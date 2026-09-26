@@ -67,6 +67,11 @@ it would silently clear four unrelated fields on every drop.
 Rendering uses `@xyflow/react` and `dagre`, both already platform dependencies already used by
 `EaCanvas`, `ProcessGraph`, and `CartesianSceneCanvas`. No layout or graph library was added.
 
+> **Superseded 2026-09-26 (plan 2026-09-08 S10):** `dagre` was retired. The org chart now lays out
+> with ELK `layered` through the shared runner `apps/web/lib/graph/elk-runner.ts`, the same engine
+> as the EA canvas. `computeOrgChartLayout` is async; `OrgChartView` computes it in an effect and
+> fits the viewport when the first layout lands.
+
 `computeOrgChartLayout` (`apps/web/lib/graph/layout-org-chart.ts`) is a sibling of the existing
 `layout-hierarchical.ts` rather than an extension of it, because `computeHierarchicalLayout` is
 bound to `GraphData` — a network/CI shape carrying `color`, `size`, and `osiLayer` — which does not

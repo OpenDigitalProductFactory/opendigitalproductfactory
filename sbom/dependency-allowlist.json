@@ -289,16 +289,6 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
-    "@types/dagre": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "apps/web"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
     "@types/jest": {
       "added": "2026-06-21",
       "workspaces": [
@@ -462,16 +452,6 @@
       "workspaces": [
         "apps/web",
         "packages/db"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
-    "dagre": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "apps/web"
       ],
       "kinds": [
         "prod"
@@ -1217,6 +1197,14 @@
     "@stoplight/prism-http": {
       "retired": "2026-09-25",
       "reason": "The integration-test harness validates vendor contracts with its own OpenAPI runtime (services/integration-test-harness/src/openapi-contract.ts); plan 2026-09-08 M4."
+    },
+    "dagre": {
+      "retired": "2026-09-26",
+      "reason": "S10 2026-09-26: one layout engine; elkjs layered covers hierarchical, org chart and swimlane"
+    },
+    "@types/dagre": {
+      "retired": "2026-09-26",
+      "reason": "S10 2026-09-26: one layout engine; elkjs layered covers hierarchical, org chart and swimlane (type definitions for the retired dagre)"
     }
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
-// People > Org Chart (BI-HCM-004). Node graph via dagre + React Flow (existing deps, as used
-// by EaCanvas / ProcessGraph), with drag-to-reassign through the governed
+// People > Org Chart (BI-HCM-004). Node graph via ELK layered + React Flow (existing deps, as
+// used by EaCanvas / ProcessGraph), with drag-to-reassign through the governed
 // `reassignEmployeeManager` action. Notes:
 //   * Reassignment is permission-checked and audited; the chart never writes Prisma directly.
 //   * Loop-creating drops are refused in the UI and the action; the server check is the guarantee.
@@ -26,7 +26,12 @@ import "@xyflow/react/dist/style.css";
 import { confirmDialog } from "@/components/ui/Dialog";
 import { Notice, StatCard, StatusBadge } from "@/components/ui/report-kit";
 import { assignEmployeeOrg, reassignEmployeeManager } from "@/lib/actions/workforce";
-import { computeOrgChartLayout, ORG_NODE_H, ORG_NODE_W } from "@/lib/graph/layout-org-chart";
+import {
+  computeOrgChartLayout,
+  ORG_NODE_H,
+  ORG_NODE_W,
+  type OrgPosition,
+} from "@/lib/graph/layout-org-chart";
 import {
   buildOrgGraph,
   eligibleManagers,
@@ -145,19 +150,35 @@ function OrgChartViewInner({ employees, canReassign = true, referenceData, onSel
 
   const filtersActive = Boolean(search || departmentFilter || statusFilter);
 
-  const positions = useMemo(
-    () =>
-      computeOrgChartLayout(
-        employees.map((e) => e.id),
-        graph.edges,
-      ),
-    [employees, graph.edges],
-  );
+  // ELK layout is async. Until the first layout lands the canvas stays empty rather than
+  // stacking every card at the origin; a re-layout (after a reassignment) keeps the previous
+  // positions on screen until the new ones arrive.
+  const [positions, setPositions] = useState<Record<string, OrgPosition> | null>(null);
+  const hasFitRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    computeOrgChartLayout(
+      employees.map((e) => e.id),
+      graph.edges,
+    ).then(
+      (next) => {
+        if (!cancelled) setPositions(next);
+      },
+      (error: unknown) => {
+        console.error("[org-chart] layout failed", error);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [employees, graph.edges]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   useEffect(() => {
+    if (!positions) return;
     setNodes(
       employees.map((emp) => {
         const metrics = graph.metrics.get(emp.id);
@@ -197,6 +218,15 @@ function OrgChartViewInner({ employees, canReassign = true, referenceData, onSel
     canReassign,
     setNodes,
   ]);
+
+  // Fit the viewport once, when the first layout is on the canvas. Later re-layouts keep the
+  // operator's pan and zoom.
+  useEffect(() => {
+    const instance = instanceRef.current;
+    if (!positions || !instance || hasFitRef.current) return;
+    hasFitRef.current = true;
+    window.setTimeout(() => instance.fitView({ padding: 0.15, duration: 200 }), 0);
+  }, [positions]);
 
   useEffect(() => {
     setEdges(
@@ -279,7 +309,7 @@ function OrgChartViewInner({ employees, canReassign = true, referenceData, onSel
   const restorePosition = useCallback(
     (nodeId: string) =>
       setNodes((prev) =>
-        prev.map((n) => (n.id === nodeId ? { ...n, position: positions[n.id] ?? n.position } : n)),
+        prev.map((n) => (n.id === nodeId ? { ...n, position: positions?.[n.id] ?? n.position } : n)),
       ),
     [positions, setNodes],
   );
@@ -479,7 +509,12 @@ function OrgChartViewInner({ employees, canReassign = true, referenceData, onSel
               onEdgesChange={onEdgesChange}
               onInit={(instance) => {
                 instanceRef.current = instance;
-                window.setTimeout(() => instance.fitView({ padding: 0.15, duration: 200 }), 0);
+                // A fresh canvas (first mount, or back from the list view) fits now if the
+                // layout is ready; otherwise the layout effect fits it when it lands.
+                hasFitRef.current = positions != null;
+                if (positions) {
+                  window.setTimeout(() => instance.fitView({ padding: 0.15, duration: 200 }), 0);
+                }
               }}
               onNodeDrag={onNodeDrag}
               onNodeDragStop={onNodeDragStop}

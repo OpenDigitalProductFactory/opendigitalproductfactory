@@ -6,7 +6,7 @@
 // 619n, Data Model 424n, …) during "auto layout". Importing it HERE runs that same compute
 // in this worker thread instead, leaving the UI responsive.
 //
-// Protocol (matched in canvas-layout.ts `elkLayout`): the main thread posts `{ id, graph }`;
+// Protocol (matched in elk-runner.ts `elkLayout`): the main thread posts `{ id, graph }`;
 // we reply `{ id, result }` on success or `{ id, error }` on failure. ELK graphs and results
 // are plain JSON-able objects, so they structured-clone across the worker boundary cleanly.
 import ELK from "elkjs/lib/elk.bundled.js";
