@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { atomicWriteFile } from "./measure-platform-substrate.mjs";
 import { stableSerialize } from "./lib/platform-substrate-measurements.mjs";
 import { resolveCapabilityServiceProjection } from "./lib/capability-service-projection.mjs";
+import { mcpPost } from "./lib/mcp-client.mjs";
 
 const scriptRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const REQUIRED_ENVIRONMENT = "local-integration-ci";
@@ -79,15 +80,17 @@ async function defaultVerifyLease(request, options) {
   if (!token) throw new Error("Governed lease verification requires DPF_MCP_BEARER_TOKEN");
   const portalUrl = String(options.portalUrl ?? "").replace(/\/$/, "");
   const mcpUrl = options.mcpUrl ?? process.env.DPF_MCP_URL ?? `${portalUrl}/api/mcp/v1`;
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const response = await fetchImpl(mcpUrl, {
-    method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_nonprod_environment_leases", arguments: {} } }),
-    signal: AbortSignal.timeout(10_000),
+  const response = await mcpPost("tools/call", { name: "list_nonprod_environment_leases", arguments: {} }, {
+    mcpUrl,
+    bearerToken: token,
+    timeoutMs: 10_000,
+    fetchImpl: options.fetchImpl,
+    // Every source of this endpoint is operator input (--mcp-url, DPF_MCP_URL,
+    // --portal-url, DPF_PORTAL_URL) or the loopback default, never on-disk config.
+    allowNonLoopbackEndpoint: true,
   });
-  if (!response.ok) throw new Error(`Lease coordination plane returned HTTP ${response.status}`);
-  const result = unwrapMcpToolResult(await response.json());
+  if (response.status < 200 || response.status >= 300) throw new Error(`Lease coordination plane returned HTTP ${response.status}`);
+  const result = unwrapMcpToolResult(JSON.parse(response.text));
   const leases = result?.leases ?? result?.data?.leases;
   if (!Array.isArray(leases)) throw new Error("Lease coordination plane returned no verifiable lease inventory");
   return leases.find((lease) => lease.leaseId === request.id) ?? null;

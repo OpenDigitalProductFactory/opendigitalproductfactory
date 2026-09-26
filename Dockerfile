@@ -173,6 +173,10 @@ COPY scripts/worktree-janitor.mjs ./scripts/
 COPY scripts/lib/worktree-janitor-core.mjs ./scripts/lib/
 COPY scripts/lib/worktree-session-heartbeat.mjs ./scripts/lib/
 COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
+# worktree-janitor.mjs and worktree-liveness.mjs query leases and Workroom
+# claims through the shared MCP client (plan 2026-09-08 §10.5 S8).
+COPY scripts/lib/mcp-client.mjs ./scripts/lib/
+COPY scripts/lib/mcp-credential.mjs ./scripts/lib/
 COPY scripts/lib/junction-safe-worktree-remove.mjs ./scripts/lib/
 COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
 COPY scripts/lib/module-size-scope.mjs ./scripts/lib/

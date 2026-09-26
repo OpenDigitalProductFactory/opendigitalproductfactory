@@ -1868,6 +1868,9 @@
     "scripts/check-no-hand-rolled-loading.mjs": [
       "docs/platform-usability-standards.md"
     ],
+    "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "scripts/check-no-local-isrecord.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
@@ -2881,6 +2884,7 @@
       "apps/web/lib/work-capsules/scope-claim-lease.ts",
       "packages/integration-shared/src/mcp-client-credential-policy.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
+      "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs",
       "scripts/gate-worktree.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/mcp-client.mjs",
