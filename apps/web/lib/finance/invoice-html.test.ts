@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { formatDate } from "@/lib/datetime";
 import { escapeInvoiceHtml, renderInvoiceHtml, type InvoiceForPdf } from "./invoice-html";
 
 // A Decimal-shaped value, the way Prisma hands money to the renderer.
@@ -68,8 +69,8 @@ describe("renderInvoiceHtml", () => {
     const t = text(renderInvoiceHtml(base));
     expect(t).toContain("INVOICE");
     expect(t).toContain("Ref: INV-2026-0001");
-    expect(t).toContain("Issued: 20 Mar 2026");
-    expect(t).toContain("Due: 20 Apr 2026");
+    expect(t).toContain(`Issued: ${formatDate(base.issueDate)}`);
+    expect(t).toContain(`Due: ${formatDate(base.dueDate)}`);
     expect(t).toContain("Bill To Acme Corp Jane Doe jane@acme.com");
     expect(t).toContain("DESCRIPTION QTY UNIT PRICE TAX % TOTAL");
     expect(t).toContain("Consulting 2 GBP 150.00 20% GBP 360.00");
@@ -141,15 +142,16 @@ describe("renderInvoiceHtml", () => {
   });
 
   it("renders the countersignature on a signed copy", () => {
+    const signedAt = "2026-03-21T10:00:00Z";
     const t = text(
       renderInvoiceHtml({
         ...base,
-        signature: { signedByName: "Jane Doe", signedByEmail: "jane@acme.com", signedAt: "2026-03-21T10:00:00Z" },
+        signature: { signedByName: "Jane Doe", signedByEmail: "jane@acme.com", signedAt },
       }),
     );
-    expect(t).toContain("Signed Signed by Jane Doe (jane@acme.com) on 21 Mar 2026");
-    const noEmail = text(renderInvoiceHtml({ ...base, signature: { signedByName: "Jane Doe", signedAt: "2026-03-21T10:00:00Z" } }));
-    expect(noEmail).toContain("Signed by Jane Doe on 21 Mar 2026");
+    expect(t).toContain(`Signed Signed by Jane Doe (jane@acme.com) on ${formatDate(signedAt)}`);
+    const noEmail = text(renderInvoiceHtml({ ...base, signature: { signedByName: "Jane Doe", signedAt } }));
+    expect(noEmail).toContain(`Signed by Jane Doe on ${formatDate(signedAt)}`);
   });
 
   it("escapes every caller-supplied field", () => {

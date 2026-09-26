@@ -13,6 +13,7 @@ import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { isPinnedImageReference } from "@/lib/documents/conversion/command";
 import { convertDocument, createConversionLimiter } from "@/lib/documents/conversion/convert";
+import { formatDate } from "@/lib/datetime";
 import { generateInvoicePdf } from "./invoice-pdf";
 
 const IMAGE = process.env.DPF_DOCTOOLS_TEST_IMAGE?.trim() ?? "";
@@ -74,8 +75,8 @@ describe.skipIf(!ready)("invoice PDF against the real dpf-doctools image", () =>
     for (const expected of [
       "INVOICE",
       "INV-2026-0042",
-      "20 Mar 2026",
-      "20 Apr 2026",
+      formatDate(invoice.issueDate),
+      formatDate(invoice.dueDate),
       "Acme Trading Ltd",
       "VAT No: GB123456789",
       "Acme Corp",
@@ -89,7 +90,7 @@ describe.skipIf(!ready)("invoice PDF against the real dpf-doctools image", () =>
       "Net 30",
       "Sort code: 12-34-56",
       "Thank you for your business",
-      "Signed by Jane Doe (jane@acme.com) on 21 Mar 2026",
+      `Signed by Jane Doe (jane@acme.com) on ${formatDate(invoice.signature.signedAt)}`,
     ]) {
       expect(text).toContain(expected);
     }

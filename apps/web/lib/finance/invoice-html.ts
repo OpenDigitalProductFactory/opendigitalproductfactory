@@ -9,8 +9,10 @@
 // and plain CSS it honours (no flexbox, no grid), and the styling follows the
 // export pipeline's print convention: no colour values, borders in currentColor.
 //
-// Money and dates are formatted exactly as the previous @react-pdf/renderer
-// invoice formatted them: `<currency> <amount to 2 dp>`, en-GB short dates.
+// Money stays `<currency> <amount to 2 dp>`, as the previous invoice rendered it.
+// Dates use the shared formatDate (lib/datetime), not a local copy.
+
+import { formatDate } from "@/lib/datetime";
 
 export type InvoiceIssuer = {
   name: string;
@@ -68,16 +70,11 @@ export type InvoiceForPdf = {
   }>;
 };
 
-// ─── Formatting (unchanged from the react-pdf invoice) ───────────────────────
+// ─── Formatting (money unchanged from the react-pdf invoice) ────────────────
 
 function fmt(value: Numeric): string {
   const n = typeof value === "number" ? value : parseFloat(value.toString());
   return isNaN(n) ? "0.00" : n.toFixed(2);
-}
-
-function fmtDate(value: Date | string): string {
-  const d = value instanceof Date ? value : new Date(value);
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function toNum(value: Numeric): number {
@@ -132,8 +129,8 @@ function header(invoice: InvoiceForPdf): string {
     '<td valign="top"><h1>INVOICE</h1></td>',
     '<td valign="top" align="right"><table class="meta" align="right">',
     metaRow("Ref:", invoice.invoiceRef),
-    metaRow("Issued:", fmtDate(invoice.issueDate)),
-    metaRow("Due:", fmtDate(invoice.dueDate)),
+    metaRow("Issued:", formatDate(invoice.issueDate)),
+    metaRow("Due:", formatDate(invoice.dueDate)),
     "</table></td>",
     "</tr></table>",
   ].join("\n");
@@ -247,7 +244,7 @@ function signatureBlock(invoice: InvoiceForPdf): string {
   const signature = invoice.signature;
   if (!signature) return "";
   const email = signature.signedByEmail ? ` (${signature.signedByEmail})` : "";
-  const text = `Signed by ${signature.signedByName}${email} on ${fmtDate(signature.signedAt)}`;
+  const text = `Signed by ${signature.signedByName}${email} on ${formatDate(signature.signedAt)}`;
   return ['<div class="footer signature">', '<p class="label">Signed</p>', `<p>${e(text)}</p>`, "</div>"].join("\n");
 }
 
