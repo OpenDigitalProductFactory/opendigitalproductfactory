@@ -35,7 +35,7 @@ function compareKeys(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function isPlainObject(value: object): value is Record<string, unknown> {
+function hasPlainPrototype(value: object): value is Record<string, unknown> {
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 }
@@ -46,7 +46,7 @@ function stableJson(value: unknown, path = "evidence"): string {
   }
 
   if (value && typeof value === "object") {
-    if (!isPlainObject(value)) {
+    if (!hasPlainPrototype(value)) {
       throw new TypeError(`Evidence fingerprint only supports JSON-compatible objects at ${path}`);
     }
 

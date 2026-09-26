@@ -6,6 +6,7 @@ export * from "./dynamic";
 export * from "./edge";
 export * from "./federation-discovery";
 export * from "./field-dispatch";
+export * from "./guards";
 export * from "./field-dispatch-notifications";
 export * from "./field-dispatch-warranty";
 export * from "./field-dispatch-assignment";
