@@ -812,6 +812,39 @@ export function createProcessTreeTracker({
   };
 }
 
+export async function fenceProcessTree({
+  platform = process.platform,
+  tracker,
+  childRunning,
+  killTree,
+}) {
+  // POSIX: one SYNCHRONOUS observation before the kill, deliberately. The
+  // periodic scan is async so it cannot starve the heartbeat (BI-04AECD8A),
+  // but that leaves a window: a descendant spawned since the last resolved
+  // scan is not yet remembered, and once its parent dies it reparents to init
+  // and can no longer be reached from the root pid. That is what keeps
+  // "remembers descendants before they reparent" true under a fence.
+  //
+  // Windows (BI-C5ED24D9): kill first. The scan there is a ~1.5 s CIM query,
+  // and ownership is already lost — a fenced child wrote its file mid-scan,
+  // ~2 s after the fence. Nothing is lost by skipping the pre-kill scan:
+  // `taskkill /T` walks the live parent links itself, which is everything
+  // such a scan could reach from the root, and a descendant whose parent had
+  // already died was unreachable from the root either way — it is covered
+  // only by the remembered set, which waitForQuiescence reaps below.
+  if (platform !== "win32" && tracker) {
+    try {
+      tracker.sample();
+    } catch {
+      // A failed observation must not block the kill path.
+    }
+  }
+  if (childRunning()) killTree();
+  if (tracker) {
+    await tracker.waitForQuiescence({ graceMs: 0, pollMs: 50 });
+  }
+}
+
 function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
   if (!commandSpec) {
     if (!allowStub) throw new Error("runGateCommand called with no command and no stub allowed");
@@ -871,18 +904,21 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
         rootPid: child.pid,
         listProcessRowsAsync: () => readProcessRowsAsync(),
       });
-      tracker.sample();
       // BI-04AECD8A: a self-rescheduling timeout, never setInterval. The next
       // scan is scheduled only once the previous one has RETURNED, so a scan
       // that outlasts its interval can no longer queue behind itself and
       // saturate the loop. Combined with the async reader, the descendant scan
       // can no longer starve the lease heartbeat that keeps this run alive.
+      // BI-C5ED24D9: that includes the FIRST scan. It was synchronous and ran
+      // right after spawn — on Windows a ~1.6 s CIM query during which the
+      // heartbeat could not fire, so a renewal due mid-scan (and any fence it
+      // carried) arrived late. It now starts immediately, asynchronously.
       const scanDelayMs = Math.max(
         50,
         numberOrDefault(process.env.DPF_GATE_PROCESS_SCAN_MS, defaultProcessScanMs()),
       );
       scanStopped = false;
-      const scheduleScan = () => {
+      const scheduleScan = (delayMs = scanDelayMs) => {
         trackerTimer = setTimeout(() => {
           Promise.resolve()
             .then(() => tracker.sampleAsync())
@@ -890,10 +926,10 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
             .finally(() => {
               if (!scanStopped) scheduleScan();
             });
-        }, scanDelayMs);
+        }, delayMs);
         trackerTimer.unref?.();
       };
-      scheduleScan();
+      scheduleScan(0);
       child.stdout.on("data", (chunk) => append(chunk));
       child.stderr.on("data", (chunk) => append(chunk));
       child.once("error", reject);
@@ -933,34 +969,21 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
         clearTimeout(trackerTimer);
         trackerTimer = null;
       }
-      // One SYNCHRONOUS observation before the kill, deliberately. The periodic
-      // scan is async so it cannot starve the heartbeat (BI-04AECD8A), but that
-      // leaves a window: a descendant spawned since the last resolved scan is
-      // not yet remembered, and once its parent dies it reparents to init and
-      // can no longer be reached from the root pid. Blocking here costs
-      // nothing — the run is already being torn down — and it is what keeps
-      // "remembers descendants before they reparent" true under a fence.
-      if (tracker) {
-        try {
-          tracker.sample();
-        } catch {
-          // A failed observation must not block the kill path.
-        }
-      }
-      if (child && child.exitCode === null) {
-        if (process.platform === "win32") {
-          spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-        } else {
+      await fenceProcessTree({
+        tracker,
+        childRunning: () => Boolean(child) && child.exitCode === null,
+        killTree: () => {
+          if (process.platform === "win32") {
+            spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+            return;
+          }
           try {
             process.kill(-child.pid, "SIGTERM");
           } catch {
             child.kill("SIGTERM");
           }
-        }
-      }
-      if (tracker) {
-        await tracker.waitForQuiescence({ graceMs: 0, pollMs: 50 });
-      }
+        },
+      });
     },
   };
 }
