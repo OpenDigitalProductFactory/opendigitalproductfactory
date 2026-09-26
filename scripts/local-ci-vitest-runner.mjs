@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { resolve } from "node:path";
@@ -19,8 +20,15 @@ import {
 const DEFAULT_VITEST_MAX_DURATION_MS = 30 * 60 * 1_000;
 
 function valueAfter(flag, fallback) {
-  const index = process.argv.indexOf(flag);
-  return index >= 0 ? process.argv[index + 1] : fallback;
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({
+    args: process.argv.slice(2),
+    strict: false,
+    allowPositionals: true,
+    options: { "initial-workers": { type: "string" }, "retry-workers": { type: "string" }, "base": { type: "string" } },
+  });
+  const value = values[flag.replace(/^--/, "")];
+  return value === undefined ? fallback : typeof value === "string" ? value : undefined;
 }
 
 function positiveInteger(value, fallback) {

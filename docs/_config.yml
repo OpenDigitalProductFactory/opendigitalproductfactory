@@ -25,6 +25,10 @@ exclude:
   - architecture/generate-gaid-docx.mjs
   - architecture/generate-docx-from-markdown.mjs
   - architecture/generate-agent-standards-white-paper-docx.mjs
+  - architecture/generate-agent-standard-docx.mjs
+  - architecture/generate-jsi-docx.mjs
+  - architecture/generate-docx-from-markdown.test.mjs
+  - architecture/agent-standard-publications.mjs
   - architecture/agent-standards-style-notes.md
 
 # Apply the default layout to Markdown pages but explicitly opt index.html
