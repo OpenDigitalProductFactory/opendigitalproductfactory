@@ -359,6 +359,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // the image — so it reaches main green and breaks the release chain.
       node("scripts/check-dockerfile-copied-script-imports.mjs"),
       node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
+      // The test-fixture twin: a contract test that cpSync's modules into a temp
+      // tree one at a time dies on ERR_MODULE_NOT_FOUND when a copied module
+      // gains a static import the fixture never copies. Hit twice on 2026-09-25
+      // in tests/release/pregate-node-gate-contract.test.mjs (#5690, #5707),
+      // and only Janitor Tests noticed.
+      node("scripts/check-fixture-copied-script-imports.mjs"),
+      conformanceTest("scripts/check-fixture-copied-script-imports.test.mjs"),
       // The FLAG half of the same class (BI-8914E888). The guard above catches a
       // script the image never receives; this catches a switch the install can
       // never set. Both are "the capability was built and the last wire was never
