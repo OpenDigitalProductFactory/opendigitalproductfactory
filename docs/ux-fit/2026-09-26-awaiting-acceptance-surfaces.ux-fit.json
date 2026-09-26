@@ -3,7 +3,10 @@
   "decidedOption": "inline-status-segment",
   "decisionInteractionId": "DI-ADCD99EDEFD7",
   "scope": {
-    "files": ["apps/web/app/(shell)/ops/page.tsx","apps/web/components/ops/EpicCard.tsx","apps/web/components/ops/OpsClient.test.tsx","apps/web/components/ops/OpsClient.tsx"]
+    "files": [
+      "apps/web/components/ops/EpicCard.tsx",
+      "apps/web/components/ops/OpsClient.tsx"
+    ]
   },
   "evidence": {
     "kind": "propose-n-pick",
