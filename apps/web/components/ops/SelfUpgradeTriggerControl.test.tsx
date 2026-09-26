@@ -272,7 +272,7 @@ describe("SelfUpgradeTriggerControl – loading", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain('data-upgrade-starting="true"');
     // BI-CE244260: the run is server-side; the page must not claim it needs to stay open.
-    expect(html).toContain("carries on at the server");
+    expect(html).toContain("continues if you leave this page");
     expect(html).not.toMatch(/keep this page open/i);
   });
 

@@ -436,8 +436,7 @@ export default function SelfUpgradeTriggerControl({
           data-upgrade-starting="true"
           aria-live="polite"
         >
-          Recording this upgrade before dispatch. It carries on at the server if
-          you leave this page; the run appears below once admission commits.
+          Recording this upgrade. It continues if you leave this page.
         </div>
       )}
 
