@@ -15,6 +15,11 @@ import {
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { type BoundWorkShapeDb, readBoundEditPaths } from "@/lib/backlog/initiative-readiness/bound-work-shape";
 import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
+import {
+  governingPrinciplesFor,
+  withGoverningRules,
+  type GoverningPrinciples,
+} from "@/lib/kernel/governing-principles";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   resolveInitiativeReviewerRecovery,
@@ -115,6 +120,8 @@ type GovernedClaimFailure = {
   code: "initiative_not_ready" | "capsule_identity_mismatch" | "readiness_projection_failed";
   workIntent: WorkIntent;
   readiness: InitiativeReadinessDecision;
+  /** BI-DEDAC950: principle page per unmet code, beside the decision so replay stays deep-equal. */
+  governingPrinciples: GoverningPrinciples;
   recovery: InitiativeReviewerRecovery;
 };
 
@@ -524,12 +531,17 @@ export async function claimGovernedBacklogWorkspace(args: {
           baseSha: recoveryWorkroom?.baseSha ?? null,
         };
         await recordDecision({ db: tx, backlogItemRowId: item.id, decision: evaluated, workIntent, actor: args.actor });
+        const governingPrinciples = governingPrinciplesFor(evaluated);
         return {
-          ...err(`Cannot start ${workIntent}: ${[...evaluated.blockers, ...evaluated.unmet].map((entry) => entry.code).join(", ")}.`),
+          ...err(withGoverningRules(
+            `Cannot start ${workIntent}: ${[...evaluated.blockers, ...evaluated.unmet].map((entry) => entry.code).join(", ")}.`,
+            governingPrinciples,
+          )),
           data: {
             code: "initiative_not_ready" as const,
             workIntent,
             readiness: evaluated,
+            governingPrinciples,
             recovery: EMPTY_RECOVERY,
           },
         };
@@ -606,12 +618,14 @@ export async function claimGovernedBacklogWorkspace(args: {
       })],
     };
     await recordDecision({ db: args.db, backlogItemRowId, decision: denied, workIntent, actor: args.actor });
+    const governingPrinciples = governingPrinciplesFor(denied);
     return {
-      ...err(error.message),
+      ...err(withGoverningRules(error.message, governingPrinciples)),
       data: {
         code: "capsule_identity_mismatch",
         workIntent,
         readiness: denied,
+        governingPrinciples,
         recovery: EMPTY_RECOVERY,
       },
     };

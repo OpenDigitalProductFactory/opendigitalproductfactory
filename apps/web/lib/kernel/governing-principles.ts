@@ -137,7 +137,8 @@ export type GoverningPrinciples = Partial<Record<ReadinessCode, string>>;
 /** `{ code: slug }` for every unmet or blocking code whose rule a page states. */
 export function governingPrinciplesFor(decision: InitiativeReadinessDecision): GoverningPrinciples {
   const out: GoverningPrinciples = {};
-  for (const entry of [...decision.blockers, ...decision.unmet]) {
+  // Tolerate a partial decision (a read of a legacy persisted row): a citation is advisory.
+  for (const entry of [...(decision.blockers ?? []), ...(decision.unmet ?? [])]) {
     const slug = entry.code === "RESEARCH_REQUIRED"
       ? researchPrinciple(decision.profile, decision.shapeDecision?.effective)
       : READINESS_GOVERNING_PRINCIPLE[entry.code];
@@ -155,6 +156,16 @@ export function governingPrinciplesByTarget(
     if (decision) out[target] = governingPrinciplesFor(decision);
   }
   return out;
+}
+
+/**
+ * A read projection's readiness summary with `governingPrinciples` keyed by
+ * target, BESIDE `decisions` (never inside one).
+ */
+export function withReadinessGoverningPrinciples<
+  T extends { decisions?: Partial<Record<ReadinessTarget, InitiativeReadinessDecision>> },
+>(summary: T): T & { governingPrinciples: Partial<Record<ReadinessTarget, GoverningPrinciples>> } {
+  return { ...summary, governingPrinciples: governingPrinciplesByTarget(summary?.decisions) };
 }
 
 /** The one refusal-message line; null when nothing is cited. */
