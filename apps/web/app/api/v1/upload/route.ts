@@ -7,6 +7,7 @@
 import * as crypto from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
+import type { UploadResponse } from "@dpf/types";
 import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
@@ -78,12 +79,12 @@ export async function POST(request: Request) {
       if (!created.ok) {
         return NextResponse.json({ code: "VALIDATION_ERROR", message: created.error }, { status: 422 });
       }
-      return apiSuccess({ fileId: created.assetId, url: mediaAssetUrl(created.assetId) }, 201);
+      return apiSuccess({ fileId: created.assetId, url: mediaAssetUrl(created.assetId) } satisfies UploadResponse, 201);
     }
 
     // Non-image (e.g. PDF): placeholder pending the document-ingest path.
     const fileId = crypto.randomUUID();
-    return apiSuccess({ fileId, url: `/uploads/${fileId}` }, 201);
+    return apiSuccess({ fileId, url: `/uploads/${fileId}` } satisfies UploadResponse, 201);
   } catch (e) {
     if (e instanceof ApiError) return e.toResponse();
     return NextResponse.json(

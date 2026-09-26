@@ -24,22 +24,27 @@ export interface RefreshRequest {
   refreshToken: string;
 }
 
+/** GET /api/v1/auth/me. `platformRole` is null for a user with no role group. */
 export interface MeResponse {
   id: string;
   email: string;
-  platformRole: string;
+  platformRole: string | null;
   isSuperuser: boolean;
   capabilities: string[];
 }
 
+export type DashboardTrend = "up" | "down" | "stable";
+
+/** One tile of GET /api/v1/workspace/dashboard. The route sends `trend: null` until it computes one. */
 export interface DashboardTile {
   area: string;
   label: string;
   value: number;
-  trend?: "up" | "down" | "stable";
+  trend?: DashboardTrend | null;
   color?: string;
 }
 
+/** GET /api/v1/workspace/dashboard. */
 export interface DashboardResponse {
   tiles: DashboardTile[];
   calendarItems: CalendarItem[];
@@ -52,12 +57,16 @@ export interface CalendarItem {
   type: string;
 }
 
+/**
+ * One row of GET /api/v1/workspace/activity. The feed is a projection of
+ * recently updated backlog items; `updatedAt` is an ISO date-time string.
+ */
 export interface ActivityItem {
   id: string;
-  action: string;
-  target: string;
-  actor: string;
-  timestamp: string;
+  title: string;
+  status: string;
+  type: string;
+  updatedAt: string;
 }
 
 export interface CreateEpicRequest {
@@ -163,6 +172,7 @@ export interface RegisterDeviceRequest {
   platform: "ios" | "android";
 }
 
+/** POST /api/v1/upload. */
 export interface UploadResponse {
   fileId: string;
   url: string;

@@ -1868,6 +1868,9 @@
     "scripts/check-no-hand-rolled-loading.mjs": [
       "docs/platform-usability-standards.md"
     ],
+    "scripts/check-no-local-dpf-type-redeclaration.mjs": [
+      "docs/architecture/package-boundaries.md"
+    ],
     "scripts/check-no-local-isrecord.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
@@ -2924,6 +2927,7 @@
       "apps/web/lib/contracts/entity-contract-drift.ts",
       "apps/web/lib/contracts/package-boundaries.test.ts",
       "packages/types/src/entities.ts",
+      "scripts/check-no-local-dpf-type-redeclaration.mjs",
       "scripts/check-package-boundaries.mjs"
     ],
     "docs/architecture/platform-overview.md": [

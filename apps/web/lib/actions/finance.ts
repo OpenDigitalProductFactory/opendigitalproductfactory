@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import type { InvoiceStatus } from "@dpf/types";
 import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import { generateInvoiceRef, generatePaymentRef } from "@/lib/finance/invoice-payment-refs";
 import { requireCapability } from "@/lib/actions/shared/guards";
@@ -13,7 +14,6 @@ import type {
   SignInvoiceInput,
   UpdateInvoiceContentInput,
 } from "@/lib/finance-validation";
-import type { INVOICE_STATUSES } from "@/lib/finance-validation";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { sendEmail, composeSignedConfirmationEmail, isEmailConfigured } from "@/lib/email";
@@ -22,7 +22,6 @@ import {
   checkInvoiceTransition,
   checkInvoiceDeletion,
   checkInvoiceEditScope,
-  type InvoiceStatus as InvoiceLifecycleStatus,
 } from "@/lib/finance/invoice-lifecycle";
 import { buildInvoiceTotals, round2 } from "@/lib/finance/invoice-totals";
 import { customerAccountNormalizedColumns } from "@/lib/mdm/dedup-gate";
@@ -81,8 +80,6 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<{ id: st
 }
 
 // ─── updateInvoiceStatus ──────────────────────────────────────────────────────
-
-type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 
 /**
  * Domain outcomes are RETURNED, not thrown: a thrown error crossing the
@@ -168,7 +165,7 @@ export async function updateInvoice(
     return { ok: true, totalAmount: 0 };
   }
 
-  const scope = checkInvoiceEditScope(existing.status as InvoiceLifecycleStatus, suppliedFields);
+  const scope = checkInvoiceEditScope(existing.status as InvoiceStatus, suppliedFields);
   if (!scope.allowed) {
     return {
       ok: false,
@@ -249,7 +246,7 @@ export async function deleteInvoice(id: string): Promise<DeleteInvoiceResult> {
   ]);
 
   const check = checkInvoiceDeletion({
-    status: invoice.status as InvoiceLifecycleStatus,
+    status: invoice.status as InvoiceStatus,
     allocationCount,
     dunningCount,
     journalEntryCount,
@@ -298,7 +295,7 @@ export async function voidInvoice(id: string, reason: string): Promise<VoidInvoi
     return { ok: false, error: "not_found", message: "Invoice not found." };
   }
 
-  const check = checkInvoiceTransition(invoice.status as InvoiceLifecycleStatus, "void");
+  const check = checkInvoiceTransition(invoice.status as InvoiceStatus, "void");
   if (!check.allowed) {
     return { ok: false, error: "illegal_transition", message: check.reason };
   }
@@ -615,7 +612,7 @@ export async function sendInvoice(invoiceId: string): Promise<{ payToken: string
   // A resend of an already-sent invoice is legitimate (chasing, re-issuing the link),
   // so sent -> sent is a no-op transition rather than a rejection. What this blocks is
   // sending an invoice that is void, paid, or written off — previously all accepted.
-  const check = checkInvoiceTransition(invoice.status as InvoiceLifecycleStatus, "sent");
+  const check = checkInvoiceTransition(invoice.status as InvoiceStatus, "sent");
   if (!check.allowed) {
     throw new Error(check.reason);
   }

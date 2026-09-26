@@ -592,6 +592,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ], { inputs: ["code"] }),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
+      // One home for the shared wire types (plan 2026-09-08 §10.5 S9).
+      conformanceTest("scripts/check-no-local-dpf-type-redeclaration.test.mjs"),
+      node("scripts/check-no-local-dpf-type-redeclaration.mjs"),
     ]),
     // BI-96033E25 — a vitest test must resolve repo paths from __dirname, not
     // process.cwd(), or `vitest run --root <pkg>` reads outside the repo and
