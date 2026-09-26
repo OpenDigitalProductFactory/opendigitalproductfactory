@@ -9,7 +9,14 @@ a prior consent by the same human for the same name and redirect family wins
 over the name. An administrator, whose eligible set also holds room
 coordinators, lands on the external development profile (Claude Code, Codex,
 Grok) and can pick a wider coworker under `Change`. A self-declared name can never choose a coworker outside the
-eligible set or widen a scope. The default flow is one Connect action;
+eligible set or widen a scope. The human half is a decision too
+(BI-07D21B4A): the screen names the signed-in account under `Connect as`,
+and the person must tick it before Connect. That account owns the connection
+and receives every approval its assistant asks for. The POST binds only if
+the ticked account is still the session's account. `Use a different
+account` signs in again and returns to the same request. If a connection
+was made under the wrong account, revoke it and reconnect; approvals never
+follow the connection to another person. The default flow is one Connect action;
 `Change` and `Adjust permissions` are disclosures, and a picker is opened
 only when eligible coworkers differ in authority. Reconnects, refreshes and
 new tasks reuse that consent without another login; each privileged action

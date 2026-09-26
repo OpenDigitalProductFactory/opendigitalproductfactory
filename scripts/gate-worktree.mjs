@@ -9,6 +9,7 @@
 // compatibility entry point that execs this file so lease safety cannot drift
 // between POSIX and Windows contributor surfaces.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
@@ -419,65 +420,71 @@ Environment:
 }
 
 function parseArgs(argv) {
+  const option = { type: "string" };
+  const flags = {
+    branch: option,
+    sha: option,
+    worktree: option,
+    remote: option,
+    "owner-provider": option,
+    "owner-session-id": option,
+    "resume-lease-id": option,
+    "mcp-url": option,
+    "lease-wait-seconds": option,
+    "poll-seconds": option,
+    "expires-minutes": option,
+    push: { type: "boolean" },
+    "no-push": { type: "boolean" },
+    "dry-run": { type: "boolean" },
+    "finalize-evidence": { type: "boolean" },
+    help: { type: "boolean", short: "h" },
+  };
+  // A bare `--` has always been skipped wherever it appears, so it is dropped before
+  // parsing. strict: false plus the token check keeps the old `die` for unknown input.
+  const { values, tokens } = utilParseArgs({
+    args: argv.filter((arg) => arg !== "--"),
+    options: flags,
+    strict: false,
+    allowPositionals: true,
+    tokens: true,
+  });
+  const stop = tokens.find((token) => token.kind !== "option" || !Object.hasOwn(flags, token.name) || token.name === "help");
+  if (stop?.kind === "option" && stop.name === "help") {
+    process.stdout.write(usage());
+    process.exit(0); // exit-0: --help prints usage; nothing gated and nothing claimed
+  }
+  if (stop) die(`unknown option: ${stop.rawName ?? stop.value}`);
+  // A value flag given last with nothing after it reads as "" (text) or NaN (number), as before.
+  const text = (name, fallback) => (values[name] === undefined ? fallback : typeof values[name] === "string" ? values[name] : "");
+  const number = (name, fallback) => (values[name] === undefined ? fallback : Number(typeof values[name] === "string" ? values[name] : undefined));
+  // --push and --no-push toggle one setting; the last one given wins.
+  const push = tokens.findLast((token) => token.name === "push" || token.name === "no-push");
   const options = {
-    branch: "",
-    sha: "",
-    worktree: "",
-    remote: "origin",
+    branch: text("branch", ""),
+    sha: text("sha", ""),
+    worktree: text("worktree", ""),
+    remote: text("remote", "origin"),
     // BI-3A34D7A9: no provider default. Defaulting to "codex" made every
     // client of every kind record itself as Codex; the identity is resolved
     // from the calling client's own environment below (resolveIdentity), and
     // an unresolvable one is recorded as unattributed rather than guessed.
-    ownerProvider: process.env.DPF_GATE_OWNER_PROVIDER || "",
-    ownerSessionId: process.env.DPF_GATE_OWNER_SESSION_ID || "",
-    mcpUrl: process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1",
-    leaseWaitSeconds: Number(process.env.DPF_GATE_LEASE_WAIT_SECONDS || 7200),
-    pollSeconds: Number(process.env.DPF_GATE_POLL_SECONDS || 10),
-    expiresMinutes: Number(process.env.DPF_GATE_EXPIRES_MINUTES || 2),
-    pushBranch: false,
-    dryRun: false,
-    finalizeEvidence: false,
+    ownerProvider: text("owner-provider", process.env.DPF_GATE_OWNER_PROVIDER || ""),
+    ownerSessionId: text("owner-session-id", process.env.DPF_GATE_OWNER_SESSION_ID || ""),
+    mcpUrl: text("mcp-url", process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1"),
+    leaseWaitSeconds: number("lease-wait-seconds", Number(process.env.DPF_GATE_LEASE_WAIT_SECONDS || 7200)),
+    pollSeconds: number("poll-seconds", Number(process.env.DPF_GATE_POLL_SECONDS || 10)),
+    expiresMinutes: number("expires-minutes", Number(process.env.DPF_GATE_EXPIRES_MINUTES || 2)),
+    pushBranch: push?.name === "push",
+    dryRun: values["dry-run"] === true,
+    finalizeEvidence: values["finalize-evidence"] === true,
     // Set only by the durable-wait resumer: the lease this run resumes.
-    resumeLeaseId: "",
+    resumeLeaseId: text("resume-lease-id", ""),
   };
-  const args = [...argv];
-  while (args.length > 0) {
-    const flag = args.shift();
-    switch (flag) {
-      case "--branch": options.branch = args.shift() ?? ""; break;
-      case "--sha": options.sha = args.shift() ?? ""; break;
-      case "--worktree": options.worktree = args.shift() ?? ""; break;
-      case "--remote": options.remote = args.shift() ?? ""; break;
-      case "--owner-provider": options.ownerProvider = args.shift() ?? ""; break;
-      case "--owner-session-id": options.ownerSessionId = args.shift() ?? ""; break;
-      case "--resume-lease-id": options.resumeLeaseId = args.shift() ?? ""; break;
-      case "--mcp-url": {
-        options.mcpUrl = args.shift() ?? "";
-        // --mcp-url is the operator naming the endpoint, the same signal
-        // DPF_MCP_URL carries. Record it there too so mcpCall's loopback
-        // enforcement reads one source of operator intent instead of this
-        // file threading a flag through all nine of its call sites.
-        if (options.mcpUrl) process.env.DPF_MCP_URL = options.mcpUrl;
-        break;
-      }
-      case "--lease-wait-seconds": options.leaseWaitSeconds = Number(args.shift()); break;
-      case "--poll-seconds": options.pollSeconds = Number(args.shift()); break;
-      case "--expires-minutes": options.expiresMinutes = Number(args.shift()); break;
-      case "--push": options.pushBranch = true; break;
-      case "--no-push": options.pushBranch = false; break;
-      case "--dry-run": options.dryRun = true; break;
-      case "--finalize-evidence": options.finalizeEvidence = true; break;
-      case "--help":
-      case "-h":
-        process.stdout.write(usage());
-        process.exit(0); // exit-0: --help prints usage; nothing gated and nothing claimed
-        break;
-      case "--":
-        break;
-      default:
-        die(`unknown option: ${flag}`);
-    }
-  }
+  // --mcp-url is the operator naming the endpoint, the same signal
+  // DPF_MCP_URL carries. Record it there too so mcpCall's loopback
+  // enforcement reads one source of operator intent instead of this
+  // file threading a flag through all nine of its call sites.
+  if (values["mcp-url"] !== undefined && options.mcpUrl) process.env.DPF_MCP_URL = options.mcpUrl;
   return options;
 }
 
@@ -812,6 +819,39 @@ export function createProcessTreeTracker({
   };
 }
 
+export async function fenceProcessTree({
+  platform = process.platform,
+  tracker,
+  childRunning,
+  killTree,
+}) {
+  // POSIX: one SYNCHRONOUS observation before the kill, deliberately. The
+  // periodic scan is async so it cannot starve the heartbeat (BI-04AECD8A),
+  // but that leaves a window: a descendant spawned since the last resolved
+  // scan is not yet remembered, and once its parent dies it reparents to init
+  // and can no longer be reached from the root pid. That is what keeps
+  // "remembers descendants before they reparent" true under a fence.
+  //
+  // Windows (BI-C5ED24D9): kill first. The scan there is a ~1.5 s CIM query,
+  // and ownership is already lost — a fenced child wrote its file mid-scan,
+  // ~2 s after the fence. Nothing is lost by skipping the pre-kill scan:
+  // `taskkill /T` walks the live parent links itself, which is everything
+  // such a scan could reach from the root, and a descendant whose parent had
+  // already died was unreachable from the root either way — it is covered
+  // only by the remembered set, which waitForQuiescence reaps below.
+  if (platform !== "win32" && tracker) {
+    try {
+      tracker.sample();
+    } catch {
+      // A failed observation must not block the kill path.
+    }
+  }
+  if (childRunning()) killTree();
+  if (tracker) {
+    await tracker.waitForQuiescence({ graceMs: 0, pollMs: 50 });
+  }
+}
+
 function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
   if (!commandSpec) {
     if (!allowStub) throw new Error("runGateCommand called with no command and no stub allowed");
@@ -871,18 +911,21 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
         rootPid: child.pid,
         listProcessRowsAsync: () => readProcessRowsAsync(),
       });
-      tracker.sample();
       // BI-04AECD8A: a self-rescheduling timeout, never setInterval. The next
       // scan is scheduled only once the previous one has RETURNED, so a scan
       // that outlasts its interval can no longer queue behind itself and
       // saturate the loop. Combined with the async reader, the descendant scan
       // can no longer starve the lease heartbeat that keeps this run alive.
+      // BI-C5ED24D9: that includes the FIRST scan. It was synchronous and ran
+      // right after spawn — on Windows a ~1.6 s CIM query during which the
+      // heartbeat could not fire, so a renewal due mid-scan (and any fence it
+      // carried) arrived late. It now starts immediately, asynchronously.
       const scanDelayMs = Math.max(
         50,
         numberOrDefault(process.env.DPF_GATE_PROCESS_SCAN_MS, defaultProcessScanMs()),
       );
       scanStopped = false;
-      const scheduleScan = () => {
+      const scheduleScan = (delayMs = scanDelayMs) => {
         trackerTimer = setTimeout(() => {
           Promise.resolve()
             .then(() => tracker.sampleAsync())
@@ -890,10 +933,10 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
             .finally(() => {
               if (!scanStopped) scheduleScan();
             });
-        }, scanDelayMs);
+        }, delayMs);
         trackerTimer.unref?.();
       };
-      scheduleScan();
+      scheduleScan(0);
       child.stdout.on("data", (chunk) => append(chunk));
       child.stderr.on("data", (chunk) => append(chunk));
       child.once("error", reject);
@@ -933,34 +976,21 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
         clearTimeout(trackerTimer);
         trackerTimer = null;
       }
-      // One SYNCHRONOUS observation before the kill, deliberately. The periodic
-      // scan is async so it cannot starve the heartbeat (BI-04AECD8A), but that
-      // leaves a window: a descendant spawned since the last resolved scan is
-      // not yet remembered, and once its parent dies it reparents to init and
-      // can no longer be reached from the root pid. Blocking here costs
-      // nothing — the run is already being torn down — and it is what keeps
-      // "remembers descendants before they reparent" true under a fence.
-      if (tracker) {
-        try {
-          tracker.sample();
-        } catch {
-          // A failed observation must not block the kill path.
-        }
-      }
-      if (child && child.exitCode === null) {
-        if (process.platform === "win32") {
-          spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-        } else {
+      await fenceProcessTree({
+        tracker,
+        childRunning: () => Boolean(child) && child.exitCode === null,
+        killTree: () => {
+          if (process.platform === "win32") {
+            spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+            return;
+          }
           try {
             process.kill(-child.pid, "SIGTERM");
           } catch {
             child.kill("SIGTERM");
           }
-        }
-      }
-      if (tracker) {
-        await tracker.waitForQuiescence({ graceMs: 0, pollMs: 50 });
-      }
+        },
+      });
     },
   };
 }

@@ -13,29 +13,31 @@
 // safe outcomes, not failures). Exits 1 only when it could not resolve the root or
 // a ff-only merge it attempted actually failed.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { existsSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { pathToFileURL } from "node:url";
 
 import { resolveRootClonePath } from "./lib/stale-root-clone.mjs";
 import { refreshRootClone } from "./lib/root-clone-refresh.mjs";
 
 function parseArgs(argv) {
-  let root = process.env.DPF_REPO_ROOT || process.env.PROJECT_ROOT || "";
-  let json = false;
-  let doFetch = true;
-  for (let i = 0; i < argv.length; i += 1) {
-    const a = argv[i];
-    if (a === "--json") json = true;
-    else if (a === "--no-fetch") doFetch = false;
-    else if (a === "--root") root = argv[++i];
-    else if (a.startsWith("--root=")) root = a.split("=")[1];
-    else if (a === "-h" || a === "--help") {
-      console.log("usage: node scripts/root-clone-refresh.mjs [--root PATH] [--no-fetch] [--json]");
-      process.exit(0);
-    }
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: { json: { type: "boolean" }, "no-fetch": { type: "boolean" }, root: { type: "string" }, help: { type: "boolean", short: "h" } },
+  });
+  if (values.help) {
+    console.log("usage: node scripts/root-clone-refresh.mjs [--root PATH] [--no-fetch] [--json]");
+    process.exit(0);
   }
-  return { root, json, doFetch };
+  return {
+    root: values.root === undefined ? process.env.DPF_REPO_ROOT || process.env.PROJECT_ROOT || "" : typeof values.root === "string" ? values.root : undefined,
+    json: values.json === true,
+    doFetch: values["no-fetch"] !== true,
+  };
 }
 
 function resolveRoot(explicit) {
@@ -43,8 +45,8 @@ function resolveRoot(explicit) {
   // Resolve the owning root clone from the current directory (works from a worktree).
   const fromCwd = resolveRootClonePath(process.cwd(), {});
   if (fromCwd && existsSync(fromCwd)) return fromCwd;
-  const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", windowsHide: true });
-  if (r.status === 0 && r.stdout.trim()) return r.stdout.trim();
+  const top = gitTextOrNull(["rev-parse", "--show-toplevel"], { cwd: process.cwd() });
+  if (top) return top;
   if (existsSync("/host-dpf")) return "/host-dpf";
   return null;
 }

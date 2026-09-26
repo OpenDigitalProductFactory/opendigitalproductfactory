@@ -15,7 +15,7 @@
  *  3. `assertRepoNotShallow` fails loud for shared root / multi-worktree clones.
  */
 
-import { execFileSync } from "node:child_process";
+import { gitText } from "./git.mjs";
 
 import { isEntryModule } from "./entry-module.mjs";
 
@@ -96,10 +96,7 @@ export function unshallowRootSharedSafe(git, opts = {}) {
 
 /** Default git runner for CLI use. */
 export function defaultGit(args) {
-  return execFileSync("git", args, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
+  return gitText(args, { cwd: process.cwd(), trim: false });
 }
 
 // CLI: node scripts/lib/git-fetch-shared-safe.mjs assert|fetch

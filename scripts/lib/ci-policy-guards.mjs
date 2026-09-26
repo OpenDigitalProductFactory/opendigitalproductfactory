@@ -158,6 +158,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/git.test.mjs"),
       conformanceTest("scripts/check-no-direct-git-spawn.test.mjs"),
       node("scripts/check-no-direct-git-spawn.mjs"),
+      // One argument parser for every script: node:util parseArgs
+      // (plan 2026-09-08 §10.5 S2).
+      conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
+      node("scripts/check-no-hand-rolled-argv.mjs"),
     ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
@@ -359,6 +363,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // the image — so it reaches main green and breaks the release chain.
       node("scripts/check-dockerfile-copied-script-imports.mjs"),
       node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
+      // The test-fixture twin: a contract test that cpSync's modules into a temp
+      // tree one at a time dies on ERR_MODULE_NOT_FOUND when a copied module
+      // gains a static import the fixture never copies. Hit twice on 2026-09-25
+      // in tests/release/pregate-node-gate-contract.test.mjs (#5690, #5707),
+      // and only Janitor Tests noticed.
+      node("scripts/check-fixture-copied-script-imports.mjs"),
+      conformanceTest("scripts/check-fixture-copied-script-imports.test.mjs"),
       // The FLAG half of the same class (BI-8914E888). The guard above catches a
       // script the image never receives; this catches a switch the install can
       // never set. Both are "the capability was built and the last wire was never
@@ -583,6 +594,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("mcp-tool-pack-guard", "MCP Tool Pack Guard", [
       node("scripts/check-mcp-tool-pack.mjs"),
     ], { inputs: ["code"] }),
+    // One kebab-case slug transform (plan 2026-09-08 §10.5 S7); copies whose
+    // output differs stay allowlisted with a reason, since slugs are persisted.
+    guard("local-slugify-guard", "Local Slugify Guard", [
+      conformanceTest("scripts/check-no-local-slugify.test.mjs"),
+      node("scripts/check-no-local-slugify.mjs"),
+    ]),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
     ]),

@@ -33,7 +33,7 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { execFileSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TOKENS_PATH = join(REPO_ROOT, "scripts", "private-identity-tokens.txt");
@@ -156,16 +156,12 @@ function serialize(counts) {
 
 /** Staged file paths (repo-relative, forward slashes); added/copied/modified/renamed. */
 export function stagedFiles({ repoRoot = REPO_ROOT } = {}) {
-  let out;
-  try {
-    out = execFileSync(
-      "git",
-      ["diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
-      { cwd: repoRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-    );
-  } catch {
-    return [];
-  }
+  const out = gitTextOrNull(["diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"], {
+    cwd: repoRoot,
+    trim: false,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (out === null) return [];
   return out
     .split("\0")
     .map((s) => s.trim())
@@ -175,15 +171,7 @@ export function stagedFiles({ repoRoot = REPO_ROOT } = {}) {
 
 /** Read a file's STAGED (index) content, not the working-tree copy. */
 function readStagedBlob(relPath, repoRoot) {
-  try {
-    return execFileSync("git", ["show", `:${relPath}`], {
-      cwd: repoRoot,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
-  } catch {
-    return null;
-  }
+  return gitTextOrNull(["show", `:${relPath}`], { cwd: repoRoot, trim: false, maxBuffer: 64 * 1024 * 1024 });
 }
 
 /**
