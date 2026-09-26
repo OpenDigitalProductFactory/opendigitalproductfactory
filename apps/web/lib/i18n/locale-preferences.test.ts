@@ -6,14 +6,14 @@ describe("validateLocalePreferences (AC-PREFERENCE)", () => {
   it("accepts a supported language and a real IANA timezone", () => {
     expect(validateLocalePreferences({ language: "en-US", timeZone: "America/Mexico_City" }, false)).toEqual({
       ok: true,
-      value: { preferredLanguage: "en-US", timeZone: "America/Mexico_City" },
+      data: { preferredLanguage: "en-US", timeZone: "America/Mexico_City" },
     });
   });
 
   it("treats empty values as 'follow the organization' (null)", () => {
     expect(validateLocalePreferences({ language: "", timeZone: "" }, false)).toEqual({
       ok: true,
-      value: { preferredLanguage: null, timeZone: null },
+      data: { preferredLanguage: null, timeZone: null },
     });
   });
 

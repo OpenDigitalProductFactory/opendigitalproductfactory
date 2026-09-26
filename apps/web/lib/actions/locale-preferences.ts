@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { resolvePrincipalRecordIdForSessionIdentity } from "@/lib/identity/principal-linking";
 import { validateLocalePreferences } from "@/lib/i18n/locale-preferences";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 /**
  * Save the signed-in person's own language and timezone (EP-6B33A840 L0.1).
@@ -15,20 +16,20 @@ import { validateLocalePreferences } from "@/lib/i18n/locale-preferences";
 export async function saveLocalePreferences(input: {
   language: string | null;
   timeZone: string | null;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<ActionResult> {
   const session = await auth();
   const user = session?.user;
-  if (!user?.id) return { ok: false, error: "Sign in to change your language and region." };
+  if (!user?.id) return err("Sign in to change your language and region.");
 
   const checked = validateLocalePreferences(input, user.type === "admin");
   if (!checked.ok) return checked;
 
   const principalId = await resolvePrincipalRecordIdForSessionIdentity({ type: user.type, id: user.id });
-  if (!principalId) return { ok: false, error: "Your account has no identity record to save this to." };
+  if (!principalId) return err("Your account has no identity record to save this to.");
 
-  await prisma.principal.update({ where: { id: principalId }, data: checked.value });
+  await prisma.principal.update({ where: { id: principalId }, data: checked.data });
   revalidatePath("/", "layout");
-  return { ok: true };
+  return ok();
 }
 
 /** The signed-in person's saved preferences, for the settings form. */

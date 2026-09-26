@@ -4,8 +4,7 @@
   "decisionInteractionId": "DI-8AC377281C57",
   "scope": {
     "files": [
-      "apps/web/components/admin/LocalePreferencesPanel.tsx",
-      "apps/web/app/(shell)/admin/settings/page.tsx"
+      "apps/web/components/admin/LocalePreferencesPanel.tsx"
     ]
   },
   "evidence": {

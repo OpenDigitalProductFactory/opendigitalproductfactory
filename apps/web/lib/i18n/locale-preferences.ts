@@ -7,14 +7,14 @@
 
 import { findLocale, localesWithStatus, type LocaleEntry } from "@dpf/i18n";
 
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+
 export interface LocalePreferencesInput {
   language: string | null | undefined;
   timeZone: string | null | undefined;
 }
 
-export type LocalePreferencesResult =
-  | { ok: true; value: { preferredLanguage: string | null; timeZone: string | null } }
-  | { ok: false; error: string };
+export type LocalePreferences = { preferredLanguage: string | null; timeZone: string | null };
 
 export function languageOptions(viewerIsAdmin: boolean): LocaleEntry[] {
   return [
@@ -26,7 +26,7 @@ export function languageOptions(viewerIsAdmin: boolean): LocaleEntry[] {
 export function validateLocalePreferences(
   input: LocalePreferencesInput,
   viewerIsAdmin: boolean,
-): LocalePreferencesResult {
+): ActionResult<LocalePreferences> {
   const language = input.language?.trim() || null;
   const timeZone = input.timeZone?.trim() || null;
 
@@ -34,7 +34,7 @@ export function validateLocalePreferences(
   if (language) {
     const entry = findLocale(language);
     const allowed = entry && (entry.status === "supported" || (entry.status === "pseudo" && viewerIsAdmin));
-    if (!entry || !allowed) return { ok: false, error: "That language is not available yet." };
+    if (!entry || !allowed) return err("That language is not available yet.");
     preferredLanguage = entry.tag;
   }
 
@@ -42,9 +42,9 @@ export function validateLocalePreferences(
     try {
       new Intl.DateTimeFormat("en-US", { timeZone });
     } catch {
-      return { ok: false, error: "That time zone is not recognized." };
+      return err("That time zone is not recognized.");
     }
   }
 
-  return { ok: true, value: { preferredLanguage, timeZone } };
+  return ok({ preferredLanguage, timeZone });
 }

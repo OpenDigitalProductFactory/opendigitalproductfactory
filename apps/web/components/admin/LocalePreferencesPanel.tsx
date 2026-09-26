@@ -2,16 +2,19 @@
 
 import { useMemo, useState, useTransition } from "react";
 
+import { Button } from "@/components/ui/Button";
+import { Surface } from "@/components/ui/Surface";
 import { saveLocalePreferences } from "@/lib/actions/locale-preferences";
 import { languageOptions } from "@/lib/i18n/locale-preferences";
 
 // EP-6B33A840 L0.1 — a person's own language and time zone. Empty = follow the
 // organization (and, for language, the browser). Only English is supported
 // today; admins also see the two pseudo-locales used to check a screen's
-// translation and right-to-left readiness.
+// translation and right-to-left readiness. Copy moves into the message
+// catalog with L0.2.
 
 const SELECT_CLASS =
-  "shrink-0 px-3 py-2 text-xs bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)] max-w-full";
+  "shrink-0 max-w-full px-3 py-2 text-xs bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]";
 
 export function LocalePreferencesPanel({
   preferredLanguage,
@@ -47,21 +50,13 @@ export function LocalePreferencesPanel({
   return (
     <div className="mt-8">
       <h2 className="text-lg font-semibold text-[var(--dpf-text)] mb-1">Language and region</h2>
-      <p className="text-sm text-[var(--dpf-muted)] mb-4">
-        Your own language and time zone for this workspace. Leave them on the organization setting unless you
-        need something different. More languages will appear here as they are translated.
-      </p>
+      <p className="text-sm text-[var(--dpf-muted)] mb-4">Your own settings. Leave them on the organization default.</p>
 
       <div className="space-y-3">
-        <div className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
+        <Surface>
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <label htmlFor="locale-pref-language" className="min-w-0">
-              <span className="text-sm font-semibold text-[var(--dpf-text)]">Language</span>
-              <span className="block text-xs text-[var(--dpf-muted)] mt-0.5">
-                {viewerIsAdmin
-                  ? "The two test languages show every screen in placeholder text so you can spot untranslated or cramped wording and check right-to-left layout."
-                  : "The language the workspace is shown in."}
-              </span>
+            <label htmlFor="locale-pref-language" className="text-sm font-semibold text-[var(--dpf-text)]">
+              Language
             </label>
             <select
               id="locale-pref-language"
@@ -70,7 +65,7 @@ export function LocalePreferencesPanel({
               disabled={isPending}
               className={SELECT_CLASS}
             >
-              <option value="">Organization setting</option>
+              <option value="">Organization default</option>
               {languages.map((l) => (
                 <option key={l.tag} value={l.tag}>
                   {l.englishName}
@@ -78,15 +73,12 @@ export function LocalePreferencesPanel({
               ))}
             </select>
           </div>
-        </div>
+        </Surface>
 
-        <div className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
+        <Surface>
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <label htmlFor="locale-pref-timezone" className="min-w-0">
-              <span className="text-sm font-semibold text-[var(--dpf-text)]">Time zone</span>
-              <span className="block text-xs text-[var(--dpf-muted)] mt-0.5">
-                Used for times shown to you. Schedules and opening hours keep their own time zone.
-              </span>
+            <label htmlFor="locale-pref-timezone" className="text-sm font-semibold text-[var(--dpf-text)]">
+              Time zone
             </label>
             <select
               id="locale-pref-timezone"
@@ -95,7 +87,7 @@ export function LocalePreferencesPanel({
               disabled={isPending}
               className={SELECT_CLASS}
             >
-              <option value="">Organization time zone</option>
+              <option value="">Organization default</option>
               {zones.map((z) => (
                 <option key={z} value={z}>
                   {z.replace(/_/g, " ")}
@@ -103,18 +95,13 @@ export function LocalePreferencesPanel({
               ))}
             </select>
           </div>
-        </div>
+        </Surface>
       </div>
 
       <div className="flex items-center gap-3 mt-4">
-        <button
-          type="button"
-          onClick={save}
-          disabled={isPending || !dirty}
-          className="px-4 py-2 text-xs font-semibold bg-[var(--dpf-accent)] text-[var(--dpf-on-accent)] rounded disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
-        >
-          {isPending ? "Saving…" : "Save language and region"}
-        </button>
+        <Button type="button" size="sm" onClick={save} disabled={isPending || !dirty}>
+          {isPending ? "Saving…" : "Save"}
+        </Button>
         {error ? (
           <span role="alert" className="text-xs text-[var(--dpf-error)]">
             {error}
