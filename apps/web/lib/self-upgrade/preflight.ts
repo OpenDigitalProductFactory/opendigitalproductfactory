@@ -17,9 +17,11 @@ type RecordReadiness = typeof import("./run-store").recordPromoterReadiness;
 type FailRun = typeof import("./run-store").failRun;
 type ReadinessFailure = { code: string; message: string; remediation?: string };
 
+type PrePullDoctools = typeof import("./doctools-release-image").prePullReleaseDoctoolsImage;
+
 export type CandidatePreflightResult =
   | { ok: true; resolvedPromoterDigest?: string; migrationHandoff?: InstallStateMigrationHandoff }
-  | { ok: false; reason: "promoter-readiness-failed" | "installer-state-repair-required" };
+  | { ok: false; reason: "promoter-readiness-failed" | "installer-state-repair-required" | "doctools-prepull-failed" };
 
 /**
  * Resolve the host path bound to /backups in the readiness container, mirroring
@@ -65,6 +67,8 @@ export async function runCandidatePreflight(params: {
   hostIdentity?: SelfUpgradeHostIdentity;
   runtimeTransitionSecret?: string;
   now?: () => Date;
+  /** Test seam; defaults to prePullReleaseDoctoolsImage. */
+  prePullDoctools?: (release: VerifiedReleaseIdentity) => Promise<Awaited<ReturnType<PrePullDoctools>>>;
 }): Promise<CandidatePreflightResult> {
   if (params.dryRun) return { ok: true };
   if (params.readinessMode === "legacy-bootstrap") {
@@ -80,8 +84,29 @@ export async function runCandidatePreflight(params: {
     return { ok: false, reason: "installer-state-repair-required" };
   }
 
-  const runtime = await params.runtime();
   const startedAt = new Date().toISOString();
+  // BI-698B7F9A: make the target release's dpf-doctools present BEFORE the
+  // swap, so the new portal has no image-missing window. It runs first: the
+  // signed handoff below expires 10 minutes after readiness, and a long pull
+  // must not sit between readiness and the drain.
+  if (params.release) {
+    const prePull = params.prePullDoctools
+      ?? (await import("./doctools-release-image")).prePullReleaseDoctoolsImage;
+    const pulled = await prePull(params.release);
+    if (pulled.outcome === "failed") {
+      await params.recordReadiness(params.runId, {
+        stage: "preflight", owner: "portal", mode: "enforced", result: "failed",
+        baselineSha: params.baselineSha ?? undefined, targetSha: params.targetSha,
+        startedAt, completedAt: new Date().toISOString(), quiescenceBegan: false,
+        failures: [{ code: "doctools_prepull_failed", message: pulled.reason }],
+      });
+      const reason = `doctools-prepull-failed: ${pulled.reason}`;
+      await params.failRun(params.runId, reason, reason);
+      await params.emitFailure(params.runId);
+      return { ok: false, reason: "doctools-prepull-failed" };
+    }
+  }
+  const runtime = await params.runtime();
   try {
     const image = params.candidatePromoterReference ?? await runtime.buildCandidatePromoterImage({
       sourcePath: params.sourcePath, targetSha: params.targetSha, promoterImage: params.promoterImage,

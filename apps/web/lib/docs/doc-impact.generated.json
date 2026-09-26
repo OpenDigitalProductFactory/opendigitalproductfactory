@@ -1136,6 +1136,9 @@
     "apps/web/lib/self-upgrade/local-changes-ledger.ts": [
       "docs/architecture/branch-and-worktree-runbook.md"
     ],
+    "apps/web/lib/self-upgrade/preflight.test.ts": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "apps/web/lib/self-upgrade/prepare-source.ts": [
       "docs/dev/collision-free-dev-workflow.md"
     ],
@@ -2006,6 +2009,9 @@
     ],
     "scripts/install-worktree-janitor-schedule.sh": [
       "docs/install/worktree-janitor-schedule.md"
+    ],
+    "scripts/installer/doctools-prepull.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "scripts/installer/install-release-assets.mjs": [
       "docs/architecture/build-gate-runbook.md"
@@ -3121,12 +3127,14 @@
       "apps/web/lib/govern/auth-redirect.ts",
       "apps/web/lib/nonprod/gate-client-revision.ts",
       "apps/web/lib/self-upgrade/doctools-release-image.test.ts",
+      "apps/web/lib/self-upgrade/preflight.test.ts",
       "docker-compose.edge-actions.yml",
       "docker-compose.linux.yml",
       "docker-entrypoint.sh",
       "packages/db/src/discovery-collectors/network.ts",
       "scripts/check-no-url-pathname-fs.mjs",
       "scripts/hooks/run-hook.mjs",
+      "scripts/installer/doctools-prepull.test.mjs",
       "scripts/installer/lib/platform.sh",
       "scripts/lib/dockerfile-portal-build.test.mjs",
       "scripts/lib/entry-module.mjs",
