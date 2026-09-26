@@ -30,7 +30,7 @@ import {
   type ProposalDissent,
 } from "@/lib/decision/resolution-proposal-store";
 
-import type { ReviewLine, ReviewProposedAction } from "./measures";
+import type { ReviewLine } from "./measures";
 
 /**
  * A deterministic measure convenes no panel, and the schema is explicit that
@@ -48,19 +48,92 @@ export const NO_PANEL_DISSENT: readonly ProposalDissent[] = [
 ];
 
 /**
- * Only actions that are genuinely a governance ruling become proposals.
+ * What the review knows about the install beyond the ledger, resolved by the
+ * caller so this module stays free of I/O (BI-1A2FD647).
  *
- * `file-defect` is deliberately absent. A defect is engineering work, and
- * auto-filing backlog items from a weekly measure would put a duplicate in the
- * pool every week the defect stayed open. Those lines are reported for a human
- * to file, and the count is returned so they cannot be silently dropped.
+ * A proposal is written only when the owner can actually accept it: every
+ * payload names the thing its write-through changes. Before this, every card
+ * the review wrote was refused on accept, because the router named actions
+ * whose inputs it never supplied.
  */
-const ACTION_BY_PROPOSAL: Partial<Record<ReviewProposedAction, ProposalActionKind>> = {
-  "confirm-material": "release_material",
-  "publish-craft-page": "answer_gap",
-  "examine-weight": "adjust_weight",
-  "capture-stance": "amend_stance",
+export type RoutingFacts = {
+  /** `wsid-` profiles holding high-stakes material awaiting a person's release. */
+  heldMaterialProfileIds: ReadonlySet<string>;
+  /** The open weight-adjustment proposal for each decision class, if any. */
+  openWeightProposalByDomainClass: ReadonlyMap<string, string>;
+  /**
+   * Nominate a craft corpus gap to the craft's own coworker. Growing a corpus
+   * is not destructive, irreversible or regulated, so by the founder's
+   * 2026-09-24 doctrine it is a coworker's job, not a card in a person's queue.
+   * Absent means nomination is unavailable and the line is only reported.
+   */
+  nominateCorpusGap?: (input: {
+    professionKey: string;
+    domainClass: string;
+    headline: string;
+  }) => Promise<{ nominated: boolean; reason?: string; needId?: string }>;
 };
+
+export const NO_ROUTING_FACTS: RoutingFacts = {
+  heldMaterialProfileIds: new Set(),
+  openWeightProposalByDomainClass: new Map(),
+};
+
+/**
+ * How one finding is resolved: a proposal an owner can accept, a nomination
+ * to the craft's coworker, or a line reported with the reason nothing was
+ * written.
+ *
+ * `file-defect` never becomes a proposal. A defect is engineering work, and
+ * auto-filing backlog items from a weekly measure would put a duplicate in the
+ * pool every week the defect stayed open.
+ */
+type FindingPlan =
+  | { kind: "proposal"; actionKind: ProposalActionKind; payload: Record<string, unknown> }
+  | { kind: "nominate"; professionKey: string; domainClass: string }
+  | { kind: "report"; reason: string };
+
+function stringEvidence(line: ReviewLine, key: string): string | null {
+  const value = line.evidence[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function planFinding(line: ReviewLine, profileId: string, facts: RoutingFacts): FindingPlan {
+  const craft = line.scope === "wsid" && line.professionKey ? line.professionKey : null;
+  switch (line.proposedAction) {
+    case "confirm-material":
+      // Held material is the one craft release a person owns: it was held
+      // because its family touches finance or compliance.
+      if (craft && facts.heldMaterialProfileIds.has(profileId)) {
+        return { kind: "proposal", actionKind: "release_material", payload: { profileId } };
+      }
+      if (craft) {
+        return { kind: "nominate", professionKey: craft, domainClass: stringEvidence(line, "domainClass") ?? "all-decision-classes" };
+      }
+      return { kind: "report", reason: "platform doctrine is curated by its owner; no automated writer grows it" };
+    case "publish-craft-page":
+      return craft
+        ? { kind: "nominate", professionKey: craft, domainClass: stringEvidence(line, "domainClass") ?? "all-decision-classes" }
+        : { kind: "report", reason: "no craft named to publish for" };
+    case "examine-weight": {
+      const domainClass = stringEvidence(line, "domainClass");
+      const weightProposalId = domainClass ? facts.openWeightProposalByDomainClass.get(domainClass) : undefined;
+      return weightProposalId
+        ? { kind: "proposal", actionKind: "adjust_weight", payload: { weightProposalId } }
+        : { kind: "report", reason: "no open weight proposal for this decision class to rule on" };
+    }
+    case "capture-stance": {
+      // The owner answers the question their decisions keep repeating. The
+      // answer is theirs to write, so the draft carries the question only.
+      const question = stringEvidence(line, "sample");
+      return question
+        ? { kind: "proposal", actionKind: "answer_gap", payload: { question, answer: "" } }
+        : { kind: "report", reason: "the repeated question was not recorded" };
+    }
+    default:
+      return { kind: "report", reason: `no resolution for ${line.proposedAction}` };
+  }
+}
 
 /**
  * Namespaced so a review finding can never collide with a real decision's
@@ -109,6 +182,10 @@ export type RoutingSummary = {
   needsDefectFiled: number;
   /** Lines whose scope named no owner — a measure defect, surfaced not hidden. */
   unroutable: number;
+  /** Craft corpus gaps handed to the craft's coworker instead of a person. */
+  nominated: number;
+  /** Lines with nothing an owner could accept; the reason is on the routed entry. */
+  reported: number;
   routed: RoutedFinding[];
 };
 
@@ -119,6 +196,8 @@ export function emptyRoutingSummary(): RoutingSummary {
     alreadyRuled: 0,
     needsDefectFiled: 0,
     unroutable: 0,
+    nominated: 0,
+    reported: 0,
     routed: [],
   };
 }
@@ -137,7 +216,9 @@ export async function routeReviewFindings(input: {
   db: ProposalClient;
   lines: readonly ReviewLine[];
   periodKey: string;
+  facts?: RoutingFacts;
 }): Promise<RoutingSummary> {
+  const facts = input.facts ?? NO_ROUTING_FACTS;
   const summary = emptyRoutingSummary();
 
   for (const line of input.lines) {
@@ -156,9 +237,8 @@ export async function routeReviewFindings(input: {
       continue;
     }
 
-    const actionKind = ACTION_BY_PROPOSAL[line.proposedAction];
     const profileId = ownerProfileIdForLine(line);
-    if (!actionKind || !profileId) {
+    if (!profileId) {
       summary.unroutable += 1;
       summary.routed.push({
         lineKey: line.lineKey,
@@ -172,6 +252,45 @@ export async function routeReviewFindings(input: {
     }
 
     const domainClass = reviewDomainClass(line);
+    const plan = planFinding(line, profileId, facts);
+
+    if (plan.kind === "nominate") {
+      const nomination = facts.nominateCorpusGap
+        ? await facts.nominateCorpusGap({
+          professionKey: plan.professionKey,
+          domainClass: plan.domainClass,
+          headline: line.headline,
+        }).catch(() => null)
+        : null;
+      const opened = Boolean(nomination && (nomination.nominated || nomination.reason === "duplicate-open-need"));
+      if (opened) summary.nominated += 1;
+      else summary.reported += 1;
+      summary.routed.push({
+        lineKey: line.lineKey,
+        profileId,
+        domainClass,
+        actionKind: "no_change",
+        proposalId: null,
+        outcome: opened
+          ? `nominated${nomination?.needId ? `:${nomination.needId}` : ""}`
+          : `reported:${nomination?.reason ?? "nomination unavailable"}`,
+      });
+      continue;
+    }
+    if (plan.kind === "report") {
+      summary.reported += 1;
+      summary.routed.push({
+        lineKey: line.lineKey,
+        profileId,
+        domainClass,
+        actionKind: "no_change",
+        proposalId: null,
+        outcome: `reported:${plan.reason}`,
+      });
+      continue;
+    }
+
+    const actionKind = plan.actionKind;
     const result = await createResolutionProposal(input.db, {
       scopeKind: "gap_cluster",
       domainClass,
@@ -185,6 +304,8 @@ export async function routeReviewFindings(input: {
         scope: line.scope,
         professionKey: line.professionKey,
         evidence: line.evidence,
+        // What the write-through reads on accept (BI-1A2FD647).
+        ...plan.payload,
       },
       summary: `${line.headline} (weekly decision-engine review ${input.periodKey})`,
       dissent: [...NO_PANEL_DISSENT],
@@ -226,5 +347,7 @@ export function describeRouting(summary: RoutingSummary): string {
     `${summary.alreadyRuled} already ruled`,
     `${summary.needsDefectFiled} needing a defect filed`,
     `${summary.unroutable} unroutable`,
+    `${summary.nominated} nominated to a craft coworker`,
+    `${summary.reported} reported`,
   ].join(", ");
 }

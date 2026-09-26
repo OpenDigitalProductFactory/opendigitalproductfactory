@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   DEFAULT_RESUME_INTERVAL_MS,
@@ -14,6 +14,7 @@ import {
   shouldSpawnResumer,
   spawnDurableWaitResumer,
 } from "./durable-wait-resumer.mjs";
+import { runBreakawayLaunch, spawnOutsideCallerJob } from "./win32-job-breakaway.mjs";
 import {
   EXIT_QUEUED,
   INFRASTRUCTURE_BACKOFF_MS,
@@ -565,4 +566,179 @@ test("a real resumer stops on a cancelled gate and ran it from the pinned worktr
     .split("\n").filter(Boolean).map((line) => JSON.parse(line))
     .find((entry) => entry.event === "finished");
   assert.deepEqual(finished.outcome, { evidence: "unrun", reason: "cancelled" });
+});
+
+// ─── BI-27A37D27: the resumer must outlive the client session on Windows ────
+//
+// Measured 2026-09-26: node's `detached: true` does not take a Windows child out
+// of the caller's JOB OBJECT. Every resumer sat in the same job as claude.exe
+// (IsProcessInJob=true) and died with the session, so a queued gate lapsed while
+// pregate:status kept saying "queued". A process created through WMI
+// Win32_Process.Create is parented by WmiPrvSE and is in no job.
+
+function breakawayHarness({ stdout = "0 5151", throws = null } = {}) {
+  const calls = { exec: [], spawn: [], specs: [] };
+  const stateDirectory = mkdtempSync(join(tmpdir(), "dpf-breakaway-"));
+  const deps = {
+    stateDirectory,
+    launcherPath: "/repo/scripts/lib/win32-job-breakaway.mjs",
+    nodePath: "C:/node/node.exe",
+    execFileSyncImpl: (file, args, options) => {
+      calls.exec.push({ file, args, options });
+      const specPath = options.env.DPF_BREAKAWAY_SPEC;
+      calls.specs.push(JSON.parse(readFileSync(specPath, "utf8")));
+      if (throws) throw new Error(throws);
+      return stdout;
+    },
+    nodeSpawn: (command, args, options) => {
+      calls.spawn.push({ command, args, options });
+      return stubChild(777);
+    },
+  };
+  return { calls, deps };
+}
+
+test("on Windows the resumer is created through WMI, outside the caller's job (BI-27A37D27)", () => {
+  const { calls, deps } = breakawayHarness();
+  const child = spawnOutsideCallerJob(
+    "C:/node/node.exe",
+    ["/repo/scripts/local-ci-durable-wait-resumer.mjs", "--branch", "fix/x"],
+    { cwd: "D:/repo", env: { DPF_MCP_BEARER_TOKEN: "t", [RESUME_MARKER_ENV]: "1" } },
+    deps,
+  );
+
+  assert.equal(child.pid, 5151);
+  assert.equal(child.via, "wmi-breakaway");
+  assert.equal(child.sessionBound, false);
+  assert.equal(calls.spawn.length, 0, "no in-job fallback when WMI succeeded");
+  assert.equal(calls.exec[0].file, "powershell.exe");
+  assert.match(calls.exec[0].args.join(" "), /Win32_Process/);
+  assert.match(calls.exec[0].args.join(" "), /Create/);
+  // The launch spec carries the exact command, cwd and environment, so the
+  // job-escaped process runs with the session's credentials and marker.
+  assert.deepEqual(calls.specs[0].args, ["/repo/scripts/local-ci-durable-wait-resumer.mjs", "--branch", "fix/x"]);
+  assert.equal(calls.specs[0].cwd, "D:/repo");
+  assert.equal(calls.specs[0].env.DPF_MCP_BEARER_TOKEN, "t");
+  assert.equal(calls.specs[0].env[RESUME_MARKER_ENV], "1");
+  assert.match(calls.exec[0].options.env.DPF_BREAKAWAY_CMD, /win32-job-breakaway\.mjs/);
+});
+
+test("a failed WMI launch falls back to the in-job spawn and says the waiter is session-bound", () => {
+  const { calls, deps } = breakawayHarness({ throws: "Access denied" });
+  const child = spawnOutsideCallerJob("node", ["/r.mjs"], { cwd: "D:/repo", env: {} }, deps);
+  assert.equal(child.pid, 777);
+  assert.equal(child.sessionBound, true);
+  assert.match(child.breakawayError, /Access denied/);
+  assert.equal(calls.spawn[0].options.detached, true);
+  assert.equal(calls.spawn[0].options.windowsHide, true);
+});
+
+test("a non-zero Win32_Process.Create return value is a failed launch, not a pid", () => {
+  const { calls, deps } = breakawayHarness({ stdout: "9 0" });
+  const child = spawnOutsideCallerJob("node", ["/r.mjs"], { cwd: "D:/repo", env: {} }, deps);
+  assert.equal(child.sessionBound, true);
+  assert.match(child.breakawayError, /returned 9/);
+  assert.equal(calls.spawn.length, 1);
+});
+
+test("spawnDurableWaitResumer reports whether its waiter survives the session", () => {
+  const bound = spawnDurableWaitResumer({
+    runnerPath: "/runner.mjs",
+    gateArgv: GATE_ARGV,
+    env: {},
+    spawnFn: () => ({ ...stubChild(31), via: "detached", sessionBound: true }),
+  });
+  assert.equal(bound.spawned, true);
+  assert.equal(bound.survivesSession, false);
+
+  const free = spawnDurableWaitResumer({
+    runnerPath: "/runner.mjs",
+    gateArgv: GATE_ARGV,
+    env: {},
+    spawnFn: () => ({ ...stubChild(32), via: "wmi-breakaway", sessionBound: false }),
+  });
+  assert.equal(free.survivesSession, true);
+  assert.equal(free.via, "wmi-breakaway");
+});
+
+test("the launcher reads and deletes its spec, then starts the resumer detached with that environment", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-breakaway-launch-"));
+  const specPath = join(dir, "launch.json");
+  writeFileSync(specPath, JSON.stringify({
+    command: "C:/node/node.exe",
+    args: ["/runner.mjs", "--branch", "fix/x"],
+    cwd: "D:/repo",
+    env: { DPF_MCP_BEARER_TOKEN: "t" },
+  }));
+  const spawned = [];
+  runBreakawayLaunch(specPath, {
+    spawnImpl: (command, args, options) => { spawned.push({ command, args, options }); return stubChild(88); },
+  });
+  assert.equal(spawned.length, 1);
+  assert.equal(spawned[0].command, "C:/node/node.exe");
+  assert.deepEqual(spawned[0].args, ["/runner.mjs", "--branch", "fix/x"]);
+  assert.equal(spawned[0].options.cwd, "D:/repo");
+  assert.equal(spawned[0].options.env.DPF_MCP_BEARER_TOKEN, "t");
+  assert.equal(spawned[0].options.detached, true);
+  // The spec holds the session environment (credentials included); it must not outlive the launch.
+  assert.throws(() => readFileSync(specPath, "utf8"), /ENOENT/);
+});
+
+// BI-27A37D27 acceptance: kill the invoking process TREE after the gate hands
+// its claim to a resumer, then prove the resumer is still alive and working.
+// POSIX: the caller leads its own process group and the whole group is killed;
+// Windows: `taskkill /T /F` kills the caller and every descendant by parent pid.
+// A resumer that is still a descendant of the caller dies either way.
+test("the resumer survives its caller's whole process tree being killed", { timeout: 60_000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-resumer-survival-"));
+  const heartbeat = join(dir, "heartbeat.log");
+  const runnerPath = join(dir, "stub-resumer.mjs");
+  writeFileSync(runnerPath, [
+    'import { appendFileSync, writeFileSync } from "node:fs";',
+    "const file = process.env.DPF_TEST_HEARTBEAT;",
+    'writeFileSync(file + ".pid", String(process.pid));',
+    'setInterval(() => appendFileSync(file, "tick\\n"), 100);',
+    "setTimeout(() => process.exit(0), 30_000);",
+  ].join("\n"));
+  const modulePath = fileURLToPath(new URL("./durable-wait-resumer.mjs", import.meta.url));
+  const callerPath = join(dir, "caller.mjs");
+  writeFileSync(callerPath, [
+    `import { spawnDurableWaitResumer } from ${JSON.stringify(pathToFileURL(modulePath).href)};`,
+    `const r = spawnDurableWaitResumer({ runnerPath: ${JSON.stringify(runnerPath)}, gateArgv: [process.execPath, "gate.mjs"], cwd: ${JSON.stringify(dir)}, env: { ...process.env, DPF_TEST_HEARTBEAT: ${JSON.stringify(heartbeat)} } });`,
+    'process.stdout.write(JSON.stringify(r) + "\\n");',
+    "setInterval(() => {}, 1000);",
+  ].join("\n"));
+
+  const caller = spawn(process.execPath, [callerPath], {
+    stdio: ["ignore", "pipe", "inherit"],
+    detached: process.platform !== "win32",
+  });
+  const report = await new Promise((resolve, reject) => {
+    let out = "";
+    caller.stdout.on("data", (chunk) => {
+      out += chunk;
+      if (out.includes("\n")) resolve(JSON.parse(out.split("\n")[0]));
+    });
+    caller.on("error", reject);
+  });
+  assert.equal(report.spawned, true);
+  assert.equal(report.survivesSession, true, `resumer not session-independent: ${report.reason}`);
+
+  const ticks = () => { try { return readFileSync(heartbeat, "utf8").split("\n").filter(Boolean).length; } catch { return 0; } };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (let i = 0; i < 100 && ticks() === 0; i += 1) await sleep(100);
+  assert.ok(ticks() > 0, "resumer never started");
+
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/T", "/F", "/PID", String(caller.pid)]);
+  } else {
+    process.kill(-caller.pid, "SIGKILL");
+  }
+  await sleep(1_000);
+  const before = ticks();
+  await sleep(1_000);
+  const after = ticks();
+  const resumerPid = Number(readFileSync(`${heartbeat}.pid`, "utf8"));
+  try { process.kill(resumerPid, "SIGKILL"); } catch { /* already gone would have failed below */ }
+  assert.ok(after > before, `resumer stopped when its caller's tree was killed (ticks ${before} -> ${after})`);
 });

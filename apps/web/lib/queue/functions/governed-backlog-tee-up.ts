@@ -1,8 +1,8 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
-export const governedBacklogTeeUpScheduled = inngest.createFunction(
+export const governedBacklogTeeUpScheduled = jobs.createFunction(
   {
     id: "build/governed-backlog-tee-up-scheduled",
     retries: 2,
@@ -32,7 +32,7 @@ export const governedBacklogTeeUpScheduled = inngest.createFunction(
   },
 );
 
-export const governedBacklogTeeUpRequested = inngest.createFunction(
+export const governedBacklogTeeUpRequested = jobs.createFunction(
   {
     id: "build/governed-backlog-tee-up-requested",
     retries: 2,

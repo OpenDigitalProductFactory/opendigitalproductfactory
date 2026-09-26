@@ -1,7 +1,7 @@
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { buildPipelineConcurrency } from "../admission";
 
-export const assuranceBomGenerate = inngest.createFunction(
+export const assuranceBomGenerate = jobs.createFunction(
   {
     id: "assurance/bom-generate",
     retries: 1,

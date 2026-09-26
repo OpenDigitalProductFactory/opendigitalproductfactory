@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
@@ -37,10 +38,15 @@ export function classifyChangedFiles(files) {
 }
 
 function parseArgs(args) {
-  const outputPathIndex = args.indexOf("--github-output");
-  return {
-    githubOutputPath: outputPathIndex >= 0 ? args[outputPathIndex + 1] : undefined,
-  };
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args,
+    strict: false,
+    allowPositionals: true,
+    options: { "github-output": { type: "string" } },
+  });
+  const githubOutputPath = values["github-output"];
+  return { githubOutputPath: typeof githubOutputPath === "string" ? githubOutputPath : undefined };
 }
 
 function readStdin() {

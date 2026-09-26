@@ -15,8 +15,8 @@ const mocks = vi.hoisted(() => ({
   admitSelfUpgrade: vi.fn(),
 }));
 
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: {
+vi.mock("@/lib/jobs", () => ({
+  jobs: {
     send: mocks.inngestSend,
   },
 }));

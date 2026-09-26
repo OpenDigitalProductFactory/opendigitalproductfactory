@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it, vi } from "vitest";
-import { parseCsv, parseFileContent, sniffOfficeContainer, type ParseFileDeps } from "./file-parsers";
+import { describe, expect, it } from "vitest";
+import { parseCsv, parseFileContent, sniffOfficeContainer, type ConvertForIngestion, type ParseFileDeps } from "./file-parsers";
+import { odsWithRows, odtWithBody } from "./__fixtures__/odf-package";
 
 // Real bytes, saved from Word: an OLE compound file, RTF, OOXML, and the same
 // OOXML file carrying a .doc name (BI-65D65EC0).
@@ -21,13 +22,17 @@ function odfBytes(): Buffer {
   return Buffer.concat([header, name, body]);
 }
 
-vi.mock("read-excel-file/universal", () => ({
-  readSheet: vi.fn(async () => [
-    ["Name", "Score"],
-    ["Alice", 10],
-    ["Bob", 20],
-  ]),
-}));
+// The engine's side of a conversion (BI-D1B40D43): every Word-family file comes
+// back as .odt and every sheet as .ods. The real engine is exercised in
+// office-conversion.docker.test.ts.
+const engine: ConvertForIngestion = async ({ to }) => {
+  if (to === "ods") return { ok: true, data: { bytes: odsWithRows([["Name", "Score"], ["Alice", 10], ["Bob", 20]]), mime: "x" } };
+  if (to === "odt") {
+    const body = '<text:h text:outline-level="1">Rescue operations plan</text:h><text:p>Second Chance fosters twelve dogs this quarter.</text:p>';
+    return { ok: true, data: { bytes: odtWithBody(body), mime: "x" } };
+  }
+  return { ok: false, error: `no fake output for ${to}`, reason: "conversion-failed" };
+};
 
 describe("parseCsv", () => {
   it("extracts columns and sample rows", () => {
@@ -64,7 +69,7 @@ describe("parseFileContent", () => {
   });
 
   it("parses xlsx files into spreadsheet summaries", async () => {
-    const result = await parseFileContent(Buffer.from("xlsx"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "test.xlsx");
+    const result = await parseFileContent(Buffer.from("xlsx"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "test.xlsx", { convert: engine });
     if (result?.type !== "spreadsheet") throw new Error("expected spreadsheet");
     expect(result.columns).toEqual(["Name", "Score"]);
     expect(result.sampleRows).toEqual([
@@ -110,7 +115,7 @@ const noConverter: ParseFileDeps = {
 };
 
 describe("parseFileContent office formats (BI-65D65EC0)", () => {
-  it("returns an unsupported result for a real Word 97-2003 file instead of calling mammoth", async () => {
+  it("returns an unsupported result for a real Word 97-2003 file when there is no converter", async () => {
     const result = await parseFileContent(legacyDoc, "application/msword", "plan.doc", noConverter);
     expect(result).toMatchObject({ type: "unsupported", format: "legacy-word" });
     if (result?.type !== "unsupported") throw new Error("expected unsupported");
@@ -131,15 +136,22 @@ describe("parseFileContent office formats (BI-65D65EC0)", () => {
     expect(result).toMatchObject({ type: "unsupported", format: "opendocument" });
   });
 
-  it("parses a real .docx", async () => {
-    const result = await parseFileContent(docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "plan.docx");
+  it("reads a real .docx through the engine", async () => {
+    const result = await parseFileContent(docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "plan.docx", { convert: engine });
     expect(result).toMatchObject({ type: "document" });
     if (result?.type !== "document") throw new Error("expected document");
     expect(result.fullText).toContain("Second Chance fosters twelve dogs this quarter.");
   });
 
-  it("parses a .docx that carries a .doc name (the bytes win)", async () => {
-    const result = await parseFileContent(docxNamedDoc, "application/msword", "plan.doc");
+  it("reads a .docx that carries a .doc name as a .docx (the bytes win)", async () => {
+    const calls: string[] = [];
+    const result = await parseFileContent(docxNamedDoc, "application/msword", "plan.doc", {
+      convert: async (request) => {
+        calls.push(request.from);
+        return engine(request);
+      },
+    });
+    expect(calls).toEqual(["docx"]);
     expect(result).toMatchObject({ type: "document" });
     if (result?.type !== "document") throw new Error("expected document");
     expect(result.fullText).toContain("Rescue operations plan");

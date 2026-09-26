@@ -1,7 +1,7 @@
 /**
  * TAK-JSI Markdown -> DOCX generator.
  *
- * Usage: node docs/architecture/generate-jsi-docx.mjs
+ * Usage: pnpm exec tsx docs/architecture/generate-jsi-docx.mjs
  */
 
 import { publicationConfig } from "./agent-standard-publications.mjs";

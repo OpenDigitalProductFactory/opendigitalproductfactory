@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { parseFileContent } from "@/lib/shared/file-parsers";
+import { odtWithBody } from "@/lib/shared/__fixtures__/odf-package";
 
 import type { ManagedDocument } from "@/lib/documents/document-store";
 import {
@@ -110,16 +111,16 @@ describe("captureBusinessDocument", () => {
     expect(d.save).not.toHaveBeenCalled();
   });
 
-  it("captures a real Word 97-2003 file once the converter turns it into .docx (BI-81524041)", async () => {
+  it("captures a real Word 97-2003 file once the converter turns it into .odt (BI-81524041, BI-D1B40D43)", async () => {
     const legacyDoc = readFileSync(resolve(__dirname, "../shared/__fixtures__/office/plan.doc"));
-    const docx = readFileSync(resolve(__dirname, "../shared/__fixtures__/office/plan.docx"));
-    const convert = vi.fn(async () => ({ ok: true as const, data: { bytes: docx, mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" } }));
+    const odt = odtWithBody('<text:h text:outline-level="1">Rescue operations plan</text:h><text:p>Second Chance fosters twelve dogs this quarter.</text:p>');
+    const convert = vi.fn(async () => ({ ok: true as const, data: { bytes: odt, mime: "application/vnd.oasis.opendocument.text" } }));
     const d = deps({ parse: (buffer, mimeType, fileName) => parseFileContent(buffer, mimeType, fileName, { convert }) });
     const res = await captureBusinessDocument(
       { organizationId: ORG, fileName: "plan.doc", mimeType: "application/msword", buffer: legacyDoc },
       d,
     );
-    expect(convert).toHaveBeenCalledWith({ input: legacyDoc, from: "doc", to: "docx" });
+    expect(convert).toHaveBeenCalledWith({ input: legacyDoc, from: "doc", to: "odt" });
     expect(res.textLength).toBeGreaterThan(0);
     const saved = vi.mocked(d.save!).mock.calls[0]![0];
     expect(saved.contentText).toContain("Second Chance fosters twelve dogs this quarter.");

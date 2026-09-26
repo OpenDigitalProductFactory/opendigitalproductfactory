@@ -308,8 +308,8 @@ async function triggerContributorInventorySync(params: Record<string, unknown>):
   // in apps/web/lib/queue/functions/contributor-inventory-sync.ts.
   const reason = typeof params["reason"] === "string" ? params["reason"] : null;
   try {
-    const { inngest } = await import("@/lib/queue/inngest-client");
-    const result = await inngest.send({
+    const { jobs } = await import("@/lib/jobs");
+    const result = await jobs.send({
       name: "ops/contributor-inventory-sync.run",
       data: { triggeredBy: reason ? `mcp:${reason}` : "mcp" },
     });

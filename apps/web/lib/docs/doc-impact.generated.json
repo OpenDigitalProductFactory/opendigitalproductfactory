@@ -836,6 +836,9 @@
     "apps/web/lib/hooks/useResilientEventSource.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
+    "apps/web/lib/i18n/locale-context.server.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
     "apps/web/lib/identity/aidoc-resolver.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/ai-agent-meta-model.md"
@@ -865,6 +868,12 @@
     ],
     "apps/web/lib/integrations/connectors/index.ts": [
       "docs/architecture/unified-connector-kernel.md"
+    ],
+    "apps/web/lib/jobs/index.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/jobs/inngest-adapter.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/kernel/runtime-gate.ts": [
       "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md"
@@ -985,6 +994,12 @@
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
     ],
+    "apps/web/lib/org-locale/locale-context.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
+    "apps/web/lib/org-locale/org-locale.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
     "apps/web/lib/performance/business-analysis-watch-run.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -1052,9 +1067,6 @@
     ],
     "apps/web/lib/queue/functions/workroom-drive.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
-    ],
-    "apps/web/lib/queue/inngest-client.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/queue/notification-adapter.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1130,6 +1142,9 @@
     "apps/web/lib/self-upgrade/doctools-release-image.test.ts": [
       "docs/install/platform-support-watchlist.md"
     ],
+    "apps/web/lib/self-upgrade/doctools-source-lineage.test.ts": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "apps/web/lib/self-upgrade/host-memory-preflight.ts": [
       "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
@@ -1164,6 +1179,9 @@
       "docs/user-guide/workspace/supported-file-formats.md"
     ],
     "apps/web/lib/shared/org-address.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "apps/web/lib/shared/slugify.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "apps/web/lib/shared/use-save-state.test.ts": [
@@ -1687,6 +1705,9 @@
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.sh": [
       "docs/operations/install.md"
     ],
+    "packages/i18n/src/locales.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
     "packages/integration-shared/src/credential-crypto.ts": [
       "docs/architecture/2026-06-22-platform-adequacy-architecture-review.md"
     ],
@@ -1734,6 +1755,9 @@
     ],
     "packages/validators/src/field-dispatch.ts": [
       "docs/architecture/field-service-work-item.md"
+    ],
+    "packages/validators/src/guards.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "packages/validators/src/readability.ts": [
       "docs/platform-usability-standards.md"
@@ -1862,17 +1886,29 @@
     "scripts/check-no-dialog-in-transition.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md"
     ],
+    "scripts/check-no-direct-job-engine-import.mjs": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
     "scripts/check-no-governed-surface-without-mcp-tool.mjs": [
       "docs/architecture/orientation.md"
     ],
     "scripts/check-no-hand-rolled-loading.mjs": [
       "docs/platform-usability-standards.md"
     ],
+    "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "scripts/check-no-local-dpf-type-redeclaration.mjs": [
       "docs/architecture/package-boundaries.md"
     ],
     "scripts/check-no-local-isrecord.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "scripts/check-no-local-slugify.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "scripts/check-no-manual-vm-cache-drop.mjs": [
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/check-no-native-dialogs.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md",
@@ -1959,6 +1995,9 @@
     "scripts/detect-hardware-host.ts": [
       "docs/install/linux.md",
       "docs/install/macos.md"
+    ],
+    "scripts/doctools-image-contract.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "scripts/dpf-bootstrap-agent-toolchain.ps1": [
       "docs/architecture/branch-and-worktree-runbook.md",
@@ -2068,6 +2107,9 @@
     ],
     "scripts/lib/host-available-memory.mjs": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/lib/is-record.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/lib/junction-safe-worktree-remove.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -2485,19 +2527,21 @@
       "apps/web/lib/decision-perspective/build-studio-gate.ts",
       "apps/web/lib/decision-perspective/planned-file-paths.ts",
       "apps/web/lib/explore/feature-build-types.ts",
+      "apps/web/lib/jobs/index.ts",
+      "apps/web/lib/jobs/inngest-adapter.ts",
       "apps/web/lib/marketing/scheduler.ts",
       "apps/web/lib/mcp/packs/surface-pack.ts",
       "apps/web/lib/queue/functions/deliberation-run.ts",
       "apps/web/lib/queue/functions/index.ts",
       "apps/web/lib/queue/functions/quiescence-run.ts",
       "apps/web/lib/queue/functions/taskrun-watchdog.ts",
-      "apps/web/lib/queue/inngest-client.ts",
       "apps/web/lib/queue/notification-adapter.ts",
       "apps/web/lib/tak/agent-grants.ts",
       "apps/web/lib/tak/autonomous-work-run.ts",
       "docker-compose.yml",
       "packages/db/prisma/schema/ai-coworker.prisma",
-      "packages/db/prisma/schema/build-delivery.prisma"
+      "packages/db/prisma/schema/build-delivery.prisma",
+      "scripts/check-no-direct-job-engine-import.mjs"
     ],
     "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md": [
       "apps/web/lib/ea/ai-routing-architecture-extract.ts",
@@ -2748,15 +2792,19 @@
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
       "apps/web/lib/shared/org-address.ts",
+      "apps/web/lib/shared/slugify.ts",
       "apps/web/scripts/offload-evidence-output.ts",
       "packages/db/prisma/schema/resource-scheduling.prisma",
       "packages/db/scripts/apply-model-metadata-comments.ts",
       "packages/db/src/model-metadata.ts",
       "packages/db/src/seed-retention-floor-obligations.ts",
+      "packages/validators/src/guards.ts",
       "scripts/check-model-metadata-tags.mjs",
       "scripts/check-no-local-isrecord.mjs",
+      "scripts/check-no-local-slugify.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",
       "scripts/check-no-new-notactive-conventions.mjs",
+      "scripts/lib/is-record.mjs",
       "scripts/portal-migrate-boot.sh"
     ],
     "docs/architecture/decision-vectors.md": [
@@ -2872,6 +2920,12 @@
       "apps/web/lib/work-management/room-shapes.ts",
       "packages/db/data/agent_registry.json"
     ],
+    "docs/architecture/localization-runbook.md": [
+      "apps/web/lib/i18n/locale-context.server.ts",
+      "apps/web/lib/org-locale/locale-context.ts",
+      "apps/web/lib/org-locale/org-locale.ts",
+      "packages/i18n/src/locales.ts"
+    ],
     "docs/architecture/mcp-tool-authorization-runbook.md": [
       "apps/web/app/api/mcp/v1/route.ts",
       "apps/web/lib/agent-grants.ts",
@@ -2884,6 +2938,7 @@
       "apps/web/lib/work-capsules/scope-claim-lease.ts",
       "packages/integration-shared/src/mcp-client-credential-policy.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
+      "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs",
       "scripts/gate-worktree.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/mcp-client.mjs",
@@ -3131,12 +3186,14 @@
       "apps/web/lib/govern/auth-redirect.ts",
       "apps/web/lib/nonprod/gate-client-revision.ts",
       "apps/web/lib/self-upgrade/doctools-release-image.test.ts",
+      "apps/web/lib/self-upgrade/doctools-source-lineage.test.ts",
       "apps/web/lib/self-upgrade/preflight.test.ts",
       "docker-compose.edge-actions.yml",
       "docker-compose.linux.yml",
       "docker-entrypoint.sh",
       "packages/db/src/discovery-collectors/network.ts",
       "scripts/check-no-url-pathname-fs.mjs",
+      "scripts/doctools-image-contract.test.mjs",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/doctools-prepull.test.mjs",
       "scripts/installer/lib/platform.sh",
@@ -3457,6 +3514,7 @@
       "scripts/check-label-association.mjs",
       "scripts/check-live-blocker-references.mjs",
       "scripts/check-mobile-jest-pin.mjs",
+      "scripts/check-no-manual-vm-cache-drop.mjs",
       "scripts/check-no-unreachable-room-links.mjs",
       "scripts/ci-change-scope.mjs",
       "scripts/ci-policy-guards.test.mjs",

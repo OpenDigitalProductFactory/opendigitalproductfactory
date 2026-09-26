@@ -27,10 +27,21 @@ const DESIGN_REVIEW_CODES = new Set<string>([
   "PLAN_REVIEW_REQUIRED",
 ]);
 
+/**
+ * BI-EE99767C: a fix-profile item never carries SPEC_APPROVAL_REQUIRED. Its spec
+ * approval is owed as OBJECTIVE_BASELINE_REQUIRED held by the design-checklist
+ * reviewer, because that approval mints the baseline. A body baseline is held by
+ * the product owner and is never routed to a spec approval.
+ */
+function isDesignReviewEntry(entry: { code: string; accountableRole?: string }): boolean {
+  return DESIGN_REVIEW_CODES.has(entry.code)
+    || (entry.code === "OBJECTIVE_BASELINE_REQUIRED" && entry.accountableRole === "design-checklist-reviewer");
+}
+
 export function designPhaseReviewDecision(
   decision: InitiativeReadinessDecision,
 ): InitiativeReadinessDecision | null {
-  const isDesignReview = (entry: { code: string }) => DESIGN_REVIEW_CODES.has(entry.code);
+  const isDesignReview = isDesignReviewEntry;
   if (![...decision.blockers, ...decision.unmet].some(isDesignReview)) return null;
   return {
     ...decision,

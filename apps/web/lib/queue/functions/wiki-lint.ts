@@ -7,14 +7,14 @@
 // dynamic Prisma + helper imports inside step.run so the function file
 // itself stays tree-shaken when Inngest registers schedules at build.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // Daily at 03:30 UTC (matches the time spec §3.6 calls out). Two
 // retries because the orchestrator is idempotent — re-running on
 // failure is safe and surfaces transient DB hiccups.
-export const wikiLint = inngest.createFunction(
+export const wikiLint = jobs.createFunction(
   { id: "wiki/lint-daily", retries: 2, triggers: [cron("30 3 * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "wiki/lint-daily");

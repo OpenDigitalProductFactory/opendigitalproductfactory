@@ -27,6 +27,14 @@ vi.mock("@/components/admin/ReadabilityPolicyPanel", () => ({
   ReadabilityPolicyPanel: () => <div>readability-policy-panel</div>,
 }));
 
+vi.mock("@/components/admin/LocalePreferencesPanel", () => ({
+  LocalePreferencesPanel: () => <div>locale-preferences-panel</div>,
+}));
+
+vi.mock("@/lib/actions/locale-preferences", () => ({
+  getLocalePreferences: vi.fn().mockResolvedValue({ preferredLanguage: null, timeZone: null, viewerIsAdmin: true }),
+}));
+
 vi.mock("@/components/admin/PlatformKeysPanel", () => ({
   PLATFORM_KEY_CONFIGS: [
     {
@@ -56,5 +64,6 @@ describe("AdminSettingsPage", () => {
 
     expect(html).toContain("File Upload Storage Path");
     expect(html).not.toContain("Brave Search API Key");
+    expect(html).toContain("locale-preferences-panel");
   });
 });

@@ -9,7 +9,14 @@ a prior consent by the same human for the same name and redirect family wins
 over the name. An administrator, whose eligible set also holds room
 coordinators, lands on the external development profile (Claude Code, Codex,
 Grok) and can pick a wider coworker under `Change`. A self-declared name can never choose a coworker outside the
-eligible set or widen a scope. The default flow is one Connect action;
+eligible set or widen a scope. The human half is a decision too
+(BI-07D21B4A): the screen names the signed-in account under `Connect as`,
+and the person must tick it before Connect. That account owns the connection
+and receives every approval its assistant asks for. The POST binds only if
+the ticked account is still the session's account. `Use a different
+account` signs in again and returns to the same request. If a connection
+was made under the wrong account, revoke it and reconnect; approvals never
+follow the connection to another person. The default flow is one Connect action;
 `Change` and `Adjust permissions` are disclosures, and a picker is opened
 only when eligible coworkers differ in authority. Reconnects, refreshes and
 new tasks reuse that consent without another login; each privileged action
@@ -41,6 +48,8 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 **MCP bearer tokens (`dpfmcp_...`) are the legacy path, on a deprecation horizon.** They are issued from Admin > Platform Development > MCP and still resolve; issuance closes when `DPF_MCP_PAT_ISSUANCE_CLOSED=1` and resolution ends at the operator's horizon (`DPF_MCP_PAT_RESOLUTION_DISABLED=1`). Treat `.mcp.json` and `.vscode/mcp.json` as local credential files only; they are ignored by git and must never be committed. An OAuth client stores its own tokens and needs neither file for credentials.
 
 **Endpoint trust for config-resolved tokens:** a `.mcp.json` file is ambient state. It is copied between worktrees, it survives a machine move, and anything with the checkout can write it. A gate script that reads a token out of it therefore checks the endpoint it names before putting that token on the wire: `isAllowedMcpEndpoint` in `scripts/lib/mcp-client.mjs` accepts only `127.0.0.1`, `localhost` and `[::1]` over HTTP or HTTPS. A file naming any other host is a stop, not a fall back to the default endpoint, because sending a live `dpfmcp_...` credential to an unintended host discloses it. To reach a portal that is not on loopback, set `DPF_MCP_BEARER_TOKEN` and `DPF_MCP_URL`: those are stated operator intent and are not narrowed.
+
+**One MCP client for scripts.** A Node script under `scripts/` talks to `/api/mcp/v1` only through `scripts/lib/mcp-client.mjs`: `mcpCall` returns the unwrapped tool result and throws, and `mcpPost` returns the raw `{ status, text }` so a fail-open caller keeps its own policy. Both run the endpoint check above and the credential resolution below. `scripts/check-no-hand-rolled-mcp-jsonrpc.mjs` refuses a new hand-built JSON-RPC envelope; its allowlist names the two files that cannot import the client and says why.
 
 **MCP token scopes:** tokens have a coarse `scope` of `read`, `write`, or `admin` plus granular per-tool grants. Default tokens are `read` and cannot call side-effecting tools even if an old token row carries a write grant. Use **Issue write token** in Admin > Platform Development > MCP when an agent must create or update Workrooms, backlog items, Build Studio evidence, runtime coordination records, or other side-effecting MCP records. The portal shows the plaintext token once, writes the local client snippet, and supports revocation without editing config files.
 

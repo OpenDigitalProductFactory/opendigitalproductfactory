@@ -42,36 +42,48 @@ import {
   pathHasActiveClaim,
 } from "./lib/worktree-liveness.mjs";
 import { runGit as runGitShared } from "./lib/git.mjs";
+import { mcpPost } from "./lib/mcp-client.mjs";
+import { parseArgs as utilParseArgs } from "node:util";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_GRACE = 14;
 
 function parseArgs(argv) {
-  let dryRun = true;
-  let tierAOnly = false;
-  /** Scope the scan to ONE branch's worktree (BI-848360EF). Default: every worktree. */
-  let branch = null;
-  let graceDays = DEFAULT_GRACE;
-  let json = false;
-  let root = process.env.DPF_REPO_ROOT || process.env.PROJECT_ROOT || "";
-  for (let i = 0; i < argv.length; i += 1) {
-    const a = argv[i];
-    if (a === "--dry-run") dryRun = true;
-    else if (a === "--live") dryRun = false;
-    else if (a === "--tier-a-only") tierAOnly = true;
-    else if (a === "--json") json = true;
-    else if (a === "--grace-days") graceDays = Number(argv[++i]);
-    else if (a.startsWith("--grace-days=")) graceDays = Number(a.split("=")[1]);
-    else if (a === "--root") root = argv[++i];
-    else if (a === "--branch") branch = argv[++i];
-    else if (a.startsWith("--branch=")) branch = a.slice("--branch=".length);
-    else if (a === "-h" || a === "--help") {
-      console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(0, 35).join("\n"));
-      process.exit(0);
-    }
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values, tokens } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    tokens: true,
+    options: {
+      "dry-run": { type: "boolean" },
+      live: { type: "boolean" },
+      "tier-a-only": { type: "boolean" },
+      json: { type: "boolean" },
+      "grace-days": { type: "string" },
+      root: { type: "string" },
+      /** Scope the scan to ONE branch's worktree (BI-848360EF). Default: every worktree. */
+      branch: { type: "string" },
+      help: { type: "boolean", short: "h" },
+    },
+  });
+  if (values.help) {
+    console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(0, 35).join("\n"));
+    process.exit(0);
   }
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  // --dry-run and --live toggle one mode; the last one given wins.
+  const mode = tokens.findLast((token) => token.kind === "option" && (token.name === "dry-run" || token.name === "live"));
+  let graceDays = values["grace-days"] === undefined ? DEFAULT_GRACE : Number(text(values["grace-days"]));
   if (!Number.isFinite(graceDays) || graceDays < 1) graceDays = DEFAULT_GRACE;
-  return { dryRun, tierAOnly, graceDays, json, root, branch };
+  return {
+    dryRun: mode?.name !== "live",
+    tierAOnly: values["tier-a-only"] === true,
+    graceDays,
+    json: values.json === true,
+    root: values.root === undefined ? process.env.DPF_REPO_ROOT || process.env.PROJECT_ROOT || "" : text(values.root),
+    branch: values.branch === undefined ? null : text(values.branch),
+  };
 }
 
 function runGit(args, cwd) {
@@ -194,37 +206,22 @@ function ageDays(wtPath) {
  * portal down, curl missing), so the scheduled run died every time while an
  * interactive run with a live token appeared to work.
  */
-function loadLeasePaths() {
+async function loadLeasePaths() {
   const token = process.env.DPF_MCP_BEARER_TOKEN;
   if (!token) return "";
   const url = process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1";
-  const body = JSON.stringify({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "tools/call",
-    params: { name: "list_nonprod_environment_leases", arguments: {} },
-  });
-  const r = spawnSync(
-    "curl",
-    [
-      "-sS",
-      "-X",
-      "POST",
-      url,
-      "-H",
-      `Authorization: Bearer ${token}`,
-      "-H",
-      "Content-Type: application/json",
-      "-d",
-      body,
-      "--max-time",
-      "8",
-    ],
-    { encoding: "utf8", windowsHide: true },
-  );
-  if (r.status !== 0 || !r.stdout) return "";
-  // Match any path-like substrings later via includes on raw payload.
-  return r.stdout;
+  try {
+    const reply = await mcpPost("tools/call", { name: "list_nonprod_environment_leases", arguments: {} }, {
+      mcpUrl: url,
+      bearerToken: token,
+      timeoutMs: 8_000,
+    });
+    if (reply.status < 200 || reply.status >= 300) return "";
+    // Match any path-like substrings later via includes on raw payload.
+    return reply.text;
+  } catch {
+    return "";
+  }
 }
 
 function pathHasLease(leasePayload, wtPath) {
@@ -277,7 +274,7 @@ function removeWorktree(root, wtPath, branch) {
   };
 }
 
-function main(argv = process.argv.slice(2)) {
+async function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
   let root;
   try {
@@ -303,9 +300,9 @@ function main(argv = process.argv.slice(2)) {
 
   const entries = listWorktrees(root);
   const prIndex = loadPrBranchIndex();
-  const leasePayload = loadLeasePaths();
+  const leasePayload = await loadLeasePaths();
   // Ask the platform who owns what, once, for the whole scan.
-  const claims = loadActiveWorkroomPaths();
+  const claims = await loadActiveWorkroomPaths();
   if (!claims.available) {
     console.error(
       `[worktree-janitor] Workroom claims UNREADABLE (${claims.reason}) — every worktree will be ` +

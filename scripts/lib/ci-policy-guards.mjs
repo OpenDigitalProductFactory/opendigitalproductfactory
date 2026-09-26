@@ -83,6 +83,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-3B6DC1DC: the TaskRun working-write guard now scopes by model, so its
       // own behaviour is under test rather than trusted.
       node("--test", "scripts/check-no-bare-working-write.test.mjs"),
+      // BI-903FB5F9: no checked-in recipe may drop the Docker VM page cache by hand.
+      node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
@@ -158,6 +160,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/git.test.mjs"),
       conformanceTest("scripts/check-no-direct-git-spawn.test.mjs"),
       node("scripts/check-no-direct-git-spawn.mjs"),
+      // One MCP JSON-RPC client for scripts: loopback check, credential
+      // resolution and transport in one place (plan 2026-09-08 §10.5 S8).
+      node("--test", "scripts/lib/mcp-client.test.mjs"),
+      conformanceTest("scripts/check-no-hand-rolled-mcp-jsonrpc.test.mjs"),
+      node("scripts/check-no-hand-rolled-mcp-jsonrpc.mjs"),
+      // One argument parser for every script: node:util parseArgs
+      // (plan 2026-09-08 §10.5 S2).
+      conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
+      node("scripts/check-no-hand-rolled-argv.mjs"),
     ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
@@ -337,6 +348,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("mobile-jest-pin-guard", "Mobile Jest Pin Guard", [
       node("scripts/check-mobile-jest-pin.mjs"),
+      node("scripts/check-mobile-react-pin.mjs"),
+      node("--test", "scripts/check-mobile-react-pin.test.mjs"),
     ], { inputs: ["code"] }),
     guard("diagram-dependency-pin-guard", "Diagram Dependency Pin Guard", [
       node("scripts/check-diagram-dependency-pins.mjs"),
@@ -392,6 +405,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("application-boundary-guard", "Application Boundary Guard", [
       node("--test", "scripts/check-application-boundaries.test.mjs"),
       node("scripts/check-application-boundaries.mjs"),
+      // One durable-job facade: only apps/web/lib/jobs/ reaches the engine
+      // (plan 2026-09-08 move M3; spec 2026-09-25 postgres job engine §6).
+      conformanceTest("scripts/check-no-direct-job-engine-import.test.mjs"),
+      node("scripts/check-no-direct-job-engine-import.mjs"),
     ], { inputs: ["code"] }),
     guard("label-association-guard", "Label Association Guard", [
       // A <label> bound to nothing renders, screenshots and inspects correctly
@@ -590,6 +607,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("mcp-tool-pack-guard", "MCP Tool Pack Guard", [
       node("scripts/check-mcp-tool-pack.mjs"),
     ], { inputs: ["code"] }),
+    // One kebab-case slug transform (plan 2026-09-08 §10.5 S7); copies whose
+    // output differs stay allowlisted with a reason, since slugs are persisted.
+    guard("local-slugify-guard", "Local Slugify Guard", [
+      conformanceTest("scripts/check-no-local-slugify.test.mjs"),
+      node("scripts/check-no-local-slugify.mjs"),
+    ]),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
       // One home for the shared wire types (plan 2026-09-08 §10.5 S9).
@@ -821,6 +844,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
+      // BI-77BE1389: install-folder sessions get the source contract at start.
+      node("--test", "packages/dpf-skill-pack/hooks/install-folder-contract.test.mjs"),
       // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the
       // SessionStart readiness banner. Both are hand-added here for the same
       // reason as every entry above — an unlisted test file never runs.

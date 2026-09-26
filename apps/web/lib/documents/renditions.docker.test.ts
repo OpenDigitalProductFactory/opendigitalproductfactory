@@ -4,7 +4,7 @@
 // (`name@sha256:…`, or the local image id `sha256:…`) AND docker has it.
 // Otherwise every case is reported SKIPPED, never passed.
 //
-// The .docx and .pptx inputs are produced at test time from the committed
+// The .docx, .pptx and .pdf inputs are produced at test time from the committed
 // flat-ODF fixtures by the image itself, so the repository carries no office
 // binary (the *.docx LFS rule never applies). The job then runs against the
 // real engine; only the database and blob storage are in-memory fakes.
@@ -112,5 +112,18 @@ describe.skipIf(!ready)("generateDocumentRenditions against the real dpf-doctool
 
     expect(await generateDocumentRenditions("ver-1", h.deps)).toEqual({ status: "rendered", kinds: ["pdf", "plain_text"] });
     expect(h.renditions.find((r) => r.kind === "plain_text")!.contentText).toContain("DPFSENTINELIMPRESS");
+  }, 240_000);
+
+  it("reads a PDF original for its text only, with no pdf rendition (BI-26CD1D1E)", async () => {
+    const out = await realConvert({ input: readFileSync(resolve(FIXTURES, "sample.fodt")), from: "fodt", to: "pdf" });
+    if (!out.ok) throw new Error(`sample.fodt -> pdf failed: ${out.reason}: ${out.error}`);
+    const h = harness("application/pdf", out.data.bytes);
+
+    expect(await generateDocumentRenditions("ver-1", h.deps)).toEqual({ status: "rendered", kinds: ["plain_text"] });
+    expect(h.renditions.map((r) => r.kind)).toEqual(["plain_text"]);
+    expect(h.blobs.size).toBe(0);
+    expect(h.renditions[0]!.contentText).toContain("DPFSENTINELWRITER");
+    expect(h.indexed[0]).toContain("DPFSENTINELWRITER");
+    expect(h.db.documentLifecycleEvent.create).not.toHaveBeenCalled();
   }, 240_000);
 });

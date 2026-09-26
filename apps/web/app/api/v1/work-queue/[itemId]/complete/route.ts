@@ -3,7 +3,7 @@
 import { prisma } from "@dpf/db";
 import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { apiSuccess } from "@/lib/api/response";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 
 export async function POST(
   request: Request,
@@ -24,7 +24,7 @@ export async function POST(
     },
   });
 
-  await inngest.send({
+  await jobs.send({
     name: "cwq/item.completed",
     data: { workItemId: itemId, outcome: "success" },
   });

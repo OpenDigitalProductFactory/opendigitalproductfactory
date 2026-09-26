@@ -16,7 +16,7 @@
 //   5. Emit pushThreadProgress events on queue, dispatch, completion,
 //      degradation, and finish.
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import { sealDeliberationOnRoom } from "@/lib/deliberation/deliberation-room-bridge.server";
 
@@ -452,7 +452,7 @@ function reverseRoleFromWorkerRole(workerRole: string): string {
 /* Inngest wrapper                                                            */
 /* -------------------------------------------------------------------------- */
 
-export const deliberationRun = inngest.createFunction(
+export const deliberationRun = jobs.createFunction(
   {
     id: "deliberation/run",
     retries: 1,

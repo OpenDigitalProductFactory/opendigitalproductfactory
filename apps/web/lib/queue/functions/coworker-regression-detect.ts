@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /**
@@ -11,7 +11,7 @@ import { gateAtEntry } from "../quiescence-gates";
  * Mirrors the cron pattern in `issue-report-triage.ts`: same retries, same
  * quiescence gate, Prisma/detector imported lazily inside the step.
  */
-export const coworkerRegressionDetect = inngest.createFunction(
+export const coworkerRegressionDetect = jobs.createFunction(
   {
     id: "quality/coworker-regression-detect",
     retries: 2,

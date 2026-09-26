@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 export const BUILD_PR_DELIVERY_RECONCILE_CRON = "2,7,12,17,22,27,32,37,42,47,52,57 * * * *";
@@ -225,7 +225,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
   return { observed, actuated, escalated, compareAndSwapLost };
 }
 
-export const buildPrDeliveryReconcile = inngest.createFunction(
+export const buildPrDeliveryReconcile = jobs.createFunction(
   {
     id: "build/pr-delivery-reconcile",
     retries: 2,

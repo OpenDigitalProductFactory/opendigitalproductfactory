@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
 
 const TRIAGE_QUEUE_ID = "triage-default";
@@ -67,7 +67,7 @@ export async function bridgeTaskNodeToWorkItem(taskNodeId: string): Promise<stri
     },
   });
 
-  await inngest.send({
+  await jobs.send({
     name: "cwq/item.created",
     data: { workItemId: item.itemId, sourceType: "task-node", urgency: "routine" },
   });

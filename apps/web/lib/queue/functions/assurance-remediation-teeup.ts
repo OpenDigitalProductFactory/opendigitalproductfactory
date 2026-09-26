@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // Assurance remediation lane P1 (BI-7C121CCF). Hourly poll that, only inside the
@@ -11,7 +11,7 @@ import { gateAtEntry } from "../quiescence-gates";
 //
 // Cron is :41 (a free minute) to stay off the shared ticks the contention guard
 // watches (scheduling-map.test.ts).
-export const assuranceRemediationTeeUpScheduled = inngest.createFunction(
+export const assuranceRemediationTeeUpScheduled = jobs.createFunction(
   {
     id: "assurance/remediation-tee-up-scheduled",
     retries: 2,

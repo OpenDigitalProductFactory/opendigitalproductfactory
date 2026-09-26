@@ -63,6 +63,109 @@ describe("recordLocalIntegrationResult", () => {
     });
   });
 
+  it("AC-2: a leased gate result folds its builder peak into the calibration row", async () => {
+    const gateKey = "c".repeat(64);
+    environmentLease.findUnique.mockResolvedValue({
+      leaseId: "NPEL-PEAK",
+      claimKey: `gate:${gateKey}`,
+      ownerSessionId: "claude-session-1",
+      status: "active",
+      evidenceRecordId: null,
+    });
+    const builderCalibration = {
+      findUnique: vi.fn().mockResolvedValue(null),
+      updateMany: vi.fn(),
+      create: vi.fn().mockResolvedValue({}),
+    };
+
+    await recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "claude",
+      externalSessionId: "claude-session-1",
+      routeContext: "/build",
+      candidateBranch: "feat/measured-reserve",
+      mode: "single-branch",
+      status: "passed",
+      summary: "Merged-code gate passed.",
+      gateKey,
+      leaseId: "NPEL-PEAK",
+      evidence: {
+        controlPlane: {
+          builderMemory: {
+            bi: "BI-D3BF53A9",
+            status: "measured",
+            peakBytes: 7 * 1024 ** 3,
+            peakScope: "this-build",
+            memoryLimitBytes: 16 * 1024 ** 3,
+            oomKills: 0,
+          },
+        },
+      },
+    }, { platformConfig, environmentLease, builderCalibration });
+
+    expect(builderCalibration.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        key: "local_ci.builder_memory_calibration",
+        value: expect.objectContaining({
+          samples: [expect.objectContaining({ peakBytes: 7 * 1024 ** 3, oomKills: 0 })],
+        }),
+      }),
+    });
+    expect(mockRecordExternalEvidence).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({ builderMemoryCalibration: "recorded" }),
+    }));
+  });
+
+  it("AC-2: an unleased result never feeds the calibration, and a store failure never blocks recording", async () => {
+    const builderCalibration = {
+      findUnique: vi.fn().mockRejectedValue(new Error("db down")),
+      updateMany: vi.fn(),
+      create: vi.fn(),
+    };
+    const evidence = {
+      controlPlane: {
+        builderMemory: { status: "measured", peakBytes: 7 * 1024 ** 3, oomKills: 0, memoryLimitBytes: 16 * 1024 ** 3 },
+      },
+    };
+    await recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "claude",
+      externalSessionId: "claude-session-1",
+      routeContext: "/build",
+      candidateBranch: "feat/measured-reserve",
+      mode: "single-branch",
+      status: "passed",
+      summary: "Unleased.",
+      evidence,
+    }, { platformConfig, builderCalibration });
+    expect(builderCalibration.findUnique).not.toHaveBeenCalled();
+
+    const gateKey = "d".repeat(64);
+    environmentLease.findUnique.mockResolvedValue({
+      leaseId: "NPEL-DOWN",
+      claimKey: `gate:${gateKey}`,
+      ownerSessionId: "claude-session-1",
+      status: "active",
+      evidenceRecordId: null,
+    });
+    await expect(recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "claude",
+      externalSessionId: "claude-session-1",
+      routeContext: "/build",
+      candidateBranch: "feat/measured-reserve",
+      mode: "single-branch",
+      status: "passed",
+      summary: "Store down.",
+      gateKey,
+      leaseId: "NPEL-DOWN",
+      evidence,
+    }, { platformConfig, environmentLease, builderCalibration })).resolves.toBeDefined();
+    expect(mockRecordExternalEvidence).toHaveBeenLastCalledWith(expect.objectContaining({
+      details: expect.objectContaining({ builderMemoryCalibration: "error" }),
+    }));
+  });
+
   it("refuses a subscriber attempt to record the canonical executor result", async () => {
     environmentLease.findUnique.mockResolvedValue({
       leaseId: "NPEL-GATE",
@@ -118,6 +221,7 @@ describe("recordLocalIntegrationResult", () => {
         mode: "single-branch",
         status: "passed",
         capacityCircuitBreaker: "not-applicable",
+        builderMemoryCalibration: "not-leased",
         evidence: { commands: ["pnpm --filter web typecheck"] },
       },
     });

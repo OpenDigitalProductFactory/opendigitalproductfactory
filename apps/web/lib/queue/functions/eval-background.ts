@@ -6,7 +6,7 @@
  * result appears when the job completes (via page revalidation).
  */
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // BI-C8164664: how long a "running" eval slot blocks a duplicate GPU eval for
@@ -56,7 +56,7 @@ export async function claimEvalSlot(modelId: string, now: Date = new Date()): Pr
  * Background dimension eval for a single model.
  * Triggered by the "Run Eval" button on ModelCard / RoutingProfilePanel.
  */
-export const evalBackground = inngest.createFunction(
+export const evalBackground = jobs.createFunction(
   {
     id: "ai/eval-background",
     retries: 1,
@@ -121,7 +121,7 @@ export const evalBackground = inngest.createFunction(
  * Background endpoint probes / full tests.
  * Triggered by "Run Probes" and "Run Full Tests" buttons.
  */
-export const probeBackground = inngest.createFunction(
+export const probeBackground = jobs.createFunction(
   {
     id: "ai/probe-background",
     retries: 1,
