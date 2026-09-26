@@ -99,7 +99,6 @@ scripts/lib/local-ci-vitest-supervisor.test.mjs
 scripts/lib/local-integration-image-retention.test.mjs
 scripts/lib/local-queue-observer.test.mjs
 scripts/lib/local-sandbox-fence.test.mjs
-scripts/lib/mcp-client.test.mjs
 scripts/lib/module-size-scope.test.mjs
 scripts/lib/platform-substrate-measurements.test.mjs
 scripts/lib/published-doc-roots.test.mjs

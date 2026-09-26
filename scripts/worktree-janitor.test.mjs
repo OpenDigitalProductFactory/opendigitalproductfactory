@@ -12,11 +12,11 @@ import { loadLeasePaths, pathHasLease } from "./worktree-janitor.mjs";
 // unreachable, curl missing) are exactly the scheduled/CI case, which is why
 // this survived: an interactive run with a live token took the string path.
 describe("worktree janitor lease payload", () => {
-  it("returns a string, never a Set, when no bearer token is configured", () => {
+  it("returns a string, never a Set, when no bearer token is configured", async () => {
     const saved = process.env.DPF_MCP_BEARER_TOKEN;
     delete process.env.DPF_MCP_BEARER_TOKEN;
     try {
-      const payload = loadLeasePaths();
+      const payload = await loadLeasePaths();
       assert.equal(typeof payload, "string", "unauthenticated lease lookup must yield a string");
       assert.ok(!(payload instanceof Set), "must not return a Set — pathHasLease calls .includes()");
     } finally {
@@ -25,12 +25,13 @@ describe("worktree janitor lease payload", () => {
     }
   });
 
-  it("does not throw when the lease lookup could not run", () => {
+  it("does not throw when the lease lookup could not run", async () => {
     const saved = process.env.DPF_MCP_BEARER_TOKEN;
     delete process.env.DPF_MCP_BEARER_TOKEN;
     try {
-      assert.doesNotThrow(() => pathHasLease(loadLeasePaths(), "/Users/x/dpf-worktrees/thing"));
-      assert.equal(pathHasLease(loadLeasePaths(), "/Users/x/dpf-worktrees/thing"), false);
+      const payload = await loadLeasePaths();
+      assert.doesNotThrow(() => pathHasLease(payload, "/Users/x/dpf-worktrees/thing"));
+      assert.equal(pathHasLease(payload, "/Users/x/dpf-worktrees/thing"), false);
     } finally {
       if (saved === undefined) delete process.env.DPF_MCP_BEARER_TOKEN;
       else process.env.DPF_MCP_BEARER_TOKEN = saved;

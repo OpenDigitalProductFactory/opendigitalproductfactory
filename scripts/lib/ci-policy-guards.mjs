@@ -160,6 +160,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/git.test.mjs"),
       conformanceTest("scripts/check-no-direct-git-spawn.test.mjs"),
       node("scripts/check-no-direct-git-spawn.mjs"),
+      // One MCP JSON-RPC client for scripts: loopback check, credential
+      // resolution and transport in one place (plan 2026-09-08 §10.5 S8).
+      node("--test", "scripts/lib/mcp-client.test.mjs"),
+      conformanceTest("scripts/check-no-hand-rolled-mcp-jsonrpc.test.mjs"),
+      node("scripts/check-no-hand-rolled-mcp-jsonrpc.mjs"),
       // One argument parser for every script: node:util parseArgs
       // (plan 2026-09-08 §10.5 S2).
       conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
