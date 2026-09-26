@@ -1957,6 +1957,9 @@
       "docs/install/linux.md",
       "docs/install/macos.md"
     ],
+    "scripts/doctools-image-contract.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/dpf-bootstrap-agent-toolchain.ps1": [
       "docs/architecture/branch-and-worktree-runbook.md",
       "docs/user-guide/contributing/agent-dev-environments.md"
@@ -3130,6 +3133,7 @@
       "docker-entrypoint.sh",
       "packages/db/src/discovery-collectors/network.ts",
       "scripts/check-no-url-pathname-fs.mjs",
+      "scripts/doctools-image-contract.test.mjs",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/lib/platform.sh",
       "scripts/lib/dockerfile-portal-build.test.mjs",

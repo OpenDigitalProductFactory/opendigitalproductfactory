@@ -104,7 +104,7 @@ docker build -f Dockerfile.doctools -t dpf-doctools .
 bash tools/doctools/smoke.sh dpf-doctools
 ```
 
-The portal only runs a digest-pinned image. To point a dev portal at a local build, set `DPF_DOCTOOLS_IMAGE` (compose passes it to `portal` and `portal-init`) to its image id (`docker image inspect -f '{{.Id}}' dpf-doctools`). The docker-gated converter test uses the same reference and is skipped without it:
+The portal only runs a digest-pinned image. To point a dev portal at a local build, set `DPF_DOCTOOLS_IMAGE` in the dev portal's own environment to its image id (`docker image inspect -f '{{.Id}}' dpf-doctools`). The docker-gated converter test uses the same reference and is skipped without it:
 
 ```bash
 DPF_DOCTOOLS_TEST_IMAGE="$(docker image inspect -f '{{.Id}}' dpf-doctools)"   pnpm --filter web exec vitest run lib/documents/conversion/convert.docker.test.ts

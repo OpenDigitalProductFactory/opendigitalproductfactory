@@ -73,10 +73,12 @@ Deliverables, in order:
    the local image id with `origin: "local-build"`. Later ticks try the
    published image again, and rebuild only when the local image was removed.
    Release installs never build.
-4. **D4 wiring and docs.** Compose passes `DPF_DOCTOOLS_IMAGE` to `portal` and
-   `portal-init` as an operator override only, and `.env.docker.example`
-   documents it as leave-unset. The install docs, `developer-setup.md` and
-   watchlist D18 describe the behaviour.
+4. **D4 docs.** The install docs, `developer-setup.md` and watchlist D18
+   describe the behaviour. Compose is deliberately not changed: the doctools
+   image contract (`scripts/doctools-image-contract.test.mjs`, AC-ODC-003)
+   forbids any doctools reference in a compose file. So the setting that AC-2
+   asks for is carried by the portal's own state, `self_upgrade.doctoolsImage`,
+   and not by a compose variable.
 
 A source upgrade re-stamps `DPF_PLATFORM_VERSION` (`promote.sh`), and the
 reconciler runs at boot and every 20 minutes, so the new lineage re-resolves
@@ -104,7 +106,7 @@ not to install time.
 | D1 lineage | OBJ-AVAILABLE | `releaseTagFromPlatformVersion` | source-lineage-resolution | AC-1 |
 | D2 reconciler | OBJ-AVAILABLE, OBJ-DURABLE | `reconcileReleaseDoctoolsImage` | doctools-pin-reconcile | AC-1, AC-2 |
 | D3 offline fallback | OBJ-AVAILABLE | `buildLocalDoctoolsImage` | doctools-local-build | AC-1 |
-| D4 wiring and docs | OBJ-DURABLE, OBJ-DOCUMENTED | `DPF_DOCTOOLS_IMAGE` | compose-override | AC-2, AC-3 |
+| D4 docs | OBJ-DURABLE, OBJ-DOCUMENTED | `self_upgrade.doctoolsImage` | doctools-pin-reconcile | AC-2, AC-3 |
 
 ## Verification
 
