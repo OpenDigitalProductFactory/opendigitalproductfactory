@@ -1,4 +1,4 @@
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 
 type PostmarkCallbackEventData =
   | { deliveryKey: string }
@@ -6,5 +6,5 @@ type PostmarkCallbackEventData =
 
 /** Queue-owned ingress keeps connector routes independent of the queue substrate. */
 export function enqueuePostmarkCallback(data: PostmarkCallbackEventData) {
-  return inngest.send({ name: "integrations/postmark-callback.received", data });
+  return jobs.send({ name: "integrations/postmark-callback.received", data });
 }

@@ -16,11 +16,11 @@
 // after discovery has had a chance to run and reconcile in-sweep. Quiescence-
 // gated and concurrency-limited to one in-flight run.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
-export const qualityIssueDriftSweepScheduled = inngest.createFunction(
+export const qualityIssueDriftSweepScheduled = jobs.createFunction(
   {
     id: "governance/quality-issue-drift-sweep-scheduled",
     retries: 1,
@@ -51,7 +51,7 @@ export const qualityIssueDriftSweepScheduled = inngest.createFunction(
 );
 
 // Manual one-shot trigger for the admin "run now" action.
-export const qualityIssueDriftSweepRequested = inngest.createFunction(
+export const qualityIssueDriftSweepRequested = jobs.createFunction(
   {
     id: "governance/quality-issue-drift-sweep-requested",
     retries: 1,

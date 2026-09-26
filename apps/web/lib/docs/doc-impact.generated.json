@@ -839,6 +839,9 @@
     "apps/web/lib/hooks/useResilientEventSource.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
+    "apps/web/lib/i18n/locale-context.server.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
     "apps/web/lib/identity/aidoc-resolver.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/ai-agent-meta-model.md"
@@ -868,6 +871,12 @@
     ],
     "apps/web/lib/integrations/connectors/index.ts": [
       "docs/architecture/unified-connector-kernel.md"
+    ],
+    "apps/web/lib/jobs/index.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/jobs/inngest-adapter.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/kernel/runtime-gate.ts": [
       "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md"
@@ -988,8 +997,12 @@
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
     ],
+    "apps/web/lib/org-locale/locale-context.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
     "apps/web/lib/org-locale/org-locale.ts": [
-      "docs/architecture/data-model-stewardship-runbook.md"
+      "docs/architecture/data-model-stewardship-runbook.md",
+      "docs/architecture/localization-runbook.md"
     ],
     "apps/web/lib/performance/business-analysis-watch-run.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1058,9 +1071,6 @@
     ],
     "apps/web/lib/queue/functions/workroom-drive.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
-    ],
-    "apps/web/lib/queue/inngest-client.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/queue/notification-adapter.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1699,6 +1709,9 @@
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.sh": [
       "docs/operations/install.md"
     ],
+    "packages/i18n/src/locales.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
     "packages/integration-shared/src/credential-crypto.ts": [
       "docs/architecture/2026-06-22-platform-adequacy-architecture-review.md"
     ],
@@ -1877,11 +1890,17 @@
     "scripts/check-no-dialog-in-transition.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md"
     ],
+    "scripts/check-no-direct-job-engine-import.mjs": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
     "scripts/check-no-governed-surface-without-mcp-tool.mjs": [
       "docs/architecture/orientation.md"
     ],
     "scripts/check-no-hand-rolled-loading.mjs": [
       "docs/platform-usability-standards.md"
+    ],
+    "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/check-no-local-formatters.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -2512,19 +2531,21 @@
       "apps/web/lib/decision-perspective/build-studio-gate.ts",
       "apps/web/lib/decision-perspective/planned-file-paths.ts",
       "apps/web/lib/explore/feature-build-types.ts",
+      "apps/web/lib/jobs/index.ts",
+      "apps/web/lib/jobs/inngest-adapter.ts",
       "apps/web/lib/marketing/scheduler.ts",
       "apps/web/lib/mcp/packs/surface-pack.ts",
       "apps/web/lib/queue/functions/deliberation-run.ts",
       "apps/web/lib/queue/functions/index.ts",
       "apps/web/lib/queue/functions/quiescence-run.ts",
       "apps/web/lib/queue/functions/taskrun-watchdog.ts",
-      "apps/web/lib/queue/inngest-client.ts",
       "apps/web/lib/queue/notification-adapter.ts",
       "apps/web/lib/tak/agent-grants.ts",
       "apps/web/lib/tak/autonomous-work-run.ts",
       "docker-compose.yml",
       "packages/db/prisma/schema/ai-coworker.prisma",
-      "packages/db/prisma/schema/build-delivery.prisma"
+      "packages/db/prisma/schema/build-delivery.prisma",
+      "scripts/check-no-direct-job-engine-import.mjs"
     ],
     "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md": [
       "apps/web/lib/ea/ai-routing-architecture-extract.ts",
@@ -2906,6 +2927,12 @@
       "apps/web/lib/work-management/room-shapes.ts",
       "packages/db/data/agent_registry.json"
     ],
+    "docs/architecture/localization-runbook.md": [
+      "apps/web/lib/i18n/locale-context.server.ts",
+      "apps/web/lib/org-locale/locale-context.ts",
+      "apps/web/lib/org-locale/org-locale.ts",
+      "packages/i18n/src/locales.ts"
+    ],
     "docs/architecture/mcp-tool-authorization-runbook.md": [
       "apps/web/app/api/mcp/v1/route.ts",
       "apps/web/lib/agent-grants.ts",
@@ -2918,6 +2945,7 @@
       "apps/web/lib/work-capsules/scope-claim-lease.ts",
       "packages/integration-shared/src/mcp-client-credential-policy.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
+      "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs",
       "scripts/gate-worktree.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/mcp-client.mjs",

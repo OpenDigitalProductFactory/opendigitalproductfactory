@@ -42,6 +42,16 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "@dpf/i18n": {
+      "added": "2026-09-26",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "First-party workspace package (packages/i18n, BI-6EA9E25A / EP-6B33A840): locale registry, negotiation and direction over native Intl. No external dependencies; adds no third-party supply-chain surface."
+    },
     "@dpf/integration-shared": {
       "added": "2026-06-21",
       "workspaces": [
@@ -289,16 +299,6 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
-    "@types/dagre": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "apps/web"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
     "@types/jest": {
       "added": "2026-06-21",
       "workspaces": [
@@ -462,16 +462,6 @@
       "workspaces": [
         "apps/web",
         "packages/db"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
-    "dagre": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "apps/web"
       ],
       "kinds": [
         "prod"
@@ -1192,6 +1182,14 @@
     "read-excel-file": {
       "retired": "2026-09-26",
       "reason": "Workbooks are read through the dpf-doctools engine (convert to .ods, read by apps/web/lib/shared/odf-content.ts); the dev-time reference-data generators read .xlsx with packages/db/scripts/lib/excel-sheet-reader.ts on fflate. Plan 2026-09-22 office document conversion S9, BI-D1B40D43."
+    },
+    "dagre": {
+      "retired": "2026-09-26",
+      "reason": "S10 2026-09-26: one layout engine; elkjs layered covers hierarchical, org chart and swimlane"
+    },
+    "@types/dagre": {
+      "retired": "2026-09-26",
+      "reason": "S10 2026-09-26: one layout engine; elkjs layered covers hierarchical, org chart and swimlane (type definitions for the retired dagre)"
     }
   }
 }

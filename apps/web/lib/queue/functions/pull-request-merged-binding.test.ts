@@ -20,8 +20,8 @@ vi.mock("@dpf/db", () => {
 });
 
 // Capture the handler instead of registering a real Inngest function.
-vi.mock("../inngest-client", () => ({
-  inngest: {
+vi.mock("@/lib/jobs", () => ({
+  jobs: {
     createFunction: (_config: unknown, handler: unknown) => ({ handler }),
   },
 }));

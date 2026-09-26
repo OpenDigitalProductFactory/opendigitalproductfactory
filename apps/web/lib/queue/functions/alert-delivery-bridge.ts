@@ -18,8 +18,8 @@
 // flooding 10k lines/sec yields exactly ONE ContainerErrorLogStorm issue, never
 // a per-line flood. MAX_ALERTS_PER_CYCLE is a belt-and-suspenders cap.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   fetchAlertSources,
@@ -221,7 +221,7 @@ export async function runAlertDeliveryScan(): Promise<AlertDeliveryResult> {
 // Alert delivery does not need 60s latency — Prometheus/Loki already debounce
 // with `for:` windows — so poll every 5 minutes. taskrun-watchdog remains the
 // sole deliberate every-minute liveness guard (see catalog allowlist test).
-export const alertDeliveryBridge = inngest.createFunction(
+export const alertDeliveryBridge = jobs.createFunction(
   { id: "ops/alert-delivery-bridge", retries: 2, triggers: [cron("*/5 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ops/alert-delivery-bridge");

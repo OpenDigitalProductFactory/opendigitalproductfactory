@@ -1,12 +1,12 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // Use-it-or-lose-it capacity drain — evaluates hourly. Near the weekly
 // allocation reset, with a healthy pool and free build slots, it dispatches the
 // top demand-ranked ready work so pre-paid LLM capacity is not wasted. No-op
 // unless capacityDrainEnabled (opt-in). Kernel decision DI-5FED0D945EBB.
-export const capacityDrainScheduled = inngest.createFunction(
+export const capacityDrainScheduled = jobs.createFunction(
   {
     id: "build/capacity-drain-scheduled",
     retries: 1,

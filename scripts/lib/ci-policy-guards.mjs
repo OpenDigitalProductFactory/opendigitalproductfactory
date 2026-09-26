@@ -160,6 +160,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/git.test.mjs"),
       conformanceTest("scripts/check-no-direct-git-spawn.test.mjs"),
       node("scripts/check-no-direct-git-spawn.mjs"),
+      // One MCP JSON-RPC client for scripts: loopback check, credential
+      // resolution and transport in one place (plan 2026-09-08 §10.5 S8).
+      node("--test", "scripts/lib/mcp-client.test.mjs"),
+      conformanceTest("scripts/check-no-hand-rolled-mcp-jsonrpc.test.mjs"),
+      node("scripts/check-no-hand-rolled-mcp-jsonrpc.mjs"),
       // One argument parser for every script: node:util parseArgs
       // (plan 2026-09-08 §10.5 S2).
       conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
@@ -343,6 +348,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("mobile-jest-pin-guard", "Mobile Jest Pin Guard", [
       node("scripts/check-mobile-jest-pin.mjs"),
+      node("scripts/check-mobile-react-pin.mjs"),
+      node("--test", "scripts/check-mobile-react-pin.test.mjs"),
     ], { inputs: ["code"] }),
     guard("diagram-dependency-pin-guard", "Diagram Dependency Pin Guard", [
       node("scripts/check-diagram-dependency-pins.mjs"),
@@ -398,6 +405,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("application-boundary-guard", "Application Boundary Guard", [
       node("--test", "scripts/check-application-boundaries.test.mjs"),
       node("scripts/check-application-boundaries.mjs"),
+      // One durable-job facade: only apps/web/lib/jobs/ reaches the engine
+      // (plan 2026-09-08 move M3; spec 2026-09-25 postgres job engine §6).
+      conformanceTest("scripts/check-no-direct-job-engine-import.test.mjs"),
+      node("scripts/check-no-direct-job-engine-import.mjs"),
     ], { inputs: ["code"] }),
     guard("label-association-guard", "Label Association Guard", [
       // A <label> bound to nothing renders, screenshots and inspects correctly

@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
@@ -752,7 +752,7 @@ export async function runSelfUpgrade(
 // NOT enrolled in the dpf-build-pipeline lane (apps/web/lib/queue/admission.ts),
 // so when an operator caps that lane it always has account-concurrency headroom
 // below the build/agent flood — a queued "Upgrade now" never sits behind builds.
-export const selfUpgradeScheduled = inngest.createFunction(
+export const selfUpgradeScheduled = jobs.createFunction(
   {
     id: SELF_UPGRADE_FUNCTION_ID_SCHEDULED,
     retries: 1,
@@ -766,7 +766,7 @@ export const selfUpgradeScheduled = inngest.createFunction(
   },
 );
 
-export const selfUpgradeManual = inngest.createFunction(
+export const selfUpgradeManual = jobs.createFunction(
   {
     id: SELF_UPGRADE_FUNCTION_ID_MANUAL,
     retries: 0,

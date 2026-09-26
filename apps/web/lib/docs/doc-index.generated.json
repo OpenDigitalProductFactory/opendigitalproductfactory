@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 720,
+  "pageCount": 721,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1992,6 +1992,20 @@
         "install-and-registration",
         "where-it-sits-in-the-pipeline",
         "relationship-to-the-other-engines"
+      ]
+    },
+    "docs/architecture/localization-runbook.md": {
+      "publicHref": "/architecture/localization-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "localization-runbook",
+        "where-things-live",
+        "how-a-viewers-language-is-chosen",
+        "locale-statuses",
+        "checking-a-screen-for-right-to-left-readiness",
+        "adding-a-locale"
       ]
     },
     "docs/architecture/mcp-tool-authorization-runbook.md": {

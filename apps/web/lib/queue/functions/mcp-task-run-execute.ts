@@ -1,4 +1,4 @@
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 import { executePersistedRemoteTask } from "@/lib/mcp-task-background-worker";
 import { executePersistedSemanticReview, reconcileSemanticReviews } from "@/lib/change-review/semantic-review-background";
 import {
@@ -7,10 +7,10 @@ import {
   REMOTE_TASK_EXECUTION_EVENT,
 } from "@/lib/mcp-task-background-dispatch";
 import { buildPipelineConcurrency } from "../admission";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry, gateBetweenSteps } from "../quiescence-gates";
 
-export const mcpTaskRunExecute = inngest.createFunction(
+export const mcpTaskRunExecute = jobs.createFunction(
   {
     id: "mcp/task-run-execute",
     retries: 2,
@@ -29,7 +29,7 @@ export const mcpTaskRunExecute = inngest.createFunction(
   },
 );
 
-export const mcpTaskRunDispatchReconciliation = inngest.createFunction(
+export const mcpTaskRunDispatchReconciliation = jobs.createFunction(
   {
     id: "mcp/task-run-dispatch-reconciliation",
     retries: 1,
