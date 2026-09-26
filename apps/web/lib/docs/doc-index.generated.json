@@ -2005,7 +2005,8 @@
         "how-a-viewers-language-is-chosen",
         "locale-statuses",
         "checking-a-screen-for-right-to-left-readiness",
-        "adding-a-locale"
+        "adding-a-locale",
+        "the-localization-guard"
       ]
     },
     "docs/architecture/mcp-tool-authorization-runbook.md": {

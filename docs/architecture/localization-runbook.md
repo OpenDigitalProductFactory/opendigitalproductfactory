@@ -49,3 +49,18 @@ Until L0.6 lands, layouts that use physical left/right styling will not mirror. 
 ## Adding a locale
 
 Add a canonical BCP-47 tag to `LOCALES` in `packages/i18n/src/locales.ts` with status `planned`. The registry tests check canonical form and script-derived direction. Promote it only through the L3.1 activation gate.
+
+## The localization guard
+
+`scripts/check-no-unlocalized-ui.mjs` (BI-4690CB37) is a ratchet in the repo guard loop (`pnpm check:guards`). It counts four categories per file. A new file must count zero, and an existing file's count may not grow.
+
+| Category | What it catches | Use instead |
+|---|---|---|
+| `jsx-copy` | Multi-word English JSX text; capitalized `placeholder`, `aria-label`, `title` and `alt` values | The message catalog (L0.2) |
+| `locale-literal` | `"en-GB"` / `"en-US"`, and `toLocale*String("xx")` with a literal locale | `getLocaleContext()` and the shared formatters |
+| `physical-direction` | `ml/mr/pl/pr`, `left/right`, `border-l/r`, `rounded-l/r`, `text-left/right`, plus the equivalent inline styles | Logical classes: `ms/me`, `ps/pe`, `start/end`, `border-s/e`, `rounded-s/e`, `text-start/end` |
+| `money-prefix` | `` `$${…}` `` templates and a literal `>$<`. SQL placeholders and spreadsheet absolute references are ignored. | `formatMoney` |
+
+When you migrate a surface and its count drops, run `node scripts/check-no-unlocalized-ui.mjs --update` to retighten the baseline (`scripts/unlocalized-ui-baseline.txt`).
+
+The counts are a regex approximation. That is by design: the ratchet only has to be monotonic.
