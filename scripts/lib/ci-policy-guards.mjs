@@ -195,6 +195,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-698B7F9A: both installers pull the release's dpf-doctools with the
       // other release images and never fail the install on it.
       conformanceTest("scripts/installer/doctools-prepull.test.mjs"),
+      // BI-7371D444: .wslconfig keys land in the section WSL reads them from
+      // (autoMemoryReclaim under [experimental]). Skips where no PowerShell exists.
+      conformanceTest("scripts/installer/wslconfig-sections.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
