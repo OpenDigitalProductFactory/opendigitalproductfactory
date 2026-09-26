@@ -679,6 +679,9 @@
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
+    "apps/web/lib/datetime.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "apps/web/lib/decision-perspective/build-studio-gate.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -984,6 +987,9 @@
     ],
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
+    ],
+    "apps/web/lib/org-locale/org-locale.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "apps/web/lib/performance/business-analysis-watch-run.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1868,6 +1874,9 @@
     "scripts/check-no-hand-rolled-loading.mjs": [
       "docs/platform-usability-standards.md"
     ],
+    "scripts/check-no-local-formatters.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "scripts/check-no-local-isrecord.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
@@ -2737,10 +2746,12 @@
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
       "apps/web/lib/compliance/format-retention-minimum.ts",
+      "apps/web/lib/datetime.ts",
       "apps/web/lib/ea/table-growth.ts",
       "apps/web/lib/evidence/bounded-evidence-output.ts",
       "apps/web/lib/operate/retention/declarations.ts",
       "apps/web/lib/operate/retention/obligation-floors.ts",
+      "apps/web/lib/org-locale/org-locale.ts",
       "apps/web/lib/routes.ts",
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
@@ -2751,6 +2762,7 @@
       "packages/db/src/model-metadata.ts",
       "packages/db/src/seed-retention-floor-obligations.ts",
       "scripts/check-model-metadata-tags.mjs",
+      "scripts/check-no-local-formatters.mjs",
       "scripts/check-no-local-isrecord.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",
       "scripts/check-no-new-notactive-conventions.mjs",

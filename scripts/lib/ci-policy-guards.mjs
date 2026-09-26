@@ -462,6 +462,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("ux-primitive-adoption-guard", "UX Primitive Adoption Guard", [
       node("--test", "scripts/check-ux-primitive-adoption.test.mjs"),
       node("scripts/check-ux-primitive-adoption.mjs"),
+      // One home per display formatter: dates in lib/datetime, money in
+      // lib/org-locale (plan 2026-09-08 §10.5 S6).
+      conformanceTest("scripts/check-no-local-formatters.test.mjs"),
+      node("scripts/check-no-local-formatters.mjs"),
     ]),
     // BI-101C107C: the Build Studio operator UI surface (component count +
     // non-test LOC under apps/web/components/build) may only shrink against

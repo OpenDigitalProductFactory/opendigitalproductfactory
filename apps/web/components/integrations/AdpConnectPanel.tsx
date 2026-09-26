@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatDate } from "@/lib/datetime";
 
 export interface AdpConnectionState {
   status: "unconfigured" | "connected" | "error" | "expired";
@@ -258,18 +259,6 @@ function FormField({
       {hint && <span className="block text-xs text-[var(--dpf-muted)]">{hint}</span>}
     </label>
   );
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return iso;
-  }
 }
 
 function isExpiringSoon(iso: string): boolean {

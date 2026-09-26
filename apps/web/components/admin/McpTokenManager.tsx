@@ -44,6 +44,7 @@ import {
   type McpTokenTemplateId,
 } from "@/lib/mcp-token-scopes";
 import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
+import { formatTimestamp } from "@/lib/datetime";
 
 export interface McpTokenManagerProps {
   baseUrl: string;
@@ -89,11 +90,6 @@ type View =
   | { kind: "issued"; payload: Issued };
 
 type Notice = { kind: "success" | "error"; message: string } | null;
-
-function formatDate(value: string | null): string {
-  if (!value) return "never";
-  return new Date(value).toLocaleString();
-}
 
 function isExpired(token: TokenRow): boolean {
   return token.expiresAt != null && new Date(token.expiresAt).getTime() < Date.now();
@@ -911,12 +907,12 @@ function TokenListItem(props: {
             </div>
             <div>
               <dt className="inline font-medium text-[var(--dpf-text)]">Issued: </dt>
-              <dd className="inline">{formatDate(token.createdAt)}</dd>
+              <dd className="inline">{formatTimestamp(token.createdAt, "never")}</dd>
             </div>
             <div>
               <dt className="inline font-medium text-[var(--dpf-text)]">Last used: </dt>
               <dd className="inline">
-                {formatDate(token.lastUsedAt)}
+                {formatTimestamp(token.lastUsedAt, "never")}
                 {token.idleDays != null && (
                   <span className="ml-1 text-[var(--dpf-muted)]">
                     ({token.idleDays === 0 ? "today" : `${token.idleDays}d idle`})
@@ -926,7 +922,7 @@ function TokenListItem(props: {
             </div>
             <div>
               <dt className="inline font-medium text-[var(--dpf-text)]">Expires: </dt>
-              <dd className="inline">{formatDate(token.expiresAt)}</dd>
+              <dd className="inline">{formatTimestamp(token.expiresAt, "never")}</dd>
             </div>
           </dl>
           </div>
