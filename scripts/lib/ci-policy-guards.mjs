@@ -343,6 +343,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("mobile-jest-pin-guard", "Mobile Jest Pin Guard", [
       node("scripts/check-mobile-jest-pin.mjs"),
+      node("scripts/check-mobile-react-pin.mjs"),
+      node("--test", "scripts/check-mobile-react-pin.test.mjs"),
     ], { inputs: ["code"] }),
     guard("diagram-dependency-pin-guard", "Diagram Dependency Pin Guard", [
       node("scripts/check-diagram-dependency-pins.mjs"),
