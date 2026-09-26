@@ -399,10 +399,6 @@ importers:
         version: 6.0.3
 
   packages/storefront-templates:
-    dependencies:
-      '@dpf/validators':
-        specifier: workspace:*
-        version: link:../validators
     devDependencies:
       typescript:
         specifier: ^6.0.3

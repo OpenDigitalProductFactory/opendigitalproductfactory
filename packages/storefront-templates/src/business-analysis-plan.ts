@@ -11,7 +11,6 @@ import {
   getPerformanceMetricDefinition,
   PERFORMANCE_METRIC_DEFINITION_VERSION,
 } from "./performance-metric-catalog";
-import { isRecord } from "@dpf/validators";
 
 export const BUSINESS_ANALYSIS_INTENTS = [
   "status",
@@ -131,6 +130,11 @@ export type BusinessAnalysisPlanResult =
       status: "refused";
       issues: BusinessAnalysisIssue[];
     };
+
+type JsonRecord = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is JsonRecord =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isOneOf = <T extends string>(value: unknown, values: readonly T[]): value is T =>
   typeof value === "string" && values.includes(value as T);

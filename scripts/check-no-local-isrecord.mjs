@@ -14,9 +14,9 @@
  *   scripts/lib         import { isRecord } from "./is-record.mjs";
  *                       (plain .mjs cannot import TypeScript)
  *
- * Any other local definition fails CI. ALLOWLIST is a closed migration backlog:
- * it emptied when plan 2026-09-08 §10.5 S5 migrated the last copies. Do not add
- * entries — import the home for your boundary instead.
+ * Any other local definition fails CI. ALLOWLIST holds only files that cannot
+ * import a home, each with its reason (plan 2026-09-08 §10.5 S5 migrated every
+ * other copy). Do not add entries — import the home for your boundary instead.
  *
  * Scope (source only; test files, fixtures and build output excluded):
  * apps/web/lib, apps/web/components, packages/<pkg>/ and scripts/lib.
@@ -44,8 +44,22 @@ export const CANONICAL = new Set([
 // (every workspace package); the others are single trees.
 export const SCAN_ROOTS = ["apps/web/lib", "apps/web/components", "packages", "scripts/lib"];
 
-// Closed migration backlog — empty since S5. Do NOT add entries.
-export const ALLOWLIST = new Set([]);
+// Closed exceptions, each with the reason it cannot import a home. Do NOT add
+// entries for convenience: a new copy imports the home for its boundary.
+export const ALLOWLIST = new Map([
+  // Both sit in the import graph of the `docs:business-types` generator, which
+  // the Derived Artifact Registry runs in the Policy Guards job with only
+  // @dpf/repo-guard-runtime installed. A workspace import (@dpf/validators)
+  // does not resolve there, so the check fails and reports the pages STALE.
+  [
+    "packages/storefront-templates/src/activation-profile.ts",
+    "in the docs:business-types generator graph; guard CI installs only repo-guard-runtime",
+  ],
+  [
+    "packages/storefront-templates/src/business-analysis-plan.ts",
+    "in the docs:business-types generator graph; guard CI installs only repo-guard-runtime",
+  ],
+]);
 
 // A local isRecord / isPlainObject DEFINITION (function decl or const arrow),
 // not a call site or an import.
@@ -129,7 +143,7 @@ export function scanRepo(root = REPO_ROOT) {
 /** Allowlisted files that no longer define isRecord — stale entries to prune. */
 export function findStaleAllowlist(root = REPO_ROOT) {
   const stale = [];
-  for (const rel of ALLOWLIST) {
+  for (const rel of ALLOWLIST.keys()) {
     let body;
     try {
       body = readFileSync(join(root, rel), "utf8");

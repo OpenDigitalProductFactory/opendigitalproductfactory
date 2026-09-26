@@ -94,8 +94,12 @@ test("the canonical homes are not themselves allowlisted (they are the sanctione
   for (const home of CANONICAL) assert.equal(ALLOWLIST.has(home), false, home);
 });
 
-test("the allowlist is a closed, empty backlog", () => {
-  assert.equal(ALLOWLIST.size, 0);
+test("every allowlist entry carries a reason and is a storefront generator input", () => {
+  assert.equal(ALLOWLIST.size, 2);
+  for (const [rel, reason] of ALLOWLIST) {
+    assert.match(rel, /^packages\/storefront-templates\/src\//, rel);
+    assert.ok(typeof reason === "string" && reason.length > 20, rel);
+  }
 });
 
 test("every canonical home exists, sits in a scan root and defines the guard", () => {

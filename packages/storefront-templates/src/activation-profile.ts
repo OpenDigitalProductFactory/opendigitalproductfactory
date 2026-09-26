@@ -36,7 +36,8 @@ import type {
   TransactionContext,
   CapabilityIsolation,
 } from "./types";
-import { isRecord } from "@dpf/validators";
+
+type UnknownRecord = Record<string, unknown>;
 
 const MODULES = new Set<ArchetypeModule>([
   "customer-estate",
@@ -175,6 +176,10 @@ export interface NormalizedActivationProfile extends ActivationProfile {
   partnerProgram: PartnerProgramProfile;
   capabilityActivations: CapabilityActivation[];
   processProfile: ArchetypeProcessProfile;
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isStringArray(value: unknown): value is string[] {
