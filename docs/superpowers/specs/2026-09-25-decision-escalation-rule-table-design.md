@@ -266,26 +266,24 @@ The input exists from day one; callers wire it as their facts exist:
 6. Every §1 surface switches to `humanEscalationWhere`/`isHumanEscalation`.
 7. Conformance extension (§3.7) and principle page update.
 
-## 6. Acceptance
+## 6. Objectives and acceptance
 
-- AC-1: No non-damaging decision is put to a person. With no declarations,
-  every `escalate`/`defer` produced by a lexical, mixed, conflict,
-  below-confidence, coverage-gap or fault branch records
-  `escalationRoute = independent_review` and is absent from the founder
-  review, owner ruling, coworker-decisions and attention surfaces.
-- AC-2: A `critical` decision, or one declaring an irreversible, outward or
-  authority consequence, a crossed threshold, or a regulation, records `human`
-  and appears in those surfaces with the damaging reason.
-- AC-3: R1 and R2 hold. A confident aligned WWWD proposal the owner never ruled
-  on is `decided`, with `novelProposition: true`. A `high` decision at ≥ 0.9
-  confidence is `decided`.
-- AC-4: The conformance walk (§3.7) passes, and fails if a ladder branch or a
-  new surface reintroduces a confidence-derived human escalation.
-- AC-5: Legacy rows (`escalationRoute` NULL) appear on every surface exactly as
-  before.
-- AC-6: Live, after deploy: over 48h the development install records zero
-  `human` routes from non-damaging decisions. Every `independent_review` row
-  carries a follow-on.
+**OBJ-HUMAN-ONLY-DAMAGING:** A decision reaches a person only when it is damaging: critical risk, a declared irreversible, outward or authority consequence, a crossed threshold, or a regulation.
+
+**OBJ-ONE-RULE:** Actions and decisions read one escalation rule table, recorded on every decision and guarded by the conformance walk and the principle page.
+
+**OBJ-RULINGS:** The founder's rulings R1 (novel-aligned proceeds) and R2 (only critical is damaging) hold in both evaluator ladders.
+
+**OBJ-LEGACY-SAFE:** Decisions recorded before the rule table appear on every surface exactly as before.
+
+| AC | Objective | Acceptance criterion |
+|---|---|---|
+| AC-1 | OBJ-HUMAN-ONLY-DAMAGING | With no declarations, every escalate or defer from a lexical, mixed, conflict, below-confidence, coverage-gap or fault branch records escalationRoute independent_review and is absent from the founder review, owner ruling, coworker-decisions and attention surfaces. |
+| AC-2 | OBJ-HUMAN-ONLY-DAMAGING | A critical decision, or one declaring an irreversible, outward or authority consequence, a crossed threshold, or a regulation, records human and appears on those surfaces with the damaging reason. |
+| AC-3 | OBJ-RULINGS | A confident aligned WWWD proposal the owner never ruled on is decided with novelProposition recorded, and a high-risk decision at 0.9 or more confidence is decided. |
+| AC-4 | OBJ-ONE-RULE | The conformance walk passes, and fails if a ladder branch or a new surface reintroduces a confidence-derived human escalation; the principle page states the decision rule verbatim. |
+| AC-5 | OBJ-LEGACY-SAFE | Rows with a NULL escalationRoute appear on every surface exactly as before. |
+| AC-6 | OBJ-HUMAN-ONLY-DAMAGING | Live, after deploy: over 48h the development install records zero human routes from non-damaging decisions, and every independent_review row carries a follow-on. |
 
 ## 7. Out of scope
 
