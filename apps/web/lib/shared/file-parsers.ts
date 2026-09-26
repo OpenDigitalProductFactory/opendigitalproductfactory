@@ -1,8 +1,9 @@
 import type { ConversionResult } from "@/lib/documents/conversion/convert";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { readOdfContentXml, readOdfSheet, readOdfText, type OdfCell } from "./odf-content";
 import { EMBEDDED_OBJECTS_REASON, hasOdfEmbeddedObjects } from "./odf-embedded-objects";
-import { conversionRouteFor, type ConversionFamily, type ConversionRoute } from "./office-conversion";
+import { conversionRouteFor, conversionRouteForName, type ConversionFamily, type ConversionRoute } from "./office-conversion";
 
 export type ReadableFileContent = {
   type: "spreadsheet" | "document";
@@ -26,7 +27,17 @@ export type UnsupportedFileContent = {
 
 export type ParsedFileContent = ReadableFileContent | UnsupportedFileContent;
 
-export type UnsupportedFileFormat = "legacy-word" | "legacy-excel" | "legacy-powerpoint" | "legacy-office" | "rtf" | "opendocument" | "presentation";
+export type UnsupportedFileFormat =
+  | "legacy-word"
+  | "legacy-excel"
+  | "legacy-powerpoint"
+  | "legacy-office"
+  | "rtf"
+  | "opendocument"
+  | "presentation"
+  | "word-document"
+  | "workbook"
+  | "pdf";
 
 /** What the bytes say the file is, whatever its name claims. */
 export type OfficeContainer =
@@ -88,6 +99,9 @@ const UNSUPPORTED_REASONS: Record<UnsupportedFileFormat, string> = {
   rtf: "This is a Rich Text (RTF) file. DPF cannot read RTF yet, so its text was not extracted. Save it as .docx, PDF or plain text and upload it again.",
   opendocument: "This is an OpenDocument file (.odt, .ods or .odp). DPF cannot read OpenDocument files yet, so its content was not extracted. Save it as .docx, .xlsx or PDF and upload it again.",
   presentation: "This is a PowerPoint presentation (.pptx). DPF reads presentation text only through its document converter, which is not available right now, so its text was not extracted. Save it as PDF and upload it again.",
+  "word-document": "This is a Word document (.docx). DPF reads Word documents through its document converter, which is not available right now, so its text was not extracted. Try again later, or save it as plain text (.txt) and upload that.",
+  workbook: "This is an Excel workbook (.xlsx). DPF reads workbooks through its document converter, which is not available right now, so its data was not extracted. Try again later, or save it as CSV and upload that.",
+  pdf: "This is a PDF. DPF reads PDF text through its document converter, which is not available right now, so its text was not extracted. Try again later, or copy its text into a plain text (.txt) file and upload that.",
 };
 
 /** The plain-language reason for a recognised format DPF cannot read. */
@@ -127,62 +141,40 @@ export function parseCsv(buffer: Buffer): ReadableFileContent {
   return { type: "spreadsheet", summary: `${columns.length} columns, ${dataLines.length} rows`, columns, sampleRows, rowCount: dataLines.length };
 }
 
-function stringifySpreadsheetCell(value: unknown): string {
+function stringifySpreadsheetCell(value: OdfCell): string {
   if (value == null) return "";
   if (value instanceof Date) return value.toISOString();
   return String(value);
 }
 
-export async function parseXlsx(buffer: Buffer): Promise<ReadableFileContent> {
-  const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/universal");
-  const input = new ArrayBuffer(buffer.byteLength);
-  new Uint8Array(input).set(buffer);
-  const rows = await readSheet(input);
-  if (rows.length === 0) return { type: "spreadsheet", summary: "Empty workbook", columns: [], rowCount: 0 };
+/** A spreadsheet summary of the first sheet of the engine's .ods output. */
+function spreadsheetFromOds(ods: Buffer): ReadableFileContent {
+  const { rows, rowCount } = readOdfSheet(readOdfContentXml(ods), { maxRows: MAX_SAMPLE_ROWS + 1, maxColumns: MAX_COLUMNS });
+  if (rowCount === 0) return { type: "spreadsheet", summary: "Empty workbook", columns: [], rowCount: 0 };
 
-  const headerRow = rows[0] ?? [];
-  const columns = headerRow.slice(0, MAX_COLUMNS).map((c) => truncate(stringifySpreadsheetCell(c), MAX_COLUMN_LEN));
-  const dataRows = rows.slice(1);
-  const sampleRows = dataRows.slice(0, MAX_SAMPLE_ROWS).map((row) =>
-    row.slice(0, MAX_COLUMNS).map((cell) => truncate(stringifySpreadsheetCell(cell), MAX_CELL_LEN)),
-  );
+  const columns = (rows[0] ?? []).map((c) => truncate(stringifySpreadsheetCell(c), MAX_COLUMN_LEN));
+  const dataRowCount = rowCount - 1;
+  const sampleRows = rows.slice(1).map((row) => row.map((cell) => truncate(stringifySpreadsheetCell(cell), MAX_CELL_LEN)));
 
-  return { type: "spreadsheet", summary: `${columns.length} columns, ${dataRows.length} rows`, columns, sampleRows, rowCount: dataRows.length };
+  return { type: "spreadsheet", summary: `${columns.length} columns, ${dataRowCount} rows`, columns, sampleRows, rowCount: dataRowCount };
 }
 
-export async function parsePdf(buffer: Buffer): Promise<ReadableFileContent> {
-  const { PDFParse } = await import(/* turbopackIgnore: true */ "pdf-parse");
-  const pdf = new PDFParse({ data: new Uint8Array(buffer) });
-  const textResult = await pdf.getText();
-  const info = await pdf.getInfo();
-  const numPages = info.pages?.length ?? textResult.pages?.length ?? 0;
-  const fullText = textResult.text ?? "";
-  await pdf.destroy();
-  return { type: "document", summary: `${numPages} page${numPages !== 1 ? "s" : ""}, ${fullText.length} characters`, fullText: truncate(fullText, MAX_TEXT_LEN) };
-}
-
-export async function parseDocx(buffer: Buffer): Promise<ReadableFileContent> {
-  const mammoth = await import(/* turbopackIgnore: true */ "mammoth");
-  const result = await mammoth.extractRawText({ buffer });
-  const htmlResult = await mammoth.convertToHtml({ buffer });
-  const headingRe = /<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi;
-  const sections: { heading: string; text: string }[] = [];
-  let match;
-  while ((match = headingRe.exec(htmlResult.value)) !== null && sections.length < MAX_SECTIONS) {
-    // CodeQL #59 (js/incomplete-multi-character-sanitization): single-pass
-    // tag strip leaves nested tag fragments like `<a<script>` partially
-    // intact. Iterate until no more tag-like patterns remain.
-    let heading = match[1]!;
-    let prev = "";
-    while (heading !== prev) {
-      prev = heading;
-      heading = heading.replace(/<[^<>]*>/g, "");
-    }
-    sections.push({ heading, text: "" });
-  }
-  const base: ReadableFileContent = { type: "document", summary: `${sections.length} section${sections.length !== 1 ? "s" : ""}, ${result.value.length} characters`, fullText: truncate(result.value, MAX_TEXT_LEN) };
+/** A document summary of the engine's .odt output, with one section per heading. */
+function documentFromOdt(odt: Buffer): ReadableFileContent {
+  const { headings, text } = readOdfText(readOdfContentXml(odt));
+  const sections = headings.slice(0, MAX_SECTIONS).map((heading) => ({ heading, text: "" }));
+  const base: ReadableFileContent = { type: "document", summary: `${sections.length} section${sections.length !== 1 ? "s" : ""}, ${text.length} characters`, fullText: truncate(text, MAX_TEXT_LEN) };
   if (sections.length > 0) base.sections = sections;
   return base;
+}
+
+/** A document summary of pdftotext output: one form feed ends each page. */
+function documentFromPdfText(output: Buffer): ReadableFileContent {
+  const pages = output.toString("utf-8").split("\f");
+  if (pages.length > 1 && pages[pages.length - 1]!.trim() === "") pages.pop();
+  const fullText = pages.map((page) => page.trimEnd()).join("\n\n").trim();
+  const numPages = pages.length;
+  return { type: "document", summary: `${numPages} page${numPages !== 1 ? "s" : ""}, ${fullText.length} characters`, fullText: truncate(fullText, MAX_TEXT_LEN) };
 }
 
 function parseTextFile(buffer: Buffer): ReadableFileContent {
@@ -208,6 +200,7 @@ const RESAVE_ADVICE: Record<ConversionFamily, string> = {
   word: "Save it as .docx or PDF and upload it again.",
   sheet: "Save it as .xlsx or CSV and upload it again.",
   slides: "Save it as PDF and upload it again.",
+  pdf: "Save it as PDF again, or copy its text into a plain text (.txt) file, and upload it again.",
 };
 
 function conversionFailedReason(route: ConversionRoute, why: string): string {
@@ -263,8 +256,9 @@ async function parseConverted(buffer: Buffer, route: ConversionRoute, convert?: 
   const converted = await convertForIngestion(buffer, route, convert);
   if (!converted.ok) return unsupportedWithReason(route.fallback, converted.error);
   try {
-    if (route.to === "docx") return await parseDocx(converted.data);
-    if (route.to === "xlsx") return await parseXlsx(converted.data);
+    if (route.to === "odt") return documentFromOdt(converted.data);
+    if (route.to === "ods") return spreadsheetFromOds(converted.data);
+    if (route.family === "pdf") return documentFromPdfText(converted.data);
     return parseTextFile(converted.data);
   } catch (error) {
     console.warn(`[file-parsers] converted ${route.from} -> ${route.to} could not be parsed: ${getErrorMessage(error)}`);
@@ -274,21 +268,19 @@ async function parseConverted(buffer: Buffer, route: ConversionRoute, convert?: 
 
 export async function parseFileContent(buffer: Buffer, mimeType: string, fileName: string, deps: ParseFileDeps = {}): Promise<ParsedFileContent | null> {
   const ext = fileName.split(".").pop()?.toLowerCase();
-  // The bytes decide before the name does: a real .doc is an OLE file mammoth
-  // cannot read, RTF would otherwise be stored as control words, and a .docx
-  // renamed .doc is still a .docx (BI-65D65EC0). Legacy, RTF, OpenDocument and
-  // presentation files are converted to a format an existing parser reads
-  // first; with no converter they keep S0's unsupported result (BI-81524041).
+  // The bytes decide before the name does: a real .doc is an OLE file, RTF
+  // would otherwise be stored as control words, and a .docx renamed .doc is
+  // still a .docx (BI-65D65EC0). Every office file and every PDF is read
+  // through the document engine (BI-81524041, BI-D1B40D43); with no converter
+  // it gets an honest unsupported result.
   const container = sniffOfficeContainer(buffer);
   const route = conversionRouteFor(container, buffer, fileName);
   if (route) return parseConverted(buffer, route, deps.convert);
   if (container.kind === "ole") return unsupportedFileContent(container.format);
   if (container.kind === "odf") return unsupportedFileContent("opendocument");
-  if (container.kind === "ooxml" && container.part === "word") return parseDocx(buffer);
   if (mimeType === "text/csv" || ext === "csv" || ext === "tsv") return parseCsv(buffer);
-  if (ext === "xlsx" || mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return parseXlsx(buffer);
-  if (mimeType === "application/pdf" || ext === "pdf") return parsePdf(buffer);
-  if (ext === "docx" || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return parseDocx(buffer);
+  const named = conversionRouteForName(fileName, mimeType);
+  if (named) return parseConverted(buffer, named, deps.convert);
   // Text-based formats
   if (ext && ["txt", "json", "md", "xml", "yaml", "yml", "log"].includes(ext)) return parseTextFile(buffer);
   if (mimeType?.startsWith("text/")) return parseTextFile(buffer);
