@@ -28,7 +28,7 @@
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
-      "value": 63
+      "value": 62
     },
     "providerConnectionStateProjectorCount": {
       "direction": "non-increasing",
