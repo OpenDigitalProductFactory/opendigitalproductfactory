@@ -173,8 +173,8 @@ importers:
         specifier: ^2.15.0
         version: 2.15.0(@types/node@26.6.2)(typescript@6.0.3)
       react-test-renderer:
-        specifier: 19.2.8
-        version: 19.2.8(react@19.2.3)
+        specifier: 19.2.3
+        version: 19.2.3(react@19.2.3)
       tailwindcss:
         specifier: ^3.4.17
         version: 3.4.19(tsx@4.23.13)(yaml@2.9.0)
@@ -4013,11 +4013,6 @@ packages:
     peerDependencies:
       react: 19.2.3
 
-  react-test-renderer@19.2.8:
-    resolution: {integrity: sha512-GHKPaDRaNYU24PHTLG8Bx8VMY9t+qNfxQbt/Yjp7aMWBkKU6766SR0n6TnYu7P5I1MfEuAMUadqiyDHyI4Yy9Q==}
-    peerDependencies:
-      react: 19.2.3
-
   react@19.2.3:
     resolution: {integrity: sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA==}
     engines: {node: '>=0.10.0'}
@@ -6494,9 +6489,7 @@ snapshots:
       metro-runtime: 0.84.6
     transitivePeerDependencies:
       - '@babel/core'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-colors@0.85.3': {}
 
@@ -9258,12 +9251,6 @@ snapshots:
       '@types/react': 19.3.0
 
   react-test-renderer@19.2.3(react@19.2.3):
-    dependencies:
-      react: 19.2.3
-      react-is: 19.3.0
-      scheduler: 0.27.0
-
-  react-test-renderer@19.2.8(react@19.2.3):
     dependencies:
       react: 19.2.3
       react-is: 19.3.0
