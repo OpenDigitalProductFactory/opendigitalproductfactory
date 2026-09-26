@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => ({
 // Admission by points in flight (BI-3430B3A4) admits by default here; its own
 // behaviour at the claim is tested below.
 vi.mock("@dpf/db", () => ({ prisma: {} }));
-vi.mock("@/lib/build/investment-admission", () => ({
+vi.mock("@/lib/build/investment-admission", async (importOriginal) => ({
+  blocksStart: (await importOriginal<typeof import("@/lib/build/investment-admission")>()).blocksStart,
   evaluateItemAdmission: mocks.evaluateItemAdmission,
   recordAdmissionOutcome: mocks.recordAdmissionOutcome,
 }));
