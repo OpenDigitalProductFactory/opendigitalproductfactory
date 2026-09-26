@@ -1,7 +1,7 @@
 {
   "version": "1",
   "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
-  "summary": "BI-6EA9E25A (EP-6B33A840 L0.1). Migration 20260926030000_principal_locale_preferences adds two nullable preference columns to Principal. Additive; existing rows stay NULL, which resolves to the org default and browser negotiation exactly as today. No backfill.",
+  "summary": "BI-6EA9E25A (EP-6B33A840 L0.1). Migration 20260926120000_principal_locale_preferences adds two nullable preference columns to Principal. Additive; existing rows stay NULL, which resolves to the org default and browser negotiation exactly as today. No backfill.",
   "changes": [
     {
       "kind": "model",
