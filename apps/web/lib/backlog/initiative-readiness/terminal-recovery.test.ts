@@ -694,6 +694,45 @@ describe("terminal initiative recovery", () => {
     }
   });
 
+  // DI-FDAB20135537: BI-FA769D87 was refused on OBJECTIVE_BASELINE_REQUIRED because
+  // its criteria sat under a bold line, not a heading. The escalation told the
+  // author the body "satisfies its baseline" and the item "cannot close"; adding
+  // a heading closed it. Missing criteria get their own, author-fixable step.
+  it("sends a small or medium item with no readable body criteria to edit its body, not to a dead end", async () => {
+    const ports = deps([room], []);
+    const result = await resolveTerminalInitiativeRecovery({
+      decision: {
+        ...decision,
+        policyVersion: "initiative-readiness.v3",
+        shapeDecision: { declared: "small", effective: "medium", sensitivity: "high", raised: true },
+        unmet: [readinessRequirement({ code: "OBJECTIVE_BASELINE_REQUIRED", state: "missing", accountableRole: "product-owner" })],
+      },
+      currentAgentId: null,
+      refusedWorkroomId: room.capsuleId,
+      ports,
+    });
+    expect(result.escalations).toMatchObject([{
+      reason: "acceptance-criteria-missing",
+      accountableRole: "product-owner",
+      toolName: "update_backlog_item",
+    }]);
+    const next = String(result.escalations[0]?.nextAction);
+    expect(next).toMatch(/Acceptance/);
+    expect(next).not.toMatch(/cannot close|satisfies its baseline/i);
+  });
+
+  it("tells a medium item whose acceptance is unmet that merged platform work is accepted on its merge", async () => {
+    const ports = deps([room], []);
+    const result = await resolveTerminalInitiativeRecovery({
+      decision: { ...decision, policyVersion: "initiative-readiness.v3", shapeDecision: { declared: "medium", effective: "medium", sensitivity: null, raised: false } },
+      currentAgentId: null,
+      refusedWorkroomId: room.capsuleId,
+      ports,
+    });
+    expect(result.escalations).toMatchObject([{ reason: "body-baseline-unpersisted", toolName: "record_execution_evidence" }]);
+    expect(String(result.escalations[0]?.nextAction)).toMatch(/merge through branch protection/);
+  });
+
   it("still asks a large shape with no baseline for spec approval", async () => {
     const ports = deps([room], []);
     const result = await resolveTerminalInitiativeRecovery({
