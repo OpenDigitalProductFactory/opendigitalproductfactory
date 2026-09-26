@@ -23,6 +23,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs as utilParseArgs } from "node:util";
 
 import { isEntryModule } from "./entry-module.mjs";
 
@@ -105,5 +106,6 @@ export function runBreakawayLaunch(specPath, { spawnImpl = spawn } = {}) {
 }
 
 if (isEntryModule(import.meta.url)) {
-  runBreakawayLaunch(process.argv[2]);
+  const { positionals: [specPath] } = utilParseArgs({ args: process.argv.slice(2), allowPositionals: true, strict: true });
+  runBreakawayLaunch(specPath);
 }
