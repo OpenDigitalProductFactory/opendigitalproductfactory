@@ -9,11 +9,14 @@
       "apps/web/app/(shell)/ops/page.tsx",
       "apps/web/app/(shell)/ops/patches/page.tsx",
       "apps/web/app/(shell)/ops/workrooms/page.tsx",
+      "apps/web/app/(shell)/platform/federation-links/page.tsx",
       "apps/web/app/(shell)/storefront/layout.tsx",
+      "apps/web/components/inventory/DiscoveryOperationsPage.tsx",
       "apps/web/components/ops/workrooms/WorkroomActivitySection.tsx",
       "apps/web/components/platform/coworker-record/panels.tsx",
       "apps/web/components/platform/identity/PrincipalDirectoryPanel.tsx",
-      "apps/web/components/shell/AppRail.tsx"
+      "apps/web/components/shell/AppRail.tsx",
+      "apps/web/components/storefront/ItemCard.tsx"
     ]
   },
   "evidence": {
