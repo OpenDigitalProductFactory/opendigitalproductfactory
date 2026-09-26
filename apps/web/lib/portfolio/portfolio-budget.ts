@@ -103,13 +103,7 @@ export async function loadPortfolioBudgets(db: ReadDb, period: Period): Promise<
 }
 
 /** The label a surface shows for a portfolio's budget. A missing budget never reads as 0. */
-export function portfolioBudgetLabel(budget: PortfolioBudget | null): string {
-  if (!budget) return "No budget set";
-  const points = `${budget.allocatedPoints.toLocaleString("en-US")} points`;
-  if (budget.usdPerPoint === null) return points;
-  const usd = (budget.allocatedPoints * budget.usdPerPoint).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-  return `${points} (${usd} at $${budget.usdPerPoint}/point)`;
-}
+export { portfolioBudgetLabel } from "./budget-label";
 
 export type SetPortfolioBudgetInput = {
   portfolioId: string;

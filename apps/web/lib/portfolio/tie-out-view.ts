@@ -4,7 +4,7 @@
 // budget set", never zero.
 
 import type { TieOutRow } from "./tie-out";
-import { portfolioBudgetLabel } from "./portfolio-budget";
+import { portfolioBudgetLabel } from "./budget-label";
 
 export type TieOutTone = "danger" | "warning" | "success" | "neutral";
 
