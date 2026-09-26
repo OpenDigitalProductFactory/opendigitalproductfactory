@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "generator": "apps/web/scripts/build-page-purpose.ts",
-  "pageRouteCount": 335,
-  "draftCount": 312,
+  "pageRouteCount": 332,
+  "draftCount": 309,
   "ratifiedCount": 23,
   "quarantinedCount": 0,
   "routes": [
@@ -3267,19 +3267,6 @@
     {
       "schemaVersion": 1,
       "status": "draft",
-      "routePath": "/platform/ai/assignments/bindings/[bindingId]",
-      "derived": {
-        "audience": "admin",
-        "destinationKind": "detail",
-        "shell": "detail",
-        "confidence": "high",
-        "sweepEligible": false,
-        "sweepExclusionReason": "dynamic-fixture-required"
-      }
-    },
-    {
-      "schemaVersion": 1,
-      "status": "draft",
       "routePath": "/platform/ai/browser-sessions",
       "derived": {
         "audience": "admin",
@@ -3955,19 +3942,6 @@
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
-      }
-    },
-    {
-      "schemaVersion": 1,
-      "status": "draft",
-      "routePath": "/platform/identity/authorization/bindings/[bindingId]",
-      "derived": {
-        "audience": "admin",
-        "destinationKind": "detail",
-        "shell": "detail",
-        "confidence": "high",
-        "sweepEligible": false,
-        "sweepExclusionReason": "dynamic-fixture-required"
       }
     },
     {
@@ -4888,19 +4862,6 @@
       "schemaVersion": 1,
       "status": "draft",
       "routePath": "/portfolio/product/[id]/versions",
-      "derived": {
-        "audience": "owner",
-        "destinationKind": "detail",
-        "shell": "detail",
-        "confidence": "high",
-        "sweepEligible": false,
-        "sweepExclusionReason": "dynamic-fixture-required"
-      }
-    },
-    {
-      "schemaVersion": 1,
-      "status": "draft",
-      "routePath": "/portfolio/products/[productId]",
       "derived": {
         "audience": "owner",
         "destinationKind": "detail",

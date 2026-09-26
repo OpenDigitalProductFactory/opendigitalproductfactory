@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { prisma } from "@dpf/db";
@@ -214,6 +215,10 @@ export default async function FederationLinksPage() {
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
           Find nearby DPF installations or connect with an invitation. Nothing is shared until
           both sides approve; either side can pause or revoke the connection.
+        </p>
+        {/* EP-2FB6C0CC (BI-DD763B93): the pages a connection feeds, linked from their home. */}
+        <p className="mt-1 text-sm text-[var(--dpf-muted)]">
+          From connected peers: <Link href="/platform/federation-proposals" className="text-[var(--dpf-accent)] hover:underline">Federation Proposals</Link> · <Link href="/platform/service-desk" className="text-[var(--dpf-accent)] hover:underline">Service Desk</Link>
         </p>
       </div>
       <OrganizationJoinPanel candidates={joinCandidates} />

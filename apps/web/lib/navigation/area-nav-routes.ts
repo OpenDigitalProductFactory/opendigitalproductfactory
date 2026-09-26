@@ -41,6 +41,8 @@ export const AREA_UPKEEP_AND_SETUP_ROUTES: readonly PortalNavRecord[] = [
   setupRoute("storefront-settings-operations", "Business hours", "/storefront/settings/operations", "/storefront/settings", "business", "view_storefront", "business"),
   setupRoute("admin-branding", "Branding", "/admin/branding", "/admin", "admin", "view_admin", "business"),
   setupRoute("finance-settings", "Finance settings", "/finance/settings", "/finance", "business", "view_finance", "business"),
+  setupRoute("admin-storefront-preset", "Storefront preset", "/admin/storefront/preset", "/admin", "admin", "view_admin", "business"),
+  setupRoute("platform-ai-browser-sessions-setup", "Browser setup", "/platform/ai/browser-sessions/setup", "/platform/ai", "platform", "view_platform", "team"),
   setupRoute("admin-reference-data", "Work locations", "/admin/reference-data", "/admin", "admin", "view_admin", "team"),
   setupRoute("admin-platform-development", "Contributing & GitHub", "/admin/platform-development", "/admin", "admin", "view_admin", "delivery"),
   setupRoute("admin-build-studio-stall-thresholds", "Build stall thresholds", "/admin/build-studio/stall-thresholds", "/admin", "admin", "view_admin", "delivery"),

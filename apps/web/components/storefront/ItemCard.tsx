@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { PublicItem } from "@/lib/storefront-types";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import { CtaButton } from "./CtaButton";
@@ -42,7 +43,10 @@ export function ItemCard({ item, orgSlug }: { item: PublicItem; orgSlug: string 
       gap: 8,
     }}>
       {showImage && <MediaImage src={item.imageUrl} alt={item.name} height={160} />}
-      <div style={{ fontWeight: 600, fontSize: 16, color: "var(--dpf-text)" }}>{item.name}</div>
+      {/* EP-2FB6C0CC (BI-DD763B93): the name opens the item's own page, which nothing linked to. */}
+      <Link href={`/s/${orgSlug}/item/${item.itemId}`} style={{ fontWeight: 600, fontSize: 16, color: "var(--dpf-text)" }}>
+        {item.name}
+      </Link>
       {item.description && (
         <div style={{ fontSize: 13, color: "var(--dpf-muted)", lineHeight: 1.5 }}>{item.description}</div>
       )}

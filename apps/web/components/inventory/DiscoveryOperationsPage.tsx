@@ -88,6 +88,10 @@ export async function DiscoveryOperationsPage({
           <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
             Treat discovery as evidence. Use it to understand purpose, ownership, and dependencies across the product estate.
           </p>
+          {/* EP-2FB6C0CC (BI-DD763B93): discovery's reference and audit pages, linked from their home. */}
+          <p className="mt-1 text-sm text-[var(--dpf-muted)]">
+            <Link href="/platform/device-catalog" className="text-[var(--dpf-accent)] hover:underline">Device Catalog</Link> · <Link href="/platform/tools/discovery/promotion-audit" className="text-[var(--dpf-accent)] hover:underline">Promotion Audit</Link>
+          </p>
         </div>
 
         <DataEnrichmentHelpNote />

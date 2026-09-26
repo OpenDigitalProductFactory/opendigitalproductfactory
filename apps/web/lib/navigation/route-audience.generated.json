@@ -13,8 +13,8 @@
     },
     "byDestinationKind": {
       "advanced-diagnostic": 103,
-      "detail": 179,
-      "legacy-internal": 35,
+      "detail": 176,
+      "legacy-internal": 38,
       "section-home": 32,
       "settings-config": 12,
       "workflow-step": 9
@@ -1371,7 +1371,7 @@
     {
       "routePath": "/platform/ai/assignments/bindings/[bindingId]",
       "audience": "admin",
-      "destinationKind": "detail",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -1672,7 +1672,7 @@
     {
       "routePath": "/platform/identity/authorization/bindings/[bindingId]",
       "audience": "admin",
-      "destinationKind": "detail",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -2148,7 +2148,7 @@
     {
       "routePath": "/portfolio/products/[productId]",
       "audience": "owner",
-      "destinationKind": "detail",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },

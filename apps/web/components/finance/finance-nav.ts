@@ -47,6 +47,7 @@ export const FINANCE_FAMILIES: FinanceFamily[] = [
       "/finance/my-expenses",
       "/finance/suppliers",
       "/finance/purchase-orders",
+      "/finance/mileage",
     ],
     subItems: [
       { label: "Spend Hub", href: "/finance/spend" },
@@ -54,6 +55,7 @@ export const FINANCE_FAMILIES: FinanceFamily[] = [
       { label: "Bills", href: "/finance/bills" },
       { label: "Suppliers", href: "/finance/suppliers" },
       { label: "Expenses", href: "/finance/expense-claims" },
+      { label: "Mileage", href: "/finance/mileage" },
     ],
   },
   {

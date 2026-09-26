@@ -5862,7 +5862,8 @@
       "dynamicParams": [
         "bindingId"
       ],
-      "file": "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx"
+      "file": "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx",
+      "redirectTo": "/platform/ai/assignments"
     },
     {
       "routePath": "/platform/ai/authority",
@@ -6347,7 +6348,8 @@
       "dynamicParams": [
         "bindingId"
       ],
-      "file": "apps/web/app/(shell)/platform/identity/authorization/bindings/[bindingId]/page.tsx"
+      "file": "apps/web/app/(shell)/platform/identity/authorization/bindings/[bindingId]/page.tsx",
+      "redirectTo": "/platform/identity/authorization"
     },
     {
       "routePath": "/platform/identity/directory",
@@ -7168,7 +7170,8 @@
       "dynamicParams": [
         "productId"
       ],
-      "file": "apps/web/app/(shell)/portfolio/products/[productId]/page.tsx"
+      "file": "apps/web/app/(shell)/portfolio/products/[productId]/page.tsx",
+      "redirectTo": "/portfolio/product/[id]"
     },
     {
       "routePath": "/r/[token]",

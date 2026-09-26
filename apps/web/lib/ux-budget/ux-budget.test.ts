@@ -563,7 +563,7 @@ describe("generated route-shell registry", () => {
     // 120 -> 119: the mirror of the eligibility gain above — /workspace/cases/[caseKey]
     // left the excluded set when the fixture began minting its id.
     // 120 -> 121: /workspace/mailroom/items/[inboundId] — dynamic, fixture-required.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(122); // 121 -> 122: /delivery became a redirect (EP-2FB6C0CC).
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(119); // 121 -> 122: /delivery became a redirect (EP-2FB6C0CC). 122 -> 119: three superseded detail routes became redirects (BI-DD763B93).
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {
