@@ -39,11 +39,11 @@ function TilesGrid({ tiles }: { tiles: TileType[] }) {
 function ActivityRow({ item }: { item: ActivityItem }) {
   return (
     <View style={styles.activityRow}>
-      <Text style={styles.activityAction}>{item.action}</Text>
+      <Text style={styles.activityAction}>{item.status}</Text>
       <Text style={styles.activityTarget} numberOfLines={1}>
-        {item.target}
+        {item.title}
       </Text>
-      <Text style={styles.activityActor}>{item.actor}</Text>
+      <Text style={styles.activityActor}>{item.type}</Text>
     </View>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { PortfolioBase } from "@dpf/types";
 import { useRouter } from "next/navigation";
 import { createKnowledgeArticle } from "@/lib/actions/knowledge";
 
@@ -25,7 +26,7 @@ const VALUE_STREAMS = [
 ] as const;
 
 type Product = { id: string; productId: string; name: string };
-type Portfolio = { id: string; slug: string; name: string };
+type PortfolioOption = Pick<PortfolioBase, "id" | "slug" | "name">;
 
 export function KnowledgeArticleForm({
   products,
@@ -34,7 +35,7 @@ export function KnowledgeArticleForm({
   defaultPortfolioId,
 }: {
   products: Product[];
-  portfolios: Portfolio[];
+  portfolios: PortfolioOption[];
   defaultProductId?: string;
   defaultPortfolioId?: string;
 }) {

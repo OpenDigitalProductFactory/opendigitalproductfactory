@@ -1,16 +1,19 @@
 import { z } from "zod";
+import {
+  INVOICE_STATUSES,
+  INVOICE_TYPES,
+  PAYMENT_DIRECTIONS,
+  PAYMENT_METHODS,
+  PAYMENT_STATUSES,
+  type CreateInvoiceInput,
+  type RecordPaymentInput,
+} from "@dpf/types";
 
-export const INVOICE_TYPES = ["standard", "credit_note", "proforma", "recurring_instance"] as const;
-export const INVOICE_STATUSES = [
-  "draft", "approved", "sent", "viewed", "partially_paid", "paid", "overdue", "void", "written_off",
-] as const;
-export const PAYMENT_DIRECTIONS = ["inbound", "outbound"] as const;
-export const PAYMENT_METHODS = [
-  "bank_transfer", "card", "cash", "cheque", "direct_debit", "stripe",
-] as const;
-export const PAYMENT_STATUSES = [
-  "pending", "completed", "failed", "refunded", "cancelled",
-] as const;
+// The closed sets and the request shapes live once, in @dpf/types (finance.ts),
+// shared with the mobile field surface. Re-exported so existing importers of this
+// module keep one path (plan 2026-09-08 §10.5 S9).
+export { INVOICE_STATUSES, INVOICE_TYPES, PAYMENT_DIRECTIONS, PAYMENT_METHODS, PAYMENT_STATUSES };
+export type { CreateInvoiceInput, RecordPaymentInput };
 
 const lineItemSchema = z.object({
   description: z.string().min(1),
@@ -85,7 +88,6 @@ export const signInvoiceSchema = z.object({
     .regex(/^data:image\/(png|jpeg);base64,/, "Signature must be a captured image"),
 });
 
-export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
 /**
  * z.input, not z.infer: line items carry `.default()` on taxRate and
@@ -94,5 +96,23 @@ export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
  * remains assignable to this.
  */
 export type UpdateInvoiceContentInput = z.input<typeof updateInvoiceContentSchema>;
-export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
 export type SignInvoiceInput = z.infer<typeof signInvoiceSchema>;
+
+// ─── Wire-contract pins ─────────────────────────────────────────────────────
+// The request bodies these schemas accept are declared in @dpf/types. Each pin
+// compiles only while the schema's INPUT type and the shared wire type are
+// assignable both ways, so a field added, removed or retyped on one side fails
+// `pnpm --filter web typecheck`. Same idiom as lib/contracts/entity-contract-drift.ts.
+type AssertAssignable<Expected, _Actual extends Expected> = true;
+
+type _CreateInvoiceAccepts = AssertAssignable<CreateInvoiceInput, z.input<typeof createInvoiceSchema>>;
+type _CreateInvoiceCovers = AssertAssignable<z.input<typeof createInvoiceSchema>, CreateInvoiceInput>;
+type _RecordPaymentAccepts = AssertAssignable<RecordPaymentInput, z.input<typeof recordPaymentSchema>>;
+type _RecordPaymentCovers = AssertAssignable<z.input<typeof recordPaymentSchema>, RecordPaymentInput>;
+
+export type FinanceWireContractChecks = [
+  _CreateInvoiceAccepts,
+  _CreateInvoiceCovers,
+  _RecordPaymentAccepts,
+  _RecordPaymentCovers,
+];
