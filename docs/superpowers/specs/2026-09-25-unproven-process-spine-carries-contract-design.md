@@ -133,17 +133,17 @@ marketplace entry (`.claude-plugin/marketplace.json` lists 0.2.1).
 | Claude Code `SessionStart` `additionalContext`, Cursor rules, Copilot instructions | Context injected into the model at session start | Injecting the rule text itself when the skill carrying it cannot be proven loaded | Always-on injection of large rule text. It is injected only when the spine is unproven, and kept to four generated lines |
 | Generated-code drift checks (protobuf/OpenAPI `generate && git diff --exit-code`) | A generated artifact is checked against its sources in CI | The derived-artifact gate over the generated contract | Hand-maintained copies |
 
-## 5. Acceptance criteria
+## 5. Objectives and acceptance criteria
 
-- **AC-PS-01** On a client that cannot report skill state, the session context
-  starts with `Process spine: UNPROVEN` and carries the four-line operating
-  contract.
-- **AC-PS-02** The contract text is generated from the three kernel pages and
-  AGENTS.md §11, and the derived-artifact gate fails on drift.
-- **AC-PS-03** A test covers the `--hook` UNPROVEN output, not only the
-  summary.
-- **AC-PS-04** Live: after the plugin upgrade, a fresh Claude Code session on
-  this host shows UNPROVEN plus the contract in its SessionStart context.
+- **OBJ-PS-1:** A session whose client cannot prove the DPF skills loaded is never told its process spine is healthy.
+- **OBJ-PS-2:** Such a session receives the operating contract inline, generated from the pages that state it.
+
+| Criterion | Objective | Statement |
+|---|---|---|
+| AC-PS-01 | OBJ-PS-1, OBJ-PS-2 | On a client that cannot report skill state, the SessionStart context starts with Process spine: UNPROVEN and carries the four-line operating contract. |
+| AC-PS-02 | OBJ-PS-2 | The contract text is generated from the three kernel pages and the AGENTS.md doctrine-store rule, and the derived-artifact gate fails on drift. |
+| AC-PS-03 | OBJ-PS-1 | A test covers the hook-mode UNPROVEN output, not only the summary renderer. |
+| AC-PS-04 | OBJ-PS-1, OBJ-PS-2 | After the plugin upgrade, a fresh Claude Code session on the development host shows UNPROVEN and the contract in its SessionStart context. |
 
 ## 6. Out of scope
 
