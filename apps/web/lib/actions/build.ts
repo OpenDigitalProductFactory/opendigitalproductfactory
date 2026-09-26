@@ -737,8 +737,8 @@ export async function autoExecuteBuild(buildId: string): Promise<void> {
       where: { buildId },
       select: { buildExecState: true },
     });
-    const { inngest } = await import("@/lib/queue/inngest-client");
-    await inngest.send({
+    const { jobs } = await import("@/lib/jobs");
+    await jobs.send({
       name: "build/execute.run",
       data: { buildId },
       id: buildExecuteSendId(

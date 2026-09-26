@@ -180,6 +180,10 @@ export default defineConfig({
         replacement: resolve(rootDir, "packages/storefront-templates/src/index.ts"),
       },
       {
+        find: "@dpf/i18n",
+        replacement: resolve(rootDir, "packages/i18n/src/index.ts"),
+      },
+      {
         find: "@dpf/validators",
         replacement: resolve(rootDir, "packages/validators/src/index.ts"),
       },

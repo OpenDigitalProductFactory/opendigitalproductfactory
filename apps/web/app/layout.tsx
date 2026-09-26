@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { DialogHost } from "@/components/ui/Dialog";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 
 // All pages in this app require database access at render time.
 // Prevent Next.js from attempting static prerendering during docker build.
@@ -40,9 +41,13 @@ const BOOT_BUNDLE_HASH =
   "unknown";
 const BOOT_JSON = JSON.stringify({ version: BOOT_VERSION, bundleHash: BOOT_BUNDLE_HASH });
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // EP-6B33A840 L0.1: the viewer's language and text direction come from one
+  // resolver (lib/org-locale/locale-context.ts). It never throws; with no
+  // preference it resolves to en-US / ltr, so English output is unchanged.
+  const { language, dir } = await getLocaleContext();
   return (
-    <html lang="en">
+    <html lang={language} dir={dir}>
       <body>
         <script
           // Safe inline — boot values are env-only, never user-supplied.

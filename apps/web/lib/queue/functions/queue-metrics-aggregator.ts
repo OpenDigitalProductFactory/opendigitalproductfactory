@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /**
@@ -11,7 +11,7 @@ import { gateAtEntry } from "../quiescence-gates";
  *
  * Spec: docs/superpowers/specs/2026-07-06-reusable-queueing-substrate-design.md §4.2
  */
-export const queueMetricsAggregator = inngest.createFunction(
+export const queueMetricsAggregator = jobs.createFunction(
   {
     id: "queue/metrics-aggregator",
     retries: 1,

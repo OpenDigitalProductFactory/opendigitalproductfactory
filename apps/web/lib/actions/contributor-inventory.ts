@@ -17,7 +17,7 @@
 import { prisma } from "@dpf/db";
 
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const TRIGGER_EVENT = "ops/contributor-inventory-sync.run";
@@ -44,7 +44,7 @@ export async function triggerContributorInventorySyncAction(
     return { ok: false, error: (err as Error).message };
   }
   try {
-    const result = await inngest.send({
+    const result = await jobs.send({
       name: TRIGGER_EVENT,
       data: { triggeredBy: reason ? `ui:${reason}` : "ui" },
     });

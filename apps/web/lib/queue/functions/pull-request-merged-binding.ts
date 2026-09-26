@@ -19,7 +19,7 @@
 // It is deliberately the smallest useful subscriber — bind and record — so the
 // reaping and completion subscribers can depend on the same signal.
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 
 const FULL_SHA_RE = /^[a-f0-9]{40}$/i;
 
@@ -101,7 +101,7 @@ export function planMergeBinding(
   };
 }
 
-export const pullRequestMergedBinding = inngest.createFunction(
+export const pullRequestMergedBinding = jobs.createFunction(
   {
     id: "build/pr-merged-binding",
     retries: 3,

@@ -2,7 +2,7 @@
 
 import { Prisma, prisma } from "@dpf/db";
 import { requireUserId } from "@/lib/actions/shared/guards";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
 import { computeFlowDurations } from "@/lib/queue/flow-metrics";
 import type {
@@ -77,7 +77,7 @@ export async function createWorkItem(data: {
     },
   });
 
-  await inngest.send({
+  await jobs.send({
     name: "cwq/item.created",
     data: {
       workItemId: item.itemId,
@@ -143,7 +143,7 @@ export async function completeWorkItem(
     },
   });
 
-  await inngest.send({
+  await jobs.send({
     name: "cwq/item.completed",
     data: { workItemId: itemId, outcome: "success" },
   });

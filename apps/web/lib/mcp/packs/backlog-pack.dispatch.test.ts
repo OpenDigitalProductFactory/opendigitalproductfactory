@@ -62,8 +62,8 @@ vi.mock("@dpf/db", () => ({
 }));
 vi.mock("@/lib/backlog/initiative-readiness/backlog-terminal-transition", () => ({ completeBacklogItemTransition: terminalMocks.backlog }));
 vi.mock("@/lib/backlog/initiative-readiness/epic-terminal-transition", () => ({ completeEpicTransition: terminalMocks.epic, convergeEpicReceiptAnchor: terminalMocks.anchor }));
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: mockInngest,
+vi.mock("@/lib/jobs", () => ({
+  jobs: mockInngest,
 }));
 // promote_to_build_studio fires a detached `void (async () => …)()` that
 // dynamically imports this module and dispatches Ideate. With the real module

@@ -18,7 +18,7 @@ vi.mock("@dpf/db", () => ({
     },
   },
 }));
-vi.mock("@/lib/queue/inngest-client", () => ({ inngest: { send: mockSend } }));
+vi.mock("@/lib/jobs", () => ({ jobs: { send: mockSend } }));
 vi.mock("@/lib/backlog/pr-submit-awaiting-acceptance", () => ({
   applyGitHubPullRequestToBacklog: mockApplyPullRequest,
 }));
