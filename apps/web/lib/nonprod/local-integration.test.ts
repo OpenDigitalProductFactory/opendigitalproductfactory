@@ -8,7 +8,7 @@ vi.mock("@/lib/actions/external-evidence", () => ({
   recordExternalEvidence: mockRecordExternalEvidence,
 }));
 
-import { recordLocalIntegrationResult } from "./local-integration";
+import { recordLocalIntegrationResult, TEST_STUB_EVIDENCE_REFUSED } from "./local-integration";
 
 describe("recordLocalIntegrationResult", () => {
   const platformConfig = {
@@ -419,4 +419,60 @@ describe("recordLocalIntegrationResult — evidence output offload (BI-39AAE9B8)
     const call = mockRecordExternalEvidence.mock.calls.at(-1)?.[0] as { details: { evidence: unknown } };
     expect(call.details.evidence).toBe(evidence);
   });
+});
+
+// BI-F5344F65. A DPF_ALLOW_LOCAL_CI_STUB run builds nothing, yet reports
+// status "passed" under a real lease. It marks its payload testStub, and the
+// portal must record none of it: no evidence row a PR could cite, no pool-policy
+// change and no builder calibration.
+describe("recordLocalIntegrationResult refuses test-stub evidence", () => {
+  const platformConfig = { findUnique: vi.fn(), updateMany: vi.fn() };
+  const environmentLease = { findUnique: vi.fn(), updateMany: vi.fn() };
+  const builderCalibration = { findUnique: vi.fn(), updateMany: vi.fn(), create: vi.fn() };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  for (const status of ["passed", "failed", "blocked_control_plane_starvation"] as const) {
+    it(`refuses a ${status} stub result before it writes anything`, async () => {
+      const gateKey = "e".repeat(64);
+      environmentLease.findUnique.mockResolvedValue({
+        leaseId: "NPEL-STUB",
+        claimKey: `gate:${gateKey}`,
+        ownerSessionId: "claude-session-stub",
+        status: "active",
+        evidenceRecordId: null,
+      });
+
+      await expect(recordLocalIntegrationResult({
+        actorUserId: "user-1",
+        provider: "claude",
+        externalSessionId: "claude-session-stub",
+        routeContext: "/build",
+        candidateBranch: "fix/admitted-owner-recovery",
+        mode: "single-branch",
+        status,
+        summary: "local-CI lease gate passed.",
+        gateKey,
+        leaseId: "NPEL-STUB",
+        evidence: {
+          testStub: true,
+          gatePassed: status === "passed",
+          buildCommand: "sandbox checkout/build stub",
+          sha: "f".repeat(40),
+          headTreeHash: "a".repeat(40),
+        },
+      }, { platformConfig, environmentLease, builderCalibration })).rejects.toMatchObject({
+        code: TEST_STUB_EVIDENCE_REFUSED,
+        message: expect.stringMatching(/DPF_ALLOW_LOCAL_CI_STUB/),
+      });
+
+      expect(mockRecordExternalEvidence).not.toHaveBeenCalled();
+      expect(platformConfig.findUnique).not.toHaveBeenCalled();
+      expect(platformConfig.updateMany).not.toHaveBeenCalled();
+      expect(builderCalibration.findUnique).not.toHaveBeenCalled();
+      expect(environmentLease.updateMany).not.toHaveBeenCalled();
+    });
+  }
 });

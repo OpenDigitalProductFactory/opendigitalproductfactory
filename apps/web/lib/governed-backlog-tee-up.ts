@@ -1,3 +1,4 @@
+import { blocksStart } from "@/lib/build/investment-admission";
 import * as crypto from "crypto";
 import { generateBuildId, mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
 import {
@@ -629,6 +630,12 @@ export async function runGovernedBacklogTeeUp(input: {
   limit?: number;
   /** Overrides the daily cap as the per-run ceiling (capacity-drain path). */
   capOverride?: number;
+  /**
+   * Admission by points in flight (BI-3430B3A4). The tee-up is an autonomous
+   * start, so a candidate past its portfolio's allowance is refused and the
+   * reason is recorded on the item. Injected in tests; defaults to the live check.
+   */
+  admit?: (itemId: string) => Promise<{ verdict: "admit" | "warn" | "refuse"; reason: string; mode?: "shadow" | "enforce" }>;
 }): Promise<{
   trigger: GovernedBacklogTeeUpTrigger;
   requestedLimit: number;
@@ -636,6 +643,7 @@ export async function runGovernedBacklogTeeUp(input: {
   createdCount: number;
   skippedCount: number;
   builds: Array<{ backlogItemId: string; buildId: string }>;
+  refused: Array<{ backlogItemId: string; reason: string }>;
 }> {
   const { prisma, userId, trigger, limit, capOverride } = input;
   const config = await prisma.platformDevConfig.findUnique({
@@ -655,6 +663,7 @@ export async function runGovernedBacklogTeeUp(input: {
       createdCount: 0,
       skippedCount: 0,
       builds: [],
+      refused: [],
     };
   }
 
@@ -692,9 +701,18 @@ export async function runGovernedBacklogTeeUp(input: {
 
   const selected = selectGovernedBacklogTeeUpCandidates(items, requestedLimit);
   const builds: Array<{ backlogItemId: string; buildId: string }> = [];
+  const refused: Array<{ backlogItemId: string; reason: string }> = [];
   let skippedCount = 0;
+  const admit = input.admit ?? liveTeeUpAdmission(userId, trigger);
 
   for (const item of selected) {
+    const admission = await admit(item.itemId);
+    // Shadow mode records the refusal and lets the start proceed (WWMD DI-D83D9C13686B).
+    if (blocksStart(admission)) {
+      refused.push({ backlogItemId: item.itemId, reason: admission.reason });
+      skippedCount += 1;
+      continue;
+    }
     const activitySummary =
       trigger === "daily"
         ? `Created by the daily backlog tee-up from ${item.itemId}.`
@@ -735,5 +753,17 @@ export async function runGovernedBacklogTeeUp(input: {
     createdCount: builds.length,
     skippedCount,
     builds,
+    refused,
+  };
+}
+
+/** The live admission check for tee-up starts, recording each refusal on its item. */
+function liveTeeUpAdmission(userId: string, trigger: GovernedBacklogTeeUpTrigger) {
+  return async (itemId: string) => {
+    const { prisma } = await import("@dpf/db");
+    const { evaluateItemAdmission, recordAdmissionOutcome } = await import("@/lib/build/investment-admission");
+    const admission = await evaluateItemAdmission(prisma as never, { itemId, startKind: "autonomous" });
+    await recordAdmissionOutcome(prisma as never, admission, { source: `governed-backlog-tee-up:${trigger}`, userId });
+    return admission;
   };
 }

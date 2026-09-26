@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { DialogHost } from "@/components/ui/Dialog";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 
 // All pages in this app require database access at render time.
@@ -41,6 +43,13 @@ const BOOT_BUNDLE_HASH =
   "unknown";
 const BOOT_JSON = JSON.stringify({ version: BOOT_VERSION, bundleHash: BOOT_BUNDLE_HASH });
 
+// The global not-found page and the setup progress bar render outside any
+// page-level provider, so their namespaces ship with the root layout.
+const GLOBAL_NAMESPACES = (language: string) => ({
+  errors: namespaceMessages(language, "errors"),
+  setup: namespaceMessages(language, "setup"),
+});
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // EP-6B33A840 L0.1: the viewer's language and text direction come from one
   // resolver (lib/org-locale/locale-context.ts). It never throws; with no
@@ -53,7 +62,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           // Safe inline — boot values are env-only, never user-supplied.
           dangerouslySetInnerHTML={{ __html: `window.__DPF_BOOT__=${BOOT_JSON};` }}
         />
-        {children}
+        {/* L0.2: namespaces client components translate with useT(). Kept small;
+            a page-level provider can add more for its own subtree. */}
+        <MessagesProvider locale={language} messages={GLOBAL_NAMESPACES(language)}>
+          {children}
+        </MessagesProvider>
         {/* BI-B0E4F3F1 — single host for in-app confirm/alert/prompt dialogs,
             replacing native window.confirm/alert/prompt (unreachable by automation). */}
         <DialogHost />
