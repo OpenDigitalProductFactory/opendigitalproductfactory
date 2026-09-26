@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: { send: vi.fn() },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { send: vi.fn() },
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -18,7 +18,7 @@ vi.mock("@/lib/build/build-artifact-provenance", () => ({
   saveBuildArtifactRevisionWithDb: vi.fn(),
 }));
 
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { prisma } from "@dpf/db";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import { saveBuildArtifactRevisionWithDb } from "@/lib/build/build-artifact-provenance";
@@ -30,11 +30,11 @@ describe("queueBuildReviewVerification", () => {
   });
 
   it("dispatches the inngest event on the happy path and does not touch the build", async () => {
-    vi.mocked(inngest.send).mockResolvedValue({ ids: ["evt-1"] } as never);
+    vi.mocked(jobs.send).mockResolvedValue({ ids: ["evt-1"] } as never);
 
     await queueBuildReviewVerification("FB-OK-001");
 
-    expect(inngest.send).toHaveBeenCalledWith({
+    expect(jobs.send).toHaveBeenCalledWith({
       name: "build/review.verify",
       data: { buildId: "FB-OK-001" },
     });
@@ -44,7 +44,7 @@ describe("queueBuildReviewVerification", () => {
   });
 
   it("marks the build failed with a synthetic step when enqueue throws", async () => {
-    vi.mocked(inngest.send).mockRejectedValue(
+    vi.mocked(jobs.send).mockRejectedValue(
       new Error("getaddrinfo ENOTFOUND inngest"),
     );
     vi.mocked(prisma.featureBuild.findUnique).mockResolvedValue({
@@ -79,7 +79,7 @@ describe("queueBuildReviewVerification", () => {
   });
 
   it("still marks failed when the build has no threadId, without emitting", async () => {
-    vi.mocked(inngest.send).mockRejectedValue(new Error("boom"));
+    vi.mocked(jobs.send).mockRejectedValue(new Error("boom"));
     vi.mocked(prisma.featureBuild.findUnique).mockResolvedValue({
       threadId: null,
     } as never);
@@ -94,7 +94,7 @@ describe("queueBuildReviewVerification", () => {
   });
 
   it("swallows persistence failure so the originating call does not crash", async () => {
-    vi.mocked(inngest.send).mockRejectedValue(new Error("queue down"));
+    vi.mocked(jobs.send).mockRejectedValue(new Error("queue down"));
     vi.mocked(prisma.featureBuild.findUnique).mockRejectedValue(
       new Error("db unreachable"),
     );

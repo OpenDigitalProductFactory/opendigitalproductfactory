@@ -3,13 +3,13 @@
 // onApproved seam). Runs the research engine and lands draft corpus material;
 // the pure logic + outcome stamping live in lib/wiki/research-execution.ts.
 
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import {
   runResearchExecution,
   type RunResearchExecutionInput,
 } from "@/lib/wiki/research-execution";
 
-export const researchExecute = inngest.createFunction(
+export const researchExecute = jobs.createFunction(
   {
     id: "research/execute",
     retries: 1,

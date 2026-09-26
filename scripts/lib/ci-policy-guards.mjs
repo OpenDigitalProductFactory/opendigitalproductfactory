@@ -405,6 +405,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("application-boundary-guard", "Application Boundary Guard", [
       node("--test", "scripts/check-application-boundaries.test.mjs"),
       node("scripts/check-application-boundaries.mjs"),
+      // One durable-job facade: only apps/web/lib/jobs/ reaches the engine
+      // (plan 2026-09-08 move M3; spec 2026-09-25 postgres job engine §6).
+      conformanceTest("scripts/check-no-direct-job-engine-import.test.mjs"),
+      node("scripts/check-no-direct-job-engine-import.mjs"),
     ], { inputs: ["code"] }),
     guard("label-association-guard", "Label Association Guard", [
       // A <label> bound to nothing renders, screenshots and inspects correctly

@@ -1,4 +1,4 @@
-import { inngest, type AssuranceBomGenerateEvent } from "@/lib/queue/inngest-client";
+import { jobs, type AssuranceBomGenerateEvent } from "@/lib/jobs";
 
 export async function queueBuildBomGeneration(input: { buildId: string; requestedByUserId: string }) {
   const event: AssuranceBomGenerateEvent = {
@@ -6,5 +6,5 @@ export async function queueBuildBomGeneration(input: { buildId: string; requeste
     data: input,
   };
 
-  return inngest.send(event);
+  return jobs.send(event);
 }

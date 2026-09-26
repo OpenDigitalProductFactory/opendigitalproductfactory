@@ -26,8 +26,8 @@
 //   `validateGitHubToken`, Phase 3) populates tokenExpiresAt and so is the
 //   only tier this monitor actually fires on.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 type Severity = "info" | "warning" | "critical" | "expired";
@@ -154,7 +154,7 @@ export async function runTokenExpiryScan(): Promise<{
   };
 }
 
-export const tokenExpiryMonitor = inngest.createFunction(
+export const tokenExpiryMonitor = jobs.createFunction(
   { id: "ops/token-expiry-monitor", retries: 2, triggers: [cron("0 9 * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ops/token-expiry-monitor");

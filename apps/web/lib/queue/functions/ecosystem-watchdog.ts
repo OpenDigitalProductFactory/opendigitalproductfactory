@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // BI-784D20FD — the weekly ecosystem turn. Without this trigger the digest
@@ -8,7 +8,7 @@ import { gateAtEntry } from "../quiescence-gates";
 //
 // Monday morning, before the inbound triage sweep, so an operator's week opens
 // with what the ecosystem is asking of them.
-export const ecosystemWatchdog = inngest.createFunction(
+export const ecosystemWatchdog = jobs.createFunction(
   { id: "ecosystem/weekly-watchdog", retries: 2, triggers: [cron("5 6 * * 1")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ecosystem/weekly-watchdog");

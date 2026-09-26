@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const send = vi.hoisted(() => vi.fn());
-vi.mock("./inngest-client", () => ({ inngest: { send } }));
+vi.mock("@/lib/jobs", () => ({ jobs: { send } }));
 
 import { sendMcpTaskRunExecutionEvent } from "./mcp-task-run-events";
 

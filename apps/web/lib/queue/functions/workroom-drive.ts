@@ -7,14 +7,14 @@
 // Mirrors obligation-assurance-watch.ts: pure exported job + thin Inngest
 // wrappers behind gateAtEntry.
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 import {
   driveOutcomeNeedsOwner,
   resolveDriveConclusion,
 } from "@/lib/work-management/drive-conclusion";
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 import type { PrismaClient } from "@dpf/db";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import {
   COORDINATION_RESOURCE_TYPE,
   COORDINATION_SCOPE_TYPE,
@@ -769,7 +769,7 @@ export function createWorkroomDriveEffects(
   };
 }
 
-export const workroomDriveScheduled = inngest.createFunction(
+export const workroomDriveScheduled = jobs.createFunction(
   {
     id: WORKROOM_DRIVE_INNGEST_ID,
     retries: 1,
@@ -783,7 +783,7 @@ export const workroomDriveScheduled = inngest.createFunction(
   },
 );
 
-export const workroomDriveRunNow = inngest.createFunction(
+export const workroomDriveRunNow = jobs.createFunction(
   {
     id: WORKROOM_DRIVE_RUN_NOW_INNGEST_ID,
     retries: 0,

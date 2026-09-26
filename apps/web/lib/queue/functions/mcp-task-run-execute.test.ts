@@ -10,8 +10,8 @@ vi.mock("@/lib/change-review/semantic-review-background", () => ({
   reconcileSemanticReviews: (...args: unknown[]) => native.reconcile(...args),
 }));
 
-vi.mock("../inngest-client", () => ({
-  inngest: { createFunction: (...args: unknown[]) => inngestMock.createFunction(...args) },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { createFunction: (...args: unknown[]) => inngestMock.createFunction(...args) },
 }));
 vi.mock("@/lib/mcp-task-background-worker", () => ({
   executePersistedRemoteTask: (...args: unknown[]) => worker.execute(...args),

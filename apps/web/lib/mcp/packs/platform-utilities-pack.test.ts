@@ -32,8 +32,8 @@ vi.mock("@/lib/shared/email-setup-tool", () => ({
 vi.mock("@/lib/patch/patch-posture", () => ({
   getPatchPosture: (...a: unknown[]) => mocks.getPatchPosture(...a),
 }));
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: { send: (...a: unknown[]) => mocks.inngestSend(...a) },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { send: (...a: unknown[]) => mocks.inngestSend(...a) },
 }));
 
 import { platformUtilitiesPack } from "./platform-utilities-pack";

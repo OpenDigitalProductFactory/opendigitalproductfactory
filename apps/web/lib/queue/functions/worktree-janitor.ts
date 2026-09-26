@@ -21,8 +21,8 @@
 //   * When AUTO_REAP=1: live **Tier A only**. Tier B never auto-deleted here.
 //   * Removals use junction-safe-worktree-remove.mjs via the CLI.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { resolveManagedScriptPath } from "@/lib/operate/backups/managed-script-path";
 
@@ -344,7 +344,7 @@ export async function runWorktreeJanitor(options: RunOptions = {}): Promise<RunR
 
 }
 
-export const worktreeJanitor = inngest.createFunction(
+export const worktreeJanitor = jobs.createFunction(
   {
     id: "ops/worktree-janitor",
     retries: 1,

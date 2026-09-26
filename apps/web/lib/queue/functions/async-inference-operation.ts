@@ -18,7 +18,7 @@ import {
   reconcileDurableInferenceTaskTransitions,
   settleDurableInferenceTaskTransition,
 } from "@/lib/mcp-task-durable-inference-transition";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry, gateBetweenSteps } from "../quiescence-gates";
 
 export {
@@ -33,7 +33,7 @@ function workerEnabled(env: Record<string, string | undefined> = process.env): b
   return configured !== "0" && configured !== "false" && configured !== "off";
 }
 
-export const asyncInferenceOperationRun = inngest.createFunction(
+export const asyncInferenceOperationRun = jobs.createFunction(
   {
     id: "inference/async-operation-run",
     retries: 2,
@@ -76,7 +76,7 @@ export const asyncInferenceOperationRun = inngest.createFunction(
   },
 );
 
-export const asyncInferenceOperationReconciliation = inngest.createFunction(
+export const asyncInferenceOperationReconciliation = jobs.createFunction(
   {
     id: ASYNC_INFERENCE_OPERATION_RECOVERY_INNGEST_ID,
     retries: 1,
@@ -106,7 +106,7 @@ export const asyncInferenceOperationReconciliation = inngest.createFunction(
   },
 );
 
-export const asyncInferenceOperationOutbox = inngest.createFunction(
+export const asyncInferenceOperationOutbox = jobs.createFunction(
   {
     id: ASYNC_INFERENCE_OPERATION_OUTBOX_INNGEST_ID,
     retries: 2,
@@ -122,7 +122,7 @@ export const asyncInferenceOperationOutbox = inngest.createFunction(
   },
 );
 
-export const asyncInferenceOperationTaskRunTransition = inngest.createFunction(
+export const asyncInferenceOperationTaskRunTransition = jobs.createFunction(
   {
     id: "mcp/task-run-durable-inference-transition",
     retries: 2,

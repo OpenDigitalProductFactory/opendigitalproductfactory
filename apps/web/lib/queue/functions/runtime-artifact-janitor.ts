@@ -32,8 +32,8 @@
 //
 // The whole scheduled set is already behind DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { resolveManagedScriptPath } from "@/lib/operate/backups/managed-script-path";
 
@@ -298,7 +298,7 @@ export async function runRuntimeArtifactJanitorObserve(
 
 // ─── Inngest wrapper ─────────────────────────────────────────────────────────
 
-export const runtimeArtifactJanitor = inngest.createFunction(
+export const runtimeArtifactJanitor = jobs.createFunction(
   {
     id: "ops/runtime-artifact-janitor",
     retries: 1,

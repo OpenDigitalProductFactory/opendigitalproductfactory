@@ -117,8 +117,8 @@ vi.mock("@/lib/self-upgrade/cooldown", () => ({
   DEFAULT_COOLDOWN_MINUTES: 30,
 }));
 
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: {
+vi.mock("@/lib/jobs", () => ({
+  jobs: {
     send: vi.fn().mockResolvedValue(undefined),
     // createFunction is called at module-init by self-upgrade.ts; stub it to avoid TypeError
     createFunction: vi.fn().mockReturnValue({ id: "mocked-fn" }),
@@ -189,7 +189,7 @@ import { isUpgradeWindowOpen, nextUpgradeWindowOpen } from "@/lib/self-upgrade/w
 import { resolveAutoUpgradeWindow, nextAutoWindowOpen } from "@/lib/self-upgrade/auto-window";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { revalidatePath } from "next/cache";
 import { runSelfUpgradeRollback, SelfUpgradeRollbackError } from "@/lib/self-upgrade/rollback";
 import { createSelfUpgradeTargetBinding } from "@/lib/self-upgrade/target-binding";
@@ -1013,7 +1013,7 @@ describe("triggerSelfUpgrade – guard: already-running", () => {
     expect(result).toEqual(
       expect.objectContaining({ queued: false, reason: "already-running" }),
     );
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(vi.mocked(jobs.send)).not.toHaveBeenCalled();
   });
 
   it("includes runId of the active run in the response", async () => {
@@ -1040,7 +1040,7 @@ describe("triggerSelfUpgrade – guard: already-running", () => {
     expect(result).toEqual(
       expect.objectContaining({ queued: false, reason: "already-running" }),
     );
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(vi.mocked(jobs.send)).not.toHaveBeenCalled();
   });
 
   it("does not dispatch a duplicate event while the latest run is still queued", async () => {
@@ -1060,7 +1060,7 @@ describe("triggerSelfUpgrade – guard: already-running", () => {
       runId: "SUR-QUEUED1",
     });
     expect(createRun).not.toHaveBeenCalled();
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(vi.mocked(jobs.send)).not.toHaveBeenCalled();
   });
 });
 
@@ -1078,7 +1078,7 @@ describe("triggerSelfUpgrade – guard: invalid-config", () => {
     expect(result).toEqual(
       expect.objectContaining({ queued: false, reason: "disabled" }),
     );
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(vi.mocked(jobs.send)).not.toHaveBeenCalled();
   });
 
   it("dryRun bypasses the disabled guard and dispatches the event", async () => {

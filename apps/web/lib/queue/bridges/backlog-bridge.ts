@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
 import type { WorkItemUrgency } from "@/lib/queue/queue-types";
 
@@ -113,7 +113,7 @@ export async function bridgeBacklogItemToWorkItem(
     },
   });
 
-  await inngest.send({
+  await jobs.send({
     name: "cwq/item.created",
     data: { workItemId: workItem.itemId, sourceType: "backlog-item", urgency },
   });
