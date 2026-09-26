@@ -1699,6 +1699,9 @@
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.sh": [
       "docs/operations/install.md"
     ],
+    "packages/i18n/src/catalog.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
     "packages/i18n/src/locales.ts": [
       "docs/architecture/localization-runbook.md"
     ],
@@ -2901,6 +2904,7 @@
       "apps/web/lib/i18n/locale-context.server.ts",
       "apps/web/lib/org-locale/locale-context.ts",
       "apps/web/lib/org-locale/org-locale.ts",
+      "packages/i18n/src/catalog.ts",
       "packages/i18n/src/locales.ts"
     ],
     "docs/architecture/mcp-tool-authorization-runbook.md": [
