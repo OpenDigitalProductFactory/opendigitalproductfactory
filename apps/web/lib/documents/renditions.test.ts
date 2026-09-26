@@ -278,7 +278,7 @@ describe("generateDocumentRenditions", () => {
 describe("backfillDocumentRenditions", () => {
   it("does nothing, and records nothing, while the converter is unavailable", async () => {
     const { deps, db } = makeDeps({ availability: vi.fn(async () => ({ available: false, detail: "no docker socket" })) });
-    expect(await backfillDocumentRenditions({}, deps)).toEqual({ status: "converter-unavailable", detail: "no docker socket", processed: 0, results: [] });
+    expect(await backfillDocumentRenditions({}, deps)).toEqual({ status: "converter-unavailable", detail: "no docker socket", processed: 0, results: [], nextCursor: null });
     expect(db.documentVersion.findMany).not.toHaveBeenCalled();
   });
 
@@ -307,5 +307,41 @@ describe("backfillDocumentRenditions", () => {
       contentFormat: { in: [PDF] },
       renditions: { none: { renditionKind: "plain_text" } },
     });
+  });
+});
+
+// BI-153EC72C: a pass continues from the previous pass's cursor, so a drain
+// never re-selects a version it already tried (a failed one stays pending), and
+// every pass logs its counts.
+describe("backfillDocumentRenditions passes (BI-153EC72C)", () => {
+  it("continues after the cursor and hands back the next one when the page was full", async () => {
+    const { deps, db } = makeDeps({}, null);
+    db.documentVersion.findMany.mockResolvedValueOnce([{ id: "ver-2" }, { id: "ver-3" }]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const outcome = await backfillDocumentRenditions({ limit: 2, cursor: "ver-1", reason: "portal-start" }, deps);
+
+    const query = (db.documentVersion.findMany.mock.calls as unknown as unknown[][])[0]![0] as unknown as Row;
+    expect(query).toMatchObject({ cursor: { id: "ver-1" }, skip: 1, take: 2, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
+    expect(outcome.nextCursor).toBe("ver-3");
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^\[renditions\] backfill pass \(portal-start\): 2 selected, 0 rendered, 0 failed, 2 skipped/));
+    log.mockRestore();
+  });
+
+  it("ends the drain when the page was not full", async () => {
+    const { deps, db } = makeDeps();
+    db.documentVersion.findMany.mockResolvedValueOnce([{ id: "ver-1" }]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const outcome = await backfillDocumentRenditions({ limit: 2 }, deps);
+    expect(outcome.nextCursor).toBeNull();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("1 selected, 1 rendered, 0 failed, 0 skipped"));
+    log.mockRestore();
+  });
+
+  it("logs a pass that found the converter unavailable", async () => {
+    const { deps } = makeDeps({ availability: vi.fn(async () => ({ available: false, detail: "image missing" })) });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect((await backfillDocumentRenditions({ reason: "release-change" }, deps)).nextCursor).toBeNull();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("[renditions] backfill pass (release-change): converter unavailable (image missing)"));
+    log.mockRestore();
   });
 });

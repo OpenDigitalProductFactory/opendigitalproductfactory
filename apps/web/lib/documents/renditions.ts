@@ -77,6 +77,8 @@ export type BackfillOutcome = {
   detail?: string;
   processed: number;
   results: Array<{ documentVersionId: string } & RenditionOutcome>;
+  /** Where the next pass continues; null when this pass reached the end. */
+  nextCursor: string | null;
 };
 
 type RenditionDb = typeof prisma;
@@ -269,19 +271,23 @@ export async function generateDocumentRenditions(
 }
 
 /**
- * The bounded one-shot sweep: current office versions that lack a rendition,
- * and current PDF versions that lack their text (BI-26CD1D1E), newest first, at most `limit` (capped at 100) per pass. Run when the
- * converter becomes available (rendition-trigger.ts); while it is unavailable
- * the sweep does nothing and records nothing.
+ * One bounded backfill pass: current office versions that lack a rendition,
+ * and current PDF versions that lack their text (BI-26CD1D1E), newest first,
+ * at most `limit` (capped at 100) per pass. A pass continues after `cursor`,
+ * so a drain (rendition-backfill-drain.ts) visits each version once even when
+ * it fails and stays pending (BI-153EC72C). While the converter is unavailable
+ * the pass does nothing and records nothing. Each pass logs its counts.
  */
 export async function backfillDocumentRenditions(
-  input: { limit?: number } = {},
+  input: { limit?: number; cursor?: string | null; reason?: string } = {},
   overrides: Partial<RenditionDeps> = {},
 ): Promise<BackfillOutcome> {
   const deps: RenditionDeps = { ...defaultDeps(), ...overrides };
+  const label = `[renditions] backfill pass (${input.reason ?? "requested"})`;
   const availability = await deps.availability();
   if (!availability.available) {
-    return { status: "converter-unavailable", detail: availability.detail, processed: 0, results: [] };
+    console.log(`${label}: converter unavailable (${availability.detail}); nothing swept`);
+    return { status: "converter-unavailable", detail: availability.detail, processed: 0, results: [], nextCursor: null };
   }
   const requested = Number.isFinite(input.limit) ? Math.trunc(input.limit!) : DEFAULT_BACKFILL_LIMIT;
   const take = Math.min(Math.max(requested, 1), MAX_BACKFILL_LIMIT);
@@ -300,7 +306,8 @@ export async function backfillDocumentRenditions(
         },
       ],
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
     take,
     select: { id: true },
   });
@@ -309,5 +316,10 @@ export async function backfillDocumentRenditions(
   for (const { id } of pending) {
     results.push({ documentVersionId: id, ...(await generateDocumentRenditions(id, deps)) });
   }
-  return { status: "swept", processed: results.length, results };
+  const count = (status: RenditionOutcome["status"]) => results.filter((result) => result.status === status).length;
+  console.log(
+    `${label}: ${results.length} selected, ${count("rendered")} rendered, ${count("failed")} failed, ${count("skipped")} skipped`,
+  );
+  const nextCursor = pending.length === take ? pending[pending.length - 1]!.id : null;
+  return { status: "swept", processed: results.length, results, nextCursor };
 }
