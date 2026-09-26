@@ -626,6 +626,40 @@ describe("terminal initiative recovery", () => {
     expect(ports.resolveRecovery).not.toHaveBeenCalled();
   });
 
+  it("BI-D3E1F6D9: after the baseline exists, a design review binds the room head, as the refused claim's packet does", async () => {
+    const pinnedBaseline = [{
+      baselineId: "baseline-current",
+      supersedesBaselineId: null,
+      artifactRef: {
+        kind: "repo-blob-at-commit",
+        repositoryFullName: room.repositoryFullName,
+        commitSha: baselineCommitSha,
+        path: "docs/superpowers/specs/design.md",
+        providerBlobId: "3".repeat(40),
+      },
+    }];
+    const ports = deps([room], pinnedBaseline);
+    ports.resolveRecovery.mockResolvedValue({ reviewerRoutes: [], escalations: [], unroutable: [] });
+    const architectureDecision: InitiativeReadinessDecision = {
+      ...decision,
+      unmet: [readinessRequirement({ code: "REVIEW_REQUIRED", state: "missing", accountableRole: "architecture-reviewer" })],
+    };
+    await resolveTerminalInitiativeRecovery({ decision: architectureDecision, currentAgentId: null, refusedWorkroomId: room.capsuleId, ports });
+
+    // The room moved past the commit that minted the baseline (a rebase or a
+    // docs commit); the reviewer reads, and the guard must accept, the head.
+    expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha });
+    expect(ports.resolveRecovery).toHaveBeenCalledWith(expect.objectContaining({
+      // No pinned commit: the packet builder binds the room head, like the claim.
+      canonicalArtifact: {
+        resolved: true,
+        path: "docs/superpowers/specs/design.md",
+        providerBlobId: "3".repeat(40),
+      },
+      expectedCurrentBaselineId: "baseline-current",
+    }));
+  });
+
   it("uses the provider-verified artifact already pinned by the current baseline", async () => {
     const ports = deps([room], [{
       baselineId: "baseline-current",

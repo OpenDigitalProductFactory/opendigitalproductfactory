@@ -16,6 +16,7 @@ import {
 } from "@/lib/platform/platform-dev-config-core";
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
 import { lazyChildProcess, lazyFs, lazyPath, lazyUtil } from "@/lib/shared/lazy-node";
 import { revalidatePath } from "next/cache";
 
@@ -746,10 +747,7 @@ async function ensureWorkspaceSafeDirectory(
   gitOpts: ExecUpdateOptions,
   workspace: string,
 ): Promise<void> {
-  await execUpdate(
-    `git config --global --add safe.directory ${shellQuote(workspace)} >/dev/null 2>&1 || true`,
-    gitOpts,
-  );
+  await execUpdate(ensureGlobalSafeDirectoryCommand(shellQuote(workspace)), gitOpts);
 }
 
 /**

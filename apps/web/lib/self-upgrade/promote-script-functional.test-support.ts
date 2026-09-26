@@ -15,7 +15,7 @@ export const REPO_ROOT = resolve(__dirname, "../../../..");
 const MIGRATOR = join(REPO_ROOT, "scripts", "installer", "migrate-install-state.mjs");
 const CATALOG = join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json");
 const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
-const BASH_COMMAND = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
+export const BASH_COMMAND = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
 export const BASH_OK = spawnSync(BASH_COMMAND, ["--version"], { encoding: "utf8" }).status === 0;
 export const GIT_OK = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
 export const PROMOTE_TEST_TIMEOUT_MS = 30_000;
@@ -219,6 +219,9 @@ export function runPromote(opts: {
   const signature = createHmac("sha256", secret).update(canonical(envelope)).digest("hex");
   const exports = [
     "unset DPF_STATE_DIR",
+    // promote.sh writes `git config --global`; confine it to a scratch file so
+    // a test run never rewrites the developer's real ~/.gitconfig (BI-249EEA02).
+    `export GIT_CONFIG_GLOBAL=${shellQuote(toBashPath(join(opts.backup, "gitconfig")))}`,
     `export PATH=${shellQuote(toBashPath(opts.fakeBin))}:"$PATH"`,
     `export PROMOTE_SOURCE=${shellQuote(toBashPath(opts.source))}`,
     ...(opts.installRoot ? [`export PROMOTE_INSTALL_ROOT=${shellQuote(toBashPath(opts.installRoot))}`] : []),
