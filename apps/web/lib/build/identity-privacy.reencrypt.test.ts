@@ -145,4 +145,17 @@ describe("resolveHiveToken — opportunistic re-encryption", () => {
     });
     expect(call.data.secretRef).toMatch(/^enc:/);
   });
+
+  it("falls back to an active github-pr-sync credential when no other token exists", async () => {
+    delete process.env.CREDENTIAL_ENCRYPTION_KEY;
+    mockHiveFind.mockImplementation((async ({ where }: { where: { providerId: string } }) =>
+      where.providerId === "github-pr-sync"
+        ? { secretRef: "ghp_pr_sync", status: "active" }
+        : where.providerId === "hive-contribution"
+          ? { secretRef: null, status: "unconfigured" }
+          : null) as never);
+
+    await expect(resolveHiveToken()).resolves.toBe("ghp_pr_sync");
+    mockHiveFind.mockReset();
+  });
 });

@@ -14,6 +14,7 @@ import { loadScheduledTaskItems } from "./sources/scheduled-task";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
 import { loadSkillProposalItems } from "./sources/skill-proposal";
 import { loadCoworkerEnvelopeItems } from "./sources/coworker-envelope";
+import { loadOrphanedApprovalItems } from "./sources/orphaned-approval";
 import { loadPlatformHealthItems } from "./sources/platform-health";
 import {
   loadCoworkerMemoryItems,
@@ -96,6 +97,10 @@ export type AttentionLoadOptions = {
    *  all, so an unidentified reader can never see another user's envelope
    *  (BI-7CB2CCDE). */
   delegatingUserId?: string;
+  /** The reader is a superuser. Only then is the orphaned-approval source
+   *  registered: it names other people's accounts, so it is an administrator's
+   *  finding, never a worker's (BI-61DE8177). */
+  readerIsSuperuser?: boolean;
 };
 
 /** The real source loaders for a reading user. Exported so the wiring — which
@@ -157,6 +162,9 @@ export function attentionSourceLoaders(
       source: "coworker-envelope",
       load: () => loadCoworkerEnvelopeItems(db, opts.delegatingUserId),
     });
+  }
+  if (opts.readerIsSuperuser) {
+    loaders.push({ source: "orphaned-approval", load: () => loadOrphanedApprovalItems(db) });
   }
   return loaders;
 }

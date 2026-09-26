@@ -1893,7 +1893,7 @@
         "4-the-reviewer-roster-who-holds-which-grant",
         "5-drive-to-completion-checklist",
         "6-known-limitation-reviewer-dispatch-can-complete-without-writing-a-receipt",
-        "7-known-limitation-a-small-or-medium-item-cannot-close-through-an-acceptance-reviewer-bi-0f8e39d5",
+        "7-closing-a-small-or-medium-item-the-baseline-is-the-body-bi-0f8e39d5",
         "anti-patterns-observed"
       ]
     },
@@ -5428,6 +5428,7 @@
         "supported-environment",
         "prerequisites",
         "quick-start",
+        "contributor-office-document-conversion",
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
         "what-the-installer-does",
         "login",

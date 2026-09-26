@@ -80,6 +80,13 @@ to use DPF**:
 Your choice is saved to `%USERPROFILE%\.dpf\.install-mode` and reused on
 re-runs without re-prompting.
 
+Office document conversion works in both modes with no extra step. A
+Customizable install does not build the converter image: the portal pins
+the `dpf-doctools` image published for the release your clone descends
+from, by digest, and pins it again after every upgrade. Only when no
+published image can be reached (offline or air-gapped) does it build
+`Dockerfile.doctools` from your clone instead.
+
 ### What the installer does
 
 1. **Preflight** — verifies Docker Desktop / WSL2, and (Customizable mode)

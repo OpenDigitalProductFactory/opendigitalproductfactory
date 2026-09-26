@@ -33,7 +33,7 @@ function toBuffer(input: Uint8Array): Buffer {
 }
 
 /** One entry of a ZIP by name, or null when the archive does not have it or cannot be read. */
-function readZipEntry(zip: Buffer, name: string, maxBytes: number): Buffer | null {
+export function readZipEntry(zip: Buffer, name: string, maxBytes: number): Buffer | null {
   const searchFrom = Math.max(0, zip.length - 65_557);
   let eocd = -1;
   for (let at = zip.length - 22; at >= searchFrom; at -= 1) {

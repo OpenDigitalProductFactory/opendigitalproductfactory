@@ -289,7 +289,7 @@ Re-run the installer with `--environment-class` to change the value in force.
 - **Activity Feed** — A chronological stream of recent actions across the platform, filtered to things you're involved in or watching.
 - **Calendar** — Upcoming dates pulled from your backlog items, leave requests, deadlines, and any scheduled events in the areas you have access to.
 - **Managed Documents** — Maintained documents with lifecycle state, versions, references, and publication status.
-- **"Needs you" inbox** — The one place for business decisions that need you now. Routine technical recovery stays with your digital team, while money leaving the business and public actions always come to you.
+- **"Needs you" inbox** — The one place for business decisions that need you now. Routine technical recovery stays with your digital team, while money leaving the business and public actions always come to you. Administrators also see when AI coworker approvals keep going to an account nobody is using.
 - **Workrooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A case can contain several rooms. Select one to see its process and owners. Links by room ID retain that selection within the canonical case, including the operation and filter context.
 
 ## What You Can Do
