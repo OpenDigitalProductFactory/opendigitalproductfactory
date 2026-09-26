@@ -176,25 +176,20 @@ finished. Colours use `--dpf-*` tokens (AGENTS.md §9).
 
 Standard followed: level-triggered reconciliation with bounded work per pass.
 
-## 5. Acceptance criteria
+## 5. Objectives and acceptance criteria
 
-- **AC-AA-01** Every `awaiting-acceptance` item has a recorded `acceptance_owed`
-  activity within one sweep of entering the state (unsnapshotted items are paged
-  first). The activity names the
-  specific unmet codes and the resolved owner, or the unroutable reason.
-- **AC-AA-02** Age is measured from state entry. A missing entry row is reported
-  as `ageBasis: created` and is never presented as entry age.
-- **AC-AA-03** Aged items are routed to a coworker through a steward Workroom
-  whose drive dispatches that coworker, with at most the configured limit per
-  run. No aged item is routed to a human unless a human condition applies, and
-  then it is reported, not routed.
-- **AC-AA-04** Proved live on the development install: one aged item, routed by
-  a real sweep run, has its acceptance evidence recorded by the dispatched
-  coworker, with no human action and no attached AI client.
-- **AC-AA-05** The Ops epic progress and command-center show awaiting-acceptance
-  (and its aged share) distinctly from done.
-- **AC-AA-06** Over the four weeks after deploy, the count of items aged over 30
-  days in the state trends down. Measured by the sweep's own run summaries.
+- **OBJ-AA-1:** Every item in awaiting-acceptance records who owes its acceptance and which unmet readiness codes would settle it.
+- **OBJ-AA-2:** Time in awaiting-acceptance is measured from state entry and visible where delivery is reported.
+- **OBJ-AA-3:** Aged awaiting-acceptance items are routed automatically to an accountable coworker, never by default to the founder.
+
+| Criterion | Objective | Statement |
+|---|---|---|
+| AC-AA-01 | OBJ-AA-1 | Every awaiting-acceptance item has a recorded acceptance_owed activity within one sweep run of entering the state, naming the specific unmet codes and the resolved owner or the unroutable reason. |
+| AC-AA-02 | OBJ-AA-2 | Age is measured from the latest state-entry activity; an item without one is reported with ageBasis created and never presented as entry age; updatedAt is never read. |
+| AC-AA-03 | OBJ-AA-3 | Aged items are routed to a coworker through a steward Workroom whose drive dispatches that coworker, at most the configured route limit per run; an item with no granted coworker is reported unroutable, not routed to a person. |
+| AC-AA-04 | OBJ-AA-3 | On the development install, one aged item routed by a real sweep run has its acceptance evidence recorded by the dispatched coworker with no human action and no attached AI client. |
+| AC-AA-05 | OBJ-AA-2 | The Ops epic progress and the command-center summary show awaiting-acceptance and its aged share distinctly from done. |
+| AC-AA-06 | OBJ-AA-2 | Every sweep run records the count of items aged over 30 days in its run summary, so the trend is measured by the platform rather than asserted. |
 
 ## 6. Slices
 
