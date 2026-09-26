@@ -8,9 +8,9 @@ import { portfolioBudgetLabel } from "./budget-label";
 
 export type TieOutTone = "danger" | "warning" | "success" | "neutral";
 
-export function budgetText(row: Pick<TieOutRow, "budget" | "portfolioId">): string {
+export function budgetText(row: Pick<TieOutRow, "budget" | "portfolioId">, formatLocale?: string | null): string {
   if (row.portfolioId === null) return "Not budgeted";
-  return portfolioBudgetLabel(row.budget);
+  return portfolioBudgetLabel(row.budget, formatLocale ?? undefined);
 }
 
 export function forecastText(row: Pick<TieOutRow, "forecast">): string {

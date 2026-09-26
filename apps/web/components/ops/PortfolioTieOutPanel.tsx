@@ -11,6 +11,7 @@ import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
+import { useT } from "@/lib/i18n/use-t";
 import { fieldControlClass, fieldErrorClass, fieldHintClass, fieldLabelClass } from "@/components/ui/form/styles";
 import { DataTable, Notice, StatusBadge, type Column } from "@/components/ui/report-kit";
 import { confirmEpicPortfoliosAction, setPortfolioBudgetAction } from "@/lib/actions/portfolio-budget";
@@ -25,9 +26,12 @@ type Props = {
   /** Proposed points per portfolio for this quarter: last quarter's delivered points. */
   proposedPoints: Record<string, number>;
   unconfirmedEpics: UnconfirmedEpic[];
+  /** Viewer's format locale from getLocaleContext(). */
+  formatLocale?: string;
 };
 
-export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics }: Props) {
+export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics, formatLocale }: Props) {
+  const t = useT("portfolio");
   const [editing, setEditing] = useState<string | null>(null);
   const quarter = `${new Date(tieOut.period.start).toISOString().slice(0, 10)} to ${new Date(new Date(tieOut.period.end).getTime() - 1).toISOString().slice(0, 10)}`;
   const editingRow = tieOut.rows.find((r) => r.portfolioId === editing) ?? null;
@@ -39,7 +43,7 @@ export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics 
       header: "Budget (points)",
       cell: (r) => (
         <span className="flex flex-wrap items-center gap-2">
-          <span className={r.budget ? "" : "text-[var(--dpf-muted)]"}>{budgetText(r)}</span>
+          <span className={r.budget ? "" : "text-[var(--dpf-muted)]"}>{budgetText(r, formatLocale)}</span>
           {r.portfolioId ? (
             <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(r.portfolioId)}>
               {r.budget ? "Change" : "Set budget"}
@@ -63,17 +67,17 @@ export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics 
     { key: "traced", header: "Traced", align: "right", cell: (r) => tracedText(r), sortAccessor: (r) => r.tracedShare ?? -1 },
     // AI beside points, never converted into them (BI-0CA5DA2B).
     { key: "aiTokens", header: "AI tokens", align: "right", cell: (r) => aiTokensText(r.ai), sortAccessor: (r) => r.ai.tokens },
-    { key: "aiSpend", header: "AI spend", cell: (r) => aiSpendText(r.ai) },
+    { key: "aiSpend", header: "AI spend", cell: (r) => aiSpendText(r.ai, formatLocale) },
     { key: "aiLatency", header: "AI run time", cell: (r) => aiLatencyText(r.ai) },
   ];
 
   return (
     <Surface as="section" level={2} rounded="xl" aria-labelledby="tie-out-heading">
-      <h2 id="tie-out-heading" className="text-base font-semibold text-[var(--dpf-text)]">Budget and capacity</h2>
+      <h2 id="tie-out-heading" className="text-base font-semibold text-[var(--dpf-text)]">{t("tieOut.heading")}</h2>
       <p className="mt-1 text-sm text-[var(--dpf-text)]">{tieOutHeadline(tieOut)}</p>
       {/* Detail defers behind a disclosure, so the page stays within its arrival budget (UX route sweep). */}
       <details className="mt-2">
-        <summary className="cursor-pointer text-sm text-[var(--dpf-accent)]">Show the tie-out</summary>
+        <summary className="cursor-pointer text-sm text-[var(--dpf-accent)]">{t("tieOut.show")}</summary>
       <p className="mt-2 max-w-3xl text-xs text-[var(--dpf-muted)]">
         This quarter ({quarter}, {tieOut.weeksRemaining} weeks left), in points: what each portfolio has committed against what it
         has measurably delivered over the last six weeks. The traced share is how much of that delivery carries a Workroom or pull
@@ -88,13 +92,13 @@ export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics 
       {tieOut.untracedChanges > 0 ? (
         <div className="mt-3">
           <Notice variant="warn" title={`${tieOut.untracedChanges} merged change(s) in six weeks name no backlog item`}>
-            They are not counted in any row above, so the delivered and capacity figures are low by that much.
+            {t("tieOut.untracedBody")}
           </Notice>
         </div>
       ) : null}
       {tieOut.aiNotTraced.runs > 0 ? (
         <p className="mt-2 text-xs text-[var(--dpf-muted)]">
-          {tieOut.aiNotTraced.runs} AI run(s) this quarter reach no item in these rows ({aiTokensText(tieOut.aiNotTraced)}; {aiSpendText(tieOut.aiNotTraced)}), so they are not traced to a portfolio.
+          {tieOut.aiNotTraced.runs} AI run(s) this quarter reach no item in these rows ({aiTokensText(tieOut.aiNotTraced)}; {aiSpendText(tieOut.aiNotTraced, formatLocale)}), so they are not traced to a portfolio.
         </p>
       ) : null}
       {editingRow?.portfolioId ? (
@@ -114,6 +118,7 @@ export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics 
 }
 
 function BudgetForm(props: { portfolioId: string; name: string; current: number | null; proposed: number; onDone: () => void }) {
+  const t = useT("portfolio");
   const [points, setPoints] = useState(String(props.current ?? props.proposed));
   const [reason, setReason] = useState(props.current === null ? `Accepting the proposal: last quarter's delivered points (${props.proposed}).` : "");
   const [message, setMessage] = useState<string | null>(null);
@@ -136,12 +141,12 @@ function BudgetForm(props: { portfolioId: string; name: string; current: number 
         </span>
       </label>
       <label className={`block ${fieldLabelClass}`}>
-        Why this figure
+        {t("tieOut.reason")}
         <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} className={`mt-1 ${fieldControlClass}`} />
       </label>
       {message ? <p role="alert" className={fieldErrorClass}>{message}</p> : null}
       <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={pending}>Save budget</Button>
+        <Button type="submit" size="sm" disabled={pending}>{t("tieOut.save")}</Button>
         <Button type="button" variant="secondary" size="sm" onClick={props.onDone}>Cancel</Button>
       </div>
       </form>

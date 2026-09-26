@@ -1,0 +1,9 @@
+{
+  "tieOut": {
+    "heading": "Budget and capacity",
+    "show": "Show the tie-out",
+    "untracedBody": "They are not counted in any row above, so the delivered and capacity figures are low by that much.",
+    "reason": "Why this figure",
+    "save": "Save budget"
+  }
+}
