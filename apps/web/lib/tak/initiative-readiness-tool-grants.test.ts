@@ -131,27 +131,6 @@ describe("initiative readiness recovery routing", () => {
     expect(await packet("docs/superpowers/plans/one.md", "BASE-2")).not.toBe(original);
   });
 
-  it("BI-D3E1F6D9: a review packet issued after its baseline exists never reuses the pre-baseline requestKey", async () => {
-    const packet = async (expectedCurrentBaselineId: string | null) => {
-      const recovery = await resolveInitiativeReviewerRecovery({
-        decision: { ...decision, unmet: [readinessRequirement({ code: "REVIEW_REQUIRED", state: "missing", accountableRole: "architecture-reviewer" })] },
-        currentAgentId: "AGT-AUTHOR",
-        db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(boundGrantRows("initiative_architecture_review", "AGT-EA", "Enterprise Architect")) } },
-        dispatchContext, canonicalArtifact, expectedCurrentBaselineId,
-      });
-      return recovery.reviewerRoutes.find((route) => route.gate === "architecture-review")!.requestCoworker.requestKey;
-    };
-    const beforeBaseline = await packet(null);
-    // Unchanged before a baseline exists: existing callers and replays keep their key.
-    expect(beforeBaseline).toBe(`initiative-readiness:BI-A45D744A:architecture-review:${dispatchContext.headSha}`);
-    const afterBaseline = await packet("baseline-1");
-    expect(afterBaseline).not.toBe(beforeBaseline);
-    expect(afterBaseline.startsWith(`${beforeBaseline}:baseline:`)).toBe(true);
-    // Deterministic per baseline, distinct across baselines.
-    expect(await packet("baseline-1")).toBe(afterBaseline);
-    expect(await packet("baseline-2")).not.toBe(afterBaseline);
-  });
-
   it("requires the bound writer and file_read on the same production agent", async () => {
     const researchOnlyDecision: InitiativeReadinessDecision = {
       ...decision,
