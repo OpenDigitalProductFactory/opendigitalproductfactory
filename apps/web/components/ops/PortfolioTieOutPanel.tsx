@@ -15,7 +15,7 @@ import { fieldControlClass, fieldErrorClass, fieldHintClass, fieldLabelClass } f
 import { DataTable, Notice, StatusBadge, type Column } from "@/components/ui/report-kit";
 import { confirmEpicPortfoliosAction, setPortfolioBudgetAction } from "@/lib/actions/portfolio-budget";
 import type { PortfolioTieOut, TieOutRow } from "@/lib/portfolio/tie-out";
-import { budgetText, forecastText, overCommitmentText, tracedText } from "@/lib/portfolio/tie-out-view";
+import { budgetText, forecastText, overCommitmentText, tieOutHeadline, tracedText } from "@/lib/portfolio/tie-out-view";
 import { aiLatencyText, aiSpendText, aiTokensText } from "@/lib/portfolio/ai-resource";
 
 export type UnconfirmedEpic = { epicId: string; title: string; portfolioId: string; portfolioName: string; confidence: "high" | "low" };
@@ -70,7 +70,11 @@ export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics 
   return (
     <Surface as="section" level={2} rounded="xl" aria-labelledby="tie-out-heading">
       <h2 id="tie-out-heading" className="text-base font-semibold text-[var(--dpf-text)]">Budget and capacity</h2>
-      <p className="mt-1 max-w-3xl text-xs text-[var(--dpf-muted)]">
+      <p className="mt-1 text-sm text-[var(--dpf-text)]">{tieOutHeadline(tieOut)}</p>
+      {/* Detail defers behind a disclosure, so the page stays within its arrival budget (UX route sweep). */}
+      <details className="mt-2">
+        <summary className="cursor-pointer text-sm text-[var(--dpf-accent)]">Show the tie-out</summary>
+      <p className="mt-2 max-w-3xl text-xs text-[var(--dpf-muted)]">
         This quarter ({quarter}, {tieOut.weeksRemaining} weeks left), in points: what each portfolio has committed against what it
         has measurably delivered over the last six weeks. The traced share is how much of that delivery carries a Workroom or pull
         request, so a low figure means work is happening where this view cannot see it.
@@ -104,6 +108,7 @@ export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics 
         />
       ) : null}
       <EpicAttribution epics={unconfirmedEpics} />
+      </details>
     </Surface>
   );
 }

@@ -44,3 +44,20 @@ export function tracedText(row: Pick<TieOutRow, "tracedShare">): string {
 function signed(n: number): string {
   return n > 0 ? `+${n}` : String(n);
 }
+
+/**
+ * The one sentence the panel shows on arrival; the table sits behind a
+ * disclosure (UX route budget). It names how many portfolios are committed past
+ * capacity and how much delivered work the platform can trace.
+ */
+export function tieOutHeadline(tieOut: { rows: Array<Pick<TieOutRow, "portfolioId" | "overCommitment" | "committedPoints" | "deliveredPoints" | "tracedShare">> }): string {
+  const portfolios = tieOut.rows.filter((r) => r.portfolioId !== null);
+  const over = portfolios.filter((r) => r.committedPoints > 0 && r.overCommitment.pointsLow > 0).length;
+  const delivered = tieOut.rows.reduce((sum, r) => sum + r.deliveredPoints, 0);
+  const traced = tieOut.rows.reduce((sum, r) => sum + (r.tracedShare ?? 0) * r.deliveredPoints, 0);
+  const commitment = over === 0
+    ? `All ${portfolios.length} portfolios fit their measured capacity`
+    : `${over} of ${portfolios.length} portfolios are committed past capacity`;
+  const tracing = delivered > 0 ? `; ${Math.round((traced / delivered) * 100)}% of delivered work is traced` : "";
+  return `${commitment}${tracing}.`;
+}

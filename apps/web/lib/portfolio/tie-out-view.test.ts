@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { budgetText, forecastText, overCommitmentText, tracedText } from "./tie-out-view";
+import { budgetText, forecastText, overCommitmentText, tieOutHeadline, tracedText } from "./tie-out-view";
 
 describe("tie-out display rules (BI-CBF5D708, design §6)", () => {
   it("never shows a missing budget as zero", () => {
@@ -47,5 +47,19 @@ describe("the tie-out panel's client imports stay off the database", () => {
     const source = readFileSync(resolve(__dirname, file), "utf8");
     const valueImports = source.split(/\r?\n/).filter((line) => /^import\s+(?!type\b)/.test(line));
     expect(valueImports.filter((line) => DB_REACHING.test(line))).toEqual([]);
+  });
+});
+
+describe("tieOutHeadline", () => {
+  const row = (portfolioId: string | null, pointsLow: number, delivered: number, traced: number | null) => ({
+    portfolioId, committedPoints: 10, deliveredPoints: delivered, tracedShare: traced,
+    overCommitment: { pointsLow, pointsHigh: pointsLow + 5, weeks: 1 },
+  });
+  it("counts portfolios past capacity and the delivery-weighted traced share", () => {
+    expect(tieOutHeadline({ rows: [row("a", 5, 100, 0.1), row("b", -20, 300, 0.2), row(null, 3, 0, null)] }))
+      .toBe("1 of 2 portfolios are committed past capacity; 18% of delivered work is traced.");
+  });
+  it("says when everything fits and nothing has been delivered", () => {
+    expect(tieOutHeadline({ rows: [row("a", -5, 0, null)] })).toBe("All 1 portfolios fit their measured capacity.");
   });
 });

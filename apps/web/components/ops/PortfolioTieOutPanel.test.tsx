@@ -42,6 +42,12 @@ describe("PortfolioTieOutPanel (BI-CBF5D708)", () => {
     />,
   );
 
+  it("leads with one headline and defers the table behind a closed disclosure (UX route budget)", () => {
+    expect(html).toContain("1 of 1 portfolios are committed past capacity; 12% of delivered work is traced.");
+    expect(html).toMatch(/<details[^>]*><summary[^>]*>Show the tie-out<\/summary>/);
+    expect(html).not.toMatch(/<details[^>]*open/);
+  });
+
   it("shows every portfolio and the unallocated row, with 'No budget set' rather than zero", () => {
     expect(html).toContain("Foundational");
     expect(html).toContain("Unallocated");
