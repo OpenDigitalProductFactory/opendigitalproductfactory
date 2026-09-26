@@ -33,13 +33,9 @@ import {
 } from "@/lib/actions/oauth-clients";
 import { buildCredentialsClientSnippets } from "@/lib/auth/mcp-setup-snippets";
 import { PUBLIC_SCOPES, PUBLIC_SCOPE_COPY, type PublicScope } from "@/lib/auth/oauth-public-scopes";
+import { formatTimestamp } from "@/lib/datetime";
 
 type View = { kind: "idle" } | { kind: "form" } | { kind: "issued"; created: CreatedCredentialsClient };
-
-function formatDate(value: string | null): string {
-  if (!value) return "never";
-  return new Date(value).toLocaleString();
-}
 
 const KIND_LABEL: Record<string, string> = {
   credentials: "Automated tool",
@@ -163,7 +159,7 @@ export function McpOAuthClientManager() {
     { key: "id", header: "Client id", mono: true, cell: (row) => row.clientId },
     { key: "kind", header: "Kind", cell: (row) => KIND_LABEL[row.registrationKind] ?? row.registrationKind },
     { key: "scopes", header: "Scopes", cell: (row) => (row.allowedScopes.length ? row.allowedScopes.join(", ") : "consent-time") },
-    { key: "lastUsed", header: "Last used", cell: (row) => formatDate(row.lastUsedAt), sortAccessor: (row) => row.lastUsedAt ?? "" },
+    { key: "lastUsed", header: "Last used", cell: (row) => formatTimestamp(row.lastUsedAt, "never"), sortAccessor: (row) => row.lastUsedAt ?? "" },
     { key: "live", header: "Live tokens", align: "right", cell: (row) => row.liveTokenCount },
     {
       key: "status",
