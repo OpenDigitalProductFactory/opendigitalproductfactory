@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Interactive Org Chart — Design
 
 - **Date:** 2026-07-30

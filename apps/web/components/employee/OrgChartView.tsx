@@ -26,12 +26,7 @@ import "@xyflow/react/dist/style.css";
 import { confirmDialog } from "@/components/ui/Dialog";
 import { Notice, StatCard, StatusBadge } from "@/components/ui/report-kit";
 import { assignEmployeeOrg, reassignEmployeeManager } from "@/lib/actions/workforce";
-import {
-  computeOrgChartLayout,
-  ORG_NODE_H,
-  ORG_NODE_W,
-  type OrgPosition,
-} from "@/lib/graph/layout-org-chart";
+import { ORG_NODE_H, ORG_NODE_W } from "@/lib/graph/layout-org-chart";
 import {
   buildOrgGraph,
   eligibleManagers,
@@ -39,6 +34,7 @@ import {
 } from "@/lib/workforce/org-chart-model";
 import type { EmployeeDirectoryRow } from "@/lib/workforce/workforce-types";
 import { OrgChartNode, type OrgChartNodeData } from "./OrgChartNode";
+import { useOrgChartLayout } from "@/lib/graph/use-org-chart-layout";
 
 /** Reference sets for the placement pickers. Values are row ids — what EmployeeProfile stores. */
 export type OrgReferenceData = {
@@ -150,29 +146,8 @@ function OrgChartViewInner({ employees, canReassign = true, referenceData, onSel
 
   const filtersActive = Boolean(search || departmentFilter || statusFilter);
 
-  // ELK layout is async. Until the first layout lands the canvas stays empty rather than
-  // stacking every card at the origin; a re-layout (after a reassignment) keeps the previous
-  // positions on screen until the new ones arrive.
-  const [positions, setPositions] = useState<Record<string, OrgPosition> | null>(null);
+  const positions = useOrgChartLayout(employees, graph.edges);
   const hasFitRef = useRef(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    computeOrgChartLayout(
-      employees.map((e) => e.id),
-      graph.edges,
-    ).then(
-      (next) => {
-        if (!cancelled) setPositions(next);
-      },
-      (error: unknown) => {
-        console.error("[org-chart] layout failed", error);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [employees, graph.edges]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
