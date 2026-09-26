@@ -344,7 +344,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       description: true, gitCommitHashes: true, updatedAt: true, buildExecState: true,
       verificationOut: true, acceptanceMet: true, phase: true,
       designDoc: true, buildPlan: true,
-      disposition: true, dispositionSuggestionReason: true,
+      disposition: true, dispositionSuggestionReason: true, dispositionSource: true,
       productVersions: {
         take: 1,
         orderBy: { shippedAt: "desc" },
@@ -434,7 +434,16 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       // carry a change confirmed "shareable". Own-repo PRs skip this — that
       // is the install's private home.
       const { mayShareToPublicHive, privateDispositionBlockMessage } = await import("@/lib/build/disposition");
-      if (!mayShareToPublicHive(build.disposition)) {
+      const { INSTALLATION_OPERATING_INTENT_KEY } = await import("@/lib/installation-journey/operating-intent");
+      const intent = await prisma.platformConfig.findUnique({
+        where: { key: INSTALLATION_OPERATING_INTENT_KEY },
+        select: { value: true },
+      });
+      const purpose = (intent?.value as { primaryPurpose?: unknown } | null | undefined)?.primaryPurpose;
+      if (!mayShareToPublicHive(build.disposition, {
+        dispositionSource: build.dispositionSource,
+        installationPurpose: typeof purpose === "string" ? purpose : null,
+      })) {
         logBuildActivity(buildId, "create_portal_pr", "blocked: change disposition is private (public-hive target)");
         return {
           success: false,
