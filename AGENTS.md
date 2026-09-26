@@ -119,6 +119,7 @@ Token table, component patterns and migration detail: [theme-aware styling runbo
 
 - **No hardcoded colors.** All UI uses the `--dpf-*` CSS custom properties so light mode, dark mode and per-org branding work automatically. Hardcoded hex, `text-white`/`text-black`, and `*-gray-*` utilities are defects. → [kernel principle](docs/founder-kernel/wiki/principles/no-hardcoded-colors.md)
 - **Compose from the shared UI primitives** rather than re-implementing surfaces, cards, tables or report chrome per page.
+- **No new English-only or direction-bound UI.** User-facing copy goes through the message catalog, locales come from `getLocaleContext()`, layout uses logical (start/end) classes, and money goes through `formatMoney`. The `check-no-unlocalized-ui` ratchet only lets existing debt shrink. → [localization runbook](docs/architecture/localization-runbook.md)
 
 
 ## 10. Communication
