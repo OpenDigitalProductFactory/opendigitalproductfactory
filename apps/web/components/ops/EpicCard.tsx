@@ -16,6 +16,14 @@ import {
   visibleUnderActiveOnly,
   type BacklogStatusSummary,
 } from "@/lib/backlog-visibility";
+import {
+  ACCEPTANCE_AGED_DAYS,
+  agedAcceptanceShare,
+  describeAgedShare,
+  formatAgedCount,
+  type AgeBasis,
+  type AgedAcceptanceShare,
+} from "@/lib/backlog/acceptance-sweep/aged-acceptance";
 
 // Must stay in sync with OpsClient SortField / SortState
 export type EpicSortField = "title" | "status" | "progress" | "stories";
@@ -49,7 +57,11 @@ type Props = {
   onEdit: (epic: EpicWithRelations) => void;
   onItemEdit: (item: BacklogItemWithRelations) => void;
   focusedItemId?: string;
+  /** Aged awaiting-acceptance items by id (BI-CEC60185). */
+  agedAcceptanceById?: ReadonlyMap<string, AgeBasis>;
 };
+
+const NO_AGED_ACCEPTANCE: ReadonlyMap<string, AgeBasis> = new Map();
 
 // How many items to render on first expand. Large epics (Master Data Management,
 // etc.) carry dozens of items; mounting them all synchronously froze the renderer
@@ -62,7 +74,7 @@ const EXPAND_PAGE_SIZE = 25;
 // the whole tree each time. Props are stable (epic identity + stable callbacks).
 export const EpicCard = memo(EpicCardImpl);
 
-function EpicCardImpl({ epic, sort, activeOnly, onEdit, onItemEdit, focusedItemId }: Props) {
+function EpicCardImpl({ epic, sort, activeOnly, onEdit, onItemEdit, focusedItemId, agedAcceptanceById = NO_AGED_ACCEPTANCE }: Props) {
   const router = useRouter();
   const hasFocusedItem = epic.items.some((item) => isFocusedBacklogItem(item, focusedItemId));
   const [expanded, setExpanded] = useState(hasFocusedItem);
@@ -75,10 +87,15 @@ function EpicCardImpl({ epic, sort, activeOnly, onEdit, onItemEdit, focusedItemI
   );
 
   const statusSummary = summarizeBacklogStatuses(epic.items);
+  const acceptance = agedAcceptanceShare(epic.items, agedAcceptanceById);
   const visibleItems = visibleUnderActiveOnly(epic.items, activeOnly);
   const hiddenItemCount = epic.items.length - visibleItems.length;
   const progressPct = statusSummary.total > 0
     ? Math.round((statusSummary.done / statusSummary.total) * 100)
+    : 0;
+  // Delivered but not accepted: its own segment after done, never part of it.
+  const awaitingPct = statusSummary.total > 0
+    ? Math.round((statusSummary.awaitingAcceptance / statusSummary.total) * 100)
     : 0;
 
   const portfolioLabels = epic.portfolios.filter((p) => p.portfolio).map((p) => p.portfolio.name).join(" · ");
@@ -125,7 +142,7 @@ function EpicCardImpl({ epic, sort, activeOnly, onEdit, onItemEdit, focusedItemI
             </span>
           </p>
           <div className="mt-0.5 sm:hidden">
-            <EpicStatusMix summary={statusSummary} />
+            <EpicStatusMix summary={statusSummary} acceptance={acceptance} />
           </div>
         </div>
 
@@ -136,20 +153,26 @@ function EpicCardImpl({ epic, sort, activeOnly, onEdit, onItemEdit, focusedItemI
 
         {/* col: status mix — explicit counts first, done-only progress second */}
         <div className="hidden sm:flex w-64 shrink-0 flex-col gap-1">
-          <EpicStatusMix summary={statusSummary} />
+          <EpicStatusMix summary={statusSummary} acceptance={acceptance} />
           {statusSummary.total > 0 ? (
             <div
-              className="h-0.5 rounded-full bg-[var(--dpf-surface-2)]"
+              className="flex h-0.5 overflow-hidden rounded-full bg-[var(--dpf-surface-2)]"
               role="progressbar"
-              aria-label={`${statusSummary.done} of ${statusSummary.total} items done`}
+              aria-label={`${statusSummary.done} of ${statusSummary.total} items done${statusSummary.awaitingAcceptance > 0 ? `, ${statusSummary.awaitingAcceptance} awaiting acceptance` : ""}`}
               aria-valuemin={0}
               aria-valuemax={statusSummary.total}
               aria-valuenow={statusSummary.done}
             >
               <div
-                className="h-0.5 rounded-full bg-[var(--dpf-success)]"
+                className="h-0.5 bg-[var(--dpf-success)]"
                 style={{ width: `${progressPct}%` }}
               />
+              {awaitingPct > 0 ? (
+                <div
+                  className="h-0.5 bg-[var(--dpf-warning)]"
+                  style={{ width: `${awaitingPct}%` }}
+                />
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -263,19 +286,20 @@ function EpicCardImpl({ epic, sort, activeOnly, onEdit, onItemEdit, focusedItemI
 }
 
 const STATUS_MIX_PARTS: Array<{
-  key: keyof Pick<BacklogStatusSummary, "triaging" | "open" | "inProgress" | "done" | "deferred" | "retired">;
+  key: keyof Pick<BacklogStatusSummary, "triaging" | "open" | "inProgress" | "awaitingAcceptance" | "done" | "deferred" | "retired">;
   label: string;
   className: string;
 }> = [
   { key: "triaging", label: "triaging", className: "text-[var(--dpf-muted)]" },
   { key: "open", label: "open", className: "text-[var(--dpf-info)]" },
   { key: "inProgress", label: "in progress", className: "text-[var(--dpf-accent)]" },
+  { key: "awaitingAcceptance", label: "awaiting acceptance", className: "text-[var(--dpf-warning)]" },
   { key: "done", label: "done", className: "text-[var(--dpf-success)]" },
   { key: "deferred", label: "deferred", className: "text-[var(--dpf-muted)]" },
   { key: "retired", label: "retired", className: "text-[var(--dpf-muted)]" },
 ];
 
-function EpicStatusMix({ summary }: { summary: BacklogStatusSummary }) {
+function EpicStatusMix({ summary, acceptance }: { summary: BacklogStatusSummary; acceptance: AgedAcceptanceShare }) {
   const populated = STATUS_MIX_PARTS.filter(({ key }) => summary[key] > 0);
   if (populated.length === 0) {
     return <span className="text-dpf-caption text-[var(--dpf-muted)]">No items</span>;
@@ -283,28 +307,40 @@ function EpicStatusMix({ summary }: { summary: BacklogStatusSummary }) {
   return (
     <div
       className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-dpf-caption tabular-nums"
-      aria-label={populated.map(({ key, label }) => `${summary[key]} ${label}`).join(", ")}
+      aria-label={populated
+        .map(({ key, label }) => `${summary[key]} ${label}${key === "awaitingAcceptance" ? agedSuffix(acceptance) : ""}`)
+        .join(", ")}
     >
       {populated.map(({ key, label, className }, index) => (
         <span key={key} className={`shrink-0 ${className}`}>
           {index > 0 ? <span className="mr-1.5 text-[var(--dpf-border)]">·</span> : null}
           {summary[key]} {label}
+          {key === "awaitingAcceptance" && acceptance.aged > 0 ? (
+            <span className="ml-1 text-[var(--dpf-error)]" title={describeAgedShare(acceptance)}>
+              {agedSuffix(acceptance).trim()}
+            </span>
+          ) : null}
         </span>
       ))}
     </div>
   );
 }
 
+/** Aged share after an awaiting count, e.g. " (2 over 14 days)"; empty when none. */
+function agedSuffix(acceptance: AgedAcceptanceShare): string {
+  return acceptance.aged > 0 ? ` (${formatAgedCount(acceptance)} over ${ACCEPTANCE_AGED_DAYS} days)` : "";
+}
+
 function TerminalStatusText({ summary }: { summary: BacklogStatusSummary }) {
-  return (
-    <>
-      {summary.done > 0 ? `${summary.done} done` : ""}
-      {summary.done > 0 && summary.deferred > 0 ? " · " : ""}
-      {summary.deferred > 0 ? `${summary.deferred} deferred` : ""}
-      {(summary.done > 0 || summary.deferred > 0) && summary.retired > 0 ? " · " : ""}
-      {summary.retired > 0 ? `${summary.retired} retired` : ""}
-    </>
-  );
+  // Awaiting acceptance is hidden by "Active only" too; name it so hidden
+  // delivered-but-unaccepted work is not read as done.
+  const parts = [
+    summary.awaitingAcceptance > 0 ? `${summary.awaitingAcceptance} awaiting acceptance` : "",
+    summary.done > 0 ? `${summary.done} done` : "",
+    summary.deferred > 0 ? `${summary.deferred} deferred` : "",
+    summary.retired > 0 ? `${summary.retired} retired` : "",
+  ].filter(Boolean);
+  return <>{parts.join(" · ")}</>;
 }
 
 function isFocusedBacklogItem(item: BacklogItemWithRelations, focusedItemId?: string): boolean {

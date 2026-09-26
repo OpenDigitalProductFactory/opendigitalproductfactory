@@ -22,7 +22,7 @@ Counts describe the Workrooms the page read, not everything in the portfolio. Wh
 
 ## Key Concepts
 
-- **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, done, deferred, or retired.
+- **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, awaiting acceptance, done, deferred, or retired.
 - **Epics** — Groups of related backlog items that together deliver a meaningful outcome. The list shows the item mix by status and calculates progress from items marked done only.
 - **Archetype Scope** — Planning metadata that indicates whether work is platform-wide, common across businesses, or specific to an archetype category or leaf archetype. This helps separate market-specific gaps from common finance, workforce, identity, and platform substrate work.
 - **Priority** — Items are ranked by priority to make the most important work visible. Priorities can be adjusted as circumstances change.
@@ -51,7 +51,17 @@ complete, two remain wanted but parked, three were intentionally closed without
 delivery, and one remains active. Deferred and retired work do not increase the
 done count.
 
-**Active only** is enabled by default. It hides deferred, done, and retired item
+Delivered work that has not yet been accepted is counted on its own, never as
+done: `3 awaiting acceptance (2 over 14 days) · 5 done`. The part in brackets is
+how many have waited 14 days or more since entering awaiting acceptance. It
+reads `up to 2` when some of those items have no recorded entry date, because
+their age is then counted from when they were created and the real figure may
+be lower; hover it for the explanation. The progress bar shows done in one
+colour and awaiting acceptance as a separate segment after it. The workspace
+**Backlog** tile shows the same counts as **Awaiting acceptance** and **Awaiting
+14+ days**, above **Done**.
+
+**Active only** is enabled by default. It hides awaiting-acceptance, deferred, done, and retired item
 rows when you expand an epic, while the row-level status mix stays visible. Turn
 it off to inspect parked and terminal items.
 
@@ -64,6 +74,9 @@ sharing or refreshing.
 - **Triaging** — Waiting for an intake decision.
 - **Open** — Accepted work that has not started.
 - **In progress** — Work is actively underway.
+- **Awaiting acceptance** — Delivered (for example merged) but not yet proven to
+  meet its acceptance criteria. It is not done, and it is not counted in epic
+  progress.
 - **Done** — Completed work; this is the only status counted as done in epic progress.
 - **Deferred** — Parked but still wanted. A deferral records why it is parked,
   what event should resume it, who owns that decision, and when it must be
