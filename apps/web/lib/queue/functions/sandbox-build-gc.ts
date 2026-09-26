@@ -3,11 +3,11 @@
 // Primary cleanup is transactional (releaseSandboxForTerminalBuild on terminal
 // FeatureBuild transitions). This job sweeps leftovers after crashes.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { runSandboxBuildGc } from "@/lib/build/sandbox/sandbox-build-gc";
 
-export const sandboxBuildGc = inngest.createFunction(
+export const sandboxBuildGc = jobs.createFunction(
   {
     id: "ops/sandbox-build-gc",
     retries: 1,

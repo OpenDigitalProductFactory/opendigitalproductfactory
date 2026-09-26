@@ -866,6 +866,12 @@
     "apps/web/lib/integrations/connectors/index.ts": [
       "docs/architecture/unified-connector-kernel.md"
     ],
+    "apps/web/lib/jobs/index.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/jobs/inngest-adapter.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
     "apps/web/lib/kernel/runtime-gate.ts": [
       "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md"
     ],
@@ -1052,9 +1058,6 @@
     ],
     "apps/web/lib/queue/functions/workroom-drive.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
-    ],
-    "apps/web/lib/queue/inngest-client.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/queue/notification-adapter.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1859,6 +1862,9 @@
     "scripts/check-no-dialog-in-transition.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md"
     ],
+    "scripts/check-no-direct-job-engine-import.mjs": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
     "scripts/check-no-governed-surface-without-mcp-tool.mjs": [
       "docs/architecture/orientation.md"
     ],
@@ -2476,19 +2482,21 @@
       "apps/web/lib/decision-perspective/build-studio-gate.ts",
       "apps/web/lib/decision-perspective/planned-file-paths.ts",
       "apps/web/lib/explore/feature-build-types.ts",
+      "apps/web/lib/jobs/index.ts",
+      "apps/web/lib/jobs/inngest-adapter.ts",
       "apps/web/lib/marketing/scheduler.ts",
       "apps/web/lib/mcp/packs/surface-pack.ts",
       "apps/web/lib/queue/functions/deliberation-run.ts",
       "apps/web/lib/queue/functions/index.ts",
       "apps/web/lib/queue/functions/quiescence-run.ts",
       "apps/web/lib/queue/functions/taskrun-watchdog.ts",
-      "apps/web/lib/queue/inngest-client.ts",
       "apps/web/lib/queue/notification-adapter.ts",
       "apps/web/lib/tak/agent-grants.ts",
       "apps/web/lib/tak/autonomous-work-run.ts",
       "docker-compose.yml",
       "packages/db/prisma/schema/ai-coworker.prisma",
-      "packages/db/prisma/schema/build-delivery.prisma"
+      "packages/db/prisma/schema/build-delivery.prisma",
+      "scripts/check-no-direct-job-engine-import.mjs"
     ],
     "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md": [
       "apps/web/lib/ea/ai-routing-architecture-extract.ts",

@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import { buildPipelineConcurrency } from "../admission";
 
@@ -7,7 +7,7 @@ import { buildPipelineConcurrency } from "../admission";
  * Polls ScheduledAgentTask every 5 minutes and dispatches due tasks.
  * Each due task gets its own Inngest step so failures are isolated.
  */
-export const agentTaskDispatch = inngest.createFunction(
+export const agentTaskDispatch = jobs.createFunction(
   {
     id: "agent/task-dispatch",
     retries: 1,

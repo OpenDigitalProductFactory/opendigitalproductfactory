@@ -67,8 +67,8 @@ export async function triggerEndpointTests(endpointId: string, probesOnly: boole
   }
 
   // Fire-and-forget via Inngest — returns immediately to the UI
-  const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
+  const { jobs } = await import("@/lib/jobs");
+  await jobs.send({
     name: "ai/probe.run",
     data: { endpointId, probesOnly, userId },
   });
@@ -168,8 +168,8 @@ export async function triggerDimensionEval(endpointId: string, modelId?: string)
   // (BI-C8164664) so "Run Eval" is never silently a no-op.
   if (modelId) {
     // Fire-and-forget via Inngest — returns immediately to the UI
-    const { inngest } = await import("@/lib/queue/inngest-client");
-    await inngest.send({
+    const { jobs } = await import("@/lib/jobs");
+    await jobs.send({
       name: "ai/eval.run",
       data: { endpointId, modelId, userId, force: true },
     });
@@ -182,9 +182,9 @@ export async function triggerDimensionEval(endpointId: string, modelId?: string)
       where: { modelStatus: "active" },
       select: { modelId: true },
     });
-    const { inngest } = await import("@/lib/queue/inngest-client");
+    const { jobs } = await import("@/lib/jobs");
     for (const p of profiles) {
-      await inngest.send({
+      await jobs.send({
         name: "ai/eval.run",
         data: { endpointId, modelId: p.modelId, userId, force: true },
       });

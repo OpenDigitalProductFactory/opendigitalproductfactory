@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // Staleness escalation thresholds for the 15-minute code-graph reconcile
@@ -80,7 +80,7 @@ async function recordCodeGraphDefer(): Promise<void> {
   });
 }
 
-export const codeGraphReconcileScheduled = inngest.createFunction(
+export const codeGraphReconcileScheduled = jobs.createFunction(
   {
     id: "ops/code-graph-reconcile-scheduled",
     retries: 1,
@@ -126,7 +126,7 @@ export const codeGraphReconcileScheduled = inngest.createFunction(
   },
 );
 
-export const codeGraphReconcileEvent = inngest.createFunction(
+export const codeGraphReconcileEvent = jobs.createFunction(
   {
     id: "ops/code-graph-reconcile-event",
     retries: 1,

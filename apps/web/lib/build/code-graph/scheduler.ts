@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 import { computeNextRunAt } from "@/lib/ai-provider-types";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 
 import {
   CODE_GRAPH_EVENT_NAME,
@@ -37,7 +37,7 @@ export async function registerCodeGraphScheduledJob(): Promise<void> {
 }
 
 export async function queueCodeGraphReconcile(input: QueueCodeGraphReconcileInput): Promise<void> {
-  await inngest.send({
+  await jobs.send({
     name: CODE_GRAPH_EVENT_NAME,
     data: {
       reason: input.reason,

@@ -1,11 +1,7 @@
-import { serve } from "inngest/next";
-import { inngest } from "@/lib/queue/inngest-client";
+import { serveJobs } from "@/lib/jobs/serve";
 import { getInngestFunctionsForRuntime } from "@/lib/queue/functions";
 
-const served = serve({
-  client: inngest,
-  functions: getInngestFunctionsForRuntime(),
-});
+const served = serveJobs(getInngestFunctionsForRuntime());
 
 function recordGatewayHit(method: "GET" | "POST" | "PUT") {
   void import("@/lib/queue/job-engine-health")

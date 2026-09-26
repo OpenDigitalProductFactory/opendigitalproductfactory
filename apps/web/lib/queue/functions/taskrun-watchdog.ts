@@ -16,8 +16,8 @@
  *
  * See docs/superpowers/specs/2026-05-19-build-studio-stall-detection.md §5.7, §6.2.
  */
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import {
   decideStall,
   shouldSurfaceBuildFailure,
@@ -106,7 +106,7 @@ export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<num
         completedAt: now,
       });
       await setQuiescenceLevel("normal", null);
-      await inngest.send({
+      await jobs.send({
         name: "platform.quiescence-cleared",
         data: {
           runId: sc.runId,
@@ -229,7 +229,7 @@ export async function recoverStuckQuiescingTaskRuns(now: Date): Promise<number> 
   return recovered;
 }
 
-export const taskrunWatchdog = inngest.createFunction(
+export const taskrunWatchdog = jobs.createFunction(
   {
     id: "ops/taskrun-watchdog",
     retries: 0,

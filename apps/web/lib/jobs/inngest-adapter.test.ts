@@ -12,11 +12,11 @@ vi.mock("@/lib/network/off-threadpool-fetch", () => ({
   }),
 }));
 
-import { inngest } from "./inngest-client";
+import { inngestClient } from "./inngest-adapter";
 
 describe("inngest client transport", () => {
   it("uses the process-lived off-threadpool fetch for SDK network calls", async () => {
-    const clientFetch = (inngest as unknown as { fetch: typeof fetch }).fetch;
+    const clientFetch = (inngestClient as unknown as { fetch: typeof fetch }).fetch;
 
     await expect(clientFetch("http://inngest:8288/health")).resolves.toBeInstanceOf(Response);
     expect(mocks.fetch).toHaveBeenCalledWith("http://inngest:8288/health");

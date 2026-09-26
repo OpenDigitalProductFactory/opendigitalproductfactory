@@ -88,12 +88,6 @@
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/inference/ai-provider-internals.ts|@/lib/queue/inngest-client|queue",
-      "owner": "ai-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
       "key": "apps/web/lib/inference/bootstrap-first-run.ts|../actions/setup-progress|actions",
       "owner": "ai-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
@@ -130,18 +124,6 @@
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/build/code-graph/scheduler.ts|@/lib/queue/inngest-client|queue",
-      "owner": "integration-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/git-promotion-intake.ts|@/lib/queue/inngest-client|queue",
-      "owner": "integration-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
       "key": "apps/web/lib/build/opencode-dispatch.ts|@/lib/queue/resource-lane|queue",
       "owner": "integration-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
@@ -149,12 +131,6 @@
     },
     {
       "key": "apps/web/lib/build/plan-to-build-transition.ts|@/lib/mcp/build-tool-helpers|mcp",
-      "owner": "integration-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/pre-build-review-auto-repair.ts|@/lib/queue/inngest-client|queue",
       "owner": "integration-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
@@ -257,12 +233,6 @@
     },
     {
       "key": "apps/web/lib/routing/inference-dispatch-guard.ts|@/lib/inference/data-screening/types|inference",
-      "owner": "ai-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/routing/rate-recovery.ts|@/lib/queue/inngest-client|queue",
       "owner": "ai-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"

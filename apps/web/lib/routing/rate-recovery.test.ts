@@ -5,8 +5,8 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 const { mockSend } = vi.hoisted(() => ({
   mockSend: vi.fn().mockResolvedValue({ ids: [] }),
 }));
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: { send: mockSend },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { send: mockSend },
 }));
 
 import { scheduleRecovery, cancelRecovery } from "./rate-recovery";

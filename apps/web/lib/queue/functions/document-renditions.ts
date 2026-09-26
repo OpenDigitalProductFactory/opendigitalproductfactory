@@ -1,4 +1,4 @@
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // BI-9D43CBEF (S4 of BI-815D40C6): the durable rendition job.
@@ -14,7 +14,7 @@ import { gateAtEntry } from "../quiescence-gates";
 // is idempotent on (documentVersionId, renditionKind): a retry or a duplicate
 // event only fills in what is still missing.
 
-export const documentRenditionGenerate = inngest.createFunction(
+export const documentRenditionGenerate = jobs.createFunction(
   {
     id: "documents/rendition-generate",
     retries: 2,
@@ -32,7 +32,7 @@ export const documentRenditionGenerate = inngest.createFunction(
   },
 );
 
-export const documentRenditionBackfill = inngest.createFunction(
+export const documentRenditionBackfill = jobs.createFunction(
   {
     id: "documents/rendition-backfill",
     retries: 1,

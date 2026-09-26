@@ -1,7 +1,7 @@
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { emitQueueProgress } from "../inngest-bridge";
 
-export const routeWorkItem = inngest.createFunction(
+export const routeWorkItem = jobs.createFunction(
   {
     id: "cwq/route-work-item",
     retries: 3,

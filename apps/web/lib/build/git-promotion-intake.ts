@@ -200,9 +200,9 @@ async function announce(
   settledStatus: GitUpdateCandidateStatus,
 ): Promise<void> {
   if (events.length > 0) {
-    const { inngest } = await import("@/lib/queue/inngest-client");
+    const { jobs } = await import("@/lib/jobs");
     try {
-      await inngest.send([...events]);
+      await jobs.send([...events]);
     } catch (err) {
       throw new GitIntakeEmitError(candidateId, err);
     }
