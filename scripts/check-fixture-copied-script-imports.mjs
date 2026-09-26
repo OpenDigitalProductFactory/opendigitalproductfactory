@@ -33,7 +33,7 @@
 // Static imports come from the Dockerfile guard's parser, so both guards agree
 // on what "statically imported" means (multi-line binding lists included).
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -292,8 +292,15 @@ function main() {
   }));
   const violations = findMissingFixtureImports(files, {
     repoRoot: REPO_ROOT,
-    readSource: (abs) => (existsSync(abs) && statSync(abs).isFile() ? readFileSync(abs, "utf8") : null),
-    isDirectory: (abs) => existsSync(abs) && statSync(abs).isDirectory(),
+    // Read, then handle failure: no exists/stat check ahead of the read (CodeQL js/file-system-race).
+    readSource: (abs) => {
+      try {
+        return readFileSync(abs, "utf8");
+      } catch {
+        return null; // missing, or a directory (EISDIR)
+      }
+    },
+    isDirectory: (abs) => statSync(abs, { throwIfNoEntry: false })?.isDirectory() ?? false,
   });
 
   if (violations.length === 0) {
