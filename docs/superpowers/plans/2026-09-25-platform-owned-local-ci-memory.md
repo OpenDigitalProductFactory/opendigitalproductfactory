@@ -67,6 +67,17 @@ Requirements are the design's OBJ lines; verification is its AC rows.
   grows by one sample per leased gate. After 5 runs, admission reports
   `builderReserve.source: "measured"`.
 
+## Verification results (recorded)
+
+- **2026-09-26 02:17Z:** local-CI gate PASS at `52fc76b`.
+- Locally:
+  - `lib/nonprod` vitest: 162 passed.
+  - Node suites for the pool policy, pool-closed line, pregate status and the guard: 79 passed.
+  - Repo guard loop: 46 guards passed.
+  - Pre-gate preflight: clean.
+- **Design review:** design-spec receipt `initiative-1291b38c-adff-4a51-a8fb-8ccaea9629da`; spec-approval passed, minting `baseline-7dbd8fe2-f384-4947-8eac-3e76db2717a9`.
+- **Architecture review:** it was dispatched before the baseline existed, so its request key was bound to a superseded packet (BI-D3E1F6D9). It is re-requested at the next head.
+
 ## Rollback
 
 Revert the PR, or delete the `local_ci.builder_memory_calibration` row. Either
