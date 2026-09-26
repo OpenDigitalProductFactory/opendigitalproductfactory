@@ -545,7 +545,10 @@ describe("generated route-shell registry", () => {
     // 213 -> 214: /workspace/mailroom (design 2026-09-09, BI-727D5FD9) — the Mailroom
     // reads declared mailboxes and routed items from route-owned read models; with no
     // mailbox it renders the education state, so its output is stable and measurable.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(214);
+    // 214 -> 215: /customer/footprint (BI-4EC1D572) — the market footprint reads
+    // business context, customer site addresses and active fulfilments; a static
+    // SVG with no wall-clock or live-orchestration state, so it is measurable.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(215);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.

@@ -1,19 +1,19 @@
 {
   "generator": "apps/web/scripts/build-route-audience.ts",
-  "pageRouteCount": 369,
+  "pageRouteCount": 370,
   "summary": {
     "byAudience": {
       "admin": 151,
       "auth-setup": 10,
       "builder": 3,
       "customer": 11,
-      "owner": 171,
+      "owner": 172,
       "public": 21,
       "worker": 2
     },
     "byDestinationKind": {
       "advanced-diagnostic": 103,
-      "detail": 179,
+      "detail": 180,
       "legacy-internal": 34,
       "section-home": 32,
       "settings-config": 12,
@@ -600,6 +600,13 @@
     },
     {
       "routePath": "/customer/engagements",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/footprint",
       "audience": "owner",
       "destinationKind": "detail",
       "confidence": "high",
