@@ -128,14 +128,43 @@ is the safe error.
   - The founder's position in BI-D3BF53A9 ("providing more memory … is
     fundamentally wrong") governs any VM-size change. The measured need decides,
     not a guess.
-- **C: wedge detection and containment.**
-  - Detect processes in D-state in FUSE/9p waits past a threshold.
-  - Raise one platform condition with evidence.
-  - Detach platform-labelled helpers from Docker's view.
-  - A VM restart is operator-approved through the portal only.
-- **D: slot substrate.** Slot Postgres needs a restart policy and an
-  ensure-start (BI-277ECBDB). After the 2026-09-25 WSL restart,
+- **C: substrate reconciler (BI-4D08C53C, as built).** The Inngest cron
+  `ops/substrate-reconciler` runs every 5 minutes at offset :04, is gated by
+  quiescence, and appears in the scheduled-jobs catalog. The logic lives in
+  `apps/web/lib/platform-runtime/substrate-reconciler.ts` with injected I/O.
+  - **Restart.** It starts an exited compose-project container when both of
+    these hold:
+    - its service is required by the enabled runtime capabilities
+      (`loadOperationalCapabilityState().serviceRequirements`);
+    - its restart policy is `always` or `unless-stopped`.
+
+    One-shot init containers, optional services and disabled services are never
+    started. When the required set cannot be read, nothing is restarted. Each
+    restart opens a warn MonitorIssue `substrate:service-restarted:<service>`,
+    or an error if the start fails. The issue resolves once the container is
+    running. A repeat means something keeps stopping the service; the caller
+    is tracked on BI-547B788D.
+  - **Wedge detection.** It reads every running container's processes through
+    the Engine `top` endpoint, where ps runs inside the VM. Any process in
+    D state for 10 minutes or more raises one error MonitorIssue,
+    `substrate:docker-vm-wedged`. The issue names the processes and says that
+    only a VM restart clears them, which also stops the portal, every
+    container and running gates. It resolves when every `top` is readable and
+    clean.
+  - **Deferred.** Executing the VM restart needs a host executor, which the
+    portal container does not have. WWMD DI-46E06C5441CF chose detect-and-report
+    now and an operator-approved restart through a designed host executor later.
+    Detaching helpers from Docker's view is dropped: the reconciler reports the
+    wedge, and the cache-drop guard from slice A prevents the helpers.
+- **D: slot substrate (BI-D2402DAB, child of BI-277ECBDB).** Slot Postgres is
+  provisioned with `--restart unless-stopped`. On reuse, the runner applies
+  `docker update --restart unless-stopped` before `docker start`, so existing
+  containers converge on their next gate. The ensure-start (`docker start` and
+  then `pg_isready`) already existed. After the 2026-09-25 WSL restart,
   `dpf-local-ci-postgres-0` stayed exited (255).
+- **Installer reclaim key (BI-7371D444).** `install-dpf.ps1` writes
+  `autoMemoryReclaim=gradual` under `[experimental]`, the only section where WSL
+  reads it (WWMD DI-BC3B38A641C7).
 
 ## Out of scope
 
