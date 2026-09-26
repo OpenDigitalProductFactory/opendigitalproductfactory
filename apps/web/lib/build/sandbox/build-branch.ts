@@ -15,6 +15,7 @@
 // revealing anything about the real user or organization.
 
 import { execInSandbox, isSandboxRunning } from "./sandbox";
+import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
 import { prisma } from "@dpf/db";
 import { buildBuildStudioSandboxTargetInput } from "@/lib/runtime-coordination/build-studio-runtime";
 import {
@@ -29,6 +30,7 @@ import {
   shouldPreserveBuildBranchWork,
   type SandboxSourceCurrencySnapshot,
 } from "./sandbox-source-currency";
+import { isRecord } from "@/lib/shared/coerce";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
@@ -128,10 +130,17 @@ export function buildSandboxCommitInFlightWorkCommand(workspace: string = WORKSP
 // cause of the data loss — the WWMD kernel chose this over a serial-rebuild
 // shortcut on Architecture-Over-Shortcuts grounds).
 //
-// node_modules is NOT reinstalled per worktree — it is shared from the canonical
-// /workspace install by symlink. Verified live in dpf-sandbox-1 (2026-06-19):
-// with the symlinks below, `tsc`, `react`, and `next` all resolve from the
-// worktree, so a per-build worktree needs no `pnpm install` of its own.
+// node_modules is installed PER WORKTREE, offline from the sandbox's pnpm store
+// (~1 min, no network). The 2026-06-19 design shared the canonical /workspace
+// install by symlink instead; two later facts retired it (2026-09-25,
+// FB-D671B016):
+//  - a shared install resolves the build's @dpf/* workspace packages into
+//    /workspace's source, not the build's own, and the in-platform gauntlet's
+//    stale-root guard (BI-A900EA3F) rightly refuses that whenever /workspace's
+//    baseline lags origin/main, which is always;
+//  - `ln -sfn` into a real directory (an agent's own `pnpm install`) nests a
+//    second node_modules inside it, and the tests load two copies of React.
+// Symlinks left by the old design are removed; a real install is kept.
 //
 // These are the lifecycle PRIMITIVES (slice 1). Wiring them into
 // startBuildBranch + threading the per-build workdir through the dispatchers is
@@ -173,10 +182,9 @@ export function resolveBuildWorkdir(buildId: string, workspace: string = WORKSPA
     : workspace;
 }
 
-// node_modules trees shared from the canonical install into each worktree by
-// symlink: the repo root plus the web app and the workspace packages whose
-// node_modules the build/typecheck toolchain resolves through. Adding a new
-// package that a build must compile against means adding its node_modules here.
+// node_modules paths the retired shared-install design symlinked into each
+// worktree. Any that are still symlinks are removed before the worktree's own
+// install, so nothing resolves into /workspace.
 const WORKTREE_SHARED_NODE_MODULES = [
   "node_modules",
   "apps/web/node_modules",
@@ -187,8 +195,8 @@ const WORKTREE_SHARED_NODE_MODULES = [
 
 /**
  * Create a build's isolated worktree at buildWorktreePath(buildId), checked out
- * to `branchRef` (its `build/<buildId>` branch), with node_modules shared from
- * the canonical /workspace install via symlink — no per-worktree `pnpm install`.
+ * to `branchRef` (its `build/<buildId>` branch), with its own node_modules
+ * installed offline from the sandbox's pnpm store.
  * Idempotent: force-removes any stale worktree at the path and prunes the
  * registry first, so a re-dispatch never trips on a leftover worktree. The
  * `--force` on `worktree add` lets the same branch be (re)attached after a prior
@@ -200,21 +208,19 @@ export function buildSandboxWorktreeAddCommand(
   workspace: string = WORKSPACE,
 ): string {
   const path = buildWorktreePath(buildId, workspace);
-  // `ln -sfn` so re-linking an already-provisioned worktree is a no-op rather
-  // than an error — the reuse branch below relies on it. A REAL directory at the
-  // link path (an agent ran `pnpm install` in the worktree) is removed first:
-  // `ln -sfn` into an existing directory nests the link inside it, the worktree
-  // keeps a private install, and its tests load a second React (FB-D671B016,
-  // 2026-09-25: 9 Grid tests "Cannot read properties of null (reading 'use')").
+  // Idempotent, so the reuse branch below can re-assert it on every ensure:
+  // drop links left by the shared-install design, then install only when the
+  // worktree has no real install yet. Offline first (the sandbox store already
+  // holds every locked package); online only if the branch changed the lockfile.
   // `node_modules` also goes in the repository's shared info/exclude, so a
   // branch cut before .gitignore ignored links never shows one as untracked.
   const excludeFile = `"$(git rev-parse --git-common-dir)/info/exclude"`;
+  const install = `(cd ${path} && { CI=true pnpm install --offline --frozen-lockfile >/tmp/dpf-worktree-install-${buildId}.log 2>&1 || CI=true pnpm install --frozen-lockfile >>/tmp/dpf-worktree-install-${buildId}.log 2>&1; })`;
   const symlinks = [
     `mkdir -p "$(git rev-parse --git-common-dir)/info"`,
     `{ grep -qx node_modules ${excludeFile} 2>/dev/null || echo node_modules >> ${excludeFile}; }`,
-    ...WORKTREE_SHARED_NODE_MODULES.map(
-      (rel) => `{ [ -L ${path}/${rel} ] || rm -rf ${path}/${rel}; } && ln -sfn ${workspace}/${rel} ${path}/${rel}`,
-    ),
+    ...WORKTREE_SHARED_NODE_MODULES.map((rel) => `{ [ ! -L ${path}/${rel} ] || rm -f ${path}/${rel}; }`),
+    `{ [ -d ${path}/node_modules/.pnpm ] || ${install}; }`,
   ].join(" && ");
   // An orphaned directory — present on disk but unknown to git because the
   // registry under .git/worktrees is gone — defeats both halves of the
@@ -400,14 +406,14 @@ function sandboxGitPrelude(): string {
     // repo exists — well before any checkout/worktree-add/commit runs.
     `git -C ${WORKSPACE} config --local core.hooksPath /dev/null >/dev/null 2>&1 || true`,
     `if [ -f "${GIT_INDEX_LOCK}" ]; then for _dpf_git_wait in 1 2 3 4 5; do if ! pgrep -x git >/dev/null 2>&1; then break; fi; sleep 1; done; if [ -f "${GIT_INDEX_LOCK}" ] && ! pgrep -x git >/dev/null 2>&1; then rm -f "${GIT_INDEX_LOCK}"; fi; fi`,
-    `git config --global --add safe.directory "${WORKSPACE}" >/dev/null 2>&1 || true`,
+    ensureGlobalSafeDirectoryCommand(`"${WORKSPACE}"`),
     // BI-518B5F69: git's ownership check is per worktree path (and the shared
     // .git/worktrees/<id>), so the single /workspace exception does not cover
     // the isolated build worktrees under /workspace/.builds — every second
     // build failed plan→build with "dubious ownership". The sandbox is a
     // single-tenant root container, so the wildcard is the honest allowance.
     // Guarded so repeated preludes do not grow the config.
-    `git config --global --get-all safe.directory 2>/dev/null | grep -qx '\\*' || git config --global --add safe.directory '*' >/dev/null 2>&1 || true`,
+    ensureGlobalSafeDirectoryCommand("'*'"),
   ].join(" && ");
 }
 
@@ -534,10 +540,6 @@ async function refreshCurrentBranchFromTarget(args: {
 
   await recordBuildSourceCurrency(args.buildId, before);
   return before;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 // ─── Client Identity ─────────────────────────────────────────────────────────

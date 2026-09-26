@@ -46,6 +46,7 @@ COPY packages/api-client/package.json ./packages/api-client/
 COPY packages/coworker-sim-harness/package.json ./packages/coworker-sim-harness/
 COPY packages/dpf-bootstrap/package.json ./packages/dpf-bootstrap/
 COPY packages/finance-templates/package.json ./packages/finance-templates/
+COPY packages/i18n/package.json ./packages/i18n/
 COPY packages/integration-shared/package.json ./packages/integration-shared/
 COPY packages/storefront-templates/package.json ./packages/storefront-templates/
 COPY packages/types/package.json ./packages/types/

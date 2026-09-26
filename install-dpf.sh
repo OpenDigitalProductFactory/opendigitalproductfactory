@@ -919,6 +919,28 @@ export PATH="$SAFETY_BIN:$PATH"
 ok "Shell guard installed at $SAFETY_BIN"
 info "  Open a new terminal for the PATH change to take effect in other shells."
 
+# 9b. The document converter (dpf-doctools, BI-698B7F9A). It is not a compose
+#     service (AC-ODC-003), so compose never pulls it; pull it here with the
+#     other release images so the portal reads Word, Excel and PDF files at
+#     first boot. Only an immutable release tag names one converter (the portal
+#     refuses a moving tag), so `latest` pulls nothing. It never fails the
+#     install: a release with no converter is simply converter-less, and any
+#     other failure is retried by the portal's own reconciler once it starts.
+dpf_prepull_doctools() {
+  local tag="${1:-}" owner="${2:-}" image out
+  printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$' || return 0
+  owner="$(printf '%s' "${owner:-opendigitalproductfactory}" | tr '[:upper:]' '[:lower:]')"
+  image="ghcr.io/${owner}/dpf-doctools:${tag}"
+  if out="$(docker pull "$image" 2>&1)"; then
+    ok "Document converter image ready ($image)"
+  elif printf '%s' "$out" | grep -Eqi 'not found|manifest unknown|name unknown'; then
+    info "This release ships no document converter; Office files will not be converted."
+  else
+    warn "Could not download the document converter image; the platform retries after it starts."
+  fi
+  return 0
+}
+
 # 9c. Customer mode pulls pre-built GHCR images (parity with the Windows
 #     consumer path). During early access those images may require a (free)
 #     GitHub login. Probe once and point the operator at `docker login`
@@ -935,6 +957,7 @@ if [ "$DPF_INSTALL_MODE" = "customer" ]; then
     info "    docker login ghcr.io"
     info "  Then re-run install-dpf.sh. (Contributor mode builds from source instead.)"
   fi
+  dpf_prepull_doctools "$(_dpf_env_value DPF_IMAGE_TAG)" "$(_dpf_env_value GHCR_OWNER)"
 fi
 
 # 10. Bring up the platform-aware compose stack. Per the doctrine's

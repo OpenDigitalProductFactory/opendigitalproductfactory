@@ -12,6 +12,11 @@ model User {
   isActive                         Boolean                             @default(true)
   isSuperuser                      Boolean                             @default(false)
   createdAt                        DateTime                            @default(now())
+  /// Last time this person used the workforce portal: stamped at sign-in and,
+  /// at most hourly, on shell renders. Null = not seen since tracking began.
+  /// Tells an operator that approvals routed to this account have no reader
+  /// (BI-61DE8177). Not a security signal; sessions outlive it.
+  lastSeenAt                       DateTime?
   approvedProposals                AgentActionProposal[]               @relation("ProposalDecisions")
   agentThreads                     AgentThread[]
   apiTokens                        ApiToken[]
@@ -190,6 +195,10 @@ model Principal {
   sponsorPrincipalId                  String?
   authorityMode                       String?
   sensitivityClearance                PrincipalSensitivity[]              @default([public])
+  /// BCP-47 UI language the person chose (EP-6B33A840 L0.1). Null = follow the org default / browser.
+  preferredLanguage                   String?
+  /// IANA timezone the person chose. Null = the org's timezone.
+  timeZone                            String?
   aliases                             PrincipalAlias[]
   deferredBacklogItems                BacklogItem[]                       @relation("BacklogDeferralOwner")
   sponsorPrincipal                    Principal?                          @relation("PrincipalSponsor", fields: [sponsorPrincipalId], references: [id])

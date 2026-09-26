@@ -10,6 +10,11 @@
 // This module runs that same command from the portal, so the pin it stores is
 // the digest the release recorded.
 //
+// A customizable (source-built) install has no release context. It resolves
+// the same published image from the release its clone descends from, and
+// builds Dockerfile.doctools locally only when none is reachable
+// (BI-4E18BC28, doctools-source-lineage.ts).
+//
 // It runs in the NEW portal at boot, and again on a timer. A swap recreates
 // the portal and kills the orchestrator, so the upgrade worker could never
 // record anything after the swap. reconcileSelfUpgradeRunsOnBoot closes that
@@ -25,16 +30,27 @@
 // DPF_DOCTOOLS_IMAGE still take precedence (see documents/conversion/image.ts),
 // so a source/dev install keeps its override.
 //
-// Nothing here can fail an upgrade or a boot:
+// Nothing in the reconciler can fail an upgrade or a boot:
 //   - a release with no dpf-doctools manifest leaves the key unset (AC-3);
 //   - an unreachable registry keeps the prior state for the next tick;
 //   - a failed pull leaves the pin in place, and the next tick retries it.
+//
+// The reconciler is the safety net. The upgrade itself pulls the target
+// release's image before the swap (prePullReleaseDoctoolsImage, called from the
+// candidate preflight, BI-698B7F9A), and the installers pull it with the other
+// release images, so the reconciler normally finds the digest already present.
 
 import { isPinnedImageReference } from "@/lib/documents/conversion/command";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
 import { RELEASE_IMAGE_TAG } from "./registry-release";
 import { loadReleaseInstallContext, type ReleaseInstallContext } from "./release-target";
+import {
+  buildLocalDoctoolsImage,
+  loadSourceLineageContext,
+  type LocalDoctoolsBuildResult,
+  type SourceLineageContext,
+} from "./doctools-source-lineage";
 
 export const DOCTOOLS_RELEASE_IMAGE_KEY = "self_upgrade.doctoolsImage";
 export const DOCTOOLS_IMAGE_NAME = "dpf-doctools";
@@ -49,10 +65,15 @@ const NOT_PUBLISHED = /not found|manifest unknown|name unknown/i;
 const INSPECT_TIMEOUT_MS = 60_000;
 const PULL_TIMEOUT_MS = 30 * 60 * 1000;
 
+/** The two facts that name a release's images: its immutable tag and GHCR owner. */
+export type ReleaseImageIdentity = Pick<ReleaseInstallContext, "imageTag" | "ghcrOwner">;
+
 export type StoredReleaseDoctoolsImage = {
   image: string;
   releaseTag: string;
   resolvedAt?: string;
+  /** Absent on pins written before BI-4E18BC28, which were all published. */
+  origin?: "published" | "local-build";
 };
 
 export type DoctoolsDockerResult = { exitCode: number; stdout: string; stderr: string };
@@ -66,6 +87,7 @@ export type ReleaseDoctoolsResolution =
 export type DoctoolsReconcileOutcome =
   | { outcome: "not-release-install" }
   | { outcome: "resolved" | "unchanged"; image: string; pulled: boolean }
+  | { outcome: "built-locally"; image: string }
   | { outcome: "not-published" }
   | { outcome: "unavailable"; detail: string }
   | { outcome: "error"; detail: string };
@@ -76,6 +98,10 @@ export type DoctoolsReconcileDeps = {
   writeStored: (value: StoredReleaseDoctoolsImage) => Promise<void>;
   clearStored: () => Promise<void>;
   runDocker: DoctoolsDockerRunner;
+  /** A source-built install's release lineage; consulted only without a release context. */
+  loadSourceLineage?: () => Promise<SourceLineageContext | null>;
+  /** Build Dockerfile.doctools from the clone when no published image is reachable. */
+  buildLocal?: (lineage: SourceLineageContext) => Promise<LocalDoctoolsBuildResult>;
   now: () => Date;
   logger: Pick<Console, "log" | "warn">;
 };
@@ -85,7 +111,7 @@ export type DoctoolsReconcileDeps = {
  * tag, or null. A moving tag (`latest`) is refused so the stored pin always
  * names exactly one release's bytes.
  */
-export function doctoolsReleaseReference(context: ReleaseInstallContext): string | null {
+export function doctoolsReleaseReference(context: ReleaseImageIdentity): string | null {
   if (!RELEASE_IMAGE_TAG.test(context.imageTag) || !REGISTRY_OWNER.test(context.ghcrOwner)) return null;
   return `${REGISTRY}/${context.ghcrOwner.toLowerCase()}/${DOCTOOLS_IMAGE_NAME}:${context.imageTag}`;
 }
@@ -109,6 +135,7 @@ export function parseStoredReleaseDoctoolsImage(value: unknown): StoredReleaseDo
     image: record.image,
     releaseTag: record.releaseTag,
     ...(typeof record.resolvedAt === "string" ? { resolvedAt: record.resolvedAt } : {}),
+    ...(record.origin === "published" || record.origin === "local-build" ? { origin: record.origin } : {}),
   };
 }
 
@@ -122,7 +149,7 @@ async function tryDocker(run: DoctoolsDockerRunner, args: string[], timeoutMs: n
 
 /** Resolve the release's dpf-doctools tag to `name@sha256:…`, without pulling. */
 export async function resolveReleaseDoctoolsImage(
-  context: ReleaseInstallContext,
+  context: ReleaseImageIdentity,
   runDocker: DoctoolsDockerRunner,
 ): Promise<ReleaseDoctoolsResolution> {
   const reference = doctoolsReleaseReference(context);
@@ -141,10 +168,13 @@ export async function resolveReleaseDoctoolsImage(
   return { kind: "published", image: `${reference.slice(0, reference.lastIndexOf(":"))}@${digest}` };
 }
 
+async function isPresent(deps: DoctoolsReconcileDeps, image: string): Promise<boolean> {
+  return (await tryDocker(deps.runDocker, ["image", "inspect", "--format", "{{.Id}}", image], INSPECT_TIMEOUT_MS)).exitCode === 0;
+}
+
 /** Pull the pinned image unless it is already present. True when a pull landed. */
 async function ensurePulled(deps: DoctoolsReconcileDeps, image: string): Promise<boolean> {
-  const present = await tryDocker(deps.runDocker, ["image", "inspect", "--format", "{{.Id}}", image], INSPECT_TIMEOUT_MS);
-  if (present.exitCode === 0) return false;
+  if (await isPresent(deps, image)) return false;
   const pull = await tryDocker(deps.runDocker, ["pull", image], PULL_TIMEOUT_MS);
   if (pull.exitCode !== 0) {
     deps.logger.warn(`[doctools-image] pull of ${image} did not complete; the next tick retries: ${(pull.stderr || pull.stdout).trim().slice(-200)}`);
@@ -154,26 +184,116 @@ async function ensurePulled(deps: DoctoolsReconcileDeps, image: string): Promise
   return true;
 }
 
+type DoctoolsLineage = {
+  imageTag: string;
+  ghcrOwner: string;
+  /** Set only for a source-built install, which may build the image itself. */
+  source?: SourceLineageContext;
+};
+
+async function loadLineage(deps: DoctoolsReconcileDeps): Promise<DoctoolsLineage | null> {
+  const release = await deps.loadContext();
+  if (release) return doctoolsReleaseReference(release) ? release : null;
+  const source = await deps.loadSourceLineage?.();
+  return source && doctoolsReleaseReference(source) ? { ...source, source } : null;
+}
+
+/** Offline fallback for a source-built install: pin an image built from its own clone. */
+async function buildLocally(
+  deps: DoctoolsReconcileDeps,
+  lineage: DoctoolsLineage,
+  why: string,
+): Promise<DoctoolsReconcileOutcome | null> {
+  if (!lineage.source || !deps.buildLocal) return null;
+  deps.logger.log(`[doctools-image] no published ${DOCTOOLS_IMAGE_NAME} reachable for ${lineage.imageTag} (${why}); building it from the install's source`);
+  const built = await deps.buildLocal(lineage.source);
+  if (!built.ok) {
+    deps.logger.warn(`[doctools-image] local build of ${DOCTOOLS_IMAGE_NAME} did not complete; the next tick retries: ${built.error}`);
+    return { outcome: "unavailable", detail: `local build failed: ${built.error}` };
+  }
+  await deps.writeStored({ image: built.data, releaseTag: lineage.imageTag, resolvedAt: deps.now().toISOString(), origin: "local-build" });
+  deps.logger.log(`[doctools-image] ${lineage.imageTag} -> ${built.data} (built locally)`);
+  return { outcome: "built-locally", image: built.data };
+}
+
+export type DoctoolsPrePullResult =
+  | { outcome: "pulled" | "present"; image: string }
+  | { outcome: "not-published" | "not-release" }
+  | { outcome: "failed"; reason: string };
+
+const tail = (result: DoctoolsDockerResult) => (result.stderr || result.stdout).trim().slice(-200);
+
+/**
+ * Make the TARGET release's dpf-doctools present before the swap
+ * (BI-698B7F9A), so the new portal's first availability check finds it.
+ *
+ * Runs in the candidate preflight, beside the promoter pull, and writes no pin:
+ * `self_upgrade.doctoolsImage` stays owned by the boot reconciler above, which
+ * resolves the same immutable tag to the same digest and then finds it present.
+ *
+ * It pulls the release TAG, then confirms the resolved digest is present. A
+ * tagged image is never "dangling", so the promoter's `docker image prune -f`
+ * cleanup cannot remove it between this pull and the new portal's first boot.
+ *
+ * A release that never published dpf-doctools is not a failure: that release
+ * is simply converter-less, and a missing optional image must never block an
+ * upgrade (BI-E6EF0B2C). Anything else is a plain reason for the caller to
+ * fail the run with, before the drain.
+ */
+export async function prePullReleaseDoctoolsImage(
+  release: { tag: string; ghcrOwner: string },
+  runDocker: DoctoolsDockerRunner = productionRunDocker,
+): Promise<DoctoolsPrePullResult> {
+  const identity = { imageTag: release.tag, ghcrOwner: release.ghcrOwner };
+  const reference = doctoolsReleaseReference(identity);
+  if (!reference) return { outcome: "not-release" };
+  const resolution = await resolveReleaseDoctoolsImage(identity, runDocker);
+  if (resolution.kind === "not-published") return { outcome: "not-published" };
+  if (resolution.kind === "unavailable") {
+    return { outcome: "failed", reason: `could not check the ${release.tag} document converter: ${resolution.detail}` };
+  }
+  const image = resolution.image;
+  const isPresent = async () =>
+    (await tryDocker(runDocker, ["image", "inspect", "--format", "{{.Id}}", image], INSPECT_TIMEOUT_MS)).exitCode === 0;
+  if (await isPresent()) return { outcome: "present", image };
+  let pull = await tryDocker(runDocker, ["pull", reference], PULL_TIMEOUT_MS);
+  if (pull.exitCode === 0 && (await isPresent())) return { outcome: "pulled", image };
+  // The tag did not land the recorded digest: pull the exact bytes instead.
+  pull = await tryDocker(runDocker, ["pull", image], PULL_TIMEOUT_MS);
+  if (pull.exitCode === 0 && (await isPresent())) return { outcome: "pulled", image };
+  return { outcome: "failed", reason: `could not download the ${release.tag} document converter: ${tail(pull) || "the image is not present after the pull"}` };
+}
+
 export async function reconcileReleaseDoctoolsImage(deps: DoctoolsReconcileDeps): Promise<DoctoolsReconcileOutcome> {
   try {
-    const context = await deps.loadContext();
-    if (!context || !doctoolsReleaseReference(context)) return { outcome: "not-release-install" };
+    const lineage = await loadLineage(deps);
+    if (!lineage) return { outcome: "not-release-install" };
     const stored = await deps.readStored();
-    if (stored && stored.releaseTag === context.imageTag) {
-      return { outcome: "unchanged", image: stored.image, pulled: await ensurePulled(deps, stored.image) };
+    const sameLineage = stored?.releaseTag === lineage.imageTag ? stored : null;
+    if (sameLineage && sameLineage.origin !== "local-build") {
+      return { outcome: "unchanged", image: sameLineage.image, pulled: await ensurePulled(deps, sameLineage.image) };
     }
-    const resolution = await resolveReleaseDoctoolsImage(context, deps.runDocker);
+    // A local build is only the offline fallback, so each tick tries the published image again.
+    const resolution = await resolveReleaseDoctoolsImage(lineage, deps.runDocker);
+    if (resolution.kind !== "published" && sameLineage) {
+      if (await isPresent(deps, sameLineage.image)) return { outcome: "unchanged", image: sameLineage.image, pulled: false };
+      return (await buildLocally(deps, lineage, "the local image was removed")) ?? { outcome: "unavailable", detail: "local image removed" };
+    }
     if (resolution.kind === "not-published") {
+      const built = await buildLocally(deps, lineage, "not published");
+      if (built) return built;
       if (stored) await deps.clearStored();
-      deps.logger.log(`[doctools-image] release ${context.imageTag} published no ${DOCTOOLS_IMAGE_NAME}; office conversion stays off`);
+      deps.logger.log(`[doctools-image] release ${lineage.imageTag} published no ${DOCTOOLS_IMAGE_NAME}; office conversion stays off`);
       return { outcome: "not-published" };
     }
     if (resolution.kind === "unavailable") {
-      deps.logger.warn(`[doctools-image] could not resolve ${DOCTOOLS_IMAGE_NAME} for ${context.imageTag}; keeping the prior state: ${resolution.detail}`);
+      const built = await buildLocally(deps, lineage, resolution.detail);
+      if (built) return built;
+      deps.logger.warn(`[doctools-image] could not resolve ${DOCTOOLS_IMAGE_NAME} for ${lineage.imageTag}; keeping the prior state: ${resolution.detail}`);
       return { outcome: "unavailable", detail: resolution.detail };
     }
-    await deps.writeStored({ image: resolution.image, releaseTag: context.imageTag, resolvedAt: deps.now().toISOString() });
-    deps.logger.log(`[doctools-image] ${context.imageTag} -> ${resolution.image}`);
+    await deps.writeStored({ image: resolution.image, releaseTag: lineage.imageTag, resolvedAt: deps.now().toISOString(), origin: "published" });
+    deps.logger.log(`[doctools-image] ${lineage.imageTag} -> ${resolution.image}`);
     return { outcome: "resolved", image: resolution.image, pulled: await ensurePulled(deps, resolution.image) };
   } catch (error) {
     const detail = getErrorMessage(error);
@@ -193,19 +313,42 @@ async function readStoredFromDb(): Promise<StoredReleaseDoctoolsImage | null> {
   return parseStoredReleaseDoctoolsImage(row?.value ?? null);
 }
 
+async function hostSourcePath(): Promise<string> {
+  const { getSelfUpgradeConfig } = await import("./config");
+  const config = await getSelfUpgradeConfig();
+  return (
+    config.hostSourceMountPath ??
+    process.env.DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT ??
+    process.env.HOST_SOURCE_PATH ??
+    "/host-dpf"
+  );
+}
+
+function productionRunDocker(args: string[], options?: { timeoutMs?: number }): Promise<DoctoolsDockerResult> {
+  return runProcessWithBudget("docker", args, {
+    timeoutMs: options?.timeoutMs ?? INSPECT_TIMEOUT_MS,
+    timeoutLabel: "doctools-image-timeout",
+  });
+}
+
 function productionDeps(): DoctoolsReconcileDeps {
   return {
     // The same host-source resolution the self-upgrade worker uses.
-    loadContext: async () => {
-      const { getSelfUpgradeConfig } = await import("./config");
-      const config = await getSelfUpgradeConfig();
-      const hostSourcePath =
-        config.hostSourceMountPath ??
-        process.env.DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT ??
-        process.env.HOST_SOURCE_PATH ??
-        "/host-dpf";
-      return loadReleaseInstallContext({ hostSourcePath });
+    loadContext: async () => loadReleaseInstallContext({ hostSourcePath: await hostSourcePath() }),
+    loadSourceLineage: async () => {
+      const { readPlatformVersionTag } = await import("@/lib/platform/image-version");
+      return loadSourceLineageContext({ hostSourcePath: await hostSourcePath(), readPlatformVersion: () => readPlatformVersionTag() });
     },
+    buildLocal: (lineage) =>
+      buildLocalDoctoolsImage({
+        sourceRoot: lineage.sourceRoot,
+        imageTag: lineage.imageTag,
+        runDocker: (args, options) =>
+          runProcessWithBudget("docker", args, {
+            timeoutMs: options?.timeoutMs ?? INSPECT_TIMEOUT_MS,
+            timeoutLabel: "doctools-image-build-timeout",
+          }),
+      }),
     readStored: readStoredFromDb,
     writeStored: async (value) => {
       const { prisma } = await import("@dpf/db");
@@ -219,11 +362,7 @@ function productionDeps(): DoctoolsReconcileDeps {
       const { prisma } = await import("@dpf/db");
       await prisma.platformConfig.deleteMany({ where: { key: DOCTOOLS_RELEASE_IMAGE_KEY } });
     },
-    runDocker: (args, options) =>
-      runProcessWithBudget("docker", args, {
-        timeoutMs: options?.timeoutMs ?? INSPECT_TIMEOUT_MS,
-        timeoutLabel: "doctools-image-timeout",
-      }),
+    runDocker: productionRunDocker,
     now: () => new Date(),
     logger: console,
   };

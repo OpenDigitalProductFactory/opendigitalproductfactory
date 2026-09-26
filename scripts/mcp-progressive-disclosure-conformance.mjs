@@ -8,6 +8,7 @@
  * separately observed live.
  */
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { pathToFileURL } from "node:url";
@@ -235,8 +236,9 @@ export async function runConformance({ mcpUrl, bearerToken }) {
 const invokedDirectly = process.argv[1]
   && pathToFileURL(process.argv[1]).href === import.meta.url;
 if (invokedDirectly) {
-  const urlArgIndex = process.argv.indexOf("--url");
-  const mcpUrl = urlArgIndex >= 0 ? process.argv[urlArgIndex + 1] : process.env.DPF_MCP_URL;
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args: process.argv.slice(2), strict: false, allowPositionals: true, options: { url: { type: "string" } } });
+  const mcpUrl = values.url === undefined ? process.env.DPF_MCP_URL : typeof values.url === "string" ? values.url : undefined;
   try {
     const results = await runConformance({
       mcpUrl,

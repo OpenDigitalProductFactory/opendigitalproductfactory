@@ -14,6 +14,8 @@
  * since it ships in the web app's render path.
  */
 
+import { isRecord } from "../shared/coerce";
+
 export interface PromotionView {
   mode: "auto" | "manual" | string;
   classifyAs?: string;
@@ -64,10 +66,6 @@ export interface PortfolioNodeInput {
 
 // --- type guards -------------------------------------------------------
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
@@ -93,7 +91,7 @@ function projectAbout(description: string | null): string | null {
 function projectPromotion(governance: Record<string, unknown>): PromotionView | null {
   if (!("promotion" in governance)) return null;
   const promotion = governance.promotion;
-  if (!isPlainObject(promotion)) {
+  if (!isRecord(promotion)) {
     warn("governance.promotion is not an object; ignoring");
     return null;
   }
@@ -123,7 +121,7 @@ function projectGovernance(governance: unknown): GovernanceView {
   if (governance === null || governance === undefined) {
     return { promotion: null, requiredFields: null, raw: null };
   }
-  if (!isPlainObject(governance)) {
+  if (!isRecord(governance)) {
     warn("governance is not an object; ignoring");
     return { promotion: null, requiredFields: null, raw: null };
   }
@@ -165,7 +163,7 @@ function projectReferences(enrichment: Record<string, unknown>): EnrichmentRefer
   }
   const projected: EnrichmentReference[] = [];
   for (const entry of references) {
-    if (!isPlainObject(entry)) continue;
+    if (!isRecord(entry)) continue;
     const { label, href } = entry;
     if (typeof label !== "string" || typeof href !== "string") continue;
     projected.push({ label, href });
@@ -189,7 +187,7 @@ function projectSectorCommercialMarkets(
 ): SectorCommercialMarket[] | null {
   const source = enrichment.industryMarkets ?? enrichment.sectorCommercialMarkets;
   if (source === undefined) return null;
-  if (!isPlainObject(source)) {
+  if (!isRecord(source)) {
     warn("enrichment.industryMarkets is not an object; ignoring");
     return null;
   }
@@ -215,7 +213,7 @@ function projectEnrichment(enrichment: unknown): EnrichmentView {
       raw: null,
     };
   }
-  if (!isPlainObject(enrichment)) {
+  if (!isRecord(enrichment)) {
     warn("enrichment is not an object; ignoring");
     return {
       standards: null,

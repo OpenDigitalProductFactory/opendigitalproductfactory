@@ -42,6 +42,16 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "@dpf/i18n": {
+      "added": "2026-09-26",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "First-party workspace package (packages/i18n, BI-6EA9E25A / EP-6B33A840): locale registry, negotiation and direction over native Intl. No external dependencies; adds no third-party supply-chain surface."
+    },
     "@dpf/integration-shared": {
       "added": "2026-06-21",
       "workspaces": [
@@ -458,16 +468,6 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
-    "docx": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "."
-      ],
-      "kinds": [
-        "dev"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
     "dotenv": {
       "added": "2026-06-21",
       "workspaces": [
@@ -740,16 +740,6 @@
       ],
       "note": "Mailroom MIME parsing for polled IMAP messages (design 2026-09-09 s3). MIT; same maintainer as nodemailer; about 1M weekly downloads; actively released; no known OSV advisories at adoption. Attachment bytes are never written to disk (metadata only)."
     },
-    "mammoth": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "apps/web"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
     "msw": {
       "added": "2026-06-21",
       "workspaces": [
@@ -812,16 +802,6 @@
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
     "papaparse": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "apps/web"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
-    "pdf-parse": {
       "added": "2026-06-21",
       "workspaces": [
         "apps/web"
@@ -1002,17 +982,6 @@
       ],
       "kinds": [
         "dev"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
-    "read-excel-file": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "apps/web",
-        "packages/db"
-      ],
-      "kinds": [
-        "prod"
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
@@ -1197,6 +1166,22 @@
     "@stoplight/prism-http": {
       "retired": "2026-09-25",
       "reason": "The integration-test harness validates vendor contracts with its own OpenAPI runtime (services/integration-test-harness/src/openapi-contract.ts); plan 2026-09-08 M4."
+    },
+    "docx": {
+      "retired": "2026-09-26",
+      "reason": "The architecture .docx publications convert through the portal's own export pipeline (markdown-to-html.ts, then dpf-convert in the dpf-doctools image) in docs/architecture/generate-docx-from-markdown.mjs; plan 2026-09-08 M2, BI-DBDB8C6D."
+    },
+    "mammoth": {
+      "retired": "2026-09-26",
+      "reason": "Word documents are read through the dpf-doctools engine (convert to .odt, read by apps/web/lib/shared/odf-content.ts); plan 2026-09-22 office document conversion S9, BI-D1B40D43."
+    },
+    "pdf-parse": {
+      "retired": "2026-09-26",
+      "reason": "PDF text is extracted by poppler's pdftotext inside the dpf-doctools engine (dpf-convert --to txt --from pdf); plan 2026-09-22 office document conversion S9, BI-D1B40D43. It also retired pdfjs-dist and @napi-rs/canvas."
+    },
+    "read-excel-file": {
+      "retired": "2026-09-26",
+      "reason": "Workbooks are read through the dpf-doctools engine (convert to .ods, read by apps/web/lib/shared/odf-content.ts); the dev-time reference-data generators read .xlsx with packages/db/scripts/lib/excel-sheet-reader.ts on fflate. Plan 2026-09-22 office document conversion S9, BI-D1B40D43."
     },
     "dagre": {
       "retired": "2026-09-26",

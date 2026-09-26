@@ -30,10 +30,11 @@
 //                                                    [--require-online]
 //                                                    [--json <path>]
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { parsePackageKeys, splitNameVersion } from "../lib/pnpm-lock.mjs";
 import { LOCKFILE_ROOTS, rootFile } from "./lockfile-roots.mjs";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { gitTextOrNull } from "../lib/git.mjs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -129,27 +130,24 @@ export function classifyAges(entries, publishedAt, { minutes, exclude, now }) {
 // ── I/O ──────────────────────────────────────────────────────────────────────
 
 function parseArgs(argv) {
-  const out = { base: "origin/main", requireOnline: false, json: null };
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--base") out.base = argv[++i];
-    else if (argv[i] === "--require-online") out.requireOnline = true;
-    else if (argv[i] === "--json") out.json = argv[++i];
-  }
-  return out;
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: { base: { type: "string" }, "require-online": { type: "boolean" }, json: { type: "string" } },
+  });
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  return {
+    base: values.base === undefined ? "origin/main" : text(values.base),
+    requireOnline: values["require-online"] === true,
+    json: values.json === undefined ? null : text(values.json),
+  };
 }
 
 function baseLockfile(baseRef, path = "pnpm-lock.yaml") {
-  try {
-    return execFileSync("git", ["show", `${baseRef}:${path}`], {
-      cwd: ROOT,
-      encoding: "utf8",
-      maxBuffer: 256 * 1024 * 1024,
-      // A root added by this change has no base lockfile; that is expected.
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-  } catch {
-    return null;
-  }
+  // A root added by this change has no base lockfile; that is expected.
+  return gitTextOrNull(["show", `${baseRef}:${path}`], { cwd: ROOT, trim: false, maxBuffer: 256 * 1024 * 1024 });
 }
 
 async function getJson(url, { tries = 3, timeoutMs = 20000 } = {}) {

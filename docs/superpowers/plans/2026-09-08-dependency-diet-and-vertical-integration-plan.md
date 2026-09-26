@@ -271,7 +271,7 @@ _Founder direction, 2026-09-25: too many dependencies, too much complexity, too 
 | M2 diagram toolchain out of the workspace | mermaid half done; `docx` is still a root devDependency for four `docs:*` generators | #5253 |
 | M3 durable jobs onto Postgres | open, needs WWMD | none since 2026-09-08 |
 | M4 Prism replaced in the harness | done: an owned OpenAPI contract runtime; Prism retired on the dependency allowlist | [design](../specs/2026-09-25-harness-owned-contract-validator-design.md) |
-| M5 document cluster | partly absorbed by the office-document engine; its S9 retires mammoth, read-excel-file and pdf-parse | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md) |
+| M5 document cluster | partly absorbed by the office-document engine; its S9 (BI-D1B40D43, 2026-09-26) retired mammoth, read-excel-file and pdf-parse (with pdfjs-dist and @napi-rs/canvas): 39 resolved components, now on the sbom deny list | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md) |
 | M6 mobile workspace split | done: founder-approved 2026-09-25; `apps/mobile` resolves in its own workspace and lockfile; platform tree 1759 → 1062 packages, duplicated names 165 → 68 | `apps/mobile/pnpm-workspace.yaml`, `scripts/sbom/lockfile-roots.mjs` |
 | M7 multi-version cleanup | first pass done (#5289); second pass in this branch | this branch |
 | M8 override prune | done in this branch | this branch |
@@ -347,6 +347,17 @@ Each S-move ships its ratchet in the same PR, in the shape the `check-no-local-*
 1. **Decisions (no code blocked on them for long):** M6 founder yes or no; M4 and S10 `principle_decide`; M3 `principle_decide` once its research section is written.
 2. **Hygiene, no decisions, one PR each:** S11 plus a `catalog:`, S3, S5, S7, S9, then S1 and S2.
 3. **Structural:** M6 execution if approved, M4, then M3 behind BET-11, and M5 through the office-document engine's S9.
+
+### 10.6.1 Founder decisions, 2026-09-26
+
+The founder decided the four open calls in the dependency-architecture thread on 2026-09-26, each on the recommended option. The DPF MCP server was unreachable from that session, so the `principle_decide` / decision-outcome records are still owed. This section is the durable record until they are filed.
+
+| Call | Decision | Consequence |
+|---|---|---|
+| M3 durable-job engine | `own_postgres_jobs` | [Durable jobs on Postgres](../specs/2026-09-25-postgres-durable-job-engine-design.md) moves from `draft` to `active`. Implementation follows its §6: facade first, then the engine behind a flag, then retirement. The §7 benchmarks gate the flag flip, not the facade. |
+| S10 graph layout | `elkjs` only | `dagre` retires; the three `lib/graph` layouts move to elkjs `layered`. |
+| M5 markdown | one `renderMarkdown()` on `markdown-it`, raw HTML off | `react-markdown` and `remark-gfm` retire behind one primitive. |
+| Delivery | one branch and one PR per move | Moves ship in parallel on `claude/<move>` branches. |
 
 ### 10.7 Backlog coverage
 

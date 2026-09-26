@@ -83,6 +83,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-3B6DC1DC: the TaskRun working-write guard now scopes by model, so its
       // own behaviour is under test rather than trusted.
       node("--test", "scripts/check-no-bare-working-write.test.mjs"),
+      // BI-903FB5F9: no checked-in recipe may drop the Docker VM page cache by hand.
+      node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
@@ -158,6 +160,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/git.test.mjs"),
       conformanceTest("scripts/check-no-direct-git-spawn.test.mjs"),
       node("scripts/check-no-direct-git-spawn.mjs"),
+      // One argument parser for every script: node:util parseArgs
+      // (plan 2026-09-08 §10.5 S2).
+      conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
+      node("scripts/check-no-hand-rolled-argv.mjs"),
     ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
@@ -186,6 +192,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/installer/pki-contract.test.mjs"),
       // BI-6DC1CD5B: canonical https origin resolver, machine trust, installer wiring.
       conformanceTest("scripts/installer/canonical-origin.test.mjs"),
+      // BI-698B7F9A: both installers pull the release's dpf-doctools with the
+      // other release images and never fail the install on it.
+      conformanceTest("scripts/installer/doctools-prepull.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
@@ -356,6 +365,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // the image — so it reaches main green and breaks the release chain.
       node("scripts/check-dockerfile-copied-script-imports.mjs"),
       node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
+      // The test-fixture twin: a contract test that cpSync's modules into a temp
+      // tree one at a time dies on ERR_MODULE_NOT_FOUND when a copied module
+      // gains a static import the fixture never copies. Hit twice on 2026-09-25
+      // in tests/release/pregate-node-gate-contract.test.mjs (#5690, #5707),
+      // and only Janitor Tests noticed.
+      node("scripts/check-fixture-copied-script-imports.mjs"),
+      conformanceTest("scripts/check-fixture-copied-script-imports.test.mjs"),
       // The FLAG half of the same class (BI-8914E888). The guard above catches a
       // script the image never receives; this catches a switch the install can
       // never set. Both are "the capability was built and the last wire was never
@@ -580,6 +596,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("mcp-tool-pack-guard", "MCP Tool Pack Guard", [
       node("scripts/check-mcp-tool-pack.mjs"),
     ], { inputs: ["code"] }),
+    // One kebab-case slug transform (plan 2026-09-08 §10.5 S7); copies whose
+    // output differs stay allowlisted with a reason, since slugs are persisted.
+    guard("local-slugify-guard", "Local Slugify Guard", [
+      conformanceTest("scripts/check-no-local-slugify.test.mjs"),
+      node("scripts/check-no-local-slugify.mjs"),
+    ]),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
     ]),
@@ -808,6 +830,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
+      // BI-77BE1389: install-folder sessions get the source contract at start.
+      node("--test", "packages/dpf-skill-pack/hooks/install-folder-contract.test.mjs"),
       // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the
       // SessionStart readiness banner. Both are hand-added here for the same
       // reason as every entry above — an unlisted test file never runs.
