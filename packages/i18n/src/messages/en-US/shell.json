@@ -1,0 +1,22 @@
+{
+  "area": {
+    "workDenied": "Your role does not include viewing Workrooms.",
+    "teamEmpty": "No one is assigned to this area yet.",
+    "setupEmpty": "Your role has no settings to change in this area.",
+    "activityHeading": "Activity by portfolio",
+    "reviewLive": "Review live Workrooms"
+  },
+  "finance": {
+    "mileageTitle": "Mileage",
+    "mileageDescription": "Log business trips so they can be claimed and reported."
+  },
+  "federation": {
+    "fromPeers": "From connected peers:",
+    "proposals": "Federation Proposals",
+    "serviceDesk": "Service Desk"
+  },
+  "discovery": {
+    "deviceCatalog": "Device Catalog",
+    "promotionAudit": "Promotion Audit"
+  }
+}

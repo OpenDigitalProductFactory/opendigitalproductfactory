@@ -8,6 +8,8 @@
 // so its use reads "subscription: $0 recorded, N tokens", never as zero cost.
 // Runs that reach no backlog item are reported as not traced.
 
+import { formatMoney } from "@/lib/org-locale/org-locale";
+
 import type { Period } from "./portfolio-budget";
 
 export type AiUse = {
@@ -62,10 +64,10 @@ export async function loadAiUseByItem(db: ReadDb, period: Period): Promise<Map<s
 const compact = (n: number) => (n >= 1_000_000 ? `${Math.round(n / 100_000) / 10}M` : n >= 1_000 ? `${Math.round(n / 100) / 10}k` : String(n));
 
 /** How the spend reads: recorded dollars, and subscription use stated as such, never as $0 alone. */
-export function aiSpendText(use: AiUse): string {
+export function aiSpendText(use: AiUse, formatLocale?: string | null): string {
   if (use.runs === 0) return "No AI runs traced";
   const parts: string[] = [];
-  if (use.recordedUsd !== null && use.recordedUsd > 0) parts.push(`$${use.recordedUsd.toFixed(2)} recorded`);
+  if (use.recordedUsd !== null && use.recordedUsd > 0) parts.push(`${formatMoney(use.recordedUsd, "USD", formatLocale)} recorded`);
   if (use.subscriptionTokens > 0) parts.push(`subscription: $0 recorded, ${compact(use.subscriptionTokens)} tokens`);
   if (parts.length === 0) parts.push(`no cost recorded for ${compact(use.tokens)} tokens`);
   return parts.join("; ");

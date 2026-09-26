@@ -1,6 +1,8 @@
 import { prisma } from "@dpf/db";
 import Link from "next/link";
 
+import { getT } from "@/lib/i18n/t.server";
+
 import { PortfolioActivityTree } from "@/components/ops/workrooms/PortfolioActivityTree";
 import { WorkroomInventory, type WorkroomInventoryRow } from "@/components/ops/workrooms/WorkroomInventory";
 import { Surface } from "@/components/ui/Surface";
@@ -37,6 +39,7 @@ type Props = {
  * component, so an area view can never drift into a second inventory.
  */
 export async function WorkroomActivitySection({ portfolioRole, scopeLabel, children }: Props) {
+  const t = await getT("shell");
   const inventory = await loadCapsuleLivenessInventory(prisma, {
     where: workroomInventoryWhere(portfolioRole),
     take: WORKROOM_READ_LIMIT,
@@ -90,13 +93,13 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
           {inventory.livenessSummary.history} retained record{inventory.livenessSummary.history === 1 ? " is" : "s are"} history, not active work.
         </p>
         <Link data-owner-first-next-action href="#live-workrooms-heading" className="mt-3 inline-block text-xs font-medium text-[var(--dpf-accent)] hover:underline">
-          Review live Workrooms
+          {t("area.reviewLive")}
         </Link>
       </Surface>
       {children}
       {!portfolioRole && (
         <Surface className="mt-6" rounded="xl">
-          <h2 className="text-base font-semibold text-[var(--dpf-text)]">Activity by portfolio</h2>
+          <h2 className="text-base font-semibold text-[var(--dpf-text)]">{t("area.activityHeading")}</h2>
           <PortfolioActivityTree rows={activityRows} partial={activity.partial} roomReadBounded={roomReadBounded} />
         </Surface>
       )}

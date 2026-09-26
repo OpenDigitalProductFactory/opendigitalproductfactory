@@ -15,7 +15,11 @@
 // builds Dockerfile.doctools locally only when none is reachable
 // (BI-4E18BC28, doctools-source-lineage.ts).
 //
-// It runs in the NEW portal at boot, and again on a timer. A swap recreates
+// It runs in the NEW portal at boot, and again on a timer. At boot the
+// release is the one the container RUNS (DPF_IMAGE_TAG, which compose also
+// interpolates into the portal image), because promote.sh commits
+// install-state.json only after the new portal is healthy and verified: until
+// then install-state still names the previous release (BI-903D22D0). A swap recreates
 // the portal and kills the orchestrator, so the upgrade worker could never
 // record anything after the swap. reconcileSelfUpgradeRunsOnBoot closes that
 // loop at boot for the same reason. One path then covers every case:
@@ -302,6 +306,44 @@ export async function reconcileReleaseDoctoolsImage(deps: DoctoolsReconcileDeps)
   }
 }
 
+/**
+ * The release install context, named by the release this container RUNS.
+ *
+ * install-state.json is the restart identity, committed by promote.sh only
+ * after the recreated portal passes health and identity checks, so during the
+ * new portal's boot it still records the previous release. The container's
+ * DPF_IMAGE_TAG is the tag compose started it from; an immutable one wins.
+ */
+export async function loadRunningReleaseContext(
+  input: Parameters<typeof loadReleaseInstallContext>[0],
+): Promise<ReleaseInstallContext | null> {
+  const context = await loadReleaseInstallContext(input);
+  if (!context) return null;
+  const running = (input.env ?? process.env).DPF_IMAGE_TAG?.trim();
+  if (!running || !RELEASE_IMAGE_TAG.test(running) || running === context.imageTag) return context;
+  return Object.freeze({ ...context, imageTag: running });
+}
+
+/** One line per reconcile outcome, for the boot log. */
+export function describeDoctoolsReconcileOutcome(result: DoctoolsReconcileOutcome): string {
+  switch (result.outcome) {
+    case "not-release-install":
+      return "not a release install and no release lineage; the pin is left alone";
+    case "resolved":
+      return `pin resolved to ${result.image}${result.pulled ? " (pulled)" : ""}`;
+    case "unchanged":
+      return `pin unchanged at ${result.image}${result.pulled ? " (pulled)" : ""}`;
+    case "built-locally":
+      return `pin set to the locally built ${result.image}`;
+    case "not-published":
+      return `the release published no ${DOCTOOLS_IMAGE_NAME}; office conversion stays off`;
+    case "unavailable":
+      return `could not resolve ${DOCTOOLS_IMAGE_NAME}; the next tick retries: ${result.detail}`;
+    case "error":
+      return `reconcile failed (non-fatal): ${result.detail}`;
+  }
+}
+
 /** The release-resolved pin, or undefined. Read by resolveDoctoolsImage(). */
 export async function readReleaseDoctoolsImage(): Promise<string | undefined> {
   return (await readStoredFromDb())?.image;
@@ -334,7 +376,7 @@ function productionRunDocker(args: string[], options?: { timeoutMs?: number }): 
 function productionDeps(): DoctoolsReconcileDeps {
   return {
     // The same host-source resolution the self-upgrade worker uses.
-    loadContext: async () => loadReleaseInstallContext({ hostSourcePath: await hostSourcePath() }),
+    loadContext: async () => loadRunningReleaseContext({ hostSourcePath: await hostSourcePath() }),
     loadSourceLineage: async () => {
       const { readPlatformVersionTag } = await import("@/lib/platform/image-version");
       return loadSourceLineageContext({ hostSourcePath: await hostSourcePath(), readPlatformVersion: () => readPlatformVersionTag() });
@@ -378,9 +420,37 @@ export function runDoctoolsReleaseImageReconcile(): Promise<DoctoolsReconcileOut
   return inFlight;
 }
 
-/** Boot reconcile, plus a periodic net. Called once from instrumentation.ts. */
-export function startDoctoolsReleaseImageReconciler(): void {
-  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return;
-  void runDoctoolsReleaseImageReconcile();
-  setInterval(() => void runDoctoolsReleaseImageReconcile(), DOCTOOLS_RECONCILE_INTERVAL_MS).unref?.();
+export type DoctoolsReconcileTrigger = "boot" | "timer";
+
+export type DoctoolsReconcilerOptions = {
+  /** Told of every settled reconcile, e.g. to sweep renditions after a pin change. */
+  onOutcome?: (outcome: DoctoolsReconcileOutcome, trigger: DoctoolsReconcileTrigger) => void;
+  run?: () => Promise<DoctoolsReconcileOutcome>;
+  logger?: Pick<Console, "log" | "warn">;
+  setInterval?: (fn: () => void, ms: number) => { unref?: () => void };
+  env?: Record<string, string | undefined>;
+};
+
+/**
+ * Boot reconcile, plus a periodic net. Called once from instrumentation.ts.
+ * The boot outcome is always logged, so a boot that changed nothing is still
+ * visible (BI-903D22D0). Resolves once the boot reconcile has settled.
+ */
+export async function startDoctoolsReleaseImageReconciler(options: DoctoolsReconcilerOptions = {}): Promise<void> {
+  const env = options.env ?? process.env;
+  if (env.NEXT_RUNTIME && env.NEXT_RUNTIME !== "nodejs") return;
+  const run = options.run ?? runDoctoolsReleaseImageReconcile;
+  const logger = options.logger ?? console;
+  const settle = async (trigger: DoctoolsReconcileTrigger) => {
+    const outcome = await run();
+    if (trigger === "boot") logger.log(`[doctools-image] boot: ${describeDoctoolsReconcileOutcome(outcome)}`);
+    try {
+      options.onOutcome?.(outcome, trigger);
+    } catch (error) {
+      logger.warn(`[doctools-image] outcome hook failed (non-fatal): ${getErrorMessage(error)}`);
+    }
+  };
+  const every = options.setInterval ?? ((fn: () => void, ms: number) => setInterval(fn, ms));
+  every(() => void settle("timer"), DOCTOOLS_RECONCILE_INTERVAL_MS).unref?.();
+  await settle("boot");
 }

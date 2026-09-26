@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_LOCALE } from "@dpf/i18n/runtime";
 import { createContext, useContext, type ReactNode } from "react";
 
 // Carries the request's language and the MF2 sources for the namespaces a
@@ -12,7 +13,7 @@ export interface MessagesContextValue {
   messages: Record<string, Record<string, string>>;
 }
 
-const MessagesContext = createContext<MessagesContextValue>({ locale: "en-US", messages: {} });
+const MessagesContext = createContext<MessagesContextValue>({ locale: DEFAULT_LOCALE, messages: {} });
 
 export function MessagesProvider({ locale, messages, children }: MessagesContextValue & { children: ReactNode }) {
   return <MessagesContext.Provider value={{ locale, messages }}>{children}</MessagesContext.Provider>;

@@ -141,7 +141,6 @@ export const ALLOWLIST = new Map([
   ["apps/web/components/finance/ReconciliationFeed.tsx#formatDate", EN_GB_DATE],
   ["apps/web/components/finance/TaxLiabilityLedgerCard.tsx#formatDate", EN_GB_DATE],
   ["apps/web/components/finance/TaxObligationPeriodsTable.tsx#formatDate", EN_GB_DATE],
-  ["apps/web/lib/invoice-pdf.tsx#fmtDate", "en-GB 2-digit-day date printed on the invoice PDF"],
   ["apps/web/components/admin/RegionPanel.tsx#formatDate", "hard-coded en-US date"],
   ["apps/web/lib/coworker-self-assessment/review-service.ts#formatDate", "hard-coded en-US date in server-written review text"],
   ["apps/web/components/finance/TaxExecutionPanel.tsx#formatDateTime", 'hard-coded en-US medium/short styles and "Not scheduled" when empty'],

@@ -7,6 +7,7 @@ vi.mock("@/lib/actions/portfolio-budget", () => ({
 }));
 
 import type { PortfolioTieOut, TieOutRow } from "@/lib/portfolio/tie-out";
+import { withMessages } from "@/test-support/with-messages";
 
 import { PortfolioTieOutPanel } from "./PortfolioTieOutPanel";
 
@@ -35,11 +36,13 @@ const tieOut: PortfolioTieOut = {
 
 describe("PortfolioTieOutPanel (BI-CBF5D708)", () => {
   const html = renderToStaticMarkup(
-    <PortfolioTieOutPanel
-      tieOut={tieOut}
-      proposedPoints={{ "p-found": 974 }}
-      unconfirmedEpics={[{ epicId: "EP-1", title: "Budgets", portfolioId: "p-found", portfolioName: "Foundational", confidence: "high" }]}
-    />,
+    withMessages(
+      <PortfolioTieOutPanel
+        tieOut={tieOut}
+        proposedPoints={{ "p-found": 974 }}
+        unconfirmedEpics={[{ epicId: "EP-1", title: "Budgets", portfolioId: "p-found", portfolioName: "Foundational", confidence: "high" }]}
+      />,
+    ),
   );
 
   it("leads with one headline and defers the table behind a closed disclosure (UX route budget)", () => {

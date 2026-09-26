@@ -8,6 +8,7 @@ import { loadAreaTeam } from "@/lib/areas/area-team.server";
 import { auth } from "@/lib/auth";
 import { getAreaSetupEntries } from "@/lib/navigation/portal-navigation-model";
 import { AREA_SECTIONS, areaHref } from "@/lib/navigation/portal-shell-sections";
+import { getT } from "@/lib/i18n/t.server";
 import { can, getGrantedCapabilities } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +43,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
   const { view: requested } = await searchParams;
   const view: AreaView = requested === "team" || requested === "setup" ? requested : "work";
 
+  const t = await getT("shell");
   const granted = new Set<string>(getGrantedCapabilities(user));
   const setupEntries = getAreaSetupEntries(section.key).filter(
     (entry) => entry.capabilityKey === null || granted.has(entry.capabilityKey),
@@ -78,7 +80,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
           work
         ) : (
           <Surface data-dpf-lead className="my-6" rounded="xl">
-            <p className="text-sm text-[var(--dpf-text)]">Your role does not include viewing Workrooms.</p>
+            <p className="text-sm text-[var(--dpf-text)]">{t("area.workDenied")}</p>
           </Surface>
         ))}
 
@@ -88,7 +90,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
             <p className="text-sm font-medium text-[var(--dpf-text)]">{VIEW_LEAD.team}</p>
           </Surface>
           {team.length === 0 ? (
-            <p className="text-sm text-[var(--dpf-muted)]">No one is assigned to this area yet.</p>
+            <p className="text-sm text-[var(--dpf-muted)]">{t("area.teamEmpty")}</p>
           ) : (
             <ul className="grid gap-3" aria-label={`${section.label} team`}>
               {team.map((member) => (
@@ -101,7 +103,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
                     ) : (
                       member.name
                     )}
-                    <span className="ml-2 text-xs font-normal text-[var(--dpf-muted)]">
+                    <span className="ms-2 text-xs font-normal text-[var(--dpf-muted)]">
                       {member.kind === "coworker" ? "AI coworker" : member.kind === "person" ? "Person" : "Role"}
                     </span>
                   </p>
@@ -123,7 +125,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
             <p className="text-sm font-medium text-[var(--dpf-text)]">{VIEW_LEAD.setup}</p>
           </Surface>
           {setupEntries.length === 0 ? (
-            <p className="text-sm text-[var(--dpf-muted)]">Your role has no settings to change in this area.</p>
+            <p className="text-sm text-[var(--dpf-muted)]">{t("area.setupEmpty")}</p>
           ) : (
             <ul className="grid gap-2 sm:grid-cols-2" aria-label={`${section.label} setup`}>
               {setupEntries.map((entry) => (

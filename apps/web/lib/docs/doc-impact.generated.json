@@ -729,6 +729,9 @@
     "apps/web/lib/docs/doc-link-resolver.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "apps/web/lib/documents/document-engine-boot.test.ts": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "apps/web/lib/documents/document-previews.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
@@ -1149,6 +1152,9 @@
     ],
     "apps/web/lib/security/safe-log.ts": [
       "docs/security/codeql-advanced-setup.md"
+    ],
+    "apps/web/lib/self-upgrade/doctools-release-image.boot.test.ts": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "apps/web/lib/self-upgrade/doctools-release-image.test.ts": [
       "docs/install/platform-support-watchlist.md"
@@ -1957,6 +1963,9 @@
     ],
     "scripts/check-no-unattributable-deferral.mjs": [
       "docs/architecture/backlog-and-planning-runbook.md"
+    ],
+    "scripts/check-no-unlocalized-ui.mjs": [
+      "docs/architecture/localization-runbook.md"
     ],
     "scripts/check-no-unreachable-room-links.mjs": [
       "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md",
@@ -2956,7 +2965,8 @@
       "apps/web/lib/org-locale/locale-context.ts",
       "apps/web/lib/org-locale/org-locale.ts",
       "packages/i18n/src/catalog.ts",
-      "packages/i18n/src/locales.ts"
+      "packages/i18n/src/locales.ts",
+      "scripts/check-no-unlocalized-ui.mjs"
     ],
     "docs/architecture/mcp-tool-authorization-runbook.md": [
       "apps/web/app/api/mcp/v1/route.ts",
@@ -3219,8 +3229,10 @@
     "docs/install/platform-support-watchlist.md": [
       "apps/web/components/monitoring/health-summary.ts",
       "apps/web/components/monitoring/prometheus-config.test.ts",
+      "apps/web/lib/documents/document-engine-boot.test.ts",
       "apps/web/lib/govern/auth-redirect.ts",
       "apps/web/lib/nonprod/gate-client-revision.ts",
+      "apps/web/lib/self-upgrade/doctools-release-image.boot.test.ts",
       "apps/web/lib/self-upgrade/doctools-release-image.test.ts",
       "apps/web/lib/self-upgrade/doctools-source-lineage.test.ts",
       "apps/web/lib/self-upgrade/preflight.test.ts",

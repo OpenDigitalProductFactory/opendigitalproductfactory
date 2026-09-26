@@ -2,6 +2,7 @@
   "version": "1",
   "decidedOption": "ops-demand-panel",
   "decisionInteractionId": "DI-5DCFAEA03A6D",
+  "note": "Catalog move only: the same placement decision covers the panel. Counted English strings moved into the portfolio message catalog; no control was added or relocated.",
   "scope": {
     "files": [
       "apps/web/components/ops/PortfolioTieOutPanel.tsx"
