@@ -96,6 +96,31 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+type GitRunner = (args: string[]) => Promise<{ code: number; stdout: string; stderr: string }>;
+
+/**
+ * The release a source upgrade's TARGET commit descends from, for the
+ * pre-swap pull (BI-698B7F9A). The running build's lineage is the wrong one
+ * here: the new portal will resolve the target's.
+ */
+export async function describeSourceLineage(input: {
+  sourcePath: string;
+  targetSha: string;
+  ghcrOwner: string | undefined;
+  runGit: GitRunner;
+}): Promise<{ imageTag: string; ghcrOwner: string } | null> {
+  const ghcrOwner = input.ghcrOwner?.trim();
+  if (!ghcrOwner) return null;
+  try {
+    const result = await input.runGit(["-C", input.sourcePath, "describe", "--tags", "--always", input.targetSha]);
+    if (result.code !== 0) return null;
+    const imageTag = releaseTagFromPlatformVersion(result.stdout);
+    return imageTag ? { imageTag, ghcrOwner } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The last line of `docker build -q`: the built image id. */
 export function parseBuiltImageId(stdout: string): string | null {
   const last = stdout.trim().split(/\r?\n/).at(-1)?.trim() ?? "";

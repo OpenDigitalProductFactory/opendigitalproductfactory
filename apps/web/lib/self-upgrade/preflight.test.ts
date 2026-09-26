@@ -89,6 +89,37 @@ describe("candidate signed install-state handoff", () => {
       expect(result.ok).toBe(true);
       expect(prePullDoctools).not.toHaveBeenCalled();
     });
+
+    it("on a customizable install's source upgrade, pre-pulls the release the TARGET descends from, first (BI-4E18BC28)", async () => {
+      const order: string[] = [];
+      const runtime = { ...readyRuntime(), buildCandidatePromoterImage: vi.fn(async () => { order.push("promoter"); return "candidate"; }) };
+      const sourceLineage = vi.fn(async () => ({ imageTag: "v2026.09.25-shape-raise.1", ghcrOwner: "owner" }));
+      const prePullDoctools = vi.fn(async () => { order.push("doctools"); return { outcome: "pulled" as const, image: "x" }; });
+      const result = await runCandidatePreflight(params({ candidatePromoterReference: undefined, release: undefined, runtime: async () => runtime as never, sourceLineage, prePullDoctools }) as never);
+      expect(result.ok).toBe(true);
+      expect(prePullDoctools).toHaveBeenCalledWith({ tag: "v2026.09.25-shape-raise.1", ghcrOwner: "owner" });
+      expect(order).toEqual(["doctools", "promoter"]);
+    });
+
+    it("never fails a source upgrade over the converter: the install can still build it locally after the swap", async () => {
+      const runtime = { ...readyRuntime(), buildCandidatePromoterImage: vi.fn(async () => "candidate") };
+      const failRun = vi.fn();
+      const result = await runCandidatePreflight(params({
+        candidatePromoterReference: undefined, release: undefined, runtime: async () => runtime as never, failRun,
+        sourceLineage: vi.fn(async () => ({ imageTag: "v2026.09.25-shape-raise.1", ghcrOwner: "owner" })),
+        prePullDoctools: vi.fn(async () => ({ outcome: "failed" as const, reason: "offline" })),
+      }) as never);
+      expect(result.ok).toBe(true);
+      expect(failRun).not.toHaveBeenCalled();
+    });
+
+    it("a source upgrade whose target has no release lineage pulls nothing", async () => {
+      const runtime = { ...readyRuntime(), buildCandidatePromoterImage: vi.fn(async () => "candidate") };
+      const prePullDoctools = vi.fn();
+      const result = await runCandidatePreflight(params({ candidatePromoterReference: undefined, release: undefined, runtime: async () => runtime as never, sourceLineage: vi.fn(async () => null), prePullDoctools }) as never);
+      expect(result.ok).toBe(true);
+      expect(prePullDoctools).not.toHaveBeenCalled();
+    });
   });
 
   it("returns a digest-bound signed envelope from candidate readiness", async () => {

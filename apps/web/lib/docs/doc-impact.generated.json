@@ -1130,6 +1130,9 @@
     "apps/web/lib/self-upgrade/doctools-release-image.test.ts": [
       "docs/install/platform-support-watchlist.md"
     ],
+    "apps/web/lib/self-upgrade/doctools-source-lineage.test.ts": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "apps/web/lib/self-upgrade/host-memory-preflight.ts": [
       "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
@@ -1956,6 +1959,9 @@
     "scripts/detect-hardware-host.ts": [
       "docs/install/linux.md",
       "docs/install/macos.md"
+    ],
+    "scripts/doctools-image-contract.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "scripts/dpf-bootstrap-agent-toolchain.ps1": [
       "docs/architecture/branch-and-worktree-runbook.md",
@@ -3127,12 +3133,14 @@
       "apps/web/lib/govern/auth-redirect.ts",
       "apps/web/lib/nonprod/gate-client-revision.ts",
       "apps/web/lib/self-upgrade/doctools-release-image.test.ts",
+      "apps/web/lib/self-upgrade/doctools-source-lineage.test.ts",
       "apps/web/lib/self-upgrade/preflight.test.ts",
       "docker-compose.edge-actions.yml",
       "docker-compose.linux.yml",
       "docker-entrypoint.sh",
       "packages/db/src/discovery-collectors/network.ts",
       "scripts/check-no-url-pathname-fs.mjs",
+      "scripts/doctools-image-contract.test.mjs",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/doctools-prepull.test.mjs",
       "scripts/installer/lib/platform.sh",

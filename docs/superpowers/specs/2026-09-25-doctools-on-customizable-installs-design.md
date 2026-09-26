@@ -80,6 +80,13 @@ Deliverables, in order:
    asks for is carried by the portal's own state, `self_upgrade.doctoolsImage`,
    and not by a compose variable.
 
+5. **D5 pre-swap pull.** BI-698B7F9A pulls the target release's image in the
+   candidate preflight, and only on a release upgrade. A customizable install's
+   source upgrade now does the same for the release its TARGET commit descends
+   from (`describeSourceLineage`, `git describe --tags --always <target>`). A
+   pull that does not land only warns and never fails the run, because the
+   install can build the image after the swap (D3).
+
 A source upgrade re-stamps `DPF_PLATFORM_VERSION` (`promote.sh`), and the
 reconciler runs at boot and every 20 minutes, so the new lineage re-resolves
 the pin. The installers are unchanged: the pin belongs to the running portal,
@@ -106,6 +113,7 @@ not to install time.
 | D1 lineage | OBJ-AVAILABLE | `releaseTagFromPlatformVersion` | source-lineage-resolution | AC-1 |
 | D2 reconciler | OBJ-AVAILABLE, OBJ-DURABLE | `reconcileReleaseDoctoolsImage` | doctools-pin-reconcile | AC-1, AC-2 |
 | D3 offline fallback | OBJ-AVAILABLE | `buildLocalDoctoolsImage` | doctools-local-build | AC-1 |
+| D5 pre-swap pull | OBJ-DURABLE | `describeSourceLineage` | doctools-pin-reconcile | AC-2 |
 | D4 docs | OBJ-DURABLE, OBJ-DOCUMENTED | `self_upgrade.doctoolsImage` | doctools-pin-reconcile | AC-2, AC-3 |
 
 ## Verification

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   LOCAL_DOCTOOLS_TAG,
   buildLocalDoctoolsImage,
+  describeSourceLineage,
   loadSourceLineageContext,
   parseBuiltImageId,
   releaseTagFromPlatformVersion,
@@ -168,5 +169,43 @@ describe("buildLocalDoctoolsImage", () => {
     });
     expect(silent.ok).toBe(false);
     expect(existsSync(scratchRoot) && (await readdir(scratchRoot)).length).toBe(0);
+  });
+});
+
+describe("describeSourceLineage: the release a source upgrade's TARGET descends from", () => {
+  it("describes the target commit in the upgrade source, not the running build", async () => {
+    const calls: string[][] = [];
+    const lineage = await describeSourceLineage({
+      sourcePath: "/host-dpf-upgrade",
+      targetSha: "b".repeat(40),
+      ghcrOwner: "opendigitalproductfactory",
+      runGit: async (args) => {
+        calls.push(args);
+        return { code: 0, stdout: "v2026.09.26-next.1-4-g0123abcd\n", stderr: "" };
+      },
+    });
+    expect(lineage).toEqual({ imageTag: "v2026.09.26-next.1", ghcrOwner: "opendigitalproductfactory" });
+    expect(calls).toEqual([["-C", "/host-dpf-upgrade", "describe", "--tags", "--always", "b".repeat(40)]]);
+  });
+
+  it("is null without an owner, for a target with no tag, or when git fails", async () => {
+    const ok = async () => ({ code: 0, stdout: "v2026.09.26\n", stderr: "" });
+    expect(await describeSourceLineage({ sourcePath: "/s", targetSha: "t", ghcrOwner: undefined, runGit: ok })).toBeNull();
+    expect(
+      await describeSourceLineage({ sourcePath: "/s", targetSha: "t", ghcrOwner: "o", runGit: async () => ({ code: 0, stdout: "0123abcd\n", stderr: "" }) }),
+    ).toBeNull();
+    expect(
+      await describeSourceLineage({ sourcePath: "/s", targetSha: "t", ghcrOwner: "o", runGit: async () => ({ code: 128, stdout: "", stderr: "fatal" }) }),
+    ).toBeNull();
+    expect(
+      await describeSourceLineage({
+        sourcePath: "/s",
+        targetSha: "t",
+        ghcrOwner: "o",
+        runGit: async () => {
+          throw new Error("spawn git ENOENT");
+        },
+      }),
+    ).toBeNull();
   });
 });
