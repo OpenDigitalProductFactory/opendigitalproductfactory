@@ -2,6 +2,6 @@
   "version": "1",
   "accountableOwner": "data-steward",
   "changes": [
-    { "kind": "projection", "store": "qdrant:new-index" }
+    { "kind": "projection", "store": "pgvector:new-index" }
   ]
 }

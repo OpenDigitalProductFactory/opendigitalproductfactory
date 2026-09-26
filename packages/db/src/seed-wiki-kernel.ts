@@ -2,7 +2,7 @@
 // EP-WIKI-001 Phase 5 machinery: reads docs/founder-kernel/, parses YAML
 // frontmatter on each markdown, upserts kernel rows (RawSource + WikiPage),
 // extracts [[wikilinks]], attaches source citations, optionally seeds
-// Qdrant directly from a precomputed embeddings.jsonl sidecar.
+// the pgvector store directly from a precomputed embeddings.jsonl sidecar.
 //
 // Idempotent: re-running advances the revision chain only when content
 // has changed, and never duplicates links or source citations.
@@ -15,7 +15,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import type { PrismaClient } from "../generated/client/client";
-import { QDRANT_COLLECTIONS, upsertVectors, type VectorPoint } from "./qdrant";
+import { VECTOR_COLLECTIONS, upsertVectors, type VectorPoint } from "./pgvector-store";
 import {
   PRINCIPLE_CONSUMER_ARCHETYPES,
   PRINCIPLE_DIMENSIONS,
@@ -438,7 +438,7 @@ async function seedWikiPages(
   count: number;
   slugToId: Map<string, string>;
   orphanLinks: Array<{ from: string; to: string }>;
-  /** Per-page metadata needed to build Qdrant payloads in `seedWikiQdrant`. */
+  /** Per-page metadata needed to build vector payloads in `seedWikiVectors`. */
   pages: SeedablePage[];
 }> {
   const wikiDir = join(KERNEL_DIR, "wiki");
@@ -477,7 +477,7 @@ async function seedWikiPages(
       body,
       pageKind: frontmatter.pageKind,
       status,
-      // Thread principle metadata into the Qdrant payload (BI-30AA6B76).
+      // Thread principle metadata into the vector payload (BI-30AA6B76).
       principleTier: principlePayload.principleTier ?? null,
       principleAppliesTo: principlePayload.principleAppliesTo,
       principleRingScope: principlePayload.principleRingScope,
@@ -532,11 +532,11 @@ async function seedWikiPages(
   return { count: files.length, slugToId, orphanLinks, pages };
 }
 
-// ─── Seed: Qdrant points from the precomputed embeddings sidecar ────────────
+// ─── Seed: vector points from the precomputed embeddings sidecar ────────────
 
 /**
  * Read `docs/founder-kernel/embeddings.jsonl` (if present) and upsert
- * the corresponding points into the `wiki-pages` Qdrant collection.
+ * the corresponding points into the `wiki-pages` vector collection.
  *
  * Per EP-WIKI-001 §5: installs whose configured embedding model matches
  * the manifest skip live embedding entirely — the sidecar is the
@@ -546,10 +546,10 @@ async function seedWikiPages(
  * Payload shape mirrors `apps/web/lib/wiki/embeddings.ts:storeWikiPage`
  * so `searchWikiPages` finds the seeded points without surprises.
  *
- * Silent-degradation: if Qdrant is unreachable or the upsert throws,
+ * Silent-degradation: if the vector store is unreachable or the upsert throws,
  * the seed completes successfully (Postgres rows are still there) but
- * `qdrantPointsSeeded` is `0` and a warning is logged. Wiki retrieval
- * will degrade gracefully until Qdrant is back.
+ * `vectorPointsSeeded` is `0` and a warning is logged. Wiki retrieval
+ * will degrade gracefully until the vector store is back.
  */
 export type SeedablePage = {
   id: string;
@@ -559,7 +559,7 @@ export type SeedablePage = {
   pageKind: string;
   status: string;
   // Principle payload fields, threaded from `extractPrinciplePayload` so
-  // `buildKernelQdrantPoints` writes the SAME Qdrant payload as the runtime
+  // `buildKernelVectorPoints` writes the SAME vector payload as the runtime
   // `storeWikiPage` (apps/web/lib/wiki/embeddings.ts). Without these,
   // principle-filtered retrieval (principle_decide, wiki_query
   // tier/appliesTo/ringScope) cannot find sidecar-seeded principle pages —
@@ -572,15 +572,15 @@ export type SeedablePage = {
 };
 
 /**
- * Build Qdrant `VectorPoint` objects from kernel pages + sidecar records.
+ * Build `VectorPoint` objects from kernel pages + sidecar records.
  * Pure — no I/O. Exported for testing; production code goes through
- * `seedWikiQdrant`.
+ * `seedWikiVectors`.
  *
  * Payload shape mirrors `apps/web/lib/wiki/embeddings.ts:storeWikiPage`
  * so `searchWikiPages` finds the seeded points without surprises. Slugs
  * in the sidecar with no matching page are skipped (warning logged).
  */
-export function buildKernelQdrantPoints(
+export function buildKernelVectorPoints(
   pages: SeedablePage[],
   records: EmbeddingRecord[],
   kernelVersion: string,
@@ -628,19 +628,19 @@ export function buildKernelQdrantPoints(
 
 /**
  * Read `docs/founder-kernel/embeddings.jsonl` (if present) and upsert
- * the corresponding points into the `wiki-pages` Qdrant collection.
+ * the corresponding points into the `wiki-pages` vector collection.
  *
  * Per EP-WIKI-001 §5: installs whose configured embedding model matches
  * the manifest skip live embedding entirely — the sidecar is the
  * canonical path. Live embedding for the kernel happens via Phase 2b
  * ingest only when the sidecar is missing or stale (handled elsewhere).
  *
- * Silent-degradation: if Qdrant is unreachable or the upsert throws,
+ * Silent-degradation: if the vector store is unreachable or the upsert throws,
  * the seed completes successfully (Postgres rows are still there) but
- * `qdrantPointsSeeded` is `0` and a warning is logged. Wiki retrieval
- * will degrade gracefully until Qdrant is back.
+ * `vectorPointsSeeded` is `0` and a warning is logged. Wiki retrieval
+ * will degrade gracefully until the vector store is back.
  */
-async function seedWikiQdrant(
+async function seedWikiVectors(
   pages: SeedablePage[],
   kernelVersion: string,
 ): Promise<{ pointsSeeded: number; sidecarPresent: boolean }> {
@@ -649,16 +649,16 @@ async function seedWikiQdrant(
     return { pointsSeeded: 0, sidecarPresent: false };
   }
 
-  const vectorPoints = buildKernelQdrantPoints(pages, records, kernelVersion);
+  const vectorPoints = buildKernelVectorPoints(pages, records, kernelVersion);
   if (vectorPoints.length === 0) {
     return { pointsSeeded: 0, sidecarPresent: true };
   }
 
   try {
-    await upsertVectors(QDRANT_COLLECTIONS.WIKI_PAGES, vectorPoints);
+    await upsertVectors(VECTOR_COLLECTIONS.WIKI_PAGES, vectorPoints);
     return { pointsSeeded: vectorPoints.length, sidecarPresent: true };
   } catch (err) {
-    console.warn("[seed-wiki-kernel] failed to upsert wiki points into Qdrant; pages remain in Postgres:", err);
+    console.warn("[seed-wiki-kernel] failed to upsert wiki points into the vector store; pages remain in Postgres:", err);
     return { pointsSeeded: 0, sidecarPresent: true };
   }
 }
@@ -673,12 +673,12 @@ export type SeedWikiKernelResult = {
   /** When true, kernel content directories are missing and nothing was seeded. */
   emptyKernel: boolean;
   /**
-   * Number of points upserted into the `wiki-pages` Qdrant collection
+   * Number of points upserted into the `wiki-pages` vector collection
    * from the precomputed `docs/founder-kernel/embeddings.jsonl` sidecar.
    * Zero when the sidecar is missing (seed completes; live embedding
-   * happens via Phase 2b ingest) or when Qdrant is unreachable.
+   * happens via Phase 2b ingest) or when the vector store is unreachable.
    */
-  qdrantPointsSeeded: number;
+  vectorPointsSeeded: number;
   /** Whether the embeddings.jsonl sidecar exists. */
   embeddingsSidecarPresent: boolean;
 };
@@ -714,7 +714,7 @@ export async function seedWikiKernel(prisma: PrismaClient): Promise<SeedWikiKern
       pageCount: 0,
       orphanLinks: [],
       emptyKernel: true,
-      qdrantPointsSeeded: 0,
+      vectorPointsSeeded: 0,
       embeddingsSidecarPresent: false,
     };
   }
@@ -730,7 +730,7 @@ export async function seedWikiKernel(prisma: PrismaClient): Promise<SeedWikiKern
       pageCount: 0,
       orphanLinks: [],
       emptyKernel: true,
-      qdrantPointsSeeded: 0,
+      vectorPointsSeeded: 0,
       embeddingsSidecarPresent: false,
     };
   }
@@ -741,14 +741,14 @@ export async function seedWikiKernel(prisma: PrismaClient): Promise<SeedWikiKern
   // (`principles/x` -> `professions/<p>/x`). upsertWikiPage keys on
   // (organizationId, slug), so without this the seed would find no row for the
   // new slug, create a fresh one, and strand the original — losing the page's
-  // version history and decision references, and leaving a stale Qdrant point.
+  // version history and decision references, and leaving a stale vector point.
   // Renaming first means the existing row is simply found under its new key and
   // updated in place, id intact.
   await applyWikiSlugMigrations(prisma as never);
 
   const sources = await seedRawSources(prisma, manifest.kernelVersion);
   const pages = await seedWikiPages(prisma, manifest.kernelVersion, sources.slugToId);
-  const qdrant = await seedWikiQdrant(pages.pages, manifest.kernelVersion);
+  const vectors = await seedWikiVectors(pages.pages, manifest.kernelVersion);
 
   return {
     kernelVersion: manifest.kernelVersion,
@@ -756,8 +756,8 @@ export async function seedWikiKernel(prisma: PrismaClient): Promise<SeedWikiKern
     pageCount: pages.count,
     orphanLinks: pages.orphanLinks,
     emptyKernel: false,
-    qdrantPointsSeeded: qdrant.pointsSeeded,
-    embeddingsSidecarPresent: qdrant.sidecarPresent,
+    vectorPointsSeeded: vectors.pointsSeeded,
+    embeddingsSidecarPresent: vectors.sidecarPresent,
   };
 }
 

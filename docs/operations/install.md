@@ -125,8 +125,8 @@ PostgreSQL remains the scheduled core backup and trial-restore target. Enabled
 capability services marked `included` are covered by their canonical core data
 owner; `separate-required` targets need a dedicated runner and report Optional
 degraded when none is available. Disabled targets are Optional inactive, not a
-failed schedule. External providers are never local backup targets. Retired
-Neo4j and Qdrant backup schedules remain disabled.
+failed schedule. External providers are never local backup targets. The
+retired BET-5 graph and vector backup schedules remain disabled.
 
 The health pages distinguish Required, Optional inactive, Optional degraded,
 and External provider-managed states. Only missing required services and

@@ -143,8 +143,8 @@ export default async function ProviderDetailPage({ params }: Props) {
     ? await listActiveProviderClearanceOverrides(providerId).catch(() => [])
     : [];
 
-  // Fetch hardware info for local providers via Neo4j InfraCI.
-  // Wrapped in try/catch — Neo4j is best-effort; a graph error must never crash the page.
+  // Fetch hardware info for local providers via graph-mirror InfraCI.
+  // Wrapped in try/catch — the graph mirror is best-effort; a graph error must never crash the page.
   let hardwareInfo: { gpu: string; vramGb: number | null; modelCount: number } | null = null;
   if (providerId === "local" || providerId === "ollama") {
     try {
@@ -158,7 +158,7 @@ export default async function ProviderDetailPage({ params }: Props) {
         };
       }
     } catch {
-      // Neo4j unavailable or returns unexpected data — hardware info degrades gracefully to null
+      // Graph mirror unavailable or returns unexpected data — hardware info degrades gracefully to null
     }
   }
 

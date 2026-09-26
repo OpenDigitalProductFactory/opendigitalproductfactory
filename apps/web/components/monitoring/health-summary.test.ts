@@ -207,7 +207,7 @@ describe("deriveMonitoringSummary", () => {
     const summary = deriveMonitoringSummary({
       checked: true,
       online: true,
-      upTargets: [up("prometheus"), up("portal"), up("postgres"), up("qdrant"), up("sandbox")],
+      upTargets: [up("prometheus"), up("portal"), up("postgres"), up("redis"), up("sandbox")],
       alerts: [],
     });
 
@@ -437,7 +437,7 @@ describe("isHostTelemetryConfigured", () => {
 
   it("is false on macOS Docker Desktop (no host telemetry exporter ships)", () => {
     expect(
-      isHostTelemetryConfigured([up("portal"), up("postgres"), up("qdrant"), up("sandbox")]),
+      isHostTelemetryConfigured([up("portal"), up("postgres"), up("redis"), up("sandbox")]),
     ).toBe(false);
   });
 

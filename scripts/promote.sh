@@ -869,7 +869,7 @@ fi
 
 # --- Step 4: docker-up ---
 # Recreate ONLY the portal from the freshly built image. --no-deps leaves
-# postgres/neo4j/etc. running. DEPLOYED_SHA resolves to DPF_VERSION (the
+# postgres and the other services running. DEPLOYED_SHA resolves to DPF_VERSION (the
 # derived built identity) via compose, so the new portal reports exactly the
 # SHA of the code it is running at /api/health/sha.
 emit_step docker-up

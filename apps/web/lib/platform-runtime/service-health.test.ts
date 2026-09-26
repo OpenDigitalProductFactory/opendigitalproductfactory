@@ -279,10 +279,10 @@ describe("projectCapabilityServiceHealth", () => {
         observedServices: {
           portal: { composePresent: true, healthy: true },
           "browser-use": { composePresent: true, healthy: true },
-          qdrant: { composePresent: true, healthy: true },
+          "mystery-store": { composePresent: true, healthy: true },
         },
       }),
-      error: "unknown_service_observation:qdrant",
+      error: "unknown_service_observation:mystery-store",
     },
     {
       name: "provider observation",

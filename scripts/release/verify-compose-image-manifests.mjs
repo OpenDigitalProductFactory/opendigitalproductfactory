@@ -68,7 +68,6 @@ function composeEnv() {
       "0000000000000000000000000000000000000000000000000000000000000000",
     ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ?? "ci-placeholder",
     POSTGRES_PASSWORD: process.env.POSTGRES_PASSWORD ?? "ci-placeholder",
-    NEO4J_AUTH: process.env.NEO4J_AUTH ?? "neo4j/ci-placeholder",
     DATABASE_URL:
       process.env.DATABASE_URL ??
       "postgresql://dpf:ci-placeholder@postgres:5432/dpf",

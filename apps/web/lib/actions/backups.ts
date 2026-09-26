@@ -78,7 +78,7 @@ export async function listBackupRunsAction(args?: {
   }));
 }
 
-// postgres-only after BET-5 retired the neo4j + qdrant backup triggers.
+// Postgres is the only backup target (BET-5).
 const TARGET_EVENT: Partial<Record<BackupTarget, string>> = {
   postgres: POSTGRES_BACKUP_EVENT,
 };
@@ -110,7 +110,7 @@ export async function triggerBackupNowAction(
  * BI-A8C149C1: admin "Verify last backup" button — fires the trial-restore
  * manual-trigger event so an operator can prove the most recent Postgres
  * backup is restorable without waiting for the nightly cron. Postgres-only
- * (BI-31C9FBDF); Neo4j + Qdrant were retired by BET-5, so Postgres is the only target.
+ * (BI-31C9FBDF); since BET-5 Postgres is the only target.
  */
 export async function triggerTrialRestoreNowAction(
   target: BackupTarget = "postgres",

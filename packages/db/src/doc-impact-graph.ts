@@ -30,7 +30,7 @@
 // Code Intelligence Graph (EP-CODE-GRAPH) indexes them as:
 //     CodeFile   → "source-code:apps/web/lib/docs-route-map.ts"
 //     CodeRoute  → "source-code:route:/platform/audit"
-// (see buildCodeFileKey in apps/web/lib/integrate/code-graph/neo4j-projection.ts —
+// (see buildCodeFileKey in apps/web/lib/build/code-graph/graph-projection.ts —
 // `${graphKey}:${path}`, graphKey "source-code"). Verified live: 4,215 CodeFile and
 // 459 CodeRoute nodes.
 //

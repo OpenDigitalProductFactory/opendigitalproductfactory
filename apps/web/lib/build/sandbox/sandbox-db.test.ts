@@ -79,11 +79,9 @@ describe("buildSandboxDbEnvVars (BI-28D31FB7 Postgres-only)", () => {
     );
   });
 
-  it("does not inject retired Neo4j/Qdrant env keys", () => {
+  it("injects only DATABASE_URL: Postgres is the only datastore", () => {
     const vars = buildSandboxDbEnvVars(buildId);
     expect(Object.keys(vars).sort()).toEqual(["DATABASE_URL"]);
-    expect(vars).not.toHaveProperty("NEO4J_URI");
-    expect(vars).not.toHaveProperty("QDRANT_INTERNAL_URL");
   });
 
   it("embeds buildId in DATABASE_URL", () => {

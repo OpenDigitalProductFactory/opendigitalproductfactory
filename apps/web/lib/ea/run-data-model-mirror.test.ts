@@ -72,16 +72,16 @@ function makeClient() {
 }
 
 describe("runDataModelMirror", () => {
-  it("composes parse → reconcile → steward from an injected schema (Neo4j off)", async () => {
+  it("composes parse → reconcile → steward from an injected schema (graph sync off)", async () => {
     const result = await runDataModelMirror({
       prisma: makeClient(),
       schemaSource: SCHEMA,
-      syncNeo4j: false,
+      syncGraph: false,
     });
 
     expect(result.mirror.status).toBe("applied");
     expect(result.mirror.summary.created).toBeGreaterThan(0);
     expect(result.steward).toBeDefined();
-    expect(result.neo4jSynced).toBeNull();
+    expect(result.graphSynced).toBeNull();
   });
 });

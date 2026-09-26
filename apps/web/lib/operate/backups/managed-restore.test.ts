@@ -1,7 +1,7 @@
 /**
  * Unit tests for the shared managed-restore engine (EP-8DC217EB BET-11,
- * BI-B72328D5), parametrized across every restore spec (postgres-only after
- * BET-5 retired neo4j + qdrant; the table stays so a future engine slots in). Mirrors the
+ * BI-B72328D5), parametrized across every restore spec (postgres-only since
+ * BET-5; the table stays so a future engine slots in). Mirrors the
  * mocking idiom of postgres-restore-runner.test.ts.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";

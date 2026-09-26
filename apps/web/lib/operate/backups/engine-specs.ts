@@ -1,7 +1,7 @@
 /**
  * Per-engine backup/restore specs (EP-8DC217EB BET-11, BI-B72328D5).
  *
- * Postgres-only after BET-5 (BI-A1E864A5) retired Neo4j and Qdrant onto
+ * Postgres-only since BET-5 (BI-A1E864A5) moved the graph and vectors into
  * Postgres (pg-graph.ts / pgvector-store.ts); the retired engines' specs and
  * runner wrappers were deleted in BI-B1977CEE. The data + tiny-hook shape is
  * kept so a future engine slots in as one more spec; the lifecycle itself

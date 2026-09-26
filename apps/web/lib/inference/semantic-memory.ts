@@ -1,14 +1,14 @@
 // apps/web/lib/semantic-memory.ts
-// Store and recall conversation memories using Qdrant vector database.
+// Store and recall conversation memories using pgvector.
 
 import { generateEmbedding, generateEmbeddingDetailed } from "./embedding";
 import {
   upsertVectors,
   searchSimilar,
   scrollPoints,
-  QDRANT_COLLECTIONS,
+  VECTOR_COLLECTIONS,
   type MatchClause,
-  type QdrantFilter,
+  type VectorFilter,
 } from "@dpf/db";
 import {
   semanticMemoryOps,
@@ -167,7 +167,7 @@ export async function storeConversationMemory(params: {
       return;
     }
 
-    await upsertVectors(QDRANT_COLLECTIONS.AGENT_MEMORY, [
+    await upsertVectors(VECTOR_COLLECTIONS.AGENT_MEMORY, [
       {
         id: params.messageId,
         vector: embedding,
@@ -270,23 +270,23 @@ export async function recallGovernedContext(params: {
     // Pass 1: Route-scoped search (if routeContext provided)
     if (params.routeContext) {
       const domain = extractRouteDomain(params.routeContext);
-      const scopedFilter: QdrantFilter = {
+      const scopedFilter: VectorFilter = {
         must: [...baseMust, { key: "routeDomain", match: { value: domain } }],
         ...(baseMustNot.length > 0 ? { must_not: baseMustNot } : {}),
       };
       results = await searchSimilar(
-        QDRANT_COLLECTIONS.AGENT_MEMORY, embedding, scopedFilter, limit, threshold,
+        VECTOR_COLLECTIONS.AGENT_MEMORY, embedding, scopedFilter, limit, threshold,
       );
     }
 
     // Pass 2: Global fallback if scoped returned fewer than 3 results
     if (results.length < 3) {
-      const globalFilter: QdrantFilter = {
+      const globalFilter: VectorFilter = {
         must: baseMust,
         ...(baseMustNot.length > 0 ? { must_not: baseMustNot } : {}),
       };
       const globalResults = await searchSimilar(
-        QDRANT_COLLECTIONS.AGENT_MEMORY, embedding, globalFilter, limit, threshold,
+        VECTOR_COLLECTIONS.AGENT_MEMORY, embedding, globalFilter, limit, threshold,
       );
       // Merge, deduplicating by id, scoped results take priority
       const seen = new Set(results.map((r) => String(r.id)));
@@ -392,7 +392,7 @@ export async function storePlatformKnowledge(params: {
   const embedding = await generateEmbedding(text);
   if (!embedding) return;
 
-  await upsertVectors(QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE, [
+  await upsertVectors(VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE, [
     {
       id: `${params.entityType}-${params.entityId}`,
       vector: embedding,
@@ -467,7 +467,7 @@ export async function searchPlatformKnowledge(params: {
     : undefined;
 
   const results = await searchSimilar(
-    QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE,
+    VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE,
     embedding,
     filter,
     params.limit ?? 5,
@@ -507,14 +507,14 @@ export async function storeCapabilityKnowledge(params: {
   const embedding = await generateEmbedding(text);
   if (!embedding) return;
 
-  await upsertVectors(QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE, [
+  await upsertVectors(VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE, [
     {
       id: `capability-${params.specRef}-${params.actionName}`,
       vector: embedding,
       // Shared fields (entityId, entityType, title, contentPreview) use camelCase
       // for backward compatibility with searchPlatformKnowledge() results.
-      // Capability-specific fields use snake_case to match Qdrant payload indexes
-      // created by ensurePayloadIndexes() — Qdrant requires exact field name matches.
+      // Capability-specific fields use snake_case to match vector payload indexes
+      // created by ensurePayloadIndexes() — the filter requires exact field name matches.
       payload: {
         entityId: params.actionName,
         entityType: "capability",
@@ -536,7 +536,7 @@ export async function storeCapabilityKnowledge(params: {
 // ─── Store Knowledge Article ──────────────────────────────────────────────
 
 /**
- * Index a knowledge article into Qdrant platform-knowledge collection.
+ * Index a knowledge article into the platform-knowledge vector collection.
  * Embeds title+body for semantic search. Stores structured payload fields
  * for filter-based discovery by product, portfolio, category, value stream.
  */
@@ -556,7 +556,7 @@ export async function storeKnowledgeArticle(params: {
   const embedding = await generateEmbedding(embeddingText);
   if (!embedding) return;
 
-  await upsertVectors(QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE, [
+  await upsertVectors(VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE, [
     {
       id: `knowledge-article-${params.articleId}`,
       vector: embedding,
@@ -582,7 +582,7 @@ export async function storeKnowledgeArticle(params: {
 /**
  * Semantic search for knowledge articles with optional payload filters.
  * Only returns published articles by default. Combines embedding similarity
- * with Qdrant payload filters for product, portfolio, category, value stream.
+ * with vector payload filters for product, portfolio, category, value stream.
  */
 export async function searchKnowledgeArticles(params: {
   query: string;
@@ -611,7 +611,7 @@ export async function searchKnowledgeArticles(params: {
   if (params.valueStream) must.push({ key: "value_streams", match: { value: params.valueStream } });
 
   const results = await searchSimilar(
-    QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE,
+    VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE,
     embedding,
     { must },
     params.limit ?? 5,
@@ -651,7 +651,7 @@ export async function lookupCapabilityByFilter(filter: {
   conditions.unshift({ key: "entityType", match: { value: "capability" } });
 
   const points = await scrollPoints(
-    QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE,
+    VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE,
     { must: conditions },
     100,
   );

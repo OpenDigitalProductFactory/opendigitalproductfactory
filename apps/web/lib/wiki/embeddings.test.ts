@@ -8,7 +8,7 @@ const generateEmbedding = vi.fn();
 const wikiPageFindMany = vi.fn();
 
 vi.mock("@dpf/db", () => ({
-  QDRANT_COLLECTIONS: {
+  VECTOR_COLLECTIONS: {
     AGENT_MEMORY: "agent-memory",
     PLATFORM_KNOWLEDGE: "platform-knowledge",
     WIKI_PAGES: "wiki-pages",
@@ -302,11 +302,11 @@ describe("published wiki embedding reconciliation", () => {
 });
 
 describe("searchWikiPages: principle filters", () => {
-  function makeQdrantResult(payload: Record<string, unknown>, score = 0.8) {
+  function makeVectorResult(payload: Record<string, unknown>, score = 0.8) {
     return { id: 1, score, payload };
   }
 
-  it("translates principleTier filter into a Qdrant payload-key match clause", async () => {
+  it("translates principleTier filter into a vector payload-key match clause", async () => {
     generateEmbedding.mockResolvedValueOnce(stub(768));
     searchSimilar.mockResolvedValueOnce([]);
 
@@ -415,14 +415,14 @@ describe("deleteWikiPageVector", () => {
 });
 
 describe("searchWikiPages: two-pass overlay-aware retrieval", () => {
-  function makeQdrantResult(payload: Record<string, unknown>, score = 0.8) {
+  function makeVectorResult(payload: Record<string, unknown>, score = 0.8) {
     return { id: 1, score, payload };
   }
 
   it("kernel-only when organizationId is null (no pass A)", async () => {
     generateEmbedding.mockResolvedValueOnce(stub(768));
     searchSimilar.mockResolvedValueOnce([
-      makeQdrantResult({
+      makeVectorResult({
         entityId: "wp_kernel_1",
         slug: "entities/digital-product",
         title: "Digital Product",
@@ -451,7 +451,7 @@ describe("searchWikiPages: two-pass overlay-aware retrieval", () => {
     generateEmbedding.mockResolvedValueOnce(stub(768));
     // Pass A: one org match
     searchSimilar.mockResolvedValueOnce([
-      makeQdrantResult({
+      makeVectorResult({
         entityId: "wp_overlay_1",
         slug: "entities/digital-product",
         title: "Digital Product (Acme)",
@@ -464,7 +464,7 @@ describe("searchWikiPages: two-pass overlay-aware retrieval", () => {
     ]);
     // Pass B: two kernel matches (one of them is the masked one — must be excluded by filter)
     searchSimilar.mockResolvedValueOnce([
-      makeQdrantResult({
+      makeVectorResult({
         entityId: "wp_kernel_portfolio",
         slug: "entities/portfolio",
         title: "Portfolio",
@@ -509,8 +509,8 @@ describe("searchWikiPages: two-pass overlay-aware retrieval", () => {
   it("does not call kernel pass when org results already fill the limit", async () => {
     generateEmbedding.mockResolvedValueOnce(stub(768));
     searchSimilar.mockResolvedValueOnce([
-      makeQdrantResult({ entityId: "a", slug: "x/a", title: "A", pageKind: "entity", contentPreview: "", isKernel: false, organizationId: "o", kernelPageId: null }, 0.9),
-      makeQdrantResult({ entityId: "b", slug: "x/b", title: "B", pageKind: "entity", contentPreview: "", isKernel: false, organizationId: "o", kernelPageId: null }, 0.8),
+      makeVectorResult({ entityId: "a", slug: "x/a", title: "A", pageKind: "entity", contentPreview: "", isKernel: false, organizationId: "o", kernelPageId: null }, 0.9),
+      makeVectorResult({ entityId: "b", slug: "x/b", title: "B", pageKind: "entity", contentPreview: "", isKernel: false, organizationId: "o", kernelPageId: null }, 0.8),
     ]);
 
     const results = await searchWikiPages({

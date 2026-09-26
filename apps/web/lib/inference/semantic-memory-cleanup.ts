@@ -10,9 +10,9 @@
 import {
   deleteVectors,
   scrollPoints,
-  QDRANT_COLLECTIONS,
+  VECTOR_COLLECTIONS,
   type MatchClause,
-  type QdrantFilter,
+  type VectorFilter,
 } from "@dpf/db";
 
 /** Upper bound on how many candidate points one cleanup/reconcile pass inspects. */
@@ -23,7 +23,7 @@ export const SEMANTIC_MEMORY_SCAN_LIMIT = 5000;
 // `@dpf/db` value at top level can hit a mocked/circular-init `undefined` and crash
 // unrelated importers before any function runs.
 function agentMemoryCollection(): string {
-  return QDRANT_COLLECTIONS.AGENT_MEMORY;
+  return VECTOR_COLLECTIONS.AGENT_MEMORY;
 }
 
 export type CleanupSourceKind = "message" | "thread" | "orphan-reconcile";
@@ -86,7 +86,7 @@ export async function purgeConversationVectorsBySource(params: {
   if (threadIds.length > 0) should.push(anyClause("threadId", threadIds));
   if (should.length === 0) return evidence; // nothing requested — idempotent no-op
 
-  const filter: QdrantFilter = { should };
+  const filter: VectorFilter = { should };
   try {
     const candidates = await scrollPoints(AGENT_MEMORY, filter, SEMANTIC_MEMORY_SCAN_LIMIT);
     evidence.candidates = candidates.length;

@@ -404,7 +404,7 @@ export function detectPrincipleTierWeightMismatch(input: {
  * runWikiLint) calls this in addition to the original aggregator.
  *
  * Cross-page detectors (commandment-cap) and the public-safety detector
- * are included here. The Qdrant-dependent detectors (duplicate,
+ * are included here. The vector-store-dependent detectors (duplicate,
  * contradiction-review) live in their own modules because they need
  * embedding similarity infrastructure that pure per-page detectors do
  * not — they are wired in by the orchestrator in a follow-up commit.

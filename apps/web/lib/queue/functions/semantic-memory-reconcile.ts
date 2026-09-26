@@ -8,7 +8,7 @@
 // gated, and concurrency-limited to one in-flight run.
 
 import { cron } from "@/lib/jobs/triggers";
-import { prisma, scrollPoints, QDRANT_COLLECTIONS } from "@dpf/db";
+import { prisma, scrollPoints, VECTOR_COLLECTIONS } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
@@ -36,7 +36,7 @@ export async function runSemanticMemoryReconcile(): Promise<
   CleanupEvidence & { orphanMessageIds: string[] }
 > {
   const points = await scrollPoints(
-    QDRANT_COLLECTIONS.AGENT_MEMORY,
+    VECTOR_COLLECTIONS.AGENT_MEMORY,
     {},
     SEMANTIC_MEMORY_SCAN_LIMIT,
   );

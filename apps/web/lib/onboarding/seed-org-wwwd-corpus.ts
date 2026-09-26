@@ -8,7 +8,7 @@
 // Two substrates are seeded (verified against live code, 2026-05-31):
 //   1. The WORKING WWWD lever — org-overlay WikiPages (organizationId set,
 //      isKernel=false, pageKind stance/principle, status "published"),
-//      embedded into Qdrant via storeWikiPage. agent-coworker.ts retrieves
+//      embedded into the vector store via storeWikiPage. agent-coworker.ts retrieves
 //      these by org for WWWD answers (recallWikiContext).
 //   2. The corpus CONTAINER — a per-org DecisionPerspectiveProfile
 //      (kind=organization, ownerOrganizationId, fallback
@@ -106,7 +106,7 @@ export type SeedOrgWwwdCorpusInput = {
   organizationId: string;
   /** Defaults to the shared prisma client. */
   db?: SeedOrgWwwdClient;
-  /** Qdrant index step; injectable for tests. Defaults to storeWikiPage. */
+  /** vector index step; injectable for tests. Defaults to storeWikiPage. */
   embed?: (input: StoreWikiPageInput) => Promise<boolean>;
 };
 

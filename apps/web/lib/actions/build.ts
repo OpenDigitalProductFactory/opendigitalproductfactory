@@ -1358,7 +1358,7 @@ export async function shipBuild(input: {
     console.warn("[shipBuild] git tag error:", err);
   }
 
-  // Apply IT4IT value stream labels to the DigitalProduct in Neo4j
+  // Apply IT4IT value stream labels to the DigitalProduct in the graph mirror
   // The product has been through the build pipeline, so it gets the R2D label
   // (Requirement to Deploy). When it's consumed, it will get R2F.
   try {

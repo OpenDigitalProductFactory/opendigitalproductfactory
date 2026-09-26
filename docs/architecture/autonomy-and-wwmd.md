@@ -54,10 +54,10 @@ Code references:
 WWMD owns the decisions about how the platform itself evolves and how the shared ecosystem behaves: build and architecture trade-offs, what generalizes into the Hive Mind commons versus stays local, contribution and governance standards for the substrate every install shares. It is deliberately *not* the layer for a customer's business calls — that is WWWD's job. Its doctrine is the founder kernel: tiered principles authored, reviewed, and versioned in the governed wiki. Retrieval for `principle_decide` splits **relevance from authority**:
 
 - **Commandments always come from Postgres** — the authoring store — and are always in scope. They are never subject to a similarity search deciding whether they "apply."
-- **Core and contextual principles are found by vector search in Qdrant**, which ranks relevance — core principles top-K ranked, contextual principles additionally gated by a cosine-similarity threshold (default `0.75`) so narrow operational rules only enter when genuinely close to the question.
-- **A Qdrant hit alone can never score.** The vector index nominates; the real principle rows — vectors, tiers, weights — are fetched from Postgres by page id. Phantom hits (index entries whose page no longer exists) are detected and dropped, and their count is reported, because a vector index that disagrees with the authoring store is itself a finding.
+- **Core and contextual principles are found by vector search in pgvector**, which ranks relevance — core principles top-K ranked, contextual principles additionally gated by a cosine-similarity threshold (default `0.75`) so narrow operational rules only enter when genuinely close to the question.
+- **A vector hit alone can never score.** The vector index nominates; the real principle rows — vectors, tiers, weights — are fetched from Postgres by page id. Phantom hits (index entries whose page no longer exists) are detected and dropped, and their count is reported, because a vector index that disagrees with the authoring store is itself a finding.
 
-This split — *Qdrant is the relevance index, Postgres is the authority* — is what keeps semantic search from quietly becoming a decision-maker.
+This split — *the vector index is the relevance index, the principle rows are the authority* — is what keeps semantic search from quietly becoming a decision-maker.
 
 ### WWWD — your organization's business decisions
 
@@ -148,7 +148,7 @@ Code references:
     <text x="158" y="250" fill="var(--fg-muted, #a4adb8)" font-size="12">platform evolution &amp; ecosystem</text>
     <text x="158" y="278" fill="var(--fg-muted, #a4adb8)" font-size="12">founder-kernel wiki</text>
     <text x="158" y="296" fill="var(--fg-muted, #a4adb8)" font-size="12">tiered principles</text>
-    <text x="158" y="322" fill="var(--fg-muted, #a4adb8)" font-size="11">Qdrant ranks relevance &middot; Postgres holds authority</text>
+    <text x="158" y="322" fill="var(--fg-muted, #a4adb8)" font-size="11">pgvector ranks relevance &middot; principle rows hold authority</text>
     <text x="440" y="230" font-size="15" font-weight="700">WWWD</text>
     <text x="440" y="250" fill="var(--fg-muted, #a4adb8)" font-size="12">your business stance</text>
     <text x="440" y="278" fill="var(--fg-muted, #a4adb8)" font-size="12">org-authored corpus:</text>

@@ -13,7 +13,7 @@
 // the runtime embedding helper at apps/web/lib/inference/embedding.ts.
 //
 // Sidecar exists so installs don't have to re-embed on first boot —
-// seedWikiKernel() loads embeddings.jsonl directly into Qdrant when
+// seedWikiKernel() loads embeddings.jsonl directly into the pgvector store when
 // the manifest.embeddingModel matches the deployment's configured
 // embedding model. On mismatch, the seed falls back to live embed.
 

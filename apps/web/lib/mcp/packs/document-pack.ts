@@ -175,7 +175,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         query: { type: "string", description: "Phrase or natural-language concept to search for." },
-        mode: { type: "string", enum: ["metadata", "full-text", "semantic", "hybrid"], description: "Search mode. Hybrid combines Postgres filters and Qdrant semantic results." },
+        mode: { type: "string", enum: ["metadata", "full-text", "semantic", "hybrid"], description: "Search mode. Hybrid combines Postgres filters and pgvector semantic results." },
         state: { type: "string", enum: ["draft", "published", "archived"], description: "Lifecycle state filter." },
         documentKind: { type: "string", description: "Kind filter." },
         ownerPrincipalId: { type: "string", description: "Principal DB id for owner filter." },
