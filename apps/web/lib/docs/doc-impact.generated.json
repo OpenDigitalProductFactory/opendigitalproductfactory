@@ -1708,6 +1708,9 @@
     "packages/i18n/src/locales.ts": [
       "docs/architecture/localization-runbook.md"
     ],
+    "packages/integration-shared/src/canonical-json.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "packages/integration-shared/src/credential-crypto.ts": [
       "docs/architecture/2026-06-22-platform-adequacy-architecture-review.md"
     ],
@@ -1898,6 +1901,9 @@
     "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "scripts/check-no-local-canonical-json.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "scripts/check-no-local-isrecord.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
@@ -2069,6 +2075,9 @@
     "scripts/lib/bootstrap-worktree-deps.mjs": [
       "docs/architecture/build-gate-runbook.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "scripts/lib/canonical-json.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/lib/ci-policy-guards.mjs": [
       "docs/architecture/context-engineering-standards.md",
@@ -2795,12 +2804,15 @@
       "packages/db/scripts/apply-model-metadata-comments.ts",
       "packages/db/src/model-metadata.ts",
       "packages/db/src/seed-retention-floor-obligations.ts",
+      "packages/integration-shared/src/canonical-json.ts",
       "packages/validators/src/guards.ts",
       "scripts/check-model-metadata-tags.mjs",
+      "scripts/check-no-local-canonical-json.mjs",
       "scripts/check-no-local-isrecord.mjs",
       "scripts/check-no-local-slugify.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",
       "scripts/check-no-new-notactive-conventions.mjs",
+      "scripts/lib/canonical-json.mjs",
       "scripts/lib/is-record.mjs",
       "scripts/portal-migrate-boot.sh"
     ],

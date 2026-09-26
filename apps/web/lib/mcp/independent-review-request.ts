@@ -8,7 +8,7 @@ import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-
 import { OAUTH_EXECUTION_AUTHORITY_SELECT, isCurrentOAuthExecutionAuthority } from "@/lib/auth/oauth-tokens";
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { resolveMcpTaskAuthorityKey } from "@/lib/auth/oauth-task-authority";
 import { deterministicExternalTaskRunId, remoteTaskRequestMatches } from "@/lib/mcp-task-capacity-contract";
 import { loadTaskInitiativeReviewOutcome } from "@/lib/mcp-task-review-outcome";
