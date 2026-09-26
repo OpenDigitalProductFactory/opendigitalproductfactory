@@ -1405,7 +1405,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 65
+    "textMass": 75
   },
   "apps/web/app/(shell)/finance/suppliers/[id]/page.tsx": {
     "vocabulary": 0,
@@ -6973,7 +6973,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 85
+    "textMass": 75
   },
   "apps/web/components/ops/StandardChangeCatalog.tsx": {
     "vocabulary": 0,

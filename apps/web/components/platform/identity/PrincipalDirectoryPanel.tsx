@@ -21,7 +21,7 @@ export function PrincipalDirectoryPanel({ principals }: { principals: PrincipalR
           Review the shared identity inventory for employees, AI coworkers, and future service identities.
           {/* One home for changing access (DI-B8ED39DC1C11, BI-154E409C). */}
           {" "}To add someone or change their access, use{" "}
-          <Link href="/admin" className="text-[var(--dpf-accent)] hover:underline">Users &amp; Roles</Link>.
+          <Link href="/admin" className="text-[var(--dpf-accent)] underline">Users &amp; Roles</Link>.
         </p>
       </div>
 

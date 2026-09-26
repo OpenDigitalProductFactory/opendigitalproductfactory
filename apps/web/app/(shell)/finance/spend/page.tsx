@@ -65,6 +65,13 @@ export default async function FinanceSpendPage() {
             { label: "Personal expenses", value: "See my expenses" },
           ]}
         />
+        {/* EP-2FB6C0CC (BI-DD763B93): Mileage had no link; it lives with the other spend records. */}
+        <FinanceSummaryCard
+          title="Mileage"
+          description="Log business trips so they can be claimed and reported."
+          href="/finance/mileage"
+          accentColor="var(--dpf-info)"
+        />
         <FinanceSummaryCard
           title="Suppliers"
           description="Manage supplier relationships and trace purchasing activity."

@@ -6,6 +6,7 @@
     "files": [
       "apps/web/app/(shell)/area/[key]/page.tsx",
       "apps/web/app/(shell)/coworker-decisions/page.tsx",
+      "apps/web/app/(shell)/finance/spend/page.tsx",
       "apps/web/app/(shell)/ops/page.tsx",
       "apps/web/app/(shell)/ops/patches/page.tsx",
       "apps/web/app/(shell)/ops/workrooms/page.tsx",
