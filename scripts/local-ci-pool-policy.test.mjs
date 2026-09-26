@@ -582,3 +582,53 @@ test("an admitting policy carries no headroom shortfall", () => {
   });
   assert.equal(policy.headroom, undefined);
 });
+
+// BI-3A14308C: a gate that delegates its production build to the merge queue
+// reserves no builder memory, but still reserves the host stage it runs.
+test("a delegated-build claim is not refused for Docker VM builder headroom", () => {
+  const gib = 1024 ** 3;
+  const host = {
+    ...SAFE_HOST,
+    availableMemoryBytes: 40 * gib,
+    // Far below floor + builder reserve: a building gate cannot fit.
+    dockerAvailableMemoryBytes: 6 * gib,
+    builderMemoryUsageBytes: [0, 0],
+  };
+  const configValue = {
+    ...PILOT_CONFIG,
+    ceilings: { ...PILOT_CONFIG.ceilings, minAvailableMemoryBytes: 4 * gib },
+  };
+  const building = resolveLocalCiPoolPolicy({
+    configValue, host, manifestSlotCount: 2, reserveAdmissionHeadroom: true,
+  });
+  assert.equal(building.rollbackReason, "host-build-headroom-low");
+  assert.equal(building.effectiveCapacity, 0);
+
+  const delegated = resolveLocalCiPoolPolicy({
+    configValue, host, manifestSlotCount: 2, reserveAdmissionHeadroom: true, reserveBuilderHeadroom: false,
+  });
+  assert.notEqual(delegated.rollbackReason, "host-build-headroom-low");
+  assert.ok(delegated.effectiveCapacity >= 1);
+});
+
+test("a delegated-build claim still reserves the host stage", () => {
+  const gib = 1024 ** 3;
+  const stage = SLOT_RESOURCES.hostStagePolicy.admissionReserveBytes;
+  const resolved = resolveLocalCiPoolPolicy({
+    configValue: {
+      ...PILOT_CONFIG,
+      ceilings: { ...PILOT_CONFIG.ceilings, minAvailableMemoryBytes: 4 * gib },
+    },
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 4 * gib + stage - 1,
+      dockerAvailableMemoryBytes: 40 * gib,
+      builderMemoryUsageBytes: [0, 0],
+    },
+    manifestSlotCount: 2,
+    reserveAdmissionHeadroom: true,
+    reserveBuilderHeadroom: false,
+  });
+  assert.equal(resolved.rollbackReason, "host-stage-headroom-low");
+  assert.equal(resolved.effectiveCapacity, 0);
+});

@@ -3,6 +3,7 @@ import type {
   GovernedExecuteRejection,
   GovernedExecuteResult,
 } from "@/lib/mcp-governed-execute";
+import { ALIGNMENT_REFUSAL_PRINCIPLE } from "@/lib/kernel/governing-principles";
 import { runTakAlignmentGate, type AlignmentGateDecision } from "./alignment-tool-gate";
 import {
   runTakPreconditionGate,
@@ -116,11 +117,18 @@ export async function enforceTakPreexecution(input: {
   if (input.alignmentRequired) {
     alignmentDecision = await runTakAlignmentGate(input.args);
     if (alignmentDecision.verdict !== "approve") {
-      const rejection: GovernedExecuteRejection = alignmentDecision.verdict === "decline"
-        ? "alignment_denied" : "alignment_escalation_required";
+      const rejection = alignmentDecision.verdict === "decline"
+        ? "alignment_denied" as const : "alignment_escalation_required" as const;
+      // BI-DEDAC950: the refusal names the principle page that governs it.
+      const principleSlug = ALIGNMENT_REFUSAL_PRINCIPLE[rejection];
+      if (principleSlug) alignmentDecision = { ...alignmentDecision, principleSlug };
       const result: GovernedExecuteResult = {
         ...rejected(input.args.toolName, rejection, alignmentDecision.rationale),
-        data: { interactionId: alignmentDecision.interactionId, alignment: alignmentDecision.alignment },
+        data: {
+          interactionId: alignmentDecision.interactionId,
+          alignment: alignmentDecision.alignment,
+          ...(principleSlug ? { principleSlug } : {}),
+        },
         governance: {
           rejected: rejection,
           alignment: alignmentDecision.alignment,

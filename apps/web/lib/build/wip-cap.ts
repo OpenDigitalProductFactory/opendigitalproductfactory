@@ -1,76 +1,35 @@
 // apps/web/lib/build/wip-cap.ts
 //
-// Build Studio work-in-progress (WIP) cap.
+// Build Studio WIP pools: the PHYSICAL limits on concurrent work.
 //
-// Why this exists:
-//   Operators kept starting new feature builds while earlier ones sat
-//   unfinished, leaving a queue full of half-done/stuck builds and nothing
-//   shipped. Build Studio also shares ONE sandbox across all in-flight builds
-//   (apps/web/lib/build/sandbox-driver.ts), so several builds in the BUILD
-//   phase at once is actively unsafe (they collide on the same working tree).
-//   This guard enforces a small WIP limit at the two entry points that create
-//   builds (createFeatureBuild + the promote_to_build_studio MCP tool) so work
-//   gets finished before new work starts.
+// History: this module held BUILD_WIP_CAP, a hard count of 3 active builds that
+// every start path read as its admission limit. BI-3430B3A4 retired that count:
+// a one-line fix and an xlarge feature no longer each take a whole slot.
+// Admission is now by points in flight per portfolio
+// (lib/build/investment-admission.ts, design
+// docs/superpowers/specs/2026-09-24-portfolio-budget-and-investment-wip-design.md §5.6).
 //
-//   The DB count is done at the call sites (typed against Prisma); this module
-//   stays pure so the cap rule is trivially unit-tested. The where-clause to
-//   count active builds is ACTIVE_BUILD_WIP_PHASES (non-terminal) + abandonedAt
-//   null + parentEpicId null.
-//
-// This is the interim hard cap. The fuller queue UX (slots indicator + queued
-// state badges) is designed in
-// docs/superpowers/specs/2026-05-20-build-studio-layout-redesign-design.md §6.
-//
-// BI-937128F6 (unify WIP across surfaces): the enforced admission decision is now
-// derived from the unified, POOL-AWARE WIP model — a new unit of work is admitted
-// only when the finite resource pool it contends on (unified-wip.gatingPool) has a
-// free slot across ALL surfaces' active WorkCapsules, not a Build-Studio-only
-// build count. bs-sandbox stays capped at BUILD_WIP_CAP so today's effective limit
-// is preserved exactly; see WIP_POOL_CAPACITY + decideUnifiedWip below and
-// unified-wip-query.ts for the DB read that supplies the pressure.
+// What stays here is the unified, pool-aware model of the machine's finite
+// resources (BI-937128F6): the Build Studio sandbox pool (sandboxPoolSize) and
+// the shared nonproduction lease. Those are physical constraints, enforced
+// where the resource is acquired and reported beside the investment limit —
+// never counted into it.
 
 import type { WipPool } from "./unified-wip";
-
-/**
- * Max number of simultaneously-active feature builds. "Active" = not yet
- * complete/failed and not abandoned. Tunable; kept small on purpose because
- * all builds share one sandbox. 3 leaves room for a couple parked in
- * ideate/plan while one is actually building.
- */
-export const BUILD_WIP_CAP = 3;
 
 /** Phases that count as finished — they no longer occupy a WIP slot. */
 export const TERMINAL_BUILD_PHASES = ["complete", "failed"] as const;
 
-export class BuildWipCapError extends Error {
-  readonly code = "BUILD_WIP_CAP_REACHED";
-  readonly active: number;
-  readonly cap: number;
-  constructor(active: number, cap: number) {
-    super(
-      `You already have ${active} build${active === 1 ? "" : "s"} in progress ` +
-        `(the limit is ${cap}). Build Studio shares one sandbox. Finish or abandon one ` +
-        `before starting another — or run it as an external Claude Code / Codex / Grok ` +
-        `build, which is first-class and NOT gated by the Build Studio sandbox (AGENTS.md §17). ` +
-        `External work still registers its capsule, so it stays visible in the unified WIP.`,
-    );
-    this.name = "BuildWipCapError";
-    this.active = active;
-    this.cap = cap;
-  }
-}
-
-/** True when `active` already-running builds means a new one would exceed the cap. */
-export function wipCapReached(active: number, cap: number = BUILD_WIP_CAP): boolean {
-  return active >= cap;
-}
-
 /**
- * Throw a BuildWipCapError if `active` running builds means starting another
- * would exceed the cap. Call after counting active builds at the start path.
+ * The Build Studio sandbox pool size: the machine's PHYSICAL limit on builds
+ * executing at once (DPF_SANDBOX_POOL_SIZE, default 1). It is enforced where a
+ * sandbox is acquired (sandbox-pool.ts) and reported beside the investment
+ * limit. It is not the admission limit: since BI-3430B3A4, admission is by
+ * points in flight per portfolio (investment-admission.ts), and the count cap
+ * BUILD_WIP_CAP is retired.
  */
-export function assertWipCapacity(active: number, cap: number = BUILD_WIP_CAP): void {
-  if (wipCapReached(active, cap)) throw new BuildWipCapError(active, cap);
+export function sandboxPoolSize(env: Record<string, string | undefined> = process.env): number {
+  return Number(env.DPF_SANDBOX_POOL_SIZE) || 1;
 }
 
 // ─── Unified, pool-aware WIP derivation (BI-937128F6) ────────────────────────
@@ -80,7 +39,7 @@ export function assertWipCapacity(active: number, cap: number = BUILD_WIP_CAP): 
 // a promote/new build is blocked only when ITS pool is saturated across ALL
 // surfaces' active WIP — not when a BS-only build count is hit. This is the
 // SOURCE-unification the founder directive asks for (unified-wip.ts header); it
-// does NOT loosen or tighten the live bs-sandbox limit (kept at BUILD_WIP_CAP).
+// reports the physical pools; it is not the admission rule (BI-3430B3A4).
 
 /**
  * Capacity of the shared singleton nonproduction-environment lease pool
@@ -96,10 +55,9 @@ export const SHARED_LEASE_WIP_CAP = 1;
 /**
  * Finite capacity per resource pool the unified WIP model gates on.
  *
- * - `bs-sandbox`  — BUILD_WIP_CAP. The one shared Build Studio sandbox. UNCHANGED
- *   from today's effective limit. Only build-studio work contends here
- *   (unified-wip.contendsOnBsSandbox), and this is the ONLY pool this cap
- *   actually enforces at the build-entry call sites.
+ * - `bs-sandbox`  — sandboxPoolSize(), the physical sandbox pool. Only
+ *   build-studio work contends here (unified-wip.contendsOnBsSandbox). It is
+ *   reported, not used to admit work: admission is by points in flight.
  * - `shared-lease` — SHARED_LEASE_WIP_CAP. Documents the singleton :3001 lease
  *   arity; enforcement lives in the NonProductionEnvironmentLease workflow.
  * - `host-worktree` — unbounded. External work in its own host worktree contends
@@ -108,7 +66,7 @@ export const SHARED_LEASE_WIP_CAP = 1;
  * - `none` — unbounded. Human / git-webhook work is not resource-bound.
  */
 export const WIP_POOL_CAPACITY: Readonly<Record<WipPool, number>> = {
-  "bs-sandbox": BUILD_WIP_CAP,
+  "bs-sandbox": sandboxPoolSize(),
   "shared-lease": SHARED_LEASE_WIP_CAP,
   "host-worktree": Number.POSITIVE_INFINITY,
   none: Number.POSITIVE_INFINITY,
@@ -152,20 +110,6 @@ export function decideUnifiedWip(
   context: UnifiedWipCapacityContext = {},
 ): UnifiedWipDecision {
   const capacity = effectiveWipPoolCapacity(pool, context);
-  const admitted = !Number.isFinite(capacity) || !wipCapReached(pressure, capacity);
+  const admitted = !Number.isFinite(capacity) || pressure < capacity;
   return { pool, pressure, capacity, admitted };
-}
-
-/**
- * Throw a BuildWipCapError if the pool a new unit contends on is saturated.
- * Mirrors assertWipCapacity's throw shape so existing call sites keep the same
- * error contract; an unbounded pool never throws.
- */
-export function assertUnifiedWipCapacity(
-  pool: WipPool,
-  pressure: number,
-  context: UnifiedWipCapacityContext = {},
-): void {
-  const decision = decideUnifiedWip(pool, pressure, context);
-  if (!decision.admitted) throw new BuildWipCapError(decision.pressure, decision.capacity);
 }

@@ -206,7 +206,7 @@ async function recordLocalIntegrationResultHandler(
   userId: string,
   context?: { routeContext?: string },
 ): Promise<ToolResult> {
-  const { recordLocalIntegrationResult } = await import("@/lib/nonprod/local-integration");
+  const { recordLocalIntegrationResult, TEST_STUB_EVIDENCE_REFUSED } = await import("@/lib/nonprod/local-integration");
   const stringValue = (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
   const provider = stringValue("provider");
   const externalSessionId = stringValue("externalSessionId");
@@ -243,21 +243,30 @@ async function recordLocalIntegrationResultHandler(
     return { success: false, error: "invalid_status", message: `Unsupported local integration status: ${status}` };
   }
 
-  const result = await recordLocalIntegrationResult({
-    actorUserId: userId,
-    provider,
-    externalSessionId,
-    routeContext,
-    buildId: stringValue("buildId") || undefined,
-    taskRunId: stringValue("taskRunId") || undefined,
-    candidateBranch,
-    mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
-    status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift" | "blocked_control_plane_starvation",
-    summary,
-    gateKey: stringValue("gateKey") || undefined,
-    leaseId: stringValue("leaseId") || undefined,
-    evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
-  });
+  let result: { id: string };
+  try {
+    result = await recordLocalIntegrationResult({
+      actorUserId: userId,
+      provider,
+      externalSessionId,
+      routeContext,
+      buildId: stringValue("buildId") || undefined,
+      taskRunId: stringValue("taskRunId") || undefined,
+      candidateBranch,
+      mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
+      status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift" | "blocked_control_plane_starvation",
+      summary,
+      gateKey: stringValue("gateKey") || undefined,
+      leaseId: stringValue("leaseId") || undefined,
+      evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
+    });
+  } catch (error) {
+    // BI-F5344F65: the writer refuses DPF_ALLOW_LOCAL_CI_STUB payloads; name it.
+    if ((error as { code?: unknown } | null)?.code === TEST_STUB_EVIDENCE_REFUSED) {
+      return { success: false, error: TEST_STUB_EVIDENCE_REFUSED, message: (error as Error).message };
+    }
+    throw error;
+  }
   return {
     success: true,
     entityId: result.id,
