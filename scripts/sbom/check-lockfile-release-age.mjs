@@ -33,7 +33,7 @@
 import { parsePackageKeys, splitNameVersion } from "../lib/pnpm-lock.mjs";
 import { LOCKFILE_ROOTS, rootFile } from "./lockfile-roots.mjs";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { gitTextOrNull } from "../lib/git.mjs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -139,17 +139,8 @@ function parseArgs(argv) {
 }
 
 function baseLockfile(baseRef, path = "pnpm-lock.yaml") {
-  try {
-    return execFileSync("git", ["show", `${baseRef}:${path}`], {
-      cwd: ROOT,
-      encoding: "utf8",
-      maxBuffer: 256 * 1024 * 1024,
-      // A root added by this change has no base lockfile; that is expected.
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-  } catch {
-    return null;
-  }
+  // A root added by this change has no base lockfile; that is expected.
+  return gitTextOrNull(["show", `${baseRef}:${path}`], { cwd: ROOT, trim: false, maxBuffer: 256 * 1024 * 1024 });
 }
 
 async function getJson(url, { tries = 3, timeoutMs = 20000 } = {}) {

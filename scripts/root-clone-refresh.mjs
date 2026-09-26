@@ -14,7 +14,7 @@
 // a ff-only merge it attempted actually failed.
 
 import { existsSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { pathToFileURL } from "node:url";
 
 import { resolveRootClonePath } from "./lib/stale-root-clone.mjs";
@@ -43,8 +43,8 @@ function resolveRoot(explicit) {
   // Resolve the owning root clone from the current directory (works from a worktree).
   const fromCwd = resolveRootClonePath(process.cwd(), {});
   if (fromCwd && existsSync(fromCwd)) return fromCwd;
-  const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", windowsHide: true });
-  if (r.status === 0 && r.stdout.trim()) return r.stdout.trim();
+  const top = gitTextOrNull(["rev-parse", "--show-toplevel"], { cwd: process.cwd() });
+  if (top) return top;
   if (existsSync("/host-dpf")) return "/host-dpf";
   return null;
 }

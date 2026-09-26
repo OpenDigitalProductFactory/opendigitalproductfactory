@@ -15,7 +15,7 @@
 // pregate exit code never was.
 
 import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { dirname, resolve as resolvePath } from "node:path";
 
 import {
@@ -33,9 +33,7 @@ import { installBrokenPipeTolerance } from "./lib/pregate-console.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 
 function gitText(args, cwd) {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
-  if (result.error || result.status !== 0) return "";
-  return String(result.stdout || "").trim();
+  return gitTextOrNull(args, { cwd: cwd ?? process.cwd() }) ?? "";
 }
 
 function readJson(path) {

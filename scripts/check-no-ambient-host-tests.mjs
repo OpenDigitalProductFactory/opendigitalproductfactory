@@ -71,7 +71,7 @@
 //   node scripts/check-no-ambient-host-tests.mjs            # check (guard loop)
 //   node scripts/check-no-ambient-host-tests.mjs --update   # re-baseline
 
-import { execFileSync } from "node:child_process";
+import { gitText } from "./lib/git.mjs";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -162,9 +162,9 @@ export function isInScope(file) {
 }
 
 function listTestFiles() {
-  const out = execFileSync("git", ["ls-files", "apps", "packages", "scripts"], {
+  const out = gitText(["ls-files", "apps", "packages", "scripts"], {
     cwd: REPO_ROOT,
-    encoding: "utf8",
+    trim: false,
     maxBuffer: 64 * 1024 * 1024,
   });
   return out.split("\n").map((l) => l.trim()).filter(Boolean).filter(isInScope);
