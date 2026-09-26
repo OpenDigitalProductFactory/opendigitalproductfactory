@@ -151,14 +151,30 @@ function trackedFiles() {
 
 function readTracked(relPath) {
   const abs = path.join(REPO_ROOT, relPath);
+  let fd;
   try {
-    const stat = fs.statSync(abs);
+    // Open once, then fstat and read that descriptor. A path stat before the
+    // read is a check-then-use race (CodeQL js/file-system-race): the name can
+    // point at a different file between the two calls. A missing path throws
+    // here and is still reported as unreadable.
+    fd = fs.openSync(abs, "r");
+    const stat = fs.fstatSync(fd);
     if (!stat.isFile() || stat.size > MAX_BYTES) return null;
-    return fs.readFileSync(abs, "utf-8");
+    const buf = Buffer.alloc(stat.size);
+    const n = fs.readSync(fd, buf, 0, stat.size, 0);
+    return buf.subarray(0, n).toString("utf8");
   } catch {
     // Tracked but absent in this checkout (sparse checkout, deleted in the
-    // working tree): nothing to read, so nothing to report.
+    // working tree), or not a readable file: nothing to read, so nothing to report.
     return null;
+  } finally {
+    if (fd !== undefined) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // The verdict is the bytes already read; a close error is not a missing file.
+      }
+    }
   }
 }
 

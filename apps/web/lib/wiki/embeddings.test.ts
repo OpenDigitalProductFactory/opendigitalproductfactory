@@ -302,10 +302,6 @@ describe("published wiki embedding reconciliation", () => {
 });
 
 describe("searchWikiPages: principle filters", () => {
-  function makeVectorResult(payload: Record<string, unknown>, score = 0.8) {
-    return { id: 1, score, payload };
-  }
-
   it("translates principleTier filter into a vector payload-key match clause", async () => {
     generateEmbedding.mockResolvedValueOnce(stub(768));
     searchSimilar.mockResolvedValueOnce([]);
