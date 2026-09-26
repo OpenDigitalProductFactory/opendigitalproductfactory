@@ -4,7 +4,7 @@ import { constants } from "node:fs";
 import { access, mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
-import { promisify } from "node:util";
+import { parseArgs as utilParseArgs, promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import { signTransitionPayload } from "./lib/transition-signing.mjs";
 
@@ -486,29 +486,38 @@ function createRuntimeDependencies(options) {
 }
 
 function parseArgs(argv) {
-  const values = {};
-  for (let index = 0; index < argv.length; index += 1) {
-    const key = argv[index];
-    if (key === "--inject-readiness-failure" || key === "--bridge-mode") values[key.slice(2).replaceAll("-", "_")] = true;
-    else if (key.startsWith("--")) values[key.slice(2).replaceAll("-", "_")] = argv[++index];
-  }
-  const rawPrNumber = values.pr_number ?? process.env.GITHUB_EVENT_PULL_REQUEST_NUMBER ?? "";
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: {
+      ...Object.fromEntries([
+        "base-sha", "candidate-sha", "repository", "project", "evidence-dir", "pr-number", "event-kind",
+        "candidate-ref", "required-checks", "timeout-ms", "portal-url", "cleanup-project",
+      ].map((name) => [name, { type: "string" }])),
+      "inject-readiness-failure": { type: "boolean" },
+      "bridge-mode": { type: "boolean" },
+    },
+  });
+  const text = (name) => (typeof values[name] === "string" ? values[name] : undefined);
+  const rawPrNumber = text("pr-number") ?? process.env.GITHUB_EVENT_PULL_REQUEST_NUMBER ?? "";
   const parsedPrNumber = /^\d+$/.test(rawPrNumber) ? Number(rawPrNumber) : 0;
   return {
-    baseSha: values.base_sha, candidateSha: values.candidate_sha, repository: values.repository,
-    project: values.project, evidenceDir: values.evidence_dir, prNumber: parsedPrNumber,
-    eventKind: values.event_kind, candidateRef: values.candidate_ref,
-    requiredChecks: (values.required_checks ?? "Production Build,Unit Tests").split(",").map((v) => v.trim()),
-    injectReadinessFailure: Boolean(values.inject_readiness_failure), bridgeMode: Boolean(values.bridge_mode),
-    timeoutMs: Number(values.timeout_ms ?? 1_200_000), portalUrl: values.portal_url,
+    baseSha: text("base-sha"), candidateSha: text("candidate-sha"), repository: text("repository"),
+    project: text("project"), evidenceDir: text("evidence-dir"), prNumber: parsedPrNumber,
+    eventKind: text("event-kind"), candidateRef: text("candidate-ref"),
+    requiredChecks: (text("required-checks") ?? "Production Build,Unit Tests").split(",").map((v) => v.trim()),
+    injectReadinessFailure: Boolean(values["inject-readiness-failure"]), bridgeMode: Boolean(values["bridge-mode"]),
+    timeoutMs: Number(text("timeout-ms") ?? 1_200_000), portalUrl: text("portal-url"),
+    cleanupRequested: values["cleanup-project"] !== undefined, cleanupProject: text("cleanup-project"),
   };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const options = parseArgs(process.argv.slice(2));
-  const cleanupIndex = process.argv.indexOf("--cleanup-project");
-  if (cleanupIndex !== -1) {
-    await cleanupProject(process.argv[cleanupIndex + 1]);
+  if (options.cleanupRequested) {
+    await cleanupProject(options.cleanupProject);
     process.stdout.write("safe cleanup complete\n");
     process.exit(0);
   }

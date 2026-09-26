@@ -4,6 +4,10 @@ import {
   contractLocalCiPoolAfterGateResult,
   type PlatformConfigCircuitBreakerStore,
 } from "./local-ci-pool-circuit-breaker";
+import {
+  recordLocalCiBuilderMemorySample,
+  type BuilderCalibrationStore,
+} from "./local-ci-builder-memory-calibration";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
 import type { LocalIntegrationStatus } from "../../../../scripts/lib/local-integration-status.mjs";
 
@@ -40,6 +44,8 @@ type LocalIntegrationDependencies = {
    * never reach it.
    */
   writeEvidenceBlob?: import("@/lib/evidence/bounded-evidence-output").EvidenceBlobWriter;
+  /** BI-903FB5F9: where measured builder peaks accumulate. Defaults to PlatformConfig. */
+  builderCalibration?: BuilderCalibrationStore;
 };
 
 export async function recordLocalIntegrationResult(
@@ -89,6 +95,16 @@ export async function recordLocalIntegrationResult(
     status: input.status,
     evidence: input.evidence,
   });
+  // BI-903FB5F9: only a canonical leased gate run measured the real builder,
+  // so only it feeds the admission reserve. Best-effort: calibration refines
+  // admission and is never a reason to lose the gate's verdict.
+  const builderMemoryCalibration = gateKey && leaseId
+    ? (await recordLocalCiBuilderMemorySample({
+      platformConfig: dependencies.builderCalibration ?? prisma.platformConfig,
+      evidence: input.evidence,
+      now: new Date(),
+    }).catch(() => ({ status: "error" as const }))).status
+    : "not-leased";
   if (circuitBreaker.status === "concurrent-update-exhausted") {
     throw new Error(
       "Local-CI capacity circuit breaker could not persist a safe singleton policy",
@@ -122,6 +138,7 @@ export async function recordLocalIntegrationResult(
         }
         : {}),
       capacityCircuitBreaker: circuitBreaker.status,
+      builderMemoryCalibration,
       evidence: boundedEvidence,
     } as Prisma.InputJsonValue,
   });

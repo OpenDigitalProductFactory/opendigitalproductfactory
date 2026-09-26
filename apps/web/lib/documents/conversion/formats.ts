@@ -46,8 +46,11 @@ export function normalizeSourceExtension(value: string): string {
 /**
  * The office MIME list: the one home for "is this stored content an office
  * file the engine can render?" (BI-9D43CBEF). Each MIME type maps to the
- * dpf-convert `--from` extension. Text, markdown, HTML and PDF are absent on
- * purpose: the document store already reads them without the engine.
+ * dpf-convert `--from` extension. Text, markdown and HTML are absent on
+ * purpose: the document store keeps their text inline. PDF is absent too, but
+ * not because the store reads it: nothing in the portal extracts a stored
+ * PDF's text. It is a text-only source (below), read by the engine's
+ * pdftotext path (BI-26CD1D1E).
  */
 const OFFICE_SOURCE_EXTENSION_BY_MIME: Readonly<Record<string, string>> = {
   "application/msword": "doc",
@@ -80,4 +83,22 @@ export function normalizeMimeType(value: string): string {
 /** The dpf-convert source extension for an office MIME type, or null for anything else. */
 export function officeSourceExtension(contentFormat: string): string | null {
   return OFFICE_SOURCE_EXTENSION_BY_MIME[normalizeMimeType(contentFormat)] ?? null;
+}
+
+/**
+ * Text-only sources: stored content the engine reads for its text but never
+ * renders, because the original already is the rendering. A PDF gets a
+ * plain_text rendition through `dpf-convert --to txt --from pdf` (pdftotext)
+ * and no pdf rendition (BI-26CD1D1E).
+ */
+const TEXT_ONLY_SOURCE_EXTENSION_BY_MIME: Readonly<Record<string, string>> = {
+  "application/pdf": "pdf",
+};
+
+/** Every text-only MIME type, lower-case, for store queries such as the rendition backfill. */
+export const TEXT_ONLY_SOURCE_MIME_TYPES: readonly string[] = Object.keys(TEXT_ONLY_SOURCE_EXTENSION_BY_MIME);
+
+/** The dpf-convert source extension for a text-only MIME type, or null for anything else. */
+export function textOnlySourceExtension(contentFormat: string): string | null {
+  return TEXT_ONLY_SOURCE_EXTENSION_BY_MIME[normalizeMimeType(contentFormat)] ?? null;
 }

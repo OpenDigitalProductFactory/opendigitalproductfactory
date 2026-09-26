@@ -26,6 +26,7 @@ import {
   isInstallationEnvironmentClass,
   type InstallationEnvironmentClass,
 } from "@dpf/db/installation-operating-intent";
+import { slugify } from "../shared/slugify";
 
 /** PlatformConfig key holding the portal-recorded estate declaration. */
 export const ESTATE_IDENTITY_CONFIG_KEY = "installation.estate-identity.v1";
@@ -99,12 +100,7 @@ export function normalizeEstateName(value: unknown): string | null {
  * equality between installations — the Ed25519 device id is the identity, this
  * is a label (see `lib/federation/instance-identity`).
  */
-export function slugifyEstateName(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
+export { slugify as slugifyEstateName } from "../shared/slugify";
 
 /**
  * The normal form used when two installations compare trust roots.
@@ -308,7 +304,7 @@ export function formatMcpServerName(input: {
   const role = ENVIRONMENT_ROLE_WORD[input.environmentClass];
   const name = normalizeEstateName(input.estateName);
   if (!name) return `dpf-${role}`;
-  const slug = slugifyEstateName(name);
+  const slug = slugify(name);
   return slug ? `dpf-${slug}-${role}` : `dpf-${role}`;
 }
 

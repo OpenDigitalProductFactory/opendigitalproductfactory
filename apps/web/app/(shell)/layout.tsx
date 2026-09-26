@@ -29,6 +29,7 @@ import { PhoneCountryProvider } from "@/components/ui/PhoneCountryContext";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 import { UxInitialLoadBoundary } from "@/components/shell/UxInitialLoadBoundary";
 import { resolveCustomerSurface } from "@/lib/owner-first/archetype-surface";
+import { recordUserSeen } from "@/lib/identity/last-seen";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists.
@@ -47,6 +48,9 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   if (session.user.type === "customer") redirect("/portal");
 
   const user = session.user;
+  // Approvals route to one person; this is how an operator can tell whether
+  // that person is still around (BI-61DE8177). Throttled and best effort.
+  await recordUserSeen(prisma, user.id);
 
   const [
     latestDiscoveryRun,

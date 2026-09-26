@@ -168,3 +168,90 @@ describe("resolveNonprodPoolPolicy decidedHostPressure (BI-48F42581)", () => {
     expect(policy.decidedHostPressure?.sustainedCpuPercent).toBe(20);
   });
 });
+
+describe("resolveNonprodPoolPolicy measured builder reserve (BI-903FB5F9)", () => {
+  const now = new Date("2026-09-24T03:03:52.775Z");
+  const poolConfig = {
+    version: 1,
+    requestedCapacity: 1,
+    ceilings: {
+      minAvailableMemoryBytes: 4 * GiB,
+      maxSustainedCpuPercent: 85,
+      minDiskFreeBytes: 50 * GiB,
+    },
+    rollback: {
+      maxServiceDurationRegressionPercent: 15,
+      maxInfrastructureFailureRatePercent: 5,
+      evidenceMismatchTolerance: 0,
+    },
+  };
+  const calibration = {
+    schemaVersion: 1,
+    ceilingBytes: 16 * GiB,
+    samples: Array.from({ length: 6 }, (_, index) => ({
+      peakBytes: 7 * GiB,
+      oomKills: 0,
+      observedAt: new Date(Date.UTC(2026, 8, 23, 0, index)).toISOString(),
+    })),
+  };
+  // The recorded 2026-09-24 closure: VM 19.89 GiB available, Windows 34.64 GiB.
+  const pressure = {
+    observedAt: now.toISOString(),
+    availableMemoryBytes: 34.64 * GiB,
+    dockerAvailableMemoryBytes: 19.89 * GiB,
+    builderMemoryUsageBytes: [0, 0],
+    sustainedCpuPercent: 20,
+    diskFreeBytes: 900 * GiB,
+    dockerHealthy: true,
+    convergenceActive: false,
+    fencesHealthy: true,
+    evidenceIsolationHealthy: true,
+  };
+
+  function store(rows: Record<string, unknown>) {
+    return {
+      findUnique: async ({ where }: { where: { key: string } }) =>
+        where.key in rows ? { value: rows[where.key] } : null,
+    };
+  }
+
+  async function decide(rows: Record<string, unknown>) {
+    return resolveNonprodPoolPolicy({
+      platformConfig: store(rows),
+      environmentKey: "local-integration-ci",
+      manifestSlotCount: 2,
+      reserveAdmissionHeadroom: true,
+      now,
+      hostPressure: pressure,
+      // The portal reads the Docker VM, so its available figure is the VM's.
+      capacityBroker: async () => ({ ...pressure, availableMemoryBytes: 19.89 * GiB }),
+    });
+  }
+
+  it("AC-5: admits on the reserve derived from measured peaks in PlatformConfig", async () => {
+    const policy = await decide({
+      "local_ci.sandbox_pool": poolConfig,
+      "local_ci.builder_memory_calibration": calibration,
+    });
+    expect(policy.effectiveCapacity).toBe(1);
+    expect(policy.builderReserve).toMatchObject({ source: "measured", sampleCount: 6, bytes: 8 * GiB });
+  });
+
+  it("AC-4: with no calibration row the checked-in calibration applies", async () => {
+    const policy = await decide({ "local_ci.sandbox_pool": poolConfig });
+    expect(policy.builderReserve).toMatchObject({ source: "checked-in", sampleCount: 0 });
+  });
+
+  it("AC-4: an OOM kill in the window reserves the ceiling and closes this host", async () => {
+    const withOom = {
+      ...calibration,
+      samples: calibration.samples.map((sample, index) => (index === 2 ? { ...sample, oomKills: 1 } : sample)),
+    };
+    const policy = await decide({
+      "local_ci.sandbox_pool": poolConfig,
+      "local_ci.builder_memory_calibration": withOom,
+    });
+    expect(policy.rollbackReason).toBe("host-build-headroom-low");
+    expect(policy.builderReserve).toMatchObject({ source: "ceiling", bytes: 16 * GiB });
+  });
+});

@@ -34,6 +34,8 @@ export type AttentionSource =
   | "coworker-envelope" // CoworkerActionEnvelope status=proposed, bound to the reading user (BI-7CB2CCDE)
   | "skill-proposal" // ImprovementProposal category=skill, status=proposed — a skill change awaiting review (BI-2F9EE2E9)
   | "workroom-stall" // a Workroom whose drive has refused consecutive wakes — stalled, or unowned (BI-03E94B5B)
+  | "orphaned-approval" // coworker approvals going to a delegate who is not using the portal (BI-61DE8177)
+  | "contribution-setup" // contribution with the DPF project is undecided, or chosen with no GitHub account connected (BI-D3342020)
   | "mailroom-item"; // correspondence the Mailroom routed that nobody acknowledged inside its window, or that is immediate (BI-12B0AE91)
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
@@ -69,7 +71,8 @@ export type ResidueReason =
   | "policy-approval" // an agent action awaits approval (AgentActionProposal)
   | "new-memory-note" // a coworker's role-local memory gained a new distilled note
   | "no-self-heal" // a platform service is degraded and has no automated repair path (health_alert)
-  | "room-stalled"; // a Workroom's drive keeps refusing to advance — typically no accountable owner
+  | "room-stalled" // a Workroom's drive keeps refusing to advance — typically no accountable owner
+  | "approver-absent"; // approvals route to one person, and that person is not using the portal
 
 /** How much the human must do. The human_cognitive_load cost axis. */
 export type DecideEffort = "one-tap" | "review" | "judgment";

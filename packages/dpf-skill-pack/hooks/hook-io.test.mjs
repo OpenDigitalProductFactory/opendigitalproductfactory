@@ -17,6 +17,9 @@ import {
   isDecisionTool,
   denyEnvelope,
   inDpfWorkspace,
+  actionCwd,
+  shellTargetDir,
+  toNativePath,
 } from "./lib/hook-io.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -39,7 +42,7 @@ test("normalizePayload reads Claude/Codex snake_case envelope", () => {
 });
 
 test("normalizePayload is defensive on junk input", () => {
-  assert.deepEqual(normalizePayload(null), { toolName: undefined, toolInput: {}, cwd: undefined });
+  assert.deepEqual(normalizePayload(null), { toolName: undefined, toolInput: {}, cwd: undefined, sessionCwd: undefined });
   assert.deepEqual(normalizePayload({ tool_input: "notobj" }).toolInput, {});
 });
 
@@ -142,4 +145,46 @@ test("lease-punt-guard stays inert when cwd is outside a DPF checkout", () => {
     encoding: "utf8",
   });
   assert.equal(out.trim(), "", "DPF-branded deny must not fire in a non-DPF repo");
+});
+
+// ── BI-77BE1389: a guard judges the folder the ACTION targets, not the session's ──
+// Sessions on an install host open in the installed runtime (no checkout), which
+// used to switch every guard off, even for a push from a worktree.
+const CHECKOUT = toNativePath(join(HERE, "..", "..", "..")); // this checkout's root
+
+test("toNativePath turns a Git Bash drive path into a Windows one", () => {
+  assert.equal(toNativePath("/d/DPF-source-root-worktrees/x"), "D:/DPF-source-root-worktrees/x");
+  assert.equal(toNativePath("C:\\Users\\a"), "C:/Users/a");
+  assert.equal(toNativePath("/usr/lib"), "/usr/lib");
+});
+
+test("shellTargetDir follows cd / pushd / git -C, chaining relative moves", () => {
+  assert.equal(shellTargetDir("cd /d/DPF-source-root-worktrees/x && git push", "D:/DPF"), "D:/DPF-source-root-worktrees/x");
+  assert.equal(shellTargetDir('git -C "D:/a b/c" status', "D:/DPF"), "D:/a b/c");
+  assert.equal(shellTargetDir("cd a && cd ../b && ls", "/work"), "/work/b");
+  assert.equal(shellTargetDir("ls -la", "D:/DPF"), "D:/DPF", "no move keeps the session folder");
+  assert.equal(shellTargetDir("cd ~ && ls", "D:/DPF"), "D:/DPF", "home and variables are not guessed");
+});
+
+test("actionCwd: a file edit is judged at its checkout root; other tools keep the session folder", () => {
+  const file = `${CHECKOUT}/apps/web/lib/example.ts`;
+  assert.equal(actionCwd("Edit", { file_path: file }, "D:/DPF"), CHECKOUT);
+  assert.equal(actionCwd("AskUserQuestion", {}, "D:/DPF"), "D:/DPF");
+  assert.equal(actionCwd("Edit", { file_path: "relative.ts" }, "D:/DPF"), "D:/DPF");
+});
+
+test("normalizePayload keeps the harness's folder as sessionCwd", () => {
+  const n = normalizePayload({ tool_name: "Bash", tool_input: { command: `cd ${CHECKOUT} && ls` }, cwd: "D:/DPF" });
+  assert.equal(n.cwd, CHECKOUT);
+  assert.equal(n.sessionCwd, "D:/DPF");
+});
+
+test("lease-punt-guard now fires for a checkout command run from a session opened outside any checkout", () => {
+  const cmd = ["cd", JSON.stringify(CHECKOUT), "&&", "npx", "prisma", "migrate", "dev"].join(" ");
+  const out = execFileSync("node", [join(HERE, "lease-punt-guard.mjs")], {
+    input: JSON.stringify({ toolName: "Shell", toolInput: { command: cmd }, cwd: "/" }),
+    env: { ...process.env, DATABASE_URL: "", DPF_GUARDS_WORKSPACE_ANY: "0" },
+    encoding: "utf8",
+  });
+  assert.match(out, /"deny"/, "the session folder no longer switches the guard off");
 });
