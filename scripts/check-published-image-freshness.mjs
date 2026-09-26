@@ -15,6 +15,7 @@
 //   node scripts/check-published-image-freshness.mjs [--image <ref>] [--ref <git-ref>]
 //                                                    [--max-behind N] [--json]
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -29,8 +30,15 @@ const DEFAULT_IMAGE = "ghcr.io/opendigitalproductfactory/dpf-portal:latest";
 const STAMP_PATH = "/app/.dpf-image-version";
 
 function arg(name, fallback) {
-  const i = process.argv.indexOf(name);
-  return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({
+    args: process.argv.slice(2),
+    strict: false,
+    allowPositionals: true,
+    options: { "image": { type: "string" }, "ref": { type: "string" }, "max-behind": { type: "string" } },
+  });
+  const value = values[name.replace(/^--/, "")];
+  return typeof value === "string" && value ? value : fallback;
 }
 const wantJson = process.argv.includes("--json");
 const image = arg("--image", DEFAULT_IMAGE);

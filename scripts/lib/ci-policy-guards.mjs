@@ -158,6 +158,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/git.test.mjs"),
       conformanceTest("scripts/check-no-direct-git-spawn.test.mjs"),
       node("scripts/check-no-direct-git-spawn.mjs"),
+      // One argument parser for every script: node:util parseArgs
+      // (plan 2026-09-08 §10.5 S2).
+      conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
+      node("scripts/check-no-hand-rolled-argv.mjs"),
     ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),

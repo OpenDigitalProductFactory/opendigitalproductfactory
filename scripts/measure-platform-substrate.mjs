@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -163,16 +164,20 @@ export async function runSubstrateMeasurement(options={}) {
 }
 
 function parseArgs(argv) {
-  const options={};
-  const keys={"--repo-root":"repoRoot","--manifest":"manifestPath","--compose":"composePath","--providers":"providersPath","--capabilities":"capabilitiesPath","--baseline":"baselinePath"};
-  for(let i=0;i<argv.length;i++) {
-    if(argv[i]==="--json") options.json=true;
-    else if(argv[i]==="--update") options.update=true;
-    else if(argv[i]==="--owner" && argv[i+1]) options.owner=argv[++i];
-    else if(argv[i]==="--expiry" && argv[i+1]) options.expiry=argv[++i];
-    else if(argv[i]==="--contraction" && argv[i+1]) options.contraction=argv[++i];
-    else if(keys[argv[i]] && argv[i+1]) options[keys[argv[i]]]=resolve(argv[++i]);
-    else throw new Error(`Unknown or incomplete argument: ${argv[i]}`);
+  const paths = { "repo-root": "repoRoot", manifest: "manifestPath", compose: "composePath", providers: "providersPath", capabilities: "capabilitiesPath", baseline: "baselinePath" };
+  const { values } = utilParseArgs({
+    args: argv,
+    options: {
+      json: { type: "boolean" },
+      update: { type: "boolean" },
+      ...Object.fromEntries(["owner", "expiry", "contraction", ...Object.keys(paths)].map((name) => [name, { type: "string" }])),
+    },
+  });
+  const options = {};
+  for (const [name, value] of Object.entries(values)) {
+    if (value === "") throw new Error(`Unknown or incomplete argument: --${name}`);
+    if (paths[name]) options[paths[name]] = resolve(value);
+    else options[name] = value;
   }
   return options;
 }

@@ -24,6 +24,7 @@
 //
 // Spec: docs/superpowers/specs/2026-07-21-agent-process-efficiency-hardening-design.md
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,10 +34,17 @@ import { createHash } from "node:crypto";
 const LOCKFILE = "pnpm-lock.yaml";
 
 function parseArgs(argv) {
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: { help: { type: "boolean", short: "h" }, expect: { type: "string" } },
+  });
   const args = { expect: null };
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--help" || argv[i] === "-h") args.help = true;
-    else if (argv[i] === "--expect") args.expect = (argv[++i] || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (values.help) args.help = true;
+  if (values.expect !== undefined) {
+    args.expect = (typeof values.expect === "string" ? values.expect : "").split(",").map((s) => s.trim()).filter(Boolean);
   }
   return args;
 }
