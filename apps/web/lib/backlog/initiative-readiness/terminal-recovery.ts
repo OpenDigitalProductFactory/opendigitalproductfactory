@@ -640,7 +640,9 @@ export async function resolveTerminalInitiativeRecovery(args: {
     );
   }
 
-  const baselineArtifact = baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
+  // BI-D3E1F6D9: a design review reads the room's current design at its head,
+  // exactly as the refused claim issues it; only acceptance keeps the pinned commit.
+  const baselineArtifact = !designPhase && baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
       === room.repositoryFullName.toLocaleLowerCase("en-US")
     ? {
       commitSha: baseline.artifactRef.commitSha,
