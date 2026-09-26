@@ -24,6 +24,7 @@ import type {
   ReadinessShape,
   ReadinessTarget,
 } from "@/lib/backlog/initiative-readiness/types";
+import type { GovernedExecuteRejection } from "@/lib/mcp-governed-execute";
 
 const GATES_PROPORTIONAL_TO_SHAPE = "gates-proportional-to-shape";
 const DESIGN_RESEARCH_REQUIRED = "principles/design-research-required";
@@ -123,7 +124,8 @@ export const DIRECTIONAL_ESCALATION_PRINCIPLE: Record<DirectionalEscalationReaso
   "high-risk": null,
 };
 
-export type AlignmentRefusalCode = "alignment_denied" | "alignment_escalation_required";
+/** The alignment gate's refusal codes (tak/preexecution-control.ts). */
+export type AlignmentRefusalCode = Extract<GovernedExecuteRejection, "alignment_denied" | "alignment_escalation_required">;
 
 export const ALIGNMENT_REFUSAL_PRINCIPLE: Record<AlignmentRefusalCode, string | null> = {
   // "the organization's business decisions in WWWD ... no scope's doctrine binds another".
