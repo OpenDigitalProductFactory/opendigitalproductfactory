@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   DEFAULT_RESUME_INTERVAL_MS,
@@ -682,4 +682,63 @@ test("the launcher reads and deletes its spec, then starts the resumer detached 
   assert.equal(spawned[0].options.detached, true);
   // The spec holds the session environment (credentials included); it must not outlive the launch.
   assert.throws(() => readFileSync(specPath, "utf8"), /ENOENT/);
+});
+
+// BI-27A37D27 acceptance: kill the invoking process TREE after the gate hands
+// its claim to a resumer, then prove the resumer is still alive and working.
+// POSIX: the caller leads its own process group and the whole group is killed;
+// Windows: `taskkill /T /F` kills the caller and every descendant by parent pid.
+// A resumer that is still a descendant of the caller dies either way.
+test("the resumer survives its caller's whole process tree being killed", { timeout: 60_000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-resumer-survival-"));
+  const heartbeat = join(dir, "heartbeat.log");
+  const runnerPath = join(dir, "stub-resumer.mjs");
+  writeFileSync(runnerPath, [
+    'import { appendFileSync, writeFileSync } from "node:fs";',
+    "const file = process.env.DPF_TEST_HEARTBEAT;",
+    'writeFileSync(file + ".pid", String(process.pid));',
+    'setInterval(() => appendFileSync(file, "tick\\n"), 100);',
+    "setTimeout(() => process.exit(0), 30_000);",
+  ].join("\n"));
+  const modulePath = fileURLToPath(new URL("./durable-wait-resumer.mjs", import.meta.url));
+  const callerPath = join(dir, "caller.mjs");
+  writeFileSync(callerPath, [
+    `import { spawnDurableWaitResumer } from ${JSON.stringify(pathToFileURL(modulePath).href)};`,
+    `const r = spawnDurableWaitResumer({ runnerPath: ${JSON.stringify(runnerPath)}, gateArgv: [process.execPath, "gate.mjs"], cwd: ${JSON.stringify(dir)}, env: { ...process.env, DPF_TEST_HEARTBEAT: ${JSON.stringify(heartbeat)} } });`,
+    'process.stdout.write(JSON.stringify(r) + "\\n");',
+    "setInterval(() => {}, 1000);",
+  ].join("\n"));
+
+  const caller = spawn(process.execPath, [callerPath], {
+    stdio: ["ignore", "pipe", "inherit"],
+    detached: process.platform !== "win32",
+  });
+  const report = await new Promise((resolve, reject) => {
+    let out = "";
+    caller.stdout.on("data", (chunk) => {
+      out += chunk;
+      if (out.includes("\n")) resolve(JSON.parse(out.split("\n")[0]));
+    });
+    caller.on("error", reject);
+  });
+  assert.equal(report.spawned, true);
+  assert.equal(report.survivesSession, true, `resumer not session-independent: ${report.reason}`);
+
+  const ticks = () => { try { return readFileSync(heartbeat, "utf8").split("\n").filter(Boolean).length; } catch { return 0; } };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (let i = 0; i < 100 && ticks() === 0; i += 1) await sleep(100);
+  assert.ok(ticks() > 0, "resumer never started");
+
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/T", "/F", "/PID", String(caller.pid)]);
+  } else {
+    process.kill(-caller.pid, "SIGKILL");
+  }
+  await sleep(1_000);
+  const before = ticks();
+  await sleep(1_000);
+  const after = ticks();
+  const resumerPid = Number(readFileSync(`${heartbeat}.pid`, "utf8"));
+  try { process.kill(resumerPid, "SIGKILL"); } catch { /* already gone would have failed below */ }
+  assert.ok(after > before, `resumer stopped when its caller's tree was killed (ticks ${before} -> ${after})`);
 });
