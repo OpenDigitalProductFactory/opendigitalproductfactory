@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 
-import { mcpCall } from "./mcp-client.mjs";
+import { buildJsonRpcBody, mcpCall, mcpPost } from "./mcp-client.mjs";
 
 test("MCP calls abort within the configured transport deadline", async () => {
   const server = createServer((_request, _response) => {
@@ -106,4 +106,72 @@ test("an explicit call-site opt-in still allows a non-loopback endpoint", async 
       (error) => !/refusing to send a bearer token/.test(error.message),
     );
   });
+});
+
+// Plan 2026-09-08 §10.5 S8: one client for every script. mcpPost is the raw
+// layer the fail-open call sites use; mcpCall unwraps on top of it.
+
+test("buildJsonRpcBody writes a JSON-RPC 2.0 envelope with a fresh id", () => {
+  const first = JSON.parse(buildJsonRpcBody("tools/call", { name: "t", arguments: {} }));
+  const second = JSON.parse(buildJsonRpcBody("tools/list"));
+  assert.equal(first.jsonrpc, "2.0");
+  assert.equal(first.method, "tools/call");
+  assert.deepEqual(first.params, { name: "t", arguments: {} });
+  assert.ok(second.id > first.id);
+  assert.equal("params" in second, false);
+});
+
+test("mcpPost returns the raw reply without interpreting the HTTP status", async () => {
+  let seen = null;
+  const reply = await mcpPost("tools/call", { name: "list_workrooms", arguments: {} }, {
+    mcpUrl: "http://127.0.0.1:3000/api/mcp/v1",
+    bearerToken: "dpfmcp_test",
+    accept: "application/json, text/event-stream",
+    fetchImpl: async (url, init) => {
+      seen = { url, init };
+      return new Response("unauthorized", { status: 401 });
+    },
+  });
+  assert.equal(reply.status, 401);
+  assert.equal(reply.text, "unauthorized");
+  assert.equal(seen.init.headers.Authorization, "Bearer dpfmcp_test");
+  assert.equal(seen.init.headers.Accept, "application/json, text/event-stream");
+  assert.equal(JSON.parse(seen.init.body).params.name, "list_workrooms");
+});
+
+test("mcpPost enforces the loopback rule on the fetchImpl path too", async () => {
+  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined }, async () => {
+    await assert.rejects(
+      mcpPost("tools/call", { name: "t", arguments: {} }, {
+        mcpUrl: REMOTE,
+        bearerToken: "dpfmcp_test",
+        fetchImpl: async () => { throw new Error("must not be called"); },
+      }),
+      /refusing to send a bearer token/,
+    );
+  });
+});
+
+test("mcpCall unwraps the text content of a tool result", async () => {
+  const result = await mcpCall("t", {}, {
+    mcpUrl: "http://127.0.0.1:3000/api/mcp/v1",
+    bearerToken: "dpfmcp_test",
+    fetchImpl: async () => new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { content: [{ type: "text", text: JSON.stringify({ success: true, data: 7 }) }] },
+    }), { status: 200 }),
+  });
+  assert.deepEqual(result, { success: true, data: 7 });
+});
+
+test("mcpCall keeps its invalid-JSON error text, which retry classifiers match", async () => {
+  await assert.rejects(
+    mcpCall("t", {}, {
+      mcpUrl: "http://127.0.0.1:3000/api/mcp/v1",
+      bearerToken: "dpfmcp_test",
+      fetchImpl: async () => new Response("<html>", { status: 502 }),
+    }),
+    /mcpCall: invalid JSON response from http:\/\/127\.0\.0\.1:3000\/api\/mcp\/v1 \(status 502\)/,
+  );
 });

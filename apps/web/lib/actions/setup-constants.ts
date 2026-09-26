@@ -33,20 +33,8 @@ export const STEP_ROUTES: Record<string, string> = {
   "workspace": "/workspace",
 };
 
-export const STEP_LABELS: Record<string, string> = {
-  "account-bootstrap": "Account",
-  "ai-providers": "AI Providers",
-  "branding": "Branding",
-  "business-context": "Your Business",
-  "how-you-decide": "How You Decide",
-  "operating-hours": "Operating Hours",
-  "storefront": "Storefront",
-  "mailroom": "Mailroom",
-  "platform-development": "Platform Dev",
-  "build-studio": "Build",
-  "meet-your-coo": "Meet Your COO",
-  "workspace": "Workspace",
-};
+// Step labels live in the message catalog: packages/i18n/src/messages/en-US/setup.json
+// (steps.*), rendered with useT("setup") (EP-6B33A840 L0.2).
 
 export type SetupStep = (typeof SETUP_STEPS)[number];
 export type StepStatus = "pending" | "completed" | "skipped";

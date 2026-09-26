@@ -23,6 +23,7 @@ The Admin area is the control centre for platform configuration. It is where adm
 - Update branding settings and preview how they appear across the platform
 - Maintain reference data tables used by portfolios, compliance, HR, and other areas
 - Configure storefront settings including domain routing and public storefront behaviour
+- Choose your own language and time zone under **Admin > Settings > Language and region**. Both default to the organization's settings. English is the only language available today; administrators also see two test languages that show every screen in placeholder text, so untranslated wording and right-to-left layout problems are easy to spot.
 
 ## Graph Explorer
 

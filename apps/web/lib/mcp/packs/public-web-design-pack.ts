@@ -336,8 +336,8 @@ async function extractBrandDesignSystemHandler(
     },
   });
 
-  const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
+  const { jobs } = await import("@/lib/jobs");
+  await jobs.send({
     name: "brand/extract.run",
     data: {
       organizationId: org.id,

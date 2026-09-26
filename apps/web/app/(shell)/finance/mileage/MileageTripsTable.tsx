@@ -14,6 +14,7 @@ import { DataTable, type Column } from "@/components/ui/report-kit/DataTable";
 import { Button } from "@/components/ui/Button";
 import { classifyTripAction } from "@/lib/actions/mileage";
 import type { TripClassification } from "@/lib/mileage/classification";
+import { formatDate } from "@/lib/datetime";
 
 export type MileageTripRow = {
   tripId: string;
@@ -31,14 +32,6 @@ const CHOICES: ReadonlyArray<{ value: TripClassification; label: string }> = [
   { value: "personal", label: "Personal" },
   { value: "commute", label: "Commute" },
 ];
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 export function MileageTripsTable({
   rows,

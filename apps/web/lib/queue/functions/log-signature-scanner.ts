@@ -14,8 +14,8 @@
 // an open report for a signature is never re-filed; a resolved one may re-file
 // (the problem recurred — worth knowing).
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   clusterBySignature,
@@ -148,7 +148,7 @@ export async function runLogSignatureScan(opts?: {
   return { scanned: lines.length, signatures: buckets.length, reportsCreated, skippedExisting };
 }
 
-export const logSignatureScanner = inngest.createFunction(
+export const logSignatureScanner = jobs.createFunction(
   { id: "ops/log-signature-scanner", retries: 2, triggers: [cron("9,24,39,54 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ops/log-signature-scanner");

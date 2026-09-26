@@ -9,7 +9,7 @@
 //
 // So the send lives here rather than being retyped at each call site.
 
-import { inngest } from "../queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 
 export type StartDeliberationInput = {
   deliberationRunId: string;
@@ -25,7 +25,7 @@ export type StartDeliberationInput = {
  * reporting a panel it never started.
  */
 export async function startDeliberationRun(input: StartDeliberationInput): Promise<void> {
-  await inngest.send({
+  await jobs.send({
     name: "deliberation/run.start",
     data: {
       deliberationRunId: input.deliberationRunId,

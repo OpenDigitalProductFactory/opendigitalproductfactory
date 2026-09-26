@@ -15,6 +15,7 @@
 // revealing anything about the real user or organization.
 
 import { execInSandbox, isSandboxRunning } from "./sandbox";
+import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
 import { prisma } from "@dpf/db";
 import { buildBuildStudioSandboxTargetInput } from "@/lib/runtime-coordination/build-studio-runtime";
 import {
@@ -405,14 +406,14 @@ function sandboxGitPrelude(): string {
     // repo exists — well before any checkout/worktree-add/commit runs.
     `git -C ${WORKSPACE} config --local core.hooksPath /dev/null >/dev/null 2>&1 || true`,
     `if [ -f "${GIT_INDEX_LOCK}" ]; then for _dpf_git_wait in 1 2 3 4 5; do if ! pgrep -x git >/dev/null 2>&1; then break; fi; sleep 1; done; if [ -f "${GIT_INDEX_LOCK}" ] && ! pgrep -x git >/dev/null 2>&1; then rm -f "${GIT_INDEX_LOCK}"; fi; fi`,
-    `git config --global --add safe.directory "${WORKSPACE}" >/dev/null 2>&1 || true`,
+    ensureGlobalSafeDirectoryCommand(`"${WORKSPACE}"`),
     // BI-518B5F69: git's ownership check is per worktree path (and the shared
     // .git/worktrees/<id>), so the single /workspace exception does not cover
     // the isolated build worktrees under /workspace/.builds — every second
     // build failed plan→build with "dubious ownership". The sandbox is a
     // single-tenant root container, so the wildcard is the honest allowance.
     // Guarded so repeated preludes do not grow the config.
-    `git config --global --get-all safe.directory 2>/dev/null | grep -qx '\\*' || git config --global --add safe.directory '*' >/dev/null 2>&1 || true`,
+    ensureGlobalSafeDirectoryCommand("'*'"),
   ].join(" && ");
 }
 

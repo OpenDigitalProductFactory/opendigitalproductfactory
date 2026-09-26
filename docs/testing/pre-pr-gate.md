@@ -577,7 +577,10 @@ tests and must never be used as release evidence. It still walks the whole pass
 path and records `status: "passed"`, so every record it writes and the evidence
 it sends carry `testStub: true` (BI-53B189C8). No push reader accepts a marked
 record: `pregate:status` reports it as INCONCLUSIVE and names the stub, and the
-pre-push hook, the agent publish guard and `pr:health` all refuse it. Tests that
+pre-push hook, the agent publish guard and `pr:health` all refuse it. The portal
+refuses a marked payload outright with `test_stub_evidence_refused` (BI-F5344F65):
+it records no evidence row a PR could cite, changes no pool policy and adds no
+builder calibration, so a stub run against a real portal fails closed. Tests that
 spawn `scripts/gate-worktree.mjs` must pass a temp repository as `--worktree`,
 never the checkout running the suite; `gate-worktree-lease.test.mjs` ends with a
 test that fails if any of its gates wrote into the caller's git dir.
@@ -664,7 +667,32 @@ action changes those numbers. Page cache already counts as available, so do
 not drop caches, and never run `sync` in the Docker VM, because it wedges the VM
 (BI-903FB5F9). The builder reserve is the measured peak of the gate's own
 production build plus a margin, not the builder's 16 GiB ceiling. Every gate
-record carries the measured peak as `evidence.builderMemory` (BI-D3BF53A9). A fenced run likewise records *which* fence fired
+record carries the measured peak as `evidence.builderMemory` (BI-D3BF53A9).
+
+**The production build is delegated to the merge queue (BI-3A14308C).** The
+local gate runs guards, typecheck and affected vitest, then stops. The merge
+queue's required `pnpm --filter web build` job is the binding production build
+(AGENTS.md §4), so a local gate reserves no builder memory in the Docker VM:
+admission needs only the host-stage reserve. The gate record says
+`productionBuild: delegated`, never that a local build passed. To build locally
+anyway, for example to reproduce a failure only the Docker image build shows,
+run the gate with `DPF_LOCAL_CI_BUILD_STRATEGY=local`. That run reserves the
+builder memory as before and records the builder's measured peak.
+
+The reserve keeps itself current (BI-903FB5F9):
+
+- Each leased gate result folds its measured peak into the
+  `local_ci.builder_memory_calibration` PlatformConfig row, a window of the 20
+  newest peaks.
+- With 5 or more peaks, admission reserves the window's highest peak plus the
+  checked-in margin.
+- With fewer peaks, it keeps the checked-in calibration.
+- After any OOM kill in the window, it reserves the full ceiling.
+- The admission decision reports which one applied as `builderReserve`.
+- A guard (`scripts/check-no-manual-vm-cache-drop.mjs`) refuses a manual
+  page-cache drop recipe in any tracked file.
+
+A fenced run likewise records *which* fence fired
 (`fence reason: lease-authority-deadline`, ...) in its gate record, so a
 self-fence never reads as a reasonless failure of the diff (BI-ECAE03F7).
 
@@ -677,6 +705,16 @@ revision 1, on Windows hosts only: older clients opened a focus-stealing
 terminal window on every re-claim (BI-69178E02). The refusal is not a verdict on
 the diff. Re-running the same branch is refused again, and a stale resumer stops
 after the first refusal. Rebase onto `origin/main` and run `pregate` again.
+
+**A queued gate's waiter outlives the session that started it.** On Windows a
+process that node spawns stays inside its caller's job object, and the Claude
+Code client runs its whole tree in one job, so every durable-wait resumer died
+when its session closed (BI-27A37D27). The resumer is now started through WMI,
+outside that job. If WMI is unavailable, the queued payload says
+`resumerSurvivesSession: false` and the wait ends with the session. For a queued
+claim whose every waiter has ended, `pregate:status` says "no waiter is alive"
+instead of "queued". That is not a verdict on the diff: re-run `pregate`. A
+branch cut before this fix keeps the old resumer until it is rebased.
 
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a

@@ -217,6 +217,7 @@ const definitions: ToolDefinition[] = [
           enum: [1],
           description: "Versioned local-CI slot capability. Omit for legacy singleton-only admission.",
         },
+        productionBuild: { type: "string", enum: ["local", "delegated"], description: "\"delegated\": the merge queue's required build owns the production build, so admission reserves no builder memory (BI-3A14308C). Omit for \"local\"." },
         hostPressure: {
           ...hostPressureSchema,
           description: "Recent fail-closed host observation used only to decide whether slot-1 may admit.",
@@ -541,6 +542,7 @@ async function claimNonprodEnvironmentLeaseHandler(
     taskRunId: stringValue("taskRunId") || undefined,
     cleanupCommand: stringValue("cleanupCommand") || undefined,
     slotManifestVersion: slotManifestVersion as 1 | undefined,
+    productionBuild: stringValue("productionBuild") === "delegated" ? "delegated" : undefined,
     hostPressure: hostPressure as LocalCiHostPressure | undefined,
     resourceClass: isHeavyResourceClass(resourceClass) ? resourceClass : undefined,
     expectedMemoryBytes,

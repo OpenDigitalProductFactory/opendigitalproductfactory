@@ -12,6 +12,8 @@ import type {
   DecisionRiskTier,
 } from "./types";
 import { riskWithin, type ProfileCoverage } from "./coverage-scoring";
+// BI-DEDAC950: an escalation names the principle page that governs it, when one does.
+import { directionalEscalationPrinciple as cite } from "@/lib/kernel/governing-principles";
 
 export type DirectionalOutcomeInput = {
   baseResult: Omit<DecisionPerspectiveEvaluationResult, "outcomeType" | "rationale">;
@@ -50,6 +52,7 @@ export function contentAwareDirectionalOutcome(
   if (input.relevanceMethod === "lexical") {
     return {
       ...baseResult,
+      ...cite("lexical-fallback"),
       outcomeType: "escalate",
       rationale:
         `Your recorded stance leans ${alignment} on this decision, but relevance was scored without the semantic embedding layer (lexical fallback) — too coarse to decide this on your behalf. Escalating to your call; restore embeddings to re-enable autonomous stance-grounded verdicts.`,
@@ -64,6 +67,7 @@ export function contentAwareDirectionalOutcome(
   if (alignment === "mixed") {
     return {
       ...baseResult,
+      ...cite("mixed-stance"),
       outcomeType: "escalate",
       rationale:
         "Your recorded stance points in conflicting directions on this decision. Escalating to your call, and the resolution becomes candidate stance material.",
@@ -73,6 +77,7 @@ export function contentAwareDirectionalOutcome(
   if (input.riskTier === "critical") {
     return {
       ...baseResult,
+      ...cite("critical-risk"),
       outcomeType: "escalate",
       rationale:
         `This is a critical-risk decision, so it goes to your call even though your recorded stance leans ${alignment} at confidence ${confidence}.`,
@@ -85,6 +90,7 @@ export function contentAwareDirectionalOutcome(
   ) {
     return {
       ...baseResult,
+      ...cite("below-confidence"),
       outcomeType: "escalate",
       rationale:
         `Your recorded stance does not clearly speak to this decision (alignment ${alignment}, confidence ${confidence} below the ${selectedProfile.autonomyPolicy.minimumConfidenceForRecommendation} threshold). Escalating to your call.`,
@@ -114,6 +120,7 @@ export function contentAwareDirectionalOutcome(
   if (!selectedCoverage.settledByRuling) {
     return {
       ...baseResult,
+      ...cite("aligned-not-settled"),
       outcomeType: "escalate",
       rationale:
         `This is a NEW proposition: your recorded stance is consistent with it (confidence ${confidence}), but you have not ruled on this question before. Escalating so you can weigh it — a decision that merely matches existing doctrine is not one you have already made.`,
@@ -124,6 +131,7 @@ export function contentAwareDirectionalOutcome(
   if (input.riskTier === "high") {
     return {
       ...baseResult,
+      ...cite("high-risk"),
       outcomeType: "escalate",
       rationale:
         `Your recorded stance supports this at confidence ${confidence}, but approving a high-risk decision still needs your live call.`,

@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 720,
+  "pageCount": 722,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1992,6 +1992,21 @@
         "install-and-registration",
         "where-it-sits-in-the-pipeline",
         "relationship-to-the-other-engines"
+      ]
+    },
+    "docs/architecture/localization-runbook.md": {
+      "publicHref": "/architecture/localization-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "localization-runbook",
+        "where-things-live",
+        "authoring-ui-copy",
+        "how-a-viewers-language-is-chosen",
+        "locale-statuses",
+        "checking-a-screen-for-right-to-left-readiness",
+        "adding-a-locale"
       ]
     },
     "docs/architecture/mcp-tool-authorization-runbook.md": {
@@ -12296,6 +12311,20 @@
         "grafana-dashboards",
         "edge-node-fleet-metrics-push-not-scrape",
         "osi-layer-model"
+      ]
+    },
+    "docs/user-guide/operations/portfolio-budgets.md": {
+      "publicHref": "/user-guide/operations/portfolio-budgets/",
+      "portalHref": "/docs/operations/portfolio-budgets",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "overview",
+        "reading-the-panel",
+        "setting-a-budget",
+        "confirming-an-epics-portfolio",
+        "how-budgets-steer-work"
       ]
     },
     "docs/user-guide/operations/self-upgrade.md": {

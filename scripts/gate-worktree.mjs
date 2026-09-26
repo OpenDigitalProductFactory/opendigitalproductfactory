@@ -64,6 +64,7 @@ export function describeLeaseCallFailure(error) {
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
 import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH, EXIT_SOURCE_DRIFT, EXIT_USAGE, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
 import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
+import { buildIsDelegated, defaultBuildStrategy } from "./lib/local-integration-ci.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
   authoritySafetyMarginMs,
@@ -1631,6 +1632,10 @@ async function main() {
         gateClientRevision: GATE_CLIENT_REVISION,
         branchName: branch,
         slotManifestVersion: slotManifest.schemaVersion,
+        // BI-3A14308C: a gate that delegates its production build to the merge
+        // queue reserves no builder memory. An older portal ignores the field
+        // and keeps reserving, so this is safe to ship before the server.
+        productionBuild: buildIsDelegated(defaultBuildStrategy()) ? "delegated" : "local",
         hostPressure,
       }, leaseQueueCallOptions(options.mcpUrl, bearerToken));
     } catch (error) {
@@ -1915,6 +1920,8 @@ async function main() {
           // item 1 asked to end.
           resumeOwner: resume.spawned ? "detached-resumer" : "caller",
           resumerPid: resume.pid,
+          // BI-27A37D27: false means the waiter dies with this client session.
+          resumerSurvivesSession: resume.spawned ? resume.survivesSession !== false : false,
           ...(resume.spawned ? {} : { resumeUnavailableReason: resume.reason }),
           ...(closedReason ? { poolClosedReason: closedReason } : {}),
         }) + "\n");
@@ -2450,7 +2457,19 @@ async function main() {
       // walking samples. The admission-time `builderMemoryUsageBytes` is
       // sampled before any build runs and says nothing about the build.
       builderMemory: controlPlaneEvidence?.builderMemory
-        ?? { bi: "BI-D3BF53A9", status: "unmeasured", reason: "no-production-build-ran", peakBytes: null },
+        ?? {
+          bi: "BI-D3BF53A9",
+          status: "unmeasured",
+          reason: buildIsDelegated(defaultBuildStrategy())
+            ? "production-build-delegated-to-merge-queue"
+            : "no-production-build-ran",
+          peakBytes: null,
+        },
+      // BI-3A14308C: say who owns the production build, never imply a local
+      // build passed when none ran.
+      productionBuild: buildIsDelegated(defaultBuildStrategy())
+        ? { owner: "merge-queue", status: "delegated", check: ".github/workflows/ci.yml production build (merge_group)" }
+        : { owner: "local-ci", status: "ran" },
       gatePassed: outcome.gatePassed,
       ...readFailureEvidenceBinding(sha, worktreePath),
       completedAt: new Date().toISOString(),

@@ -6,7 +6,7 @@ import path from "node:path";
 import { prisma } from "@dpf/db";
 
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 
 import {
   POSTGRES_BACKUP_EVENT,
@@ -95,7 +95,7 @@ export async function triggerBackupNowAction(
     };
   }
   try {
-    const result = await inngest.send({
+    const result = await jobs.send({
       name: eventName,
       data: { trigger: "manual" },
     });
@@ -126,7 +126,7 @@ export async function triggerTrialRestoreNowAction(
     "@/lib/operate/backups/constants"
   );
   try {
-    const result = await inngest.send({
+    const result = await jobs.send({
       name: POSTGRES_TRIAL_RESTORE_EVENT,
       data: { trigger: "manual" },
     });

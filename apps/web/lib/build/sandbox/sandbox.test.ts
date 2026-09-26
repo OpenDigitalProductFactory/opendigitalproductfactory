@@ -115,7 +115,7 @@ describe("prefixSafeWorkspaceCommand", () => {
     const command = prefixSafeWorkspaceCommand("git -C /workspace/.builds/FB-1 rev-parse HEAD^{tree}");
 
     expect(command).toContain("git config --global --add safe.directory '*'");
-    expect(command).toContain("git config --global --get-all safe.directory 2>/dev/null | grep -qx '\\*' ||");
+    expect(command).toContain("git config --global --get-all safe.directory 2>/dev/null | grep -qxF '*' ||");
     expect(command.indexOf("safe.directory '*'")).toBeLessThan(command.indexOf("git -C /workspace/.builds/FB-1"));
   });
 });

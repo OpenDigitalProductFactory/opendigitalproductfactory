@@ -9,12 +9,12 @@
 // This daily cron runs it. It only acts on RecurringSchedules an operator set to
 // status="active"; the job is catalog `editable`, so an operator can disable it.
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
-export const recurringInvoiceDispatch = inngest.createFunction(
+export const recurringInvoiceDispatch = jobs.createFunction(
   { id: "finance/recurring-invoice-dispatch", retries: 1, triggers: [cron("30 6 * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "finance/recurring-invoice-dispatch");

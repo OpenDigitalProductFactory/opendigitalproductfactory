@@ -79,6 +79,17 @@ export type ResolvedLocalCiPoolPolicy = {
    */
   decidedHostPressure?: LocalCiHostPressure;
   /**
+   * The builder admission reserve the canonical resolver applied and where it
+   * came from: measured gate peaks, the checked-in calibration, or the ceiling
+   * after an OOM kill (BI-903FB5F9).
+   */
+  builderReserve?: {
+    bytes: number;
+    source: "measured" | "checked-in" | "ceiling";
+    reason: string;
+    sampleCount: number;
+  };
+  /**
    * The arithmetic behind a headroom refusal (BI-D3BF53A9): what was
    * available, the floor kept back, the per-slot reserve, and the shortfall.
    * A closed pool that only says "headroom-low" cannot be told apart from a
@@ -532,6 +543,13 @@ export function resolveLocalCiPoolPolicy(input: {
   host: LocalCiHostPressure;
   manifestSlotCount: number;
   reserveAdmissionHeadroom?: boolean;
+  /**
+   * BI-3A14308C (WWMD DI-ED547297DC9F): false when the gate builds no local
+   * production image because the merge queue owns that build. The host-stage
+   * reserve still applies; only the builder reserve is waived. Defaults to
+   * true, so a caller that does not say keeps today's admission.
+   */
+  reserveBuilderHeadroom?: boolean;
   env?: PolicyEnv;
   now?: Date;
   /**
@@ -539,6 +557,11 @@ export function resolveLocalCiPoolPolicy(input: {
    * valid config row exists, so an operator's explicit row always wins.
    */
   installation?: LocalCiInstallationProfile | null;
+  /**
+   * Builder admission reserve kept current from measured gate peaks
+   * (BI-903FB5F9). Absent: the checked-in calibration applies, as before.
+   */
+  builderReserveBytes?: number;
 }): ResolvedLocalCiPoolPolicy {
   const manifestCapacity = Number.isFinite(input.manifestSlotCount)
     && input.manifestSlotCount >= LOCAL_CI_MIN_CAPACITY
@@ -594,12 +617,15 @@ export function resolveLocalCiPoolPolicy(input: {
   }
 
   if (input.reserveAdmissionHeadroom) {
+    const reserveBuilder = input.reserveBuilderHeadroom !== false;
     const builderMemoryBytes = localCiBuilderAdmissionReserveBytes({
       hardCeilingBytes: localCiSlotResources.builderPolicy.memoryBytes,
-      calibratedReserveBytes:
-        localCiSlotResources.builderPolicy.admissionReserveBytes,
+      calibratedReserveBytes: input.builderReserveBytes
+        ?? localCiSlotResources.builderPolicy.admissionReserveBytes,
     });
-    const hostBuildCapacity = localCiBuildHeadroomCapacity({
+    // A delegated gate builds nothing in the Docker VM, so it reserves no
+    // builder memory there: its build capacity is the whole manifest.
+    const hostBuildCapacity = !reserveBuilder ? manifestCapacity : localCiBuildHeadroomCapacity({
       dockerAvailableMemoryBytes:
         Math.max(0, (input.host.dockerAvailableMemoryBytes ?? Number.NaN)
           - config.ceilings.minAvailableMemoryBytes),

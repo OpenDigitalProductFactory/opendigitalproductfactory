@@ -1,6 +1,6 @@
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-contract";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 const MAX_PER_RUN = 25;
@@ -27,7 +27,7 @@ const MAX_PER_RUN = 25;
  * the master DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED flag (it is registered in
  * scheduledFunctions).
  */
-export const backlogTriageDrain = inngest.createFunction(
+export const backlogTriageDrain = jobs.createFunction(
   { id: "ops/backlog-triage-drain", retries: 1, triggers: [cron("23 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ops/backlog-triage-drain");
