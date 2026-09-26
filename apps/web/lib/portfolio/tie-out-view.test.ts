@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { budgetText, forecastText, overCommitmentText, tracedText } from "./tie-out-view";
@@ -32,5 +35,17 @@ describe("tie-out display rules (BI-CBF5D708, design §6)", () => {
     expect(forecastText({ forecast: { low: 3, median: 3, high: 3, label: "estimated" } })).toBe("3 (estimated)");
     expect(tracedText({ tracedShare: 0.121 })).toBe("12% traced");
     expect(tracedText({ tracedShare: null })).toBe("Nothing delivered yet");
+  });
+});
+
+describe("the tie-out panel's client imports stay off the database", () => {
+  // PortfolioTieOutPanel is a client component. A value import of a module that
+  // reaches @dpf/db pulls pg into the browser bundle and fails `next build`
+  // (it did, in the 2026-09-26 local-CI gate), which no unit test sees.
+  const DB_REACHING = /from\s+"(?:\.\/|@\/lib\/portfolio\/)(portfolio-budget|investment-read-model|tie-out|tie-out-panel-data|budget-reservation|epic-portfolio-attribution)"/;
+  it.each(["tie-out-view.ts", "ai-resource.ts", "budget-label.ts"])("%s has no value import of a database module", (file) => {
+    const source = readFileSync(resolve(__dirname, file), "utf8");
+    const valueImports = source.split(/\r?\n/).filter((line) => /^import\s+(?!type\b)/.test(line));
+    expect(valueImports.filter((line) => DB_REACHING.test(line))).toEqual([]);
   });
 });
