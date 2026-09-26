@@ -8,7 +8,7 @@
 import { useMemo, useState } from "react";
 
 import type { CountryFootprint, MarketFootprint } from "@/lib/footprint/market-footprint";
-import { customerShadeStep, hasEnglishAsOfficialLanguage } from "@/lib/footprint/market-footprint";
+import { customerShadeStep, languageFitFor, type LanguageFit } from "@/lib/footprint/market-footprint";
 import { WORLD_COUNTRY_PATHS } from "@/lib/footprint/world-country-paths";
 
 export type FootprintLayer = "targets" | "customers" | "deployments" | "language";
@@ -18,7 +18,7 @@ function layersFor(people: string): Array<{ key: FootprintLayer; label: string; 
   { key: "targets", label: "Target markets", description: "Countries you sell to or operate in." },
   { key: "customers", label: people, description: `${people} with a site in each country.` },
   { key: "deployments", label: "Deployments", description: "Customer sites running an installed node with an active fulfilment." },
-  { key: "language", label: "Language fit", description: "Countries where English is an official language. The platform is English-only." },
+  { key: "language", label: "Language fit", description: "Countries where a language the platform supports is official (filled), where one is planned (striped), and where none is yet (dotted)." },
   ];
 }
 
@@ -39,9 +39,10 @@ function countryFill(
   // it answers "where could an English-only product sell?".
   if (layer === "language") {
     if (!isoA2) return base;
-    return hasEnglishAsOfficialLanguage(isoA2)
-      ? "color-mix(in srgb, var(--dpf-accent) 55%, var(--dpf-surface-2))"
-      : "url(#footprint-dots)";
+    const { fit } = languageFitFor(isoA2);
+    if (fit === "supported") return "color-mix(in srgb, var(--dpf-accent) 55%, var(--dpf-surface-2))";
+    if (fit === "planned") return "url(#footprint-planned)";
+    return "url(#footprint-dots)";
   }
   if (!country) return base;
   switch (layer) {
@@ -58,6 +59,24 @@ function countryFill(
   }
 }
 
+let languageNames: Intl.DisplayNames | null = null;
+
+function languageName(code: string): string {
+  try {
+    languageNames ??= new Intl.DisplayNames(["en"], { type: "language" });
+    return languageNames.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+export function languageFitText(fit: LanguageFit, languages: string[]): string {
+  const names = languages.map(languageName).join(", ");
+  if (fit === "supported") return `Supported (${names})`;
+  if (fit === "planned") return `Planned (${names})`;
+  return "No supported language yet";
+}
+
 function layerValue(layer: FootprintLayer, country: CountryFootprint, people: string): string {
   switch (layer) {
     case "targets":
@@ -67,7 +86,7 @@ function layerValue(layer: FootprintLayer, country: CountryFootprint, people: st
     case "deployments":
       return `${country.deploymentCount} deployment${country.deploymentCount === 1 ? "" : "s"}`;
     case "language":
-      return country.languageFit ? "English is official" : "English is not official";
+      return languageFitText(country.languageFit, country.languages);
   }
 }
 
@@ -117,6 +136,10 @@ export function FootprintView({ footprint, peopleLabel }: { footprint: MarketFoo
               <rect width="6" height="6" fill="color-mix(in srgb, var(--dpf-accent) 35%, var(--dpf-surface-2))" />
               <line x1="0" y1="0" x2="0" y2="6" stroke="var(--dpf-accent)" strokeWidth="2.5" />
             </pattern>
+            <pattern id="footprint-planned" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+              <rect width="6" height="6" fill={LAND} />
+              <line x1="0" y1="0" x2="0" y2="6" stroke="var(--dpf-warning)" strokeWidth="2.5" />
+            </pattern>
             <pattern id="footprint-dots" width="5" height="5" patternUnits="userSpaceOnUse">
               <rect width="5" height="5" fill={LAND} />
               <circle cx="2.5" cy="2.5" r="0.9" fill="var(--dpf-muted)" />
@@ -137,7 +160,7 @@ export function FootprintView({ footprint, peopleLabel }: { footprint: MarketFoo
                 onClick={country ? () => setSelected(shape.isoA2) : undefined}
                 className={country ? "cursor-pointer" : undefined}
               >
-                <title>{country ? `${country.name}: ${layerValue(layer, country, peopleLabel)}` : layer === "language" && shape.isoA2 ? `${shape.name}: ${hasEnglishAsOfficialLanguage(shape.isoA2) ? "English is official" : "English is not official"}` : shape.name}</title>
+                <title>{country ? `${country.name}: ${layerValue(layer, country, peopleLabel)}` : layer === "language" && shape.isoA2 ? `${shape.name}: ${(() => { const f = languageFitFor(shape.isoA2); return languageFitText(f.fit, f.languages); })()}` : shape.name}</title>
               </path>
             );
           })}
@@ -192,7 +215,7 @@ export function FootprintTable({
             <th scope="col" className="px-3 py-2">Target market</th>
             <th scope="col" className="px-3 py-2 text-right">{peopleLabel}</th>
             <th scope="col" className="px-3 py-2 text-right">Deployments</th>
-            <th scope="col" className="px-3 py-2">English official</th>
+            <th scope="col" className="px-3 py-2">Language</th>
           </tr>
         </thead>
         <tbody>
@@ -219,7 +242,7 @@ export function FootprintTable({
               <td className="px-3 py-2">{country.targetMarket ? "Yes" : "No"}</td>
               <td className="px-3 py-2 text-right">{country.customerCount}</td>
               <td className="px-3 py-2 text-right">{country.deploymentCount}</td>
-              <td className="px-3 py-2">{country.languageFit ? "Yes" : "No"}</td>
+              <td className="px-3 py-2">{languageFitText(country.languageFit, country.languages)}</td>
             </tr>
           ))}
         </tbody>

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { buildMarketFootprint, customerShadeStep, hasEnglishAsOfficialLanguage } from "./market-footprint";
+import { localesWithStatus } from "@dpf/i18n";
+
+import {
+  buildMarketFootprint,
+  customerShadeStep,
+  languageFitFor,
+  OFFICIAL_LANGUAGE_COUNTRIES,
+  registryLanguages,
+} from "./market-footprint";
 
 describe("buildMarketFootprint", () => {
   it("unions sellsTo and operatesIn as target markets, case-insensitively", () => {
@@ -54,10 +62,11 @@ describe("buildMarketFootprint", () => {
     expect(result.unplacedDeployments).toBe(1);
   });
 
-  it("marks language fit from English being an official language", () => {
-    const result = buildMarketFootprint({ targetMarkets: [["JP", "IE"]], accounts: [], deploymentSites: [] });
-    expect(result.countries.find((c) => c.isoA2 === "IE")?.languageFit).toBe(true);
-    expect(result.countries.find((c) => c.isoA2 === "JP")?.languageFit).toBe(false);
+  it("marks language fit from the locale registry", () => {
+    const result = buildMarketFootprint({ targetMarkets: [["JP", "IE", "MX"]], accounts: [], deploymentSites: [] });
+    expect(result.countries.find((c) => c.isoA2 === "IE")?.languageFit).toBe("supported");
+    expect(result.countries.find((c) => c.isoA2 === "MX")?.languageFit).toBe("planned");
+    expect(result.countries.find((c) => c.isoA2 === "JP")?.languageFit).toBe("none");
   });
 
   it("only lists countries with something to show, sorted by customers then name", () => {
@@ -86,13 +95,20 @@ describe("customerShadeStep", () => {
   });
 });
 
-describe("hasEnglishAsOfficialLanguage", () => {
-  it("knows common English-official countries", () => {
-    for (const code of ["US", "GB", "IE", "CA", "AU", "NZ", "IN", "ZA", "SG", "NG"]) {
-      expect(hasEnglishAsOfficialLanguage(code)).toBe(true);
+describe("languageFitFor", () => {
+  it("follows the registry: English supported, Spanish and Arabic planned", () => {
+    expect(languageFitFor("GB")).toEqual({ fit: "supported", languages: ["en"] });
+    expect(languageFitFor("us")).toEqual({ fit: "supported", languages: ["en"] });
+    expect(languageFitFor("AR").fit).toBe("planned");
+    expect(languageFitFor("SA")).toEqual({ fit: "planned", languages: ["ar"] });
+    expect(languageFitFor("FR")).toEqual({ fit: "none", languages: [] });
+  });
+
+  it("covers every language the registry supports or plans", () => {
+    const { supported, planned } = registryLanguages();
+    for (const language of [...supported, ...planned]) {
+      expect(OFFICIAL_LANGUAGE_COUNTRIES[language], `no country table for "${language}"`).toBeDefined();
     }
-    for (const code of ["FR", "DE", "JP", "BR", "MX", "CN"]) {
-      expect(hasEnglishAsOfficialLanguage(code)).toBe(false);
-    }
+    expect(localesWithStatus("supported").length).toBeGreaterThan(0);
   });
 });

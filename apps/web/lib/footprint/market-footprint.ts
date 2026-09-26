@@ -7,24 +7,64 @@
 //
 // Design: docs/superpowers/specs/2026-09-26-market-footprint-world-view-design.md
 
+import { localesWithStatus } from "@dpf/i18n";
+
 import { WORLD_COUNTRY_PATHS } from "./world-country-paths";
 
 /**
- * Countries where English is an official or de facto national language. The
- * platform's interface is English-only, so this is its language fit. Source:
- * CLDR territory language data (official/de facto official status), trimmed to
- * sovereign states and major territories.
+ * Countries where each language the platform knows is an official or de facto
+ * national language, keyed by primary language subtag. Which languages count as
+ * supported or planned comes from the locale registry (@dpf/i18n), so language
+ * fit follows the product as locales ship. Source: CLDR territory language data
+ * (official / de facto official), sovereign states and major territories.
+ * locales.test in this directory fails if the registry names a language this
+ * table does not cover.
  */
-const ENGLISH_OFFICIAL = new Set([
-  "AG", "AI", "AS", "AU", "BB", "BI", "BM", "BS", "BW", "BZ", "CA", "CK", "CM", "DM", "FJ", "FK",
-  "FM", "GB", "GD", "GG", "GH", "GI", "GM", "GU", "GY", "IE", "IM", "IN", "JE", "JM", "KE", "KI",
-  "KN", "KY", "LC", "LR", "LS", "MH", "MP", "MT", "MU", "MW", "NA", "NG", "NR", "NU", "NZ", "PG",
-  "PH", "PK", "PR", "PW", "RW", "SB", "SC", "SD", "SG", "SH", "SL", "SS", "SX", "SZ", "TC", "TO",
-  "TT", "TV", "TZ", "UG", "US", "VC", "VG", "VI", "VU", "WS", "ZA", "ZM", "ZW",
-]);
+export const OFFICIAL_LANGUAGE_COUNTRIES: Readonly<Record<string, ReadonlySet<string>>> = {
+  en: new Set([
+    "AG", "AI", "AS", "AU", "BB", "BI", "BM", "BS", "BW", "BZ", "CA", "CK", "CM", "DM", "FJ", "FK",
+    "FM", "GB", "GD", "GG", "GH", "GI", "GM", "GU", "GY", "IE", "IM", "IN", "JE", "JM", "KE", "KI",
+    "KN", "KY", "LC", "LR", "LS", "MH", "MP", "MT", "MU", "MW", "NA", "NG", "NR", "NU", "NZ", "PG",
+    "PH", "PK", "PR", "PW", "RW", "SB", "SC", "SD", "SG", "SH", "SL", "SS", "SX", "SZ", "TC", "TO",
+    "TT", "TV", "TZ", "UG", "US", "VC", "VG", "VI", "VU", "WS", "ZA", "ZM", "ZW",
+  ]),
+  es: new Set([
+    "AR", "BO", "CL", "CO", "CR", "CU", "DO", "EC", "ES", "GQ", "GT", "HN", "MX", "NI", "PA", "PE",
+    "PR", "PY", "SV", "UY", "VE",
+  ]),
+  ar: new Set([
+    "AE", "BH", "DJ", "DZ", "EG", "EH", "ER", "IQ", "JO", "KM", "KW", "LB", "LY", "MA", "MR", "OM",
+    "PS", "QA", "SA", "SD", "SO", "SY", "TD", "TN", "YE",
+  ]),
+};
 
-export function hasEnglishAsOfficialLanguage(isoA2: string): boolean {
-  return ENGLISH_OFFICIAL.has(isoA2.toUpperCase());
+export type LanguageFit = "supported" | "planned" | "none";
+
+function primaryLanguage(tag: string): string {
+  return tag.split("-")[0].toLowerCase();
+}
+
+/** Primary languages per registry status; pseudo-locales are QA-only and ignored. */
+export function registryLanguages(): { supported: string[]; planned: string[] } {
+  const supported = new Set(localesWithStatus("supported").map((entry) => primaryLanguage(entry.tag)));
+  const planned = new Set(
+    localesWithStatus("planned")
+      .map((entry) => primaryLanguage(entry.tag))
+      .filter((language) => !supported.has(language)),
+  );
+  return { supported: [...supported], planned: [...planned] };
+}
+
+/** Whether a supported (or planned) platform language is official in a country. */
+export function languageFitFor(isoA2: string): { fit: LanguageFit; languages: string[] } {
+  const code = isoA2.toUpperCase();
+  const { supported, planned } = registryLanguages();
+  const official = (list: string[]) => list.filter((language) => OFFICIAL_LANGUAGE_COUNTRIES[language]?.has(code));
+  const supportedHere = official(supported);
+  if (supportedHere.length > 0) return { fit: "supported", languages: supportedHere };
+  const plannedHere = official(planned);
+  if (plannedHere.length > 0) return { fit: "planned", languages: plannedHere };
+  return { fit: "none", languages: [] };
 }
 
 export interface FootprintAccountRow {
@@ -51,7 +91,9 @@ export interface CountryFootprint {
   targetMarket: boolean;
   customerCount: number;
   deploymentCount: number;
-  languageFit: boolean;
+  languageFit: LanguageFit;
+  /** Registry languages official here (supported first, else planned). */
+  languages: string[];
 }
 
 export interface MarketFootprint {
@@ -135,7 +177,10 @@ export function buildMarketFootprint(input: MarketFootprintInput): MarketFootpri
     targetMarket: targets.has(isoA2),
     customerCount: customers.get(isoA2) ?? 0,
     deploymentCount: deployments.get(isoA2) ?? 0,
-    languageFit: hasEnglishAsOfficialLanguage(isoA2),
+    ...(() => {
+      const { fit, languages } = languageFitFor(isoA2);
+      return { languageFit: fit, languages };
+    })(),
   }));
   countries.sort(
     (left, right) =>

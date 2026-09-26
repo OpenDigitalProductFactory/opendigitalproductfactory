@@ -9,7 +9,7 @@ order: 9
 
 - Seeing where you sell, where your customers are and where you are deployed, by country
 - Planning visits, support and sales by country
-- Checking which countries fit an English-only product
+- Checking which countries fit the languages the platform supports today, or plans to
 
 ## Where To Find It
 
@@ -24,7 +24,7 @@ A world map with a table underneath that lists the same countries and numbers. P
 | **Target markets** | Hatched when you sell to or operate in it (from your business context) |
 | **Customers** | Shaded by how many customer accounts have a site there; darker means more |
 | **Deployments** | Filled and outlined where a customer site runs an installed node with an active service |
-| **Language fit** | Filled where English is an official language, dotted where it is not. The platform is English-only. |
+| **Language fit** | Filled where a language the platform supports is official (today, English); striped where a planned language is official (Spanish, Arabic); dotted where neither is. It follows the platform's language list, so countries change as languages ship. |
 
 Select a country on the map or in the table to see all its numbers in one line.
 

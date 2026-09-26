@@ -30,7 +30,7 @@ A software-platform business, DPF itself included, cannot see where it sells, wh
    - `targetMarket` (in `sellsTo ∪ operatesIn`);
    - `customerCount` (distinct `CustomerAccount` with at least one site whose address resolves to that country);
    - `deploymentCount`: distinct `CustomerSite`s in that country hosting an `EdgeNode` with an `active` `ProductFulfillmentInstance`. The path is `ProductFulfillmentInstance.edgeNodeId → EdgeNode.customerSiteId → CustomerSite → Address`. This is the CRM-derived source the operator chose on 2026-09-23. Self-installed users stay invisible until `BI-06EA3167`;
-   - `languageFit` (the country's primary language is among the platform's supported locales).
+   - `languageFit`: `supported`, `planned` or `none`. It is derived from the locale registry (`@dpf/i18n` `LOCALES`, added in #5752) and a per-language table of the countries where that language is official. A test fails if the registry names a language the table does not cover.
 
    It also returns `unplacedCustomers`: accounts with no site, or a site with no country. This figure is always shown and never dropped.
 3. **The world map.** A server-rendered SVG choropleth drawn from vendored Natural Earth 1:110m country outlines, which are public domain. The outlines are pre-projected once with the Equal Earth projection and committed as path data keyed by ISO 3166-1 numeric code, joined through `Country.numericCode`. It has no runtime dependency, no WebGL and no network call, and it works on every install.
