@@ -12,7 +12,7 @@
     },
     "directInngestImportCount": {
       "direction": "non-increasing",
-      "value": 26
+      "value": 0
     },
     "integrationConnectRouteCount": {
       "direction": "non-increasing",

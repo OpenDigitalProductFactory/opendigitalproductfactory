@@ -28,12 +28,12 @@
  * Plan: docs/superpowers/plans/2026-06-09-build-studio-durable-execution-migration.md
  */
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateBetweenSteps, type GateBetweenStepsRunner } from "../quiescence-gates";
 import { STEP_ORDER } from "@/lib/build-exec-types";
 import type { BuildExecutionState } from "@/lib/build-exec-types";
 
-export const buildExecute = inngest.createFunction(
+export const buildExecute = jobs.createFunction(
   {
     id: "build/execute",
     retries: 3,

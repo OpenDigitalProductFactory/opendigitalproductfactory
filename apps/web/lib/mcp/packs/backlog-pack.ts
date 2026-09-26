@@ -223,8 +223,8 @@ async function processBacklogForBuildStudio(
     ? Math.min(Math.max(0, Math.floor(requestedLimitRaw)), configuredCap)
     : configuredCap;
 
-  const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
+  const { jobs } = await import("@/lib/jobs");
+  await jobs.send({
     name: "build/backlog-tee-up.requested",
     data: {
       userId,

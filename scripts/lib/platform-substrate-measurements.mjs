@@ -143,11 +143,16 @@ function hasDirectInngestImport(content) {
   ].map((match) => match[1]);
   return specifiers.some((specifier) => specifier === "inngest"
     || specifier.startsWith("inngest/")
-    || /(?:^|\/)queue\/inngest-client$/.test(specifier));
+    || /(?:^|\/)queue\/inngest-client$/.test(specifier)
+    || /(?:^|\/)jobs\/inngest-adapter$/.test(specifier));
 }
 
+// apps/web/lib/jobs/ is the durable-job facade and its engine adapter (plan
+// 2026-09-08 move M3); scripts/check-no-direct-job-engine-import.mjs refuses engine
+// imports anywhere else, so this count is expected to stay at zero.
 function isApprovedInngestPath(path) {
-  return path === "apps/web/app/api/inngest/route.ts"
+  return path.startsWith("apps/web/lib/jobs/")
+    || path === "apps/web/app/api/inngest/route.ts"
     || path.startsWith("apps/web/lib/execution/adapters/")
     || path.startsWith("apps/web/lib/queue/");
 }

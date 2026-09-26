@@ -1,15 +1,12 @@
-import { Inngest } from "inngest";
-
-import { createOffThreadpoolFetchTransport } from "@/lib/network/off-threadpool-fetch";
-
-const inngestTransport = createOffThreadpoolFetchTransport();
-
-export const inngest = new Inngest({
-  id: "dpf-platform",
-  fetch: inngestTransport.fetch,
-});
-
-// Event payload types for type-safe event sending
+/**
+ * Typed payloads for the platform's durable-job events.
+ *
+ * Engine-neutral: these describe what a sender puts on the wire and what a
+ * handler receives in `event.data`. They moved here from
+ * `lib/queue/inngest-client.ts` when the `@/lib/jobs` facade was introduced
+ * (spec docs/superpowers/specs/2026-09-25-postgres-durable-job-engine-design.md
+ * §6 step 1), so they survive the engine swap unchanged.
+ */
 
 /** BI-801313EB: advisory wake for one already-persisted async operation. */
 export interface AsyncInferenceOperationRunEvent {

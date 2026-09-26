@@ -4,15 +4,15 @@
 // Revoke. Hourly, no quiescence gate (coordination records, not portal state).
 // The decision rule and its guard-rails live in lib/edge-node/stale-supersession.
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
 import { prisma } from "@dpf/db";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import { supersedeStaleInstallerNodes, type StaleSupersessionDb } from "@/lib/edge-node/stale-supersession";
 
-export const edgeNodeJanitor = inngest.createFunction(
+export const edgeNodeJanitor = jobs.createFunction(
   {
     id: "ops/edge-node-janitor",
     retries: 1,
