@@ -163,19 +163,18 @@ and joins test 1.
 Standard followed: a stable, dereferenceable rule identifier on every
 refusal. This is the pattern the linters and RFC 9457 share.
 
-## 5. Acceptance criteria
+## 5. Objectives and acceptance criteria
 
-- **AC-GP-01** Every readiness refusal (claim, terminal status, read
-  projection) carries `governingPrinciples` for each unmet or blocking code
-  that has a page, and the message names them.
-- **AC-GP-02** Directional-outcome escalations and alignment refusals carry
-  `principleSlug` where a page governs them.
-- **AC-GP-03** A test proves that every cited slug resolves to a published
-  principle page with a `## Rule`, using the seeder's slug rule.
-- **AC-GP-04** The unwritten-rule inventory is printed and ratcheted.
-- **AC-GP-05** Live: a claim refused on the dev install returns
-  `governingPrinciples`, and `wiki_query` on each returned slug yields that
-  page as the top hit.
+- **OBJ-GP-1:** An agent that hits a decision, readiness or alignment refusal can reach the governing rule's page from the refusal itself.
+- **OBJ-GP-2:** A cited principle can never silently point at nothing, and a gate enforcing a rule no page states is visible.
+
+| Criterion | Objective | Statement |
+|---|---|---|
+| AC-GP-01 | OBJ-GP-1 | Every readiness refusal on the claim, terminal-status and read-projection surfaces carries governingPrinciples for each unmet or blocking code that has a page, and the refusal message names them. |
+| AC-GP-02 | OBJ-GP-1 | Directional-outcome escalations and alignment refusals carry principleSlug wherever a page governs them. |
+| AC-GP-03 | OBJ-GP-2 | A test proves every cited slug resolves, by the seeder's own slug rule, to a published principle page with a Rule section. |
+| AC-GP-04 | OBJ-GP-2 | The inventory of enforced-but-unwritten rules is printed by a test and ratcheted so it can only shrink. |
+| AC-GP-05 | OBJ-GP-1 | On the development install a refused claim returns governingPrinciples, and wiki_query on each returned slug returns that page first. |
 
 ## 6. Delivery
 
