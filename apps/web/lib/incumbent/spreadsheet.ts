@@ -5,7 +5,7 @@
 // Wraps the P1 intake core (createIncumbentApplication) over the rows of an
 // imported sheet. This module is the PURE, injectable part — column-name
 // heuristics + per-row orchestration — so it unit-tests without a live Prisma
-// client. The file → matrix → rows parsing (parseDelimitedGrid / readSheet /
+// client. The file → matrix → rows parsing (parseDelimitedGrid / readSheetMatrix /
 // inferTableFromSheet, all existing) is thin I/O in the server action.
 //
 // Malformed rows are reported, never fatal (spec §6 acceptance): a bad row adds
