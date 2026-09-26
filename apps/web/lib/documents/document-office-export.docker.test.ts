@@ -7,9 +7,10 @@
 //
 // A markdown fixture with headings, a table, lists and an image goes through
 // the real pipeline (markdown -> HTML -> dpf-convert) to .docx and is then
-// re-imported through the platform's existing .docx reader (parseDocx, and
-// mammoth's HTML for the table), so structure is proven by the same code that
-// ingests a customer's file.
+// re-imported through the platform's own .docx ingestion (parseFileContent,
+// through the same engine), so headings and text are proven by the same code
+// that ingests a customer's file. Table cells, lists and the picture are read
+// straight from the package's word/document.xml (BI-D1B40D43 retired mammoth).
 
 import { spawnSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
@@ -22,7 +23,8 @@ vi.mock("@dpf/db", () => ({
 import { isPinnedImageReference } from "./conversion/command";
 import { convertDocument, createConversionLimiter } from "./conversion/convert";
 import { exportDocumentVersion, type DocumentExportDeps } from "./document-office-export";
-import { parseDocx } from "@/lib/shared/file-parsers";
+import { parseFileContent } from "@/lib/shared/file-parsers";
+import { readZipEntry } from "@/lib/shared/odf-embedded-objects";
 
 const IMAGE = process.env.DPF_DOCTOOLS_TEST_IMAGE?.trim() ?? "";
 
@@ -103,20 +105,23 @@ describe.skipIf(!ready)("document export against the real dpf-doctools image", (
     expect(upserts[0]!.create.renditionKind).toBe("docx");
     expect(blobs.get(upserts[0]!.create.blobId)).toEqual(docx);
 
-    const parsed = await parseDocx(docx);
+    const parsed = await parseFileContent(docx, "", "board-pack.docx", { convert: realConvert });
+    if (parsed?.type !== "document") throw new Error(`re-import failed: ${JSON.stringify(parsed)}`);
     expect(parsed.sections?.map((s) => s.heading)).toEqual(["Quarterly Board Pack", "Regional Figures", "Next Steps"]);
     expect(parsed.fullText).toContain("Hire two coordinators");
     expect(parsed.fullText).toContain("Approve the budget");
+    expect(parsed.fullText).toContain("North\t42\tAvery");
 
-    const mammoth = await import("mammoth");
-    const html = (await mammoth.convertToHtml({ buffer: docx })).value;
-    expect(html).toMatch(/<h1>Quarterly Board Pack<\/h1>/);
-    expect(html).toMatch(/<table>/);
+    const body = readZipEntry(docx, "word/document.xml", 16 * 1024 * 1024)?.toString("utf8") ?? "";
+    expect(body).toContain("<w:tbl>");
+    const cells = [...body.matchAll(/<w:tc>[\s\S]*?<\/w:tc>/g)].map(([tc]) => [...tc.matchAll(/<w:t(?: [^>]*)?>([^<]*)<\/w:t>/g)].map((t) => t[1]).join(""));
     for (const cell of ["Region", "Units", "Owner", "North", "42", "Avery", "South", "17", "Blake"]) {
-      expect(html).toMatch(new RegExp(`<t[dh]>(<p>)?${cell}(</p>)?</t[dh]>`));
+      expect(cells).toContain(cell);
     }
-    expect(html).toMatch(/<li>(<p>)?Hire two coordinators/);
-    expect(html).toMatch(/<img [^>]*src="data:image\/png;base64,/);
+    expect(body).toMatch(/<w:numPr>[\s\S]*?Hire two coordinators/);
+    expect(body).toMatch(/<a:blip r:embed="[^"]+"/);
+    const media = [...docx.toString("latin1").matchAll(/word\/media\/[^\x00/]+\.png/g)];
+    expect(media.length).toBeGreaterThan(0);
   }, 240_000);
 
   it("exports the same markdown to .odt and to PDF", async () => {

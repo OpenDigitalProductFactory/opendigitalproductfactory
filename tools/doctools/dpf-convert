@@ -35,7 +35,9 @@ EOF
 # The one filter table. Key = the --to value callers pass; value = the
 # LibreOffice --convert-to argument. `txt` is special-cased below: it renders
 # a PDF first and extracts its text with pdftotext, so every family (text,
-# spreadsheet, presentation, drawing) yields text through one path.
+# spreadsheet, presentation, drawing) yields text through one path. A PDF
+# input skips LibreOffice for `txt`: pdftotext reads it directly, in reading
+# order, one form feed per page (BI-D1B40D43).
 filter_for() {
   case "$1" in
     pdf)  printf '%s' 'pdf' ;;
@@ -109,6 +111,20 @@ head -c "$((MAX_BYTES + 1))" > "$INPUT"
 SIZE="$(stat -c %s "$INPUT")"
 [ "$SIZE" -gt 0 ] || die "$EXIT_BAD_ARGS" "empty input"
 [ "$SIZE" -le "$MAX_BYTES" ] || die "$EXIT_TOO_LARGE" "input exceeds DPF_CONVERT_MAX_BYTES ($MAX_BYTES)"
+
+# PDF to text: poppler reads the PDF itself. LibreOffice would open it as a
+# drawing and re-export it, which is slower and loses the reading order. Same
+# workspace, same timeout, same exit codes.
+if [ "$TO" = "txt" ] && [ "$FROM" = "pdf" ]; then
+  timeout --kill-after=5 "$TIMEOUT_SECONDS" pdftotext -enc UTF-8 "$INPUT" "$WORK/out/input.txt" 1>&2
+  rc=$?
+  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    die "$EXIT_TIMEOUT" "text extraction timed out after ${TIMEOUT_SECONDS}s"
+  fi
+  [ "$rc" -eq 0 ] || die "$EXIT_FAILED" "pdftotext could not read the PDF (exit $rc)"
+  cat "$WORK/out/input.txt"
+  exit "$EXIT_OK"
+fi
 
 run_engine() {  # run_engine <convert-to argument> <input file> <outdir>
   timeout --kill-after=5 "$TIMEOUT_SECONDS" \

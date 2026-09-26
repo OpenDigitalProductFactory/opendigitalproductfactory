@@ -115,7 +115,7 @@ export async function adoptWorktree(args: {
   await ensureCapsuleWorkItemAnchorNonFatal(capsule, "adopted");
   // BI-36FC2981: delivery work is born owned, whichever door created the room.
   const ownership = boundBacklogItemId && args.db.workroomParticipant
-    ? await establishAdoptedOwnership(args.db, capsule.id, actor, args.resolveUserPrincipalId)
+    ? await establishNewRoomOwnership(args.db, capsule.id, actor, "adopt", args.resolveUserPrincipalId)
     : null;
   // A bound room without both SHAs cannot have a reviewer routed to it. Say so
   // now, with the exact call that repairs it, rather than at review time.
@@ -140,10 +140,17 @@ export async function adoptWorktree(args: {
   };
 }
 
-async function establishAdoptedOwnership(
+/**
+ * Appoint the person the work is for as the new room's owner and admit their
+ * assistant. Adopt and create both call this: create_workroom rooms were born
+ * with no participants at all (WC-D73AC93B, WC-7BB9B3CD on 2026-09-25), and the
+ * drive's repair never reaches a room without a work shape.
+ */
+export async function establishNewRoomOwnership(
   db: CapsuleDb,
   workroomId: string,
   actor: WorkCapsuleActor,
+  source: "adopt" | "create",
   resolveUserPrincipalId?: (userId: string) => Promise<string | null>,
 ): Promise<string | null> {
   const principals = await resolveRoomOwnershipPrincipals(actor, resolveUserPrincipalId ?? (async (userId) => {
@@ -158,7 +165,7 @@ async function establishAdoptedOwnership(
         workCapsuleId: workroomId,
         kind: "coworker-joined",
         summary,
-        payload: { ...outcome, source: "adopt" },
+        payload: { ...outcome, source },
         recordedById: actor.userId,
         recordedByAgentId: actor.agentId,
       },

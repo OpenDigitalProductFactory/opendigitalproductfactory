@@ -86,6 +86,13 @@ DPF**:
   source, enables the in-repo git hooks, and runs the agent-toolchain
   bootstrap so Claude Code / Codex are wired up.
 
+Office document conversion works in both modes with no extra step. A
+Customizable install does not build the converter image: the portal pins
+the `dpf-doctools` image published for the release your clone descends
+from, by digest, and pins it again after every upgrade. Only when no
+published image can be reached (offline or air-gapped) does it build
+`Dockerfile.doctools` from your clone instead.
+
 Your choice is saved to `~/.dpf/install-state.json` (`installMode`) and reused
 on re-runs without re-prompting. To skip the prompt, pass `--customer` or
 `--contributor`. For an unattended (CI / scripted) install:

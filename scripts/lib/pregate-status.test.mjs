@@ -759,3 +759,44 @@ test("a real PASS in the sibling slot still wins over a test-stub record", () =>
   assert.equal(best.verdict, "PASS");
   assert.equal(best.slot, "slot-1");
 });
+
+// BI-27A37D27: a queued record whose waiter is dead is not a queue. Saying
+// "queued" sent sessions to wait hours on a claim nothing would ever run.
+test("a queued claim with no live waiter says so instead of 'queued'", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "queued", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+    queuedWaiter: { checked: true, alive: false, pids: [53956] },
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /no waiter is alive/i);
+  assert.match(r.reason, /53956/);
+  assert.match(r.reason, /re-run pregate/i);
+});
+
+test("a queued claim with a live waiter keeps the queued wording", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "queued", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+    queuedWaiter: { checked: true, alive: true, pids: [1] },
+  });
+  assert.doesNotMatch(r.reason, /no waiter is alive/i);
+});
+
+// BI-27A37D27: "admitted" is written when the slot is granted and stays while
+// the stages run. Headlining it as FAIL stopped callers mid-run (observed live:
+// a gate reported FAIL while its log was inside check-guards).
+test("an admitted record is an in-flight run, never a FAIL", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "admitted", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /has not recorded a verdict/);
+});

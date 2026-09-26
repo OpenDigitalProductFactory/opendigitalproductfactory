@@ -664,7 +664,22 @@ action changes those numbers. Page cache already counts as available, so do
 not drop caches, and never run `sync` in the Docker VM, because it wedges the VM
 (BI-903FB5F9). The builder reserve is the measured peak of the gate's own
 production build plus a margin, not the builder's 16 GiB ceiling. Every gate
-record carries the measured peak as `evidence.builderMemory` (BI-D3BF53A9). A fenced run likewise records *which* fence fired
+record carries the measured peak as `evidence.builderMemory` (BI-D3BF53A9).
+
+The reserve keeps itself current (BI-903FB5F9):
+
+- Each leased gate result folds its measured peak into the
+  `local_ci.builder_memory_calibration` PlatformConfig row, a window of the 20
+  newest peaks.
+- With 5 or more peaks, admission reserves the window's highest peak plus the
+  checked-in margin.
+- With fewer peaks, it keeps the checked-in calibration.
+- After any OOM kill in the window, it reserves the full ceiling.
+- The admission decision reports which one applied as `builderReserve`.
+- A guard (`scripts/check-no-manual-vm-cache-drop.mjs`) refuses a manual
+  page-cache drop recipe in any tracked file.
+
+A fenced run likewise records *which* fence fired
 (`fence reason: lease-authority-deadline`, ...) in its gate record, so a
 self-fence never reads as a reasonless failure of the diff (BI-ECAE03F7).
 
@@ -677,6 +692,16 @@ revision 1, on Windows hosts only: older clients opened a focus-stealing
 terminal window on every re-claim (BI-69178E02). The refusal is not a verdict on
 the diff. Re-running the same branch is refused again, and a stale resumer stops
 after the first refusal. Rebase onto `origin/main` and run `pregate` again.
+
+**A queued gate's waiter outlives the session that started it.** On Windows a
+process that node spawns stays inside its caller's job object, and the Claude
+Code client runs its whole tree in one job, so every durable-wait resumer died
+when its session closed (BI-27A37D27). The resumer is now started through WMI,
+outside that job. If WMI is unavailable, the queued payload says
+`resumerSurvivesSession: false` and the wait ends with the session. For a queued
+claim whose every waiter has ended, `pregate:status` says "no waiter is alive"
+instead of "queued". That is not a verdict on the diff: re-run `pregate`. A
+branch cut before this fix keeps the old resumer until it is rebased.
 
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a

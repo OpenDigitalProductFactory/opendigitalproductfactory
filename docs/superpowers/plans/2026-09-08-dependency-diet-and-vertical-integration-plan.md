@@ -271,7 +271,7 @@ _Founder direction, 2026-09-25: too many dependencies, too much complexity, too 
 | M2 diagram toolchain out of the workspace | mermaid half done; `docx` is still a root devDependency for four `docs:*` generators | #5253 |
 | M3 durable jobs onto Postgres | open, needs WWMD | none since 2026-09-08 |
 | M4 Prism replaced in the harness | done: an owned OpenAPI contract runtime; Prism retired on the dependency allowlist | [design](../specs/2026-09-25-harness-owned-contract-validator-design.md) |
-| M5 document cluster | partly absorbed by the office-document engine; its S9 retires mammoth, read-excel-file and pdf-parse | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md) |
+| M5 document cluster | partly absorbed by the office-document engine; its S9 (BI-D1B40D43, 2026-09-26) retired mammoth, read-excel-file and pdf-parse (with pdfjs-dist and @napi-rs/canvas): 39 resolved components, now on the sbom deny list | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md) |
 | M6 mobile workspace split | done: founder-approved 2026-09-25; `apps/mobile` resolves in its own workspace and lockfile; platform tree 1759 → 1062 packages, duplicated names 165 → 68 | `apps/mobile/pnpm-workspace.yaml`, `scripts/sbom/lockfile-roots.mjs` |
 | M7 multi-version cleanup | first pass done (#5289); second pass in this branch | this branch |
 | M8 override prune | done in this branch | this branch |

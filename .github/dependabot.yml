@@ -117,12 +117,6 @@ updates:
       # (0.27.19 → 0.27.20) fail the guard, so block the family; it moves with
       # the guard's override list, not independently.
       - dependency-name: "@floating-ui/*"
-      # read-excel-file is pinned to an exact 9.2.0. The 9.3.x line is a breaking
-      # change — `readFiles(...)` no longer returns a thenable, so
-      # excel-sheet-reader.test.ts fails with "readFiles(...).then is not a
-      # function". Block until the reader is migrated to the new 9.3+ API and the
-      # pin is bumped deliberately.
-      - dependency-name: "read-excel-file"
 
   # apps/mobile resolves in its own workspace and lockfile (plan 2026-09-08 M6),
   # so root updates no longer reach it. Same cooldown as the root. The Expo /

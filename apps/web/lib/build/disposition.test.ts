@@ -94,6 +94,14 @@ describe("mayShareToPublicHive", () => {
     expect(mayShareToPublicHive(undefined)).toBe(false);
     expect(mayShareToPublicHive("anything-else")).toBe(false);
   });
+
+  it("shares by default on a platform-development install unless a person kept it private", () => {
+    expect(mayShareToPublicHive("private", { installationPurpose: "evolve-dpf", dispositionSource: null })).toBe(true);
+    expect(mayShareToPublicHive("private", { installationPurpose: "evolve-dpf", dispositionSource: "suggested" })).toBe(true);
+    expect(mayShareToPublicHive("private", { installationPurpose: "evolve-dpf", dispositionSource: "operator" })).toBe(false);
+    expect(mayShareToPublicHive("private", { installationPurpose: "operate-organization", dispositionSource: null })).toBe(false);
+    expect(mayShareToPublicHive("private", {})).toBe(false);
+  });
 });
 
 describe("privateDispositionBlockMessage", () => {
