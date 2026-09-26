@@ -23,7 +23,14 @@ test("physical-direction counts inline physical styles", () => {
 test("classes named in comments are not counted", () => {
   const source = `// use text-right here\n/* ml-2 was removed */\nconst a = 1;`;
   assert.equal(tsx(source)["physical-direction"], 0);
-  assert.equal(stripComments(`const url = "https://x.test/ml-2";`).includes("https://x.test/ml-2"), true);
+  const withUrl = `const url = "https://x.test/ml-2";`;
+  assert.equal(stripComments(withUrl), withUrl);
+});
+
+test("path and event-name segments are not classes", () => {
+  const source = `const e = { name: "build/pr-merged.received" }; const f = "a.ml-2";`;
+  assert.equal(countCategories(source, { isTsx: false })["physical-direction"], 0);
+  assert.equal(tsx(`<div className="md:pr-4 -ml-2" />`)["physical-direction"], 2);
 });
 
 test("locale-literal counts hardcoded en-GB / en-US and literal toLocale locales", () => {

@@ -46,7 +46,8 @@ const SCAN_ROOTS = ["apps/web/app", "apps/web/components", "apps/web/lib"];
 const EXCLUDED_PREFIXES = ["packages/i18n/"];
 
 // A class token prefix: optional variants such as `md:` or `hover:` and an optional `-`.
-const V = String.raw`(?<![\w-])(?:[a-z0-9-]+:)*-?`;
+// Not after `/` or `.`: `"build/pr-merged.received"` is an event name, not a class.
+const V = String.raw`(?<![\w./-])(?:[a-z0-9-]+:)*-?`;
 const PHYSICAL_CLASS_RE = new RegExp(
   String.raw`${V}(?:(?:ml|mr|pl|pr|left|right|scroll-ml|scroll-mr|scroll-pl|scroll-pr)-[\w./[\]-]+|(?:border-l|border-r|rounded-l|rounded-r|rounded-tl|rounded-tr|rounded-bl|rounded-br)(?:-[\w./[\]-]+)?|text-(?:left|right))(?![\w-])`,
   "g",
@@ -149,7 +150,7 @@ export function diff(current, baseline) {
   const grew = [];
   const fresh = [];
   for (const [key, n] of Object.entries(current)) {
-    const label = key.replace("\t", " [") + "]";
+    const label = key.replaceAll("\t", " [") + "]";
     if (key in baseline) {
       if (n > baseline[key]) grew.push(`${label} ${baseline[key]} -> ${n}`);
     } else {

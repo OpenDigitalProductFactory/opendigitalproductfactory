@@ -980,7 +980,7 @@ apps/web/components/onboarding/HowYouDecideCards.tsx	jsx-copy	4
 apps/web/components/ops/BacklogItemRow.tsx	jsx-copy	6
 apps/web/components/ops/BacklogPanel.tsx	jsx-copy	4
 apps/web/components/ops/BuildStamps.tsx	physical-direction	3
-apps/web/components/ops/CoworkerActivityInspectionLink.tsx	physical-direction	2
+apps/web/components/ops/CoworkerActivityInspectionLink.tsx	physical-direction	1
 apps/web/components/ops/DemandBoard.tsx	jsx-copy	29
 apps/web/components/ops/DemandBoard.tsx	physical-direction	5
 apps/web/components/ops/EpicCard.tsx	jsx-copy	3
@@ -1199,7 +1199,6 @@ apps/web/components/platform/identity/FederationAuthorityCard.tsx	jsx-copy	3
 apps/web/components/platform/identity/GroupMembershipPanel.tsx	jsx-copy	5
 apps/web/components/platform/identity/GroupMembershipPanel.tsx	physical-direction	1
 apps/web/components/platform/identity/IdentityPlaceholderPanel.tsx	jsx-copy	2
-apps/web/components/platform/platform-nav.ts	physical-direction	1
 apps/web/components/platform/service-desk/ServiceTicketsTable.tsx	jsx-copy	1
 apps/web/components/portal-context/EvidenceSummaryList.tsx	jsx-copy	1
 apps/web/components/portal-context/HiveMindCandidateList.tsx	jsx-copy	1
@@ -1483,9 +1482,7 @@ apps/web/lib/backlog/initiative-readiness/repository-artifact.ts	locale-literal	
 apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts	locale-literal	17
 apps/web/lib/backlog/pr-submit-awaiting-acceptance.ts	physical-direction	2
 apps/web/lib/build/build-phase-run.ts	money-prefix	1
-apps/web/lib/build/build-studio-pr-readiness.ts	physical-direction	1
 apps/web/lib/build/claude-dispatch.ts	money-prefix	1
-apps/web/lib/build/git-promotion-intake.ts	physical-direction	4
 apps/web/lib/build/specialist-prompts.ts	physical-direction	4
 apps/web/lib/cockpit/cockpit-formatting.ts	money-prefix	2
 apps/web/lib/compliance/format-retention-minimum.ts	locale-literal	1
@@ -1522,11 +1519,10 @@ apps/web/lib/mcp/build-ship-handlers.ts	physical-direction	2
 apps/web/lib/mcp/org-context-bundle.ts	money-prefix	1
 apps/web/lib/mcp/packs/marketing-ops-pack.ts	locale-literal	1
 apps/web/lib/mcp/packs/surface-pack.ts	locale-literal	1
-apps/web/lib/navigation/portal-navigation-model.ts	physical-direction	1
 apps/web/lib/onboarding/confirm-stance-vectors.ts	money-prefix	1
 apps/web/lib/onboarding/seed-org-wwwd-corpus.ts	money-prefix	1
 apps/web/lib/operate/backlog-triage-drain.ts	physical-direction	4
-apps/web/lib/operate/scheduled-jobs/catalog.ts	physical-direction	3
+apps/web/lib/operate/scheduled-jobs/catalog.ts	physical-direction	1
 apps/web/lib/org-locale/locale-context.ts	locale-literal	1
 apps/web/lib/org-locale/org-locale.ts	locale-literal	7
 apps/web/lib/org-locale/org-locale.ts	physical-direction	2
@@ -1534,15 +1530,8 @@ apps/web/lib/owner-first/domain-summary.ts	locale-literal	1
 apps/web/lib/performance/business-metric-rollup.ts	locale-literal	1
 apps/web/lib/performance/business-performance-provider.ts	locale-literal	1
 apps/web/lib/performance/performance-format.ts	locale-literal	5
-apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts	physical-direction	2
-apps/web/lib/queue/functions/contributor-inventory-sync.ts	physical-direction	1
-apps/web/lib/queue/functions/index.ts	physical-direction	1
-apps/web/lib/queue/functions/pr-submit-awaiting-acceptance-reconcile.ts	physical-direction	2
-apps/web/lib/queue/functions/pull-request-merged-binding.ts	physical-direction	2
-apps/web/lib/queue/functions/pull-request-merged-reap.ts	physical-direction	5
-apps/web/lib/queue/inngest-client.ts	physical-direction	1
+apps/web/lib/queue/functions/pull-request-merged-reap.ts	physical-direction	3
 apps/web/lib/resource-scheduling/resource-occupancy.ts	physical-direction	1
-apps/web/lib/self-upgrade/impact/index.ts	physical-direction	1
 apps/web/lib/self-upgrade/zoned-time.ts	locale-literal	1
 apps/web/lib/skills/seed-pull-request.ts	physical-direction	4
 apps/web/lib/slot-engine/compute-slots.ts	locale-literal	1
@@ -1555,9 +1544,7 @@ apps/web/lib/tak/route-context/providers/platform.ts	money-prefix	2
 apps/web/lib/tak/thread-cost-ledger.ts	money-prefix	2
 apps/web/lib/twin/demo-business-snapshot.ts	locale-literal	1
 apps/web/lib/ux-budget/purpose-contracts/graph-explorer.ts	physical-direction	1
-apps/web/lib/ux-budget/purpose-contracts/index.ts	physical-direction	1
-apps/web/lib/ux-budget/purpose-contracts/right-now.ts	physical-direction	6
-apps/web/lib/ux-budget/route-shells.ts	physical-direction	1
+apps/web/lib/ux-budget/purpose-contracts/right-now.ts	physical-direction	2
 apps/web/lib/ward/ward-store.ts	physical-direction	1
 apps/web/lib/work-capsules.ts	physical-direction	2
 apps/web/lib/work-capture/recurrence-expander.ts	locale-literal	3
