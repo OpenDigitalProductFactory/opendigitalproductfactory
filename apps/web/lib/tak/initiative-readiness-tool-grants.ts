@@ -618,7 +618,15 @@ function requestCoworkerPacket(args: {
       ? `${base.requestKey}:plan:${createHash("sha256").update(canonicalJson({
         binding, targetAgent: args.targetAgentId, objective,
       })).digest("hex")}`
-      : base.requestKey;
+      // BI-D3E1F6D9: an independent review issued once the baseline exists binds
+      // it, so it must not share a key with the same head's pre-baseline packet. The
+      // TaskRun id derives from the key, so a shared key made the refreshed packet
+      // an idempotency conflict and the review unobtainable at that head.
+      : args.independent && args.expectedCurrentBaselineId
+        ? `${base.requestKey}:baseline:${createHash("sha256").update(canonicalJson({
+          binding, targetAgent: args.targetAgentId, objective,
+        })).digest("hex")}`
+        : base.requestKey;
   return {
     ...base,
     requestKey,
