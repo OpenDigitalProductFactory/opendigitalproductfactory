@@ -13,6 +13,7 @@ let effectCursor = 0;
 let pendingEffects: Array<() => void> = [];
 
 const swimlaneResolvers: Array<(result: LayoutResult) => void> = [];
+const hierarchicalResolvers: Array<(result: LayoutResult) => void> = [];
 
 function depsChanged(prev: unknown[] | undefined, next: unknown[] | undefined) {
   if (prev == null || next == null) return true;
@@ -42,6 +43,7 @@ function resetHookState() {
   effectSlots.splice(0).forEach((effect) => effect.cleanup?.());
   resetCursors();
   swimlaneResolvers.length = 0;
+  hierarchicalResolvers.length = 0;
 }
 
 vi.mock("react", () => ({
@@ -92,6 +94,15 @@ vi.mock("@/lib/graph/layout-swimlane", () => ({
   ),
 }));
 
+vi.mock("@/lib/graph/layout-hierarchical", () => ({
+  computeHierarchicalLayout: vi.fn(
+    () =>
+      new Promise<LayoutResult>((resolve) => {
+        hierarchicalResolvers.push(resolve);
+      }),
+  ),
+}));
+
 import { useGraphLayout } from "@/lib/graph/use-graph-layout";
 
 const graphData: GraphData = {
@@ -102,11 +113,11 @@ const graphData: GraphData = {
   links: [{ source: "host-a", target: "subnet-a", type: "MEMBER_OF" }],
 };
 
-function renderHook(scopeToken: string) {
+function renderHook(scopeToken: string, view: keyof typeof VIEW_CONFIGS = "subnet-topology") {
   resetCursors();
   const result = useGraphLayout(
     graphData,
-    VIEW_CONFIGS["subnet-topology"],
+    VIEW_CONFIGS[view],
     null,
     { width: 800, height: 500 },
     scopeToken,
@@ -150,5 +161,27 @@ describe("useGraphLayout", () => {
     await flushAsyncLayout();
 
     expect(stateUpdates).not.toContainEqual(firstResult);
+  });
+
+  // The ELK-backed hierarchical layout is async (dagre retired, plan 2026-09-08 S10); it must
+  // obey the same latest-request/latest-scope rule as the swimlane layout.
+  it("commits only the latest async hierarchical layout", async () => {
+    const stale: LayoutResult = { nodes: [{ ...graphData.nodes[0], x: 1, y: 1 }], links: [] };
+    const fresh: LayoutResult = { nodes: [{ ...graphData.nodes[1], x: 2, y: 2 }], links: [] };
+
+    renderHook("hosting-stack:1", "hosting-stack");
+    renderHook("hosting-stack:2", "hosting-stack");
+
+    expect(hierarchicalResolvers).toHaveLength(2);
+    // The stale layout is cleared while the new one computes.
+    expect(stateUpdates).toContain(null);
+
+    hierarchicalResolvers[1]?.(fresh);
+    await flushAsyncLayout();
+    expect(stateUpdates).toContainEqual(fresh);
+
+    hierarchicalResolvers[0]?.(stale);
+    await flushAsyncLayout();
+    expect(stateUpdates).not.toContainEqual(stale);
   });
 });

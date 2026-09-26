@@ -42,10 +42,10 @@ const fakeCalendar = [
 const fakeActivity = [
   {
     id: "a1",
-    action: "created",
-    target: "Epic: Onboarding",
-    actor: "Alice",
-    timestamp: "2026-03-19T10:00:00Z",
+    title: "Onboarding checklist",
+    status: "open",
+    type: "product",
+    updatedAt: "2026-03-19T10:00:00Z",
   },
 ];
 
