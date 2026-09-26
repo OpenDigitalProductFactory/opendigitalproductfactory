@@ -18,6 +18,8 @@ const base = {
   selfAsserted: false,
   installationName: "Second Chance Animal Rescue",
   actingUser: "owner@example.com",
+  actingUserId: "user-owner",
+  switchAccountUrl: "/login?callbackUrl=%2Fapi%2Foauth%2Fauthorize%3Fclient_id%3Dabc",
   scopes: ["dpf.read", "dpf.work"] as PublicScope[],
   resource: "http://127.0.0.1:3000/api/mcp/v1",
   redirectUri: "http://127.0.0.1:49152/callback",
@@ -97,7 +99,7 @@ describe("consent rendering", () => {
   it("lists permissions plainly by default and keeps the checkboxes behind Adjust permissions", () => {
     const html = renderConsentPage(base);
     expect(html).toContain("<summary>Adjust permissions</summary>");
-    expect(html.indexOf("<li>")).toBeLessThan(html.indexOf('type="checkbox"'));
+    expect(html.indexOf("<li>")).toBeLessThan(html.indexOf('name="granted_scope"'));
   });
   it("names the client, the installation and the acting human", () => {
     const html = renderConsentPage(base);
@@ -177,6 +179,34 @@ describe("consent rendering", () => {
     expect(html).toContain("CanvasText");
     expect(html).not.toContain("<link");
     expect(html).not.toMatch(/#[0-9a-fA-F]{6}/);
+  });
+});
+
+// BI-07D21B4A: consent silently bound whatever session the browser held — every
+// connection on one install went to a bootstrap account nobody signs in with,
+// and every approval the assistant asked for landed in that account's inbox.
+describe("consent names the account and makes the person confirm it", () => {
+  it("asks the person to confirm the account with a required control bound to that user id", () => {
+    const html = renderConsentPage(base);
+    expect(html).toMatch(/<input type="checkbox" name="confirm_account" value="user-owner" required>/);
+    const form = html.slice(html.indexOf("<form"));
+    expect(form).toContain("owner@example.com");
+  });
+  it("says where the assistant's approval requests will go", () => {
+    expect(renderConsentPage(base)).toContain("approval requests will come to this account");
+  });
+  it("offers a way to use a different account that returns to this request", () => {
+    const html = renderConsentPage(base);
+    expect(html).toContain('<a href="/login?callbackUrl=%2Fapi%2Foauth%2Fauthorize%3Fclient_id%3Dabc">Use a different account</a>');
+  });
+  it("escapes a hostile account label and switch link", () => {
+    const html = renderConsentPage({ ...base, actingUser: '<img src=x onerror=a>', switchAccountUrl: '"><script>x()</script>' });
+    expect(html).not.toContain("<img src=x");
+    expect(html).not.toContain("<script>x()</script>");
+  });
+  it("says why nothing was connected when Connect came without the account confirmed", () => {
+    expect(renderConsentPage({ ...base, accountNotice: true }))
+      .toContain("Confirm the account this connection works under. Nothing was connected.");
   });
 });
 
