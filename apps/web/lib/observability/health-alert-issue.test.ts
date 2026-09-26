@@ -25,7 +25,7 @@ describe("healthAlertIssueKey", () => {
 
   it("falls back instance -> job -> bare alertname", () => {
     expect(healthAlertIssueKey({ alertname: "X", instance: "sandbox:3000" })).toBe("health-alert-X:sandbox:3000");
-    expect(healthAlertIssueKey({ alertname: "X", job: "qdrant" })).toBe("health-alert-X:qdrant");
+    expect(healthAlertIssueKey({ alertname: "X", job: "redis" })).toBe("health-alert-X:redis");
     expect(healthAlertIssueKey({ alertname: "PostgresDown" })).toBe("health-alert-PostgresDown");
   });
 });

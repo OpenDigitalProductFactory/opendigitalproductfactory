@@ -234,7 +234,7 @@ worktree path: doing so can point cleanup at a different sibling and is rejected
 before host state is mutated.
 Slot 0 preserves the singleton portal on `http://localhost:3010` and uses its
 dedicated PostgreSQL endpoint on port `15432`; it may still consume shared,
-read-only or concurrency-safe development services such as Qdrant and Neo4j.
+read-only or concurrency-safe development services.
 Slot 1 is declared and testable, but automatic admission remains fixed at one
 until BI-A4427AB8 runs the separately governed capacity pilot.
 

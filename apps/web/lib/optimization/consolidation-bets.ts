@@ -189,7 +189,7 @@ export const CONSOLIDATION_BETS: readonly ConsolidationBet[] = [
       tools: [],
       files: [
         "packages/db/src/pg-graph.ts",
-        "packages/db/src/qdrant.ts",
+        "packages/db/src/pgvector-store.ts",
         "apps/web/lib/wiki/ppr.ts",
         "apps/web/lib/inference/embedding.ts",
       ],

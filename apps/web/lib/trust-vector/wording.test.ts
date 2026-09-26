@@ -75,7 +75,7 @@ describe("buildTrustMessage", () => {
       asOf: "2026-05-26T12:00:00.000Z",
       dimensions: [
         dimension("freshness", 1, "Postgres records were read now."),
-        dimension("runtimeAvailability", 0.1, "Neo4j was unavailable."),
+        dimension("runtimeAvailability", 0.1, "The graph mirror was unavailable."),
       ],
     });
 
@@ -83,7 +83,7 @@ describe("buildTrustMessage", () => {
       lowConfidenceResult: "This graph result is incomplete.",
     });
 
-    expect(message).toBe("This graph result is incomplete. Neo4j was unavailable.");
+    expect(message).toBe("This graph result is incomplete. The graph mirror was unavailable.");
     expect(message).not.toMatch(/\d+\.\d+/);
   });
 });

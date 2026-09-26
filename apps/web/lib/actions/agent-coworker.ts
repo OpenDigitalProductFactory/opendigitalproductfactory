@@ -2453,7 +2453,7 @@ export async function sendMessage(input: {
     await resolveAIDocForAgent(agent.agentId).catch(() => null)
   )?.operating_profile_fingerprint ?? null;
 
-  // Fire-and-forget: store conversation memories in Qdrant
+  // Fire-and-forget: store conversation memories in the vector store
   import("@/lib/semantic-memory").then(({ storeConversationMemory }) => {
     const memBase = {
       userId: user.id!,

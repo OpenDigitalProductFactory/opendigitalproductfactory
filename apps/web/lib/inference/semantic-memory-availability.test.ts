@@ -10,7 +10,7 @@ vi.mock("@dpf/db", () => ({
   searchSimilar: vi.fn(async () => []),
   upsertVectors: vi.fn(async () => undefined),
   scrollPoints: vi.fn(async () => []),
-  QDRANT_COLLECTIONS: { PLATFORM_KNOWLEDGE: "platform-knowledge", AGENT_MEMORY: "agent-memory" },
+  VECTOR_COLLECTIONS: { PLATFORM_KNOWLEDGE: "platform-knowledge", AGENT_MEMORY: "agent-memory" },
   prisma: {},
   semanticMemoryOps: {},
 }));

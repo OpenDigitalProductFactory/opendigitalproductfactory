@@ -1,7 +1,7 @@
-// apps/web/lib/sandbox-db.ts
+// apps/web/lib/build/sandbox/sandbox-db.ts
 // Sandbox database stack management — creates and destroys PostgreSQL for
-// isolated sandbox environments. BET-5 (BI-28D31FB7): Neo4j + Qdrant containers
-// are no longer provisioned; vectors/graph live in Postgres (pgvector).
+// isolated sandbox environments. Vectors and the graph mirror live in the same
+// Postgres (pgvector, graph_node / graph_edge).
 
 import { lazyExec } from "@/lib/shared/lazy-node";
 import { Prisma, prisma } from "@dpf/db";
@@ -21,9 +21,8 @@ export function buildDbContainerName(buildId: string): string {
 // ─── Environment Variable Builder ─────────────────────────────────────────────
 
 /**
- * Env for the sandboxed portal. BET-5: only Postgres is provisioned. Legacy
- * NEO4J_/QDRANT_ URLs are intentionally omitted so the portal cannot reach
- * retired services even if code still reads those env names.
+ * Env for the sandboxed portal. Only Postgres is provisioned, so DATABASE_URL
+ * is the only datastore address it gets.
  */
 export function buildSandboxDbEnvVars(buildId: string): Record<string, string> {
   return {
@@ -102,7 +101,7 @@ export async function createSandboxDbStack(
   }
   const dbName = buildDbContainerName(buildId);
 
-  // PostgreSQL only (BET-5 BI-28D31FB7 — no Neo4j/Qdrant sidecars).
+  // PostgreSQL is the only datastore sidecar.
   const { stdout: dbOut } = await exec(
     [
       "docker run -d",
@@ -162,23 +161,8 @@ export async function findAvailablePort(startPort: number, endPort: number): Pro
 
 export async function destroySandboxDbStack(
   buildId: string,
-  state: {
-    dbContainerId?: string;
-    /** @deprecated BET-5 — ignored; leftover containers still force-removed by name */
-    neo4jContainerId?: string;
-    /** @deprecated BET-5 — ignored; leftover containers still force-removed by name */
-    qdrantContainerId?: string;
-  },
+  state: { dbContainerId?: string },
 ): Promise<void> {
-  // Always remove Postgres; also force-remove any leftover neo4j/qdrant names
-  // from pre-retirement sandboxes so destroy stays idempotent.
-  const targets = [
-    state.dbContainerId ?? buildDbContainerName(buildId),
-    state.neo4jContainerId ?? `dpf-sandbox-neo4j-${buildId}`,
-    state.qdrantContainerId ?? `dpf-sandbox-qdrant-${buildId}`,
-  ];
-
-  await Promise.all(
-    targets.map((id) => exec(`docker rm -f ${id}`).catch(() => {})),
-  );
+  const target = state.dbContainerId ?? buildDbContainerName(buildId);
+  await exec(`docker rm -f ${target}`).catch(() => {});
 }

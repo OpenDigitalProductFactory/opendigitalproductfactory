@@ -66,7 +66,7 @@ export function buildSandboxCreateArgs(
   },
 ): string[] {
   // No --network=none: sandbox needs npm registry access for pnpm install.
-  // Internal services (postgres, neo4j) are protected by not mounting .env
+  // Internal services (postgres) are protected by not mounting .env
   // or any credentials. For production, use a custom network with port filtering.
   const args: string[] = [
     "create",
@@ -603,16 +603,12 @@ export async function destroyFullSandboxStack(
   state: {
     containerId?: string;
     dbContainerId?: string;
-    neo4jContainerId?: string;
-    qdrantContainerId?: string;
     networkId?: string;
   },
 ): Promise<void> {
   const ids = [
     state.containerId,
     state.dbContainerId,
-    state.neo4jContainerId,
-    state.qdrantContainerId,
   ].filter(Boolean);
   await Promise.all(ids.map((id) => exec(`docker rm -f ${id}`).catch(() => {})));
   if (state.networkId) await destroySandboxNetwork(state.networkId);

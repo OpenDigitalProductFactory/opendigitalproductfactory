@@ -127,7 +127,7 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-// postgres-only after BET-5 retired the neo4j + qdrant stores.
+// Postgres is the only backup target (BET-5, BI-A1E864A5).
 const TARGET_LABELS: Record<"postgres", string> = {
   postgres: "Postgres",
 };

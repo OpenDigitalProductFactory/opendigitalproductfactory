@@ -47,7 +47,7 @@ The pre-commit hook also scans the staged snapshot for secrets with the same pin
 2. Configures in-repo git hooks
 3. Installs pnpm workspace dependencies
 4. Generates `apps/web/.env.local` and root `.env` from examples (with portable in-place `sed` that works on both GNU and BSD `sed`, and `openssl` / `python3` secret generation)
-5. Brings up the contributor compose stack (Postgres + Neo4j + Qdrant)
+5. Brings up the contributor compose stack (Postgres)
 6. Waits for Postgres readiness and runs Prisma migrations + seed
 7. Verifies the agent rulebook (AGENTS.md + pointer files) is intact
 

@@ -11,7 +11,7 @@
 // No compose file needed; multi-project hosts (contributor worktree sandboxes)
 // can't be cross-hit because of the project scope.
 
-// postgres-only data service after BET-5 retired neo4j + qdrant.
+// Postgres is the only restartable data service (BET-5).
 export const RESTARTABLE_SERVICES = ["portal", "sandbox", "postgres"] as const;
 export type RestartableService = (typeof RESTARTABLE_SERVICES)[number];
 

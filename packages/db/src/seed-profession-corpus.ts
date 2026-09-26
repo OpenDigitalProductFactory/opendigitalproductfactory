@@ -1,8 +1,8 @@
 // packages/db/src/seed-profession-corpus.ts
 // WSID Phase 2 (BI-871126F9): seed profession corpus wiki pages from
 // docs/professions/*/wiki/. Generalises seed-wiki-kernel.ts machinery
-// for open-license external sources (no kernel manifest; no Qdrant sidecar
-// in Phase 2 — Qdrant seeding is a Phase 3+ extension).
+// for open-license external sources (no kernel manifest; no vector sidecar
+// in Phase 2 — vector seeding is a Phase 3+ extension).
 //
 // Idempotent: re-running advances the revision chain only when body
 // content has changed; never duplicates RawSource rows, page rows,

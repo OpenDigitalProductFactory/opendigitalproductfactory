@@ -15,8 +15,8 @@ import {
 import {
   syncEaElement,
   syncEaRelationship,
-  deleteEaElement as neo4jDeleteEaElement,
-  deleteEaRelationship as neo4jDeleteEaRelationship,
+  deleteEaElement as graphDeleteEaElement,
+  deleteEaRelationship as graphDeleteEaRelationship,
 } from "@dpf/db/graph-sync";
 import {
   assertCoverageStatus,
@@ -83,7 +83,7 @@ export async function createEaElement(input: CreateEaElementInput): Promise<void
     },
   });
 
-  // Fire-and-forget Neo4j sync
+  // Fire-and-forget graph sync
   const et = await prisma.eaElementType.findUnique({
     where: { id: input.elementTypeId },
     select: { neoLabel: true, slug: true, notation: { select: { slug: true } } },
@@ -173,7 +173,7 @@ export async function updateEaElement(id: string, input: UpdateEaElementInput): 
 export async function deleteEaElement(id: string): Promise<void> {
   await requireManageEaModel();
   await prisma.eaElement.delete({ where: { id } });
-  void Promise.resolve(neo4jDeleteEaElement(id)).catch(console.error);
+  void Promise.resolve(graphDeleteEaElement(id)).catch(console.error);
 }
 
 // ─── Relationship actions ─────────────────────────────────────────────────────
@@ -249,7 +249,7 @@ export async function createEaRelationship(
 export async function deleteEaRelationship(id: string): Promise<void> {
   await requireManageEaModel();
   await prisma.eaRelationship.delete({ where: { id } });
-  void Promise.resolve(neo4jDeleteEaRelationship(id)).catch(console.error);
+  void Promise.resolve(graphDeleteEaRelationship(id)).catch(console.error);
 }
 
 // ─── Lifecycle advance ────────────────────────────────────────────────────────

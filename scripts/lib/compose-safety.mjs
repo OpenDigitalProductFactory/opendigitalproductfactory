@@ -116,7 +116,7 @@ const CONTAINER_CREATING_COMMANDS = new Set(["up", "create", "start", "restart",
 // any of these on the root project is the risky act; recreating a stateless
 // service (portal, inngest) is not — that is the `redeploy-portal` / promoter
 // `--no-deps portal` path, which must stay allowed.
-const DATA_SERVICES = new Set(["postgres", "neo4j", "qdrant"]);
+const DATA_SERVICES = new Set(["postgres"]);
 
 // `up`-family options that take a value, so the following token is NOT a service
 // operand. Combined with the global OPTIONS_WITH_VALUES above.
@@ -197,7 +197,7 @@ export function validateComposeSafety({ args, env = process.env } = {}) {
   ) {
     errors.push(
       `Refusing 'docker compose ${intent.command}' of a data service on the root dpf project. ` +
-        "This recreates postgres/neo4j/qdrant and can silently attach the live database to a stale or wrong " +
+        "This recreates postgres and can silently attach the live database to a stale or wrong " +
         "volume — exactly the 2026-06-23 8-day data revert (BI-B61779DB). The governed portal update path is " +
         "/ops/self-upgrade (or scripts/redeploy-portal.* / promote.sh, which use --no-deps and never touch the " +
         "data services). For an intentional install/recovery, set DPF_ALLOW_ROOT_COMPOSE_UP=1; for worktrees/CI, " +

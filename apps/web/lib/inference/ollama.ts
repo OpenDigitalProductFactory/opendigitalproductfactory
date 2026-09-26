@@ -56,7 +56,7 @@ async function enrichLocalInfraCI(baseUrl: string, status: string): Promise<void
       hwInfo ? { baseUrl, gpu: hwInfo.gpu, modelCount: hwInfo.modelCount } : undefined,
     );
   } catch {
-    // Neo4j unavailable — don't crash the page
+    // Graph mirror unavailable — don't crash the page
   }
 }
 

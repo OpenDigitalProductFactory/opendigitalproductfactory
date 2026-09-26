@@ -3,7 +3,7 @@
  *
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.2
  *
- * postgres-only after BET-5 retired the neo4j + qdrant stores. The daily cron
+ * Postgres is the only backup target (BET-5). The daily cron
  * fires at 03:00 UTC, runs the Postgres backup, then verifies it via a
  * trial-restore. The manual-trigger event lets the admin "Run backup now"
  * button work on demand.

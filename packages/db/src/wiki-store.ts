@@ -556,7 +556,7 @@ export async function recordIngestEvent(
 
 /**
  * Postgres-first principle retrieval, used by recallPrincipleContext to
- * always inject in-scope commandments regardless of Qdrant availability.
+ * always inject in-scope commandments regardless of vector store availability.
  *
  * - Filters to `pageKind = "principle"`, `status = "published"`, and the
  *   supplied tier.

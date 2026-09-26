@@ -44,7 +44,7 @@ These are not in any training corpus. They are how DPF expresses itself.
 
 **When to use.** Spec sign-off questions with multiple plausible answers. Build Studio phase-advance gates where principles pull in different directions. Anywhere an operator decision should be made traceable to which principles supported or opposed it. The Build Studio plan-advancement gate at [apps/web/lib/decision-perspective/build-studio-gate.ts:33](../../apps/web/lib/decision-perspective/build-studio-gate.ts:33) is the canonical end-to-end example.
 
-**When NOT to use.** Single-option decisions (no scoring needed). Pure mechanical decisions ("does this file exist?"). Decisions inside a tight loop — `principle_decide` is a Postgres + Qdrant retrieval call, not a microsecond operation. Decisions where the answer is already encoded in a hard runtime invariant.
+**When NOT to use.** Single-option decisions (no scoring needed). Pure mechanical decisions ("does this file exist?"). Decisions inside a tight loop — `principle_decide` is a Postgres + pgvector retrieval call, not a microsecond operation. Decisions where the answer is already encoded in a hard runtime invariant.
 
 **Shape.**
 ```

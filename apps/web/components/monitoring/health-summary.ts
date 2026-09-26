@@ -377,9 +377,9 @@ export const JOB_PRESENTATION: Record<string, JobPresentation> = {
 
 // Plain-language service names for the health SUMMARY CARDS (BI-2F778C13
 // follow-up). JOB_PRESENTATION names are the tile-grid labels and are still
-// product/tech vocabulary ("PostgreSQL", "Qdrant", "cAdvisor") — fine on the
+// product/tech vocabulary ("PostgreSQL", "pgvector", "cAdvisor") — fine on the
 // detailed operator grid, but the summary-card detail line used to join the
-// RAW scrape-job strings ("portal, postgres, qdrant, sandbox down") straight
+// RAW scrape-job strings ("portal, postgres, sandbox down") straight
 // at a non-technical business user. This map gives those same jobs a
 // what-it-is-to-you label; the wording mirrors alert-humanize's
 // SERVICE_DOWN_IMPACT so both surfaces speak one language.
@@ -418,7 +418,7 @@ export function humanizeJobList(jobs: string[]): string {
 // see on the Health tab — because they're observable through a different
 // channel (AI Inference + Voice STT both flow through portal application
 // metrics on /api/metrics, not their own scrape job). These tiles render as
-// neutral "Portal metrics". (Neo4j was removed here by BET-5 — BI-2B70C92C.)
+// neutral "Portal metrics".
 export const UNSCRAPED_SERVICES: ServiceDefinition[] = [
   { name: "AI Inference", statusHint: "Portal metrics" },
   { name: "Voice STT", statusHint: "Portal metrics" },

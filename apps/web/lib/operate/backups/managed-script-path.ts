@@ -83,7 +83,7 @@ const DEFAULT_MANAGED_SCRIPT_MAX_BUFFER = 8 * 1024 * 1024;
  *   then COPYs them without a chmod. A direct exec therefore dies with
  *   `spawn EACCES`, which the runners surfaced as the opaque "runner exited -1"
  *   and which aborted the pre-upgrade recovery point (incident 2026-06-06:
- *   recovery-point-failed across postgres/neo4j/qdrant in <25ms each).
+ *   recovery-point-failed across every backup target in <25ms each).
  *
  *   Every managed script begins with `#!/bin/sh`, so `sh <script>` is
  *   semantically identical and removes the executable-bit dependency entirely.

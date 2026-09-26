@@ -31,7 +31,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        service: { type: "string", description: "Service name: portal, sandbox, postgres, neo4j, qdrant, portal-init" },
+        service: { type: "string", description: "Service name: portal, sandbox, postgres, portal-init, browser-use" },
         lines: { type: "number", description: "Number of lines to return (default 100, max 500)" },
       },
       required: ["service"],
@@ -76,7 +76,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        service: { type: "string", description: "Service name: portal, sandbox, postgres, neo4j, qdrant" },
+        service: { type: "string", description: "Service name: portal, sandbox, postgres" },
       },
       required: ["service"],
     },
@@ -141,7 +141,7 @@ function logAdminActivity(
 async function adminViewLogs(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const service = String(params.service ?? "");
   const lines = Math.min(Number(params.lines) || 100, 500);
-  const ALLOWED_SERVICES = ["portal", "sandbox", "postgres", "neo4j", "qdrant", "portal-init", "browser-use"];
+  const ALLOWED_SERVICES = ["portal", "sandbox", "postgres", "portal-init", "browser-use"];
   if (!ALLOWED_SERVICES.includes(service)) {
     return { success: false, error: `Invalid service. Allowed: ${ALLOWED_SERVICES.join(", ")}`, message: `Unknown service "${service}".` };
   }

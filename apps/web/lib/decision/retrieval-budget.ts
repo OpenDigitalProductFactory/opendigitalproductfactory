@@ -97,7 +97,7 @@ export async function retrievePrincipleTiers(input: {
         [],
       )) as Array<Record<string, unknown>>;
     } catch (err) {
-      console.warn(`[principle_decide] ${label} Qdrant lookup failed:`, err);
+      console.warn(`[principle_decide] ${label} vector lookup failed:`, err);
       return [];
     }
   };

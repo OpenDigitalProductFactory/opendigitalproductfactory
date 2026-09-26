@@ -360,7 +360,6 @@ async function stepInitDb(
 
   // Pool sandboxes use a shared sandbox-postgres managed by compose.
   // Per-build DB containers are only created for dynamic sandboxes.
-  // BET-5 (BI-28D31FB7): Postgres only — Neo4j/Qdrant sidecars retired.
   const dbContainer = state.dbContainerId ?? "dpf-sandbox-postgres-1";
 
   await waitForSandboxDb(dbContainer);
