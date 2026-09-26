@@ -67,6 +67,7 @@ vi.mock("@/lib/self-upgrade/support", () => ({
 }));
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
 vi.mock("@/lib/self-upgrade/registry-release", () => ({ readRegistryReleaseCandidate: mocks.readRegistryReleaseCandidate }));
+vi.mock("@/lib/self-upgrade/doctools-release-image", () => ({ prePullReleaseDoctoolsImage: vi.fn(async () => ({ outcome: "present", image: `ghcr.io/o/dpf-doctools@sha256:${"e".repeat(64)}` })) }));
 vi.mock("@/lib/release-health/state", () => ({ loadVerifiedReleaseTargetEvidence: mocks.loadVerifiedReleaseTargetEvidence, recordVerifiedReleaseTargetEvidence: mocks.recordVerifiedReleaseTargetEvidence }));
 vi.mock("@/lib/self-upgrade/window", () => ({
   isUpgradeWindowOpen: mocks.isUpgradeWindowOpen,
