@@ -118,6 +118,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/install-folder-contract.mjs\"",
+            "statusMessage": "Load the source contract when the session opens in the install folder"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/uncommitted-work-guard.mjs\" --snapshot",
             "statusMessage": "Note work that was already uncommitted when the session started"
           }

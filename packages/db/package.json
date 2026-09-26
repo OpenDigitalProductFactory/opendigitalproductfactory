@@ -124,7 +124,6 @@
     "i18n-iso-countries": "^7.14.0",
     "net-snmp": "^3.26.3",
     "pg": "^8.23.0",
-    "read-excel-file": "9.2.0",
     "undici": "^8.10.0"
   },
   "devDependencies": {

@@ -85,4 +85,11 @@ describe("attentionSourceLoaders", () => {
     expect(sources).not.toContain("coworker-envelope");
     expect(sources).toContain("agent-proposal");
   });
+
+  it("registers the orphaned-approval source only for a superuser reader (BI-61DE8177)", () => {
+    const superuser = attentionSourceLoaders(db, { delegatingUserId: "u", readerIsSuperuser: true }).map((l) => l.source);
+    const ordinary = attentionSourceLoaders(db, { delegatingUserId: "u" }).map((l) => l.source);
+    expect(superuser).toContain("orphaned-approval");
+    expect(ordinary).not.toContain("orphaned-approval");
+  });
 });
