@@ -13,6 +13,8 @@
 // DECISION_OPTION_KINDS below. P2 promotes this to a typed AgentMessage.decision
 // column (tracked follow-up); this parser stays the single validation seam.
 
+import { slugify } from "../shared/slugify";
+
 /** Decision-option kinds — the SAME vocabulary as AttentionActionKind
  *  (lib/attention/types.ts). Kept as a runtime list here for validation; keep
  *  the two in sync. Drives button styling; semantics are advisory in P1. */
@@ -61,11 +63,8 @@ export type CoworkerDecision = {
 // newlines even though the coworker is instructed to keep it on one line.
 const DECISION_SENTINEL_RE = /<!--\s*dpf-decision:\s*(\{[\s\S]*?\})\s*-->/;
 
-function slugify(label: string, index: number): string {
-  const base = label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+function optionId(label: string, index: number): string {
+  const base = slugify(label);
   return base ? `${base}-${index}` : `option-${index}`;
 }
 
@@ -85,7 +84,7 @@ function normalizeOption(raw: unknown, index: number): CoworkerDecisionOption | 
       : "answer";
 
   const option: CoworkerDecisionOption = {
-    id: typeof rec.id === "string" && rec.id.trim() ? rec.id.trim() : slugify(label, index),
+    id: typeof rec.id === "string" && rec.id.trim() ? rec.id.trim() : optionId(label, index),
     label,
     value,
     kind,
@@ -277,7 +276,7 @@ export function deriveDecisionFromProse(content: string): CoworkerDecision | nul
     const label =
       value.length > PROSE_LABEL_MAX ? `${value.slice(0, PROSE_LABEL_MAX - 1).trimEnd()}…` : value;
     const option: CoworkerDecisionOption = {
-      id: slugify(clause, index),
+      id: optionId(clause, index),
       label,
       value,
       kind: "answer",
