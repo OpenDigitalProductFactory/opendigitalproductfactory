@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs as utilParseArgs } from "node:util";
 import { execFile, spawn, spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -499,8 +500,7 @@ async function probeControlPlane(postgresProbe) {
 }
 
 function resolveGit(args) {
-  const result = spawnSync("git", args, { encoding: "utf8", shell: false });
-  return result.status === 0 ? result.stdout.trim() : null;
+  return gitTextOrNull(args, { cwd: process.cwd() });
 }
 
 // BI-D3BF53A9: sample the builder's own cgroup while it builds. Async, so a slow

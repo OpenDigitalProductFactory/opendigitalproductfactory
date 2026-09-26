@@ -13,6 +13,7 @@
 
 import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
+import { runGit } from "./lib/git.mjs";
 import { X_OK } from "node:constants";
 import { accessSync, chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
@@ -43,7 +44,7 @@ function die(message) {
 }
 
 function git(args, cwd) {
-  return spawnSync("git", args, { cwd, encoding: "utf8" });
+  return runGit(args, { cwd: cwd ?? process.cwd() });
 }
 
 function gitOrEmpty(args, cwd) {
@@ -440,18 +441,18 @@ export function createLocalIntegrationChildInvocation({
 function ensureScratchWorkspace(root, workspace) {
   if (existsSync(join(workspace, ".git"))) return;
   mkdirSync(dirname(workspace), { recursive: true });
-  const add = spawnSync("git", ["-C", root, "worktree", "add", "--detach", workspace], { encoding: "utf8" });
-  if (add.status !== 0) {
-    const forced = spawnSync("git", ["-C", root, "worktree", "add", "--force", "--detach", workspace], { encoding: "utf8" });
-    if (forced.status !== 0) die(`could not create scratch workspace ${workspace}: ${forced.stderr}`);
+  const add = git(["-C", root, "worktree", "add", "--detach", workspace]);
+  if (!add.ok) {
+    const forced = git(["-C", root, "worktree", "add", "--force", "--detach", workspace]);
+    if (!forced.ok) die(`could not create scratch workspace ${workspace}: ${forced.stderr}`);
   }
 }
 
 function cleanScratchWorkspace(workspace, manifest) {
   assertLocalCiCleanupTarget(manifest, workspace);
-  spawnSync("git", ["-C", workspace, "merge", "--abort"], { encoding: "utf8" });
-  spawnSync("git", ["-C", workspace, "reset", "--hard", "--quiet"], { encoding: "utf8" });
-  spawnSync("git", ["-C", workspace, "clean", "-fd", "--quiet", "-e", "node_modules", "-e", ".env"], { encoding: "utf8" });
+  git(["-C", workspace, "merge", "--abort"]);
+  git(["-C", workspace, "reset", "--hard", "--quiet"]);
+  git(["-C", workspace, "clean", "-fd", "--quiet", "-e", "node_modules", "-e", ".env"]);
 }
 
 async function main() {

@@ -3,7 +3,7 @@ import { parseArgs as utilParseArgs } from "node:util";
 import { open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateBudget } from "./lib/baseline-budget.mjs";
 import {
@@ -31,8 +31,7 @@ async function json(path,label) {
 }
 
 function sha(repoRoot) {
-  const result=spawnSync("git",["rev-parse","HEAD"],{cwd:repoRoot,encoding:"utf8"});
-  return result.status===0 ? result.stdout.trim() : "unknown";
+  return gitTextOrNull(["rev-parse","HEAD"],{cwd:repoRoot}) ?? "unknown";
 }
 
 export async function atomicWriteFile(targetPath, content, injectedIo={}) {
