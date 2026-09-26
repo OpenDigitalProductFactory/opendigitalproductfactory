@@ -81,7 +81,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",
-    "@testing-library/react": "^16.3.2",
+    "@testing-library/react": "^16.3.3",
     "@types/mailparser": "^3.4.6",
     "@types/node": "^26.6.2",
     "@types/nodemailer": "^8.0.1",
