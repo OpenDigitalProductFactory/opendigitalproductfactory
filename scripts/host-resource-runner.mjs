@@ -5,6 +5,7 @@ import { hostname, freemem, totalmem } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { isAllowedMcpEndpoint, mcpCall } from "./lib/mcp-client.mjs";
 import { superviseLeaseRun } from "./lib/lease-supervisor.mjs";
@@ -122,8 +123,7 @@ export function buildHostResourceClaim({
 }
 
 function gitValue(args) {
-  const result = spawnSync("git", args, { encoding: "utf8", windowsHide: true });
-  return result.status === 0 ? result.stdout.trim() : "";
+  return gitTextOrNull(args, { cwd: process.cwd() }) ?? "";
 }
 
 export function readMcpConnection(cwd) {

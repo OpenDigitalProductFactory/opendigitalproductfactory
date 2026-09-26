@@ -15,6 +15,7 @@
 // focused debugging. This keeps lease/fence safety in one implementation.
 
 import { spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -777,13 +778,7 @@ function readWorktreeBuildRecord() {
 }
 
 function readWorkingTreePorcelain() {
-  try {
-    const result = spawnSync("git", ["status", "--porcelain"], { encoding: "utf8" });
-    if (result.error || result.status !== 0) return "";
-    return String(result.stdout || "");
-  } catch {
-    return "";
-  }
+  return gitTextOrNull(["status", "--porcelain"], { cwd: process.cwd(), trim: false }) ?? "";
 }
 
 async function main() {

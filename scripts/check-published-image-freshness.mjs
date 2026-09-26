@@ -16,6 +16,7 @@
 //                                                    [--max-behind N] [--json]
 
 import { execFileSync } from "node:child_process";
+import { gitText, runGit } from "./lib/git.mjs";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -58,7 +59,7 @@ function readPublishedSha(ref) {
 }
 
 function main() {
-  const headSha = run("git", ["rev-parse", gitRef]);
+  const headSha = gitText(["rev-parse", gitRef], { cwd: process.cwd() });
 
   let publishedSha = null;
   try {
@@ -72,17 +73,12 @@ function main() {
   let commitsBehind = 0;
   let contractChanged = [];
   if (publishedSha) {
-    try {
-      execFileSync("git", ["merge-base", "--is-ancestor", publishedSha, headSha], { stdio: "ignore" });
-      isAncestor = true;
-    } catch {
-      isAncestor = false;
-    }
+    isAncestor = runGit(["merge-base", "--is-ancestor", publishedSha, headSha], { cwd: process.cwd() }).ok;
     if (isAncestor) {
-      commitsBehind = Number(run("git", ["rev-list", "--count", `${publishedSha}..${headSha}`]));
-      const changed = run("git", [
+      commitsBehind = Number(gitText(["rev-list", "--count", `${publishedSha}..${headSha}`], { cwd: process.cwd() }));
+      const changed = gitText([
         "diff", "--name-only", `${publishedSha}..${headSha}`, "--", ...RELEASE_CONTRACT_PATHS,
-      ]);
+      ], { cwd: process.cwd() });
       contractChanged = changed ? changed.split(/\r?\n/).filter(Boolean) : [];
     }
   }

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
+import { runGit } from "../lib/git.mjs";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -45,10 +46,8 @@ function parseArgs(argv) {
 }
 
 function repoRoot() {
-  const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
-    encoding: "utf8",
-  });
-  if (result.status !== 0) {
+  const result = runGit(["rev-parse", "--show-toplevel"], { cwd: process.cwd() });
+  if (!result.ok) {
     throw new Error(`git rev-parse failed: ${result.stderr.trim()}`);
   }
   return result.stdout.trim();

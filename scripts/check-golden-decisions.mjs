@@ -23,7 +23,7 @@
 // both engines (this scorer + the canonical vitest test) run in CI against the same
 // corpus, so any behavioral divergence surfaces as one going red.
 
-import { execFileSync } from "node:child_process";
+import { gitText } from "./lib/git.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -151,12 +151,7 @@ export function loadCommandments(dir = PRINCIPLES_DIR, professionsDir = PROFESSI
 }
 
 function defaultGit(args) {
-  return execFileSync("git", args, {
-    cwd: join(HERE, ".."),
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 32 * 1024 * 1024,
-  });
+  return gitText(args, { cwd: join(HERE, ".."), trim: false, maxBuffer: 32 * 1024 * 1024 });
 }
 
 /**

@@ -28,7 +28,7 @@
 //   node scripts/local-ci-host-stage-calibration.mjs           # human report
 //   node scripts/local-ci-host-stage-calibration.mjs --json    # machine output
 
-import { spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 
 import { isEntryModule } from "./lib/entry-module.mjs";
@@ -97,10 +97,7 @@ export function collectReceipts(worktreesDir) {
  * so this must ask git rather than assume a path.
  */
 function worktreeReceiptsDir() {
-  const result = spawnSync("git", ["rev-parse", "--git-common-dir"], {
-    cwd: REPO_ROOT, encoding: "utf8", shell: false, windowsHide: true,
-  });
-  const common = result.status === 0 ? result.stdout.trim() : "";
+  const common = gitTextOrNull(["rev-parse", "--git-common-dir"], { cwd: REPO_ROOT }) ?? "";
   if (!common) return join(REPO_ROOT, ".git", "worktrees");
   return join(common.startsWith(".") ? join(REPO_ROOT, common) : common, "worktrees");
 }

@@ -25,6 +25,7 @@
 // Spec: docs/superpowers/specs/2026-07-21-agent-process-efficiency-hardening-design.md
 
 import { spawnSync } from "node:child_process";
+import { runGit } from "./lib/git.mjs";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -56,7 +57,8 @@ function lockHash() {
 
 // Extract the set of `name@version` package definitions from the lockfile diff.
 function changedPackages() {
-  const diff = spawnSync("git", ["diff", "--unified=0", "--", LOCKFILE], { encoding: "utf8" }).stdout || "";
+  // Partial stdout on failure, as before: a failed diff reads as whatever git printed.
+  const diff = runGit(["diff", "--unified=0", "--", LOCKFILE], { cwd: process.cwd() }).stdout;
   const re = /^([+-])  '?(@?[a-z0-9][^' @]*)@([0-9][^:'()]*)/i;
   const added = new Map();
   const removed = new Map();
