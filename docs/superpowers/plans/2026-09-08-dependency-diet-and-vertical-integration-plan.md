@@ -348,6 +348,17 @@ Each S-move ships its ratchet in the same PR, in the shape the `check-no-local-*
 2. **Hygiene, no decisions, one PR each:** S11 plus a `catalog:`, S3, S5, S7, S9, then S1 and S2.
 3. **Structural:** M6 execution if approved, M4, then M3 behind BET-11, and M5 through the office-document engine's S9.
 
+### 10.6.1 Founder decisions, 2026-09-26
+
+The founder decided the four open calls in the dependency-architecture thread on 2026-09-26, each on the recommended option. The DPF MCP server was unreachable from that session, so the `principle_decide` / decision-outcome records are still owed. This section is the durable record until they are filed.
+
+| Call | Decision | Consequence |
+|---|---|---|
+| M3 durable-job engine | `own_postgres_jobs` | [Durable jobs on Postgres](../specs/2026-09-25-postgres-durable-job-engine-design.md) moves from `draft` to `active`. Implementation follows its §6: facade first, then the engine behind a flag, then retirement. The §7 benchmarks gate the flag flip, not the facade. |
+| S10 graph layout | `elkjs` only | `dagre` retires; the three `lib/graph` layouts move to elkjs `layered`. |
+| M5 markdown | one `renderMarkdown()` on `markdown-it`, raw HTML off | `react-markdown` and `remark-gfm` retire behind one primitive. |
+| Delivery | one branch and one PR per move | Moves ship in parallel on `claude/<move>` branches. |
+
 ### 10.7 Backlog coverage
 
 The DPF MCP server was unreachable from the session that wrote this section, so M8 and the §7 ratchet ran against BI-5265CAD0 (M7 + M8), already filed. The S-moves need backlog items under `EP-8DC217EB` before they are implemented, and the next session with MCP access files them.
