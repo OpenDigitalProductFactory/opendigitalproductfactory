@@ -47,6 +47,7 @@ const REQUIRED_IN_BUNDLE = Object.freeze([
   "scripts/installer/install-release-assets.mjs",
   "scripts/installer/local-model-policy.json",
   "scripts/bootstrap-organization-pki.ps1",
+  "scripts/publish-host-gpu.ps1",
   // The install guides tell operators to run these by name, so a consumer install
   // that lacks them fails the documented uninstall with "file not found" — the
   // only offered route to zero footprint (IMP-073).

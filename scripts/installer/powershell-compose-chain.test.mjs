@@ -27,6 +27,16 @@ test("PowerShell lifecycle commands share one complete compose-chain resolver", 
   }
 });
 
+test("Windows start publishes a host GPU snapshot for local admission", () => {
+  const publisher = read("scripts/publish-host-gpu.ps1");
+  assert.match(publisher, /nvidia-smi/);
+  assert.match(publisher, /host-gpu\.json/);
+  assert.doesNotMatch(publisher, /[^\x00-\x7F]/);
+  for (const caller of ["dpf-start.ps1", "scripts/dpf-start.ps1", "install-dpf.ps1"]) {
+    assert.match(read(caller), /publish-host-gpu\.ps1/, `${caller} does not start the GPU publisher`);
+  }
+});
+
 test("ordinary stop preserves volumes while uninstall makes purge explicit", () => {
   assert.doesNotMatch(read("dpf-stop.ps1"), /\s-(?:v|volumes)\b/i);
   assert.match(read("uninstall-dpf.ps1"), /\[switch\]\$Purge/);

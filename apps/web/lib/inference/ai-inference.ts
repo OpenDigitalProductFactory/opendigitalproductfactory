@@ -520,6 +520,10 @@ export async function callProvider(
   // the shared adapter boundary so direct, agentic, evaluation and fallback
   // callers cannot start a local model while governed local CI owns the host.
   await assertProviderDispatchCapacity(providerId);
+  // Lease ownership is routing policy. Whether the card is free is an inference
+  // fact, so it stays in this layer (routing may not import inference).
+  const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
+  await assertLocalGpuFree({ providerId, modelId });
 
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has

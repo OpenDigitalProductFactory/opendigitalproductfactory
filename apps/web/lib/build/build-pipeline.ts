@@ -190,6 +190,8 @@ export async function runBuildPipeline(params: {
           }
           break; // step succeeded — move on
         } catch (err) {
+          const { describeCapacityDeferral } = await import("./capacity-deferral");
+          if (describeCapacityDeferral(err)) throw err;
           attempt++;
           let errorMsg = getErrorMessage(err);
           const { getAutonomousPlaybookMode } = await import(
