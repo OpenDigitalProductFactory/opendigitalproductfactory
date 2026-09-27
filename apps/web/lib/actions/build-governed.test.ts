@@ -333,7 +333,6 @@ describe("governed build start approvals", () => {
     }
 
     expect(unhandled).toEqual([]);
-    // The drain gate refuses the start before any DB write.
     expect(mockPrisma.buildPhaseRun.upsert).not.toHaveBeenCalled();
     expect(mockPrisma.buildPhaseRun.findUnique).not.toHaveBeenCalled();
     expect(mockPrisma.buildPhaseRun.create).not.toHaveBeenCalled();
