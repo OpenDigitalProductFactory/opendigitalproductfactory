@@ -78,7 +78,7 @@ describe("writeGovernedToolAudit", () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
       auditClass: "metrics_only",
       parameters: {},
-      result: {},
+      result: { error: "missing" },
     }));
   });
 });

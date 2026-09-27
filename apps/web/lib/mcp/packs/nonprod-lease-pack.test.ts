@@ -492,6 +492,17 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     expect(lease.claimNonprodEnvironmentLease).not.toHaveBeenCalled();
   });
 
+  it("release keeps nonprod_lease_not_owner instead of wrapping it as release_failed", async () => {
+    lease.releaseNonprodEnvironmentLease.mockRejectedValue(new Error("nonprod_lease_not_owner"));
+    const res = await nonprodLeasePack.handlers.release_nonprod_environment_lease(
+      { leaseId: "NPEL-1", ownerSessionId: "other" },
+      "u1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("nonprod_lease_not_owner");
+    expect(res.data).toMatchObject({ retryable: false, leaseId: "NPEL-1" });
+  });
+
   it("release delegates to the service with the leaseId", async () => {
     lease.releaseNonprodEnvironmentLease.mockResolvedValue({
       id: "L1",

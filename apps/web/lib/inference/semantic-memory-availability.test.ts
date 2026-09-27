@@ -28,7 +28,10 @@ describe("searchPlatformKnowledge reports that it could not look", () => {
 
     expect(search.status).toBe("unavailable");
     expect(search.results).toEqual([]);
-    if (search.status === "unavailable") expect(search.reason).toBeTruthy();
+    if (search.status === "unavailable") {
+      expect(search.reason).toBeTruthy();
+      expect(search.code).toBe("search_unavailable");
+    }
   });
 
   it("returns ok with an empty list when the corpus genuinely holds nothing", async () => {
@@ -69,6 +72,7 @@ describe("a capacity deferral is not a model failure (BI-339C441F root cause)", 
 
     expect(search.status).toBe("unavailable");
     if (search.status === "unavailable") {
+      expect(search.code).toBe("search_deferred");
       expect(search.reason).toContain("local CI");
       expect(search.reason).toContain("retryable");
       // Must NOT blame the model — the backend is healthy throughout.
@@ -92,6 +96,8 @@ describe("a capacity deferral is not a model failure (BI-339C441F root cause)", 
     expect(deferred.status).toBe(failed.status);
     if (deferred.status === "unavailable" && failed.status === "unavailable") {
       expect(deferred.reason).not.toBe(failed.reason);
+      expect(deferred.code).toBe("search_deferred");
+      expect(failed.code).toBe("search_unavailable");
     }
   });
 });
