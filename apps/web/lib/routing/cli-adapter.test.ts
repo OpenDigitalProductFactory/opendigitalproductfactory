@@ -71,6 +71,7 @@ vi.mock("@/lib/shared/lazy-node", () => ({
 // can assert on the (path, content, mode) it was handed WITHOUT the content ever
 // touching a command string.
 const mockWriteSandboxFile = vi.fn((..._args: unknown[]): Promise<void> => Promise.resolve());
+vi.mock("./cli-pool-status", () => ({ recordCliRateLimit: vi.fn(), clearCliRateLimit: vi.fn() }));
 vi.mock("@/lib/build/sandbox/agent-cli-runtime", () => ({
   writeSandboxFile: (...args: unknown[]) => mockWriteSandboxFile(...args),
 }));
