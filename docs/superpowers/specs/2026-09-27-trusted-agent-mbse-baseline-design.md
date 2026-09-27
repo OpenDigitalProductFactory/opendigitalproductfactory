@@ -39,7 +39,9 @@ that another organization must adopt.
 Source observations below are pinned to repository commit
 `0d827752665f790d3c4d3eba789ae908c45d78ba`. They identify code and test sources;
 they do not report those tests as executed or establish live enforcement.
-On 2026-09-27 the programme contained 13 live backlog items in triage.
+The 2026-09-27 live scope reconciliation identified 14 direct backlog items and
+two related items owned by other epics. Their individual statuses remain in the
+live backlog; this document does not declare their delivery complete.
 The design claim for BI-9236453D was allowed by decision `IRD-89085D4D9C64`.
 
 The [public DPF site](https://opendigitalproductfactory.com/) was inspected on
@@ -82,6 +84,32 @@ authority case: tool discovery reported `agent-grant-missing` for `backlog_triag
 It did not widen the coworker's grants. This does not validate the other rows.
 Triage remains with an authorized role; changing status through another transport
 would invalidate the example.
+
+### Data admission and processing boundaries
+
+The expanded scope adds the following evidence questions. These rows are
+requirements derived from the related live backlog items, not verified findings
+about every current execution path.
+
+| ID and required property | Existing delivery owner | Evidence needed |
+|---|---|---|
+| B-10: data admission uses explicit classification and exact allowed sets | BI-1F8CCBFF, this epic | Positive Public source-only admission; negative missing-label, mixed-context and noncontiguous-clearance cases. Verify human, coworker and room eligibility independently. |
+| B-11: the actual processing destination is approved | BI-0212E871, EP-D38F463C | Selected provider account/connection, fallback and outbound MCP result checks. Seeding preserves disabled or narrowed policy; model identity alone cannot establish approval. |
+| B-12: source restrictions survive context transformations | BI-BBE6A910, EP-A33A5C61 | Restrictions and provenance survive retrieval, attachments, memory, summaries, chunks and caches. Recheck revoked source access at recall and egress. |
+
+BI-1F8CCBFF identifies
+`docs/superpowers/specs/2026-09-27-workroom-data-admission-design.md`
+on its separately pushed design branch as its proposed design. That artifact is
+not part of the pinned baseline tree. Its reported test evidence must be inspected
+before adopting a result. The other two items keep their current epic ownership;
+the programme consumes their evidence instead of duplicating their controls.
+
+Public repository visibility does not establish data classification. An explicitly
+Public workroom does not grant access to an Internal coworker context. A permitted
+data label does not by itself permit a purpose or destination. Missing labels need
+remediation, and declassification needs attributable authority; neither bulk Public
+backfills nor inferred clearance inheritance are acceptable demonstration shortcuts.
+Preserve the separate catalog-metadata repairs BI-EA61F512 and BI-D9F158AF.
 
 ## Research & Benchmarking
 
@@ -161,6 +189,9 @@ on trigger(work, requested_action):
     if evidence is insufficient: return bounded_research_or_escalation()
     eligible = check_job_data_tool_and_policy_constraints(snapshot, evidence)
     if eligible denies: return recorded_refusal()
+    context = assemble_context_preserving_source_restrictions(evidence)
+    destination = resolve_actual_processing_account_and_connection(snapshot)
+    if not permitted_to_process(context, destination): return recorded_refusal()
     judgment = evaluate_admissible_options(scope, evidence, snapshot)
     if judgment is unresolved: return recorded_escalation()
     proposal = bind_exact_action_and_versions(judgment, requested_action)
@@ -182,6 +213,10 @@ expired budget may escalate but cannot silently relax the policy. Retries need
 effect identity and reconciliation, not an assumption of exactly-once delivery.
 Tools with shell, browser or code execution need a separately enforced resource
 and credential boundary covering their reachable effects.
+Every later context expansion, model fallback and result egress repeats the
+applicable source, purpose and destination checks. A summary or cached embedding
+cannot erase a restriction. This sequence expresses the design obligation;
+BI-F9582C48 must define executable checks and binding semantics before reuse.
 
 ## Reference specimen and frozen scenario proposal
 
@@ -206,6 +241,10 @@ still to be selected; no regulated-industry compliance claim follows from it.
 | S-06 timeout after external submission | Effect marked uncertain; reconciliation precedes retry | No unexamined repeat of a non-idempotent effect. |
 | S-07 concurrent/replayed request | Durable identity and approval binding constrain repeats | Observable result follows the declared idempotency contract. |
 | S-08 shadow or unavailable control | View identifies the evidence/mode limitation | No enforcement/conformance badge from shadow-only evidence. |
+| S-09 explicitly Public source-only work | Eligible human, coworker context and room use an approved destination | Permitted bounded work succeeds without fabricated write authority. |
+| S-10 missing label, mixed context or a gap in allowed clearance sets | Admission identifies the unsatisfied constraint | No default Public classification, rank-based grant inheritance or silent context disclosure. |
+| S-11 revoked source or transformed restricted context | Recall and egress retain and re-evaluate source restrictions | Summaries, attachments, memory and caches cannot bypass the restriction. |
+| S-12 unapproved selected account or model fallback | Destination check runs before processing or outbound disclosure | No transmission to an unapproved destination; approved fallback can proceed only after re-evaluation. |
 
 Freeze fixtures, expected results, thresholds and profile versions before running
 the assessment; report denominator and environment. Tests passing a finite set
@@ -255,6 +294,12 @@ Detailed executable plans and immutable coverage must precede implementation.
 | 10 | Open governance and LF/TBM materials: BI-1C39CCF8 | Standards, contribution terms and paper |
 | 11 | Publisher proposal/sample chapters: BI-6AC40460 | Standards and paper |
 | 12 | Existing docs/public website: BI-928E1B0F | Draft in parallel; release claims follow their evidence |
+| 13 | Workroom data classification/admission: BI-1F8CCBFF | Existing admission design and reviewed control/evidence mapping |
+
+The conformance and DPF demonstration deliverables also consume BI-0212E871 and
+BI-BBE6A910. Their necessary admission, destination and source-propagation evidence
+must be available before S-09 through S-12 can support a conformance claim. This
+is a documented dependency proposal, not a native dependency-graph assertion.
 
 Existing implementation epics retain their items: EP-MBSE-WORKROOM-SPINE,
 EP-1C37C089, EP-COWORKER-LIFECYCLE, EP-32B0E693, EP-31815F97 and
