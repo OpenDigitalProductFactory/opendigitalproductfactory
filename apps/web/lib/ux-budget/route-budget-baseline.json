@@ -773,7 +773,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - text\n  - heading [level=1]\n  - link\n  - paragraph\n    - text\n  - link\n  - link\n    - text\n  - link\n  - link\n    - text\n  - paragraph\n    - text\n  - link"
     },
     "/finance/assets/new": {
-      "defaultVisibleWords": 135,
+      "defaultVisibleWords": 139,
       "leadBandWords": 0,
       "primaryActions": 2,
       "visibleFields": 11,
