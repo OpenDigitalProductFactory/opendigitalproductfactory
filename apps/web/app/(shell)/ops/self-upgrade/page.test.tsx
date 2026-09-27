@@ -47,8 +47,8 @@ vi.mock("@/lib/self-upgrade/merge-point", () => ({
   }),
 }));
 
-vi.mock("@/components/ops/OpsTabNav", () => ({
-  OpsTabNav: () => <div data-testid="ops-tab-nav" />,
+vi.mock("@/components/platform/PlatformTabNav", () => ({
+  PlatformTabNav: () => <div data-testid="platform-tab-nav" />,
 }));
 
 // BI-D43EB266: the source-merge sub-step is folded into the Self-Upgrade page.
@@ -243,14 +243,14 @@ const baseStatus = {
 };
 
 describe("SelfUpgradePage", () => {
-  it("renders page title and ops tab nav", async () => {
+  it("renders page title and platform tab nav", async () => {
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
     vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
 
     const html = renderToStaticMarkup(await SelfUpgradePage());
 
     expect(html).toContain("Self-Upgrade");
-    expect(html).toContain('data-testid="ops-tab-nav"');
+    expect(html).toContain('data-testid="platform-tab-nav"');
     expect(html).toContain('data-testid="self-upgrade-client"');
     expect(html).not.toContain("plain-language status");
     expect(html).not.toContain("Run logs, runtime and security checks");

@@ -261,8 +261,8 @@ export function projectFounderReviewCandidate(row: DecisionInteractionQueueRow) 
     createdAt: row.createdAt.toISOString(),
     links: {
       buildHref: row.buildId ? `/build?buildId=${encodeURIComponent(row.buildId)}` : null,
-      taskRunHref: row.taskRunId ? `/platform/ai/history?taskRunId=${encodeURIComponent(row.taskRunId)}` : null,
-      decisionCanvasHref: `/platform/ai/decisions/${encodeURIComponent(row.interactionId)}`,
+      taskRunHref: row.taskRunId ? `/platform/audit/ledger?taskRunId=${encodeURIComponent(row.taskRunId)}` : null,
+      decisionCanvasHref: `/coworker-decisions/decisions/${encodeURIComponent(row.interactionId)}`,
       routeContext: row.routeContext,
     },
   };

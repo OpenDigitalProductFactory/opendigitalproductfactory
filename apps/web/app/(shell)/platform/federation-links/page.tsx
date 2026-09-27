@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { prisma } from "@dpf/db";
@@ -6,6 +7,7 @@ import { isFederationRelationshipPreset } from "@dpf/db/federation-link-types";
 import { resolveIncidentProjectionSpec } from "@dpf/db/projection-egress";
 
 import { auth } from "@/lib/auth";
+import { getT } from "@/lib/i18n/t.server";
 import { can } from "@/lib/permissions";
 import { listNearbyFederationCandidates } from "@/lib/federation/nearby-candidates";
 import { summarizeNearbyPairingProjection } from "@/lib/federation/nearby-pairing";
@@ -44,6 +46,7 @@ export default async function FederationLinksPage() {
     redirect("/403");
   }
 
+  const t = await getT("shell");
   const [links, edgeNodes, partnerAccounts, nearbyPairingSessions, introducedCandidates] = await Promise.all([
     prisma.federationLink.findMany({
       include: { principal: { select: { displayName: true } } },
@@ -214,6 +217,13 @@ export default async function FederationLinksPage() {
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
           Find nearby DPF installations or connect with an invitation. Nothing is shared until
           both sides approve; either side can pause or revoke the connection.
+        </p>
+        {/* EP-2FB6C0CC (BI-DD763B93): the pages a connection feeds, linked from their home. */}
+        <p className="mt-1 text-sm text-[var(--dpf-muted)]">
+          {t("federation.fromPeers")}{" "}
+          <Link href="/platform/federation-proposals" className="text-[var(--dpf-accent)] hover:underline">{t("federation.proposals")}</Link>
+          {" · "}
+          <Link href="/platform/service-desk" className="text-[var(--dpf-accent)] hover:underline">{t("federation.serviceDesk")}</Link>
         </p>
       </div>
       <OrganizationJoinPanel candidates={joinCandidates} />

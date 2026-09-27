@@ -17,8 +17,6 @@ export default async function PlatformPage() {
     authoritySummary,
     toolStats,
     proposalStats,
-    userCount,
-    roleCount,
     capabilityCount,
     commandCenter,
   ] = await Promise.all([
@@ -30,8 +28,6 @@ export default async function PlatformPage() {
     getPlatformAuthoritySummary(),
     getToolExecutionStats(),
     getProposalStats(),
-    prisma.user.count(),
-    prisma.platformRole.count(),
     prisma.platformCapability.count(),
     loadWorkspaceCommandCenter(prisma),
   ]);
@@ -77,16 +73,6 @@ export default async function PlatformPage() {
           metrics={[
             authorityMetrics[0],
             authorityMetrics[1],
-          ]}
-        />
-        <PlatformSummaryCard
-          title="Core Admin"
-          description="Reach the narrower admin surface for access, organization, and controlled configuration."
-          href="/admin"
-          accent="var(--dpf-accent)"
-          metrics={[
-            { label: "Users", value: userCount },
-            { label: "Roles", value: roleCount },
           ]}
         />
       </div>

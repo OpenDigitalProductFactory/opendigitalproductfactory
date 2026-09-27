@@ -1,25 +1,25 @@
 {
   "generator": "apps/web/scripts/build-route-audience.ts",
-  "pageRouteCount": 369,
+  "pageRouteCount": 370,
   "summary": {
     "byAudience": {
       "admin": 151,
       "auth-setup": 10,
       "builder": 3,
       "customer": 11,
-      "owner": 171,
+      "owner": 172,
       "public": 21,
       "worker": 2
     },
     "byDestinationKind": {
       "advanced-diagnostic": 103,
-      "detail": 179,
-      "legacy-internal": 34,
+      "detail": 176,
+      "legacy-internal": 38,
       "section-home": 32,
       "settings-config": 12,
       "workflow-step": 9
     },
-    "overrideCount": 8,
+    "overrideCount": 9,
     "lowConfidenceCount": 0,
     "lowConfidencePaths": []
   },
@@ -268,6 +268,13 @@
       "destinationKind": "advanced-diagnostic",
       "confidence": "high",
       "source": "heuristic"
+    },
+    {
+      "routePath": "/area/[key]",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "override"
     },
     {
       "routePath": "/build",
@@ -685,7 +692,7 @@
     {
       "routePath": "/delivery",
       "audience": "owner",
-      "destinationKind": "section-home",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -1364,7 +1371,7 @@
     {
       "routePath": "/platform/ai/assignments/bindings/[bindingId]",
       "audience": "admin",
-      "destinationKind": "detail",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -1665,7 +1672,7 @@
     {
       "routePath": "/platform/identity/authorization/bindings/[bindingId]",
       "audience": "admin",
-      "destinationKind": "detail",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -2141,7 +2148,7 @@
     {
       "routePath": "/portfolio/products/[productId]",
       "audience": "owner",
-      "destinationKind": "detail",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },

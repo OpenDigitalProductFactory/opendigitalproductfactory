@@ -1,5 +1,5 @@
 import { TeardownControl } from "@/components/ops/TeardownControl";
-import { OpsTabNav } from "@/components/ops/OpsTabNav";
+import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
 import { listInstallationTeardownEvidence } from "@/lib/actions/teardown";
 
 export default async function TeardownPage() {
@@ -20,7 +20,7 @@ export default async function TeardownPage() {
         </p>
       </div>
 
-      <OpsTabNav />
+      <PlatformTabNav />
 
       <div className="mt-5">
         <TeardownControl initialEvidence={evidence} />

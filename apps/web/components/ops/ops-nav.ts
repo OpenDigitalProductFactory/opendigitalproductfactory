@@ -11,6 +11,10 @@
 // leads, and "Backlog" is the execution/burn-down board (/ops) it feeds into. They
 // are two faces of the same BacklogItem, no longer two duplicate boards.
 
+// EP-2FB6C0CC (spec §9, BI-811C588E): /ops is delivery only — requests, the work in
+// progress and the change flow. Keeping the platform alive (self-upgrade, patches,
+// teardown, dev loop, security) moved to the Platform "Updates & health" family,
+// finishing EP-NAV-COHERENCE decision D2.
 export const OPS_NAV_GROUPS: ReadonlyArray<{
   label: string;
   tabs: ReadonlyArray<{ label: string; href: string }>;
@@ -19,25 +23,12 @@ export const OPS_NAV_GROUPS: ReadonlyArray<{
     label: "Delivery",
     tabs: [
       { label: "Delivery Flow", href: "/ops/demand" },
-      { label: "Backlog", href: "/ops" },
-    ],
-  },
-  {
-    label: "Runtime & Releases",
-    tabs: [
-      { label: "Business Journeys", href: "/ops/journeys" },
-      { label: "Workrooms", href: "/ops/workrooms" },
+      { label: "Requests", href: "/ops" },
+      { label: "Work in progress", href: "/ops/workrooms" },
+      { label: "Work control", href: "/build/work" },
       { label: "Changes", href: "/ops/changes" },
       { label: "Promotions", href: "/ops/promotions" },
-      { label: "Self-upgrade", href: "/ops/self-upgrade" },
-      { label: "Teardown", href: "/ops/teardown" },
-      { label: "Patches", href: "/ops/patches" },
-      { label: "Dev Loop", href: "/ops/dev-loop" },
+      { label: "Business Journeys", href: "/ops/journeys" },
     ],
-  },
-  {
-    // EP-SOVEREIGN-SOC P4 — the AI SOC console (coverage / detections / cases / SLA).
-    label: "Security",
-    tabs: [{ label: "SOC Console", href: "/ops/security" }],
   },
 ];

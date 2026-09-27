@@ -24,7 +24,7 @@ export function inspectPlatformCompositionSingleHome(root = defaultRoot) {
   if (opsNav.includes("Stack Currency") || opsNav.includes("/ops/stack-currency")) {
     failures.push("Operations navigation still publishes Stack Currency.");
   }
-  if (!opsNav.includes("Workrooms")) {
+  if (!opsNav.includes("/ops/workrooms")) {
     failures.push("The unrelated Workrooms navigation entry was removed.");
   }
   if (productNav.includes("Supply Chain") || productNav.includes("/supply-chain")) {

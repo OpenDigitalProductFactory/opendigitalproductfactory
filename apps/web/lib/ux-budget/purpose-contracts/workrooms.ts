@@ -12,10 +12,10 @@ export const WORKROOM_PURPOSE_CONTRACTS: PurposeContractModule = [
       job: "Distinguish live Workrooms from retained history and open the exact room whose activity needs attention.",
       successOutcome: "The operator sees a truthful live count, understands inactive and cleanup states, and reaches one Workroom activity record in one click.",
       findability: {
-        parentArea: "Operations",
-        entryPoints: ["/ops", "Operations > Workrooms", "/build/work"],
-        navigationLayer: "Operations area tab nav",
-        discoveryCue: "A Workrooms tab in Runtime & Releases and a linked live-count card in Build Studio.",
+        parentArea: "Improve & deliver",
+        entryPoints: ["Improve & deliver > Work in progress", "/ops", "/build/work"],
+        navigationLayer: "Rail entry, and a tab in the Requests section nav",
+        discoveryCue: "A Work in progress rail entry and Requests tab; each area's Work view shows the same rooms for its portfolio.",
         expectedPath: ["/ops", "/ops/workrooms", "/workspace/cases/[caseKey]"],
       },
       contentRoles: {

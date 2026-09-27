@@ -9,6 +9,7 @@ import {
   getPrimaryNavEntries,
   getRouteNavRecord,
   getSectionNavEntries,
+  getAreaSetupEntries,
 } from "./portal-navigation-model";
 
 const adminUser = { platformRole: "HR-000", isSuperuser: false };
@@ -93,7 +94,9 @@ describe("portal navigation model", () => {
       .map((item) => item.href);
 
     expect(shellHrefs).toContain("/platform");
-    expect(shellHrefs).toContain("/admin");
+    // EP-2FB6C0CC: Admin is reached from the Run the platform area's Setup view.
+    expect(shellHrefs).not.toContain("/admin");
+    expect(getAreaSetupEntries("platform").map((entry) => entry.path)).toContain("/admin");
 
     for (const href of shellHrefs) {
       expect(getRouteNavRecord(href), href).toBeDefined();
@@ -119,18 +122,17 @@ describe("portal navigation model", () => {
     }
   });
 
-  it("groups the Delivery home and Build Studio under a Delivery section (BI-ARCH-DELIVERY-IA)", () => {
-    const delivery = getRouteNavRecord("/delivery");
-    expect(delivery?.domain).toBe("delivery");
-    expect(delivery?.shellNav?.sectionKey).toBe("delivery");
+  it("groups requests, work in progress and Build Studio under Improve & deliver (EP-2FB6C0CC)", () => {
+    // The Delivery hub is superseded by the area home and kept as a redirect.
+    expect(getRouteNavRecord("/delivery")?.destinationKind).toBe("legacy-redirect");
 
     const sections = getShellNavSections(adminUser);
     const deliverySection = sections.find((section) => section.key === "delivery");
-    expect(deliverySection, "Delivery shell section should exist").toBeDefined();
+    expect(deliverySection?.label).toBe("Improve & deliver");
 
     const deliveryHrefs = deliverySection?.items.map((item) => item.href) ?? [];
-    expect(deliveryHrefs).toContain("/delivery");
-    expect(deliveryHrefs).toContain("/build");
+    expect(deliveryHrefs).toEqual(expect.arrayContaining(["/ops", "/ops/workrooms", "/build"]));
+    expect(deliveryHrefs).not.toContain("/delivery");
 
     // Build Studio's work surface moved out of the Platform rail section into
     // Delivery (its model/provider config stays under Platform at
@@ -144,7 +146,7 @@ describe("portal navigation model", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
       key: "work_activity",
-      label: "Work",
+      label: "Work in progress",
       audienceModes: ["operator"],
     });
   });
@@ -159,7 +161,7 @@ describe("portal navigation model", () => {
 
   it("does not introduce a second activity dashboard beside the canonical one", () => {
     const activityish = PORTAL_NAV_ROUTES.filter(
-      (record) => record.label === "Work" && record.destinationKind !== "legacy-redirect",
+      (record) => record.label === "Work in progress" && record.destinationKind !== "legacy-redirect",
     );
     expect(activityish).toHaveLength(1);
   });
@@ -203,7 +205,7 @@ describe("one answer to where work activity lives", () => {
   // the deliverable; this pins it.
   it("offers Work in the shell navigation, not only in the model", () => {
     const work = PORTAL_NAV_ROUTES.find((route) => route.path === "/ops/workrooms");
-    expect(work?.label).toBe("Work");
+    expect(work?.label).toBe("Work in progress");
     expect(work?.shellNav?.sectionKey).toBe("delivery");
   });
 

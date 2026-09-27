@@ -84,10 +84,12 @@ describe("getWorkspaceTiles()", () => {
     expect(tiles).not.toContain("inventory");
   });
 
-  it("superuser gets all 13 top-level tiles regardless of role", () => {
+  it("superuser gets every rail entry as a tile, derived from the nav model (BI-DBA470FF)", () => {
     const tiles = getWorkspaceTiles(superuser);
+    const railItems = getShellNavSections(superuser, { mode: "operator" }).flatMap((section) => section.items);
 
-    expect(tiles.length).toBe(13);
+    expect(tiles.map((tile) => tile.key)).toEqual(railItems.map((item) => item.key));
+    expect(tiles.map((tile) => tile.label)).toEqual(railItems.map((item) => item.label));
     expect(tiles.map((tile) => tile.key)).toContain("documents");
     // Workbooks is demoted under Platform Hub (EP-GRID-WORKBOOKS) — no longer a top-level tile.
     expect(tiles.map((tile) => tile.key)).not.toContain("workbooks");
@@ -101,14 +103,19 @@ describe("getShellNavSections()", () => {
     expect(sections.map((section) => section.key)).toEqual([
       "workspace",
       "business",
-      "products",
+      "team",
       "delivery",
       "platform",
       "knowledge",
     ]);
-    expect(sections.find((section) => section.key === "products")?.items.map((item) => item.key)).toContain("portfolio");
-    expect(sections.find((section) => section.key === "products")?.items.map((item) => item.key)).not.toContain("inventory");
-    expect(sections.find((section) => section.key === "platform")?.items.map((item) => item.key)).toContain("ai_workforce");
+    const items = (key: string) => sections.find((section) => section.key === key)?.items.map((item) => item.key) ?? [];
+    expect(items("business")).toContain("portfolio");
+    expect(items("business")).not.toContain("inventory");
+    expect(items("team")).toEqual(expect.arrayContaining(["employee", "ai_coworkers"]));
+    expect(items("platform")).toContain("platform");
+    // EP-2FB6C0CC: AI Workforce configuration and Admin are reached from area Setup views.
+    expect(items("platform")).not.toContain("ai_workforce");
+    expect(items("platform")).not.toContain("admin");
   });
 
   it("worker mode condenses the rail to day-to-day surfaces, hiding operator/platform chrome", () => {
@@ -119,11 +126,10 @@ describe("getShellNavSections()", () => {
     const worker = getShellNavSections(hr000, { mode: "worker" });
 
     // Operator mode keeps the operator/platform surfaces…
-    expect(keys(operator)).toEqual(expect.arrayContaining(["platform", "admin", "ai_workforce", "backlog"]));
+    expect(keys(operator)).toEqual(expect.arrayContaining(["platform", "backlog", "build"]));
     // …worker mode hides them and keeps the business/workspace day-to-day surfaces.
     expect(keys(worker)).not.toContain("platform");
-    expect(keys(worker)).not.toContain("admin");
-    expect(keys(worker)).not.toContain("ai_workforce");
+    expect(keys(worker)).not.toContain("build");
     expect(keys(worker)).toEqual(expect.arrayContaining(["workspace", "customer", "finance"]));
     expect(keys(operator)).toContain("performance");
     expect(keys(worker)).not.toContain("performance");
@@ -163,8 +169,8 @@ describe("getShellNavSections()", () => {
 
     expect(sections.map((section) => section.key)).toEqual([
       "workspace",
-      "business",
-      "products",
+      // People moved to Team (EP-2FB6C0CC); HR-500 holds no Serve & grow capability.
+      "team",
       // Delivery appears for HR-500 because the Work entry is gated on
       // view_operations, which this role holds (asserted above) — so
       // /ops/workrooms was already open to it. The rail surfaces a destination
@@ -246,24 +252,14 @@ describe("getAccessibleSectionNavEntries()", () => {
 });
 
 describe("getWorkspaceSections()", () => {
-  it("prioritizes AI coworker oversight for admins", () => {
+  it("groups the launcher by the same areas as the rail, not a second taxonomy (BI-DBA470FF)", () => {
     const sections = getWorkspaceSections(hr000);
+    const rail = getShellNavSections(hr000, { mode: "operator" });
 
-    expect(sections[0]?.key).toBe("ai-control");
-    expect(sections[0]?.tiles.map((tile) => tile.key)).toContain("ai_workforce");
-    expect(sections[0]?.tiles.map((tile) => tile.key)).toContain("build");
-  });
-
-  it("organizes workspace by jobs to be done instead of one flat launcher", () => {
-    const sections = getWorkspaceSections(hr000);
-
-    expect(sections.map((section) => section.key)).toEqual([
-      "ai-control",
-      "product-oversight",
-      "business-operations",
-    ]);
-    expect(sections.find((section) => section.key === "product-oversight")?.tiles.map((tile) => tile.key)).not.toContain("inventory");
-    expect(sections.find((section) => section.key === "business-operations")?.tiles.map((tile) => tile.key)).toContain("finance");
+    expect(sections.map((section) => section.key)).toEqual(rail.map((section) => section.key));
+    expect(sections.map((section) => section.label)).toEqual(rail.map((section) => section.label));
+    expect(sections.find((section) => section.key === "business")?.tiles.map((tile) => tile.key)).toContain("finance");
+    expect(sections.find((section) => section.key === "delivery")?.tiles.map((tile) => tile.key)).toContain("build");
   });
 });
 

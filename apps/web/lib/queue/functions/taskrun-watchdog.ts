@@ -524,7 +524,7 @@ export const taskrunWatchdog = jobs.createFunction(
           const payload = {
             title: `Task stalled in ${d.candidate.phase ?? "unknown"} phase`,
             body: `Watchdog detected ${d.reason} after ${d.threshold.heartbeatTimeoutSeconds}s heartbeat / ${d.threshold.totalPhaseTimeoutSeconds}s total budget.`,
-            deepLink: d.candidate.buildId ? `/build` : `/platform/ai/operations`,
+            deepLink: d.candidate.buildId ? `/build` : `/platform/ai/build-studio`,
           };
 
           if (existing) {

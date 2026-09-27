@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mostRestrictiveFreshWeekly } from "./evaluate-drain";
+import { mostRestrictiveFreshWeekly } from "./evaluate-capacity-drain";
 import type { CliPoolState } from "@/lib/routing/cli-pool-status";
 
 const NOW = new Date("2026-07-16T12:00:00Z");

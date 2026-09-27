@@ -372,7 +372,7 @@ export function ProductManagementPlaybooks({
                   {task.taskRunId ? (
                     <Link
                       className={SECONDARY_BUTTON}
-                      href={`/platform/ai/history?taskRunId=${encodeURIComponent(task.taskRunId)}`}
+                      href={`/platform/audit/ledger?taskRunId=${encodeURIComponent(task.taskRunId)}`}
                     >
                       Inspect last run
                     </Link>

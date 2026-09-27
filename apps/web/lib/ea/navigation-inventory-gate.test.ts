@@ -38,6 +38,8 @@ const KNOWN_NAV_TOPLEVEL = new Set<string>([
   "member-equity", "ops", "platform", "portal", "portfolio", "rental", "reset-password",
   "s", "sandbox-restricted", "service-requests", "setup", "storefront", "welcome",
   "coworker-decisions", "workbooks", "workspace",
+  // EP-2FB6C0CC: area homes (/area/[key]) and the retired Delivery hub, now a redirect.
+  "area", "delivery",
 ]);
 
 describe("navigation inventory gate (EP-NAV-COHERENCE P7)", () => {

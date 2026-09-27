@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 664,
+  "routeCount": 665,
   "routes": [
     {
       "routePath": "/",
@@ -4130,6 +4130,18 @@
       "exposure": "authenticated"
     },
     {
+      "routePath": "/area/[key]",
+      "kind": "page",
+      "segments": [
+        "area",
+        "[key]"
+      ],
+      "dynamicParams": [
+        "key"
+      ],
+      "file": "apps/web/app/(shell)/area/[key]/page.tsx"
+    },
+    {
       "routePath": "/auth/callback",
       "kind": "route",
       "segments": [
@@ -4808,7 +4820,8 @@
         "delivery"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/delivery/page.tsx"
+      "file": "apps/web/app/(shell)/delivery/page.tsx",
+      "redirectTo": "/area/delivery"
     },
     {
       "routePath": "/docs/[[...slug]]",
@@ -5849,7 +5862,8 @@
       "dynamicParams": [
         "bindingId"
       ],
-      "file": "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx"
+      "file": "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx",
+      "redirectTo": "/platform/ai/assignments"
     },
     {
       "routePath": "/platform/ai/authority",
@@ -6334,7 +6348,8 @@
       "dynamicParams": [
         "bindingId"
       ],
-      "file": "apps/web/app/(shell)/platform/identity/authorization/bindings/[bindingId]/page.tsx"
+      "file": "apps/web/app/(shell)/platform/identity/authorization/bindings/[bindingId]/page.tsx",
+      "redirectTo": "/platform/identity/authorization"
     },
     {
       "routePath": "/platform/identity/directory",
@@ -7155,7 +7170,8 @@
       "dynamicParams": [
         "productId"
       ],
-      "file": "apps/web/app/(shell)/portfolio/products/[productId]/page.tsx"
+      "file": "apps/web/app/(shell)/portfolio/products/[productId]/page.tsx",
+      "redirectTo": "/portfolio/product/[id]"
     },
     {
       "routePath": "/r/[token]",
