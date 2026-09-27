@@ -1894,6 +1894,7 @@
         "5-drive-to-completion-checklist",
         "6-known-limitation-reviewer-dispatch-can-complete-without-writing-a-receipt",
         "7-closing-a-small-or-medium-item-the-baseline-is-the-body-bi-0f8e39d5",
+        "approval-outcome-readback",
         "anti-patterns-observed"
       ]
     },
@@ -12708,6 +12709,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "checking-an-approval-result",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
         "the-ward-for-a-shelter",

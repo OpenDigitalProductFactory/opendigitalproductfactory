@@ -1,0 +1,28 @@
+{
+  "result": "Approval result",
+  "recent": "Recent approval results",
+  "unavailable": "This request is not available in your Inbox.",
+  "details": "Request details",
+  "open": "Open this result",
+  "states": {
+    "waiting": { "label": "Waiting for your decision", "next": "Review this request in your Inbox." },
+    "executed": { "label": "Authorized and completed", "next": "Your assistant can continue. No further approval is needed for this request." },
+    "failed": { "label": "Authorized, but did not complete", "next": "Your assistant must check the failure before trying again." },
+    "not-run": { "label": "Authorized, but did not run", "next": "Your assistant must resolve the recorded blocker before trying again." },
+    "expired": { "label": "Approval window closed", "next": "Your assistant can check whether the work is still needed and send a fresh request." },
+    "declined": { "label": "Declined", "next": "This request will not run. Tell your assistant if you want a different action." },
+    "cancelled": { "label": "Cancelled", "next": "This request will not run." },
+    "unknown": { "label": "Approved; result not confirmed", "next": "Your assistant must check the target before retrying. Approval alone does not prove completion." }
+  },
+  "recovery": {
+    "credential-unavailable": "The original connection is no longer active. Your assistant must check its connection before retrying.",
+    "consent-changed": "The connection's authorization changed. Review its access before retrying.",
+    "scope-insufficient": "The connection no longer has permission for this action. Review its access before retrying.",
+    "arguments-not-provable": "The saved request could not be verified. Your assistant must check the target before sending a fresh request.",
+    "no-pending-call": "The original request could not be found. Your assistant must check the target before sending a fresh request.",
+    "task-bound": "Your assistant must check the task that owns this request.",
+    "task-not-waiting": "The task has moved on. Your assistant must check its current result before retrying.",
+    "task-waiting-again": "The task continued and needs another decision. Review the next request in your Inbox.",
+    "expired": "The approval window closed before execution. Your assistant must check the target before sending a fresh request."
+  }
+}

@@ -3,9 +3,9 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 419,
-      "reason": "propose_portfolio_budgets and set_portfolio_budget (BI-9EC60FE0). Budgets are quarterly per portfolio and must be set by an attributable person with a reason; nothing existing writes a points budget (Portfolio.budgetKUsd has no write path and is annual dollars). The proposal is read-only and separate so an agent can show last quarter's delivered mix, and the current 'no budget set' state, without the power to apply it.",
-      "recordedAt": "2026-09-25"
+      "value": 420,
+      "reason": "BI-AFEAAA76: get_my_approval_status reads the exact requesting human and assistant approval outcome. Existing tools expose pending tasks or broad administrative records, but none safely distinguishes completed, failed, not-run and expired requests after the Inbox card disappears. A read-only status door removes repeated approvals and legacy-token workarounds without exposing arguments, granting room admission, or permitting execution.",
+      "recordedAt": "2026-09-27"
     },
     "registry.packFiles": {
       "value": 103,

@@ -125,6 +125,20 @@ A small or medium item's objective baseline is the acceptance criteria in its bo
 - **`acceptance-criteria-missing`: the body has no criteria the parser can read.** Put them under a heading that contains "Acceptance" (for example `## Acceptance criteria`), one criterion per bullet, or use bullets that start with `AC-<id>:`. A bold line is not a heading. Update the body with `update_backlog_item` and retry. BI-FA769D87 was refused this way and closed minutes after its criteria moved under a heading.
 - **`body-baseline-unpersisted`: the criteria are there, but acceptance is unmet.** Platform work is accepted once its merge through branch protection is recognized. Bind the Workroom head to the merged commit, cite `manual_check` (and `ux_verified` when a UI changed), and read any merge-signal reason on the refusal. Other medium work needs an independent objective-mapping receipt, and no lane persists a baseline from body criteria yet. That gap stays open on BI-0F8E39D5. Minting a baseline from the body was weighed and deferred: it would touch the whole reviewer lane and could stale receipts that close today. It will be revisited when an unmerged medium item is actually blocked by it. Do not self-approve.
 
+## Approval outcome readback
+
+When a governed call returns an approval request, retain its `envelopeId` and
+`inboxHref`. After the human decides, use `get_my_approval_status(envelopeId)` to
+read the durable result before considering a retry. The tool requires the same
+authenticated human and acting coworker; another user's or coworker's request
+returns the same unavailable response as an unknown ID. It reveals no arguments
+or raw tool results and confers no workroom admission or reviewer authority.
+
+An approved request without execution evidence remains unknown. Confirm the
+target operation's actual state before retrying; HTTP success from the approval
+route alone is not delivery or acceptance evidence. The Inbox projects the same
+safe outcome and recovery guidance, including execution refusals and expiry.
+
 ## Anti-patterns (observed)
 
 - **Driving the workroom from gate-refusal errors instead of the packet.** Get the packet; it names every actor and hands you the call.

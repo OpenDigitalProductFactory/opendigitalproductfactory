@@ -6,6 +6,8 @@ const collab = vi.hoisted(() => ({
 }));
 const external = vi.hoisted(() => ({ dispatch: vi.fn() }));
 const authority = vi.hoisted(() => ({ authorize: vi.fn() }));
+const approvalStatus = vi.hoisted(() => ({ read: vi.fn() }));
+vi.mock("@/lib/coworker/approval-outcome-store", () => ({ readApprovalOutcome: approvalStatus.read }));
 vi.mock("@/lib/mcp/independent-review-request", () => ({ authorizeCoworkerRequest: authority.authorize }));
 vi.mock("@/lib/tak/coworker-collaboration", () => ({
   requestCoworker: (...a: unknown[]) => collab.requestCoworker(...a),
@@ -18,7 +20,7 @@ vi.mock("@/lib/mcp/external-coworker-task-adapter", () => ({
 import { coworkerPack } from "./coworker-pack";
 import { TOOL_TO_GRANTS, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
-const EXPECTED_TOOLS = ["request_coworker", "summon_coworker", "find_coworker"];
+const EXPECTED_TOOLS = ["request_coworker", "summon_coworker", "find_coworker", "get_my_approval_status"];
 
 const initiativeReviewBinding = {
   writerToolName: "record_initiative_evidence",
@@ -51,6 +53,14 @@ beforeEach(() => {
 });
 
 describe("coworker pack — registration", () => {
+  it("reads an exact approval using verified user and assistant, ignoring supplied identity", async () => {
+    approvalStatus.read.mockResolvedValue({ state: "expired", label: "Approval window closed" });
+    const handler = coworkerPack.handlers.get_my_approval_status;
+    expect(handler).toBeTypeOf("function");
+    const result = await handler({ envelopeId: "e1", userId: "victim", agentId: "other" }, "u1", { agentId: "a1" });
+    expect(approvalStatus.read).toHaveBeenCalledWith("e1", "u1", "a1");
+    expect(result.success).toBe(true);
+  });
   it("discloses review requests to evidence authors without granting general summons or review receipts", () => {
     const grants = ["initiative_evidence_write"];
     expect(isToolAllowedByGrants("request_coworker", grants)).toBe(true);

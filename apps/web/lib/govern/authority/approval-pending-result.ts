@@ -7,6 +7,7 @@
 
 // Type-only, so this does not create a runtime cycle with the execute seam.
 import type { GovernedExecuteResult } from "@/lib/mcp-governed-execute";
+import { envelopeInboxRoute } from "@/lib/coworker/envelope-routes";
 
 /**
  * A call parked on a human decision, worded so the model can tell it apart from
@@ -39,6 +40,7 @@ export function approvalPendingResult(
   const message = [
     `${toolName} is waiting for a person to approve it.`,
     envelopeId ? `Approval request ${envelopeId}${expiresAt ? `, which expires ${expiresAt}` : ""}.` : null,
+    envelopeId ? `Open ${envelopeInboxRoute(envelopeId)}. Check its outcome with get_my_approval_status after the person decides.` : null,
     detail,
     `${toolName} is available to you — this is not a missing tool or a denied grant,`,
     "and calling it again will not advance it. Report that the work is awaiting approval.",
@@ -55,6 +57,7 @@ export function approvalPendingResult(
     // string, and each did it differently.
     disposition: "awaiting-person",
     governance: { rejected: "approval_required" },
+    ...(envelopeId ? { data: { envelopeId, expiresAt, inboxHref: envelopeInboxRoute(envelopeId), statusTool: "get_my_approval_status" } } : {}),
   };
 }
 
