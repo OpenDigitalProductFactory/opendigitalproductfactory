@@ -22,6 +22,25 @@ it("does not include an unadmitted child room in a parent's message feed", async
   await roomMessagingPack.handlers.read_room_messages({ caseKey: "parent" }, "alice", { agentId: "agent" });
   expect(mocks.messages).toHaveBeenCalledWith(expect.objectContaining({ where: { workItemId: { in: ["parent"] } } }));
 });
+it("names a not-admitted invite as room_not_admitted", async () => {
+  mocks.access.mockResolvedValue({ decision: { level: "none", reason: "not-admitted" }, agentPrincipalId: "PRN-agent" });
+  const result = await roomMessagingPack.handlers.invite_room_participant(
+    { caseKey: "private-room", agentId: "other" },
+    "alice",
+    { agentId: "agent" },
+  );
+  expect(result.success).toBe(false);
+  expect(result.error).toBe("room_not_admitted");
+});
+it("keeps any other invite refusal as forbidden", async () => {
+  mocks.access.mockResolvedValue({ decision: { level: "content", reason: "observe-only" }, agentPrincipalId: "PRN-agent" });
+  const result = await roomMessagingPack.handlers.invite_room_participant(
+    { caseKey: "private-room", agentId: "other" },
+    "alice",
+    { agentId: "agent" },
+  );
+  expect(result.error).toBe("forbidden");
+});
 it("filters shared coworker engagement to rooms admitted for the calling human", async () => {
   mocks.engagement.mockResolvedValue({ agentId: "agent", principalRef: "PRN-agent", activeRoomCount: 2,
     rooms: [{ caseKey: "parent" }, { caseKey: "private-child" }] });
