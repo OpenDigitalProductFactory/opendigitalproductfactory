@@ -2265,6 +2265,9 @@
       "docs/architecture/build-gate-runbook.md",
       "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
+    "scripts/publish-host-gpu.ps1": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/regen-lockfile.mjs": [
       "docs/architecture/agent-skill-index.md",
       "docs/architecture/contributor-procedure-runbook.md"
@@ -3260,6 +3263,7 @@
       "scripts/lib/dockerfile-portal-build.test.mjs",
       "scripts/lib/entry-module.mjs",
       "scripts/lib/host-available-memory.mjs",
+      "scripts/publish-host-gpu.ps1",
       "tests/release/pregate-node-gate-contract.test.mjs"
     ],
     "docs/install/scratch-install-rehearsal.md": [

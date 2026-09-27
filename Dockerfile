@@ -129,6 +129,7 @@ COPY scripts/installer/install-state.v1.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v2.schema.json ./scripts/installer/
 COPY scripts/installer/native-edge-host.ps1 ./scripts/installer/
 COPY scripts/bootstrap-organization-pki.ps1 ./scripts/
+COPY scripts/publish-host-gpu.ps1 ./scripts/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/compose-chain.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/canonical-origin.ps1 ./scripts/installer/lib/
@@ -272,7 +273,7 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml docker-compose.edge-actions.yml /dpf-release-assets/ && \
     mkdir -p /dpf-release-assets/scripts/pki && cp scripts/pki/edge-client.tpl /dpf-release-assets/scripts/pki/ && \
     cp uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat /dpf-release-assets/ && \
-    cp scripts/bootstrap-organization-pki.ps1 /dpf-release-assets/scripts/ && \
+    cp scripts/bootstrap-organization-pki.ps1 scripts/publish-host-gpu.ps1 /dpf-release-assets/scripts/ && \
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
     cp scripts/installer/local-model-policy.json /dpf-release-assets/scripts/installer/ && \

@@ -483,8 +483,13 @@ export const chatAdapter: ExecutionAdapterHandler = {
           localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
         }).effectiveTimeoutMs),
       });
-      res = providerId === "local" ? await withLocalInferenceLock(doFetch) : await doFetch();
+      res = providerId === "local"
+        ? await withLocalInferenceLock(doFetch, { modelId })
+        : await doFetch();
     } catch (e) {
+      // A busy GPU is a capacity deferral. Wrapping it as "network" makes the
+      // fallback chain treat the local model as broken instead of waiting.
+      if (e instanceof Error && e.name === "LocalProviderCapacityDeferredError") throw e;
       throw new InferenceError(
         `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
         "network",
