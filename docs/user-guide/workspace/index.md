@@ -26,6 +26,20 @@ Process pauses appear in the room's attention summary. Observed execution
 separates activity events from receipts, and the header shows the same recorded
 or inherited human accountability as the workforce panel.
 
+## Checking an approval result
+
+After you approve or decline a coworker's request, the Inbox keeps its result.
+The request's link opens that result directly, including after a refresh. Open
+**Recent approval results** to review recent decisions separately from work that
+still needs you. Completed decisions do not increase the attention count.
+
+An approval and a completed action are separate facts. The result says whether
+the action completed, failed, could not run, or expired, and explains the next
+step. Older decisions without a recorded result say the outcome is unknown.
+Do not approve again just because the original card disappeared; your assistant
+can check the result and the affected work first. You can only read your own
+approval results.
+
 ## Operations and Performance
 
 The main rail separates two different decisions:

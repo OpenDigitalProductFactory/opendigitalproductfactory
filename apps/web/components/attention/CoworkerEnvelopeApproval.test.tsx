@@ -3,12 +3,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { refresh, approveProposal, rejectProposal } = vi.hoisted(() => ({
+const { refresh, replace, approveProposal, rejectProposal } = vi.hoisted(() => ({
   refresh: vi.fn(),
+  replace: vi.fn(),
   approveProposal: vi.fn(),
   rejectProposal: vi.fn(),
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, replace }) }));
 vi.mock("@/lib/actions/proposals", () => ({ approveProposal, rejectProposal }));
 
 import { CoworkerEnvelopeApproval } from "./CoworkerEnvelopeApproval";
@@ -61,6 +62,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   refresh.mockClear();
+  replace.mockClear();
   approveProposal.mockClear();
   rejectProposal.mockClear();
   fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
@@ -143,7 +145,7 @@ describe("CoworkerEnvelopeApproval", () => {
     );
     expect(approveProposal).not.toHaveBeenCalled();
     expect(rejectProposal).not.toHaveBeenCalled();
-    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(expect.stringMatching(/^\/workspace\/inbox\?approval=.+#approval-result$/)));
   });
 
   it("declines through the envelope endpoint and never the proposal actions", async () => {
@@ -186,7 +188,7 @@ describe("CoworkerEnvelopeApproval", () => {
 
     await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(refresh).toHaveBeenCalled();
+    expect(replace).toHaveBeenCalledWith(expect.stringMatching(/^\/workspace\/inbox\?approval=.+#approval-result$/));
   });
 
   it("surfaces the refusal when the envelope belongs to another user", async () => {

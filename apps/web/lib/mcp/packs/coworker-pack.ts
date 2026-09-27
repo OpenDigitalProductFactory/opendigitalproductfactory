@@ -66,6 +66,14 @@ const initiativeReviewProperties = {
 
 const definitions: ToolDefinition[] = [
   {
+    name: "get_my_approval_status",
+    description: "Read the outcome of an approval requested by your current assistant identity for the authenticated user. Returns only status, a safe next step, and an exact Inbox link. Does not approve, retry, or grant access to the target.",
+    inputSchema: { type: "object", properties: { envelopeId: { type: "string", minLength: 1, maxLength: 128 } }, required: ["envelopeId"], additionalProperties: false },
+    requiredCapability: null,
+    sideEffect: false,
+    executionMode: "immediate",
+  },
+  {
     name: "request_coworker",
     description:
       "Hand off a scoped sub-task to a NAMED peer coworker. Unlike spawn_work_thread (anonymous child), this targets a specific coworker by agentId or slug and emits a VISIBLE handoff the user sees inline. Use when you need another coworker's distinct capability (e.g. ask the Enterprise Architect to review a schema).",
@@ -334,6 +342,14 @@ async function findCoworkerHandler(params: Record<string, unknown>): Promise<Too
 }
 
 const handlers: Record<string, ToolPackHandler> = {
+  get_my_approval_status: async (params, userId, context) => {
+    const envelopeId = typeof params.envelopeId === "string" ? params.envelopeId.trim() : "";
+    if (!envelopeId || envelopeId.length > 128) return { success: false, error: "invalid_params", message: "An approval request ID is required." };
+    const { readApprovalOutcome } = await import("@/lib/coworker/approval-outcome-store");
+    const outcome = await readApprovalOutcome(envelopeId, userId, context?.agentId);
+    if (!outcome) return { success: false, error: "approval_not_available", message: "This approval request is not available to your current user and assistant." };
+    return { success: true, message: `${outcome.label}. ${outcome.nextAction}`, data: outcome };
+  },
   request_coworker: (params, userId, context) => requestCoworkerHandler(params, userId, context),
   summon_coworker: (params, userId, context) => summonCoworkerHandler(params, userId, context),
   find_coworker: (params) => findCoworkerHandler(params),
