@@ -50,6 +50,22 @@ export function designPhaseReviewDecision(
   };
 }
 
+/** Validate pre-delivery packets against the same obligations their claim uses.
+ * Terminal acceptance/research prerequisites cannot suppress an owed design
+ * review. Keep filtering in the shared design-phase policy, not the OAuth guard.
+ * Exact packet equality still decides whether the requested gate was issued. */
+export function decisionForIndependentReview(
+  writerToolName: string,
+  decisions: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>>,
+): InitiativeReadinessDecision | null {
+  if (writerToolName === "record_initiative_design_review"
+    || writerToolName === "record_initiative_architecture_review") {
+    const decision = decisions.implementation ?? decisions.plan;
+    return decision ? designPhaseReviewDecision(decision) : null;
+  }
+  return decisions.completion ?? null;
+}
+
 /**
  * BI-1D8E53D9: a passing spec-approval MINTS the objective baseline, so an item
  * still owed its design reviews has none yet. Route those reviews against the

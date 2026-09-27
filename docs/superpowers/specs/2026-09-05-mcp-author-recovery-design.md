@@ -137,10 +137,23 @@ and post-implementation review continue using their terminal recovery semantics.
 
 Implementation files are expected in `apps/web/lib/mcp/independent-review-request.ts`,
 its tests and the existing readiness/recovery policy and tests identified by the
-impact contract. Preserve the old canonical design and research; independent
-review of this addendum and plan coverage remain required before implementation.
+impact contract. Preserve the old canonical design and research. The server's
+medium-shape readiness resolved this regression through author reproduction
+evidence and acceptance criteria in the existing item body: research receipt
+`initiative-f9aafe66-ec1b-4b4b-b643-52464134c2b1`, implementation allowed by
+`IRD-55128EA3D7BD`. No new spec approval or plan coverage was owed by that shape.
+Independent semantic review and actual live acceptance remain delivery gates.
 No grant migration, new authentication mechanism, new BI or new review writer is
 part of the repair. Unit tests do not substitute for the live accepted review.
 
 Rollback is a scoped reviewed revert, preserving task and receipt history.
 Authority is never widened to make the recovery test pass.
+
+Further source reconciliation found the earlier related BI-817556D8 design-phase
+repair already on main. Reuse its `designPhaseReviewDecision` policy. Terminal
+recovery can still return early for research before reaching that policy, and the
+old validator test supplied the same decision to both phases. Four new distinct
+decision regressions reproduced the refusal before the repair; the repaired
+request uses filtered implementation obligations for design/architecture writers
+and retains completion for terminal writers. Targeted tests pass; deployment and
+live acceptance are not yet claimed.
