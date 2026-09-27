@@ -92,9 +92,12 @@ export async function authorizeCoworkerRequest(
   // hashes and packet-shaped JSON are never evidence of server authorization.
   const { getBacklogItem } = await import("./packs/backlog-pack-read-tools");
   const item = await getBacklogItem({ itemId: binding.itemId }, context.agentId);
-  const readiness = item.data?.readiness as { decisions?: { completion?: InitiativeReadinessDecision } } | undefined;
-  const decision = readiness?.decisions?.completion;
-  if (!item.success || !decision) return deny("This item's readiness could not be resolved.");
+  const readiness = item.data?.readiness as { decisions?: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>> } | undefined;
+  if (!item.success || !readiness?.decisions) return deny("This item's readiness could not be resolved.");
+  const { decisionForIndependentReview } = await import("@/lib/backlog/initiative-readiness/design-phase-recovery");
+  const decision = decisionForIndependentReview(binding.writerToolName, readiness.decisions);
+  if (!decision) return await hasCompletedReview(params, userId, context)
+    ? { bounded: true } : deny("This item has no pending review for the requested lane.");
   if (decision.verdict === "allowed") return await hasCompletedReview(params, userId, context)
     ? { bounded: true } : deny("This item has no pending independent completion review.");
   const { resolveTerminalInitiativeRecovery } = await import("@/lib/backlog/initiative-readiness/terminal-recovery");

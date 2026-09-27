@@ -85,3 +85,75 @@ Before implementation, publish a plan for this BI and bind its atomic internal s
 Source-local checks precede canonical shared nonproduction verification. Check operator-visible state in the Workroom list and detail as well as MCP projections. Unit mocks cannot be the only authority/provider test. No implementation or runtime verification has been performed by this design publication.
 
 Risk: inconsistent consumer state or accidental authority expansion. Revert the scoped projector/adapter change together while preserving immutable records and existing receipts. A needed schema migration or altered governance rule requires explicit design revision before implementation.
+
+## 2026-09-27 regression addendum: validate the requested review gate
+
+Existing coverage: BI-CF118B6D, AC-MCP-RECOVERY-2, -4 and -5. Repair Workroom:
+WC-A11C9B8E. This addendum does not supersede the historical design or represent
+independent approval. It excludes the separately owned approval-outcome UI repair.
+
+Evidence `cmuk47kpb0eu101up14lh8x61` records the following reproduced failure:
+an implementation-readiness design-spec packet for BI-224E6E82/WC-0829A222 at
+`021f8a8525f4f2f042df2ecf62a34fae23537865` was rejected unchanged by
+`request_coworker`. One instructed refresh (IRD-E24198830365) produced an identical
+packet and the same rejection. No reviewer task or approval receipt was created.
+
+At inspected source `71b9df9f08705fd1ff67b2c5f01cfc87a05e71b0`,
+`apps/web/lib/mcp/independent-review-request.ts` unconditionally selects
+`readiness.decisions.completion` and `resolveTerminalInitiativeRecovery` before
+comparing the complete canonical packet. A packet issued for a different phase
+therefore need not equal the completion packet. Repeated refresh cannot repair
+that disagreement.
+
+### Bounded repair
+
+Reuse the canonical readiness lane and phase policy. Select the decision and
+recovery issuer appropriate to the validated writer/gate, using one shared
+selection path for issuance and validation. Do not accept client-supplied phase
+claims as authority and do not broaden acceptance to arbitrary packet shapes.
+Where several phases can issue the same gate, define the canonical selection in
+the existing policy and test the actual producer and validator together.
+
+Retain full packet equality and every current control: fresh human authority,
+OAuth consent and scope, coworker grants, lane capability, exact room action
+admission, independent reviewer identity, immutable artifact/head/blob, baseline
+binding and eligible evidence. Unknown or unsupported gates remain denied.
+Completed replay may return only an existing matching task and real writer
+receipt; it must never dispatch fresh work from stale input. Terminal completion
+and post-implementation review continue using their terminal recovery semantics.
+
+### Ordered implementation and acceptance
+
+1. Add a failing producer-to-validator regression for the live design-spec packet
+   mismatch with separate author/reviewer identities and valid exact room access.
+2. Refactor the existing gate/phase selection into shared policy rather than a
+   second independently maintained table; update the bounded OAuth validator.
+3. Cover design-spec, spec-approval, architecture-review, plan-review, objective
+   mapping and post-implementation review where their lane contracts apply.
+   Keep negative tests for forged fields, stale head/baseline, wrong room,
+   revoked human/agent authority, self-review and absent completed receipts.
+4. Verify actual dispatch and persisted independent receipt through the live
+   repaired route, then resume BI-224E6E82 from its unchanged immutable design.
+
+Implementation files are expected in `apps/web/lib/mcp/independent-review-request.ts`,
+its tests and the existing readiness/recovery policy and tests identified by the
+impact contract. Preserve the old canonical design and research. The server's
+medium-shape readiness resolved this regression through author reproduction
+evidence and acceptance criteria in the existing item body: research receipt
+`initiative-f9aafe66-ec1b-4b4b-b643-52464134c2b1`, implementation allowed by
+`IRD-55128EA3D7BD`. No new spec approval or plan coverage was owed by that shape.
+Independent semantic review and actual live acceptance remain delivery gates.
+No grant migration, new authentication mechanism, new BI or new review writer is
+part of the repair. Unit tests do not substitute for the live accepted review.
+
+Rollback is a scoped reviewed revert, preserving task and receipt history.
+Authority is never widened to make the recovery test pass.
+
+Further source reconciliation found the earlier related BI-817556D8 design-phase
+repair already on main. Reuse its `designPhaseReviewDecision` policy. Terminal
+recovery can still return early for research before reaching that policy, and the
+old validator test supplied the same decision to both phases. Four new distinct
+decision regressions reproduced the refusal before the repair; the repaired
+request uses filtered implementation obligations for design/architecture writers
+and retains completion for terminal writers. Targeted tests pass; deployment and
+live acceptance are not yet claimed.
