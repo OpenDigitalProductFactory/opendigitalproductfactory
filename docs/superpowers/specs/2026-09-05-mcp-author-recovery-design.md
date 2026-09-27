@@ -149,6 +149,41 @@ part of the repair. Unit tests do not substitute for the live accepted review.
 Rollback is a scoped reviewed revert, preserving task and receipt history.
 Authority is never widened to make the recovery test pass.
 
+## 2026-09-27 source-review activity classification
+
+BI-CF118B6D / AC-RECOVERY-GATE-4; repair room WC-068FE3AD.
+WWMD DI-FC20931D1CE9 selects validated activity classification. The earlier
+DI-57E03E6F5647 had insufficient scoring input and is not a decision.
+
+The delivered validator now admits the original review, but inference inherits
+the coworker's general confidential classification in `mcp-task-execution.ts`.
+Build Studio already classifies platform source work as `development`, with
+payload screening still authoritative. A review binding alone is not proof:
+`tasks/submit` accepts caller-supplied binding metadata.
+
+Before choosing development for a source-only design/spec/plan review, revalidate
+the exact server-issued request through the existing independent-review policy,
+including current OAuth authority, author room admission, independent reviewer,
+immutable source identity and current readiness. Require platform scope and the
+canonical source-only request/tool contract. A raw binding, route name, client
+name or source filename must never suffice. Preserve the existing classification
+when this proof is absent or cannot be read. General delegation is not proof of
+source-only activity. Mixed evidence, objective mapping, PIR and unknown gates
+retain their existing classification. Restricted classifications remain local.
+
+Do not change provider clearances, model capability floors, residency assignments,
+or screening. Customer records, secrets and sensitive tool output must still
+raise or block dispatch through the canonical screening path. Apply the same
+proof on resumed attempts; preserve the original task, idempotency key, deadline
+and retry budget. No migration or alternate credential is required.
+
+Verification extends AC-RECOVERY-GATE-4: prove validated source-only routing,
+deny classification changes for forged/stale/unbound or mixed-evidence requests,
+retain secret/customer screening and explicit residency, and prove capacity
+resume does not reset authority or budgets. The unchanged live design must yield
+an actual independent receipt before acceptance is claimed. Revert this scoped
+adapter change without deleting task or receipt history.
+
 Further source reconciliation found the earlier related BI-817556D8 design-phase
 repair already on main. Reuse its `designPhaseReviewDecision` policy. Terminal
 recovery can still return early for research before reaching that policy, and the
