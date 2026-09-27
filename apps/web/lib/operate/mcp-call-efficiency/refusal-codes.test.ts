@@ -28,6 +28,10 @@ describe("governed code classification (BI-AF9E4906)", () => {
     expect(governedRefusalDisposition({ error: "approval_required" })).toBe("awaiting-person");
     expect(governedRefusalDisposition({ error: "branch_occupied" })).toBe("refused");
     expect(governedRefusalDisposition({ error: "gate_evidence_blocked" })).toBe("awaiting-input");
+    expect(governedRefusalDisposition({ error: "CANONICAL_DESIGN_REQUIRED" })).toBe("awaiting-input");
+    expect(governedRefusalDisposition({ error: "search_deferred" })).toBe("inconclusive");
+    expect(governedRefusalDisposition({ error: "surface_not_found" })).toBe("refused");
+    expect(governedRefusalDisposition({ error: "nonprod_lease_not_owner" })).toBe("refused");
   });
 
   it("leaves an unclassified code a fault, so a broken tool is never excused", () => {

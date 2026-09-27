@@ -436,7 +436,13 @@ export type PlatformKnowledgeHit = {
  */
 export type PlatformKnowledgeSearch =
   | { status: "ok"; results: PlatformKnowledgeHit[] }
-  | { status: "unavailable"; reason: string; results: [] };
+  | {
+      status: "unavailable";
+      /** search_deferred is capacity, not a broken model. search_unavailable is a real embedding failure. */
+      code: "search_deferred" | "search_unavailable";
+      reason: string;
+      results: [];
+    };
 
 export async function searchPlatformKnowledge(params: {
   query: string;
@@ -452,9 +458,11 @@ export async function searchPlatformKnowledge(params: {
     console.warn(
       `[semantic-memory] searchPlatformKnowledge did not query the corpus — ${embedded.status}: ${embedded.reason}`,
     );
+    const deferred = embedded.status === "deferred";
     return {
       status: "unavailable",
-      reason: embedded.status === "deferred"
+      code: deferred ? "search_deferred" : "search_unavailable",
+      reason: deferred
         ? `semantic search is deferred while local CI holds host capacity (${embedded.reason}) — retryable`
         : `the embedding step failed (${embedded.reason})`,
       results: [],

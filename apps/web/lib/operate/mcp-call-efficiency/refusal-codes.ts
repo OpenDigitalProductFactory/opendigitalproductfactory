@@ -51,7 +51,24 @@ export type ToolLevelGovernedCode =
   | "scope_conflict"
   | "nonprod_lease_not_owner"
   | "lease_terminal"
-  | "idempotency_conflict";
+  | "idempotency_conflict"
+  // Initiative readiness. Same answer as initiative_not_ready: the work is not
+  // ready, the tool did not break. Live ledger, 14 days: these were every
+  // remaining record_initiative_design_review failure besides one authorization.
+  | "CANONICAL_DESIGN_REQUIRED"
+  | "CANONICAL_DESIGN_AMBIGUOUS"
+  | "CLASSIFICATION_REQUIRED"
+  | "ARTIFACT_AUTHOR_REQUIRED"
+  | "reviewer-not-independent"
+  | "gate-not-authorized"
+  // Capacity deferral. The embedding backend was not asked; retrying unchanged
+  // is the documented recovery. A real embedding failure stays search_unavailable
+  // and is still a fault.
+  | "search_deferred"
+  // Authorized Surface said the selector is not a registered, authorized
+  // surface. That is a refusal, not an empty node and not a crashed tool.
+  | "surface_not_found"
+  | "surface_not_authorized";
 
 /**
  * What kind of answer each tool-level governed code is — total by construction.
@@ -74,6 +91,18 @@ const TOOL_LEVEL_GOVERNED_DISPOSITION: Record<ToolLevelGovernedCode, OutcomeDisp
 
   // The work already exists; the duplicate call is answered, not denied.
   idempotency_conflict: "proceed",
+
+  CANONICAL_DESIGN_REQUIRED: "awaiting-input",
+  CANONICAL_DESIGN_AMBIGUOUS: "awaiting-input",
+  CLASSIFICATION_REQUIRED: "awaiting-input",
+  ARTIFACT_AUTHOR_REQUIRED: "awaiting-input",
+  "reviewer-not-independent": "refused",
+  "gate-not-authorized": "refused",
+
+  search_deferred: "inconclusive",
+
+  surface_not_found: "refused",
+  surface_not_authorized: "refused",
 };
 
 /**

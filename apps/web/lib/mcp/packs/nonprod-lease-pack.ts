@@ -710,9 +710,10 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
         data: { retryable: false, leaseId },
       };
     }
+    const errorCode = detail === "nonprod_lease_not_owner" ? detail : "release_failed";
     return {
       success: false,
-      error: "release_failed",
+      error: errorCode,
       message: `Could not release lease ${leaseId}: ${detail}. Do not blind-retry (retryable: false).`,
       data: { retryable: false, leaseId },
     };
