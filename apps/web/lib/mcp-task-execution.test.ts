@@ -11,6 +11,8 @@ const autonomous = vi.hoisted(() => ({
   resolveTools: vi.fn(),
 }));
 const pirContext = vi.hoisted(() => vi.fn(async () => ""));
+const sensitivity = vi.hoisted(() => vi.fn(async (_parsed: unknown, _token: unknown, fallback: string) => fallback));
+vi.mock("./mcp-task-review-sensitivity", () => ({ remoteReviewSensitivity: sensitivity }));
 vi.mock("./pir-evidence-context", () => ({ loadPirEvidenceContext: pirContext }));
 vi.mock("./mcp-task-review-outcome", () => ({
   loadInitiativeReviewOutcome: vi.fn(async (_binding: unknown, receiptId: string) => ({
@@ -37,7 +39,7 @@ vi.mock("./mcp/external-approval-location-lookup", () => ({
   withTaskRunApprovalLocation: vi.fn(async (value: unknown) => value),
 }));
 
-import { executeRemoteTaskAttempt, remoteTaskConversation } from "./mcp-task-execution";
+import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 
 const writerToolName = "record_initiative_evidence";
@@ -70,6 +72,15 @@ const parsed = {
 };
 
 describe("remote task terminal-writer postcondition", () => {
+  it.each([undefined, "capacity"] as const)("revalidates activity classification without replacing the task on %s", async (resumeKind) => {
+    sensitivity.mockResolvedValueOnce("development");
+    autonomous.execute.mockResolvedValue({ content: "Still reviewing", executedTools: [] });
+    const token = { tokenId: "oauth", userId: "human", capability: "write" as const, source: "oauth" as const };
+    await executeRemoteTaskAttempt({ run: { id: "original", taskRunId: "TR-ORIGINAL", contextId: "thread-1" }, threadId: "thread-1",
+      token, userContext: {} as never, parsed, idempotentReplay: Boolean(resumeKind), resumeKind, capacityAttempt: 2 });
+    expect(sensitivity).toHaveBeenCalledWith(parsed, token, expect.any(String));
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({ sensitivity: "development", taskRunId: "TR-ORIGINAL" }));
+  });
   it.each([undefined, "terminal-writer"] as const)("supplies current PIR observations on initial execution and same-task recovery (%s)", async (resumeKind) => {
     pirContext.mockResolvedValueOnce("Runtime observation RV-LIVE: deployed repair verified.");
     autonomous.execute.mockResolvedValue({ content: "Need review.", executedTools: [] });
@@ -699,34 +710,6 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
     const outcome = await attempt();
 
     expect(outcome).toMatchObject({ result: { waitReason: "missing-terminal-writer" } });
-  });
-});
-
-describe("remoteTaskConversation", () => {
-  it("merges hydrated terminal-writer context into the sole system prompt", () => {
-    expect(remoteTaskConversation({
-      systemPrompt: "Review independently.",
-      prompt: "Record the exact governed receipt.",
-      resumeKind: "terminal-writer",
-      terminalWriterContext: "Immutable artifact evidence",
-    })).toEqual({
-      systemPrompt: "Review independently.\n\nImmutable artifact evidence",
-      chatHistory: [
-        { role: "user", content: "Record the exact governed receipt." },
-      ],
-    });
-  });
-
-  it("keeps an ordinary task system prompt and user history unchanged", () => {
-    expect(remoteTaskConversation({
-      systemPrompt: "Review independently.",
-      prompt: "Inspect the artifact.",
-    })).toEqual({
-      systemPrompt: "Review independently.",
-      chatHistory: [
-        { role: "user", content: "Inspect the artifact." },
-      ],
-    });
   });
 });
 

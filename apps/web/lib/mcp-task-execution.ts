@@ -1,5 +1,7 @@
+import { remoteTaskConversation } from "./mcp-task-conversation";
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { loadPirEvidenceContext } from "./pir-evidence-context";
+import { remoteReviewSensitivity } from "./mcp-task-review-sensitivity";
 import { prisma, type Prisma } from "@dpf/db";
 import { terminalWriterDispatchContractForProvider } from "@/lib/routing/execution-plan";
 import type { RequestContract } from "@/lib/routing/request-contract";
@@ -60,23 +62,6 @@ function approvalRequiredEnvelopeId(value: unknown): string | null {
   const data = result["data"];
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   return optionalString((data as Record<string, unknown>)["envelopeId"]);
-}
-
-export function remoteTaskConversation(input: {
-  systemPrompt: string;
-  prompt: string;
-  resumeKind?: "capacity" | "terminal-writer";
-  terminalWriterContext?: string;
-}): {
-  systemPrompt: string;
-  chatHistory: Array<{ role: "user"; content: string }>;
-} {
-  return {
-    systemPrompt: input.resumeKind === "terminal-writer" && input.terminalWriterContext
-      ? `${input.systemPrompt}\n\n${input.terminalWriterContext}`
-      : input.systemPrompt,
-    chatHistory: [{ role: "user", content: input.prompt }],
-  };
 }
 
 export async function executeRemoteTaskAttempt(input: {
@@ -205,7 +190,7 @@ export async function executeRemoteTaskAttempt(input: {
       systemPrompt: conversation.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
       chatHistory: conversation.chatHistory,
-      sensitivity: agent.sensitivity ?? "internal",
+      sensitivity: await remoteReviewSensitivity(parsed, token, agent.sensitivity ?? "internal"),
       tools: tools.tools,
       toolsForProvider: tools.toolsForProvider,
       deferredTools: tools.deferredTools,
