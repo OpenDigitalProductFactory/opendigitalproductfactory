@@ -93,6 +93,41 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     expect(lease.listQueuedNonprodEnvironmentLeases).toHaveBeenCalledOnce();
   });
 
+  it("marks an already-terminal lease non-retryable", async () => {
+    lease.claimNonprodEnvironmentLease.mockResolvedValue({
+      status: "terminal",
+      reason: "expired",
+      lease: {
+        leaseId: "NPEL-T1",
+        claimKey: "local-ci:s1:abc",
+        taskRunId: null,
+      },
+    });
+    const res = await nonprodLeasePack.handlers.claim_nonprod_environment_lease(
+      {
+        environmentKey: "local-integration-ci",
+        ownerProvider: "codex",
+        ownerSessionId: "s1",
+        claimKey: "local-ci:s1:abc",
+        purpose: "test",
+        url: "http://localhost:3010",
+        ports: [3010],
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        gateClientRevision: 1,
+        worktreePath: "D:\\DPF-source-root-worktrees\\lease-terminal-retry-stop",
+      },
+      "u1",
+    );
+
+    expect(res).toMatchObject({
+      success: false,
+      error: "lease_terminal",
+      data: { retryable: false, reason: "expired" },
+    });
+    expect(res.message).toMatch(/Do not call again with this claimKey/);
+    expect(res.message).toMatch(/retryable: false/);
+  });
+
   it("returns a durable queued admission without reporting a conflict", async () => {
     lease.claimNonprodEnvironmentLease.mockResolvedValue({
       status: "queued",

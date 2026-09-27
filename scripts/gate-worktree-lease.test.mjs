@@ -675,7 +675,8 @@ test("released terminal claim from a prior run gets a fresh rerun claimKey", asy
     assert.ok([0, 3].includes(result.code), result.output);
     assert.equal(claims.length, 2);
     assert.notEqual(claims[0].claimKey, claims[1].claimKey);
-    assert.match(claims[1].claimKey, /:rerun-1$/);
+    assert.match(claims[1].claimKey, /:fresh-[0-9a-f]{8}$/);
+    assert.doesNotMatch(claims[1].claimKey, /:rerun-/);
     assert.match(result.output, /creating fresh admission attempt 1/);
   } finally {
     server.closeAllConnections();
@@ -683,7 +684,7 @@ test("released terminal claim from a prior run gets a fresh rerun claimKey", asy
   }
 });
 
-test("terminal claim replacement advances past an expired rerun from a prior process", async () => {
+test("a chain of already-terminal claim keys stops after one fresh key", async () => {
   const claims = [];
   const server = createServer((request, response) => {
     let body = "";
@@ -770,17 +771,19 @@ test("terminal claim replacement advances past an expired rerun from a prior pro
       },
     });
 
-    assert.ok([0, 3].includes(result.code), result.output);
-    assert.equal(claims.length, 3);
+    assert.equal(result.code, 81, result.output);
+    assert.equal(claims.length, 2);
     assert.match(claims[0].claimKey, /^local-ci:[^:]+:[0-9a-f]{40}$/);
-    assert.match(claims[1].claimKey, /:rerun-1$/);
-    assert.match(claims[2].claimKey, /:rerun-2$/);
+    assert.match(claims[1].claimKey, /:fresh-[0-9a-f]{8}$/);
+    assert.ok(claims.every((claim) => !/:rerun-\d+$/.test(claim.claimKey)));
     assert.ok(claims.every((claim) => claim.ownerProvider === "codex"));
     assert.ok(claims.every(
       (claim) => claim.ownerSessionId === "test-terminal-claim-owner",
     ));
-    assert.match(result.output, /creating fresh admission attempt 2/);
+    assert.match(result.output, /local_ci_terminal_chain_refused/);
+    assert.doesNotMatch(result.output, /creating fresh admission attempt 2/);
     const state = JSON.parse(readFileSync(stateFile, "utf8"));
+    assert.equal(state.status, "cancelled");
     assert.deepEqual(
       state.leaseEvents
         .filter((event) => event.type === "terminal-claim-replaced")
@@ -797,13 +800,6 @@ test("terminal claim replacement advances past an expired rerun from a prior pro
           terminalAttemptSequence: 1,
           priorClaimKey: claims[0].claimKey,
           replacementClaimKey: claims[1].claimKey,
-          interruptedByQuiescence: false,
-        },
-        {
-          terminalReason: "expired",
-          terminalAttemptSequence: 2,
-          priorClaimKey: claims[1].claimKey,
-          replacementClaimKey: claims[2].claimKey,
           interruptedByQuiescence: false,
         },
       ],
@@ -884,7 +880,7 @@ test("cancelled terminal claim from an interrupted run gets a fresh rerun claimK
     assert.ok([0, 3].includes(result.code), result.output);
     assert.equal(claims.length, 2);
     assert.notEqual(claims[0].claimKey, claims[1].claimKey);
-    assert.match(claims[1].claimKey, /:rerun-1$/);
+    assert.match(claims[1].claimKey, /:fresh-[0-9a-f]{8}$/);
     assert.match(result.output, /previous local-CI lease claim was cancelled/);
     assert.match(result.output, /creating fresh admission attempt 1/);
   } finally {
