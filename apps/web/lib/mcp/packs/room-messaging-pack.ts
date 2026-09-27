@@ -224,10 +224,11 @@ async function inviteRoomParticipantHandler(
     workItem: item,
   });
   if (caller.decision.level !== "action") {
+    const reason = caller.decision.reason;
     return {
       success: false,
-      error: "forbidden",
-      message: `Only a room member with action rights (e.g. the Coordinator) can invite participants (${caller.decision.reason}).`,
+      error: reason === "not-admitted" ? "room_not_admitted" : "forbidden",
+      message: `Only a room member with action rights (e.g. the Coordinator) can invite participants (${reason}).`,
     };
   }
 

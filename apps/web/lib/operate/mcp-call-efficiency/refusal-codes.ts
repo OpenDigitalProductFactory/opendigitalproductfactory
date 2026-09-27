@@ -68,7 +68,16 @@ export type ToolLevelGovernedCode =
   // Authorized Surface said the selector is not a registered, authorized
   // surface. That is a refusal, not an empty node and not a crashed tool.
   | "surface_not_found"
-  | "surface_not_authorized";
+  | "surface_not_authorized"
+  // A renewal whose lease is already gone. The handler says to re-claim; retrying
+  // the same renew cannot succeed. Live ledger, 14 days: every renew failure.
+  | "lease_lost"
+  // The branch's gate client is below the platform revision floor. The handler
+  // says to rebase and that the same client will be refused again.
+  | "gate_client_upgrade_required"
+  // Invite refused because the caller is not admitted to the room. Generic
+  // forbidden stays a fault: other tools use it for outcomes this scan has not seen.
+  | "room_not_admitted";
 
 /**
  * What kind of answer each tool-level governed code is — total by construction.
@@ -103,6 +112,9 @@ const TOOL_LEVEL_GOVERNED_DISPOSITION: Record<ToolLevelGovernedCode, OutcomeDisp
 
   surface_not_found: "refused",
   surface_not_authorized: "refused",
+  lease_lost: "refused",
+  gate_client_upgrade_required: "refused",
+  room_not_admitted: "refused",
 };
 
 /**
