@@ -254,6 +254,10 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   // instead of dying on ERR_MODULE_NOT_FOUND before the stub guard.
   cpSync(join(repoRoot, "scripts", "lib", "lease-supervisor.mjs"), join(temp, "scripts", "lib", "lease-supervisor.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-sandbox-fence.mjs"), join(temp, "scripts", "lib", "local-sandbox-fence.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "process-identity.mjs"), join(temp, "scripts", "lib", "process-identity.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "gate-execution-checkpoint.mjs"), join(temp, "scripts", "lib", "gate-execution-checkpoint.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "ci-evidence-plan.mjs"), join(temp, "scripts", "lib", "ci-evidence-plan.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "derived-artifacts-registry.mjs"), join(temp, "scripts", "lib", "derived-artifacts-registry.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-queue-observer.mjs"), join(temp, "scripts", "lib", "local-queue-observer.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-manifest.mjs"), join(temp, "scripts", "lib", "local-ci-slot-manifest.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-substrate.mjs"), join(temp, "scripts", "lib", "local-ci-slot-substrate.mjs"));
@@ -500,7 +504,7 @@ test("gate-worktree.mjs reports active lease contention and stale main before ex
   }
 });
 
-test("gate-worktree.mjs preserves a green gate for finalize-only evidence replay after quiescence", async () => {
+test("gate-worktree.mjs preserves pending material through quiescence but refuses a stub without a completion checkpoint", async () => {
   const { dir } = makeTempRepo();
   let recordAttempts = 0;
   let preflightQuiescing = false;
@@ -563,21 +567,16 @@ test("gate-worktree.mjs preserves a green gate for finalize-only evidence replay
     preflightQuiescing = false;
     const callCountBeforeFinalize = mcp.calls.length;
     const finalized = await runGateAsync(["--finalize-evidence", ...commonArgs], env);
-    assert.equal(finalized.status, 0, `${finalized.stdout}\n${finalized.stderr}`);
-    assert.match(finalized.stdout, /recorded pending local-CI evidence: EXT-FINALIZED/);
-    assert.equal(existsSync(pendingPath), false);
+    assert.notEqual(finalized.status, 0, `${finalized.stdout}\n${finalized.stderr}`);
+    assert.match(finalized.stderr, /no durable completion checkpoint/);
+    assert.equal(existsSync(pendingPath), true);
 
     const finalizeCalls = mcp.calls.slice(callCountBeforeFinalize).map((call) => call.params.name);
-    assert.deepEqual(finalizeCalls, ["get_quiescence_status", "record_local_integration_result"]);
+    assert.deepEqual(finalizeCalls, ["get_quiescence_status"]);
     const finalState = JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), "utf8"));
     assert.equal(finalState.gatePassed, true);
-    assert.equal(finalState.evidencePending, false);
-    assert.equal(finalState.evidenceRecordId, "EXT-FINALIZED");
-    assert.equal(finalState.leaseExpiresAt, pending.expiresAt);
-    assert.ok(
-      Date.parse(finalState.expiresAt) >= Date.parse(finalState.recordedAt) + 23 * 60 * 60_000,
-      "finalized PASS evidence must remain publishable beyond the short lease authority",
-    );
+    assert.equal(finalState.evidencePending, true);
+    assert.equal(finalState.evidenceRecordId, "");
   } finally {
     await mcp.close();
   }

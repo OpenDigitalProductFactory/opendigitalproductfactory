@@ -1,5 +1,44 @@
 # Build gate runbook
 
+## Recovering an interrupted gate publication
+
+The controller retains `<full-log>.<lease-id>.execution.json` before descendant
+cleanup. It binds the observed command result to its original owner, lease, gate,
+candidate, merged tree, evidence plan, toolchain and artifact. This checkpoint is
+execution material; it is not a canonical pass. Termination decisions remain in
+the adjacent `.termination.jsonl` journal, including the Windows owned-job close
+policy recorded before launch.
+
+Before sending a completed result, the controller atomically saves the exact
+request in the existing slot's pending-evidence file. If acknowledgement is lost,
+run `pnpm run pregate -- --finalize-evidence` from the original governed worktree
+with its original provider/session attribution. Recovery validates the checkpoint,
+current evidence policy and original completion time, then uses the normal
+authenticated recorder. Publication and lease binding share a transaction; replay
+returns the existing receipt only for matching content and actor. A recovered
+failure stays failed. Recovery never extends the evidence lifetime.
+
+Missing checkpoints, changed identities/content, expired evidence and leases
+outside the recorder's active/released contract are refused. Preserve those files
+as inconclusive material and obtain a newly admitted run with the repaired
+controller. Do not edit a lease, invent a pass file or turn a timeline note into
+local-CI evidence. The September 12 profile execution predates this checkpoint
+contract and is outside the evidence freshness window.
+
+Windows commands run in a kernel Job Object before starting descendants; closing
+the owned handle fences that membership without traversing recycled parent PIDs.
+The wrapper watches its owned input pipe, so loss of its controller also closes
+the job. This uses the documented
+[Windows Job Object contract](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
+Normal Windows gates use job membership alone. The shared individual-cleanup
+helper also supports a bound Windows handle and creation-time comparison.
+Linux observations reuse the shared fence reader's kernel start ticks. Other
+POSIX hosts use process start time; a fresh identity check precedes signalling,
+but separate observation and signal calls retain a race and second-resolution
+start times on those hosts cannot prove same-second PID reuse impossible.
+Unreadable or inconsistent ownership never authorizes individual termination.
+These protections do not establish the cause of historical executor losses.
+
 CI scopes a pull request from its source head and that head's merge-base with `origin/main`. GitHub's checkout may be a synthetic merge; using its base with the source head includes unrelated main changes as reverse diffs and can turn documentation into exhaustive work. Both comparison endpoints must describe the same source history. Merge-group and other non-PR events retain exhaustive verification.
 
 **Public documentation publication.** CI's `Documentation Publication Build` builds `docs/` with the same [GitHub Pages Jekyll action](https://github.com/actions/jekyll-build-pages) used by legacy Pages publication. It runs for changed documentation or CI configuration on PRs, merge candidates and main; missing comparison history runs the build. Unchanged publication inputs produce a terminal no-build result. The job also checks that malformed Liquid is rejected, and feeds the required `Merge Readiness` aggregate. It only builds: the existing Pages channel still owns deployment. A green build is not evidence that the public site has deployed. Jekyll processes Liquid inside code fences; protect literal examples using its [raw tag guidance](https://jekyllrb.com/docs/liquid/tags/#jekyll-processes-all-liquid-filters-in-code-blocks).

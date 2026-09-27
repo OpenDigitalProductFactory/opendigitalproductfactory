@@ -1184,6 +1184,7 @@
       "publishedPortal": false,
       "anchors": [
         "build-gate-runbook",
+        "recovering-an-interrupted-gate-publication",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
         "the-room-follows-its-pr-through-ci-bi-88341b5d",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",

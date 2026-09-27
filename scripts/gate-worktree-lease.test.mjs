@@ -1878,9 +1878,9 @@ test("sampleAsync yields to the event loop, so a timer due mid-scan still fires"
 
 test("sampleAsync reports the same descendants as the synchronous sample", async () => {
   const rows = [
-    { pid: 100, parentPid: 1, commandLine: "root" },
-    { pid: 101, parentPid: 100, commandLine: "child" },
-    { pid: 102, parentPid: 101, commandLine: "grandchild" },
+    { pid: 100, birthTime: "100", parentPid: 1, commandLine: "root" },
+    { pid: 101, birthTime: "101", parentPid: 100, commandLine: "child" },
+    { pid: 102, birthTime: "102", parentPid: 101, commandLine: "grandchild" },
   ];
   const tracker = createProcessTreeTracker({
     rootPid: 100,
@@ -1894,12 +1894,12 @@ test("sampleAsync reports the same descendants as the synchronous sample", async
 test("process tree tracker remembers descendants before they reparent", async () => {
   const snapshots = [
     [
-      { pid: 100, parentPid: 1 },
-      { pid: 101, parentPid: 100 },
-      { pid: 102, parentPid: 101 },
+      { pid: 100, birthTime: "100", parentPid: 1 },
+      { pid: 101, birthTime: "101", parentPid: 100 },
+      { pid: 102, birthTime: "102", parentPid: 101 },
     ],
     [
-      { pid: 102, parentPid: 1 },
+      { pid: 102, birthTime: "102", parentPid: 1 },
     ],
   ];
   const alive = new Set([102]);
@@ -1918,10 +1918,10 @@ test("process tree tracker remembers descendants before they reparent", async ()
   });
 
   assert.deepEqual(collectDescendantPids(100, [
-    { pid: 100, parentPid: 1 },
-    { pid: 101, parentPid: 100 },
-    { pid: 102, parentPid: 101 },
-    { pid: 200, parentPid: 1 },
+    { pid: 100, birthTime: "100", parentPid: 1 },
+    { pid: 101, birthTime: "101", parentPid: 100 },
+    { pid: 102, birthTime: "102", parentPid: 101 },
+    { pid: 200, birthTime: "200", parentPid: 1 },
   ]), [101, 102]);
 
   tracker.sample();
@@ -2273,8 +2273,9 @@ test("no test in this file wrote gate artifacts into the checkout running it", (
 // now runs a different command than the descendant it once remembered.
 test("the descendant cleanup never kills a reused process id", async () => {
   let rows = [
-    { pid: 100, parentPid: 1, commandLine: "node local-ci-runner.mjs" },
-    { pid: 101, parentPid: 100, commandLine: "docker build ." },
+    { pid: 1, parentPid: 0, birthTime: "1" },
+    { pid: 100, birthTime: "100", parentPid: 1, commandLine: "node local-ci-runner.mjs" },
+    { pid: 101, birthTime: "101", parentPid: 100, commandLine: "docker build ." },
   ];
   const terminated = [];
   const events = [];
@@ -2290,8 +2291,8 @@ test("the descendant cleanup never kills a reused process id", async () => {
   tracker.sample();
   // The build exits; its id is reused by a stranger's resumer, and the runner lingers.
   rows = [
-    { pid: 100, parentPid: 1, commandLine: "node local-ci-runner.mjs" },
-    { pid: 101, parentPid: 4242, commandLine: "node local-ci-durable-wait-resumer.mjs --branch other" },
+    { pid: 100, birthTime: "100", parentPid: 1, commandLine: "node local-ci-runner.mjs" },
+    { pid: 101, birthTime: "201", parentPid: 4242, commandLine: "node local-ci-durable-wait-resumer.mjs --branch other" },
   ];
   await tracker.waitForQuiescence({ graceMs: 0, pollMs: 1 });
   assert.deepEqual(terminated, [100]);
