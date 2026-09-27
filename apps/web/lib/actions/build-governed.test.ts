@@ -11,6 +11,9 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
     },
     buildPhaseRun: {
       upsert: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
     },
     businessBuildBrief: {
       findUnique: vi.fn(),
@@ -217,6 +220,9 @@ describe("governed build start approvals", () => {
     mockPrisma.organization.findFirst.mockResolvedValue({ id: "org-1" });
     mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
     mockPrisma.buildPhaseRun.upsert.mockResolvedValue({});
+    mockPrisma.buildPhaseRun.findUnique.mockResolvedValue(null);
+    mockPrisma.buildPhaseRun.create.mockResolvedValue({});
+    mockPrisma.buildPhaseRun.update.mockResolvedValue({});
     mockGetQuiescenceLevel.mockResolvedValue("normal");
     mockIsSandboxAvailable.mockResolvedValue(false);
     mockStartBuildBranch.mockResolvedValue(undefined);
@@ -327,9 +333,10 @@ describe("governed build start approvals", () => {
     }
 
     expect(unhandled).toEqual([]);
-    // The drain gate refuses the start before any DB write — the cost-tracking
-    // upsert never runs.
     expect(mockPrisma.buildPhaseRun.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.buildPhaseRun.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.buildPhaseRun.create).not.toHaveBeenCalled();
+    expect(mockPrisma.buildPhaseRun.update).not.toHaveBeenCalled();
   });
 
   it("createFeatureBuild no longer refuses on a count of active builds (BI-3430B3A4)", async () => {
