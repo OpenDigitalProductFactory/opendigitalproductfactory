@@ -29,7 +29,7 @@ Claim `packages/db/src/archetype-room-definition-projection.ts` and its tests,
 `apps/web/lib/storefront/project-operational-value-stream.ts` and its tests, and
 the existing backfill implementation/tests if eligibility needs repair. Consume
 every returned test-impact/guard obligation before editing. Add generated-Prisma
-integration coverage for AC1-AC5, plus focused pure tests for role fallback.
+integration coverage for AC-1 through AC-5, plus focused pure tests for role fallback.
 Prove failures on the unchanged source. Shared-runtime tests require a lease;
 worktree dependency failures are inconclusive, not product failures.
 
@@ -40,7 +40,7 @@ Use existing lifecycle retirement/audit conventions; preserve IDs, relationships
 and unrelated metadata. Compose EA and room projection at the existing app entry
 with transaction rollback. Verify existing-install backfill eligibility. Inspect
 active readers and prevent retired definitions appearing as active work. Refactor
-shared conventions only where needed. Make AC1-AC5 green, including concurrency
+shared conventions only where needed. Make AC-1 through AC-5 green, including concurrency
 and rollback tests, and run affected typechecks.
 
 ## Phase 4: delivery and live acceptance
@@ -48,7 +48,7 @@ and rollback tests, and run affected typechecks.
 Run impact-derived checks and required production build/PR gates. Document any
 unrun gate. Ship one scoped signed PR through the merge queue, verify the resulting
 image identity, use native self-upgrade when coordinated with the release owner,
-and execute AC6 through the supported entrypoint with a governed test organization.
+and execute AC-6 through the supported entrypoint with a governed test organization.
 Record real evidence and independent acceptance before marking BI224E6E82 done.
 
 ## Risks and rollback

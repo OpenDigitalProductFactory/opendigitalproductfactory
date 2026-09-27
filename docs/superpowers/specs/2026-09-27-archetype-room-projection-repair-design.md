@@ -52,6 +52,15 @@ whether the historical evidence is sufficient for the existing feature baseline.
 
 ## Repair contract
 
+The identifiers below make the existing repair requirements and acceptance
+criteria readable by the scope-baseline writer. They do not expand the scope.
+
+**OBJ-PERSIST:** Persist each declared stage as a room definition with valid typed database writes and its declared role, trigger, outcome, gates and measures.
+**OBJ-IDENTITY:** Preserve one room identity per organization and stage across repeated and concurrent projection, without losing unrelated metadata.
+**OBJ-HISTORY:** Retire and reactivate room definitions without deleting their identities, relationships, view references or lifecycle history.
+**OBJ-ATOMIC:** Derive the operational model once and commit the EA and room projections atomically through the existing production entrypoint.
+**OBJ-CONVERGE:** Reconcile existing EA-only installations through the supported entrypoint and verify the resulting room lifecycle on the deployed system.
+
 R1. Persist every declared stage's trigger, outcome, responsible role, trust gates
 and measure bindings with valid Prisma inputs. Resolve a missing stage role from
 its declared stream role consistently with the sibling job-definition projection;
@@ -83,14 +92,18 @@ run broad production backfills as an incidental test.
 
 ## Acceptance and verification
 
-| ID | Required observation |
-| --- | --- |
-| AC1 | Actual generated Prisma client creates and updates room definitions with all declared bindings; unknown fields cannot pass typechecking. |
-| AC2 | Repetition and concurrent invocation preserve one identity per organization/stage; another organization's rows are untouched. |
-| AC3 | Removing then restoring a stage preserves row identity, relationships and history, excludes retirement from active results, and records lifecycle transitions. |
-| AC4 | Production orchestration derives once and persists both projections; injected failure leaves neither partially committed. |
-| AC5 | Existing EA-only organizations are eligible for supported reconciliation and receive room definitions without a duplicate EA model. |
-| AC6 | Live supported setup/reset or reconciliation against a governed test organization yields the expected definitions and retirement behavior. |
+| ID | Objectives | Required observation |
+| --- | --- | --- |
+| AC-1 | OBJ-PERSIST | Actual generated Prisma client creates and updates room definitions with all declared bindings; unknown fields cannot pass typechecking. |
+| AC-2 | OBJ-IDENTITY | Repetition and concurrent invocation preserve one identity per organization/stage; another organization's rows are untouched. |
+| AC-3 | OBJ-HISTORY | Removing then restoring a stage preserves row identity, relationships and history, excludes retirement from active results, and records lifecycle transitions. |
+| AC-4 | OBJ-ATOMIC | Production orchestration derives once and persists both projections; injected failure leaves neither partially committed. |
+| AC-5 | OBJ-CONVERGE | Existing EA-only organizations are eligible for supported reconciliation and receive room definitions without a duplicate EA model. |
+| AC-6 | OBJ-PERSIST, OBJ-IDENTITY, OBJ-HISTORY, OBJ-ATOMIC, OBJ-CONVERGE | Live supported setup/reset or reconciliation against a governed test organization yields the expected definitions and retirement behavior. |
+
+AC-1 through AC-6 retain the statements previously labelled AC1 through AC6.
+The prior design-spec receipt remains evidence for its exact reviewed revision;
+this format correction still requires approval of the revised immutable artifact.
 
 Unit tests alone are insufficient. Real Prisma regression coverage must use the
 shared nonproduction environment and an isolated test organization. Tests must
