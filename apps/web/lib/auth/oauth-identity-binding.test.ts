@@ -6,6 +6,7 @@ const identityDb = vi.hoisted(() => ({
   agent: { findMany: vi.fn() },
   authorityBinding: { findUnique: vi.fn() },
   mcpApiToken: { findFirst: vi.fn() },
+  oAuthRefreshToken: { findFirst: vi.fn() },
 }));
 vi.mock("@dpf/db", () => ({ prisma: { oAuthAuthorizationCode: db, ...identityDb } }));
 
@@ -81,6 +82,7 @@ describe("current OAuth execution authority", () => {
     oauthClient: { revokedAt: null, registrationKind: "dcr" as const } };
   beforeEach(() => {
     vi.clearAllMocks();
+    identityDb.oAuthRefreshToken.findFirst.mockResolvedValue(null);
     identityDb.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] });
     identityDb.agent.findMany.mockResolvedValue([{ id: "agent-row", agentId: token.agentId }]);
     identityDb.authorityBinding.findUnique.mockResolvedValue({ oauthPurpose: "consent", status: "active",
@@ -118,6 +120,22 @@ describe("current OAuth execution authority", () => {
   });
   it("refuses expired queued authority when no equally scoped successor exists", async () => {
     identityDb.mcpApiToken.findFirst.mockResolvedValue(null);
+    expect(await isCurrentOAuthExecutionAuthority({ ...token, oauthFamilyKey: "family", expiresAt: new Date(0) })).toBe(false);
+  });
+  it("keeps accepted work authorized while the client is quiet and its refresh family remains valid", async () => {
+    identityDb.mcpApiToken.findFirst.mockResolvedValue(null);
+    identityDb.oAuthRefreshToken.findFirst.mockResolvedValue({ id: "refresh" });
+    expect(await isCurrentOAuthExecutionAuthority({ ...token, oauthFamilyKey: "family", expiresAt: new Date(0) })).toBe(true);
+    expect(identityDb.oAuthRefreshToken.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      oauthFamilyKey: "family", userId: token.userId, oauthClientId: "client", authorityBindingId: "binding",
+      agentId: token.agentId, resource: token.resource, scopes: { hasEvery: token.publicScopes },
+      revokedAt: null, consumedAt: null, rotatedToId: null, expiresAt: { gt: expect.any(Date) },
+    }) }));
+  });
+  it("does not let a valid refresh family override revoked consent", async () => {
+    identityDb.mcpApiToken.findFirst.mockResolvedValue(null);
+    identityDb.oAuthRefreshToken.findFirst.mockResolvedValue({ id: "refresh" });
+    identityDb.authorityBinding.findUnique.mockResolvedValue(null);
     expect(await isCurrentOAuthExecutionAuthority({ ...token, oauthFamilyKey: "family", expiresAt: new Date(0) })).toBe(false);
   });
   it.each(["revoked-consent", "disabled-human", "missing-binding", "wrong-agent", "removed-delegation"])("rejects %s before queued execution", async state => {

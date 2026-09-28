@@ -1,4 +1,5 @@
 import { resolveMcpTaskAuthorityKey } from "@/lib/auth/oauth-task-authority";
+import { recoverExpiredOAuthReview } from "./mcp-task-oauth-recovery";
 import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
 import { persistedTerminalReaderExecutions, reserveTerminalWriterReplay } from "./mcp-task-terminal-writer-recovery";
 import { prisma, type Prisma } from "@dpf/db";
@@ -371,6 +372,12 @@ export async function submitRemoteCoworkerTask(input: {
       }
     }
     const replay = replayOrConflict(existing, parsed);
+    if (requestMatches && parsed.initiativeReviewBinding && await recoverExpiredOAuthReview(existing, token)) {
+      return { kind: "result", result: { taskRunId: existing.taskRunId, status: "submitted",
+        idempotentReplay: true, requiresApproval: false, asynchronous: true,
+        content: remoteTaskContent("The original review was reserved for recovery with current connection authority."),
+        isError: false } };
+    }
     if (
       requestMatches
       && (existing.status === "input-required" || (existing.status === "completed" && terminalToolPolicy))
