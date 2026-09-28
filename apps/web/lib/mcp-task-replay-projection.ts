@@ -101,6 +101,15 @@ export function projectRemoteTaskReplay(input: {
       },
     };
   }
+  // Historical wait details remain audit evidence, not permission to revive a
+  // terminal task. Explicit recovery must reserve a new dispatch first.
+  if (["failed", "canceled", "rejected", "archived"].includes(input.existing.status)) {
+    return { kind: "result", result: {
+      taskRunId: input.existing.taskRunId, status: input.existing.status,
+      idempotentReplay: true, requiresApproval: false, resumable: false,
+      progressPayload: input.existing.progressPayload, a2aMetadata: input.existing.a2aMetadata,
+    } };
+  }
   const terminalWriterEscalation = recoverTerminalWriterEscalation(input.existing.progressPayload);
   const terminalWriterWait = parseTerminalWriterWait(input.existing.progressPayload);
   const terminalWriterDispatchFailure = parseTerminalWriterDispatchFailure(

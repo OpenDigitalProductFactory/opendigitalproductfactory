@@ -100,7 +100,7 @@ type OAuthAuthorityRow = Omit<Prisma.McpApiTokenGetPayload<{ select: typeof OAUT
 
 /** Admission does not preserve revoked consent while a request waits in a queue. */
 export async function isCurrentOAuthExecutionAuthority(row: OAuthAuthorityRow,
-  db: Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding" | "mcpApiToken"> = prisma,
+  db: Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding" | "mcpApiToken" | "oAuthRefreshToken"> = prisma,
 ): Promise<boolean> {
   if (row.kind !== "oauth_access" || row.revokedAt || !row.oauthClient || row.oauthClient.revokedAt
     || !await currentOAuthHuman(row.userId, db)) return false;
@@ -115,7 +115,18 @@ export async function isCurrentOAuthExecutionAuthority(row: OAuthAuthorityRow,
       revokedAt: null, expiresAt: { gt: new Date() }, publicScopes: { hasEvery: row.publicScopes },
       oauthClient: { revokedAt: null },
     }, select: OAUTH_EXECUTION_AUTHORITY_SELECT });
-    if (!successor || !isCurrentOAuthAccessToken(successor)) return false;
+    if (!successor || !isCurrentOAuthAccessToken(successor)) {
+      // Accepted work belongs to the consent family, not to the client's next
+      // network request. This does NOT make an expired bearer signable.
+      if (!row.oauthFamilyKey || !row.authorityBindingId) return false;
+      const refresh = await db.oAuthRefreshToken.findFirst({ where: {
+        oauthFamilyKey: row.oauthFamilyKey, userId: row.userId, oauthClientId: row.oauthClientId,
+        authorityBindingId: row.authorityBindingId, agentId: row.agentId, resource: row.resource ?? "",
+        scopes: { hasEvery: row.publicScopes }, revokedAt: null, consumedAt: null, rotatedToId: null,
+        expiresAt: { gt: new Date() },
+      }, select: { id: true } });
+      if (!refresh) return false;
+    }
   }
   if (!row.authorityBindingId) return row.oauthClient?.registrationKind === "credentials";
   if (!row.oauthClientId || !row.resource) return false;
