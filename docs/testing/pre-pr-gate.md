@@ -68,6 +68,8 @@ and capture that as the evidence. See AGENTS.md §5 "Where each gate runs".
 
 ## What runs in CI
 
+Public-site changes also run the [documentation publication build](../architecture/build-gate-runbook.md), including rendered-example and malformed-Liquid checks. Its result feeds Merge Readiness; publication itself remains a separate Pages deployment.
+
 The root `pnpm test` script is:
 
 ```jsonc

@@ -36,6 +36,7 @@ A client component's namespace must be provided by a `MessagesProvider` above it
 
 **Message syntax** is a subset of Unicode MessageFormat 2.0:
 
+{% raw %}
 ```text
 Hello, {$name}!
 {$amount :currency currency=$code}
@@ -46,6 +47,7 @@ Hello, {$name}!
 one {{One item}}
 * {{{$count} items}}
 ```
+{% endraw %}
 
 The formatter handles `:number`, `:integer`, `:currency`, `:datetime`, `:date`, `:time` and `:string`, with `.input` / `.match` on exact, plural-category and `*` keys.
 
