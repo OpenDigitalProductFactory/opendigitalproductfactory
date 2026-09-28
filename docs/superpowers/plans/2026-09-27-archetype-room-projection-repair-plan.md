@@ -16,6 +16,27 @@ violates acceptance. Tests and live verification are part of that same repair.
 No phase is independently shippable. Live coverage receipt: pending; this section
 does not substitute for `record_plan_backlog_coverage` or independent plan review.
 
+### Explicit traceability for the atomic deliverable
+
+Deliverable key: `room-projection-repair`. All rows belong to BI-224E6E82;
+there are no separately shippable phases or deliverable dependencies.
+Contract and flow identifiers below are local references for this coverage record,
+not new platform types or runtime entities.
+
+| Objective | Contract reference | Flow reference | Verification reference |
+| --- | --- | --- | --- |
+| OBJ-PERSIST | CONTRACT-PERSIST: valid typed writes and declared bindings (design R1) | FLOW-PROJECT: existing operational-value-stream projection entrypoint | AC-1 |
+| OBJ-IDENTITY | CONTRACT-IDENTITY: tenant-scoped stable identity under repetition and concurrency (design R2) | FLOW-RECONCILE: repeat the existing reconciliation entrypoint | AC-2 |
+| OBJ-HISTORY | CONTRACT-HISTORY: retain identities, relationships and lifecycle history (design R3) | FLOW-RETIRE-REACTIVATE: remove and restore a declared stage | AC-3 |
+| OBJ-ATOMIC | CONTRACT-ATOMIC: one model and transaction for EA and room projection (design R4) | FLOW-ROLLBACK: inject a room write failure in combined projection | AC-4 |
+| OBJ-CONVERGE | CONTRACT-CONVERGE: existing EA-only installations remain eligible (design R5) | FLOW-BACKFILL: existing operational-value-stream backfill | AC-5 |
+| OBJ-PERSIST, OBJ-IDENTITY, OBJ-HISTORY, OBJ-ATOMIC, OBJ-CONVERGE | CONTRACT-LIVE: verify the served image and persisted outcome | FLOW-LIVE: supported reconciliation for an isolated governed test organization | AC-6 |
+
+The coverage request must include every objective and acceptance ID above, with
+the contract and flow IDs as its explicit references. It cannot be recorded until
+a passing independent spec-approval creates this item's scope baseline. Preserve
+the existing review task identities while that prerequisite is pending.
+
 ## Phase 1: reconcile evidence and review
 
 Preserve PR5141 and historical design bindings from the repair design. Publish
