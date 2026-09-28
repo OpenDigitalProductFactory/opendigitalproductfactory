@@ -541,6 +541,7 @@
         "10-chain-of-custody-and-agent-action-receipts",
         "101-core-requirement",
         "102-minimum-receipt-fields",
+        "1021-principle-directed-execution-binding",
         "103-trace-context-and-delegation",
         "104-integrity-and-non-repudiation",
         "105-privacy-and-minimization",
@@ -729,6 +730,7 @@
         "11-standards-contribution-profile",
         "12-implementation-and-claiming-guidance",
         "13-open-standardization-questions",
+        "mbse-composition-mapping",
         "14-summary"
       ]
     },
@@ -743,6 +745,7 @@
         "standards-map",
         "enterprise-operating-model-bridge",
         "composition-rule",
+        "principle-directed-work-and-mbse-composition",
         "adjacent-dpf-concepts",
         "source-of-truth-rule"
       ]
@@ -1927,6 +1930,7 @@
         "81-wsid-and-vector-decisioning",
         "82-learning-and-adaptation",
         "83-workroom-process-overseer-qualification",
+        "84-qualification-of-principle-directed-work",
         "9-model-and-provider-suitability",
         "91-eligibility-before-ranking",
         "92-evidence-based-adequacy",
@@ -2317,6 +2321,7 @@
         "purpose",
         "assertion-format",
         "core-assertion-set",
+        "principle-directed-amendment-assertions",
         "evidence-publication-guidance",
         "use-in-dpf"
       ]
@@ -2380,6 +2385,7 @@
         "712-proactivity-earned-autonomy-and-assurance-posture",
         "7121-autonomy-is-bounded-by-gate-coverage",
         "7122-admission-criteria-for-autonomous-operation",
+        "713-principle-directed-decision-contract",
         "8-tool-execution-and-action-gating",
         "81-tool-definitions",
         "82-execution-modes",
@@ -2414,6 +2420,7 @@
         "122-retention-rules",
         "123-context-truncation-and-summarization",
         "124-memory-validation",
+        "125-data-admission-and-processing-boundaries",
         "13-audit-evidence-and-non-repudiation",
         "131-minimum-audit-events",
         "132-evidence-fields",

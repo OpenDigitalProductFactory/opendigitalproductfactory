@@ -50,6 +50,24 @@ No document widens another document's authority:
 - a `TAK` permission is not evidence of job competence
 - a model card, system card, or generic benchmark is not a job qualification
 
+## Principle-directed work and MBSE composition
+
+The working-draft amendment under EP-B932453F makes the governing loop explicit:
+scoped principles and evidence inform a recommendation; TAK separately checks
+authority and mediates the effect; GAID binds receipts; JSI evaluates the operating
+composition and its continuing qualification. Hard constraints precede preference
+ranking. The normative owners are [TAK §7.13](trusted-ai-kernel.md#713-principle-directed-decision-contract),
+[GAID §10.2.1](GAID.md#1021-principle-directed-execution-binding) and
+[JSI §8.4](job-specific-intelligence.md#84-qualification-of-principle-directed-work).
+
+The informative [MBSE composition design](../superpowers/specs/2026-09-27-principle-directed-agent-composition-design.md)
+connects requirements, work shapes, decisions, controls and outcome evidence using
+existing modeling approaches. It is an implementation profile proposal, not a new
+general-purpose modeling language or a claim of full interchange conformance.
+These amendments and their proposed assertions still require independent review
+and execution evidence. Existing implementations do not become conformant by
+publishing the amended text.
+
 ## Adjacent DPF concepts
 
 | Concept | Relationship to the standards family |
