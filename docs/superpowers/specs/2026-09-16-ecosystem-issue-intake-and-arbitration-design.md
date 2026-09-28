@@ -465,6 +465,40 @@ Workroom/TaskRun and accountable coworker assignments. A purpose of `evolve-dpf`
 alone is insufficient to prove repository-controller ownership. An unbound
 installation reports `not commissioned` and names the missing owner binding.
 
+The concrete extension points are:
+
+| Concern | Canonical record and writer | Enforcement or read path |
+| --- | --- | --- |
+| Repository | `PlatformDevConfig.upstreamRemoteUrl`, existing platform-development configuration writer | `contributor-change-lanes/github-rest-reader.ts::resolveRepoIdentity`; commissioning requires an explicit URL, never the reader's fallback repository |
+| Installation purpose and peer | `PlatformConfig[installation.operating-intent.v1]`, `saveInstallationOperatingIntent` | `loadInstallationOperatingIntent` and the existing installation profile; a suggested or missing intent is insufficient |
+| Accountable controller | Existing `Workroom` with `repositoryFullName`, `issue-triage-watch@1.0.0`, owner and participant assignments | Governed workroom creation/assignment; the existing shape's portfolio-advisor classifies and deduplicates, backlog-owner decides admission |
+| Recurrence | Existing `ScheduledJob` for `ecosystem-inbound-issue-triage`; extend its typed metadata with the commissioned Workroom reference | `inbound-triage-runner.ts` resolves that reference before reading or ingesting; metadata points at authority and does not copy it |
+| Canonical work and source | `BacklogItem` and `BacklogItemActivity(kind=intake_origin)`, written through `ingestBacklogItem` | Extend origin reconciliation in `operate/backlog-ingest.ts`; do not add an issue queue or source table |
+| Public disposition | Existing issue bridge and its terminal/outbound retry owners | Project approved delivery evidence; never publish the intake body |
+
+Commissioning must refuse a missing, foreign, inactive or repository-mismatched
+Workroom reference. Before each run, the runner resolves the current workroom
+owner and its local write authority, validates the explicit repository identity,
+and acquires the existing scheduler's single-run protection. A development peer
+with read-only authority cannot pass this predicate even if its purpose is
+`evolve-dpf`. The scheduled-job record remains one per job identifier; the standing
+workroom supplies roles and evidence, not another polling timer. Revocation or
+owner reassignment invalidates the next run. The current purpose-only runner does
+not enforce this predicate yet; activation is blocked until this extension and
+the negative tests pass. This is local controller fencing, not a claim of a global
+distributed lock across untrusted independent installations.
+
+For existing installs, add the optional metadata reference first and treat absence
+as uncommissioned. Populate it only through owner-authorized commissioning after
+validating an existing workroom; never infer authority from a GitHub token. For
+origin backfill, read legacy `intake_origin` activities and the stored source URL,
+resolve a unique repository-qualified identity, and append an audited mapping to
+the same item. Dual-read legacy and qualified identities during transition;
+ambiguous collisions stop for reconciliation without creating work or changing
+terminal status. Switch writers to the qualified identity only after the backfill
+and repeated-poll checks pass. Retain old evidence for audit and rollback of the
+reader; no destructive migration or new model is required by this amendment.
+
 **Operating contract.** Separate intake detection from the weekly voting digest.
 The proposed internal target is hourly detection, acknowledgement and assignment
 within one business day, a disposition within two business days, and a weekly
