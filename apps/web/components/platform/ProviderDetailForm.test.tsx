@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { configureProvider, testProviderAuth, discoverModels, profileModels } from "@/lib/actions/ai-providers";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { ProviderWithCredential } from "@/lib/ai-provider-types";
@@ -73,6 +76,26 @@ const providerFixture: ProviderWithCredential = {
 };
 
 describe("ProviderDetailForm", () => {
+  afterEach(() => { cleanup(); vi.clearAllMocks(); });
+  it("recovers the ready button after a rejected save", async () => {
+    vi.mocked(configureProvider).mockRejectedValue(new Error("network failure"));
+    render(<ProviderDetailForm pw={providerFixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    fireEvent.click(screen.getByRole("button", { name: "Save & ready provider" }));
+    await waitFor(() => expect(screen.getByText(/Setup failed\. Retry\./)).toBeTruthy());
+    expect((screen.getByRole("button", { name: "Save & ready provider" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(testProviderAuth).not.toHaveBeenCalled();
+  });
+  it("reuses the catalog prepared by saving and surfaces a failed probe", async () => {
+    vi.mocked(configureProvider).mockResolvedValue({});
+    vi.mocked(testProviderAuth).mockResolvedValue({ ok: false, message: "HTTP 429" });
+    render(<ProviderDetailForm pw={providerFixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    fireEvent.click(screen.getByRole("button", { name: "Save & ready provider" }));
+    await waitFor(() => expect(screen.getByText(/HTTP 429/)).toBeTruthy());
+    expect(testProviderAuth).toHaveBeenCalledWith("zai", false);
+    expect(discoverModels).not.toHaveBeenCalled();
+    expect(profileModels).not.toHaveBeenCalled();
+    expect(screen.getByText("Failed")).toBeTruthy();
+  });
   it("presents one managed readiness action instead of separate setup chores", () => {
     const html = renderToStaticMarkup(
       <ProviderDetailForm
@@ -85,7 +108,7 @@ describe("ProviderDetailForm", () => {
     );
 
     expect(html).toContain("Technical readiness");
-    expect(html).toContain("Data-use eligibility is evaluated separately");
+    expect(html).toContain("Workload data-use rules apply.");
     expect(html).toContain("Save &amp; ready provider");
     expect(html).not.toContain(">Save<");
     expect(html).not.toContain("Test &amp; Discover");
