@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "decidedOption": "inline-failure",
+  "decisionInteractionId": "DI-85DDD03B6E44",
+  "scope": {
+    "files": ["apps/web/components/platform/ProviderDetailForm.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["inline-failure", "toast-only"]
+  }
+}
