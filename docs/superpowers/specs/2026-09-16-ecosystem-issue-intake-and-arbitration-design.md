@@ -450,6 +450,98 @@ link keep the relay/direct behaviour byte-for-byte.
 
 ## 6. Verification
 
+### 6.1 Customer-first controller commissioning (BI-FD40397B)
+
+Operator direction, 2026-09-27: the repository-controller installation owns the DPF GitHub project and
+platform issue follow-through. External submissions require earlier attention
+because they can affect customers, adoption, revenue and reputation. This
+extends intake and operations; it does not replace the demand scoring system.
+
+**Authority and installation boundary.** Commission on the repository-controller
+installation. The development peer may inspect realistic records but
+must not mutate peer-owned work or start a competing controller. Reuse the
+installation identity, repository configuration, scheduled-job catalogue,
+Workroom/TaskRun and accountable coworker assignments. A purpose of `evolve-dpf`
+alone is insufficient to prove repository-controller ownership. An unbound
+installation reports `not commissioned` and names the missing owner binding.
+
+**Operating contract.** Separate intake detection from the weekly voting digest.
+The proposed internal target is hourly detection, acknowledgement and assignment
+within one business day, a disposition within two business days, and a weekly
+update while unresolved. These targets require owner ratification before being
+published as customer commitments. Urgent service, safety or security impact
+uses the existing incident/escalation path. Routine external acknowledgement
+precedes internal suggestions; delivery order still considers severity, evidenced
+impact, age, dependencies and available capacity. Unknown origin remains visible
+for review. A bot author, repository member or relay credential does not establish
+the originating customer's relationship. Never infer revenue from an issue label.
+
+**Identity and reconciliation.** Repository-qualified origin identity is the
+join key. Resolve existing unqualified issue-number origins against their stored
+source URL before adding identities; ambiguous records remain in review. Repeated
+polls must not increment occurrence counts, duplicate deferred/retired work or
+reopen completed work. Reopening an issue records a new source event on the same
+canonical item for disposition. Follow pagination to completion and distinguish
+partial reads from an empty queue. Comments, edits, closure and reopen events
+must reconcile through the existing issue bridge and source registry. Preserve
+source evidence and canonical delivery state when retiring duplicate imports.
+
+**Action and communication.** Every unresolved actionable issue has an accountable
+owner, next action, due date, blocker and source link in the existing Work/Attention
+views. The controller selects work through the current demand scorer and capacity
+arbitration, then writes the disposition through the existing approved outbound
+path. Public content is a sanitized projection, never a private BI body. Failed
+publication remains visibly pending and retries idempotently. Do not treat a
+drafted reply, proposed work or imported record as a delivered customer outcome.
+
+**Human availability.** BI-8239CD30 owns approval lifecycle repair. Controller
+operations must not assume a person will answer within fifteen minutes. Pending
+decisions remain discoverable through overnight and weekend absence; short-lived
+execution authority is revalidated when the person acts. Changed inputs or policy
+require an explained refreshed review. Approval resumes work on the server, with
+the outcome visible in the same Inbox item. This dependency never authorizes
+automatic consent or bypassing existing gates.
+
+**UX acceptance.** Extend shared report and attention primitives. The first
+viewport shows external requests awaiting response, overdue actions, current
+owner, latest successful scan, next scan and incomplete coverage. Each row leads
+to the existing work record, with impact, blocker and next action before technical
+provenance. Empty, uncommissioned, blocked and failed states have distinct copy and
+one relevant next action. Keyboard, mobile and both themes use existing tokens.
+
+**Burndown.** Report opening balance, new, reopened, accepted, delivered and
+remaining work, plus oldest unanswered external request, overdue reviews, stale
+updates and cycle time. Duplicate retirement is reconciliation, not delivery.
+Standing reports and epic umbrellas close only against their own acceptance
+criteria. A seven-day observed baseline and a successful recurring controller run
+are required before claiming continuous operation.
+
+**Delivery sequence and existing ownership.**
+
+1. BI-FD40397B commissions controller identity, cadence, owner and operational
+   evidence on the controller; confirm the write-authorized owning connection first.
+2. EP-37AE9BA3 / BI-952F08BA / BI-CCD8D841 carry source identity and reconciliation;
+   validate repeat-poll, terminal-state and cross-repository collision cases there.
+3. BI-4C8A83AB carries arbitration integration and real capacity/disposition
+   acceptance. BI-AE9FCB4C carries terminal closure; EP-EAD82F94 owns durable
+   outbound retry. Reuse their delivery evidence before creating successor work.
+4. Reconcile the audited 25 overdue deferrals and seek acceptance for four
+   delivered candidates. Keep six umbrellas, four hardware invitations and the
+   standing security report open until their evidence warrants closure.
+5. Exercise a new external submission end to end: one canonical item, owner and
+   due action; repeat poll unchanged; edited comment and reopen reconciled;
+   capacity-backed disposition; failed read visibly incomplete; quiet no-op run.
+
+Reserve approximately twenty percent of implementation effort for consolidating
+origin reconciliation and public status projection into existing primitives.
+No second queue, GitHub client, ranking engine or dashboard is introduced.
+There is no schema migration in this design amendment. Any later schema change
+must include forward-only compatibility and backfill evidence before rollout.
+
+**Delivery status.** Design amendment awaiting independent review and operating
+target ratification. No controller has been commissioned by this document, no
+approval timeout has changed, and runtime acceptance remains outstanding.
+
 - Unit: quadratic cost function; budget exhaustion; tie-break ordering; dedupe across both transports; consent gate refusal paths.
 - Integration: a report on a non-coding install reaches an upstream BacklogItem with submitter provenance intact and no PII in the envelope (`assertNoExcludedEgress` already enforces this — assert it in the test).
 - Negative: no opt-in → nothing leaves. Budget exhausted → the vote is refused, not silently dropped. Untrusted link → no transport.
