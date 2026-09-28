@@ -92,7 +92,7 @@ Rollback disables new fixture issuance while retaining expiry enforcement, revoc
 
 - Decision: decomposed
 - Parent: `BI-9369DEB5`
-- Receipt: pending immutable plan coverage registration; implementation is not admitted until the live receipt and independent plan review are valid.
+- Receipt: `cmukmjjrr0w6h01s0zlb0vvdl`, recorded against plan commit `fab742053b31e0cd85ca30de640e2e6cd1006bdd`; both live BI mappings validated. Independent plan review remains required before implementation.
 - Dependencies: phase-1-mint-and-exchange -> none; phase-2-outcome-an-operator-sees -> phase-1-mint-and-exchange
 
 | Deliverable | Mapping |
