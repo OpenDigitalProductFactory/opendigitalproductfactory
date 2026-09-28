@@ -67,6 +67,16 @@ The order is fixed: **BI first, then plan.** [`dpf-file-backlog-item`](../dpf-fi
    - `decomposed`: every independent deliverable maps to a live new or existing BI;
    - `atomic`: no deliverable is independently shippable, with a substantive operator rationale explaining why one BI is correct.
 
+   The server selects the receipt contract from the current delivery shape and
+   sensitivity. Schema v3 binds break-fix, small and medium work to the actual
+   item and declared scope; it does not invent a spec-approval prerequisite.
+   Medium work must have acceptance criteria in the BI body and quote every
+   criterion verbatim in the immutable plan. For v3, all four reference lists
+   must be non-empty and each reference must appear verbatim in the plan.
+   Larger and unshaped work retain schema v2 scope-baseline traceability.
+   Never choose or downgrade the receipt schema in the client. A changed scope,
+   classification or acceptance criterion requires new coverage.
+
    Copy the returned receipt, parent BI, deliverable-to-BI mappings, and dependencies into a `## Backlog coverage` plan section. `mcp__dpf__check_plan_backlog_coverage` is the resumability check. If MCP is unavailable, the tool is missing, or the token lacks scope, stop and report that condition; Markdown checkboxes are not a fallback and planning/backlog completeness cannot be claimed.
 
    This is the decomposition-pack contract, not the initiative-readiness review contract. The minimum shape is:

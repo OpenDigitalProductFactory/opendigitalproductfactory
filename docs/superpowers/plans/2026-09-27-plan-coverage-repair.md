@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Repair delivery-shape consistency in plan coverage
 
 Backlog item: BI-MCP-EFF-852B5BBE. Workroom: WC-6ABDEF73.
@@ -48,8 +52,7 @@ Operator authorization: Mark explicitly replied "authorize the fix" after the
 scoped exception was presented in this thread. This records authorization to
 permit source implementation of this coverage-gate
 repair before obtaining the currently unreachable plan-coverage receipt, only
-for BI-MCP-EFF-852B5BBE in WC-6ABDEF73 on codex/plan-coverage-repair. Record the
-operator's explicit decision here before using the exception. This exception
+for BI-MCP-EFF-852B5BBE in WC-6ABDEF73 on codex/plan-coverage-repair. The operator's explicit decision is recorded here before using the exception. This exception
 authorizes only the missing pre-implementation plan-coverage receipt; it
 authorizes no runtime writes or other gate bypass.
 
@@ -67,3 +70,11 @@ work, sensitivity escalation, immutable artifact validation and changed scope.
 Rollback is a normal revert through the merge queue; retain recorded evidence
 and do not downgrade historical receipts. Until deployment and functional
 verification, neither this repair nor the duplicate-plugin fix is complete.
+
+## Source verification
+
+Focused planning and shared shape tests passed (74 tests). Production typecheck
+passed after extracting the scope projection into its owning helper. Module-size
+and style-drift guards passed. Repository preflight is being rerun after fixing
+module-size and plan-frontmatter findings. Runtime deployment and live MCP
+verification are unrun. No completion or merge-readiness claim is made here.
