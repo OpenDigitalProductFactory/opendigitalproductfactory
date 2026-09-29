@@ -23,6 +23,22 @@ model Portfolio {
   workQueues                    WorkQueue[]
   budgetPeriods                 PortfolioBudgetPeriod[]
   budgetReservations            BudgetReservation[]
+  /// The one human accountable for this portfolio: owns its automatic work
+  /// (scheduled builds, their rooms, the approvals they raise) and answers for
+  /// its budget. Nullable on purpose, like Organization.topAccountablePrincipalId:
+  /// unset reads as unset, never as a guessed owner (BI-67B27832). Set only by
+  /// setPortfolioOwner, which records who set it and why. Owner ROLES
+  /// (PORTFOLIO_OWNER_ROLES) stay the capability layer; this is accountability.
+  accountablePrincipalId        String?
+  accountablePrincipal          Principal?                     @relation("PortfolioAccountable", fields: [accountablePrincipalId], references: [id], onDelete: SetNull)
+  accountableSetById            String?
+  accountableSetBy              User?                          @relation("PortfolioAccountableSetBy", fields: [accountableSetById], references: [id], onDelete: SetNull)
+  accountableSetAt              DateTime?
+  accountableReason             String?
+
+  @@index([accountablePrincipalId])
+  // FK-leading: find the portfolios a person set, and detect orphans when a User is removed.
+  @@index([accountableSetById])
 }
 
 /// One portfolio's investment budget for one quarter, in points (BI-9EC60FE0,

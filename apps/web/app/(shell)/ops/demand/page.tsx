@@ -14,6 +14,10 @@ import { FounderSharedPortfolioPanel } from "@/components/ops/FounderSharedPortf
 import { getFounderSharedPortfolio } from "@/lib/federation/founder-portfolio";
 import { PortfolioTieOutPanel } from "@/components/ops/PortfolioTieOutPanel";
 import { loadPortfolioTieOutPanel } from "@/lib/portfolio/tie-out-panel-data";
+import { PortfolioOwnership } from "@/components/portfolio/PortfolioOwnership";
+import { loadPortfolioOwnership } from "@/lib/portfolio/accountable-owner-view";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +45,11 @@ export default async function DemandPage({
     loadPortfolioTieOutPanel(),
     getLocaleContext(),
   ]);
+  // Who answers for each portfolio sits beside its budget (BI-67B27832).
+  const [ownership, session] = await Promise.all([loadPortfolioOwnership(prisma as never), auth()]);
+  const canManageOwners = Boolean(
+    session?.user && can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "manage_platform"),
+  );
   const policy = resolveDemandPolicy(policyConfig);
   return (
     <div className="space-y-6">
@@ -77,6 +86,7 @@ export default async function DemandPage({
       />
       <MessagesProvider locale={locale.language} messages={{ portfolio: namespaceMessages(locale.language, "portfolio") }}>
         <PortfolioTieOutPanel {...JSON.parse(JSON.stringify(tieOutPanel))} formatLocale={locale.formatLocale} />
+        <PortfolioOwnership view={ownership} canManage={canManageOwners} />
       </MessagesProvider>
     </div>
   );

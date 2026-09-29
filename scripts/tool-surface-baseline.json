@@ -3,9 +3,9 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 420,
-      "reason": "BI-AFEAAA76: get_my_approval_status reads the exact requesting human and assistant approval outcome. Existing tools expose pending tasks or broad administrative records, but none safely distinguishes completed, failed, not-run and expired requests after the Inbox card disappears. A read-only status door removes repeated approvals and legacy-token workarounds without exposing arguments, granting room admission, or permitting execution.",
-      "recordedAt": "2026-09-27"
+      "value": 421,
+      "reason": "BI-67B27832: set_portfolio_owner records the one person accountable for a portfolio, who then owns its automatic work (scheduled builds, their rooms, their approvals). No existing tool writes accountability: set_portfolio_budget sets money, appoint_room_coordinator sets one room, and scheduled work otherwise fell to the oldest superuser (a bootstrap account nobody reads). It is an authority-consequence write in the existing portfolio-budget pack, not a new pack.",
+      "recordedAt": "2026-09-29"
     },
     "registry.packFiles": {
       "value": 103,
