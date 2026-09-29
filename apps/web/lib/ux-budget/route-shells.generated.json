@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 332,
+  "pageRouteCount": 333,
   "migratedCount": 1,
   "summary": {
     "cockpit": 17,
     "list": 6,
-    "detail": 259,
+    "detail": 260,
     "settings": 12,
     "form": 17,
     "public": 21,
@@ -863,6 +863,18 @@
     },
     {
       "routePath": "/customer/engagements",
+      "shell": "detail",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/footprint",
       "shell": "detail",
       "audience": "owner",
       "migrated": false,

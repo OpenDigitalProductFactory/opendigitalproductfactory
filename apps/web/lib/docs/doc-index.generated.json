@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 722,
+  "pageCount": 723,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1462,6 +1462,7 @@
         "shape-budgets-the-surface-only-shrinks",
         "lockfile-roots",
         "pruning-overrides",
+        "typecheck-program-budget-checked-lines-only-grow-with-the-diff",
         "axis-2-vulnerability-lifecycle-the-local-dependabot-equivalent",
         "the-remediation-ladder-when-a-floor-wont-work",
         "owning-a-fix-pnpm-patch-when-upstream-is-dead",
@@ -11939,6 +11940,19 @@
         "evidence-and-recovery-checklist",
         "market-intelligence-research-a-prospect-on-request",
         "related-guides"
+      ]
+    },
+    "docs/user-guide/customers/market-footprint.md": {
+      "publicHref": "/user-guide/customers/market-footprint/",
+      "portalHref": "/docs/customers/market-footprint",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "where-to-find-it",
+        "what-it-shows",
+        "customers-that-are-not-placed",
+        "where-the-numbers-come-from"
       ]
     },
     "docs/user-guide/customers/marketing.md": {
