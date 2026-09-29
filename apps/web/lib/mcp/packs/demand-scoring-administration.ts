@@ -2,7 +2,7 @@ import { prisma } from "@dpf/db";
 import { DEMAND_SCORE_FRAMEWORKS, INVESTMENT_BUCKET_VALUES } from "@/lib/explore/backlog";
 import type { DemandTransitionDb } from "@/lib/demand/transition-repository";
 import { fundingRiskTier } from "@/lib/demand/funding-risk";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import { queueProductManagementPlaybookRefreshForBacklogItem } from "@/lib/product-management/product-management-playbook-refresh";
 import { createAuthorizationDecisionLog } from "@/lib/governance-data";
 import {

@@ -16,7 +16,7 @@
 
 import { prisma } from "@dpf/db";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { CapabilityKey } from "@/lib/permissions";
 import { ROUTE_AGENT_MAP_ENTRIES } from "@/lib/tak/agent-routing";
 import { getToolMarketplaceReadiness } from "@/lib/actions/tool-marketplace-readiness";

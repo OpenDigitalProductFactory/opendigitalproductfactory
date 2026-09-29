@@ -8,7 +8,7 @@
 // agent-grants.ts TOOL_TO_GRANTS (the gating source); tool-registry.test asserts
 // no drift.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

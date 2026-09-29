@@ -13,7 +13,7 @@
 // with the rest of the switch; it is replicated here so the pack is
 // self-contained (the original stays inline for its other consumers).
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 /** Coerce an optional string param, trimming and nulling empties. */

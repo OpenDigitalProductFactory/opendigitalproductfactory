@@ -28,7 +28,7 @@ import { prisma } from "@dpf/db";
 import { inferProviderIdFromRouteContext } from "@/lib/ai-provider-route-context";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 
-import type { EndpointTestRunRequest, ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { EndpointTestRunRequest, ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

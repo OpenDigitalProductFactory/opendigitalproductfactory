@@ -1,4 +1,4 @@
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { resolveTerminalInitiativeRecovery } from "@/lib/backlog/initiative-readiness/terminal-recovery";
 import { governingPrinciplesFor, withGoverningRules } from "@/lib/kernel/governing-principles";
