@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 723,
+  "pageCount": 724,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -9418,6 +9418,23 @@
         "conditions",
         "addendum-2026-09-25-dpf-render-bi-3a0e5413-slice-s6",
         "addendum-2026-09-25-the-trusted-document-path-bi-bff142a1",
+        "sources"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-09-29-cloudflare-tunnel.md": {
+      "publicHref": "/security/tool-evaluations/2026-09-29-cloudflare-tunnel/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-cloudflare-tunnel-cloudflared-v202693",
+        "pre-exposure-defects-in-dpf-block-any-public-reachability",
+        "verified-facts-about-the-tool",
+        "cosai-security-findings",
+        "compliance",
+        "architecture-fit",
+        "integration-evidence",
+        "conditions",
         "sources"
       ]
     },
