@@ -1,5 +1,5 @@
 ---
-status: approved
+status: active
 ---
 
 # Open-source platform work is public by default: design
