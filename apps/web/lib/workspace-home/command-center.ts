@@ -186,10 +186,10 @@ const SIX_C_DESCRIPTIONS: Record<SixCKey, string> = {
 const SIX_C_HREFS: Record<SixCKey, string> = {
   context: "/coworker-decisions",
   connections: "/platform/tools/integrations",
-  capabilities: "/platform/ai",
+  capabilities: "/platform/ai/overview",
   cadence: "/workspace/my-queue",
   confidence: "/platform/ai/operations-map",
-  containment: "/platform/ai/authority",
+  containment: "/platform/ai/overview",
 };
 
 const SEVERITY_RANK: Record<CommandSeverity, number> = {
@@ -498,7 +498,7 @@ function buildCommandStrip(input: WorkspaceCommandCenterInput): CommandCenterIte
       label: "AI workforce containment",
       description: `${input.agentsWithBrokenProviders} coworker${input.agentsWithBrokenProviders !== 1 ? "s have" : " has"} an inactive pinned provider`,
       severity: "critical",
-      href: "/platform/ai",
+      href: "/platform/ai/overview",
     });
   }
 
@@ -528,7 +528,7 @@ function buildCommandStrip(input: WorkspaceCommandCenterInput): CommandCenterIte
       label: "Containment review",
       description: `${input.pendingActionProposalCount} proposed action${input.pendingActionProposalCount !== 1 ? "s are" : " is"} waiting for a human decision`,
       severity: "warning",
-      href: "/platform/ai/authority",
+      href: "/platform/ai/overview",
     });
   }
 
@@ -560,7 +560,7 @@ function buildCommandStrip(input: WorkspaceCommandCenterInput): CommandCenterIte
       label: "Improvement queue",
       description: `${metrics.actionableImprovementCount} improvement proposal${metrics.actionableImprovementCount !== 1 ? "s need" : " needs"} review`,
       severity: "info",
-      href: "/ops/improvements",
+      href: "/ops?origin=improvement",
     });
   }
 
@@ -572,7 +572,7 @@ function buildCommandStrip(input: WorkspaceCommandCenterInput): CommandCenterIte
 
 function buildSnapshot(metrics: WorkspaceMetrics): SnapshotItem[] {
   return [
-    { id: "ai", label: "AI coworkers", value: metrics.agentCount, href: "/platform/ai" },
+    { id: "ai", label: "AI coworkers", value: metrics.agentCount, href: "/platform/ai/overview" },
     {
       id: "work",
       label: "Open work",
@@ -601,13 +601,13 @@ function aiContainmentGrade(input: WorkspaceCommandCenterInput): CellGrade {
   if (state === "blocked") {
     return blocked("Coworkers can act but an approval path or route scope is missing", {
       label: "Configure authority",
-      href: "/platform/ai/authority",
+      href: "/platform/ai/overview",
     });
   }
   if (state === "attention") {
     return attention("Route scope is unconfirmed for action-capable coworkers", {
       label: "Review authority",
-      href: "/platform/ai/authority",
+      href: "/platform/ai/overview",
     });
   }
   return good(
@@ -645,12 +645,12 @@ function buildReadinessMatrix(input: WorkspaceCommandCenterInput): BusinessDomai
           : input.agentsWithBrokenProviders > 0
             ? attention(`${count(input.agentsWithBrokenProviders, "coworker")} pinned to an inactive provider`, {
                 label: "Review provider pins",
-                href: "/platform/ai",
+                href: "/platform/ai/overview",
               })
             : good(`${count(m.activeProviderCount, "active provider")}`),
       capabilities:
         m.agentCount === 0
-          ? blocked("No AI coworkers configured", { label: "Add an AI coworker", href: "/platform/ai" })
+          ? blocked("No AI coworkers configured", { label: "Add an AI coworker", href: "/platform/ai/overview" })
           : good(`${count(m.agentCount, "AI coworker")} able to act`),
       cadence:
         input.overdueScheduledTaskCount > 0
@@ -673,7 +673,7 @@ function buildReadinessMatrix(input: WorkspaceCommandCenterInput): BusinessDomai
           : input.lowConfidenceAssessmentCount > 0
             ? attention(`${count(input.lowConfidenceAssessmentCount, "low-confidence self-assessment")}`, {
                 label: "Review coworker capability",
-                href: "/platform/ai",
+                href: "/platform/ai/overview",
               })
             : input.recentFailedToolExecutionCount > 0
               ? attention(`${count(input.recentFailedToolExecutionCount, "failed tool execution")} in the last 7 days`, {
@@ -843,7 +843,7 @@ function buildReadinessMatrix(input: WorkspaceCommandCenterInput): BusinessDomai
             }),
       capabilities:
         m.agentCount === 0 && m.activeEmployeeCount === 0
-          ? blocked("No coworkers or staff to build", { label: "Add a coworker", href: "/platform/ai" })
+          ? blocked("No coworkers or staff to build", { label: "Add a coworker", href: "/platform/ai/overview" })
           : good(`${count(m.agentCount, "coworker")}, ${count(m.activeEmployeeCount, "active staff member")}`),
       cadence:
         m.inProgressBacklogCount > 0
@@ -908,7 +908,7 @@ function buildWorkInMotion(input: WorkspaceCommandCenterInput): WorkInMotionItem
       label: `${input.pendingActionProposalCount} proposed action${input.pendingActionProposalCount !== 1 ? "s" : ""} waiting`,
       actor: "Human approver",
       status: "approval-required",
-      href: "/platform/ai/authority",
+      href: "/platform/ai/overview",
     });
   }
 
@@ -945,7 +945,7 @@ function buildAttentionItems(input: WorkspaceCommandCenterInput): WorkspaceAtten
       id: "improvements",
       label: "Improvements",
       description: `${metrics.actionableImprovementCount} improvement proposal${metrics.actionableImprovementCount !== 1 ? "s" : ""} need review`,
-      href: "/ops/improvements",
+      href: "/ops?origin=improvement",
     });
   }
 
@@ -954,7 +954,7 @@ function buildAttentionItems(input: WorkspaceCommandCenterInput): WorkspaceAtten
       id: "broken-providers",
       label: "AI Workforce",
       description: `${input.agentsWithBrokenProviders} agent${input.agentsWithBrokenProviders !== 1 ? "s have" : " has"} an inactive provider - may not work as expected`,
-      href: "/platform/ai",
+      href: "/platform/ai/overview",
     });
   }
 
@@ -972,7 +972,7 @@ function buildAttentionItems(input: WorkspaceCommandCenterInput): WorkspaceAtten
       id: "approval-proposals",
       label: "Approvals",
       description: `${input.pendingActionProposalCount} AI coworker proposal${input.pendingActionProposalCount !== 1 ? "s need" : " needs"} a human decision`,
-      href: "/platform/ai/authority",
+      href: "/platform/ai/overview",
     });
   }
 

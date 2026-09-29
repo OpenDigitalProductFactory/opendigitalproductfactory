@@ -632,6 +632,9 @@
     "apps/web/lib/build/ideate-build-resolution.ts": [
       "docs/dogfood/2026-05-23-dale-hvac-build-studio.md"
     ],
+    "apps/web/lib/build/investment-admission.ts": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "apps/web/lib/build/progress-visibility.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -679,6 +682,9 @@
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
+    "apps/web/lib/datetime.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "apps/web/lib/decision-perspective/build-studio-gate.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -722,6 +728,9 @@
     ],
     "apps/web/lib/docs/doc-link-resolver.mjs": [
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "apps/web/lib/documents/document-engine-boot.test.ts": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "apps/web/lib/documents/document-previews.ts": [
       "docs/architecture/document-generation-facility.md"
@@ -869,6 +878,16 @@
     "apps/web/lib/integrations/connectors/index.ts": [
       "docs/architecture/unified-connector-kernel.md"
     ],
+    "apps/web/lib/jobs/index.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/jobs/inngest-adapter.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/kernel/governing-principles.ts": [
+      "docs/architecture/initiative-readiness-runbook.md",
+      "docs/founder-kernel/AUTHORING.md"
+    ],
     "apps/web/lib/kernel/runtime-gate.ts": [
       "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md"
     ],
@@ -992,6 +1011,7 @@
       "docs/architecture/localization-runbook.md"
     ],
     "apps/web/lib/org-locale/org-locale.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md",
       "docs/architecture/localization-runbook.md"
     ],
     "apps/web/lib/performance/business-analysis-watch-run.ts": [
@@ -1061,9 +1081,6 @@
     ],
     "apps/web/lib/queue/functions/workroom-drive.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
-    ],
-    "apps/web/lib/queue/inngest-client.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/queue/notification-adapter.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1135,6 +1152,9 @@
     ],
     "apps/web/lib/security/safe-log.ts": [
       "docs/security/codeql-advanced-setup.md"
+    ],
+    "apps/web/lib/self-upgrade/doctools-release-image.boot.test.ts": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "apps/web/lib/self-upgrade/doctools-release-image.test.ts": [
       "docs/install/platform-support-watchlist.md"
@@ -1662,6 +1682,9 @@
       "docs/architecture/backlog-and-planning-runbook.md",
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "packages/db/src/wiki-frontmatter.ts": [
+      "docs/founder-kernel/AUTHORING.md"
+    ],
     "packages/db/src/wiki-taxonomy.ts": [
       "docs/founder-kernel/AUTHORING.md",
       "docs/founder-kernel/SCHEMA.md"
@@ -1674,6 +1697,9 @@
     ],
     "packages/dpf-skill-pack/hooks/design-grounding-precheck.mjs": [
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "packages/dpf-skill-pack/hooks/operating-contract.generated.mjs": [
+      "docs/architecture/skill-surfaces-runbook.md"
     ],
     "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs": [
       "docs/architecture/agent-client-capability-parity.md"
@@ -1696,14 +1722,23 @@
     "packages/dpf-skill-pack/hooks/worktree-create.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
+    "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs": [
+      "docs/architecture/skill-surfaces-runbook.md"
+    ],
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.ps1": [
       "docs/operations/install.md"
     ],
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.sh": [
       "docs/operations/install.md"
     ],
+    "packages/i18n/src/catalog.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
     "packages/i18n/src/locales.ts": [
       "docs/architecture/localization-runbook.md"
+    ],
+    "packages/integration-shared/src/canonical-json.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "packages/integration-shared/src/credential-crypto.ts": [
       "docs/architecture/2026-06-22-platform-adequacy-architecture-review.md"
@@ -1883,11 +1918,26 @@
     "scripts/check-no-dialog-in-transition.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md"
     ],
+    "scripts/check-no-direct-job-engine-import.mjs": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
     "scripts/check-no-governed-surface-without-mcp-tool.mjs": [
       "docs/architecture/orientation.md"
     ],
     "scripts/check-no-hand-rolled-loading.mjs": [
       "docs/platform-usability-standards.md"
+    ],
+    "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "scripts/check-no-local-canonical-json.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "scripts/check-no-local-dpf-type-redeclaration.mjs": [
+      "docs/architecture/package-boundaries.md"
+    ],
+    "scripts/check-no-local-formatters.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/check-no-local-isrecord.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -1919,6 +1969,9 @@
     ],
     "scripts/check-no-unattributable-deferral.mjs": [
       "docs/architecture/backlog-and-planning-runbook.md"
+    ],
+    "scripts/check-no-unlocalized-ui.mjs": [
+      "docs/architecture/localization-runbook.md"
     ],
     "scripts/check-no-unreachable-room-links.mjs": [
       "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md",
@@ -2060,6 +2113,9 @@
     "scripts/lib/bootstrap-worktree-deps.mjs": [
       "docs/architecture/build-gate-runbook.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "scripts/lib/canonical-json.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/lib/ci-policy-guards.mjs": [
       "docs/architecture/context-engineering-standards.md",
@@ -2208,6 +2264,9 @@
     "scripts/promote.sh": [
       "docs/architecture/build-gate-runbook.md",
       "docs/runbooks/bet5-windows-self-upgrade.md"
+    ],
+    "scripts/publish-host-gpu.ps1": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "scripts/regen-lockfile.mjs": [
       "docs/architecture/agent-skill-index.md",
@@ -2515,19 +2574,21 @@
       "apps/web/lib/decision-perspective/build-studio-gate.ts",
       "apps/web/lib/decision-perspective/planned-file-paths.ts",
       "apps/web/lib/explore/feature-build-types.ts",
+      "apps/web/lib/jobs/index.ts",
+      "apps/web/lib/jobs/inngest-adapter.ts",
       "apps/web/lib/marketing/scheduler.ts",
       "apps/web/lib/mcp/packs/surface-pack.ts",
       "apps/web/lib/queue/functions/deliberation-run.ts",
       "apps/web/lib/queue/functions/index.ts",
       "apps/web/lib/queue/functions/quiescence-run.ts",
       "apps/web/lib/queue/functions/taskrun-watchdog.ts",
-      "apps/web/lib/queue/inngest-client.ts",
       "apps/web/lib/queue/notification-adapter.ts",
       "apps/web/lib/tak/agent-grants.ts",
       "apps/web/lib/tak/autonomous-work-run.ts",
       "docker-compose.yml",
       "packages/db/prisma/schema/ai-coworker.prisma",
-      "packages/db/prisma/schema/build-delivery.prisma"
+      "packages/db/prisma/schema/build-delivery.prisma",
+      "scripts/check-no-direct-job-engine-import.mjs"
     ],
     "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md": [
       "apps/web/lib/ea/ai-routing-architecture-extract.ts",
@@ -2598,6 +2659,7 @@
       "scripts/measure-capability-completeness.mjs"
     ],
     "docs/architecture/agent-client-capability-parity.md": [
+      "apps/web/lib/build/investment-admission.ts",
       "apps/web/lib/build/unified-wip-query.ts",
       "apps/web/lib/build/unified-wip.ts",
       "apps/web/lib/deliberation/external-review-activation.ts",
@@ -2770,10 +2832,12 @@
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
       "apps/web/lib/compliance/format-retention-minimum.ts",
+      "apps/web/lib/datetime.ts",
       "apps/web/lib/ea/table-growth.ts",
       "apps/web/lib/evidence/bounded-evidence-output.ts",
       "apps/web/lib/operate/retention/declarations.ts",
       "apps/web/lib/operate/retention/obligation-floors.ts",
+      "apps/web/lib/org-locale/org-locale.ts",
       "apps/web/lib/routes.ts",
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
@@ -2784,12 +2848,16 @@
       "packages/db/scripts/apply-model-metadata-comments.ts",
       "packages/db/src/model-metadata.ts",
       "packages/db/src/seed-retention-floor-obligations.ts",
+      "packages/integration-shared/src/canonical-json.ts",
       "packages/validators/src/guards.ts",
       "scripts/check-model-metadata-tags.mjs",
+      "scripts/check-no-local-canonical-json.mjs",
+      "scripts/check-no-local-formatters.mjs",
       "scripts/check-no-local-isrecord.mjs",
       "scripts/check-no-local-slugify.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",
       "scripts/check-no-new-notactive-conventions.mjs",
+      "scripts/lib/canonical-json.mjs",
       "scripts/lib/is-record.mjs",
       "scripts/portal-migrate-boot.sh"
     ],
@@ -2899,6 +2967,7 @@
       "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
       "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts",
       "apps/web/lib/backlog/initiative-readiness/types.ts",
+      "apps/web/lib/kernel/governing-principles.ts",
       "apps/web/lib/mcp/external-coworker-task-adapter.ts",
       "apps/web/lib/mcp/packs/coworker-pack.ts",
       "apps/web/lib/tak/initiative-readiness-tool-grants.ts",
@@ -2910,7 +2979,9 @@
       "apps/web/lib/i18n/locale-context.server.ts",
       "apps/web/lib/org-locale/locale-context.ts",
       "apps/web/lib/org-locale/org-locale.ts",
-      "packages/i18n/src/locales.ts"
+      "packages/i18n/src/catalog.ts",
+      "packages/i18n/src/locales.ts",
+      "scripts/check-no-unlocalized-ui.mjs"
     ],
     "docs/architecture/mcp-tool-authorization-runbook.md": [
       "apps/web/app/api/mcp/v1/route.ts",
@@ -2924,6 +2995,7 @@
       "apps/web/lib/work-capsules/scope-claim-lease.ts",
       "packages/integration-shared/src/mcp-client-credential-policy.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
+      "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs",
       "scripts/gate-worktree.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/mcp-client.mjs",
@@ -2967,6 +3039,7 @@
       "apps/web/lib/contracts/entity-contract-drift.ts",
       "apps/web/lib/contracts/package-boundaries.test.ts",
       "packages/types/src/entities.ts",
+      "scripts/check-no-local-dpf-type-redeclaration.mjs",
       "scripts/check-package-boundaries.mjs"
     ],
     "docs/architecture/platform-overview.md": [
@@ -2999,7 +3072,9 @@
       "apps/web/lib/skills/skill-relevance.ts",
       "packages/db/src/mandated-skills.ts",
       "packages/db/src/seed-skills.ts",
-      "packages/dpf-skill-pack/hooks/process-spine-health-check.mjs"
+      "packages/dpf-skill-pack/hooks/operating-contract.generated.mjs",
+      "packages/dpf-skill-pack/hooks/process-spine-health-check.mjs",
+      "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs"
     ],
     "docs/architecture/tax-period-component-migration.md": [
       "packages/db/scripts/schema-regression-guard.mjs"
@@ -3091,7 +3166,9 @@
     "docs/founder-kernel/AUTHORING.md": [
       "apps/web/lib/decision/golden-decisions.baseline.json",
       "apps/web/lib/decision/golden-decisions.test.ts",
+      "apps/web/lib/kernel/governing-principles.ts",
       "packages/db/src/seed-wiki-kernel.ts",
+      "packages/db/src/wiki-frontmatter.ts",
       "packages/db/src/wiki-taxonomy.ts",
       "scripts/build-kernel-embeddings.ts",
       "scripts/check-authoring-cost-dimensions.mjs"
@@ -3167,8 +3244,10 @@
     "docs/install/platform-support-watchlist.md": [
       "apps/web/components/monitoring/health-summary.ts",
       "apps/web/components/monitoring/prometheus-config.test.ts",
+      "apps/web/lib/documents/document-engine-boot.test.ts",
       "apps/web/lib/govern/auth-redirect.ts",
       "apps/web/lib/nonprod/gate-client-revision.ts",
+      "apps/web/lib/self-upgrade/doctools-release-image.boot.test.ts",
       "apps/web/lib/self-upgrade/doctools-release-image.test.ts",
       "apps/web/lib/self-upgrade/doctools-source-lineage.test.ts",
       "apps/web/lib/self-upgrade/preflight.test.ts",
@@ -3184,6 +3263,7 @@
       "scripts/lib/dockerfile-portal-build.test.mjs",
       "scripts/lib/entry-module.mjs",
       "scripts/lib/host-available-memory.mjs",
+      "scripts/publish-host-gpu.ps1",
       "tests/release/pregate-node-gate-contract.test.mjs"
     ],
     "docs/install/scratch-install-rehearsal.md": [

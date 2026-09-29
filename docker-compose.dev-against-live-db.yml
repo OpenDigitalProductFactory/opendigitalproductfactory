@@ -82,8 +82,6 @@ services:
     depends_on: !reset
       postgres:
         condition: service_healthy
-      # BET-5 (BI-A1E864A5): neo4j / qdrant deps and env removed — services
-      # retired (Postgres pgvector + graph mirror).
 
   # Swap Prometheus to the contributor overlay so the Health tab gains a
   # "Contributor Preview" tile while dev-portal is running. Customer installs

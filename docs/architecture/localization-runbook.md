@@ -18,6 +18,48 @@ How DPF decides a viewer's language, text direction, time zone and currency, and
 
 Read the context with `await getLocaleContext()` in server code. It never throws. Never read `Accept-Language`, `OrgSettings.locale` or a `"en-US"` literal directly.
 
+## Authoring UI copy
+
+User-facing copy lives in the message catalog, not in JSX. Two rules:
+
+- **Catalogs.** They sit at `packages/i18n/src/messages/<locale>/<namespace>.json`, and **en-US is the source of truth**. Register a new namespace in `SOURCE_CATALOG` (`packages/i18n/src/catalog.ts`).
+- **Keys.** They are typed from the en-US JSON, so an unknown key fails typecheck.
+
+Use the translator that matches where the code runs:
+
+| Where | How |
+|---|---|
+| Server components and actions | `const t = await getT("errors"); t("notFound.storefront.heading")` |
+| Client components | `const t = useT("setup"); t("steps.branding")` |
+
+A client component's namespace must be provided by a `MessagesProvider` above it. The root layout provides `errors` and `setup`, and a page can add a provider for its own subtree.
+
+**Message syntax** is a subset of Unicode MessageFormat 2.0:
+
+{% raw %}
+```text
+Hello, {$name}!
+{$amount :currency currency=$code}
+{$when :date}
+.input {$count :number}
+.match $count
+0 {{No items}}
+one {{One item}}
+* {{{$count} items}}
+```
+{% endraw %}
+
+The formatter handles `:number`, `:integer`, `:currency`, `:datetime`, `:date`, `:time` and `:string`, with `.input` / `.match` on exact, plural-category and `*` keys.
+
+Markup, `.local` and unknown functions are rejected when a catalog loads. A missing key falls back **per key**: regional, then macro-language, then en-US (`es-MX` → `es-419` → `es` → `en-US`). A key missing everywhere renders as the key itself, never as an empty string.
+
+**Pseudo-locales** are generated from en-US, never authored:
+
+| Locale | What it does | What it catches |
+|---|---|---|
+| `en-XA` | Accents the text, lengthens it by 35% and brackets it | Copy that escaped the catalog (it stays plain English) and truncation |
+| `ar-XB` | Mirrors the text and runs the page right-to-left | Right-to-left layout problems |
+
 ## How a viewer's language is chosen
 
 The first match wins:
@@ -49,3 +91,18 @@ Until L0.6 lands, layouts that use physical left/right styling will not mirror. 
 ## Adding a locale
 
 Add a canonical BCP-47 tag to `LOCALES` in `packages/i18n/src/locales.ts` with status `planned`. The registry tests check canonical form and script-derived direction. Promote it only through the L3.1 activation gate.
+
+## The localization guard
+
+`scripts/check-no-unlocalized-ui.mjs` (BI-4690CB37) is a ratchet in the repo guard loop (`pnpm check:guards`). It counts four categories per file. A new file must count zero, and an existing file's count may not grow.
+
+| Category | What it catches | Use instead |
+|---|---|---|
+| `jsx-copy` | Multi-word English JSX text; capitalized `placeholder`, `aria-label`, `title` and `alt` values | The message catalog (L0.2) |
+| `locale-literal` | `"en-GB"` / `"en-US"`, and `toLocale*String("xx")` with a literal locale | `getLocaleContext()` and the shared formatters |
+| `physical-direction` | `ml/mr/pl/pr`, `left/right`, `border-l/r`, `rounded-l/r`, `text-left/right`, plus the equivalent inline styles | Logical classes: `ms/me`, `ps/pe`, `start/end`, `border-s/e`, `rounded-s/e`, `text-start/end` |
+| `money-prefix` | `` `$${…}` `` templates and a literal `>$<`. SQL placeholders and spreadsheet absolute references are ignored. | `formatMoney` |
+
+When you migrate a surface and its count drops, run `node scripts/check-no-unlocalized-ui.mjs --update` to retighten the baseline (`scripts/unlocalized-ui-baseline.txt`).
+
+The counts are a regex approximation. That is by design: the ratchet only has to be monotonic.

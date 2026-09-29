@@ -256,23 +256,42 @@ reserve and shortfall). The waiting line names the shortfall and says that no
 session action changes it: page cache already counts as available, so dropping
 caches cannot help, and `sync` wedges the VM (BI-903FB5F9).
 
-**Not decided here: admit on need.** The reserve protects only the Docker build
-stage. Typecheck and vitest run on the host first, for several minutes, while
-the reserve sits idle. Two directions go to the founder for scoping, and
-neither is built in this change:
+**Decided 2026-09-26: the merge queue owns the production build
+(BI-3A14308C).** The reserve protects only the Docker build stage, which the
+local gate reached only after several minutes of typecheck and vitest while the
+reserve sat idle. Four options went through `principle_decide` (WWMD,
+DI-ED547297DC9F):
+- cloud owns the heavy build: 11.72;
+- keep the measured reserve and recalibrate: 9.21;
+- reuse the build when untouched: 8.85;
+- late builder reservation: 8.64.
 
-1. *Late builder reservation.* Admit on the host-stage reserve alone. Take the
-   builder reserve as a second, queued reservation when the gate reaches the
-   build stage. That lets typecheck and vitest start on a smaller VM and turns a
-   host that cannot fit the build into a clean refusal at the stage boundary,
-   not a queue that never moves. It overlaps BI-34955E1F: the reservation has
-   to be held for the stage's lifetime, not computed once.
-2. *Reuse or skip the production image build.* The stage-receipt reuse already
-   covers an exact-tree re-run. A wider reuse key covering the Dockerfile
-   `build` stage inputs (apps/web, packages, config, the lockfile) would skip
-   the build for changes outside them. That is a product decision about what
-   the local gate must prove, given that the cloud merge queue runs the full
-   build anyway (AGENTS.md §4, "the heavy build runs once, in the cloud").
+The verdict was proceed, confidence high, margin 2.5, which applies AGENTS.md
+§4: "the heavy build runs once, in the cloud". The merge queue's required
+`pnpm --filter web build` job (`.github/workflows/ci.yml`, `merge_group`) is
+already the binding production-build evidence.
+
+- The local plan's default build strategy is `merge-queue`
+  (`scripts/lib/local-integration-ci.mjs`), so it ends at vitest and builds no
+  image. `DPF_LOCAL_CI_BUILD_STRATEGY=local` (or `docker-build` / `host-next`)
+  opts one run back into a local build, for example to measure the builder or
+  to reproduce a Dockerfile-only failure.
+- The strategy is part of the toolchain fingerprint, so a delegated run never
+  reuses a verdict from a run that built, or the reverse.
+- The claim declares `productionBuild: "delegated"`. The pool then waives only
+  the builder reserve (`reserveBuilderHeadroom: false`) and still applies the
+  host-stage reserve and every other rollback. An older portal ignores the
+  field and keeps reserving, so the client can ship first.
+- The gate record says `evidence.productionBuild: { owner: "merge-queue",
+  status: "delegated" }`, and `builderMemory` reads `unmeasured` /
+  `production-build-delegated-to-merge-queue`. A build that did not run is
+  never reported as passed.
+- What a delegated gate no longer catches locally: a failure that only the
+  Docker image build shows. The Dockerfile build-context guard
+  (`dockerfile-build-context.guard.test.ts`) still runs, and the merge queue
+  and the post-merge image publish still build the image.
+- Builder calibration (BI-903FB5F9, #5755) keeps learning from the runs that
+  still build locally.
 
 ## Dependency readiness for the bounded build
 

@@ -99,7 +99,7 @@ describe("MaterialBacklinksPanel", () => {
     expect(html).toContain("Obsidian backlinks");
     expect(html).toContain('href="https://example.test/backlinks"');
     expect(html).toContain("How should decisions show material?");
-    expect(html).toContain('href="/platform/ai/decisions/DI-1"');
+    expect(html).toContain('href="/coworker-decisions/decisions/DI-1"');
   });
 
   it("renders a stable empty panel when no governed backlinks exist", () => {

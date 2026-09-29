@@ -66,7 +66,7 @@ export function buildSandboxCreateArgs(
   },
 ): string[] {
   // No --network=none: sandbox needs npm registry access for pnpm install.
-  // Internal services (postgres, neo4j) are protected by not mounting .env
+  // Internal services (postgres) are protected by not mounting .env
   // or any credentials. For production, use a custom network with port filtering.
   const args: string[] = [
     "create",
@@ -158,8 +158,23 @@ export function buildSandboxListReleasableFilesCommand(
   // forked. Passing `baseRef` (typically the client branch tip) compares the
   // post-stage index against the merge base so committed + uncommitted work
   // both appear.
-  const base = baseRef ? ` ${quotePosixArg(baseRef)}` : "";
-  return `cd ${workspace} && git diff --cached${base} --name-only -- . ${joinQuotedArgs(SANDBOX_DIFF_EXCLUDES)}`;
+  return `cd ${workspace} && git diff --cached${diffBase(baseRef)} --name-only -- . ${joinQuotedArgs(SANDBOX_DIFF_EXCLUDES)}`;
+}
+
+/**
+ * The base a build's diff is taken against: the MERGE BASE of HEAD and
+ * `baseRef`, never `baseRef`'s tip. `git diff --cached <ref>` compares the
+ * index with the ref's current tree, so once the client branch moves on (a
+ * sandbox baseline refresh after an upgrade), every change the branch gained
+ * appears in the build's diff, reversed. FB-D671B016 (2026-09-26): a 10-file
+ * change captured as a 1.6 MB diff over hundreds of files, too large for any
+ * reviewer and full of unrelated contact details, so the semantic review
+ * could not route. Falls back to the tip only when no merge base exists.
+ */
+function diffBase(baseRef?: string): string {
+  if (!baseRef) return "";
+  const ref = quotePosixArg(baseRef);
+  return ` "$(git merge-base HEAD ${ref} 2>/dev/null || echo ${ref})"`;
 }
 
 export function buildSandboxDiffForFilesCommand(
@@ -167,8 +182,7 @@ export function buildSandboxDiffForFilesCommand(
   workspace: string = SANDBOX_WORKSPACE,
   baseRef?: string,
 ): string {
-  const base = baseRef ? ` ${quotePosixArg(baseRef)}` : "";
-  return `cd ${workspace} && git diff --cached${base} -- ${files.map((file) => quotePosixArg(file)).join(" ")}`;
+  return `cd ${workspace} && git diff --cached${diffBase(baseRef)} -- ${files.map((file) => quotePosixArg(file)).join(" ")}`;
 }
 
 export function buildSandboxNextDevReadinessCommand(workspace: string = SANDBOX_WORKSPACE): string {
@@ -603,16 +617,12 @@ export async function destroyFullSandboxStack(
   state: {
     containerId?: string;
     dbContainerId?: string;
-    neo4jContainerId?: string;
-    qdrantContainerId?: string;
     networkId?: string;
   },
 ): Promise<void> {
   const ids = [
     state.containerId,
     state.dbContainerId,
-    state.neo4jContainerId,
-    state.qdrantContainerId,
   ].filter(Boolean);
   await Promise.all(ids.map((id) => exec(`docker rm -f ${id}`).catch(() => {})));
   if (state.networkId) await destroySandboxNetwork(state.networkId);

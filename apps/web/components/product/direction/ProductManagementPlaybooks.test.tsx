@@ -113,7 +113,7 @@ describe("ProductManagementPlaybooks", () => {
     expect(html).toContain("Preview required");
     expect(html).toContain("Evidence source failed.");
     expect(html).toContain(
-      'href="/platform/ai/history?taskRunId=TR-PM-1"',
+      'href="/platform/audit/ledger?taskRunId=TR-PM-1"',
     );
   });
 });

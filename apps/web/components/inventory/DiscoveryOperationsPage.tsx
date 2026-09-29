@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PORTFOLIO_COLOURS } from "@/lib/portfolio";
 import { getDiscoveryOperationsViewModel } from "@/lib/discovery-operations-view-model";
 import { auth } from "@/lib/auth";
+import { getT } from "@/lib/i18n/t.server";
 import { can } from "@/lib/permissions";
 import { DataEnrichmentHelpNote } from "@/components/inventory/DataEnrichmentHelpNote";
 import { DiscoveryRunSummary } from "@/components/inventory/DiscoveryRunSummary";
@@ -37,6 +38,7 @@ type DiscoveryOperationsPageProps = {
 export async function DiscoveryOperationsPage({
   isLegacyAlias = false,
 }: DiscoveryOperationsPageProps) {
+  const t = await getT("shell");
   const session = await auth();
   const includeConnections = !!session?.user && can({
     platformRole: session.user.platformRole,
@@ -87,6 +89,12 @@ export async function DiscoveryOperationsPage({
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">Estate Discovery</h1>
           <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
             Treat discovery as evidence. Use it to understand purpose, ownership, and dependencies across the product estate.
+          </p>
+          {/* EP-2FB6C0CC (BI-DD763B93): discovery's reference and audit pages, linked from their home. */}
+          <p className="mt-1 text-sm text-[var(--dpf-muted)]">
+            <Link href="/platform/device-catalog" className="text-[var(--dpf-accent)] hover:underline">{t("discovery.deviceCatalog")}</Link>
+            {" · "}
+            <Link href="/platform/tools/discovery/promotion-audit" className="text-[var(--dpf-accent)] hover:underline">{t("discovery.promotionAudit")}</Link>
           </p>
         </div>
 

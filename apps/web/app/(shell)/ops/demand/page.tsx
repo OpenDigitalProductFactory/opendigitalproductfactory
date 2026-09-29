@@ -1,4 +1,7 @@
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { getDemandItems } from "@/lib/demand/demand-data";
 import { resolveDemandPolicy } from "@/lib/demand/policy";
 import { DemandBoard } from "@/components/ops/DemandBoard";
@@ -9,6 +12,8 @@ import { getWorkSyncLinks } from "@/lib/federation/work-sync-read-model";
 import { getDemandShareContext, getNetworkDemandItems } from "@/lib/federation/demand-read-model";
 import { FounderSharedPortfolioPanel } from "@/components/ops/FounderSharedPortfolioPanel";
 import { getFounderSharedPortfolio } from "@/lib/federation/founder-portfolio";
+import { PortfolioTieOutPanel } from "@/components/ops/PortfolioTieOutPanel";
+import { loadPortfolioTieOutPanel } from "@/lib/portfolio/tie-out-panel-data";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +28,7 @@ export default async function DemandPage({
   }>;
 }) {
   const scope = (await searchParams) ?? {};
-  const [items, networkItems, shareContext, founderPortfolio, workSyncLinks, policyConfig] = await Promise.all([
+  const [items, networkItems, shareContext, founderPortfolio, workSyncLinks, policyConfig, tieOutPanel, locale] = await Promise.all([
     getDemandItems(scope),
     getNetworkDemandItems(),
     getDemandShareContext(),
@@ -33,6 +38,8 @@ export default async function DemandPage({
       where: { id: "singleton" },
       select: { demandFramework: true, demandBucketTargets: true },
     }),
+    loadPortfolioTieOutPanel(),
+    getLocaleContext(),
   ]);
   const policy = resolveDemandPolicy(policyConfig);
   return (
@@ -68,6 +75,9 @@ export default async function DemandPage({
         bucketTargets={policy.bucketTargets}
         activeFramework={policy.framework}
       />
+      <MessagesProvider locale={locale.language} messages={{ portfolio: namespaceMessages(locale.language, "portfolio") }}>
+        <PortfolioTieOutPanel {...JSON.parse(JSON.stringify(tieOutPanel))} formatLocale={locale.formatLocale} />
+      </MessagesProvider>
     </div>
   );
 }

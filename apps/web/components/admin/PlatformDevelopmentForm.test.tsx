@@ -32,6 +32,18 @@ const baseProps = {
 };
 
 describe("PlatformDevelopmentForm", () => {
+  // EP-2FB6C0CC (BI-BB74D6C6): the "Connect GitHub" deep link from the Needs-you
+  // item and the token-expiry banner must land somewhere in every state, including
+  // "contributing, no contributor agreement yet" — the state automated setup leaves.
+  it.each([
+    ["no decision yet", { currentMode: null }],
+    ["contributing without the contributor agreement", { currentMode: "contributing" as const }],
+    ["contributing and set up", { currentMode: "contributing" as const, dcoAcceptedAt: "2026-09-01T00:00:00.000Z" }],
+  ])("always renders the #connect-github target (%s)", (_label, overrides) => {
+    const html = renderToStaticMarkup(<PlatformDevelopmentForm {...baseProps} {...overrides} />);
+    expect(html.match(/id="connect-github"/g)).toHaveLength(1);
+  });
+
   it("renders the two contribution-mode options", () => {
     const html = renderToStaticMarkup(<PlatformDevelopmentForm {...baseProps} />);
     expect(html).toContain("Keep everything on my system");

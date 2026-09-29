@@ -953,7 +953,7 @@ describe("scheduleInitialCodeGraphBootstrap", () => {
   });
 
   it("logs initializer failures without throwing", async () => {
-    const boom = new Error("neo4j unavailable");
+    const boom = new Error("graph mirror unavailable");
     const ensure = vi.fn().mockRejectedValue(boom);
     const log = vi.fn();
     const error = vi.fn();

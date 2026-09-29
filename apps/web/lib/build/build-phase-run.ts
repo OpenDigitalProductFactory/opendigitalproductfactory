@@ -27,8 +27,9 @@ import type { AutonomousBuildExecutionProfileRefV1 } from "@/lib/build/autonomou
 export type BuildPhaseName = "ideate" | "plan" | "build" | "review" | "ship";
 
 /**
- * Mark the start of a phase. Upserts a BuildPhaseRun row with startedAt = now.
- * Safe to call multiple times (idempotent on buildId + phase).
+ * Mark the start of a phase. Creates a BuildPhaseRun row with startedAt = now.
+ * Safe to call multiple times while the phase is in flight: the original
+ * startedAt is kept. A finished row is reopened as a new attempt.
  */
 export async function startBuildPhaseRun(
   buildId: string,
@@ -49,18 +50,71 @@ export async function startBuildPhaseRun(
 
   try {
     const now = new Date();
-    await prisma.buildPhaseRun.upsert({
+    const existing = await prisma.buildPhaseRun.findUnique({
       where: { buildId_phase: { buildId, phase } },
-      create: {
-        buildId,
-        phase,
-        startedAt: now,
-        executionProfileRef: opts?.executionProfileRef,
-      },
-      update: {}, // Don't overwrite if already started — phase may restart rarely
+      select: { completedAt: true },
     });
+    if (!existing) {
+      await prisma.buildPhaseRun.create({
+        data: {
+          buildId,
+          phase,
+          startedAt: now,
+          executionProfileRef: opts?.executionProfileRef,
+        },
+      });
+      return;
+    }
+    // An in-flight row keeps its original startedAt. Resetting it would restart
+    // the quiescence reaper clock on every duplicate start. A finished row is a
+    // new attempt and must reopen, or the retry is invisible to the drain.
+    if (existing.completedAt) {
+      await prisma.buildPhaseRun.update({
+        where: { buildId_phase: { buildId, phase } },
+        data: {
+          startedAt: now,
+          completedAt: null,
+          durationMs: null,
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: null,
+          inferenceCount: 0,
+          providerId: null,
+          ...(opts?.executionProfileRef
+            ? { executionProfileRef: opts.executionProfileRef }
+            : {}),
+        },
+      });
+    }
   } catch (err) {
     console.warn("[build-phase-run] Failed to start phase run:", { buildId, phase }, err);
+  }
+}
+
+/**
+ * Close an open phase row when the attempt has stopped and nothing is running.
+ *
+ * Quiescence treats `completedAt IS NULL` as in-flight work and will spend the
+ * whole drain budget on it. A provider refusal or capacity deferral returns in
+ * seconds; leaving the start row open makes that finished attempt block a
+ * self-upgrade until the 15-minute dead-phase reaper (which is longer than the
+ * drain). Does not create a row and does not record a successful completion.
+ */
+export async function releaseUnfinishedBuildPhaseRun(
+  buildId: string,
+  phase: BuildPhaseName,
+): Promise<void> {
+  try {
+    await prisma.buildPhaseRun.updateMany({
+      where: { buildId, phase, completedAt: null },
+      data: { completedAt: new Date() },
+    });
+  } catch (err) {
+    console.warn(
+      "[build-phase-run] Failed to release unfinished phase run:",
+      { buildId, phase },
+      err,
+    );
   }
 }
 

@@ -18,8 +18,8 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: {
+vi.mock("@/lib/jobs", () => ({
+  jobs: {
     send: mockSend,
   },
 }));

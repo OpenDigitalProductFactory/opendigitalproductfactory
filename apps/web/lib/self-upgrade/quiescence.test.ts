@@ -45,8 +45,8 @@ vi.mock("@dpf/db", () => ({
 }));
 
 const inngestSendMock = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: { send: (...args: unknown[]) => inngestSendMock(...args) },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { send: (...args: unknown[]) => inngestSendMock(...args) },
 }));
 
 const broadcastSystemMock = vi.hoisted(() => vi.fn());
@@ -830,7 +830,7 @@ describe("QuiescingError", () => {
 });
 
 describe("signalSwapComplete — swap-signal retry", () => {
-  it("retries the swap-complete event on a transient inngest.send failure", async () => {
+  it("retries the swap-complete event on a transient jobs.send failure", async () => {
     vi.useFakeTimers();
     try {
       inngestSendMock

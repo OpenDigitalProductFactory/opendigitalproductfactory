@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 722,
+  "pageCount": 723,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -541,6 +541,7 @@
         "10-chain-of-custody-and-agent-action-receipts",
         "101-core-requirement",
         "102-minimum-receipt-fields",
+        "1021-principle-directed-execution-binding",
         "103-trace-context-and-delegation",
         "104-integrity-and-non-repudiation",
         "105-privacy-and-minimization",
@@ -729,6 +730,7 @@
         "11-standards-contribution-profile",
         "12-implementation-and-claiming-guidance",
         "13-open-standardization-questions",
+        "mbse-composition-mapping",
         "14-summary"
       ]
     },
@@ -743,6 +745,7 @@
         "standards-map",
         "enterprise-operating-model-bridge",
         "composition-rule",
+        "principle-directed-work-and-mbse-composition",
         "adjacent-dpf-concepts",
         "source-of-truth-rule"
       ]
@@ -1894,6 +1897,7 @@
         "5-drive-to-completion-checklist",
         "6-known-limitation-reviewer-dispatch-can-complete-without-writing-a-receipt",
         "7-closing-a-small-or-medium-item-the-baseline-is-the-body-bi-0f8e39d5",
+        "approval-outcome-readback",
         "anti-patterns-observed"
       ]
     },
@@ -1926,6 +1930,7 @@
         "81-wsid-and-vector-decisioning",
         "82-learning-and-adaptation",
         "83-workroom-process-overseer-qualification",
+        "84-qualification-of-principle-directed-work",
         "9-model-and-provider-suitability",
         "91-eligibility-before-ranking",
         "92-evidence-based-adequacy",
@@ -2002,10 +2007,12 @@
       "anchors": [
         "localization-runbook",
         "where-things-live",
+        "authoring-ui-copy",
         "how-a-viewers-language-is-chosen",
         "locale-statuses",
         "checking-a-screen-for-right-to-left-readiness",
-        "adding-a-locale"
+        "adding-a-locale",
+        "the-localization-guard"
       ]
     },
     "docs/architecture/mcp-tool-authorization-runbook.md": {
@@ -2314,6 +2321,7 @@
         "purpose",
         "assertion-format",
         "core-assertion-set",
+        "principle-directed-amendment-assertions",
         "evidence-publication-guidance",
         "use-in-dpf"
       ]
@@ -2377,6 +2385,7 @@
         "712-proactivity-earned-autonomy-and-assurance-posture",
         "7121-autonomy-is-bounded-by-gate-coverage",
         "7122-admission-criteria-for-autonomous-operation",
+        "713-principle-directed-decision-contract",
         "8-tool-execution-and-action-gating",
         "81-tool-definitions",
         "82-execution-modes",
@@ -2411,6 +2420,7 @@
         "122-retention-rules",
         "123-context-truncation-and-summarization",
         "124-memory-validation",
+        "125-data-admission-and-processing-boundaries",
         "13-audit-evidence-and-non-repudiation",
         "131-minimum-audit-events",
         "132-evidence-fields",
@@ -12021,6 +12031,7 @@
         "starting-an-invoice-from-context",
         "decisions-recovery-and-evidence",
         "sent-documents-are-kept",
+        "invoice-pdfs-use-document-conversion",
         "what-you-can-edit-and-when",
         "status-movement-is-governed",
         "void-versus-delete",
@@ -12323,6 +12334,20 @@
         "grafana-dashboards",
         "edge-node-fleet-metrics-push-not-scrape",
         "osi-layer-model"
+      ]
+    },
+    "docs/user-guide/operations/portfolio-budgets.md": {
+      "publicHref": "/user-guide/operations/portfolio-budgets/",
+      "portalHref": "/docs/operations/portfolio-budgets",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "overview",
+        "reading-the-panel",
+        "setting-a-budget",
+        "confirming-an-epics-portfolio",
+        "how-budgets-steer-work"
       ]
     },
     "docs/user-guide/operations/self-upgrade.md": {
@@ -12704,6 +12729,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "checking-an-approval-result",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
         "the-ward-for-a-shelter",

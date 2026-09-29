@@ -70,7 +70,6 @@ export const DEFERRED = Object.freeze([
   "scripts/prose-lint-baseline.json",
   "scripts/provider-local-connector-lifecycle-baseline.json",
   "scripts/reporting-composition-baseline.json",
-  "scripts/retired-substrate-baseline.txt",
   "scripts/route-error-baseline.txt",
   "scripts/stewardship-scope-baseline.txt",
   "scripts/superpowers-skill-baseline.txt",

@@ -1,6 +1,6 @@
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 
-export const rateRecovery = inngest.createFunction(
+export const rateRecovery = jobs.createFunction(
   {
     id: "ops/rate-recovery",
     retries: 1,

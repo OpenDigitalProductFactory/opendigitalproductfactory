@@ -13,15 +13,15 @@
 //    - expiresAt in the past + releasedAt IS NULL → set releasedAt + status=expired
 //    (Leases with releasedAt already set are already closed; skip them.)
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { prisma } from "@dpf/db";
 import { reapExpiredNonprodEnvironmentLeases } from "@/lib/nonprod/environment-lease";
 
 const STALE_RUNNING_HOURS = 2;   // running/starting targets with no heartbeat
 const STALE_PLANNED_DAYS  = 7;   // planned targets with no consumer ever started
 
-export const runtimeTargetJanitor = inngest.createFunction(
+export const runtimeTargetJanitor = jobs.createFunction(
   {
     id: "ops/runtime-target-janitor",
     retries: 1,

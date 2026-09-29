@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 // Structure detects absent evidence; the independent reviewer judges credibility.
 const narrative = z.string().trim().min(20).max(12_000);

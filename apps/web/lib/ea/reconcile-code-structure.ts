@@ -17,7 +17,7 @@ import { buildCodeStructureModel, type CodeImportEdge } from "./code-structure-e
 import { applySysmlModel, type SysmlSeedResult } from "./sysml-model-seed";
 
 // One row per CodeFile (toPath null when it imports nothing), plus one row per
-// IMPORTS edge to another CodeFile — parity with the old Neo4j OPTIONAL MATCH.
+// IMPORTS edge to another CodeFile (a left join, so importless files stay).
 const EDGE_QUERY = [
   "SELECT f.props->>'path' AS \"fromPath\", t.props->>'path' AS \"toPath\"",
   "  FROM graph_node f",

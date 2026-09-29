@@ -150,7 +150,7 @@ describe("workspace command center readiness", () => {
     const view = buildWorkspaceCommandCenterView(makeInput());
 
     expect(Object.fromEntries(view.snapshot.map((item) => [item.id, item.href]))).toEqual({
-      ai: "/platform/ai",
+      ai: "/platform/ai/overview",
       work: "/ops",
       customers: "/customer",
       finance: "/finance",

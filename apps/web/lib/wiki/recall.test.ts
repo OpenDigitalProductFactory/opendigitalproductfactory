@@ -165,7 +165,7 @@ describe("recallWikiContext", () => {
   });
 
   it("returns null silently when searchWikiPages throws", async () => {
-    searchWikiPages.mockRejectedValueOnce(new Error("Qdrant down"));
+    searchWikiPages.mockRejectedValueOnce(new Error("vector store down"));
     const out = await recallWikiContext({ query: "q", organizationId: null });
     expect(out).toBeNull();
   });
@@ -312,7 +312,7 @@ describe("recallWikiContextWithPrinciples", () => {
   });
 
   it("returns wikiBlock=null when wiki retrieval throws (principles still surface)", async () => {
-    searchWikiPages.mockRejectedValueOnce(new Error("Qdrant down for wiki"));
+    searchWikiPages.mockRejectedValueOnce(new Error("vector store down for wiki"));
     recallPrincipleContext.mockResolvedValueOnce({
       block: "GOVERNANCE PRINCIPLES:\nCommandments (1):\n- X (slug) — D",
       commandments: [{ id: "x" }],

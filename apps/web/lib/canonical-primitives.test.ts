@@ -9,7 +9,7 @@ describe("canonical primitives registry", () => {
   it("registers report-kit with a principle + docs pointer", () => {
     const rk = CANONICAL_PRIMITIVES.find((p) => p.name === "report-kit");
     expect(rk).toBeDefined();
-    expect(rk?.principleSlug).toBe("compose-report-kit-for-reporting-ux");
+    expect(rk?.principleSlug).toBe("professions/frontend-engineer/compose-report-kit-for-reporting-ux");
     expect(rk?.docs).toContain("report-kit/README.md");
     expect(rk?.exports).toContain("StatusBadge");
     expect(rk?.exports).toContain("DataTable");

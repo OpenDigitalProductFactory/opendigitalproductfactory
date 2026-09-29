@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { inngest, type BuildPreBuildReviewRepairEvent } from "../inngest-client";
+import { jobs, type BuildPreBuildReviewRepairEvent } from "@/lib/jobs";
 
 type PreBuildReviewRepairEventData = BuildPreBuildReviewRepairEvent["data"];
 
@@ -7,7 +7,7 @@ function logBuildActivity(buildId: string, tool: string, summary: string): void 
   prisma.buildActivity.create({ data: { buildId, tool, summary: summary.slice(0, 240) } }).catch(() => {});
 }
 
-export const preBuildReviewRepair = inngest.createFunction(
+export const preBuildReviewRepair = jobs.createFunction(
   {
     id: "build/pre-build-review-repair",
     retries: 2,

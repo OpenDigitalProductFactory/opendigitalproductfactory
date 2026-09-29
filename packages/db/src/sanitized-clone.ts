@@ -1,8 +1,8 @@
 // packages/db/src/sanitized-clone.ts
 // Sanitized clone pipeline -- copies production data to dev with PII obfuscation.
 // Classification driven by table-classification.ts.
-// Postgres-only: BET-5 (BI-A1E864A5) retired Neo4j/Qdrant onto Postgres, so the
-// graph mirror and vectors ride along in the Postgres clone; the former Neo4j
+// Postgres-only: since BET-5 (BI-A1E864A5) the graph mirror and vectors live in
+// Postgres, so they ride along in the Postgres clone; the former graph-store
 // clone step was removed in BI-B1977CEE.
 
 import { getTableSensitivity } from "./table-classification";

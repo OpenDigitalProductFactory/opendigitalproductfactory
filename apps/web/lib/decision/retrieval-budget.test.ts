@@ -118,7 +118,7 @@ describe("retrievePrincipleTiers", () => {
     // must degrade the optional tiers, never fail the decision outright.
     const budget = createRetrievalBudget(8000);
     const search = vi.fn(async () => {
-      throw new Error("qdrant down");
+      throw new Error("vector store down");
     });
     const { core, contextual } = await retrievePrincipleTiers({ search, budget, ...args });
     expect(core).toEqual([]);

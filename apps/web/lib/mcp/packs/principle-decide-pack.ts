@@ -4,7 +4,7 @@
 // advisory decision gate that scores a set of options against the governance
 // principles in scope for the calling population and returns a recommendation
 // plus a per-principle contribution ledger. The handler lazy-imports the
-// Postgres commandment lookup and the Qdrant core/contextual principle search,
+// Postgres commandment lookup and the vector core/contextual principle search,
 // then runs the pure decide() math — reproducing the former switch case
 // verbatim, so behaviour is identical when the tool is invoked over MCP.
 //
@@ -91,7 +91,7 @@ const definitions: ToolDefinition[] = [
         },
         maxPrinciples: {
           type: "number",
-          description: "Cap on relevant core/contextual principles retrieved from Qdrant. Default 20.",
+          description: "Cap on relevant core/contextual principles retrieved from the vector store. Default 20.",
         },
         tieMargin: {
           type: "number",
@@ -195,7 +195,7 @@ export async function runPrincipleDecision(
     "@/lib/decision/consumer-context-attenuation"
   );
   // BI-3C1A6451: server-side embedding for the semantic-fallback path.
-  // Used both for principle direction text (Qdrant-sourced principles
+  // Used both for principle direction text (vector-sourced principles
   // have empty dimensionVector) and for option descriptions when the
   // caller passes empty features. Pre-fix, both produced alignment=0.
   const { generateEmbedding, isEmbeddingAvailable } = await import(
@@ -363,13 +363,13 @@ export async function runPrincipleDecision(
 
   // RC2/RC3 (BI-E1267C6D) — rehydrate the authoritative principle rows.
   //
-  // Qdrant is the relevance index, not the authoring store: its payload
+  // the vector store is the relevance index, not the authoring store: its payload
   // (embeddings.ts storeWikiPage) carries principleTier/AppliesTo/RingScope/
   // Dimensions/Public and deliberately NOT principleDimensionVector or
-  // principleWeight. So a Qdrant hit alone can never score structurally, and
+  // principleWeight. So a vector hit alone can never score structurally, and
   // the principleWeight override read below was reading a key that is never
   // written. Rather than duplicating the vector into the payload (which then
-  // goes stale on any principle edit that skips a re-embed), we let Qdrant
+  // goes stale on any principle edit that skips a re-embed), we let the vector store
   // rank relevance and then fetch the real rows from Postgres by pageId —
   // pageId is the WikiPage id (payload entityId), so this is one keyed
   // findMany with no backfill and no drift surface.
@@ -408,12 +408,12 @@ export async function runPrincipleDecision(
     }
   }
 
-  // BI-6ADB019D — drop phantom hits: Qdrant points whose WikiPage no longer
+  // BI-6ADB019D — drop phantom hits: vector points whose WikiPage no longer
   // exists. Postgres is the authoring store, so an id the index returned that
   // a SUCCESSFUL lookup could not find is a deleted page, not a slow one.
   //
   // Observed live: five hits titled "Live State Over Seed Data" when the DB
-  // holds exactly one — four Qdrant points referencing rows that are gone.
+  // holds exactly one — four vector points referencing rows that are gone.
   // Left in place they cost nothing in score (they contribute 0.000) but they
   // consume `maxPrinciples` slots, so real doctrine gets squeezed out of the
   // relevance set by principles that do not exist. That is the same starvation
@@ -486,13 +486,13 @@ export async function runPrincipleDecision(
   }
 
   // Build DecisionPrinciple[] from the merged set. Postgres rows carry
-  // the full dimensionVector for structured alignment; Qdrant hits only
+  // the full dimensionVector for structured alignment; vector hits only
   // carry dimension keys (no signed vector), so they fall back to
   // semantic alignment. For the semantic path to produce non-zero
   // signal, we must embed each candidate's direction text and let
   // decide()'s cosine math do the rest (BI-3C1A6451 — the dead-code
   // defect tracked at apps/web/lib/wiki/principle-decide.ts:117).
-  // PG rows carry direction at row.principleDirection; Qdrant hits
+  // PG rows carry direction at row.principleDirection; vector hits
   // carry it at hit.contentPreview.
   type CandidateRow = {
     id: string;
@@ -528,7 +528,7 @@ export async function runPrincipleDecision(
     }),
     ...relevanceHits.map((hit): CandidateRow => {
       // Prefer the rehydrated Postgres row (authoritative: signed vector,
-      // weight override, direction text). Fall back to the Qdrant payload
+      // weight override, direction text). Fall back to the vector payload
       // field-by-field so a rehydration miss degrades to the pre-fix
       // behaviour for that one principle rather than dropping it.
       const row = hydratedById.get(String(hit["pageId"] ?? ""));
@@ -542,7 +542,7 @@ export async function runPrincipleDecision(
         ),
         tier,
         // BI-A9E9ADCB (RC3): the override is read from the rehydrated row.
-        // It was previously read off the Qdrant hit, but storeWikiPage never
+        // It was previously read off the vector hit, but storeWikiPage never
         // writes principleWeight to the payload, so the override was still
         // always undefined and every core/contextual principle silently used
         // the tier default (0.4/0.1). resolveWeight still falls back to the
@@ -589,7 +589,7 @@ export async function runPrincipleDecision(
   // RC6 (BI-E1267C6D) — cap the relevance-retrieved set, not the merged list.
   //
   // maxPrinciples is documented (and named) as a cap on the core/contextual
-  // principles retrieved from Qdrant, but was applied as slice() over the
+  // principles retrieved from the vector index, but was applied as slice() over the
   // merged list, which is built commandments-first. Once the commandment
   // corpus outgrew the cap that arithmetic silently starved the tail: with 41
   // commandments against a default cap of 20, a live call retrieved 41

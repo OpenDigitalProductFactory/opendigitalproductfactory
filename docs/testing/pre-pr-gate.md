@@ -68,6 +68,8 @@ and capture that as the evidence. See AGENTS.md §5 "Where each gate runs".
 
 ## What runs in CI
 
+Public-site changes also run the [documentation publication build](../architecture/build-gate-runbook.md), including rendered-example and malformed-Liquid checks. Its result feeds Merge Readiness; publication itself remains a separate Pages deployment.
+
 The root `pnpm test` script is:
 
 ```jsonc
@@ -234,7 +236,7 @@ worktree path: doing so can point cleanup at a different sibling and is rejected
 before host state is mutated.
 Slot 0 preserves the singleton portal on `http://localhost:3010` and uses its
 dedicated PostgreSQL endpoint on port `15432`; it may still consume shared,
-read-only or concurrency-safe development services such as Qdrant and Neo4j.
+read-only or concurrency-safe development services.
 Slot 1 is declared and testable, but automatic admission remains fixed at one
 until BI-A4427AB8 runs the separately governed capacity pilot.
 
@@ -577,7 +579,10 @@ tests and must never be used as release evidence. It still walks the whole pass
 path and records `status: "passed"`, so every record it writes and the evidence
 it sends carry `testStub: true` (BI-53B189C8). No push reader accepts a marked
 record: `pregate:status` reports it as INCONCLUSIVE and names the stub, and the
-pre-push hook, the agent publish guard and `pr:health` all refuse it. Tests that
+pre-push hook, the agent publish guard and `pr:health` all refuse it. The portal
+refuses a marked payload outright with `test_stub_evidence_refused` (BI-F5344F65):
+it records no evidence row a PR could cite, changes no pool policy and adds no
+builder calibration, so a stub run against a real portal fails closed. Tests that
 spawn `scripts/gate-worktree.mjs` must pass a temp repository as `--worktree`,
 never the checkout running the suite; `gate-worktree-lease.test.mjs` ends with a
 test that fails if any of its gates wrote into the caller's git dir.
@@ -665,6 +670,16 @@ not drop caches, and never run `sync` in the Docker VM, because it wedges the VM
 (BI-903FB5F9). The builder reserve is the measured peak of the gate's own
 production build plus a margin, not the builder's 16 GiB ceiling. Every gate
 record carries the measured peak as `evidence.builderMemory` (BI-D3BF53A9).
+
+**The production build is delegated to the merge queue (BI-3A14308C).** The
+local gate runs guards, typecheck and affected vitest, then stops. The merge
+queue's required `pnpm --filter web build` job is the binding production build
+(AGENTS.md §4), so a local gate reserves no builder memory in the Docker VM:
+admission needs only the host-stage reserve. The gate record says
+`productionBuild: delegated`, never that a local build passed. To build locally
+anyway, for example to reproduce a failure only the Docker image build shows,
+run the gate with `DPF_LOCAL_CI_BUILD_STRATEGY=local`. That run reserves the
+builder memory as before and records the builder's measured peak.
 
 The reserve keeps itself current (BI-903FB5F9):
 

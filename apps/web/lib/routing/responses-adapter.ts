@@ -10,6 +10,7 @@ import {
   formatMessageForResponses,
 } from "@/lib/ai-inference";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
+import { buildResponsesUrl, isChatGptBackend } from "./responses-contract";
 
 type ResponsesOutputItem =
   | {
@@ -33,18 +34,6 @@ export function unsupportedParameterName(status: number, errBody: string): strin
   if (status !== 400) return null;
   const match = /unsupported parameter:?\s*['"`]?([A-Za-z_][A-Za-z0-9_.]*)/i.exec(errBody);
   return match ? match[1]! : null;
-}
-
-function isChatGptBackend(providerId: string, baseUrl: string): boolean {
-  return providerId === "chatgpt" || baseUrl.includes("chatgpt.com/backend-api");
-}
-
-function buildResponsesUrl(providerId: string, baseUrl: string): string {
-  if (isChatGptBackend(providerId, baseUrl)) {
-    return `${baseUrl}/codex/responses`;
-  }
-  const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
-  return `${apiBase}/responses`;
 }
 
 function toResponsesTools(tools?: Array<Record<string, unknown>>): Array<Record<string, unknown>> | undefined {

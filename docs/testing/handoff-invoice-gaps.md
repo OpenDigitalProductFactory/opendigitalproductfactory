@@ -24,7 +24,7 @@
 ## Gap 2 — Send Invoice: SMTP not verified on cold-start fresh install
 
 **Observed:** The "Send Invoice" button is present on every saved invoice detail page. The implementation IS complete:
-- `POST /api/v1/finance/invoices/:id/send` → marks `sentAt`, generates PDF via `@react-pdf/renderer`, composes HTML email with "Pay Now" button linking to `/s/pay/{payToken}`, attaches PDF, sends via platform email service
+- `POST /api/v1/finance/invoices/:id/send` → marks `sentAt`, generates the PDF (invoice HTML printed by the dpf-doctools engine, `lib/invoice-pdf.ts`; before 2026-09-26 this was `@react-pdf/renderer`), composes HTML email with "Pay Now" button linking to `/s/pay/{payToken}`, attaches PDF, sends via platform email service
 
 **What was NOT verified:** Whether SMTP is configured out of the box on a fresh install. If the platform ships with no default SMTP config, clicking "Send Invoice" silently fails (no email delivered, no error surfaced to the operator).
 

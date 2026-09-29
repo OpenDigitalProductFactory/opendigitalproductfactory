@@ -11,9 +11,9 @@
 // cleanly during a self-upgrade drain) and concurrency-limited to one in-flight
 // run; the scan action carries its own "a scan is already running" guard as well.
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /** Weekly, Monday 06:00 UTC. Regulations change on the order of months, not hours. */
@@ -37,7 +37,7 @@ async function runScheduledRegulatoryScan() {
   return runRegulatoryMonitorScan("scheduled");
 }
 
-export const regulatoryMonitorScanScheduled = inngest.createFunction(
+export const regulatoryMonitorScanScheduled = jobs.createFunction(
   {
     id: REGULATORY_MONITOR_SCAN_SCHEDULED_INNGEST_ID,
     retries: 1,
@@ -55,7 +55,7 @@ export const regulatoryMonitorScanScheduled = inngest.createFunction(
 
 // Operator "run now" — the ops scheduled-jobs surface dispatches
 // REGULATORY_MONITOR_SCAN_REQUESTED_EVENT to force an off-cadence rescan.
-export const regulatoryMonitorScanRequested = inngest.createFunction(
+export const regulatoryMonitorScanRequested = jobs.createFunction(
   {
     id: REGULATORY_MONITOR_SCAN_REQUESTED_INNGEST_ID,
     retries: 1,

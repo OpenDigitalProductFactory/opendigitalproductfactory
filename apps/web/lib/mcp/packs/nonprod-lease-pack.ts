@@ -162,8 +162,8 @@ const definitions: ToolDefinition[] = [
     description:
       "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. " +
       "Reusing claimKey returns the same durable queue entry (idempotent wait). " +
-      "Do not claim in a tight loop without a stable claimKey. " +
-      "When queued, terminate the polling runner and resume from the returned TaskRun — do not renew or open a second claim.",
+      "Do not poll this tool. When queued, stop and resume from the returned TaskRun — do not renew or open a second claim. " +
+      "lease_terminal means this claimKey is finished (released, cancelled, or expired): do not retry it (retryable: false). A new admission needs a new claimKey, and only when the work is still wanted.",
     inputSchema: {
       type: "object",
       properties: {
@@ -217,6 +217,7 @@ const definitions: ToolDefinition[] = [
           enum: [1],
           description: "Versioned local-CI slot capability. Omit for legacy singleton-only admission.",
         },
+        productionBuild: { type: "string", enum: ["local", "delegated"], description: "\"delegated\": the merge queue's required build owns the production build, so admission reserves no builder memory (BI-3A14308C). Omit for \"local\"." },
         hostPressure: {
           ...hostPressureSchema,
           description: "Recent fail-closed host observation used only to decide whether slot-1 may admit.",
@@ -541,6 +542,7 @@ async function claimNonprodEnvironmentLeaseHandler(
     taskRunId: stringValue("taskRunId") || undefined,
     cleanupCommand: stringValue("cleanupCommand") || undefined,
     slotManifestVersion: slotManifestVersion as 1 | undefined,
+    productionBuild: stringValue("productionBuild") === "delegated" ? "delegated" : undefined,
     hostPressure: hostPressure as LocalCiHostPressure | undefined,
     resourceClass: isHeavyResourceClass(resourceClass) ? resourceClass : undefined,
     expectedMemoryBytes,
@@ -604,8 +606,8 @@ async function claimNonprodEnvironmentLeaseHandler(
       success: false,
       entityId: result.lease.leaseId,
       error: "lease_terminal",
-      message: `Nonproduction lease request is already ${result.reason}; create a new claimKey to request admission again.`,
-      data: { lease: toolLease, reason: result.reason, ...common },
+      message: `Nonproduction lease request is already ${result.reason}. Do not call again with this claimKey (retryable: false). A new admission needs a new claimKey, and only when the work is still wanted.`,
+      data: { lease: toolLease, reason: result.reason, retryable: false, ...common },
     };
   }
   if (result.status === "subscribed") {
@@ -708,9 +710,10 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
         data: { retryable: false, leaseId },
       };
     }
+    const errorCode = detail === "nonprod_lease_not_owner" ? detail : "release_failed";
     return {
       success: false,
-      error: "release_failed",
+      error: errorCode,
       message: `Could not release lease ${leaseId}: ${detail}. Do not blind-retry (retryable: false).`,
       data: { retryable: false, leaseId },
     };

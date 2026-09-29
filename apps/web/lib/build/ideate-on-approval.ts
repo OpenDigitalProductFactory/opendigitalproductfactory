@@ -317,13 +317,23 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         }
       }
     }
+    const releaseIdeateAttempt = async () => {
+      try {
+        const { releaseUnfinishedBuildPhaseRun } = await import("./build-phase-run");
+        await releaseUnfinishedBuildPhaseRun(buildId, "ideate");
+      } catch {
+        /* phase attribution remains best-effort */
+      }
+    };
     try {
       const { startBuildPhaseRun } = await import("./build-phase-run");
-      void startBuildPhaseRun(buildId, "ideate", {
+      // Await the start. A later release must not race an unawaited insert
+      // that would reopen the row after the attempt has already stopped.
+      await startBuildPhaseRun(buildId, "ideate", {
         ...(executionProfileRef ? { executionProfileRef } : {}),
-      }).catch(() => {});
+      });
     } catch {
-      /* phase attribution remains best-effort */
+      /* QuiescingError, or a start failure, must not abort the dispatch */
     }
 
     // The BI body is the canonical context for backlog-promoted drafts.
@@ -377,6 +387,7 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         // switching engines cannot help; the stranded-build reconciler re-drives
         // this build once the host frees. Stop here without a verdict.
         await logActivity(`Ideate deferred: ${(ideateResult.error ?? "").slice(0, 220)}`);
+        await releaseIdeateAttempt();
         return { kind: "deferred-capacity", reason: ideateResult.error ?? "capacity deferral", durationMs: Date.now() - startedAt };
       }
       if (ideateResult.infrastructure && !infrastructureRetried) {
@@ -416,6 +427,7 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         durationMs,
       };
       await logActivity(`Auto-dispatch failed after ${(durationMs / 1000).toFixed(1)}s: ${outcome.error.slice(0, 200)}`);
+      await releaseIdeateAttempt();
       // BI-7AD0759A: the model's output is the ONLY thing that explains why it
       // could not be parsed, and it was being dropped on the floor here — on a
       // local-only install that leaves the operator a four-minute wait and a
@@ -471,6 +483,7 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         durationMs,
       };
       await logActivity(`Auto-dispatch saved-evidence step failed after ${(durationMs / 1000).toFixed(1)}s: ${outcome.error.slice(0, 200)}`);
+      await releaseIdeateAttempt();
       return outcome;
     }
 
@@ -495,6 +508,7 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         durationMs,
       };
       await logActivity(`Auto-dispatch saved-evidence VERIFICATION FAILED after ${(durationMs / 1000).toFixed(1)}s: designDoc not present on ${buildId} after save.`);
+      await releaseIdeateAttempt();
       return outcome;
     }
 
@@ -580,6 +594,12 @@ async function dispatchIdeateForApprovedBuildInner(params: {
     const message = getErrorMessage(err);
     console.error("[ideate-on-approval] Unhandled error in auto-dispatch:", { buildId }, err);
     await logActivity(`Auto-dispatch threw unexpectedly: ${message.slice(0, 200)}`);
+    try {
+      const { releaseUnfinishedBuildPhaseRun } = await import("./build-phase-run");
+      await releaseUnfinishedBuildPhaseRun(buildId, "ideate");
+    } catch {
+      /* phase attribution remains best-effort */
+    }
     return { kind: "dispatched-failure", error: message, durationMs: 0 };
   }
 }

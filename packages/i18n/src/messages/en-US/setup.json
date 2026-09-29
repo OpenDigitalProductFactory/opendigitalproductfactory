@@ -1,0 +1,26 @@
+{
+  "progress": {
+    "label": "Setup progress",
+    "stepAria": "Step {$index} of {$total}: {$label}, {$state}",
+    "current": "current",
+    "status": {
+      "completed": "completed",
+      "skipped": "skipped",
+      "pending": "pending"
+    }
+  },
+  "steps": {
+    "account-bootstrap": "Account",
+    "ai-providers": "AI Providers",
+    "branding": "Branding",
+    "business-context": "Your Business",
+    "how-you-decide": "How You Decide",
+    "operating-hours": "Operating Hours",
+    "storefront": "Storefront",
+    "mailroom": "Mailroom",
+    "platform-development": "Platform Dev",
+    "build-studio": "Build",
+    "meet-your-coo": "Meet Your COO",
+    "workspace": "Workspace"
+  }
+}

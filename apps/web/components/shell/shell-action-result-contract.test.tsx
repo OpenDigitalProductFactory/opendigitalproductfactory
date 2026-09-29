@@ -92,6 +92,7 @@ const sections: ShellNavSection[] = [
     key: "workspace",
     label: "Workspace",
     description: "Your queue.",
+    portfolioRole: null,
     items: [
       {
         key: "workspace",

@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
@@ -188,7 +188,7 @@ export async function runSelfUpgrade(
     // Reusing a stale-but-present image means a promote.sh fix shipped in the portal never
     // reaches the promoter that runs it — the live symptom: an install whose dpf-promoter
     // predated BET-5 ran the old promote.sh, so the pgvector-recreate (step 3a) and the
-    // Neo4j/Qdrant decommission (step 7c) silently never executed and the upgrade died at
+    // legacy-datastore decommission (step 7c) silently never executed and the upgrade died at
     // migrate. ensurePromoterImage() rebuilds JIT-buildable images from the portal's baked
     // /promoter/ files every time (custom/registry images are still left to the operator's
     // pull), keeping the promoter's promote.sh in lock-step with the running portal.
@@ -569,8 +569,8 @@ export async function runSelfUpgrade(
   });
   await recordRunRecoveryPoint(run.runId, recoveryPoint);
   if (recoveryPoint.status === "degraded") {
-    // A best-effort (derived-store) backup failed — neo4j (code/knowledge
-    // graph) and qdrant (vectors) rebuild from source, so this does NOT block
+    // A best-effort (derived-store) backup failed — derived stores rebuild
+    // from source, so this does NOT block
     // the upgrade. Record it loudly for the operator audit trail and proceed.
     const note = summarizeRecoveryPointDegradation(recoveryPoint);
     if (note) console.warn(`[self-upgrade] ${run.runId}: ${note}`);
@@ -752,7 +752,7 @@ export async function runSelfUpgrade(
 // NOT enrolled in the dpf-build-pipeline lane (apps/web/lib/queue/admission.ts),
 // so when an operator caps that lane it always has account-concurrency headroom
 // below the build/agent flood — a queued "Upgrade now" never sits behind builds.
-export const selfUpgradeScheduled = inngest.createFunction(
+export const selfUpgradeScheduled = jobs.createFunction(
   {
     id: SELF_UPGRADE_FUNCTION_ID_SCHEDULED,
     retries: 1,
@@ -766,7 +766,7 @@ export const selfUpgradeScheduled = inngest.createFunction(
   },
 );
 
-export const selfUpgradeManual = inngest.createFunction(
+export const selfUpgradeManual = jobs.createFunction(
   {
     id: SELF_UPGRADE_FUNCTION_ID_MANUAL,
     retries: 0,

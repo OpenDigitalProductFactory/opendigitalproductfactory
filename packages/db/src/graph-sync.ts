@@ -1,7 +1,6 @@
 // packages/db/src/graph-sync.ts
 // Projection sync: push Prisma records into the Postgres graph mirror after writes.
-// BET-5 (BI-A1E864A5): the writes formerly ran Cypher MERGE against Neo4j; they now
-// UPSERT into the `graph_node` / `graph_edge` tables (see 20260714120000_bet5_graph_mirror)
+// The writes UPSERT into the `graph_node` / `graph_edge` tables (see 20260714120000_bet5_graph_mirror)
 // that pg-graph.ts reads. These are fire-and-forget projections — failures are logged
 // but never allowed to bubble up to the caller. Postgres is always the authority.
 //
@@ -16,15 +15,15 @@
 // by pgId and the nodeId-keyed subtree read would never find the product.
 
 import { prisma } from "./client";
-import { NETWORK_RELATIONSHIP_TYPES } from "./neo4j-schema";
+import { NETWORK_RELATIONSHIP_TYPES } from "./graph-schema";
 
 // ─── Graph-mirror primitives ──────────────────────────────────────────────────
 
 /** UPSERT a node. On conflict, labels are UNION-merged (existing order preserved,
  *  genuinely-new labels appended) so labels added out-of-band — IT4IT value-stream
  *  labels on DigitalProduct, the type-specific EaElement label — survive a re-sync
- *  (Neo4j `MERGE ... SET` never touched the label set). Props are shallow-merged,
- *  mirroring `SET n.x = …` (only named keys change; others are left intact). */
+ *  (a re-sync never removes a label). Props are shallow-merged: only named keys
+ *  change; others are left intact. */
 export async function upsertGraphNode(
   key: string,
   labels: string[],
@@ -46,7 +45,7 @@ export async function upsertGraphNode(
   );
 }
 
-/** Append labels to an already-present node (Neo4j apoc.create.addLabels parity).
+/** Append labels to an already-present node.
  *  No-op if the node is absent or is not of `requiredLabel`. */
 async function addGraphNodeLabels(
   key: string,
@@ -138,7 +137,7 @@ export async function syncDigitalProduct(dp: {
  * Apply IT4IT value stream labels to a DigitalProduct node.
  * Labels: :S2P (Strategy to Portfolio), :R2D (Requirement to Deploy),
  *         :R2F (Request to Fulfill), :D2C (Detect to Correct)
- * See neo4j-schema.ts for label definitions.
+ * See graph-schema.ts for the relationship vocabulary.
  */
 export async function syncIT4ITLabels(
   productId: string,
@@ -289,7 +288,7 @@ export async function syncDocumentReference(ref: {
     documentKind: ref.targetKind ?? null,
     syncedAt,
   });
-  // DOC_REFERENCES edge. The Neo4j edge identity also carried refType +
+  // DOC_REFERENCES edge. A reference is also identified by refType +
   // source/targetVersionId; the mirror's (src,dst,rel_type) uniqueness cannot
   // hold parallel references, so those are stored as props on the single edge.
   await upsertGraphEdge(ref.sourceDocumentId, ref.targetDocumentId, "DOC_REFERENCES", {
@@ -343,8 +342,8 @@ export async function syncInfraCI(
   };
 
   if (extendedProps) {
-    // Only carry keys that were explicitly provided (parity with the conditional
-    // Neo4j SET clauses — an absent key leaves any existing prop untouched).
+    // Only carry keys that were explicitly provided — an absent key leaves any
+    // existing prop untouched.
     if (extendedProps.baseUrl !== undefined) props.baseUrl = extendedProps.baseUrl;
     if (extendedProps.gpu !== undefined) props.gpu = extendedProps.gpu;
     if (extendedProps.vramGb !== undefined) props.vramGb = extendedProps.vramGb;
@@ -564,7 +563,7 @@ export async function syncEaRelationship(rel: {
   notationSlug: string;
   relationshipTypeSlug: string;
 }): Promise<void> {
-  // Edge identity in Neo4j also carried relationshipId; the mirror keys edges by
+  // A relationship is also identified by relationshipId; the mirror keys edges by
   // (src,dst,rel_type) and stores relationshipId as a prop (used by deleteEaRelationship).
   await upsertGraphEdge(rel.fromElementId, rel.toElementId, rel.neoType, {
     relationshipId: rel.id,

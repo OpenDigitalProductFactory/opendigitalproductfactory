@@ -19,6 +19,7 @@ import { WARD_PURPOSE_CONTRACTS } from "./ward";
 import { ADOPTION_WAITING_LIST_PURPOSE_CONTRACTS } from "./adoption-waiting-list";
 import { PET_RESCUE_PURPOSE_CONTRACTS } from "./pet-rescue";
 import { MAILROOM_PURPOSE_CONTRACTS } from "./mailroom";
+import { AREA_HOME_PURPOSE_CONTRACTS } from "./area-home";
 import { MARKET_FOOTPRINT_PURPOSE_CONTRACTS } from "./market-footprint";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
@@ -36,6 +37,7 @@ const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   ADOPTION_WAITING_LIST_PURPOSE_CONTRACTS,
   PET_RESCUE_PURPOSE_CONTRACTS,
   MAILROOM_PURPOSE_CONTRACTS,
+  AREA_HOME_PURPOSE_CONTRACTS,
   MARKET_FOOTPRINT_PURPOSE_CONTRACTS,
 ];
 

@@ -9,6 +9,7 @@
 // compatibility entry point that execs this file so lease safety cannot drift
 // between POSIX and Windows contributor surfaces.
 
+import { randomBytes } from "node:crypto";
 import { parseArgs as utilParseArgs } from "node:util";
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -64,6 +65,7 @@ export function describeLeaseCallFailure(error) {
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
 import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH, EXIT_SOURCE_DRIFT, EXIT_USAGE, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
 import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
+import { buildIsDelegated, defaultBuildStrategy } from "./lib/local-integration-ci.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
   authoritySafetyMarginMs,
@@ -1530,6 +1532,9 @@ async function main() {
   let receivedSignal = "";
   let queuedClaimInterruptedByQuiescence = false;
   let terminalClaimAttemptSequence = 0;
+  // A key this process did not queue. One fresh identity, then stop.
+  // Walking :rerun-1, :rerun-2, ... replays every earlier cycle's corpse.
+  let inheritedTerminalReplacementMinted = false;
   const leaseEvents = [];
   const hostPressureSamples = [];
   let admissionPoolPolicy = null;
@@ -1631,6 +1636,10 @@ async function main() {
         gateClientRevision: GATE_CLIENT_REVISION,
         branchName: branch,
         slotManifestVersion: slotManifest.schemaVersion,
+        // BI-3A14308C: a gate that delegates its production build to the merge
+        // queue reserves no builder memory. An older portal ignores the field
+        // and keeps reserving, so this is safe to ship before the server.
+        productionBuild: buildIsDelegated(defaultBuildStrategy()) ? "delegated" : "local",
         hostPressure,
       }, leaseQueueCallOptions(options.mcpUrl, bearerToken));
     } catch (error) {
@@ -2045,6 +2054,42 @@ async function main() {
         die(`previous local-CI lease claim was already ${terminalReason} at the admission deadline`);
       }
       const priorClaimKey = claimKey;
+      // A fresh process starts at local-ci:<session>:<sha>. On lease_terminal
+      // it used to mint :rerun-N from the previous key's suffix and continue
+      // with no sleep. Every earlier cycle's keys are already terminal, so
+      // each restart replayed the whole chain (measured: 20 keys, ~3.5s apart).
+      // A key this process did not queue gets one new identity that cannot
+      // collide with that chain. If that fresh key is itself terminal, stop.
+      const inheritedTerminal = !leaseId && !options.resumeLeaseId;
+      if (inheritedTerminal && inheritedTerminalReplacementMinted) {
+        const refusedLeaseId = claimResponse?.entityId
+          || claimResponse?.data?.lease?.leaseId
+          || null;
+        leaseEvents.push({
+          type: "terminal-chain-refused",
+          at: new Date().toISOString(),
+          leaseId: refusedLeaseId,
+          priorClaimKey,
+          terminalReason,
+        });
+        writeState(stateFile, {
+          branch, sha, gatePassed: false, leaseId: refusedLeaseId || "", evidenceId: "",
+          status: "cancelled", expiresAt: "", resilience: null, leaseEvents,
+          failureReason: "a fresh claim key was already terminal; refusing to walk historical rerun keys",
+        });
+        if (queueObserverPath) {
+          releaseLocalQueueObserver({ path: queueObserverPath, token: gateObserverIdentity.token });
+          queueObserverPath = "";
+        }
+        process.stderr.write(`${JSON.stringify({
+          status: "cancelled",
+          code: "local_ci_terminal_chain_refused",
+          leaseId: refusedLeaseId,
+          claimKey: priorClaimKey,
+          nextAction: "This candidate's claim keys are already terminal, including one fresh key. Not walking rerun-1, rerun-2, and onward. Run pregate again only for a new candidate.",
+        })}\n`);
+        process.exit(EXIT_WAIT_CANCELLED);
+      }
       const terminalAttemptPrefix = `${baseClaimKey}:rerun-`;
       const priorAttemptText = priorClaimKey.startsWith(terminalAttemptPrefix)
         ? priorClaimKey.slice(terminalAttemptPrefix.length)
@@ -2052,11 +2097,16 @@ async function main() {
       const priorAttemptSequence = /^\d+$/.test(priorAttemptText)
         ? Number.parseInt(priorAttemptText, 10)
         : 0;
-      terminalClaimAttemptSequence = Math.max(
-        terminalClaimAttemptSequence,
-        Number.isSafeInteger(priorAttemptSequence) ? priorAttemptSequence : 0,
-      ) + 1;
-      claimKey = `${baseClaimKey}:rerun-${terminalClaimAttemptSequence}`;
+      terminalClaimAttemptSequence = inheritedTerminal
+        ? 1
+        : Math.max(
+          terminalClaimAttemptSequence,
+          Number.isSafeInteger(priorAttemptSequence) ? priorAttemptSequence : 0,
+        ) + 1;
+      claimKey = inheritedTerminal
+        ? `${baseClaimKey}:fresh-${randomBytes(4).toString("hex")}`
+        : `${baseClaimKey}:rerun-${terminalClaimAttemptSequence}`;
+      if (inheritedTerminal) inheritedTerminalReplacementMinted = true;
       const interruptedByQuiescence = terminalDecision.reestablishQueueIntent;
       leaseEvents.push({
         type: interruptedByQuiescence
@@ -2452,7 +2502,19 @@ async function main() {
       // walking samples. The admission-time `builderMemoryUsageBytes` is
       // sampled before any build runs and says nothing about the build.
       builderMemory: controlPlaneEvidence?.builderMemory
-        ?? { bi: "BI-D3BF53A9", status: "unmeasured", reason: "no-production-build-ran", peakBytes: null },
+        ?? {
+          bi: "BI-D3BF53A9",
+          status: "unmeasured",
+          reason: buildIsDelegated(defaultBuildStrategy())
+            ? "production-build-delegated-to-merge-queue"
+            : "no-production-build-ran",
+          peakBytes: null,
+        },
+      // BI-3A14308C: say who owns the production build, never imply a local
+      // build passed when none ran.
+      productionBuild: buildIsDelegated(defaultBuildStrategy())
+        ? { owner: "merge-queue", status: "delegated", check: ".github/workflows/ci.yml production build (merge_group)" }
+        : { owner: "local-ci", status: "ran" },
       gatePassed: outcome.gatePassed,
       ...readFailureEvidenceBinding(sha, worktreePath),
       completedAt: new Date().toISOString(),

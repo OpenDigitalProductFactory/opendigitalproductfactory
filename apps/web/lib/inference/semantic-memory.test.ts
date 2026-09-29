@@ -9,7 +9,7 @@ vi.mock("@dpf/db", () => ({
   searchSimilar: vi.fn().mockResolvedValue([]),
   scrollPoints: vi.fn().mockResolvedValue([]),
   hashToNumber: vi.fn().mockReturnValue(12345),
-  QDRANT_COLLECTIONS: {
+  VECTOR_COLLECTIONS: {
     AGENT_MEMORY: "agent-memory",
     PLATFORM_KNOWLEDGE: "platform-knowledge",
   },

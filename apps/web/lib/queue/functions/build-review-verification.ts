@@ -24,11 +24,11 @@
  * `uxTestResults + uxVerificationStatus` (chunk 6 of the plan).
  */
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { buildPipelineConcurrency } from "../admission";
 import { shouldRunBrowserUxVerification } from "@/lib/build/ui-surface";
 
-export const buildReviewVerification = inngest.createFunction(
+export const buildReviewVerification = jobs.createFunction(
   {
     id: "build/review-verification",
     retries: 1,

@@ -168,6 +168,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   approve_demand_for_funding: ["backlog_write"],
   propose_epic_portfolios: ["backlog_read"],
   confirm_epic_portfolios: ["backlog_write"],
+  propose_portfolio_budgets: ["backlog_read"],
+  set_portfolio_budget: ["backlog_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],
@@ -405,7 +407,6 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   register_digital_product_from_build: ["registry_read", "backlog_write"],
   create_build_epic: ["backlog_write"],
 
-  // Web / External
   search_public_web: ["web_search"],
   fetch_public_website: ["web_search"],
   analyze_public_website_branding: ["web_search"],
@@ -413,6 +414,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   search_integrations: ["external_registry_search", "registry_read"],
   search_tool_marketplace: ["registry_read"],
   get_my_coworker_profile: ["registry_read"],
+  get_my_approval_status: ["registry_read"],
   assess_my_capabilities: ["registry_read"],
   submit_coworker_capability_need: ["registry_read"],
   list_my_capability_needs: ["registry_read"],

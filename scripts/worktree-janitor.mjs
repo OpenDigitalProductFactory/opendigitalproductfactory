@@ -42,6 +42,7 @@ import {
   pathHasActiveClaim,
 } from "./lib/worktree-liveness.mjs";
 import { runGit as runGitShared } from "./lib/git.mjs";
+import { mcpPost } from "./lib/mcp-client.mjs";
 import { parseArgs as utilParseArgs } from "node:util";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -205,37 +206,22 @@ function ageDays(wtPath) {
  * portal down, curl missing), so the scheduled run died every time while an
  * interactive run with a live token appeared to work.
  */
-function loadLeasePaths() {
+async function loadLeasePaths() {
   const token = process.env.DPF_MCP_BEARER_TOKEN;
   if (!token) return "";
   const url = process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1";
-  const body = JSON.stringify({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "tools/call",
-    params: { name: "list_nonprod_environment_leases", arguments: {} },
-  });
-  const r = spawnSync(
-    "curl",
-    [
-      "-sS",
-      "-X",
-      "POST",
-      url,
-      "-H",
-      `Authorization: Bearer ${token}`,
-      "-H",
-      "Content-Type: application/json",
-      "-d",
-      body,
-      "--max-time",
-      "8",
-    ],
-    { encoding: "utf8", windowsHide: true },
-  );
-  if (r.status !== 0 || !r.stdout) return "";
-  // Match any path-like substrings later via includes on raw payload.
-  return r.stdout;
+  try {
+    const reply = await mcpPost("tools/call", { name: "list_nonprod_environment_leases", arguments: {} }, {
+      mcpUrl: url,
+      bearerToken: token,
+      timeoutMs: 8_000,
+    });
+    if (reply.status < 200 || reply.status >= 300) return "";
+    // Match any path-like substrings later via includes on raw payload.
+    return reply.text;
+  } catch {
+    return "";
+  }
 }
 
 function pathHasLease(leasePayload, wtPath) {
@@ -288,7 +274,7 @@ function removeWorktree(root, wtPath, branch) {
   };
 }
 
-function main(argv = process.argv.slice(2)) {
+async function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
   let root;
   try {
@@ -314,9 +300,9 @@ function main(argv = process.argv.slice(2)) {
 
   const entries = listWorktrees(root);
   const prIndex = loadPrBranchIndex();
-  const leasePayload = loadLeasePaths();
+  const leasePayload = await loadLeasePaths();
   // Ask the platform who owns what, once, for the whole scan.
-  const claims = loadActiveWorkroomPaths();
+  const claims = await loadActiveWorkroomPaths();
   if (!claims.available) {
     console.error(
       `[worktree-janitor] Workroom claims UNREADABLE (${claims.reason}) — every worktree will be ` +

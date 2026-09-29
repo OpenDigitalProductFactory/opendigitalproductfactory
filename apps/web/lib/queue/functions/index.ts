@@ -20,6 +20,7 @@ import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
 import { materialFreshnessDecay } from "./material-freshness-decay";
 import { prSubmitAwaitingAcceptanceReconcile } from "./pr-submit-awaiting-acceptance-reconcile";
+import { budgetReservationSettle } from "./budget-reservation-settle";
 import { researchExecute } from "./research-execute";
 import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
@@ -188,6 +189,7 @@ export const scheduledFunctions = [
   researchScheduleScan,
   materialFreshnessDecay,
   prSubmitAwaitingAcceptanceReconcile,
+  budgetReservationSettle,
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
@@ -258,7 +260,7 @@ export const eventFunctions = [
   governedBacklogTeeUpRequested,
   issueReportProjectOnCreate,
   documentRenditionGenerate, // BI-9D43CBEF: office file saved -> PDF + text renditions, indexed
-  documentRenditionBackfill, // BI-9D43CBEF: bounded sweep when the converter becomes available
+  documentRenditionBackfill, // BI-9D43CBEF/BI-153EC72C: bounded, draining sweep at portal start, on a pin change, and when the converter becomes available
   contributorInventorySyncOnDemand,
   gitPromotionSandboxVerification,
   postgresBackupRequested,

@@ -348,8 +348,8 @@ export async function startQuiescence(opts: StartQuiescenceOpts): Promise<{
     },
   });
 
-  const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
+  const { jobs } = await import("@/lib/jobs");
+  await jobs.send({
     name: "ops/quiescence.start",
     data: {
       runId,
@@ -445,7 +445,7 @@ export async function signalSwapStarting(runId: string, now: Date = new Date()):
  * drives the coordinator's terminal transition (completed/failed/aborted) and
  * flips the quiescence level back to normal — losing it leaves the platform
  * draining until the watchdog reaps the coordinator minutes later. A transient
- * inngest.send failure (network blip, rate limit) shouldn't cost that. After the
+ * jobs.send failure (network blip, rate limit) shouldn't cost that. After the
  * final attempt the error is rethrown so the caller's own failure handling runs.
  */
 async function withSwapSignalRetry(
@@ -481,9 +481,9 @@ async function withSwapSignalRetry(
  * platform.quiescence-cleared to wake suspended Inngest functions.
  */
 export async function signalSwapComplete(runId: string): Promise<void> {
-  const { inngest } = await import("@/lib/queue/inngest-client");
+  const { jobs } = await import("@/lib/jobs");
   await withSwapSignalRetry(`swap-complete(succeeded) ${runId}`, () =>
-    inngest.send({
+    jobs.send({
       name: "ops/quiescence.swap-complete",
       data: { runId, outcome: "succeeded" },
     }),
@@ -500,9 +500,9 @@ export async function signalSwapComplete(runId: string): Promise<void> {
  * new bundle came up but didn't match expected version.
  */
 export async function failQuiescenceSwap(runId: string, reason: string): Promise<void> {
-  const { inngest } = await import("@/lib/queue/inngest-client");
+  const { jobs } = await import("@/lib/jobs");
   await withSwapSignalRetry(`swap-complete(failed) ${runId}`, () =>
-    inngest.send({
+    jobs.send({
       name: "ops/quiescence.swap-complete",
       data: { runId, outcome: "failed", reason },
     }),
@@ -515,9 +515,9 @@ export async function failQuiescenceSwap(runId: string, reason: string): Promise
  * emits platform.quiescence-cleared.
  */
 export async function abortQuiescence(runId: string, operatorUserId: string): Promise<void> {
-  const { inngest } = await import("@/lib/queue/inngest-client");
+  const { jobs } = await import("@/lib/jobs");
   await withSwapSignalRetry(`swap-complete(aborted) ${runId}`, () =>
-    inngest.send({
+    jobs.send({
       name: "ops/quiescence.swap-complete",
       data: { runId, outcome: "aborted", operatorUserId },
     }),
@@ -609,8 +609,8 @@ async function broadcastQuiescenceCleared(payload: {
     const msg = getErrorMessage(err);
     console.warn(sanitizeForLog(`[quiescence-reconcile] broadcastSystem failed: ${msg}`));
   }
-  const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
+  const { jobs } = await import("@/lib/jobs");
+  await jobs.send({
     name: "platform.quiescence-cleared",
     data: {
       runId: payload.runId,

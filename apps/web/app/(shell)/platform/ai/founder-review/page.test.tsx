@@ -66,9 +66,9 @@ describe("FounderReviewPage", () => {
     expect(html).toContain("Clarify founder principle");
     expect(html).toContain("Should the interface hide raw traces?");
     expect(html).toContain("WWMD Platform");
-    expect(html).toContain('href="/platform/ai/decisions/DI-1"');
+    expect(html).toContain('href="/coworker-decisions/decisions/DI-1"');
     expect(html).toContain('href="/build?buildId=FB-1"');
-    expect(html).toContain('href="/platform/ai/history?taskRunId=TR-1"');
+    expect(html).toContain('href="/platform/audit/ledger?taskRunId=TR-1"');
     expect(html).toContain("Review evidence");
     expect(html).not.toContain("Record outcome");
     expect(html).not.toContain("WWMD MCP Sprint 1");
@@ -121,7 +121,7 @@ describe("FounderReviewPage", () => {
     expect(html).toContain("Owner/Operator Review");
     expect(html).toContain("WWWD Organization");
     expect(html).toContain("Clarify operating policy");
-    expect(html).toContain('href="/platform/ai/decisions/DI-ORG"');
+    expect(html).toContain('href="/coworker-decisions/decisions/DI-ORG"');
     expect(html).not.toContain("Clarify founder principle");
   });
 
@@ -223,7 +223,7 @@ describe("FounderReviewPage", () => {
     const html = renderToStaticMarkup(await FounderReviewPage({}));
 
     expect(html).toContain("Should we prioritize fixing quality issues?");
-    expect(html).toContain('href="/platform/ai/decisions/DI-DUP-NEW"');
+    expect(html).toContain('href="/coworker-decisions/decisions/DI-DUP-NEW"');
     expect(html).not.toContain("DI-DUP-OLD");
     expect(html).toContain("1 waiting");
   });

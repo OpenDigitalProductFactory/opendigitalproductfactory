@@ -1,14 +1,14 @@
 // Top-down hierarchical layout for the People > Org Chart canvas (BI-HCM-004).
 //
-// Sits beside `layout-hierarchical.ts` / `layout-swimlane.ts` and reuses the same dagre
-// dependency rather than adding a layout library. It is a separate entry point because
-// `computeHierarchicalLayout` is bound to `GraphData` (a network/CI shape carrying
+// Sits beside `layout-hierarchical.ts` / `layout-swimlane.ts` and uses the same ELK `layered`
+// runner (`elk-runner.ts`) rather than a second layout library. It is a separate entry point
+// because `computeHierarchicalLayout` is bound to `GraphData` (a network/CI shape carrying
 // color/size/osiLayer), which does not describe a workforce.
 //
-// Pure and React-free so the layout is unit-testable without React Flow.
+// Pure and React-free so the layout is unit-testable without React Flow. Async because ELK is.
 
-import dagre from "dagre";
 import type { OrgEdge } from "@/lib/workforce/org-chart-model";
+import { computeLayeredPositions } from "./elk-runner";
 
 /** Footprint of an OrgChartNode card. Kept here so layout and render agree on one number. */
 export const ORG_NODE_W = 220;
@@ -32,13 +32,13 @@ export type OrgPosition = { x: number; y: number };
  * letting them influence ranking pulls people out of their real management layer. They are
  * still drawn, just not ranked.
  *
- * Returns top-left coordinates (React Flow's origin), not dagre's centre points.
+ * Returns top-left coordinates (React Flow's origin); the chart's bounding box starts at 0,0.
  */
-export function computeOrgChartLayout(
+export async function computeOrgChartLayout(
   employeeIds: string[],
   edges: OrgEdge[],
   options: OrgLayoutOptions = {},
-): Record<string, OrgPosition> {
+): Promise<Record<string, OrgPosition>> {
   const {
     nodeWidth = ORG_NODE_W,
     nodeHeight = ORG_NODE_H,
@@ -48,29 +48,15 @@ export function computeOrgChartLayout(
 
   if (employeeIds.length === 0) return {};
 
-  const g = new dagre.graphlib.Graph({ directed: true, compound: false, multigraph: false });
-  g.setGraph({ rankdir: "TB", ranksep: rankSep, nodesep: nodeSep });
-  g.setDefaultEdgeLabel(() => ({}));
-
-  const known = new Set(employeeIds);
-  for (const id of employeeIds) {
-    g.setNode(id, { width: nodeWidth, height: nodeHeight });
-  }
-  for (const edge of edges) {
-    if (edge.kind !== "line") continue;
-    if (!known.has(edge.source) || !known.has(edge.target)) continue;
-    g.setEdge(edge.source, edge.target);
-  }
-
-  dagre.layout(g);
+  const laid = await computeLayeredPositions(
+    employeeIds.map((id) => ({ id, width: nodeWidth, height: nodeHeight })),
+    edges.filter((edge) => edge.kind === "line"),
+    { direction: "TB", rankSep, nodeSep },
+  );
 
   const positions: Record<string, OrgPosition> = {};
   for (const id of employeeIds) {
-    const node = g.node(id);
-    positions[id] = {
-      x: (node?.x ?? 0) - nodeWidth / 2,
-      y: (node?.y ?? 0) - nodeHeight / 2,
-    };
+    positions[id] = laid.get(id) ?? { x: 0, y: 0 };
   }
   return positions;
 }

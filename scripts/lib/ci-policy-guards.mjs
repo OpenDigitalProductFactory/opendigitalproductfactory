@@ -160,6 +160,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/git.test.mjs"),
       conformanceTest("scripts/check-no-direct-git-spawn.test.mjs"),
       node("scripts/check-no-direct-git-spawn.mjs"),
+      // One MCP JSON-RPC client for scripts: loopback check, credential
+      // resolution and transport in one place (plan 2026-09-08 §10.5 S8).
+      node("--test", "scripts/lib/mcp-client.test.mjs"),
+      conformanceTest("scripts/check-no-hand-rolled-mcp-jsonrpc.test.mjs"),
+      node("scripts/check-no-hand-rolled-mcp-jsonrpc.mjs"),
       // One argument parser for every script: node:util parseArgs
       // (plan 2026-09-08 §10.5 S2).
       conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
@@ -195,6 +200,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-698B7F9A: both installers pull the release's dpf-doctools with the
       // other release images and never fail the install on it.
       conformanceTest("scripts/installer/doctools-prepull.test.mjs"),
+      // BI-7371D444: .wslconfig keys land in the section WSL reads them from
+      // (autoMemoryReclaim under [experimental]). Skips where no PowerShell exists.
+      conformanceTest("scripts/installer/wslconfig-sections.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
@@ -343,6 +351,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("mobile-jest-pin-guard", "Mobile Jest Pin Guard", [
       node("scripts/check-mobile-jest-pin.mjs"),
+      node("scripts/check-mobile-react-pin.mjs"),
+      node("--test", "scripts/check-mobile-react-pin.test.mjs"),
     ], { inputs: ["code"] }),
     guard("diagram-dependency-pin-guard", "Diagram Dependency Pin Guard", [
       node("scripts/check-diagram-dependency-pins.mjs"),
@@ -398,6 +408,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("application-boundary-guard", "Application Boundary Guard", [
       node("--test", "scripts/check-application-boundaries.test.mjs"),
       node("scripts/check-application-boundaries.mjs"),
+      // One durable-job facade: only apps/web/lib/jobs/ reaches the engine
+      // (plan 2026-09-08 move M3; spec 2026-09-25 postgres job engine §6).
+      conformanceTest("scripts/check-no-direct-job-engine-import.test.mjs"),
+      node("scripts/check-no-direct-job-engine-import.mjs"),
     ], { inputs: ["code"] }),
     guard("label-association-guard", "Label Association Guard", [
       // A <label> bound to nothing renders, screenshots and inspects correctly
@@ -468,6 +482,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("ux-primitive-adoption-guard", "UX Primitive Adoption Guard", [
       node("--test", "scripts/check-ux-primitive-adoption.test.mjs"),
       node("scripts/check-ux-primitive-adoption.mjs"),
+      // One home per display formatter: dates in lib/datetime, money in
+      // lib/org-locale (plan 2026-09-08 §10.5 S6).
+      conformanceTest("scripts/check-no-local-formatters.test.mjs"),
+      node("scripts/check-no-local-formatters.mjs"),
     ]),
     // BI-101C107C: the Build Studio operator UI surface (component count +
     // non-test LOC under apps/web/components/build) may only shrink against
@@ -602,8 +620,19 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/check-no-local-slugify.test.mjs"),
       node("scripts/check-no-local-slugify.mjs"),
     ]),
+    // One canonical-JSON form for hashes and signatures per import boundary
+    // (plan 2026-09-08 §10.5 S4). Every remaining copy differs from it and
+    // feeds a persisted or signed value, so each stays allowlisted with its
+    // exact difference until a per-call-site migration decides otherwise.
+    guard("local-canonical-json-guard", "Local Canonical JSON Guard", [
+      conformanceTest("scripts/check-no-local-canonical-json.test.mjs"),
+      node("scripts/check-no-local-canonical-json.mjs"),
+    ]),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
+      // One home for the shared wire types (plan 2026-09-08 §10.5 S9).
+      conformanceTest("scripts/check-no-local-dpf-type-redeclaration.test.mjs"),
+      node("scripts/check-no-local-dpf-type-redeclaration.mjs"),
     ]),
     // BI-96033E25 — a vitest test must resolve repo paths from __dirname, not
     // process.cwd(), or `vitest run --root <pkg>` reads outside the repo and
@@ -873,6 +902,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/process-spine-conformance.test.mjs",
         "scripts/lib/ensure-post-checkout-hook.test.mjs",
+      ),
+      // BI-545943EE: the SessionStart process-spine verdict and the generated
+      // operating contract it carries when the spine is unproven. Moved off the
+      // test-inventory allowlist: unlisted = never run.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/process-spine-health.test.mjs",
+        "packages/dpf-skill-pack/scripts/generate-operating-contract.test.mjs",
       ),
       node(
         "--test",

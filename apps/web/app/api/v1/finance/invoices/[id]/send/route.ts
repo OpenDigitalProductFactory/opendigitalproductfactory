@@ -6,7 +6,13 @@ import { ApiError, apiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
 import { getInvoice, sendInvoice } from "@/lib/actions/finance";
 import { getOrgIdentity } from "@/lib/org-identity";
-import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
+import {
+  generateInvoicePdf,
+  getInvoicePdfFilename,
+  InvoicePdfError,
+  invoicePdfFailureMessage,
+  invoicePdfFailureStatus,
+} from "@/lib/invoice-pdf";
 import { sendEmail, composeInvoiceEmail, isEmailConfigured } from "@/lib/email";
 import { checkInvoiceTransition, type InvoiceStatus } from "@/lib/finance/invoice-lifecycle";
 import { snapshotInvoiceDocument } from "@/lib/finance/invoice-document-store";
@@ -43,6 +49,14 @@ export async function POST(
       throw apiError("ILLEGAL_TRANSITION", transition.reason, 422);
     }
 
+    // Render the PDF before sendInvoice marks the invoice sent: the render runs
+    // in the dpf-doctools engine and can fail (no converter on this install, a
+    // timeout), and a failure must not leave the invoice falsely marked "sent".
+    // It reads the invoice fetched above, so the bytes are the same either way.
+    const issuer = await getOrgIdentity();
+    const pdf = await generateInvoicePdf({ ...invoice, issuer });
+    const filename = getInvoicePdfFilename(invoice.invoiceRef, invoice.account.name);
+
     const { payToken } = await sendInvoice(id);
 
     const baseUrl =
@@ -50,10 +64,6 @@ export async function POST(
       request.headers.get("origin") ||
       "http://localhost:3000";
     const payUrl = `${baseUrl}/s/pay/${payToken}`;
-
-    const issuer = await getOrgIdentity();
-    const pdf = await generateInvoicePdf({ ...invoice, issuer });
-    const filename = getInvoicePdfFilename(invoice.invoiceRef, invoice.account.name);
 
     const email = composeInvoiceEmail({
       to: invoice.contact.email,
@@ -109,6 +119,10 @@ export async function POST(
     return apiSuccess({ sent: true, payToken, payUrl, revision });
   } catch (e) {
     if (e instanceof ApiError) return e.toResponse();
+    if (e instanceof InvoicePdfError) {
+      console.error(`[invoice-pdf] ${e.message}`);
+      return apiError("INVOICE_PDF_FAILED", invoicePdfFailureMessage(e.reason), invoicePdfFailureStatus(e.reason)).toResponse();
+    }
     return NextResponse.json(
       { code: "INTERNAL_ERROR", message: "An unexpected error occurred" },
       { status: 500 },

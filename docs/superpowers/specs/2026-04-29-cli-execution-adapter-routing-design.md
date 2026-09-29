@@ -826,7 +826,51 @@ adapter_health = healthy
 - Build Studio dispatch is unchanged. Convergence happens only when Phase H has run and only as an explicit follow-up.
 - Receipts spec landing first lets §7 mint full provenance receipts. If receipts spec slips, §7 still mints `ToolExecution` rows and the receipt linkage is added in a follow-up patch.
 
-## 17. References
+## 17. Organization quota recovery (BI-EDF1BD54, 2026-09-27)
+
+The live Claude CLI returned a 149-character organization monthly spend-limit
+banner to three independent review branches. Their session records identify
+`isApiErrorMessage: true`, `error: rate_limit` and zero generated tokens.
+The adapter recognized personal weekly limits but missed this wording, returned
+it as content, and prevented the existing fallback chain from running.
+
+Extend the existing adapter boundary rather than changing reviewer prompts,
+quota settings or provider eligibility. Recognize the observed organization
+spend-limit banner and retain structured failed-result information. A failed
+CLI result must raise an existing `InferenceError`; quota maps to `rate_limit`,
+unknown failure to `provider_error`. Successful ordinary prose remains content.
+The fallback chain remains the owner of provider selection, screening, capacity,
+bounded retries and truthful exhaustion. Codex or local is used only when it is
+already an eligible candidate. No provider is newly enabled or granted access.
+
+This extends the simpler quota recovery in #4680. BI-18AF9BA0 fixes a distinct
+Codex stderr classification defect; its exclusion of echoed prompt text is a
+precedent for classifying only the CLI envelope and bounded quota banner here.
+No new table, dependency, public tool, credential or migration is required.
+
+Implementation and acceptance:
+
+- Reproduce the observed banner through the adapter before changing production
+  code. Include organization and personal quotas, successful content, and
+  structured failure envelopes with otherwise unfamiliar text.
+- Refactor quota/error classification into one adapter helper where needed;
+  keep parsing and error propagation separate so a parse catch cannot swallow
+  a provider failure.
+- Exercise the real adapter through the existing fallback chain with eligible
+  Codex and local candidates. Verify exhaustion remains an error, and failure
+  text is never returned as a completed review.
+- Run affected adapter/router tests, typecheck, deterministic guards and the
+  canonical merged-code gate; deliver through a DCO PR and merge queue, then
+  verify the review path on the canonical install.
+
+Operator direction in task `01a0c605-8f98-7ba1-bc3d-42836ccb11aa` explicitly
+authorizes this bounded process repair: "ok, this is an override situation then
+to fix that step in the process." It does not turn the existing inconclusive
+review into a pass or bypass protected publication, grants, independent review,
+scope ownership, build gates or runtime integrity. Any unavailable review stays
+inconclusive. This scope expires when this repair merges or is abandoned.
+
+## 18. References
 
 - [Coworker Substrate Status Review](../audits/2026-04-29-cli-substrate-status-review.md) — the audit this spec promotes
 - [Codex JSONL probe evidence](../audits/evidence/2026-04-29-codex-cli-jsonl-probe.md) — empirical event taxonomy

@@ -72,7 +72,11 @@ export async function writeGovernedToolAudit(data: {
       } } : {}),
       ...(data.preconditionDecision ? { _takPrecondition: data.preconditionDecision } : {}),
     } : {},
-    result: isMetricsOnly ? {} : data.result as unknown as object,
+    // Metrics-only rows drop payloads, but a failure with no error code is
+    // indistinguishable from a crash. Keep the code alone so the efficiency
+    // scan can tell a governed refusal from a fault (BI-MCP-EFF query_detections,
+    // surface_open, and the other read tools whose results were `{}`).
+    result: isMetricsOnly ? metricsOnlyResult(data.result) : data.result as unknown as object,
     success: data.result.success, executionMode: data.source,
     routeContext: data.context?.routeContext ?? null, durationMs: data.durationMs,
     auditClass, capabilityId: deriveCapabilityId(data.toolName),
@@ -114,6 +118,13 @@ export async function updateGovernedToolAudit(id: string, result: ToolResult, du
 
 /** A parked call's audit row names the envelope it waits on, so the approval
  *  card and the approved-request runner join on a column, not JSON. */
+function metricsOnlyResult(result: ToolResult): { error: string } | Record<string, never> {
+  if (result.success) return {};
+  return typeof result.error === "string" && result.error.length > 0
+    ? { error: result.error }
+    : {};
+}
+
 function pendingEnvelopeId(result: ToolResult): string | null {
   if (result.error !== "approval_required") return null;
   const data = result.data as Record<string, unknown> | undefined;

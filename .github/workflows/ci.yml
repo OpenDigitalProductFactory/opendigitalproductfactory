@@ -144,6 +144,87 @@ jobs:
             echo "- Enforcement: fail-closed; this push runs exhaustive evidence"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  docs-publication:
+    name: Documentation Publication Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect publication inputs
+        id: scope
+        env:
+          DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          # Missing history means build, never a false skip. Compare against
+          # checkout HEAD so PR and merge-queue candidates are both validated.
+          if [ -z "$DIFF_BASE" ] || ! git cat-file -e "$DIFF_BASE^{commit}" 2>/dev/null; then
+            echo 'build=true' >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$DIFF_BASE" HEAD -- docs/ .github/workflows/ci.yml; then
+            echo 'build=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'build=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build the public documentation corpus
+        if: steps.scope.outputs.build == 'true'
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs
+          destination: ./_site
+          verbose: false
+      - name: Verify the literal MessageFormat example survived publication
+        if: steps.scope.outputs.build == 'true'
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Text(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.parts = []
+              def handle_data(self, data):
+                  self.parts.append(data)
+          paths = [Path('_site/architecture/localization-runbook.html'),
+                   Path('_site/architecture/localization-runbook/index.html')]
+          page = next((p for p in paths if p.is_file()), None)
+          assert page, 'Localization runbook was not published'
+          rendered = Text()
+          rendered.feed(page.read_text())
+          assert '* {{{$count} items}}' in ''.join(rendered.parts), 'Literal example was altered'
+          PY
+      - name: Prepare malformed Liquid regression fixture
+        if: steps.scope.outputs.build == 'true'
+        run: |
+          mkdir -p .pages-invalid-fixture
+          cat > .pages-invalid-fixture/index.md <<'EOF'
+          ---
+          layout: null
+          ---
+          {% deliberately_invalid_liquid_tag %}
+          EOF
+      - name: Verify the publisher rejects malformed Liquid
+        id: invalid-liquid
+        if: steps.scope.outputs.build == 'true'
+        continue-on-error: true
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./.pages-invalid-fixture
+          destination: ./_invalid_site
+          verbose: false
+      - name: Assert negative fixture failed
+        if: steps.scope.outputs.build == 'true'
+        env:
+          FIXTURE_OUTCOME: ${{ steps.invalid-liquid.outcome }}
+        run: test "$FIXTURE_OUTCOME" = failure
+      - name: Report unchanged publication inputs
+        if: steps.scope.outputs.build == 'false'
+        run: echo 'Public documentation inputs unchanged; publication build not needed.'
+
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
@@ -782,6 +863,7 @@ jobs:
     if: always()
     needs:
       - changes
+      - docs-publication
       - exact-tree-evidence-shadow
       - typecheck
       - typecheck-tests

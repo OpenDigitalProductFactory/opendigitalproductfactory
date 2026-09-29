@@ -291,7 +291,7 @@ Cross-cutting RTL checks:
 - mixed-direction input (`dir="auto"`)
 - mirroring exceptions
 - email-client RTL
-- **PDF shaping in `@react-pdf/renderer` is unverified.** It may need the dpf-doctools engine instead.
+- **PDF shaping in the dpf-doctools engine is unverified for RTL.** Invoice PDFs moved off `@react-pdf/renderer` to HTML printed by the engine (LibreOffice) on 2026-09-26 (plan 2026-09-08 M5).
 - mobile `I18nManager`
 
 Storage always stays Gregorian UTC.
@@ -478,9 +478,9 @@ This replaces the earlier proposal of 100% on tier 1 and 95% elsewhere. A single
 - **Calendar:** Gregorian by default, with Hijri (`-u-ca-islamic-umalqura`) as a display option.
 - **Font:** Noto Sans Arabic.
 - **Urdu** ships second, in Naskh first, with Nastaliq later.
-- **Blocking spike before committing Arabic:** `@react-pdf/renderer` has known Arabic shaping and RTL issues (#2638, #3007, #1636, #1571).
-  - Prove the path first: a registered Noto font plus bidi control marks.
-  - If it fails, route RTL PDFs through a headless-browser or dpf-doctools renderer.
+- **Blocking spike before committing Arabic:** invoice PDFs are HTML printed by the dpf-doctools engine (LibreOffice) since 2026-09-26; the retired `@react-pdf/renderer` had known Arabic shaping and RTL issues (#2638, #3007, #1636, #1571).
+  - Prove the path first: `dir="rtl"` HTML with Noto Sans Arabic present in the dpf-doctools image.
+  - If it fails, route RTL PDFs through a headless-browser renderer.
 
 **Sources**
 - [IFRS IAS 21](https://www.ifrs.org/issued-standards/list-of-standards/ias-21-the-effects-of-changes-in-foreign-exchange-rates/)

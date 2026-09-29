@@ -34,7 +34,7 @@ describe("getDomainNavEntries", () => {
     // EA + Ops are delivery-domain; Marketing is customer-domain — all in-domain.
     expect(paths).toContain("/ea/capabilities");
     expect(paths).toContain("/ea/value-streams");
-    expect(paths).toContain("/ops/self-upgrade");
+    expect(paths).toContain("/ops/workrooms");
     expect(paths).toContain("/ops/changes");
     expect(paths).toContain("/customer/marketing/campaigns");
     expect(paths).toContain("/customer/marketing/strategy");
