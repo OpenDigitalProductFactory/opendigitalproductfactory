@@ -871,6 +871,14 @@
     "longSentences": 0,
     "textMass": 6
   },
+  "apps/web/app/(shell)/customer/footprint/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 30
+  },
   "apps/web/app/(shell)/customer/marketing/automation/page.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -5462,6 +5470,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 10
+  },
+  "apps/web/components/customer/footprint/FootprintView.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 69
   },
   "apps/web/components/decision-perspective/DecisionCanvas.tsx": {
     "vocabulary": 0,
