@@ -907,6 +907,9 @@
     "apps/web/lib/marketing/utm.ts": [
       "docs/architecture/unified-connector-kernel.md"
     ],
+    "apps/web/lib/mcp-governed-execute-types.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
     "apps/web/lib/mcp-governed-execute.ts": [
       "docs/architecture/ai-agent-meta-model.md",
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
@@ -1269,6 +1272,9 @@
     ],
     "apps/web/lib/tak/initiative-readiness-tool-grants.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/tak/precondition-ordering-types.ts": [
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/tak/prompt-assembler.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
@@ -3009,6 +3015,7 @@
       "scripts/pregate.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [
+      "apps/web/lib/mcp-governed-execute-types.ts",
       "apps/web/lib/mcp-tool-types.ts",
       "apps/web/lib/mcp/packs/deliberation-siem-pack.ts",
       "apps/web/lib/mcp/packs/feedback-pack.ts",
@@ -3017,6 +3024,7 @@
       "apps/web/lib/mcp/packs/workbooks-pack.ts",
       "apps/web/lib/mcp/tool-pack.ts",
       "apps/web/lib/mcp/tool-registry.ts",
+      "apps/web/lib/tak/precondition-ordering-types.ts",
       "scripts/check-mcp-tool-pack.mjs",
       "scripts/check-module-size.mjs",
       "scripts/check-no-web-import-cycle-growth.mjs",

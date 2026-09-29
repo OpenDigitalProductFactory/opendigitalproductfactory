@@ -6,7 +6,7 @@
 // let grow further.
 
 // Type-only, so this does not create a runtime cycle with the execute seam.
-import type { GovernedExecuteResult } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
 import { envelopeInboxRoute } from "@/lib/coworker/envelope-routes";
 
 /**

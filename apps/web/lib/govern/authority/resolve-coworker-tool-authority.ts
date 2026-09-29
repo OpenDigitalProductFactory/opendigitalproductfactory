@@ -12,7 +12,7 @@ import { findApprovedAuthorityEnvelope } from "@/lib/coworker/authority-approval
 import { resolveCallConsequence } from "@/lib/tool-consequence";
 import { getWorkCaseAction } from "@/lib/work-management/action-registry";
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
-import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute-types";
 import { getGrantedCapabilities } from "@/lib/permissions";
 import type { EscalationSteering } from "./escalation-gate";
 import { roomAuthorizesTool } from "@/lib/work-management/room-turn-authority";

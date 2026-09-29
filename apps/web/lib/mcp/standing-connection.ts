@@ -18,7 +18,7 @@ import {
 import { approvalExecutionContext, type ApprovalCredential } from "@/lib/coworker/approved-request-credential";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { tokenAdmitsTool } from "@/lib/mcp/token-tool-scope";
-import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute-types";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import type { UserContext } from "@/lib/permissions";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";

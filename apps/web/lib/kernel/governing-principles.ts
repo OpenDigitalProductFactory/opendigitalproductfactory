@@ -24,7 +24,7 @@ import type {
   ReadinessShape,
   ReadinessTarget,
 } from "@/lib/backlog/initiative-readiness/types";
-import type { GovernedExecuteRejection } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteRejection } from "@/lib/mcp-governed-execute-types";
 
 const GATES_PROPORTIONAL_TO_SHAPE = "gates-proportional-to-shape";
 const DESIGN_RESEARCH_REQUIRED = "principles/design-research-required";
