@@ -268,16 +268,17 @@ _Founder direction, 2026-09-25: too many dependencies, too much complexity, too 
 | Move | State | Evidence |
 |---|---|---|
 | M1 production dependency set in the image | done | #5267 |
-| M2 diagram toolchain out of the workspace | mermaid half done; `docx` is still a root devDependency for four `docs:*` generators | #5253 |
-| M3 durable jobs onto Postgres | open, needs WWMD | none since 2026-09-08 |
+| M2 diagram toolchain out of the workspace | done: mermaid out (#5253); `docx` retired, the architecture `.docx` builds through dpf-doctools (#5724) | #5253, #5724 |
+| M3 durable jobs onto Postgres | decided `own_postgres_jobs` (§10.6.1). Phase 1 done: every durable job goes through the `@/lib/jobs` facade (#5760). Phase 2 (the Postgres engine behind a flag) and phase 3 (retire Inngest) are open; the spec's §7 benchmarks need a Postgres runtime | #5760, [design](../specs/2026-09-25-postgres-durable-job-engine-design.md) |
 | M4 Prism replaced in the harness | done: an owned OpenAPI contract runtime; Prism retired on the dependency allowlist | [design](../specs/2026-09-25-harness-owned-contract-validator-design.md) |
-| M5 document cluster | partly absorbed by the office-document engine; its S9 (BI-D1B40D43, 2026-09-26) retired mammoth, read-excel-file and pdf-parse (with pdfjs-dist and @napi-rs/canvas): 39 resolved components, now on the sbom deny list | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md) |
-| M6 mobile workspace split | done: founder-approved 2026-09-25; `apps/mobile` resolves in its own workspace and lockfile; platform tree 1759 → 1062 packages, duplicated names 165 → 68 | `apps/mobile/pnpm-workspace.yaml`, `scripts/sbom/lockfile-roots.mjs` |
-| M7 multi-version cleanup | first pass done (#5289); second pass in this branch | this branch |
-| M8 override prune | done in this branch | this branch |
-| M9 retired-substrate sweep | backup engines deleted | #5285 |
+| M5 document cluster | partly absorbed by the office-document engine; its S9 (BI-D1B40D43, 2026-09-26) retired mammoth, read-excel-file and pdf-parse (with pdfjs-dist and @napi-rs/canvas): 39 resolved components, now on the sbom deny list. M5b done: invoice PDFs render through the dpf-doctools export path and `@react-pdf/renderer` is retired (#5770). The markdown half (`renderMarkdown()` on `markdown-it`, §10.6.1) is built on branch `claude/m5-markdown-it` and waits on UX-fit evidence: a sweep against a running portal or a propose-n-pick decision recorded through the DPF MCP | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md), #5770 |
+| M6 mobile workspace split | done (follow-ups: the Jest 30.5.2 patch landed deduped, #5727; the React pin is declared, guarded by `check-mobile-react-pin.mjs` and excluded from Dependabot, #5759): founder-approved 2026-09-25; `apps/mobile` resolves in its own workspace and lockfile; platform tree 1759 → 1062 packages, duplicated names 165 → 68 | `apps/mobile/pnpm-workspace.yaml`, `scripts/sbom/lockfile-roots.mjs` |
+| M7 multi-version cleanup | done: first pass #5289, second pass #5670 | #5289, #5670 |
+| M8 override prune | done | #5670 |
+| M9 retired-substrate sweep | done: backup engines deleted (#5285); Neo4j and Qdrant residue swept and `check-retired-substrate.mjs` now forbids it (#5774) | #5285, #5774 |
 | M11 step 1 separate test program | done | #5268, #5292 |
-| §7 budgets ratchet | done in this branch | this branch |
+| M11 step 2 project references | blocked: a 657-file import cycle across `lib/mcp`, build, TAK and `app/actions` stops the split into referenced projects. Breaking the cycle comes first, starting with the 610 imports that are type-only. Baseline for the later steps: web typecheck 153 s wall, 5,558 MB peak RSS, 8,208 files | measured 2026-09-26 |
+| §7 budgets ratchet | done | #5670 |
 
 ### 10.2 The totals regrew because nothing held them
 
@@ -327,16 +328,16 @@ The founder direction extends past packages to our own source. A read-only surve
 
 | Move | Concern | Sites | Single home | Effort |
 |---|---|---|---|---|
-| S1 | git exec wrappers in `scripts/` with three argument orders | at least 37 files define their own top-level `git` or `runGit` | `scripts/lib/git.mjs`, from `runGit` in `scripts/lib/git-changed-files.mjs` | M, mechanical. **Step 1 done 2026-09-25**: 29 of the 32 exec wrappers now delegate to `scripts/lib/git.mjs` (`runGit` / `gitText` / `gitTextOrNull`, failure behaviour chosen by name); every affected test file gives the same result as before. The ratchet `scripts/check-no-direct-git-spawn.mjs` holds the rest (31 files) as a closed backlog. Ten diff-scoped guards still read partial stdout on a failed git call; each is now marked `Fail-open as before` for review |
-| S2 | CLI argument parsing in `scripts/` | at least 22 files define their own top-level `parseArgs` | `node:util` `parseArgs` | M, mechanical |
+| S1 | git exec wrappers in `scripts/` with three argument orders | at least 37 files define their own top-level `git` or `runGit` | `scripts/lib/git.mjs`, from `runGit` in `scripts/lib/git-changed-files.mjs` | M, mechanical. **Step 1 done 2026-09-25**: 29 of the 32 exec wrappers now delegate to `scripts/lib/git.mjs` (`runGit` / `gitText` / `gitTextOrNull`, failure behaviour chosen by name); every affected test file gives the same result as before. The ratchet `scripts/check-no-direct-git-spawn.mjs` holds the rest (31 files) as a closed backlog. Ten diff-scoped guards still read partial stdout on a failed git call; each is now marked `Fail-open as before` for review. **Step 2 done 2026-09-26** (#5717): 26 more scripts moved onto the runner; the allowlist is down from 31 to 5, each with its reason (async, Buffer output or `.error` readers, or no static imports). |
+| S2 | CLI argument parsing in `scripts/` | at least 22 files define their own top-level `parseArgs` | `node:util` `parseArgs` | M, mechanical. **Done 2026-09-26** (#5718): one argument parser for every script |
 | S3 | hand-written `pnpm-lock.yaml` parsers | 5 (`sbom/runtime-surface`, `sbom/generate-platform-sbom`, `sbom/check-lockfile-release-age`, `lib/load-pinned-guard-typescript`, `lib/sandbox-freshness`) | `scripts/lib/pnpm-lock.mjs` | S. **Done 2026-09-25**: all five migrated; ratchet `scripts/check-no-local-lockfile-parser.mjs`. It fixed a latent bug: the release-age walk had emitted 107 junk keys from nested lines |
-| S4 | canonical JSON for hashing and signing | 22 copies beside `apps/web/lib/shared/canonical-json.ts` | `@dpf/integration-shared`, so db, web and scripts share one | M. The copies differ (key collation, non-finite handling), so a switch changes hashes and needs a migration note per call site |
-| S5 | `isRecord` / `isPlainObject` | 35 | widen `check-no-local-isrecord.mjs` from `apps/web/lib` to `components/`, `packages/` and `scripts/lib` | S |
-| S6 | date, money, byte and duration formatters | 41 + 34 (12 identical `formatDateTime` in integration panels, 11 identical `formatMoney` in finance tables) | `lib/org-locale` for money and dates; `lib/shared/format.ts` for the rest | S to M |
-| S7 | `slugify` | 14 beside `lib/shared/slugify.ts` | the existing home, plus a local-copy ratchet | S |
-| S8 | hand-written MCP JSON-RPC clients in `scripts/` and packages | 7 beside `scripts/lib/mcp-client.mjs` | the existing client | S to M |
-| S9 | types redeclared outside `@dpf/types` | 13 pairs. `MeResponse` has already drifted (`platformRole: string \| null` vs `string`) | `@dpf/types`, with routes using `satisfies` | S |
-| S10 | two graph-layout engines | `dagre` in `lib/graph`, `elkjs` in `lib/ea` | one engine (elkjs already covers layered layout); a dependency removal | M, WWMD |
+| S4 | canonical JSON for hashing and signing | 22 copies beside `apps/web/lib/shared/canonical-json.ts` | `@dpf/integration-shared`, so db, web and scripts share one | M. The copies differ (key collation, non-finite handling), so a switch changes hashes and needs a migration note per call site. **Done 2026-09-26** (#5773): one canonical-JSON home per import boundary, plus the ratchet `check-no-local-canonical-json.mjs` |
+| S5 | `isRecord` / `isPlainObject` | 35 | widen `check-no-local-isrecord.mjs` from `apps/web/lib` to `components/`, `packages/` and `scripts/lib` | S. **Done 2026-09-26** (#5722): one `isRecord` per import boundary. Two storefront-template files keep local copies, allowlisted with reasons, because their generator runs in the guard CI job, where workspace packages are not installed |
+| S6 | date, money, byte and duration formatters | 41 + 34 (12 identical `formatDateTime` in integration panels, 11 identical `formatMoney` in finance tables) | `lib/org-locale` for money and dates; `lib/shared/format.ts` for the rest | S to M. **Done 2026-09-26** (#5764): the copied date formatters have one home; the ratchet `check-no-local-formatters.mjs` lists the remaining exceptions with reasons |
+| S7 | `slugify` | 14 beside `lib/shared/slugify.ts` | the existing home, plus a local-copy ratchet | S. **Done 2026-09-26** (#5723): identical copies migrated, plus a local-copy ratchet |
+| S8 | hand-written MCP JSON-RPC clients in `scripts/` and packages | 7 beside `scripts/lib/mcp-client.mjs` | the existing client | S to M. **Done 2026-09-26** (#5725): scripts use the one MCP JSON-RPC client |
+| S9 | types redeclared outside `@dpf/types` | 13 pairs. `MeResponse` has already drifted (`platformRole: string \| null` vs `string`) | `@dpf/types`, with routes using `satisfies` | S. **Done 2026-09-26** (#5762): one declaration per `@dpf/types` wire type |
+| S10 | two graph-layout engines | `dagre` in `lib/graph`, `elkjs` in `lib/ea` | one engine (elkjs already covers layered layout); a dependency removal | M, WWMD. **Done 2026-09-26** (#5766): founder chose elkjs (§10.6.1); the dagre layouts are ported and `dagre` is retired |
 | S11 | first-party range drift | `net-snmp` `^3.26.3` vs `^3.14.0`; `dotenv` `^17.2.3` vs `^17.4.2`; `@prisma/client` `^7.9.0` vs `prisma` `^7.9.1`; exact `typescript` in `repo-guard-runtime`; `bcryptjs`, `read-excel-file` and `undici` declared in several workspaces | one specifier per package, then a pnpm `catalog:` so the next drift cannot happen | S. **Done 2026-09-25**: `dotenv`, `net-snmp` and `@prisma/client` aligned; the Prisma family now resolves to 7.9.1 together, where the client had been 7.9.0. `check-sbom-drift` now fails on specifier drift, with the accepted exceptions recorded in `sbom/baseline.json` (only the exact `typescript` pin). `catalog:` is deferred: the adp and harness images build without the workspace file |
 | S12 | service images installing without the lockfile | `services/adp` and `services/integration-test-harness` ran `pnpm install` against their own `package.json`: no lockfile, overrides, release-age floor or patches. Measured on 2026-09-25, the harness resolved 25 versions and adp 13 versions that the lockfile of the day did not have (adp shipped `undici` 8.11.2 and `zod` 4.6.5 against locked 8.10.0 and 4.4.3); every registry release reached the image unvetted. The adp image also could not start: since 2026-07-10 `@dpf/integration-shared` has exported extensionless TypeScript source that Node cannot load from `node_modules` | both install `--frozen-lockfile` from the workspace and ship a `pnpm deploy --prod` tree, as edge-node does; `integration-shared/scripts/prepare-dist.mjs` makes its `dist/` Node-loadable; the adp build fails if its runtime imports do not load | S. **Done 2026-09-25** |
 
@@ -358,6 +359,25 @@ The founder decided the four open calls in the dependency-architecture thread on
 | S10 graph layout | `elkjs` only | `dagre` retires; the three `lib/graph` layouts move to elkjs `layered`. |
 | M5 markdown | one `renderMarkdown()` on `markdown-it`, raw HTML off | `react-markdown` and `remark-gfm` retire behind one primitive. |
 | Delivery | one branch and one PR per move | Moves ship in parallel on `claude/<move>` branches. |
+
+### 10.6.2 Re-measurement and what remains, 2026-09-29
+
+Measured with `node scripts/sbom/check-sbom-drift.mjs` on `main` at `fab98a17b`. The platform totals count the platform lockfile only; since M6, `apps/mobile` has its own lockfile and its own budget.
+
+| Measure | 2026-09-08 | 2026-09-25 before | 2026-09-29 |
+|---|---|---|---|
+| Resolved components (platform) | 2000 | 1907 | 959 |
+| Duplicated names (platform) | 227 | 216 | 58 |
+| Excess instances (platform) | 291 | 261 | 61 |
+| Multi-major names (platform) | — | 124 | 27 |
+| Mobile lockfile | — | — | 951 components, 87 duplicated names |
+
+Every S-move and M1, M2, M4, M6, M7, M8 and M9 are done. Open:
+
+- **M3 phases 2 and 3.** The Postgres engine behind a flag, then Inngest retires. Needs a Postgres runtime for the §7 benchmarks.
+- **M5 markdown.** Built on `claude/m5-markdown-it`; needs UX-fit evidence before its PR can pass `check-ux-fit-decision`.
+- **M11 steps 2 to 4.** Step 2 waits on breaking the import cycle in §10.1. Step 4 (the `extendedDiagnostics` baseline) does not depend on step 2 and can go first.
+- **Owed records.** The §10.6.1 `principle_decide` records and the §10.7 backlog items, once a session has DPF MCP access.
 
 ### 10.7 Backlog coverage
 
