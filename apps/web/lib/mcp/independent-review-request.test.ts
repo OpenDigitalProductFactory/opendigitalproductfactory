@@ -17,7 +17,7 @@ vi.mock("./packs/backlog-pack-read-tools", () => ({ getBacklogItem: mocks.item }
 vi.mock("@/lib/backlog/initiative-readiness/terminal-recovery", () => ({ resolveTerminalInitiativeRecovery: mocks.recovery }));
 
 import { authorizeCoworkerRequest } from "./independent-review-request";
-import type { ToolExecutionContext } from "@/lib/mcp-tools";
+import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
 import { remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 

@@ -33,13 +33,8 @@ export type {
   AuthorityApprovalTaskResume,
   CoworkerAuthorityInputResolver,
 } from "./govern/authority/coworker-tool-authority-gate";
-import {
-  PLATFORM_TOOLS,
-  executeTool,
-  type ToolDefinition,
-  type ToolResult,
-  type ToolExecutionContext,
-} from "./mcp-tools";
+import { PLATFORM_TOOLS, executeTool } from "./mcp-tools";
+import type { ToolDefinition, ToolResult, ToolExecutionContext } from "./mcp-tool-types";
 import { coerceMcpToolArgs } from "./mcp-arg-coercion";
 import { canonicalWorkroomToolName } from "./tak/workroom-tool-aliases";
 import {

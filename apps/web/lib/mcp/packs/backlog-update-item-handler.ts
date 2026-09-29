@@ -10,7 +10,7 @@
 
 import { attributeBacklogPortfolio, prisma } from "@dpf/db";
 import { BACKLOG_SCOPE_KIND_VALUES } from "@/lib/explore/backlog";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import {
   resolveProductManagementScopeRefs,
   type ProductManagementScope,

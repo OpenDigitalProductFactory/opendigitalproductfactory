@@ -19,7 +19,7 @@
 //
 // Pure + dependency-light so it unit-tests without next-auth or the action surface.
 
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { CORE_MCP_TOOL_NAMES } from "@/lib/mcp/tool-tier";
 import { resolveLocalToolCeiling, type LocalPresence } from "@/lib/routing/local-tool-ceiling";

@@ -1,7 +1,7 @@
 import { scryptSync } from "crypto";
 import { prisma } from "@dpf/db";
 
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import type { AlignmentGateDecision } from "./alignment-tool-gate";
 import type { PreconditionOrderingDecision } from "./precondition-ordering-gate";
 import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";

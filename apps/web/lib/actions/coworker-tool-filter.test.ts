@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 
 import { adviseHeldBackTools, buildAdvisePromptSuffix, filterToolsForCoworkerRuntime } from "./coworker-tool-filter";
 
