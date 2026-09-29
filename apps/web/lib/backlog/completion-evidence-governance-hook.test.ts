@@ -8,7 +8,7 @@ import {
   isAgentCompletionRequest,
   resolveCompletionEvidenceGateMode,
 } from "./completion-evidence-governance-hook";
-import type { ToolLifecycleEvent } from "@/lib/mcp-governed-execute";
+import type { ToolLifecycleEvent } from "@/lib/mcp-governed-execute-types";
 
 function event(
   source: ToolLifecycleEvent["source"] = "external-jsonrpc",

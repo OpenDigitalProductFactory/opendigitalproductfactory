@@ -5,7 +5,7 @@
 // rightly refused to let grow further — the same reason approval-pending-result
 // was split out next door.
 
-import type { GovernedExecuteRejection } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteRejection } from "@/lib/mcp-governed-execute-types";
 import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 
 /**

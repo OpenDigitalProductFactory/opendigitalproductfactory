@@ -5,7 +5,7 @@ import type {
   ToolLifecycleDecision,
   ToolLifecycleEvent,
   ToolLifecycleHook,
-} from "@/lib/mcp-governed-execute";
+} from "@/lib/mcp-governed-execute-types";
 
 import {
   resolveCompletionEvidence,

@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 
-import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute-types";
 
 export type GaidActorEnvelope = {
   principalId: string;
