@@ -4,7 +4,8 @@
   "decisionInteractionId": "DI-7EF482872696",
   "scope": {
     "files": [
-      "apps/web/components/admin/OrganizationAccountableOwnerPanel.tsx"
+      "apps/web/components/admin/OrganizationAccountableOwnerPanel.tsx",
+      "apps/web/app/(shell)/admin/settings/page.tsx"
     ]
   },
   "evidence": {
