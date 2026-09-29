@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-disclosure",
+  "decisionInteractionId": "DI-7EF482872696",
+  "scope": {
+    "files": [
+      "apps/web/components/admin/OrganizationAccountableOwnerPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "progressive-disclosure",
+      "always-open-form",
+      "separate-page"
+    ]
+  }
+}
