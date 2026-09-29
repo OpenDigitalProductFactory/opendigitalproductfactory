@@ -641,6 +641,8 @@ export async function executePersistedRemoteTask(input: {
   const capacityWait = parseResourceWaitProjection(row.progressPayload);
   const outcome = await executeRemoteTaskAttempt({
     ...reconstructed.data,
+    expectedReservation: string(progress["resumeReservedAt"]),
+    expectedDispatchClaim: claimedAt.toISOString(),
     idempotentReplay: capacityWait !== null,
     capacityAttempt: capacityWait ? capacityWait.attempt + 1 : 1,
     ...(capacityWait ? { resumeKind: "capacity" as const } : {}),

@@ -37,7 +37,7 @@ const SPEC_PREFIX = "docs/superpowers/specs/";
  */
 const COMPARE_FILE_LIMIT = 300;
 
-type CompareFile = { filename: string; sha: string; status: string };
+type CompareFile = { filename: string; sha: string; status: string; patch?: string };
 
 function compareFiles(payload: unknown): CompareFile[] | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
@@ -51,7 +51,7 @@ function compareFiles(payload: unknown): CompareFile[] | null {
     const sha = typeof row.sha === "string" ? row.sha : "";
     const status = typeof row.status === "string" ? row.status : "";
     if (!filename || !sha || !status) return null;
-    rows.push({ filename, sha, status });
+    rows.push({ filename, sha, status, ...(typeof row.patch === "string" ? { patch: row.patch } : {}) });
   }
   return rows;
 }
@@ -263,14 +263,32 @@ async function discoverCanonicalDesignArtifactWithFetch(
   return { resolved: true, artifact: { path: canonical.filename, providerBlobId: canonical.sha } };
 }
 
-/** A single implementation artifact may be accompanied by tests and explanatory docs. */
+/**
+ * BI-09399355: a manifest whose only change is its `"version"` value is release
+ * bookkeeping, not a competing implementation: a repair that bumps four plugin
+ * manifests beside one code change is still one reviewable change. Read from the
+ * provider's own patch; a missing patch (GitHub omits large ones) proves nothing,
+ * so the file stays a candidate.
+ */
+const VERSION_LINE = /^[+-]\s*"version"\s*:\s*"[^"]*"\s*,?\s*$/;
+
+function isVersionOnlyChange(file: CompareFile): boolean {
+  if (file.status !== "modified" || !file.filename.endsWith(".json") || !file.patch) return false;
+  const changed = file.patch.split("\n")
+    .filter((line) => (line.startsWith("+") || line.startsWith("-")) && !line.startsWith("+++") && !line.startsWith("---"));
+  return changed.length === 2 && changed.every((line) => VERSION_LINE.test(line))
+    && changed.some((line) => line.startsWith("+")) && changed.some((line) => line.startsWith("-"));
+}
+
+/** A single implementation artifact may be accompanied by tests, explanatory docs and version bumps. */
 function discoverRepairArtifact(files: CompareFile[]): CanonicalArtifactDiscoveryResult {
   const valid = files.filter((file) => /^[a-f0-9]{40}$/i.test(file.sha)
     && !file.filename.includes("\\")
     && file.filename.split("/").every((part) => part.length > 0 && part !== "." && part !== ".."));
   const implementation = valid.filter((file) => !file.filename.startsWith("docs/")
     && !/(^|\/)(__tests__|tests?)\//.test(file.filename)
-    && !/\.(test|spec)\.[^/]+$/.test(file.filename));
+    && !/\.(test|spec)\.[^/]+$/.test(file.filename)
+    && !isVersionOnlyChange(file));
   // Deletions remain part of the repair scope even though no head blob survives.
   const candidates = valid.length !== files.length ? [] : valid.length === 1 ? valid : implementation;
   if (candidates.length === 1 && candidates[0]!.status !== "removed") {

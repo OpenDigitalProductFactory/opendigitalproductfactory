@@ -2,13 +2,11 @@ import type {
   GovernedExecuteArgs,
   GovernedExecuteRejection,
   GovernedExecuteResult,
-} from "@/lib/mcp-governed-execute";
+} from "@/lib/mcp-governed-execute-types";
 import { ALIGNMENT_REFUSAL_PRINCIPLE } from "@/lib/kernel/governing-principles";
 import { runTakAlignmentGate, type AlignmentGateDecision } from "./alignment-tool-gate";
-import {
-  runTakPreconditionGate,
-  type PreconditionOrderingDecision,
-} from "./precondition-ordering-gate";
+import { runTakPreconditionGate } from "./precondition-ordering-gate";
+import type { PreconditionOrderingDecision } from "./precondition-ordering-types";
 import { writeToolExecutionReceipt } from "./tool-execution-receipt";
 
 type AuditResult = { id: string } | null;

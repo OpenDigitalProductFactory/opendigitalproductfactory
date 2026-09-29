@@ -1,7 +1,7 @@
 import { prisma } from "@dpf/db";
 
 import type { ConstitutionalAlignmentResult } from "@/lib/decision-perspective/alignment-criteria";
-import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute-types";
 import type { SpecialistAlignmentDelegationResult } from "./alignment-specialist-delegation";
 
 export type AlignmentGateDecision = {

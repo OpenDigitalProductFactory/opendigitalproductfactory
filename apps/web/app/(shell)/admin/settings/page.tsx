@@ -73,7 +73,7 @@ export default async function AdminSettingsPage() {
       <PlatformKeysPanel
         keyData={await getKeyData(PLATFORM_KEYS)}
         title="Core Configuration"
-        description="Install-wide settings that belong to the organization and platform rather than AI runtime tools."
+        description="Install-wide settings."
         configs={ADMIN_PLATFORM_KEY_CONFIGS}
       />
       <SocialAuthPanel keyData={await getKeyData(SOCIAL_AUTH_KEYS)} />

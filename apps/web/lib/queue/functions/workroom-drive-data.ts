@@ -127,8 +127,19 @@ export async function reconcileCoordinationBindings(): Promise<number> {
 }
 
 /**
- * Read the actual agent dispatch for the room's current stage and cycle.
- * Missing dispatch is not permission to accept historical evidence.
+ * When the room's current stage started: the actual agent dispatch for the
+ * current stage and cycle, or — for a governed-decision stage, which is never
+ * dispatched — the drive's own attention ask for that stage's decision.
+ * Missing start is not permission to accept historical evidence.
+ *
+ * The attention branch is scoped to the room STILL waiting on that governed
+ * decision (its stored pendingAttention), not to the cycle key. The drive writes
+ * an attention row only when its hold changes (BI-E8C78E80), and the hold key
+ * has no cycle in it, so a decision left waiting across a cycle rollover has no
+ * row in the current cycle: on this install the dependency-advisory-watch room
+ * asked on 2026-09-26 and was on cycle 2026-09-29 with no newer row. Cycle
+ * scoping would have made its decision unreadable. The latest ask still bounds
+ * the evidence, so a decision recorded before the room asked does not count.
  */
 export async function loadStageDispatchTimes(
   capsuleIds: readonly string[],
@@ -141,11 +152,22 @@ export async function loadStageDispatchTimes(
     FROM "WorkCapsuleActivity" a
     JOIN "WorkCapsule" w ON w."id" = a."workCapsuleId"
     WHERE w."capsuleId" = ANY(${[...capsuleIds]}::text[])
-      AND a."kind" = 'workroom-drive'
-      AND a."payload" ->> 'action' = 'dispatch_agent'
-      AND a."payload" ->> 'reason' = 'agent_stage'
       AND a."payload" ->> 'stageKey' = w."workspaceState" #>> '{workroomDrive,stageKey}'
-      AND a."payload" ->> 'lastCycleKey' = w."workspaceState" #>> '{workroomDrive,lastCycleKey}'
+      AND (
+        (
+          a."kind" = 'workroom-drive'
+          AND a."payload" ->> 'action' = 'dispatch_agent'
+          AND a."payload" ->> 'reason' = 'agent_stage'
+          AND a."payload" ->> 'lastCycleKey' = w."workspaceState" #>> '{workroomDrive,lastCycleKey}'
+        )
+        OR (
+          a."kind" = 'workroom-drive-attention'
+          AND a."payload" ->> 'action' = 'attention'
+          AND a."payload" ->> 'reason' = 'governed_decision'
+          AND w."workspaceState" #>> '{workroomDrive,pendingAttention,reason}' = 'governed_decision'
+          AND w."workspaceState" #>> '{workroomDrive,pendingAttention,stageKey}' = a."payload" ->> 'stageKey'
+        )
+      )
     ORDER BY w."capsuleId", a."recordedAt" DESC
   `;
   return new Map(rows.map((row) => [row.capsuleId, row.dispatchedAt]));
