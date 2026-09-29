@@ -2290,6 +2290,9 @@
     "scripts/restore-postgres.sh": [
       "docs/operations/disaster-recovery.md"
     ],
+    "scripts/run-tsc.mjs": [
+      "docs/architecture/dependency-reduction-routine.md"
+    ],
     "scripts/safety/transcript-snapshot.ps1": [
       "docs/operations/session-transcript-recovery.md"
     ],
@@ -2306,6 +2309,9 @@
       "docs/architecture/dependency-reduction-routine.md"
     ],
     "scripts/sbom/check-singleton-safety.mjs": [
+      "docs/architecture/dependency-reduction-routine.md"
+    ],
+    "scripts/sbom/check-typecheck-baseline.mjs": [
       "docs/architecture/dependency-reduction-routine.md"
     ],
     "scripts/sbom/internalization-candidates.mjs": [
@@ -2906,11 +2912,13 @@
       "pnpm-lock.yaml",
       "scripts/check-diagram-dependency-pins.mjs",
       "scripts/lib/mermaid-renderer.mjs",
+      "scripts/run-tsc.mjs",
       "scripts/sbom/audit-provenance.mjs",
       "scripts/sbom/check-lockfile-release-age.mjs",
       "scripts/sbom/check-new-dependencies.mjs",
       "scripts/sbom/check-sbom-drift.mjs",
       "scripts/sbom/check-singleton-safety.mjs",
+      "scripts/sbom/check-typecheck-baseline.mjs",
       "scripts/sbom/internalization-candidates.mjs",
       "scripts/sbom/lockfile-roots.mjs",
       "scripts/sbom/runtime-surface.mjs",

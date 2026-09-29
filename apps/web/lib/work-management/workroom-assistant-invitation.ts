@@ -4,7 +4,7 @@ import { currentUserContext } from "@/lib/govern/current-user-context";
 import { resolveOAuthConsent } from "@/lib/auth/oauth-identity-binding";
 import { authorizeWorkroomAccess } from "./room-participation";
 import { persistWorkroomParticipantAssignment } from "./room-participant-assignment.server";
-import { readWorkroomBoundaryClaim } from "./workroom-boundary-claim";
+import { resolveRoomSensitivityCeiling } from "./room-sensitivity-ceiling.server";
 import { readWorkspaceRoomPolicy } from "./workspace-room-access";
 
 export class WorkroomAssistantInvitationError extends Error {}
@@ -18,7 +18,7 @@ async function ownerRoom(userId: string, workroomId: string, db: Prisma.Transact
   const [alias, room] = await Promise.all([
     db.principalAlias.findFirst({ where: { aliasType: "user", aliasValue: userId, issuer: "" }, select: { principal: { select: principalSelect } } }),
     db.workroom.findUnique({ where: { id: workroomId }, select: {
-      id: true, capsuleId: true, requestedByPrincipalId: true, createdByPrincipalId: true, leaseHolderPrincipalId: true, scopeClaims: true,
+      id: true, capsuleId: true, requestedByPrincipalId: true, createdByPrincipalId: true, leaseHolderPrincipalId: true, scopeClaims: true, backlogItemId: true,
       participants: { select: { principalId: true, lifecycle: true, roles: true } }, workItem: { select: { evidence: true } },
     } }),
   ]);
@@ -30,7 +30,7 @@ async function ownerRoom(userId: string, workroomId: string, db: Prisma.Transact
   const policy = readWorkspaceRoomPolicy(room.workItem?.evidence);
   const policyRefs = policy.actionPrincipalRefs ?? policy.admittedPrincipalRefs;
   if (policyRefs && !policyRefs.includes(human.principalId)) throw denied();
-  for (const sensitivityCeiling of [readWorkroomBoundaryClaim(room.scopeClaims)?.sensitivityCeiling ?? "internal", ...(policy.sensitivityCeiling ? [policy.sensitivityCeiling] : [])]) {
+  for (const sensitivityCeiling of [await resolveRoomSensitivityCeiling(room, db), ...(policy.sensitivityCeiling ? [policy.sensitivityCeiling] : [])]) {
     const access = authorizeWorkroomAccess({ requested: "action", principalRef: human.principalId,
       assignedPrincipalRefs: [human.principalId], sensitivityCeiling, sensitivityClearance: human.sensitivityClearance,
       isSuperuser: false, principalKind: "human" });
