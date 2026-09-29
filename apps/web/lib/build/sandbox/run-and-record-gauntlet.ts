@@ -42,8 +42,25 @@ export async function runAndRecordGauntlet(build: GauntletBuild, diffPatch: stri
   const workdir = resolveBuildWorkdir(build.buildId);
   // The sandbox repo is shallow; without a merge base every guard runs unscoped
   // and the diff guards judge changes this build never made.
+  // Fetches run through the serialized sandbox git path, which also clears
+  // stale .git locks, and a failure is recorded rather than swallowed
+  // (BI-E4AD091E).
   const { ensureMergeBaseWithMain } = await import("./ensure-merge-base");
-  await ensureMergeBaseWithMain({ exec: execInSandbox, containerId: build.sandboxId, workdir });
+  const { wrapSandboxGitCommand } = await import("./build-branch");
+  const mergeBase = await ensureMergeBaseWithMain({
+    exec: (containerId, command) => execInSandbox(containerId, wrapSandboxGitCommand(command)),
+    containerId: build.sandboxId,
+    workdir,
+  });
+  if (!mergeBase.found) {
+    await prisma.buildActivity.create({
+      data: {
+        buildId: build.buildId,
+        tool: "merge_base",
+        summary: `No merge base with origin/main after ${mergeBase.deepened} deepen round(s)${mergeBase.fetchError ? `: ${mergeBase.fetchError}` : ""}. Diff-scoped guards cannot run.`,
+      },
+    }).catch(() => {});
+  }
   const outcome = await runGuardGauntlet({ exec: execInSandbox, containerId: build.sandboxId, workdir });
   // Could-not-run is not a failing verdict, and must not be recorded as one.
   if (!outcome.ran) return { ran: false, reason: outcome.reason };

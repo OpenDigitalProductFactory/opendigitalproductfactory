@@ -35,7 +35,22 @@ import { isRecord } from "@/lib/shared/coerce";
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
 const WORKSPACE = "/workspace";
-const GIT_INDEX_LOCK = `${WORKSPACE}/.git/index.lock`;
+/**
+ * A git lock older than this is left over, never live: no sandbox git
+ * operation holds one for 15 minutes (an unshallow of the full history takes
+ * under a minute). BI-E4AD091E: a shallow.lock left at 2026-09-25 13:53 failed
+ * every history fetch for four days; the old guard only knew index.lock, and
+ * only cleared it when no git process ran anywhere — never, under load.
+ */
+const STALE_GIT_LOCK_MINUTES = 15;
+
+/** Remove stale lock files in a git dir and its per-worktree admin dirs. */
+export function buildSandboxStaleGitLockCleanupCommand(gitDir: string): string {
+  return [
+    `find ${gitDir} -maxdepth 1 -name '*.lock' -mmin +${STALE_GIT_LOCK_MINUTES} -exec rm -f {} + 2>/dev/null || true`,
+    `find ${gitDir}/worktrees -mindepth 2 -maxdepth 2 -name '*.lock' -mmin +${STALE_GIT_LOCK_MINUTES} -exec rm -f {} + 2>/dev/null || true`,
+  ].join("; ");
+}
 // `**/node_modules` (the entry itself) as well as its contents: a build
 // worktree shares each package's node_modules by SYMLINK, and git sees a
 // symlink as a file, so `**/node_modules/**` never matched it and the WIP
@@ -405,7 +420,7 @@ function sandboxGitPrelude(): string {
     // harmless no-op, and gets applied on the very next prelude call once the
     // repo exists — well before any checkout/worktree-add/commit runs.
     `git -C ${WORKSPACE} config --local core.hooksPath /dev/null >/dev/null 2>&1 || true`,
-    `if [ -f "${GIT_INDEX_LOCK}" ]; then for _dpf_git_wait in 1 2 3 4 5; do if ! pgrep -x git >/dev/null 2>&1; then break; fi; sleep 1; done; if [ -f "${GIT_INDEX_LOCK}" ] && ! pgrep -x git >/dev/null 2>&1; then rm -f "${GIT_INDEX_LOCK}"; fi; fi`,
+    buildSandboxStaleGitLockCleanupCommand(`${WORKSPACE}/.git`),
     ensureGlobalSafeDirectoryCommand(`"${WORKSPACE}"`),
     // BI-518B5F69: git's ownership check is per worktree path (and the shared
     // .git/worktrees/<id>), so the single /workspace exception does not cover
