@@ -146,6 +146,64 @@ joint one: without it, jest-expo and the React Native toolchain bring Jest 29
 back. It leaves with the mobile workspace split (plan 2026-09-08 M6).
 `pnpm audit:stale-overrides` remains the advisory-side cross-check.
 
+### Typecheck program budget (checked lines only grow with the diff)
+
+The web production program (`apps/web/tsconfig.json`) is typechecked on every
+push, so every line it checks costs time on every push. The ratchet
+`scripts/sbom/check-typecheck-baseline.mjs` fails a PR that grows the program
+by lines its diff does not explain (plan 2026-09-08 M11 step 4). Its anchor is
+`sbom/typecheck-baseline.json`.
+
+It reads the program from the compile CI already runs. `scripts/run-tsc.mjs`,
+given `DPF_TSC_PROGRAM_REPORT=<file>`, adds `--listFiles --extendedDiagnostics`
+to the same tsc run and writes the file list and diagnostics to `<file>`. The
+Typecheck job sets it, then runs the ratchet on the report. That costs no
+second compile. The job uploads the resulting analysis as the
+`typecheck-program-analysis` artifact.
+
+Every checked line falls into one bucket:
+
+| Bucket | What | Gate |
+| --- | --- | --- |
+| project | `apps/web` source the tsconfig includes | reported: a diff explains every line |
+| generated | Prisma client (`packages/db/generated`), `.next/types` | reported: the schema or route diff explains it |
+| outside | first-party source from other directories (`packages/db/src`, `scripts/lib`, ...) | lines reported; a **new** directory fails until accepted |
+| excluded | `apps/web` files the production tsconfig excludes (tests, e2e, `scripts/`, vitest config) that an import pulls back in | hard budget, no tolerance |
+| dependency | TypeScript's `lib.*.d.ts` plus everything under `node_modules` | hard budget, 1% tolerance |
+
+Budgets hold only the lines no diff explains. Comparing total lines against a
+committed number would go stale after the first ordinary PR. Every later PR
+would then fail on growth it did not cause, or every PR would have to rewrite
+the baseline.
+
+The rules match the shape budgets above:
+
+- **Lowering is automatic.** `--update-baseline` lowers budgets and shrinks
+  the accepted source set. It never raises them.
+- **Raising is a recorded decision.** `--raise-budget "<reason>"` moves
+  budgets and the accepted set to the current program and writes the reason
+  into `lastBudgetRaise`. No local compile is needed: pass the CI artifact with
+  `--analysis <typecheck-program-analysis.json>`.
+- **The 1% dependency tolerance** lets a patch bump of a typed dependency pass
+  with a warning. The tolerated growth accumulates, so the PR that crosses 1%
+  must record a reason.
+- **Check time is recorded, never gated.** Wall-clock depends on the machine and
+  its load. Files, lines, identifiers, symbols and types are recorded under
+  `measured.tsc` for reference.
+- **Excluded patterns only tighten.** The baseline keeps the tsconfig
+  `exclude` list it was measured with. Dropping `**/*.test.ts` from the tsconfig
+  does not re-admit the tests: they still count as excluded lines.
+
+To measure locally, run
+`flock /tmp/dpf-heavy.lock node scripts/sbom/check-typecheck-baseline.mjs --measure`.
+It runs a full web typecheck, about 150 s at 5.5 GB peak on the sandbox. Add
+`--update-baseline` to lock in a reduction.
+
+Known gap: a production file that starts importing an existing file from an
+accepted directory adds lines that no diff line wrote. The file is still
+first-party source that the program needs, so the ratchet reports it and
+does not gate it.
+
 ## Axis 2 — vulnerability & lifecycle (the local Dependabot-equivalent)
 
 `scripts/sbom/scan-dependencies.mjs` (`pnpm scan:deps`) checks every resolved
