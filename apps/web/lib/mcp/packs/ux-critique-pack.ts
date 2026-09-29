@@ -19,7 +19,7 @@
 // portal. A judge calibrated on agent-authored verdicts is calibrated against
 // itself, so this is a correctness boundary, not a permissions nicety.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

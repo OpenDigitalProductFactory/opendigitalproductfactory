@@ -8,7 +8,7 @@
 // memorized/vectorized snapshot — the coworker reasons over the current database.
 // The entityType → reader map is the convention: adding a model is one entry.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";

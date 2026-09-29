@@ -14,7 +14,7 @@
 
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { CapabilityKey } from "@/lib/permissions";
 import {
   analyzePublicWebsiteBranding,

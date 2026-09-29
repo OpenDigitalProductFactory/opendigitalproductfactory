@@ -27,7 +27,7 @@ import type {
   ToolLifecycleEvent,
   ToolLifecycleHook,
 } from "@/lib/mcp-governed-execute";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { classifyConsequentialTool } from "@/lib/tak/consequential-tool-policy";
 import {
   autonomyLevelToDecisionMode,

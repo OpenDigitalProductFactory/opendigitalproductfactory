@@ -23,7 +23,7 @@ import {
 } from "@/lib/agent-form-assist";
 // mcp-tools is imported dynamically at call sites to avoid NFT whole-project tracing;
 // type-only imports are erased at build time and safe.
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getActionsForRoute } from "@/lib/agent-action-registry";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";

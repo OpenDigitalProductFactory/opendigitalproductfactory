@@ -7,7 +7,7 @@
 // layout, type, colour and overrun the way a person would. No password is
 // typed and no credential passes through the agent.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

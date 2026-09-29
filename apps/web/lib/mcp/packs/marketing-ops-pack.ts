@@ -24,7 +24,7 @@ import {
   recordMarketingKpiCheckpoint,
   recordMarketingStrategistReview,
 } from "@/lib/marketing";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { planUpcomingMarketingDraftsHandler } from "../marketing-cadence-handler";
 import { recordMarketingGroundingDefinition, recordMarketingGroundingHandler } from "../marketing-grounding-tool";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";

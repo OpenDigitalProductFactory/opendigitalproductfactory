@@ -1,5 +1,5 @@
 import type { UserContext } from "@/lib/permissions";
-import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import {
   parseInitiativeReviewBinding,
   submitRemoteCoworkerTask,
