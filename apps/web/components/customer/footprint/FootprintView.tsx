@@ -13,15 +13,19 @@ import { WORLD_COUNTRY_PATHS } from "@/lib/footprint/world-country-paths";
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import { DataTable, type Column } from "@/components/ui/report-kit";
+import { useMessagesContext } from "@/components/i18n/MessagesProvider";
+import { useT } from "@/lib/i18n/use-t";
+
+type FootprintT = ReturnType<typeof useT<"footprint">>;
 
 export type FootprintLayer = "targets" | "customers" | "deployments" | "language";
 
-function layersFor(people: string): Array<{ key: FootprintLayer; label: string; description: string }> {
+function layersFor(t: FootprintT, people: string): Array<{ key: FootprintLayer; label: string; description: string }> {
   return [
-  { key: "targets", label: "Target markets", description: "Countries you sell to or operate in." },
-  { key: "customers", label: people, description: `${people} with a site in each country.` },
-  { key: "deployments", label: "Deployments", description: "Customer sites running an installed node with an active fulfilment." },
-  { key: "language", label: "Language fit", description: "Countries where a language the platform supports is official (filled), where one is planned (striped), and where none is yet (dotted)." },
+    { key: "targets", label: t("layers.targets"), description: t("layers.targetsDescription") },
+    { key: "customers", label: people, description: t("layers.customersDescription", { people }) },
+    { key: "deployments", label: t("layers.deployments"), description: t("layers.deploymentsDescription") },
+    { key: "language", label: t("layers.language"), description: t("layers.languageDescription") },
   ];
 }
 
@@ -64,37 +68,52 @@ function countryFill(
 
 let languageNames: Intl.DisplayNames | null = null;
 
-function languageName(code: string): string {
+function languageName(locale: string, code: string): string {
   try {
-    languageNames ??= new Intl.DisplayNames(["en"], { type: "language" });
+    if (languageNames?.resolvedOptions().locale !== locale) {
+      languageNames = new Intl.DisplayNames([locale], { type: "language" });
+    }
     return languageNames.of(code) ?? code;
   } catch {
     return code;
   }
 }
 
-export function languageFitText(fit: LanguageFit, languages: string[]): string {
-  const names = languages.map(languageName).join(", ");
-  if (fit === "supported") return `Supported (${names})`;
-  if (fit === "planned") return `Planned (${names})`;
-  return "No supported language yet";
+function languageFitText(t: FootprintT, locale: string, fit: LanguageFit, languages: string[]): string {
+  const names = new Intl.ListFormat(locale, { type: "conjunction" }).format(
+    languages.map((code) => languageName(locale, code)),
+  );
+  if (fit === "supported") return t("values.languageSupported", { languages: names });
+  if (fit === "planned") return t("values.languagePlanned", { languages: names });
+  return t("values.languageNone");
 }
 
-function layerValue(layer: FootprintLayer, country: CountryFootprint, people: string): string {
+function layerValue(t: FootprintT, locale: string, layer: FootprintLayer, country: CountryFootprint, people: string): string {
   switch (layer) {
     case "targets":
-      return country.targetMarket ? "Target market" : "Not targeted";
+      return country.targetMarket ? t("values.targetYes") : t("values.targetNo");
     case "customers":
-      return `${people}: ${country.customerCount}`;
+      return t("values.customers", { people, count: country.customerCount });
     case "deployments":
-      return `${country.deploymentCount} deployment${country.deploymentCount === 1 ? "" : "s"}`;
+      return t("values.deployments", { count: country.deploymentCount });
     case "language":
-      return languageFitText(country.languageFit, country.languages);
+      return languageFitText(t, locale, country.languageFit, country.languages);
   }
 }
 
 export function FootprintView({ footprint, peopleLabel }: { footprint: MarketFootprint; peopleLabel: string }) {
-  const LAYERS = layersFor(peopleLabel);
+  const t = useT("footprint");
+  const { locale } = useMessagesContext();
+  const LAYERS = layersFor(t, peopleLabel);
+  const value = (which: FootprintLayer, country: CountryFootprint) => layerValue(t, locale, which, country, peopleLabel);
+  const shapeTitle = (name: string, isoA2: string | null, country: CountryFootprint | undefined) => {
+    if (country) return `${country.name}: ${value(layer, country)}`;
+    if (layer === "language" && isoA2) {
+      const fit = languageFitFor(isoA2);
+      return `${name}: ${languageFitText(t, locale, fit.fit, fit.languages)}`;
+    }
+    return name;
+  };
   const [layer, setLayer] = useState<FootprintLayer>("customers");
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -107,7 +126,7 @@ export function FootprintView({ footprint, peopleLabel }: { footprint: MarketFoo
 
   return (
     <div className="space-y-4">
-      <div role="radiogroup" aria-label="Map layer" className="flex flex-wrap gap-2">
+      <div role="radiogroup" aria-label={t("layers.groupLabel")} className="flex flex-wrap gap-2">
         {LAYERS.map((entry) => (
           <Button
             key={entry.key}
@@ -129,7 +148,7 @@ export function FootprintView({ footprint, peopleLabel }: { footprint: MarketFoo
         <svg
           viewBox={WORLD_COUNTRY_PATHS.viewBox}
           role="img"
-          aria-label={`World map, ${active.label} layer. The table below lists the same countries.`}
+          aria-label={t("map.label", { layer: active.label })}
           className="h-auto w-full"
         >
           <defs>
@@ -161,22 +180,21 @@ export function FootprintView({ footprint, peopleLabel }: { footprint: MarketFoo
                 onClick={country ? () => setSelected(shape.isoA2) : undefined}
                 className={country ? "cursor-pointer" : undefined}
               >
-                <title>{country ? `${country.name}: ${layerValue(layer, country, peopleLabel)}` : layer === "language" && shape.isoA2 ? `${shape.name}: ${(() => { const f = languageFitFor(shape.isoA2); return languageFitText(f.fit, f.languages); })()}` : shape.name}</title>
+                <title>{shapeTitle(shape.name, shape.isoA2, country)}</title>
               </path>
             );
           })}
         </svg>
         <figcaption className="px-2 pt-1 text-xs text-[var(--dpf-muted)]">
-          Country outlines: Natural Earth (public domain). Equal Earth projection.
+          {t("map.caption")}
         </figcaption>
       </figure>
       </Surface>
 
       {selectedCountry && (
         <p aria-live="polite" className="text-sm text-[var(--dpf-text)]">
-          <span className="font-semibold">{selectedCountry.name}</span>: {layerValue("targets", selectedCountry, peopleLabel)} ·{" "}
-          {layerValue("customers", selectedCountry, peopleLabel)} · {layerValue("deployments", selectedCountry, peopleLabel)} ·{" "}
-          {layerValue("language", selectedCountry, peopleLabel)}
+          <span className="font-semibold">{selectedCountry.name}</span>:{" "}
+          {(["targets", "customers", "deployments", "language"] as const).map((which) => value(which, selectedCountry)).join(" · ")}
         </p>
       )}
 
@@ -207,17 +225,19 @@ export function FootprintTable({
   selected: string | null;
   onSelect: (code: string) => void;
 }) {
+  const t = useT("footprint");
+  const { locale } = useMessagesContext();
   const columns: Column<CountryFootprint>[] = [
     {
       key: "country",
-      header: "Country",
+      header: t("table.country"),
       sortAccessor: (row) => row.name,
       cell: (row) => (
         <button
           type="button"
           aria-pressed={selected === row.isoA2}
           onClick={() => onSelect(row.isoA2)}
-          className={`min-h-[32px] text-left underline-offset-2 hover:underline ${
+          className={`min-h-[32px] text-start underline-offset-2 hover:underline ${
             selected === row.isoA2 ? "font-semibold underline" : ""
           }`}
         >
@@ -225,18 +245,18 @@ export function FootprintTable({
         </button>
       ),
     },
-    { key: "target", header: "Target market", sortAccessor: (row) => (row.targetMarket ? 1 : 0), cell: (row) => (row.targetMarket ? "Yes" : "No") },
+    { key: "target", header: t("table.target"), sortAccessor: (row) => (row.targetMarket ? 1 : 0), cell: (row) => (row.targetMarket ? t("table.yes") : t("table.no")) },
     { key: "customers", header: peopleLabel, align: "right", sortAccessor: (row) => row.customerCount, cell: (row) => row.customerCount },
-    { key: "deployments", header: "Deployments", align: "right", sortAccessor: (row) => row.deploymentCount, cell: (row) => row.deploymentCount },
-    { key: "language", header: "Language", cell: (row) => languageFitText(row.languageFit, row.languages) },
+    { key: "deployments", header: t("table.deployments"), align: "right", sortAccessor: (row) => row.deploymentCount, cell: (row) => row.deploymentCount },
+    { key: "language", header: t("table.language"), cell: (row) => languageFitText(t, locale, row.languageFit, row.languages) },
   ];
 
   return (
     <div className="space-y-2">
       {(unplacedCustomers > 0 || unplacedDeployments > 0) && (
         <p className="text-sm text-[var(--dpf-text)]">
-          <span className="font-semibold">Not placed:</span> {peopleLabel}: {unplacedCustomers} · Deployments:{" "}
-          {unplacedDeployments} — no site, or no country on the site address.
+          <span className="font-semibold">{t("table.notPlaced")}</span>{" "}
+          {t("table.notPlacedDetail", { people: peopleLabel, customers: unplacedCustomers, deployments: unplacedDeployments })}
         </p>
       )}
       <DataTable
@@ -244,8 +264,8 @@ export function FootprintTable({
         rows={countries}
         getRowKey={(row) => row.isoA2}
         initialSort={{ key: "customers", dir: "desc" }}
-        ariaLabel="Market footprint by country"
-        empty="No countries to show yet."
+        ariaLabel={t("table.label")}
+        empty={t("table.empty")}
       />
     </div>
   );

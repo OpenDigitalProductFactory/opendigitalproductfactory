@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { namespaceMessages } from "@dpf/i18n";
+
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+
 import { buildMarketFootprint } from "@/lib/footprint/market-footprint";
 
 import { FootprintView } from "./FootprintView";
@@ -16,7 +20,11 @@ const footprint = buildMarketFootprint({
 });
 
 describe("FootprintView", () => {
-  const html = renderToStaticMarkup(<FootprintView footprint={footprint} peopleLabel="Customers" />);
+  const html = renderToStaticMarkup(
+    <MessagesProvider locale="en-US" messages={{ footprint: namespaceMessages("en-US", "footprint") }}>
+      <FootprintView footprint={footprint} peopleLabel="Customers" />
+    </MessagesProvider>,
+  );
 
   it("offers the four layers as a radio group with customers selected", () => {
     for (const label of ["Target markets", "Customers", "Deployments", "Language fit"]) {
