@@ -164,6 +164,32 @@ The 74 cron functions register in the BET-11 `ScheduledJob` substrate: one `next
 
 **Existing installs.** Runs in flight in Inngest at upgrade time must finish before its container goes. One release carries both engines, with every function on Postgres and Inngest draining. `/ops/self-upgrade` quiescence already waits for in-flight work. The following release removes the containers, and the `inngest` database is dropped a release after that, once a guard confirms it has no unfinished runs. Existing installs converge on the next `/ops/self-upgrade` with no operator step.
 
+### 6.1 Governed scope manifest (phase 2, `BI-85E6EF14`)
+
+**OBJ-M3-PARITY:** With the engine flag unset, job execution is unchanged: every function runs on Inngest exactly as it does today.
+
+**OBJ-M3-SEMANTICS:** A function routed to Postgres gets the facade's durable semantics: memoised steps across replays, sleep, waitForEvent with match and timeout, cancelOn, retries then onFailure, and send-side dedupe.
+
+**OBJ-M3-CONCURRENCY:** Postgres-routed runs never exceed any declared concurrency limit, limit 1 or N, per function key or on the shared account lane.
+
+**OBJ-M3-RECOVERY:** A run interrupted by a process death resumes exactly once, without re-executing a memoised step.
+
+**OBJ-M3-SCHEMA:** The engine's tables arrive in one forward-only migration that applies against any existing data state.
+
+**OBJ-M3-EVIDENCE:** The §7 benchmarks run on real Postgres and their results are recorded in this spec before the flag is turned on anywhere.
+
+| Acceptance ID | Objective IDs | Acceptance statement |
+| --- | --- | --- |
+| AC-M3-FLAG-OFF | OBJ-M3-PARITY | With `DPF_JOBS_ENGINE` unset, the existing job test suites pass unchanged, the Postgres worker does not start, and `jobs.send` reaches only Inngest. |
+| AC-M3-REPLAY | OBJ-M3-SEMANTICS | A step completed in an earlier attempt returns its stored output on replay without calling its function again, including repeated step ids in one run. |
+| AC-M3-PARK | OBJ-M3-SEMANTICS | `sleep`/`sleepUntil` and `waitForEvent` park the run without holding a worker or a concurrency slot; a matching event resumes the wait with that event, and a timeout resumes it with `null`. |
+| AC-M3-FAIL | OBJ-M3-SEMANTICS | A throwing handler retries up to its `retries` count, then runs `onFailure` with the failure event and ends `failed`; a `cancelOn` event ends a queued or running run `cancelled`. |
+| AC-M3-DEDUPE | OBJ-M3-SEMANTICS | Two sends with the same event id start one run per triggered function. |
+| AC-M3-LIMIT | OBJ-M3-CONCURRENCY | Under concurrent claimers, runs holding a slot on a lane never exceed that lane's limit, for limit 1, limit 2, limit 4 and an account lane shared across functions. |
+| AC-M3-LEASE | OBJ-M3-RECOVERY | Killing the worker mid-step, mid-sleep and mid-wait leaves each run to resume once after lease expiry, with its completed steps not re-executed. |
+| AC-M3-MIGRATION | OBJ-M3-SCHEMA | The migration applies cleanly on a fresh schema and on a copy of the live schema, and creates no object that depends on existing rows. |
+| AC-M3-BENCH | OBJ-M3-EVIDENCE | §7 records p50/p99 event-to-first-step latency, claim throughput under an overlapping cron minute, extra WAL and connections, and the kill-drill results, with the verdict for the flag. |
+
 ## 7. Benchmarks required before implementation
 
 None of these can be run in a sandbox without Postgres; they are acceptance criteria, not results.
