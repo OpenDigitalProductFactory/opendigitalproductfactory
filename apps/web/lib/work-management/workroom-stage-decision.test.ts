@@ -59,7 +59,7 @@ describe("governed stage decision (pure)", () => {
     expect(validateStageDecision({ stageKey: "decide", choice: "defer", deferUntil: "2026-09-29" }, stage, now).ok).toBe(false);
     expect(validateStageDecision({ stageKey: "decide", choice: "defer", deferUntil: "2026-02-31" }, stage, now).ok).toBe(false);
     expect(validateStageDecision({ stageKey: "decide", choice: "defer", deferUntil: "2026-10-15" }, stage, now))
-      .toEqual({ ok: true, decision: { choice: "defer", deferUntil: "2026-10-15", rationale: null } });
+      .toEqual({ ok: true, data: { choice: "defer", deferUntil: "2026-10-15", rationale: null } });
     expect(validateStageDecision({ stageKey: "decide", choice: "shrug" }, stage, now).ok).toBe(false);
   });
 

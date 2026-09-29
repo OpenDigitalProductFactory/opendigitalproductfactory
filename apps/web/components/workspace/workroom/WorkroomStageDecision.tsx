@@ -6,11 +6,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { FormStatus, TextField } from "@/components/ui/form";
 import { recordWorkroomStageDecision } from "@/lib/actions/workroom-stage-decision";
-import {
-  STAGE_DECISION_CHOICE_LABEL,
-  type StageDecisionChoice,
-  type WorkroomStageDecisionView,
-} from "@/lib/work-management/workroom-stage-decision";
+import { useT } from "@/lib/i18n/use-t";
+import type { StageDecisionChoice, WorkroomStageDecisionView } from "@/lib/work-management/workroom-stage-decision";
 
 /**
  * The decision a governed stage is waiting on, inside the room's Attention card.
@@ -18,10 +15,12 @@ import {
  * Progressive disclosure, because the card is one cell of a dense header: ONE
  * line saying what waits and who decides, and a single "Decide" button. The
  * choices, the date (only for Defer), the optional rationale and what the
- * earlier stages found stay behind that button. Anyone who is not the decider
+ * earlier stages found stay behind that button. Copy lives in the `workrooms`
+ * message catalog namespace. Anyone who is not the decider
  * sees the line and no control — the server refuses them anyway.
  */
 export function WorkroomStageDecision({ view }: { view: WorkroomStageDecisionView }) {
+  const t = useT("workrooms");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [choice, setChoice] = useState<StageDecisionChoice | null>(null);
@@ -31,10 +30,10 @@ export function WorkroomStageDecision({ view }: { view: WorkroomStageDecisionVie
   const [pending, startTransition] = useTransition();
 
   const line = view.canDecide
-    ? `Your decision: ${view.stageTitle}.`
+    ? t("stageDecision.yours", { stage: view.stageTitle })
     : view.deciderName
-      ? `Waiting on ${view.deciderName} to decide: ${view.stageTitle}.`
-      : `Waiting on a decision: ${view.stageTitle}.`;
+      ? t("stageDecision.waitingOn", { name: view.deciderName, stage: view.stageTitle })
+      : t("stageDecision.waiting", { stage: view.stageTitle });
 
   function submit() {
     if (!choice) return;
@@ -60,7 +59,7 @@ export function WorkroomStageDecision({ view }: { view: WorkroomStageDecisionVie
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium text-[var(--dpf-text)]">{line}</p>
         {view.canDecide && !open ? (
-          <Button size="sm" onClick={() => setOpen(true)}>Decide</Button>
+          <Button size="sm" onClick={() => setOpen(true)}>{t("stageDecision.decide")}</Button>
         ) : null}
       </div>
       {!view.canDecide && !view.deciderName && view.refusal ? (
@@ -69,10 +68,9 @@ export function WorkroomStageDecision({ view }: { view: WorkroomStageDecisionVie
 
       {view.canDecide && open ? (
         <div className="space-y-3 border-t border-[var(--dpf-border)] pt-3">
-          <p className="text-xs text-[var(--dpf-muted)]">{view.condition}</p>
           {view.findings.length > 0 ? (
             <div>
-              <p className="text-xs font-semibold text-[var(--dpf-muted)]">What the room found</p>
+              <p className="text-xs font-semibold text-[var(--dpf-muted)]">{t("stageDecision.found")}</p>
               <ul className="mt-1 space-y-1">
                 {view.findings.map((finding) => (
                   <li key={finding.stageKey} className="text-xs text-[var(--dpf-text)]">
@@ -85,7 +83,7 @@ export function WorkroomStageDecision({ view }: { view: WorkroomStageDecisionVie
           ) : null}
 
           <fieldset>
-            <legend className="sr-only">Decision</legend>
+            <legend className="sr-only">{t("stageDecision.choice")}</legend>
             <div className="flex flex-wrap gap-1">
               {view.choices.map((option) => (
                 <label
@@ -104,7 +102,7 @@ export function WorkroomStageDecision({ view }: { view: WorkroomStageDecisionVie
                     onChange={() => setChoice(option)}
                     className="sr-only"
                   />
-                  {STAGE_DECISION_CHOICE_LABEL[option]}
+                  {t(`stageDecision.choices.${option}`)}
                 </label>
               ))}
             </div>
@@ -113,7 +111,7 @@ export function WorkroomStageDecision({ view }: { view: WorkroomStageDecisionVie
           {choice === "defer" ? (
             <TextField
               name="stage-decision-defer-until"
-              label="Defer until"
+              label={t("stageDecision.deferUntil")}
               type="date"
               required
               value={deferUntil}
@@ -123,7 +121,7 @@ export function WorkroomStageDecision({ view }: { view: WorkroomStageDecisionVie
           ) : null}
           <TextField
             name="stage-decision-rationale"
-            label="Rationale"
+            label={t("stageDecision.rationale")}
             optional
             value={rationale}
             onValueChange={setRationale}
@@ -133,10 +131,10 @@ export function WorkroomStageDecision({ view }: { view: WorkroomStageDecisionVie
 
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={submit} disabled={!choice || pending || (choice === "defer" && !deferUntil)}>
-              Record decision
+              {t("stageDecision.record")}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
-              Cancel
+              {t("stageDecision.cancel")}
             </Button>
           </div>
           <FormStatus error={error} />

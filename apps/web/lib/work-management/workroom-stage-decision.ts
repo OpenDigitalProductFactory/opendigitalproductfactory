@@ -21,6 +21,7 @@
 //
 // Pure: no Prisma, no React.
 
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { isRecord } from "@/lib/shared/coerce";
 import type { EffectiveHumanAccountability } from "./human-accountability";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
@@ -147,20 +148,20 @@ export function validateStageDecision(
   input: StageDecisionInput,
   stage: GovernedDecisionStage,
   now: Date,
-): { ok: true; decision: ValidStageDecision } | { ok: false; error: string } {
+): ActionResult<ValidStageDecision> {
   const choice = stage.choices.find((entry) => entry === input.choice);
-  if (!choice) return { ok: false, error: `Choose one of: ${stage.choices.map((c) => STAGE_DECISION_CHOICE_LABEL[c]).join(", ")}.` };
+  if (!choice) return err(`Choose one of: ${stage.choices.map((c) => STAGE_DECISION_CHOICE_LABEL[c]).join(", ")}.`);
   const rationale = input.rationale?.trim() ? input.rationale.trim().slice(0, 500) : null;
-  if (choice !== "defer") return { ok: true, decision: { choice, deferUntil: null, rationale } };
+  if (choice !== "defer") return ok({ choice, deferUntil: null, rationale });
   const raw = input.deferUntil?.trim() ?? "";
-  if (!DATE_RE.test(raw)) return { ok: false, error: "A deferral needs a date to come back to it." };
+  if (!DATE_RE.test(raw)) return err("A deferral needs a date to come back to it.");
   const until = new Date(`${raw}T00:00:00.000Z`);
   const today = now.toISOString().slice(0, 10);
   if (!Number.isFinite(until.getTime()) || until.toISOString().slice(0, 10) !== raw) {
-    return { ok: false, error: "That deferral date is not a real date." };
+    return err("That deferral date is not a real date.");
   }
-  if (raw <= today) return { ok: false, error: "A deferral date must be in the future." };
-  return { ok: true, decision: { choice, deferUntil: raw, rationale } };
+  if (raw <= today) return err("A deferral date must be in the future.");
+  return ok({ choice, deferUntil: raw, rationale });
 }
 
 /** The stage evidence the decision is recorded as — the ONE governed receipt path. */
@@ -208,7 +209,6 @@ export type WorkroomStageDecisionView = {
   roomRowId: string;
   stageKey: string;
   stageTitle: string;
-  condition: string;
   choices: StageDecisionChoice[];
   deciderName: string | null;
   canDecide: boolean;

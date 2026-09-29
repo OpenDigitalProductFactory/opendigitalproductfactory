@@ -59,23 +59,23 @@ async function callerHumanPrincipalId(db: StageDecisionDb, userId: string): Prom
 async function loadDecisionContext(
   db: StageDecisionDb,
   input: { roomRowId: string; userId: string; stageKey?: string },
-): Promise<{ ok: true; context: DecisionContext } | { ok: false; error: string }> {
+): Promise<ActionResult<DecisionContext>> {
   const room = await db.workroom.findUnique({
     where: { id: input.roomRowId },
     select: { id: true, capsuleId: true, scopeClaims: true, workspaceState: true, archivedAt: true },
   }) as RoomRow | null;
-  if (!room || room.archivedAt) return { ok: false, error: "That room could not be found." };
+  if (!room || room.archivedAt) return err("That room could not be found.");
   const pending = readPendingGovernedDecision(room.workspaceState);
   if (!pending || (input.stageKey !== undefined && pending.stageKey !== input.stageKey)) {
-    return { ok: false, error: "This room is not waiting on a decision for that stage." };
+    return err("This room is not waiting on a decision for that stage.");
   }
   const shape = resolveWorkShapeClaim(room.scopeClaims);
   const stage = governedDecisionStage(shape ? readWorkShapeDefinitionContract(shape) : null, pending.stageKey);
-  if (!stage) return { ok: false, error: "That stage is not a decision a person records here." };
+  if (!stage) return err("That stage is not a decision a person records here.");
   const owner = (await loadRoomAccountabilityBatch(db, [room.id])).get(room.id)!;
   const decider = resolveStageDecider(owner.accountability, owner.accountableDisplayName);
   const callerPrincipalId = await callerHumanPrincipalId(db, input.userId);
-  return { ok: true, context: { room, stage, decider, callerPrincipalId } };
+  return ok({ room, stage, decider, callerPrincipalId });
 }
 
 function callerMayDecide(context: DecisionContext): boolean {
@@ -94,14 +94,14 @@ export async function recordWorkroomStageDecisionForUser(
 ): Promise<ActionResult> {
   const loaded = await loadDecisionContext(db, input);
   if (!loaded.ok) return err(loaded.error);
-  const { context } = loaded;
+  const context = loaded.data;
   if (!callerMayDecide(context)) return err(stageDeciderRefusal(context.decider));
   const valid = validateStageDecision(input, context.stage, input.now ?? new Date());
   if (!valid.ok) return err(valid.error);
   const decider = context.decider as Extract<StageDecider, { state: "resolved" }>;
   const evidence = buildStageDecisionEvidence({
     stage: context.stage,
-    decision: valid.decision,
+    decision: valid.data,
     decidedBy: decider.decidedBy,
     deciderName: decider.name,
   });
@@ -121,8 +121,8 @@ export async function loadWorkroomStageDecisionView(
 ): Promise<WorkroomStageDecisionView | null> {
   const loaded = await loadDecisionContext(db, input);
   if (!loaded.ok) return null;
-  const { room, stage, decider } = loaded.context;
-  const canDecide = callerMayDecide(loaded.context);
+  const { room, stage, decider } = loaded.data;
+  const canDecide = callerMayDecide(loaded.data);
   const evidence = await db.workroomActivity.findMany({
     where: { workCapsuleId: room.id, kind: "evidence-recorded" },
     orderBy: { recordedAt: "desc" },
@@ -134,7 +134,6 @@ export async function loadWorkroomStageDecisionView(
     roomRowId: room.id,
     stageKey: stage.key,
     stageTitle: stage.title,
-    condition: stage.condition,
     choices: stage.choices,
     deciderName: decider.state === "resolved" ? decider.name : null,
     canDecide,

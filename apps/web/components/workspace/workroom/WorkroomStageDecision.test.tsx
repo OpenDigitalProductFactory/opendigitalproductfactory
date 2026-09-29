@@ -8,6 +8,8 @@ const m = vi.hoisted(() => ({ record: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh }) }));
 vi.mock("@/lib/actions/workroom-stage-decision", () => ({ recordWorkroomStageDecision: m.record }));
 
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import type { WorkroomStageDecisionView } from "@/lib/work-management/workroom-stage-decision";
 import { WorkroomStageDecision } from "./WorkroomStageDecision";
 
@@ -16,7 +18,6 @@ const VIEW: WorkroomStageDecisionView = {
   roomRowId: "room-row-1",
   stageKey: "decide",
   stageTitle: "Decide the response to each finding",
-  condition: "The accountable owner accepts, patches, or defers with a date.",
   choices: ["accept", "patch", "defer"],
   deciderName: "Alex Owner",
   canDecide: true,
@@ -24,12 +25,20 @@ const VIEW: WorkroomStageDecisionView = {
   findings: [{ stageKey: "sweep", title: "Sweep advisories", summary: "14 advisories read" }],
 };
 
+function renderDecision(view: WorkroomStageDecisionView) {
+  return render(
+    <MessagesProvider locale="en-US" messages={{ workrooms: namespaceMessages("en-US", "workrooms") }}>
+      <WorkroomStageDecision view={view} />
+    </MessagesProvider>,
+  );
+}
+
 beforeEach(() => { vi.resetAllMocks(); m.record.mockResolvedValue({ ok: true }); });
 afterEach(cleanup);
 
 describe("WorkroomStageDecision", () => {
   it("renders collapsed by default: one line and a Decide button", () => {
-    render(<WorkroomStageDecision view={VIEW} />);
+    renderDecision(VIEW);
     expect(screen.getByText("Your decision: Decide the response to each finding.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Decide" })).toBeInTheDocument();
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
@@ -38,7 +47,7 @@ describe("WorkroomStageDecision", () => {
   });
 
   it("reveals compact choices and the findings; the date appears only for Defer", () => {
-    render(<WorkroomStageDecision view={VIEW} />);
+    renderDecision(VIEW);
     fireEvent.click(screen.getByRole("button", { name: "Decide" }));
     expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("value"))).toEqual(["accept", "patch", "defer"]);
     expect(screen.getByText("14 advisories read")).toBeInTheDocument();
@@ -48,7 +57,7 @@ describe("WorkroomStageDecision", () => {
   });
 
   it("records the choice through the action", async () => {
-    render(<WorkroomStageDecision view={VIEW} />);
+    renderDecision(VIEW);
     fireEvent.click(screen.getByRole("button", { name: "Decide" }));
     fireEvent.click(screen.getByRole("radio", { name: "Accept" }));
     fireEvent.change(screen.getByLabelText(/Rationale/), { target: { value: "Not reachable" } });
@@ -60,7 +69,7 @@ describe("WorkroomStageDecision", () => {
   });
 
   it("shows everyone else who decides, with no control", () => {
-    render(<WorkroomStageDecision view={{ ...VIEW, canDecide: false, refusal: "Only Alex Owner (the room's accountable owner) can record this decision." }} />);
+    renderDecision({ ...VIEW, canDecide: false, refusal: "Only Alex Owner (the room's accountable owner) can record this decision." });
     expect(screen.getByText("Waiting on Alex Owner to decide: Decide the response to each finding.")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });

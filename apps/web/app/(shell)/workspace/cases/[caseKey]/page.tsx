@@ -1,10 +1,13 @@
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
 import { notFound, redirect } from "next/navigation";
 
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { RoomWorkforcePanel } from "@/components/workspace/workroom/RoomWorkforcePanel";
 import { WorkCaseDetailView } from "@/components/workspace/WorkCaseDetailView";
 import { auth } from "@/lib/auth";
 import { getGrantedCapabilities } from "@/lib/permissions";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import { loadPrismaWorkroomParticipants } from "@/lib/work-management/room-participation-prisma.server";
 import { loadWorkroomPostureContext } from "@/lib/work-management/room-posture.server";
@@ -82,10 +85,18 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
       caseKey, roomRowId: detailOrRoom.workroomRowId, userId: session.user.id,
     }).catch(() => null)
     : null;
+  const locale = await getLocaleContext();
 
   return (
     <>
-      <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} stageDecision={stageDecision} navigationContext={query} />
+      {stageDecision ? (
+        // The decision control translates with useT("workrooms"); provide it only when rendered.
+        <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
+          <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} stageDecision={stageDecision} navigationContext={query} />
+        </MessagesProvider>
+      ) : (
+        <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} navigationContext={query} />
+      )}
       {workforce ? (
         <div className="mt-4">
           <RoomWorkforcePanel
