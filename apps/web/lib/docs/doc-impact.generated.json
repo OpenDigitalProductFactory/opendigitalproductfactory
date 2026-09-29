@@ -544,6 +544,9 @@
     "apps/web/lib/actions/sovereignty.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
+    "apps/web/lib/actions/workroom-stage-decision.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
     "apps/web/lib/agent-grants.ts": [
       "docs/architecture/ai-agent-meta-model.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
@@ -3139,6 +3142,7 @@
       "apps/web/lib/decision-perspective/weight-inference.ts"
     ],
     "docs/architecture/work-shapes-and-the-decision-gate.md": [
+      "apps/web/lib/actions/workroom-stage-decision.ts",
       "apps/web/lib/mcp/packs/profession-decision-pack.ts",
       "apps/web/lib/queue/functions/workroom-drive.ts",
       "apps/web/lib/tak/decision-routing-governance-hook.ts",
