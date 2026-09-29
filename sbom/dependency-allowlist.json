@@ -334,16 +334,6 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
-    "@types/nodemailer": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "apps/web"
-      ],
-      "kinds": [
-        "dev"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
     "@types/papaparse": {
       "added": "2026-06-21",
       "workspaces": [
@@ -638,7 +628,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "Mailroom IMAP adapter (design 2026-09-09 s3, BI-13919D7E). MIT; Postal Systems (Andris Reinman, the Nodemailer/EmailEngine maintainer); promise API, UID search, UIDVALIDITY handling; actively released; no known OSV advisories at adoption. Rejected node-imap (unmaintained since 2019, callback API) and imap-simple (wraps node-imap)."
+      "note": "Mailroom IMAP adapter (design 2026-09-09 s3, BI-13919D7E). MIT; Postal Systems (Andris Reinman, the Nodemailer/EmailEngine maintainer); promise API, UID search, UIDVALIDITY handling; actively released; no known OSV advisories at adoption. Rejected node-imap (unmaintained since 2019, callback API) and imap-simple (wraps node-imap). Bumped to ^2.1.2 on 2026-09-29 (plan 2026-09-08 M7) so it shares libmime 5.4.6, @zone-eu/mailsplit 5.4.19, libqp 2.1.2 and libbase64 1.3.1 with mailparser 3.9.31; MIT, same maintainer, npm SLSA v1 provenance, released 2026-09-28 past the release-age floor, no breaking changes in 2.1 (additive exports and fixes)."
     },
     "inngest": {
       "added": "2026-06-21",
@@ -728,7 +718,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "Mailroom MIME parsing for polled IMAP messages (design 2026-09-09 s3). MIT; same maintainer as nodemailer; about 1M weekly downloads; actively released; no known OSV advisories at adoption. Attachment bytes are never written to disk (metadata only)."
+      "note": "Mailroom MIME parsing for polled IMAP messages (design 2026-09-09 s3). MIT; same maintainer as nodemailer; about 1M weekly downloads; actively released; no known OSV advisories at adoption. Attachment bytes are never written to disk (metadata only). Bumped to ^3.9.31 on 2026-09-29 (plan 2026-09-08 M7) so its exact nodemailer pin (10.0.12) matches the direct dependency; MIT, npm SLSA v1 provenance, released 2026-09-28 past the release-age floor."
     },
     "msw": {
       "added": "2026-06-21",
@@ -789,7 +779,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "Outbound SMTP transport for apps/web/lib/shared/email.ts. Upgraded to ^10.0.12 on 2026-09-29 (plan 2026-09-08 M7): clears GHSA-6vj9-mwq6-2f5v and GHSA-8vvx-rff5-p5rq (fixed in 10.0.2) and collapses the second copy mailparser pinned. Vetting: licence MIT-0 from 10.0.0 (OSI-approved, more permissive than the earlier MIT); single maintainer andris (Andris Reinman, author since 2011); npm SLSA v1 provenance attestation on 10.0.12; released 2026-09-28, past the 24 h release-age floor; about 26M weekly downloads; zero runtime dependencies; ships its own TypeScript declarations, so @types/nodemailer is retired; Node >= 20 required (the portal runs Node 20+); scan-dependencies reports no OSV advisory for 10.0.12."
     },
     "papaparse": {
       "added": "2026-06-21",
@@ -1184,6 +1174,10 @@
     "@react-pdf/renderer": {
       "retired": "2026-09-26",
       "reason": "Invoice PDFs are an HTML template (apps/web/lib/finance/invoice-html.ts) printed to PDF by the dpf-doctools engine through convertDocument (dpf-convert --from html --to pdf), the document export pipeline; plan 2026-09-08 M5, BI-0AB1FD47. It also retired its exclusive closure (pdfkit, fontkit, yoga-layout and the @react-pdf/* packages among them)."
+    },
+    "@types/nodemailer": {
+      "retired": "2026-09-29",
+      "reason": "nodemailer 10 is written in TypeScript and ships its own declarations (dist/cjs/nodemailer.d.ts, keeping the @types layout); plan 2026-09-08 M7."
     }
   }
 }
