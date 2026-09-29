@@ -7,7 +7,18 @@ vi.mock("@/lib/actions/organization-accountable-owner", () => ({
   setOrganizationAccountableOwner: vi.fn(),
 }));
 
-import { OrganizationAccountableOwnerPanel } from "./OrganizationAccountableOwnerPanel";
+import { namespaceMessages } from "@dpf/i18n";
+import type { ComponentProps } from "react";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { OrganizationAccountableOwnerPanel as Panel } from "./OrganizationAccountableOwnerPanel";
+
+function OrganizationAccountableOwnerPanel(props: ComponentProps<typeof Panel>) {
+  return (
+    <MessagesProvider locale="en-US" messages={{ admin: namespaceMessages("en-US", "admin") }}>
+      <Panel {...props} />
+    </MessagesProvider>
+  );
+}
 
 const candidates = [
   { id: "p-1", displayName: "Avery Owner", email: "avery@example.test" },

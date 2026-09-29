@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import { setOrganizationAccountableOwner } from "@/lib/actions/organization-accountable-owner";
 import type { ActiveHumanPrincipalOption } from "@/lib/identity/principal-linking";
+import { useT } from "@/lib/i18n/use-t";
 
 // The organization's accountable owner (Organization.topAccountablePrincipalId):
 // the person every Workroom without its own owner answers to. One line by
 // default; the picker and its consequence appear only when the operator asks
 // to change it, because this is set once at setup and rarely revisited.
+// Copy lives in the "admin" catalog namespace; the page provides it.
 
 const SELECT_CLASS =
   "max-w-full px-3 py-2 text-xs bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]";
@@ -24,6 +26,7 @@ export function OrganizationAccountableOwnerPanel({
   owner: Owner;
   candidates: ActiveHumanPrincipalOption[];
 }) {
+  const t = useT("admin");
   const [current, setCurrent] = useState<Owner>(owner);
   const [open, setOpen] = useState(false);
   const [choice, setChoice] = useState(owner?.id ?? "");
@@ -50,15 +53,15 @@ export function OrganizationAccountableOwnerPanel({
   }
 
   return (
-    <Surface as="section" padding="sm" className="mt-8" aria-label="Organization accountable owner">
+    <Surface as="section" padding="sm" className="mt-8">
       <p className="text-sm text-[var(--dpf-text)]">
         {current ? (
           <>
-            <span className="text-[var(--dpf-muted)]">Accountable owner:</span>{" "}
+            <span className="text-[var(--dpf-muted)]">{t("accountableOwner.label")}</span>{" "}
             <span className="font-semibold">{current.displayName}</span>
           </>
         ) : (
-          <span className="text-[var(--dpf-muted)]">No accountable owner recorded</span>
+          <span className="text-[var(--dpf-muted)]">{t("accountableOwner.unset")}</span>
         )}
         {" · "}
         <button
@@ -68,18 +71,16 @@ export function OrganizationAccountableOwnerPanel({
           aria-controls="accountable-owner-editor"
           className="text-[var(--dpf-accent)] hover:underline"
         >
-          {current ? "Change" : "Set"}
+          {t(current ? "accountableOwner.change" : "accountableOwner.set")}
         </button>
       </p>
 
       {open && (
         <div id="accountable-owner-editor" className="mt-3 space-y-3">
-          <p className="text-xs text-[var(--dpf-muted)]">
-            Every workroom without its own owner answers to this person.
-          </p>
+          <p className="text-xs text-[var(--dpf-muted)]">{t("accountableOwner.consequence")}</p>
           <div className="flex flex-wrap items-center gap-3">
             <label htmlFor="accountable-owner-picker" className="sr-only">
-              Accountable owner
+              {t("accountableOwner.picker")}
             </label>
             <select
               id="accountable-owner-picker"
@@ -88,10 +89,10 @@ export function OrganizationAccountableOwnerPanel({
               disabled={isPending}
               className={SELECT_CLASS}
             >
-              <option value="">Choose a person</option>
+              <option value="">{t("accountableOwner.choose")}</option>
               {candidates.map((candidate) => (
                 <option key={candidate.id} value={candidate.id}>
-                  {candidate.displayName} ({candidate.email})
+                  {t("accountableOwner.option", { name: candidate.displayName, email: candidate.email })}
                 </option>
               ))}
             </select>
@@ -101,10 +102,10 @@ export function OrganizationAccountableOwnerPanel({
               onClick={save}
               disabled={isPending || !choice || choice === current?.id}
             >
-              {isPending ? "Saving…" : "Save"}
+              {t(isPending ? "accountableOwner.saving" : "accountableOwner.save")}
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={toggle} disabled={isPending}>
-              Cancel
+              {t("accountableOwner.cancel")}
             </Button>
           </div>
           {error && (

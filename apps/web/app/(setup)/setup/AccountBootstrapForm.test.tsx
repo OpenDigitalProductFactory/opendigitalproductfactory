@@ -3,6 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AccountBootstrapForm } from "./AccountBootstrapForm";
 
+vi.mock("@/lib/i18n/t.server", async () => {
+  const { translate } = await import("@dpf/i18n");
+  return {
+    getT: async (namespace: "setup") => (key: string) => translate("en-US", namespace, key as never),
+  };
+});
+
 vi.mock("@/lib/actions/first-run-account-bootstrap", () => ({
   bootstrapFirstRunOwner: vi.fn(),
 }));
@@ -12,8 +19,8 @@ vi.mock("./AccountBootstrapSubmitButton", () => ({
 }));
 
 describe("AccountBootstrapForm", () => {
-  it("renders a native first-run bootstrap form with named required fields", () => {
-    const html = renderToStaticMarkup(<AccountBootstrapForm setupId="setup-1" />);
+  it("renders a native first-run bootstrap form with named required fields", async () => {
+    const html = renderToStaticMarkup(await AccountBootstrapForm({ setupId: "setup-1" }));
 
     expect(html).toContain("Welcome to your platform");
     expect(html).toContain('name="organizationName"');
@@ -22,6 +29,6 @@ describe("AccountBootstrapForm", () => {
     expect(html).toContain('required=""');
     expect(html).toContain('minLength="8"');
     expect(html).toContain("Get Started");
-    expect(html).toContain("accountable owner; you can change this in Admin › Settings.");
+    expect(html).toContain("You&#x27;ll be the organization&#x27;s accountable owner (change it in Admin › Settings).");
   });
 });

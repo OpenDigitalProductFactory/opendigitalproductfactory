@@ -24,6 +24,10 @@ vi.mock("@/components/admin/OrganizationAccountableOwnerPanel", () => ({
   ),
 }));
 
+vi.mock("@/lib/i18n/locale-context.server", () => ({
+  getLocaleContext: vi.fn().mockResolvedValue({ language: "en-US" }),
+}));
+
 vi.mock("@/lib/identity/principal-linking", () => ({
   listActiveHumanPrincipalsForUsers: vi.fn().mockResolvedValue([]),
 }));

@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { PlatformKeysPanel } from "@/components/admin/PlatformKeysPanel";
 import { SocialAuthPanel } from "@/components/admin/SocialAuthPanel";
@@ -6,6 +7,8 @@ import { EmailSettingsPanel } from "@/components/admin/EmailSettingsPanel";
 import { ReadabilityPolicyPanel } from "@/components/admin/ReadabilityPolicyPanel";
 import { LocalePreferencesPanel } from "@/components/admin/LocalePreferencesPanel";
 import { OrganizationAccountableOwnerPanel } from "@/components/admin/OrganizationAccountableOwnerPanel";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { listActiveHumanPrincipalsForUsers } from "@/lib/identity/principal-linking";
 import { getLocalePreferences } from "@/lib/actions/locale-preferences";
 import { getSmtpConfigStatus } from "@/lib/shared/smtp-config";
@@ -53,6 +56,7 @@ async function getAccountableOwner(): Promise<{ id: string; displayName: string 
 }
 
 export default async function AdminSettingsPage() {
+  const { language } = await getLocaleContext();
   return (
     <div>
       <div className="mb-6">
@@ -60,10 +64,12 @@ export default async function AdminSettingsPage() {
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Organization &amp; Core Configuration</p>
       </div>
       <AdminTabNav />
-      <OrganizationAccountableOwnerPanel
-        owner={await getAccountableOwner()}
-        candidates={await listActiveHumanPrincipalsForUsers()}
-      />
+      <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+        <OrganizationAccountableOwnerPanel
+          owner={await getAccountableOwner()}
+          candidates={await listActiveHumanPrincipalsForUsers()}
+        />
+      </MessagesProvider>
       <PlatformKeysPanel
         keyData={await getKeyData(PLATFORM_KEYS)}
         title="Core Configuration"

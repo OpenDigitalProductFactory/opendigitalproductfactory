@@ -6,6 +6,7 @@
 // Keys are typed from the en-US JSON (no generator): an unknown key is a
 // compile error (AC-TYPED-KEYS).
 
+import admin from "./messages/en-US/admin.json";
 import errors from "./messages/en-US/errors.json";
 import footprint from "./messages/en-US/footprint.json";
 import approvals from "./messages/en-US/approvals.json";
@@ -18,7 +19,7 @@ import { isPseudoLocale } from "./pseudo";
 import { formatSource } from "./runtime";
 
 /** The en-US source catalog, one entry per namespace. Add a namespace here and in messages/en-US/. */
-export const SOURCE_CATALOG = { approvals, errors, footprint, portfolio, setup, shell } as const;
+export const SOURCE_CATALOG = { admin, approvals, errors, footprint, portfolio, setup, shell } as const;
 
 export type Namespace = keyof typeof SOURCE_CATALOG;
 
