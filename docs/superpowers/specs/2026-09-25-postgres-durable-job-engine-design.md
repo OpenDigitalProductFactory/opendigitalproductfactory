@@ -5,7 +5,7 @@ status: active
 # Durable jobs on Postgres: replace the Inngest server with an owned `@dpf/jobs` engine
 
 **Plan:** [dependency diet, move M3](../plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md) · **Epic:** `EP-8DC217EB` · **Backlog:** `BI-068BBA33` · **Sequenced behind:** BET-11 scheduling substrate (`BI-B72328D5`) · **Doctrine:** `absorb-dont-adopt` (commandment)
-**Decision:** `own_postgres_jobs`, founder, 2026-09-26 (plan §10.6.1). §8 keeps the inputs, which the `principle_decide` record still owes. The DPF MCP server was unreachable from the deciding session. The §7 benchmarks gate turning the Postgres engine on (§6 step 2), not the facade (§6 step 1).
+**Decision:** `own_postgres_jobs`, founder, 2026-09-26 (plan §10.6.1), filed in the WWMD ledger as DI-E52E32AEA1E4 on 2026-09-29. §8 keeps the inputs. **Phase 2:** `BI-85E6EF14`; §5.2–§5.5 were amended for it on 2026-09-29 (concurrency limit N, cron, engine selection). The §7 benchmarks gate turning the Postgres engine on (§6 step 2), not the facade (§6 step 1).
 
 ## 1. Problem
 
@@ -115,13 +115,20 @@ A type-level test pins the facade to the options in use. Anything outside §2 is
 | `JobRun` | one run of one function | `functionId`, `eventId`, `status` (`queued`, `running`, `sleeping`, `waiting`, `completed`, `failed`, `cancelled`), `attempt`, `runAfter`, `concurrencyKey`, `leaseOwner`, `leaseExpiresAt`, `error` |
 | `JobStep` | memoised step results | `(runId, stepId)` unique; `output jsonb`; `completedAt` |
 | `JobWait` | a run parked on `waitForEvent` | `runId`, `eventName`, `matchExpr`, `expiresAt` |
+| `JobConcurrencySlot` | one held concurrency slot (§5.3) | `(laneKey, slot)` unique; `runId`; `acquiredAt` |
+| `JobCronState` | next fire time per cron function (§5.4) | `functionId` unique; `cron`; `nextFireAt` |
 
 Status is a Prisma enum (AGENTS.md §8). Run history reuses the existing `TaskRun` linkage for `/ops`; `JobRun` is the engine's state, not a second reporting model.
 
 ### 5.3 Execution
 
 - **Claim.** `UPDATE "JobRun" SET status='running', leaseOwner=$1, leaseExpiresAt=now()+$2 WHERE id IN (SELECT id FROM "JobRun" WHERE status='queued' AND runAfter<=now() AND <concurrency admissible> ORDER BY runAfter FOR UPDATE SKIP LOCKED LIMIT $n) RETURNING *`.
-- **Concurrency.** Limit 1 per function or per key is enforced by a partial unique index on `(functionId, concurrencyKey) WHERE status='running'`. A second claimer fails the insert-or-update and skips the row. This covers all 84 configs, which are all limit 1. A limit above 1 is out of scope until something needs it; the facade type rejects it. The shared account-scope lane in `admission.ts` becomes a second key column with the same index.
+- **Concurrency (amended 2026-09-29, phase 2).** §2 counted every config as limit 1; phase 1 found otherwise. Five functions run at limit 2 (`assurance-bom`, `assurance-scan`, `build-review-verification`, `document-renditions`, `eval-background`), `mcp-task-run-execute` at limit 4, and the shared build-pipeline lane (`admission.ts`, `scope: "account"`) takes an operator-set limit. A partial unique index can only express limit 1, so the engine uses **slots**:
+  - A *lane* is one concurrency constraint evaluated for one run: `fn:<functionId>:<keyValue>` for a function-scoped constraint (`keyValue` is the evaluated `key` expression, or empty), `account:<keyValue>` for the shared lane. A run belongs to one lane per constraint it declares (at most two).
+  - `JobConcurrencySlot(laneKey, slot, runId)` is unique on `(laneKey, slot)`. A run holds one slot row per lane while it is `running`.
+  - The claim transaction takes `pg_advisory_xact_lock` on each of the run's lanes in sorted order (no deadlock between two claimers), counts the lane's held slots, and inserts the lowest free slot number below the lane's limit. If any lane is full, the run is skipped this round and stays `queued`. The unique index is the backstop: two claimers can never hold the same slot.
+  - Slots are deleted whenever a run leaves `running` (completed, failed, cancelled, sleeping, waiting) and by lease recovery, so a sleeping or waiting run does not hold capacity, as in Inngest.
+  - Limit 1 is the same mechanism with one slot, so the 78 limit-1 configs need no special case.
 - **Replay.** Each attempt re-invokes the handler from the top. `step.run` looks up `JobStep(runId, stepId)`: on a hit it returns the stored output without running `fn`; on a miss it runs `fn`, stores the result and continues. Repeated step ids inside one run get Inngest's counter suffix, so replay order matches.
 - **Sleep.** `step.sleep` records the step, sets `runAfter=wakeAt`, sets status `sleeping` and ends the invocation. The claimer picks the run up again after `wakeAt`, and replay skips the steps already done.
 - **`waitForEvent`.** It inserts a `JobWait`, sets status `waiting` and ends the invocation. `jobs.send` inserts the `JobEvent` and, in the same transaction, matches open `JobWait` rows by name and match expression. Each match gets the event stored as that step's output, and its run is set back to `queued`. `pg_notify('dpf_jobs', …)` wakes a worker. On timeout, the wait's step output is `null`, as in Inngest.
@@ -133,6 +140,16 @@ Status is a Prisma enum (AGENTS.md §8). Run history reuses the existing `TaskRu
 ### 5.4 Cron
 
 The 74 cron functions register in the BET-11 `ScheduledJob` substrate: one `nextRunAt(schedule)` and one tick. The tick inserts a `JobEvent` per due schedule, so cron runs use the same execution path. This is why M3 is sequenced behind BET-11: the scheduler lands once.
+
+**Amended 2026-09-29, phase 2.** `ScheduledJob.schedule` holds named cadences (`"weekly"`), not cron expressions, and the owned evaluator `computeNextCronRun` (`lib/operate/cron-next-run.ts`) treats a `*` minute or hour as 0 and ignores steps. The cron functions use every-minute, `*/5`, `*/15`, `37 */6 * * *` and long minute lists. So:
+
+- `lib/operate/cron-next-run.ts` gains a full five-field evaluator (`*`, lists, ranges, steps, day-of-month/day-of-week OR as in Vixie cron), exported beside `computeNextCronRun`, whose behaviour for the agent-task scheduler does not change. One module, no second parser, no dependency.
+- A Postgres-routed cron function keeps its `nextFireAt` in `JobCronState`. The worker's tick claims due rows with `FOR UPDATE SKIP LOCKED`, inserts the `inngest/scheduled.timer` event and run in the same transaction, and advances `nextFireAt`. A tick that finds several missed fire times fires once (Inngest does not backfill either).
+- `DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED` and the per-job `ScheduledJob.enabled` switch gate the Postgres tick exactly as they gate Inngest crons today.
+
+### 5.5 Engine selection (phase 2)
+
+`DPF_JOBS_ENGINE` selects the engine: `inngest` (default) or `postgres`. `DPF_JOBS_POSTGRES_FUNCTIONS` optionally narrows `postgres` to a comma-separated list of function ids, for the per-domain soak in §6 step 2. Unset, every function stays on Inngest and nothing about today's behaviour changes: the Postgres worker does not start and `jobs.send` goes only to Inngest. With a function routed to Postgres, `jobs.send` writes the `JobEvent` (which starts Postgres-routed runs and resolves waits) and also forwards to Inngest while any function remains there, so an event reaches every function that listens to it regardless of engine.
 
 ## 6. Migration
 
