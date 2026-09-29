@@ -351,7 +351,16 @@ Each S-move ships its ratchet in the same PR, in the shape the `check-no-local-*
 
 ### 10.6.1 Founder decisions, 2026-09-26
 
-The founder decided the four open calls in the dependency-architecture thread on 2026-09-26, each on the recommended option. The DPF MCP server was unreachable from that session, so the `principle_decide` / decision-outcome records are still owed. This section is the durable record until they are filed.
+The founder decided the four open calls in the dependency-architecture thread on 2026-09-26, each on the recommended option. The DPF MCP server was unreachable from that session; the decisions were filed in the WWMD decision ledger on 2026-09-29 (`principle_decide`, platform-development), each recommending the founder's option with high confidence:
+
+| Call | Ledger record |
+|---|---|
+| M3 `own_postgres_jobs` (supersedes DI-66B0DEBEA992, keep Inngest, under that record's re-open trigger (a)) | DI-E52E32AEA1E4 |
+| S10 `elkjs` only | DI-459D332D727F |
+| M5 `markdown-it`, raw HTML off | DI-D9292D812CFF |
+| One branch and one PR per move | DI-8578ECC7DA6C |
+
+The `record_decision_outcome` step could not be filed: the connection's coworker lacks the `decision_record_create` grant (`agent-grant-missing`). The four outcomes stay unrecorded in that column until an administrator grants it.
 
 | Call | Decision | Consequence |
 |---|---|---|
@@ -377,8 +386,32 @@ Every S-move and M1, M2, M4, M6, M7, M8 and M9 are done. Open:
 - **M3 phases 2 and 3.** The Postgres engine behind a flag, then Inngest retires. Needs a Postgres runtime for the §7 benchmarks.
 - **M5 markdown.** Built but not pushed; it needs UX-fit evidence before `check-ux-fit-decision` lets it through. A session with a running portal or DPF MCP access lands it.
 - **M11 steps 2 to 4.** Step 2 waits on breaking the import cycle in §10.1. Step 4 (the `extendedDiagnostics` baseline) does not depend on step 2 and can go first.
-- **Owed records.** The §10.6.1 `principle_decide` records and the §10.7 backlog items, once a session has DPF MCP access.
+- **Owed records.** Filed 2026-09-29; see §10.6.1 and §10.7. Only the decision-outcome column remains, blocked on a grant.
 
 ### 10.7 Backlog coverage
 
-The DPF MCP server was unreachable from the session that wrote this section, so M8 and the §7 ratchet ran against BI-5265CAD0 (M7 + M8), already filed. The S-moves need backlog items under `EP-8DC217EB` before they are implemented, and the next session with MCP access files them.
+M8 and the §7 ratchet ran against BI-5265CAD0 (M7 + M8). The S-moves were delivered before their backlog items existed; the items were filed under `EP-8DC217EB` on 2026-09-29 and closed with their PRs as evidence. The M-items were linked to the same epic.
+
+| Move | Item | State |
+|---|---|---|
+| S1 | BI-92ED9ECF | done (#5707, #5717) |
+| S2 | BI-0FEDF412 | done (#5718) |
+| S3 | BI-BA138E88 | done (#5690) |
+| S4 | BI-2CD11286 | done (#5773) |
+| S5 | BI-4D521509 | done (#5722) |
+| S6 | BI-210F06A4 | done (#5764) |
+| S7 | BI-CB991A70 | done (#5723) |
+| S8 | BI-5F59E987 | done (#5725) |
+| S9 | BI-FF951FC9 | done (#5762) |
+| S10 | BI-1023CDD1 | done (#5766) |
+| S11 | BI-3D37F899 | done (#5693) |
+| S12 | BI-82052153 | done (#5702) |
+| M2 | BI-DBDB8C6D | awaiting acceptance (#5253, #5724) |
+| M3 | BI-068BBA33 | open: phase 1 done (#5760); phases 2 and 3 open |
+| M5 | BI-0AB1FD47 | open: M5b done (#5770); markdown open |
+| M7 + M8 | BI-5265CAD0 | awaiting acceptance (#5289, #5670) |
+| M9 | BI-B1977CEE | awaiting acceptance (#5285, #5774) |
+| M11 | BI-0A3B155F | open: step 2 blocked by the import cycle |
+| M11 precursor | BI-F68CD3E3 | open: break the 657-file import cycle, starting with the 610 type-only imports |
+
+M2, M7 + M8 and M9 stop at awaiting acceptance. The readiness gate refused `done` for each: it wants research, plan-coverage and acceptance evidence those older items never recorded (`initiative_not_ready`: RESEARCH_REQUIRED, PLAN_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED, OBJECTIVE_BASELINE_REQUIRED, OBJECTIVE_RECONCILIATION_REQUIRED). The work is merged; acceptance is a reviewer's step.
