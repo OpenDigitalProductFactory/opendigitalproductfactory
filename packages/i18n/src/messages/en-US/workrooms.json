@@ -1,0 +1,15 @@
+{
+  "stageDecision": {
+    "yours": "Your decision: {$stage}.",
+    "waitingOn": "Waiting on {$name} to decide: {$stage}.",
+    "waiting": "Waiting on a decision: {$stage}.",
+    "decide": "Decide",
+    "found": "What the room found",
+    "choice": "Decision",
+    "choices": { "accept": "Accept", "patch": "Patch", "defer": "Defer" },
+    "deferUntil": "Defer until",
+    "rationale": "Rationale",
+    "record": "Record decision",
+    "cancel": "Cancel"
+  }
+}

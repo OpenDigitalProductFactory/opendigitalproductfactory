@@ -457,6 +457,9 @@
     "apps/web/components/proactivity/ProactivityRosterList.tsx": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
+    "apps/web/components/shared/MarkdownHtml.tsx": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "apps/web/components/shell/SectionNav.tsx": [
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
@@ -540,6 +543,9 @@
     ],
     "apps/web/lib/actions/sovereignty.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
+    ],
+    "apps/web/lib/actions/workroom-stage-decision.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/agent-grants.ts": [
       "docs/architecture/ai-agent-meta-model.md",
@@ -907,6 +913,9 @@
     "apps/web/lib/marketing/utm.ts": [
       "docs/architecture/unified-connector-kernel.md"
     ],
+    "apps/web/lib/mcp-governed-execute-types.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
     "apps/web/lib/mcp-governed-execute.ts": [
       "docs/architecture/ai-agent-meta-model.md",
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
@@ -1195,6 +1204,9 @@
     "apps/web/lib/shared/file-upload.ts": [
       "docs/user-guide/workspace/supported-file-formats.md"
     ],
+    "apps/web/lib/shared/markdown.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "apps/web/lib/shared/office-conversion.ts": [
       "docs/user-guide/workspace/supported-file-formats.md"
     ],
@@ -1269,6 +1281,9 @@
     ],
     "apps/web/lib/tak/initiative-readiness-tool-grants.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/tak/precondition-ordering-types.ts": [
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/tak/prompt-assembler.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
@@ -1943,6 +1958,9 @@
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/check-no-local-isrecord.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "scripts/check-no-local-markdown-renderer.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/check-no-local-slugify.mjs": [
@@ -2843,6 +2861,7 @@
       "packages/db/src/capability-maturity.ts"
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
+      "apps/web/components/shared/MarkdownHtml.tsx",
       "apps/web/lib/compliance/format-retention-minimum.ts",
       "apps/web/lib/datetime.ts",
       "apps/web/lib/ea/table-growth.ts",
@@ -2853,6 +2872,7 @@
       "apps/web/lib/routes.ts",
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
+      "apps/web/lib/shared/markdown.ts",
       "apps/web/lib/shared/org-address.ts",
       "apps/web/lib/shared/slugify.ts",
       "apps/web/scripts/offload-evidence-output.ts",
@@ -2866,6 +2886,7 @@
       "scripts/check-no-local-canonical-json.mjs",
       "scripts/check-no-local-formatters.mjs",
       "scripts/check-no-local-isrecord.mjs",
+      "scripts/check-no-local-markdown-renderer.mjs",
       "scripts/check-no-local-slugify.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",
       "scripts/check-no-new-notactive-conventions.mjs",
@@ -3017,6 +3038,7 @@
       "scripts/pregate.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [
+      "apps/web/lib/mcp-governed-execute-types.ts",
       "apps/web/lib/mcp-tool-types.ts",
       "apps/web/lib/mcp/packs/deliberation-siem-pack.ts",
       "apps/web/lib/mcp/packs/feedback-pack.ts",
@@ -3025,6 +3047,7 @@
       "apps/web/lib/mcp/packs/workbooks-pack.ts",
       "apps/web/lib/mcp/tool-pack.ts",
       "apps/web/lib/mcp/tool-registry.ts",
+      "apps/web/lib/tak/precondition-ordering-types.ts",
       "scripts/check-mcp-tool-pack.mjs",
       "scripts/check-module-size.mjs",
       "scripts/check-no-web-import-cycle-growth.mjs",
@@ -3119,6 +3142,7 @@
       "apps/web/lib/decision-perspective/weight-inference.ts"
     ],
     "docs/architecture/work-shapes-and-the-decision-gate.md": [
+      "apps/web/lib/actions/workroom-stage-decision.ts",
       "apps/web/lib/mcp/packs/profession-decision-pack.ts",
       "apps/web/lib/queue/functions/workroom-drive.ts",
       "apps/web/lib/tak/decision-routing-governance-hook.ts",

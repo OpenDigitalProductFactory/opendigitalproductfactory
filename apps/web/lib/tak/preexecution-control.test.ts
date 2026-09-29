@@ -7,7 +7,7 @@ vi.mock("@dpf/db", () => ({ prisma: {} }));
 vi.mock("./tool-execution-receipt", () => ({ writeToolExecutionReceipt: vi.fn() }));
 
 import { ALIGNMENT_REFUSAL_PRINCIPLE } from "@/lib/kernel/governing-principles";
-import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute-types";
 
 import { setAlignmentGateOverrideForTests, type AlignmentGateDecision } from "./alignment-tool-gate";
 import { enforceTakPreexecution } from "./preexecution-control";
