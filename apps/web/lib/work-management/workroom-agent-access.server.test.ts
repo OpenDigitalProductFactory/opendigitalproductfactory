@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ human: vi.fn(), alias: vi.fn(), agent: vi.fn(), room: vi.fn() }));
-vi.mock("@dpf/db", () => ({ prisma: { principalAlias: { findFirst: m.alias }, agent: { findUnique: m.agent }, workroom: { findUnique: m.room } } }));
+const m = vi.hoisted(() => ({ human: vi.fn(), alias: vi.fn(), agent: vi.fn(), room: vi.fn(), item: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: { principalAlias: { findFirst: m.alias }, agent: { findUnique: m.agent }, workroom: { findUnique: m.room }, backlogItem: { findFirst: m.item } } }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: m.human }));
 import { resolveAgentWorkroomAccess } from "./workroom-agent-access.server";
 const human = { id: "human-row", principalId: "PRN-human", kind: "human", status: "active", sensitivityClearance: ["internal"] };
@@ -47,6 +47,24 @@ it("checks current clearance in unanchored rooms on every request", async () => 
   expect((await resolveAgentWorkroomAccess(input)).decision.reason).toBe("insufficient-clearance");
   m.alias.mockImplementation(async ({ where }) => ({ principal: where.aliasType === "user" ? human : agent }));
   expect((await resolveAgentWorkroomAccess(input)).decision.level).toBe("action");
+});
+it("admits a public-cleared coworker to open-source platform work (BI-0A5EE9C1)", async () => {
+  m.alias.mockImplementation(async ({ where }) => ({ principal: where.aliasType === "user" ? human : { ...agent, sensitivityClearance: ["public"] } }));
+  m.room.mockResolvedValue({ ...room(), backlogItemId: "BI-PLATFORM" });
+  m.item.mockResolvedValue({ sensitivity: "internal", scopeKind: "platform", digitalProduct: null });
+  expect((await resolveAgentWorkroomAccess(input)).decision.level).toBe("action");
+  expect(m.item.mock.calls[0][0].where).toEqual({ OR: [{ itemId: "BI-PLATFORM" }, { id: "BI-PLATFORM" }] });
+});
+it("keeps customer-domain and explicitly confidential work closed to a public-cleared coworker", async () => {
+  m.alias.mockImplementation(async ({ where }) => ({ principal: where.aliasType === "user" ? human : { ...agent, sensitivityClearance: ["public"] } }));
+  m.room.mockResolvedValue({ ...room(), backlogItemId: "BI-CUSTOMER" });
+  m.item.mockResolvedValue({ sensitivity: "internal", scopeKind: "archetype-leaf", digitalProduct: null });
+  expect((await resolveAgentWorkroomAccess(input)).decision.reason).toBe("insufficient-clearance");
+  m.item.mockResolvedValue({ sensitivity: "confidential", scopeKind: "platform", digitalProduct: null });
+  expect((await resolveAgentWorkroomAccess(input)).decision.reason).toBe("insufficient-clearance");
+  m.item.mockResolvedValue({ sensitivity: "internal", scopeKind: "platform", digitalProduct: null });
+  m.room.mockResolvedValue({ ...room(), backlogItemId: "BI-PLATFORM", workItem: { evidence: [{ workroomPolicy: { sensitivityCeiling: "internal" } }] } });
+  expect((await resolveAgentWorkroomAccess(input)).decision.reason).toBe("insufficient-clearance");
 });
 it("preserves stricter room boundaries and case policy", async () => {
   m.room.mockResolvedValue({ ...room(), scopeClaims: [{ workroomBoundary: { sensitivityCeiling: "confidential" } }] });

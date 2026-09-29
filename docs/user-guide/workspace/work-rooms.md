@@ -138,6 +138,12 @@ their legacy behavior and the panel reports oversight as not applicable.
 
 Room access has separate discovery, content, and action boundaries. Assignment or an explicit room policy admits a principal; a presence heartbeat never does. Sensitivity clearance is checked on the server before messages, participants, or context load. A person without content access receives the same not-found experience as an unknown room.
 
+A room's sensitivity comes from the boundary set on the room. If no boundary is set, it comes from the backlog item the room serves:
+
+- **Platform work is public by default.** This means items scoped to the platform itself (planning scope *platform* or *common*, or the DPF portal product). DPF is open source, so any coworker cleared for public information can help with it.
+- **Other work stays internal**, such as work on your own organization's products and operations.
+- **An item marked *confidential* or *restricted* stays closed**, even when it is platform work. To keep a platform item private, mark it confidential. Every change to an item's sensitivity is recorded on the item.
+
 When an existing communication adapter attaches a Teams, Slack, email, or other external conversation to a Workroom, DPF remains the canonical context:
 
 - concise notifications carry a link back to the internal room and its canonical Work Case reference;
