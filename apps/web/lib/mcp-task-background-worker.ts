@@ -28,10 +28,8 @@ import { admitDurableInferenceTask } from "./mcp-task-durable-inference-runtime"
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { automaticReviewerRecoveryWait } from "./mcp-task-background-dispatch";
-import type {
-  RemoteTaskSubmitAuth,
-  RemoteTaskSubmitParams,
-} from "./mcp-task-submit";
+import type { RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
 type PersistedRemoteTask = {
   id: string;

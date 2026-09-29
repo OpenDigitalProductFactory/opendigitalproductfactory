@@ -1,5 +1,6 @@
 import { parseRemoteTaskSubmitParams, type RemoteTaskSubmitParams } from "./mcp-task-submit-params";
-export { parseRemoteTaskSubmitParams, REMOTE_RISK_CLASSES, type RemoteRiskClass, type RemoteTaskSubmitParams } from "./mcp-task-submit-params";
+import type { ExistingRemoteTask, RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
+export { parseRemoteTaskSubmitParams, REMOTE_RISK_CLASSES } from "./mcp-task-submit-params";
 import { resolveMcpTaskAuthorityKey } from "@/lib/auth/oauth-task-authority";
 import { recoverExpiredOAuthReview } from "./mcp-task-oauth-recovery";
 import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
@@ -61,17 +62,6 @@ export {
   parseInitiativeReviewBinding,
   validateInitiativeReviewAuthorityScope,
 } from "./mcp-task-review-contract";
-export type { InitiativeReviewBinding } from "./mcp-task-review-contract";
-export type RemoteTaskSubmitAuth = {
-  tokenId: string;
-  userId: string;
-  capability: "read" | "write";
-  source: import("@/lib/mcp/tool-tier").McpAuthSource;
-};
-
-export type RemoteTaskSubmitOutcome =
-  | { kind: "invalid_params"; message: string }
-  | { kind: "result"; result: Record<string, unknown> };
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -79,20 +69,6 @@ function optionalString(value: unknown): string | null {
 function remoteTaskContent(text: string) {
   return [{ type: "text", text }];
 }
-
-export type ExistingRemoteTask = {
-  id: string;
-  taskRunId: string;
-  userId: string;
-  threadId: string | null;
-  contextId: string | null;
-  status: string;
-  progressPayload: unknown;
-  a2aMetadata: unknown;
-  lastHeartbeatAt: Date | null;
-  completedAt: Date | null;
-  updatedAt: Date;
-};
 
 function replayOrConflict(existing: ExistingRemoteTask, parsed: RemoteTaskSubmitParams): RemoteTaskSubmitOutcome {
   const metadata = existing.a2aMetadata && typeof existing.a2aMetadata === "object"

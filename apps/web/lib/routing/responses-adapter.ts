@@ -3,7 +3,8 @@
  * providers.
  */
 
-import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler, ToolCallEntry } from "./adapter-types";
+import type { ToolCallEntry } from "./chat-message-types";
+import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import {
   InferenceError,
   classifyHttpError,

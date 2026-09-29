@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 import type { RouteSensitivity } from "./agent-sensitivity";
-import type { RemoteTaskSubmitAuth, RemoteTaskSubmitParams } from "./mcp-task-submit";
+import type { RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { requiredToolNames } from "./mcp-task-review-contract";
 import { INITIATIVE_READINESS_LANES } from "./tak/initiative-readiness-tool-grants";
 import { authorizeCoworkerRequest } from "./mcp/independent-review-request";

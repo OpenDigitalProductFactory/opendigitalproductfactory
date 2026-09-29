@@ -924,6 +924,9 @@
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
+    "apps/web/lib/mcp-task-submit-types.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
     "apps/web/lib/mcp-tool-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -1114,6 +1117,9 @@
     ],
     "apps/web/lib/routing/chat-adapter.ts": [
       "docs/design/golden-triangle-design.md"
+    ],
+    "apps/web/lib/routing/chat-message-types.ts": [
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/routing/cli-adapter.ts": [
       "docs/dogfood/2026-05-23-dale-hvac-build-studio.md"
@@ -3042,6 +3048,7 @@
     ],
     "docs/architecture/mcp-tool-packs.md": [
       "apps/web/lib/mcp-governed-execute-types.ts",
+      "apps/web/lib/mcp-task-submit-types.ts",
       "apps/web/lib/mcp-tool-types.ts",
       "apps/web/lib/mcp/packs/deliberation-siem-pack.ts",
       "apps/web/lib/mcp/packs/feedback-pack.ts",
@@ -3050,6 +3057,7 @@
       "apps/web/lib/mcp/packs/workbooks-pack.ts",
       "apps/web/lib/mcp/tool-pack.ts",
       "apps/web/lib/mcp/tool-registry.ts",
+      "apps/web/lib/routing/chat-message-types.ts",
       "apps/web/lib/tak/precondition-ordering-types.ts",
       "scripts/check-mcp-tool-pack.mjs",
       "scripts/check-module-size.mjs",

@@ -8,8 +8,7 @@
  * champion/challenger, rate tracking, and outcome telemetry.
  */
 
-import type { ChatMessage } from "@/lib/ai-inference";
-import type { ToolCallEntry } from "@/lib/routing/adapter-types";
+import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
 import type {
   RouteDecision,
   EndpointManifest,
