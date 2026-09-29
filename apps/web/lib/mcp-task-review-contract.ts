@@ -1,5 +1,5 @@
 import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "./source-page-lines";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 
 export type InitiativeReviewBinding = {
   writerToolName: string;

@@ -915,6 +915,9 @@
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
+    "apps/web/lib/mcp-tool-types.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
     "apps/web/lib/mcp/external-coworker-task-adapter.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
@@ -1989,6 +1992,9 @@
     "scripts/check-no-url-pathname-fs.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
+    "scripts/check-no-web-import-cycle-growth.mjs": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
     "scripts/check-override-comments.mjs": [
       "docs/architecture/contributor-procedure-runbook.md"
     ],
@@ -3015,6 +3021,7 @@
       "scripts/pregate.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [
+      "apps/web/lib/mcp-tool-types.ts",
       "apps/web/lib/mcp/packs/deliberation-siem-pack.ts",
       "apps/web/lib/mcp/packs/feedback-pack.ts",
       "apps/web/lib/mcp/packs/runtime-coordination-pack.ts",
@@ -3024,6 +3031,7 @@
       "apps/web/lib/mcp/tool-registry.ts",
       "scripts/check-mcp-tool-pack.mjs",
       "scripts/check-module-size.mjs",
+      "scripts/check-no-web-import-cycle-growth.mjs",
       "scripts/mcp-tool-pack-baseline.json"
     ],
     "docs/architecture/mcp-tool-surface-ergonomics-audit.md": [

@@ -14,7 +14,7 @@
 // and build-ship-handlers.ts) so no single file exceeds the module-size cap;
 // they import the shared Build Studio helpers rather than replicating them.
 
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
   updateFeatureBrief,

@@ -1,5 +1,5 @@
 import { adoptionScopePatch, scopeWriteWhere } from "./scope-input";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { WORK_INTENTS, type WorkIntent } from "@/lib/work-capsules";
 import {

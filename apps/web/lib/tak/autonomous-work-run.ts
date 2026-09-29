@@ -6,7 +6,7 @@ import type { MessageOrigin } from "@/lib/inference/data-screening/types";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-review";
 import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { AgentEvent } from "@/lib/tak/agent-event-bus";
 import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
 import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";

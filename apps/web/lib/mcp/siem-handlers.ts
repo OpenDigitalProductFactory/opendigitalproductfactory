@@ -19,7 +19,7 @@ import { randomUUID } from "node:crypto";
 
 import { prisma } from "@dpf/db";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   decideSecurityResponse,
   type SecurityBlastRadius,

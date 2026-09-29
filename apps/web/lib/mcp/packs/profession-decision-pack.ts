@@ -18,7 +18,7 @@
 // with `declaredBorrow`. What crosses the boundary is a consult, never a copy —
 // the coworker definition stays single-homed in the platform.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

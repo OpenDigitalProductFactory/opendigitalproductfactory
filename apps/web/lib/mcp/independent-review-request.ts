@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { can } from "@/lib/permissions";
