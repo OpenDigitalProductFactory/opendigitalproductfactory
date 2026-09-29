@@ -1,24 +1,12 @@
 import { prisma } from "@dpf/db";
 
-import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute-types";
+import type { PreconditionOrderingCheck, PreconditionOrderingDecision } from "./precondition-ordering-types";
 
 export type ArchitecturePrecondition = {
   key: string;
   business: { required: boolean; satisfied: boolean; evidenceRef: string };
   systems: { required: boolean; satisfied: boolean; evidenceRef: string };
-};
-
-export type PreconditionOrderingCheck = {
-  key: string;
-  coherent: boolean;
-  satisfied: boolean;
-  evidenceRefs: [string, string];
-};
-
-export type PreconditionOrderingDecision = {
-  verdict: "approve" | "decline" | "escalate";
-  rationale: string;
-  checks: PreconditionOrderingCheck[];
 };
 
 export function evaluatePreconditionOrdering(input: {

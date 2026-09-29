@@ -54,6 +54,7 @@ const EXPECTED_LEGACY_JOBS = [
   "label-association-guard",
   "live-blocker-references",
   "local-canonical-json-guard",
+  "local-markdown-renderer-guard",
   "local-slugify-guard",
   "mcp-tool-pack-guard",
   "mobile-jest-pin-guard",

@@ -26,6 +26,7 @@ vi.mock("@dpf/db", () => ({
     taskRun: {
       findUnique: (...args: unknown[]) => db.findTaskRun(...args),
       update: (...args: unknown[]) => db.updateTaskRun(...args),
+      updateMany: (...args: unknown[]) => db.updateTaskRun(...args),
     },
   },
 }));
@@ -129,7 +130,7 @@ describe("remote task terminal-writer postcondition", () => {
     vi.clearAllMocks();
     db.findModelConfig.mockResolvedValue(null);
     db.findTaskRun.mockResolvedValue({ status: "working" });
-    db.updateTaskRun.mockResolvedValue({});
+    db.updateTaskRun.mockResolvedValue({ count: 1 });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "AGT-WS-PORTFOLIO",
       displayName: "Portfolio Advisor",
@@ -265,7 +266,7 @@ describe("remote task terminal-writer postcondition", () => {
     });
 
     expect(db.updateTaskRun).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-7991D9CAE467" },
+      where: expect.objectContaining({ taskRunId: "TR-MCP-7991D9CAE467", status: "working" }),
       data: expect.objectContaining({
         status: "input-required",
         completedAt: null,
@@ -334,7 +335,7 @@ describe("remote task terminal-writer postcondition", () => {
     });
 
     expect(db.updateTaskRun).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-APPROVAL-PROJECTION" },
+      where: expect.objectContaining({ taskRunId: "TR-MCP-APPROVAL-PROJECTION", status: "input-required" }),
       data: expect.objectContaining({
         status: "input-required",
         completedAt: null,
@@ -528,7 +529,7 @@ describe("remote task terminal-writer postcondition", () => {
     });
 
     expect(db.updateTaskRun).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-7ECDD7A53D18" },
+      where: expect.objectContaining({ taskRunId: "TR-MCP-7ECDD7A53D18", status: "working" }),
       data: expect.objectContaining({
         status: "input-required",
         completedAt: null,
@@ -593,7 +594,7 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
     vi.clearAllMocks();
     db.findModelConfig.mockResolvedValue(null);
     db.findTaskRun.mockResolvedValue({ status: "working" });
-    db.updateTaskRun.mockResolvedValue({});
+    db.updateTaskRun.mockResolvedValue({ count: 1 });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "AGT-WS-PORTFOLIO",
       displayName: "Portfolio Advisor",
@@ -722,7 +723,7 @@ describe("agent residency policy is read, never inferred from a pin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db.findTaskRun.mockResolvedValue({ status: "working" });
-    db.updateTaskRun.mockResolvedValue({});
+    db.updateTaskRun.mockResolvedValue({ count: 1 });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "AGT-WS-PORTFOLIO",
       displayName: "Portfolio Advisor",

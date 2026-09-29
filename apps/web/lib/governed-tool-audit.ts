@@ -1,10 +1,10 @@
 import { prisma } from "@dpf/db";
 
 import type { AlignmentGateDecision } from "./tak/alignment-tool-gate";
-import type { PreconditionOrderingDecision } from "./tak/precondition-ordering-gate";
+import type { PreconditionOrderingDecision } from "./tak/precondition-ordering-types";
 import { deriveAuditClassForTool, deriveCapabilityId } from "./tool-audit-helpers";
 import { boundLargeStrings } from "./evidence/bounded-evidence-output";
-import type { GovernedExecuteContext, GovernedExecuteSource } from "./mcp-governed-execute";
+import type { GovernedExecuteContext, GovernedExecuteSource } from "./mcp-governed-execute-types";
 import type { ToolDefinition, ToolResult } from "./mcp-tool-types";
 
 let createOverride: ((data: Record<string, unknown>) => Promise<unknown>) | null = null;

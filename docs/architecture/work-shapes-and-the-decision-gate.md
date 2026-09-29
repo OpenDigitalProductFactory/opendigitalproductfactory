@@ -751,6 +751,29 @@ outcome advances nothing (fail closed). The first live advance after the kind
 fix, on 2026-09-24, was a coworker's own "blocked: no tool available" record
 carrying the declared kind (BI-E0D23FD5).
 
+**A human decision completes a governed stage through the same write.** A
+`governed-decision` stage with a `role:` or `person:` principal is never
+dispatched; the drive raises attention and stores `pendingAttention`. The
+room's Attention card now offers that decision to the person who may make it
+(`recordWorkroomStageDecision`, `apps/web/lib/actions/workroom-stage-decision.ts`),
+and the decision is recorded as that stage's evidence — a kind the stage
+declared (`decision-record`), outcome `completed`, a human actor, and a result
+carrying the choice (accept, patch where the stage's condition names it, or
+defer with a future date), the decision scope and the principal the stage
+named. The drive earns the completing receipt from it exactly as it does from a
+coworker's evidence; there is no second receipt path. Because such a stage has
+no dispatch, the drive takes its start time from its own latest attention ask
+for that governed decision, scoped to the room still waiting on it rather than
+to the cycle key (the ask is written only when the hold changes, so a decision
+left waiting across a cycle rollover has no row in the current cycle). Evidence
+recorded before the ask still does not count. Who may decide follows the
+accountable-owner fallback (DI-A76F0C10EF14): the stage's role holder when a
+role binding exists — none does yet, since no substrate binds `role:*` refs —
+otherwise the room's resolved accountable human (explicit room owner, then an
+inherited room, then the organization's top accountable owner). The evidence
+records `decidedBy: "accountable-owner-fallback"` so the substitution is
+visible; anyone else sees who decides and is refused.
+
 ## Failing closed is not the same as locking
 
 `#5166` stopped a real defect: a stage that produced no completing receipt was

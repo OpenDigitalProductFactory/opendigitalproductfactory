@@ -72,6 +72,14 @@ A recorded wait names the stage and the role or person expected to act in the
 attention summary. That wait remains visible until the runner records another
 action; refreshing the page does not mean the work has progressed.
 
+When a standing room is waiting on a decision, its **Attention** card says what
+is waiting and who decides. If that is you — the room's accountable owner — a
+**Decide** button opens the choices (for example Accept, Patch or Defer), a
+date when you defer, an optional one-line reason, and a short summary of what
+the earlier stages found. Your decision is recorded as the stage's evidence and
+the room moves on at its next run. Anyone else sees who decides, not the
+control.
+
 Use **Map** or **List**, search by step or owner, and filter by state. Arrow keys
 move between visible steps; Home and End select the first and last. The selected
 step and filters stay in the URL so returning to the room preserves context.

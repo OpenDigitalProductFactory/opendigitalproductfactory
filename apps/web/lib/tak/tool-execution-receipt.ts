@@ -3,12 +3,12 @@ import { prisma } from "@dpf/db";
 
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import type { AlignmentGateDecision } from "./alignment-tool-gate";
-import type { PreconditionOrderingDecision } from "./precondition-ordering-gate";
-import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";
+import type { PreconditionOrderingDecision } from "./precondition-ordering-types";
+import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute-types";
 import { getWorkCaseAction } from "@/lib/work-management/action-registry";
 import { collaborationShapeForTool } from "./consequential-tool-policy";
 import { resolveGaidActorEnvelope, type GaidActorEnvelope } from "./gaid-actor-envelope";
-import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute-types";
 
 let createOverride: ((data: Record<string, unknown>) => Promise<unknown>) | null = null;
 let updateOverride: ((id: string, data: Record<string, unknown>) => Promise<unknown>) | null = null;
