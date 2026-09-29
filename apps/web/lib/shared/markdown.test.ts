@@ -26,8 +26,8 @@ describe("renderMarkdown", () => {
 
   it("renders task-list items as disabled checkboxes", () => {
     const html = renderMarkdown("- [x] shipped\n- [ ] open\n- plain [ ] item");
-    expect(html).toContain('<li class="task-list-item"><input type="checkbox" disabled checked> shipped</li>');
-    expect(html).toContain('<li class="task-list-item"><input type="checkbox" disabled> open</li>');
+    expect(html).toContain('<li class="task-list-item list-none"><input type="checkbox" disabled checked> shipped</li>');
+    expect(html).toContain('<li class="task-list-item list-none"><input type="checkbox" disabled> open</li>');
     expect(html).toContain("<li>plain [ ] item</li>");
   });
 

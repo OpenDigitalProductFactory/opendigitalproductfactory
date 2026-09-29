@@ -98,7 +98,8 @@ function taskLists(state: StateCore): void {
     const checkbox = new state.Token("html_inline", "", 0);
     checkbox.content = `<input type="checkbox" disabled${match[1] === " " ? "" : " checked"}> `;
     inline.children!.unshift(checkbox);
-    tokens[i - 2].attrJoin("class", "task-list-item");
+    // The checkbox is the item marker, so the list bullet goes (as on GitHub).
+    tokens[i - 2].attrJoin("class", "task-list-item list-none");
   }
 }
 
