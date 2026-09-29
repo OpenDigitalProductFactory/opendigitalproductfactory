@@ -31,6 +31,7 @@
 > - **Research & Benchmarking (AGENTS.md §10):** Still TBD. No comparisons executed against GitHub Actions self-hosted, GitLab Runner, Buildkite, Drone, Firecracker/gVisor/Kata, AWS CodeBuild, etc. The executor/orchestrator split analogy is unvalidated in the record.
 > - **Ratified elements:** The 2026-05-31 "Near-term Grok worker layering" and "Worker worktree boundary" sections are sound and consistent with `worktree-is-source-control-not-runtime` kernel principle (AGENTS §4) and the contribution-dispatch pattern. dpf-native remains the highest-leverage path for Contract 9 mode-1 compliance, air-gapped support, and substrate unlock (every cloud substrate becomes Build-Studio-capable without privileged pods or port 1455).
 > - **Risk / sequencing note:** Sandbox model existing without the surrounding provider contract increases the chance of ad-hoc usage drifting from the intended `exec` / lifecycle abstraction. Recommend treating interface extraction (sequencing step 1) as a **refactoring priority** before new provider or agent work — it is now a "no-op" only if we move quickly. Security review checklist remains fully applicable (heavy weight).
+> - **2026-09-29 stability addendum:** "Workspace contract" (below) is added. It is grounded in ~41 sandbox defects from 2026-08-01 to 2026-09-29, ~25 of which trace to many builds sharing one mutable checkout. It sets the per-build workspace guarantee that every provider owes, and a migration path M1–M5 inside sequencing step 1. The Research & Benchmarking section is now populated and awaits review.
 > - **Recommendation:** Promote this from research stub to "binding pending Research & Benchmarking completion + interface extraction PR" once the benchmarking notes are added and the first extraction lands behind the existing feature flags / disabled default. This spec still owns the shape of Contract 6.
 
 ## Why this exists
@@ -551,6 +552,52 @@ seeding are specified in the implementation plan that wraps this
 spec; the spec only fixes the **shape of the gate**, not the eval
 catalog.
 
+## Workspace contract (2026-09-29 stability addendum)
+
+### Why: the shared sandbox is the defect source
+
+From 2026-08-01 to 2026-09-29 the Build Studio sandbox produced ~41 defects: backlog items and merged PRs grouped by root pattern. Class counts are judgment calls at the boundaries.
+
+| Class | Root pattern | ≈ | Examples |
+|---|---|---|---|
+| A | Many builds share one mutable checkout, container and install | 15 | BI-3D7569C7 (#5800: index.lock; every build start hard-reset the shared root, 60 resets in 400 reflog entries), BI-E4AD091E (a stale shallow.lock froze history for 4 days, so 13–15 guards per build could not run), #5669/#5678/#5731 (node_modules symlinks and installs), BI-972A386D, BI-36ADD115, BI-37A1349E |
+| B | One repo mounted in two containers at two paths and two uids | 10 | BI-7FCF10FE/#5579/#5580 (the portal's `worktree prune` dropped every build's registration), #5578, BI-518B5F69 (dubious ownership), BI-8FFC45DA, BI-0F5B3FCB |
+| C | No declared, verified source and toolchain baseline per build | 7 | BI-21F77660 (shallow repo, no merge base), BI-7A0B2DE4, BI-F697A831, a stale shared Prisma client leaving the container unhealthy (2026-09-29) |
+| D | The singleton container lifecycle is not reconciled | 7 | BI-547B788D, BI-4D08C53C, BI-3370373F, BI-0B95D268 |
+| E | Pool configuration drift (three sources of truth) | 2 | #5574; phantom `dpf-sandbox-2/3` slot rows re-seeded 2026-09-29 |
+
+Per-build worktrees (BI-98B723C0, 2026-06-19) separated only the working files. The git common dir (refs, the `shallow` file, config, the worktree registry), the root checkout, the generated client, `.next`, the preview process and the container itself stayed shared and mutable in place. Every fix since has patched one symptom. The benchmarking below shows that no surveyed CI or workspace system runs concurrent jobs as worktrees of one shared repository.
+
+### The guarantee every provider owes (binding once this spec is ratified)
+
+A provider's `createSandbox` returns a workspace that satisfies **W1–W5**. The orchestrator relies on them and never repairs around their absence.
+
+- **W1 — Own repository per build.** The build has its own clone, not a worktree. It is created from a host-level bare mirror with `git clone --reference <mirror> --dissociate`, so objects are borrowed at creation and the clone never depends on the mirror afterwards. The mirror is the only shared git state, and it has one writer behind a file lock with a timeout (Buildkite `git-mirrors-lock-timeout` pattern). There is no shared index, `shallow` file, ref, config or registry, so there is nothing to contend on, prune or reset.
+- **W2 — One owner, one path.** Only the build's own execution unit reads or writes its workspace, at one path, as one uid. The portal and the other control-plane services never mount build workspaces. They read through the provider (`exec` / `readFile` on the `BuildExecutionProvider` interface) or from the pushed branch. `safe.directory '*'` is removed.
+- **W3 — Immutable baseline, per-build derived state.** Each build records a source identity (`baseSha`, lockfile digest, toolchain fingerprint) at creation. `node_modules` is installed per build with `--frozen-lockfile --offline` from a shared, content-addressed pnpm store on the same filesystem. Generated artifacts (the Prisma client, `.next`) are produced inside the build's workspace, never in a shared root. A baseline that does not match the recorded identity is refused at creation instead of failing at runtime.
+- **W4 — Disposable.** A workspace is created for one build and destroyed with it. Resume after a portal swap re-attaches the build to its surviving workspace, or re-creates it from the pushed build branch. Nothing is repaired in place. Reaping uses the labels, startup sweep and periodic reconciler in "Cleanup mechanism (every provider)".
+- **W5 — Health is per build.** A build's workspace health (repo valid, install matches lockfile, dev server up) is reported per build. One build's broken state cannot mark another build, or the substrate, unhealthy.
+
+### local-docker migration (inside binding sequencing step 1)
+
+Each step ships behind a flag (`DPF_BUILD_WORKSPACE_MODE=worktree|clone`, then per-build container on/off), is reversible, and is verified on the live install before the next begins.
+
+| Step | Change | Closes | Existing substrate reused |
+|---|---|---|---|
+| M1 | Replace per-build worktrees with W1 clones inside the current sandbox container. The mirror lives under the sandbox volume. Retire the `startBuildBranch` shared-root reset/clean/checkout sequence. | A (git), B (prune) | `build-branch.ts` worktree lifecycle; #5800 lock becomes mirror-only |
+| M2 | The portal stops mounting `sandbox_workspace`. Tool roots, the code graph and review read through the provider. | B | `sandbox-tool-roots.ts`, `/sandbox-workspace` consumers (enumerate before cutting) |
+| M3 | A container per build through the existing `local-docker` provider: `dpf-sandbox-<buildId>`, on a per-build network, with its own preview port. | A (process, preview, generated client), W5 | `sandbox.ts:60-91` already creates it; today only `git-promotion-sandbox-verification.ts` uses it |
+| M4 | Desired-state reconciler: one pool definition, boot-order readiness before resume, a reaper keyed on FeatureBuild liveness. | D, E | "Cleanup mechanism" labels and sweeps; `sandbox-pool.ts` |
+| M5 | A baseline image or snapshot keyed on (main SHA, lockfile digest), refreshed on merge, so a new workspace hydrates fast. | C | Codespaces/Ona/Coder prebuild pattern; BI-357792B1 source baseline |
+
+M1 alone removes every shared-git-state defect class without touching container topology. It is the proposed first delivery.
+
+### Decisions this addendum needs from the operator
+
+1. Ratify W1–W5 as the provider contract.
+2. Approve M1 as the first delivery, with the M2–M5 order as proposed.
+3. Isolation default: plain containers (proposed). gVisor, Kata and Firecracker are opt-in providers for Linux/KVM hosts; they are not the baseline, because Docker Desktop installs lack KVM.
+
 ## Cleanup mechanism (every provider)
 
 Sandboxes orphaned by portal crash, network partition, or a `kill -9`
@@ -976,7 +1023,7 @@ privileged-runtime concerns — arbitrary code execution, credentials,
 network egress, file system access, and (for dpf-native) in-process
 agent loops in the portal.**
 
-- [ ] Research & Benchmarking section complete (per AGENTS.md §10)
+- [ ] Research & Benchmarking section complete (per AGENTS.md §10). The substrate/workspace half was populated 2026-09-29 and is pending review; the coding-agent harness half is still open
       — patterns from GitHub Actions self-hosted runners, GitLab
       Runner, Buildkite Agent, Drone CI agent, plus the Firecracker
       / gVisor / Kata Containers isolation primitives. Specifically
@@ -1078,37 +1125,77 @@ order, not a question.
    image. `dpf-sandbox:cli-bundled` remains shippable for customers
    who explicitly opt in to bundled vendor CLIs.
 
-## Research and Benchmarking (TBD per AGENTS.md §10 — CA note: still pending as of 2026-06-xx reconciliation)
+## Research and Benchmarking
 
-**Chief Architect note:** This section remains unpopulated. No comparisons to GitHub Actions / GitLab Runner / Buildkite / Firecracker / gVisor / Kata / CodeBuild / Claude Code loop internals etc. have been recorded. The "executor vs orchestrator" split analogy that justifies the provider × runner axis is therefore still an unvalidated architectural hypothesis in the written record. Complete this before the spec can exit "research stub" per the maturity gates checklist below.
+*Substrate and workspace half compiled 2026-09-29 from primary sources. Items marked **[unverified]** lack a primary source. The coding-agent harness half (Codex CLI, Claude Code, Aider, SWE-Agent loop patterns for `dpf-native`) is **still pending** and remains a maturity gate.*
 
-Before finalization, compare the sandbox / build-execution patterns
-of:
+### Systems surveyed
 
-**Open source build / CI runners:** GitHub Actions self-hosted
-runner, GitLab Runner, Buildkite Agent, Drone CI agent. Each has
-a runtime-abstraction layer that supports Docker, Kubernetes, and
-shell modes. **Specifically compare their executor (substrate) vs
-orchestrator (work definition) split** — that's the structural
-analog of this spec's provider × runner split. Read their interface
-design and capability advertisement patterns.
+| System | Orchestrator (decides, scales, reaps) | Executor (substrate) | Git provisioning per job | Concurrency isolation | Orphan cleanup |
+|---|---|---|---|---|---|
+| GitHub Actions / ARC | Actions service + ARC controller and listener | Hosted VM, self-hosted host, K8s pod | Fresh `actions/checkout`, `fetch-depth: 1` | One job per ephemeral VM or pod | Server reaps registrations (1 day ephemeral, 14 days persistent); ARC deletes pods |
+| GitLab Runner | GitLab + runner manager (`concurrent`) | shell / docker / kubernetes executor | `GIT_STRATEGY` clone or fetch, `GIT_DEPTH` 20 | A directory per `$CI_CONCURRENT_ID`, or a container per job | `GIT_STRATEGY=empty`; container or pod disposal |
+| Buildkite | Buildkite API + agent / `agent-stack-k8s` | Agent host, Elastic stack, K8s Job | Bare mirror + `git clone --reference` per checkout | A directory per agent; a mirror lock (300 s default) | `disconnect-after-job`; `pre-exit` hook; Job disposal |
+| Codespaces / Ona / Coder | Control plane + reconcile loop | VM, container, Terraform target | Own clone, re-synced from remote on start | A container or VM per workspace | Pool reconciliation; invalidated on version change |
 
-**Open source ephemeral container orchestration:** k3s, Firecracker
-(used by Fly.io), gVisor, Kata Containers. Understand the
-isolation primitives.
+Sources:
+- GitHub: [hosted runners](https://docs.github.com/en/actions/concepts/runners/github-hosted-runners), [secure use](https://docs.github.com/en/actions/reference/security/secure-use), [autoscaling](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/autoscaling-with-self-hosted-runners), [ARC](https://docs.github.com/en/actions/concepts/runners/actions-runner-controller), [actions/checkout](https://github.com/actions/checkout).
+- GitLab: [executors](https://docs.gitlab.com/runner/executors/), [configure runners](https://docs.gitlab.com/ci/runners/configure_runners/).
+- Buildkite: [git mirrors](https://buildkite.com/docs/agent/v3/git-mirrors), [hooks](https://buildkite.com/docs/agent/v3/hooks).
+- Workspaces: [Codespaces prebuilds](https://docs.github.com/en/codespaces/prebuilding-your-codespaces/about-github-codespaces-prebuilds), [Ona prebuilds](https://ona.com/docs/ona/projects/prebuilds), [devcontainer spec](https://containers.dev/implementors/json_reference/), [Coder prebuilt workspaces](https://coder.com/docs/admin/templates/extending-templates/prebuilt-workspaces).
 
-**Commercial cloud build products:** AWS CodeBuild, Google Cloud
-Build, Azure Pipelines hosted agents. They solve the same
-abstraction problem at scale.
+**Isolation primitives:**
+- [gVisor](https://gvisor.dev/docs/) (the `runsc` user-space kernel) has syscall and I/O overhead that lands on `pnpm install` and `next build`.
+- [Kata Containers](https://katacontainers.io/) gives a VM boundary behind OCI but needs nested virtualization.
+- [Firecracker](https://firecracker-microvm.github.io/) microVMs need Linux KVM, which Docker Desktop hosts do not have.
 
-**Coding-agent SDKs and harnesses:** OpenAI Codex CLI internals,
-Anthropic Claude Code CLI internals, Aider, Continue, Cursor's
-agent loop, SWE-Agent. The dpf-native runner draws on the loop
-patterns these establish; document which patterns adopted, which
-rejected.
+**pnpm:**
+- Share the content-addressed store (`store-dir`), keyed on the lockfile, never `node_modules`.
+- The store must be on the same filesystem to hard-link.
+- `pnpm fetch`, then `install --offline --frozen-lockfile` ([settings](https://pnpm.io/settings), [fetch](https://pnpm.io/cli/fetch), [CI](https://pnpm.io/continuous-integration)).
+- Concurrent-write safety of one shared store is **[unverified]**.
 
-Document patterns adopted, patterns rejected, anti-patterns
-identified, gaps the design fills.
+### Findings
+
+**The executor/orchestrator split is universal, which validates provider × runner.** Every system separates a control plane that schedules, scales and reaps from a substrate plugin, and puts the job lifecycle (Buildkite hooks, GitLab `GIT_STRATEGY`, devcontainer lifecycle commands) in a third layer. Workspace provisioning (the clone plus dependency hydration) is a **contract of the job lifecycle**, not a property one provider happens to have. That is why this spec adds the Workspace contract W1–W5.
+
+**For N concurrent jobs against one large repo, the pattern is a shared bare mirror plus a clone per job. Nobody surveyed uses worktrees of one shared repo.** Git's own documentation gives the reasons:
+1. **Locks.** Worktrees share `$GIT_COMMON_DIR` (refs, objects, config), and the `shallow` file is common too ([worktree](https://git-scm.com/docs/git-worktree), [repository layout](https://git-scm.com/docs/gitrepository-layout)), so fetches in any build contend on the same `shallow.lock` and ref locks.
+2. **Prune.** `git worktree prune` removes registrations whose working trees look missing, and a second container with a different mount path sees them as missing.
+3. **Path identity.** A worktree's `gitdir` is absolute by default. Relative links need git 2.48 or later and break libgit2.
+4. **Ownership.** `safe.directory` is honored only in protected config scopes ([git-config](https://git-scm.com/docs/git-config)).
+5. **Blast radius.** One reset, clean or stale artifact in a shared root hits every job.
+
+The mirror pattern has a documented cost: `--reference` without `--dissociate` can be corrupted by maintenance on the mirror ([git-clone](https://git-scm.com/docs/git-clone), Buildkite git-mirrors).
+
+### Adopted
+- A per-build clone from a bare mirror with `--reference --dissociate`; the mirror has a single writer behind a lock with a timeout.
+- An ephemeral execution unit per build (GitHub JIT runners, ARC pods, `disconnect-after-job`).
+- Orchestrator-side reaping keyed on liveness (ARC controller; GitHub registration TTLs).
+- A shared pnpm store with per-build `node_modules`.
+- Generated artifacts inside each workspace.
+- A prebuilt baseline keyed on (main SHA, lockfile), plus a fresh sync on start (Codespaces, Ona, Coder).
+- A lifecycle-hook contract for runners (Buildkite hooks, devcontainer lifecycle).
+- Identical mount paths or relative alternates for any shared volume.
+
+### Rejected
+- Per-build `git worktree` of a shared checkout: the shared common dir can be pruned from another mount.
+- The control plane mounting or running git against executor workspaces: no surveyed system does this.
+- Shared `node_modules` or a shared-root install.
+- `--shared` or `--reference` without `--dissociate` against a pruned mirror.
+- Blanket `safe.directory '*'`.
+- gVisor, Kata or Firecracker as the default (overhead, KVM requirement); they stay available as opt-in providers.
+
+### Documented warnings matching DPF defects
+
+| DPF defect | Documented warning |
+|---|---|
+| index.lock / shallow.lock contention | GitLab: jobs may share a directory "if the `builds_dir` is shared"; git: `shallow` lives in `$GIT_COMMON_DIR` |
+| Build start hard-reset the shared checkout | `actions/checkout` `clean` and GitLab `-ffdx` are safe only because the directory is private to the job |
+| The other container's prune dropped registrations | git-worktree: prune removes "missing" working trees; `lock` exists for other-mount cases |
+| Dubious ownership | git-config: `safe.directory` is honored only in protected scopes; `actions/checkout` scopes it per job path |
+| A stale shared generated client made the container unhealthy | GitHub: persistent self-hosted runners have no "ephemeral clean" guarantee |
+| 30.6 GB of orphaned worktrees | GitHub: operators must automate wiping; ARC deletes pods from the controller |
 
 ## Source documents
 
