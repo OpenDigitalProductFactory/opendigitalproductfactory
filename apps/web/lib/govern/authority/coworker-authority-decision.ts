@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
-import type { ToolConsequence } from "@/lib/mcp-tools";
+import type { ToolConsequence } from "@/lib/tool-consequence";
 
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";

@@ -23,7 +23,7 @@
 // without a running model, sandbox, or DB. Mutators return new objects and
 // never mutate their input.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
 export type ExecutionPlanStepStatus = "pending" | "in_progress" | "done" | "skipped";
 

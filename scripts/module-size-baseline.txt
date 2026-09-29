@@ -42,9 +42,10 @@ apps/web/lib/finance/ai-provider-finance.ts	1303
 apps/web/lib/inference/ai-provider-internals.ts	1151
 apps/web/lib/marketing.ts	1191
 apps/web/lib/mcp/packs/backlog-pack.dispatch.test.ts	873
+apps/web/lib/mcp/packs/backlog-pack.dispatch.test.ts	874
 apps/web/lib/mcp/packs/contribution-hive-pack.ts	862
 apps/web/lib/mcp/packs/sandbox-pack.ts	924
-apps/web/lib/navigation/portal-navigation-model.ts	996
+apps/web/lib/navigation/portal-navigation-model.ts	1008
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1378
 apps/web/lib/routing/chat-adapter.test.ts	1073

@@ -15,7 +15,7 @@ import type { DemandScoreInputs, DemandScoreResult } from "@/lib/demand/scoring"
 import type { DemandEvidenceDb } from "@/lib/demand/evidence-repository";
 import type { DemandTransitionDb } from "@/lib/demand/transition-repository";
 import { resolveEstimateProvenance } from "@/lib/demand/estimate-provenance";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import {
   approveDemandForFundingHandler,

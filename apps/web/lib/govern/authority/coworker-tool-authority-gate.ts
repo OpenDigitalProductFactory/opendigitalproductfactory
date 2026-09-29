@@ -6,8 +6,8 @@ import { randomUUID } from "crypto";
 import type {
   GovernedExecuteArgs,
   GovernedExecuteRejection,
-} from "@/lib/mcp-governed-execute";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+} from "@/lib/mcp-governed-execute-types";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 
 import {
   evaluateCoworkerAuthority,

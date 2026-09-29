@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 665,
+  "routeCount": 666,
   "routes": [
     {
       "routePath": "/",
@@ -4692,6 +4692,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/customer/(crm)/engagements/page.tsx"
+    },
+    {
+      "routePath": "/customer/footprint",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "footprint"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/footprint/page.tsx"
     },
     {
       "routePath": "/customer/funnel",

@@ -252,7 +252,29 @@ jobs:
         # threshold the codebase recently crossed, breaking Typecheck for every PR.
         env:
           NODE_OPTIONS: --max-old-space-size=8192
+          # The same web compile records what it checked for the ratchet below.
+          DPF_TSC_PROGRAM_REPORT: ${{ runner.temp }}/web-tsc-program.json
         run: pnpm typecheck
+
+      # Plan 2026-09-08 M11 step 4: fail a PR that grows the web production
+      # program by lines its diff does not explain (dependency types, excluded
+      # files pulled back in, a new source directory). Reads the report the
+      # step above wrote, so it costs no second compile.
+      - name: Typecheck program ratchet
+        if: needs.changes.outputs.heavy == 'true'
+        run: >-
+          node scripts/sbom/check-typecheck-baseline.mjs
+          --report "$RUNNER_TEMP/web-tsc-program.json"
+          --write-analysis "$RUNNER_TEMP/typecheck-program-analysis.json"
+
+      - name: Upload typecheck program analysis
+        if: always() && needs.changes.outputs.heavy == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: typecheck-program-analysis
+          path: ${{ runner.temp }}/typecheck-program-analysis.json
+          if-no-files-found: ignore
+          retention-days: 14
 
   # apps/web's test files (37% of its TypeScript lines) are checked as their
   # own program (apps/web/tsconfig.test.json) so the production program the

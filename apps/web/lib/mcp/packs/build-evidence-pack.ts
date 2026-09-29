@@ -15,7 +15,7 @@
 import * as crypto from "crypto";
 import { prisma } from "@dpf/db";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   EXECUTION_EVIDENCE_KINDS,
   isExecutionEvidenceKind,

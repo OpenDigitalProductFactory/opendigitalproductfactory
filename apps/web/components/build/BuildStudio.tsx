@@ -7,7 +7,7 @@ import { confirmDialog } from "@/components/ui/Dialog";
 import { Spinner } from "@/components/ui/Spinner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import ReactMarkdown from "react-markdown";
+import { MarkdownHtml } from "@/components/shared/MarkdownHtml";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { BusinessBriefPanel } from "./BusinessBriefPanel";
 import { OwnerChangeProofPanel } from "./OwnerChangeProofPanel";
@@ -1256,7 +1256,7 @@ function CanonicalDocSection({ build }: { build: FeatureBuildRow }) {
       )}
       {description ? (
         <div className="prose prose-sm prose-invert max-w-none text-[var(--dpf-text)] leading-relaxed [&_h1]:text-base [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:my-2 [&_ul]:my-2 [&_ol]:my-2 [&_code]:text-xs">
-          <ReactMarkdown>{description}</ReactMarkdown>
+          <MarkdownHtml source={description} />
         </div>
       ) : (
         <p className="text-xs text-[var(--dpf-muted)]">

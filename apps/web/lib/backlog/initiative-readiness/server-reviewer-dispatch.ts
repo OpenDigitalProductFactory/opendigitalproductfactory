@@ -28,7 +28,7 @@ import "server-only";
 
 import { prisma } from "@dpf/db";
 
-import type { GovernedExecuteArgs, GovernedExecuteResult } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteArgs, GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
 import { findStandingConnection, type StandingConnection } from "@/lib/mcp/standing-connection";
 
 /** A dispatch for the same request is not repeated within this window. */

@@ -14,7 +14,7 @@
 // the whole backlog via query_backlog, so this lens is strictly less powerful.)
 
 import { professionKeyFromRole } from "@/lib/decision-perspective/resolve-profession-profile";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 
 /**
  * The acting coworker's agentId from MCP tool context, or null when the

@@ -11,7 +11,7 @@ import type {
   AuthorityApprovalTaskResume,
 } from "./mcp-governed-execute";
 import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authority-decision";
-import type { ToolResult } from "./mcp-tools";
+import type { ToolResult } from "./mcp-tool-types";
 import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
 import { registerWorkroomAliasCases } from "./mcp-governed-execute-alias.cases";
 type AuditRow = Record<string, unknown>;

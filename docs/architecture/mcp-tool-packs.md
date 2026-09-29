@@ -29,6 +29,22 @@ live in three places:
 surfaces `mcp-tools.ts` consumes (the combined definition list + a `name -> handler`
 lookup) and throws on a duplicate tool name across packs.
 
+The contract types a pack, a handler or a coworker surface names (`ToolDefinition`,
+`ToolResult`, `ToolExecutionContext`, `ToolAnnotations`, `BuildPhaseTag`) live in the leaf
+module [`lib/mcp-tool-types.ts`](../../apps/web/lib/mcp-tool-types.ts), not in `mcp-tools.ts`.
+Import them from there. While they lived in `mcp-tools.ts`, every pack's `import type` closed
+a loop through the registry, and apps/web's all-imports cycle, which TypeScript project
+references need acyclic, reached several hundred files.
+[`scripts/check-no-web-import-cycle-growth.mjs`](../../scripts/check-no-web-import-cycle-growth.mjs)
+keeps that cycle from growing back (dependency-diet plan M11 step 2).
+The governed executor follows the same rule: `GovernedExecuteArgs`, `GovernedExecuteContext`,
+`GovernedExecuteResult`, `GovernedExecuteRejection` and the `ToolLifecycle*` hook types live in
+[`lib/mcp-governed-execute-types.ts`](../../apps/web/lib/mcp-governed-execute-types.ts), and the
+precondition verdict types in
+[`lib/tak/precondition-ordering-types.ts`](../../apps/web/lib/tak/precondition-ordering-types.ts),
+so a gate, hook, receipt or audit writer names them without an edge back into
+`lib/mcp-governed-execute.ts`.
+
 A definition also declares its reach. `sideEffect` plus `consequence` (`outward` | `irreversible` | `authority`) is what puts a tool behind the consult-before-consequential-act gate, and an `outward` tool additionally names whose stance governs it with `consequenceScope`: `business` (default, WWWD-alignment-gated) or `platform` (platform development or operations that leave the install, such as `create_portal_pr` or `contribute_to_hive`; receipted and outward-reviewed, never scored against the customer business stance). Declare both on the tool; never infer them from the pack name (BI-63B14D4B).
 
 ## Migration discipline (parity first)

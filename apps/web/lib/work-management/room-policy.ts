@@ -49,7 +49,8 @@ export function appendRoomPolicyParticipant(evidence: unknown, invite: RoomParti
     admittedPrincipalRefs: [...admitted],
     actionPrincipalRefs: [...action],
     discoverablePrincipalRefs: current.discoverablePrincipalRefs ?? [],
-    sensitivityCeiling: current.sensitivityCeiling ?? "internal",
+    // Carry only a ceiling someone set; the room derives its own (BI-0A5EE9C1).
+    ...(current.sensitivityCeiling ? { sensitivityCeiling: current.sensitivityCeiling } : {}),
     participants,
   };
 

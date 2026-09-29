@@ -1,4 +1,4 @@
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { WORK_CAPSULE_EXECUTOR_KINDS, isWorkCapsuleExecutorKind } from "@/lib/work-capsules";
 

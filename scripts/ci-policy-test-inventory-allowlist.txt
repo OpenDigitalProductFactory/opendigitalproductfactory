@@ -51,6 +51,7 @@ scripts/check-no-type-reexport-in-use-server.test.mjs
 scripts/check-no-unhonored-grant-growth.test.mjs
 scripts/check-no-unlocalized-ui.test.mjs
 scripts/check-no-unresolved-prometheus-targets.test.mjs
+scripts/check-no-web-import-cycle-growth.test.mjs
 scripts/check-reporting-composition.test.mjs
 scripts/check-style-drift.test.mjs
 scripts/ci-evidence-receipt-discovery.test.mjs

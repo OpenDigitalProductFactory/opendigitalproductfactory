@@ -72,6 +72,14 @@ A recorded wait names the stage and the role or person expected to act in the
 attention summary. That wait remains visible until the runner records another
 action; refreshing the page does not mean the work has progressed.
 
+When a standing room is waiting on a decision, its **Attention** card says what
+is waiting and who decides. If that is you — the room's accountable owner — a
+**Decide** button opens the choices (for example Accept, Patch or Defer), a
+date when you defer, an optional one-line reason, and a short summary of what
+the earlier stages found. Your decision is recorded as the stage's evidence and
+the room moves on at its next run. Anyone else sees who decides, not the
+control.
+
 Use **Map** or **List**, search by step or owner, and filter by state. Arrow keys
 move between visible steps; Home and End select the first and last. The selected
 step and filters stay in the URL so returning to the room preserves context.
@@ -137,6 +145,12 @@ their legacy behavior and the panel reports oversight as not applicable.
 ## Access and Other Channels
 
 Room access has separate discovery, content, and action boundaries. Assignment or an explicit room policy admits a principal; a presence heartbeat never does. Sensitivity clearance is checked on the server before messages, participants, or context load. A person without content access receives the same not-found experience as an unknown room.
+
+A room's sensitivity comes from the boundary set on the room. If no boundary is set, it comes from the backlog item the room serves:
+
+- **Platform work is public by default.** This means items scoped to the platform itself (planning scope *platform* or *common*, or the DPF portal product). DPF is open source, so any coworker cleared for public information can help with it.
+- **Other work stays internal**, such as work on your own organization's products and operations.
+- **An item marked *confidential* or *restricted* stays closed**, even when it is platform work. To keep a platform item private, mark it confidential. Every change to an item's sensitivity is recorded on the item.
 
 When an existing communication adapter attaches a Teams, Slack, email, or other external conversation to a Workroom, DPF remains the canonical context:
 

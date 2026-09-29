@@ -7,7 +7,7 @@
 // a current server-issued independent review through the token-bound task owner.
 // Central TOOL_TO_GRANTS owns disclosure; the request guard narrows execution.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { dispatchExternalCoworkerTask } from "@/lib/mcp/external-coworker-task-adapter";
 import { authorizeCoworkerRequest } from "@/lib/mcp/independent-review-request";

@@ -620,6 +620,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/check-no-local-slugify.test.mjs"),
       node("scripts/check-no-local-slugify.mjs"),
     ]),
+    // One markdown renderer, on markdown-it with raw HTML off (plan 2026-09-08
+    // M5, WWMD DI-D9292D812CFF): no other file imports a markdown library.
+    guard("local-markdown-renderer-guard", "Local Markdown Renderer Guard", [
+      conformanceTest("scripts/check-no-local-markdown-renderer.test.mjs"),
+      node("scripts/check-no-local-markdown-renderer.mjs"),
+    ]),
     // One canonical-JSON form for hashes and signatures per import boundary
     // (plan 2026-09-08 §10.5 S4). Every remaining copy differs from it and
     // feeds a persisted or signed value, so each stays allowlisted with its
@@ -646,6 +652,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("sbom-divergence-guard", "SBOM Divergence Guard", [
       node("--test", "scripts/sbom/check-sbom-drift.test.mjs"),
+      // The typecheck program ratchet (plan 2026-09-08 M11 step 4) needs a full
+      // web compile, so the gate itself runs in ci.yml's Typecheck job; its
+      // comparison logic is tested here.
+      node("--test", "scripts/sbom/check-typecheck-baseline.test.mjs"),
       conformanceTest("scripts/sbom/lockfile-roots.test.mjs"),
       node("scripts/sbom/check-sbom-drift.mjs"),
       // One lockfile reader for every script (plan 2026-09-08 §10.5 S3).
