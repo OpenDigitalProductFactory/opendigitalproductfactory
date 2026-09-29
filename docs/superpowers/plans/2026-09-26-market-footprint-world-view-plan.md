@@ -10,9 +10,13 @@ status: draft
 
 > **For agentic workers:** one BI, one branch, one PR. Use `dpf-tdd` red-green for each phase, run the fast local gate before push, and use `dpf-pr-with-dco` for handoff.
 
-## Coverage decision: atomic
+## Backlog coverage
 
-The projection alone has no screen. The map alone has no data. The route alone renders nothing. None of these is usable by an owner on its own, so the plan is recorded as one atomic deliverable against `BI-4EC1D572`.
+- Parent: `BI-4EC1D572`
+- Decision: atomic
+- Receipt: blocked-by: record_plan_backlog_coverage returned traceability-incomplete on 2026-09-29 because no initiative scope baseline exists for BI-4EC1D572; the implementation claim itself was allowed at medium shape
+- Rationale: The projection alone has no screen, the outlines alone have no data, and the route renders nothing without both, so no phase is usable by an owner on its own.
+- Dependencies: none (the MapLibre renderer, BI-814F86E1, is deliberately not a dependency; the world view is a static SVG)
 
 ## Phase 1 — Country outlines (vendored data)
 
