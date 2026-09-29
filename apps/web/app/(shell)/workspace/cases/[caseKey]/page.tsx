@@ -14,6 +14,7 @@ import { canonicalWorkCaseHref, resolveCanonicalWorkCaseKey } from "@/lib/work-m
 import { loadRoomWorkforce } from "@/lib/work-management/room-workforce.server";
 import { loadWorkspaceWorkCaseDetail } from "@/lib/work-management/workspace-case-loader";
 import { loadWorkroomOnlyCaseDetail } from "@/lib/work-management/workroom-only-case-projection";
+import { loadWorkroomStageDecisionView } from "@/lib/work-management/workroom-stage-decision.server";
 
 type Props = {
   params: Promise<{ caseKey: string }>;
@@ -73,10 +74,18 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
   const workforce = detailOrRoom.workroomRowId
     ? await loadRoomWorkforce(prisma as never, { workroomId: detailOrRoom.workroomRowId })
     : null;
+  // The governed decision this room waits on, if a person records it here. A
+  // failed read hides the control (the room still says it is waiting) rather
+  // than taking the page down.
+  const stageDecision = detailOrRoom.workroomRowId
+    ? await loadWorkroomStageDecisionView(prisma as never, {
+      caseKey, roomRowId: detailOrRoom.workroomRowId, userId: session.user.id,
+    }).catch(() => null)
+    : null;
 
   return (
     <>
-      <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} navigationContext={query} />
+      <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} stageDecision={stageDecision} navigationContext={query} />
       {workforce ? (
         <div className="mt-4">
           <RoomWorkforcePanel
