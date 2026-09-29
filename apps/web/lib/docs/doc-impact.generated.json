@@ -457,6 +457,9 @@
     "apps/web/components/proactivity/ProactivityRosterList.tsx": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
+    "apps/web/components/shared/MarkdownHtml.tsx": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "apps/web/components/shell/SectionNav.tsx": [
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
@@ -1191,6 +1194,9 @@
     ],
     "apps/web/lib/shared/file-upload.ts": [
       "docs/user-guide/workspace/supported-file-formats.md"
+    ],
+    "apps/web/lib/shared/markdown.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "apps/web/lib/shared/office-conversion.ts": [
       "docs/user-guide/workspace/supported-file-formats.md"
@@ -1940,6 +1946,9 @@
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/check-no-local-isrecord.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "scripts/check-no-local-markdown-renderer.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/check-no-local-slugify.mjs": [
@@ -2831,6 +2840,7 @@
       "packages/db/src/capability-maturity.ts"
     ],
     "docs/architecture/data-model-stewardship-runbook.md": [
+      "apps/web/components/shared/MarkdownHtml.tsx",
       "apps/web/lib/compliance/format-retention-minimum.ts",
       "apps/web/lib/datetime.ts",
       "apps/web/lib/ea/table-growth.ts",
@@ -2841,6 +2851,7 @@
       "apps/web/lib/routes.ts",
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
+      "apps/web/lib/shared/markdown.ts",
       "apps/web/lib/shared/org-address.ts",
       "apps/web/lib/shared/slugify.ts",
       "apps/web/scripts/offload-evidence-output.ts",
@@ -2854,6 +2865,7 @@
       "scripts/check-no-local-canonical-json.mjs",
       "scripts/check-no-local-formatters.mjs",
       "scripts/check-no-local-isrecord.mjs",
+      "scripts/check-no-local-markdown-renderer.mjs",
       "scripts/check-no-local-slugify.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",
       "scripts/check-no-new-notactive-conventions.mjs",
