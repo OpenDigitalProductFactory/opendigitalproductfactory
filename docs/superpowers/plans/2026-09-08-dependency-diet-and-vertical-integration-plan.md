@@ -273,11 +273,12 @@ _Founder direction, 2026-09-25: too many dependencies, too much complexity, too 
 | M4 Prism replaced in the harness | done: an owned OpenAPI contract runtime; Prism retired on the dependency allowlist | [design](../specs/2026-09-25-harness-owned-contract-validator-design.md) |
 | M5 document cluster | partly absorbed by the office-document engine; its S9 (BI-D1B40D43, 2026-09-26) retired mammoth, read-excel-file and pdf-parse (with pdfjs-dist and @napi-rs/canvas): 39 resolved components, now on the sbom deny list. M5b done: invoice PDFs render through the dpf-doctools export path and `@react-pdf/renderer` is retired (#5770). The markdown half is done (2026-09-29, BI-0AB1FD47): one `renderMarkdown()` on `markdown-it` 14 with raw HTML off (§10.6.1, DI-D9292D812CFF) serves the user guide, wiki, coworker chat, build brief, workspace documents and the office export; `react-markdown` and `remark-gfm` are retired on the sbom allowlist, and `check-no-local-markdown-renderer.mjs` holds it at one renderer. Platform lockfile 959 → 872 resolved components | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md), #5770, #5803 |
 | M6 mobile workspace split | done (follow-ups: the Jest 30.5.2 patch landed deduped, #5727; the React pin is declared, guarded by `check-mobile-react-pin.mjs` and excluded from Dependabot, #5759): founder-approved 2026-09-25; `apps/mobile` resolves in its own workspace and lockfile; platform tree 1759 → 1062 packages, duplicated names 165 → 68 | `apps/mobile/pnpm-workspace.yaml`, `scripts/sbom/lockfile-roots.mjs` |
-| M7 multi-version cleanup | done: first pass #5289, second pass #5670 | #5289, #5670 |
+| M7 multi-version cleanup | done: first pass #5289, second pass #5670, third pass #5795 (Playwright 1.63 drops the second `fsevents`; `@inngest/ai` 0.1.8 drops the last TypeScript 5); nodemailer 10 (#5798) clears GHSA-6vj9-mwq6-2f5v and GHSA-8vvx-rff5-p5rq and leaves one nodemailer. Every remaining duplicate is held by an upstream pin or needs an override; the #5795 PR body lists them by cause | #5289, #5670, #5795, #5798 |
 | M8 override prune | done | #5670 |
 | M9 retired-substrate sweep | done: backup engines deleted (#5285); Neo4j and Qdrant residue swept and `check-retired-substrate.mjs` now forbids it (#5774) | #5285, #5774 |
 | M11 step 1 separate test program | done | #5268, #5292 |
-| M11 step 2 project references | blocked: a 657-file import cycle across `lib/mcp`, build, TAK and `app/actions` stops the split into referenced projects. Breaking the cycle comes first, starting with the 610 imports that are type-only. Baseline for the later steps: web typecheck 153 s wall, 5,558 MB peak RSS, 8,208 files | measured 2026-09-26 |
+| M11 step 2 project references | in progress. Project references need the all-imports graph (`import type` included) acyclic. Corrected 2026-09-29: the earlier "657 files, 610 type-only imports" came from a regex that also matched `import type`; converting imports to `import type` would have removed nothing. Measured with the TypeScript parser: the largest all-imports cycle was 678 files (519 without inline `import("x").T` type queries); the runtime cycle is 75. Moving the tool contract types out of `lib/mcp-tools.ts` took it to 134 (#5797), and the guard `check-no-web-import-cycle-growth.mjs` now holds it; moving the governed-execute contract types took it to 92 (#5805). The next cut is a `ChatMessage` leaf (the 92-file cycle around `lib/ai-inference.ts` drops to 18 without it); then the runtime hinge `lib/mcp-tools.ts -> lib/mcp/pack-registry.ts` | #5797, #5805 |
+| M11 step 4 measure, then ratchet | done: the web typecheck records its program in the same compile, and CI fails a PR that grows it by lines no diff explains (dependency types, excluded files pulled back in, a new source directory). Anchor `sbom/typecheck-baseline.json`: 8,223 files, 2,973,637 checked lines; the generated Prisma client is 54% of them, the largest remaining lever | #5793 |
 | §7 budgets ratchet | done | #5670 |
 
 ### 10.2 The totals regrew because nothing held them
@@ -369,23 +370,23 @@ The `record_decision_outcome` step could not be filed: the connection's coworker
 | M5 markdown | one `renderMarkdown()` on `markdown-it`, raw HTML off | `react-markdown` and `remark-gfm` retire behind one primitive. |
 | Delivery | one branch and one PR per move | Moves ship in parallel on `claude/<move>` branches. |
 
-### 10.6.2 Re-measurement and what remains, 2026-09-29
+### 10.6.2 Re-measurement and what remains, 2026-09-29 (updated after #5803)
 
-Measured with `node scripts/sbom/check-sbom-drift.mjs` on `main` at `fab98a17b`. The platform totals count the platform lockfile only; since M6, `apps/mobile` has its own lockfile and its own budget.
+Measured with `node scripts/sbom/check-sbom-drift.mjs` on `main` at `fab98a17b`, and again at `38d6f07b7` after #5795, #5798 and #5803. The platform totals count the platform lockfile only; since M6, `apps/mobile` has its own lockfile and its own budget.
 
 | Measure | 2026-09-08 | 2026-09-25 before | 2026-09-29 |
 |---|---|---|---|
-| Resolved components (platform) | 2000 | 1907 | 959 |
-| Duplicated names (platform) | 227 | 216 | 58 |
-| Excess instances (platform) | 291 | 261 | 61 |
-| Multi-major names (platform) | — | 124 | 27 |
+| Resolved components (platform) | 2000 | 1907 | 868 |
+| Duplicated names (platform) | 227 | 216 | 55 |
+| Excess instances (platform) | 291 | 261 | 58 |
+| Multi-major names (platform) | — | 124 | 25 |
 | Mobile lockfile | — | — | 951 components, 87 duplicated names |
 
-Every S-move and M1, M2, M4, M6, M7, M8 and M9 are done. Open:
+Every S-move and M1, M2, M4, M5, M6, M7, M8 and M9 are done. Open:
 
 - **M3 phases 2 and 3.** The Postgres engine behind a flag (BI-85E6EF14, design on `claude/m3-postgres-jobs`, waiting on independent review), then Inngest retires. Needs a Postgres runtime for the §7 benchmarks.
 - **M5 markdown.** Done in #5803 (BI-0AB1FD47).
-- **M11 steps 2 to 4.** Step 2 waits on breaking the import cycle in §10.1. Step 4 (the `extendedDiagnostics` baseline) does not depend on step 2 and can go first.
+- **M11 step 2.** The import cycle is being cut down (§10.1); project references follow once it is gone. Step 4 is done (#5793). Step 3 (CI shape) is unchanged.
 - **Owed records.** Filed 2026-09-29; see §10.6.1 and §10.7. Only the decision-outcome column remains, blocked on a grant.
 
 ### 10.7 Backlog coverage
