@@ -5,7 +5,7 @@ status: active
 # Durable jobs on Postgres: replace the Inngest server with an owned `@dpf/jobs` engine
 
 **Plan:** [dependency diet, move M3](../plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md) · **Epic:** `EP-8DC217EB` · **Backlog:** `BI-068BBA33` · **Sequenced behind:** BET-11 scheduling substrate (`BI-B72328D5`) · **Doctrine:** `absorb-dont-adopt` (commandment)
-**Decision:** `own_postgres_jobs`, founder, 2026-09-26 (plan §10.6.1), filed in the WWMD ledger as DI-E52E32AEA1E4 on 2026-09-29. §8 keeps the inputs. **Phase 2:** `BI-85E6EF14`; §5.2–§5.5 were amended for it on 2026-09-29 (concurrency limit N, cron, engine selection). The §7 benchmarks gate turning the Postgres engine on (§6 step 2), not the facade (§6 step 1).
+**Decision:** `own_postgres_jobs`, founder, 2026-09-26 (plan §10.6.1), filed in the WWMD ledger as DI-E52E32AEA1E4 on 2026-09-29. §8 keeps the inputs. **Phase 2:** `BI-85E6EF14`, [plan](../plans/2026-09-29-m3-phase-2-postgres-job-engine-plan.md); §5.2–§5.5 were amended for it on 2026-09-29 (concurrency limit N, cron, engine selection). The §7 benchmarks gate turning the Postgres engine on (§6 step 2), not the facade (§6 step 1).
 
 ## 1. Problem
 
