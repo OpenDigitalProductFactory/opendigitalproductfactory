@@ -22,5 +22,6 @@ describe("AccountBootstrapForm", () => {
     expect(html).toContain('required=""');
     expect(html).toContain('minLength="8"');
     expect(html).toContain("Get Started");
+    expect(html).toContain("accountable owner; you can change this in Admin › Settings.");
   });
 });

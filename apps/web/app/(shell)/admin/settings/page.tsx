@@ -5,6 +5,8 @@ import { SocialAuthPanel } from "@/components/admin/SocialAuthPanel";
 import { EmailSettingsPanel } from "@/components/admin/EmailSettingsPanel";
 import { ReadabilityPolicyPanel } from "@/components/admin/ReadabilityPolicyPanel";
 import { LocalePreferencesPanel } from "@/components/admin/LocalePreferencesPanel";
+import { OrganizationAccountableOwnerPanel } from "@/components/admin/OrganizationAccountableOwnerPanel";
+import { listActiveHumanPrincipalsForUsers } from "@/lib/identity/principal-linking";
 import { getLocalePreferences } from "@/lib/actions/locale-preferences";
 import { getSmtpConfigStatus } from "@/lib/shared/smtp-config";
 import { loadReadabilityPolicy } from "@/lib/readability/policy";
@@ -42,6 +44,14 @@ async function getKeyData(keys: string[]): Promise<Record<string, { configured: 
   return data;
 }
 
+/** The organization's recorded accountable owner, read from the same single row as its other readers. */
+async function getAccountableOwner(): Promise<{ id: string; displayName: string } | null> {
+  const org = await prisma.organization.findFirst({
+    select: { topAccountablePrincipal: { select: { id: true, displayName: true } } },
+  });
+  return org?.topAccountablePrincipal ?? null;
+}
+
 export default async function AdminSettingsPage() {
   return (
     <div>
@@ -50,6 +60,10 @@ export default async function AdminSettingsPage() {
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Organization &amp; Core Configuration</p>
       </div>
       <AdminTabNav />
+      <OrganizationAccountableOwnerPanel
+        owner={await getAccountableOwner()}
+        candidates={await listActiveHumanPrincipalsForUsers()}
+      />
       <PlatformKeysPanel
         keyData={await getKeyData(PLATFORM_KEYS)}
         title="Core Configuration"

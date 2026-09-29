@@ -77,6 +77,10 @@ export function AccountBootstrapForm({ setupId }: Props) {
             />
           </div>
 
+          <p className="text-xs text-[var(--dpf-muted)]">
+            You&apos;ll be recorded as the organization&apos;s accountable owner; you can change this in Admin › Settings.
+          </p>
+
           <AccountBootstrapSubmitButton />
         </form>
       </div>

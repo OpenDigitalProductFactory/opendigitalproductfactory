@@ -349,6 +349,11 @@ go to change it.
 The header and workforce panel use the same accountability result, including
 its recorded or inherited source.
 
+The organization's recorded owner is set when the install is first set up — the owner account
+is recorded unless an owner already exists — and an administrator can change it under
+**Admin > Settings** (**Accountable owner · Change**). Changing it re-points every room that
+inherits from the organization; rooms with their own recorded owner are unaffected.
+
 If nobody is recorded, the room says setup is required rather than naming whoever happens to be
 handy. The install's first administrator, the person who created the room and whoever holds the
 lease are all available, and all of them would be a guess presented as a decision.

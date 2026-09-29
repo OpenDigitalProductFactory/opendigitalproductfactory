@@ -3,6 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    organization: {
+      findFirst: vi.fn().mockResolvedValue({ topAccountablePrincipal: { id: "p-1", displayName: "Avery Owner" } }),
+    },
     platformConfig: {
       findMany: vi.fn().mockResolvedValue([]),
       // loadReadabilityPolicy() reads this key; null → default policy.
@@ -13,6 +16,16 @@ vi.mock("@dpf/db", () => ({
 
 vi.mock("@/components/admin/AdminTabNav", () => ({
   AdminTabNav: () => <div>admin-tab-nav</div>,
+}));
+
+vi.mock("@/components/admin/OrganizationAccountableOwnerPanel", () => ({
+  OrganizationAccountableOwnerPanel: ({ owner }: { owner: { displayName: string } | null }) => (
+    <div>accountable-owner-panel:{owner?.displayName ?? "none"}</div>
+  ),
+}));
+
+vi.mock("@/lib/identity/principal-linking", () => ({
+  listActiveHumanPrincipalsForUsers: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/components/admin/SocialAuthPanel", () => ({
@@ -65,5 +78,6 @@ describe("AdminSettingsPage", () => {
     expect(html).toContain("File Upload Storage Path");
     expect(html).not.toContain("Brave Search API Key");
     expect(html).toContain("locale-preferences-panel");
+    expect(html).toContain("accountable-owner-panel:Avery Owner");
   });
 });
