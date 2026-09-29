@@ -8,7 +8,7 @@
 // Spec: docs/superpowers/specs/2026-09-24-portfolio-budget-and-investment-wip-design.md
 
 import { prisma } from "@dpf/db";
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import {
   confirmEpicPortfolios,
   loadEpicPortfolioProposals,

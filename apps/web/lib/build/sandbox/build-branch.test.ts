@@ -20,7 +20,14 @@ import {
   resolveBuildWorkdir,
   getClientIdentity,
   wrapSandboxGitCommand,
+  buildSandboxRepoStateProbeCommand,
+  parseSandboxRepoState,
+  SANDBOX_GIT_LOCK_FILE,
 } from "./build-branch";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { shouldPreserveBuildBranchWork } from "./sandbox-source-currency";
 
 describe("wrapSandboxGitCommand", () => {
@@ -444,5 +451,81 @@ describe("getClientIdentity upstream default", () => {
     expect(identity.upstreamRemoteUrl).toBe(
       "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git",
     );
+  });
+});
+
+// BI-3D7569C7 — live 2026-09-29: the baseline probe printed "true\nyes"
+// (rev-parse --is-inside-work-tree writes "true" to stdout), which never
+// equals "yes". Every build start then took the fresh-baseline path: a hard
+// reset of the shared /workspace to origin/main plus a "sandbox baseline"
+// commit (60 such resets in the sandbox's last 400 reflog entries), the
+// widest writes on the shared index that concurrent builds collide on.
+describe("sandbox repo-state probe", () => {
+  function probe(dir: string): string {
+    return execFileSync("sh", ["-c", buildSandboxRepoStateProbeCommand(dir)], { encoding: "utf8" });
+  }
+
+  function gitIn(dir: string, ...args: string[]): void {
+    execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { stdio: "ignore" });
+  }
+
+  it("reads a repo with commits as having commits", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dpf-probe-"));
+    try {
+      gitIn(dir, "init", "-q");
+      writeFileSync(join(dir, "f"), "x");
+      gitIn(dir, "add", "f");
+      gitIn(dir, "commit", "-qm", "base");
+      expect(parseSandboxRepoState(probe(dir))).toBe("has-commits");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads an initialised repo with no commits as empty", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dpf-probe-"));
+    try {
+      gitIn(dir, "init", "-q");
+      expect(parseSandboxRepoState(probe(dir))).toBe("empty-repo");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads a plain directory as no repo", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dpf-probe-"));
+    try {
+      expect(parseSandboxRepoState(probe(dir))).toBe("no-repo");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses output it cannot classify instead of assuming a fresh repo", () => {
+    expect(() => parseSandboxRepoState("")).toThrow();
+    expect(() => parseSandboxRepoState("true\nyes")).toThrow();
+  });
+});
+
+// BI-3D7569C7 — concurrent builds ran git writes on the one shared /workspace
+// index unserialized; on the live sandbox image 9/10 concurrent root commits
+// failed on index.lock, 0/10 under flock.
+describe("wrapSandboxGitCommand serializes shared-root git", () => {
+  it("holds an exclusive lock on the sandbox git lock file around the command", () => {
+    const wrapped = wrapSandboxGitCommand("git -C /workspace status --short");
+    expect(wrapped).toContain(`9>${SANDBOX_GIT_LOCK_FILE}`);
+    expect(wrapped).toContain("flock -n 9");
+    const lockIdx = wrapped.indexOf("flock -n 9");
+    expect(wrapped.indexOf("git -C /workspace status --short")).toBeGreaterThan(lockIdx);
+  });
+
+  it("bounds the wait and fails with a named reason rather than hanging", () => {
+    const wrapped = wrapSandboxGitCommand("true");
+    expect(wrapped).toMatch(/exit 75/);
+    expect(wrapped).toContain("sandbox git lock busy");
+  });
+
+  it("keeps working on an image without flock", () => {
+    expect(wrapSandboxGitCommand("true")).toContain("command -v flock");
   });
 });

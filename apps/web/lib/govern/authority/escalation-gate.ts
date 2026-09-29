@@ -43,7 +43,7 @@
  * every input is already resolved by the caller.
  */
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
-import type { ToolConsequence, ToolConsequenceScope } from "@/lib/mcp-tools";
+import type { ToolConsequence, ToolConsequenceScope } from "@/lib/tool-consequence";
 
 /**
  * Sensitivities at which an action is damaging on data grounds alone,

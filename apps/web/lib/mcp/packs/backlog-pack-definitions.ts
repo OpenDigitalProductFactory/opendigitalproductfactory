@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import {
   backlogScopeCreateProperties,
   backlogScopeFilterProperties,

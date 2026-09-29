@@ -1,5 +1,5 @@
 import { normalizePersistedScope, parseScopeInput } from "./scope-input";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import { ensureCapsuleWorkItemAnchorNonFatal } from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import {
   WORK_CAPSULE_EXECUTOR_KINDS,

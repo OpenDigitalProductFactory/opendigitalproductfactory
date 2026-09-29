@@ -12,7 +12,7 @@
 // else; the read returns readiness telemetry only (no secrets). Inputs are
 // validated against the closed vocabularies.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import {
   SURFACE_READINESS_STATES,

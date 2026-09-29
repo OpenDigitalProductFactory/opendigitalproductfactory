@@ -12,7 +12,8 @@ import {
   recordRepeatedToolIssue,
 } from "@/lib/tak/runtime-issues";
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
-import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
+import { PLATFORM_TOOLS, toolsToOpenAIFormat } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { createAuthorizedSurfaceTurnGovernance } from "@/lib/coworker/authorized-surface-execution-context";
 import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
@@ -37,10 +38,10 @@ import {
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
   resolveTurnGroundedGuidanceRoute,
   resolveTurnMinimumCapabilities,
+  type AgentMinimumCapabilities,
 } from "@/lib/routing/agent-capability-types";
 import { extractToolCalls } from "@/lib/routing/extract-tool-calls";
 import { lookupPinnedModelFamily } from "@/lib/routing/model-successor";
-import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
 import type { UserContext } from "@/lib/permissions";
 import {
   type ExecutionPlan,
@@ -907,8 +908,6 @@ export function buildToolSessionHintMessage(
     "]"
   );
 }
-
-
 
 export type RunAgenticLoopParams = {
 

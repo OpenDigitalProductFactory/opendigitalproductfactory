@@ -28,7 +28,7 @@ import {
   queryBacklog,
 } from "./backlog-pack-read-tools";
 import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { tryAcquireBacklogClaimAtomic } from "@/lib/backlog/claim-on-start";
 import { normalizeCompletionEvidenceManifest } from "@/lib/backlog/completion-evidence-policy";

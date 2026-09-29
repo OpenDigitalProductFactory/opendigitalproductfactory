@@ -4,7 +4,7 @@
 // coworker services/offers. The tools stay in a scoped pack so mcp-tools.ts
 // remains a composition layer instead of growing the frozen inline switch.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
