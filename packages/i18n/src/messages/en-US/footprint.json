@@ -10,7 +10,8 @@
     "emptyHeading": "Nothing to show on the map yet",
     "emptyTargets": "Add the countries you sell to or operate in to your business context.",
     "emptySites": "Give each of your {$people} a site with an address.",
-    "emptySitesLink": "Open the Customer area"
+    "nextPlaceCustomers": "Add addresses for {$people} not yet on the map",
+    "nextOpenAccounts": "Open accounts"
   },
   "layers": {
     "groupLabel": "Map layer",

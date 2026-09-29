@@ -38,12 +38,22 @@ export default async function MarketFootprintPage() {
     resolveVocabularyKey({ archetypeCategory: config?.archetype?.category ?? null, industry: context?.industry }),
   ).stakeholderLabel;
   const peopleLower = people.toLowerCase();
+  // The owner's first move: place the people the map cannot show yet.
+  const needsPlacing = !footprint.hasAnyData || footprint.unplacedCustomers > 0;
 
   return (
     <div className="space-y-4">
-      <header>
+      <header className="space-y-2" data-dpf-lead>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">{t("page.heading")}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-[var(--dpf-muted)]">{t("page.intro", { people: peopleLower })}</p>
+        <p className="max-w-3xl text-sm text-[var(--dpf-muted)]">{t("page.intro", { people: peopleLower })}</p>
+        <Link
+          href="/customer"
+          data-dpf-primary-action
+          data-owner-first-next-action={needsPlacing ? "place-customers" : "open-accounts"}
+          className="inline-flex min-h-[44px] items-center text-sm font-medium text-[var(--dpf-accent)] underline"
+        >
+          {needsPlacing ? t("page.nextPlaceCustomers", { people: peopleLower }) : t("page.nextOpenAccounts")}
+        </Link>
       </header>
 
       {footprint.hasAnyData ? (
@@ -68,10 +78,7 @@ export default async function MarketFootprintPage() {
           <h2 className="font-semibold">{t("page.emptyHeading")}</h2>
           <ul className="mt-2 list-disc space-y-1 ps-5 text-[var(--dpf-muted)]">
             <li>{t("page.emptyTargets")}</li>
-            <li>
-              {t("page.emptySites", { people: peopleLower })}{" "}
-              <Link href="/customer" className="underline">{t("page.emptySitesLink")}</Link>
-            </li>
+            <li>{t("page.emptySites", { people: peopleLower })}</li>
           </ul>
         </Surface>
       )}
