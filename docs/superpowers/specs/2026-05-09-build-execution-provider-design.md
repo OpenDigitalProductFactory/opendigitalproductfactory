@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Build Execution Provider + Agent Runner Architecture (DRAFT / RESEARCH)
 
 > Status: **research stub** — not yet a finalized spec. Per AGENTS.md §10
