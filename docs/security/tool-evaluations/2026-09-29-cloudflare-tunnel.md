@@ -31,6 +31,10 @@ Verified against `origin/main` at `6f876d19`.
 | P3 | **Unauthenticated Prometheus metrics.** | `apps/web/app/api/metrics/route.ts:10` `export async function GET() {` with no auth. | Operational detail about the install is public. |
 | P4 | **Fail-open host handling without `PUBLIC_URL`, and client-steerable IP keys.** | `apps/web/lib/canonical-host.ts:64-66` passes every host when `PUBLIC_URL` is unset and reads `x-forwarded-host` first (`:157-158`); `apps/web/lib/portal-url.ts:50-52` builds auth redirects from forwarded headers; `docker-compose.yml:189` `AUTH_TRUST_HOST: "true"`. Rate limits key on the **first** `x-forwarded-for` entry (`apps/web/app/connect/pair/route.ts:17`, `apps/web/app/api/v1/federation/membership/sign/route.ts:24`), which the client controls because Cloudflare appends to an existing header. | Auth redirects can be steered by a forged `X-Forwarded-Host`; per-requester limits can be bypassed. The design already names the `PUBLIC_URL` fail-open as its open question 1. |
 
+**Status (2026-09-30):** P1 is fixed by BI-3267763F. Compose no longer carries a
+default Inngest key, the installers generate both keys, and a self-upgrade replaces
+a missing or public key and recreates `inngest` with the portal.
+
 P1–P3 are fixes in DPF, not tunnel configuration. Denying the paths at the tunnel
 ingress is a useful second layer but is not a substitute: the LAN exposure of P1
 exists today without any tunnel.

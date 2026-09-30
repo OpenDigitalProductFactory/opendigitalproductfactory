@@ -173,7 +173,12 @@ single-tree mode persists — current behavior, full back-compat.
    selects the curated `ai/qwen3-coder` tier; fresh installs do not
    auto-provision mutable third-party model references.
 9. **`.env` generation** — only on first install; existing `.env` is
-   preserved.
+   preserved. A re-run only adds generated secrets the file is missing:
+   `DPF_GIT_WEBHOOK_SECRET`, and the Inngest `INNGEST_SIGNING_KEY` and
+   `INNGEST_EVENT_KEY`. The installer also replaces an Inngest key that still
+   holds the old public default, because anyone who knows the signing key can
+   start background jobs. A self-upgrade does the same for an install that is
+   never re-installed.
 10. **Release image availability** (customer mode only) — probes the GHCR
     portal image and, if it's gated behind early-access auth, points you at
     `docker login ghcr.io` before bring-up.

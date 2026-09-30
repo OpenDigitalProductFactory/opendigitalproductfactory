@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureGitWebhookSecret, installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
+import { ensureGitWebhookSecret, ensureInngestKeys, installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
 
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 
@@ -148,4 +148,31 @@ test("updateEnv carries the webhook secret into the committed install env", () =
   } finally {
     if (previous === undefined) delete process.env.DPF_GIT_WEBHOOK_SECRET; else process.env.DPF_GIT_WEBHOOK_SECRET = previous;
   }
+});
+
+// BI-3267763F: no install keeps running Inngest on the keys published in the repo.
+test("an upgrade persists the Inngest keys promote.sh exported and replaces the public defaults", () => {
+  const exported = { INNGEST_SIGNING_KEY: "d".repeat(64), INNGEST_EVENT_KEY: "e".repeat(64) };
+  const fromDefaults = ensureInngestKeys("INNGEST_SIGNING_KEY=abcdef0123456789\nINNGEST_EVENT_KEY=deadbeefcafebabe\n", "\n", exported); // gitleaks:allow — the old public compose default this test refuses, not a credential (BI-3267763F)
+  assert.equal(fromDefaults, `INNGEST_SIGNING_KEY=${"d".repeat(64)}\nINNGEST_EVENT_KEY=${"e".repeat(64)}\n`);
+  const missing = ensureInngestKeys("DPF_IMAGE_TAG=v1", "\n", exported);
+  assert.match(missing, new RegExp(`^INNGEST_SIGNING_KEY=${"d".repeat(64)}$`, "m"));
+  assert.match(missing, new RegExp(`^INNGEST_EVENT_KEY=${"e".repeat(64)}$`, "m"));
+  const placeholder = ensureInngestKeys('INNGEST_SIGNING_KEY="<generate with: openssl rand -hex 32>"\n', "\n", exported);
+  assert.match(placeholder, new RegExp(`^INNGEST_SIGNING_KEY=${"d".repeat(64)}$`, "m"));
+  const real = `INNGEST_SIGNING_KEY=${"1".repeat(64)}\nINNGEST_EVENT_KEY=${"2".repeat(64)}\n`;
+  assert.equal(ensureInngestKeys(real, "\n", exported), real, "a real key is never rotated");
+});
+
+test("an exported public default is never persisted; a random key is generated instead", () => {
+  const text = ensureInngestKeys("", "\n", { INNGEST_SIGNING_KEY: "abcdef0123456789", INNGEST_EVENT_KEY: "deadbeefcafebabe" }); // gitleaks:allow — the old public compose default this test refuses, not a credential (BI-3267763F)
+  assert.match(text, /^INNGEST_SIGNING_KEY=[0-9a-f]{64}$/m);
+  assert.match(text, /^INNGEST_EVENT_KEY=[0-9a-f]{64}$/m);
+  assert.doesNotMatch(text, /abcdef0123456789|deadbeefcafebabe/);
+});
+
+test("updateEnv carries the Inngest keys into the committed install env", () => {
+  const text = updateEnv(Buffer.from("DPF_IMAGE_TAG=v1.0.0\r\nINNGEST_SIGNING_KEY=abcdef0123456789\r\n"), "v2.0.0", "opendigitalproductfactory").toString("utf8"); // gitleaks:allow — the old public compose default this test refuses, not a credential (BI-3267763F)
+  assert.match(text, /^INNGEST_SIGNING_KEY=[0-9a-f]{64}\r$/m);
+  assert.match(text, /^INNGEST_EVENT_KEY=[0-9a-f]{64}\r$/m);
 });

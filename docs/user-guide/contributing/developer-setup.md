@@ -69,6 +69,8 @@ Then edit `.env` and `apps/web/.env.local` to replace the `<generate with: ...>`
 -join ((1..32) | ForEach-Object { "{0:x2}" -f (Get-Random -Max 256) })
 ```
 
+`INNGEST_SIGNING_KEY` and `INNGEST_EVENT_KEY` each need their own 64-hex-character value (`openssl rand -hex 32`). Compose refuses to start without them. The portal and the `inngest` service share them, so after changing either one, recreate both services together.
+
 Or use the automated script (Option A) which handles this automatically.
 
 If you have an older install with `packages/db/.env`, Prisma still treats it as a legacy fallback, but new installs should not need it.
