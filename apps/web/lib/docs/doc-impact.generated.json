@@ -1902,6 +1902,9 @@
     "scripts/check-doc-reference-integrity.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "scripts/check-docker-patch-context.mjs": [
+      "docs/architecture/dependency-reduction-routine.md"
+    ],
     "scripts/check-docs-impact.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
@@ -2319,6 +2322,9 @@
     ],
     "scripts/safety/transcript-snapshot.ps1": [
       "docs/operations/session-transcript-recovery.md"
+    ],
+    "scripts/sbom/assert-deploy-matches-lockfile.mjs": [
+      "docs/architecture/dependency-reduction-routine.md"
     ],
     "scripts/sbom/audit-provenance.mjs": [
       "docs/architecture/dependency-reduction-routine.md"
@@ -2937,8 +2943,10 @@
       "apps/web/lib/assurance/cyclonedx-generator.ts",
       "pnpm-lock.yaml",
       "scripts/check-diagram-dependency-pins.mjs",
+      "scripts/check-docker-patch-context.mjs",
       "scripts/lib/mermaid-renderer.mjs",
       "scripts/run-tsc.mjs",
+      "scripts/sbom/assert-deploy-matches-lockfile.mjs",
       "scripts/sbom/audit-provenance.mjs",
       "scripts/sbom/check-lockfile-release-age.mjs",
       "scripts/sbom/check-new-dependencies.mjs",
