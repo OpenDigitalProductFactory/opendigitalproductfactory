@@ -607,6 +607,8 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
           prBodyBase64: Buffer.from(prBody, "utf8").toString("base64"),
           repositoryOwner: repoOwner,
           repositoryName: repoName,
+          // BI-5C4933EB: check the published tree in the build's own worktree.
+          workdir: (await import("@/lib/build/sandbox/build-branch")).resolveBuildWorkdir(buildId),
         }),
         `${token}\n`,
       );
