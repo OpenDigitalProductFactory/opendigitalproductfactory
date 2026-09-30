@@ -89,7 +89,11 @@ const definitions: ToolDefinition[] = [
       required: ["title", "body", "category"],
     },
     requiredCapability: "manage_backlog",
-    executionMode: "proposal",
+    // Immediate, not a proposal (BI-0073DE6A): the article is only ever created
+    // as a draft, and publishing is a separate act. Declaring it a proposal
+    // stacked a second approval that no unattended cadence could clear. An
+    // unsteered call still goes to a person through the escalation gate.
+    executionMode: "immediate",
     sideEffect: true,
   },
   {
