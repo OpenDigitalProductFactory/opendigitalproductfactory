@@ -239,6 +239,8 @@ async function ensureNMinusOneHostEnvironment(workspace, project) {
   if (workspace.harnessEnvironment && workspace.harnessEnvFile) return workspace.harnessEnvironment;
   const authSecret = `dpf_n1_${randomBytes(32).toString("base64url")}`;
   const credentialKey = randomBytes(32).toString("hex");
+  const inngestSigningKey = randomBytes(32).toString("hex");
+  const inngestEventKey = randomBytes(32).toString("hex");
   const env = {
     ...process.env,
     COMPOSE_PROJECT_NAME: project,
@@ -253,6 +255,8 @@ async function ensureNMinusOneHostEnvironment(workspace, project) {
     DPF_N1_HARNESS: "1",
     AUTH_SECRET: authSecret,
     CREDENTIAL_ENCRYPTION_KEY: credentialKey,
+    INNGEST_SIGNING_KEY: inngestSigningKey,
+    INNGEST_EVENT_KEY: inngestEventKey,
   };
   const envFile = join(workspace.root, "n-minus-one.env");
   await writeFile(envFile, [
@@ -264,6 +268,8 @@ async function ensureNMinusOneHostEnvironment(workspace, project) {
     "DPF_N1_HARNESS=1",
     `AUTH_SECRET=${authSecret}`,
     `CREDENTIAL_ENCRYPTION_KEY=${credentialKey}`,
+    `INNGEST_SIGNING_KEY=${inngestSigningKey}`,
+    `INNGEST_EVENT_KEY=${inngestEventKey}`,
     "",
   ].join("\n"), { mode: 0o600 });
   workspace.harnessEnvironment = env;

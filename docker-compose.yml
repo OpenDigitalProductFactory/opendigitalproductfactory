@@ -302,8 +302,12 @@ services:
       HIVE_CONTRIBUTION_TOKEN: ${HIVE_CONTRIBUTION_TOKEN:-}
       HIVE_OPS_TOKEN: ${HIVE_OPS_TOKEN:-}
       INNGEST_BASE_URL: http://inngest:8288
-      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-deadbeefcafebabe}
-      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-abcdef0123456789}
+      # No default (BI-3267763F). A published fallback let anyone who could
+      # reach /api/inngest forge signed invocations. The installers generate
+      # both keys; scripts/promote.sh replaces a missing or known-default key
+      # and recreates inngest with the portal so the two always agree.
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:?INNGEST_EVENT_KEY is required - the installer or a self-upgrade writes a random value into .env (BI-3267763F)}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:?INNGEST_SIGNING_KEY is required - the installer or a self-upgrade writes a random value into .env (BI-3267763F)}
       INNGEST_DEV: ${INNGEST_DEV:-0}
       # Self-hosted Inngest (INNGEST_DEV=0) does NOT auto-discover apps, so the
       # portal must register its function catalog on boot — instrumentation.ts
@@ -970,8 +974,9 @@ services:
       - "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8288:8288"
       - "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8289:8289"
     environment:
-      - INNGEST_EVENT_KEY=${INNGEST_EVENT_KEY:-deadbeefcafebabe}
-      - INNGEST_SIGNING_KEY=${INNGEST_SIGNING_KEY:-abcdef0123456789}
+      # Must match the portal's keys; no default (BI-3267763F).
+      - INNGEST_EVENT_KEY=${INNGEST_EVENT_KEY:?INNGEST_EVENT_KEY is required - the installer or a self-upgrade writes a random value into .env (BI-3267763F)}
+      - INNGEST_SIGNING_KEY=${INNGEST_SIGNING_KEY:?INNGEST_SIGNING_KEY is required - the installer or a self-upgrade writes a random value into .env (BI-3267763F)}
       - INNGEST_POSTGRES_URI=postgres://${POSTGRES_USER:-dpf}:${POSTGRES_PASSWORD:-dpf_dev}@postgres:5432/inngest
       - INNGEST_REDIS_URI=redis://redis:6379
     depends_on:

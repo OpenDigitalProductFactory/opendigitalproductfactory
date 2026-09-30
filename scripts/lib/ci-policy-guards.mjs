@@ -250,6 +250,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/installer/lib/doctor-redaction.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
       ),
+      // BI-3267763F: no compose default, installer output or self-upgrade
+      // leaves Inngest on the signing/event keys once published in this repo.
+      conformanceTest("scripts/installer/inngest-keys-contract.test.mjs"),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),

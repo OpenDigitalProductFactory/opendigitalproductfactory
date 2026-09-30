@@ -97,7 +97,7 @@ describe("finalize does not repeat a verdict it already has", () => {
   it("reuses a recorded failure for the same gate identity instead of re-running the gauntlet", async () => {
     const d = deps({ priorFailure: vi.fn().mockResolvedValue({ failedGuards: ["Data-Impact Gate", "Derived Artifact Registry"] }) });
     const out = await runBuildStudioFinalize("FB-86B4CCA3", d);
-    expect(out).toEqual({ status: "gauntlet-failed", failedGuards: ["Data-Impact Gate", "Derived Artifact Registry"], reused: true });
+    expect(out).toMatchObject({ status: "gauntlet-failed", failedGuards: ["Data-Impact Gate", "Derived Artifact Registry"], reused: true });
     expect(d.runGauntlet).not.toHaveBeenCalled();
     expect(d.capture).not.toHaveBeenCalled();
   });

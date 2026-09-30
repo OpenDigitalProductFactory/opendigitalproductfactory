@@ -90,7 +90,9 @@ dpf_random_secret_b64() {
 # An existing value is NEVER replaced: an operator may have pasted it into
 # another system (the GitHub webhook Secret field for DPF_GIT_WEBHOOK_SECRET),
 # and rotating it silently would break that. An absent key, a blank value, or
-# an unfilled `<...>` example placeholder counts as missing. The file is
+# an unfilled `<...>` example placeholder counts as missing, and so does a
+# value published in this repository as a compose default (the old Inngest
+# keys, BI-3267763F) -- a public value is not a secret. The file is
 # rewritten in place so its permissions survive. The secret is never printed.
 # Prints one word: added | filled | kept.
 # Args: $1 = key, $2 = env file, $3 = byte length (default 32),
@@ -102,7 +104,7 @@ dpf_env_ensure_secret_hex() {
   # is the normal "missing" answer, not a failure.
   current="$(grep -E "^${key}=" "$file" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d "\"' \t\r" || true)"
   case "$current" in
-    ''|'<'*) ;;
+    ''|'<'*|abcdef0123456789|deadbeefcafebabe) ;;
     *) printf 'kept\n'; return 0 ;;
   esac
   value="$(dpf_random_secret_hex "$bytes")"

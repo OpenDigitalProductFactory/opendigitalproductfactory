@@ -70,8 +70,8 @@ services:
       # via Docker DNS (`dev-portal:3000` — internal port, not the :3001 host
       # mapping). Without these, /api/inngest 500s on every register attempt.
       INNGEST_BASE_URL: http://inngest:8288
-      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-deadbeefcafebabe}
-      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-abcdef0123456789}
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:?INNGEST_EVENT_KEY must be set — already required by the live portal}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:?INNGEST_SIGNING_KEY must be set — already required by the live portal}
       INNGEST_DEV: ${INNGEST_DEV:-0}
       INNGEST_SERVE_ORIGIN: http://dev-portal:3000
     # Compose merges depends_on by default, so a plain block here would APPEND
