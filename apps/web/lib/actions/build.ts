@@ -535,9 +535,9 @@ export async function advanceBuildPhase(
     if (!build.sandboxId) {
       throw new Error("Build Studio cannot advance to review because the sandbox is no longer available.");
     }
-    const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
+    const { getClientIdentity, resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
     const { clientBranch } = await getClientIdentity();
-    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
+    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch, workspace: resolveBuildWorkdir(buildId) }); // BI-5C4933EB: the build's own worktree
     if (releasableFiles.length === 0) {
       return {
         ok: false,
@@ -551,9 +551,9 @@ export async function advanceBuildPhase(
     if (!build.sandboxId) {
       throw new Error("Build Studio cannot continue to release because the sandbox is no longer available.");
     }
-    const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
+    const { getClientIdentity, resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
     const { clientBranch } = await getClientIdentity();
-    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
+    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch, workspace: resolveBuildWorkdir(buildId) }); // BI-5C4933EB: the build's own worktree
     if (releasableFiles.length === 0) {
       return {
         ok: false,
@@ -1022,9 +1022,9 @@ export async function resumeBuildImplementation(buildId: string): Promise<Resume
     if (!build.sandboxId) {
       throw new Error("This release-phase build has no sandbox attached, so implementation cannot be resumed safely.");
     }
-    const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
+    const { getClientIdentity, resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
     const { clientBranch } = await getClientIdentity();
-    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
+    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch, workspace: resolveBuildWorkdir(buildId) }); // BI-5C4933EB: the build's own worktree
     if (releasableFiles.length > 0) {
       throw new Error("This build already has releasable source changes. Continue from the release decisions instead of reopening implementation.");
     }
