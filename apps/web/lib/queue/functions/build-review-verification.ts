@@ -148,7 +148,7 @@ export const buildReviewVerification = jobs.createFunction(
     // build's Workroom and head), records any gate decisions it needs and re-runs
     // it, records the scoped tests, and writes the failure analysis the semantic
     // review requires. Each stop is recorded on the build as a named status.
-    await step.run("finalize", async () => {
+    const finalize = await step.run("finalize", async () => {
       const { finalizeBuildForReview } = await import("@/lib/build/finalize-stage-wiring");
       return finalizeBuildForReview({
         id: build.id,
@@ -159,6 +159,15 @@ export const buildReviewVerification = jobs.createFunction(
         designDoc: (build as { designDoc?: unknown }).designDoc,
       });
     });
+
+    // BI-FBA2FDBE: the semantic review needs the failure analysis only a
+    // finished finalize writes. Running it after any other outcome produced a
+    // "repair" verdict nothing consumed, on the same tree, every few minutes.
+    // The finalize stop is already on the build's trail as a named status.
+    const { finalizeAllowsSemanticReview } = await import("@/lib/build/finalize-stage-runner");
+    if (!finalizeAllowsSemanticReview(finalize)) {
+      return { status: "finalize-incomplete", finalize: finalize.status };
+    }
 
     // Phase 3 of the shared Change Reviewer control: task-level reviews remain
     // intact, then one surface-neutral review evaluates the assembled committed

@@ -27,11 +27,40 @@ export type GauntletRun =
     binding: EvidenceBinding | null;
   };
 
+/**
+ * The identity a gauntlet verdict is recorded under: repository, the tree the
+ * guards inspected, the guard plan, and the toolchain. One place, so a lookup
+ * of a prior verdict keys exactly as the recording did (BI-FBA2FDBE).
+ */
+export async function gauntletIdentityFor(build: Pick<GauntletBuild, "sandboxId">, treeSha: string) {
+  const { guardPlanDigest } = await import("./guard-gauntlet");
+  const { toolchainFingerprintFrom, resolveGauntletRepository } = await import("./guard-gauntlet-evidence");
+  const { execInSandbox } = await import("@/lib/sandbox");
+  const toolchain = await execInSandbox(build.sandboxId, "node -v 2>/dev/null; pnpm -v 2>/dev/null").catch(() => "");
+  const [node, pnpm] = toolchain.split(/\r?\n/);
+  return {
+    repository: resolveGauntletRepository(),
+    treeSha,
+    guardPlanDigest: guardPlanDigest("scripts/pregate-preflight.mjs"),
+    toolchainFingerprint: toolchainFingerprintFrom({ node, pnpm }),
+  };
+}
+
+/** The gate key a gauntlet run on the build's worktree would be recorded under now, or null. */
+export async function currentGauntletGateKey(build: Pick<GauntletBuild, "buildId" | "sandboxId">): Promise<string | null> {
+  const { readWorktreeTreeSha } = await import("./guard-gauntlet");
+  const { deriveGauntletGateKey } = await import("./guard-gauntlet-evidence");
+  const { resolveBuildWorkdir } = await import("./build-branch");
+  const { execInSandbox } = await import("@/lib/sandbox");
+  const treeSha = await readWorktreeTreeSha(execInSandbox, build.sandboxId, resolveBuildWorkdir(build.buildId));
+  return treeSha ? deriveGauntletGateKey(await gauntletIdentityFor(build, treeSha)) : null;
+}
+
 /** Run the gauntlet in the build's worktree, stamp the Workroom head, record bound evidence. */
 export async function runAndRecordGauntlet(build: GauntletBuild, diffPatch: string | null): Promise<GauntletRun> {
-  const { runGuardGauntlet, guardPlanDigest } = await import("./guard-gauntlet");
+  const { runGuardGauntlet } = await import("./guard-gauntlet");
   const {
-    buildGauntletEvidence, summarizeGauntlet, toolchainFingerprintFrom, resolveGauntletRepository, resolveInPlatformEvidenceBinding,
+    buildGauntletEvidence, summarizeGauntlet, resolveInPlatformEvidenceBinding,
   } = await import("./guard-gauntlet-evidence");
   const { resolveBuildWorkdir } = await import("./build-branch");
   const { execInSandbox } = await import("@/lib/sandbox");
@@ -68,14 +97,7 @@ export async function runAndRecordGauntlet(build: GauntletBuild, diffPatch: stri
     return { ran: true, passed: outcome.passed, failedGuards: outcome.failedGuards, output: outcome.output, recordId: null, binding: null };
   }
 
-  const toolchain = await execInSandbox(build.sandboxId, "node -v 2>/dev/null; pnpm -v 2>/dev/null").catch(() => "");
-  const [node, pnpm] = toolchain.split(/\r?\n/);
-  const identity = {
-    repository: resolveGauntletRepository(),
-    treeSha: outcome.treeSha,
-    guardPlanDigest: guardPlanDigest("scripts/pregate-preflight.mjs"),
-    toolchainFingerprint: toolchainFingerprintFrom({ node, pnpm }),
-  };
+  const identity = await gauntletIdentityFor(build, outcome.treeSha);
 
   // BI-AF531123: bind to this build's Workroom and exact head so a failure
   // analysis can cite the record.
