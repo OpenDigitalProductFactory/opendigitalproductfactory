@@ -5,5 +5,17 @@
     "untracedBody": "They are not counted in any row above, so the delivered and capacity figures are low by that much.",
     "reason": "Why this figure",
     "save": "Save budget"
+  },
+  "owners": {
+    "heading": "Who answers for each portfolio",
+    "body": "Their automatic work and its approvals go to them.",
+    "standIn": "Unset portfolios go to {$email}.",
+    "notSet": "Not set",
+    "change": "Change",
+    "person": "Accountable person",
+    "nobody": "Nobody",
+    "why": "Why this person",
+    "save": "Save",
+    "cancel": "Cancel"
   }
 }

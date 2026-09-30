@@ -10,7 +10,9 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@dpf/db";
 
 import { auth } from "@/lib/auth";
-import { ok, type ActionResult } from "@/lib/shared/action-result";
+import { requireCapability } from "@/lib/actions/shared/guards";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import { setPortfolioOwner } from "@/lib/portfolio/accountable-owner";
 import { confirmEpicPortfolios } from "@/lib/portfolio/epic-portfolio-attribution";
 import { quarterBounds } from "@/lib/portfolio/investment-points";
 import { setPortfolioBudget } from "@/lib/portfolio/portfolio-budget";
@@ -55,4 +57,17 @@ export async function confirmEpicPortfoliosAction(input: {
   if (!result.ok) return { ok: false, error: result.message };
   revalidatePath("/ops/demand");
   return ok(`Confirmed ${result.data.confirmed.length} epic(s); the reason is recorded with each.`);
+}
+
+/** Choose the one person who answers for a portfolio's automatic work (BI-67B27832). */
+export async function setPortfolioOwnerAction(input: {
+  portfolioId: string;
+  principalRef: string | null;
+  reason: string;
+}): Promise<ActionResult<string>> {
+  const { userId } = await requireCapability("manage_platform");
+  const result = await setPortfolioOwner(prisma as never, { ...input, actor: { userId } });
+  if (!result.ok) return err(result.message);
+  revalidatePath("/ops/demand");
+  return ok(result.data.accountablePrincipalId ? "Accountable person saved." : "Accountable person cleared.");
 }

@@ -7,7 +7,7 @@
 // budget and confirming an epic's portfolio are the only writes, both by a
 // person with a reason. Nothing here dispatches work.
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
@@ -28,9 +28,11 @@ type Props = {
   unconfirmedEpics: UnconfirmedEpic[];
   /** Viewer's format locale from getLocaleContext(). */
   formatLocale?: string;
+  /** Further portfolio controls that belong behind the same disclosure (the accountable owners, BI-67B27832). */
+  children?: ReactNode;
 };
 
-export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics, formatLocale }: Props) {
+export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics, formatLocale, children }: Props) {
   const t = useT("portfolio");
   const [editing, setEditing] = useState<string | null>(null);
   const quarter = `${new Date(tieOut.period.start).toISOString().slice(0, 10)} to ${new Date(new Date(tieOut.period.end).getTime() - 1).toISOString().slice(0, 10)}`;
@@ -112,6 +114,7 @@ export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics,
         />
       ) : null}
       <EpicAttribution epics={unconfirmedEpics} />
+      {children}
       </details>
     </Surface>
   );

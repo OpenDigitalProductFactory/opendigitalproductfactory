@@ -130,6 +130,8 @@ export type GovernedBacklogTeeUpCandidate = {
    */
   activeEpicId: string | null;
   digitalProductId: string | null;
+  /** The item's portfolio; its accountable person owns a scheduled build (BI-67B27832). */
+  portfolioId?: string | null;
   epicId: string | null;
   createdAt: Date;
   epic: { status: string } | null;
@@ -636,6 +638,13 @@ export async function runGovernedBacklogTeeUp(input: {
    * reason is recorded on the item. Injected in tests; defaults to the live check.
    */
   admit?: (itemId: string) => Promise<{ verdict: "admit" | "warn" | "refuse"; reason: string; mode?: "shadow" | "enforce" }>;
+  /**
+   * Who owns each build this run creates (BI-67B27832). Scheduled runs pass the
+   * portfolio-aligned resolver so a build, and the room it opens, belong to the
+   * accountable person of its item's portfolio. Omitted: every build is owned
+   * by `userId`, the person who asked for the run.
+   */
+  ownerForPortfolio?: (portfolioId: string | null) => Promise<string>;
 }): Promise<{
   trigger: GovernedBacklogTeeUpTrigger;
   requestedLimit: number;
@@ -689,6 +698,7 @@ export async function runGovernedBacklogTeeUp(input: {
       activeBuildId: true,
       activeEpicId: true,
       digitalProductId: true,
+      portfolioId: true,
       epicId: true,
       createdAt: true,
       epic: {
@@ -722,11 +732,14 @@ export async function runGovernedBacklogTeeUp(input: {
       item,
       db: prisma,
     });
+    const ownerUserId = input.ownerForPortfolio
+      ? await input.ownerForPortfolio(item.portfolioId ?? null)
+      : userId;
     const result = await prisma.$transaction((tx) =>
       promoteBacklogItemToBuildDraft({
         tx,
         itemId: item.itemId,
-        userId,
+        userId: ownerUserId,
         governedBacklogEnabled: config.governedBacklogEnabled === true,
         autonomousStart,
         activity: {

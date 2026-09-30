@@ -76,3 +76,18 @@ describe("PortfolioTieOutPanel (BI-CBF5D708)", () => {
     expect(html).toContain("104 AI run(s) this quarter reach no item in these rows");
   });
 });
+
+describe("PortfolioTieOutPanel owners slot (BI-67B27832)", () => {
+  it("keeps further portfolio controls behind the same closed disclosure, so the page's arrival is unchanged", () => {
+    const html = renderToStaticMarkup(
+      withMessages(
+        <PortfolioTieOutPanel tieOut={tieOut} proposedPoints={{}} unconfirmedEpics={[]}>
+          <p>owners-slot</p>
+        </PortfolioTieOutPanel>,
+      ),
+    );
+    const details = html.slice(html.indexOf("<details"), html.indexOf("</details>"));
+    expect(details).toContain("owners-slot");
+    expect(html.slice(0, html.indexOf("<details"))).not.toContain("owners-slot");
+  });
+});
