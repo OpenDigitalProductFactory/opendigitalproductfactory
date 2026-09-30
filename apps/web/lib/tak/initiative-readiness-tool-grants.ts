@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { ARTIFACT_AUTHOR_RECOVERY, readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
+import type { InitiativeGateKey } from "@/lib/backlog/initiative-readiness/receipt-schema";
 import type {
-  InitiativeGateKey,
   InitiativeReadinessDecision,
   ReadinessCode,
   ReadinessRequirementResult,
-} from "@/lib/backlog/initiative-readiness";
+} from "@/lib/backlog/initiative-readiness/types";
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
 import { formatInitiativeReviewObjective, IMMUTABLE_REVIEW_READER_TOOL as IMMUTABLE_READER_TOOL } from "./initiative-review-objective";

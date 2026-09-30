@@ -3,7 +3,7 @@
 // The purpose-identity ratchet refuses to grandfather a NEW route, so the area
 // home arrives ratified. It replaces the Delivery hub (/delivery), now a redirect.
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const AREA_HOME_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

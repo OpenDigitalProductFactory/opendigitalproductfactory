@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@dpf/db";
 import { projectApprovalOutcome, type ApprovalOutcome, type ApprovalOutcomeRow } from "./approval-outcome";
-import type { ApprovedRequestRun } from "./approved-request-run";
+import type { ApprovedRequestRun } from "./approved-request-run-types";
 
 type Db = typeof prisma;
 

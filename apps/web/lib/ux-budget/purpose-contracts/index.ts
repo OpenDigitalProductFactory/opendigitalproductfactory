@@ -1,9 +1,8 @@
 import {
   purposeContractSourceSchema,
+  type PurposeContractModule,
   type PurposeContractSource,
 } from "../page-purpose";
-
-export type PurposeContractModule = readonly PurposeContractSource[];
 
 import { ARCHETYPE_READINESS_PURPOSE_CONTRACTS } from "./archetype-readiness";
 import { GRAPH_EXPLORER_PURPOSE_CONTRACTS } from "./graph-explorer";
