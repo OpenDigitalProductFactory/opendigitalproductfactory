@@ -9,6 +9,8 @@
 // itself stays on its ExternalEvidenceRecord (the single source of truth); the
 // state points at it by record id.
 
+import { enforceBuildInitiativeReadiness } from "@/lib/build/build-entry-gate";
+
 /** Hand-backs per build before the operator is asked. */
 export const GAUNTLET_REPAIR_MAX_ATTEMPTS = 2;
 
@@ -85,7 +87,7 @@ function readState(verificationOut: unknown): GauntletRepairState | undefined {
   };
 }
 
-export type RouteOutcome = "repair-queued" | "escalated" | "already-escalated" | "not-in-review";
+export type RouteOutcome = "repair-queued" | "escalated" | "already-escalated" | "not-in-review" | "not-ready";
 
 /**
  * Called by the review job when finalize ends gauntlet-failed. Hands the build
@@ -133,6 +135,15 @@ export async function routeGauntletFailureToRepair(buildId: string, failure: Gau
   }
 
   if (!canTransitionPhase("review", "build")) return "not-in-review";
+  // Re-entering build is gated like every entry into build: the initiative must
+  // still be ready for implementation.
+  const readiness = await enforceBuildInitiativeReadiness({
+    buildId, target: "implementation", targetPhase: "build", expectedPhase: "review",
+  });
+  if (!readiness.allowed) {
+    await log(`Guards failed on this build's change (${failure.failedGuards.join(", ")}), but it was not handed back: ${readiness.message}`);
+    return "not-ready";
+  }
   // step "complete" with verificationOut set: if the repair job dies, the
   // stranded-build sweep's advance-to-review branch returns the build to
   // review, where this attempt is already counted. A missing or failed step
