@@ -166,6 +166,19 @@ export const buildReviewVerification = jobs.createFunction(
     // The finalize stop is already on the build's trail as a named status.
     const { finalizeAllowsSemanticReview } = await import("@/lib/build/finalize-stage-runner");
     if (!finalizeAllowsSemanticReview(finalize)) {
+      // BI-B2EEA6DE: guards that failed on this build's own change go back to
+      // its coding agent, bounded, then to the operator.
+      if (finalize.status === "gauntlet-failed") {
+        const routed = await step.run("route-gauntlet-failure-to-repair", async () => {
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, {
+            treeSha: finalize.treeSha ?? null,
+            recordId: finalize.recordId ?? null,
+            failedGuards: finalize.failedGuards,
+          });
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
       return { status: "finalize-incomplete", finalize: finalize.status };
     }
 

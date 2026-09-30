@@ -31,7 +31,7 @@ export type FinalizeDeps = {
    * inputs give the identical verdict, so it is reused rather than re-run
    * (BI-FBA2FDBE: one tree re-ran the full gauntlet 20+ times).
    */
-  priorFailure?: () => Promise<{ failedGuards: string[] } | null>;
+  priorFailure?: () => Promise<{ failedGuards: string[]; recordId?: string | null; treeSha?: string | null } | null>;
 };
 
 /** Printed by a guard that could not evaluate the change (scripts/lib/git-changed-files.mjs). */
@@ -40,7 +40,7 @@ export const GUARD_DID_NOT_RUN_MARKER = "the guard did not run";
 export type FinalizeOutcome =
   | { status: "ready"; evidenceIds: string[] }
   | { status: "gauntlet-not-run"; reason: string }
-  | { status: "gauntlet-failed"; failedGuards: string[]; reused?: true }
+  | { status: "gauntlet-failed"; failedGuards: string[]; recordId?: string | null; treeSha?: string | null; reused?: true }
   | { status: "decisions-missing"; missing: string[] }
   | { status: "decisions-exhausted"; failedGuards: string[] }
   | { status: "unbound" }
@@ -61,7 +61,9 @@ export async function runBuildStudioFinalize(buildId: string, deps: FinalizeDeps
   // No log row for a reused verdict: the original failure is already on the
   // build's trail, and a fresh row every sweep would hide it.
   const prior = await deps.priorFailure?.();
-  if (prior) return { status: "gauntlet-failed", failedGuards: prior.failedGuards, reused: true };
+  if (prior) {
+    return { status: "gauntlet-failed", failedGuards: prior.failedGuards, recordId: prior.recordId ?? null, treeSha: prior.treeSha ?? null, reused: true };
+  }
 
   let captured = await deps.capture();
   let gauntlet = await deps.runGauntlet(captured.diffPatch);
@@ -86,7 +88,14 @@ export async function runBuildStudioFinalize(buildId: string, deps: FinalizeDeps
       gauntlet = await deps.runGauntlet(captured.diffPatch);
       continue;
     }
-    if (!keys) return done(deps, buildId, { status: "gauntlet-failed", failedGuards: gauntlet.failedGuards });
+    if (!keys) {
+      return done(deps, buildId, {
+        status: "gauntlet-failed",
+        failedGuards: gauntlet.failedGuards,
+        recordId: gauntlet.recordId,
+        treeSha: gauntlet.binding?.headTreeHash ?? null,
+      });
+    }
     if (round >= FINALIZE_DECISION_ROUNDS) return done(deps, buildId, { status: "decisions-exhausted", failedGuards: gauntlet.failedGuards });
     const decisions = await authorGateDecisions({
       llm: deps.llm, keys, guardOutput: gauntlet.output, diffSummary: captured.changedFiles.join("\n"),

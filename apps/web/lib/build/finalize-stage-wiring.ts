@@ -99,19 +99,24 @@ export async function finalizeBuildForReview(build: FinalizeBuild): Promise<Fina
           details: { path: ["evidence", "gateKey"], equals: gateKey },
         },
         orderBy: { createdAt: "desc" },
-        select: { details: true },
+        select: { id: true, details: true },
       });
-      return priorGauntletFailure(record?.details, GUARD_DID_NOT_RUN_MARKER);
+      const prior = priorGauntletFailure(record?.details, GUARD_DID_NOT_RUN_MARKER);
+      return prior && record ? { ...prior, recordId: record.id } : prior;
     },
   });
 }
 
 /** A reusable failing verdict from a recorded gauntlet's details, or null. */
-export function priorGauntletFailure(details: unknown, didNotRunMarker: string): { failedGuards: string[] } | null {
+export function priorGauntletFailure(details: unknown, didNotRunMarker: string): { failedGuards: string[]; treeSha: string | null } | null {
   const evidence = details && typeof details === "object" ? (details as { evidence?: unknown }).evidence : null;
   if (!evidence || typeof evidence !== "object") return null;
   const { passed, failedGuards, output } = evidence as { passed?: unknown; failedGuards?: unknown; output?: unknown };
   if (passed !== false || !Array.isArray(failedGuards) || failedGuards.length === 0) return null;
   if (typeof output === "string" && output.includes(didNotRunMarker)) return null;
-  return { failedGuards: failedGuards.filter((g): g is string => typeof g === "string") };
+  const treeSha = (evidence as { treeSha?: unknown }).treeSha;
+  return {
+    failedGuards: failedGuards.filter((g): g is string => typeof g === "string"),
+    treeSha: typeof treeSha === "string" ? treeSha : null,
+  };
 }
