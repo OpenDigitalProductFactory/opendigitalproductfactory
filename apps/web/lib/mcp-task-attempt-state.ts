@@ -1,7 +1,7 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
 import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
-import type { RemoteTaskSubmitOutcome } from "./mcp-task-submit";
+import type { RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
 
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;

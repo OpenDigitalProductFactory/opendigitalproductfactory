@@ -2,7 +2,7 @@ import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import "server-only";
 
 import { prisma } from "@dpf/db";
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import { readCollaborationProvenance } from "@/lib/tak/conversation-participants-core";
 import {

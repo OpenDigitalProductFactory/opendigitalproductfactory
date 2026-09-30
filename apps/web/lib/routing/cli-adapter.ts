@@ -19,7 +19,8 @@ export { isCliQuotaBanner, stripLeadingQuotaBanner } from "./cli-result-errors";
  * unchanged — this adapter is ONLY for `anthropic-sub`.
  */
 
-import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler, ToolCallEntry } from "./adapter-types";
+import type { ToolCallEntry } from "./chat-message-types";
+import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError } from "@/lib/ai-inference";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { registerExecutionAdapter } from "./execution-adapter-registry";

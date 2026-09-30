@@ -3,7 +3,7 @@ import { toRoomAuthorityContext, type RoomTurnAuthority } from "@/lib/work-manag
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import type { MessageOrigin } from "@/lib/inference/data-screening/types";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-review";
 import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";

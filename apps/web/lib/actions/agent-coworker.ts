@@ -12,7 +12,8 @@ import {
   NoProvidersAvailableError,
 } from "@/lib/ai-provider-priority";
 import { NoEligibleEndpointsError } from "@/lib/routed-inference";
-import { logTokenUsage, type ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { logTokenUsage } from "@/lib/ai-inference";
 import { buildCoworkerContextKey } from "@/lib/agent-coworker-context";
 import { resolveWithheldHistory } from "@/lib/tak/thread-history-withholding";
 import { getKnowledgePointersForRoute } from "@/lib/actions/route-knowledge-pointers";

@@ -1,5 +1,5 @@
 import { previewRoute, type RouteAndCallOptions } from "@/lib/routed-inference";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import type { RouteSensitivity } from "@/lib/agent-sensitivity";
 import { rotateTerminalWriterProvider, summarizeTerminalToolProgress, type TerminalToolPolicy, type TerminalToolRecord } from "./terminal-tool-policy";
 
