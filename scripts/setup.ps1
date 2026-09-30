@@ -134,6 +134,30 @@ foreach ($envFile in @("apps\web\.env.local", $rootEnv)) {
     Write-Ok "Generated DPF_GIT_WEBHOOK_SECRET in $envFile"
 }
 
+# Inngest signing and event keys (BI-3267763F): the root .env feeds the compose
+# stack, which refuses to render without them. Generated when missing, a
+# placeholder, or the old public compose default; never rotated once set.
+if (Test-Path $rootEnv) {
+    foreach ($inngestKey in @("INNGEST_SIGNING_KEY", "INNGEST_EVENT_KEY")) {
+        $envText = Get-Content -Path $rootEnv -Raw
+        if ($null -eq $envText) { $envText = "" }
+        $match = [System.Text.RegularExpressions.Regex]::Match($envText, "(?m)^$inngestKey=(.*)$")
+        $current = if ($match.Success) { $match.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+        if ($current.Length -gt 0 -and -not $current.StartsWith("<") -and @("abcdef0123456789", "deadbeefcafebabe") -notcontains $current) { continue }
+        $inngestBytes = New-Object byte[] 32
+        [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($inngestBytes)
+        $inngestValue = -join ($inngestBytes | ForEach-Object { $_.ToString("x2") })
+        if ($match.Success) {
+            $envText = [System.Text.RegularExpressions.Regex]::Replace($envText, "(?m)^$inngestKey=.*$", "$inngestKey=$inngestValue")
+        } else {
+            if ($envText.Length -gt 0 -and -not $envText.EndsWith("`n")) { $envText += "`n" }
+            $envText += "$inngestKey=$inngestValue`n"
+        }
+        Set-Content -Path $rootEnv -Value $envText -NoNewline
+        Write-Ok "Generated $inngestKey in $rootEnv"
+    }
+}
+
 # -- Databases -------------------------------------------------------------------
 
 Write-Step "Starting services (PostgreSQL + Ollama)"
