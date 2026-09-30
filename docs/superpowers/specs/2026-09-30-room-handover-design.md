@@ -105,7 +105,31 @@ Every handed-over room gets a `WorkroomActivity` row recording:
 The tool returns counts: handed over, skipped (changed), refused (no
 accountable person).
 
-### 3.6 Operator surface
+### 3.6 Whose authority runs the handover (live finding, 2026-09-30)
+
+On 2026-09-30 the operator approved `appoint_room_coordinator` for
+WC-6B9C448D (envelope cmuodfoinaw8101o3qlgcm6hn). Execution then refused it:
+`workroom_access_denied`, "You or your assistant are not admitted to this
+workroom." The refusal is correct:
+
+- the calling assistant (AGT-EXT-CLAUDE) is not admitted to the room;
+- an agent may not ride the superuser short-circuit (BI-154DAA7E);
+- the only admitted human is the unused account.
+
+No human path exists either: no server action or screen assigns a room's
+coordinator. So a room owned by an absent account cannot be re-homed by
+anyone today.
+
+The handover therefore runs under the **approving human's** authority:
+
+- The operator control is a server action. It admits a superuser as a human,
+  which is the existing `authorizeWorkroomAccess` behaviour.
+- The MCP tool proposes and dry-runs. Its apply step executes as the human who
+  approved the envelope, never as the assistant.
+- Every room's activity row records both people: the assistant that proposed
+  and the human that authorized.
+
+### 3.7 Operator surface
 
 Add a "Hand over this account's rooms" control where the orphan warning card
 (BI-61DE8177) points: Admin › Platform Development. It shows the dry run and a
