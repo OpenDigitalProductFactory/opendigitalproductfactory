@@ -13,16 +13,16 @@
   },
   "dependencies": {
     "@dpf/integration-shared": "workspace:*",
-    "pg": "^8.23.0",
-    "prom-client": "^15.1.3",
-    "undici": "^8.10.0",
-    "zod": "^4.6.5"
+    "pg": "catalog:",
+    "prom-client": "catalog:",
+    "undici": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^26.6.2",
-    "@types/pg": "^8.23.1",
-    "tsx": "^4.23.15",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

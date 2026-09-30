@@ -70,20 +70,44 @@ Accepted splits live in `sbom/baseline.json`; ratchet down as they're fixed
 
 Tier 1 fires only once our declarations *resolve* apart. Before that they drift in
 text: `net-snmp` was `^3.26.3` in `packages/db` and `^3.14.0` in `services/edge-node`,
-both resolving to 3.26.3 until the next lockfile refresh would have split them. The
-same guard therefore also fails a PR in which two workspaces declare one registry
-package with different specifiers (plan 2026-09-08 S11). `workspace:`, `link:`,
-`file:` and `catalog:` specifiers are exempt.
+both resolving to 3.26.3 until the next lockfile refresh would have split them.
+Every registry package that two or more platform workspaces declare therefore has
+its range written once, in the default [pnpm catalog](https://pnpm.io/catalogs)
+(`catalog:` in `pnpm-workspace.yaml`), and each `package.json` declares it as
+`"catalog:"` (plan 2026-09-08 S11). The same guard fails a PR in which two
+workspaces declare one registry package any other way: different ranges, the same
+range typed twice, or one workspace opting out of the catalog. `workspace:`,
+`link:` and `file:` specifiers are exempt. A dependency that only one workspace
+declares keeps its range in that `package.json`.
 
 A deliberate difference goes in `sbom/baseline.json` `acceptedSpecifierDrift` as
 name → reason; today that is only the exact `typescript` pin in
-`packages/repo-guard-runtime`. An entry that no longer drifts fails as stale, so the
-map only shrinks.
+`packages/repo-guard-runtime`, which the guard AST runtime verifies against the
+lockfile. An entry that no longer drifts fails as stale, so the map only shrinks.
 
-We do not use a pnpm `catalog:` yet. `services/adp` and
-`services/integration-test-harness` build their images from their own
-`package.json` without the workspace file, and `catalog:` cannot resolve there.
-Revisit once those images install from the workspace lockfile.
+**Adding a shared dependency.** When a second workspace starts using a package
+another workspace already declares (or a new package lands in two at once):
+
+1. Add `name: <range>` under `catalog:` in `pnpm-workspace.yaml`, keeping the
+   highest floor any workspace had.
+2. Set the specifier to `"catalog:"` in every `package.json` that declares it.
+3. Regenerate with `pnpm install --lockfile-only`, then confirm
+   `pnpm install --lockfile-only --frozen-lockfile` passes and
+   `node scripts/sbom/check-sbom-drift.mjs` is green.
+
+A version bump is then one line in `pnpm-workspace.yaml`. Dependabot updates
+catalog entries in place. A brand-new package still goes through the New
+Dependency Gate (Axis 3) first.
+
+The catalog is safe for the service images because every image that installs from
+this workspace copies `pnpm-workspace.yaml` beside the lockfile before
+`pnpm install --frozen-lockfile` (root `Dockerfile`, `services/adp`,
+`services/edge-node`, `services/integration-test-harness`). Their
+`pnpm deploy --legacy` trees keep the `catalog:` and `workspace:` specifiers in the
+copied `package.json` as written, which is harmless: the runtime stage only runs
+`node`, never a package manager, and the deployed `node_modules` holds the locked
+versions. `apps/mobile` resolves in its own single-workspace lockfile root, so it
+has no second workspace to drift against and no catalog.
 
 ### Shape budgets (the surface only shrinks)
 
