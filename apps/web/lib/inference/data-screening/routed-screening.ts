@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import type { ActivityContract } from "@/lib/routing/activity-contract";
 import {
   ContextMaskAuthorizationError,

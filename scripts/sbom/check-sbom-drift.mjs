@@ -42,7 +42,7 @@ const BASELINE_PATH = join(ROOT, "sbom", "baseline.json");
 export const BUDGETED_TOTALS = ["resolvedComponents", "duplicatedNames", "excessInstances", "multiMajorNames"];
 
 const BASELINE_NOTE =
-  "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `acceptedSpecifierDrift` maps each package our workspaces deliberately declare with different specifiers to the reason; unlisted drift fails, and a listed name that no longer drifts fails as stale. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.";
+  "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `acceptedSpecifierDrift` maps each registry package that two or more workspaces declare other than through one shared `catalog:` specifier (pnpm-workspace.yaml `catalog`) to the reason; unlisted drift fails, and a listed name that no longer drifts fails as stale. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.";
 
 /** Compare totals to budgets. A total with no numeric budget is not gated. */
 export function evaluateBudgets(totals, budgets = {}) {
@@ -74,9 +74,11 @@ export function nextBudgets(totals, budgets = {}, { raise = false } = {}) {
 }
 
 /**
- * Specifier drift against the accepted map (name -> reason). Unaccepted drift
- * fails; an accepted name that no longer drifts is stale and fails too, so the
- * map only shrinks (plan 2026-09-08 S11).
+ * Specifier drift against the accepted map (name -> reason). Drift is a
+ * registry name that two or more workspaces declare without one shared
+ * `catalog:` specifier (findSpecifierDrift). Unaccepted drift fails; an
+ * accepted name that no longer drifts is stale and fails too, so the map only
+ * shrinks (plan 2026-09-08 S11).
  */
 export function evaluateSpecifierDrift(specifierDrift = [], accepted = {}) {
   const current = new Set(specifierDrift.map((x) => x.name));
@@ -211,12 +213,14 @@ function main() {
   if (drift.unaccepted.length) {
     process.stderr.write(
       [
-        `::error::Our workspaces declare ${drift.unaccepted.map((x) => x.name).join(", ")} with different specifiers:`,
+        `::error::More than one workspace declares ${drift.unaccepted.map((x) => x.name).join(", ")} without the shared catalog: specifier:`,
         ...drift.unaccepted.map((x) => `    - ${x.name}: ${Object.entries(x.specifiers).map(([s, ws]) => `${s} in ${ws.join(", ")}`).join("; ")}`),
         "",
-        "  Declare one specifier everywhere (pick the highest floor). If one workspace",
-        "  needs a different one on purpose, record why in sbom/baseline.json",
-        "  `acceptedSpecifierDrift` (name -> reason) in the same PR.",
+        "  Put the range once under `catalog:` in pnpm-workspace.yaml (pick the highest",
+        '  floor), declare it as "catalog:" in every package.json, then run',
+        "  pnpm install --lockfile-only. If one workspace needs a different specifier on",
+        "  purpose, record why in sbom/baseline.json `acceptedSpecifierDrift`",
+        "  (name -> reason) in the same PR. See docs/architecture/dependency-reduction-routine.md.",
         "",
       ].join("\n"),
     );

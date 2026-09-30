@@ -7,11 +7,11 @@
 
 import { prisma } from "@dpf/db";
 import type { TaskRouteDecision, CandidateTrace } from "./task-router-types";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import {
   callProvider,
   logTokenUsage,
   InferenceError,
-  type ChatMessage,
 } from "@/lib/ai-inference";
 import { normalizeRouteDecisionActor } from "./route-decision-attribution";
 import {

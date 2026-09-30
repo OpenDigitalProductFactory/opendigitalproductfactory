@@ -1682,6 +1682,24 @@ if ($gitWebhookValue.Length -eq 0 -or $gitWebhookValue.StartsWith("<")) {
     Write-Host "  Generated DPF_GIT_WEBHOOK_SECRET in .env (read it there to configure the GitHub webhook)"
 }
 
+# Inngest signing and event keys (BI-3267763F). The portal and the inngest
+# service verify each other with them; compose no longer supplies a default,
+# because the old one was published in the repository and let anyone who could
+# reach /api/inngest forge signed invocations. Generated the same way as
+# AUTH_SECRET when missing, a placeholder, or that old public default; a real
+# value is never rotated. Values are never printed.
+$inngestPublicDefaults = @("abcdef0123456789", "deadbeefcafebabe")
+foreach ($inngestKey in @("INNGEST_SIGNING_KEY", "INNGEST_EVENT_KEY")) {
+    $inngestEnv = Get-Content -Path "$DPF_DIR\.env" -Raw -ErrorAction SilentlyContinue
+    if ($null -eq $inngestEnv) { $inngestEnv = "" }
+    $inngestMatches = [System.Text.RegularExpressions.Regex]::Matches($inngestEnv, "(?m)^$inngestKey=(.*)$")
+    $inngestValue = if ($inngestMatches.Count -gt 0) { $inngestMatches[$inngestMatches.Count - 1].Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+    if ($inngestValue.Length -eq 0 -or $inngestValue.StartsWith("<") -or $inngestPublicDefaults -contains $inngestValue) {
+        Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key $inngestKey -Value (New-RandomPassword 32)
+        Write-Host "  Generated $inngestKey in .env"
+    }
+}
+
 if ($InstallMode -eq "consumer") {
     Set-DPFConsumerReleaseIdentity -InstallDir $DPF_DIR -Version $Version
 }

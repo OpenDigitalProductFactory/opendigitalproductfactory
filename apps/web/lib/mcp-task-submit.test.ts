@@ -206,8 +206,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       },
     });
 
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: expect.stringMatching(/^TR-MCP-/) },
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ taskRunId: expect.stringMatching(/^TR-MCP-/), status: "working" }),
       data: {
         status: "input-required",
         completedAt: null,
@@ -788,6 +788,6 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     });
 
     expect(autonomous.execute.mock.calls[0]?.[0]).not.toHaveProperty("effortWarrant");
-    expect(db.findUnique).not.toHaveBeenCalled();
+    expect(db.findUnique).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ status: true }) }));
   });
 });

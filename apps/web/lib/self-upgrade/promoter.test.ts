@@ -91,6 +91,7 @@ describe("buildPromoterReadinessCommand", () => {
       ...BASE,
       stateDirHostPath: "/Users/me/.dpf",
       backupHostPath: "/Users/me/dpf-backups",
+      composeEnvFileHostPath: "/Users/me/dpf/.env",
       artifact,
     };
     const { args } = buildPromoterReadinessCommand(readinessParams);
@@ -100,6 +101,7 @@ describe("buildPromoterReadinessCommand", () => {
     expect(args).not.toContain("/var/run/docker.sock:/var/run/docker.sock");
     expect(args).toContain(`${readinessParams.stateDirHostPath}:/dpf-state:ro`);
     expect(args).toContain(`${readinessParams.backupHostPath}:/backups:ro`);
+    expect(args).toContain(`${readinessParams.composeEnvFileHostPath}:/install-env/.env:ro`);
     expect(args).toContain("DPF_PROMOTER_DOCKER_PREFLIGHT=ready");
   });
 
@@ -397,8 +399,22 @@ describe("buildPromoterCommand", () => {
     });
 
     expect(args).toContain("/Users/me/dpf/.upgrade-workspace:/host-source:ro");
-    expect(args).toContain("/Users/me/dpf/.env:/install-env/.env:ro");
+    // Writable for a real self-upgrade: promote.sh persists the Inngest keys
+    // it generated (BI-3267763F).
+    expect(args).toContain("/Users/me/dpf/.env:/install-env/.env");
     expect(args).toContain("PROMOTE_COMPOSE_ENV_FILE=/install-env/.env");
+  });
+
+  it("mounts the install env file read-only for dry runs and runtime transitions", () => {
+    const dry = buildPromoterCommand({ ...BASE, composeEnvFileHostPath: "/Users/me/dpf/.env", dryRun: true });
+    expect(dry.args).toContain("/Users/me/dpf/.env:/install-env/.env:ro");
+    const rotate = buildPromoterCommand({
+      ...BASE,
+      composeEnvFileHostPath: "/Users/me/dpf/.env",
+      stateDirHostPath: "/Users/me/.dpf",
+      runtimeTransitionAuthorityOperation: "rotate-secret",
+    });
+    expect(rotate.args).toContain("/Users/me/dpf/.env:/install-env/.env:ro");
   });
 
   it("passes the install's recorded compose chain so the wrong-substrate overlay is never force-applied", () => {

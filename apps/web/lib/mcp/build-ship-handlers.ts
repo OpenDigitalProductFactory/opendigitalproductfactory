@@ -83,9 +83,12 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
   // staged-but-uncommitted changes and returns empty for any build whose
   // agent committed before deploy_feature ran.
   const { extractAndCategorizeDiff, scanForDestructiveOps, isNowInWindow } = await import("@/lib/build/sandbox/sandbox-promotion");
-  const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
+  const { getClientIdentity, resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
   const { clientBranch } = await getClientIdentity();
-  const extracted = await extractAndCategorizeDiff(build.sandboxId, { baseRef: clientBranch });
+  // BI-5C4933EB: read the build's own worktree (isolation on), not the shared
+  // root, which stays on client/<id>. /workspace when isolation is off.
+  const buildWorkdir = resolveBuildWorkdir(buildId);
+  const extracted = await extractAndCategorizeDiff(build.sandboxId, { baseRef: clientBranch, workspace: buildWorkdir });
   if (!extracted.fullDiff.trim()) {
     await prisma.featureBuild.update({
       where: { buildId },
@@ -135,7 +138,7 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
   // empty for committed-work builds and contribute_to_hive cannot
   // attribute the PR's commits back to specific FBs.
   const { listSandboxCommitsAheadOfBase } = await import("@/lib/build/sandbox/sandbox");
-  const commitHashes = await listSandboxCommitsAheadOfBase(build.sandboxId, clientBranch);
+  const commitHashes = await listSandboxCommitsAheadOfBase(build.sandboxId, clientBranch, buildWorkdir);
 
   await prisma.featureBuild.update({
     where: { buildId },
@@ -604,6 +607,8 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
           prBodyBase64: Buffer.from(prBody, "utf8").toString("base64"),
           repositoryOwner: repoOwner,
           repositoryName: repoName,
+          // BI-5C4933EB: check the published tree in the build's own worktree.
+          workdir: (await import("@/lib/build/sandbox/build-branch")).resolveBuildWorkdir(buildId),
         }),
         `${token}\n`,
       );

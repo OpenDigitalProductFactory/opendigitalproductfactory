@@ -26,6 +26,7 @@ import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
 import { buildExecute } from "./build-execute";
 import { preBuildReviewRepair } from "./pre-build-review-repair";
+import { buildGauntletRepair } from "./build-gauntlet-repair";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -254,6 +255,7 @@ export const eventFunctions = [
   buildReviewVerification,
   buildExecute,
   preBuildReviewRepair,
+  buildGauntletRepair,
   assuranceBomGenerate,
   assuranceScanRun,
   deliberationRun,

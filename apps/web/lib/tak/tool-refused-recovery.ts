@@ -2,7 +2,7 @@
 // delivered tool is unavailable. Kept out of agentic-loop.ts so the baselined
 // module does not grow (module-size ratchet).
 
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import { ISSUE_REPORT_STATUS, type IssueReportStatus } from "@/lib/quality/issue-report-status";
 
 /**

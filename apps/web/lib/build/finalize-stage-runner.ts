@@ -25,12 +25,22 @@ export type FinalizeDeps = {
   designReference: () => Promise<string>;
   saveFailureAnalysis: (failureAnalysis: unknown) => Promise<void>;
   log: (summary: string) => void;
+  /**
+   * The recorded failing verdict for the gauntlet identity this build would run
+   * now (same repository, tree, guard plan and toolchain), or null. Identical
+   * inputs give the identical verdict, so it is reused rather than re-run
+   * (BI-FBA2FDBE: one tree re-ran the full gauntlet 20+ times).
+   */
+  priorFailure?: () => Promise<{ failedGuards: string[]; recordId?: string | null; treeSha?: string | null } | null>;
 };
+
+/** Printed by a guard that could not evaluate the change (scripts/lib/git-changed-files.mjs). */
+export const GUARD_DID_NOT_RUN_MARKER = "the guard did not run";
 
 export type FinalizeOutcome =
   | { status: "ready"; evidenceIds: string[] }
   | { status: "gauntlet-not-run"; reason: string }
-  | { status: "gauntlet-failed"; failedGuards: string[] }
+  | { status: "gauntlet-failed"; failedGuards: string[]; recordId?: string | null; treeSha?: string | null; reused?: true }
   | { status: "decisions-missing"; missing: string[] }
   | { status: "decisions-exhausted"; failedGuards: string[] }
   | { status: "unbound" }
@@ -38,13 +48,35 @@ export type FinalizeOutcome =
   | { status: "evidence-unresolvable"; resolved: number }
   | { status: "analysis-invalid"; reasons: string[] };
 
+/**
+ * The semantic review needs the failure analysis only a finished finalize
+ * writes, so any other outcome can only produce a review that fails for want
+ * of it (BI-FBA2FDBE).
+ */
+export function finalizeAllowsSemanticReview(outcome: FinalizeOutcome): boolean {
+  return outcome.status === "ready";
+}
+
 export async function runBuildStudioFinalize(buildId: string, deps: FinalizeDeps): Promise<FinalizeOutcome> {
+  // No log row for a reused verdict: the original failure is already on the
+  // build's trail, and a fresh row every sweep would hide it.
+  const prior = await deps.priorFailure?.();
+  if (prior) {
+    return { status: "gauntlet-failed", failedGuards: prior.failedGuards, recordId: prior.recordId ?? null, treeSha: prior.treeSha ?? null, reused: true };
+  }
+
   let captured = await deps.capture();
   let gauntlet = await deps.runGauntlet(captured.diffPatch);
   let rerunForFlake = false;
   for (let round = 0; ; round++) {
     if (!gauntlet.ran) return done(deps, buildId, { status: "gauntlet-not-run", reason: gauntlet.reason });
     if (gauntlet.passed) break;
+    // A guard that could not evaluate the change reached no verdict: counting it
+    // as a failure is the mistake report-only-the-verdict-you-reached names, and
+    // no gate decision or repair can fix a guard that never looked.
+    if (gauntlet.output.includes(GUARD_DID_NOT_RUN_MARKER)) {
+      return done(deps, buildId, { status: "gauntlet-not-run", reason: `a guard could not run (${gauntlet.failedGuards.join(", ")})` });
+    }
     const keys = trailerKeysForFailedGuards(gauntlet.failedGuards);
     if (!keys && !rerunForFlake) {
       // A real guard failure is deterministic and fails again on the same tree;
@@ -56,7 +88,14 @@ export async function runBuildStudioFinalize(buildId: string, deps: FinalizeDeps
       gauntlet = await deps.runGauntlet(captured.diffPatch);
       continue;
     }
-    if (!keys) return done(deps, buildId, { status: "gauntlet-failed", failedGuards: gauntlet.failedGuards });
+    if (!keys) {
+      return done(deps, buildId, {
+        status: "gauntlet-failed",
+        failedGuards: gauntlet.failedGuards,
+        recordId: gauntlet.recordId,
+        treeSha: gauntlet.binding?.headTreeHash ?? null,
+      });
+    }
     if (round >= FINALIZE_DECISION_ROUNDS) return done(deps, buildId, { status: "decisions-exhausted", failedGuards: gauntlet.failedGuards });
     const decisions = await authorGateDecisions({
       llm: deps.llm, keys, guardOutput: gauntlet.output, diffSummary: captured.changedFiles.join("\n"),

@@ -440,6 +440,9 @@ kernel, your specific Docker version, with your specific user setup.
    > `ADMIN_PASSWORD` and `INNGEST_SIGNING_KEY`. Rotate each of them in `.env`
    > and restart the stack. `CREDENTIAL_ENCRYPTION_KEY` decrypts stored
    > credentials, so re-enter any provider secrets after rotating it.
+   > `INNGEST_SIGNING_KEY` and `INNGEST_EVENT_KEY` are shared by the portal
+   > and the `inngest` service, so recreate both services together after
+   > rotating either one.
 
 We especially want reports from:
 

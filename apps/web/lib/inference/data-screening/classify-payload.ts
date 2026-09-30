@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { SOURCE_CONTACT_EXEMPTION_PATTERN } from "./source-contact-evidence";
 
-import type { ContentBlock } from "@/lib/inference/ai-inference";
+import type { ContentBlock } from "@/lib/routing/chat-message-types";
 import type {
   GovernedPayloadHint,
   MessageOrigin,

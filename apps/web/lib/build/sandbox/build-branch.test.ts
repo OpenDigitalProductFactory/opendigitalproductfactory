@@ -23,6 +23,7 @@ import {
   buildSandboxRepoStateProbeCommand,
   parseSandboxRepoState,
   SANDBOX_GIT_LOCK_FILE,
+  buildSandboxStaleGitLockCleanupCommand,
 } from "./build-branch";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -56,13 +57,10 @@ describe("wrapSandboxGitCommand", () => {
     expect(command).toContain("node_modules");
   });
 
-  it("cleans up a stale workspace index lock before running git commands", () => {
-    expect(wrapSandboxGitCommand('git -C /workspace status --short')).toContain(
-      'rm -f "/workspace/.git/index.lock"',
-    );
-    expect(wrapSandboxGitCommand('git -C /workspace status --short')).toContain(
-      'pgrep -x git',
-    );
+  it("cleans up stale workspace git locks before running git commands", () => {
+    const wrapped = wrapSandboxGitCommand('git -C /workspace status --short');
+    expect(wrapped.indexOf("-name '*.lock'")).toBeGreaterThan(-1);
+    expect(wrapped.indexOf("-name '*.lock'")).toBeLessThan(wrapped.indexOf("git -C /workspace status --short"));
   });
 
   it("prefixes sandbox git commands with a safe.directory allowance for /workspace", () => {
@@ -527,5 +525,33 @@ describe("wrapSandboxGitCommand serializes shared-root git", () => {
 
   it("keeps working on an image without flock", () => {
     expect(wrapSandboxGitCommand("true")).toContain("command -v flock");
+  });
+});
+
+// BI-E4AD091E — a stale .git/shallow.lock (2026-09-25 13:53, nothing holding
+// it) failed every history fetch for four days. Locks are cleared by age: no
+// git operation holds one for 15 minutes.
+describe("stale sandbox git lock cleanup", () => {
+  it("removes lock files older than the bound and keeps fresh ones", () => {
+    const gitDir = mkdtempSync(join(tmpdir(), "dpf-locks-"));
+    try {
+      execFileSync("mkdir", ["-p", join(gitDir, "worktrees", "FB-1")]);
+      for (const f of ["shallow.lock", "index.lock", join("worktrees", "FB-1", "index.lock")]) {
+        writeFileSync(join(gitDir, f), "");
+        execFileSync("touch", ["-t", "202609251353", join(gitDir, f)]);
+      }
+      writeFileSync(join(gitDir, "packed-refs.lock"), "");
+      execFileSync("sh", ["-c", buildSandboxStaleGitLockCleanupCommand(gitDir)]);
+      const left = execFileSync("sh", ["-c", `cd ${gitDir} && find . -name '*.lock' | sort`], { encoding: "utf8" }).trim();
+      expect(left).toBe("./packed-refs.lock");
+    } finally {
+      rmSync(gitDir, { recursive: true, force: true });
+    }
+  });
+
+  it("runs inside every wrapped sandbox git command, in place of the pgrep guard", () => {
+    const wrapped = wrapSandboxGitCommand("git -C /workspace status --short");
+    expect(wrapped).toContain(buildSandboxStaleGitLockCleanupCommand("/workspace/.git"));
+    expect(wrapped).not.toContain("pgrep -x git");
   });
 });

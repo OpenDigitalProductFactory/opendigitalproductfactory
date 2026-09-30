@@ -275,17 +275,20 @@ async function stageSandboxWorkspaceChanges(containerId: string, workspace: stri
 
 export async function listReleasableSandboxFiles(
   containerId: string,
-  opts?: { baseRef?: string },
+  opts?: { baseRef?: string; workspace?: string },
 ): Promise<string[]> {
-  await stageSandboxWorkspaceChanges(containerId);
+  // BI-5C4933EB: callers pass the build's workdir (resolveBuildWorkdir) so the
+  // check reads its own worktree; defaults to /workspace (byte-identical).
+  const workspace = opts?.workspace ?? SANDBOX_WORKSPACE;
+  await stageSandboxWorkspaceChanges(containerId, workspace);
   try {
     const output = await execInSandbox(
       containerId,
-      buildSandboxListReleasableFilesCommand(SANDBOX_WORKSPACE, opts?.baseRef),
+      buildSandboxListReleasableFilesCommand(workspace, opts?.baseRef),
     );
     return parseSandboxChangedFiles(output);
   } finally {
-    await resetSandboxGitIndex(containerId);
+    await resetSandboxGitIndex(containerId, workspace);
   }
 }
 

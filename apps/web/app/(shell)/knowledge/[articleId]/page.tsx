@@ -9,6 +9,8 @@ import { KnowledgeCategoryBadge } from "@/components/knowledge/KnowledgeCategory
 import { StalenessIndicator } from "@/components/knowledge/StalenessIndicator";
 import { KnowledgeArticleActions } from "@/components/knowledge/KnowledgeArticleActions";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { MarkdownHtml } from "@/components/shared/MarkdownHtml";
+import { DOCUMENT_MARKDOWN_OPTIONS } from "@/components/shared/markdown-document-options";
 
 type Props = {
   params: Promise<{ articleId: string }>;
@@ -143,11 +145,11 @@ export default async function KnowledgeArticleDetailPage({ params }: Props) {
       )}
 
       {/* Article body */}
-      <div className="prose prose-sm prose-invert max-w-none mb-8 px-4 py-3 rounded bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
-        <pre className="whitespace-pre-wrap text-xs text-[var(--dpf-text)] font-sans leading-relaxed">
-          {article.body}
-        </pre>
-      </div>
+      <MarkdownHtml
+        source={article.body}
+        options={DOCUMENT_MARKDOWN_OPTIONS}
+        className="mb-8 px-4 py-3 rounded bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] [&>:last-child]:mb-0"
+      />
 
       {/* Revision history */}
       {article.revisions.length > 0 && (

@@ -22,5 +22,8 @@
     "build-studio": "Build",
     "meet-your-coo": "Meet Your COO",
     "workspace": "Workspace"
+  },
+  "accountBootstrap": {
+    "accountableOwnerNote": "You'll be the organization's accountable owner (change it in Admin › Settings)."
   }
 }

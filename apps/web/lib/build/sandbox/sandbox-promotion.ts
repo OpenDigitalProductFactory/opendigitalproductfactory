@@ -6,6 +6,7 @@ import { lazyExec, lazyPath, lazyFsPromises, getCwd } from "@/lib/shared/lazy-no
 import * as os from "os";
 import { prisma } from "@dpf/db";
 import { extractDiff } from "@/lib/sandbox";
+import { resolveBuildWorkdir } from "@/lib/build/sandbox/build-branch";
 import { isInWindow } from "@/lib/deployment-window-utils";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
@@ -208,7 +209,10 @@ export async function executePromotion(
   let diffPatch = build?.diffPatch as string | null;
   if (!diffPatch && build?.sandboxId) {
     try {
-      const extracted = await extractAndCategorizeDiff(build.sandboxId);
+      // BI-5C4933EB: read the build's own worktree, not the shared root.
+      const extracted = await extractAndCategorizeDiff(build.sandboxId, {
+        workspace: resolveBuildWorkdir(build.buildId),
+      });
       diffPatch = extracted.fullDiff;
 
       // Persist for future reference
@@ -453,7 +457,7 @@ export function detectSchemaRegressions(fullDiff: string): string[] {
 
 export async function extractAndCategorizeDiff(
   containerId: string,
-  opts?: { baseRef?: string },
+  opts?: { baseRef?: string; workspace?: string },
 ): Promise<{
   fullDiff: string;
   migrationFiles: string[];

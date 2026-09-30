@@ -28,10 +28,8 @@ import { admitDurableInferenceTask } from "./mcp-task-durable-inference-runtime"
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { automaticReviewerRecoveryWait } from "./mcp-task-background-dispatch";
-import type {
-  RemoteTaskSubmitAuth,
-  RemoteTaskSubmitParams,
-} from "./mcp-task-submit";
+import type { RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
 type PersistedRemoteTask = {
   id: string;
@@ -641,6 +639,8 @@ export async function executePersistedRemoteTask(input: {
   const capacityWait = parseResourceWaitProjection(row.progressPayload);
   const outcome = await executeRemoteTaskAttempt({
     ...reconstructed.data,
+    expectedReservation: string(progress["resumeReservedAt"]),
+    expectedDispatchClaim: claimedAt.toISOString(),
     idempotentReplay: capacityWait !== null,
     capacityAttempt: capacityWait ? capacityWait.attempt + 1 : 1,
     ...(capacityWait ? { resumeKind: "capacity" as const } : {}),

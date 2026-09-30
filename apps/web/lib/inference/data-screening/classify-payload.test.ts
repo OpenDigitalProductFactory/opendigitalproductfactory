@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { classifyInferencePayload } from "./classify-payload";
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 describe("classifyInferencePayload", () => {
   it("detects secrets, customer, employee, finance, and source-code data without echoing raw values", () => {

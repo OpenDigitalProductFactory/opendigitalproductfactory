@@ -10,7 +10,7 @@ order: 3
 
 ## Workflow
 
-1. Create the owner account and enter the company's business context, including location, markets, customers, risk posture, and data-residency needs.
+1. Create the owner account and enter the company's business context, including location, markets, customers, risk posture, and data-residency needs. The owner account is recorded as the organization's accountable owner — the person every Workroom without its own owner answers to — unless one is already recorded. Change it later under **Admin > Settings**.
 2. Review AI providers only after that context is captured. Personal, consumer, and unknown hosted connections remain limited to public or synthetic material until their business terms are reviewed.
 3. Use the COO's provider guidance when the decision is unclear. The COO consults the Data Governance Agent and returns validated source links, explicit unknowns, and one safest next action without sending customer data or secrets to obtain advice. If the available evidence is stale, mismatched, or incomplete, DPF says it cannot confirm the claim and keeps the safer provider posture.
 4. If you are not ready to choose, select **Skip safely** or **Review later**. Skipping does not approve a hosted provider: company and customer data remain restricted until the missing review is complete.

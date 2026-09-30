@@ -755,6 +755,18 @@ if [ "$_git_webhook_secret" != "kept" ]; then
   info "Generated DPF_GIT_WEBHOOK_SECRET in .env (read it there to configure the GitHub webhook)"
 fi
 
+# Inngest signing and event keys (BI-3267763F). The portal and the inngest
+# service verify each other with them, so a value published in the repository
+# lets anyone who can reach /api/inngest forge signed invocations. Filled when
+# missing, a placeholder, or the old public compose default; a real value is
+# kept. Never printed.
+for _inngest_key in INNGEST_SIGNING_KEY INNGEST_EVENT_KEY; do
+  if [ "$(dpf_env_ensure_secret_hex "$_inngest_key" .env 32 \
+    "# Inngest ${_inngest_key} (BI-3267763F). Portal and inngest must share it.")" != "kept" ]; then
+    info "Generated ${_inngest_key} in .env"
+  fi
+done
+
 # Persist the same canonical host identity written to install-state.json. These
 # installer-owned values are the portal/promoter authority; container OS is not.
 dpf_platform

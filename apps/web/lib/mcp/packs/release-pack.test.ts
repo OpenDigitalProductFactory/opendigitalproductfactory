@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
   businessProfileFindFirst: vi.fn(),
@@ -48,6 +48,10 @@ vi.mock("@/lib/shared/lazy-node", async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   lazyChildProcess: () => ({ exec: promo.exec, execFile: promo.execFile }),
   lazyUtil: () => ({ promisify: (fn: (...a: unknown[]) => unknown) => fn }),
+}));
+const mockExtractDiff = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/sandbox", () => ({
+  extractDiff: (...a: unknown[]) => mockExtractDiff(...a),
 }));
 vi.mock("@/lib/mcp/build-tool-helpers", () => ({
   logBuildActivity: (...a: unknown[]) => promo.logBuildActivity(...a),
@@ -218,5 +222,36 @@ describe("release pack — handler behavior (delegation preserved)", () => {
     const res = await releasePack.handlers.get_release_status({}, "u1");
     expect(res.success).toBe(false);
     expect(res.error).toBe("Provide bundle_id or promotion_id.");
+  });
+});
+
+// BI-5C4933EB: a build without a stored diff is read from ITS worktree when
+// per-build isolation is on, not from the shared /workspace root.
+describe("release pack — run_release_gate reads the build's workdir", () => {
+  const originalIsolation = process.env.DPF_BUILD_WORKTREE_ISOLATION;
+  const bundle = {
+    bundleId: "RB-1",
+    status: "assembling",
+    builds: [{ buildId: "FB-1", title: "t", phase: "review", diffPatch: null, verificationOut: null, sandboxId: "sb-1" }],
+  };
+  afterEach(() => {
+    if (originalIsolation === undefined) delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
+    else process.env.DPF_BUILD_WORKTREE_ISOLATION = originalIsolation;
+  });
+
+  it("extracts from /workspace/.builds/<buildId> when isolation is on", async () => {
+    delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
+    db.releaseBundleFindUnique.mockResolvedValue(bundle);
+    mockExtractDiff.mockResolvedValue("");
+    await releasePack.handlers.run_release_gate({ bundle_id: "RB-1" }, "u1");
+    expect(mockExtractDiff).toHaveBeenCalledWith("sb-1", { workspace: "/workspace/.builds/FB-1" });
+  });
+
+  it("extracts from /workspace when isolation is off", async () => {
+    process.env.DPF_BUILD_WORKTREE_ISOLATION = "0";
+    db.releaseBundleFindUnique.mockResolvedValue(bundle);
+    mockExtractDiff.mockResolvedValue("");
+    await releasePack.handlers.run_release_gate({ bundle_id: "RB-1" }, "u1");
+    expect(mockExtractDiff).toHaveBeenCalledWith("sb-1", { workspace: "/workspace" });
   });
 });

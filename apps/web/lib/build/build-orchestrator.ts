@@ -1076,6 +1076,52 @@ export async function runBuildOrchestrator(params: Parameters<typeof runBuildOrc
   return withOrchestrationRunning(params.buildId, () => runBuildOrchestratorInner(params));
 }
 
+/**
+ * BI-B2EEA6DE: one repair task for guard findings on an assembled build. It
+ * goes through the same specialist dispatch, engine selection and liveness as
+ * a plan task, so a repair is not a second, unaudited way to run an agent.
+ */
+export async function runGauntletRepairTask(params: {
+  buildId: string;
+  userId: string;
+  task: { title: string; implement: string; verify: string };
+}): Promise<boolean> {
+  const { withOrchestrationRunning } = await import("./build-liveness");
+  return withOrchestrationRunning(params.buildId, async () => {
+    const build = await prisma.featureBuild.findUnique({
+      where: { buildId: params.buildId },
+      select: { title: true, kind: true, threadId: true },
+    });
+    if (!build) return false;
+    const { BUILD_DISPATCH_USER_SELECT } = await import("./build-on-plan-approval");
+    const user = await prisma.user.findUnique({ where: { id: params.userId }, select: BUILD_DISPATCH_USER_SELECT });
+    if (!user) return false;
+    const buildContext = `Guard-finding repair for "${build.title}" (${build.kind})`;
+    const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
+    const dispatchConfig = await getBuildStudioConfig({
+      sensitivity: mapBuildDeliverableToRoutingSensitivity(deriveDeliverableSensitivity({ text: buildContext })),
+    });
+    const task: AssignedTask = {
+      taskIndex: 0,
+      title: params.task.title,
+      specialist: "software-engineer",
+      files: [],
+      task: { title: params.task.title, testFirst: "", implement: params.task.implement, verify: params.task.verify },
+    };
+    const result = await dispatchSpecialist({
+      task,
+      userId: params.userId,
+      platformRole: user.groups?.[0]?.platformRole?.roleId ?? null,
+      isSuperuser: user.isSuperuser ?? false,
+      buildId: params.buildId,
+      buildContext,
+      parentThreadId: build.threadId ?? `gauntlet-repair-${params.buildId}-${Date.now()}`,
+      dispatchConfig,
+    });
+    return result.success;
+  });
+}
+
 async function runBuildOrchestratorInner(params: {
   buildId: string;
   plan: BuildPlanDoc;

@@ -13,15 +13,15 @@
   },
   "dependencies": {
     "@dpf/validators": "workspace:*",
-    "net-snmp": "^3.26.3",
-    "undici": "^8.10.0",
-    "zod": "^4.6.5"
+    "net-snmp": "catalog:",
+    "undici": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/net-snmp": "^3.11.0",
-    "@types/node": "^26.6.2",
-    "tsx": "^4.23.15",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }
