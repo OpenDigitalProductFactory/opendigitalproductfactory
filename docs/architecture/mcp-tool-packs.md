@@ -44,6 +44,14 @@ precondition verdict types in
 [`lib/tak/precondition-ordering-types.ts`](../../apps/web/lib/tak/precondition-ordering-types.ts),
 so a gate, hook, receipt or audit writer names them without an edge back into
 `lib/mcp-governed-execute.ts`.
+The remote coworker task submitter does the same: `RemoteTaskSubmitAuth`, `RemoteTaskSubmitOutcome`
+and `ExistingRemoteTask` live in
+[`lib/mcp-task-submit-types.ts`](../../apps/web/lib/mcp-task-submit-types.ts). The inference
+message shapes every adapter and agent loop passes around (`ChatMessage`, `ContentBlock`,
+`ToolCallEntry`) live in
+[`lib/routing/chat-message-types.ts`](../../apps/web/lib/routing/chat-message-types.ts)
+(routing is the innermost application context, so every layer may import it),
+not in the inference runtime or the adapter contract.
 
 A definition also declares its reach. `sideEffect` plus `consequence` (`outward` | `irreversible` | `authority`) is what puts a tool behind the consult-before-consequential-act gate, and an `outward` tool additionally names whose stance governs it with `consequenceScope`: `business` (default, WWWD-alignment-gated) or `platform` (platform development or operations that leave the install, such as `create_portal_pr` or `contribute_to_hive`; receipted and outward-reviewed, never scored against the customer business stance). Declare both on the tool; never infer them from the pack name (BI-63B14D4B).
 

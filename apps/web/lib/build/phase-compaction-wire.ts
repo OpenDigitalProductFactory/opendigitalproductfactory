@@ -12,7 +12,7 @@
 // hiccup never blocks the phase transition.
 
 import { prisma } from "@dpf/db";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 /** Maximum number of thread messages to include in the phase summary. */
 const PHASE_WINDOW_SIZE = 40;

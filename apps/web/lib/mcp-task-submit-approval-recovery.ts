@@ -10,12 +10,8 @@ import {
   withExternalApprovalLocation,
 } from "./mcp/external-approval-location";
 import { isStaleApprovalRecoveryRun } from "./mcp-task-approval-recovery-contract";
-import type {
-  ExistingRemoteTask,
-  RemoteTaskSubmitAuth,
-  RemoteTaskSubmitOutcome,
-  RemoteTaskSubmitParams,
-} from "./mcp-task-submit";
+import type { ExistingRemoteTask, RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
 /**
  * Resuming an approved writer and recovering an expired one are the same

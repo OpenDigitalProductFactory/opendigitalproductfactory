@@ -1,4 +1,4 @@
-import type { ExistingRemoteTask, RemoteTaskSubmitAuth } from "./mcp-task-submit";
+import type { ExistingRemoteTask, RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
 import { prisma, type Prisma } from "@dpf/db";
 import { isRecord } from "./shared/coerce";
 import { isCurrentOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT } from "./auth/oauth-tokens";

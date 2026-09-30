@@ -32,11 +32,8 @@ import {
   requiredToolNames,
   requiresInitiativeReviewEffort,
 } from "./mcp-task-review-contract";
-import type {
-  RemoteTaskSubmitAuth,
-  RemoteTaskSubmitOutcome,
-  RemoteTaskSubmitParams,
-} from "./mcp-task-submit";
+import type { RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
 import {
   TERMINAL_WRITER_REJECTED_WAIT_REASON,

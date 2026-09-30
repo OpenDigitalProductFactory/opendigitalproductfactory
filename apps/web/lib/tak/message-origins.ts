@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import type { MessageOrigin } from "@/lib/inference/data-screening/types";
 
 /** A chat history and the positional labels that describe it, kept in step. */

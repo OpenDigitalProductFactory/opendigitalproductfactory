@@ -5,8 +5,8 @@
 import { callProvider, InferenceError } from "@/lib/ai-inference";
 import { resolveLocalToolCeiling } from "./local-tool-ceiling";
 import { resolveLocalToolFidelityCeiling } from "./local-tool-fidelity";
-import type { ChatMessage } from "@/lib/ai-inference";
-import type { AsyncOperationStartResult, ToolCallEntry } from "./adapter-types";
+import type { ChatMessage, ToolCallEntry } from "./chat-message-types";
+import type { AsyncOperationStartResult } from "./adapter-types";
 import { prisma } from "@dpf/db";
 import type { RouteDecision } from "./types";
 import type { RoutedExecutionPlan } from "./recipe-types";
