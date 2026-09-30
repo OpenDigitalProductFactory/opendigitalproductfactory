@@ -23,6 +23,7 @@ The Admin area is the control centre for platform configuration. It is where adm
 - Update branding settings and preview how they appear across the platform
 - Maintain reference data tables used by portfolios, compliance, HR, and other areas
 - Configure storefront settings including domain routing and public storefront behaviour
+- See and change the organization's accountable owner under **Admin > Settings**. The page shows one line — **Accountable owner: <name> · Change** — and **Change** opens a picker of active people with sign-in accounts. Every Workroom without its own owner answers to this person. First-install setup records the owner account here; changing it requires platform-management rights and is recorded in the compliance audit trail with the previous and new owner. When nothing is recorded, the line reads **No accountable owner recorded · Set**.
 - Choose your own language and time zone under **Admin > Settings > Language and region**. Both default to the organization's settings. English is the only language available today; administrators also see two test languages that show every screen in placeholder text, so untranslated wording and right-to-left layout problems are easy to spot.
 
 ## Graph Explorer

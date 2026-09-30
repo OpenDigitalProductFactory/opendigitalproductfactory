@@ -1,10 +1,15 @@
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { PlatformKeysPanel } from "@/components/admin/PlatformKeysPanel";
 import { SocialAuthPanel } from "@/components/admin/SocialAuthPanel";
 import { EmailSettingsPanel } from "@/components/admin/EmailSettingsPanel";
 import { ReadabilityPolicyPanel } from "@/components/admin/ReadabilityPolicyPanel";
 import { LocalePreferencesPanel } from "@/components/admin/LocalePreferencesPanel";
+import { OrganizationAccountableOwnerPanel } from "@/components/admin/OrganizationAccountableOwnerPanel";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
+import { listActiveHumanPrincipalsForUsers } from "@/lib/identity/principal-linking";
 import { getLocalePreferences } from "@/lib/actions/locale-preferences";
 import { getSmtpConfigStatus } from "@/lib/shared/smtp-config";
 import { loadReadabilityPolicy } from "@/lib/readability/policy";
@@ -42,7 +47,16 @@ async function getKeyData(keys: string[]): Promise<Record<string, { configured: 
   return data;
 }
 
+/** The organization's recorded accountable owner, read from the same single row as its other readers. */
+async function getAccountableOwner(): Promise<{ id: string; displayName: string } | null> {
+  const org = await prisma.organization.findFirst({
+    select: { topAccountablePrincipal: { select: { id: true, displayName: true } } },
+  });
+  return org?.topAccountablePrincipal ?? null;
+}
+
 export default async function AdminSettingsPage() {
+  const { language } = await getLocaleContext();
   return (
     <div>
       <div className="mb-6">
@@ -50,10 +64,16 @@ export default async function AdminSettingsPage() {
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Organization &amp; Core Configuration</p>
       </div>
       <AdminTabNav />
+      <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+        <OrganizationAccountableOwnerPanel
+          owner={await getAccountableOwner()}
+          candidates={await listActiveHumanPrincipalsForUsers()}
+        />
+      </MessagesProvider>
       <PlatformKeysPanel
         keyData={await getKeyData(PLATFORM_KEYS)}
         title="Core Configuration"
-        description="Install-wide settings that belong to the organization and platform rather than AI runtime tools."
+        description="Install-wide settings."
         configs={ADMIN_PLATFORM_KEY_CONFIGS}
       />
       <SocialAuthPanel keyData={await getKeyData(SOCIAL_AUTH_KEYS)} />
