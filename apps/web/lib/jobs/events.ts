@@ -225,6 +225,14 @@ export interface BuildPreBuildReviewRepairEvent {
   };
 }
 
+/** BI-B2EEA6DE: hand a build's guard findings back to its coding agent. */
+export interface BuildGauntletRepairEvent {
+  name: "build/gauntlet.repair";
+  data: {
+    buildId: string;
+  };
+}
+
 export interface AssuranceBomGenerateEvent {
   name: "assurance/bom.generate";
   data: {

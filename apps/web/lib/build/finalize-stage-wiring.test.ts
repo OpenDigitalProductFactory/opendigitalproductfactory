@@ -10,7 +10,7 @@ const record = (evidence: Record<string, unknown>) => ({ evidence });
 describe("priorGauntletFailure", () => {
   it("reuses a recorded failing verdict", () => {
     expect(priorGauntletFailure(record({ passed: false, failedGuards: ["Data-Impact Gate"], output: "[data-impact] FAILED" }), GUARD_DID_NOT_RUN_MARKER))
-      .toEqual({ failedGuards: ["Data-Impact Gate"] });
+      .toEqual({ failedGuards: ["Data-Impact Gate"], treeSha: null });
   });
 
   it("never reuses a pass", () => {
