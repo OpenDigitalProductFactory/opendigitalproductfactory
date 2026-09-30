@@ -57,20 +57,56 @@ test("findSpecifierDrift reports a name declared with different registry specifi
   const drift = findSpecifierDrift({
     "packages/db": imp([{ name: "net-snmp", specifier: "^3.26.3", version: "3.26.3" }]),
     "services/edge-node": imp([{ name: "net-snmp", specifier: "^3.14.0", version: "3.26.3" }]),
-    "apps/web": imp([], [{ name: "zod", specifier: "^4.4.3", version: "4.4.3" }]),
-    "services/adp": imp([{ name: "zod", specifier: "^4.4.3", version: "4.4.3" }]),
+    "apps/web": imp([], [{ name: "zod", specifier: "catalog:", version: "4.4.3" }]),
+    "services/adp": imp([{ name: "zod", specifier: "catalog:", version: "4.4.3" }]),
   });
   assert.deepEqual(drift, [
     { name: "net-snmp", specifiers: { "^3.14.0": ["services/edge-node"], "^3.26.3": ["packages/db"] } },
   ]);
 });
 
-test("findSpecifierDrift ignores workspace, link, file and catalog specifiers", () => {
+test("findSpecifierDrift ignores workspace, link and file specifiers", () => {
   const drift = findSpecifierDrift({
     a: imp([{ name: "@dpf/db", specifier: "workspace:*", version: null }]),
     b: imp([{ name: "@dpf/db", specifier: "file:../db", version: null }]),
     c: imp([{ name: "@dpf/db", specifier: "link:../db", version: null }]),
-    d: imp([{ name: "@dpf/db", specifier: "catalog:", version: null }]),
+  });
+  assert.deepEqual(drift, []);
+});
+
+test("findSpecifierDrift accepts a shared name only when every workspace declares the same catalog: reference", () => {
+  const drift = findSpecifierDrift({
+    "apps/web": imp([{ name: "zod", specifier: "catalog:", version: "4.6.5" }], [{ name: "vitest", specifier: "catalog:", version: "4.1.11" }]),
+    "services/adp": imp([{ name: "zod", specifier: "catalog:", version: "4.6.5" }], [{ name: "vitest", specifier: "catalog:", version: "4.1.11" }]),
+  });
+  assert.deepEqual(drift, []);
+});
+
+test("findSpecifierDrift fails a shared name declared with the same plain range instead of catalog:", () => {
+  // The ratchet: agreeing ranges typed twice drift on the next one-sided bump.
+  const drift = findSpecifierDrift({
+    "apps/web": imp([{ name: "undici", specifier: "^8.10.0", version: "8.11.2" }]),
+    "packages/db": imp([{ name: "undici", specifier: "^8.10.0", version: "8.11.2" }]),
+  });
+  assert.deepEqual(drift, [{ name: "undici", specifiers: { "^8.10.0": ["apps/web", "packages/db"] } }]);
+});
+
+test("findSpecifierDrift fails a workspace that opts out of the catalog, and a split across catalogs", () => {
+  const drift = findSpecifierDrift({
+    "apps/web": imp([], [{ name: "typescript", specifier: "catalog:", version: "6.0.3" }, { name: "vite", specifier: "catalog:", version: "8.2.1" }]),
+    "packages/repo-guard-runtime": imp([], [{ name: "typescript", specifier: "6.0.3", version: "6.0.3" }]),
+    "packages/db": imp([], [{ name: "vite", specifier: "catalog:legacy", version: "7.0.0" }]),
+  });
+  assert.deepEqual(drift, [
+    { name: "typescript", specifiers: { "6.0.3": ["packages/repo-guard-runtime"], "catalog:": ["apps/web"] } },
+    { name: "vite", specifiers: { "catalog:": ["apps/web"], "catalog:legacy": ["packages/db"] } },
+  ]);
+});
+
+test("findSpecifierDrift leaves a dependency that only one workspace declares alone", () => {
+  const drift = findSpecifierDrift({
+    "apps/web": imp([{ name: "next", specifier: "^16.2.0", version: "16.2.9" }], [{ name: "next", specifier: "^16.2.0", version: "16.2.9" }]),
+    "services/adp": imp([{ name: "prom-client", specifier: "^15.1.3", version: "15.1.3" }]),
   });
   assert.deepEqual(drift, []);
 });
