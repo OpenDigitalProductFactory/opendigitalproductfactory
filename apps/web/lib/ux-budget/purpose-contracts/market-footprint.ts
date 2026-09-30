@@ -3,7 +3,7 @@
 // The purpose-identity ratchet refuses to grandfather a NEW route, so the market
 // footprint page arrives ratified. Shape mirrors mileage.ts.
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 const SOURCE = "apps/web/app/(shell)/customer/footprint/page.tsx";
 

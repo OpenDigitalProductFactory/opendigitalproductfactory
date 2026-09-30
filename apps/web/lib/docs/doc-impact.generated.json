@@ -562,6 +562,9 @@
     "apps/web/lib/ai-operations-map/project-routing-topology.ts": [
       "docs/specs/routing-resilience-and-failure-observability-spec.md"
     ],
+    "apps/web/lib/ai-readiness/readiness-summary-types.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
     "apps/web/lib/architecture/background-operation-observation-contract.test.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
@@ -686,6 +689,9 @@
     ],
     "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "apps/web/lib/coworker/approved-request-run-types.ts": [
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/coworker/authorized-surface-registry.ts": [
       "docs/architecture/orientation.md"
@@ -1197,6 +1203,9 @@
     ],
     "apps/web/lib/self-upgrade/prepare-source.ts": [
       "docs/dev/collision-free-dev-workflow.md"
+    ],
+    "apps/web/lib/self-upgrade/run-types.ts": [
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/self-upgrade/status-snapshot.ts": [
       "docs/architecture/background-operation-observation-contract.md"
@@ -3051,6 +3060,8 @@
       "scripts/pregate.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [
+      "apps/web/lib/ai-readiness/readiness-summary-types.ts",
+      "apps/web/lib/coworker/approved-request-run-types.ts",
       "apps/web/lib/mcp-governed-execute-types.ts",
       "apps/web/lib/mcp-task-submit-types.ts",
       "apps/web/lib/mcp-tool-types.ts",
@@ -3062,6 +3073,7 @@
       "apps/web/lib/mcp/tool-pack.ts",
       "apps/web/lib/mcp/tool-registry.ts",
       "apps/web/lib/routing/chat-message-types.ts",
+      "apps/web/lib/self-upgrade/run-types.ts",
       "apps/web/lib/tak/precondition-ordering-types.ts",
       "scripts/check-mcp-tool-pack.mjs",
       "scripts/check-module-size.mjs",

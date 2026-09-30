@@ -35,24 +35,7 @@ import {
   type ApprovalCredentialDb,
 } from "./approved-request-credential";
 import { runApprovedTaskRequest, type ApprovedTaskDb } from "./approved-task-run";
-
-export type ApprovedRequestRun =
-  | { status: "executed"; message: string }
-  | { status: "failed"; message: string }
-  /** Not run here; the reason says why and what still can run it. */
-  | { status: "not-run"; reason: ApprovedRequestNotRunReason; message: string };
-
-export type ApprovedRequestNotRunReason =
-  | "task-bound"
-  | "not-approved"
-  | "expired"
-  | "no-pending-call"
-  | "arguments-not-provable"
-  | "credential-unavailable"
-  | "consent-changed"
-  | "scope-insufficient"
-  | "task-not-waiting"
-  | "task-waiting-again";
+import type { ApprovedRequestNotRunReason, ApprovedRequestRun } from "./approved-request-run-types";
 
 const NOT_RUN_COPY: Record<ApprovedRequestNotRunReason, string> = {
   "task-bound": "It resumes when your coworker's task continues.",
