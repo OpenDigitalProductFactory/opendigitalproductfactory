@@ -85,8 +85,9 @@ export default async function DemandPage({
         activeFramework={policy.framework}
       />
       <MessagesProvider locale={locale.language} messages={{ portfolio: namespaceMessages(locale.language, "portfolio") }}>
-        <PortfolioTieOutPanel {...JSON.parse(JSON.stringify(tieOutPanel))} formatLocale={locale.formatLocale} />
-        <PortfolioOwnership view={ownership} canManage={canManageOwners} />
+        <PortfolioTieOutPanel {...JSON.parse(JSON.stringify(tieOutPanel))} formatLocale={locale.formatLocale}>
+          <PortfolioOwnership view={ownership} canManage={canManageOwners} />
+        </PortfolioTieOutPanel>
       </MessagesProvider>
     </div>
   );

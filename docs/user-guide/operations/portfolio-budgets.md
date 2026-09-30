@@ -49,7 +49,7 @@ the old one; nothing is overwritten.
 
 ## Choosing who answers for each portfolio
 
-Below the panel, **Who answers for each portfolio** lists one accountable person per portfolio, or "Not set".
+Open **Show the tie-out**: below the budgets, **Who answers for each portfolio** lists one accountable person per portfolio, or "Not set".
 That person owns the portfolio's automatic work: the builds the platform starts on its own, the workrooms those
 builds open, and the approvals they ask for.
 
