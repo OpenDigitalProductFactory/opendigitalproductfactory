@@ -37,6 +37,7 @@ beforeEach(() => {
     findPermitByPermitId: async () => null,
     consumePermit: async () => undefined,
     createObservation: async (data) => { observations.push(data); },
+    findLineage: async () => ({ found: false }),
   });
 });
 
@@ -79,6 +80,7 @@ describe("executeTool unmediated observation", () => {
       findPermitByPermitId: async () => { throw new Error("x"); },
       consumePermit: async () => { throw new Error("x"); },
       createObservation: async () => { throw new Error("db down"); },
+      findLineage: async () => { throw new Error("x"); },
     });
     const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const result = await executeTool("create_portal_pr", {}, "user-1");

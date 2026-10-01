@@ -163,6 +163,14 @@ export type GovernedExecuteResult = ToolResult & {
     alignmentInteractionId?: string;
     precondition?: PreconditionOrderingDecision;
     approvalReplayOf?: string;
+    /**
+     * GPP Phase 2 PR-D (BI-69415B68): the permit the reference monitor minted
+     * for this call — `gpp1.<permitId>.<keyId>.<mac>`, or the bare permit id
+     * when the install has no permit key — and its shadow verdict. Additive;
+     * present only when a gate admitted an outward, authority or irreversible
+     * call. The verdict never changes the outcome.
+     */
+    permit?: { handle: string; verdict: string };
   };
 };
 

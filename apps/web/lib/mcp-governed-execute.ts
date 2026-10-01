@@ -482,6 +482,9 @@ export async function governedExecuteTool(
         actorAgentId: args.context?.agentId ?? null,
         workroomId: args.context?.roomAuthority?.workroomId ?? null,
         permitHandle: args.context?.permitHandle,
+        // PR-D: the exact call's arguments, bound as paramHash at mint and
+        // compared against a presented handle (param_mismatch).
+        params: args.rawParams,
       })
     : null;
 
@@ -675,5 +678,14 @@ export async function governedExecuteTool(
     });
   }
 
-  return { ...result, governance: { durationMs } };
+  // PR-D: the handle of the permit minted for this call, additively, so a
+  // caller can cite or replay it. The handler and the audit row get the opaque
+  // permit id only (gppPermitId / gppPermitRef), never the MAC.
+  return {
+    ...result,
+    governance: {
+      durationMs,
+      ...(gppPermit?.handle ? { permit: { handle: gppPermit.handle, verdict: gppPermit.verdict } } : {}),
+    },
+  };
 }
