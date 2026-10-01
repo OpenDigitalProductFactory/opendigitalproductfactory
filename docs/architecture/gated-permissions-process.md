@@ -1,6 +1,6 @@
 # Gated Permissions Process (GPP)
 
-**Status:** working draft 0.1 · **Date:** 2026-09-30 · **Epic:** EP-B932453F · **Backlog:** BI-2C3B3AC9
+**Status:** working draft 0.2 · **Date:** 2026-10-01 · **Epic:** EP-B932453F · **Backlog:** BI-2C3B3AC9
 **Placement decision:** DI-5E0B3CA09D27 (WWMD, high confidence). GPP is the fourth member of the
 [standards family](agent-standards-family.md) and owns the binding semantic only.
 
@@ -89,6 +89,25 @@ A binding `MUST` carry a version. A change to its scope, gate, capability set, s
 validity or stop conditions is a material change and `MUST` produce a new version. A gate
 decision recorded against an earlier version `MUST NOT` authorize calls under a later one
 (§9.3).
+
+#### 2.1.1 Binding revision versus shape version
+
+Work shapes are often pinned by the work that uses them: a Workroom may claim an exact shape
+version. If every binding change forced a new shape version, tightening a binding would unbind
+live work, and implementers would have a reason to avoid tightening. To prevent that:
+
+- A binding's version `MUST` be tracked separately from the version of the work shape it
+  attaches to.
+- A revision that only **narrows** a binding — removes a capability, shrinks the subject scope,
+  shortens validity, or adds a stop condition or precondition — `MAY` apply to work pinned to the
+  existing shape version, and `MUST` take effect at the next reach (§9.3).
+- A revision that **makes explicit** a capability already reachable under the binding's current
+  effective envelope `MAY` apply without a shape version change. It `MUST` be recorded with its
+  date and author, and C-6 reach reconciliation (§10) `MUST` confirm that the declaration did not
+  widen reach.
+- A revision that **widens** the effective envelope `MUST` produce a new binding version, and
+  `MUST NOT` authorize calls for work admitted under an earlier version until that work's gate is
+  resolved again for the new version.
 
 ## 3. References
 
@@ -371,7 +390,8 @@ mode column says which.
 | GPP element | DPF substrate | Mode today |
 |---|---|---|
 | Work shapes and stages | `apps/web/lib/work-management/work-shapes.ts`, `delivery-shapes.ts` — 47 work shapes; each stage has an accountable principal and an advance that is a status change or a `governed-decision{decisionScope}` | Defined |
-| Capability set | Work-shape `grants` (for example `tool:read`, `tool:write-source`), translated by `roomGrantsFromWorkShape` in `room-turn-authority.ts` | **Per shape, not per stage.** Vocabulary is coarse (`tool:read`, `tool:write-source`, `tool:write`). `write-source` resolves to no enforceable grant today. In-portal coworker turns in a room that declares a delivery shape therefore admit only the read baseline (`room-turn-authority.server.ts` → `roomGrantsFromWorkShape`). This fails safe but is dangling under C-2 (BI-00588B51). |
+| Stage-level capability set (first slice) | `WorkShapeStage.tools` in `work-shapes.ts`, read through `stageDeclaredTools` (`stage-briefing.ts`). Declared tools are pinned into each scheduled stage run by `scheduledToolsNeedingPin` (`apps/web/lib/tak/scheduled-task-runs.ts`). Parity test `apps/web/lib/work-management/stage-tool-parity.test.ts` asserts C-1 (GPP-001), C-2 (GPP-002) and the grant-held first condition of C-4. Stages that do not yet have the read tool they need are listed in the shrink-only `KNOWN_STAGE_TOOL_GAPS` (`stage-tool-gaps.ts`). BI-43C3E914, PR #5846, merge `a6557758ce41`. | **Declared and tested** for standing, coworker and orchestration stages. Pinning is used for scheduled runs. Delivery shapes are not yet covered. The declarations were added without shape version bumps, so §2.1.1 applies: C-6 must confirm they made existing reach explicit rather than widening it. |
+| Shape-level capability set | Work-shape `grants` (for example `tool:read`, `tool:write-source`), translated by `roomGrantsFromWorkShape` in `room-turn-authority.ts` | **Per shape.** Vocabulary is coarse (`tool:read`, `tool:write-source`, `tool:write`). The stage parity test does not cover shape grants. `write-source` resolves to no enforceable grant today. In-portal coworker turns in a room that declares a delivery shape therefore admit only the read baseline (`room-turn-authority.server.ts` → `roomGrantsFromWorkShape`). This fails safe but is dangling under C-2 (BI-00588B51). |
 | Owning scope | `Workroom.decisionScope` enum `wwmd \| wwwd \| wsid`; gate tools `principle_decide` (WWMD), `evaluate_org_business_decision` (WWWD), `evaluate_profession_decision` (WSID) | Defined; scope per room, not per binding |
 | Envelope narrowing | `deriveRoomTurnAuthority` — agent grants ∩ user capability ∩ room grants; observers get the read baseline; room boundary `advise \| propose \| preauthorized` | Enforced |
 | Effective permission (TAK) | `getAvailableTools` (discovery) and `governedExecuteTool` → `evaluateCoworkerAuthority` deny-ladder (identity, capability, grant, room, delegation, route, subject, integration, sensitivity, policy version, escalation) | Enforced on the governed path |
@@ -388,7 +408,7 @@ mode column says which.
 
 **Overall DPF status:**
 
-- `GPP-Modeled`: **partial.** Bindings exist at shape level, with a coarse vocabulary and one known dangling token.
+- `GPP-Modeled`: **partial.** Standing, coworker and orchestration stages declare stage-level tools under a parity test that is a CI gate, with a shrink-only gap list. Delivery shapes still bind at shape level, with a coarse vocabulary and one known dangling token.
 - `GPP-Enforced`: **partial.** Room narrowing, the alignment and escalation gates are enforced; the shape gate is in shadow mode; exact-action projection covers 11 tools.
 - `GPP-Evidenced`: **not yet.**
 
@@ -417,3 +437,4 @@ belongs with the family's conformance work (BI-2AB781FA).
 | Version | Date | Change |
 |---|---|---|
 | 0.1 | 2026-09-30 | Initial working draft (BI-2C3B3AC9). |
+| 0.2 | 2026-10-01 | Added §2.1.1 binding revision versus shape version. Annex A now cites the first stage-level binding slice (BI-43C3E914, PR #5846). |
