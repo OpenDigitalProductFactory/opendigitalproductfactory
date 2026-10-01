@@ -36,6 +36,27 @@ export const LOCAL_CI_OVERRIDE_REASON_CODES = Object.freeze([
 const LOCAL_CI_OVERRIDE_CODE_SET = new Set(LOCAL_CI_OVERRIDE_REASON_CODES);
 
 /**
+ * A cloud agent session (a claude.ai/code container, marked by
+ * CLAUDE_CODE_REMOTE=true) has no local DPF install and cannot reach the
+ * local-CI lease, so pregate can never run there. Rather than refuse every such
+ * push, the pre-push hook records it under the existing
+ * `external-contribution-no-install` code: never a pass, still PR-visible, and
+ * still subject to DCO and the guard-parity preflight. Cloud CI and the merge
+ * queue remain the gate. The shell hook mirrors this reason inline; keep the
+ * two in sync.
+ */
+export const CLOUD_AGENT_SESSION_OVERRIDE_REASON =
+  "external-contribution-no-install: cloud agent session (CLAUDE_CODE_REMOTE=true), no local DPF install or local-CI lease; cloud CI is the gate";
+
+/**
+ * @param {Record<string, string | undefined>} env
+ * @returns {string | null} the recorded override reason for a cloud agent session, else null
+ */
+export function cloudAgentSessionOverride(env) {
+  return env && env.CLAUDE_CODE_REMOTE === "true" ? CLOUD_AGENT_SESSION_OVERRIDE_REASON : null;
+}
+
+/**
  * @param {string | null | undefined} value
  * @returns {{ ok: true, code: string, detail: string } | { ok: false, reason: string }}
  */

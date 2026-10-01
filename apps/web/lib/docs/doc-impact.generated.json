@@ -1740,6 +1740,9 @@
     "packages/dpf-skill-pack/hooks/design-grounding-precheck.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "packages/dpf-skill-pack/hooks/operating-contract.generated.mjs": [
       "docs/architecture/skill-surfaces-runbook.md"
     ],
@@ -2820,6 +2823,7 @@
       "apps/web/lib/build/gauntlet-repair.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
+      "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs",
       "pnpm-lock.yaml",
       "scripts/check-build-script-policy.mjs",
       "scripts/check-no-server-imports-in-client.mjs",
