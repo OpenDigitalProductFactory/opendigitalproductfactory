@@ -13,6 +13,7 @@ Each slice is its own PR, gated, reversible, and verified on the live install be
 
 The core behavior. After A, "Upgrade now" with a build in flight waits for it and then installs.
 
+0. **Build before the door closes.** Build and verify the candidate image before `startQuiescence`, so admission is closed only for the swap. Live evidence, SUR-3B7203FD (2026-09-30): admission closed at 17:04, the promoter was then killed mid-`next build` (`promoter-timeout`), and the drain held the door about 10 minutes for nothing. Check how `runPromoter` splits build and swap before changing the order.
 1. `queue/functions/self-upgrade.ts:203-247` — remove the `activity-in-flight` early skip for manual and scheduled runs; both enter the drain.
 2. `self-upgrade.ts:524` — pass `budgetMs` from a new `drainWaitBudgetMs` setting (default 60 minutes).
 3. `queue/functions/quiescence-run.ts:106` — flip TaskRuns to `quiescing` only after hard blockers reach zero, or on force. Admission closes at drain start as today.
