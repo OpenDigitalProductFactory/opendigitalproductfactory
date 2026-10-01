@@ -200,7 +200,7 @@ type StallScanRow = {
   stuckSince: string | null;
   /** scopeClaims, from which the room's workShape ref is read. */
   scopeClaims: unknown;
-  blockedCause: string | null;
+  id: string;
 };
 
 /**
@@ -226,11 +226,7 @@ export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
       w."scopeClaims"    AS "scopeClaims",
       COALESCE((w."workspaceState" #>> '{workroomDrive,hold,stuckTicks}')::int, 0) AS "consecutivePauses",
       w."workspaceState" #>> '{workroomDrive,hold,stuckSince}' AS "stuckSince",
-      (
-        SELECT a."summary" FROM "WorkCapsuleActivity" a
-        WHERE a."workCapsuleId" = w."id" AND a."kind" = 'evidence-recorded' AND a."payload" ->> 'outcome' = 'blocked'
-        ORDER BY a."recordedAt" DESC LIMIT 1
-      ) AS "blockedCause"
+      w."id"             AS "id"
     FROM "WorkCapsule" w
     WHERE w."archivedAt" IS NULL
       AND w."status" NOT IN ('abandoned', 'archived', 'complete')
@@ -239,6 +235,9 @@ export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
     ORDER BY "consecutivePauses" DESC, w."updatedAt" ASC
     LIMIT ${ROOM_STALL_SCAN_LIMIT}
   `;
+  const causes = await loadBlockedCauses(db, rows
+    .filter((r) => asRecord(r.drive)?.reason === WRITEBACK_UNAVAILABLE)
+    .map((r) => r.id));
   return rows.map((r) => ({
     capsuleId: r.capsuleId,
     title: r.title,
@@ -248,8 +247,26 @@ export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
     consecutivePauses: Number(r.consecutivePauses),
     stuckSince: r.stuckSince,
     ladderOwner: resolveLadderOwner(r.scopeClaims),
-    blockedCause: r.blockedCause ? r.blockedCause.slice(0, 280) : null,
+    blockedCause: causes.get(r.id) ?? null,
   }));
+}
+
+/**
+ * The latest blocked stage evidence for the writeback-stalled rooms only — a
+ * separate, bounded read on the (workCapsuleId, kind, recordedAt) index, so the
+ * stall scan itself stays a single read of room rows (BI-70B2ED84).
+ */
+async function loadBlockedCauses(db: Db, roomIds: string[]): Promise<Map<string, string>> {
+  if (roomIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<Array<{ id: string; summary: string }>>`
+    SELECT DISTINCT ON (a."workCapsuleId") a."workCapsuleId" AS "id", a."summary" AS "summary"
+    FROM "WorkCapsuleActivity" a
+    WHERE a."workCapsuleId" = ANY(${roomIds})
+      AND a."kind" = 'evidence-recorded'
+      AND a."payload" ->> 'outcome' = 'blocked'
+    ORDER BY a."workCapsuleId", a."recordedAt" DESC
+  `;
+  return new Map(rows.map((row) => [row.id, row.summary.slice(0, 280)]));
 }
 
 export async function loadWorkroomStallItems(db: Db): Promise<AttentionItem[]> {

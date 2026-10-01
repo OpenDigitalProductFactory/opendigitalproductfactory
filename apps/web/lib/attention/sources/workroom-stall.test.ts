@@ -20,6 +20,7 @@ import { describe, expect, it } from "vitest";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 import {
   STALL_TICK_THRESHOLD,
+  loadRoomStallRows,
   projectRoomStall,
   type RoomStallRow,
 } from "./workroom-stall";
@@ -326,5 +327,29 @@ describe("projectRoomStall for a stage that could not finish", () => {
   it("does not suggest an appointment for a budget or stop-condition halt", () => {
     const item = projectRoomStall(row({ drive: pause("budget_exhausted"), ladderOwner: owner }));
     expect(item?.context).not.toContain("appoint them");
+  });
+});
+
+describe("loadRoomStallRows reads blocked causes in a separate bounded query", () => {
+  it("asks for causes only for writeback-stalled rooms, and attaches them", async () => {
+    const calls: string[] = [];
+    const db = {
+      $queryRaw: async (parts: TemplateStringsArray, ...values: unknown[]) => {
+        const text = parts.join("?");
+        calls.push(text);
+        if (text.includes('"WorkCapsuleActivity"')) {
+          expect(values[0]).toEqual(["row-wb"]);
+          return [{ id: "row-wb", summary: "no tool provides read access" }];
+        }
+        return [
+          { id: "row-wb", capsuleId: "WC-WB", title: "Writeback", portfolioRole: null, updatedAt: new Date(), drive: pause("executor_writeback_unavailable"), scopeClaims: [], consecutivePauses: 4, stuckSince: null },
+          { id: "row-co", capsuleId: "WC-CO", title: "Coordinator", portfolioRole: null, updatedAt: new Date(), drive: pause("conformance_pause", ["missing_explicit_coordinator"]), scopeClaims: [], consecutivePauses: 4, stuckSince: null },
+        ];
+      },
+    } as unknown as Parameters<typeof loadRoomStallRows>[0];
+    const rows = await loadRoomStallRows(db);
+    expect(calls[0]).not.toContain('"WorkCapsuleActivity"');
+    expect(rows.find((r) => r.capsuleId === "WC-WB")?.blockedCause).toBe("no tool provides read access");
+    expect(rows.find((r) => r.capsuleId === "WC-CO")?.blockedCause).toBeNull();
   });
 });
