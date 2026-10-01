@@ -138,27 +138,34 @@ layout.
   check in step 1 is still the gate. With `dryRun` false it is not advise-safe,
   so it is hidden in advise mode (AGENTS.md §6).
 
-## 5. Acceptance criteria
+## 5. Objectives and acceptance
 
-1. Bumping a shape version leaves every live room on the prior version
-   resolving and driving. Test: registry with a prior version, plus the drive
-   plan for a pinned room.
-2. `diffWorkShapeBinding` classifies each change row in §4.2 as stated (table
-   test).
-3. Rebind refuses each of these: not the owner and no `manage_platform`;
-   target not current; downgrade; key change; stage in flight; a widening
-   without a rationale. Each refusal has its own code.
-4. A successful rebind writes the claim through compare-and-set and records
-   `decision-record` evidence plus a `workshape-rebound` activity. A concurrent
-   scope change wins and the rebind reports a conflict.
-5. A rebind does not re-run a stage whose binding is unchanged (§4.3).
-6. A room pinned to a prior version shows the `awaiting_rebind` attention to
-   its accountable principal, and the one-line notice plus diff disclosure on
-   its page.
-7. The `rebind_workroom_shape` MCP tool returns the same diff on `dryRun`,
-   and the tool-surface baseline records its reason.
-8. Live: BI-EBF0F6EE bumps its four shapes to 1.1.0; the owner rebinds the
-   four rooms from the portal; their next cycle pins the new stage tools.
+**OBJ-PIN:** Bumping a work-shape version never silently stops a live room; a room keeps driving on its pinned version until its owner decides.
+
+**OBJ-DIFF:** Every rebind is preceded by a binding diff that classifies the change as widening, narrowing or unchanged under GPP §2.1.1.
+
+**OBJ-GATE:** A room moves to a new shape version only through one governed action that checks authority and target, refuses mid-flight stages, records the decision, and writes through compare-and-set.
+
+**OBJ-OWNER:** The accountable owner learns a rebind is waiting and can make it from the room page or over MCP, with the diff disclosed progressively.
+
+| ID | Objectives | Acceptance statement |
+|---|---|---|
+| AC-PIN-1 | OBJ-PIN | With a shape bumped and its old definition in `WORK_SHAPE_PRIOR_VERSIONS`, a room pinned to the old version resolves and the drive plans its next stage (test). |
+| AC-PIN-2 | OBJ-PIN | Room creation and claim adoption still refuse a superseded version (test on `normalizePersistedScope`). |
+| AC-DIFF-1 | OBJ-DIFF | `diffWorkShapeBinding` classifies every change row in §4.2 as stated (table test). |
+| AC-GATE-1 | OBJ-GATE | Rebind refuses, each with its own code: actor neither owner nor `manage_platform`; target not current; downgrade; key change; stage in flight; widening without rationale (tests). |
+| AC-GATE-2 | OBJ-GATE | A successful rebind writes the claim behind `scopeWriteWhere`, records `decision-record` evidence with from/to, diff and rationale, and a `workshape-rebound` activity; a concurrent scope change wins and the rebind returns `rebind_conflict` (tests). |
+| AC-GATE-3 | OBJ-GATE, OBJ-PIN | A rebind does not re-run a stage whose binding is unchanged (test against `room-cycle-store`, per §4.3). |
+| AC-OWNER-1 | OBJ-OWNER | A room pinned to a prior version yields one `awaiting_rebind` attention for its accountable principal per cycle, not one per tick (test). |
+| AC-OWNER-2 | OBJ-OWNER | The room page shows the one-line notice with the diff behind a disclosure and a Rebind control; verified on the running app. |
+| AC-OWNER-3 | OBJ-OWNER, OBJ-DIFF | `rebind_workroom_shape` with `dryRun` returns the same diff the page shows; the tool-surface baseline records its reason. |
+| AC-LIVE-1 | OBJ-GATE, OBJ-OWNER | Live: BI-EBF0F6EE bumps its four shapes to 1.1.0, the owner rebinds the four rooms, and their next cycle pins the new stage tools. |
+
+### 5.1 Review notes folded in (architecture review, 2026-10-01)
+
+- **Retention.** A prior version stays in `WORK_SHAPE_PRIOR_VERSIONS` while any non-terminal room pins it. Removing one is a code change. If a room is found pinned to a version the registry no longer holds, it pauses with an `awaiting_rebind` attention rather than going silent.
+- **Losing a concurrent race.** `rebind_conflict` returns the room's current claim. The page re-reads the room and shows the diff again, so the owner decides against what is actually there.
+- **Advise mode.** The page notice and diff are read-only and always visible. The MCP tool is hidden in advise mode as a whole: a `dryRun` flag does not make a side-effect tool advise-safe (AGENTS.md §6).
 
 ## 6. Out of scope
 
