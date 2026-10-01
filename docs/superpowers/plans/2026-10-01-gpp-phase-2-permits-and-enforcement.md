@@ -580,7 +580,7 @@ AC-FORGERY.
 
 **Grounding (AGENTS.md §1).**
 - `apps/web/lib/build/plan-to-build-transition.ts` already calls itself the "single source of truth for
-  the Build Studio plan→build phase transition" (BI-05208DE5). PR-F **extends that module** rather than
+  the Build Studio plan→build phase transition" (its header comment, `plan-to-build-transition.ts:1-4`). PR-F **extends that module** rather than
   adding a parallel one.
 - Its path-specific side effects stay with their callers:
   - build-branch initialisation and the failure tracker
