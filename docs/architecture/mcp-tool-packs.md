@@ -112,6 +112,12 @@ arities) and [`workbooks-pack`](../../apps/web/lib/mcp/packs/workbooks-pack.ts) 
 followed on the same lazy pattern as the third and fourth packs — **every sibling-module
 domain (static + lazy) is now extracted.**
 
+`rebind_workroom_shape` (BI-CB5C0DCE) lives in this pack, but its handler is
+its own lazy module (`work-capsules/workroom-shape-rebind-handler.ts`), so
+`mcp-handlers.ts` does not grow. It is the governed way to move a room's
+`workShape` pin to a newer version. The rule it carries is in
+[work shapes and the decision gate](work-shapes-and-the-decision-gate.md).
+
 `work-capsules-pack` shares one `scopeProperties` block across `create_workroom` and
 `adopt_worktree`, so a field added there reaches both convene paths at once. That is how
 `workroomShape` landed ⟦runtime: 2026-08-23⟧ — the room's collaboration

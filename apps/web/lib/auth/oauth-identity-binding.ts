@@ -52,7 +52,7 @@ export async function eligibleOAuthCoworkers(
 export async function createOAuthConsentBinding(input: {
   userId: string; clientId: string; resource: string; agentId: string;
   scopes: PublicScope[];
-}, db: Db) {
+}, db: Db): Promise<Prisma.AuthorityBindingModel> {
   const eligible = await eligibleOAuthCoworkers(input.userId, input.clientId, input.resource, db, { agentId: input.agentId });
   const agent = eligible.find((candidate) => candidate.agentId === input.agentId);
   if (!agent) throw new Error(OAUTH_SETUP_REQUIRED);
