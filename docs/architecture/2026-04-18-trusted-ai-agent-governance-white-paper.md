@@ -413,7 +413,7 @@ A standard gains credibility when it is exercised in a real system rather than o
 | Mandatory receipt reservation for consequential calls, tied to the agent's GAID | GAID §10 | **Enforced** on the governed path |
 | Workroom collaboration-shape gate on consequential calls | GPP | **Shadow** by kernel decision; records what it would refuse, pending operator ratification against that evidence |
 | Turning a sealed scope decision into a single-use, time-bound authorization for one exact action | GPP §9.1 | **Enforced for 11 tools**; widening it is the GPP implementation path |
-| Per-stage capability sets on work shapes | GPP §7 | **In progress**; today grants attach per shape |
+| Per-stage capability sets on work shapes | GPP §7 | **Declared and CI-tested** for standing, coworker and orchestration stages, and pinned into scheduled stage runs; a shrink-only list tracks stages still missing a read tool. Delivery shapes still bind per shape |
 | Capability vocabulary resolves to enforceable grants | GPP C-2 | **Not yet checked**; one dangling capability found ([§8.3](#83-what-building-it-taught-us)) |
 | Job qualification lifecycle: assessment, credential, surveillance, revalidation | JSI | **Not built**; no qualification table exists |
 | Signed public receipts, public badges, federated issuance | GAID | **Not built** |
@@ -424,9 +424,9 @@ A standard gains credibility when it is exercised in a real system rather than o
 
 Two findings from writing the GPP standard against DPF's own code illustrate why the model must be checked against the system.
 
-**A dangling capability.** DPF's delivery work shapes grant a capability named `write-source`. No tool grant honours that name. Inside a delivery Workroom, an in-portal coworker's tool surface therefore quietly collapses to read-only. The system fails safe, and nobody could see it, because the model said *write* while the runtime said *read*. GPP's vocabulary-resolution check is designed to catch exactly this. It is now tracked for repair, and stage-level capability work in progress includes a parity test that asserts it.
+**A dangling capability.** DPF's delivery work shapes grant a capability named `write-source`. No tool grant honours that name. Inside a delivery Workroom, an in-portal coworker's tool surface therefore quietly collapses to read-only. The system fails safe, and nobody could see it, because the model said *write* while the runtime said *read*. GPP's vocabulary-resolution check is designed to catch exactly this. It is now tracked for repair. The first stage-level binding slice has since merged with a parity test asserting GPP's stage-coverage and vocabulary-resolution checks for the stages it covers.
 
-**Reach in the other direction.** Live operation of standing Workrooms showed rooms stalling because a stage's work needed a read tool the model had not admitted. Reach reconciliation is a two-way check: a model that admits too little produces stalls, and one that admits too much produces incidents.
+**Reach in the other direction.** Live operation of standing Workrooms showed rooms stalling because a stage's work needed a read tool the model had not admitted. When stage-level bindings were introduced, 21 stages were recorded on a shrink-only gap list, each pointing to the backlog item that will supply the missing tool. Reach reconciliation is a two-way check: a model that admits too little produces stalls, and one that admits too much produces incidents.
 
 Neither finding was visible from the documentation alone. Both became visible the moment the model and the runtime were compared.
 
