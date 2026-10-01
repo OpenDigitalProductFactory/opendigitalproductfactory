@@ -28,6 +28,7 @@ import {
   GATE_INFRASTRUCTURE_UNAVAILABLE_CODE,
   classifyGateInfrastructureEvidence,
   classifyLocalCiOverride,
+  cloudAgentSessionOverride,
 } from "./lib/local-ci-override.mjs";
 
 /** Commands that publish runtime code and must carry pregate evidence. */
@@ -294,6 +295,9 @@ export function decide(command, env = {}, opts = {}) {
 
   const gate = evaluateGateVerdict(head, { cwd: head.topLevel || cwd });
   if (gate.ok) return { block: false };
+  // A cloud agent session cannot run pregate; the git pre-push hook records
+  // the push under the same allowlisted code instead of refusing it.
+  if (cloudAgentSessionOverride(env)) return { block: false };
   return {
     block: true,
     reason: `${GUIDANCE} (${gate.reason})`,

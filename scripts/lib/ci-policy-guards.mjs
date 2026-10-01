@@ -872,6 +872,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "packages/dpf-skill-pack/hooks/command-text.test.mjs",
       ),
       node("--test", "packages/dpf-skill-pack/hooks/root-clone-guard.test.mjs"),
+      // The publish guard and its cloud-agent-session allowance share the
+      // override reason with .githooks/pre-push-gate.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/pregate-evidence-guard.test.mjs",
+        "packages/dpf-skill-pack/hooks/lib/local-ci-override.cloud-session.test.mjs",
+      ),
       node("--test", "packages/dpf-skill-pack/hooks/compose-guard.test.mjs"),
       // BI-F87BD9BF: raw tsc / root-level vitest / npx are refused with the
       // checked-in routine named, instead of costing an OOM and a retry.

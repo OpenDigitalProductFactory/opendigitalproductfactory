@@ -3,7 +3,7 @@
 // posture confidential and local, and explicitly mask amounts and component detail
 // anywhere a field-level projection is requested.
 
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 import type { DataCategory, DataFieldId } from "./taxonomy";
 
 const CLASSIFICATION = {

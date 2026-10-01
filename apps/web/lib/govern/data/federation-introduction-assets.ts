@@ -1,4 +1,4 @@
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 import type { DataCategory, DataFieldId } from "./taxonomy";
 
 export const FEDERATION_INTRODUCTION_ASSETS: readonly DataAssetDefinition[] = [

@@ -10,6 +10,6 @@ this file; never retype them into prose, where they drift (Simplify & Strengthen
 |---|---:|---|
 | Prisma models | 630 | `packages/db/prisma/schema/` |
 | Prisma enums | 99 | `packages/db/prisma/schema/` |
-| Migrations | 602 | `packages/db/prisma/migrations/` |
+| Migrations | 603 | `packages/db/prisma/migrations/` |
 | Kernel principles | 111 | `docs/founder-kernel/wiki/principles/` |
 | App routes | 666 | `apps/web/lib/ea/route-manifest.json` |

@@ -148,3 +148,33 @@ describe("current OAuth execution authority", () => {
     expect(await isCurrentOAuthExecutionAuthority(current)).toBe(false);
   });
 });
+
+// BI-A771AF73: the agent registry keeps slug "mirror" rows beside each canonical
+// AGT-* identity. A picker that offers both shows every assistant twice, and a
+// consent bound to a mirror would split one assistant across two records.
+describe("consent offers each assistant once", () => {
+  const resource = "https://dpf.example/api/mcp/v1";
+  beforeEach(() => {
+    vi.clearAllMocks();
+    identityDb.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] });
+    identityDb.agent.findMany.mockResolvedValue([]);
+  });
+
+  it("never lists a dual-seed mirror slug beside its canonical identity", async () => {
+    await eligibleOAuthCoworkers("human", "client", resource);
+    const where = identityDb.agent.findMany.mock.calls[0][0].where;
+    const excluded: string[] = where.AND?.[0]?.agentId?.notIn ?? [];
+    for (const mirror of ["external-claude-code", "external-codex", "external-grok", "mailroom-coordinator", "bookkeeper"]) {
+      expect(excluded).toContain(mirror);
+    }
+    expect(excluded).not.toContain("AGT-EXT-CLAUDE");
+  });
+
+  it("refuses a mirror slug even when asked for it by id", async () => {
+    await eligibleOAuthCoworkers("human", "client", resource, undefined, { agentId: "external-claude-code" });
+    const where = identityDb.agent.findMany.mock.calls[0][0].where;
+    expect(where.agentId).toBe("external-claude-code");
+    expect(where.AND?.[0]?.agentId?.notIn).toContain("external-claude-code");
+  });
+});
+

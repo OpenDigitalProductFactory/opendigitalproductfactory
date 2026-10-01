@@ -20,7 +20,13 @@ export const governedBacklogTeeUpScheduled = jobs.createFunction(
       const { resolveScheduledOwnerUserId } = await import("../scheduled-owner");
 
       const userId = await resolveScheduledOwnerUserId();
-      const teeUp = await runGovernedBacklogTeeUp({ prisma, userId, trigger: "daily" });
+      const teeUp = await runGovernedBacklogTeeUp({
+        prisma,
+        userId,
+        trigger: "daily",
+        // Each build belongs to its item's portfolio owner (BI-67B27832).
+        ownerForPortfolio: (portfolioId) => resolveScheduledOwnerUserId(undefined, { portfolioId }),
+      });
       // BI-3E0EE3BA: complete the autopilot path. The tee-up auto-approves an
       // eligible draft but never fired its Ideate research (the only caller was
       // the operator's Approve-Start click), leaving auto-promoted builds

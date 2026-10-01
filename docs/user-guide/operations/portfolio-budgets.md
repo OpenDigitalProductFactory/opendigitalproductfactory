@@ -47,6 +47,18 @@ portfolio delivered last quarter. Accept it or change it, and say why. The reaso
 and your name are recorded with the budget. A change adds a new version and keeps
 the old one; nothing is overwritten.
 
+## Choosing who answers for each portfolio
+
+Open **Show the tie-out**: below the budgets, **Who answers for each portfolio** lists one accountable person per portfolio, or "Not set".
+That person owns the portfolio's automatic work: the builds the platform starts on its own, the workrooms those
+builds open, and the approvals they ask for.
+
+- To choose or change the person, select **Change**, pick them, say why, and save. You need platform-management
+  permission. Only a person with an active account can be chosen, never an AI coworker.
+- While a portfolio has nobody, its work goes to the Foundational portfolio's person, then to the organization's
+  top accountable person. The line above the list names who that is right now. If nobody is chosen anywhere, it
+  names the install's first administrator: choose someone.
+
 ## Confirming an epic's portfolio
 
 When an epic's portfolio has been proposed but no person has confirmed it, the

@@ -1,9 +1,7 @@
 import { AiReadinessSummaryPanel } from "@/components/platform/AiReadinessSummaryPanel";
 import { auth } from "@/lib/auth";
-import {
-  getAiReadinessSummary,
-  type AiReadinessSummary,
-} from "@/lib/ai-readiness/readiness-summary";
+import { getAiReadinessSummary } from "@/lib/ai-readiness/readiness-summary";
+import type { AiReadinessSummary } from "@/lib/ai-readiness/readiness-summary-types";
 
 export const dynamic = "force-dynamic";
 

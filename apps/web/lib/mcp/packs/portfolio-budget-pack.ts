@@ -21,6 +21,7 @@ import {
   proposePortfolioBudgets,
   setPortfolioBudget,
 } from "@/lib/portfolio/portfolio-budget";
+import { setPortfolioOwner } from "@/lib/portfolio/accountable-owner";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -102,6 +103,25 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
+  // BI-67B27832: one accountable person per portfolio owns its automatic work.
+  {
+    name: "set_portfolio_owner",
+    description:
+      "Set or clear the one person accountable for a portfolio. That person owns the portfolio's automatic work: scheduled builds, the rooms they open, and the approvals they raise. Only an active person with an active account can be chosen, never a coworker. A reason is required and the setting person is recorded. Pass principalRef null to clear; automatic work then falls to the Foundational owner, then the organization's top accountable.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        portfolioId: { type: "string", description: "Portfolio id, as returned by propose_portfolio_budgets." },
+        principalRef: { type: ["string", "null"], description: "The person's principal id (PRN-*), or null to clear." },
+        reason: { type: "string", description: "Why this person answers for the portfolio. Recorded with it." },
+      },
+      required: ["portfolioId", "principalRef", "reason"],
+    },
+    requiredCapability: "manage_platform",
+    sideEffect: true,
+    // Changes who decides the approvals this portfolio's work raises.
+    consequence: "authority",
+  },
 ];
 
 function targetQuarter(params: Record<string, unknown>) {
@@ -147,6 +167,25 @@ async function setPortfolioBudgetHandler(
   });
   if (!result.ok) return { success: false, error: result.error, message: result.message };
   return { success: true, entityId: result.data.budgetId, message: "Portfolio budget set.", data: result.data };
+}
+
+async function setPortfolioOwnerHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
+  const principalRef = typeof params["principalRef"] === "string" && params["principalRef"].trim()
+    ? params["principalRef"].trim()
+    : null;
+  const result = await setPortfolioOwner(prisma as never, {
+    portfolioId: String(params["portfolioId"] ?? ""),
+    principalRef,
+    reason: typeof params["reason"] === "string" ? params["reason"] : "",
+    actor: { userId: userId || null },
+  });
+  if (!result.ok) return { success: false, error: result.error, message: result.message };
+  return {
+    success: true,
+    entityId: result.data.portfolioId,
+    message: result.data.accountablePrincipalId ? "Portfolio owner set." : "Portfolio owner cleared.",
+    data: result.data,
+  };
 }
 
 async function proposeEpicPortfoliosHandler(params: Record<string, unknown>): Promise<ToolResult> {
@@ -195,11 +234,13 @@ export const portfolioBudgetPack: ToolPack = {
     confirm_epic_portfolios: (params, userId, context) => confirmEpicPortfoliosHandler(params, userId, context),
     propose_portfolio_budgets: (params) => proposePortfolioBudgetsHandler(params),
     set_portfolio_budget: (params, userId, context) => setPortfolioBudgetHandler(params, userId, context),
+    set_portfolio_owner: (params, userId) => setPortfolioOwnerHandler(params, userId),
   },
   grants: {
     propose_epic_portfolios: ["backlog_read"],
     confirm_epic_portfolios: ["backlog_write"],
     propose_portfolio_budgets: ["backlog_read"],
     set_portfolio_budget: ["backlog_write"],
+    set_portfolio_owner: ["backlog_write"],
   },
 };

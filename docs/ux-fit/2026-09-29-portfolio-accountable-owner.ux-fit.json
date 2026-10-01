@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "beside-budget-tie-out",
+  "decisionInteractionId": "DI-2CB02C52095B",
+  "scope": {
+    "files": [
+      "apps/web/components/portfolio/PortfolioOwnership.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "beside-budget-tie-out",
+      "portfolio-detail-pages",
+      "admin-settings-page"
+    ]
+  }
+}

@@ -5,7 +5,7 @@
 // describes a relocation: the arrival-time signal is now the header badge, and
 // this page is the detail behind it.
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const INSTALLATION_IDENTITY_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

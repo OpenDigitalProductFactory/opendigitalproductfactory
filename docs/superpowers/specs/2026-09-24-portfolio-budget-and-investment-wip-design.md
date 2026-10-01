@@ -245,6 +245,62 @@ them, per the 2026-08-15 methodology:
 - **Human and non-digital** classes follow BI-29F61030's own slices when they
   land.
 
+### 5.8 Accountable owner (amendment 2026-09-29, BI-67B27832)
+
+**Founder direction (2026-09-29).** Ownership of automatic work aligns to the
+portfolios, where budgets and priorities are set. There is one actual human
+accountable identity per portfolio, managed simply from an owner perspective.
+
+**The gap.** Scheduled and proactive work (the tee-up, the capacity drain, the
+skill curator, review and ship jobs) was owned by the oldest active superuser.
+On a standard install that is the seeded `admin@dpf.local`. It created every
+Build Studio build (126 of 126 on the live install), coordinated the rooms those
+builds opened (187), and received the approvals they raised. Nobody reads that
+inbox.
+
+**The model.**
+
+- `Portfolio.accountablePrincipalId` names the one person accountable for the
+  portfolio. It is nullable on purpose and mirrors
+  `Organization.topAccountablePrincipalId`: unset reads as unset, never as a
+  guessed owner. Only an active person with an active account qualifies, never
+  a coworker.
+- Owner **roles** (`PORTFOLIO_OWNER_ROLES`) remain the capability layer: who
+  *may* act. The accountable person is who *answers*.
+- It is written only by `setPortfolioOwner`: the MCP tool `set_portfolio_owner`
+  (grant `backlog_write`, capability `manage_platform`, consequence
+  `authority`) and the operator control beside the budget tie-out on
+  Ops > Delivery Flow (`/ops/demand`), where budgets are set (WWMD
+  DI-2CB02C52095B). The setting person,
+  the time and the reason are recorded on the row.
+
+**Resolution of automatic work's owner** (`resolveWorkOwner`), in order:
+
+1. the accountable person of the work's own portfolio;
+2. the accountable person of **Foundational**, which holds the platform's own
+   work, for jobs with no single portfolio;
+3. the organization's top accountable person;
+4. only then the oldest active superuser, returned as `fallback`; the owner
+   view names that account so someone chooses.
+
+The scheduled tee-up (daily and capacity drain) resolves the owner **per
+item**, from the item's portfolio. The build's owner, and so its room's
+coordinator, is that portfolio's accountable person. A manual promotion keeps
+the person who clicked.
+
+**Relationship to BI-0ACB97B5.** The "accountable budget owner" that design
+assigns allocation authority to is this same field. It has one home.
+
+**Rejected.**
+
+- Reusing the owner roles as the owner: a role holds zero or many people and
+  is not one accountable identity.
+- Organization top accountable for everything: it ignores the portfolio
+  alignment the founder asked for, so it is kept as a fallback.
+- Removing the superuser fallback outright: it would stop every scheduled job
+  on installs that have not chosen owners yet. The fallback stays, but it is
+  labelled and visible.
+
 ## 6. The tie-out
 
 The tie-out has one row per portfolio per period, plus an **unallocated** row.

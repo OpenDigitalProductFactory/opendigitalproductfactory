@@ -288,6 +288,7 @@ describe("portfolio-budget tool pack", () => {
       "confirm_epic_portfolios",
       "propose_portfolio_budgets",
       "set_portfolio_budget",
+      "set_portfolio_owner",
     ]);
     for (const def of portfolioBudgetPack.definitions) {
       expect(portfolioBudgetPack.handlers[def.name], def.name).toBeTypeOf("function");
