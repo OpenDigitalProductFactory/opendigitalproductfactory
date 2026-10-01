@@ -59,8 +59,25 @@ jobs:
             scripts/ci-shadow-selection.test.mjs \
             scripts/ci-coverage-config.test.mjs
 
+      # Same retried fetch and empty-path refusal as .github/actions/setup-pnpm.
+      - name: Fetch pinned pnpm (retried)
+        run: |
+          for attempt in 1 2 3; do
+            if corepack install; then exit 0; fi
+            echo "::warning::corepack install failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 5))
+          done
+          echo "::error::corepack could not fetch the pinned pnpm after 3 attempts"
+          exit 1
+
       - name: Resolve pnpm store path
-        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+        run: |
+          store_path="$(pnpm store path --silent)"
+          if [ -z "$store_path" ]; then
+            echo "::error::pnpm store path is empty; pnpm is not usable on this runner"
+            exit 1
+          fi
+          echo "PNPM_STORE_PATH=$store_path" >> "$GITHUB_ENV"
 
       - name: Start pnpm restore timer
         run: date +%s%3N > "$RUNNER_TEMP/pnpm-restore-start"
