@@ -38,6 +38,22 @@ DPF has the geographic scene contract (`apps/web/lib/twin/geographic-scene.ts`),
    - **The worker is served first-party.** MapLibre 6 builds its worker from `import.meta.url`, which a bundler cannot rewrite, and the worker imports `./maplibre-gl-shared.mjs` from beside itself. So `GET /api/map-assets/runtime/[file]` serves exactly two allowlisted files from the pinned package, `maplibre-gl-worker.mjs` and `maplibre-gl-shared.mjs`, and the wrapper calls `setWorkerUrl()` on that route before the first map. `outputFileTracingIncludes` ships the two files in the standalone image, following the design-intelligence precedent in `next.config.mjs`.
 5. **Honest degradation.** `geographicRendererCapability()` returns one of `renderer-ready`, `webgl-unavailable`, `region-pack-missing` or `region-out-of-coverage`. The component shows that state beside the caller's accessible list. It never shows a blank grey canvas or invents coordinates. Per the `BI-3A56AE0C` contract, callers must always render their own list; the map is the enhancement.
 
+## Objectives and acceptance
+
+- **OBJ-GEO-RENDER:** A spatial surface can draw a geographic scene's zones and placements on an interactive map from the install's own data, with no third-party tile, style, glyph or telemetry request.
+- **OBJ-GEO-PACK:** A region pack installed on the host is served to the signed-in browser by byte range from the install itself, and only an allowlisted pack id can be read.
+- **OBJ-GEO-DEGRADE:** When the map cannot draw — no WebGL, no pack, or a scene outside pack coverage — the surface states which case applies and keeps its accessible list, never a blank canvas.
+- **OBJ-GEO-ISOLATE:** The map engine adds no weight to any route that does not mount the geographic component, and its dependencies are pinned and evaluated.
+
+| Acceptance | Objectives | Statement |
+|---|---|---|
+| AC-GEO-RENDER-1 | OBJ-GEO-RENDER | `GeographicSceneCanvas` draws zone fills and outlines and placement circles with labels from `buildGeographicSceneModel` output, and passes selection in and out by entity id. |
+| AC-GEO-RENDER-2 | OBJ-GEO-RENDER | The generated style contains no off-origin URL and no `glyphs` or `sprite` entry, in light and dark themes, with and without a pack. |
+| AC-GEO-PACK-1 | OBJ-GEO-PACK | `/api/map-assets/[packId]` returns `206` with `Content-Range` for one range, `416` for multiple or unsatisfiable ranges, `404` for a missing pack, `409` for a length mismatch, and refuses unauthenticated calls. |
+| AC-GEO-PACK-2 | OBJ-GEO-PACK | Pack ids that fail the manifest pattern, `..`, encoded separators and absolute paths never resolve outside the map-data root. |
+| AC-GEO-DEGRADE-1 | OBJ-GEO-DEGRADE | `geographicRendererCapability()` returns `renderer-ready`, `webgl-unavailable`, `region-pack-missing` or `region-out-of-coverage`, and the component renders the matching state beside the caller's list. |
+| AC-GEO-ISOLATE-1 | OBJ-GEO-ISOLATE | The production build places `maplibre-gl` only in a chunk loaded by the geographic component; `maplibre-gl@6.11.2` and `pmtiles@4.5.0` are pinned exactly and recorded in the approved tools registry. |
+
 ## 3. Design choices and their reasons
 
 | Choice | Alternatives rejected | Why |
