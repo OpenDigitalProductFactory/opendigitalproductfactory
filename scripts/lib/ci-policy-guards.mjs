@@ -375,9 +375,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // The same guard refuses an unfrozen `pnpm install` in any Dockerfile.
       node("scripts/check-docker-patch-context.mjs"),
       node("--test", "scripts/check-docker-patch-context.test.mjs"),
-      // The edge-node image runs this after `pnpm deploy`: the legacy deploy
-      // skips the lockfile under node-linker=hoisted, so the image asserts its
-      // deploy tree against pnpm-lock.yaml instead of trusting the config.
+      // The service images (adp, edge-node, integration-test-harness) run
+      // this after `pnpm deploy`: the legacy deploy skips the lockfile under
+      // node-linker=hoisted, so each image asserts its deploy tree against
+      // pnpm-lock.yaml instead of trusting the config.
       node("--test", "scripts/sbom/assert-deploy-matches-lockfile.test.mjs"),
       // Same failure family, different input: the Dockerfile copies scripts by
       // name, so extracting a helper out of one silently drops it from the image
