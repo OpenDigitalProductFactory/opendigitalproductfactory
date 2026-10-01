@@ -63,6 +63,10 @@ For a consequential tool call, Decision Perspective is a pre-execution control r
 
 Only effects that leave the **business** are checked this way. A tool whose outward effect is platform development or operations (opening a pull request, contributing to the hive, running a discovery sweep, a sign-in handshake) declares `consequenceScope: "platform"` and is governed by the founder kernel (WWMD) instead: it is still receipted and outward-reviewed, but the business owner is never asked "what should the business do?" about a pull request (BI-63B14D4B). When a business-outward tool carries no descriptive fields, the gate states the parameters it was given rather than escalating a bare tool name.
 
+Which decision admits which tools, for which stage of the work, is modelled by the
+[Gated Permissions Process](../../architecture/gated-permissions-process.md#73-the-pairing-at-a-glance).
+The gate described here is the decision side of that pairing.
+
 Product and GTM checks may use a qualified WSID specialist, but qualification never grants permission. The ordinary TAK intersection still requires the actor's authority, tool grants, workflow policy, data constraints, and preconditions. Owners and employees pass through the same control as coworkers.
 
 There is no alignment bypass flag. To permit an action that the current stance rejects, an owner deliberately amends and publishes the WWWD stance, producing a new policy version, and submits the action for a fresh decision. Every consequential verdict is recorded as a GAID-bound receipt showing the actor, decision interaction, policy version, delegation and qualification evidence, cited sources, and amendment lineage. For an approved action, the receipt channel is reserved before the side effect; if it cannot be reserved, the action does not run.
@@ -322,6 +326,8 @@ Tracked under EP-WWMD, EP-VOICE-LAYER, and EP-WSID:
 - MCP — the `decisionPerspective.invoke` tool exposes the gate to external clients under the same grant model
 
 ## Related Specs
+
+- [Gated Permissions Process (GPP)](../../architecture/gated-permissions-process.md) — the standard that pairs these decision scopes with tool permissions
 
 - `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md` — the kernel design (V1 WWMD)
 - `docs/superpowers/specs/2026-05-19-wwmd-mcp-exposure-design.md` — the MCP tool surface
