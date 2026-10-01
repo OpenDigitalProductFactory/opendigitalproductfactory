@@ -3819,7 +3819,8 @@
           "code_graph_read",
           "build_lifecycle",
           "sandbox_execute",
-          "initiative_evidence_write"
+          "initiative_evidence_write",
+          "decision_record_create"
         ]
       }
     },
@@ -3875,7 +3876,8 @@
           "code_graph_read",
           "build_lifecycle",
           "sandbox_execute",
-          "initiative_evidence_write"
+          "initiative_evidence_write",
+          "decision_record_create"
         ]
       }
     },
@@ -3931,7 +3933,8 @@
           "code_graph_read",
           "build_lifecycle",
           "sandbox_execute",
-          "initiative_evidence_write"
+          "initiative_evidence_write",
+          "decision_record_create"
         ]
       }
     },
