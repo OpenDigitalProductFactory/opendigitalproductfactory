@@ -32,6 +32,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { ROOT_CONTEXT_DOCKERFILES } from "./check-docker-patch-context.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(new URL(import.meta.url))), "..");
@@ -204,19 +205,32 @@ export function findMissingCopiedImports(dockerfileText, readSource) {
   return violations;
 }
 
+/**
+ * Violations across every Dockerfile built from the repo root (the service
+ * images copy scripts by name too: services/edge-node runs the deploy-lockfile
+ * assertion), tagged with the Dockerfile they came from.
+ */
+export function findMissingCopiedImportsInRepo(root = REPO_ROOT) {
+  const readSource = (src) => {
+    const abs = path.join(root, src);
+    return existsSync(abs) ? readFileSync(abs, "utf8") : null;
+  };
+  const violations = [];
+  for (const dockerfile of ROOT_CONTEXT_DOCKERFILES) {
+    const text = readSource(dockerfile);
+    if (text == null) continue;
+    for (const v of findMissingCopiedImports(text, readSource)) violations.push({ dockerfile, ...v });
+  }
+  return violations;
+}
+
 function main() {
   const dockerfilePath = path.join(REPO_ROOT, "Dockerfile");
   if (!existsSync(dockerfilePath)) {
     console.error(`[dockerfile-script-imports] cannot read ${dockerfilePath}`);
     process.exit(1);
   }
-  const violations = findMissingCopiedImports(
-    readFileSync(dockerfilePath, "utf8"),
-    (src) => {
-      const abs = path.join(REPO_ROOT, src);
-      return existsSync(abs) ? readFileSync(abs, "utf8") : null;
-    },
-  );
+  const violations = findMissingCopiedImportsInRepo();
 
   if (violations.length === 0) {
     console.log(
@@ -232,7 +246,7 @@ function main() {
     "The image build dies at `pnpm install` / first run with ERR_MODULE_NOT_FOUND. `next build` and PR CI cannot see this.\n",
   );
   for (const v of violations) {
-    console.error(`  stage ${v.stage}: ${v.importer}`);
+    console.error(`  ${v.dockerfile} stage ${v.stage}: ${v.importer}`);
     console.error(`    imports ${v.specifier} -> ${v.missing} (not copied)`);
     console.error(`    add: COPY ${path.posix.join(path.posix.dirname(v.importerSrc), v.specifier)} <dest>\n`);
   }
