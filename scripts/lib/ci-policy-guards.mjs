@@ -249,6 +249,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/installer/lib/state-lock-timeout.test.mjs",
         "scripts/installer/lib/doctor-redaction.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
+        // BI-58C58CB6: these sat on the test-inventory allowlist, ran nowhere
+        // in CI, and drifted on every host until BI-76334D21 caught them.
+        "scripts/installer/install-state-transaction.test.mjs",
+        "scripts/installer/migrate-install-state.test.mjs",
+        "scripts/installer/resolve-host-identity.test.mjs",
+        "scripts/installer/validate-install-state.test.mjs",
+        "scripts/installer/native-edge-host-contract.test.mjs",
       ),
       // BI-3267763F: no compose default, installer output or self-upgrade
       // leaves Inngest on the signing/event keys once published in this repo.
