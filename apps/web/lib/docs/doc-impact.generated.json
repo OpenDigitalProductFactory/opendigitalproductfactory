@@ -654,6 +654,9 @@
     "apps/web/lib/build/investment-admission.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
+    "apps/web/lib/build/plan-to-build-transition-core.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/build/progress-visibility.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -3098,6 +3101,7 @@
     ],
     "docs/architecture/gated-permissions-process.md": [
       "apps/web/lib/actions/build.ts",
+      "apps/web/lib/build/plan-to-build-transition-core.ts",
       "apps/web/lib/ea/reconcile-sysml-projections.ts",
       "apps/web/lib/explore/build-process-matrix.ts",
       "apps/web/lib/explore/feature-build-types.ts",
