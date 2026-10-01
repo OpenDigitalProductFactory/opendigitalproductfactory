@@ -19,6 +19,22 @@
 //     row is a payload.
 //   - A Tags-block run that is a real emoji subdivision flag: U+1F3F4, 1–6
 //     lowercase/digit tags, then CANCEL TAG (England, Scotland, Wales).
+//   - Direction marks, embeddings and isolates (LRM, RLM, ALM, LRE/RLE/PDF,
+//     LRI/RLI/FSI/PDI) in text that contains right-to-left letters (Arabic,
+//     Hebrew and the other RTL scripts), where mixed-direction text needs them
+//     to display in order (localization epic EP-6B33A840; Arabic is the first
+//     RTL locale). A run of three or more in a row is still a payload, and in
+//     text with no RTL letters they serve no purpose. The two override
+//     characters (LRO, RLO) are always removed: they are the Trojan Source
+//     reordering vector and ordinary text does not need them.
+//
+// Soft hyphens (hyphenation hints) and the Mongolian vowel separator (a
+// shaping control in traditional Mongolian) are not policed: they cannot spell
+// an instruction and real text uses them.
+//
+// Sanitize what a model reads, not what is stored: stored text stays as the
+// person wrote it, so a direction mark is never lost to a read-edit-write
+// round trip through an agent.
 //
 // Pure, dependency-free and idempotent: sanitizing sanitized text is a no-op.
 
@@ -42,13 +58,30 @@ export type SanitizedText = {
 const ZWNJ = 0x200c;
 const ZWJ = 0x200d;
 const BLACK_FLAG = 0x1f3f4;
+const LRO = 0x202d;
+const RLO = 0x202e;
+
+// A letter or digit from a right-to-left script (Arabic-Indic digits are what
+// ALM exists for). Format characters such as ALM belong to the Arabic script
+// too, so require a letter or digit.
+const RTL_LETTER =
+  /(?=[\p{L}\p{Nd}])[\p{Script=Hebrew}\p{Script=Arabic}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Mandaic}\p{Script=Adlam}]/u;
+
+/** Length of the run of consecutive bidi controls that contains index `i`. */
+function bidiRunLength(cps: number[], i: number): number {
+  let start = i;
+  let end = i;
+  while (start > 0 && classifyInvisible(cps[start - 1]) === "bidi") start--;
+  while (end < cps.length - 1 && classifyInvisible(cps[end + 1]) === "bidi") end++;
+  return end - start + 1;
+}
 const CANCEL_TAG = 0xe007f;
 
 /** Classify one code point, or null when it is not an invisible we police. */
 export function classifyInvisible(cp: number): InvisibleClass | null {
   if (cp >= 0xe0000 && cp <= 0xe007f) return "tag";
   if ((cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0xe0100 && cp <= 0xe01ef)) return "variationSelector";
-  if (cp === 0x200b || cp === ZWNJ || cp === ZWJ || cp === 0x2060 || cp === 0xfeff || cp === 0x180e) return "zeroWidth";
+  if (cp === 0x200b || cp === ZWNJ || cp === ZWJ || cp === 0x2060 || cp === 0xfeff) return "zeroWidth";
   if (
     (cp >= 0x202a && cp <= 0x202e) ||
     (cp >= 0x2066 && cp <= 0x2069) ||
@@ -60,7 +93,6 @@ export function classifyInvisible(cp: number): InvisibleClass | null {
   }
   if (cp >= 0x2061 && cp <= 0x2064) return "invisibleOperator";
   if (
-    cp === 0x00ad || // soft hyphen
     cp === 0x034f || // combining grapheme joiner
     cp === 0x115f ||
     cp === 0x1160 ||
@@ -102,6 +134,7 @@ export function sanitizeUntrustedText(input: string): SanitizedText {
   if (!INVISIBLE_PROBE.test(input)) return { text: input, removed, total: 0 };
 
   const cps = Array.from(input, (ch) => ch.codePointAt(0)!);
+  const hasRtl = RTL_LETTER.test(input);
   const kept: number[] = [];
   let total = 0;
   for (let i = 0; i < cps.length; i++) {
@@ -121,6 +154,11 @@ export function sanitizeUntrustedText(input: string): SanitizedText {
       }
     } else if (cls === "variationSelector") {
       if (prevKept !== undefined && classifyInvisible(prevKept) === null && !/\s/u.test(String.fromCodePoint(prevKept))) {
+        kept.push(cp);
+        continue;
+      }
+    } else if (cls === "bidi") {
+      if (hasRtl && cp !== LRO && cp !== RLO && bidiRunLength(cps, i) <= 2) {
         kept.push(cp);
         continue;
       }
@@ -149,7 +187,7 @@ function fromCodePoints(cps: number[]): string {
 
 // Every code point classifyInvisible() can return non-null for.
 const INVISIBLE_PROBE =
-  /[\u{E0000}-\u{E007F}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}​-‏⁠-⁯﻿᠎‪-‮؜­͏ᅟᅠㅤﾠ￹-￻]/u;
+  /[\u{E0000}-\u{E007F}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}\u{200B}-\u{200F}\u{2060}-\u{206F}\u{FEFF}\u{202A}-\u{202E}\u{61C}\u{34F}\u{115F}\u{1160}\u{3164}\u{FFA0}\u{FFF9}-\u{FFFB}]/u;
 
 /**
  * True when what was removed is the shape of a deliberate payload rather than
