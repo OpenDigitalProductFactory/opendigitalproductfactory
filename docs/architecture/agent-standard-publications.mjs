@@ -28,7 +28,7 @@ export const AGENT_STANDARD_PUBLICATIONS = Object.freeze({
     markdownPath: join(ARCH_DIR, "2026-04-18-trusted-ai-agent-governance-white-paper.md"),
     outputPath: join(ARCH_DIR, "Trusted-AI-Agent-Governance-White-Paper.docx"),
     title: "Trusted AI Agent Governance",
-    subtitle: "Why TAK, GAID, and TAK-JSI Are Needed Now",
+    subtitle: "Decide Once, Enforce Always: Why TAK, GAID, TAK-JSI, and GPP Are Needed Now",
     diagramsDir: join(ARCH_DIR, "gaid-diagrams"),
   },
 });
