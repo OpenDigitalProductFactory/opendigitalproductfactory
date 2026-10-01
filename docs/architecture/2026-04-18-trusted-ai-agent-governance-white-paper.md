@@ -383,6 +383,48 @@ Organizations already model their processes, controls and responsibilities, in B
 
 That is the contribution this paper most wants the systems-engineering and AI-governance communities to test.
 
+### 7.4 From model to machine
+
+In manufacturing, a CAD model becomes a part because three properties hold. Every element of the
+model has an exact meaning. A post-processor compiles that model deterministically into machine
+instructions. Design-rule checks reject parts that cannot be made before any metal is cut. Governed
+agentic work needs the same three properties.
+
+- **A notation with execution semantics.** Each construct is a typed element with a defined runtime
+  behaviour. A stage marks the tools that are reachable. A gate diamond names its owning authority
+  and whether it blocks or only observes. A stop records a disposition. The iconography is borrowed
+  from BPMN so that practitioners recognise it. The semantics are deliberately restricted so that
+  soundness (no deadlock, no unreachable stage) stays decidable.
+- **A deterministic compiler.** It turns the drawn shape into the executable definition the runtime
+  reads. It also classifies every change as narrowing, clarifying or widening authority, and only a
+  widening change requires re-deciding.
+- **Design-rule checks before deployment.** GPP's completeness checks, plus workflow-net soundness,
+  reject a shape that would leave a consequential tool ungated or a transition guarded on one code
+  path but not another.
+
+The acceptance test is the manufacturing one: convert every existing shape into the model, compile
+it back, and get the same executable result.
+
+The model also concentrates attention. Most tool calls are reads and routine internal changes, and
+those keep ordinary permission checks. The design view shows where the *critical* interactions are:
+outward, authority-changing and irreversible actions, and dangerous capability combinations. That
+is where the gate is placed in the call path, and only there.
+
+At those points, authority becomes a value the call must carry. It is a permit minted by the gate,
+bound to the decision, the stage, the actor and, for irreversible actions, the exact parameters. It
+is checked at a single mediation point that no code path can avoid. This is object-capability
+security applied to agent tool use.
+
+It is honest about its boundary. An agent that can read the signing key or write the database
+directly can forge what the database holds. On a development installation that is detected, not
+prevented. Prevention is a deployment property: agent runtimes that hold no database credentials
+and cannot reach the key.
+
+Adoption is incremental by design:
+- A tool with no declared binding behaves exactly as before.
+- Every binding starts in shadow mode, recording what it would refuse.
+- New structural checks are ratchets: today's exceptions sit on a list that can only shrink.
+
 ## 8. DPF: the working instantiation
 
 A standard gains credibility when it is exercised in a real system rather than only described. DPF is both:
@@ -429,6 +471,17 @@ Two findings from writing the GPP standard against DPF's own code illustrate why
 **Reach in the other direction.** Live operation of standing Workrooms showed rooms stalling because a stage's work needed a read tool the model had not admitted. When stage-level bindings were introduced, 21 stages were recorded on a shrink-only gap list, each pointing to the backlog item that will supply the missing tool. Reach reconciliation is a two-way check: a model that admits too little produces stalls, and one that admits too much produces incidents.
 
 Neither finding was visible from the documentation alone. Both became visible the moment the model and the runtime were compared.
+
+**The platform's own delivery flow.** Writing DPF's Build Studio flow down as a model, rather than
+reading it file by file, exposed three more findings:
+- Its stages, gates and tool sets were spread across at least six modules.
+- One tool could advance work from planning to building after an evidence check alone, skipping the
+  blocking platform-scope decision that the main path enforces. This is one transition with two gate
+  sets, and it is now tracked as a defect.
+- Its ship gate is shadow-only unless an enforce mode is switched on.
+
+None of these was visible from documentation. All three were visible the moment the flow was
+expressed as a model.
 
 ### 8.4 Portability
 
@@ -534,6 +587,19 @@ The same logic applies to the whole family:
 - require qualification revalidation when the operating profile, doctrine, routing or data policy changes materially
 - require runtime evidence, linking each receipt to its authorizing decision, for consequential actions
 - measure supervision load and harm together; a falling number of approvals is only good news if harm does not rise
+
+**The agent-tool protocol community should** consider authorization that is scoped to the
+transaction and the situation, not only to the server and scope. MCP today authorizes a client for
+scopes, treats tool annotations as untrusted hints, and states that a server-issued handle "is a
+name, not a capability". None of its finalized enhancement proposals defines per-call authorization.
+The existing hooks would carry it:
+- per-request metadata
+- a result type that requires further input
+- an extensions framework
+
+DPF intends to build such an extension as a reference implementation: gate-minted permits that can
+only be narrowed, plus a structured refusal that names the gate a call needs. It will then offer the
+extension for review.
 
 **Platform vendors should:**
 
@@ -662,4 +728,4 @@ We invite implementers, assessors, standards bodies and systems engineers to tes
 | Revision | Date | Change |
 |---|---|---|
 | 1 | 2026-04-18 | First edition: TAK, GAID, TAK-JSI |
-| 2 | 2026-10-01 | Reframed around approval fatigue and the incident record. Added GPP as the fourth cornerstone, decision scopes (§6), MBSE with AI as a first-class participant (§7), the DPF claim-to-evidence ledger (§8) and efficacy measures (§9). Narrowed the first edition's "one missing control plane" claim (§4.4). Refreshed market references (BI-6CC40F77). |
+| 2 | 2026-10-01 | Added §7.4 (model to machine: notation, compiler, design-rule checks, critical-call gating, permits, the honest forgery boundary), the Build Studio findings in §8.3, and the transaction-scoped MCP recommendation in §13. Reframed around approval fatigue and the incident record. Added GPP as the fourth cornerstone, decision scopes (§6), MBSE with AI as a first-class participant (§7), the DPF claim-to-evidence ledger (§8) and efficacy measures (§9). Narrowed the first edition's "one missing control plane" claim (§4.4). Refreshed market references (BI-6CC40F77). |
