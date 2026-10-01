@@ -293,6 +293,27 @@ function unreadEvidenceByCode(
   return byCode;
 }
 
+/**
+ * BI-6EB2DBBB: whether the item already carries a small fix's research — the
+ * reproduction on a named ref (`source_verified`) and a failing-to-passing proof
+ * whose latest test record passes (`test_pass` not superseded by `test_fail`).
+ * Both are written by record_execution_evidence, which the author can reach.
+ */
+export function hasRecordedReproduction(activities: readonly InitiativeReadinessActivity[]): boolean {
+  let source = false;
+  let latestTest: { at: number; pass: boolean } | null = null;
+  for (const activity of activities) {
+    if (activity.kind !== "evidence") continue;
+    const evidenceKind = object(activity.payload)?.evidenceKind;
+    if (evidenceKind === "source_verified") source = true;
+    if (evidenceKind === "test_pass" || evidenceKind === "test_fail") {
+      const at = activity.recordedAt.getTime();
+      if (!latestTest || at >= latestTest.at) latestTest = { at, pass: evidenceKind === "test_pass" };
+    }
+  }
+  return source && latestTest?.pass === true;
+}
+
 type InitiativePlanArtifact = Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
 
 function projectPlanCoverage(
@@ -488,11 +509,20 @@ export function projectBacklogItemReadiness(args: {
   // BI-0E2E3BC5 adds the one earlier source: a Build Studio design its reviewers
   // passed, which exists before any delivery and is what a medium item's research
   // is. A failed or absent review confers nothing.
+  //
+  // BI-6EB2DBBB adds the claim-time source the operator directed on 2026-09-23:
+  // for a SMALL FIX, research is the reproduction the author already produced —
+  // the defect on a named ref and a failing-to-passing test, recorded as
+  // execution evidence before the claim. It needs no separately granted writer,
+  // so an external session can claim a small fix. Net-new work, medium and
+  // larger shapes, and a fix with no recorded reproduction still need the
+  // recorded research receipt.
   const recordedResearch = state(evidence, "research");
+  const smallFixReproduced = applied === "small" && profile === "fix" && hasRecordedReproduction(args.activities);
   const researchState: ReadinessEvidenceState =
     recordedResearch === "missing"
       && proportional
-      && (args.completion?.deliveryEvidence === "pass" || reviewedBuildDesign)
+      && (args.completion?.deliveryEvidence === "pass" || reviewedBuildDesign || smallFixReproduced)
       ? "pass"
       : recordedResearch;
   const facts: InitiativeReadinessFacts = {

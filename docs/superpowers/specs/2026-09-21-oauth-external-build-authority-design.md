@@ -500,9 +500,14 @@ is a lookup over existing rows:
 
 1. The coworker on this human's most recent active `consent` binding for
    this resource whose client has the same self-asserted name and the same
-   redirect family (scheme, host and path with the loopback port ignored,
-   the same comparison `isRedirectUriAllowed` already makes). This is what
-   makes a reconnect land on the same assistant without a question.
+   redirect family. For a loopback redirect the family is scheme, host and
+   first path segment: the port is ephemeral and some clients add a
+   per-session path nonce (Codex's `/callback/<nonce>` changed between
+   2026-09-23 and 2026-10-01 and defeated reuse on the live install). A
+   non-loopback redirect keeps port and full path. This is what makes a
+   reconnect land on the same assistant without a question. Each consent's
+   audit row records the resolution kind, the default offered and whether
+   the human changed it, so AC-OC-7 is measurable from the database.
 2. A coworker whose registry aliases (`agent_registry.json`, for example
    `codex` for `AGT-EXT-CODEX`) match the client's self-asserted name,
    case-insensitively, as a whole word.

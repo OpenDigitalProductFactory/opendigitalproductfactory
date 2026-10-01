@@ -1,6 +1,6 @@
 # Gated Permissions Process (GPP)
 
-**Status:** working draft 0.4 · **Date:** 2026-10-01 · **Epic:** EP-B932453F · **Backlog:** BI-2C3B3AC9
+**Status:** working draft 0.5 · **Date:** 2026-10-01 · **Epic:** EP-B932453F · **Backlog:** BI-2C3B3AC9
 **Placement decision:** DI-5E0B3CA09D27 (WWMD, high confidence). GPP is the fourth member of the
 [standards family](agent-standards-family.md) and owns the binding semantic only.
 
@@ -553,7 +553,7 @@ people act on the picture.
 | Requirement | DPF substrate | Mode |
 |---|---|---|
 | Executable model | Work shapes are code-declared models: `WorkShapeDefinition` in `work-shapes.ts` and `delivery-shapes.ts` (stages, accountable principals, `governed-decision{decisionScope}` advances, stop conditions, `grants`, stage `tools`). The runtime reads the declared shape. | **Implemented** for work shapes. Build Studio's flow is not yet one declared shape (Annex C). |
-| Transition gate sets | Declared per shape stage (`advance`). Build Studio's gates are spread across several modules (Annex C). | **Partial**; C-8 violation recorded (BI-45F9CB7A) |
+| Transition gate sets | Declared per shape stage (`advance`). Build Studio's plan → build gate sets are declared per path in `PLAN_TO_BUILD_GATE_PROFILES` (`apps/web/lib/build/plan-to-build-transition-core.ts`, re-exported by `plan-to-build-transition.ts`), and all five plan → build paths go through `transitionPlanToBuild` (GPP Phase 2 PR-F). Build Studio's other transitions are still spread across several modules (Annex C). | **Partial.** Plan → build: one transition function, gate sets declared but still unequal per path, so C-8 remains open (BI-45F9CB7A). Other Build Studio transitions: not yet declared. |
 | V-1 Design view | The EA/SysML parity engine (`apps/web/lib/ea/reconcile-sysml-projections.ts`) re-derives projections of MCP tool authority, coworker authority, value streams, process models and work-pattern architecture from their sources | **Partial.** Bindings are not yet first-class elements in the projection. |
 | V-2 Runtime view | `shape-projection.ts` renders a room's stages as a graph in `WorkroomShape.tsx`. Gate verdicts are read off receipts, never inferred. | **Partial.** Bindings in force, the envelope and gate modes are not yet shown. |
 | V-3 Shared identity | Rooms pin `key@version` of their shape | **Partial.** Binding identifiers do not exist yet. |
@@ -602,15 +602,40 @@ mode column says which.
 | Required-approver enforcement | `required-approvers.ts` computes who must approve | Not wired to an enforcement point (BI-F9ED8151) |
 | Qualification precondition | `coordinator-eligibility.ts` | No JSI qualification table; returns not-applicable |
 | Receipts | `ToolExecutionReceipt`, GAID actor envelope, mandatory receipt reservation for consequential calls | Enforced on the governed path |
-| Critical-interaction map (Phase 1) | `apps/web/scripts/gpp-critical-interaction-map.ts` over `lib/gpp/critical-interaction-map.ts`. For every tool it shows: consequence class; grants and holders; alignment, escalation, projector and shape-gate modes, taken from the runtime classifier and gate-mode resolver; and direct call sites. On 2026-10-01 it reported 436 tools: 246 side-effecting, 65 critical, 183 side-effecting with no consequence class, and 28 direct call sites (4 with a dynamic tool name). | On demand; not a CI gate |
+| Critical-interaction map (Phase 1) | `apps/web/scripts/gpp-critical-interaction-map.ts` over `lib/gpp/critical-interaction-map.ts`. For every tool it shows: consequence class; grants and holders; alignment, escalation, projector, shape-gate and (since Phase 2) permit modes, taken from the runtime classifier, gate-mode resolver and binding table; and direct call sites. On 2026-10-01 it reported 436 tools: 246 side-effecting, 65 critical, 183 side-effecting with no consequence class, and 28 direct call sites (4 with a dynamic tool name). | On demand; not a CI gate |
 | Consequence-classification ratchet (Phase 1) | `lib/gpp/consequence-classification-ratchet.test.ts` with the shrink-only `KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS` (183 entries) | **Enforced in CI** for new tools only. Existing gaps are listed, not fixed. |
 | Unmediated-reach ratchet, C-9 (Phase 1) | `lib/gpp/unmediated-reach-ratchet.test.ts` with the per-file, shrink-only `KNOWN_UNMEDIATED_EXECUTE_SITES` (28 sites, 15 files) | **Enforced in CI** for new paths only. Existing paths, including Build Studio's pipeline, are allowlisted, not routed. |
+| Permit (Phase 2) | `GppPermit` and `GppPermitObservation` (`packages/db/prisma/schema/ai-coworker.prisma`); hand-declared bindings `tak-alignment-admit@1` and `human-checkpoint-admit@1` in `apps/web/lib/gpp/bindings.ts`; minting in `lib/gpp/permit-mint.ts`; verdicts in `lib/gpp/permit-verdict.ts`. When the alignment gate approves, or an approved human checkpoint admits, an outward, authority or irreversible call in `governedExecuteTool`, a single-use, 15-minute permit is minted. The monitor records one verdict per such call (`ungoverned`, `valid`, `absent`, `expired`, `revoked`, `exhausted`, `tool_not_in_capabilities`). It writes the verdict and the cited permit onto `ToolExecution.gppPermitVerdict` and `gppPermitRef`, and forwards the permit id to the handler. A direct `executeTool` call to such a tool records `unmediated`. MCP clients can replay a handle in `tools/call` `params._meta["com.opendigitalproductfactory/authorization-handle"]`. The permit stays a DB-backed row (DI-2DE3951FBB28). Since PR-D its handle is `gpp1.<permitId>.<keyId>.<mac>`: an HMAC-SHA256 over the canonical claims (`lib/gpp/permit-handle.ts`), and the claims bind `paramHash`, the SHA-256 of the exact call's canonical `{ tool, params }` (`lib/gpp/param-hash.ts`). Before the checks above, the monitor verifies the MAC (`mac_invalid` for an edited or invented row; `unsigned` when the install has no `DPF_GPP_PERMIT_SECRET`), the parameters (`param_mismatch` for a handle replayed with other arguments) and the lineage of the admitting decision (`lineage_missing`; `lineage_unsealed` when the `DecisionInteraction` is not sealed, or when the lineage is an `AuthorizationDecisionLog`, which is not hash-chained). It records the first failing check as the verdict and every check in the observation's `detail.checks`. The monitor returns the minted handle on `governance.permit`; the handler and the audit row get only the permit id. The key has no fallback, to `AUTH_SECRET` or anything else, and no installer provisions it yet, so an install without it records `unsigned`. Since PR-E, enforcement is per binding (`lib/gpp/binding-enforcement.ts`, decided in `lib/gpp/permit-enforcement.ts`): a binding is enforced only when it has an entry in the checked-in `GPP_BINDING_ENFORCEMENT` table, and every other binding is on the shrink-only `KNOWN_SHADOW_BINDINGS` list. Under an enforced binding, an outward, authority or irreversible call without a valid permit from that binding is refused with `permit_required` (disposition `awaiting-input`), whose data carries the MCP extension draft's remediation hint (`handle_required`, `handle_invalid` or `handle_mismatch`, and the gate to pass); the refusal is audited and receipted like the other rejections, and the observation is recorded `enforced`. A call the binding cannot judge for a reason that is not the caller's runs as in shadow and records `enforcement_downgraded` with the reason: no permit key, unsealed lineage the ratifying decision did not accept, an infrastructure fault, or `DPF_GPP_ENFORCEMENT=shadow-all`. A forged, replayed, mismatched or expired permit is refused before any downgrade is considered. A direct `executeTool` call is never refused; instead a binding cannot be promoted while any of its tools has a direct site. BI-69415B68. | **Per binding; all shadow.** The enforcement table is empty, so no verdict changes a call's outcome, and mint, record and lineage-lookup failures are swallowed. Routine reads and ordinary writes are not observed. Forgery is detectable, not preventable, on installs where agents can read host secrets or write the database. |
+| Transition path uniqueness, C-8 (Phase 2 PR-F) | `transitionPlanToBuild` and `PLAN_TO_BUILD_GATE_PROFILES` in `apps/web/lib/build/plan-to-build-transition-core.ts`, re-exported by `plan-to-build-transition.ts`. All five Build Studio plan → build paths call it: `advanceBuildPhase`, `POST /api/agent/build/advance-phase`, `performPlanToBuildTransition` (plan review and the pre-build resume), the `save_phase_handoff` auto-advance and the `dispatchBuildForApprovedPlan` fallback write. The function runs each path's declared steps in declared order and owns the phase write. Each path's gate set, order, modes and refusal form are unchanged and declared in its profile. The WWMD plan-advancement gate is blocking on the UI action and the admin route, follows the autonomous playbook mode on plan review and resume, is not evaluated but recorded (`gpp-c8-transition-gate-skipped`) on `save_phase_handoff`, and is not evaluated on the dispatch fallback. `lib/gpp/direct-phase-writes-ratchet.test.ts` fails on any new write that can set `phase = "build"` outside that file, against the shrink-only `KNOWN_DIRECT_BUILD_PHASE_WRITES`. BI-45F9CB7A. | **Single path, gate sets unequal.** Visible and ratcheted, not yet uniform. Enforcing WWMD on `save_phase_handoff` is a separate decision on the shadow counts. Review → ship and the other transitions are not routed. |
 | Evidence for §11 | `AuthorizationDecisionLog`, `ToolExecution`, `DecisionInteraction`, `CoworkerActionEnvelope`, `WorkroomActivity` | Records exist; about 28 direct `executeTool` call sites bypass the governed audit; no published measures |
+
+**Promoting a permit binding to enforced (informative).** Each promotion is its own small, revertable
+PR that adds one entry to `GPP_BINDING_ENFORCEMENT` in `apps/web/lib/gpp/binding-enforcement.ts` and
+removes the binding from `KNOWN_SHADOW_BINDINGS`. Nothing in the database and no environment variable
+can promote a binding; `DPF_GPP_ENFORCEMENT=shadow-all` is the only runtime override, and it can only
+return every binding to shadow. `binding-enforcement.test.ts` refuses the entry unless:
+
+1. it cites a WWMD decision id (`DI-` and 12 hex digits) from `principle_decide`, recorded with
+   `dpf-record-decision-outcome`, a ratification date, and the evidence it rests on: at least 14 days
+   of `GppPermitObservation` for the binding with no unexplained `mac_invalid`, `param_mismatch`,
+   `lineage_missing`, `absent`, `ungoverned` or `unmediated` verdict for its tools;
+2. the binding names an explicit `tools` list, and every tool is outward, authority or irreversible by
+   `classifyConsequentialTool`. A predicate-wide binding, such as the two seeds, cannot be promoted;
+3. no tool on the list has a direct `executeTool` site, and no direct site with a dynamic tool name
+   exists. On 2026-10-01 four dynamic sites remain, so no binding is promotable yet;
+4. for an alignment-admit binding, the alignment gate runs for every listed tool outside a Workroom;
+5. the entry states how it treats unsealed lineage (R1): `sealed-required`, where an unsealed decision
+   downgrades that call to shadow, or `unsealed-accepted`, which the decision must accept explicitly.
+
+The install operator also configures `DPF_GPP_PERMIT_SECRET` before a promotion. Without it the binding
+records `enforcement_downgraded` (`permit-key-unconfigured`) on every call rather than enforcing. To
+demote a binding, revert its promotion PR. In an emergency the operator sets
+`DPF_GPP_ENFORCEMENT=shadow-all`.
 
 **Overall DPF status:**
 
 - `GPP-Modeled`: **partial.** Standing, coworker and orchestration stages declare stage-level tools under a parity test that is a CI gate, with a shrink-only gap list. Delivery shapes still bind at shape level, with a coarse vocabulary and one known dangling token.
-- `GPP-Enforced`: **partial.** Room narrowing, the alignment and escalation gates are enforced; the shape gate is in shadow mode; exact-action projection covers 11 tools.
+- `GPP-Enforced`: **partial.** Room narrowing, the alignment and escalation gates are enforced; the shape gate is in shadow mode, and the Phase 2 permit is enforced per binding with no binding promoted yet; exact-action projection covers 11 tools.
 - `GPP-Evidenced`: **not yet.**
 
 ## Annex B (informative): proposed assertions
@@ -744,7 +769,7 @@ obvious. This is the practical argument for MBSE.
 | Step | What changes | Checks it satisfies |
 |---|---|---|
 | 1 | Express the Build Studio flow as one declared work shape: stages, per-stage `tools`, the gate set per transition with scope and mode | §12.4.1; C-1, C-2 |
-| 2 | Route every phase-changing path through one transition function | C-8 (BI-45F9CB7A) |
+| 2 | Route every phase-changing path through one transition function. Plan → build done in GPP Phase 2 PR-F, with each path's gates unchanged; review → ship next | C-8 (BI-45F9CB7A) |
 | 3 | Bind each stage to one accountable agent identity that holds the stage's grants | C-4 |
 | 4 | Declare the build-engine sandbox as an environment-enforced binding | §7 element 11; C-7 |
 | 5 | Render bindings, gate modes and the envelope in the room's shape view | V-1, V-2 |
@@ -758,3 +783,4 @@ obvious. This is the practical argument for MBSE.
 | 0.2 | 2026-10-01 | Added §2.1.1 binding revision versus shape version. Annex A now cites the first stage-level binding slice (BI-43C3E914, PR #5846). |
 | 0.3 | 2026-10-01 | Added the §7.3 pairing diagram and §12.3 model diagram. Added §12.4 model-to-running-system requirements (executability, V-1…V-4 visibility). Added check C-8 and assertions GPP-013/014. Added Annex C, Build Studio as a GPP model (BI-D0AB33B5). |
 | 0.4 | 2026-10-01 | Added check C-9 (unmediated reach) and assertion GPP-015. Annex A cites the Phase 1 critical-interaction map and both ratchets (BI-69415B68). |
+| 0.5 | 2026-10-01 | Annex A cites the Phase 2 permit (PR-C shadow permits, PR-D MAC and paramHash, PR-E per-binding enforcement with an empty enforced set). Annex A and §12.4.3: Build Studio's five plan → build paths go through one transition function with declared per-path gate profiles, plus a direct phase-write ratchet (GPP Phase 2 PR-F, BI-45F9CB7A). C-8 stays open until the gate sets are made equal. |

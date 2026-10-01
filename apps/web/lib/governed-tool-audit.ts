@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { prisma, type GppPermitVerdict } from "@dpf/db";
 
 import type { AlignmentGateDecision } from "./tak/alignment-tool-gate";
 import type { PreconditionOrderingDecision } from "./tak/precondition-ordering-types";
@@ -47,6 +47,8 @@ export async function writeGovernedToolAudit(data: {
   preconditionDecision?: PreconditionOrderingDecision | null;
   /** The approval this run spent, or the one it is parked on (BI-12E5DD91). */
   envelopeId?: string | null;
+  /** GPP Phase 2 PR-C: the shadow permit verdict for an O/A/I call. Omitted for R/W calls. */
+  gppPermit?: { permitId: string | null; verdict: GppPermitVerdict } | null;
 }): Promise<{ id: string } | null> {
   const auditClass = deriveAuditClassForTool(data.toolName);
   const isMetricsOnly = auditClass === "metrics_only";
@@ -86,6 +88,10 @@ export async function writeGovernedToolAudit(data: {
     apiTokenId: data.context?.apiTokenId ?? null, skillId: data.context?.skillId ?? null,
     delegationChainId: data.context?.delegationChainId ?? null,
     envelopeId: data.envelopeId ?? pendingEnvelopeId(data.result),
+    ...(data.gppPermit ? {
+      gppPermitVerdict: data.gppPermit.verdict,
+      ...(data.gppPermit.permitId ? { gppPermitRef: data.gppPermit.permitId } : {}),
+    } : {}),
   };
   try {
     const created = createOverride

@@ -16,7 +16,7 @@ import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
  * requirement and definition — now and for those built later"; this is the
  * governed-execute chokepoint, which every tool call passes through.
  *
- * Five of these thirteen are not refusals, and all thirteen used to render as
+ * Five of the first thirteen are not refusals, and all thirteen used to render as
  * "<tool> rejected: …". That is why a coworker handed a pending approval
  * concluded the tool did not exist and proposed building it.
  */
@@ -49,6 +49,11 @@ export const GOVERNED_REJECTION_DISPOSITION: Record<
   // same judgement made at the transport layer.
   authority_evidence_unavailable: "inconclusive",
   receipt_reservation_failed: "inconclusive",
+
+  // Waiting on an input the caller can obtain. GPP Phase 2 PR-E: an enforced
+  // binding requires a permit, and the remedy is to pass the gate the refusal
+  // names, not to give up and not to retry unchanged.
+  permit_required: "awaiting-input",
 };
 
 
@@ -70,7 +75,11 @@ export function rejectionMessage(
   detail: string,
   disposition: OutcomeDisposition,
 ): string {
-  return disposition === "inconclusive"
-    ? `${toolName} could not be checked: ${detail} This is not a refusal — the check itself was unavailable, and the call can be retried unchanged.`
-    : `${toolName} rejected: ${detail}`;
+  if (disposition === "inconclusive") {
+    return `${toolName} could not be checked: ${detail} This is not a refusal — the check itself was unavailable, and the call can be retried unchanged.`;
+  }
+  if (disposition === "awaiting-input") {
+    return `${toolName} is waiting on an input: ${detail}`;
+  }
+  return `${toolName} rejected: ${detail}`;
 }

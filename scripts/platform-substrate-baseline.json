@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-01T05:55:08.189Z",
-  "gitSha": "cfbdee3adbd3e2a774bc67db266369fba7783a5d",
+  "generatedAt": "2026-10-01T18:01:05.294Z",
+  "gitSha": "bd41fb3f3da5e7017328c1e4602d4a7e1c2eb787",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
@@ -23,11 +23,11 @@
       "direction": "non-increasing",
       "expiry": "2027-03-31",
       "owner": "portfolio-management",
-      "value": 637
+      "value": 639
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 20410
+      "value": 20561
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
