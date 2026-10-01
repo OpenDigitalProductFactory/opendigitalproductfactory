@@ -2,7 +2,7 @@
 // Node built-in test runner (no node_modules needed): node --test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -392,6 +392,77 @@ test("--force reinstalls even when the probe already reports compile-ready", () 
   // whatever the probe says.
   bootstrapWorktreeDeps("/wt/anything", { force: true, execute: recordingExecute(calls) });
   assert.ok(calls.some((c) => c.includes("install")), "force must always attempt the install");
+});
+
+// ── BI-7DD16424: a STALE non-pnpm node_modules must not abort the install ────
+//
+// Observed 2026-10-01 on a reused worktree whose node_modules came from an
+// ad-hoc install on another store (@axe-core, @playwright, docx, tsx only).
+// pnpm saw an incompatible modules dir, wanted to purge it, asked for
+// confirmation, and — with no TTY under pregate's auto-heal — aborted with
+// ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY. The bootstrap reported
+// managed_install_failed and the tree stayed source-only. The purge is the
+// remedy when node_modules is this worktree's own directory; it is the
+// 2026-06-19 wipe when node_modules is a link into another tree.
+
+const PURGE_WITHOUT_PROMPT = "--config.confirm-modules-purge=false";
+
+function installCall(calls) {
+  return calls.find((c) => / install /.test(` ${c} `));
+}
+
+test("a stale node_modules DIRECTORY is purged without a TTY prompt (BI-7DD16424)", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "dpf-stale-wt-"));
+  try {
+    for (const pkg of ["@axe-core/playwright", "@playwright/test", "docx", "tsx"]) {
+      mkdirSync(join(sandbox, "node_modules", pkg), { recursive: true });
+    }
+    writeFileSync(join(sandbox, "node_modules", ".modules.yaml"), "storeDir: /elsewhere/store/v10\n");
+    const calls = [];
+    bootstrapWorktreeDeps(sandbox, { execute: recordingExecute(calls) });
+    const install = installCall(calls);
+    assert.ok(install, `the install must run; commands were: ${JSON.stringify(calls)}`);
+    assert.ok(
+      install.includes(PURGE_WITHOUT_PROMPT),
+      `a non-interactive install must not stop at pnpm's purge prompt; ran: ${install}`,
+    );
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("an ABSENT node_modules installs with the purge prompt disabled too (nothing to purge)", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "dpf-empty-wt-"));
+  try {
+    const calls = [];
+    bootstrapWorktreeDeps(sandbox, { execute: recordingExecute(calls) });
+    assert.ok(installCall(calls)?.includes(PURGE_WITHOUT_PROMPT));
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("a node_modules that is a LINK keeps pnpm's purge confirmation, so the link target survives (BI-7DD16424)", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "dpf-linked-wt-"));
+  try {
+    const rootClone = join(sandbox, "root-clone");
+    const worktree = join(sandbox, "worktree");
+    mkdirSync(join(rootClone, "node_modules", "keep-me"), { recursive: true });
+    mkdirSync(worktree);
+    // "junction" is honoured on Windows and ignored elsewhere — the real shape on both.
+    symlinkSync(join(rootClone, "node_modules"), join(worktree, "node_modules"), "junction");
+    const calls = [];
+    bootstrapWorktreeDeps(worktree, { execute: recordingExecute(calls) });
+    const install = installCall(calls);
+    assert.ok(install, `the install still runs (pnpm refuses the purge itself); commands were: ${JSON.stringify(calls)}`);
+    assert.ok(
+      !install.includes(PURGE_WITHOUT_PROMPT),
+      `purging through a link wipes the tree it points at; ran: ${install}`,
+    );
+    assert.ok(existsSync(join(rootClone, "node_modules", "keep-me")));
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
 });
 
 test("the install decision is driven by measured readiness, not by existsSync", () => {
