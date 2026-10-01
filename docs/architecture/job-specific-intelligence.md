@@ -403,6 +403,27 @@ effective profile receive the applicable Section 13 impact analysis. Insufficien
 remain inconclusive. This note explains application of existing requirements; it does not confer
 qualification, widen authority or adopt additional conformance requirements.
 
+### 8.4 Qualification of Principle-Directed Work
+
+**Working-draft amendment, EP-B932453F / BI-A484D58F.** `JSI-PD-001`: a scheme
+assessing principle-directed work `MUST` evaluate the subject's ability to select
+the owning scope, distinguish constraints from preferences, recognize insufficient
+evidence, and seek the correct resolver without fabricating authority. The scheme
+`MUST` bind those results to the assessed corpus/axis versions, work shape, model
+routing, tool/data boundaries and oversight configuration.
+
+`JSI-PD-002`: transfer to another harness or operating profile `MUST` retain the
+original evidence scope and require target-profile assessment or an attributable,
+scheme-defined equivalence decision. Unsupported enforcement capabilities `MUST`
+be reported as limitations rather than inferred from successfully imported prose
+or skills. A portable definition can remain `TAK-JSI-Defined` without being
+`TAK-JSI-Assessed` or `TAK-JSI-Qualified`.
+
+These clauses refine §§8.1, 8.2 and 13. TAK owns live authorization and the
+[principle-directed control contract](trusted-ai-kernel.md#713-principle-directed-decision-contract).
+Independent review remains pending; no existing qualification is upgraded by this
+draft amendment.
+
 ## 9. Model and Provider Suitability
 
 ### 9.1 Eligibility before ranking

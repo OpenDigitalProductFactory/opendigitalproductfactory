@@ -7,6 +7,15 @@ const dbConfig = readFileSync("packages/db/vitest.config.ts", "utf8");
 const webPackage = JSON.parse(readFileSync("apps/web/package.json", "utf8"));
 const dbPackage = JSON.parse(readFileSync("packages/db/package.json", "utf8"));
 const calibrationWorkflow = readFileSync(".github/workflows/ci-calibration.yml", "utf8");
+const workspaceYaml = readFileSync("pnpm-workspace.yaml", "utf8");
+
+/** A default-catalog specifier resolves to its range in pnpm-workspace.yaml. */
+function declaredRange(specifier, name) {
+  if (specifier !== "catalog:") return specifier;
+  const block = workspaceYaml.match(/^catalog:\n((?: {2}.*\n)+)/m)?.[1] ?? "";
+  const quoted = name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  return block.match(new RegExp(`^ {2}["']?${quoted}["']?:\\s*(\\S+)`, "m"))?.[1];
+}
 
 test("web V8 coverage explicitly includes owned production surfaces", () => {
   assert.match(webConfig, /coverage:\s*\{/);
@@ -38,7 +47,9 @@ test("web and database packages declare complete coverage runtimes", () => {
   for (const manifest of [webPackage, dbPackage]) {
     assert.equal(manifest.scripts["test:coverage"], "vitest run --coverage");
     assert.equal(typeof manifest.devDependencies["@vitest/coverage-v8"], "string");
-    assert.equal(manifest.devDependencies["@vitest/coverage-v8"], manifest.devDependencies.vitest);
+    const coverage = declaredRange(manifest.devDependencies["@vitest/coverage-v8"], "@vitest/coverage-v8");
+    assert.equal(typeof coverage, "string");
+    assert.equal(coverage, declaredRange(manifest.devDependencies.vitest, "vitest"));
   }
 });
 

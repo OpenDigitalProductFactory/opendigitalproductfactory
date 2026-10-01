@@ -197,7 +197,24 @@ const localInferenceLane = getResourceLane(LOCAL_INFERENCE_LANE_KEY, {
 
 /** Run `fn` under the single-slot local-GPU admission lane. The one gate every
  *  local-inference caller (chat + build) must acquire so the single GPU is
- *  never double-subscribed (BI-98572A51). */
-export function withLocalInferenceLock<T>(fn: () => Promise<T>): Promise<T> {
+ *  never double-subscribed (BI-98572A51).
+ *
+ *  The lane only sees this process. Before taking it, ask whether the card is
+ *  free at all (another process, another app, a game). Unit tests skip that
+ *  import: it reaches the lease registry, and the suite must not touch the GPU. */
+export function withLocalInferenceLock<T>(
+  fn: () => Promise<T>,
+  options?: { modelId?: string | null },
+): Promise<T> {
+  const vitest = process.env.VITEST === "true" || process.env.VITEST === "1";
+  if (vitest) {
+    return localInferenceLane.run(fn, { maxQueueDepth: localInferenceMaxQueueDepth() });
+  }
+  return admitLocalGpuThenRun(fn, options?.modelId ?? null);
+}
+
+async function admitLocalGpuThenRun<T>(fn: () => Promise<T>, modelId: string | null): Promise<T> {
+  const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
+  await assertLocalGpuFree({ modelId });
   return localInferenceLane.run(fn, { maxQueueDepth: localInferenceMaxQueueDepth() });
 }

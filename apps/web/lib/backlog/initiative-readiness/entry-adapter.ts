@@ -7,6 +7,7 @@ import { itemBodyBaselineState } from "./item-body-baseline";
 import type { InheritedInitiativeScope } from "./parent-scope-inheritance";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
+import type { DeliverySensitivityAssessment } from "./delivery-sensitivity";
 import { effectiveShape } from "./shape-requirements";
 import type {
   InitiativeReadinessDecision,
@@ -42,8 +43,12 @@ export type InitiativeReadinessItem = {
   activeBuildKind?: string | null;
   /** v3: the Workroom's declared/derived delivery shape as `delivery-<shape>@<version>`, when bound. */
   workShape?: string | null;
-  /** v3: deliverable sensitivity (design 3.2); distinct from BacklogItem.sensitivity, the data classification. */
-  deliverySensitivity?: ReadinessSensitivity | null;
+  /**
+   * v3: deliverable sensitivity (design 3.2); distinct from BacklogItem.sensitivity,
+   * the data classification. Pass the assessment (BI-243BC956) so the decision can
+   * cite what raised the shape; a bare level is still accepted.
+   */
+  deliverySensitivity?: ReadinessSensitivity | DeliverySensitivityAssessment | null;
   /** v3: the item body is the baseline for small/medium shapes. */
   body?: string | null;
 };
@@ -428,7 +433,10 @@ export function projectBacklogItemReadiness(args: {
   // The derivations below serve the proportional gate table only, so they key on
   // the shape the gates will actually apply: sensitivity that raises small or
   // medium to large also takes these derivations away.
-  const applied = shape ? effectiveShape(shape, args.item.deliverySensitivity, profile) : null;
+  const sensitivity = typeof args.item.deliverySensitivity === "string"
+    ? { level: args.item.deliverySensitivity, trigger: null }
+    : args.item.deliverySensitivity ?? null;
+  const applied = shape ? effectiveShape(shape, sensitivity?.level, profile, args.item.workType) : null;
   const proportional = applied === "small" || applied === "medium";
   // BI-0E2E3BC5: a Build Studio build records its research and acceptance
   // criteria in the design document its reviewers passed, and writes no
@@ -492,7 +500,9 @@ export function projectBacklogItemReadiness(args: {
     transitionObject: args.transitionObject,
     profile: profile ?? "doc-only",
     shape,
-    sensitivity: args.item.deliverySensitivity ?? null,
+    sensitivity: sensitivity?.level ?? null,
+    sensitivityTrigger: sensitivity?.trigger ?? null,
+    workType: args.item.workType ?? null,
     evaluatedAt: args.evaluatedAt,
     classification: profile ? "pass" : "missing",
     canonicalDesign: pass(baselineState),

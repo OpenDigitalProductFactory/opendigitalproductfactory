@@ -47,6 +47,35 @@ describe("Build Studio PR readiness", () => {
     expect(command).not.toContain("validated body");
   });
 
+  // BI-5C4933EB: the check detached the shared /workspace root and then tried
+  // to restore build/<id>, which git refuses while that branch is checked out
+  // in the build's own worktree, so readiness never completed.
+  it("runs in the build's own workdir, never the shared root", () => {
+    const command = buildPublishedReadinessCommand({
+      branchName: "build/FB-123",
+      commitSha: "a".repeat(40),
+      restoreBranch: "build/FB-123",
+      prBodyBase64: "dmFsaWRhdGVkIGJvZHk=",
+      repositoryOwner: "OpenDigitalProductFactory",
+      repositoryName: "opendigitalproductfactory",
+      workdir: "/workspace/.builds/FB-123",
+    });
+    expect(command.startsWith("cd '/workspace/.builds/FB-123'")).toBe(true);
+    expect(command).not.toContain("cd /workspace;");
+  });
+
+  it("refuses a workdir outside the sandbox workspace", () => {
+    expect(() => buildPublishedReadinessCommand({
+      branchName: "build/FB-123",
+      commitSha: "a".repeat(40),
+      restoreBranch: "build/FB-123",
+      prBodyBase64: "dmFsaWRhdGVkIGJvZHk=",
+      repositoryOwner: "OpenDigitalProductFactory",
+      repositoryName: "opendigitalproductfactory",
+      workdir: "/tmp/../etc",
+    })).toThrow();
+  });
+
   it("parses the machine-readable verdict after sandbox noise", () => {
     expect(parsePublishedReadinessOutput(
       `fetch complete\nDPF_PR_READINESS_JSON={"ready":false,"blockers":["Docs Impact failed locally."]}\nDPF_PR_READINESS_COMMAND fetch=0 checkout=0 readiness=1 restore=0\n`,

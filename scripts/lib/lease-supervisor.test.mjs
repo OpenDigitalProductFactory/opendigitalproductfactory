@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   authoritySafetyMarginMs,
   heartbeatIntervalMs,
+  isAuthoritativeRefusal,
   superviseLeaseRun,
   uncertainRetryDelayMs,
 } from "./lease-supervisor.mjs";
@@ -378,3 +379,65 @@ test("the backoff is capped at the heartbeat interval and never zero", () => {
     }
   }
 });
+
+// 2026-09-24: a passed gate lost its verdict. A quiescing portal or a server
+// that threw is "not now", not "the lease is gone", and a failed release must
+// not take the run's evidence with it.
+test("only a refusal that says the lease is gone is authoritative", () => {
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "lease_lost" }), true);
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "nonprod_lease_not_owner" }), true);
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "portal_quiescing" }), false);
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "tool_threw" }), false);
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "x", data: { retryable: true } }), false);
+  assert.equal(isAuthoritativeRefusal({ jsonrpc: "2.0", error: { code: -32000 } }), false);
+  assert.equal(isAuthoritativeRefusal({ success: true }), false);
+});
+
+test("a quiescing portal is retried inside the budget, not fenced", async () => {
+  const child = deferred();
+  const retries = [];
+  let heartbeatCallback;
+  const resultPromise = superviseLeaseRun({
+    ttlMs: 120_000,
+    expiresAt: new Date(120_000).toISOString(),
+    now: () => 0,
+    run: () => child.promise,
+    renew: async () => ({ success: false, error: "portal_quiescing" }),
+    terminate: async () => { throw new Error("must not terminate"); },
+    release: async () => {},
+    schedule: (callback) => { heartbeatCallback = callback; return "heartbeat"; },
+    cancelSchedule: () => {},
+    scheduleDeadline: () => "deadline",
+    cancelDeadline: () => {},
+    scheduleRetry: (callback, delayMs) => { retries.push({ callback, delayMs }); return "retry"; },
+    cancelRetry: () => {},
+    onEvent: () => {},
+  });
+  await heartbeatCallback();
+  assert.equal(retries.length, 1);
+  child.resolve({ status: 0 });
+  const result = await resultPromise;
+  assert.equal(result.status, "completed");
+});
+
+test("a failed release is recorded and does not throw away the run's result", async () => {
+  const events = [];
+  const result = await superviseLeaseRun({
+    ttlMs: 120_000,
+    expiresAt: new Date(120_000).toISOString(),
+    now: () => 0,
+    run: async () => ({ status: 0, verdict: "passed" }),
+    renew: async () => ({ success: true }),
+    terminate: async () => {},
+    release: async () => { throw new Error("release refused"); },
+    schedule: () => "heartbeat",
+    cancelSchedule: () => {},
+    scheduleDeadline: () => "deadline",
+    cancelDeadline: () => {},
+    onEvent: (event) => events.push(event),
+  });
+  assert.equal(result.status, "completed");
+  assert.deepEqual(result.result, { status: 0, verdict: "passed" });
+  assert.ok(events.some((event) => event.type === "release-failed" && event.reason === "release refused"));
+});
+

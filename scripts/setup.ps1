@@ -111,6 +111,53 @@ if (-not (Test-Path $rootEnv)) {
     Write-Ok "Created root .env with generated secrets"
 }
 
+# GitHub update signing secret (BI-C26D5DC5): generated when missing or still the
+# example placeholder, never rotated once set. Distinct per file on purpose: each
+# is the secret of the portal that reads that file.
+foreach ($envFile in @("apps\web\.env.local", $rootEnv)) {
+    if (-not (Test-Path $envFile)) { continue }
+    $envText = Get-Content -Path $envFile -Raw
+    if ($null -eq $envText) { $envText = "" }
+    $match = [System.Text.RegularExpressions.Regex]::Match($envText, '(?m)^DPF_GIT_WEBHOOK_SECRET=(.*)$')
+    $current = if ($match.Success) { $match.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+    if ($current.Length -gt 0 -and -not $current.StartsWith("<")) { continue }
+    $webhookBytes = New-Object byte[] 32
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($webhookBytes)
+    $webhookSecret = -join ($webhookBytes | ForEach-Object { $_.ToString("x2") })
+    if ($match.Success) {
+        $envText = [System.Text.RegularExpressions.Regex]::Replace($envText, '(?m)^DPF_GIT_WEBHOOK_SECRET=.*$', "DPF_GIT_WEBHOOK_SECRET=$webhookSecret")
+    } else {
+        if ($envText.Length -gt 0 -and -not $envText.EndsWith("`n")) { $envText += "`n" }
+        $envText += "DPF_GIT_WEBHOOK_SECRET=$webhookSecret`n"
+    }
+    Set-Content -Path $envFile -Value $envText -NoNewline
+    Write-Ok "Generated DPF_GIT_WEBHOOK_SECRET in $envFile"
+}
+
+# Inngest signing and event keys (BI-3267763F): the root .env feeds the compose
+# stack, which refuses to render without them. Generated when missing, a
+# placeholder, or the old public compose default; never rotated once set.
+if (Test-Path $rootEnv) {
+    foreach ($inngestKey in @("INNGEST_SIGNING_KEY", "INNGEST_EVENT_KEY")) {
+        $envText = Get-Content -Path $rootEnv -Raw
+        if ($null -eq $envText) { $envText = "" }
+        $match = [System.Text.RegularExpressions.Regex]::Match($envText, "(?m)^$inngestKey=(.*)$")
+        $current = if ($match.Success) { $match.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+        if ($current.Length -gt 0 -and -not $current.StartsWith("<") -and @("abcdef0123456789", "deadbeefcafebabe") -notcontains $current) { continue }
+        $inngestBytes = New-Object byte[] 32
+        [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($inngestBytes)
+        $inngestValue = -join ($inngestBytes | ForEach-Object { $_.ToString("x2") })
+        if ($match.Success) {
+            $envText = [System.Text.RegularExpressions.Regex]::Replace($envText, "(?m)^$inngestKey=.*$", "$inngestKey=$inngestValue")
+        } else {
+            if ($envText.Length -gt 0 -and -not $envText.EndsWith("`n")) { $envText += "`n" }
+            $envText += "$inngestKey=$inngestValue`n"
+        }
+        Set-Content -Path $rootEnv -Value $envText -NoNewline
+        Write-Ok "Generated $inngestKey in $rootEnv"
+    }
+}
+
 # -- Databases -------------------------------------------------------------------
 
 Write-Step "Starting services (PostgreSQL + Ollama)"

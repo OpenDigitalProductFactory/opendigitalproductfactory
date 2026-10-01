@@ -24,6 +24,8 @@ export const GATE_EXIT = Object.freeze({
   CONTROL_PLANE_STARVATION: 5,
   ABANDONED_OR_UNRECORDED: 7,
   DURABLE_WAIT: 75,
+  WAIT_CANCELLED: 81,
+  SOURCE_DRIFT: 82,
   CHILD_SIGNAL_DEATH: 87,
   INTERRUPTED: 130,
 });
@@ -76,6 +78,20 @@ export function classifyGateExit({ code, output = "" }) {
       };
     case GATE_EXIT.INTERRUPTED:
       return { kind: "interrupted", retry: false, verdict: "none", summary: "interrupted" };
+    // BI-D35B85BF: both are final and unrun. Re-running the same command would
+    // override a cancellation or test source nobody queued.
+    case GATE_EXIT.WAIT_CANCELLED:
+      return {
+        kind: "cancelled", retry: false, verdict: "none",
+        summary: "the queued wait was cancelled, or its lease may not be replaced; nothing ran",
+        next: "run pregate again only if the work should still be gated",
+      };
+    case GATE_EXIT.SOURCE_DRIFT:
+      return {
+        kind: "source-drift", retry: false, verdict: "none",
+        summary: "the resumed gate's worktree no longer holds the queued commit; nothing ran",
+        next: "commit or restore the work, then run pregate again",
+      };
     default:
       break;
   }

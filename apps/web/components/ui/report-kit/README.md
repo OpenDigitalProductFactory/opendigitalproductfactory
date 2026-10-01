@@ -35,7 +35,7 @@ import {
 | `FilterBar` | client¹ | search + select + pill facets above a table |
 | `ExportButton` / `toCsv` | client | CSV export of rows (papaparse-backed) |
 | `Chart` | client² | business-data line / bar / area charts (recharts) |
-| `statusColors` (`intentStyle`, `resolveIntent`, `STATUS_INTENT`) | ✅ | the one place status→color semantics live |
+| `statusColors` (`intentStyle`, `resolveIntent`, `STATUS_INTENT`) | ✅ | the one place status→color semantics live; the module is `apps/web/lib/ui-model/statusColors.ts`, re-exported here |
 
 ¹ `DataTable` / `FilterBar` are `"use client"` (they manage sort/page/onChange
 state). A server page uses them by rendering them inside a small client child —
@@ -54,8 +54,10 @@ design tokens:
 `success · warning · danger · info · neutral · accent`
 
 A domain status string resolves to an intent via the central registry in
-`statusColors.ts`. Adding a domain/status is a one-line edit there — not a new
-color map in a page.
+`apps/web/lib/ui-model/statusColors.ts`. It lives in `lib` so server code and
+`lib` projections can resolve an intent without importing `components/**`; the
+report-kit barrel re-exports it. Adding a domain/status is a one-line edit
+there — not a new color map in a page.
 
 ```tsx
 // explicit intent
@@ -329,5 +331,6 @@ import { Chart } from "@/components/ui/report-kit/Chart";
 - **Phase 2:** migrate reference surfaces (complaints, finance/payments), grow
   `STATUS_INTENT`, fold `ChangeLaneStatusBadge` onto `StatusBadge`.
 - **Phase 3:** ✅ `StatCard` + `ExportButton` (CSV via papaparse) + `Chart`
-  (recharts — charting decision resolved). Remaining: PDF export (`@react-pdf`),
+  (recharts — charting decision resolved). Remaining: PDF export (through the dpf-doctools engine, as invoices and
+  document export do; `@react-pdf/renderer` was retired 2026-09-26),
   server-rendered `DataTable` URL mode.

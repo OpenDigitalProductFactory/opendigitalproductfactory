@@ -13,7 +13,7 @@
 // implementations live in sibling modules (build-review-handlers.ts and
 // build-design-review-handler.ts) so no file exceeds the module-size ceiling.
 
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { saveBuildEvidence, reviewBuildPlan } from "@/lib/mcp/build-review-handlers";
 import { reviewDesignDoc } from "@/lib/mcp/build-design-review-handler";

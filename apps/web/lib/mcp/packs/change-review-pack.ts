@@ -25,7 +25,7 @@ import {
   type SemanticReviewOutcome,
 } from "@/lib/change-review/semantic-review-enforcement";
 import type { DeliberationArtifactType, StrategyProfile } from "@/lib/deliberation/external-review-activation";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { isRecord } from "@/lib/shared/coerce";
 import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-store";

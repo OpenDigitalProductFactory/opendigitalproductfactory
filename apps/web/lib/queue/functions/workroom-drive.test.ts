@@ -186,7 +186,7 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     const fx = effects();
     const current = room({ currentStageKey: "sweep", receipts: [{ stageKey: "sweep", kind: "blocked" }],
       stageDispatchedAt: new Date("2026-09-01T00:00:00Z"),
-      recordedEvidence: [{ stageKey: "sweep", kind: "assurance-run", recordedAt: new Date("2026-09-01T00:01:00Z") }],
+      recordedEvidence: [{ stageKey: "sweep", kind: "assurance-run", outcome: "completed", recordedAt: new Date("2026-09-01T00:01:00Z") }],
     });
     await runWorkroomDriveJob(new Date("2026-09-01T00:02:00Z"), { listRooms: async () => [current], effects: fx });
     const snapshot = fx.persist.mock.calls.at(-1)?.[0]?.snapshot as Record<string, unknown>;
@@ -212,6 +212,7 @@ describe("applyDrivePlan lease expiry", () => {
   function persistedLease(status = "ready") {
     const persisted = { expiresAt: null as Date | null, holder: "prn-row-coord", status };
     driveDb.scheduledAgentTask.upsert.mockReset().mockResolvedValue({});
+    driveDb.scheduledAgentTask.findUnique.mockReset().mockResolvedValue(null);
     driveDb.$transaction.mockImplementation(async (run) => run(driveDb));
     driveDb.workroom.findUnique.mockResolvedValue({ workspaceState: {} });
     driveDb.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
@@ -351,5 +352,105 @@ describe("applyDrivePlan lease expiry", () => {
     });
     expect(outcome).toBe("dispatched");
     expect(fx.acquireLease).toHaveBeenCalled();
+  });
+});
+
+// BI-E8C78E80 — a tick that changed nothing updates the snapshot but adds no
+// trail row, and a room stuck for an hour tells its owner once.
+describe("applyDrivePlan hold", () => {
+  const plan = (over: Record<string, unknown> = {}) => ({
+    action: "pause", reason: "conformance_pause", roomId: "row-1", shapeKey: null, shapeVersion: null,
+    definition: null, stageKey: "spec", accountablePrincipalRef: null, agentId: null, attentionPrincipalRef: null,
+    taskId: null, conformance: { deviations: [{ code: "missing_explicit_coordinator" }] }, cycle: null,
+    deviations: [], ledger: [], ...over,
+  }) as unknown as Parameters<typeof applyDrivePlan>[0]["plan"];
+
+  it("records the first tick of a hold and keeps the repeats quiet", async () => {
+    const fx = effects();
+    await applyDrivePlan({ room: room(), plan: plan(), now: new Date("2026-09-24T00:00:00Z"), effects: fx });
+    const stored = fx.persist.mock.calls[0][0].snapshot;
+    expect(fx.persist.mock.calls[0][0].quiet).toBe(false);
+    await applyDrivePlan({ room: room({ workspaceState: { workroomDrive: stored } }), plan: plan(),
+      now: new Date("2026-09-24T00:15:00Z"), effects: fx });
+    expect(fx.persist.mock.calls[1][0]).toMatchObject({ quiet: true, snapshot: { hold: { ticks: 2 } } });
+  });
+
+  it("tells the owner once after an hour stuck, and not again in the same spell", async () => {
+    const notifyStall = vi.fn(async () => {});
+    const fx = { ...effects(), notifyStall };
+    let state: unknown = {};
+    for (let i = 0; i < 6; i++) {
+      await applyDrivePlan({ room: room({ workspaceState: state }), plan: plan(),
+        now: new Date(Date.UTC(2026, 8, 24, 0, 15 * i)), effects: fx });
+      state = { workroomDrive: fx.persist.mock.calls.at(-1)?.[0].snapshot };
+    }
+    expect(notifyStall).toHaveBeenCalledTimes(1);
+    expect(notifyStall).toHaveBeenCalledWith(expect.objectContaining({ hold: expect.objectContaining({ stuckTicks: 4 }) }));
+  });
+});
+
+// BI-43C3E914 — a stage names the tools it needs (GPP element 2 "Attachment",
+// element 5 "Capability set"), and the drive carries them to the run.
+describe("stage-declared tools reach the dispatched task", () => {
+  const declaredRoom = () => room({
+    scopeClaims: [buildWorkShapeClaim({ key: "dependency-advisory-watch", version: "1.0.0" })],
+  });
+
+  it("passes a declared stage's tools to the task and names them in the brief", async () => {
+    const fx = effects();
+    const result = await runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [declaredRoom()],
+      effects: fx,
+    });
+    expect(result.dispatched).toBe(1);
+    const call = fx.upsertAgentTask.mock.calls[0]?.[0];
+    expect(call?.stage).toMatchObject({
+      shapeKey: "dependency-advisory-watch",
+      shapeVersion: "1.0.0",
+      stageKey: "sweep",
+      tools: ["read_codebase_manifest", "list_patch_posture"],
+    });
+    expect(call?.prompt).toContain("Tools for this stage: read_codebase_manifest, list_patch_posture.");
+  });
+
+  it("leaves an undeclared stage exactly as before: no tools, no tools line", async () => {
+    const fx = effects();
+    // obligation-assurance-watch/sweep is on KNOWN_STAGE_TOOL_GAPS.
+    await runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [room()],
+      effects: fx,
+    });
+    const call = fx.upsertAgentTask.mock.calls[0]?.[0];
+    expect(call?.stage.tools).toEqual([]);
+    expect(call?.stage.stageKey).toBe("sweep");
+    expect(call?.prompt).not.toContain("Tools for this stage");
+  });
+
+  it("writes the stage record to taskConfig.workroomStage, preserving other taskConfig keys", async () => {
+    driveDb.$transaction.mockImplementation(async (run) => run(driveDb));
+    driveDb.workroom.updateMany.mockResolvedValue({ count: 1 });
+    driveDb.scheduledAgentTask.upsert.mockReset().mockResolvedValue({});
+    driveDb.scheduledAgentTask.findUnique.mockReset().mockResolvedValue({
+      taskConfig: { trigger: { kind: "time", recordedAt: "2026-08-01T00:00:00.000Z" } },
+    });
+    const fx = createWorkroomDriveEffects(async () => driveDb as never, () => new Date("2026-09-01T00:00:00.000Z"));
+    const stage = { shapeKey: "dependency-advisory-watch", shapeVersion: "1.0.0", stageKey: "sweep", tools: ["read_codebase_manifest"] };
+    await expect(fx.upsertAgentTask({
+      taskId: "task-1",
+      agentId: "security-engineer",
+      ownerUserId: "user-1",
+      title: "t",
+      prompt: "p",
+      stage,
+      now: new Date("2026-09-01T00:00:00.000Z"),
+      lease: { roomId: "row-1", expiresAt: new Date("2026-09-01T00:10:00.000Z"), holderPrincipalId: null },
+    })).resolves.toBe(true);
+    const args = driveDb.scheduledAgentTask.upsert.mock.calls[0]?.[0];
+    const expected = {
+      trigger: { kind: "time", recordedAt: "2026-08-01T00:00:00.000Z" },
+      workroomStage: stage,
+    };
+    expect(args?.create?.taskConfig).toEqual(expected);
+    expect(args?.update?.taskConfig).toEqual(expected);
   });
 });

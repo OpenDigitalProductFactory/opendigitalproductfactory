@@ -70,8 +70,8 @@ export async function createSelfUpgradeRecoveryPoint(
   const backupTargets = resolveRecoveryBackupTargets();
   const overrides = args.runners ?? {};
 
-  // BET-5 retired neo4j (code + knowledge graph) and qdrant (vectors); the
-  // platform now runs on postgres only. postgres is the primary data store and
+  // Since BET-5 the graph and vectors live in postgres; the platform runs on
+  // postgres only. postgres is the primary data store and
   // the only store a portal upgrade migrates, so it is the sole recovery-point
   // target.
   const members: SelfUpgradeRecoveryPointMember[] = [];
@@ -92,8 +92,7 @@ export async function createSelfUpgradeRecoveryPoint(
 }
 
 /**
- * The order recovery-point members are recorded in. postgres-only after BET-5
- * retired neo4j + qdrant.
+ * The order recovery-point members are recorded in. postgres-only since BET-5.
  */
 const RECOVERY_TARGET_ORDER: readonly BackupTarget[] = ["postgres"];
 
@@ -105,9 +104,8 @@ const RECOVERY_TARGET_ORDER: readonly BackupTarget[] = ["postgres"];
 export const PRIMARY_BACKUP_TARGET: BackupTarget = "postgres";
 
 /**
- * Which stores the pre-upgrade recovery point backs up. postgres only: BET-5
- * retired neo4j (code + knowledge graph) and qdrant (vectors), so postgres is
- * the sole store an upgrade needs to protect.
+ * Which stores the pre-upgrade recovery point backs up. postgres only: since
+ * BET-5 the graph and vectors live in postgres, so it is the sole store an upgrade needs to protect.
  */
 export function resolveRecoveryBackupTargets(): Set<BackupTarget> {
   return new Set<BackupTarget>([PRIMARY_BACKUP_TARGET]);

@@ -17,10 +17,12 @@ import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inven
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
 import { loadBaselineSource, type BaselineSourceDb } from "./baseline-source";
 import { discoverCanonicalReviewArtifact } from "./canonical-artifact-discovery";
+import { designPhaseReviewDecision, loadPlanReviewArtifact, routeDesignReviewsBeforeBaseline } from "./design-phase-recovery";
 import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
   selectEligibleObjectiveEvidenceActivityIds,
 } from "./objective-reconciliation";
+import { bodyBaselineEscalation, researchLaneEscalation, smallShapeAcceptanceEscalation } from "./shape-lane-escalations";
 import type { InitiativeReadinessDecision } from "./types";
 import { readRepositoryProviderBlob } from "./repository-artifact";
 
@@ -41,6 +43,8 @@ export type TerminalRecoveryEscalationReason =
   | "workroom-ambiguous"
   | "workroom-identity-incomplete"
   | "baseline-not-found"
+  | "body-baseline-unpersisted"
+  | "acceptance-criteria-missing"
   | "baseline-ambiguous"
   | "eligible-evidence-not-found"
   | "eligible-evidence-unbounded"
@@ -54,62 +58,12 @@ type TerminalEscalation = {
   // design-author owns RESEARCH_REQUIRED on every shape that carries it
   // (shape-requirements.ts small() and medium()), so the research lane's
   // escalation is addressed to the author, not to a reviewer (BI-7876699F).
-  accountableRole: "acceptance-reviewer" | "delivery-coordinator" | "design-author";
-  toolName: "record_initiative_evidence" | "record_execution_evidence";
+  accountableRole: "acceptance-reviewer" | "delivery-coordinator" | "design-author" | "product-owner";
+  toolName: "record_initiative_evidence" | "record_execution_evidence" | "update_backlog_item";
   grant: "initiative_evidence_write" | "backlog_write";
   reason: TerminalRecoveryEscalationReason;
   nextAction: string;
 };
-
-/**
- * BI-05F8860A: under readiness.v3 a small or break-fix item owes no objective
- * mapping — its acceptance lane belongs to the delivery-coordinator and is met
- * by cited manual/ux evidence (the runtime check or the failing-to-passing
- * test). Routing that lane at objective-mapping produced "baseline-not-found",
- * then "eligible-evidence-not-found", then "objective-mapping-history-
- * unavailable" — three misleading escalations for one missing evidence row.
- */
-function smallShapeAcceptanceEscalation(): TerminalInitiativeRecovery {
-  return {
-    reviewerRoutes: [],
-    unroutable: [],
-    escalations: [{
-      accountableRole: "delivery-coordinator",
-      toolName: "record_execution_evidence",
-      grant: "backlog_write",
-      reason: "acceptance-evidence-required",
-      nextAction: "This delivery shape is accepted by the runtime check on the live install or by the failing-to-passing test, not by objective mapping. Record it with record_execution_evidence (kind manual_check or ux_verified) inside the current completion window, then cite that activity id in completionEvidence.evidenceActivityIds. Do not re-claim the item to refresh readiness; a re-claim does not reopen the window.",
-    }],
-  };
-}
-
-/**
- * BI-7876699F: research is satisfied by the AUTHOR, never by objective mapping.
- *
- * When RESEARCH_REQUIRED was the only unmet lane this function did not exist, so
- * the packet fell through to the workroom/baseline chain and answered
- * "baseline-not-found — complete independent spec approval". A delivery-small
- * shape's requirement set contains no OBJECTIVE_BASELINE_REQUIRED at all, so that
- * route could never legally be taken: the item was unclosable by anyone, and the
- * packet was pointing at a gate its own policy said did not apply.
- *
- * Same principle as smallShapeAcceptanceEscalation above (BI-05F8860A): name the
- * writer the accountable role can actually reach, and do not consult machinery
- * this lane does not use.
- */
-function researchLaneEscalation(): TerminalInitiativeRecovery {
-  return {
-    reviewerRoutes: [],
-    unroutable: [],
-    escalations: [{
-      accountableRole: "design-author",
-      toolName: "record_initiative_evidence",
-      grant: "initiative_evidence_write",
-      reason: "research-evidence-required",
-      nextAction: "Research is the reproduction, and its author records it: call record_initiative_evidence with gate \"research\", citing the defect on a named ref (commit or branch + file + line) and the failing-to-passing proof. This lane needs no objective baseline and no independent spec approval — the delivery shape does not require one.",
-    }],
-  };
-}
 
 export type TerminalInitiativeRecovery = Omit<InitiativeReviewerRecovery, "escalations"> & {
   escalations: Array<InitiativeReviewerRecovery["escalations"][number] | TerminalEscalation>;
@@ -151,6 +105,7 @@ export type TerminalRecoveryPorts = {
     purpose?: "post-implementation-review";
   }): Promise<Awaited<ReturnType<typeof discoverCanonicalReviewArtifact>>>;
   resolveRecovery(args: Parameters<typeof resolveInitiativeReviewerRecovery>[0]): Promise<InitiativeReviewerRecovery>;
+  loadPlanArtifact(args: { itemId: string; repositoryFullName: string }): ReturnType<typeof loadPlanReviewArtifact>;
 };
 
 function escalation(reason: TerminalRecoveryEscalationReason, nextAction: string): TerminalInitiativeRecovery {
@@ -455,6 +410,7 @@ const DEFAULT_PORTS: TerminalRecoveryPorts = {
   verifyHistoricalArtifact: (args) => readRepositoryProviderBlob(args),
   discoverArtifact: discoverCanonicalReviewArtifact,
   resolveRecovery: (args) => resolveInitiativeReviewerRecovery({ ...args, db: prisma as never }),
+  loadPlanArtifact: loadPlanReviewArtifact,
 };
 
 function baselineAncestors(
@@ -647,8 +603,12 @@ export async function resolveTerminalInitiativeRecovery(args: {
     });
   }
 
+  const designPhase = designPhaseReviewDecision(args.decision); // BI-817556D8: before acceptance lanes fail closed
   const payloads = await ports.loadBaselinePayloads(args.decision.subject.id);
   if (payloads.length === 0) {
+    if (designPhase) return routeDesignReviewsBeforeBaseline({ designPhase, currentAgentId: args.currentAgentId, baseSha: room.baseSha, dispatchContext, ports }); // BI-1D8E53D9
+    const effective = args.decision.shapeDecision?.effective;
+    if (effective === "small" || effective === "medium") return bodyBaselineEscalation(args.decision);
     return escalation("baseline-not-found", "No current objective baseline exists. Complete independent spec approval before acceptance mapping.");
   }
   const baselineRows = parseBaselinePayloads(payloads);
@@ -657,7 +617,8 @@ export async function resolveTerminalInitiativeRecovery(args: {
     return escalation("baseline-ambiguous", "The objective baseline chain has no unique valid head. Reconcile or supersede the conflicting baseline before dispatch.");
   }
 
-  const needsObjectiveMapping = [...args.decision.blockers, ...args.decision.unmet]
+  const decision = designPhase ?? args.decision;
+  const needsObjectiveMapping = [...decision.blockers, ...decision.unmet]
     .some((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED"
       || entry.code === "OBJECTIVE_RECONCILIATION_REQUIRED");
   const eligibleEvidence = needsObjectiveMapping
@@ -679,7 +640,9 @@ export async function resolveTerminalInitiativeRecovery(args: {
     );
   }
 
-  const baselineArtifact = baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
+  // BI-D3E1F6D9: a design review reads the room's current design at its head,
+  // exactly as the refused claim issues it; only acceptance keeps the pinned commit.
+  const baselineArtifact = !designPhase && baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
       === room.repositoryFullName.toLocaleLowerCase("en-US")
     ? {
       commitSha: baseline.artifactRef.commitSha,
@@ -701,11 +664,12 @@ export async function resolveTerminalInitiativeRecovery(args: {
   }
 
   const recovery = await ports.resolveRecovery({
-    decision: args.decision,
+    decision,
     currentAgentId: args.currentAgentId,
     db: prisma as never,
     dispatchContext,
     canonicalArtifact: { resolved: true, ...artifact },
+    ...(designPhase ? { planArtifact: await ports.loadPlanArtifact({ itemId: decision.subject.id, repositoryFullName: room.repositoryFullName }) } : {}),
     expectedCurrentBaselineId: baseline.baselineId,
     ...(needsObjectiveMapping
       ? { eligibleEvidenceActivityIds: eligibleEvidence.data.activityIds }

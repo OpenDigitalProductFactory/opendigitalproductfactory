@@ -17,7 +17,7 @@ import {
   COMPACTION_THRESHOLD,
   COMPACTION_BATCH,
 } from "./thread-compaction";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 function makeMessages(count: number): ChatMessage[] {
   return Array.from({ length: count }, (_, i) => ({

@@ -1,4 +1,4 @@
-import type { BuildPhaseTag, ToolDefinition } from "@/lib/mcp-tools";
+import type { BuildPhaseTag, ToolDefinition } from "@/lib/mcp-tool-types";
 
 const ACTIVE_BUILD_PHASES = new Set<string>(["ideate", "plan", "build", "review", "ship"]);
 const TERMINAL_BUILD_PHASES = new Set<string>(["complete", "failed", "abandoned"]);

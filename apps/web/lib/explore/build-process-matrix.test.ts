@@ -3,6 +3,7 @@ import {
   BUILD_PROCESS_TYPE_VALUES,
   BUILD_PROCESS_SIZES,
   GATE_REQUIREMENTS,
+  checkPhaseGate,
   checkRequirement,
   DELIVERABLE_SENSITIVITIES,
   deriveBuildProcessSize,
@@ -18,7 +19,7 @@ import {
   type BuildProcessType,
 } from "./build-process-matrix";
 import { evaluateVerificationDepthShadow } from "./verification-depth-shadow";
-import { checkPhaseGate, normalizeHappyPathState, type FixContext } from "./feature-build-types";
+import { normalizeHappyPathState, type FixContext } from "./feature-build-types";
 
 // The right-sizing matrix maps (type, size) -> a LifecyclePolicy. These tests
 // pin three contracts the spec calls out:

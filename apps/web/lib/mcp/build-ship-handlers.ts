@@ -8,7 +8,7 @@
 
 import { prisma } from "@dpf/db";
 
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import {
   resolveActiveBuildId,
   extractBuildIdHint,
@@ -83,9 +83,12 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
   // staged-but-uncommitted changes and returns empty for any build whose
   // agent committed before deploy_feature ran.
   const { extractAndCategorizeDiff, scanForDestructiveOps, isNowInWindow } = await import("@/lib/build/sandbox/sandbox-promotion");
-  const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
+  const { getClientIdentity, resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
   const { clientBranch } = await getClientIdentity();
-  const extracted = await extractAndCategorizeDiff(build.sandboxId, { baseRef: clientBranch });
+  // BI-5C4933EB: read the build's own worktree (isolation on), not the shared
+  // root, which stays on client/<id>. /workspace when isolation is off.
+  const buildWorkdir = resolveBuildWorkdir(buildId);
+  const extracted = await extractAndCategorizeDiff(build.sandboxId, { baseRef: clientBranch, workspace: buildWorkdir });
   if (!extracted.fullDiff.trim()) {
     await prisma.featureBuild.update({
       where: { buildId },
@@ -135,7 +138,7 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
   // empty for committed-work builds and contribute_to_hive cannot
   // attribute the PR's commits back to specific FBs.
   const { listSandboxCommitsAheadOfBase } = await import("@/lib/build/sandbox/sandbox");
-  const commitHashes = await listSandboxCommitsAheadOfBase(build.sandboxId, clientBranch);
+  const commitHashes = await listSandboxCommitsAheadOfBase(build.sandboxId, clientBranch, buildWorkdir);
 
   await prisma.featureBuild.update({
     where: { buildId },
@@ -344,7 +347,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       description: true, gitCommitHashes: true, updatedAt: true, buildExecState: true,
       verificationOut: true, acceptanceMet: true, phase: true,
       designDoc: true, buildPlan: true,
-      disposition: true, dispositionSuggestionReason: true,
+      disposition: true, dispositionSuggestionReason: true, dispositionSource: true,
       productVersions: {
         take: 1,
         orderBy: { shippedAt: "desc" },
@@ -434,7 +437,16 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       // carry a change confirmed "shareable". Own-repo PRs skip this — that
       // is the install's private home.
       const { mayShareToPublicHive, privateDispositionBlockMessage } = await import("@/lib/build/disposition");
-      if (!mayShareToPublicHive(build.disposition)) {
+      const { INSTALLATION_OPERATING_INTENT_KEY } = await import("@/lib/installation-journey/operating-intent");
+      const intent = await prisma.platformConfig.findUnique({
+        where: { key: INSTALLATION_OPERATING_INTENT_KEY },
+        select: { value: true },
+      });
+      const purpose = (intent?.value as { primaryPurpose?: unknown } | null | undefined)?.primaryPurpose;
+      if (!mayShareToPublicHive(build.disposition, {
+        dispositionSource: build.dispositionSource,
+        installationPurpose: typeof purpose === "string" ? purpose : null,
+      })) {
         logBuildActivity(buildId, "create_portal_pr", "blocked: change disposition is private (public-hive target)");
         return {
           success: false,
@@ -595,6 +607,8 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
           prBodyBase64: Buffer.from(prBody, "utf8").toString("base64"),
           repositoryOwner: repoOwner,
           repositoryName: repoName,
+          // BI-5C4933EB: check the published tree in the build's own worktree.
+          workdir: (await import("@/lib/build/sandbox/build-branch")).resolveBuildWorkdir(buildId),
         }),
         `${token}\n`,
       );

@@ -10,7 +10,7 @@
 // Read-only projection — the row's lifecycle stays owned by the bridge cron.
 
 import type { prisma } from "@dpf/db";
-import { humanizeHealthAlert } from "@/components/monitoring/alert-humanize";
+import { humanizeHealthAlert } from "@/lib/observability/alert-humanize";
 import type { AttentionItem } from "../types";
 
 type Db = typeof prisma;

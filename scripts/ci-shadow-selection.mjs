@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,29 +56,30 @@ export function buildShadowSelection({
 }
 
 function parseArgs(args) {
-  const options = {
-    repoRoot: process.cwd(),
-    fullPaths: [],
-    selectedPath: null,
-    changedFilesPath: null,
-    unknownFilesPath: null,
-    escalatedToFull: false,
-    outputPath: "artifacts/ci-observation/shadow-selection.json",
+  const option = { type: "string" };
+  const { values } = utilParseArgs({
+    args,
+    options: {
+      "repo-root": option,
+      full: { type: "string", multiple: true },
+      selected: option,
+      "changed-files": option,
+      "unknown-files": option,
+      escalated: option,
+      output: option,
+    },
+  });
+  const empty = Object.keys(values).find((name) => [values[name]].flat().some((value) => !value));
+  if (empty) throw new Error(`--${empty} requires a value`);
+  return {
+    repoRoot: values["repo-root"] ?? process.cwd(),
+    fullPaths: values.full ?? [],
+    selectedPath: values.selected ?? null,
+    changedFilesPath: values["changed-files"] ?? null,
+    unknownFilesPath: values["unknown-files"] ?? null,
+    escalatedToFull: values.escalated === "true",
+    outputPath: values.output ?? "artifacts/ci-observation/shadow-selection.json",
   };
-  for (let index = 0; index < args.length; index += 2) {
-    const flag = args[index];
-    const value = args[index + 1];
-    if (!value || value.startsWith("--")) throw new Error(`${flag} requires a value`);
-    if (flag === "--repo-root") options.repoRoot = value;
-    else if (flag === "--full") options.fullPaths.push(value);
-    else if (flag === "--selected") options.selectedPath = value;
-    else if (flag === "--changed-files") options.changedFilesPath = value;
-    else if (flag === "--unknown-files") options.unknownFilesPath = value;
-    else if (flag === "--escalated") options.escalatedToFull = value === "true";
-    else if (flag === "--output") options.outputPath = value;
-    else throw new Error(`unknown argument: ${flag}`);
-  }
-  return options;
 }
 
 function readJson(path, fallback = null) {

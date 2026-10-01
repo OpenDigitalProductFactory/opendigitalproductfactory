@@ -106,15 +106,15 @@
       "label": "DPF: Shared Workspace Infrastructure",
       "type": "shell",
       "command": "cmd",
-      "args": ["/c", "docker compose up -d postgres neo4j qdrant portal-init sandbox"],
+      "args": ["/c", "docker compose up -d postgres portal-init sandbox"],
       "options": { "cwd": "${workspaceFolder}" },
       "osx": {
         "command": "bash",
-        "args": ["-lc", "docker compose up -d postgres neo4j qdrant portal-init sandbox"]
+        "args": ["-lc", "docker compose up -d postgres portal-init sandbox"]
       },
       "linux": {
         "command": "bash",
-        "args": ["-lc", "docker compose up -d postgres neo4j qdrant portal-init sandbox"]
+        "args": ["-lc", "docker compose up -d postgres portal-init sandbox"]
       },
       "problemMatcher": [],
       "detail": "Start databases + validation services for shared-workspace development"
@@ -303,7 +303,7 @@
         "args": ["-lc", "echo 'WARNING: This will destroy ALL data including the database, users, OAuth tokens, sandbox workspace, and all configuration.' && read -r -p 'Press Enter to continue or Ctrl+C to cancel: ' && docker compose down -v --remove-orphans && docker compose build && docker compose up -d"]
       },
       "problemMatcher": [],
-      "detail": "DESTRUCTIVE: Stops all containers, deletes ALL volumes (database, sandbox, neo4j, qdrant, redis), rebuilds all images from source, and starts fresh. You will need to reconfigure everything: admin user, OAuth providers, branding, etc."
+      "detail": "DESTRUCTIVE: Stops all containers, deletes ALL volumes (database, sandbox, redis), rebuilds all images from source, and starts fresh. You will need to reconfigure everything: admin user, OAuth providers, branding, etc."
     }
   ]
 }

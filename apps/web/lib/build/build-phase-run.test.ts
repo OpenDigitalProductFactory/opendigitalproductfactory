@@ -74,6 +74,7 @@ vi.mock("@dpf/db", () => ({
 
 import {
   completeBuildPhaseRun,
+  releaseUnfinishedBuildPhaseRun,
   stampBuildPhaseExecutionProfile,
   startBuildPhaseRun,
 } from "./build-phase-run";
@@ -85,21 +86,36 @@ beforeEach(() => {
 });
 
 describe("startBuildPhaseRun", () => {
-  it("upserts a row with startedAt when called", async () => {
+  it("creates a row with startedAt when called", async () => {
     await startBuildPhaseRun("build-123", "ideate");
-    expect(prisma.buildPhaseRun.upsert).toHaveBeenCalledOnce();
-    const call = vi.mocked(prisma.buildPhaseRun.upsert).mock.calls[0]![0];
-    expect(call.where.buildId_phase).toEqual({ buildId: "build-123", phase: "ideate" });
-    expect(call.create.startedAt).toBeInstanceOf(Date);
+    expect(prisma.buildPhaseRun.create).toHaveBeenCalledOnce();
+    const call = vi.mocked(prisma.buildPhaseRun.create).mock.calls[0]![0];
+    expect(call.data.buildId).toBe("build-123");
+    expect(call.data.phase).toBe("ideate");
+    expect(call.data.startedAt).toBeInstanceOf(Date);
   });
 
-  it("is idempotent — does not overwrite an existing startedAt on second call", async () => {
+  it("is idempotent — does not overwrite an in-flight startedAt on second call", async () => {
     await startBuildPhaseRun("build-123", "ideate");
     await startBuildPhaseRun("build-123", "ideate");
-    expect(prisma.buildPhaseRun.upsert).toHaveBeenCalledTimes(2);
-    // update: {} means no overwrite on second call
-    const secondCall = vi.mocked(prisma.buildPhaseRun.upsert).mock.calls[1]![0];
-    expect(secondCall.update).toEqual({});
+    expect(prisma.buildPhaseRun.create).toHaveBeenCalledOnce();
+    expect(prisma.buildPhaseRun.update).not.toHaveBeenCalled();
+  });
+
+  it("reopens a finished phase as a new attempt", async () => {
+    await startBuildPhaseRun("build-reopen", "ideate");
+    await completeBuildPhaseRun("build-reopen", "ideate");
+    vi.mocked(prisma.buildPhaseRun.update).mockClear();
+
+    await startBuildPhaseRun("build-reopen", "ideate");
+
+    expect(prisma.buildPhaseRun.update).toHaveBeenCalledOnce();
+    const call = vi.mocked(prisma.buildPhaseRun.update).mock.calls[0]![0];
+    expect(call.where.buildId_phase).toEqual({ buildId: "build-reopen", phase: "ideate" });
+    expect(call.data.completedAt).toBeNull();
+    expect(call.data.startedAt).toBeInstanceOf(Date);
+    expect(call.data.inputTokens).toBe(0);
+    expect(call.data.inferenceCount).toBe(0);
   });
 
   it("stamps the compact resolved execution profile on the actual phase row", async () => {
@@ -123,14 +139,28 @@ describe("startBuildPhaseRun", () => {
       executionProfileRef,
     });
 
-    const call = vi.mocked(prisma.buildPhaseRun.upsert).mock.calls[0]![0];
-    expect(call.create.executionProfileRef).toEqual(executionProfileRef);
-    expect(call.update).toEqual({});
+    const call = vi.mocked(prisma.buildPhaseRun.create).mock.calls[0]![0];
+    expect(call.data.executionProfileRef).toEqual(executionProfileRef);
   });
 
   it("swallows db errors without throwing", async () => {
-    vi.mocked(prisma.buildPhaseRun.upsert).mockRejectedValueOnce(new Error("db down"));
+    vi.mocked(prisma.buildPhaseRun.findUnique).mockRejectedValueOnce(new Error("db down"));
     await expect(startBuildPhaseRun("build-123", "ideate")).resolves.not.toThrow();
+  });
+});
+
+describe("releaseUnfinishedBuildPhaseRun", () => {
+  it("closes only an open row for that phase", async () => {
+    await releaseUnfinishedBuildPhaseRun("build-123", "ideate");
+    expect(prisma.buildPhaseRun.updateMany).toHaveBeenCalledWith({
+      where: { buildId: "build-123", phase: "ideate", completedAt: null },
+      data: { completedAt: expect.any(Date) },
+    });
+  });
+
+  it("swallows db errors without throwing", async () => {
+    vi.mocked(prisma.buildPhaseRun.updateMany).mockRejectedValueOnce(new Error("db down"));
+    await expect(releaseUnfinishedBuildPhaseRun("build-123", "ideate")).resolves.not.toThrow();
   });
 });
 

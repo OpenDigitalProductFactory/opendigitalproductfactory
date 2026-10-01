@@ -450,6 +450,10 @@ model PlatformDevConfig {
   forkVerifiedAt            DateTime?
   backlogTeeUpDailyCap      Int       @default(3)
   governedBacklogEnabled    Boolean   @default(false)
+  /// Points-in-flight admission (BI-3430B3A4): shadow records every decision
+  /// without blocking; enforce refuses autonomous starts past the allowance.
+  /// Shadow first per WWMD DI-D83D9C13686B.
+  wipAdmissionMode          WipAdmissionMode @default(shadow)
   // Demand-management policy (EP-DEMAND-MGMT Phase 4): the operator-owned,
   // audited scoring policy the demand engine reads instead of a hardcoded
   // default. demandFramework = active scoring framework (rice|wsjf|value_effort|
@@ -558,4 +562,11 @@ model TableGrowthSample {
 
   @@index([table, sampledAt])
   @@index([sampledAt])
+}
+
+// PlatformDevConfig.wipAdmissionMode — whether points-in-flight admission
+// blocks autonomous starts (enforce) or only records what it would do (shadow).
+enum WipAdmissionMode {
+  shadow
+  enforce
 }

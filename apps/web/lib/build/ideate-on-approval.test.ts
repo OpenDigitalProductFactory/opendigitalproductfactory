@@ -8,16 +8,22 @@ const { mockPrisma } = vi.hoisted(() => ({
   },
 }));
 
-const { mockDispatchIdeateResearch, mockGetBuildStudioConfig, mockExecuteTool } = vi.hoisted(() => ({
+const { mockDispatchIdeateResearch, mockGetBuildStudioConfig, mockExecuteTool, mockReleaseUnfinishedBuildPhaseRun } = vi.hoisted(() => ({
   mockDispatchIdeateResearch: vi.fn(),
   mockGetBuildStudioConfig: vi.fn(),
   mockExecuteTool: vi.fn(),
+  mockReleaseUnfinishedBuildPhaseRun: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
 
 vi.mock("./ideate-dispatch", () => ({
   dispatchIdeateResearch: mockDispatchIdeateResearch,
+}));
+
+vi.mock("./build-phase-run", () => ({
+  startBuildPhaseRun: vi.fn().mockResolvedValue(undefined),
+  releaseUnfinishedBuildPhaseRun: mockReleaseUnfinishedBuildPhaseRun,
 }));
 
 // BI-0B95D268: the infrastructure retry waits for the sandbox container; the
@@ -49,6 +55,7 @@ import {
   dispatchApprovedIdeateBuilds,
   dispatchDesignReviewFixLoop,
   DESIGN_FIX_MAX_ROUNDS,
+  fixDiagnosisProblem,
 } from "./ideate-on-approval";
 
 function engineSelection(
@@ -361,6 +368,7 @@ describe("dispatchIdeateForApprovedBuild", () => {
       "u-1",
       expect.any(Object),
     );
+    expect(mockReleaseUnfinishedBuildPhaseRun).not.toHaveBeenCalled();
     // Selection evidence, the dispatch log, and the saved success are visible.
     expect(mockPrisma.buildActivity.create).toHaveBeenCalledTimes(3);
   });
@@ -385,6 +393,7 @@ describe("dispatchIdeateForApprovedBuild", () => {
 
     expect(outcome.kind).toBe("dispatched-failure");
     expect(mockExecuteTool).not.toHaveBeenCalled();
+    expect(mockReleaseUnfinishedBuildPhaseRun).toHaveBeenCalledWith("FB-X", "ideate");
   });
 
   it("returns dispatched-failure when saveBuildEvidence rejects", async () => {
@@ -598,6 +607,18 @@ describe("dispatchDesignReviewFixLoop (design-review fix loop)", () => {
     expect(res).toMatchObject({ kind: "no-failed-review", rounds: 0 });
     expect(mockEscalate).not.toHaveBeenCalled();
     expect(mockDispatchIdeateResearch).not.toHaveBeenCalled();
+  });
+
+  // BI-A9C8DA0E: the diagnosis loop only read brief.problem / brief.summary, and
+  // none of the 16 fix builds on the dev install had either — so it never ran and
+  // every fix escalated at round 0 (FB-AA30F66E). The problem statement lives in
+  // the tee-up's fixContext.actual (the item body) and ideate's problemStatement.
+  it("finds the problem to diagnose where fix builds actually carry it", () => {
+    expect(fixDiagnosisProblem({ problem: " P " }, null)).toBe("P");
+    expect(fixDiagnosisProblem({ fixContext: { actual: "the body" } }, { problemStatement: "PS" })).toBe("the body");
+    expect(fixDiagnosisProblem({ fixContext: {} }, { problemStatement: "from ideate" })).toBe("from ideate");
+    expect(fixDiagnosisProblem(null, null)).toBe("");
+    expect(fixDiagnosisProblem({ fixContext: { actual: "   " } }, { problemStatement: "" })).toBe("");
   });
 
   it("escalates a fix build directly — regenerating the designDoc cannot fill a missing fix diagnosis", async () => {

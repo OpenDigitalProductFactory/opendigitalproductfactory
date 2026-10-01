@@ -9,11 +9,11 @@ import {
   friendlyJobLabel,
   humanizeJobList,
   isHostTelemetryConfigured,
-  type MonitoringAlert,
   type PrometheusActiveTarget,
   type PrometheusInstantResult,
   type ServiceDefinition,
 } from "./health-summary";
+import type { MonitoringAlert } from "@/lib/observability/monitoring-jobs";
 import type {
   CapabilityHealthAggregate,
   CapabilityHealthState,
@@ -207,7 +207,7 @@ describe("deriveMonitoringSummary", () => {
     const summary = deriveMonitoringSummary({
       checked: true,
       online: true,
-      upTargets: [up("prometheus"), up("portal"), up("postgres"), up("qdrant"), up("sandbox")],
+      upTargets: [up("prometheus"), up("portal"), up("postgres"), up("redis"), up("sandbox")],
       alerts: [],
     });
 
@@ -437,7 +437,7 @@ describe("isHostTelemetryConfigured", () => {
 
   it("is false on macOS Docker Desktop (no host telemetry exporter ships)", () => {
     expect(
-      isHostTelemetryConfigured([up("portal"), up("postgres"), up("qdrant"), up("sandbox")]),
+      isHostTelemetryConfigured([up("portal"), up("postgres"), up("redis"), up("sandbox")]),
     ).toBe(false);
   });
 

@@ -22,8 +22,10 @@ on:
       - "packages/types/**"
       - "packages/validators/**"
       - ".github/workflows/mobile-ci.yml"
-      - "pnpm-workspace.yaml"
-      - "pnpm-lock.yaml"
+      # apps/mobile resolves in its own workspace (plan 2026-09-08 M6); its
+      # lockfile and workspace file live under apps/mobile/** above. The shared
+      # decode-uri-component patch is applied by that workspace too.
+      - "patches/decode-uri-component@*.patch"
 
 permissions:
   contents: read
@@ -48,8 +50,11 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+          cache-dependency-path: apps/mobile/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter mobile typecheck
+        working-directory: apps/mobile
+      - run: pnpm run typecheck
+        working-directory: apps/mobile
 
   unit-tests:
     name: Unit tests (mobile jest)
@@ -66,5 +71,8 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+          cache-dependency-path: apps/mobile/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter mobile test:ci
+        working-directory: apps/mobile
+      - run: pnpm run test:ci
+        working-directory: apps/mobile

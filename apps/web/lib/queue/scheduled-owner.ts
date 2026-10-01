@@ -1,49 +1,31 @@
 /**
- * Resolve the User principal that OWNS scheduled / proactive platform work.
+ * Resolve the User that OWNS scheduled / proactive platform work.
  *
  * Proactive crons (the skill curator, governed backlog tee-up, …) are not run
  * by any human in the moment, but every `TaskRun` they create must still be
- * owned by a real `User` — `TaskRun.userId` is a NOT NULL FK to `User`. The
- * platform convention, verified against live `TaskRun` rows, is to attribute
- * that ownership to the bootstrap superuser (HR-000), the same principal that
- * owns the install. The non-human *executor* of the work is carried separately
- * on `TaskRun.initiatingAgentId` / `currentAgentId` when a specific AI coworker
- * (an `Agent` identity) drives it — the skill curator is a governance cron
- * owned by the human supervisor, so it sets only the owner.
+ * owned by a real `User`: `TaskRun.userId` is a NOT NULL FK to `User`. There is
+ * NO sentinel "system" user; a literal `userId: "system"` fails the FK
+ * (`TaskRun_userId_fkey`, P2003). Always resolve a real owner through here.
  *
- * There is NO sentinel "system" user: a literal `userId: "system"` has no
- * matching `User` row and fails the FK (`TaskRun_userId_fkey`, P2003). Always
- * resolve a real owner through this helper instead of hardcoding a string.
+ * The owner follows the portfolio (BI-67B27832): the accountable person of the
+ * work's portfolio, else of Foundational (the platform's own work), else the
+ * organization's top accountable, and only as a labelled last resort the oldest
+ * active superuser. It used to go straight to that last resort, which on a
+ * standard install is the seeded bootstrap account nobody reads, so approvals
+ * from proactive work orphaned. See lib/portfolio/accountable-owner.ts.
  */
-export type ScheduledOwnerClient = {
-  user: {
-    findFirst: (args: unknown) => Promise<{ id: string } | null>;
-  };
-};
+import type { AccountableOwnerDb } from "@/lib/portfolio/accountable-owner";
+
+export type ScheduledOwnerClient = AccountableOwnerDb;
 
 export async function resolveScheduledOwnerUserId(
   db?: ScheduledOwnerClient,
+  opts: { portfolioId?: string | null } = {},
 ): Promise<string> {
-  // Dynamic import (not a top-level one) keeps @dpf/db out of the inngest
-  // function-registration module graph and mirrors how the callers already
-  // load prisma inside their step closures. Tests inject `db` and never reach
-  // this branch, so they stay hermetic.
-  const client =
-    db ?? ((await import("@dpf/db")).prisma as unknown as ScheduledOwnerClient);
-
-  const owner = await client.user.findFirst({
-    where: { isSuperuser: true, isActive: true },
-    // Oldest active superuser = the bootstrap install owner. Deterministic so
-    // every proactive job attributes to the same principal across runs.
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-
-  if (!owner) {
-    throw new Error(
-      "No active superuser is available to own scheduled platform work.",
-    );
-  }
-
-  return owner.id;
+  // Dynamic imports keep @dpf/db out of the inngest function-registration
+  // module graph, matching how callers load prisma inside their step closures.
+  const { resolveWorkOwner } = await import("@/lib/portfolio/accountable-owner");
+  const client = db ?? ((await import("@dpf/db")).prisma as unknown as ScheduledOwnerClient);
+  const owner = await resolveWorkOwner(client, opts);
+  return owner.userId;
 }

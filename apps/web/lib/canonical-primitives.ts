@@ -5,8 +5,10 @@
 // codebase manifest, so agents (Build Studio / Claude / Codex) and humans
 // DISCOVER the blessed primitive instead of hand-rolling a parallel one-off.
 //
-// Keep in lockstep with the kernel principle each entry cites
-// (docs/founder-kernel/wiki/principles/<principleSlug>.md). The API contract
+// Keep in lockstep with the principle page each entry cites. `principleSlug`
+// is the WikiPage slug `wiki_query` resolves: `professions/<p>/<name>` for a
+// profession page (docs/professions/<p>/wiki/<name>.md). It is checked to
+// resolve by lib/kernel/governing-principles.test.ts. The API contract
 // itself lives in the palette's own README/types — this registry only points
 // to it, so the two can't drift.
 
@@ -21,7 +23,7 @@ export interface CanonicalPrimitive {
   exports: string[];
   /** Lowercase keywords whose presence means this palette should be composed. */
   triggers: string[];
-  /** Kernel principle slug that makes composing it normative. */
+  /** WikiPage slug of the principle that makes composing it normative (wiki_query-able). */
   principleSlug: string;
   /** Where the API contract is documented. */
   docs: string;
@@ -56,7 +58,7 @@ export const CANONICAL_PRIMITIVES: CanonicalPrimitive[] = [
       "status color",
       "severity color",
     ],
-    principleSlug: "compose-report-kit-for-reporting-ux",
+    principleSlug: "professions/frontend-engineer/compose-report-kit-for-reporting-ux",
     docs: "apps/web/components/ui/report-kit/README.md",
   },
 ];

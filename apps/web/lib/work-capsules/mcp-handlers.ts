@@ -1,11 +1,12 @@
 import { normalizePersistedScope, parseScopeInput } from "./scope-input";
+import { STAGE_EVIDENCE_OUTCOMES, type StageEvidenceOutcome } from "@/lib/work-management/stage-evidence-receipts";
 import { prisma } from "@dpf/db";
 import {
   anchorCapsuleByIdNonFatal,
   ensureCapsuleWorkItemAnchorNonFatal,
 } from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import { computeChangeImpactContract } from "@/lib/build/gate-context-bridge";
-import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { resolveTerminalInitiativeRecovery } from "@/lib/backlog/initiative-readiness/terminal-recovery";
 import {
@@ -34,13 +35,13 @@ import {
   type WorkCapsuleEvidenceKind,
 } from "@/lib/work-capsules";
 import type { BacklogBindingReader } from "./adopt-backlog-binding";
-import { adoptWorktree } from "./adopt-worktree-handler";
+import { adoptWorktree, establishNewRoomOwnership } from "./adopt-worktree-handler";
+import { reassignCapsuleExecutor } from "./reassign-executor-handler";
 import {
   adoptWorktreeCapsule,
   claimWorkCapsuleScope,
   createWorkCapsule,
   heartbeatWorkCapsule,
-  reassignWorkCapsuleExecutor,
   planCapsuleWorkspace,
   releaseWorkCapsuleScope,
   recordWorkCapsuleEvidence,
@@ -48,14 +49,13 @@ import {
   updateWorkCapsuleStatus,
   WorkCapsuleCompletionDeniedError,
   WorkCapsulePublicationRefusedError,
-  ScopeOverlapError,
   type CapsuleDb,
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
 import { publicationRefusedToolResult } from "./publication-refusal";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
-import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
+import { invalidScopeResult, scopeClaimRefusal } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
 import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
@@ -278,16 +278,8 @@ export async function claimCapsuleScopeTool(
       }),
     });
   } catch (error) {
-    if (error instanceof ScopeOverlapError) {
-      return {
-        success: false,
-        error: "scope_conflict",
-        message:
-          `Scope overlaps ${error.conflicts.length} active claim(s) on another Work Capsule. ` +
-          "Coordinate with the holder, claim different scope, or pass force=true to deliberately co-claim.",
-        data: { conflicts: error.conflicts },
-      };
-    }
+    const refusal = scopeClaimRefusal(error);
+    if (refusal) return refusal;
     throw error;
   }
 
@@ -483,10 +475,14 @@ export async function createWorkCapsuleTool(
   if (!bound.created) return bound.refusal;
   const capsule = bound.capsule;
   await ensureCapsuleWorkItemAnchorNonFatal(capsule, "created");
+  // BI-36FC2981: a created room is born owned, exactly as an adopted one is.
+  const ownership = capsule.backlogItemId
+    ? await establishNewRoomOwnership(workCapsuleDb(), capsule.id, resolvedActor, "create")
+    : null;
   return {
     success: true,
     entityId: capsule.capsuleId,
-    message: `Created Work Capsule ${capsule.capsuleId}.`,
+    message: [`Created Work Capsule ${capsule.capsuleId}.`, ownership ?? ""].filter(Boolean).join(" "),
     data: { capsule },
   };
 }
@@ -575,46 +571,7 @@ export async function reassignCapsuleExecutorTool(
   userId: string,
   context: ToolContext,
 ): Promise<ToolResult> {
-  const capsuleId = stringParam(params, "capsuleId");
-  const toExecutorKind = stringParam(params, "toExecutorKind");
-  if (!capsuleId || !toExecutorKind) {
-    return { success: false, error: "invalid_input", message: "capsuleId and toExecutorKind are required." };
-  }
-  if (!isWorkCapsuleExecutorKind(toExecutorKind)) {
-    return {
-      success: false,
-      error: "invalid_executor_kind",
-      message: `toExecutorKind must be one of: ${WORK_CAPSULE_EXECUTOR_KINDS.join(", ")}.`,
-    };
-  }
-  const manifest =
-    params["handoffManifest"] && typeof params["handoffManifest"] === "object" && !Array.isArray(params["handoffManifest"])
-      ? (params["handoffManifest"] as Record<string, unknown>)
-      : undefined;
-
-  try {
-    const capsule = await reassignWorkCapsuleExecutor({
-      db: workCapsuleDb(),
-      capsuleId,
-      toExecutorKind,
-      toExecutorRef: stringParam(params, "toExecutorRef") ?? undefined,
-      reason: stringParam(params, "reason") ?? undefined,
-      handoffManifest: manifest,
-      actor: await actor(userId, context),
-    });
-    return {
-      success: true,
-      entityId: capsule.capsuleId,
-      message: `Reassigned ${capsule.capsuleId} to ${toExecutorKind}; lease transferred.`,
-      data: { capsule },
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: "reassign_failed",
-      message: getErrorMessage(error),
-    };
-  }
+  return reassignCapsuleExecutor({ params, db: workCapsuleDb(), resolveActor: () => actor(userId, context) });
 }
 
 export async function recordCapsuleEvidenceTool(
@@ -647,6 +604,7 @@ export async function recordCapsuleEvidenceTool(
     // The stage this evidence completes. Without it the drive cannot tell a
     // stage outcome from a room-level note, and the stage never advances.
     stageKey?: string;
+    outcome?: StageEvidenceOutcome;
     command?: string;
     url?: string;
     targetId?: string;
@@ -658,7 +616,21 @@ export async function recordCapsuleEvidenceTool(
     summary,
   };
   const stageKey = stringParam(params, "stageKey");
-  if (stageKey) evidence.stageKey = stageKey;
+  if (stageKey) {
+    // Stage evidence must say what happened. A coworker that could not do the
+    // work records that too, through this same write — and a blocker must never
+    // be read as the stage being done. Refuse rather than guess (fail closed).
+    const outcome = stringParam(params, "outcome");
+    if (!outcome || !(STAGE_EVIDENCE_OUTCOMES as readonly string[]).includes(outcome)) {
+      return {
+        success: false,
+        error: "invalid_outcome",
+        message: `Stage evidence needs outcome: ${STAGE_EVIDENCE_OUTCOMES.join(" or ")} — "completed" when the stage's work is done, "blocked" with what stopped you.`,
+      };
+    }
+    evidence.stageKey = stageKey;
+    evidence.outcome = outcome as StageEvidenceOutcome;
+  }
   const command = stringParam(params, "command");
   const url = stringParam(params, "url");
   const targetId = stringParam(params, "targetId");

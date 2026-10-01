@@ -15,6 +15,20 @@ try {
     $pluginKey = 'dpf-platform@dpf-platform-local'
     $marketplace = 'dpf-platform-local'
 
+    # Give the installed descriptor this machine's literal endpoint (every
+    # session, after any reconcile): the desktop app cannot parse the
+    # descriptor's ${DPF_MCP_URL:-...} and refuses sign-in. Shared with the sh twin.
+    function Invoke-PinMcpUrl {
+        $pinner = Join-Path $PSScriptRoot 'lib\pin-plugin-mcp-url.mjs'
+        $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+        if ($null -ne $nodeCmd -and (Test-Path -LiteralPath $pinner)) {
+            try {
+                $pinOut = & $nodeCmd.Source $pinner $installed $repoRoot 2>$null
+                if ($pinOut) { $pinOut | ForEach-Object { Write-Output $_ } }
+            } catch { }
+        }
+    }
+
     if (-not (Test-Path $manifest)) { exit 0 }
 
     # Resolve claude (PATH first, then common install locations).
@@ -26,10 +40,10 @@ try {
             if (Test-Path $c) { $claude = $c; break }
         }
     }
-    if (-not $claude) { exit 0 }
+    if (-not $claude) { Invoke-PinMcpUrl; exit 0 }
 
     $want = (Get-Content -Raw $manifest | ConvertFrom-Json).version
-    if (-not $want) { exit 0 }
+    if (-not $want) { Invoke-PinMcpUrl; exit 0 }
 
     # Decide ok|drift for THIS repo. Used both before reconcile and again after,
     # to verify convergence rather than trust the install call.
@@ -49,7 +63,8 @@ try {
         return 'drift'
     }
 
-    if ((Get-DriftState) -ne 'drift') { exit 0 }
+
+    if ((Get-DriftState) -ne 'drift') { Invoke-PinMcpUrl; exit 0 }
 
     # Prune every install record for THIS repo before reinstalling. `claude
     # plugin install` no-ops when ANY project record for this key exists (it
@@ -91,5 +106,6 @@ try {
     } else {
         Write-Output "DPF platform plugin reconcile could NOT converge to v$want (still drifted). Run: $claude plugin install $pluginKey --scope project"
     }
+    Invoke-PinMcpUrl
 } catch { }
 exit 0

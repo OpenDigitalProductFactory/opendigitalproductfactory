@@ -7,7 +7,7 @@
 "use client";
 
 import { DataTable, StatCard, StatusBadge, type Column } from "@/components/ui/report-kit";
-import type { Intent } from "@/components/ui/report-kit/statusColors";
+import type { Intent } from "@/lib/ui-model/statusColors";
 import type { CorpusGapRow, ProfessionCorpusSignals } from "@/lib/coworker-record/corpus-signals";
 // Value import MUST come from the dependency-free presentation module, not from
 // corpus-signals.ts — that one imports prisma, and a value import across the

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isRecord } from "./guards";
 
 // Field Dispatch — job lifecycle application contract (F1).
 //
@@ -145,10 +146,6 @@ export type FieldDispatchEvidenceEntry = z.infer<typeof fieldDispatchEvidenceEnt
 
 export interface FieldDispatchEvidence {
   entries: FieldDispatchEvidenceEntry[];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**

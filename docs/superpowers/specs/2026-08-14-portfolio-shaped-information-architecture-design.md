@@ -1,10 +1,10 @@
 ---
-status: draft
+status: active
 ---
 # Portfolio-shaped information architecture — design
 
-**Status:** draft for operator review · 2026-08-14
-**Proposed epic home:** EP-8DC217EB (Vertical Integration Inward — recombine DPF's own functionality)
+**Status:** draft for operator review · 2026-08-14. Direction approved by the founder 2026-09-25 after the navigation and surface review; §9 amends it so each area is workroom-shaped.
+**Proposed epic home:** EP-8DC217EB (Vertical Integration Inward — recombine DPF's own functionality). Execution slices for §9: EP-2FB6C0CC.
 **Supersedes nothing; extends:** the EP-NAV-COHERENCE nav model (its *mechanics* are DONE and are constraints here, not open design space).
 **Source analysis:** "The UX Has No Spine" (UX surface & navigation analysis, 2026-08-14).
 
@@ -122,3 +122,104 @@ The companion spec's lexicon rule has been corrected accordingly (*Interaction S
 - People, AI Workforce, and Coworker Decisions are reachable under one Workforce section without violating section-scoped nav or the breadcrumb guarantee.
 - The reconciled spine is previewable via nav-mode on a live install before it becomes default.
 - No regression in the EP-NAV-COHERENCE guarantees (§3), asserted by the existing nav tests plus the new trace test.
+
+## 9. Amendment 2026-09-25 — each area is workroom-shaped
+
+### 9.1 Founder direction and evidence
+
+The navigation and surface review of 2026-09-25 (EP-2FB6C0CC) found three problems:
+
+- The rail follows how DPF is built, not what people come to do. 7 of 22 rail labels open a page with a different title.
+- Several jobs have more than one home: coworkers 4, workrooms 3, access 2.
+- Most settings sit under Admin or Platform, away from the work that reads them. The GitHub contribution setting is the calibration case: Admin › Advanced › Platform Development, then a wizard.
+
+WWMD DI-3CAD53D55BC5 chose this spec's portfolio spine with activity labels.
+
+The founder approved moving forward the same day and added the governing direction for this amendment:
+
+> Workrooms were introduced after the portal was first built, and the layout should reflect them. Admin and setup align to the activities that require and use them, so authorized humans and AI coworkers are managed with the work going on in each area.
+
+### 9.2 What already exists (no new model)
+
+Every part of an area already has a substrate. This amendment adds no table, registry or nav renderer.
+
+| Area part | Existing substrate |
+|---|---|
+| The area itself | A rail section keyed to one FPAW portfolio (§4), and `Workroom.portfolioRole` on each room (`work-coordination.prisma`). |
+| Its rooms | Workroom instances, nested by `WorkroomRelation(contains)`. The archetype standing-room tree is in `packages/storefront-templates/src/standing-rooms.ts`, with top rooms per portfolio. The canonical inventory is `/ops/workrooms`; the inspector is `/workspace/cases/[caseKey]` (2026-09-07 portfolio-work-activity spec). |
+| Its coworkers | Route ownership (`ROUTE_AGENT_MAP`, `lib/tak/agent-routing.ts`, projected into `AuthorityBinding scopeType=route`); work-shape coordinator bindings (`AuthorityBinding scopeType=workroom`); and room participants (`WorkroomParticipant`, one `Principal` model for humans and agents). |
+| Its people | Work-shape stage roles (`role:finance-owner`, `role:customer-owner`, …), inherited accountability (PWA-04), room participants, and platform roles (HR-000…HR-600). |
+| Its setup | The settings the area's runtime reads. The 2026-09-25 settings sweep traced 42 settings surfaces to their runtime readers; the review packet carries the table. |
+
+`Agent.portfolioId` records where a coworker is *employed* (AI coworkers are Workforce capacity, PAAW §6), not the area it serves. So it is **not** used for area membership.
+
+### 9.3 The area template
+
+Every portfolio section (Serve & grow, Team, Improve & deliver, Run the platform) renders the same three section-nav entries through the existing `SectionNav`, ahead of the area's own activity pages. The two cross-cuts (Today, Learn) do not get the template.
+
+1. **Work.** The rooms placed in this portfolio. This is a filtered view of the canonical `/ops/workrooms` inventory (`one-home-per-capability`: a scoped view of the existing home, not a new dashboard). It is grouped by standing room, then live rooms. Unplaced rooms stay in the inventory's exception group; they are never guessed into an area.
+2. **Team.** The humans and AI coworkers who work here, with what they may do:
+   - who owns the area's pages;
+   - who coordinates its standing rooms;
+   - who is in its live rooms;
+   - which people hold its owner roles.
+
+   Each row links to the one canonical record: `/workforce/[agentId]` for a coworker, the People record for a person, and the authority binding in context. Team is a projection. It never becomes a second directory or a second permission model.
+3. **Setup.** The settings this area's work reads. **A setting's home is the area whose runtime reads it.** A setting read by two or more areas, and identity, access, security and platform upkeep, stays in Run the platform, and each area that uses it links to it in context (PWA-08).
+
+Admin, as a separate rail entry, shrinks to Run the platform › Setup, which keeps users and roles, sign-in and federation, authorization bindings, file storage, backups, scheduled jobs, audit and data stewardship. The Advanced holding tab is retired (BI-3ED24FA2).
+
+### 9.4 Where setup moves (from the settings sweep)
+
+| Area | Setup it gains | Leaves |
+|---|---|---|
+| Serve & grow | Storefront profile, business hours, capabilities, sections and items; branding; outbound email (SMTP, Postmark); the archetype (read-only) | Admin › Organization / Configuration; Platform › Tools › Integrations (Postmark) |
+| Team | AI providers and routing, priority and models, prompts, skills, workroom posture defaults, coworker reading level; work locations (reference data) | Platform › AI Operations; Admin › Configuration |
+| Improve & deliver | Contributing & GitHub (contribution mode, GitHub connection, private paths, git remote), governed backlog lane, Build Studio engine settings, stall thresholds, tokens for external coding agents | Admin › Advanced › Platform Development; Platform › AI › Build Runtime; `/admin/build-studio/stall-thresholds` |
+| Funding (wherever Finance sits) | QuickBooks and Stripe connections join the existing `/finance/settings` | Platform › Tools › Integrations |
+| Run the platform | Keeps the cross-cutting setup listed in §9.3, plus the Connections cockpit (BI-2A0180A9) for dependencies shared across areas | — |
+
+Moves keep their routes or leave a redirect with an expiry (`supersession-is-a-mechanical-act`), and every in-app link points at the new home.
+
+The sweep also found controls that do nothing. Each goes to the review's exercise pass (BI-595245CC) before any move:
+- The Scheduled Jobs page shows the backup job, but the backup cron is fixed in code.
+- Dunning has no scheduler.
+- Stripe, QuickBooks and Entra/LDAP credentials have no runtime reader.
+- `resolveBmrAuthority` has no callers.
+
+### 9.5 Research — where comparable products put setup
+
+- **Jira.** Project settings (people, roles, workflows, permissions) live with the project; global admin keeps identity, security and billing. *Adopt:* setup with the work, global admin for cross-cutting concerns only. *Reject:* per-project permission schemes as a separate model; they are a known source of permission sprawl. DPF keeps one `Principal` / `AuthorityBinding` model, and Team only projects it.
+- **Linear.** Each team owns its members, workflow states and settings; workspace settings hold security, billing and integrations. *Adopt:* the area's own members and settings, one click from its work.
+- **GitHub.** Repository settings and collaborators live with the repository; organization settings hold members, SSO and policies. *Adopt:* the same two-level split. *Reject:* duplicating member lists per repository; the Team view links to one record.
+
+### 9.6 Dependencies
+
+The template works on today's data, and each gap below shows as an honest empty state, never a guess:
+
+- **BI-C30A4694:** 60% of rooms have no portfolio yet, so Work stays thin until placement lands.
+- **BI-CB525EC6:** the owner roles are not bound to people yet, so Team shows the unbound role as the next step.
+- **BI-8E51C422:** no value-stream team definitions exist yet (0 rows), so definitions stay at `/ea/workrooms`.
+- **BI-2DBC4D2D:** coworker surface consolidation. Team links to its one directory.
+- **BI-30AB0979:** Business administration's portfolio placement.
+
+### 9.7 Objectives and acceptance for this amendment
+
+**OBJ-AREA-SPINE:** The rail is the portfolio spine with activity labels: at most 18 Full-mode entries, each traceable to one FPAW portfolio key or a declared cross-cut.
+
+**OBJ-AREA-WORK:** Each portfolio section shows the work going on in it as a filtered view of the one workroom inventory.
+
+**OBJ-AREA-TEAM:** Each portfolio section shows the humans and AI coworkers who work there, and what they may do, as a projection of existing bindings, participants and roles.
+
+**OBJ-AREA-SETUP:** Each setting has one home: the area whose runtime reads it, or Run the platform when it is cross-cutting.
+
+**OBJ-AREA-NO-REGRESSION:** The §3 coherence guarantees and the UX surface budgets hold while the rail changes.
+
+| Acceptance | Objectives | Statement |
+|---|---|---|
+| AC-AREA-SPINE | OBJ-AREA-SPINE | A nav-model test resolves every `shellNav` entry to one portfolio key or a declared cross-cut, and Full mode has at most 18 rail entries. |
+| AC-AREA-WORK | OBJ-AREA-WORK | Each portfolio section's Work entry opens `/ops/workrooms` scoped to that portfolio, and a test asserts both views list the same rooms. |
+| AC-AREA-TEAM | OBJ-AREA-TEAM | Team reads only route and work-shape `AuthorityBinding` rows, `WorkroomParticipant` rows and owner roles, and every row links to its canonical record without copying it. |
+| AC-AREA-SETUP | OBJ-AREA-SETUP | A test maps every settings panel to exactly one area, or to Run the platform with its linking areas; the Admin rail entry and Advanced tab are retired. |
+| AC-AREA-OUTCOME | OBJ-AREA-SPINE, OBJ-AREA-SETUP | Operations to outcome measured on the running portal go down for the review's activity map; rail to Connect GitHub is at most 3. |
+| AC-AREA-GUARDS | OBJ-AREA-NO-REGRESSION | Section-scoped nav, breadcrumb and the one-SectionNav ratchet pass, and the route budget sweep shows lower shell word counts with a deliberately re-frozen baseline. |

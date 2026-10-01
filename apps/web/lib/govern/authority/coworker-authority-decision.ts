@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
-import type { ToolConsequence } from "@/lib/mcp-tools";
+import type { ToolConsequence } from "@/lib/tool-consequence";
 
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
@@ -91,6 +91,8 @@ export type CoworkerAuthorityInput = {
     /** False when an explicit operator policy forbids policy projection. */
     policyProjectionAllowed?: boolean;
     consequence?: ToolConsequence | null;
+    /** How this call's consequence was narrowed from the tool's declaration (BI-2D65BD1B). */
+    consequenceRefinement?: { declared: ToolConsequence; reason: string };
     /** A Work Case may elevate an otherwise ordinary mutation to consequential. */
     workCaseConsequential?: boolean;
     requiresDelegationChain?: boolean;
@@ -257,6 +259,12 @@ function fingerprint(value: unknown): string {
     .digest("hex");
 }
 
+/** The exact-call fingerprint an approval binds to (BI-12E5DD91: the
+ *  approved-request runner proves stored arguments are the approved ones). */
+export function fingerprintCoworkerInput(rawParams: Record<string, unknown>): string {
+  return fingerprint(rawParams);
+}
+
 function normalize(value: string | null | undefined): string | null {
   return value?.trim() || null;
 }
@@ -280,7 +288,7 @@ export function buildCoworkerApprovalBinding(
     toolName: input.action.toolName.trim(),
     subject: input.subject ?? null,
     routeContext: normalize(input.action.routeContext),
-    inputFingerprint: fingerprint(input.rawParams),
+    inputFingerprint: fingerprintCoworkerInput(input.rawParams),
     sensitivity: input.dataPolicy.sensitivity,
     decisionVersionFingerprint: fingerprint(
       [...(input.dataPolicy.decisionVersionIds ?? [])].sort(),

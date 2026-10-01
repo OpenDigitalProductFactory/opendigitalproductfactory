@@ -24,7 +24,7 @@
 // evidence of absence, and the previous code made exactly that mistake twice
 // (this signal, and the lease payload, which returns "" without a token).
 
-import { spawnSync } from "node:child_process";
+import { mcpPost } from "./mcp-client.mjs";
 
 /** Statuses that mean a room still owns its worktree. Anything terminal is not here. */
 export const ACTIVE_WORKROOM_STATUSES = Object.freeze([
@@ -106,13 +106,15 @@ function collectRooms(node, found = []) {
 }
 
 /**
- * Ask the platform which worktrees are claimed. Never throws.
+ * Ask the platform which worktrees are claimed. Never rejects.
  *
- * @returns {{ available: boolean, activePaths: Set<string>, reason: string }}
+ * `fetchImpl` is the test seam; production goes through the shared MCP client
+ * (scripts/lib/mcp-client.mjs) over node:http, with no curl dependency.
+ *
+ * @returns {Promise<{ available: boolean, activePaths: Set<string>, reason: string }>}
  */
-export function loadActiveWorkroomPaths(options = {}) {
+export async function loadActiveWorkroomPaths(options = {}) {
   const env = options.env ?? process.env;
-  const run = options.run ?? spawnSync;
   const token = env.DPF_MCP_BEARER_TOKEN;
 
   if (!token) {
@@ -122,27 +124,18 @@ export function loadActiveWorkroomPaths(options = {}) {
   }
 
   const url = env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1";
-  const body = JSON.stringify({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "tools/call",
-    params: { name: "list_workrooms", arguments: {} },
-  });
-
-  let result;
+  let reply;
   try {
-    result = run(
-      "curl",
-      [
-        "-sS", "-X", "POST", url,
-        "-H", `Authorization: Bearer ${token}`,
-        "-H", "Content-Type: application/json",
-        "-H", "Accept: application/json, text/event-stream",
-        "--max-time", "20",
-        "-d", body,
-      ],
-      { encoding: "utf8", windowsHide: true },
-    );
+    reply = await mcpPost("tools/call", { name: "list_workrooms", arguments: {} }, {
+      mcpUrl: url,
+      bearerToken: token,
+      timeoutMs: 20_000,
+      accept: "application/json, text/event-stream",
+      fetchImpl: options.fetchImpl,
+      // DPF_MCP_URL is operator intent; `env` may be an injected copy, so the
+      // client's own process.env check cannot see it.
+      allowNonLoopbackEndpoint: Boolean(env.DPF_MCP_URL),
+    });
   } catch (err) {
     return {
       available: false,
@@ -151,10 +144,10 @@ export function loadActiveWorkroomPaths(options = {}) {
     };
   }
 
-  if (!result || result.status !== 0) {
-    return { available: false, activePaths: new Set(), reason: "workroom query returned non-zero" };
+  if (reply.status < 200 || reply.status >= 300) {
+    return { available: false, activePaths: new Set(), reason: `workroom query returned HTTP ${reply.status}` };
   }
-  return parseActiveWorktreePaths(String(result.stdout ?? ""));
+  return parseActiveWorktreePaths(reply.text);
 }
 
 /** Is this worktree claimed by a live Workroom? */

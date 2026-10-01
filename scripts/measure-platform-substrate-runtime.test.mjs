@@ -204,7 +204,7 @@ test("production verifier accepts the MCP structuredContent lease envelope", asy
   const leaseRecord = await verifyGovernedLease(governedLease);
   const result = await runRuntimeMeasurement({
     manifestPath, baselinePath, update: true, lease: governedLease, mcpToken: "fixture-token",
-    fetchImpl: async () => ({ ok: true, json: async () => ({ result: { structuredContent: { leases: [leaseRecord] } } }) }),
+    fetchImpl: async () => new Response(JSON.stringify({ result: { structuredContent: { leases: [leaseRecord] } } }), { status: 200 }),
     execute: execFixture,
     fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" },
     portalUrl: "http://portal",

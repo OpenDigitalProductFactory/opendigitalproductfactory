@@ -27,6 +27,7 @@ import { ensureSandboxGrokGovernance } from "./sandbox/grok-governance-seed";
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
+import { providerSetupLocation } from "@/lib/ai-provider-routes";
 
 const DEFAULT_SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -79,7 +80,7 @@ async function ensureGrokAuth(providerId: string, containerId: string, taskSlug:
   // API-key fallback.
   const apiKey = credential?.secretRef ?? credential?.cachedToken;
   if (!apiKey) {
-    throw new Error(`No xAI credential for provider "${providerId}". Sign in to Grok (OAuth) or add an API key via Admin > AI Workforce > External Services.`);
+    throw new Error(`No xAI credential for provider "${providerId}". Sign in to Grok (OAuth) or add an API key via ${providerSetupLocation(providerId)}.`);
   }
   const keyFile = `/tmp/grok-key-${taskSlug}.txt`;
   await writeSandboxFile({ containerId, path: keyFile, content: apiKey, mode: "600" });

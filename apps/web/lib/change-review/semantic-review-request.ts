@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { failureAnalysisSchema } from "./failure-analysis";
 import { deriveSemanticReviewGateIdentity } from "@/lib/gates/gate-run-identity";
 import { resolveSemanticReviewCoordination, type SemanticChangeReviewOperationInput } from "./semantic-change-review-operation";

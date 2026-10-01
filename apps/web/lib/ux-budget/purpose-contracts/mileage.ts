@@ -7,7 +7,7 @@
 // and pricing all merged with no route and no write path, so drives could be
 // recorded by nothing and read by nobody.
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const MILEAGE_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

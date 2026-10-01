@@ -30,8 +30,38 @@ export function integrationBranchName(candidateBranch, slotKey = "") {
   }`;
 }
 
-export function defaultBuildStrategy(hostPlatform = process.platform) {
+/**
+ * BI-3A14308C (WWMD DI-ED547297DC9F, AGENTS.md section 4: "the heavy build runs
+ * once, in the cloud"). The merge queue's required `pnpm --filter web build`
+ * job is the binding production-build evidence (.github/workflows/ci.yml), so
+ * the local gate delegates that build by default. It no longer reserves
+ * 14+ GiB of builder memory before typecheck and vitest can start, on hosts
+ * where that reserve closed the pool for every session.
+ */
+export const DELEGATED_BUILD_STRATEGY = "merge-queue";
+
+/** The strategy a gate uses when it DOES build locally, per host. */
+export function localBuildStrategy(hostPlatform = process.platform) {
   return hostPlatform === "win32" ? "docker-build" : "host-next";
+}
+
+/**
+ * The build strategy for this gate. Delegated to the merge queue unless the
+ * operator asks for a local build with DPF_LOCAL_CI_BUILD_STRATEGY: `local`
+ * (the host's local strategy), `docker-build` or `host-next`. The strategy is
+ * part of the toolchain fingerprint, so a delegated run never reuses a verdict
+ * minted by a run that built, or the reverse.
+ */
+export function defaultBuildStrategy(hostPlatform = process.platform, env = process.env) {
+  const requested = env?.DPF_LOCAL_CI_BUILD_STRATEGY;
+  if (requested === "local") return localBuildStrategy(hostPlatform);
+  if (requested === "docker-build" || requested === "host-next") return requested;
+  return DELEGATED_BUILD_STRATEGY;
+}
+
+/** Whether a strategy builds nothing locally (the merge queue owns the build). */
+export function buildIsDelegated(buildStrategy) {
+  return buildStrategy === DELEGATED_BUILD_STRATEGY;
 }
 
 export function dockerBuildTag(candidateBranch, slotKey = "") {
@@ -254,6 +284,16 @@ export function createToolchainFingerprint(input) {
 }
 
 export function createProductionArtifactIdentity(input) {
+  if (buildIsDelegated(input.buildStrategy)) {
+    // Nothing was built here. Name who owns the build rather than inventing
+    // an artifact, so no reader mistakes a delegated run for a local build.
+    return {
+      kind: "delegated",
+      integrationTreeSha: input.integrationTreeSha,
+      identity: DELEGATED_BUILD_STRATEGY,
+      locator: ".github/workflows/ci.yml (merge_group production build)",
+    };
+  }
   if (input.buildStrategy === "docker-build") {
     return {
       kind: "docker-image",
@@ -305,7 +345,7 @@ export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd()
 export function createLocalIntegrationPlan(input) {
   const branch = integrationBranchName(input.candidateBranch, input.slotKey);
   const baseRef = input.baseRef ?? "origin/main";
-  const buildStrategy = input.buildStrategy ?? defaultBuildStrategy(input.hostPlatform);
+  const buildStrategy = input.buildStrategy ?? defaultBuildStrategy(input.hostPlatform, input.env);
   const productionBuildCommand = buildStrategy === "docker-build"
     ? [
         "node",
@@ -410,7 +450,8 @@ export function createLocalIntegrationPlan(input) {
       "--base",
       baseRef,
     ],
-    productionBuildCommand,
+    // BI-3A14308C: a delegated plan ends at vitest; the merge queue builds.
+    ...(buildIsDelegated(buildStrategy) ? [] : [productionBuildCommand]),
   ];
   const commands = executionLane === "documentation"
     ? [...setupCommands, ...guardCommands]

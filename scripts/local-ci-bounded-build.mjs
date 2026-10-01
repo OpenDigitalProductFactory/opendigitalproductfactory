@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { spawn, spawnSync } from "node:child_process";
+import { parseArgs as utilParseArgs } from "node:util";
+import { execFile, spawn, spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,9 +11,15 @@ import {
   buildxBuildArgs,
   buildxCreateArgs,
   classifyBoundedBuildExit,
+  observedBuildWorkers,
   postgresContainerProbeArgs,
   validateBuilderInspection,
 } from "./lib/local-ci-bounded-builder.mjs";
+import {
+  builderMemorySampleArgs,
+  parseBuilderMemorySample,
+  summarizeBuilderMemory,
+} from "./lib/local-ci-builder-memory.mjs";
 import {
   buildxRmArgs,
   buildxStopArgs,
@@ -40,8 +48,15 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const BUILDKIT_CONFIG = join(SCRIPT_DIR, "config", "local-ci-buildkitd.toml");
 
 function valueAfter(flag) {
-  const index = process.argv.indexOf(flag);
-  return index >= 0 ? process.argv[index + 1] || "" : "";
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({
+    args: process.argv.slice(2),
+    strict: false,
+    allowPositionals: true,
+    options: { "tag": { type: "string" }, "slot-key": { type: "string" }, "candidate": { type: "string" } },
+  });
+  const value = values[flag.replace(/^--/, "")];
+  return typeof value === "string" ? value : "";
 }
 
 function usage() {
@@ -485,8 +500,54 @@ async function probeControlPlane(postgresProbe) {
 }
 
 function resolveGit(args) {
-  const result = spawnSync("git", args, { encoding: "utf8", shell: false });
-  return result.status === 0 ? result.stdout.trim() : null;
+  return gitTextOrNull(args, { cwd: process.cwd() });
+}
+
+// BI-D3BF53A9: sample the builder's own cgroup while it builds. Async, so a slow
+// `docker exec` never stalls the control-plane watchdog, and best-effort: a
+// sample that cannot be read is skipped, never a reason to fail the build.
+const BUILDER_MEMORY_SAMPLE_INTERVAL_MS = 5_000;
+
+function sampleBuilderMemory(builder) {
+  return new Promise((resolveSample) => {
+    execFile("docker", builderMemorySampleArgs(builder.container), {
+      encoding: "utf8",
+      timeout: 10_000,
+      windowsHide: true,
+    }, (error, stdout) => {
+      resolveSample(error && !stdout ? null : parseBuilderMemorySample(stdout));
+    });
+  });
+}
+
+function builderContainerStartedAt(builder) {
+  const inspected = runDocker([
+    "inspect", builder.container, "--format", "{{.State.StartedAt}}",
+  ], 15_000);
+  return inspected.status === 0 ? inspected.stdout.trim() || null : null;
+}
+
+function startBuilderMemorySampler(builder) {
+  const samples = [];
+  let inFlight = false;
+  const timer = setInterval(() => {
+    if (inFlight) return;
+    inFlight = true;
+    sampleBuilderMemory(builder).then((sample) => {
+      if (sample) samples.push(sample);
+      inFlight = false;
+    });
+  }, BUILDER_MEMORY_SAMPLE_INTERVAL_MS);
+  timer.unref?.();
+  return {
+    samples,
+    async finish() {
+      clearInterval(timer);
+      // Read memory.peak once more AFTER the build and BEFORE cool-down stops
+      // the builder: stopping it discards the cgroup and its high-water.
+      return sampleBuilderMemory(builder);
+    },
+  };
 }
 
 function writeEvidence(path, payload) {
@@ -675,6 +736,8 @@ async function main() {
       shell: false,
       detached: process.platform !== "win32",
     });
+    const buildStartedAt = new Date().toISOString();
+    const memorySampler = startBuilderMemorySampler(builder);
     let childComplete = false;
     let childExit = null;
     let buildOutput = "";
@@ -723,6 +786,14 @@ async function main() {
       exitCode: childExit,
       output: buildOutput,
     });
+    const builderMemory = summarizeBuilderMemory({
+      samples: memorySampler.samples,
+      finalSample: await memorySampler.finish(),
+      containerStartedAt: builderContainerStartedAt(builder),
+      buildStartedAt,
+      memoryLimitBytes: builder.memoryBytes,
+      observedWorkers: observedBuildWorkers(buildOutput),
+    });
     const finalStatus = watchdog.status === "blocked_control_plane_starvation"
       ? watchdog.status
       : buildOutcome.status;
@@ -740,12 +811,22 @@ async function main() {
       failures,
       samples: [...preflight.samples, ...watchdog.samples],
       buildExitCode: childExit,
+      builderMemory,
       termination,
       artifact: finalStatus === "healthy"
         ? { imageTag: tag, imageId: localImageId(tag) }
         : null,
     };
     writeEvidence(evidencePath, payload);
+    process.stdout.write(
+      `[local-ci-bounded-build] builder memory: ${builderMemory.status}`
+        + (builderMemory.peakBytes
+          ? ` peak=${builderMemory.peakBytes} bytes (${builderMemory.peakScope})`
+            + ` sampledAnon=${builderMemory.sampledMaxAnonBytes ?? "?"}`
+            + ` sampledNodeRss=${builderMemory.sampledMaxNodeRssTotalBytes ?? "?"}`
+          : ` (${builderMemory.reason})`)
+        + ` cap=${builder.memoryBytes}\n`,
+    );
     const receiptStatus = canonicalStageReceiptStatus(finalStatus);
     stageReceipt.complete(receiptStatus, payload);
     if (finalStatus === "blocked_control_plane_starvation") {

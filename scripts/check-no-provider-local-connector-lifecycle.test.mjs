@@ -119,7 +119,7 @@ test("Policy Guards source profile provisions the pinned isolated AST runtime", 
 
   const base = {
     runtimeManifest: { devDependencies: { typescript: "6.0.3" } },
-    lockText: "  packages/repo-guard-runtime:\n    devDependencies:\n      typescript:\n        specifier: 6.0.3\n        version: 6.0.3\n",
+    lockText: "importers:\n  packages/repo-guard-runtime:\n    devDependencies:\n      typescript:\n        specifier: 6.0.3\n        version: 6.0.3\n",
     resolvedPackagePath: "/repo/node_modules/typescript/package.json",
     repoRoot: "/repo",
   };

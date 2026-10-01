@@ -38,6 +38,7 @@ Folding "a human must decide this now" into the backlog is a category error: the
 - **Business judgment** — a coworker cannot continue safely without your choice.
 - **Bounded coworker proposals** — a coworker recommends taking more initiative within a stated limit; you can accept it, keep the current level, or ask for a narrower limit.
 - **Coworker actions held for your approval** — a coworker was told to stop and ask before taking a specific action. The card names the coworker, the exact action, the reason given, the job it belongs to, and the time you have to answer. When the action is a review of a saved file, it also names the file, the exact saved version, and the check being answered, so you can see precisely what you are approving. Only you can answer your own; nobody else sees it.
+- **Approvals nobody is answering** *(administrators only)*. AI coworker approvals keep going to an account that is not using the portal: it is deactivated, has not been seen for three days, or has never been seen. The card names the account, how many requests went unanswered in the last week, and which actions they were for. You cannot answer them for that person. The usual cause is an AI connection set up while the wrong account was signed in. Open **Review AI connections**, revoke that connection, and reconnect under the right account.
 - **Friday review** — low-urgency research and improvement suggestions are grouped together instead of interrupting the daily inbox.
 
 ## What You Can Do

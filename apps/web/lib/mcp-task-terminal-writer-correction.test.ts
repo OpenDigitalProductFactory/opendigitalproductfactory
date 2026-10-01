@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
+  persisted: {} as Record<string, unknown>,
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   findModelConfig: vi.fn(),
@@ -19,14 +20,9 @@ const autonomous = vi.hoisted(() => ({
   resolveTools: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({
+vi.mock("@dpf/db", async () => ({
   prisma: {
-    taskRun: {
-      findFirst: (...args: unknown[]) => db.findFirst(...args),
-      findUnique: (...args: unknown[]) => db.findUnique(...args),
-      update: (...args: unknown[]) => db.update(...args),
-      updateMany: (...args: unknown[]) => db.updateMany(...args),
-    },
+    taskRun: (await import("./test-support/task-run-state")).taskRunState(db),
     coworkerActionEnvelope: { findFirst: (...args: unknown[]) => db.findEnvelope(...args) },
     toolExecution: {
       findFirst: (...args: unknown[]) => db.findToolExecution(...args),
@@ -78,6 +74,7 @@ const params = {
 describe("terminal writer correction resumption", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  db.persisted = {};
     db.findFirst.mockResolvedValue(null);
     db.findUnique.mockResolvedValue({ status: "working" });
     db.findEnvelope.mockResolvedValue(null);
@@ -107,7 +104,18 @@ describe("terminal writer correction resumption", () => {
     autonomous.execute.mockResolvedValue({ content: "Done.", executedTools: [] });
   });
 
-  it("resumes input-required after a schema-invalid writer attempt without an envelope", async () => {
+  it("does not execute an initial submission after a newer reservation takes ownership", async () => {
+    vi.stubEnv("DPF_EXTERNAL_MCP_TASK_ASYNC", "0");
+    db.findUnique.mockImplementation(async () => {
+      db.persisted = { status: "working", progressPayload: { resumeReservedAt: "newer-attempt" } };
+      return db.persisted;
+    });
+    const outcome = await submitRemoteCoworkerTask({ token: { tokenId: "PAT-STALE", userId: "user-1", capability: "write", source: "pat" }, userContext: { platformRole: "developer", isSuperuser: false }, params });
+    expect(outcome).toMatchObject({ kind: "result", result: { status: "working" } });
+    expect(autonomous.execute).not.toHaveBeenCalled();
+  });
+
+  it.each(["resume", "canceled-during-hydration", "replaced-during-hydration"])("protects writer retry ownership: %s", async (scenario) => {
     await submitRemoteCoworkerTask({
       token: { tokenId: "PAT-WRITER-CORRECTION", userId: "user-1", capability: "write", source: "pat" },
       userContext: { platformRole: "developer", isSuperuser: false },
@@ -176,6 +184,16 @@ describe("terminal writer correction resumption", () => {
         nextCursor: null,
       },
     });
+    const readPage = autonomous.executeTool.getMockImplementation()!;
+    autonomous.executeTool.mockImplementation(async (...args: unknown[]) => {
+      const result = await readPage(...args);
+      if (scenario !== "resume") {
+        db.persisted = { status: scenario === "canceled-during-hydration" ? "canceled" : "working",
+          progressPayload: { resumeReservedAt: "replacement", summary: "Preserve this state" } };
+      }
+      return scenario === "canceled-during-hydration"
+        ? { success: false, message: "Read failed after cancellation." } : result;
+    });
     autonomous.execute.mockResolvedValue({
       content: "Corrected proposal recorded.",
       executedTools: [{ name: "record_initiative_evidence", result: { success: true } }],
@@ -187,6 +205,12 @@ describe("terminal writer correction resumption", () => {
       params,
     });
 
+    if (scenario !== "resume") {
+      expect(outcome).toMatchObject({ kind: "result", result: { status: scenario === "canceled-during-hydration" ? "canceled" : "working" } });
+      expect(db.persisted.progressPayload).toEqual({ resumeReservedAt: "replacement", summary: "Preserve this state" });
+      expect(autonomous.execute).not.toHaveBeenCalled();
+      return;
+    }
     expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { taskRunId: "TR-MCP-WRITER-CORRECTION", status: "input-required", updatedAt },
       data: expect.objectContaining({

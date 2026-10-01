@@ -86,3 +86,45 @@ test("the gate-infrastructure-unavailable record is gate-UNRUN, never a pass", (
   assert.match(hook, /gate-UNRUN recorded for/);
   assert.doesNotMatch(hook, /gatePassed:\s*true[\s\S]*infrastructureEvidence/, "the evidence path must not mint a pass");
 });
+
+// BI-53B189C8: the hook's own record readers (the slot selector and the legacy
+// fallback for trees without pregate-status.mjs) must refuse a
+// DPF_ALLOW_LOCAL_CI_STUB record exactly as the canonical reader does.
+test("the hook's inline readers refuse a test-stub record", () => {
+  assert.match(
+    hook,
+    /state\.gatePassed === true && state\.testStub !== true/,
+    "the slot selector must not pick a testStub record as the passing slot",
+  );
+  const legacy = hook.slice(hook.indexOf('if [ ! -f "$state_file" ]'));
+  assert.match(
+    legacy,
+    /if \(state\.testStub === true\) \{[\s\S]*?process\.exit\(1\)/,
+    "the legacy reader must refuse a testStub record",
+  );
+});
+
+// Cloud agent sessions (claude.ai/code, CLAUDE_CODE_REMOTE=true) cannot run
+// pregate. The hook records their push under external-contribution-no-install
+// through the same override writer, only after a genuine PASS was ruled out.
+test("the cloud-session path runs after the PASS verdict and records through the override writer", () => {
+  const verdict = hook.indexOf("if node scripts/pregate-status.mjs; then");
+  const cloud = hook.indexOf('if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then');
+  const refusal = hook.indexOf('echo "[pre-push-gate] Run the sandbox gate first:  pnpm run pregate" >&2', cloud);
+  assert.notEqual(verdict, -1, "the PASS verdict must still be consulted");
+  assert.notEqual(cloud, -1, "the cloud-session path is missing");
+  assert.ok(verdict < cloud, "a genuine PASS must win over the cloud-session record");
+  assert.ok(cloud < refusal, "the cloud-session path must come before the refusal");
+  assert.match(hook.slice(cloud, refusal), /recorded_override/, "the cloud path must use the shared override writer");
+  assert.match(hook, /recorded_override\(\) \{/, "the override writer must be a shared function");
+});
+
+test("the hook's cloud-session reason matches the shared constant", async () => {
+  const { CLOUD_AGENT_SESSION_OVERRIDE_REASON } = await import(
+    "../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs"
+  );
+  assert.ok(
+    hook.includes(`DPF_SKIP_PREPUSH_GATE_REASON="${CLOUD_AGENT_SESSION_OVERRIDE_REASON}"`),
+    "the inline reason in .githooks/pre-push-gate must equal CLOUD_AGENT_SESSION_OVERRIDE_REASON",
+  );
+});

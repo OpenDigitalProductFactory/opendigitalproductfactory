@@ -1,4 +1,4 @@
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 import type { ClassificationProvenance } from "./taxonomy";
 
 const PROVENANCE: ClassificationProvenance = {

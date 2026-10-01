@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-vi.mock("@/lib/ai-inference", () => {
+const aiInferenceFake = vi.hoisted(() => {
   class InferenceError extends Error {
     name = "InferenceError";
     constructor(
@@ -76,6 +76,8 @@ vi.mock("@/lib/ai-inference", () => {
     formatMessageForResponses,
   };
 });
+vi.mock("@/lib/routing/inference-error", () => aiInferenceFake);
+vi.mock("@/lib/routing/provider-message-format", () => aiInferenceFake);
 
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";

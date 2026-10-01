@@ -86,7 +86,7 @@ These come from the Authority-side observability surface, **not** from scraping 
 
 The Authority Core is the fan-in point by design. The controls that keep that correct rather than
 fragile (topology §8A.3): server-assigned heartbeat intervals **with jitter**, per-scope concurrency
-caps, payload size/rate caps, `runKey` idempotency, **async** projection to Neo4j/Qdrant/reporting,
+caps, payload size/rate caps, `runKey` idempotency, **async** projection to the graph mirror/reporting,
 bounded offline queues with drop-oldest-by-class, and visible backlog gauges. Validate them with the
 synthetic fleet harness (100 / 1,000-node profiles, `VC-EDGE-SCALE`) before a broad rollout.
 

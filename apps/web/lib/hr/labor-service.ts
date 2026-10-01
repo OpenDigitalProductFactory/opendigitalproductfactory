@@ -12,6 +12,7 @@
 // in labor.ts / labor-billing.ts; this file only reads/writes Prisma around them.
 
 import { prisma } from "@dpf/db";
+import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import { getFinancialProfile } from "@dpf/finance-templates";
 import { createInvoice } from "@/lib/actions/finance";
 import type { Compensation } from "./labor";
@@ -229,7 +230,7 @@ export async function generateInvoiceFromBillableTime(
     accountId: customerAccountId,
     type: "standard",
     dueDate: dueDate.toISOString(),
-    currency: settings?.baseCurrency ?? "GBP",
+    currency: await getOrgBaseCurrency(),
     sourceType: "billable-time",
     notes: `Billable time through ${new Date().toISOString().slice(0, 10)} (${priced.totalHours} hours).`,
     lineItems: priced.lines.map((l) => ({

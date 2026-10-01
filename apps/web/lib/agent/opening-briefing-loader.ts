@@ -41,6 +41,7 @@ export async function loadOpeningBriefingPayload(
   const { items } = await loadAttentionItems(prisma, {
     aiReadinessUserId: user.id,
     delegatingUserId: user.id,
+    readerIsSuperuser: user.isSuperuser === true,
   });
   // V1 operator-view, matching /workspace/inbox; worker scoping is BI-AS-4.
   const visible = filterAttentionForAudience(items, { operator: true });

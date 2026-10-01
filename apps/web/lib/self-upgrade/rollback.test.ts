@@ -43,7 +43,7 @@ const recoveryPoint = {
   trigger: "pre-upgrade-recovery",
   selfUpgradeRunId: "SUR-ROLLBACK",
   createdAt: "2026-06-01T00:00:00.000Z",
-  // postgres-only after BET-5 retired neo4j + qdrant.
+  // Postgres is the only restore target (BET-5).
   members: [{ target: "postgres", runId: "BR-PG", status: "ok" }],
 };
 

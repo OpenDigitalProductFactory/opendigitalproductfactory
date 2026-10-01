@@ -21,7 +21,9 @@ export const SHELL_TAP_TARGET_CLASS = "dpf-tap-target";
 export const CONTEXTUAL_DOCS_LABEL = "Help for this page";
 
 /** Visible name of the global documentation catalog nav item (C1). */
-export const GLOBAL_DOCS_LABEL = "All docs";
+// Matches the docs home heading ("User Guide"), so the rail label, header link and
+// page title name the same thing (EP-2FB6C0CC label truth).
+export const GLOBAL_DOCS_LABEL = "User Guide";
 
 /** Compact visible text for the contextual help control in the header. */
 export const CONTEXTUAL_DOCS_COMPACT_LABEL = "Help";

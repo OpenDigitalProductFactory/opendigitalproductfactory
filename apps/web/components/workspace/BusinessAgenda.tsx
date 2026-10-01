@@ -13,7 +13,7 @@
 
 import { LocalTime } from "@/components/ui/LocalTime";
 import { StatusBadge } from "@/components/ui/report-kit";
-import type { Intent } from "@/components/ui/report-kit/statusColors";
+import type { Intent } from "@/lib/ui-model/statusColors";
 import type { CalendarEventView } from "@/lib/calendar-data";
 
 /** Categories that belong to the operator schedule, never the business home. */

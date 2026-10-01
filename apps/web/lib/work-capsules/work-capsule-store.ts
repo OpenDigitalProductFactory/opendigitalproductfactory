@@ -25,6 +25,7 @@ import {
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
 import { assertWorkroomPublishable } from "./publication-refusal";
+import { assertScopeClaimLease } from "./scope-claim-lease";
 import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
 import {
   CapsuleBranchOccupiedError,
@@ -38,7 +39,7 @@ import {
   defaultPlatformRepositoryFullName,
   type CapsuleAdoptionInput,
 } from "./work-capsule-branch-identity";
-import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import type { CapsuleDb, ClaimBacklogWorkspaceInput, WorkCapsuleActor } from "./work-capsule-store-types";
 import { assertOAuthWorkroomOwner, workroomOwnershipData } from "./oauth-workroom-ownership";
 import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
 import { intentsConflict, scopeValuesOverlap } from "./work-capsule-scope-overlap";
@@ -355,19 +356,7 @@ export type BacklogWorkspaceConflict = {
  */
 export async function claimBacklogItemWorkspace(args: {
   db: CapsuleDb;
-  input: {
-    backlogItemId: string;
-    repositoryFullName: string;
-    headBranch: string;
-    worktreePath: string;
-    baseBranch?: string | null;
-    executorKind?: WorkCapsuleExecutorKind | null;
-    executorRef?: string | null;
-    title?: string;
-    objective?: string;
-    force?: boolean;
-    overrideReason?: string | null;
-  };
+  input: ClaimBacklogWorkspaceInput;
   actor: WorkCapsuleActor;
   now?: Date;
 }): Promise<{
@@ -432,6 +421,8 @@ export async function claimBacklogItemWorkspace(args: {
       headBranch: args.input.headBranch,
       worktreePath: args.input.worktreePath,
       baseBranch: args.input.baseBranch ?? "main",
+      baseSha: args.input.baseSha ?? null,
+      headSha: args.input.headSha ?? null,
       backlogItemId: item.itemId,
       epicId: item.epicId ?? null,
       executorKind: args.input.executorKind ?? null,
@@ -818,9 +809,8 @@ export async function claimWorkCapsuleScope(args: {
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
 
-  // BI-95E37EA1: never append scope claims to a terminal or foreign capsule.
-  // The abandoned-main false-success path used to land claims on an unrelated
-  // WC; refuse here so even a stale capsuleId cannot pollute its audit trail.
+  // BI-95E37EA1: never append scope claims to a terminal or foreign capsule
+  // (the abandoned-main false-success path landed claims on an unrelated WC).
   if (isTerminalCapsuleStatus(capsule.status) || capsule.archivedAt != null) {
     throw new Error(
       `Work Capsule ${args.capsuleId} is ${capsule.status ?? "terminal"} and cannot accept scope claims. ` +
@@ -837,9 +827,9 @@ export async function claimWorkCapsuleScope(args: {
     claims: args.claims,
     now: args.now,
   });
-  if (conflicts.length > 0 && !args.force) {
-    throw new ScopeOverlapError(conflicts);
-  }
+  if (conflicts.length > 0 && !args.force) throw new ScopeOverlapError(conflicts);
+  // BI-2D65BD1B: the rule the authority gate used to call this claim ordinary.
+  assertScopeClaimLease(capsule, args.actor.principalId ?? null, args.force === true, args.now ?? new Date());
 
   const recordedAt = (args.now ?? new Date()).toISOString();
   const nextClaims = new Map<string, ScopeClaim>();

@@ -5,8 +5,8 @@ const { mockSupersede } = vi.hoisted(() => ({ mockSupersede: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { edgeNode: {}, edgeNodeCertificate: {}, $transaction: vi.fn() } }));
 vi.mock("@/lib/edge-node/stale-supersession", () => ({ supersedeStaleInstallerNodes: mockSupersede }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: vi.fn(async () => ({ proceed: true })) }));
-vi.mock("../inngest-client", () => ({
-  inngest: {
+vi.mock("@/lib/jobs", () => ({
+  jobs: {
     createFunction: vi.fn((config: unknown, handler: unknown) => ({ config, handler })),
   },
 }));

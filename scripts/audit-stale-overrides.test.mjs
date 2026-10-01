@@ -103,6 +103,6 @@ test("the live pnpm-workspace.yaml parses and classifies without throwing", () =
   const { entries, scanned } = parseOverrides(text);
   assert.ok(scanned > 0);
   const res = classifyFloors(entries, null);
-  // node-forge is grandfathered debt (no tag) → must surface as un-auditable.
-  assert.ok(res.unauditable.some((r) => r.key === "node-forge"), "node-forge should be un-auditable until its tag is backfilled");
+  // postcss is grandfathered debt (no tag) → must surface as un-auditable.
+  assert.ok(res.unauditable.some((r) => r.key === "postcss"), "postcss should be un-auditable until its tag is backfilled");
 });

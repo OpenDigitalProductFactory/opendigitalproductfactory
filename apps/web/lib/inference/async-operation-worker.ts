@@ -4,10 +4,13 @@ import {
 } from "./async-operation-contract";
 import type { AsyncOperationRecord } from "./async-operation-lifecycle";
 import { ASYNC_INFERENCE_INDETERMINATE_RETRY_MS } from "./async-operation-constants";
+// From the shared leaf, not ./async-operation-store (which re-exports it): the
+// store imports the lifecycle, which imports the provider, which imports this
+// worker, so importing the store here closed a module load-order cycle.
 import {
   AsyncOperationLeaseLostError,
   type AsyncOperationLeaseClaim,
-} from "./async-operation-store";
+} from "./async-operation-store-shared";
 
 const DEFAULT_LEASE_MS = 45_000;
 

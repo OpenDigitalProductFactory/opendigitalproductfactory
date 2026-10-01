@@ -51,6 +51,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
         },
         evidence: ["screen-capture-set"],
         effort: "low",
+        tools: ["surface_open", "surface_snapshot"],
       },
       {
         key: "ground",
@@ -65,6 +66,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
         },
         evidence: ["cited-finding-list"],
         effort: "medium",
+        tools: ["search_ux_critique_corpus"],
       },
       {
         key: "adjudicate",
@@ -222,6 +224,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
         },
         evidence: ["surface-inventory"],
         effort: "low",
+        tools: ["search_integrations", "read_codebase_manifest"],
       },
       {
         key: "assess",
@@ -236,6 +239,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
         },
         evidence: ["drift-report"],
         effort: "medium",
+        tools: ["read_project_file", "search_project_files"],
       },
       {
         key: "authorize",

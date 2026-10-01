@@ -4,7 +4,7 @@
 // runs (in order) auth → body schema → freshness window →
 // (edgeNodeId, runKey) idempotency lookup → persist via
 // `persistSubmittedDiscoveryRun` (normalize + dedupe + Postgres
-// upsert + Neo4j projection). Returns 201 with the persistence
+// upsert + graph projection). Returns 201 with the persistence
 // summary on first-time submission, 200 with the prior snapshot on
 // idempotent replay, or 4xx/5xx with an audit-logged failure.
 //
@@ -469,7 +469,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   // Persistence pipeline: map the wire envelope to the CollectorOutput
   // shape that persistSubmittedDiscoveryRun consumes, then normalize +
-  // dedupe + write to Postgres + project to Neo4j. The submitted
+  // dedupe + write to Postgres + project to the graph mirror. The submitted
   // observations are tagged sourceKind="edge_node" so admins can
   // distinguish them from portal-resident collector output.
   const submittedOutput = {

@@ -173,13 +173,15 @@ describe("POST — mutating tool safety", () => {
       runId: "QR-MCP-DRAIN",
       retryAfterSeconds: 30,
       writesRefused: true,
-      cleanupOperationsAllowed: ["release_nonprod_environment_lease"],
+      cleanupOperationsAllowed: ["release_nonprod_environment_lease", "renew_nonprod_environment_lease"],
     });
     expect(body.result.content[0].text).toContain("Mutating MCP write refused");
     expect(govMock).not.toHaveBeenCalled();
   });
 
-  it("allows cleanup-safe lease release during quiescence", async () => {
+  // Renewal joined release on 2026-09-24: refusing it during a drain lapsed the
+  // lease of a gate that was already running, and its verdict was lost.
+  it.each(["release_nonprod_environment_lease", "renew_nonprod_environment_lease"])("allows %s during quiescence", async (toolName) => {
     getQuiescenceConfigMock.mockResolvedValue({
       level: "draining",
       runId: "QR-MCP-DRAIN",
@@ -195,16 +197,12 @@ describe("POST — mutating tool safety", () => {
     });
     govMock.mockResolvedValue({
       success: true,
-      message: "Released lease NPEL-TEST.",
+      message: "Lease NPEL-TEST handled.",
       entityId: "NPEL-TEST",
       data: { leaseId: "NPEL-TEST" },
     });
 
-    const res = await POST(
-      toolRequest("release_nonprod_environment_lease", {
-        leaseId: "NPEL-TEST",
-      }),
-    );
+    const res = await POST(toolRequest(toolName, { leaseId: "NPEL-TEST" }));
 
     const body = await res.json();
     expect(body.result.isError).toBe(false);

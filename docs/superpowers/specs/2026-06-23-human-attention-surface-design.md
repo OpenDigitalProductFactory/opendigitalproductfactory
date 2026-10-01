@@ -4,6 +4,49 @@ status: active
 
 # The Attention Surface — a kernels-first "Needs you" inbox, separate from the work backlog
 
+## September 27 repair: the result survives the decision
+
+BI-AFEAAA76 extends the BI-7CB2CCDE projection below. Excluding settled requests
+from the *decision queue* remains correct; excluding their results from every
+owner surface was not. The previous card kept execution only in React state and
+then refreshed a loader selecting only proposed, unexpired rows. The result vanished.
+
+After Authorize or Decline, the Inbox opens the exact request's read-only result.
+Normal Inbox visits show a collapsed recent-results section (seven days, ten
+requests). An exact link can retrieve an older request under the same owner
+predicate, or include a pending request outside the queue's first 25 rows.
+The history does not count as work needing another decision.
+
+One safe projection over CoworkerActionEnvelope and ToolExecution distinguishes
+completed, failed, not-run, declined, cancelled, expired and unconfirmed outcomes.
+The approval route records runner outcomes in the existing execution audit with
+the distinct `approval_outcome` audit verb; it cannot be mistaken for the approved
+tool's replay result. No authority state, reservation or expiry is changed.
+Legacy approvals without execution evidence remain unconfirmed. A terminal
+executor result wins over an earlier not-run attempt. Raw arguments, errors and
+result payloads are absent from this projection.
+
+`get_my_approval_status` reads one exact request for the authenticated human and
+acting assistant; neither identity comes from parameters. It uses the existing
+registry-read grant, current transport authorization and both row predicates.
+It exposes no workroom content, grants no admission and cannot execute or approve.
+The owner UI uses only the delegating-user predicate, as do existing decision routes.
+An unavailable request gives the same response whether missing or owned elsewhere.
+
+UX fit: Workspace / Inbox, owner persona, local disclosure only. Reuse Surface
+and report-kit StatusBadge; no new route, queue, authority store or access grant.
+WWMD DI-8A9BB19430DD selected the exact Inbox result over a separate detail page.
+The interactive HTML prototype is under docs/ux-fit. UX-specialist engagement
+was unavailable to the connected agent (catalog and engagement grants absent);
+no specialist review is claimed. Empty and unavailable states carry no identifiers.
+
+Acceptance AC-9..12 on BI-AFEAAA76 cover response persistence, refresh, expiry,
+cross-user/assistant denial, legacy uncertainty, and actual handover readback.
+The implementation sequence is reproduction, shared projection/audit, UI and
+MCP readback, focused tests, governed build/release, then live verification.
+OAuth consent, fresh/refresh/recovery and parallel-task acceptance remain owned
+by BI-B986A18B; this repair does not substitute for those results.
+
 | Field | Value |
 | ----- | ----- |
 | Status | **Design-first (spec only, no feature code).** For founder review. Keystone + slices filed under new epic `EP-ATTENTION-SURFACE`. |

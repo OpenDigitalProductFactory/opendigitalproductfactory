@@ -5,7 +5,7 @@
 // the boundary's closed refusal code into a typed error for the store and a
 // structured tool result for the handler.
 
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 
 import { WorkCapsulePublicationRefusedError } from "./work-capsule-terminal-status";
 

@@ -1,5 +1,6 @@
 import { EmailInput } from "@/components/ui/EmailInput";
 import { bootstrapFirstRunOwner } from "@/lib/actions/first-run-account-bootstrap";
+import { getT } from "@/lib/i18n/t.server";
 import { AccountBootstrapSubmitButton } from "./AccountBootstrapSubmitButton";
 
 type Props = {
@@ -12,7 +13,9 @@ type Props = {
  * The form posts as a native server action so first-run sign-in follows the
  * same Auth.js redirect path as the normal login page.
  */
-export function AccountBootstrapForm({ setupId }: Props) {
+export async function AccountBootstrapForm({ setupId }: Props) {
+  const t = await getT("setup");
+
   async function submitBootstrap(formData: FormData) {
     "use server";
 
@@ -76,6 +79,8 @@ export function AccountBootstrapForm({ setupId }: Props) {
               className="w-full rounded-lg"
             />
           </div>
+
+          <p className="text-xs text-[var(--dpf-muted)]">{t("accountBootstrap.accountableOwnerNote")}</p>
 
           <AccountBootstrapSubmitButton />
         </form>

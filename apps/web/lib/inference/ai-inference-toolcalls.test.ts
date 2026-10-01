@@ -6,7 +6,7 @@ import {
   formatMessageForOpenAI,
   formatMessageForResponses,
 } from "./ai-inference";
-import type { ChatMessage } from "./ai-inference";
+import type { ChatMessage } from "../routing/chat-message-types";
 
 describe("extractToolCalls", () => {
   describe("Anthropic format", () => {

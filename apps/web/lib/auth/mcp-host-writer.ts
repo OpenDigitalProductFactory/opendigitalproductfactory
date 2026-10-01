@@ -1,20 +1,33 @@
 import { lazyFs, lazyPath } from "@/lib/shared/lazy-node";
+import type { McpAuthMode } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 import { buildSetupSnippets } from "./mcp-setup-snippets";
 
 /**
- * Writes .mcp.json and .vscode/mcp.json to the host-mounted install directory.
- * The files point at the stable DPF_MCP_BEARER_TOKEN env var so future token
- * rotation changes the secret, not the client config shape.
+ * Writes .mcp.json and .vscode/mcp.json to the host-mounted install directory
+ * when the client's only credential path is the bearer header: a plain-http
+ * install, or explicit legacy mode. The files point at the stable
+ * DPF_MCP_BEARER_TOKEN env var so future token rotation changes the secret,
+ * not the client config shape.
+ *
+ * In OAuth mode on https it writes nothing (BI-5201141C, design 12.4.4): the
+ * dpf-platform plugin's URL-only connector is the one Claude Code connector,
+ * and Claude Code de-duplicates plugin and project servers by endpoint, so a
+ * project file at another URL would load as a second `dpf` server.
+ *
  * No-ops silently when the bind mount does not exist (dev / CI environments).
  */
-export function writeMcpJsonToHost(plaintext: string, baseUrl: string): void {
+export function writeMcpJsonToHost(plaintext: string, baseUrl: string, authMode: McpAuthMode = "oauth"): void {
   const mountPath = "/host-dpf";
   const fs = lazyFs();
   const p = lazyPath();
   if (!fs.existsSync(mountPath)) return;
 
-  const snippets = buildSetupSnippets(plaintext, baseUrl, "oauth");
+  const snippets = buildSetupSnippets(plaintext, baseUrl, authMode);
+  // The snippet carries the header exactly when the shared credential policy
+  // says the client cannot authorize by OAuth; that is the only case a
+  // project connector is still needed.
+  if (!snippets.claudeCode.includes('"Authorization"')) return;
 
   // Use path.posix so paths always use forward slashes — this code runs inside
   // a Linux Docker container regardless of the OS running the build/tests.

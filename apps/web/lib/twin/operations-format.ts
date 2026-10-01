@@ -1,4 +1,4 @@
-import type { Intent } from "@/components/ui/report-kit";
+import type { Intent } from "@/lib/ui-model/statusColors";
 
 export function moneyToNumber(
   value: number | string | { toString(): string } | null,

@@ -29,8 +29,8 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
 vi.mock("@/lib/tak/task-records", () => ({
   createTaskMessage: vi.fn(),
 }));
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: { send: vi.fn().mockResolvedValue({ ids: ["event-1"] }) },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { send: vi.fn().mockResolvedValue({ ids: ["event-1"] }) },
 }));
 
 vi.mock("@dpf/db", () => ({

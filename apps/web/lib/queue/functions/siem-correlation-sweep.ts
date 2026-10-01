@@ -12,7 +12,7 @@
 //
 // Spec: docs/superpowers/specs/2026-06-24-sovereign-soc-siem-design.md §4.3, §7.1.
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
 import {
   evaluateRulesForEvent,
@@ -33,7 +33,7 @@ import {
   type ThreatIndicatorView,
 } from "@/lib/security/threat-intel";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 const SWEEP_LOOKBACK_MIN = Number(
@@ -368,7 +368,7 @@ async function groupOpenDetectionsIntoCases(
   return casesOpened;
 }
 
-export const siemCorrelationSweep = inngest.createFunction(
+export const siemCorrelationSweep = jobs.createFunction(
   { id: "ops/siem-correlation-sweep", retries: 2, triggers: [cron("3,18,33,48 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ops/siem-correlation-sweep");

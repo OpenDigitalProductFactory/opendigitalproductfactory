@@ -17,6 +17,7 @@ const { mockPrisma, mockAutoDiscoverAndProfile } = vi.hoisted(() => ({
       upsert: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     mcpServer: {
       findMany: vi.fn(),
@@ -46,6 +47,7 @@ import {
   createOAuthFlow,
   exchangeOAuthCode,
   findPendingOAuthProviderId,
+  refreshOAuthToken,
 } from "./provider-oauth";
 
 describe("createOAuthFlow", () => {
@@ -79,10 +81,34 @@ describe("createOAuthFlow", () => {
     );
   });
 
-  it("requests the Responses API scope for Codex OAuth flows", async () => {
+  // BI-46461599: without offline_access OpenAI issues no refresh token, so the
+  // provider dies at first expiry. The Codex CLI's own login (same public
+  // client) requests these scopes.
+  it("requests offline_access by default for Codex OAuth flows", async () => {
     const result = await createOAuthFlow("codex");
 
     expect(result).toHaveProperty("authorizeUrl");
+    const url = new URL((result as { authorizeUrl: string }).authorizeUrl);
+    expect(url.searchParams.get("scope")).toBe("openid profile email offline_access");
+  });
+
+  it("requests offline_access by default for ChatGPT OAuth flows", async () => {
+    const result = await createOAuthFlow("chatgpt");
+
+    const url = new URL((result as { authorizeUrl: string }).authorizeUrl);
+    expect(url.searchParams.get("scope")).toBe("openid profile email offline_access");
+  });
+
+  it("adds no default scope for providers outside auth.openai.com", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "other",
+      authorizeUrl: "https://auth.openai.com.evil.example/oauth/authorize",
+      oauthClientId: "client-other",
+      oauthRedirectUri: null,
+    });
+
+    const result = await createOAuthFlow("other");
+
     const url = new URL((result as { authorizeUrl: string }).authorizeUrl);
     expect(url.searchParams.get("scope")).toBeNull();
   });
@@ -182,6 +208,36 @@ describe("exchangeOAuthCode", () => {
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("chatgpt");
   });
 
+  it("keeps the stored refresh token when the token response carries none", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: "access-token", expires_in: 3600 }),
+      }),
+    );
+
+    await exchangeOAuthCode("state-1", "code-1");
+
+    const calls = mockPrisma.credentialEntry.upsert.mock.calls.map(([args]) => args);
+    expect(calls.map((c) => c.where.providerId).sort()).toEqual(["chatgpt", "codex"]);
+    for (const call of calls) {
+      expect(call.update).not.toHaveProperty("refreshToken");
+      expect(call.update.cachedToken).toBe("enc:access-token");
+      expect(call.create.refreshToken).toBeNull();
+    }
+  });
+
+  it("stores a new refresh token on both OpenAI rows when one is issued", async () => {
+    await exchangeOAuthCode("state-1", "code-1");
+
+    const calls = mockPrisma.credentialEntry.upsert.mock.calls.map(([args]) => args);
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      expect(call.update.refreshToken).toBe("enc:refresh-token");
+    }
+  });
+
   it("completes OAuth activation even when reconciliation fails", async () => {
     mockAutoDiscoverAndProfile.mockRejectedValue(new Error("discovery failed"));
 
@@ -190,6 +246,74 @@ describe("exchangeOAuthCode", () => {
     expect(result).toEqual({ providerId: "codex" });
     expect(mockPrisma.credentialEntry.upsert).toHaveBeenCalled();
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
+  });
+});
+
+describe("refreshOAuthToken", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "codex",
+      tokenUrl: "https://auth.openai.com/oauth/token",
+      oauthClientId: "client-codex",
+    });
+    mockPrisma.credentialEntry.updateMany.mockResolvedValue({ count: 2 });
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  // BI-46461599: the credential read "ok" for a week after it expired with no
+  // way to refresh.
+  it("marks an expired credential without a refresh token expired, with its sibling", async () => {
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({
+      providerId: "codex",
+      refreshToken: null,
+      tokenExpiresAt: new Date(Date.now() - 60_000),
+      status: "ok",
+    });
+
+    const result = await refreshOAuthToken("codex");
+
+    expect(result).toEqual({ error: "Re-authentication required" });
+    expect(mockPrisma.credentialEntry.updateMany).toHaveBeenCalledWith({
+      where: { providerId: { in: ["codex", "chatgpt"] } },
+      data: { status: "expired" },
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("marks only the row itself for a provider with no OpenAI sibling", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "other",
+      tokenUrl: "https://example.test/oauth/token",
+      oauthClientId: "client-other",
+    });
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({
+      providerId: "other",
+      refreshToken: null,
+      tokenExpiresAt: new Date(Date.now() - 60_000),
+      status: "ok",
+    });
+
+    await refreshOAuthToken("other");
+
+    expect(mockPrisma.credentialEntry.updateMany).toHaveBeenCalledWith({
+      where: { providerId: { in: ["other"] } },
+      data: { status: "expired" },
+    });
+  });
+
+  it("leaves a still-valid credential without a refresh token untouched", async () => {
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({
+      providerId: "codex",
+      refreshToken: null,
+      tokenExpiresAt: new Date(Date.now() + 60 * 60_000),
+      status: "ok",
+    });
+
+    const result = await refreshOAuthToken("codex");
+
+    expect(result).toEqual({ error: "Re-authentication required" });
+    expect(mockPrisma.credentialEntry.updateMany).not.toHaveBeenCalled();
   });
 });
 

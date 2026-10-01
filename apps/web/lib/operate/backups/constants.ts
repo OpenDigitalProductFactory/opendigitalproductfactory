@@ -8,7 +8,7 @@ export const POSTGRES_BACKUP_JOB_NAME =
   "Postgres daily backup (platform-managed)";
 export const POSTGRES_BACKUP_SCHEDULE = "daily";
 
-// The retired neo4j-daily-backup / qdrant-daily-backup job ids live only in
+// The retired graph and vector daily-backup job ids live only in
 // packages/db/src/seed-platform-backup.ts, where the seed deactivates any
 // ScheduledJob rows left behind by installs that predate BET-5.
 

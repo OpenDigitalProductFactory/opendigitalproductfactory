@@ -50,6 +50,31 @@ describe("backlog terminal MCP recovery projection", () => {
     });
   });
 
+  // BI-DEDAC950: the refusal names the page behind each unmet code, beside the
+  // decision (never inside it), and the message carries one wiki_query line.
+  it("cites the governing principle of each unmet code beside the decision", async () => {
+    mocks.completeTransition.mockResolvedValue({ ok: false, code: "ACCEPTANCE_EVIDENCE_REQUIRED", decision });
+    mocks.resolveRecovery.mockResolvedValue({ reviewerRoutes: [], escalations: [], unroutable: [] });
+
+    const result = await completeBacklogItemTransitionTool({
+      item: { status: "in-progress", epicId: null, organizationId: null },
+      itemId: "BI-ONE",
+      resolution: "done",
+      completionEvidence: {},
+      userId: "USR-ONE",
+    });
+
+    expect(result.data).toMatchObject({
+      readiness: decision,
+      governingPrinciples: { ACCEPTANCE_EVIDENCE_REQUIRED: "gates-proportional-to-shape" },
+    });
+    expect(result.data?.readiness).not.toHaveProperty("governingPrinciples");
+    expect(result.message).toBe(
+      "Cannot complete BI-ONE: ACCEPTANCE_EVIDENCE_REQUIRED. "
+      + "Governing rules: ACCEPTANCE_EVIDENCE_REQUIRED → gates-proportional-to-shape (look up with wiki_query).",
+    );
+  });
+
   it("does not resolve recovery for an allowed transition", async () => {
     mocks.completeTransition.mockResolvedValue({ ok: true, decision: { ...decision, unmet: [] } });
     const result = await completeBacklogItemTransitionTool({

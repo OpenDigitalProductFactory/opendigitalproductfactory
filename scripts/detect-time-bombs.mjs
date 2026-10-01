@@ -30,6 +30,7 @@
 // Intended for a SCHEDULED job, not per-PR: it runs the suite once per horizon
 // plus a baseline, so it is deliberately not on the critical path of a merge.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -41,25 +42,26 @@ const WEB_DIR = path.join(REPO_ROOT, "apps", "web");
 const VITEST_BIN = path.join(REPO_ROOT, "node_modules", "vitest", "vitest.mjs");
 
 function parseArgs(argv) {
-  const options = { days: [90], filter: "" };
-  for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === "--days") {
-      const raw = argv[i + 1] ?? "";
-      i += 1;
-      options.days = raw
-        .split(",")
-        .map((value) => Number.parseFloat(value.trim()))
-        .filter((value) => Number.isFinite(value) && value !== 0);
-      if (options.days.length === 0) {
-        throw new Error(`--days needs at least one non-zero number (got "${raw}")`);
-      }
-    } else if (argv[i] === "--filter") {
-      options.filter = argv[i + 1] ?? "";
-      i += 1;
-    } else if (argv[i] === "--help" || argv[i] === "-h") {
-      options.help = true;
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: { days: { type: "string" }, filter: { type: "string" }, help: { type: "boolean", short: "h" } },
+  });
+  const text = (value) => (typeof value === "string" ? value : "");
+  const options = { days: [90], filter: values.filter === undefined ? "" : text(values.filter) };
+  if (values.days !== undefined) {
+    const raw = text(values.days);
+    options.days = raw
+      .split(",")
+      .map((value) => Number.parseFloat(value.trim()))
+      .filter((value) => Number.isFinite(value) && value !== 0);
+    if (options.days.length === 0) {
+      throw new Error(`--days needs at least one non-zero number (got "${raw}")`);
     }
   }
+  if (values.help) options.help = true;
   return options;
 }
 

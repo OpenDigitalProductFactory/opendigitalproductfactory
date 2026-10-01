@@ -116,7 +116,7 @@ describe("loadOptimizationCockpitData", () => {
   it("treats per-selector graph errors as unresolved instead of failing the page", async () => {
     const deps = makeDeps({
       trace: async (input) => {
-        if (input.model === "TaskRun") throw new Error("neo4j hiccup");
+        if (input.model === "TaskRun") throw new Error("graph hiccup");
         return {
           graphKey: "source-code",
           available: true,

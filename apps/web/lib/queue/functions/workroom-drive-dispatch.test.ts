@@ -13,6 +13,25 @@ describe("loadStageDispatchTimes", () => {
     expect(sql).toContain("{workroomDrive,stageKey}");
     expect(sql).toContain("{workroomDrive,lastCycleKey}");
   });
+  it("also starts a governed-decision stage at the drive's attention ask (never-dispatched stage)", async () => {
+    const askedAt = new Date("2026-09-26T01:30:00.806Z");
+    const query = vi.fn().mockResolvedValue([{ capsuleId: "WC-DECIDE", dispatchedAt: askedAt }]);
+    const result = await loadStageDispatchTimes(["WC-DECIDE"], { $queryRaw: query } as never);
+    expect(result.get("WC-DECIDE")).toEqual(askedAt);
+    expect(result.get("WC-OTHER")).toBeUndefined();
+    const sql = query.mock.calls[0][0].join("?");
+    // The attention row: the drive's own ask for THIS stage's governed decision.
+    expect(sql).toContain("'workroom-drive-attention'");
+    expect(sql).toContain("'attention'");
+    expect(sql).toContain("'governed_decision'");
+    // Scoped to the room still waiting on that decision. role_stage/person_stage
+    // attention is not a start time: only governed_decision is accepted.
+    expect(sql).toContain("{workroomDrive,pendingAttention,reason}");
+    expect(sql).toContain("{workroomDrive,pendingAttention,stageKey}");
+    expect(sql).not.toContain("'role_stage'");
+    // The dispatch branch keeps its cycle scope; latest row wins.
+    expect(sql).toMatch(/ORDER BY w\."capsuleId", a\."recordedAt" DESC/);
+  });
   it("does not query an empty room set", async () => {
     const query = vi.fn();
     expect(await loadStageDispatchTimes([], { $queryRaw: query } as never)).toEqual(new Map());
@@ -68,7 +87,7 @@ describe("stage effort on dispatch (Phase G)", () => {
 
   it("carries the declared tier of the dispatched stage", async () => {
     const call = await dispatchStage(readWorkShapeDefinitionContract(shape), "sweep");
-    expect(call?.workroomStage).toEqual({ shapeKey: shape.key, stageKey: "sweep", effort: "low" });
+    expect(call?.stage).toMatchObject({ shapeKey: shape.key, stageKey: "sweep", effort: "low" });
   });
 
   it("carries high for a governed-decision stage whatever it declares", async () => {
@@ -78,15 +97,15 @@ describe("stage effort on dispatch (Phase G)", () => {
       stages: contract.stages.map((s) => (s.key === "decide" ? { ...s, effort: "low" as const } : s)),
     };
     const call = await dispatchStage(demoted, "decide");
-    expect(call?.workroomStage?.effort).toBe("high");
+    expect(call?.stage.effort).toBe("high");
   });
 
-  it("carries no stage record for an undeclared stage", async () => {
+  it("carries no effort for an undeclared stage", async () => {
     const contract = readWorkShapeDefinitionContract(shape);
     const undeclared = { ...contract, stages: contract.stages.map(({ effort: _e, ...s }) => s) };
     const call = await dispatchStage(undeclared, "sweep");
     expect(call).toBeDefined();
-    expect(call?.workroomStage ?? null).toBeNull();
+    expect(call?.stage).not.toHaveProperty("effort");
   });
 });
 
@@ -101,44 +120,30 @@ describe("upsertAgentTask taskConfig write (Phase G)", () => {
     };
     return { tx, client: { ...tx, $transaction: vi.fn(async (run: (t: typeof tx) => unknown) => run(tx)) } };
   }
-  const input = (workroomStage: { shapeKey: string; stageKey: string; effort: "low" | "high" } | null) => ({
+  const stage = (effort?: "low" | "high") => ({ shapeKey: "s", shapeVersion: "1.0.0", stageKey: "sweep", tools: [], ...(effort ? { effort } : {}) });
+  const input = (s: ReturnType<typeof stage>) => ({
     taskId: "T-1", agentId: "a", ownerUserId: "u", title: "t", prompt: "p", now: new Date("2026-09-01T00:00:00Z"),
     lease: { roomId: "row-1", expiresAt: new Date("2026-09-01T00:05:00Z"), holderPrincipalId: null },
-    workroomStage,
+    stage: s,
   });
   const upsertArgs = (tx: ReturnType<typeof db>["tx"]) => tx.scheduledAgentTask.upsert.mock.calls[0]![0];
+  const fxFor = (client: unknown) => createWorkroomDriveEffects(async () => client as never, () => new Date("2026-09-01T00:00:00Z"));
 
-  it("persists the stage effort under taskConfig.workroomStage on create and update", async () => {
+  it("persists the stage effort beside its tools under taskConfig.workroomStage", async () => {
     const { tx, client } = db(undefined);
-    const fx = createWorkroomDriveEffects(async () => client as never, () => new Date("2026-09-01T00:00:00Z"));
-    await fx.upsertAgentTask(input({ shapeKey: "s", stageKey: "sweep", effort: "low" }));
-    const args = upsertArgs(tx);
-    expect(args.create.taskConfig).toEqual({ workroomStage: { shapeKey: "s", stageKey: "sweep", effort: "low" } });
-    expect(args.update.taskConfig).toEqual({ workroomStage: { shapeKey: "s", stageKey: "sweep", effort: "low" } });
+    await fxFor(client).upsertAgentTask(input(stage("low")));
+    expect(upsertArgs(tx).update.taskConfig).toEqual({ workroomStage: stage("low") });
   });
 
   it("merges into an existing taskConfig without disturbing a recorded trigger", async () => {
     const { tx, client } = db({ trigger: { kind: "time" } });
-    const fx = createWorkroomDriveEffects(async () => client as never, () => new Date("2026-09-01T00:00:00Z"));
-    await fx.upsertAgentTask(input({ shapeKey: "s", stageKey: "decide", effort: "high" }));
-    expect(upsertArgs(tx).update.taskConfig).toEqual({
-      trigger: { kind: "time" }, workroomStage: { shapeKey: "s", stageKey: "decide", effort: "high" },
-    });
+    await fxFor(client).upsertAgentTask(input(stage("high")));
+    expect(upsertArgs(tx).update.taskConfig).toEqual({ trigger: { kind: "time" }, workroomStage: stage("high") });
   });
 
-  it("does not write taskConfig at all for an undeclared stage", async () => {
-    const { tx, client } = db(null);
-    const fx = createWorkroomDriveEffects(async () => client as never, () => new Date("2026-09-01T00:00:00Z"));
-    await fx.upsertAgentTask(input(null));
-    const args = upsertArgs(tx);
-    expect(args.create).not.toHaveProperty("taskConfig");
-    expect(args.update).not.toHaveProperty("taskConfig");
-  });
-
-  it("clears a stale stage record when the room moves to an undeclared stage", async () => {
-    const { tx, client } = db({ trigger: { kind: "time" }, workroomStage: { shapeKey: "s", stageKey: "sweep", effort: "low" } });
-    const fx = createWorkroomDriveEffects(async () => client as never, () => new Date("2026-09-01T00:00:00Z"));
-    await fx.upsertAgentTask(input(null));
-    expect(upsertArgs(tx).update.taskConfig).toEqual({ trigger: { kind: "time" } });
+  it("drops a stale effort when the room moves to an undeclared stage", async () => {
+    const { tx, client } = db({ trigger: { kind: "time" }, workroomStage: stage("low") });
+    await fxFor(client).upsertAgentTask(input(stage()));
+    expect(upsertArgs(tx).update.taskConfig).toEqual({ trigger: { kind: "time" }, workroomStage: stage() });
   });
 });

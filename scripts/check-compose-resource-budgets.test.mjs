@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  evaluateLocalCiFit,
   evaluateResourceBudgets,
   extractServiceBlocks,
+  parseMemoryBytes,
   serviceHasResourceLimits,
   sizeWslCeilings,
 } from "./check-compose-resource-budgets.mjs";
@@ -141,5 +143,54 @@ describe("sizeWslCeilings", () => {
     );
     assert.equal(sized.memoryGb, 8);
     assert.equal(sized.processors, 3);
+  });
+});
+
+// BI-48EACCB0 (BI-903FB5F9 slice B): the largest VM the budget will size must
+// hold the always-on stack, the measured builder reserve and the admission floor.
+describe("evaluateLocalCiFit", () => {
+  const GiB = 1024 ** 3;
+  const budget = {
+    host: { wsl: { maxMemoryGb: 32 } },
+    alwaysOnServices: {
+      postgres: { memory: "2g" },
+      portal: { memory: "3g" },
+      redis: { memory: "512m" },
+      inngest: { memory: "1g" },
+      loki: { memory: "1g" },
+      alloy: { memory: "512m" },
+    },
+  };
+
+  it("parses compose memory strings", () => {
+    assert.equal(parseMemoryBytes("2g"), 2 * GiB);
+    assert.equal(parseMemoryBytes("512m"), 512 * 1024 ** 2);
+    assert.equal(parseMemoryBytes("1G"), GiB);
+    assert.equal(parseMemoryBytes("nonsense"), null);
+  });
+
+  it("AC-1: reports headroom when the maximum VM holds always-on + reserve + floor", () => {
+    const fit = evaluateLocalCiFit({ budget, builderReserveBytes: 14.86 * GiB, floorBytes: 4 * GiB });
+    assert.equal(fit.ok, true);
+    assert.equal(fit.alwaysOnBytes, 8 * GiB);
+    assert.ok(Math.abs(fit.headroomBytes - (32 - 8 - 14.86 - 4) * GiB) < 1024);
+  });
+
+  it("AC-1: fails, naming the shortfall, when the maximum VM cannot admit a build", () => {
+    const fit = evaluateLocalCiFit({
+      budget: { ...budget, host: { wsl: { maxMemoryGb: 24 } } },
+      builderReserveBytes: 16 * GiB,
+      floorBytes: 4 * GiB,
+    });
+    assert.equal(fit.ok, false);
+    assert.equal(fit.headroomBytes, -4 * GiB);
+    assert.match(fit.message, /cannot admit a local-CI build/);
+    assert.match(fit.message, /short by 4\.00 GiB/);
+  });
+
+  it("fails closed on an unreadable input rather than passing", () => {
+    const fit = evaluateLocalCiFit({ budget: { host: {} }, builderReserveBytes: 14 * GiB, floorBytes: 4 * GiB });
+    assert.equal(fit.ok, false);
+    assert.match(fit.message, /cannot be evaluated/);
   });
 });

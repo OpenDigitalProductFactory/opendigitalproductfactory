@@ -38,6 +38,9 @@ type CapsuleEvidenceInput = {
   /** The work-shape stage this evidence completes. The drive earns a completing
    *  receipt from stage-scoped evidence only (BI-76B35820). */
   stageKey?: string;
+  /** Stage evidence only: `completed` advances the stage, `blocked` records
+   *  why it could not be done and advances nothing. */
+  outcome?: "completed" | "blocked";
   command?: string;
   url?: string;
   targetId?: string;

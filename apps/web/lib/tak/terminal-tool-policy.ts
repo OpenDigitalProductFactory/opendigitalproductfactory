@@ -120,10 +120,37 @@ function boundedInteger(value: unknown, minimum: number, maximum: number): value
  * source identity. Provider arguments may select only a bounded page within
  * that artifact; they cannot replace or broaden the bound artifact itself.
  */
+/**
+ * BI-E8237EAE: the largest reader page a model sees whole through a tool-result
+ * cap of `modelVisibleChars`. The page travels inside a JSON envelope (message,
+ * identity, cursor) and JSON escaping grows the content, so the page is the cap
+ * less a fixed envelope allowance, less an escaping margin.
+ */
+export function readerPageCharsForModelView(modelVisibleChars: number): number {
+  return Math.max(500, Math.floor((modelVisibleChars - 1_200) * 0.8));
+}
+
+// A fixed floor, then one read per page of the bound artifact plus two for a
+// restart, never more than this ceiling (BI-E8237EAE).
+const MAX_SCALED_READER_CALLS = 24;
+
+function effectiveReaderBudget(policy: TerminalToolPolicy, readerRecords: readonly TerminalToolRecord[]): number {
+  for (const record of readerRecords) {
+    const data = record.result.success ? record.result.data : undefined;
+    const totalChars = data?.["totalChars"];
+    const content = data?.["content"];
+    if (data?.["hasMore"] !== true || typeof totalChars !== "number" || typeof content !== "string" || content.length === 0) continue;
+    const pages = Math.ceil(totalChars / content.length);
+    return Math.min(MAX_SCALED_READER_CALLS, Math.max(policy.maximumReaderCalls, pages + 2));
+  }
+  return policy.maximumReaderCalls;
+}
+
 export function normalizeTerminalToolArguments(
   policy: TerminalToolPolicy,
   toolName: string,
   providerArguments: Record<string, unknown>,
+  modelVisibleChars?: number,
 ): TerminalToolArgumentDisposition {
   if (toolName !== "read_source_at_version" || !policy.readerToolNames.includes(toolName)) {
     return { kind: "allow", arguments: providerArguments };
@@ -190,6 +217,13 @@ export function normalizeTerminalToolArguments(
     }
     normalized[name] = value;
   }
+  // BI-E8237EAE: a page the model cannot see whole is ruled invalid evidence and
+  // forces a restart, so never request one larger than the model's view.
+  if (modelVisibleChars !== undefined) {
+    const visiblePage = readerPageCharsForModelView(modelVisibleChars);
+    const requested = typeof normalized["maxChars"] === "number" ? normalized["maxChars"] as number : Number.POSITIVE_INFINITY;
+    normalized["maxChars"] = Math.min(requested, visiblePage);
+  }
 
   return { kind: "allow", arguments: normalized };
 }
@@ -240,7 +274,7 @@ export function summarizeTerminalToolProgress(
       continuationCursor: null,
       paginationInvalid: false,
       writerAttempted: records.some((record) => record.name === policy.writerToolName),
-      readerBudgetExhausted: readerRecords.length >= policy.maximumReaderCalls,
+      readerBudgetExhausted: readerRecords.length >= effectiveReaderBudget(policy, readerRecords),
     };
   }
   const successfulReaderCalls = readerRecords.filter((record) => record.result.success).length;
@@ -340,7 +374,7 @@ export function summarizeTerminalToolProgress(
     continuationCursor: attemptActive ? expectedCursor : null,
     paginationInvalid,
     writerAttempted: records.some((record) => record.name === policy.writerToolName),
-    readerBudgetExhausted: readerRecords.length >= policy.maximumReaderCalls,
+    readerBudgetExhausted: readerRecords.length >= effectiveReaderBudget(policy, readerRecords),
   };
 }
 
@@ -513,7 +547,7 @@ export function buildTerminalToolReminder(
     return "Part of the source was withheld by the model context budget. Restart the same immutable traversal with smaller maxChars pages; do not record a disposition until every page is visible.";
   }
   if (progress.partialEvidence) return `Continue read_source_at_version with cursor ${progress.continuationCursor}; the writer remains unavailable until traversal completes.`;
-  const remaining = policy.maximumReaderCalls - progress.readerAttempts;
+  const remaining = effectiveReaderBudget(policy, records.filter((record) => policy.readerToolNames.includes(record.name))) - progress.readerAttempts;
   return `Use the immutable evidence readers before ${policy.writerToolName}. ${remaining} bounded evidence calls remain; reserve the terminal step for the governed writer.`;
 }
 

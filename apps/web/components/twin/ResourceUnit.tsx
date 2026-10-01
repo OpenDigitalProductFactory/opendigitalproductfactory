@@ -6,7 +6,7 @@
 import { StatusBadge } from "@/components/ui/report-kit";
 
 import { ActorMark } from "./ActorMark";
-import type { ResourceUnitData } from "./types";
+import type { ResourceUnitData } from "@/lib/twin/kit-types";
 
 export function ResourceUnit({
   label,

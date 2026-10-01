@@ -701,3 +701,102 @@ test("a genuinely finished failing run is still FAIL", () => {
   });
   assert.equal(r.verdict, "FAIL");
 });
+
+// BI-53B189C8. `DPF_ALLOW_LOCAL_CI_STUB=1` exercises the gate's lease and
+// evidence plumbing without building anything, and its record says
+// status "passed", gatePassed true. Bound to the real HEAD and branch it read as
+// PASS here, and this reader is the pre-push hook's verdict. The stub marks its
+// record; a marked record is never evidence for a push, whatever it binds to.
+test("a test-stub record bound to THIS head and branch is not a PASS", () => {
+  const r = classifySlotRecord({
+    state: passingState({ testStub: true }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  assert.notEqual(r.verdict, "PASS");
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /DPF_ALLOW_LOCAL_CI_STUB/);
+  assert.match(r.reason, /not evidence/);
+  assert.equal(exitCodeForVerdict(r.verdict), 1);
+});
+
+test("a test-stub record names itself even after HEAD has moved past it", () => {
+  // Observed 2026-09-24: a fixture record reported as an ordinary STALE gate,
+  // quoting the fixture's evidence id as if a real run had produced it.
+  const r = classifySlotRecord({
+    state: passingState({ sha: OLD, branch: "fix/admitted-owner-recovery", testStub: true }),
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /test stub/i);
+  assert.match(r.reason, /fix\/admitted-owner-recovery/);
+});
+
+test("a real PASS in the sibling slot still wins over a test-stub record", () => {
+  const stub = classifySlotRecord({
+    state: passingState({ testStub: true }),
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  const real = classifySlotRecord({
+    state: passingState(),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  const best = reconcileSlots([
+    { slotKey: "slot-0", ...stub },
+    { slotKey: "slot-1", ...real },
+  ]);
+  assert.equal(best.verdict, "PASS");
+  assert.equal(best.slot, "slot-1");
+});
+
+// BI-27A37D27: a queued record whose waiter is dead is not a queue. Saying
+// "queued" sent sessions to wait hours on a claim nothing would ever run.
+test("a queued claim with no live waiter says so instead of 'queued'", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "queued", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+    queuedWaiter: { checked: true, alive: false, pids: [53956] },
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /no waiter is alive/i);
+  assert.match(r.reason, /53956/);
+  assert.match(r.reason, /re-run pregate/i);
+});
+
+test("a queued claim with a live waiter keeps the queued wording", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "queued", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+    queuedWaiter: { checked: true, alive: true, pids: [1] },
+  });
+  assert.doesNotMatch(r.reason, /no waiter is alive/i);
+});
+
+// BI-27A37D27: "admitted" is written when the slot is granted and stays while
+// the stages run. Headlining it as FAIL stopped callers mid-run (observed live:
+// a gate reported FAIL while its log was inside check-guards).
+test("an admitted record is an in-flight run, never a FAIL", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "admitted", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /has not recorded a verdict/);
+});

@@ -1,15 +1,24 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 
 import {
   collectDescendantPids,
   createProcessTreeTracker,
+  fenceProcessTree,
   defaultDescendantPollMs,
   defaultProcessScanMs,
   findConflictingLocalCiMutatorPids,
@@ -24,6 +33,47 @@ import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 // re-claiming against a server that has been torn down. The spawn decision
 // itself is covered with an injected spawn in lib/durable-wait-resumer.test.mjs.
 process.env.DPF_DURABLE_RESUMER = "off";
+
+// BI-53B189C8. Every gate this file spawns must write into a temp repository.
+// Three tests once passed `--worktree process.cwd()`, so each run left stub
+// PASS records, bound to the caller's real HEAD, in the git dir of the checkout
+// running the suite. `pregate:status` then quoted a fixture's evidence id as
+// that worktree's gate. The stamps are taken before any test runs, and the last
+// test in this file compares them.
+const GATE_ARTIFACT_NAME = /^dpf-(local-ci-|sandbox-freshness|pre-admission-)/;
+
+function callerGateDirectory() {
+  const result = spawnSync("git", ["rev-parse", "--git-path", "dpf-local-ci-gate.json"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  if (result.status !== 0 || !result.stdout.trim()) return null;
+  return dirname(resolve(process.cwd(), result.stdout.trim()));
+}
+
+function gateArtifactStamps(directory) {
+  const stamps = new Map();
+  if (!directory) return stamps;
+  let names = [];
+  try {
+    names = readdirSync(directory);
+  } catch {
+    return stamps;
+  }
+  for (const name of names) {
+    if (!GATE_ARTIFACT_NAME.test(name)) continue;
+    try {
+      const stat = statSync(join(directory, name));
+      stamps.set(name, `${stat.mtimeMs}:${stat.size}`);
+    } catch {
+      // Removed between the listing and the stat; it is not a write.
+    }
+  }
+  return stamps;
+}
+
+const CALLER_GATE_DIRECTORY = callerGateDirectory();
+const CALLER_GATE_ARTIFACTS_BEFORE = gateArtifactStamps(CALLER_GATE_DIRECTORY);
 
 const TEST_HOST_PRESSURE = {
   observedAt: "2026-07-30T05:00:00.000Z",
@@ -625,7 +675,8 @@ test("released terminal claim from a prior run gets a fresh rerun claimKey", asy
     assert.ok([0, 3].includes(result.code), result.output);
     assert.equal(claims.length, 2);
     assert.notEqual(claims[0].claimKey, claims[1].claimKey);
-    assert.match(claims[1].claimKey, /:rerun-1$/);
+    assert.match(claims[1].claimKey, /:fresh-[0-9a-f]{8}$/);
+    assert.doesNotMatch(claims[1].claimKey, /:rerun-/);
     assert.match(result.output, /creating fresh admission attempt 1/);
   } finally {
     server.closeAllConnections();
@@ -633,7 +684,7 @@ test("released terminal claim from a prior run gets a fresh rerun claimKey", asy
   }
 });
 
-test("terminal claim replacement advances past an expired rerun from a prior process", async () => {
+test("a chain of already-terminal claim keys stops after one fresh key", async () => {
   const claims = [];
   const server = createServer((request, response) => {
     let body = "";
@@ -720,17 +771,19 @@ test("terminal claim replacement advances past an expired rerun from a prior pro
       },
     });
 
-    assert.ok([0, 3].includes(result.code), result.output);
-    assert.equal(claims.length, 3);
+    assert.equal(result.code, 81, result.output);
+    assert.equal(claims.length, 2);
     assert.match(claims[0].claimKey, /^local-ci:[^:]+:[0-9a-f]{40}$/);
-    assert.match(claims[1].claimKey, /:rerun-1$/);
-    assert.match(claims[2].claimKey, /:rerun-2$/);
+    assert.match(claims[1].claimKey, /:fresh-[0-9a-f]{8}$/);
+    assert.ok(claims.every((claim) => !/:rerun-\d+$/.test(claim.claimKey)));
     assert.ok(claims.every((claim) => claim.ownerProvider === "codex"));
     assert.ok(claims.every(
       (claim) => claim.ownerSessionId === "test-terminal-claim-owner",
     ));
-    assert.match(result.output, /creating fresh admission attempt 2/);
+    assert.match(result.output, /local_ci_terminal_chain_refused/);
+    assert.doesNotMatch(result.output, /creating fresh admission attempt 2/);
     const state = JSON.parse(readFileSync(stateFile, "utf8"));
+    assert.equal(state.status, "cancelled");
     assert.deepEqual(
       state.leaseEvents
         .filter((event) => event.type === "terminal-claim-replaced")
@@ -747,13 +800,6 @@ test("terminal claim replacement advances past an expired rerun from a prior pro
           terminalAttemptSequence: 1,
           priorClaimKey: claims[0].claimKey,
           replacementClaimKey: claims[1].claimKey,
-          interruptedByQuiescence: false,
-        },
-        {
-          terminalReason: "expired",
-          terminalAttemptSequence: 2,
-          priorClaimKey: claims[1].claimKey,
-          replacementClaimKey: claims[2].claimKey,
           interruptedByQuiescence: false,
         },
       ],
@@ -834,7 +880,7 @@ test("cancelled terminal claim from an interrupted run gets a fresh rerun claimK
     assert.ok([0, 3].includes(result.code), result.output);
     assert.equal(claims.length, 2);
     assert.notEqual(claims[0].claimKey, claims[1].claimKey);
-    assert.match(claims[1].claimKey, /:rerun-1$/);
+    assert.match(claims[1].claimKey, /:fresh-[0-9a-f]{8}$/);
     assert.match(result.output, /previous local-CI lease claim was cancelled/);
     assert.match(result.output, /creating fresh admission attempt 1/);
   } finally {
@@ -1068,7 +1114,7 @@ test("canonical local-CI claims request no more than the admitted-owner recovery
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "fix/admitted-owner-recovery",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--mcp-url", `http://127.0.0.1:${address.port}`,
       "--no-push",
     ], {
@@ -1144,7 +1190,7 @@ test("slot-1 metadata is bound through renewal before the canonical gate runs", 
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "feat/two-slot-binding",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
       "--no-push",
@@ -1244,7 +1290,7 @@ test("an admitted owner renews authority while a live host fence delays the run"
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "fix/admitted-owner-recovery",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--poll-seconds", "0.05",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
@@ -1576,6 +1622,7 @@ test(
   "signal while queued cancels the durable claim exactly once",
   { skip: process.platform === "win32" ? "Windows child.kill terminates without delivering POSIX signal handlers" : false },
   async () => {
+  const SLOW_PRE_CLAIM_MS = 2_500;
   const calls = [];
   let gateChild;
   let signalled = false;
@@ -1586,28 +1633,35 @@ test(
       const payload = JSON.parse(body);
       const tool = payload.params.name;
       calls.push(tool);
-      const result = tool === "claim_nonprod_environment_lease"
-        ? {
-          success: true,
-          entityId: "NPEL-SIGNAL-TEST",
-          data: {
-            lease: { leaseId: "NPEL-SIGNAL-TEST" },
-            admission: { status: "queued", queuePosition: 1, waitAgeMs: 25 },
-          },
-        }
-        : { success: true };
-      response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify({
-        jsonrpc: "2.0",
-        id: payload.id,
-        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
-      }));
-      if (tool === "claim_nonprod_environment_lease" && !signalled) {
-        signalled = true;
-        setTimeout(() => gateChild?.kill("SIGTERM"), 25);
-      }
+      // A loaded host is slow before its first claim (observed: load ~50 on
+      // macOS). Make that slowness deterministic, so the admission budget can
+      // never be what ends this run - only the signal may.
+      const delayMs = tool === "get_quiescence_status" ? SLOW_PRE_CLAIM_MS : 0;
+      setTimeout(() => respond(response, tool, payload), delayMs);
     });
   });
+  const respond = (response, tool, payload) => {
+    const result = tool === "claim_nonprod_environment_lease"
+      ? {
+        success: true,
+        entityId: "NPEL-SIGNAL-TEST",
+        data: {
+          lease: { leaseId: "NPEL-SIGNAL-TEST" },
+          admission: { status: "queued", queuePosition: 1, waitAgeMs: 25 },
+        },
+      }
+      : { success: true };
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({
+      jsonrpc: "2.0",
+      id: payload.id,
+      result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+    }));
+    if (tool === "claim_nonprod_environment_lease" && !signalled) {
+      signalled = true;
+      setTimeout(() => gateChild?.kill("SIGTERM"), 25);
+    }
+  };
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
 
@@ -1619,13 +1673,19 @@ test(
         "--worktree", makeTempWorktree(),
         "--expires-minutes", "0.05",
         "--poll-seconds", "0.05",
-        "--lease-wait-seconds", "2",
+        // The signal ends this run. The admission budget must outlast a slow
+        // pre-claim phase, or the gate times out before the signal lands.
+        "--lease-wait-seconds", "30",
         "--mcp-url", `http://127.0.0.1:${address.port}`,
         "--no-push",
       ], {
         cwd: process.cwd(),
         env: {
           ...process.env,
+          // Spawned directly for the kill handle, so it does not get run()'s
+          // fixed host pressure; without it the gate samples the real host.
+          NODE_ENV: "test",
+          DPF_LOCAL_CI_HOST_PRESSURE_JSON: JSON.stringify(TEST_HOST_PRESSURE),
           DPF_MCP_BEARER_TOKEN: "test-token",
           DPF_ALLOW_LOCAL_CI_STUB: "1",
           DPF_GATE_RETRY_JITTER: "0",
@@ -1745,6 +1805,52 @@ test("hard host-pressure loss kills the real child process tree before later mut
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+// BI-C5ED24D9. A fence is a race against the fenced child. On Windows a
+// process scan is a ~1.5 s CIM query; run before taskkill, it let the child
+// write mid-scan, ~2 s after ownership was lost. These pin the order per
+// platform: kill first where the parent link survives the kill (Windows),
+// observe first where it does not (POSIX reparenting).
+function recordingFenceTracker(order) {
+  return {
+    sample: () => { order.push("sample"); return []; },
+    waitForQuiescence: async () => { order.push("quiesce"); return []; },
+  };
+}
+
+test("fenceProcessTree kills the Windows tree before any process scan", async () => {
+  const order = [];
+  await fenceProcessTree({
+    platform: "win32",
+    tracker: recordingFenceTracker(order),
+    childRunning: () => true,
+    killTree: () => order.push("kill"),
+  });
+  assert.equal(order[0], "kill", `a scan before the kill is time the fenced child can mutate: ${order.join(" > ")}`);
+  assert.deepEqual(order, ["kill", "quiesce"]);
+});
+
+test("fenceProcessTree observes before the kill on POSIX, where descendants reparent", async () => {
+  const order = [];
+  await fenceProcessTree({
+    platform: "linux",
+    tracker: recordingFenceTracker(order),
+    childRunning: () => true,
+    killTree: () => order.push("kill"),
+  });
+  assert.deepEqual(order, ["sample", "kill", "quiesce"]);
+});
+
+test("fenceProcessTree still reaps remembered descendants when the child already exited", async () => {
+  const order = [];
+  await fenceProcessTree({
+    platform: "win32",
+    tracker: recordingFenceTracker(order),
+    childRunning: () => false,
+    killTree: () => order.push("kill"),
+  });
+  assert.deepEqual(order, ["quiesce"]);
 });
 
 // BI-04AECD8A. The descendant scan used to be a 250ms setInterval calling a
@@ -2066,4 +2172,128 @@ test("a gate launch sweeps observer records leaked by a killed run (BI-2C7F51BA)
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test("a DPF_ALLOW_LOCAL_CI_STUB run leaves a record no push reader accepts", async () => {
+  const worktree = makeTempWorktree();
+  const gitIn = (args) => spawnSync("git", args, { cwd: worktree, encoding: "utf8" }).stdout.trim();
+  const branch = gitIn(["rev-parse", "--abbrev-ref", "HEAD"]);
+  const evidence = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      if (tool === "record_local_integration_result") evidence.push(payload.params.arguments);
+      const lease = { leaseId: "NPEL-STUB-RUN", expiresAt: new Date(Date.now() + 10_000).toISOString() };
+      const result = tool === "claim_nonprod_environment_lease"
+        ? {
+          success: true,
+          entityId: lease.leaseId,
+          data: { lease, admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 1 } },
+        }
+        : tool === "renew_nonprod_environment_lease"
+          ? { success: true, entityId: lease.leaseId, data: { lease } }
+          : tool === "record_local_integration_result"
+            ? { success: true, entityId: "EVIDENCE-STUB-RUN" }
+            : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+  const address = server.address();
+  const env = {
+    ...process.env,
+    DPF_MCP_BEARER_TOKEN: "test-token",
+    DPF_ALLOW_LOCAL_CI_STUB: "1",
+    DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+  };
+  delete env.DPF_LOCAL_CI_SLOT_KEY;
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", branch,
+      "--worktree", worktree,
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], { cwd: process.cwd(), env });
+
+    // The stub still drives the full pass-path plumbing; that is its job.
+    assert.equal(result.code, 0, result.output);
+    const state = JSON.parse(readFileSync(join(worktree, ".git", "dpf-local-ci-gate.json"), "utf8"));
+    assert.equal(state.branch, branch);
+    assert.equal(state.testStub, true, JSON.stringify(state));
+    assert.equal(evidence.length, 1);
+    assert.equal(evidence[0].evidence.testStub, true);
+
+    // Same branch, same SHA: the worst case. The canonical reader, which is
+    // also the pre-push hook's verdict, must refuse it.
+    const status = spawnSync(process.execPath, [resolve("scripts/pregate-status.mjs"), "--json"], {
+      cwd: worktree,
+      encoding: "utf8",
+    });
+    const verdict = JSON.parse(status.stdout);
+    assert.notEqual(verdict.verdict, "PASS", status.stdout);
+    assert.equal(status.status, 1);
+    assert.match(verdict.reason, /DPF_ALLOW_LOCAL_CI_STUB/);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolveClose) => server.close(resolveClose));
+    rmSync(worktree, { recursive: true, force: true });
+  }
+});
+
+// Keep this test LAST: it reads the stamps taken before the first test ran.
+test("no test in this file wrote gate artifacts into the checkout running it", (t) => {
+  if (!CALLER_GATE_DIRECTORY) {
+    t.skip("not running inside a git checkout");
+    return;
+  }
+  const after = gateArtifactStamps(CALLER_GATE_DIRECTORY);
+  const written = [...after]
+    .filter(([name, stamp]) => CALLER_GATE_ARTIFACTS_BEFORE.get(name) !== stamp)
+    .map(([name]) => name)
+    .sort();
+  assert.deepEqual(
+    written,
+    [],
+    `gate records were written into ${CALLER_GATE_DIRECTORY}; a test spawned gate-worktree.mjs against the real checkout instead of a temp repository`,
+  );
+});
+
+// 2026-09-24: detached durable-wait resumers died without a trace. Windows
+// reuses process ids, so the gate's end-of-run cleanup must not kill an id that
+// now runs a different command than the descendant it once remembered.
+test("the descendant cleanup never kills a reused process id", async () => {
+  let rows = [
+    { pid: 100, parentPid: 1, commandLine: "node local-ci-runner.mjs" },
+    { pid: 101, parentPid: 100, commandLine: "docker build ." },
+  ];
+  const terminated = [];
+  const events = [];
+  const tracker = createProcessTreeTracker({
+    rootPid: 1,
+    listProcessRows: () => rows,
+    processAlive: (pid) => rows.some((row) => row.pid === pid),
+    terminate: (pid) => { terminated.push(pid); rows = rows.filter((row) => row.pid !== pid); },
+    wait: async () => {},
+    now: (() => { let t = 0; return () => (t += 1000); })(),
+    onEvent: (event) => events.push(event),
+  });
+  tracker.sample();
+  // The build exits; its id is reused by a stranger's resumer, and the runner lingers.
+  rows = [
+    { pid: 100, parentPid: 1, commandLine: "node local-ci-runner.mjs" },
+    { pid: 101, parentPid: 4242, commandLine: "node local-ci-durable-wait-resumer.mjs --branch other" },
+  ];
+  await tracker.waitForQuiescence({ graceMs: 0, pollMs: 1 });
+  assert.deepEqual(terminated, [100]);
+  assert.ok(events.some((event) => event.type === "descendant-pid-reused" && event.pid === 101));
 });

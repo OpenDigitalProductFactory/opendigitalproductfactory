@@ -1,0 +1,43 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "User.lastSeenAt, written by recordUserSeen (apps/web/lib/identity/last-seen.ts) from workforce sign-in (lib/govern/auth.ts) and the workforce shell layout",
+    "Read by the orphaned-approval attention source (apps/web/lib/attention/sources/orphaned-approval.ts), shown only to superusers on the Needs you inbox and the coworker opening briefing"
+  ],
+  "privacyAssessment": {
+    "personalData": true,
+    "sensitivity": "internal: one activity timestamp per workforce account, coarsened to at most one update an hour",
+    "dataSubjectRights": "Part of the User record: exported and erased with it. It holds no content, location, device or IP; only the most recent time the person used the portal.",
+    "reviewDisposition": "Overwritten in place (no history kept). Surfaced only to superusers, and only as 'not used since <date>' for an account whose AI approvals are going unanswered. Not used for performance monitoring or any per-person activity report."
+  },
+  "migration": {
+    "name": "20260926030000_user_last_seen_at",
+    "backfill": "None. Adds a nullable column; every existing user reads NULL, meaning 'not seen since tracking began', and is stamped on their next sign-in or portal page. There is no historical sign-in record to derive a value from. IF NOT EXISTS makes a re-run harmless, so it applies cleanly against any existing data state.",
+    "rollback": "Forward-only. Older code ignores the column."
+  },
+  "tests": [
+    "packages/db/src/user-last-seen-at-migration.test.ts",
+    "apps/web/lib/identity/last-seen.test.ts",
+    "apps/web/lib/attention/sources/orphaned-approval.test.ts",
+    "apps/web/lib/attention/aggregate.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:user",
+      "prismaModel": "User",
+      "lifecycleDisposition": "Existing model; the new column follows the User row's lifecycle and adds no retention obligation.",
+      "fields": [
+        {
+          "fieldId": "data:user#lastSeenAt",
+          "resolution": "governed",
+          "reason": "Coworker approvals route only to their delegating user; without a last-seen signal an operator cannot tell that the account never comes, and approvals expire unanswered (live: 193 for admin@dpf.local).",
+          "provenance": "BI-61DE8177; follows BI-07D21B4A (consent bound a bootstrap account)",
+          "flags": ["personal"],
+          "fieldPolicy": "Written only by recordUserSeen, at most hourly. Read only by the superuser-gated orphaned-approval source. Never shown to non-superusers, never placed in a model prompt beyond the 'not used since' line on that card."
+        }
+      ]
+    }
+  ]
+}

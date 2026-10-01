@@ -212,6 +212,8 @@ export function buildInvoiceLiabilityDrafts(
       taxAmount: unknown;
     }>;
   }>,
+  /** The org base currency, for a document that carries none (BI-6030131C). */
+  orgCurrency: string,
 ): LiabilityDraft[] {
   const drafts: LiabilityDraft[] = [];
 
@@ -250,7 +252,7 @@ export function buildInvoiceLiabilityDrafts(
         taxableAmount: taxableBaseFromLine(lineItem.lineTotal, Math.abs(rawTaxAmount)),
         taxRate,
         taxAmount: signedTaxAmount,
-        currency: invoice.currency ?? "GBP",
+        currency: invoice.currency ?? orgCurrency,
         occurredAt: invoice.issueDate,
         evidence: {
           invoiceRef: invoice.invoiceRef ?? null,
@@ -261,6 +263,30 @@ export function buildInvoiceLiabilityDrafts(
   }
 
   return drafts;
+}
+
+/** The liability draft for an operator's manual period adjustment. It has no
+ *  document of its own, so it is in the org's base currency (BI-6030131C). */
+export function buildManualAdjustmentDraft(
+  registration: TaxRegistrationRecord,
+  input: { periodId: string | null; periodStart: Date; periodEnd: Date; dueDate: Date; amount: number; orgCurrency: string },
+): LiabilityDraft {
+  const { periodStart, periodEnd } = input;
+  return {
+    entryId: stableTaxEntityId("TAX-LIAB", registration.id, "manual_adjustment", periodStart, periodEnd),
+    sourceType: "manual_adjustment",
+    sourceId: input.periodId ?? stableTaxEntityId("TAX-PERIOD", registration.id, periodStart, periodEnd),
+    sourceLineItemId: null,
+    direction: "adjustment",
+    taxType: registration.taxType,
+    taxCode: "manual_adjustment",
+    taxableAmount: 0,
+    taxRate: null,
+    taxAmount: input.amount,
+    currency: input.orgCurrency,
+    occurredAt: input.dueDate,
+    notes: "Manual period adjustment carried on the obligation period.",
+  };
 }
 
 export function buildBillLiabilityDrafts(
@@ -278,6 +304,8 @@ export function buildBillLiabilityDrafts(
       taxAmount: unknown;
     }>;
   }>,
+  /** The org base currency, for a document that carries none (BI-6030131C). */
+  orgCurrency: string,
 ): LiabilityDraft[] {
   const drafts: LiabilityDraft[] = [];
 
@@ -298,7 +326,7 @@ export function buildBillLiabilityDrafts(
         taxableAmount: taxableBaseFromLine(lineItem.lineTotal, taxAmount),
         taxRate: roundCurrency(decimalValue(lineItem.taxRate)),
         taxAmount,
-        currency: bill.currency ?? "GBP",
+        currency: bill.currency ?? orgCurrency,
         occurredAt: bill.issueDate,
         evidence: {
           billRef: bill.billRef ?? null,

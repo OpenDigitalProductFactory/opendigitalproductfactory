@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { resolve } from "path";
 import { describe, expect, it } from "vitest";
 import {
-  buildKernelQdrantPoints,
+  buildKernelVectorPoints,
   deriveSlug,
   extractPrinciplePayload,
   extractWikilinks,
@@ -793,7 +793,7 @@ describe("seed-wiki-kernel: deriveSlug", () => {
   });
 });
 
-describe("seed-wiki-kernel: buildKernelQdrantPoints", () => {
+describe("seed-wiki-kernel: buildKernelVectorPoints", () => {
   const now = new Date("2026-05-10T00:00:00Z");
 
   const pages: SeedablePage[] = [
@@ -816,7 +816,7 @@ describe("seed-wiki-kernel: buildKernelQdrantPoints", () => {
   ];
 
   it("builds a point per sidecar record that matches a page", () => {
-    const points = buildKernelQdrantPoints(
+    const points = buildKernelVectorPoints(
       pages,
       [
         { slug: "entities/digital-product", vector: [0.1, 0.2, 0.3], model: "ai/nomic-embed-text-v1.5" },
@@ -846,7 +846,7 @@ describe("seed-wiki-kernel: buildKernelQdrantPoints", () => {
   });
 
   it("skips sidecar records with no matching page", () => {
-    const points = buildKernelQdrantPoints(
+    const points = buildKernelVectorPoints(
       pages,
       [
         { slug: "entities/digital-product", vector: [0.1], model: "m" },
@@ -860,7 +860,7 @@ describe("seed-wiki-kernel: buildKernelQdrantPoints", () => {
   });
 
   it("returns empty array for empty sidecar", () => {
-    expect(buildKernelQdrantPoints(pages, [], "0.1.0", now)).toEqual([]);
+    expect(buildKernelVectorPoints(pages, [], "0.1.0", now)).toEqual([]);
   });
 
   it("truncates contentPreview to 500 chars", () => {
@@ -868,7 +868,7 @@ describe("seed-wiki-kernel: buildKernelQdrantPoints", () => {
     const longPages: SeedablePage[] = [
       { id: "wp_long", slug: "entities/long", title: "L", body: longBody, pageKind: "entity", status: "published" },
     ];
-    const points = buildKernelQdrantPoints(
+    const points = buildKernelVectorPoints(
       longPages,
       [{ slug: "entities/long", vector: [0], model: "m" }],
       "0.1.0",
@@ -901,7 +901,7 @@ describe("seed-wiki-kernel: buildKernelQdrantPoints", () => {
         status: "published",
       },
     ];
-    const points = buildKernelQdrantPoints(
+    const points = buildKernelVectorPoints(
       mixed,
       [
         { slug: "principles/architecture-over-shortcuts", vector: [0.1], model: "m" },

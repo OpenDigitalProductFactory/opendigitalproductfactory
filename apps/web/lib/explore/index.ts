@@ -9,4 +9,5 @@ export * from "./reference-model-types";
 export * from "./decomposition";
 export * from "./complexity-assessment";
 export * from "./feature-build-types";
+export { checkPhaseGate } from "./build-process-matrix"; // not re-exported by ./feature-build-types (load-order cycle)
 export * from "./feature-build-data";

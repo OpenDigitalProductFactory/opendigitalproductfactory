@@ -4,7 +4,9 @@ import { isLocalProviderId } from "./provider-locality";
 export type LocalProviderCapacityDeferralReason =
   | "local-ci-active-capacity-reservation"
   | "local-ci-queued-capacity-reservation"
-  | "local-ci-capacity-reservation-unavailable";
+  | "local-ci-capacity-reservation-unavailable"
+  | "host-gpu-busy"
+  | "local-runner-busy";
 
 export type LocalProviderCapacityStatus =
   | { available: true; reason: null; expectedFreeAt?: null }

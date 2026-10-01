@@ -1,0 +1,336 @@
+/**
+ * Typed payloads for the platform's durable-job events.
+ *
+ * Engine-neutral: these describe what a sender puts on the wire and what a
+ * handler receives in `event.data`. They moved here from
+ * `lib/queue/inngest-client.ts` when the `@/lib/jobs` facade was introduced
+ * (spec docs/superpowers/specs/2026-09-25-postgres-durable-job-engine-design.md
+ * §6 step 1), so they survive the engine swap unchanged.
+ */
+
+/** BI-801313EB: advisory wake for one already-persisted async operation. */
+export interface AsyncInferenceOperationRunEvent {
+  name: "inference/async-operation.run";
+  data: { operationId: string; notBefore: string };
+}
+
+export interface NonprodCapacityAvailableEvent {
+  name: "nonprod/capacity.available";
+  data: {
+    eventId: string;
+    taskRunId: string;
+    leaseId: string;
+    claimKey: string | null;
+    environmentKey: string;
+    ownerSessionId: string;
+    candidateKey: string | null;
+    occurredAt: string;
+  };
+}
+
+/** BI-8A58C65A: execute an approved research proposal (enqueued from the
+ *  approval seam; handled by research-execute.ts). */
+export interface ResearchExecuteRunEvent {
+  name: "research/execute.run";
+  data: {
+    proposalId: string;
+    organizationId: string;
+    digitalProductId: string | null;
+    productLineId: string | null;
+    businessProductId: string | null;
+    topic: string;
+    query: string;
+  };
+}
+
+/** EP-INTAKE-UNIFY Phase 4 / BI-EDFBE081: project a freshly-created OPEN
+ *  PlatformIssueReport into the backlog immediately (handled by
+ *  issue-report-project.ts). The 15-min triage cron is the safety net. */
+export interface IssueReportCreatedEvent {
+  name: "quality/issue-report.created";
+  data: { reportId: string };
+}
+
+/** BI-9D43CBEF: derive PDF + plain-text renditions of one saved office
+ *  DocumentVersion (handled by functions/document-renditions.ts). */
+export interface DocumentRenditionRequestedEvent {
+  name: "documents/rendition.requested";
+  data: { documentVersionId: string };
+}
+
+/** BI-9D43CBEF: bounded rendition backfill, requested at portal start, on a
+ *  doctools pin change (BI-153EC72C) and when the document converter becomes
+ *  available (lib/documents/rendition-trigger.ts). */
+export interface DocumentRenditionBackfillRequestedEvent {
+  name: "documents/rendition.backfill-requested";
+  data: { reason: string; limit?: number };
+}
+
+export interface CwqItemCreatedEvent {
+  name: "cwq/item.created";
+  data: { workItemId: string; sourceType: string; urgency: string };
+}
+
+export interface CwqItemCompletedEvent {
+  name: "cwq/item.completed";
+  data: {
+    workItemId: string;
+    outcome: "success" | "failed" | "cancelled";
+    evidence?: unknown;
+  };
+}
+
+export interface CwqItemCancelledEvent {
+  name: "cwq/item.cancelled";
+  data: { workItemId: string; reason: string };
+}
+
+export interface DataControlOperationRecoveryRequestedEvent {
+  name: "govern/data-control-operation.recover";
+  data: { requestedByUserId?: string };
+}
+
+export interface CwqApprovalRequestedEvent {
+  name: "cwq/approval.requested";
+  data: {
+    workItemId: string;
+    escalationTimeoutMinutes: number;
+    escalationLevel?: number;
+  };
+}
+
+export interface CwqApprovalResponseEvent {
+  name: "cwq/approval.response";
+  data: {
+    workItemId: string;
+    decision: "approve" | "reject" | "delegate";
+    decidedBy: string;
+  };
+}
+
+export interface OpsRateRecoverEvent {
+  name: "ops/rate.recover";
+  data: { providerId: string; modelId: string };
+}
+
+export interface OpsMcpCatalogSyncEvent {
+  name: "ops/mcp-catalog.sync";
+  data: { syncId: string };
+}
+
+export interface OpsCodeGraphReconcileEvent {
+  name: "ops/code-graph.reconcile";
+  data: {
+    reason: "git-commit" | "git-backup" | "scheduled" | "manual";
+    graphKey: string;
+    headSha: string | null;
+    branch: string | null;
+    forceFull?: boolean;
+  };
+}
+
+export interface QualityIssueTriageEvent {
+  name: "quality/issue-triage.run";
+  data: Record<string, never>;
+}
+
+export interface AiEvalRunEvent {
+  name: "ai/eval.run";
+  /** force: bypass the recency-cooldown guard in runDimensionEval. Set by the
+   *  operator-initiated "Run Eval" UI action so a manual re-eval always runs;
+   *  left unset on automated enqueue paths (first-boot, page-load
+   *  checkBundledProviders, model-discovery refresh) so a freshly-calibrated
+   *  model isn't re-evaluated on every Inngest retry. BI-C8164664. */
+  data: { endpointId: string; modelId: string; userId: string; force?: boolean };
+}
+
+export interface AiProbeRunEvent {
+  name: "ai/probe.run";
+  data: { endpointId?: string; modelId?: string; probesOnly: boolean; userId: string };
+}
+
+export interface BrandExtractRunEvent {
+  name: "brand/extract.run";
+  data: {
+    organizationId: string;
+    taskRunId: string;
+    userId: string;
+    threadId: string | null;
+    sources: {
+      url?: string;
+      codebasePath?: string;
+      uploadIds?: string[];
+    };
+  };
+}
+
+export interface BuildBacklogTeeUpRequestedEvent {
+  name: "build/backlog-tee-up.requested";
+  data: {
+    userId: string;
+    limit?: number | null;
+    routeContext?: string | null;
+    threadId?: string | null;
+    requestedByAgentId?: string | null;
+  };
+}
+
+export interface BuildGitUpdateReceivedEvent {
+  name: "build/git-update.received";
+  data: {
+    candidateId: string;
+  };
+}
+
+/**
+ * BI-A6E4D205 — a pull request MERGED, delivered by webhook rather than found
+ * by poll. Sent by handleGitHubWebhook on `pull_request` with action=closed and
+ * merged=true; carries the identity every downstream consumer keys on.
+ *
+ * The merge is the moment a worktree first becomes Tier-A reapable and the
+ * moment `mergedThroughGates` becomes true, so this is the event that lets a
+ * thread end at push instead of being held open to watch the queue.
+ */
+export interface BuildPullRequestMergedEvent {
+  name: "build/pr-merged.received";
+  data: {
+    candidateId: string;
+    repositoryFullName: string;
+    number: number;
+    headRefName: string;
+    headSha: string;
+    mergeCommitSha: string | null;
+    mergedAt: string | null;
+  };
+}
+
+/** BI-89030C9B Phase 1 — durable build execution. Sent by autoExecuteBuild
+ *  when DPF_BUILD_DURABLE_EXECUTION_ENABLED is on; handled by
+ *  queue/functions/build-execute.ts. Sends carry a deterministic idempotency
+ *  id (buildExecuteSendId) so duplicate dispatches of the same logical
+ *  attempt collapse to one run. */
+export interface BuildExecuteRunEvent {
+  name: "build/execute.run";
+  data: {
+    buildId: string;
+  };
+}
+
+export interface BuildPreBuildReviewRepairEvent {
+  name: "build/pre-build-review.repair";
+  data: {
+    buildId: string;
+    userId: string;
+    kind: "design" | "plan";
+  };
+}
+
+/** BI-B2EEA6DE: hand a build's guard findings back to its coding agent. */
+export interface BuildGauntletRepairEvent {
+  name: "build/gauntlet.repair";
+  data: {
+    buildId: string;
+  };
+}
+
+export interface AssuranceBomGenerateEvent {
+  name: "assurance/bom.generate";
+  data: {
+    buildId: string;
+    requestedByUserId: string;
+  };
+}
+
+export interface AssuranceScanRunEvent {
+  name: "assurance/scan.run";
+  data: {
+    buildId: string;
+    requestedByUserId: string;
+  };
+}
+
+export interface PortalSelfUpgradeRequestedEvent {
+  name: "portal/self-upgrade.requested";
+  data: {
+    trigger: "manual";
+    requestedByUserId?: string | null;
+  };
+}
+
+/** BI-0AB96FE7: operator "run now" / dry-run for the Inngest history-retention
+ *  + orphan-reaper sweep (handled by inngest-retention-sweep.ts). `dryRun`
+ *  counts eligible rows without deleting. */
+export interface OpsInngestRetentionRequestedEvent {
+  name: "ops/inngest-retention.requested";
+  data: { dryRun?: boolean };
+}
+
+export interface LocalModelInstallEvent {
+  name: "inference/local-model.install";
+  data: {
+    jobId: string;
+    attempt: number;
+    modelReference: string;
+    requestedByUserId: string;
+  };
+}
+
+// ─── Activity Quiescence Protocol events (BI-QUIESCE-002) ────────────────
+
+/** Sent by callers to start a quiescence drain. The coordinator function
+ *  (apps/web/lib/queue/functions/quiescence-run.ts) is triggered on this event. */
+export interface OpsQuiescenceStartEvent {
+  name: "ops/quiescence.start";
+  data: {
+    runId: string;
+    budgetMs: number;
+    triggerRefId: string | null;
+    shipForce: boolean;
+    /** BI-F9EE05E5: wait for work and pause for the operator at the bound
+     *  (self-upgrade) instead of deferring (other triggers). */
+    awaitOperatorAtBudget?: boolean;
+  };
+}
+
+/** BI-F9EE05E5: an operator decision for a drain that is waiting for work.
+ *  The coordinator sleeps on this event between checks. */
+export interface OpsQuiescenceControlEvent {
+  name: "ops/quiescence.control";
+  data: { runId: string; action: "abort" | "keep-waiting" | "force"; operatorUserId: string };
+}
+
+/** BI-F9EE05E5: the coordinator reached ready-to-swap; wakes the waiting
+ *  self-upgrade job. */
+export interface OpsQuiescenceReadyToSwapEvent {
+  name: "ops/quiescence.ready-to-swap";
+  data: { runId: string; triggerRefId: string | null };
+}
+
+/** Sent by callers AFTER the swap completes (or fails / is aborted). The
+ *  coordinator picks this up via step.waitForEvent and transitions to its
+ *  terminal state. */
+export interface OpsQuiescenceSwapCompleteEvent {
+  name: "ops/quiescence.swap-complete";
+  data: {
+    runId: string;
+    outcome: "succeeded" | "failed" | "aborted";
+    reason?: string;
+    operatorUserId?: string;
+  };
+}
+
+/** Emitted by the coordinator on EVERY terminal transition. Two consumer
+ *  classes: client UI (banner dismiss) AND suspended Inngest functions
+ *  waiting on this event for resume. The CRITICAL invariant from spec §5.2:
+ *  every terminal path emits this — without it, a coordinator failure leaves
+ *  the Inngest queue waiting forever. */
+export interface PlatformQuiescenceClearedEvent {
+  name: "platform.quiescence-cleared";
+  data: {
+    runId: string;
+    outcome: "succeeded" | "deferred" | "aborted" | "failed";
+    triggerRefId: string | null;
+    deferSurface: string | null;
+    reason: string | null;
+  };
+}

@@ -11,6 +11,7 @@ import { ecosystemSubmissionSweep } from "./ecosystem-submission-sweep";
 import { ecosystemWatchdog } from "./ecosystem-watchdog";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
+import { documentRenditionBackfill, documentRenditionGenerate } from "./document-renditions";
 import { backlogTriageDrain } from "./backlog-triage-drain";
 import { coworkerRegressionDetect } from "./coworker-regression-detect";
 import { agentTaskDispatch } from "./agent-task-dispatch";
@@ -19,11 +20,13 @@ import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
 import { materialFreshnessDecay } from "./material-freshness-decay";
 import { prSubmitAwaitingAcceptanceReconcile } from "./pr-submit-awaiting-acceptance-reconcile";
+import { budgetReservationSettle } from "./budget-reservation-settle";
 import { researchExecute } from "./research-execute";
 import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
 import { buildExecute } from "./build-execute";
 import { preBuildReviewRepair } from "./pre-build-review-repair";
+import { buildGauntletRepair } from "./build-gauntlet-repair";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -187,6 +190,7 @@ export const scheduledFunctions = [
   researchScheduleScan,
   materialFreshnessDecay,
   prSubmitAwaitingAcceptanceReconcile,
+  budgetReservationSettle,
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
@@ -251,11 +255,14 @@ export const eventFunctions = [
   buildReviewVerification,
   buildExecute,
   preBuildReviewRepair,
+  buildGauntletRepair,
   assuranceBomGenerate,
   assuranceScanRun,
   deliberationRun,
   governedBacklogTeeUpRequested,
   issueReportProjectOnCreate,
+  documentRenditionGenerate, // BI-9D43CBEF: office file saved -> PDF + text renditions, indexed
+  documentRenditionBackfill, // BI-9D43CBEF/BI-153EC72C: bounded, draining sweep at portal start, on a pin change, and when the converter becomes available
   contributorInventorySyncOnDemand,
   gitPromotionSandboxVerification,
   postgresBackupRequested,

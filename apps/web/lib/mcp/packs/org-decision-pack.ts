@@ -9,7 +9,7 @@
 // recommendation; the human still validates the final action. The grant mirrors
 // agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 // Static: the module is pure and dependency-free, so a lazy import buys nothing

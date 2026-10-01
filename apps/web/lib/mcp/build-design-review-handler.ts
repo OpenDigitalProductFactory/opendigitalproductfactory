@@ -13,7 +13,7 @@ import * as crypto from "crypto";
 import { prisma } from "@dpf/db";
 import { ENTERPRISE_ARCHITECT_DISPLAY_NAME } from "@dpf/db/agent-identity";
 
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPackHandler } from "./tool-pack";
 import {
@@ -145,6 +145,12 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
             await prisma.featureBuild.update({ where: { buildId }, data: { phase: "plan" } });
             if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "plan" });
             logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan (fix)");
+            // BI-8823E12A: hand off to plan generation as the feature path does —
+            // without it a fix build idled in plan until the stranded-build sweep.
+            void import("@/lib/build/plan-on-approval").then(m =>
+              m.dispatchPlanForApprovedBuild({ buildId, userId })
+                .catch(err => console.error("[plan-on-approval] auto-dispatch failed:", err))
+            );
           } else {
             const reason = gate.reason ?? readiness?.message ?? "Initiative readiness is incomplete.";
             logBuildActivity(buildId, "phase:gate-blocked", reason);

@@ -42,6 +42,7 @@ export interface EnvelopeRow {
   status: EnvelopeStatus;
   createdAt: Date;
   resolvedAt: Date | null;
+  expiresAt?: Date | null;
 }
 
 // Deliberately NOT lib/shared/action-result's ActionResult: this is an HTTP
@@ -82,6 +83,27 @@ function assertCallerIsDelegate(envelope: EnvelopeRow, callerUserId: string): En
   return { ok: true, envelope };
 }
 
+/**
+ * A decision that arrives after the window closed settles the request as
+ * `expired` instead of approving or declining it (BI-12E5DD91, BI-78D3CF1E).
+ * The periodic sweep does the same later; doing it here means a stale card
+ * can never approve a lapsed request, and the person sees why.
+ */
+async function refuseIfLapsed(envelope: EnvelopeRow): Promise<EnvelopeActionResult<EnvelopeRow> | null> {
+  if (!envelope.expiresAt || envelope.expiresAt.getTime() > Date.now()) return null;
+  if (envelope.status === "proposed" || envelope.status === "approved") {
+    await prisma.coworkerActionEnvelope.updateMany({
+      where: { id: envelope.id, status: { in: ["proposed", "approved"] }, resolvedAt: null },
+      data: { status: "expired", resolvedAt: new Date() },
+    });
+  }
+  return {
+    ok: false,
+    reason: "This request's decision window closed before it was answered, so it has expired. Your coworker can ask again.",
+    httpStatus: 409,
+  };
+}
+
 // ─── Verbs ───────────────────────────────────────────────────────────────────
 
 /** User-side approve: proposed → approved. The actual underlying-tool
@@ -97,6 +119,8 @@ export async function approveEnvelope(
   if (!load.ok) return load;
   const authz = assertCallerIsDelegate(load.envelope, callerUserId);
   if (!authz.ok) return authz;
+  const lapsed = await refuseIfLapsed(load.envelope);
+  if (lapsed) return lapsed;
 
   const transition = transitionOnApprove(load.envelope.status);
   if (!transition.ok) {
@@ -111,14 +135,14 @@ export async function approveEnvelope(
     where: { id: envelopeId },
     data: { status: "approved" },
   });
-  // Approving does NOT resume the waiting task here, and must not. The task
-  // stays `input-required` until the caller replays its immutable packet;
-  // resumeApprovedRemoteTask (mcp-task-submit.ts) then finds this approved,
-  // unexpired envelope and re-executes with the original arguments, reserving
-  // the run with a CAS on `status: "input-required"`. Marking the task working
-  // at approval time makes that CAS unmatchable and the approval unusable —
-  // #4796 did exactly that and was reverted. If an approval appears not to take
-  // effect, check the envelope's `expiresAt` first: the window is 15 minutes.
+  // Approving does NOT mark the waiting task working here, and must not.
+  // Marking it working at approval time makes the resume's CAS on
+  // `status: "input-required"` unmatchable and the approval unusable — #4796
+  // did exactly that and was reverted. The approve route instead runs the
+  // resume itself (approved-task-run.ts, BI-9FD11E5E), taking that same CAS, so
+  // it and a client replay of the immutable packet cannot both run the writer.
+  // If an approval appears not to take effect, check the envelope's
+  // `expiresAt` first: the window is 15 minutes.
   return { ok: true, envelope: updated as EnvelopeRow };
 }
 
@@ -133,6 +157,8 @@ export async function denyEnvelope(
   if (!load.ok) return load;
   const authz = assertCallerIsDelegate(load.envelope, callerUserId);
   if (!authz.ok) return authz;
+  const lapsed = await refuseIfLapsed(load.envelope);
+  if (lapsed) return lapsed;
 
   const transition = transitionOnDeny(load.envelope.status);
   if (!transition.ok) {

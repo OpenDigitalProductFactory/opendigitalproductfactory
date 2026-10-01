@@ -216,8 +216,8 @@ function recoveryPointSummary(run: LatestRun | null): RecoveryPointSummary | nul
   };
 }
 
-// Operator-facing label for a recovery-point member. The derived stores
-// (neo4j, qdrant) are INTENTIONALLY not backed up — they re-derive from
+// Operator-facing label for a recovery-point member. Derived-store members
+// recorded by runs before BET-5 were INTENTIONALLY not backed up — they re-derive from
 // postgres + source — so a "skipped" member must read as a deliberate choice,
 // not as a "missing" backup (which looks like a failure sitting next to a
 // "Recovery point: ok" header). And a successful backup's internal runId/cuid

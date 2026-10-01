@@ -12,17 +12,17 @@
  *   3. OpenAI-compatible (everything else) — POST {apiBase}/v1/chat/completions
  */
 
-import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler, ToolCallEntry } from "./adapter-types";
+import type { ToolCallEntry } from "./chat-message-types";
+import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
+import { InferenceError, classifyHttpError } from "./inference-error";
 import {
-  InferenceError,
-  classifyHttpError,
   extractAnthropicToolCalls,
   extractOpenAIToolCalls,
   extractTextualToolCalls,
   formatMessageForAnthropic,
   formatMessageForOpenAI,
   formatMessageForResponses,
-} from "@/lib/ai-inference";
+} from "./provider-message-format";
 import { isAnthropic } from "./provider-utils";
 import { formatMessagesForGemini } from "./gemini-messages";
 import { captureAnthropicWeeklyQuota } from "./cli-pool-status";
@@ -40,6 +40,7 @@ import {
   createInferenceTimeoutSignal,
   resolveInferenceRuntimePolicy,
 } from "./local-inference-runtime-policy";
+import { isRecord } from "@/lib/shared/coerce";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // The runtime-policy module separates the governed, deliberately slower 27B
@@ -127,10 +128,6 @@ const GEMINI_UNSUPPORTED_SCHEMA_KEYS = new Set([
   "uniqueItems",
   "writeOnly",
 ]);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * Collapse a JSON Schema union type to the scalar Gemini's proto accepts.
@@ -486,8 +483,13 @@ export const chatAdapter: ExecutionAdapterHandler = {
           localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
         }).effectiveTimeoutMs),
       });
-      res = providerId === "local" ? await withLocalInferenceLock(doFetch) : await doFetch();
+      res = providerId === "local"
+        ? await withLocalInferenceLock(doFetch, { modelId })
+        : await doFetch();
     } catch (e) {
+      // A busy GPU is a capacity deferral. Wrapping it as "network" makes the
+      // fallback chain treat the local model as broken instead of waiting.
+      if (e instanceof Error && e.name === "LocalProviderCapacityDeferredError") throw e;
       throw new InferenceError(
         `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
         "network",

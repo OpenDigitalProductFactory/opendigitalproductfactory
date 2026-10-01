@@ -1,10 +1,5 @@
-import type { ToolLifecycleHook } from "../mcp-governed-execute";
-import {
-  evaluateWorkCasePolicy,
-  type WorkCasePolicyInput,
-} from "./policy-envelope";
-
-export type WorkCaseExecutionContext = WorkCasePolicyInput;
+import type { ToolLifecycleHook } from "../mcp-governed-execute-types";
+import { evaluateWorkCasePolicy } from "./policy-envelope";
 
 export function createWorkCaseGovernanceHook(): ToolLifecycleHook {
   return {

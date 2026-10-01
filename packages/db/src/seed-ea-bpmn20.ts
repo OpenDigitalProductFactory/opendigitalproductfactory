@@ -71,7 +71,7 @@ const ELEMENT_TYPES: ElementTypeDef[] = [
 
   // ── Data Objects ──────────────────────────────────────────────────────────
   { slug: "bpmn_data_object", name: "Data Object", neoLabel: "BPMN__DataObject", domain: "data", description: "Data input/output — maps to PhaseHandoff or evidence artifact",       stages: DESIGN_STAGES, statuses: DESIGN_STATUSES, ontologyCategory: "information" },
-  { slug: "bpmn_data_store",  name: "Data Store",  neoLabel: "BPMN__DataStore",  domain: "data", description: "Persistent data reference — maps to Prisma model or Qdrant collection", stages: DESIGN_STAGES, statuses: DESIGN_STATUSES, ontologyCategory: "information" },
+  { slug: "bpmn_data_store",  name: "Data Store",  neoLabel: "BPMN__DataStore",  domain: "data", description: "Persistent data reference — maps to Prisma model or vector collection", stages: DESIGN_STAGES, statuses: DESIGN_STATUSES, ontologyCategory: "information" },
   { slug: "bpmn_data_input",  name: "Data Input",  neoLabel: "BPMN__DataInput",  domain: "data", description: "Process input parameter — maps to build brief or user request",        stages: DESIGN_STAGES, statuses: DESIGN_STATUSES, ontologyCategory: "information" },
   { slug: "bpmn_data_output", name: "Data Output", neoLabel: "BPMN__DataOutput", domain: "data", description: "Process output artifact — maps to build artifact or release bundle",    stages: DESIGN_STAGES, statuses: DESIGN_STATUSES, ontologyCategory: "information" },
 ];

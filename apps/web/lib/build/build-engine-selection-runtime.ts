@@ -2,6 +2,7 @@ import { prisma } from "@dpf/db";
 
 import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { previewRoute } from "@/lib/inference/routed-inference";
+import { BUILD_PHASE_ROUTE_OPTIONS } from "@/lib/build/build-phase-route-options";
 import { resolveCredentialProviderId } from "@/lib/inference/ai-provider-internals";
 import { loadProviderHealthBatch } from "@/lib/routing/provider-health-loader";
 import { cliAdapterTypeForProvider } from "@/lib/routing/provider-routing-eligibility";
@@ -223,6 +224,7 @@ export async function resolveBuildEngineSelection(
         // (founder ruling 2026-08-12) — default to the development clearance class.
         opts.sensitivity ?? "development",
         {
+          ...BUILD_PHASE_ROUTE_OPTIONS,
           taskType: "code-gen",
           tools: [{ name: "edit_sandbox_file" }, { name: "run_sandbox_tests" }],
           requireTools: true,

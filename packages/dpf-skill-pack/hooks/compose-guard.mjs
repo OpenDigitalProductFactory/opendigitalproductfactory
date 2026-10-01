@@ -2,7 +2,7 @@
 // packages/dpf-skill-pack/hooks/compose-guard.mjs
 //
 // PreToolUse guard (BI-39543181 / BI-B61779DB): refuse a RAW `docker compose`
-// command that would (re)create a stateful data service (postgres/neo4j/qdrant)
+// command that would (re)create a stateful data service (postgres)
 // on the ROOT `dpf` project, or destroy its volumes. A root-project `up` is
 // exactly what silently swapped the live database onto a stale 8-day-old
 // `dpf_pgdata` volume on 2026-06-23: the volume holding the real data was a
@@ -39,7 +39,7 @@ import {
 
 const DEFAULT_PROJECT = "dpf";
 const CONTAINER_CREATING = new Set(["up", "create", "start", "restart", "run"]);
-const DATA_SERVICES = new Set(["postgres", "neo4j", "qdrant"]);
+const DATA_SERVICES = new Set(["postgres"]);
 
 // Compose options that take a separate value token (so the next token is NOT a
 // service operand). Mirrors scripts/lib/compose-safety.mjs (kept inline so the
@@ -53,7 +53,7 @@ const OPTS_WITH_VALUES = new Set([
 
 const GUIDANCE_UP =
   "Raw 'docker compose up/create/restart' of a data service on the ROOT dpf project blocked " +
-  "(BI-B61779DB). This recreates postgres/neo4j/qdrant and can silently attach the live database " +
+  "(BI-B61779DB). This recreates postgres and can silently attach the live database " +
   "to a stale or wrong volume — exactly the 2026-06-23 8-day data revert. Use the governed path " +
   "(/ops/self-upgrade) to update the portal, or scripts/redeploy-portal.* / promote.sh (which use " +
   "--no-deps portal and never touch the data services). For an intentional install/recovery, prefix " +

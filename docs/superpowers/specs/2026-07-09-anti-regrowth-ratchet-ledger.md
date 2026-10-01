@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Anti-regrowth ratchet ledger — EP-8DC217EB §6 standing discipline
 
 _Status: BI-81EE4A46 · EP-8DC217EB (Vertical Integration Inward) plan §6 · 2026-07-09_
@@ -22,6 +26,7 @@ the running ledger of the §6-named ratchets.
 | ban new local backup helper / heartbeat / metric | `managed-backup`/`managed-restore` | `check-no-local-backup-helper.mjs` | shipped (BET-11) |
 | **ban new local `Record<…, Intent>` status→color map** | report-kit `statusColors` / `<StatusBadge domain=… status=…>` | **`check-no-local-status-color.mjs`** | **this BI** |
 | **ban new raw `NextResponse.json({ error })`** | `apiErrorResponse` (`lib/api/error`) | **`check-no-raw-route-error.mjs`** | **this BI** |
+| ban new local date, money, byte or duration formatter | `lib/datetime` (dates), `lib/org-locale` `formatMoney` (money) | `check-no-local-formatters.mjs` | shipped (plan 2026-09-08 §10.5 S6) |
 | cap the MCP tool count / drain the switch | `composeToolPacks` + packs | `check-mcp-tool-pack.mjs` (inline-switch freeze) | partial — a runtime total-count cap is a tracked follow-up |
 | ban new `status String` without a registered catalog | (a status-catalog registry) | — | tracked follow-up (needs the catalog substrate first) |
 

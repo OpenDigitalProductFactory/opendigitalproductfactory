@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
 import { newId } from "@/lib/shared/new-id";
@@ -41,7 +42,7 @@ export async function createRecurringSchedule(
       name: input.name,
       frequency: input.frequency,
       amount,
-      currency: input.currency ?? "USD",
+      currency: input.currency ?? (await getOrgBaseCurrency()),
       startDate: new Date(input.startDate),
       endDate: input.endDate ? new Date(input.endDate) : null,
       nextInvoiceDate: new Date(input.startDate),

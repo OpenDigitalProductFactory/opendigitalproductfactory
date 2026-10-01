@@ -66,9 +66,10 @@ export async function ensureDiscoveryTriageScheduledTask(
 
   const existingTask = await prisma.scheduledAgentTask.findUnique({
     where: { taskId: DISCOVERY_TRIAGE_TASK_ID },
-    select: { taskId: true, nextRunAt: true },
+    select: { taskId: true, nextRunAt: true, ownerUserId: true },
   });
 
+  // An existing task keeps its owner: an account handover must survive re-seeding (BI-ED055D45).
   if (existingTask) {
     await prisma.scheduledAgentTask.update({
       where: { taskId: DISCOVERY_TRIAGE_TASK_ID },
@@ -79,7 +80,6 @@ export async function ensureDiscoveryTriageScheduledTask(
         routeContext: DISCOVERY_TRIAGE_ROUTE_CONTEXT,
         schedule: DISCOVERY_TRIAGE_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
         isActive: true,
         nextRunAt: existingTask.nextRunAt ?? nextRunAt,
       },
@@ -117,6 +117,6 @@ export async function ensureDiscoveryTriageScheduledTask(
 
   return {
     created: !existingTask,
-    ownerUserId: owner.id,
+    ownerUserId: existingTask?.ownerUserId ?? owner.id,
   };
 }

@@ -48,7 +48,7 @@ function makeCommandmentRow(id: string, title: string, direction: string) {
   };
 }
 
-function makeQdrantHit(
+function makeVectorHit(
   slug: string,
   title: string,
   tier: string,
@@ -71,7 +71,7 @@ function makeQdrantHit(
 // ─── recallPrincipleContext ─────────────────────────────────────────────────
 
 describe("recallPrincipleContext: commandment branch", () => {
-  it("always injects in-scope commandments from Postgres, even when Qdrant is unreachable", async () => {
+  it("always injects in-scope commandments from Postgres, even when the vector store is unreachable", async () => {
     listPrinciplesByTier.mockResolvedValueOnce([
       makeCommandmentRow(
         "architecture-over-shortcuts",
@@ -84,8 +84,8 @@ describe("recallPrincipleContext: commandment branch", () => {
         "Prefer queried state over inferred causes.",
       ),
     ]);
-    // Simulate Qdrant down
-    searchWikiPages.mockRejectedValue(new Error("Qdrant unreachable"));
+    // Simulate the vector store down
+    searchWikiPages.mockRejectedValue(new Error("vector store unreachable"));
 
     const result = await recallPrincipleContext({
       query: "should I take the quick fix?",
@@ -143,8 +143,8 @@ describe("recallPrincipleContext: core branch", () => {
     listPrinciplesByTier.mockResolvedValueOnce([]);
     searchWikiPages
       .mockResolvedValueOnce([
-        makeQdrantHit("principles/reusability", "Reusability by Design", "core", 0.85),
-        makeQdrantHit("principles/specialization", "Specialization", "core", 0.78),
+        makeVectorHit("principles/reusability", "Reusability by Design", "core", 0.85),
+        makeVectorHit("principles/specialization", "Specialization", "core", 0.78),
       ])
       .mockResolvedValueOnce([]); // contextual call
 
@@ -175,7 +175,7 @@ describe("recallPrincipleContext: core branch", () => {
     });
   });
 
-  it("returns empty core array when no Qdrant core matches exist (commandments still surface)", async () => {
+  it("returns empty core array when no vector core matches exist (commandments still surface)", async () => {
     listPrinciplesByTier.mockResolvedValueOnce([
       makeCommandmentRow("a", "Anchor", "Direction A."),
     ]);
@@ -199,7 +199,7 @@ describe("recallPrincipleContext: contextual branch (threshold-gated)", () => {
     searchWikiPages
       .mockResolvedValueOnce([]) // core call
       .mockResolvedValueOnce([
-        makeQdrantHit("principles/db-fix-seed-migration", "DB fix = seed + migration", "contextual", 0.81),
+        makeVectorHit("principles/db-fix-seed-migration", "DB fix = seed + migration", "contextual", 0.81),
       ]);
 
     const result = await recallPrincipleContext({
@@ -224,11 +224,11 @@ describe("recallPrincipleContext: contextual branch (threshold-gated)", () => {
 });
 
 describe("recallPrincipleContext: silent-degradation", () => {
-  it("returns commandments even when both Qdrant calls reject", async () => {
+  it("returns commandments even when both vector calls reject", async () => {
     listPrinciplesByTier.mockResolvedValueOnce([
       makeCommandmentRow("p1", "P1", "Direction 1."),
     ]);
-    searchWikiPages.mockRejectedValue(new Error("Qdrant down"));
+    searchWikiPages.mockRejectedValue(new Error("vector store down"));
 
     const result = await recallPrincipleContext({
       query: "x",
@@ -241,7 +241,7 @@ describe("recallPrincipleContext: silent-degradation", () => {
     expect(result?.contextual).toEqual([]);
   });
 
-  it("returns null when Postgres rejects AND Qdrant has no matches (nothing to inject)", async () => {
+  it("returns null when Postgres rejects AND the vector store has no matches (nothing to inject)", async () => {
     listPrinciplesByTier.mockRejectedValueOnce(new Error("Postgres down"));
     searchWikiPages.mockResolvedValue([]);
 
@@ -269,7 +269,7 @@ describe("recallPrincipleContext: silent-degradation", () => {
 });
 
 describe("recallPrincipleContext: org overlay support", () => {
-  it("passes organizationId through to both Postgres and Qdrant for overlay-aware retrieval", async () => {
+  it("passes organizationId through to both Postgres and the vector store for overlay-aware retrieval", async () => {
     listPrinciplesByTier.mockResolvedValueOnce([]);
     searchWikiPages.mockResolvedValue([]);
 
@@ -303,9 +303,9 @@ describe("formatPrincipleContext", () => {
           "Prefer maintainability.",
         ),
       ],
-      core: [makeQdrantHit("principles/reusability", "Reusability", "core")],
+      core: [makeVectorHit("principles/reusability", "Reusability", "core")],
       contextual: [
-        makeQdrantHit("principles/db-fix", "DB fix = seed + migration", "contextual"),
+        makeVectorHit("principles/db-fix", "DB fix = seed + migration", "contextual"),
       ],
     });
 
@@ -380,7 +380,7 @@ describe("recallPrincipleContext: ring-scope filter", () => {
     score = 0.8,
   ) {
     return {
-      ...makeQdrantHit(slug, title, tier, score),
+      ...makeVectorHit(slug, title, tier, score),
       principleRingScope: ringScope,
     };
   }
@@ -402,7 +402,7 @@ describe("recallPrincipleContext: ring-scope filter", () => {
     expect(args.ringScope).toEqual(["ring-2-workflow"]);
   });
 
-  it("passes principleRingScope to Qdrant search for core + contextual branches", async () => {
+  it("passes principleRingScope to the vector search for core + contextual branches", async () => {
     listPrinciplesByTier.mockResolvedValueOnce([]);
     searchWikiPages.mockResolvedValue([]);
 
@@ -419,7 +419,7 @@ describe("recallPrincipleContext: ring-scope filter", () => {
     }
   });
 
-  it("omits principleRingScope on Qdrant calls when caller passed universal-ring (no constraint)", async () => {
+  it("omits principleRingScope on vector calls when caller passed universal-ring (no constraint)", async () => {
     listPrinciplesByTier.mockResolvedValueOnce([]);
     searchWikiPages.mockResolvedValue([]);
 

@@ -3,14 +3,14 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 413,
-      "reason": "record_decision_outcome (BI-F302B80E) is the return half of principle_decide. The kernel records what it would do; nothing recorded what the caller then did, so of 1,080 governed decisions exactly one carried a known outcome and no agreement rate was computable. It earns a permanent place because the alternative is not a smaller surface but an unmeasurable one: the skill for this asked the agent to write the disposition as prose in an evidence blob, and prose cannot be selected or counted. It is deliberately NOT folded into principle_decide - a decision must not certify its own outcome, the same separation reverify_decision_evidence exists for.",
-      "recordedAt": "2026-09-22"
+      "value": 428,
+      "reason": "BI-EBF0F6EE: list_pull_requests, read_contributor_inventory, list_supplier_contracts and list_bills give four standing-room stages (pull-request flow, contributor intake, vendor renewal, payables) a read over data the install already holds; without them those rooms recorded 'no tool can read X' every cycle. Each is read-only, page-capped, granted only to that stage's accountable agent, and declared on the stage so the GPP parity test (C-1/C-2/C-4) proves it real and granted. Claim to check: those rooms' runs call these tools and record completed or inconclusive evidence instead of blocked.",
+      "recordedAt": "2026-10-01"
     },
     "registry.packFiles": {
-      "value": 102,
-      "reason": "New decision-outcome-pack.ts (BI-F302B80E). It is its own pack rather than a tool added to principle-decide-pack for the separation stated above: the outcome is reported after the work, by the party that did it, and the two must not share a surface that could report its own result. One tool, one handler, modelled on decision-reverify-pack which exists for the same reason.",
-      "recordedAt": "2026-09-22"
+      "value": 105,
+      "reason": "BI-EBF0F6EE: contributor-inventory-pack.ts and payables-pack.ts. Contributor inventory had a sync trigger but no reader and no pack of its own; payables/supplier reads are a finance-operations domain distinct from banking and reporting packs, granted to a narrower key (payables_read) than financial_read.",
+      "recordedAt": "2026-10-01"
     },
     "tier.coreToolNames": {
       "value": 35,

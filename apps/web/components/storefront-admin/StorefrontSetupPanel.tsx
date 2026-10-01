@@ -7,7 +7,7 @@ import {
   restoreStorefrontServiceLine,
   purgeRemovedServiceLine,
 } from "@/lib/storefront/service-line-actions";
-import { intentStyle } from "@/components/ui/report-kit/statusColors";
+import { intentStyle } from "@/lib/ui-model/statusColors";
 import type { SetupTask, GeneratedContentGroup } from "@/lib/storefront/setup-model";
 
 interface Props {

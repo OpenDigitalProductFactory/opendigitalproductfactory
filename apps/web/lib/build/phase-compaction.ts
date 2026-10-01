@@ -8,7 +8,7 @@
 //
 // The summary call uses taskType "analysis" (routes to a routine-tier model).
 
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 export type PhaseName = "ideate" | "design" | "implement" | "review" | "ship" | string;
 
@@ -28,6 +28,7 @@ export async function compactPhase(
 ): Promise<ChatMessage> {
   try {
     const { routeAndCall } = await import("@/lib/inference/routed-inference");
+    const { buildPhaseRouteOptions } = await import("@/lib/build/build-phase-route-options");
 
     const transcript = phaseMessages
       .map((m) => {
@@ -55,7 +56,7 @@ export async function compactPhase(
       ],
       "You are a Build Studio phase summarizer. Output only the bullet-point summary.",
       "internal",
-      { taskType: "analysis" },
+      buildPhaseRouteOptions({ taskType: "analysis" }),
     );
 
     return {

@@ -306,7 +306,7 @@ export async function searchByPPR(
 
   // Build the seed map keyed by page id (cosine score as the reset weight).
   // Seeds that don't appear in the subgraph (e.g. status changed since
-  // Qdrant indexed) are dropped — PPR can't seed an absent node.
+  // vector indexed) are dropped — PPR can't seed an absent node.
   const seedMap = new Map<string, number>();
   for (const s of seeds) {
     if (subgraph.meta.has(s.pageId)) {
@@ -363,7 +363,7 @@ export async function searchByPPR(
     const m = subgraph.meta.get(s.id);
     if (!m) continue;
     // Reuse the seed metadata when available (it has contentPreview from
-    // the Qdrant payload); fall back to the subgraph metadata otherwise.
+    // the vector payload); fall back to the subgraph metadata otherwise.
     const seed = seedById.get(s.id);
     if (seed) {
       results.push({

@@ -26,6 +26,20 @@ Process pauses appear in the room's attention summary. Observed execution
 separates activity events from receipts, and the header shows the same recorded
 or inherited human accountability as the workforce panel.
 
+## Checking an approval result
+
+After you approve or decline a coworker's request, the Inbox keeps its result.
+The request's link opens that result directly, including after a refresh. Open
+**Recent approval results** to review recent decisions separately from work that
+still needs you. Completed decisions do not increase the attention count.
+
+An approval and a completed action are separate facts. The result says whether
+the action completed, failed, could not run, or expired, and explains the next
+step. Older decisions without a recorded result say the outcome is unknown.
+Do not approve again just because the original card disappeared; your assistant
+can check the result and the affected work first. You can only read your own
+approval results.
+
 ## Operations and Performance
 
 The main rail separates two different decisions:
@@ -289,7 +303,7 @@ Re-run the installer with `--environment-class` to change the value in force.
 - **Activity Feed** — A chronological stream of recent actions across the platform, filtered to things you're involved in or watching.
 - **Calendar** — Upcoming dates pulled from your backlog items, leave requests, deadlines, and any scheduled events in the areas you have access to.
 - **Managed Documents** — Maintained documents with lifecycle state, versions, references, and publication status.
-- **"Needs you" inbox** — The one place for business decisions that need you now. Routine technical recovery stays with your digital team, while money leaving the business and public actions always come to you.
+- **"Needs you" inbox** — The one place for business decisions that need you now. Routine technical recovery stays with your digital team, while money leaving the business and public actions always come to you. Administrators also see when AI coworker approvals keep going to an account nobody is using.
 - **Workrooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A case can contain several rooms. Select one to see its process and owners. Links by room ID retain that selection within the canonical case, including the operation and filter context.
 
 ## What You Can Do
@@ -299,6 +313,7 @@ Re-run the installer with `--environment-class` to change the value in force.
 - Review recent activity from colleagues and digital coworkers without leaving your workspace
 - Access your calendar for today's events and upcoming deadlines
 - Open [Managed Documents](documents.md) to review document state, versions, and references
+- Check [which file formats](supported-file-formats.md) coworker attachments, onboarding uploads, and Workbook imports can read
 - Open [My Work and Workrooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work. Each room also states the pace it works at — how persistently the coworker follows up, whether it asks before acting, and why — which quietens outside your operating hours without ever changing what the coworker is allowed to do.
 - Each room also names the human accountable for it and says where that answer came from, alongside the workers in the room and any subagents they delegated — see [who is accountable, and who is working](work-rooms.md#who-is-accountable-and-who-is-working)
 - A Workroom that is not attached to a work item opens as [its own case](work-rooms.md#opening-a-workroom-that-has-no-work-item) instead of reporting that the page could not be found

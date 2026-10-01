@@ -80,6 +80,13 @@ to use DPF**:
 Your choice is saved to `%USERPROFILE%\.dpf\.install-mode` and reused on
 re-runs without re-prompting.
 
+Office document conversion works in both modes with no extra step. A
+Customizable install does not build the converter image: the portal pins
+the `dpf-doctools` image published for the release your clone descends
+from, by digest, and pins it again after every upgrade. Only when no
+published image can be reached (offline or air-gapped) does it build
+`Dockerfile.doctools` from your clone instead.
+
 ### What the installer does
 
 1. **Preflight** — verifies Docker Desktop / WSL2, and (Customizable mode)
@@ -89,7 +96,12 @@ re-runs without re-prompting.
 3. **Compose chain** — assembles `docker-compose.yml` (+
    `docker-compose.release.yml` in consumer mode) and the Edge Node overlay.
 4. **`.env` generation** — only on first install; an existing `.env` is
-   preserved.
+   preserved. A re-run only adds generated secrets the file is missing:
+   `DPF_GIT_WEBHOOK_SECRET`, and the Inngest `INNGEST_SIGNING_KEY` and
+   `INNGEST_EVENT_KEY`. The installer also replaces an Inngest key that still
+   holds the old public default (`abcdef0123456789` / `deadbeefcafebabe`),
+   because anyone who knows the signing key can start background jobs. A
+   self-upgrade does the same for an install that is never re-installed.
 5. **Images** —
    - *Ready to go:* `docker compose pull` of the CI-stamped GHCR images.
    - *Customizable:* a [Docker-memory preflight](#docker-memory), then
@@ -97,10 +109,21 @@ re-runs without re-prompting.
      and `DPF_PLATFORM_VERSION` (`git describe --tags`) so
      `/ops/self-upgrade` reports the correct identity, then
      `docker compose build`.
-6. **`docker compose up -d`** — brings up postgres, portal-init
+6. **HTTPS at the canonical address** — the install becomes its own
+   certificate authority and serves the portal over https at one address:
+   `https://localhost` when it serves only this machine, or the machine's
+   DNS name when the network resolves it here. It writes `PUBLIC_URL` and
+   adds the certificate to your user's trusted roots, so Windows asks you to
+   confirm once. AI clients such as Claude Code sign in with OAuth only over
+   https. It also saves the AI client address (`DPF_MCP_URL`) and the
+   certificate bundle (`NODE_EXTRA_CA_CERTS`) in your user environment on
+   every run, so clients you open afterwards find the install. If this step
+   fails, the portal stays at `http://localhost:3000` and
+   the installer says so.
+7. **`docker compose up -d`** — brings up postgres, portal-init
    (migrations + seed), and the portal.
-7. **Health check** — polls `http://localhost:3000/api/health`.
-8. **Edge Node bootstrap** — mints a single-use auto-approve token, downloads
+8. **Health check** — polls `http://localhost:3000/api/health`.
+9. **Edge Node bootstrap** — mints a single-use auto-approve token, downloads
    and checksum-verifies the native Go Edge Node, and supervises it with a
    Windows Scheduled Task at logon. The host process owns the physical
    multicast interfaces that Docker Desktop hides from Linux containers. It
@@ -117,7 +140,7 @@ re-runs without re-prompting.
    will not validate — still pairs, but through the short code both operators
    confirm. The pairing screen names which condition could not be proved, so a
    peer that should be pairing automatically and is not tells you why.
-9. **Autostart** — registers a Windows **Scheduled Task** so the stack
+10. **Autostart** — registers a Windows **Scheduled Task** so the stack
    starts at logon (see [Autostart](#autostart)).
 
 ### Login
@@ -128,8 +151,10 @@ Login credentials are written to `.env` in the install directory:
 - **Password:** `ADMIN_PASSWORD` in `.env` (randomly generated on first
   install). Change it after first login.
 
-The portal is at **`http://localhost:3000`** — always use `localhost`,
-not the machine's LAN IP.
+The portal is at the address the installer printed, normally
+**`https://localhost`** (its `PUBLIC_URL` in `.env`). Other addresses, such as
+`http://localhost:3000` or the machine's LAN IP, redirect there. If HTTPS setup
+failed, use `http://localhost:3000`.
 
 ## Network exposure after install
 

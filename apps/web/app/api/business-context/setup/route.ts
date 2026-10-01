@@ -5,6 +5,7 @@ import { parseOrgAddress, sanitizeOrgAddressInput, serializeOrgAddress } from "@
 import { isRiskPosture } from "@/lib/govern/risk-posture";
 import { applyRiskEnvelopeToOrgProfile } from "@/lib/onboarding/apply-risk-envelope-to-profile";
 import { isDataHandlingPredicate } from "@dpf/db/regulation-applicability";
+import { applyOrgCountry } from "@/lib/actions/currency";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -167,6 +168,15 @@ export async function POST(req: NextRequest) {
       ...riskPostureUpdate,
     },
   });
+
+  // The country captured here is the operator's own; carry it to the org's
+  // currency/locale settings. Only tax setup did this before, so an org that
+  // chose Mexico here kept USD/en-US (BI-6030131C). applyOrgCountry only
+  // initializes currency/locale on the first country, so an explicit operator
+  // currency choice is never overwritten. Non-fatal, like the tax-setup call.
+  if (sanitizedAddress?.countryCode) {
+    await applyOrgCountry(sanitizedAddress.countryCode).catch(() => null);
+  }
 
   // When the operator changes the posture, keep the org WWWD profile's autonomy
   // policy in sync (P1). Fail-open inside the helper; balanced = no change.

@@ -115,55 +115,46 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   function handleReadyProvider() {
     startTransition(async () => {
       setPipelineStatus("Saving provider settings...");
+      setSaveMessage(null);
       setTestResult(null);
       setDiscoveryResult(null);
       setProfilingResult(null);
 
-      const result = await configureProvider(buildSaveInput());
-      if (result.error) {
-        setSaveMessage(`Error: ${result.error}`);
-        setPipelineStatus(null);
-        return;
-      }
-      setSaveMessage("Settings saved");
-
-      setPipelineStatus("Checking connection...");
-      const test = await testProviderAuth(provider.providerId);
-      setTestResult(test);
-      if (!test.ok) {
+      try {
+        const result = await configureProvider(buildSaveInput());
+        if (result.error) {
+          setTestResult({ ok: false, message: result.error });
+          return;
+        }
+        setSaveMessage("Settings saved");
+        // Saving already discovers models and prepares routing profiles.
+        setPipelineStatus("Checking connection...");
+        setTestResult(await testProviderAuth(provider.providerId, false));
+      } catch {
+        setTestResult({ ok: false, message: "Setup failed. Retry." });
+      } finally {
         setPipelineStatus(null);
         router.refresh();
-        return;
       }
-
-      setPipelineStatus("Refreshing model catalog...");
-      const discovery = await discoverModels(provider.providerId);
-      setDiscoveryResult(discovery);
-      if (discovery.discovered > 0) {
-        setPipelineStatus("Preparing routing metadata...");
-        const profResult = await profileModels(provider.providerId);
-        setProfilingResult(profResult);
-      }
-
-      setPipelineStatus(null);
-      router.refresh();
     });
   }
 
   function handleRefreshModels() {
     startTransition(async () => {
       setPipelineStatus("Discovering models...");
-      const discovery = await discoverModels(provider.providerId);
-      setDiscoveryResult(discovery);
-
-      if (discovery.discovered > 0) {
-        setPipelineStatus("Syncing routing profiles...");
-        const profResult = await profileModels(provider.providerId);
-        setProfilingResult(profResult);
+      try {
+        const discovery = await discoverModels(provider.providerId);
+        setDiscoveryResult(discovery);
+        if (discovery.discovered > 0) {
+          setPipelineStatus("Syncing routing profiles...");
+          setProfilingResult(await profileModels(provider.providerId));
+        }
+      } catch {
+        setTestResult({ ok: false, message: "Refresh failed. Retry." });
+      } finally {
+        setPipelineStatus(null);
+        router.refresh();
       }
-
-      setPipelineStatus(null);
-      router.refresh();
     });
   }
 
@@ -172,11 +163,13 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     || credential?.secretHint
     || (selectedAuthMethod === "oauth2_authorization_code" && credential?.status === "ok")
     || secretRef;
-  const readinessState = provider.status === "active" && hasProfiles && hasCredential
-    ? { label: "Ready", tone: "var(--dpf-success)", detail: "Connection, catalog, and routing metadata are prepared." }
+  const readinessState = testResult?.ok === false
+    ? { label: "Failed", tone: "var(--dpf-warning)", detail: "Review the error and retry." }
+    : provider.status === "active" && hasProfiles && hasCredential
+    ? { label: "Ready", tone: "var(--dpf-success)", detail: "Models are prepared." }
     : hasCredential
-      ? { label: "Needs readiness check", tone: "var(--dpf-warning)", detail: "Save once and DPF will test, discover, and prepare models automatically." }
-      : { label: "Needs credentials", tone: "var(--dpf-muted)", detail: "Add credentials, then DPF will handle the readiness checks." };
+      ? { label: "Needs readiness check", tone: "var(--dpf-warning)", detail: "Save to verify and prepare models." }
+      : { label: "Needs credentials", tone: "var(--dpf-muted)", detail: "Connect your account to continue." };
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
@@ -220,7 +213,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <span style={{ color: "var(--dpf-muted)", fontSize: 12 }}>{readinessState.detail}</span>
         </div>
         <p style={{ color: "var(--dpf-muted)", fontSize: 12, margin: "6px 0 0" }}>
-          Data-use eligibility is evaluated separately for each workload and connected account.
+          Workload data-use rules apply.
         </p>
       </div>
 

@@ -7,7 +7,7 @@ import { recommendedActionFor, type RoutingEligibility } from "@/lib/routing/pro
 import { buildProviderCostView } from "@/lib/inference/ai-provider-cost-view";
 import { DataSourceBadge } from "@/components/ui/DataSourceBadge";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
-import { intentStyle, resolveIntent } from "@/components/ui/report-kit/statusColors";
+import { intentStyle, resolveIntent } from "@/lib/ui-model/statusColors";
 import { ModelClassBadges } from "./ModelClassBadge";
 import { ProviderStatusToggle } from "./ProviderStatusToggle";
 

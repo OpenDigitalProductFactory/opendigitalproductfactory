@@ -23,7 +23,7 @@ import {
   type IntegrationTreatment,
 } from "@/lib/build/integration-benchmarking";
 import { getToolMarketplaceReadiness } from "@/lib/actions/tool-marketplace-readiness";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { resolveActiveBuildId, extractBuildIdHint } from "@/lib/mcp/build-tool-helpers";
 

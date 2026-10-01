@@ -159,7 +159,7 @@ describe("individual measures", () => {
   it("agreement flags a class humans disagree with and stays quiet above threshold", () => {
     const disagree = repeat(4, (i) => row({ recommendedOptionId: "a", chosenOptionId: i === 0 ? "a" : "b" }));
     const lines = measureAgreement(disagree).filter((l) => l.evidence.total !== undefined);
-    expect(lines).toEqual([expect.objectContaining({ lineKey: "agreement:wwmd/kernel-consult", proposedAction: "examine-weight", evidence: { agreed: 1, total: 4, rate: 0.25 } })]);
+    expect(lines).toEqual([expect.objectContaining({ lineKey: "agreement:wwmd/kernel-consult", proposedAction: "examine-weight", evidence: { agreed: 1, total: 4, rate: 0.25, domainClass: "kernel-consult" } })]);
     const agree = repeat(4, () => row({ recommendedOptionId: "a", chosenOptionId: "a" }));
     expect(measureAgreement(agree).filter((l) => l.evidence.total !== undefined)).toEqual([]);
   });

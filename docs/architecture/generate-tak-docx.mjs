@@ -4,7 +4,7 @@
  * Renders Mermaid diagrams to SVG + high-resolution PNG and assembles
  * the publication DOCX from the Markdown source of truth.
  *
- * Usage: node docs/architecture/generate-tak-docx.mjs
+ * Usage: pnpm exec tsx docs/architecture/generate-tak-docx.mjs
  */
 
 import { publicationConfig } from "./agent-standard-publications.mjs";

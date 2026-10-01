@@ -38,7 +38,7 @@ param(
     # external coding agent all side-effecting MCP tools without admin powers.
     [string]$MintScope = "write",
     # Opt-in: install Google Antigravity's `agy` CLI (runs the official vendor
-    # installer) when absent, then wire the DPF MCP config. OFF by default — we
+    # installer) when absent, then wire the DPF MCP config. OFF by default -- we
     # never run a vendor installer silently (kernel DI-B91843F8C157).
     [switch]$InstallAntigravity
 )
@@ -64,25 +64,16 @@ $GrokConfigPath         = Join-Path $HOME ".grok\config.toml"  # platform-specif
 $KernelPrinciplesDir    = Join-Path $RepoRoot "docs\founder-kernel\wiki\principles"
 $ContributorMemoryDir   = Join-Path $HOME ".claude\projects"
 $ProjectSlug            = ($RepoRoot -replace '[:\\\/]+', '-').TrimStart('-')
-$McpEndpoint            = if ($env:DPF_MCP_URL) { $env:DPF_MCP_URL } else { "http://127.0.0.1:3000/api/mcp/v1" }
-# BI-FA2C46D7: on an https endpoint the client authorizes over OAuth and Node
-# clients must trust the organization's own CA. Resolve the root bundle the PKI
-# bootstrap wrote (explicit env, then the install's .env, then the default PKI
-# dir) and export it for this run; the persist step below records it for new
-# processes beside the token (Windows analog of the POSIX env file + launchctl).
-$McpTrustBundle = ""
-if ($McpEndpoint -like 'https://*') {
-    $envFileBundle = ""
-    $installEnv = Join-Path $RepoRoot ".env"
-    if (Test-Path -LiteralPath $installEnv) {
-        $line = Get-Content -LiteralPath $installEnv | Where-Object { $_ -match '^DPF_PKI_TRUST_BUNDLE=' } | Select-Object -Last 1
-        if ($line) { $envFileBundle = ($line -replace '^DPF_PKI_TRUST_BUNDLE=', '').Trim() }
-    }
-    foreach ($candidate in @($env:DPF_PKI_TRUST_BUNDLE, $envFileBundle, (Join-Path $HOME ".dpf\pki\root_ca.crt"))) {
-        if ($candidate -and (Test-Path -LiteralPath $candidate)) { $McpTrustBundle = $candidate; break }
-    }
-    if ($McpTrustBundle) { $env:NODE_EXTRA_CA_CERTS = $McpTrustBundle }
-}
+# BI-2D545A0C (design 12.4.3): the endpoint is the install's canonical origin,
+# read from PUBLIC_URL in the install's .env, and on https Node clients trust
+# the organization's own CA (BI-FA2C46D7). One rule, shared with the installer:
+# scripts\installer\lib\mcp-client-env.ps1. An explicit DPF_MCP_URL stands only
+# when the install names no https origin.
+. (Join-Path $ScriptDir "installer\lib\mcp-client-env.ps1")
+$McpClientEnv           = Resolve-DpfMcpClientEnv -InstallDir $RepoRoot
+$McpEndpoint            = if ($McpClientEnv.McpUrl) { $McpClientEnv.McpUrl } else { "http://127.0.0.1:3000/api/mcp/v1" }
+$McpTrustBundle         = $McpClientEnv.CaBundle
+if ($McpTrustBundle) { $env:NODE_EXTRA_CA_CERTS = $McpTrustBundle }
 $SkillPackManifestPath  = Join-Path $RepoRoot "packages\dpf-skill-pack\.claude-plugin\plugin.json"
 
 if (-not (Test-Path -LiteralPath $SkillPackManifestPath)) {
@@ -269,10 +260,13 @@ exit 127
 # On an https endpoint the transport values (DPF_MCP_URL + NODE_EXTRA_CA_CERTS)
 # are what let a client authorize over OAuth; persist them for new processes
 # even when no token was minted this run. Never at dry-run time.
-if (-not $DryRun -and $McpTrustBundle) {
-    [System.Environment]::SetEnvironmentVariable('DPF_MCP_URL', $McpEndpoint, 'User')
-    [System.Environment]::SetEnvironmentVariable('NODE_EXTRA_CA_CERTS', $McpTrustBundle, 'User')
-    Write-Ok "MCP client transport persisted (User env): https endpoint + organization root bundle (NODE_EXTRA_CA_CERTS)."
+if (-not $DryRun) {
+    $transport = Set-DpfMcpClientEnv -ClientEnv $McpClientEnv
+    if ($transport -eq "persisted") {
+        Write-Ok "MCP client transport persisted (User env): https endpoint$(if ($McpTrustBundle) { ' + organization root bundle (NODE_EXTRA_CA_CERTS)' })."
+    } elseif ($transport -eq "unchanged") {
+        Write-Ok "MCP client transport already persisted (User env): $McpEndpoint"
+    }
 }
 
 # --- Compute plan via Node bridge --------------------------------------------
@@ -397,7 +391,7 @@ if ($plan.codex -and $plan.codex.writes.Count -gt 0) {
 
 # 2c. Grok CLI: dedicated config.toml wiring (like Codex) from grok config plan.
 # Writes the mcp_servers.dpf section (from grok.mcp.json) into the Grok TOML.
-# Generic MCP client config (above) covers .mcp.json side; this is the native Grok config.
+# Generic MCP client config (below) covers the repo-root files; this is the native Grok config.
 if ($plan.grok -and $plan.grok.config -and $plan.grok.config.writes.Count -gt 0) {
     foreach ($write in $plan.grok.config.writes) {
         if ($DryRun.IsPresent) {
@@ -431,7 +425,7 @@ if ($AgyPresent) {
     Write-Skip "Antigravity CLI not installed; skipping (pass -InstallAntigravity to opt in)."
 }
 
-# 2b. MCP client config (.mcp.json + .vscode/mcp.json) -- env-backed, no secret.
+# 2b. MCP client config (.vscode/mcp.json, and .mcp.json on http/legacy only; on https the plugin owns the Claude connector) -- env-backed, no secret.
 if ($plan.mcpClientConfig -and $plan.mcpClientConfig.writes.Count -gt 0) {
     foreach ($write in $plan.mcpClientConfig.writes) {
         if ($DryRun.IsPresent) {
@@ -444,7 +438,7 @@ if ($plan.mcpClientConfig -and $plan.mcpClientConfig.writes.Count -gt 0) {
             [System.IO.File]::WriteAllText($write.path, $write.content, [System.Text.Encoding]::UTF8)
         }
     }
-    Write-Ok "MCP client config written ($($plan.mcpClientConfig.writes.Count) file(s): .mcp.json / .vscode/mcp.json)."
+    Write-Ok "MCP client config written ($($plan.mcpClientConfig.writes.Count) file(s); the plugin owns the Claude connector on https)."
 } else {
     Write-Ok "MCP client config already converged."
 }

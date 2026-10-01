@@ -44,6 +44,8 @@ model PatientProfile {
   careIntakeExceptions       CareIntakeException[]
   careIntakeStatusEvents     CareIntakeStatusEvent[]
 
+  controlledSubstanceMovements ControlledSubstanceMovement[]
+
   @@unique([organizationId, principalId])
   @@unique([id, organizationId])
   @@unique([organizationId, sourceSystem, sourceId])
@@ -196,6 +198,8 @@ model CareLocation {
   resources          CareResource[]
   policies           CareSchedulingPolicy[]
   appointments       CareAppointment[]
+
+  controlledSubstanceRegisters ControlledSubstanceRegister[]
 
   @@unique([organizationId, code])
   @@unique([id, organizationId])

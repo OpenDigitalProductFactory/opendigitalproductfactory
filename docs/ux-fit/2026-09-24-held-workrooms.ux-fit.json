@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "decidedOption": "ops-workrooms-held-section",
+  "decisionInteractionId": "DI-A9C2CA834EAE",
+  "scope": {
+    "files": ["apps/web/app/(shell)/ops/workrooms/page.tsx", "apps/web/components/ops/workrooms/HeldWorkroomsList.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["ops-workrooms-held-section", "inbox-and-notice-only", "new-held-rooms-page"]
+  }
+}

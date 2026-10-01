@@ -6,8 +6,8 @@
 // drain) and honors the ScheduledJob.enabled kill switch inside the runner. The
 // batching + per-run inference budget cost guardrail lives in the engine + runner.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   IDENTITY_INFERENCE_CRON,
@@ -16,7 +16,7 @@ import {
   IDENTITY_INFERENCE_REQUESTED_INNGEST_ID,
 } from "@/lib/asset-intelligence/identity-inference-constants";
 
-export const identityInferenceFallbackScheduled = inngest.createFunction(
+export const identityInferenceFallbackScheduled = jobs.createFunction(
   {
     id: IDENTITY_INFERENCE_SCHEDULED_INNGEST_ID,
     retries: 1,
@@ -37,7 +37,7 @@ export const identityInferenceFallbackScheduled = inngest.createFunction(
 
 // Manual one-shot trigger for the admin "run now" action; supports an optional smaller
 // scan limit for a quick poll.
-export const identityInferenceFallbackRequested = inngest.createFunction(
+export const identityInferenceFallbackRequested = jobs.createFunction(
   {
     id: IDENTITY_INFERENCE_REQUESTED_INNGEST_ID,
     retries: 1,

@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "canvas-menu-import-dialog",
+  "decisionInteractionId": "DI-0B5031E0F1A9",
+  "scope": {
+    "files": [
+      "apps/web/components/ea/DiagramImportDialog.tsx",
+      "apps/web/components/ea/DiagramImportPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "canvas-menu-import-dialog",
+      "new-imports-route",
+      "views-page-collapsed-disclosure"
+    ]
+  }
+}

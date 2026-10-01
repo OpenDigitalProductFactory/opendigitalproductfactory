@@ -258,3 +258,17 @@ export type WorkspaceHomeValidationResult = {
     reason: "unknown-component-key" | "invalid-data-ref";
   };
 };
+
+// Per-tile status the workspace launcher renders (components/shell/WorkspaceTiles.tsx)
+// and the command center builds. Kept in lib so lib never imports components/**.
+export type TileMetric = {
+  label: string;
+  value: string | number;
+  color?: string;
+};
+
+export type TileStatus = {
+  metrics?: TileMetric[];
+  badge?: string;
+  badgeColor?: string;
+};

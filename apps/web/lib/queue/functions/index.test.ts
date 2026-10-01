@@ -76,3 +76,13 @@ describe("every-minute cron allowlist (BI-915C40C6)", () => {
     expect(watchdog?.cron).toBe("* * * * *");
   });
 });
+
+describe("document rendition functions (BI-9D43CBEF)", () => {
+  it("register as event functions, so every install runs them without the scheduled flag", () => {
+    const ids = getInngestFunctionsForRuntime({}).map((fn) => (fn as { id: () => string }).id());
+    expect(ids).toContain("documents/rendition-generate");
+    expect(ids).toContain("documents/rendition-backfill");
+    const scheduledIds = scheduledFunctions.map((fn) => (fn as { id: () => string }).id());
+    expect(scheduledIds).not.toContain("documents/rendition-generate");
+  });
+});

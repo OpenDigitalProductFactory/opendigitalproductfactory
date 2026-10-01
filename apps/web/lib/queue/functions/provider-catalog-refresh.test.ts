@@ -12,8 +12,8 @@ vi.mock("@/lib/inference/ai-provider-internals", () => ({
 }));
 vi.mock("@/lib/routing/loader", () => ({ invalidateRoutingLoaderCache: mockInvalidate }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: vi.fn(async () => ({ proceed: true })) }));
-vi.mock("../inngest-client", () => ({
-  inngest: {
+vi.mock("@/lib/jobs", () => ({
+  jobs: {
     createFunction: vi.fn((config: unknown, handler: unknown) => ({ config, handler })),
   },
 }));

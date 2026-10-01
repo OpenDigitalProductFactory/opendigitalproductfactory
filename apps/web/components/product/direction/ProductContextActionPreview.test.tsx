@@ -35,7 +35,7 @@ describe("ProductContextActionPreview", () => {
       screen
         .getByRole("link", { name: "Continue to Delivery" })
         .getAttribute("href"),
-    ).toBe("/delivery?view=flow");
+    ).toBe("/ops/demand");
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(

@@ -1,6 +1,6 @@
 import { signCursor, equalSignature } from "@/lib/shared/signed-cursor";
 
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import {
   projectDeliveryTaskHubRow,
   type DeliveryTaskAsyncOperation,

@@ -159,7 +159,7 @@ export function explainExclusion(
           `${bucketed.count} of ${bucketed.total} endpoints use a model that the connected ChatGPT account cannot run through Codex.`,
         remediation:
           "Select a ChatGPT-subscription-supported Codex model such as gpt-5.4, or use an API-key Codex connection for models that require API access.",
-        href: "/platform/ai/model-assignment",
+        href: "/platform/ai/assignments",
       };
     case "connection-excluded":
       return {
@@ -183,7 +183,7 @@ export function explainExclusion(
           `${bucketed.count} of ${bucketed.total} endpoints lack a capability this coworker requires (for example tool use).`,
         remediation:
           "Connect a provider whose models support the required capability, or lower the coworker's capability requirement if it does not genuinely need it.",
-        href: "/platform/ai/model-assignment",
+        href: "/platform/ai/assignments",
       };
     case "quality-floor":
       return {
@@ -199,7 +199,7 @@ export function explainExclusion(
           `${bucketed.count} of ${bucketed.total} endpoints have a context window smaller than this work needs.`,
         remediation:
           "Connect a model with a larger context window, or reduce the coworker's minimum context requirement.",
-        href: "/platform/ai/model-assignment",
+        href: "/platform/ai/assignments",
       };
     case "endpoint-status":
       return {

@@ -42,7 +42,7 @@
 | LLM provider — external | code review | Real `LLM_BASE_URL` (Anthropic / OpenAI / hosted Ollama) round-trips | 🙋 **reports wanted** |
 | TAPPaaS deployment | none — spec only | Pilot deploy into a real TAPPaaS environment | 🧪 **design partner wanted** |
 | DPF Edge Node enrollment (single-host) | none — spec only | First-draft enrollment ceremony executed end-to-end | 🙋 **reports wanted** |
-| DPF Edge Node — multi-host LAN (T2) | none — code-complete via T2.1-T2.4 | Authority on Host A, Edge Node on Host B over a real LAN with a switch; non-loopback IP attribution; ARP / nmap / SNMP collector output reaching Postgres + Neo4j | 🙋 **reports wanted** |
+| DPF Edge Node — multi-host LAN (T2) | none — code-complete via T2.1-T2.4 | Authority on Host A, Edge Node on Host B over a real LAN with a switch; non-loopback IP attribution; ARP / nmap / SNMP collector output reaching Postgres and its graph mirror | 🙋 **reports wanted** |
 | Cloud — Single VM substrate (AWS / GCP / Azure) | runbook + verify-wrapper ready ([cloud-single-vm.md](cloud-single-vm.md)) | First real-cloud pilot report on each major cloud | 🙋 **reports wanted** |
 | Cloud — Managed Container service / Managed k8s | none — spec only | Substrate pilot per packaging target | 🧪 **design partner wanted** |
 | Cloud — Cloudflare-fronted managed isolated cells | architecture + live decomposed backlog; no runtime implementation | Two synthetic cells, edge/origin failure drills, restore/exit proof, and full deployment-contract evidence | 🔬 **research — not yet a pilot offer** |
@@ -168,7 +168,7 @@ bash install-dpf.sh                 # interactive — say "Ready to go"
 - [ ] Docker Engine installs via apt-get / dnf and `systemctl enable --now docker` succeeds.
 - [ ] If user was added to `docker` group: installer exits 75 with a clear logout-or-newgrp instruction. Re-running succeeds.
 - [ ] `~/.dpf/install-state.json` exists with `"schemaVersion": 1`, `"platform": "linux"`.
-- [ ] `docker compose -p dpf ps` shows portal, postgres, neo4j, qdrant, redis, sandbox, promoter, inngest, adp, ollama all running.
+- [ ] `docker compose -p dpf ps` shows portal, postgres, redis, sandbox, promoter, inngest, adp, ollama all running.
 - [ ] `curl http://localhost:3000/api/health` returns 200.
 - [ ] Login at http://localhost:3000 with `admin@dpf.local` + the password printed at end of install (also in `.env`).
 - [ ] `systemctl --user status dpf.service` reports `active (exited)` (with `--no-autostart` skipped, this is enabled).

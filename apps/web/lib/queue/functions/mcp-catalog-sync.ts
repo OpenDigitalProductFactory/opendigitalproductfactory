@@ -1,7 +1,7 @@
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
-export const mcpCatalogSync = inngest.createFunction(
+export const mcpCatalogSync = jobs.createFunction(
   {
     id: "ops/mcp-catalog-sync",
     retries: 2,

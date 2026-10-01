@@ -96,7 +96,7 @@ DPF supports more than one governed development surface. Choose the path that ma
 
 ## Architecture and standards
 
-The [Enterprise Architecture guide](architecture/index.md) explains how operators model their own organization inside DPF. For DPF's runtime architecture, Trusted AI Kernel (TAK), Global AI Agent Identification & Governance (GAID) standard, and platform conformance assessment, continue to the [contributor Architecture section](../architecture/platform-overview.md). Those pages explain the platform's design and governance; they are not required for ordinary day-to-day operation.
+The [Enterprise Architecture guide](architecture/index.md) explains how operators model their own organization inside DPF. For DPF's runtime architecture and the four trusted-agent standards it implements first — the Trusted AI Kernel (TAK), Global AI Agent Identification & Governance (GAID), Job-Specific Intelligence (TAK-JSI), and the Gated Permissions Process (GPP) — start with the [standards family map](../architecture/agent-standards-family.md), then the [contributor Architecture section](../architecture/platform-overview.md) and the platform conformance assessment. Those pages explain the platform's design and governance; they are not required for ordinary day-to-day operation.
 
 ## Specifications and plans
 

@@ -39,15 +39,17 @@ import {
 } from "@/lib/auth/mcp-api-token";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
 import { connectionDelegationFor } from "@/lib/mcp/connection-delegation";
+import { normalizeTokenScope, requiredTokenScopeForTool, tokenAdmitsTool, tokenScopeSatisfies } from "@/lib/mcp/token-tool-scope";
 import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
 import { oauthSetupRequiredResult } from "@/lib/auth/oauth-setup-required";
 import { resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
 import { buildStepUpChallenge, type StepUpContext } from "@/lib/auth/oauth-step-up";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
-import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
+import { PLATFORM_TOOLS, resolveAnnotations } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
-import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
+import { getToolGrantMapping, expandGrants, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
 import {
   resolveListingAuthorityForToken,
@@ -78,9 +80,11 @@ import {
   type ResolvedMcpTransportAuth as ResolvedAuth,
 } from "@/lib/mcp/transport-auth";
 import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
-import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
+import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
+import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
 // ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
@@ -148,13 +152,6 @@ function scopeToCapability(scope: McpTokenScope): McpTokenCapability {
   return scope === "read" ? "read" : "write";
 }
 
-function normalizeTokenScope(token: Pick<ResolvedMcpToken, "scope" | "capability">): McpTokenScope {
-  if (token.scope === "admin" || token.scope === "write" || token.scope === "read") {
-    return token.scope;
-  }
-  return token.capability === "write" ? "write" : "read";
-}
-
 async function loadUserContext(userId: string): Promise<UserContext> {
   return await currentUserContext(userId).catch(() => null)
     ?? { userId, platformRole: null, isSuperuser: false };
@@ -172,39 +169,27 @@ function tokenCanUseTool(
   userContext: UserContext,
   grantMap: Record<string, string[]>,
 ): boolean {
-  if (tool.requiredCapability && !can(userContext, tool.requiredCapability as CapabilityKey)) {
-    return false;
-  }
-  const required = grantMap[tool.name];
-  if (!required) return false; // default-deny tools without a grant entry
-  const requiredScope = requiredTokenScopeForTool(tool, required);
-  if (!tokenScopeSatisfies(normalizeTokenScope(token), requiredScope)) {
-    return false;
-  }
-  // Expand through GRANT_IMPLICATIONS so an implying grant (e.g. build_promote)
-  // surfaces the finer-grant tools it implies (e.g. build_lifecycle). Mirrors
-  // the call-time check below and the agent-grant layer.
-  return required.some((g) => expandGrants(token.scopes).includes(g));
+  return roleAllowsTool(tool, userContext) && tokenScopesAllowTool(tool, token, grantMap);
 }
 
-function requiredTokenScopeForTool(
-  tool: ToolDefinition | undefined,
-  requiredGrants: readonly string[],
-): McpTokenScope {
-  if (requiredGrants.some((grant) => grant.startsWith("admin_"))) return "admin";
-  return tool?.sideEffect ? "write" : "read";
+function roleAllowsTool(tool: ToolDefinition, userContext: UserContext): boolean {
+  return !tool.requiredCapability || can(userContext, tool.requiredCapability as CapabilityKey);
 }
 
-function tokenScopeSatisfies(actual: McpTokenScope, required: McpTokenScope): boolean {
-  if (required === "read") return true;
-  if (required === "write") return actual === "write" || actual === "admin";
-  return actual === "admin";
+// The token half on its own, so load_tools can tell a token gap from a role gap.
+// Default-deny a tool with no grant entry; scope and expanded grants both admit
+// it, the same rule the call-time check and the agent-grant layer use.
+function tokenScopesAllowTool(tool: ToolDefinition, token: ResolvedMcpToken, grantMap: Record<string, string[]>): boolean {
+  return tokenAdmitsTool(tool, grantMap[tool.name], token);
 }
 
 const QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS = new Set([
   // Releasing a lease is cleanup, and is what prevents quiescence-blocked
   // local-CI evidence writes from leaking scarce nonprod environments.
   "release_nonprod_environment_lease",
+  // Renewing keeps a gate that is already running alive through a drain, so
+  // its verdict is not lost to the lease lapsing mid-build (2026-09-24).
+  "renew_nonprod_environment_lease",
 ]);
 
 function isToolAllowedDuringQuiescence(toolName: string, tool: ToolDefinition | undefined): boolean {
@@ -233,7 +218,7 @@ async function quiescenceRefusalResult(
     readOperationsAllowed: true,
     cleanupOperationsAllowed: [...QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS],
     implications:
-      "Mutating MCP writes are refused while the portal is quiescing. Retry after quiescence clears; cleanup-safe lease release remains available.",
+      "Mutating MCP writes are refused while the portal is quiescing. Retry after quiescence clears; lease release and renewal remain available.",
   };
   return {
     content: [
@@ -326,14 +311,14 @@ async function handleLoadTools(
   const granted = PLATFORM_TOOLS.filter((t) => tokenCanUseTool(t, token, userContext, grantMap));
   // Same authority filter as tools/list: a token can never load (and so never
   // call) a tool the agent's grants / the human's clearance would reject.
-  const authorized = filterListableTools(
-    granted,
-    await resolveListingAuthorityForToken(token, userContext),
-  );
+  const authority = await resolveListingAuthorityForToken(token, userContext);
+  const authorized = filterListableTools(granted, authority);
+  const toolByName = new Map(PLATFORM_TOOLS.map((tool) => [tool.name, tool]));
+  const knownNames = new Set(toolByName.keys());
+  const authorizedNames = new Set(authorized.map((tool) => tool.name));
   const selected = resolveLoadToolsSelection(authorized, args);
-  const noMatch = classifyLoadToolsNoMatch(
-    args, new Set(PLATFORM_TOOLS.map((tool) => tool.name)), new Set(granted.map((tool) => tool.name)), selected.length,
-  );
+  // Judge against what selection drew from (agent-filtered), not the token-only list.
+  const noMatch = classifyLoadToolsNoMatch(args, knownNames, authorizedNames, new Set(selected.map((t) => t.name)));
   // W12 (BI-EE64547B): internal session-JWT calls are per-call stateless — the
   // result still carries the selected definitions inline, but no per-token
   // session row is written (internal lists are full-tier; nothing to append).
@@ -341,10 +326,17 @@ async function handleLoadTools(
     token.source === "session-jwt"
       ? mergeLoadedToolNames([], selected.map((t) => t.name))
       : await loadToolsForSession(token.tokenId, selected.map((t) => t.name));
+  const status = buildLoadToolsStatus(args, {
+    knownNames, authorizedNames, loadedToolNames, authority, isAllowedByGrants: isToolAllowedByGrants,
+    tokenGrants: (name) => tokenScopesAllowTool(toolByName.get(name)!, token, grantMap),
+    roleAllows: (name) => roleAllowsTool(toolByName.get(name)!, userContext),
+    requiredGrants: (name) => grantMap[name] ?? [],
+  });
   const result = buildLoadToolsResult(
     selected.map((t) => ({ name: t.name, description: t.description })),
     loadedToolNames,
     noMatch,
+    status,
   );
   return acceptsEventStream && selected.length > 0
     ? loadToolsSseResponse(id, result)
@@ -572,7 +564,7 @@ async function handleToolsCall(
   }
 
   const userContext = await loadUserContext(token.userId);
-  const result = await governedExecuteTool({
+  const executed = await governedExecuteTool({
     toolName,
     rawParams: args,
     userId: token.userId,
@@ -594,6 +586,23 @@ async function handleToolsCall(
     },
     source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });
+
+  // External CLIs feed this result straight into their model, so hidden
+  // Unicode is removed here exactly as the native loop removes it in
+  // clampToolResultForModel (BI-7AD0DA3D). The audited ToolResult stays whole.
+  const cleaned = sanitizeUntrustedValue({ message: executed.message, error: executed.error, data: executed.data });
+  const smugglingSuspected = looksLikeSmuggling(cleaned);
+  if (smugglingSuspected) {
+    console.warn("[mcp/v1] hidden-unicode payload removed from tool result tool=%s removed=%d", sanitizeForLog(toolName), cleaned.total);
+  }
+  const result = {
+    ...executed,
+    message: smugglingSuspected
+      ? `${invisibleRemovalNotice(cleaned)}\n${cleaned.value.message ?? ""}`
+      : cleaned.value.message,
+    error: cleaned.value.error,
+    data: cleaned.value.data,
+  };
 
   // Convert ToolResult into MCP tools/call response shape:
   //   - content[]: a single text block carrying a JSON serialization of the

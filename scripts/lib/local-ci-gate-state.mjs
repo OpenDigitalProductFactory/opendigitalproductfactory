@@ -46,6 +46,16 @@ export function isTerminalPassRecord(state) {
     && state.status === "passed";
 }
 
+/**
+ * BI-53B189C8. True when `state` was written by a `DPF_ALLOW_LOCAL_CI_STUB=1`
+ * run. The stub exercises the lease and evidence plumbing and builds nothing,
+ * yet it reaches status "passed" with gatePassed true, so without this mark its
+ * record reads exactly like a real PASS. A marked record is never push evidence.
+ */
+export function isTestStubGateRecord(state) {
+  return Boolean(state) && typeof state === "object" && state.testStub === true;
+}
+
 export function createLocalCiPassEvidenceValidity(options) {
   return createCiEvidenceValidity(options);
 }
@@ -115,6 +125,7 @@ export function writeLocalCiGateState(stateFile, {
   failureReason = "",
   failureSummary = null,
   childExitCode = null,
+  testStub = false,
 }) {
   const previous = readLocalCiGateState(stateFile);
   // BI-FFCFCCE0. A verdict that was reached and reported must not be erased by
@@ -183,6 +194,7 @@ export function writeLocalCiGateState(stateFile, {
   if (failureReason) payload.failureReason = failureReason;
   if (failureSummary) payload.failureSummary = failureSummary;
   if (childExitCode !== null && childExitCode !== undefined) payload.childExitCode = childExitCode;
+  if (testStub) payload.testStub = true;
   writeGateStateAtomically(stateFile, serializeGateState(payload));
   return { written: true, preservedPass: false, status };
 }

@@ -190,3 +190,23 @@ These checks are silent authorization checks, not repeated OAuth approvals.
 The refreshed main branch supplies the POSIX-mode capability probe for PKI
 fixtures. This repair reuses that checked-in host correction. Windows skips
 remain distinct from Linux policy-guard evidence.
+
+### Queued OAuth expiry and recovery repair — BI-1E56D891
+
+Implementation admission IRD-656F1D546638 covers this bounded follow-up.
+Preserve the published isolated-persona design on its separate branch; this
+repair needs no fixture schema or grant change.
+
+1. Reproduce quiet-client expiry and terminal replay flags with failing tests.
+2. Extend the shared execution-authority resolver with exact refresh-family
+   continuity. Keep inbound bearer validity and every current consent check.
+3. Isolate a narrow historical-review recovery helper, reused from exact
+   request replay. Preserve task identity, failure evidence and retry counters;
+   reserve one recovery atomically. Consolidating authority/recovery checks is
+   the focused refactor portion (approximately 20% of effort).
+4. Verify revoked/expired refresh family, consent and human denial; wrong
+   family, canceled/completed tasks, recorded writes, prior recovery and races.
+5. Run affected source tests/typecheck, source preflight and the shared gate;
+   publish through the protected PR/release path. Retry the original review
+   only after upgrade, then prove quiet-client queued continuity on the live
+   install. Source tests are not completion of parent V6/V7/V9 acceptance.

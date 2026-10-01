@@ -69,12 +69,12 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
       actions: [{
         kind: "open-in-context",
         label: "Review proactivity change",
-        href: "/platform/ai",
+        href: "/platform/ai/overview",
       }, {
         kind: "snooze",
         label: "Snooze",
       }],
-      deepLink: "/platform/ai",
+      deepLink: "/platform/ai/overview",
       audience: { operator: true },
       proactivity: {
         level: proactivityChange.currentLevel,
@@ -132,9 +132,9 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
     actions: [{
       kind: "open-in-context",
       label: isActivityRoutingAction ? "Review routing workbench" : "Review in AI Workforce",
-      href: isActivityRoutingAction ? "/platform/ai/operations-map" : "/platform/ai",
+      href: isActivityRoutingAction ? "/platform/ai/operations-map" : "/platform/ai/overview",
     }],
-    deepLink: isActivityRoutingAction ? "/platform/ai/operations-map" : "/platform/ai",
+    deepLink: isActivityRoutingAction ? "/platform/ai/operations-map" : "/platform/ai/overview",
     audience: { operator: true },
     author: attentionAuthorForAgent(row.agentId, { trustLevel: "propose" }),
   };

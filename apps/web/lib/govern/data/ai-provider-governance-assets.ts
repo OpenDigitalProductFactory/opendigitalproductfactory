@@ -4,7 +4,7 @@
 // registry under its module-size ceiling (same pattern as the other
 // *-assets.ts sibling modules). Spread into DATA_ASSET_REGISTRY.
 
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 
 const ASYNC_TRANSITION_FIELD_PROVENANCE = {
   source: "manual",

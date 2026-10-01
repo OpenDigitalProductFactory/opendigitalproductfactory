@@ -1,0 +1,67 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "Portfolio.accountablePrincipalId / accountableSetById / accountableSetAt / accountableReason, written only by setPortfolioOwner (apps/web/lib/portfolio/accountable-owner.ts) via the set_portfolio_owner MCP tool and the operator control on Ops > Delivery Flow (/ops/demand)",
+    "Read by resolveWorkOwner to choose the owning User of scheduled and proactive work (lib/queue/scheduled-owner.ts, governed backlog tee-up, capacity drain) and by the owner view on /ops/demand"
+  ],
+  "privacyAssessment": {
+    "personalData": true,
+    "sensitivity": "internal: which workforce person is accountable for a portfolio, who recorded it, when and why",
+    "dataSubjectRights": "References the person's Principal and the setter's User; both set to NULL when those rows are deleted (ON DELETE SET NULL). No content about the person is copied.",
+    "reviewDisposition": "One current value per portfolio, overwritten on change; the reason and setter make each change attributable. Shown to anyone who can open /ops/demand; changed only with manage_platform."
+  },
+  "migration": {
+    "name": "20260929200000_portfolio_accountable_owner",
+    "backfill": "None. Four nullable columns and two ON DELETE SET NULL foreign keys; every existing portfolio reads 'not set' until a person chooses an owner. Owners are decisions and are never derived. IF NOT EXISTS and duplicate_object guards make a re-run harmless, so it applies cleanly against any existing data state.",
+    "rollback": "Forward-only. Older code ignores the columns and keeps attributing scheduled work to the oldest superuser."
+  },
+  "tests": [
+    "packages/db/src/portfolio-accountable-owner-migration.test.ts",
+    "apps/web/lib/portfolio/accountable-owner.test.ts",
+    "apps/web/lib/portfolio/accountable-owner-view.test.ts",
+    "apps/web/lib/queue/scheduled-owner.test.ts",
+    "apps/web/lib/governed-backlog-tee-up.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:portfolio",
+      "prismaModel": "Portfolio",
+      "lifecycleDisposition": "Existing model; the new columns follow the Portfolio row and add no retention obligation.",
+      "fields": [
+        {
+          "fieldId": "data:portfolio#accountablePrincipalId",
+          "resolution": "governed",
+          "reason": "The one person accountable for the portfolio. Scheduled work defaulted to the seeded bootstrap superuser, so its builds, rooms and approvals went to an account nobody reads (126 builds, 187 rooms on the live install).",
+          "provenance": "BI-67B27832; spec 2026-09-24-portfolio-budget-and-investment-wip-design.md §5.8",
+          "flags": ["personal"],
+          "fieldPolicy": "Set only by setPortfolioOwner: an active human principal with an active account, a named setter and a reason. Never derived."
+        },
+        {
+          "fieldId": "data:portfolio#accountableSetById",
+          "resolution": "governed",
+          "reason": "Who recorded the accountable person, for attribution.",
+          "provenance": "BI-67B27832",
+          "flags": ["personal"],
+          "fieldPolicy": "Written with the owner by setPortfolioOwner; SET NULL if the setter's User is deleted."
+        },
+        {
+          "fieldId": "data:portfolio#accountableSetAt",
+          "resolution": "inherited",
+          "reason": "When the accountable person was recorded.",
+          "provenance": "BI-67B27832",
+          "flags": []
+        },
+        {
+          "fieldId": "data:portfolio#accountableReason",
+          "resolution": "governed",
+          "reason": "Why this person answers for the portfolio, as stated by the setter.",
+          "provenance": "BI-67B27832",
+          "flags": [],
+          "fieldPolicy": "Free text entered by an operator with manage_platform; shown on /ops/demand."
+        }
+      ]
+    }
+  ]
+}

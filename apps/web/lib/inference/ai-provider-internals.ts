@@ -474,8 +474,8 @@ export const PROVIDER_CATALOG_REFRESH_EVENT = "inference/provider-catalog-refres
  */
 export async function requestProviderCatalogRefresh(request: { providerId: string; reason: string }): Promise<void> {
   try {
-    const { inngest } = await import("@/lib/queue/inngest-client");
-    await inngest.send({ name: PROVIDER_CATALOG_REFRESH_EVENT, data: request });
+    const { jobs } = await import("@/lib/jobs");
+    await jobs.send({ name: PROVIDER_CATALOG_REFRESH_EVENT, data: request });
   } catch (err) {
     console.warn(`[provider-catalog-refresh] could not enqueue refresh for ${JSON.stringify(request.providerId)}: ${getErrorMessage(err)}`);
   }
@@ -1073,13 +1073,13 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
         );
         return result;
       }
-      const { inngest } = await import("@/lib/queue/inngest-client");
+      const { jobs } = await import("@/lib/jobs");
       const models = await prisma.modelProfile.findMany({
         where: { providerId, modelStatus: "active" },
         select: { modelId: true, id: true },
       });
       for (const event of buildAutoDiscoveryEvalEvents(providerId, models)) {
-        await inngest.send(event);
+        await jobs.send(event);
       }
       console.log(`[auto-discover] Queued background evals for ${models.length} model(s) on ${JSON.stringify(providerId)}`);
     } catch (err) {
@@ -1135,9 +1135,9 @@ export async function queueUncalibratedModelEvals(providerId: string): Promise<n
   if (models.length === 0) return 0;
 
   try {
-    const { inngest } = await import("@/lib/queue/inngest-client");
+    const { jobs } = await import("@/lib/jobs");
     for (const event of buildAutoDiscoveryEvalEvents(providerId, models)) {
-      await inngest.send(event);
+      await jobs.send(event);
     }
     console.log(`[auto-eval] Queued calibration evals for ${models.length} un-calibrated model(s) on ${JSON.stringify(providerId)}`);
   } catch (err) {

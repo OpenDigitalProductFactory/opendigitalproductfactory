@@ -40,7 +40,7 @@ export function RosterImport() {
         id="roster-import-file"
         ref={inputRef}
         type="file"
-        accept=".csv,.tsv,.xlsx"
+        accept=".csv,.tsv,.xlsx,.xls,.ods"
         aria-label="Upload a team spreadsheet"
         disabled={pending}
         onChange={(e) => {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { _setGovernanceForTests, governedExecuteTool } from "./mcp-governed-execute";
-import type { ToolResult } from "./mcp-tools";
+import type { ToolResult } from "./mcp-tool-types";
 
 const USER = { platformRole: "ceo", isSuperuser: true };
 const resolveActor = async (args: { context?: { agentId?: string }; userId: string }) => ({

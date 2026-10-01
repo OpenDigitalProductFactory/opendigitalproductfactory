@@ -9,7 +9,7 @@ const { workItem, backlogItem, workQueue, inngestSend, recordQueueTransition } =
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: { workItem, backlogItem, workQueue } }));
-vi.mock("@/lib/queue/inngest-client", () => ({ inngest: { send: inngestSend } }));
+vi.mock("@/lib/jobs", () => ({ jobs: { send: inngestSend } }));
 vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition }));
 
 import { bridgeBacklogItemToWorkItem } from "./backlog-bridge";

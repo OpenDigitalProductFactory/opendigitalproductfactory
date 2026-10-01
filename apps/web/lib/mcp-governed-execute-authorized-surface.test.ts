@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { _setGovernanceForTests, governedExecuteTool } from "./mcp-governed-execute";
 import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authority-decision";
-import type { ToolExecutionContext, ToolResult } from "./mcp-tools";
+import type { ToolExecutionContext, ToolResult } from "./mcp-tool-types";
 
 const USER = { platformRole: "ceo", isSuperuser: true };
 type ExecuteTool = (name: string, params: Record<string, unknown>, userId: string, context?: ToolExecutionContext) => Promise<ToolResult>;

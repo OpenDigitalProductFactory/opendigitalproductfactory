@@ -62,3 +62,30 @@ export function formatInstant(
 
   return new Intl.DateTimeFormat(undefined, formatOptions).format(date);
 }
+
+// ── Shared display helpers (S6: one home for the hand-copied formatters) ──
+//
+// Each helper below reproduces, character for character, a formatter that had
+// been copied into several components. They keep the copies' semantics exactly:
+// the runtime's default locale and zone, no zone label, and `Date#toLocale*`'s
+// own "Invalid Date" for an unparseable value (where `formatInstant` returns "").
+// Changing any of that changes what users see, so it is a separate decision.
+
+/** Date and time in the runtime's locale, e.g. "Sep 26, 2026, 3:04 PM". */
+export function formatDateTime(value: string | number | Date): string {
+  return new Date(value).toLocaleString(undefined, PRESETS.datetime);
+}
+
+/** Date only in the runtime's locale, e.g. "Sep 26, 2026". */
+export function formatDate(value: string | number | Date): string {
+  return new Date(value).toLocaleDateString(undefined, PRESETS.date);
+}
+
+/**
+ * `Date#toLocaleString()` with the runtime's defaults (numeric date and time
+ * with seconds), or `empty` when there is no value.
+ */
+export function formatTimestamp(value: string | null | undefined, empty = "—"): string {
+  if (!value) return empty;
+  return new Date(value).toLocaleString();
+}

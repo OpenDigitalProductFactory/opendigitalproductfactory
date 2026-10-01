@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "current-version-export-menu",
+  "decisionInteractionId": "DI-EECCCF15B277",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/workspace/documents/[documentId]/DocumentExportMenu.tsx",
+      "apps/web/app/(shell)/workspace/documents/[documentId]/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "current-version-export-menu",
+      "header-action-row-buttons"
+    ]
+  }
+}

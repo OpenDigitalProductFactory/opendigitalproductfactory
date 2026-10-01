@@ -2,6 +2,7 @@ import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
+  persisted: {} as Record<string, unknown>,
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   findModelConfig: vi.fn(),
@@ -20,14 +21,9 @@ const autonomous = vi.hoisted(() => ({
   resolveTools: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({
+vi.mock("@dpf/db", async () => ({
   prisma: {
-    taskRun: {
-      findFirst: (...args: unknown[]) => db.findFirst(...args),
-      findUnique: (...args: unknown[]) => db.findUnique(...args),
-      update: (...args: unknown[]) => db.update(...args),
-      updateMany: (...args: unknown[]) => db.updateMany(...args),
-    },
+    taskRun: (await import("./test-support/task-run-state")).taskRunState(db),
     coworkerActionEnvelope: { findFirst: (...args: unknown[]) => db.findEnvelope(...args) },
     toolExecution: {
       findFirst: (...args: unknown[]) => db.findToolExecution(...args),
@@ -108,6 +104,7 @@ function submit(tokenId: string, request = params) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  db.persisted = {};
   db.findFirst.mockResolvedValue(null);
   db.findUnique.mockResolvedValue({ status: "working" });
   db.findEnvelope.mockResolvedValue(null);
@@ -329,7 +326,7 @@ describe("terminal writer resumption", () => {
     });
     expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({ // guarded working transition (BI-D208E70C)
       where: expect.objectContaining({ taskRunId: "TR-MCP-SAME-WRITER-RUN" }),
-      data: { status: "working", lastHeartbeatAt: expect.any(Date) },
+      data: expect.objectContaining({ status: "working", lastHeartbeatAt: expect.any(Date) }),
     }));
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
       taskRunId: "TR-MCP-SAME-WRITER-RUN",
@@ -459,8 +456,8 @@ describe("terminal writer resumption", () => {
     expect(autonomous.executeTool).toHaveBeenCalledTimes(1);
     expect(db.findToolExecutions).toHaveBeenCalledTimes(1);
     expect(autonomous.execute).not.toHaveBeenCalled();
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-ZERO-READER-FAIL" },
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ taskRunId: "TR-MCP-ZERO-READER-FAIL", status: "working" }),
       data: expect.objectContaining({
         status: "input-required",
         completedAt: null,
@@ -613,8 +610,8 @@ describe("terminal writer resumption", () => {
         },
       },
     });
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-WRITER-EXHAUSTED" },
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ taskRunId: "TR-MCP-WRITER-EXHAUSTED", status: "working" }),
       data: expect.objectContaining({
         status: "input-required",
         progressPayload: expect.objectContaining({
@@ -634,7 +631,7 @@ describe("terminal writer resumption", () => {
       }),
     });
     if (truncated) {
-      const projection = db.update.mock.calls.map(([call]) => call.data.progressPayload)
+      const projection = db.updateMany.mock.calls.map(([call]) => call.data.progressPayload)
         .find(progress => progress?.summary === failureMessage);
       expect(projection.terminalWriterWait).not.toHaveProperty("noncompliance");
     }

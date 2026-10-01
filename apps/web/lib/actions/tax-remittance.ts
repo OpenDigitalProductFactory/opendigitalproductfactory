@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import { newId } from "@/lib/shared/new-id";
 import {
   netFromComponents,
@@ -19,6 +20,7 @@ import {
   buildBillLiabilityDrafts,
   buildFilingPacketNotes,
   buildInvoiceLiabilityDrafts,
+  buildManualAdjustmentDraft,
   computeNextCronRun,
   credentialPublicId,
   decimalValue,
@@ -294,6 +296,7 @@ export async function generateTaxObligationPeriods() {
   const generatedPeriods: Array<{ id: string; periodId: string }> = [];
   const canSummarizeOrgTax = registrations.length === 1;
   const generationBoundary = new Date();
+  const orgCurrency = await getOrgBaseCurrency();
 
   for (const registration of registrations) {
     const monthsPerPeriod = periodMonthsForFrequency(registration.filingFrequency);
@@ -377,26 +380,14 @@ export async function generateTaxObligationPeriods() {
           }),
         ]);
 
-        liabilityDrafts.push(...buildInvoiceLiabilityDrafts(registration, invoices));
-        liabilityDrafts.push(...buildBillLiabilityDrafts(registration, bills));
+        liabilityDrafts.push(...buildInvoiceLiabilityDrafts(registration, invoices, orgCurrency));
+        liabilityDrafts.push(...buildBillLiabilityDrafts(registration, bills, orgCurrency));
       }
 
       if (manualAdjustmentAmount !== 0) {
-        liabilityDrafts.push({
-          entryId: stableTaxEntityId("TAX-LIAB", registration.id, "manual_adjustment", periodStart, periodEnd),
-          sourceType: "manual_adjustment",
-          sourceId: existing?.id ?? stableTaxEntityId("TAX-PERIOD", registration.id, periodStart, periodEnd),
-          sourceLineItemId: null,
-          direction: "adjustment",
-          taxType: registration.taxType,
-          taxCode: "manual_adjustment",
-          taxableAmount: 0,
-          taxRate: null,
-          taxAmount: manualAdjustmentAmount,
-          currency: "GBP",
-          occurredAt: dueDate,
-          notes: "Manual period adjustment carried on the obligation period.",
-        });
+        liabilityDrafts.push(buildManualAdjustmentDraft(registration, {
+          periodId: existing?.id ?? null, periodStart, periodEnd, dueDate, amount: manualAdjustmentAmount, orgCurrency,
+        }));
       }
 
       const salesTaxAmount = roundCurrency(

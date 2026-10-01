@@ -16,8 +16,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/permissions", () => ({ can: mocks.can }));
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: { send: mocks.inngestSend },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { send: mocks.inngestSend },
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {

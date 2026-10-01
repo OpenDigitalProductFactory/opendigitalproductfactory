@@ -59,6 +59,7 @@ export async function ensureBookkeepingCycleScheduledTask(
     select: { taskId: true, nextRunAt: true },
   });
 
+  // An existing task keeps its owner: an account handover must survive re-seeding (BI-ED055D45).
   if (existing) {
     await prisma.scheduledAgentTask.update({
       where: { taskId: BOOKKEEPING_CYCLE_TASK_ID },
@@ -70,7 +71,6 @@ export async function ensureBookkeepingCycleScheduledTask(
         schedule: BOOKKEEPING_CYCLE_SCHEDULE,
         timezone,
         taskKind: BOOKKEEPING_CYCLE_TASK_KIND,
-        ownerUserId: owner.id,
         isActive: true,
         nextRunAt: existing.nextRunAt ?? nextRunAt,
       },

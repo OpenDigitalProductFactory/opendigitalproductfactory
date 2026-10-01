@@ -17,7 +17,7 @@
 // also why packages/db/src/table-classification.ts marks them "restricted"
 // (never copied to a dev environment).
 
-import type { DataAssetDefinition, DataFieldDefinition } from "./assets";
+import type { DataAssetDefinition, DataFieldDefinition } from "./asset-types";
 import type { ClassificationProvenance, DataAssetId } from "./taxonomy";
 
 const PROVENANCE: ClassificationProvenance = {

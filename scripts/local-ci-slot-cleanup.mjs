@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -10,6 +11,7 @@ import {
   localCiSlotEnvironment,
 } from "./lib/local-ci-slot-manifest.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { gitText } from "./lib/git.mjs";
 
 export function createLocalCiCleanupPlan(manifest, composeFile) {
   assertLocalCiCleanupTarget(manifest, manifest.output.build);
@@ -55,13 +57,7 @@ export function createLocalCiCleanupPlan(manifest, composeFile) {
   };
 }
 
-function git(args, cwd = process.cwd()) {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
-  if (result.status !== 0) {
-    throw new Error(`git ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
-  }
-  return result.stdout.trim();
-}
+const git = (args, cwd = process.cwd()) => gitText(args, { cwd });
 
 function rootCloneFor(repoTop) {
   const listing = git(["worktree", "list", "--porcelain"], repoTop);
@@ -89,8 +85,10 @@ function runCleanup(plan) {
 }
 
 function valueAfter(args, flag) {
-  const index = args.indexOf(flag);
-  return index >= 0 ? args[index + 1] : "";
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args, strict: false, allowPositionals: true, options: { "slot-key": { type: "string" } } });
+  const value = values[flag.replace(/^--/, "")];
+  return value === undefined ? "" : typeof value === "string" ? value : undefined;
 }
 
 function main() {

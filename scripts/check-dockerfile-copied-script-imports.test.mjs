@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   findMissingCopiedImports,
+  findMissingCopiedImportsInRepo,
   logicalLines,
   parseStages,
   staticRelativeImports,
@@ -59,6 +60,24 @@ test("reads static imports but ignores dynamic ones", () => {
     ].join("\n"),
   );
   assert.deepEqual(specs.sort(), ["../lib/b.mjs", "./lib/a.mjs", "./lib/side-effect.mjs"]);
+});
+
+// Regression: generate-platform-sbom.mjs imports ../lib/pnpm-lock.mjs with a
+// binding list over several lines, which the single-line pattern never saw.
+test("reads a static import whose binding list spans lines", () => {
+  const specs = staticRelativeImports(
+    [
+      "import {",
+      "  parseImporters as parseLockImporters,",
+      "  unquote,",
+      '} from "../lib/pnpm-lock.mjs";',
+      "export {",
+      "  x,",
+      "} from './lib/x.mjs';",
+      "const y = Buffer.from('z');",
+    ].join("\n"),
+  );
+  assert.deepEqual(specs.sort(), ["../lib/pnpm-lock.mjs", "./lib/x.mjs"]);
 });
 
 // The measured regression: set-hooks-path.mjs gained a top-level import of
@@ -111,6 +130,14 @@ test("the checked-in Dockerfile satisfies the invariant", () => {
   });
   assert.deepEqual(
     violations.map((v) => `${v.stage}: ${v.importer} -> ${v.missing}`),
+    [],
+  );
+});
+
+test("every root-context Dockerfile satisfies the invariant, service images included", () => {
+  const violations = findMissingCopiedImportsInRepo(REPO_ROOT);
+  assert.deepEqual(
+    violations.map((v) => `${v.dockerfile} ${v.stage}: ${v.importer} -> ${v.missing}`),
     [],
   );
 });

@@ -7,7 +7,7 @@
 
 import type { TaskState } from "@/lib/tak/task-states";
 import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
-import type { Intent } from "@/components/ui/report-kit/statusColors";
+import type { Intent } from "@/lib/ui-model/statusColors";
 
 export function taskStateIntent(state: TaskState): Intent {
   switch (state) {

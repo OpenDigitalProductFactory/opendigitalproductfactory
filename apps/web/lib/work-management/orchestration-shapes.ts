@@ -39,6 +39,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -52,6 +53,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -101,6 +103,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -114,6 +117,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -163,6 +167,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -176,6 +181,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -225,6 +231,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -238,6 +245,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -287,6 +295,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -300,6 +309,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -349,6 +359,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -362,6 +373,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -411,6 +423,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -424,6 +437,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -473,6 +487,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -486,6 +501,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -536,6 +552,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["get_finance_period_summary"],
       },
       {
         key: "act",
@@ -595,6 +612,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_epics", "list_backlog_items", "search_portfolio_context"],
       },
       {
         key: "name-the-stalls",
@@ -608,6 +626,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["backlog-items"],
         effort: "low",
+        tools: ["list_backlog_items", "query_backlog"],
       },
       {
         key: "owner-directs",

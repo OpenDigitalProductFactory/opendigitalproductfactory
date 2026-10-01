@@ -69,7 +69,6 @@ apps/web/app/api/storefront/admin/sections/reorder/route.ts	1
 apps/web/app/api/storefront/bookings/[id]/cancel/route.ts	2
 apps/web/app/api/storefront/bookings/[id]/confirm/route.ts	2
 apps/web/app/api/storefront/sign-up/route.ts	2
-apps/web/app/api/test/codex-responses/route.ts	1
 apps/web/app/api/transcribe/route.ts	1
 apps/web/app/api/upload/route.ts	3
 apps/web/app/api/v1/discovery/connections/[id]/run/route.ts	1

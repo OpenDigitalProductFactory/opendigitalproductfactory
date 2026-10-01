@@ -11,7 +11,7 @@ import type {
   AuthorityApprovalTaskResume,
 } from "./mcp-governed-execute";
 import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authority-decision";
-import type { ToolResult } from "./mcp-tools";
+import type { ToolResult } from "./mcp-tool-types";
 import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
 import { registerWorkroomAliasCases } from "./mcp-governed-execute-alias.cases";
 type AuditRow = Record<string, unknown>;
@@ -107,7 +107,7 @@ function applyAuthorityOverrides(
     authorityApprovalTaskResume: approvalTaskResume,
     authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
-    policyAuthorityEnvelopeReserve: async () => true,
+    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null,
     ...overrides,
   });
 }
@@ -142,7 +142,7 @@ beforeEach(() => {
     authorityApprovalTaskResume: approvalTaskResume,
     authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
-    policyAuthorityEnvelopeReserve: async () => true,
+    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null,
   });
 });
 
@@ -159,7 +159,7 @@ afterEach(() => {
     authorityApprovalTaskResume: null,
     authorityApprovalEnvelopeFinalize: null,
     policyAuthorityProjectionAttempt: null,
-    policyAuthorityEnvelopeReserve: null,
+    policyAuthorityEnvelopeReserve: null, authorityExecutedOutcome: null,
   });
 });
 

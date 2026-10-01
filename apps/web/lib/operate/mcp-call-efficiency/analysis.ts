@@ -424,7 +424,9 @@ export function createCallEfficiencyAccumulator(
         const firstThreadId = correlations.get(correlationId)!.firstThreadId;
         addFinding({
           kind: "retry_storm",
-          severity: row.n >= retryStormMin * 2 ? "critical" : "warning",
+          severity: row.refused >= row.n / 2
+            ? "warning"
+            : row.n >= retryStormMin * 2 ? "critical" : "warning",
           toolName,
           title: `Retry storm: ${toolName} (${row.n} fail→retry pairs)`,
           detail: row.refused >= row.n / 2
@@ -442,7 +444,10 @@ export function createCallEfficiencyAccumulator(
             correlationId,
             sampleIds: row.ids.slice(0, 5),
           },
-          recommendedAction: "fix_instructions",
+          // A storm of governed refusals is the caller re-asking a settled no.
+          // Recommending fix_instructions files a doc item that sends the next
+          // agent to rewrite a tool that behaved correctly.
+          recommendedAction: row.refused >= row.n / 2 ? "investigate" : "fix_instructions",
           wasteCallEstimate: row.n,
         });
     }

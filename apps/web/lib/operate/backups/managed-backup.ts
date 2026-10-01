@@ -3,7 +3,7 @@
  *
  * `runManagedBackup(spec, args)` is the single implementation of the backup
  * lifecycle that postgres-backup-runner.ts and the (since-deleted, BET-5)
- * neo4j/qdrant backup runners previously each carried as a near-verbatim copy:
+ * graph and vector backup runners previously each carried as a near-verbatim copy:
  *
  *   1. Allocate a per-run target directory under /backups/<subdir>/<ISO-ts>.
  *   2. Spawn the engine's managed shell script via the /bin/sh chokepoint.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { TwinSnapshot } from "@/components/twin";
+import type { TwinSnapshot } from "./twin-snapshot";
 
 import { restaurantBusyShiftFixture } from "./__fixtures__/restaurant-busy-shift";
 import {

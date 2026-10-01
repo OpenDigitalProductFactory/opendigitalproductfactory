@@ -1,0 +1,9 @@
+{
+  "scope": "MCP efficiency refusal classification. apps/web/lib/inference/semantic-memory.ts matches the [ai-context] persistent-surface rule, but nothing about the stored surface changes. searchPlatformKnowledge's unavailable variant gains an in-memory code discriminator (search_deferred | search_unavailable) so a capacity deferral is not reported as a broken embedder. QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE, the embedding request, the filter, the similarity threshold, the payload projection, and every stored vector are untouched. No asset, field, policy, or lifecycle change to any persistent surface occurred.",
+  "approver": "platform-architecture (autonomous; operator-directed delivery of the MCP efficiency refusal classification)",
+  "rationale": "A DataImpactManifest would have to fabricate change kinds for a stored surface whose shape did not move. The only new value is an in-memory status code on a function result, the same class of change already excepted for this surface in changes/search-knowledge-availability-status.data-impact-exception.json and changes/embedding-capacity-deferral-reason.data-impact-exception.json. BI-MCP-EFF-EC0E2467 stays open: search_unavailable remains a fault.",
+  "compensatingControl": "apps/web/lib/inference/semantic-memory-availability.test.ts asserts a deferral returns search_deferred and a backend failure returns search_unavailable. apps/web/lib/mcp/packs/knowledge-pack.test.ts asserts the handler surfaces that code as the tool error. The governed-refusal classifier treats only search_deferred as inconclusive; search_unavailable stays a fault so a dead embedder still files.",
+  "expiry": "2026-12-01T00:00:00.000Z",
+  "remediationBI": "BI-MCP-EFF-EC0E2467",
+  "waives": []
+}

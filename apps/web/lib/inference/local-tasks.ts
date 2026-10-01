@@ -10,7 +10,7 @@
  * rather than failing — graceful degradation, not hard dependency.
  */
 
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 // ─── Core Request ───────────────────────────────────────────────────────────
 

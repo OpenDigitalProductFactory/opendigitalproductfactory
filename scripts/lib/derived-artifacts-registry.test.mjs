@@ -81,6 +81,19 @@ test("enrolls the route-derived registry chain (BI-34D69270)", () => {
   assert.deepEqual(order, chain, "route chain must be in dependency order (downstream reads upstream)");
 });
 
+test("enrolls the operating contract with every source its generator reads (BI-545943EE)", async () => {
+  const entry = DERIVED_ARTIFACTS.find((e) => e.id === "operating-contract");
+  assert.ok(entry, "missing registry entry: operating-contract");
+  const generator = await import("../../packages/dpf-skill-pack/scripts/generate-operating-contract.mjs");
+  // A source the generator reads but the registry does not watch would let an
+  // edit to that page ship a stale contract with no pre-commit regeneration.
+  for (const source of [...generator.PRINCIPLE_SOURCES, generator.AGENTS_SOURCE]) {
+    assert.ok(matchesAnyGlob(source, entry.sourceGlobs), `operating-contract does not watch ${source}`);
+  }
+  assert.deepEqual(entry.artifactPaths, [generator.GENERATED_MODULE_PATH]);
+  assert.ok(entry.check.includes("--check"));
+});
+
 test("sbom-baseline is registered with autoStage disabled (judgment call, not a pure function of sources)", () => {
   const entry = DERIVED_ARTIFACTS.find((e) => e.id === "sbom-baseline");
   assert.equal(entry.autoStage, false);

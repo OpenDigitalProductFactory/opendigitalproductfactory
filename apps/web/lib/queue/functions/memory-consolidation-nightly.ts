@@ -10,9 +10,9 @@
 // (provenance preserved); expiry supersedes stale entries (never a hard delete).
 // Runs behind the quiescence gate so it never contends with an upgrade.
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 import { prisma } from "@dpf/db";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import { dedupeCoworkerNotes, dedupeUserFacts } from "@/lib/tak/memory-consolidation-runner";
 import {
@@ -180,7 +180,7 @@ export async function runMemoryConsolidationSweep(): Promise<MemoryConsolidation
   return result;
 }
 
-export const memoryConsolidationNightly = inngest.createFunction(
+export const memoryConsolidationNightly = jobs.createFunction(
   {
     id: "coworker/memory-consolidation-nightly",
     retries: 1,

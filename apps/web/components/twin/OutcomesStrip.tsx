@@ -7,7 +7,7 @@
 
 import type { Intent } from "@/components/ui/report-kit";
 
-import type { TwinOutcome } from "./snapshot";
+import type { TwinOutcome } from "@/lib/twin/twin-snapshot";
 
 const INTENT_COLOR: Record<Intent, string> = {
   success: "var(--dpf-success)",

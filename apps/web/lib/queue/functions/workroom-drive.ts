@@ -7,14 +7,14 @@
 // Mirrors obligation-assurance-watch.ts: pure exported job + thin Inngest
 // wrappers behind gateAtEntry.
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 import {
   driveOutcomeNeedsOwner,
   resolveDriveConclusion,
 } from "@/lib/work-management/drive-conclusion";
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 import type { Prisma, PrismaClient } from "@dpf/db";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import {
   COORDINATION_RESOURCE_TYPE,
   COORDINATION_SCOPE_TYPE,
@@ -22,7 +22,9 @@ import {
   resolveCoordinatorEligibility,
 } from "@/lib/work-management/coordinator-eligibility";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
-import { buildStageBrief, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
+import { buildStageBrief, stageBriefInputFromDefinition, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
+import { withWorkroomStageTaskConfig, type WorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
+import { driveTickIsNews, nextDriveHold, readDriveHold, stallNoticeDue, type WorkroomDriveHold } from "@/lib/work-management/workroom-drive-hold";
 
 import {
   loadCoordinationBindings,
@@ -50,7 +52,6 @@ import {
 } from "@/lib/work-management/room-participant-assignment";
 import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { readWorkShapeDefinitionContract, resolveStageEffort } from "@/lib/work-management/work-shapes";
-import { nextWorkroomStageTaskConfig, type WorkroomStageEffortRecord } from "@/lib/work-management/workroom-stage-effort";
 import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
@@ -64,6 +65,7 @@ import {
   readStoredWorkroomDriveState,
 } from "@/lib/work-management/workroom-drive-state";
 import { appendCompletingWorkroomDriveReceipt, WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
 export type WorkroomDriveRoom = {
   id: string;
@@ -110,8 +112,12 @@ export type WorkroomDriveEffects = {
     summary: string;
     payload: Record<string, unknown>;
     observationOnly?: boolean;
+    /** Update the snapshot but add no trail row: the hold did not change (BI-E8C78E80). */
+    quiet?: boolean;
     lease?: { expiresAt: Date; holderPrincipalId: string | null };
   }) => Promise<void>;
+  /** Tell a stuck room's owner once per stuck spell (BI-E8C78E80). Optional; tests may omit it. */
+  notifyStall?: (input: { room: WorkroomDriveRoom; hold: WorkroomDriveHold; reason: string; conformance: unknown }) => Promise<void>;
   acquireLease: (input: {
     roomId: string;
     now: Date;
@@ -126,10 +132,10 @@ export type WorkroomDriveEffects = {
     ownerUserId: string;
     title: string;
     prompt: string;
+    /** Stage + declared tools, written to taskConfig.workroomStage for the scheduler's pin (BI-43C3E914). */
+    stage: WorkroomStageTaskConfig;
     now: Date;
     lease: { roomId: string; expiresAt: Date; holderPrincipalId: string | null };
-    /** Phase G: the dispatched stage's resolved effort tier; null when it declares none. */
-    workroomStage?: WorkroomStageEffortRecord | null;
   }) => Promise<boolean>;
   deactivateAgentTask: (taskId: string) => Promise<void>;
 };
@@ -242,6 +248,15 @@ export async function applyDrivePlan(input: {
     accountability,
   });
 
+  const priorHold = readDriveHold(room.workspaceState);
+  const hold = nextDriveHold(priorHold, { action: plan.action, reason: plan.reason, stageKey: plan.stageKey, conformance: plan.conformance }, now);
+  if (stallNoticeDue(hold) && effects.notifyStall) {
+    await effects.notifyStall({ room, hold, reason: plan.reason, conformance: plan.conformance })
+      .then(() => { hold.notifiedAt = now.toISOString(); }, () => undefined);
+  }
+  const quiet = !driveTickIsNews(priorHold, hold, plan.action);
+  const persist: WorkroomDriveEffects["persist"] = (args) => effects.persist({ ...args, quiet: quiet && !args.observationOnly });
+
   const snapshot = {
     kind: "workroom-drive",
     version: 1,
@@ -265,13 +280,14 @@ export async function applyDrivePlan(input: {
       : null,
     conformance: plan.conformance,
     ledger: plan.ledger,
+    hold,
   };
 
   if (plan.action === "do_not_wake") {
     if (plan.shapeKey) {
       await effects.deactivateAgentTask(workroomDriveTaskId(room.capsuleId, plan.shapeKey));
     }
-    await effects.persist({
+    await persist({
       roomId: room.id,
       snapshot,
       activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
@@ -282,7 +298,7 @@ export async function applyDrivePlan(input: {
   }
 
   if (plan.action === "attention") {
-    await effects.persist({
+    await persist({
       roomId: room.id,
       snapshot,
       activityKind: WORKROOM_DRIVE_ATTENTION_KIND,
@@ -304,7 +320,7 @@ export async function applyDrivePlan(input: {
       currentHolder: room.leaseHolderPrincipalId,
     });
     if (lease === "held") {
-      await effects.persist({
+      await persist({
         roomId: room.id,
         snapshot: { ...snapshot, reason: "lease_held" },
         activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
@@ -315,17 +331,20 @@ export async function applyDrivePlan(input: {
       return "skipped";
     }
     if (!room.ownerUserId) {
-      await effects.persist({
+      await persist({
         roomId: room.id,
         snapshot: { ...snapshot, reason: "missing_task_owner" },
         activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
         summary: "Agent stage is eligible but no owner user is bound for ScheduledAgentTask.",
-        payload: snapshot,
+        payload: { ...snapshot, reason: "missing_task_owner" },
       });
       return "skipped";
     }
-    const stage = plan.definition?.stages.find((candidate) => candidate.key === plan.stageKey);
-    const effort = resolveStageEffort(stage);
+    // GPP element 2 "Attachment" + element 5 "Capability set": the brief and the
+    // task carry the stage's declared tools; the scheduler pins them (BI-43C3E914).
+    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null,
+      shapeKey: plan.shapeKey ?? "", shapeVersion: plan.shapeVersion ?? "", definition: plan.definition ?? null, stageKey: plan.stageKey ?? "" });
+    const effort = resolveStageEffort(plan.definition?.stages.find((candidate) => candidate.key === plan.stageKey));
     const scheduled = await effects.upsertAgentTask({
       taskId: plan.taskId,
       agentId: plan.agentId,
@@ -335,25 +354,14 @@ export async function applyDrivePlan(input: {
       // answered it with prose and zero tool calls (BI-4A394B21). The shape
       // already carries the objective, the definition of done and the evidence
       // to leave; send it.
-      prompt: buildStageBrief({
-        capsuleId: room.capsuleId,
-        roomObjective: room.objective ?? null,
-        shapeKey: plan.shapeKey ?? "",
-        shapeVersion: plan.shapeVersion ?? "",
-        shapeTitle: plan.definition?.title ?? null,
-        shapeDescription: plan.definition?.description ?? null,
-        stageKey: plan.stageKey ?? "",
-        stageTitle: stage?.title ?? null,
-        doneWhen: stage?.advance.condition ?? null,
-        evidenceKinds: stageEvidenceKinds(plan.definition ?? null, plan.stageKey),
-        stopConditions: (plan.definition?.stopConditions ?? []).map((entry) => entry.condition),
-      }),
+      prompt: buildStageBrief(brief),
+      // Phase G: the stage's declared effort rides the same record; governed stages resolve high.
+      stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...(brief.stageTools ?? [])], ...(effort ? { effort } : {}) },
       now,
       lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
-      workroomStage: effort && stage ? { shapeKey: plan.shapeKey ?? "", stageKey: stage.key, effort } : null,
     });
     if (!scheduled) return "skipped";
-    await effects.persist({
+    await persist({
       roomId: room.id,
       snapshot,
       activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
@@ -364,7 +372,7 @@ export async function applyDrivePlan(input: {
     return "dispatched";
   }
 
-  await effects.persist({
+  await persist({
     roomId: room.id,
     snapshot,
     activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
@@ -547,6 +555,8 @@ async function loadStandingRooms(
   const { prisma } = await import("@dpf/db");
   const ids = await loadStandingRoomIds(prisma as never);
   if (ids.length === 0) return [];
+  // BI-E8C78E80: rooms from before delivery work was born owned get their owner first.
+  await repairUnownedDeliveryRooms(prisma as never, ids).catch((error) => console.warn("[workroom-drive] owner repair skipped:", error));
   const rows = await prisma.workroom.findMany({
     where: {
       id: { in: ids },
@@ -568,15 +578,7 @@ async function loadStandingRooms(
           },
         },
       },
-      createdByPrincipal: {
-        select: {
-          aliases: {
-            where: { aliasType: "user", issuer: "" },
-            select: { aliasValue: true },
-            take: 1,
-          },
-        },
-      },
+      ...ROOM_OWNER_USER_INCLUDE,
     },
   });
 
@@ -597,7 +599,7 @@ async function loadStandingRooms(
       workspaceState: row.workspaceState,
       leaseExpiresAt: row.leaseExpiresAt,
       leaseHolderPrincipalId: row.leaseHolderPrincipalId,
-      ownerUserId: row.createdByPrincipal?.aliases[0]?.aliasValue ?? null,
+      ownerUserId: roomOwnerUserId(row),
       participants: row.participants.map((participant) => {
         const kind = participant.principal.kind === "agent"
           ? "agent" as const
@@ -647,6 +649,7 @@ export function createWorkroomDriveEffects(
         { workroomId: roomId },
       );
     },
+    notifyStall: async (input) => (await import("@/lib/work-management/workroom-stall-notice")).notifyWorkroomStall(input),
     async persist(input) {
       const prisma = await loadDb();
       const activity = await prisma.$transaction(async (tx) => {
@@ -679,6 +682,7 @@ export function createWorkroomDriveEffects(
           });
           if (updated.count !== 1) return null;
         }
+        if (input.quiet) return null;
         return tx.workroomActivity.create({
           data: {
             workCapsuleId: input.roomId,
@@ -727,9 +731,9 @@ export function createWorkroomDriveEffects(
           data: { leaseExpiresAt: input.lease.expiresAt },
         });
         if (owned.count !== 1) return false;
-        // Phase G: undefined = leave taskConfig untouched (an undeclared stage writes nothing).
-        const existing = await tx.scheduledAgentTask.findUnique({ where: { taskId: input.taskId }, select: { taskConfig: true } });
-        const taskConfig = nextWorkroomStageTaskConfig(existing?.taskConfig ?? null, input.workroomStage ?? null);
+        // Merge, never replace: taskConfig is shared JSON; only workroomStage is this writer's.
+        const current = await tx.scheduledAgentTask.findUnique({ where: { taskId: input.taskId }, select: { taskConfig: true } });
+        const taskConfig = withWorkroomStageTaskConfig(current?.taskConfig ?? null, input.stage) as Prisma.InputJsonValue;
         await tx.scheduledAgentTask.upsert({
           where: { taskId: input.taskId },
           create: {
@@ -743,12 +747,13 @@ export function createWorkroomDriveEffects(
             ownerUserId: input.ownerUserId,
             nextRunAt: input.now,
             isActive: true,
-            ...(taskConfig ? { taskConfig: taskConfig as Prisma.InputJsonValue } : {}),
+            taskConfig,
           },
           update: {
             agentId: input.agentId,
             title: input.title,
             prompt: input.prompt,
+            taskConfig,
             nextRunAt: input.now,
             isActive: true,
             ...(taskConfig ? { taskConfig: taskConfig as Prisma.InputJsonValue } : {}),
@@ -767,7 +772,7 @@ export function createWorkroomDriveEffects(
   };
 }
 
-export const workroomDriveScheduled = inngest.createFunction(
+export const workroomDriveScheduled = jobs.createFunction(
   {
     id: WORKROOM_DRIVE_INNGEST_ID,
     retries: 1,
@@ -781,7 +786,7 @@ export const workroomDriveScheduled = inngest.createFunction(
   },
 );
 
-export const workroomDriveRunNow = inngest.createFunction(
+export const workroomDriveRunNow = jobs.createFunction(
   {
     id: WORKROOM_DRIVE_RUN_NOW_INNGEST_ID,
     retries: 0,

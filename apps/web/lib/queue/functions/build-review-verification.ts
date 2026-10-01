@@ -24,11 +24,11 @@
  * `uxTestResults + uxVerificationStatus` (chunk 6 of the plan).
  */
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { buildPipelineConcurrency } from "../admission";
 import { shouldRunBrowserUxVerification } from "@/lib/build/ui-surface";
 
-export const buildReviewVerification = inngest.createFunction(
+export const buildReviewVerification = jobs.createFunction(
   {
     id: "build/review-verification",
     retries: 1,
@@ -55,6 +55,7 @@ export const buildReviewVerification = inngest.createFunction(
           diffPatch: true,
           verificationOut: true,
           buildBranch: true,
+          designDoc: true,
         },
       });
     });
@@ -121,74 +122,6 @@ export const buildReviewVerification = inngest.createFunction(
       }
     });
 
-    await step.run("guard-gauntlet", async () => {
-      const { runGuardGauntlet, guardPlanDigest } = await import("@/lib/build/sandbox/guard-gauntlet");
-      const { buildGauntletEvidence, summarizeGauntlet, toolchainFingerprintFrom, resolveGauntletRepository } =
-        await import("@/lib/build/sandbox/guard-gauntlet-evidence");
-      const { resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
-      const { execInSandbox } = await import("@/lib/sandbox");
-      const { recordLocalIntegrationResult } = await import("@/lib/nonprod/local-integration");
-
-      const workdir = resolveBuildWorkdir(buildId);
-      const outcome = await runGuardGauntlet({
-        exec: execInSandbox,
-        containerId: build.sandboxId!,
-        workdir,
-      });
-
-      // Could-not-run is not a failing verdict, and must not be recorded as one.
-      if (!outcome.ran) {
-        console.warn(`[guard-gauntlet] not run for ${buildId}: ${outcome.reason}`);
-        return { ran: false, reason: outcome.reason };
-      }
-      // Without a tree there is nothing to key evidence to, so the run informs
-      // the log but cannot become a record that something else reuses.
-      if (!outcome.treeSha) {
-        console.warn(`[guard-gauntlet] ${buildId} produced no tree sha; result not recorded as evidence`);
-        return { ran: true, passed: outcome.passed, recorded: false };
-      }
-
-      const toolchain = await execInSandbox(build.sandboxId!, "node -v 2>/dev/null; pnpm -v 2>/dev/null")
-        .catch(() => "");
-      const [node, pnpm] = toolchain.split(/\r?\n/);
-      const identity = {
-        repository: resolveGauntletRepository(),
-        treeSha: outcome.treeSha,
-        guardPlanDigest: guardPlanDigest("scripts/pregate-preflight.mjs"),
-        toolchainFingerprint: toolchainFingerprintFrom({ node, pnpm }),
-      };
-
-      await recordLocalIntegrationResult({
-        actorUserId: build.createdById,
-        provider: "build-studio",
-        externalSessionId: buildId,
-        routeContext: "/build",
-        buildId,
-        candidateBranch: build.buildBranch ?? `build/${buildId}`,
-        mode: "single-branch",
-        status: outcome.passed ? "passed" : "failed",
-        summary: summarizeGauntlet({
-          passed: outcome.passed,
-          failedGuards: outcome.failedGuards,
-          treeSha: outcome.treeSha,
-        }),
-        evidence: buildGauntletEvidence({
-          identity,
-          workdir: outcome.workdir,
-          passed: outcome.passed,
-          failedGuards: outcome.failedGuards,
-          output: outcome.output,
-          durationMs: outcome.durationMs,
-        }),
-      });
-
-      return { ran: true, passed: outcome.passed, recorded: true, treeSha: outcome.treeSha };
-    });
-
-    // Phase 3 of the shared Change Reviewer control: task-level reviews remain
-    // intact, then one surface-neutral review evaluates the assembled committed
-    // change before UX verification or promotion. Shadow mode is the rollback
-    // default until outcome telemetry calibrates deterministic enforcement.
     // The semantic review judges the assembled change: the exact diff and the
     // committed head/base trees. The orchestrated build path advances to
     // review without recording either (only the legacy pipeline's completion
@@ -210,13 +143,85 @@ export const buildReviewVerification = inngest.createFunction(
       }
     });
 
+
+    // BI-A0521CB0: the finalize stage runs the guard gauntlet (bound to this
+    // build's Workroom and head), records any gate decisions it needs and re-runs
+    // it, records the scoped tests, and writes the failure analysis the semantic
+    // review requires. Each stop is recorded on the build as a named status.
+    const finalize = await step.run("finalize", async () => {
+      const { finalizeBuildForReview } = await import("@/lib/build/finalize-stage-wiring");
+      return finalizeBuildForReview({
+        id: build.id,
+        buildId,
+        createdById: build.createdById,
+        sandboxId: build.sandboxId!,
+        buildBranch: build.buildBranch ?? null,
+        designDoc: (build as { designDoc?: unknown }).designDoc,
+      });
+    });
+
+    // BI-FBA2FDBE: the semantic review needs the failure analysis only a
+    // finished finalize writes. Running it after any other outcome produced a
+    // "repair" verdict nothing consumed, on the same tree, every few minutes.
+    // The finalize stop is already on the build's trail as a named status.
+    const { finalizeAllowsSemanticReview } = await import("@/lib/build/finalize-stage-runner");
+    if (!finalizeAllowsSemanticReview(finalize)) {
+      // BI-B2EEA6DE: guards that failed on this build's own change go back to
+      // its coding agent, bounded, then to the operator.
+      if (finalize.status === "gauntlet-failed") {
+        const routed = await step.run("route-gauntlet-failure-to-repair", async () => {
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, {
+            treeSha: finalize.treeSha ?? null,
+            recordId: finalize.recordId ?? null,
+            failedGuards: finalize.failedGuards,
+          });
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
+      // BI-83E1ADF8: a failure analysis that names a risk the change does not
+      // mitigate goes back through the same bounded hand-back, then the owner.
+      if (finalize.status === "risk-blocked") {
+        const routed = await step.run("route-unmitigated-risk-to-repair", async () => {
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, {
+            treeSha: finalize.treeSha,
+            recordId: null,
+            failedGuards: ["Failure analysis"],
+            source: "risk",
+            findings: finalize.risks.map((risk) => ({
+              severity: risk.severity,
+              description: `${risk.key}: ${risk.trigger} → ${risk.effect}. Why it is not mitigated: ${risk.rationale}`,
+            })),
+          });
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
+      return { status: "finalize-incomplete", finalize: finalize.status };
+    }
+
+    // Phase 3 of the shared Change Reviewer control: task-level reviews remain
+    // intact, then one surface-neutral review evaluates the assembled committed
+    // change before UX verification or promotion. Shadow mode is the rollback
+    // default until outcome telemetry calibrates deterministic enforcement.
     const semanticReview = await step.run("semantic-change-review", async () => {
       const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
       const { reviewBuildStudioAssembledChange } = await import(
         "@/lib/change-review/build-studio-semantic-review"
       );
+      // Finalize may have committed decisions and written the failure analysis,
+      // so review the build row as it is now, not as it was loaded.
+      const { prisma } = await import("@dpf/db");
+      const fresh = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { diffPatch: true, verificationOut: true },
+      });
       return reviewBuildStudioAssembledChange({
-        build: assembled.captured ? { ...build, diffPatch: assembled.diffPatch } : build,
+        build: {
+          ...build,
+          diffPatch: fresh?.diffPatch ?? (assembled.captured ? assembled.diffPatch : build.diffPatch),
+          verificationOut: fresh?.verificationOut ?? build.verificationOut,
+        },
         sandboxState: await getSandboxStateForBuild(buildId),
       });
     });
@@ -252,6 +257,26 @@ export const buildReviewVerification = inngest.createFunction(
           },
         }).catch(() => {});
       });
+      // BI-50E8802C: a review that asks for repair goes back to the build's
+      // coding agent with its blocking findings, through the same bounded
+      // hand-back as guard failures (shared attempt bound, then escalation).
+      if (nextAction === "repair") {
+        const blocking = issues.filter((issue) => issue.severity !== "minor");
+        const findings = (blocking.length > 0 ? blocking : issues).map((issue) => ({
+          severity: issue.severity, description: issue.description, location: issue.location, suggestion: issue.suggestion,
+        }));
+        const routed = await step.run("route-review-findings-to-repair", async () => {
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, {
+            treeSha: semanticReview.outcome.receipt.headTreeHash ?? null,
+            recordId: null,
+            failedGuards: ["Semantic change review"],
+            source: "review",
+            findings,
+          });
+        });
+        return { status: "semantic-review-blocked", decision, nextAction, repair: routed };
+      }
       return { status: "semantic-review-blocked", decision, nextAction };
     }
 
@@ -275,8 +300,8 @@ export const buildReviewVerification = inngest.createFunction(
       // Either there are no acceptance criteria to assert, or the build changed
       // no UI surface a browser can drive. Mark UX verification "skipped"
       // (advisory, non-blocking per the ratified gate policy) and proceed to
-      // ship rather than stranding in review. The "Ship to GitHub" step remains
-      // a human gate downstream — auto-ship only extracts the diff and advances
+      // ship rather than stranding in review. Ship then opens the PR itself
+      // (BI-D80F2EA0) after extracting the diff and advancing
       // the phase to `ship`.
       const skipReason: "no-acceptance-criteria" | "no-ui-surface" =
         testCases.length === 0 ? "no-acceptance-criteria" : "no-ui-surface";
@@ -314,7 +339,7 @@ export const buildReviewVerification = inngest.createFunction(
       // Auto-dispatch ship for the skipped (non-blocking) verification — mirrors
       // the "complete" path below so non-UI / no-AC builds are not stranded in
       // review. dispatchShipForVerifiedBuild only extracts the diff and advances
-      // to the ship phase; pushing to GitHub stays a human gate.
+      // to the ship phase; the PR is then opened automatically (BI-D80F2EA0).
       await step.run("auto-dispatch-ship", () =>
         autoDispatchShipForCompletedVerification(buildId, "skipped"),
       );

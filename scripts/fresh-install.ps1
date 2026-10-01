@@ -166,6 +166,14 @@ if (-not (Test-Path $envFile)) {
     $authBytes = New-Object byte[] 32
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($authBytes)
     $authSecret = [Convert]::ToBase64String($authBytes)
+    # Inngest keys (BI-3267763F): compose has no default for them any more.
+    $inngestKeyValues = foreach ($i in 1..2) {
+        $inngestBytes = New-Object byte[] 32
+        [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($inngestBytes)
+        -join ($inngestBytes | ForEach-Object { $_.ToString("x2") })
+    }
+    $inngestSigningKey = $inngestKeyValues[0]
+    $inngestEventKey = $inngestKeyValues[1]
 
     @"
 # Docker Compose defaults -- created by fresh-install.ps1
@@ -174,6 +182,8 @@ POSTGRES_PASSWORD=dpf_dev
 DATABASE_URL=postgresql://dpf:dpf_dev@postgres:5432/dpf
 AUTH_SECRET=$authSecret
 CREDENTIAL_ENCRYPTION_KEY=$encKey
+INNGEST_SIGNING_KEY=$inngestSigningKey
+INNGEST_EVENT_KEY=$inngestEventKey
 ADMIN_PASSWORD=changeme123
 DPF_HOST_INSTALL_PATH=$InstallRoot
 DPF_BACKUPS_HOST_PATH=$InstallRoot-backups

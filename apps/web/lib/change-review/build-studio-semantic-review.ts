@@ -256,5 +256,18 @@ async function publishFailureReadinessWhenBound(capsuleId: string): Promise<void
     console.info(`[semantic-review] ${capsuleId}: failure-readiness status not published yet — ${bound.reason}; the ship lane publishes it once the commit is on GitHub.`);
     return;
   }
-  await publishFailureReadinessStatus(capsuleId);
+  try {
+    await publishFailureReadinessStatus(capsuleId);
+  } catch (err) {
+    // The Workroom head is stamped before review so evidence can bind to it,
+    // but the commit reaches GitHub only when the ship lane pushes it. GitHub
+    // answers 422 for a commit it does not have: that is the same lifecycle
+    // position as "no commit yet", not a failed review (FB-D671B016). Any other
+    // publication failure still fails loudly.
+    if (err instanceof Error && /\(422\)/.test(err.message)) {
+      console.info(`[semantic-review] ${capsuleId}: failure-readiness status not published yet — the commit is not on GitHub; the ship lane publishes it after the push.`);
+      return;
+    }
+    throw err;
+  }
 }

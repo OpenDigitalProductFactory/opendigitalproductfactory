@@ -10,8 +10,8 @@
 // self-upgrade drain), concurrency 1, honors the ScheduledJob.enabled kill
 // switch inside the runner.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   MDM_STEWARD_CRON,
@@ -29,7 +29,7 @@ async function isEnabled(): Promise<boolean> {
   return isJobEnabled(MDM_STEWARD_JOB_ID);
 }
 
-export const mdmStewardSweepScheduled = inngest.createFunction(
+export const mdmStewardSweepScheduled = jobs.createFunction(
   {
     id: MDM_STEWARD_SCHEDULED_INNGEST_ID,
     retries: 1,
@@ -50,7 +50,7 @@ export const mdmStewardSweepScheduled = inngest.createFunction(
 );
 
 // Manual one-shot trigger for the admin "run now" action; supports dry-run.
-export const mdmStewardSweepRequested = inngest.createFunction(
+export const mdmStewardSweepRequested = jobs.createFunction(
   {
     id: MDM_STEWARD_REQUESTED_INNGEST_ID,
     retries: 1,

@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "decidedOption": "inbox-exact-result",
+  "decisionInteractionId": "DI-8A9BB19430DD",
+  "scope": {
+    "files": [
+      "apps/web/components/attention/ApprovalOutcomeHistory.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["inbox-exact-result", "separate-approval-detail"]
+  }
+}

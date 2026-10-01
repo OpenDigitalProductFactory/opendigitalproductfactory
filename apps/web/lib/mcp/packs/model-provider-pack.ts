@@ -15,7 +15,7 @@
 
 import { prisma } from "@dpf/db";
 import { lazyFsPromises, lazyPath, getCwd } from "@/lib/shared/lazy-node";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { resolveActiveBuildId, extractBuildIdHint } from "@/lib/mcp/build-tool-helpers";
 

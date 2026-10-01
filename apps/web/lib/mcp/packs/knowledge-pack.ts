@@ -11,7 +11,7 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -89,7 +89,11 @@ const definitions: ToolDefinition[] = [
       required: ["title", "body", "category"],
     },
     requiredCapability: "manage_backlog",
-    executionMode: "proposal",
+    // Immediate, not a proposal (BI-0073DE6A): the article is only ever created
+    // as a draft, and publishing is a separate act. Declaring it a proposal
+    // stacked a second approval that no unattended cadence could clear. An
+    // unsteered call still goes to a person through the escalation gate.
+    executionMode: "immediate",
     sideEffect: true,
   },
   {
@@ -121,11 +125,12 @@ async function searchKnowledgeHandler(params: Record<string, unknown>): Promise<
   if (search.status === "unavailable") {
     return {
       success: false,
+      error: search.code,
       message:
         `Semantic search is unavailable — ${search.reason}. This is NOT "no results": ` +
         "the corpus was never queried. Do not treat this as evidence that nothing matches. " +
         "Fall back to list_backlog_items or query_backlog and say the check was lexical only.",
-      data: { results: [], searchStatus: "unavailable" },
+      data: { results: [], searchStatus: "unavailable", code: search.code },
     };
   }
   const results = search.results;
@@ -218,7 +223,7 @@ async function createKnowledgeArticleHandler(params: Record<string, unknown>, us
       },
     });
 
-    // Index into Qdrant
+    // Index into the vector store
     await storeKnowledgeArticle({
       articleId,
       title,

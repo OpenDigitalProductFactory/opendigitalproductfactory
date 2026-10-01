@@ -6,7 +6,7 @@
 //
 // Deliberately commandments-only, not a full principle_decide call. The full
 // retrieval path (apps/web/lib/mcp/packs/principle-decide-pack.ts) carries
-// Qdrant core/contextual search, ring-scope filtering, and the RC2/RC3/RC6
+// vector core/contextual search, ring-scope filtering, and the RC2/RC3/RC6
 // fixes shipped 2026-07-24 (BI-E1267C6D) — reusing or duplicating that
 // machinery here would touch the single most recently-fixed, most sensitive
 // retrieval path in the platform for a gate-verdict decision that commandments

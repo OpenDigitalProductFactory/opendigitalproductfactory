@@ -10,7 +10,7 @@
 // minutes-long, build-artifact-coupled — stays the build-phase mechanism; this is
 // the synchronous, output-revising leverage for coworker turns.)
 import type { RouteSensitivity } from "@/lib/agent-sensitivity";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import {
   buildDeliberationPrompt,
   interpretReviewVerdict,

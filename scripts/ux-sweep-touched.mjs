@@ -21,6 +21,7 @@
 // still sweeps them, capped by --max-routes (default 40) so a shell layout
 // edit points you at CI rather than sweeping 600 routes locally.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -79,13 +80,20 @@ export function touchedRoutes(changed, manifestRoutes, { read, resolveImport = r
 }
 
 function parseArgs(argv) {
-  const out = { run: false, baseUrl: process.env.UX_SWEEP_BASE_URL ?? "http://localhost:3000", maxRoutes: 40 };
-  for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === "--run") out.run = true;
-    else if (argv[i] === "--base-url") out.baseUrl = argv[++i] ?? out.baseUrl;
-    else if (argv[i] === "--max-routes") out.maxRoutes = Number(argv[++i]) || out.maxRoutes;
-  }
-  return out;
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: { run: { type: "boolean" }, "base-url": { type: "string" }, "max-routes": { type: "string" } },
+  });
+  const baseUrl = typeof values["base-url"] === "string" ? values["base-url"] : undefined;
+  const maxRoutes = typeof values["max-routes"] === "string" ? Number(values["max-routes"]) : NaN;
+  return {
+    run: values.run === true,
+    baseUrl: baseUrl ?? process.env.UX_SWEEP_BASE_URL ?? "http://localhost:3000",
+    maxRoutes: maxRoutes || 40,
+  };
 }
 
 function main() {

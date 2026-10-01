@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { brokerCapabilities, DEFAULT_MAX_BROKERED_TOOLS } from "./capability-broker";
 
 const tool = (name: string, description = ""): ToolDefinition => ({

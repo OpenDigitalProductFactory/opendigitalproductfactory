@@ -15,7 +15,7 @@ vi.mock("@/lib/inference/routed-inference", () => ({
 }));
 
 import { compactPhase } from "./phase-compaction";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 function makePhaseMessages(count: number): ChatMessage[] {
   return Array.from({ length: count }, (_, i) => ({

@@ -2,12 +2,14 @@
 
 import { newId } from "@/lib/shared/new-id";
 import { prisma } from "@dpf/db";
+import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import { can } from "@/lib/permissions";
 import { requireCapability, requireUser } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
 import { sendEmail, composeExpenseApprovalEmail } from "@/lib/email";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { resolveAppBaseUrl } from "@/lib/app-url";
+import { tokenLinkUrl } from "@/lib/routes";
 import type { CreateExpenseClaimInput } from "@/lib/expense-validation";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
@@ -41,12 +43,15 @@ export async function createExpenseClaim(input: CreateExpenseClaimInput) {
   // Calculate totalAmount from items
   const totalAmount = input.items.reduce((sum, item) => sum + item.amount, 0);
 
+  // Absent currency = the org's own; an item without one follows its claim.
+  const claimCurrency = input.currency ?? (await getOrgBaseCurrency());
+
   const claim = await prisma.expenseClaim.create({
     data: {
       claimId,
       employeeId: employeeProfile.id,
       title: input.title,
-      currency: input.currency ?? "USD",
+      currency: claimCurrency,
       notes: input.notes ?? null,
       status: "draft",
       totalAmount,
@@ -56,7 +61,7 @@ export async function createExpenseClaim(input: CreateExpenseClaimInput) {
           category: item.category,
           description: item.description,
           amount: item.amount,
-          currency: item.currency ?? "USD",
+          currency: item.currency ?? claimCurrency,
           receiptUrl: item.receiptUrl ?? null,
           taxReclaimable: item.taxReclaimable ?? false,
           taxAmount: item.taxAmount ?? 0,
@@ -217,7 +222,7 @@ export async function submitExpenseClaim(id: string): Promise<void> {
     const manager = managers[0]!;
     const issuer = await getOrgIdentity();
     const fromHeader = issuer?.email ? `${issuer.name} <${issuer.email}>` : undefined;
-    const approveUrl = `${baseUrl}/finance/expenses/approvals/${approvalToken}`;
+    const approveUrl = tokenLinkUrl(baseUrl, "expenseApproval", approvalToken);
 
     const emailPayload = composeExpenseApprovalEmail({
       to: manager.email,

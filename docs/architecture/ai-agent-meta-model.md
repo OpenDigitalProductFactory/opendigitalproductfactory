@@ -122,6 +122,14 @@ fail closed instead of selecting one identity. Request authorization reloads the
 Principal and current customer/account state, so deactivation or merge state
 invalidates an existing session without treating JWT claims as authority.
 
+Where a record names a responsible person by relational `Principal.id` — the
+organization's accountable owner (`Organization.topAccountablePrincipalId`,
+set at first-install setup and changed under Admin › Settings) or a Workroom
+owner — a `User` resolves through `resolveActiveHumanPrincipalRecordIdForUser`
+in `apps/web/lib/identity/principal-linking.ts`. It answers only with an
+active `kind="human"` principal, so an agent or deactivated identity sharing
+the alias can never become the accountable person.
+
 GAID is deliberately complementary to **TAK** (Trusted AI Kernel): *GAID says who an agent is and what claims can be made about it; TAK says how a trustworthy runtime must govern it.* See `docs/architecture/trusted-ai-kernel.md` and `docs/architecture/agent-standards-dpf-conformance.md`.
 
 ```mermaid

@@ -33,6 +33,8 @@ OpenAI Codex is an agentic coding specialist that runs tasks with tool use, sand
 5. Select your organization and project when prompted (do not skip this step)
 6. The platform stores an encrypted token that auto-refreshes
 
+The sign-in asks OpenAI for offline access, which is what lets the platform renew the token on its own. Connections made before this was added have no renewal token: they stop working when the first token expires (about ten days after sign-in). If yours was connected before the upgrade, sign in once more so it can renew itself from then on.
+
 Note: The OAuth callback uses a dedicated port (1455) on localhost. This is required by OpenAI's shared client configuration and is handled automatically by the platform.
 
 ## Agent Provider vs Standard Provider
@@ -40,7 +42,7 @@ Note: The OAuth callback uses a dedicated port (1455) on localhost. This is requ
 Codex is categorized as an "agent" provider, which means it behaves differently from standard LLM providers:
 
 - **Model discovery**: Models cannot be discovered via the standard /v1/models API when using OAuth subscription. Models are defined in the platform registry and updated when OpenAI announces changes.
-- **Test connection**: When using OAuth, the test verifies that the credential is valid rather than making an API call (subscription tokens use a different backend than the standard API).
+- **Save & ready provider**: Saves settings, prepares the model catalog, and sends a small inference request using an active model. OAuth checks use the subscription backend. Only a completed response verifies readiness and clears a previously recorded capacity cooldown for this provider. Account and data-use rules still determine which work can route there.
 - **MCP service**: Codex has a linked MCP (Model Context Protocol) service called "OpenAI Codex Agent" that provides two tools: `codex` (start a coding session) and `codex-reply` (continue a thread). This service activates automatically when you connect via OAuth and deactivates when you disconnect.
 
 ## Linked MCP Service
@@ -79,8 +81,11 @@ The ChatGPT/Codex integration has several non-obvious requirements:
 
 ## Troubleshooting
 
+- A failed readiness check shows the endpoint actually attempted. A network error, rejected request, or incomplete response leaves the existing capacity restriction in place. Retry after resolving the reported problem; signing in alone does not prove inference capacity.
+
 - "HTTP 403 on Test Connection with API Key" -- your OpenAI API account needs funding. The ChatGPT subscription does not fund API access.
 - "HTTP 403 on Sync Models" -- model discovery is not available with OAuth subscription tokens. Models are managed via the platform registry.
+- "Provider shows Expired, or disables itself with Re-authentication required" -- the token ran out and there was no renewal token to replace it. Sign in again from the Codex or ChatGPT provider page; both providers pick up the new token.
 - "Organization and project prompt" -- you must select these during OAuth sign-in. Skipping causes the flow to fail.
 - "Port 1455 unreachable" -- ensure the platform's Docker container has port 1455 mapped (this is configured in docker-compose.yml).
 - "Store must be set to false" -- internal error if `store: false` is missing from the Responses API request body.

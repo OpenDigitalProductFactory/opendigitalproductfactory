@@ -92,6 +92,7 @@ export function mergeLocalCiHostPressure(input: {
     evidenceIsolationHealthy:
       input.client.evidenceIsolationHealthy === true
       && input.server.evidenceIsolationHealthy === true,
+    ...(input.server.probeFailures?.length ? { probeFailures: [...input.server.probeFailures] } : {}),
   };
 }
 
@@ -263,53 +264,41 @@ const DEFAULT_PROBES: LocalCiServerPressureProbes = {
 };
 
 /**
- * Sample the canonical portal's view of the local-CI host. If any probe throws,
- * return an explicitly unsafe partial observation rather than mixing successful
- * values into an optimistic capacity decision.
+ * Sample the canonical portal's view of the local-CI host. A probe that throws
+ * leaves its own value missing, with health read as unsafe, and is named in
+ * `probeFailures`, so the pool still closes but says which probe to look at.
+ * Before, one failed probe (usually builder memory during another gate's
+ * build) dropped every server number and reported "host-cpu-unmeasurable".
  */
 export async function observeLocalCiServerPressure(
   probes: LocalCiServerPressureProbes = DEFAULT_PROBES,
 ): Promise<LocalCiHostPressure> {
   const observedAt = probes.now().toISOString();
-  try {
-    const [
-      availableMemoryBytes,
-      builderMemoryUsageBytes,
-      sustainedCpuPercent,
-      diskFreeBytes,
-      dockerHealthy,
-      convergenceActive,
-      fencesHealthy,
-      evidenceIsolationHealthy,
-    ] = await Promise.all([
-      probes.availableMemoryBytes(),
-      probes.builderMemoryUsageBytes(),
-      probes.sustainedCpuPercent(),
-      probes.diskFreeBytes(),
-      probes.dockerHealthy(),
-      probes.convergenceActive(),
-      probes.fencesHealthy(),
-      probes.evidenceIsolationHealthy(),
-    ]);
-    return {
-      observedAt,
-      availableMemoryBytes,
-      dockerAvailableMemoryBytes: availableMemoryBytes,
-      builderMemoryUsageBytes,
-      sustainedCpuPercent,
-      diskFreeBytes,
-      dockerHealthy,
-      convergenceActive,
-      fencesHealthy,
-      evidenceIsolationHealthy,
-    };
-  } catch {
-    return {
-      observedAt,
-      dockerHealthy: false,
-      convergenceActive: true,
-      fencesHealthy: false,
-      evidenceIsolationHealthy: false,
-    };
-  }
+  const names = [
+    "availableMemoryBytes", "builderMemoryUsageBytes", "sustainedCpuPercent", "diskFreeBytes",
+    "dockerHealthy", "convergenceActive", "fencesHealthy", "evidenceIsolationHealthy",
+  ] as const;
+  const settled = await Promise.allSettled(names.map(async (name) => probes[name]()));
+  const value = (name: (typeof names)[number]): unknown => {
+    const result = settled[names.indexOf(name)];
+    return result.status === "fulfilled" ? result.value : undefined;
+  };
+  const probeFailures = names.filter((_, index) => settled[index].status === "rejected");
+  // Still fail closed: any failed probe reads every health signal as unsafe, so
+  // no capacity decision mixes a partial sample into an optimistic answer.
+  const healthy = probeFailures.length === 0;
+  const availableMemoryBytes = value("availableMemoryBytes") as number | undefined;
+  return {
+    observedAt,
+    availableMemoryBytes,
+    dockerAvailableMemoryBytes: availableMemoryBytes,
+    builderMemoryUsageBytes: value("builderMemoryUsageBytes") as number[] | undefined,
+    sustainedCpuPercent: value("sustainedCpuPercent") as number | undefined,
+    diskFreeBytes: value("diskFreeBytes") as number | undefined,
+    dockerHealthy: healthy && value("dockerHealthy") === true,
+    convergenceActive: !healthy || value("convergenceActive") !== false,
+    fencesHealthy: healthy && value("fencesHealthy") === true,
+    evidenceIsolationHealthy: healthy && value("evidenceIsolationHealthy") === true,
+    ...(healthy ? {} : { probeFailures: [...probeFailures] }),
+  };
 }

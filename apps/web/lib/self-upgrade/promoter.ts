@@ -279,7 +279,10 @@ export function buildPromoterCommand(params: PromoterParams): { command: string;
   }
 
   if (params.composeEnvFileHostPath && params.composeEnvFileHostPath.length > 0) {
-    args.push("-v", `${params.composeEnvFileHostPath}:${PROMOTER_COMPOSE_ENV_FILE}:ro`);
+    // A real self-upgrade may write the Inngest keys it generated back to the
+    // install .env (BI-3267763F); every other launch only reads it.
+    const envWritable = !params.dryRun && !params.runtimeTransitionAuthorityOperation && !params.runtimeCapabilityTransitionId;
+    args.push("-v", `${params.composeEnvFileHostPath}:${PROMOTER_COMPOSE_ENV_FILE}${envWritable ? "" : ":ro"}`);
   }
 
   // promote.sh resolves the install's governed capability projection before
@@ -383,6 +386,8 @@ export function buildPromoterReadinessCommand(
   if (stateIndex >= 0) command.args[stateIndex] = `${command.args[stateIndex]}:ro`;
   const backupsIndex = command.args.findIndex((arg) => arg.endsWith(":/backups"));
   if (backupsIndex >= 0) command.args[backupsIndex] = `${command.args[backupsIndex]}:ro`;
+  const envIndex = command.args.findIndex((arg) => arg.endsWith(`:${PROMOTER_COMPOSE_ENV_FILE}`));
+  if (envIndex >= 0) command.args[envIndex] = `${command.args[envIndex]}:ro`;
   const imageIndex = command.args.indexOf(params.artifact.digest);
   if (imageIndex < 0) throw new Error("promoter_readiness_image_unavailable");
   command.args.splice(imageIndex, 0, "-e", "DPF_PROMOTER_DOCKER_PREFLIGHT=ready");
@@ -687,81 +692,19 @@ export function resolvePromoterTimeoutMs(params: PromoterTimeoutParams): number 
 }
 
 /**
- * Force-remove a promoter container by name. Best-effort: the timeout path uses
- * it to stop a build that stalled and never closed (killing the local `docker
- * run` client does NOT stop the daemon-side build/container). Never throws.
+ * Force-remove a promoter container by name, and the budgeted spawn the
+ * timeout path runs on. Both moved to `@/lib/shared/run-process-with-budget`
+ * so the document converter (BI-52E565DA) shares the same kill path; they are
+ * re-exported here for existing callers and tests.
  */
-export async function forceRemovePromoterContainer(name: string): Promise<void> {
-  if (!name) return;
-  await new Promise<void>((resolve) => {
-    try {
-      const child = spawn("docker", ["rm", "-f", name], { env: { ...process.env } });
-      child.stdout?.on("data", () => {});
-      child.stderr?.on("data", () => {});
-      child.on("close", () => resolve());
-      child.on("error", () => resolve());
-    } catch {
-      resolve();
-    }
-  });
-}
-
-/**
- * Spawn a process under a hard wall-clock budget. On expiry: kill the child,
- * force-remove `containerName` (so a daemon-side build actually stops — killing
- * the local client does not), and resolve nonzero with a `[promoter-timeout]`
- * marker. Separated from runPromoter so the timeout path is unit-testable with a
- * cheap hanging command instead of a real `docker run`.
- */
-export async function runProcessWithBudget(
-  command: string,
-  args: string[],
-  opts: { timeoutMs: number; containerName?: string },
-): Promise<PromoterResult> {
-  return new Promise((done, reject) => {
-    const child = spawn(command, args, { env: { ...process.env }, shell: false });
-
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      const mins = Math.round(opts.timeoutMs / 60000);
-      stderr += `\n[promoter-timeout] promoter did not finish within ${mins}m — killed and container force-removed.`;
-      try {
-        child.kill("SIGKILL");
-      } catch {
-        /* already gone */
-      }
-      void forceRemovePromoterContainer(opts.containerName ?? "").finally(() => {
-        done({ exitCode: PROMOTER_TIMEOUT_EXIT_CODE, stdout, stderr });
-      });
-    }, opts.timeoutMs);
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk;
-    });
-
-    child.on("close", (code: number | null) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      done({ exitCode: code ?? 1, stdout, stderr });
-    });
-
-    child.on("error", (err) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(err);
-    });
-  });
-}
+export {
+  forceRemoveContainer as forceRemovePromoterContainer,
+  runProcessWithBudget,
+} from "@/lib/shared/run-process-with-budget";
+import {
+  forceRemoveContainer as forceRemovePromoterContainer,
+  runProcessWithBudget,
+} from "@/lib/shared/run-process-with-budget";
 
 export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {
   // Idempotency guard (SUR-E2BF265E). The container name is deterministic

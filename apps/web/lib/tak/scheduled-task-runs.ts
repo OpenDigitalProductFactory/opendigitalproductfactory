@@ -1,3 +1,4 @@
+import { workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import {
   createAutonomousWorkRun,
   type AutonomousWorkRunRef,
@@ -104,7 +105,55 @@ export function scheduledRequiredToolNames(input: {
 }
 
 /**
- * The governed writers this prompt names that are authorized but NOT attached.
+ * Does the prompt actually name this tool?
+ *
+ * A plain substring test is wrong whenever one tool's name is a prefix of
+ * another's, and this codebase has that pair: `create_marketing_campaign` and
+ * `create_marketing_campaign_brief` (marketing-pack.ts and
+ * marketing-ops-pack.ts). The Marketing Strategist's prompt asks for the
+ * BRIEF, and `"…create_marketing_campaign_brief…".includes("create_marketing_campaign")`
+ * is true — so the platform demanded a tool the prompt never mentioned, never
+ * saw it run, and filed the run as failed.
+ *
+ * Measured on the reference install 2026-09-23: the coworker wrote
+ * "Foster Carer Recruitment Drive" at 14:00:23 and the run was recorded
+ * `error` at 14:00:01 with "required governed tool create_marketing_campaign
+ * executed zero times", its own message continuing "OK. I've created a new
+ * campaign brief". The work landed and the verdict denied it — the mirror of
+ * the false green BI-4F64C5D3 removed.
+ *
+ * A tool name is a token, so it must match on token boundaries. Underscores
+ * are part of the name, which is why  is not enough on its own.
+ */
+function promptNamesTool(lowerPrompt: string, toolName: string): boolean {
+  const name = toolName.toLowerCase();
+  let from = 0;
+  for (;;) {
+    const at = lowerPrompt.indexOf(name, from);
+    if (at < 0) return false;
+    const before = at === 0 ? "" : lowerPrompt[at - 1]!;
+    const after = lowerPrompt[at + name.length] ?? "";
+    const boundary = (ch: string) => ch === "" || !/[a-z0-9_]/.test(ch);
+    if (boundary(before) && boundary(after)) return true;
+    from = at + 1;
+  }
+}
+
+/**
+ * The tools this run must reach that are authorized but NOT attached.
+ *
+ * Two sources, in priority order:
+ *   1. the governed writers the prompt names (scheduledRequiredToolNames) —
+ *      first, because the run's verdict is judged on them;
+ *   2. the tools the Workroom stage DECLARES it needs (WorkShapeStage.tools,
+ *      carried as taskConfig.workroomStage.tools — BI-43C3E914).
+ *
+ * Pinning only prompt-named tools was a GPP C-6 "Reach reconciliation" gap in
+ * the reverse direction: the stage's model admitted a tool the run never
+ * reached, because ranking by prompt relevance dropped it from the attachment
+ * budget and coworkers reported "no tool to read X". Declared tools are pinned
+ * here; they stay subject to the agent ∩ user grant filter, which pinning never
+ * bypasses — a declared name the run is not authorized for is simply absent.
  *
  * Returns an empty list when nothing needs pinning, so the caller re-resolves
  * only when a required tool would otherwise have to be discovered at runtime.
@@ -113,11 +162,17 @@ export function scheduledToolsNeedingPin(input: {
   prompt: string;
   attached: Array<{ name: string; sideEffect?: boolean }>;
   deferred: Array<{ name: string; sideEffect?: boolean }>;
+  /** The Workroom stage's declared tools. Omitted/empty: behaviour unchanged. */
+  declaredStageTools?: readonly string[];
+  /** The task's taskConfig; its workroomStage record supplies declaredStageTools
+   *  when they are not passed directly (BI-43C3E914, GPP element 5). */
+  taskConfig?: unknown;
 }): string[] {
-  const required = scheduledRequiredToolNames({
+  const promptRequired = scheduledRequiredToolNames({
     prompt: input.prompt,
     authorizedTools: [...input.attached, ...input.deferred],
   });
+  const required = [...new Set([...promptRequired, ...(input.declaredStageTools ?? workroomStageToolsFromTaskConfig(input.taskConfig))])];
   if (required.length === 0) return [];
   const deferredNames = new Set(input.deferred.map((tool) => tool.name));
   return required.some((name) => deferredNames.has(name)) ? required : [];
@@ -132,7 +187,7 @@ export function classifyScheduledRequiredTools(input: {
   let proposed: ScheduledRequiredToolOutcome | null = null;
 
   for (const tool of input.authorizedTools) {
-    if (!tool.sideEffect || !prompt.includes(tool.name.toLowerCase())) continue;
+    if (!tool.sideEffect || !promptNamesTool(prompt, tool.name)) continue;
     const calls = input.executedTools.filter((execution) => execution.name === tool.name);
     if (
       calls.some(

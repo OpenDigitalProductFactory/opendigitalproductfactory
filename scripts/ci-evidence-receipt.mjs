@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
+import { parseArgs as utilParseArgs } from "node:util";
 import {
   mkdirSync,
   readFileSync,
@@ -20,6 +20,7 @@ import {
 } from "./lib/ci-evidence-receipt.mjs";
 import { sha256Bytes, sha256File } from "./lib/ci-build-artifact.mjs";
 import { parseAggregate } from "./merge-readiness-policy.mjs";
+import { gitText } from "./lib/git.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WORKFLOW_PATH = ".github/workflows/ci.yml";
@@ -44,22 +45,20 @@ const REUSABLE_HEAVY_GATE_IDS = [
 ];
 
 function parseArgs(argv) {
-  const [mode, ...rest] = argv;
-  const options = {};
-  for (let index = 0; index < rest.length; index += 1) {
-    const flag = rest[index];
-    if (!flag.startsWith("--")) throw new Error(`unexpected argument: ${flag}`);
-    const value = rest[index + 1];
-    if (!value || value.startsWith("--")) throw new Error(`missing value for ${flag}`);
-    options[flag.slice(2)] = value;
-    index += 1;
-  }
-  return { mode, options };
+  const option = { type: "string" };
+  const { values, positionals } = utilParseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: { "input-dir": option, "output-dir": option, "source-run-id": option },
+  });
+  const [mode, ...extra] = positionals;
+  if (extra.length > 0) throw new Error(`unexpected argument: ${extra[0]}`);
+  const empty = Object.keys(values).find((name) => !values[name]);
+  if (empty) throw new Error(`missing value for --${empty}`);
+  return { mode, options: { ...values } };
 }
 
-function git(...args) {
-  return execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
-}
+const git = (...args) => gitText(args, { cwd: ROOT });
 
 function appendOutput(values) {
   if (!process.env.GITHUB_OUTPUT) return;

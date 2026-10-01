@@ -266,8 +266,10 @@ test("surface manifests wire the hooks file so guards ship on every surface", ()
   );
 
   // Codex's current plugin manifest schema rejects an explicit hooks field.
-  // The dependency-free updater installs the same guards through
-  // ~/.codex/hooks.json, which is covered by update_agent_toolchain_test.py.
+  // Codex still loads hooks/hooks.json from its plugin cache without one, so
+  // the updater prunes its ~/.codex/hooks.json copy when that cache carries
+  // every guard and merges it only as a fallback (BI-2B634E68). Both paths
+  // are covered by update_agent_toolchain_test.py.
   const codexManifest = JSON.parse(
     readFileSync(join(here, "..", ".codex-plugin", "plugin.json"), "utf8"),
   );

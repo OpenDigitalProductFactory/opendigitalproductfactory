@@ -138,6 +138,7 @@ test("every direct protected FeatureBuild phase writer references the canonical 
   assert.deepEqual(writers, [
     "apps/web/lib/actions/build.ts",
     "apps/web/lib/build/build-on-plan-approval.ts",
+    "apps/web/lib/build/gauntlet-repair.ts",
     "apps/web/lib/build/plan-to-build-transition.ts",
     "apps/web/lib/build/ship-on-review-approval.ts",
     "apps/web/lib/mcp/build-design-review-handler.ts",

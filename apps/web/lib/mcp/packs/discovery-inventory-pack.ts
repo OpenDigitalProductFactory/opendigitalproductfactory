@@ -13,7 +13,7 @@
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
 import { DISCOVERY_TRIAGE_AGENT_ID } from "@dpf/db";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { DiscoveryTriageRunResult } from "@/lib/discovery-triage-runner";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 

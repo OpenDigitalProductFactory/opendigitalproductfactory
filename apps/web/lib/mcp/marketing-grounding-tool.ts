@@ -11,7 +11,7 @@
 // permanently empty on installs that never had them derived. draft-builder.ts
 // reads all three.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
 export const recordMarketingGroundingDefinition: ToolDefinition = {
   name: "record_marketing_grounding",

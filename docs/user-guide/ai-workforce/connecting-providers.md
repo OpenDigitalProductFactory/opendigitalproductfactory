@@ -74,9 +74,21 @@ different measurements. DPF does not infer that a model's displayed size is
 ordinary RAM consumption or assign a causal mechanism without corresponding
 telemetry.
 
-This behavior is automatic. If local work is temporarily deferred, let the
-active verification finish and retry; do not disable, reconnect, or re-profile
-the local provider unless its status remains unhealthy after the gate releases.
+Local completion also waits when the graphics card itself is busy, even if no
+platform verification is running. Another program on this computer — a game, a
+second model, or a request that already holds the local model — can fill the
+card. On Windows, a small publisher writes what the graphics driver reports,
+because the portal cannot see the card directly. When that snapshot is fresh
+and shows the card is busy, or a new model would not fit beside what is
+already there, DPF defers the local completion and releases a parked local
+model that is not serving a request. A missing or stale snapshot does not by
+itself defer local work. Embedding requests keep the verification rule above
+and are not held for this graphics-card check.
+
+This behavior is automatic. If local work is temporarily deferred, wait until
+the graphics card or the active verification is free and retry; do not disable,
+reconnect, or re-profile the local provider unless its status remains unhealthy
+after that wait.
 
 ## How OAuth Works
 

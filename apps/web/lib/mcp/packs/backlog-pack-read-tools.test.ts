@@ -192,6 +192,36 @@ describe("backlog deferral read projection", () => {
     }));
   });
 
+  // BI-DEDAC950: the read projection names the principle behind each unmet
+  // code per target, beside `decisions` and never inside a decision.
+  it("cites governing principles per readiness target beside the decisions", async () => {
+    mocks.findUnique.mockResolvedValue({
+      ...baseItem, id: "row-bi", status: "in-progress", body: null,
+      createdAt: new Date("2026-09-25T00:00:00Z"), completedAt: null,
+      deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null,
+      productLine: null, businessProduct: null, demandEvidenceLinks: [], activities: [],
+    });
+    const completion = { verdict: "input-required", profile: "feature", blockers: [], unmet: [{ code: "DELIVERY_EVIDENCE_REQUIRED" }] };
+    const implementation = { verdict: "allowed", profile: "feature", blockers: [], unmet: [] };
+    mocks.projectReadiness.mockReturnValue({ decisions: { implementation, completion } });
+
+    const result = await getBacklogItem({ itemId: baseItem.itemId });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        readiness: {
+          decisions: { implementation, completion },
+          governingPrinciples: {
+            implementation: {},
+            completion: { DELIVERY_EVIDENCE_REQUIRED: "principles/build-gate-mandatory" },
+          },
+        },
+      },
+    });
+    expect(completion).not.toHaveProperty("governingPrinciples");
+  });
+
   it("builds the nonconformant filter from the canonical projection fields", async () => {
     await listBacklogItems({ deferralConformance: "nonconformant" });
 

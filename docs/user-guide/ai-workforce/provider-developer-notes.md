@@ -76,6 +76,8 @@ The `refreshOAuthToken()` function handles automatic token refresh. It uses the 
 - Category: `agent` — different behavior from `direct` providers
 - CANNOT discover models via /v1/models with subscription token (different backend)
 - Test connection: credential status check only (no API call)
+- OAuth scope: `openid profile email offline_access`, defaulted in `createOAuthFlow()` for any `auth.openai.com` authorize URL when `CredentialEntry.scope` is empty (a configured scope wins). Without `offline_access` OpenAI issues no refresh token. The Codex CLI's own login additionally requests `api.connectors.read api.connectors.invoke`; DPF does not need them. Never send `api.responses.write` (invalid, removed in e8a1551799b).
+- A token response without a refresh token never overwrites a stored one; when a credential has no refresh token and is past expiry, `refreshOAuthToken()` marks it and its codex/chatgpt sibling `expired`.
 - Has linked MCP service (`codex-agent`) that auto-activates on OAuth connect
 - The `/auth/callback` route does NOT require session auth (runs on different port, session cookie not available)
 

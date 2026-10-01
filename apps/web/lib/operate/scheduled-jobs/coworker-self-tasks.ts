@@ -176,6 +176,8 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
       "Do not invent products, vendors, or numbers; cite only real discovered data.",
     ].join("\n"),
     routeContext: "/inventory",
+    // The write step 2 of the prompt asks for (BI-0073DE6A).
+    mandatedTools: ["create_knowledge_article"],
     cadence: {
       // Weekly (Tue) and twice-weekly (Tue+Fri) at 15:31 UTC. Knowledge does not
       // need a daily refresh, so even Assertive stays sub-daily — conservative by
@@ -260,6 +262,9 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
       "Do not invent providers, models, costs, agents, disks, or alerts; cite only real data.",
     ].join("\n"),
     routeContext: "/platform",
+    // The article step 3 of the prompt asks for (BI-0073DE6A). Step 5's backlog
+    // filing is not declared here; it stays a person's call.
+    mandatedTools: ["create_knowledge_article"],
     cadence: {
       // Weekly (Thu) and twice-weekly (Thu+Sun) at 17:19 UTC. Platform posture
       // changes slowly, so even Assertive stays sub-daily (matches the estate /

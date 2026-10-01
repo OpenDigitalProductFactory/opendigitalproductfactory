@@ -1347,7 +1347,6 @@ docs/superpowers/specs/2026-07-03-coworker-limitation-response-contract-design.m
 docs/superpowers/specs/2026-07-03-coworker-tool-provisioning-mcp-door-design.md
 docs/superpowers/specs/2026-07-03-fleet-safe-schema-evolution-design.md
 docs/superpowers/specs/2026-07-03-generalized-governance-controls-framework-design.md
-docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md
 docs/superpowers/specs/2026-07-03-proactivity-drives-in-task-initiative.md
 docs/superpowers/specs/2026-07-03-uk-corporate-governance-provision-29-design.md
 docs/superpowers/specs/2026-07-04-business-activity-simulator-design.md

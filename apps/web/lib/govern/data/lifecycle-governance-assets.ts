@@ -1,4 +1,4 @@
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 
 const CONFIRMED_CLASSIFICATION = {
   state: "confirmed",

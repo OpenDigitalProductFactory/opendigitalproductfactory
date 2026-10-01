@@ -11,7 +11,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export const SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT = "ROLLBACK";
 const ROLLBACK_TRIGGER = "self-upgrade-rollback";
-// postgres-only after BET-5 retired neo4j + qdrant.
+// Postgres is the only restore target (BET-5).
 const RESTORE_ORDER: BackupTarget[] = ["postgres"];
 
 type PrismaLike = typeof defaultPrisma;

@@ -4,8 +4,8 @@ const inngest = vi.hoisted(() => ({
   createFunction: vi.fn((config: unknown, handler: unknown) => ({ config, handler })),
 }));
 
-vi.mock("../inngest-client", () => ({
-  inngest: { createFunction: (config: unknown, handler: unknown) => inngest.createFunction(config, handler) },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { createFunction: (config: unknown, handler: unknown) => inngest.createFunction(config, handler) },
 }));
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 

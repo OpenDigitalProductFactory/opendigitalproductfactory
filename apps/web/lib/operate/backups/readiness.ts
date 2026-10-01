@@ -2,7 +2,6 @@
  * Reads the current state of the backup mechanism for the admin readiness card.
  *
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.8
- * Spec: docs/superpowers/specs/2026-05-18-postgres-backup-slice-3-neo4j-qdrant.md §3.4
  */
 
 import { prisma } from "@dpf/db";
@@ -157,7 +156,7 @@ export async function getPostgresBackupReadiness(): Promise<ReadinessSummary> {
   return getReadinessForTarget(POSTGRES_BACKUP_JOB_ID, "postgres");
 }
 
-// postgres-only after BET-5 retired the neo4j + qdrant backup jobs.
+// Postgres is the only backup target (BET-5).
 export async function getAllBackupReadiness(): Promise<{
   postgres: ReadinessSummary;
   capabilityOwned: Array<{ target: string; status: "required" | "optional_inactive" | "optional_degraded" }>;

@@ -67,10 +67,19 @@ describe("coworker-backlog-lens pack — registration", () => {
 });
 
 describe("coworker-backlog-lens pack — handler behavior", () => {
-  it("requires a current coworker agentId", async () => {
-    await expect(
-      coworkerBacklogLensPack.handlers.list_my_backlog({}, "u1", {}),
-    ).rejects.toThrow(/current coworker agentId is required/);
+  it("refuses an agentless connection with a structured, non-throwing result (BI-949FBBAE)", async () => {
+    const res = await coworkerBacklogLensPack.handlers.list_my_backlog({}, "u1", {});
+    expect(res).toEqual({
+      success: false,
+      error: "coworker_not_bound",
+      message: "This connection is not bound to an AI coworker, so it has no coworker profile.",
+      data: {
+        agentBound: false,
+        message: "This connection is not bound to an AI coworker, so it has no coworker profile.",
+        recovery: "Connect through OAuth so the platform assigns your assistant, or reissue the MCP token with an acting coworker.",
+      },
+    });
+    expect(db.prisma.backlogItem.findMany).not.toHaveBeenCalled();
   });
 
   it("returns the identity-scoped slice with a status roll-up", async () => {

@@ -19,6 +19,7 @@ const dispatchedAt = at("2026-09-07T10:00:00Z");
 const evidence = (over: Partial<RecordedEvidence> = {}): RecordedEvidence => ({
   stageKey: "sweep",
   kind: "assurance-run",
+  outcome: "completed",
   recordedAt: at("2026-09-07T10:05:00Z"),
   ...over,
 });
@@ -41,6 +42,18 @@ describe("stageHasCompletingEvidence", () => {
     // A note on the room is not a stage outcome. Accepting it would let any
     // unrelated write advance the shape.
     expect(stageHasCompletingEvidence({ ...base, evidence: [evidence({ stageKey: null })] })).toBe(false);
+  });
+
+  it("rejects a recorded BLOCKER — the coworker saying it could not do the work is not the work", () => {
+    // Observed on the live install 2026-09-24 00:05 UTC: a repository-policy
+    // drift room recorded `assurance-run` for `read` with the summary "blocked:
+    // no tool available", and the stage advanced to `diff`. The brief tells a
+    // blocked coworker to record the blocker; that record must never complete.
+    expect(stageHasCompletingEvidence({ ...base, evidence: [evidence({ outcome: "blocked" })] })).toBe(false);
+  });
+
+  it("rejects stage evidence that states no outcome — fail closed", () => {
+    expect(stageHasCompletingEvidence({ ...base, evidence: [evidence({ outcome: null })] })).toBe(false);
   });
 
   it("rejects an evidence kind the stage never declared", () => {

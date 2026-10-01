@@ -76,6 +76,7 @@ describe("discovery triage seed helper", () => {
     scheduledAgentTask.findUnique.mockResolvedValue({
       taskId: DISCOVERY_TRIAGE_TASK_ID,
       nextRunAt: new Date("2026-04-26T08:00:00Z"),
+      ownerUserId: "user-mark",
     });
 
     const result = await ensureDiscoveryTriageScheduledTask(
@@ -83,16 +84,16 @@ describe("discovery triage seed helper", () => {
       new Date("2026-04-25T12:00:00Z"),
     );
 
-    expect(result).toEqual({ created: false, ownerUserId: "user-admin" });
+    expect(result).toEqual({ created: false, ownerUserId: "user-mark" });
     expect(scheduledAgentTask.update).toHaveBeenCalledWith({
       where: { taskId: DISCOVERY_TRIAGE_TASK_ID },
       data: expect.objectContaining({
         agentId: DISCOVERY_TRIAGE_AGENT_ID,
         timezone: "America/Chicago",
-        ownerUserId: "user-admin",
         nextRunAt: new Date("2026-04-26T08:00:00Z"),
       }),
     });
+    expect(scheduledAgentTask.update.mock.calls[0][0].data).not.toHaveProperty("ownerUserId");
   });
 
   it("fails loudly when no superuser exists", async () => {

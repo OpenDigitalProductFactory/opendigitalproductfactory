@@ -134,7 +134,7 @@ describe("composeOpeningBriefing", () => {
       proactivityLevel: "balanced",
       items: [
         makeItem({
-          id: "platform-health:neo4j",
+          id: "platform-health:graph",
           source: "platform-health",
           title: "The knowledge graph is down",
           context: "The knowledge graph is unavailable.",

@@ -124,7 +124,7 @@ When a complex problem requires multiple perspectives (a rugged landscape in Div
 **Remember decisions and rationale. Re-derive details from source.**
 
 ### Rule
-The vector database (Qdrant) stores **salient context** — decisions, user preferences, design rationale, and cross-conversation insights. It does not store raw conversation transcripts, code content, or data that can be derived from the codebase or git history.
+The vector store (pgvector, inside Postgres) stores **salient context** — decisions, user preferences, design rationale, and cross-conversation insights. It does not store raw conversation transcripts, code content, or data that can be derived from the codebase or git history.
 
 ### What to Store
 

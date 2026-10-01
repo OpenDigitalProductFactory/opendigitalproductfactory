@@ -2,7 +2,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import { STAGE_EVIDENCE_TOOL, buildStageBrief, type StageBriefInput } from "./stage-briefing";
+import {
+  STAGE_EVIDENCE_TOOL,
+  buildStageBrief,
+  stageBriefInputFromDefinition,
+  stageDeclaredTools,
+  type StageBriefInput,
+} from "./stage-briefing";
+import { getWorkShape, readWorkShapeDefinitionContract } from "./work-shapes";
 
 const input: StageBriefInput = {
   capsuleId: "WC-A69BCABB",
@@ -75,5 +82,68 @@ describe("buildStageBrief", () => {
     expect(sparse).toContain("WC-A69BCABB");
     expect(sparse).toContain(STAGE_EVIDENCE_TOOL);
     expect(sparse).not.toContain("null");
+  });
+});
+
+// BI-43C3E914 — GPP element 5 "Capability set", per stage.
+describe("stage-declared tools in the brief", () => {
+  it("names the stage's declared tools in one line", () => {
+    const brief = buildStageBrief({ ...input, stageTools: ["read_codebase_manifest", "list_patch_posture"] });
+    expect(brief).toContain("Tools for this stage: read_codebase_manifest, list_patch_posture.");
+    expect(brief.match(/Tools for this stage/g)).toHaveLength(1);
+  });
+
+  it("adds no line when the stage declares no tools", () => {
+    expect(buildStageBrief(input)).not.toContain("Tools for this stage");
+    expect(buildStageBrief({ ...input, stageTools: [] })).not.toContain("Tools for this stage");
+    expect(buildStageBrief({ ...input, stageTools: ["  "] })).not.toContain("Tools for this stage");
+  });
+});
+
+describe("stageDeclaredTools", () => {
+  const contract = (key: string) => {
+    const shape = getWorkShape(key);
+    return shape ? readWorkShapeDefinitionContract(shape) : null;
+  };
+
+  it("reads a declared stage's tools from the shape", () => {
+    expect(stageDeclaredTools(contract("dependency-advisory-watch"), "sweep")).toEqual([
+      "read_codebase_manifest",
+      "list_patch_posture",
+    ]);
+  });
+
+  it("is empty for an undeclared stage, an unknown stage, or no shape", () => {
+    expect(stageDeclaredTools(contract("obligation-assurance-watch"), "sweep")).toEqual([]);
+    expect(stageDeclaredTools(contract("dependency-advisory-watch"), "nope")).toEqual([]);
+    expect(stageDeclaredTools(null, "sweep")).toEqual([]);
+    expect(stageDeclaredTools(contract("dependency-advisory-watch"), null)).toEqual([]);
+  });
+});
+
+describe("stageBriefInputFromDefinition", () => {
+  it("forwards everything the shape declares about the stage, including its tools", () => {
+    const shape = getWorkShape("dependency-advisory-watch");
+    const definition = shape ? readWorkShapeDefinitionContract(shape) : null;
+    const brief = stageBriefInputFromDefinition({
+      capsuleId: "WC-1", roomObjective: "objective", shapeKey: "dependency-advisory-watch",
+      shapeVersion: "1.0.0", definition, stageKey: "sweep",
+    });
+    const stage = definition?.stages.find((candidate) => candidate.key === "sweep");
+    expect(brief).toMatchObject({
+      shapeTitle: definition?.title,
+      stageTitle: stage?.title,
+      doneWhen: stage?.advance.condition,
+      evidenceKinds: stage?.evidence,
+      stageTools: ["read_codebase_manifest", "list_patch_posture"],
+    });
+    expect(brief.stopConditions).toEqual(definition?.stopConditions.map((entry) => entry.condition));
+  });
+
+  it("degrades to nulls and empty lists with no definition", () => {
+    const brief = stageBriefInputFromDefinition({
+      capsuleId: "WC-1", roomObjective: null, shapeKey: "", shapeVersion: "", definition: null, stageKey: "",
+    });
+    expect(brief).toMatchObject({ shapeTitle: null, stageTitle: null, doneWhen: null, evidenceKinds: [], stopConditions: [], stageTools: [] });
   });
 });

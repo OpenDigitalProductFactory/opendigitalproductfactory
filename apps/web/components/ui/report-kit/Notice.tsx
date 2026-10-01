@@ -8,7 +8,7 @@
 
 import type { CSSProperties } from "react";
 
-import { intentStyle, type Intent } from "./statusColors";
+import { intentStyle, type Intent } from "@/lib/ui-model/statusColors";
 
 /**
  * Friendly variant names for the four common callout tones. Each maps onto a

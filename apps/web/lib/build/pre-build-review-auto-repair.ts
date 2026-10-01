@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { inngest, type BuildPreBuildReviewRepairEvent } from "@/lib/queue/inngest-client";
+import { jobs, type BuildPreBuildReviewRepairEvent } from "@/lib/jobs";
 
 type AutoRepairContext = {
   suppressDesignReviewAutoRepair?: boolean;
@@ -15,7 +15,7 @@ function logBuildActivity(buildId: string, tool: string, summary: string): void 
 async function queuePreBuildReviewRepair(buildId: string, userId: string, kind: RepairKind): Promise<void> {
   const tool = kind === "design" ? "design_fix_loop" : "plan_dispatch";
   try {
-    await inngest.send({
+    await jobs.send({
       name: "build/pre-build-review.repair",
       data: { buildId, userId, kind },
     });

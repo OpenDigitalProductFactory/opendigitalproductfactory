@@ -146,9 +146,8 @@ When you typed-confirm a destructive command, DPF tries to take an automatic sna
 | Destructive command | Snapshot strategy |
 |---|---|
 | `docker volume rm dpf_pgdata` | `pg_dump` → `$DPF_BACKUPS_HOST_PATH/pre-destructive/<date>/docker-volume-rm-pgdata-<ts>.dump` |
-| `docker volume rm dpf_neo4jdata` | Defers to the most recent nightly Neo4j backup (online dump would require stopping the DB first, which the destructive command is itself about to do). |
 | `docker volume rm <other>` | Best-effort `pg_dump` (audit log identifies it as "other"). |
-| `docker compose down -v` | Both pg_dump + neo4j-defer. Succeeds if at least one strategy captures. |
+| `docker compose down -v` | `pg_dump`. |
 | `prisma migrate reset` | `pg_dump`. |
 | `git reset --hard` | `git stash push -u` of uncommitted work in the current repo. Recoverable via `git stash list` / `git stash pop`. |
 | `Remove-Item -Recurse` on the install dir | Tarball of operator-private artifacts (`.env`, `.claude/settings.local.json`, host profile). |
@@ -173,7 +172,7 @@ Single `Y` keystroke proceeds. Anything else cancels. The second prompt exists b
 Every snapshot attempt writes one structured JSON line to `$DPF_BACKUPS_HOST_PATH/pre-destructive/.snapshot.log`:
 
 ```
-[pre-destructive-snapshot-trace] {"timestamp":"2026-05-24T18:47:59.400Z","event":"pre-destructive-snapshot","outcome":"OK|FAILED|DEFERRED|NO_STRATEGY","strategy":"pg_dump|neo4j|git-stash|fs-essentials","snapshot_path":"…","reason":"…","cmd":"docker volume rm dpf_pgdata","install_root":"…"}
+[pre-destructive-snapshot-trace] {"timestamp":"2026-05-24T18:47:59.400Z","event":"pre-destructive-snapshot","outcome":"OK|FAILED|DEFERRED|NO_STRATEGY","strategy":"pg_dump|git-stash|fs-essentials","snapshot_path":"…","reason":"…","cmd":"docker volume rm dpf_pgdata","install_root":"…"}
 ```
 
 Grep `outcome":"FAILED"` after an incident to find snapshot failures that the operator proceeded through anyway.

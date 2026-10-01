@@ -3,7 +3,7 @@
  *
  * `runManagedRestore(spec, args)` is the single implementation of the restore
  * lifecycle that postgres-restore-runner.ts and the (since-deleted, BET-5)
- * neo4j/qdrant restore runners previously each carried:
+ * graph and vector restore runners previously each carried:
  *
  *   1. Acquire the portal-side mutex (single restore at a time, any target).
  *   2. Verify the source artifact exists and its sha256 still matches what

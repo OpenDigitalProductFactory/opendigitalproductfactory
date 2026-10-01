@@ -58,7 +58,18 @@ REAPED_COUNT=0
 MCP_ENDPOINT="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
 mcp_call() {
   _body="$(printf '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"%s","arguments":%s}}' "$1" "$2")"
-  curl -s --max-time 5 -X POST "$MCP_ENDPOINT" \
+  # BI-8A562681: on the canonical https origin the portal certificate is issued
+  # by the install's own CA. curl does not read NODE_EXTRA_CA_CERTS, so pass the
+  # bundle the toolchain persists for Node clients explicitly.
+  set --
+  case "$MCP_ENDPOINT" in
+    https://*)
+      if [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ -f "$NODE_EXTRA_CA_CERTS" ]; then
+        set -- --cacert "$NODE_EXTRA_CA_CERTS"
+      fi
+      ;;
+  esac
+  curl -s --max-time 5 "$@" -X POST "$MCP_ENDPOINT" \
     -H "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}" \
     -H "Content-Type: application/json" \
     -H "Accept: application/json, text/event-stream" \

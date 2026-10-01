@@ -11,7 +11,7 @@
 // points) but is ORG-SCOPED and read-only — it never embeds. Fail-open: on any
 // store error it reports what it can rather than throwing into the page render.
 
-import { prisma, QDRANT_COLLECTIONS, scrollPoints } from "@dpf/db";
+import { prisma, VECTOR_COLLECTIONS, scrollPoints } from "@dpf/db";
 
 const PAGE_SCAN_LIMIT = 2_000;
 const VECTOR_SCAN_LIMIT = 20_000;
@@ -41,7 +41,7 @@ export async function getOverlayEmbeddingCoverage(
         orderBy: { slug: "asc" },
       }),
       scrollPoints(
-        QDRANT_COLLECTIONS.WIKI_PAGES,
+        VECTOR_COLLECTIONS.WIKI_PAGES,
         { must: [{ key: "entityType", match: { value: "wiki-page" } }] },
         VECTOR_SCAN_LIMIT,
       ),

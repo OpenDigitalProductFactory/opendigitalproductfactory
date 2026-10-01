@@ -1,4 +1,4 @@
-import type { Intent } from "@/components/ui/report-kit";
+import type { Intent } from "@/lib/ui-model/statusColors";
 import {
   formatMarketingLabel,
   type MarketingWorkspaceSnapshot,

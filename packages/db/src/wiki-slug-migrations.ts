@@ -12,14 +12,14 @@
 // column, so nothing records that the new page continues the old one, and
 // `WikiPageVersion` (plus the other `pageId` relations) is `onDelete: Cascade`.
 // A naive move therefore forces a choice between:
-//   - leaving the old row orphaned — a duplicate principle, and a stale Qdrant
+//   - leaving the old row orphaned — a duplicate principle, and a stale vector
 //     point of exactly the class BI-6ADB019D found live; or
 //   - deleting it, which destroys its version history.
 //
 // Neither satisfies the spec's "preserving decision history" requirement.
 //
 // THE FIX: rename in place, before the upsert pass. The row keeps its id, so
-// its version history, decision references, and existing Qdrant point all stay
+// its version history, decision references, and existing vector point all stay
 // valid — only the lookup key moves. No schema change and no new column.
 //
 // Two alternatives were rejected:

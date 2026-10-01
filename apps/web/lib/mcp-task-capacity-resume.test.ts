@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
+  persisted: {} as Record<string, unknown>,
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   findModelConfig: vi.fn(),
@@ -23,15 +24,10 @@ const autonomous = vi.hoisted(() => ({
 }));
 const records = vi.hoisted(() => ({ create: vi.fn() }));
 
-vi.mock("@dpf/db", () => ({
+vi.mock("@dpf/db", async () => ({
   prisma: {
     authorityBinding: { findUnique: (...args: unknown[]) => db.findConsent(...args) },
-    taskRun: {
-      findFirst: (...args: unknown[]) => db.findFirst(...args),
-      findUnique: (...args: unknown[]) => db.findUnique(...args),
-      update: (...args: unknown[]) => db.update(...args),
-      updateMany: (...args: unknown[]) => db.updateMany(...args),
-    },
+    taskRun: (await import("./test-support/task-run-state")).taskRunState(db),
     coworkerActionEnvelope: { findFirst: (...args: unknown[]) => db.findEnvelope(...args) },
     toolExecution: { findFirst: (...args: unknown[]) => db.findToolExecution(...args) },
     agentThread: { upsert: (...args: unknown[]) => db.upsertThread(...args) },
@@ -78,6 +74,7 @@ function submit(tokenId: string, params: Record<string, unknown> = immutablePara
 
 beforeEach(() => {
   vi.clearAllMocks();
+  db.persisted = {};
   vi.stubEnv("DPF_EXTERNAL_MCP_TASK_ASYNC", "0");
   db.findFirst.mockResolvedValue(null);
   db.findUnique.mockResolvedValue({ status: "working" });
@@ -130,8 +127,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
         riskClass: "bounded-write",
       });
 
-      expect(db.update).toHaveBeenLastCalledWith({
-        where: { taskRunId: expect.stringMatching(/^TR-MCP-/) },
+      expect(db.updateMany).toHaveBeenLastCalledWith({
+        where: expect.objectContaining({ taskRunId: expect.stringMatching(/^TR-MCP-/), status: "working" }),
         data: {
           status: "submitted",
           completedAt: null,
@@ -146,6 +143,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
               resumeMode: "same-taskrun",
               attempt: 1,
               observedAt: expect.any(String),
+              // BI-D25F867D: the next attempt waits out a bounded backoff.
+              nextAttemptAt: expect.any(String),
             },
           },
         },
@@ -264,6 +263,7 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
     }).metadata;
 
     vi.clearAllMocks();
+    db.persisted = {};
     const waiting = {
       id: "task-internal",
       taskRunId: "TR-MCP-SAME-RUN",
@@ -470,8 +470,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
         riskClass: "bounded-write",
       });
 
-      expect(db.update).toHaveBeenLastCalledWith({
-        where: { taskRunId: expect.stringMatching(/^TR-MCP-/) },
+      expect(db.updateMany).toHaveBeenLastCalledWith({
+        where: expect.objectContaining({ taskRunId: expect.stringMatching(/^TR-MCP-/), status: "working" }),
         data: {
           status: "failed",
           completedAt: expect.any(Date),
@@ -495,4 +495,19 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
     },
   );
 
+});
+
+// BI-D25F867D — a capacity wait is bounded and paced.
+describe("resource wait pacing", () => {
+  it("backs off 1, 2, 4, 8 then 15 minutes and is due only after its time", async () => {
+    const { createResourceWaitProjection, resourceWaitBackoffMs, resourceWaitDue } = await import("./mcp-task-capacity-contract");
+    expect([1, 2, 3, 4, 5, 6].map(resourceWaitBackoffMs)).toEqual([1, 2, 4, 8, 15, 15].map((m) => m * 60_000));
+    const now = new Date("2026-09-24T12:00:00.000Z");
+    const wait = createResourceWaitProjection("busy", 3, now);
+    expect(wait.nextAttemptAt).toBe("2026-09-24T12:04:00.000Z");
+    expect(resourceWaitDue(wait, new Date("2026-09-24T12:03:59.000Z"))).toBe(false);
+    expect(resourceWaitDue(wait, new Date("2026-09-24T12:04:00.000Z"))).toBe(true);
+    // A wait written before pacing existed is due at once.
+    expect(resourceWaitDue({ ...wait, nextAttemptAt: undefined }, now)).toBe(true);
+  });
 });

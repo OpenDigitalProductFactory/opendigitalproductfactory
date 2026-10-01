@@ -146,7 +146,7 @@ Derived at triage from signals already on the item; overridable with a recorded 
 2. Work type `doc|chore` → `small` unless effortSize says otherwise.
 3. `effortSize` drives `small|medium|large|xlarge` for everything else.
 4. Any of: new Prisma model or enum value, new MCP tool, new route, new agent role, new archetype → at least `large` (this is the `verify-substrate-before-proposing-new` principle turned into a classifier).
-5. Sensitivity keyword regex plus org risk posture → sensitivity floor (exists today).
+5. Sensitivity keyword regex plus org risk posture → sensitivity floor (exists today). *Superseded for the readiness gate by `2026-09-25-shape-raise-reads-the-change-design.md` (BI-243BC956): sensitivity is read from the change; the keyword regex is a labelled fallback only.*
 6. **Unclassified → `large` + `high`.** Never `small`. A shape must be an explicit act.
 7. `xlarge` cannot enter implementation. The only legal transition is decomposition.
 

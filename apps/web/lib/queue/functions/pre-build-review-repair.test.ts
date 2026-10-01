@@ -4,8 +4,8 @@ const dispatchDesignReviewFixLoopMock = vi.fn();
 const dispatchPlanForApprovedBuildMock = vi.fn();
 const buildActivityCreateMock = vi.fn();
 
-vi.mock("../inngest-client", () => ({
-  inngest: {
+vi.mock("@/lib/jobs", () => ({
+  jobs: {
     createFunction: (config: unknown, fn: unknown) => ({ config, fn }),
   },
 }));

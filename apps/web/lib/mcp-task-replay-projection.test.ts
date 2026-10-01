@@ -25,6 +25,17 @@ function project(progressPayload: Record<string, unknown>) {
 }
 
 describe("projectRemoteTaskReplay required terminal writer dispatch", () => {
+  it.each(["failed", "canceled", "rejected", "archived"])("never projects stale capacity as resumable for %s", status => {
+    const result = projectRemoteTaskReplay({ requestMatches: true, existing: {
+      taskRunId: "task", status, a2aMetadata: {}, progressPayload: {
+        errorCode: "authorization_revoked", terminalWriterWait,
+        resourceWait: { schemaVersion: 1, kind: "provider-capacity", attempt: 1,
+          observedAt: "2026-09-27T23:32:00Z", nextAttemptAt: "2026-09-27T23:33:00Z", resumeMode: "same-taskrun", failureKind: "capacity" },
+      },
+    } });
+    expect(result.result.resumable).toBe(false);
+    expect(result.result.waitReason).toBeUndefined();
+  });
   it("preserves the actionable adapter-enforceability cause on an identical replay", () => {
     const progressPayload = {
       terminalWriterWait,

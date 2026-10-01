@@ -131,6 +131,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["query_detections", "query_security_events"],
       },
       {
         key: "hunt",
@@ -142,6 +143,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "medium",
+        tools: ["query_security_events", "query_detections"],
       },
       {
         key: "activate-content",
@@ -191,6 +193,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["summarize_estate_posture", "review_estate_identity"],
       },
       {
         key: "assess",
@@ -204,6 +207,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "medium",
+        tools: ["summarize_estate_posture", "explain_blast_radius"],
       },
       {
         key: "inventory",
@@ -215,6 +219,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["review_estate_identity", "summarize_estate_posture"],
       },
       {
         key: "accept-or-remediate",
@@ -262,6 +267,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "medium",
+        tools: ["query_ontology_graph", "describe_ea_view"],
       },
       {
         key: "ratify",
@@ -311,6 +317,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["search_public_web", "fetch_public_website"],
       },
       {
         key: "determine",
@@ -493,6 +500,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["manual-check"],
         effort: "medium",
+        tools: ["get_marketing_summary", "get_content_calendar"],
       },
       {
         key: "storefront-fit",
@@ -515,6 +523,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["manual-check"],
         effort: "medium",
+        tools: ["doc_search", "doc_load"],
       },
       {
         key: "accessibility",
@@ -528,6 +537,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["ux-verified"],
         effort: "medium",
+        tools: ["evaluate_page"],
       },
       {
         key: "publish",
@@ -642,6 +652,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["search_tool_marketplace", "search_integrations"],
       },
       {
         key: "adopt",

@@ -42,6 +42,7 @@
 //   node scripts/runtime-artifact-janitor.mjs --staleness-days 14   # conservative
 //   node scripts/runtime-artifact-janitor.mjs --json                # CI/automation
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,22 +62,28 @@ import { dirname, join } from "node:path";
 
 // ── Arg parse ────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
-  const opts = { apply: false, stalenessDays: DEFAULT_STALENESS_DAYS, json: false, help: false };
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === "--dry-run") opts.apply = false;
-    else if (arg === "--apply" || arg === "--live") opts.apply = true;
-    else if (arg === "--json") opts.json = true;
-    else if (arg === "-h" || arg === "--help") opts.help = true;
-    else if (arg === "--staleness-days") {
-      opts.stalenessDays = Number(argv[i + 1]);
-      i += 1;
-    } else if (arg.startsWith("--staleness-days=")) {
-      opts.stalenessDays = Number(arg.slice("--staleness-days=".length));
-    } else {
-      throw new Error(`unknown argument: ${arg}`);
-    }
-  }
+  const options = {
+    "dry-run": { type: "boolean" },
+    apply: { type: "boolean" },
+    live: { type: "boolean" },
+    json: { type: "boolean" },
+    help: { type: "boolean", short: "h" },
+    "staleness-days": { type: "string" },
+  };
+  // strict: false plus the token check below keeps the old message for unknown input
+  // and still accepts a negative --staleness-days value, which the range check rejects.
+  const { values, tokens } = utilParseArgs({ args: argv, options, strict: false, allowPositionals: true, tokens: true });
+  const unknown = tokens.find((token) => token.kind !== "option" || !Object.hasOwn(options, token.name));
+  if (unknown) throw new Error(`unknown argument: ${unknown.rawName ?? unknown.value ?? "--"}`);
+  // --dry-run, --apply and --live toggle one mode; the last one given wins.
+  const mode = tokens.findLast((token) => ["dry-run", "apply", "live"].includes(token.name));
+  const staleness = values["staleness-days"];
+  const opts = {
+    apply: mode !== undefined && mode.name !== "dry-run",
+    stalenessDays: staleness === undefined ? DEFAULT_STALENESS_DAYS : Number(typeof staleness === "string" ? staleness : undefined),
+    json: values.json === true,
+    help: values.help === true,
+  };
   if (!Number.isFinite(opts.stalenessDays) || opts.stalenessDays <= 0) {
     throw new Error("--staleness-days must be a positive number");
   }

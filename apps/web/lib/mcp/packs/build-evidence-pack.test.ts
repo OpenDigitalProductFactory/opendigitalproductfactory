@@ -25,7 +25,10 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-const localIntegration = vi.hoisted(() => ({ recordLocalIntegrationResult: vi.fn() }));
+const localIntegration = vi.hoisted(() => ({
+  recordLocalIntegrationResult: vi.fn(),
+  TEST_STUB_EVIDENCE_REFUSED: "test_stub_evidence_refused",
+}));
 vi.mock("@/lib/nonprod/local-integration", () => localIntegration);
 
 import { buildEvidencePack } from "./build-evidence-pack";
@@ -195,6 +198,51 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
         leaseId: "NPEL-GATE",
       }),
     );
+  });
+
+  // BI-F5344F65: a DPF_ALLOW_LOCAL_CI_STUB payload builds nothing. The writer
+  // refuses it with a stable code; the caller gets a named refusal, so the gate
+  // fails closed instead of holding a PASS.
+  it("record_local_integration_result turns the writer's test-stub refusal into a named error", async () => {
+    localIntegration.recordLocalIntegrationResult.mockRejectedValue(Object.assign(
+      new Error("This local-CI result came from the DPF_ALLOW_LOCAL_CI_STUB=1 test stub, which builds nothing."),
+      { code: "test_stub_evidence_refused" },
+    ));
+    const res = await buildEvidencePack.handlers.record_local_integration_result(
+      {
+        provider: "claude",
+        externalSessionId: "s1",
+        routeContext: "/build",
+        candidateBranch: "fix/admitted-owner-recovery",
+        mode: "single-branch",
+        status: "passed",
+        summary: "local-CI lease gate passed.",
+        gateKey: "a".repeat(64),
+        leaseId: "NPEL-GATE",
+        evidence: { testStub: true, gatePassed: true, buildCommand: "sandbox checkout/build stub" },
+      },
+      "u1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("test_stub_evidence_refused");
+    expect(res.message).toMatch(/DPF_ALLOW_LOCAL_CI_STUB/);
+  });
+
+  it("record_local_integration_result still propagates any other writer failure", async () => {
+    localIntegration.recordLocalIntegrationResult.mockRejectedValue(new Error("Local-CI lease does not match the immutable gate key"));
+    await expect(buildEvidencePack.handlers.record_local_integration_result(
+      {
+        provider: "claude",
+        externalSessionId: "s1",
+        routeContext: "/build",
+        candidateBranch: "feat/x",
+        mode: "single-branch",
+        status: "passed",
+        summary: "ok",
+        evidence: {},
+      },
+      "u1",
+    )).rejects.toThrow(/immutable gate key/);
   });
 
   it("record_local_integration_result rejects an unsupported mode without delegating", async () => {

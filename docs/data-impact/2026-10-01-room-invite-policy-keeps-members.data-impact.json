@@ -1,0 +1,41 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "WorkItem.evidence workroomPolicy snapshots, written by appendRoomPolicyParticipant (apps/web/lib/work-management/room-policy.ts) from invite_room_participant and federated room admission",
+    "Read by readWorkspaceRoomPolicy for Workroom admission (workroom-agent-access.server.ts, room-agent-access.server.ts)"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: Principal references (PRN ids) of the people and coworkers admitted to a Workroom",
+    "dataSubjectRights": "Holds only Principal references that are already present on the room's participant rows; no new content about a person is copied.",
+    "reviewDisposition": "Append-only evidence; the corrected snapshot supersedes the narrower one (latest-wins) and the earlier one is kept for audit."
+  },
+  "migration": {
+    "name": "20261001120000_room_invite_policy_keeps_members",
+    "backfill": "Inline repair: for each WorkItem whose latest workroomPolicy leaves out an active member of its rooms, append one snapshot admitting those members (action rights for acting roles). Nothing is removed. Idempotent: verified on the live data in a rolled-back transaction (2 WorkItems, 3 rooms updated; a second run updated 0). Applies cleanly to any data state, including none affected.",
+    "rollback": "Forward-only. Older code reads the appended snapshot the same way (latest-wins), so it keeps the repaired admission."
+  },
+  "tests": [
+    "apps/web/lib/work-management/room-policy.test.ts",
+    "apps/web/lib/work-management/room-policy-members.server.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:work-item",
+      "prismaModel": "WorkItem",
+      "lifecycleDisposition": "Existing model; the appended evidence entry follows the WorkItem row and adds no retention obligation.",
+      "fields": [
+        {
+          "fieldId": "data:work-item#evidence",
+          "resolution": "governed",
+          "reason": "An invite into a room with no prior policy admitted only the invitee, locking the room's own coordinator and assistant out (WC-6B9C448D, WC-22820F00, WC-9304762D on the live install).",
+          "provenance": "BI-16DA79C5",
+          "flags": [],
+          "fieldPolicy": "workroomPolicy snapshots are appended only by appendRoomPolicyParticipant, which now carries the room's current active members; never edited in place."
+        }
+      ]
+    }
+  ]
+}

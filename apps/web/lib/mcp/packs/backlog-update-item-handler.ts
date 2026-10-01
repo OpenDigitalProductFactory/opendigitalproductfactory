@@ -10,7 +10,8 @@
 
 import { attributeBacklogPortfolio, prisma } from "@dpf/db";
 import { BACKLOG_SCOPE_KIND_VALUES } from "@/lib/explore/backlog";
-import type { ToolResult } from "@/lib/mcp-tools";
+import { BACKLOG_SENSITIVITY_VALUES, isBacklogSensitivity } from "@/lib/federation/cross-org-sharing";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import {
   resolveProductManagementScopeRefs,
   type ProductManagementScope,
@@ -85,6 +86,22 @@ export async function handleUpdateBacklogItem(
       };
     }
     data["scopeKind"] = scopeKind;
+  }
+  // BI-0A5EE9C1: platform work reads as public; marking an item confidential or
+  // restricted is how an operator keeps it closed. Every change is audited.
+  let sensitivityChange: { from: string; to: string } | null = null;
+  if (params["sensitivity"] !== undefined) {
+    if (!isBacklogSensitivity(params["sensitivity"])) {
+      return {
+        success: false,
+        error: "invalid_sensitivity",
+        message: `sensitivity must be one of ${BACKLOG_SENSITIVITY_VALUES.join("|")}`,
+      };
+    }
+    if (params["sensitivity"] !== existing.sensitivity) {
+      data["sensitivity"] = params["sensitivity"];
+      sensitivityChange = { from: existing.sensitivity, to: params["sensitivity"] };
+    }
   }
   const archetypeCategories = cleanStringArray(params["archetypeCategories"]);
   if (archetypeCategories) data["archetypeCategories"] = archetypeCategories;
@@ -187,6 +204,18 @@ export async function handleUpdateBacklogItem(
       where: { itemId: String(params["itemId"]) },
       data,
     });
+    if (sensitivityChange) {
+      await tx.backlogItemActivity.create({
+        data: {
+          backlogItemId: existing.id,
+          kind: "sensitivity_changed",
+          summary: `Sensitivity changed from ${sensitivityChange.from} to ${sensitivityChange.to}`,
+          payload: sensitivityChange,
+          recordedById: userId ?? null,
+          recordedByAgentId: context?.agentId ?? null,
+        },
+      });
+    }
     if (classifiedAtProductBoundary) {
       await tx.backlogItemActivity.create({
         data: {

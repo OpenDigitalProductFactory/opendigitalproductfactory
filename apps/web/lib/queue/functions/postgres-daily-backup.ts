@@ -3,7 +3,7 @@
  *
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.2
  *
- * postgres-only after BET-5 retired the neo4j + qdrant stores. The daily cron
+ * Postgres is the only backup target (BET-5). The daily cron
  * fires at 03:00 UTC, runs the Postgres backup, then verifies it via a
  * trial-restore. The manual-trigger event lets the admin "Run backup now"
  * button work on demand.
@@ -11,8 +11,8 @@
  * `concurrency: { limit: 1, scope: "fn" }` per function prevents overlapping
  * runs of the same function (cron vs. manual).
  */
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   ALL_BACKUPS_CRON,
@@ -89,7 +89,7 @@ export async function runScheduledCoreAndCapabilityBackups(deps: {
 
 // ─── Daily cron (postgres backup + trial-restore) ────────────────────────────
 
-export const allBackupsDailyScheduled = inngest.createFunction(
+export const allBackupsDailyScheduled = jobs.createFunction(
   {
     id: "ops/all-backups-daily-scheduled",
     retries: 0, // each sub-runner has its own retry / error handling
@@ -129,7 +129,7 @@ export const allBackupsDailyScheduled = inngest.createFunction(
 
 // ─── Postgres trial-restore — manual trigger (BI-31C9FBDF) ────────────────────
 
-export const postgresTrialRestoreRequested = inngest.createFunction(
+export const postgresTrialRestoreRequested = jobs.createFunction(
   {
     id: "ops/postgres-trial-restore-requested",
     retries: 1,
@@ -149,7 +149,7 @@ export const postgresTrialRestoreRequested = inngest.createFunction(
 // ─── Postgres — kept for backwards compat + independent manual trigger ────────
 
 /** @deprecated Use allBackupsDailyScheduled for the daily cron path. Kept for backwards compat with existing event subscribers. */
-export const postgresDailyBackupScheduled = inngest.createFunction(
+export const postgresDailyBackupScheduled = jobs.createFunction(
   {
     id: "ops/postgres-daily-backup-scheduled",
     retries: 2,
@@ -169,7 +169,7 @@ export const postgresDailyBackupScheduled = inngest.createFunction(
   },
 );
 
-export const postgresBackupRequested = inngest.createFunction(
+export const postgresBackupRequested = jobs.createFunction(
   {
     id: "ops/postgres-backup-requested",
     retries: 2,

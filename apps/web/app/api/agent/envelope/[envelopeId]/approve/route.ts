@@ -21,7 +21,9 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { runApprovedExternalRequest } from "@/lib/coworker/approved-request-run";
 import { approveEnvelope } from "@/lib/coworker/envelope-actions";
+import { recordApprovalOutcome } from "@/lib/coworker/approval-outcome-store";
 
 type RouteContext = {
   params: Promise<{ envelopeId: string }>;
@@ -45,5 +47,23 @@ export async function POST(_request: Request, context: RouteContext): Promise<Re
     return NextResponse.json({ error: result.reason }, { status: result.httpStatus });
   }
 
-  return NextResponse.json({ ok: true, envelope: result.envelope });
+  // BI-12E5DD91: the approval completes the call it approved. A direct MCP
+  // call runs here, once, through the governed executor; a call parked inside
+  // an external task resumes that task (BI-9FD11E5E). The approval itself is
+  // already recorded, so a run that cannot happen is reported, never an error.
+  const execution = await runApprovedExternalRequest(envelopeId).catch((error: unknown) => ({
+    status: "failed" as const,
+    message: error instanceof Error ? error.message : "The approved action could not be run.",
+  }));
+  const response = { ok: true, envelope: result.envelope, execution };
+  try {
+    await recordApprovalOutcome(envelopeId, session.user.id, execution);
+  } catch {
+    // Approval/execution may already have happened. Never return an ordinary
+    // retryable decision error that invites another authorization attempt.
+    return NextResponse.json({ ...response,
+      outcomeWarning: "The decision was saved, but its result could not be saved. Do not approve again; your assistant must check the target before retrying.",
+    });
+  }
+  return NextResponse.json(response);
 }

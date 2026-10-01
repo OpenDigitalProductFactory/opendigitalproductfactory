@@ -11,7 +11,7 @@ import {
   updateLocalModelOperation,
   type LocalModelOperationUpdate,
 } from "@/lib/inference/local-model-operations";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateBetweenSteps } from "../quiescence-gates";
 
 export type LocalModelInstallInput = {
@@ -118,7 +118,7 @@ export async function runLocalModelInstall(
   }
 }
 
-export const localModelInstall = inngest.createFunction(
+export const localModelInstall = jobs.createFunction(
   {
     id: "inference/local-model-install",
     retries: 2,

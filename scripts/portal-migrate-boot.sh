@@ -81,11 +81,5 @@ if ! pnpm --filter web exec tsx scripts/reembed-wiki-store.ts; then
   echo "[portal-boot] WARN: wiki embedding self-heal did not reach full coverage — embedding provider may be unavailable; new publishes still embed on the write-path, and the next boot retries (see error above)" >&2
 fi
 
-# BET-5 (BI-A1E864A5 / BI-922EBB99 / BI-2A3BE4D7): the one-time Neo4j+Qdrant → Postgres boot
-# backfill was retired here once the fleet completed migration (zero un-migrated installs).
-# The platform runs Postgres-only; new installs never provision the legacy stores. The
-# host-level, data-safety-gated teardown (scripts/decommission-neo4j-qdrant.{sh,ps1}) remains
-# in promote.sh as an idempotent no-op safety net.
-
 echo "[portal-boot] provider catalog reconciled (or degraded); starting server"
 exec "$@"

@@ -12,12 +12,23 @@ import { buildWeeklyDigest } from "@/lib/attention/weekly-digest";
 import { loadWeeklyDigestDisposition } from "@/lib/attention/weekly-digest-preferences";
 import { runEscalationHygiene } from "@/lib/quality/escalation-hygiene-runner";
 import { AttentionInbox } from "@/components/attention/AttentionInbox";
+import { ApprovalOutcomeHistory } from "@/components/attention/ApprovalOutcomeHistory";
+import { loadApprovalOutcomes } from "@/lib/coworker/approval-outcome-store";
+import { loadCoworkerEnvelopeItems } from "@/lib/attention/sources/coworker-envelope";
+import { getT } from "@/lib/i18n/t.server";
 
 export const dynamic = "force-dynamic";
 
-export default async function WorkspaceInboxPage() {
+export default async function WorkspaceInboxPage({ searchParams }: { searchParams: Promise<{ approval?: string }> }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  const requested = (await searchParams).approval;
+  const approvalId = typeof requested === "string" && requested.length <= 128 ? requested : undefined;
+  const t = await getT("approvals");
+  const outcomes = (await loadApprovalOutcomes(session.user.id, approvalId)).map((outcome) => ({
+    ...outcome, label: t(`states.${outcome.state}.label`), nextAction: t(outcome.nextActionKey),
+  }));
+  const outcomeCopy = { result: t("result"), recent: t("recent"), unavailable: t("unavailable"), details: t("details"), open: t("open") };
 
   // Best-effort auto-resolve so settled escalations clear when the inbox is viewed
   // (re-homed from /ops with the band; the 15-min cron still covers it). Idempotent,
@@ -27,7 +38,12 @@ export default async function WorkspaceInboxPage() {
   const { items, failedSources } = await loadAttentionItems(prisma, {
     aiReadinessUserId: session.user.id,
     delegatingUserId: session.user.id,
+    readerIsSuperuser: session.user.isSuperuser === true,
   });
+  // An exact approval link remains usable even outside the most recent 25.
+  if (approvalId && !items.some((item) => item.id === `coworker-envelope:${approvalId}`)) {
+    items.push(...await loadCoworkerEnvelopeItems(prisma, session.user.id, Date.now(), approvalId));
+  }
   // V1 operator-view; worker scoping (own approvals only) is BI-AS-4.
   const visible = filterAttentionForAudience(items, { operator: true });
   const nowMs = Date.now();
@@ -55,12 +71,14 @@ export default async function WorkspaceInboxPage() {
           and low-urgency review out of today&apos;s count. The work backlog stays in Operations.
         </p>
       </div>
+      {approvalId ? <ApprovalOutcomeHistory outcomes={outcomes} copy={outcomeCopy} exact /> : null}
       <AttentionInbox
         projection={projection}
         failedSources={failedSources}
         nowMs={nowMs}
         digestDisposition={digestDisposition}
       />
+      {!approvalId ? <ApprovalOutcomeHistory outcomes={outcomes} copy={outcomeCopy} /> : null}
     </main>
   );
 }

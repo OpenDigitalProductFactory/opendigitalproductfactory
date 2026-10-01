@@ -7,8 +7,6 @@ packages/dpf-skill-pack/hooks/decision-routing-guard.test.mjs
 packages/dpf-skill-pack/hooks/governance-freshness-check.test.mjs
 packages/dpf-skill-pack/hooks/grok-skill-exposure-adapter.test.mjs
 packages/dpf-skill-pack/hooks/hook-io.test.mjs
-packages/dpf-skill-pack/hooks/pregate-evidence-guard.test.mjs
-packages/dpf-skill-pack/hooks/process-spine-health.test.mjs
 packages/dpf-skill-pack/hooks/tool-economy-precheck.test.mjs
 packages/dpf-skill-pack/hooks/worktree-session-hygiene.test.mjs
 scripts/agent-host-resource-charter.contract.test.mjs
@@ -50,7 +48,9 @@ scripts/check-no-suitability-object-shorthand.test.mjs
 scripts/check-no-system-user-sentinel.test.mjs
 scripts/check-no-type-reexport-in-use-server.test.mjs
 scripts/check-no-unhonored-grant-growth.test.mjs
+scripts/check-no-unlocalized-ui.test.mjs
 scripts/check-no-unresolved-prometheus-targets.test.mjs
+scripts/check-no-web-import-cycle-growth.test.mjs
 scripts/check-reporting-composition.test.mjs
 scripts/check-style-drift.test.mjs
 scripts/ci-evidence-receipt-discovery.test.mjs
@@ -64,11 +64,6 @@ scripts/finance-workforce-maturity-matrix.contract.test.mjs
 scripts/gate-worktree-lease.test.mjs
 scripts/hooks/run-hook.test.mjs
 scripts/installer-state-contract.contract.test.mjs
-scripts/installer/install-state-transaction.test.mjs
-scripts/installer/migrate-install-state.test.mjs
-scripts/installer/native-edge-host-contract.test.mjs
-scripts/installer/resolve-host-identity.test.mjs
-scripts/installer/validate-install-state.test.mjs
 scripts/lib/bootstrap-worktree-deps.test.mjs
 scripts/lib/capability-service-projection.test.mjs
 scripts/lib/capability-state-hash.test.mjs
@@ -99,7 +94,6 @@ scripts/lib/local-ci-vitest-supervisor.test.mjs
 scripts/lib/local-integration-image-retention.test.mjs
 scripts/lib/local-queue-observer.test.mjs
 scripts/lib/local-sandbox-fence.test.mjs
-scripts/lib/mcp-client.test.mjs
 scripts/lib/module-size-scope.test.mjs
 scripts/lib/platform-substrate-measurements.test.mjs
 scripts/lib/published-doc-roots.test.mjs

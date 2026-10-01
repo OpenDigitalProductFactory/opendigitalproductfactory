@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { FederationRelationshipPreset } from "./federation-link-types";
 import type { ProjectionContractSpec } from "./projection-serialization";
+import { isRecord } from "@dpf/validators";
 
 export const DEMAND_SCHEMA_VERSIONS = ["dpf.demand/1"] as const;
 export type DemandSchemaVersion = (typeof DEMAND_SCHEMA_VERSIONS)[number];
@@ -192,10 +193,6 @@ export const DEMAND_PROJECTION_TEMPLATES: Record<FederationRelationshipPreset, P
 export interface DemandEnvelopeValidationContext {
   receivingInstallationId?: string;
   previousOriginVersion?: number;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isNonEmptyString(value: unknown, max: number): boolean {

@@ -10,19 +10,16 @@ import {
   isDataAssetId,
   isDataFieldId,
   parseDataFieldId,
-  type ClassificationProvenance,
   type DataAssetId,
   type DataCategory,
   type DataCriticality,
   type DataFieldId,
   type DataSensitivity,
   type LifecycleClassKey,
-  type MasterDataDomainKey,
   type ProcessingPurposeKey,
   type ProjectionClass,
   type ProtectionProfileKey,
   type ResidencyClassKey,
-  type SubjectLocator,
 } from "./taxonomy";
 import { AI_PROVIDER_GOVERNANCE_ASSETS } from "./ai-provider-governance-assets";
 import { STATUTORY_REFERENCE_ASSETS } from "./statutory-reference-assets";
@@ -44,59 +41,16 @@ import { WORKROOM_RELATION_ASSETS } from "./workroom-relation-assets";
 import { INITIATIVE_GOVERNANCE_ASSETS } from "./initiative-governance-assets";
 import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
 import { MAILROOM_ASSETS } from "./mailroom-assets";
+import { PORTFOLIO_BUDGET_ASSETS } from "./portfolio-budget-assets";
 import { BUSINESS_PERFORMANCE_ASSETS } from "./business-performance-assets";
 import { EXTERNAL_CHANNEL_ASSETS } from "./external-channel-assets";
 import { ANIMAL_WELFARE_ASSETS } from "./animal-welfare-assets";
-
-// ─── Definitions (spec §6.1) ─────────────────────────────────────────────────
-export type FieldResolution = "inherited" | "governed" | "not-applicable";
-
-export type DataFieldDefinition = {
-  id: DataFieldId;
-  physicalName: string;
-  resolution: FieldResolution;
-  resolutionReason: string;
-  categories?: DataCategory[];
-  sensitivity?: DataSensitivity;
-  subjectRoles?: SubjectLocator[];
-  collectionRule?: "allowed" | "minimize" | "prohibited";
-  protection?: ProtectionProfileKey;
-  purposeCapabilities?: ProcessingPurposeKey[];
-  lifecycleOverride?: LifecycleClassKey;
-  projectionOverride?: ProjectionClass;
-  provenance: ClassificationProvenance;
-};
-
-export type DataAssetDefinition = {
-  id: DataAssetId;
-  physical: { prismaModel: string };
-  fields: DataFieldDefinition[];
-  domain: string;
-  ownerRole: string;
-  stewardRole: string;
-  categories: DataCategory[];
-  sensitivity: DataSensitivity;
-  criticality: DataCriticality;
-  subjectLocators: SubjectLocator[];
-  masterDataDomain?: MasterDataDomainKey;
-  lifecycleClass: LifecycleClassKey;
-  purposeCapabilities: ProcessingPurposeKey[];
-  residencyClass: ResidencyClassKey;
-  projectionClass: ProjectionClass;
-  classification: {
-    state: "suggested" | "confirmed";
-    source: "manual" | "inferred" | "propagated";
-    effectiveFrom: string;
-  };
-};
-
-// ─── Registry (indexed, validated) ───────────────────────────────────────────
-
-export type DataAssetRegistry = {
-  readonly byId: ReadonlyMap<DataAssetId, DataAssetDefinition>;
-  readonly byPrismaModel: ReadonlyMap<string, DataAssetDefinition>;
-  readonly assets: readonly DataAssetDefinition[];
-};
+import { CONTROLLED_SUBSTANCE_ASSETS } from "./controlled-substance-assets";
+import type {
+  DataAssetDefinition,
+  DataAssetRegistry,
+  DataFieldDefinition,
+} from "./asset-types";
 
 /** Thrown when a registry definition violates a structural invariant. */
 export class DataAssetRegistryError extends Error {
@@ -730,8 +684,10 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...INITIATIVE_GOVERNANCE_ASSETS,
   ...FEDERATION_INTRODUCTION_ASSETS,
   ...MAILROOM_ASSETS,
+  ...PORTFOLIO_BUDGET_ASSETS,
   ...EXTERNAL_CHANNEL_ASSETS,
   ...ANIMAL_WELFARE_ASSETS,
+  ...CONTROLLED_SUBSTANCE_ASSETS,
    {
     id: "data:agent-conversation",
     physical: { prismaModel: "AgentMessage" },

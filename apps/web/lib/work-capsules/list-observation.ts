@@ -1,5 +1,5 @@
-import { canonicalJson } from "@/lib/shared/canonical-json";
-import type { ToolExecutionContext } from "@/lib/mcp-tools";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
 import { loadCapsuleLivenessInventory, type InventoryDb } from "./liveness-inventory";
 import { WorkroomObservations, WORKROOM_OBSERVATION_LIMIT } from "./observation-pages";
 

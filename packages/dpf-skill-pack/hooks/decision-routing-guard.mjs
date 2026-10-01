@@ -29,7 +29,7 @@
 //
 // Decision protocol mirrors lease-guard.mjs (deny + reason, exit 0).
 
-import { readHookPayload, isDecisionTool, emitDeny, inDpfWorkspace } from "./lib/hook-io.mjs";
+import { readHookPayload, isDecisionTool, emitDeny, inDpfAgentHost } from "./lib/hook-io.mjs";
 
 // Engineering approach/architecture-selection vocabulary. Deliberately excludes
 // generic "which" so operator-owned questions ("which brand color", "what should
@@ -137,7 +137,8 @@ export function decide(toolName, toolInput = {}, env = {}) {
 function main() {
   const payload = readHookPayload();
   if (payload === null) process.exit(0); // fail open on read/parse error
-  if (!inDpfWorkspace(payload.cwd)) process.exit(0); // DPF-scoped global hook: enforce only inside a DPF checkout
+  // A checkout OR an install folder: sessions start in the install (BI-310949BC).
+  if (!inDpfAgentHost(payload.cwd)) process.exit(0);
 
   // Operator-decision tool across surfaces (AskUserQuestion / AskQuestion).
   if (!isDecisionTool(payload.toolName)) process.exit(0);

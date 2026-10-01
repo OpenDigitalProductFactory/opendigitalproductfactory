@@ -19,10 +19,10 @@ import {
   parseMembershipSignRequest,
   relayMembershipSign,
 } from "@/lib/federation/membership-relay";
+import { clientAddressKey } from "@/lib/security/client-address";
 
 function callerKey(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip")?.trim() || "unknown";
+  return clientAddressKey(request.headers);
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

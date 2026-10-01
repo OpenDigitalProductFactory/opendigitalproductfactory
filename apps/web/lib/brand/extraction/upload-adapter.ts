@@ -1,3 +1,4 @@
+import type { ParsedFileContent } from "@/lib/shared/file-parsers";
 import type { PartialDesignSystem } from "./types";
 
 export type Upload = {
@@ -51,28 +52,19 @@ async function extractImageSignals(upload: Upload): Promise<{
   }
 }
 
-async function extractPdfText(upload: Upload): Promise<string | null> {
-  try {
-    const mod = await import("pdf-parse");
-    const pdfParse = (mod as unknown as { default?: (buf: Buffer) => Promise<{ text: string }> }).default
-      ?? (mod as unknown as (buf: Buffer) => Promise<{ text: string }>);
-    const result = await pdfParse(upload.data);
-    const text = result?.text?.trim() ?? "";
-    return text ? text.slice(0, 2000) : null;
-  } catch {
-    return null;
-  }
-}
+export type UploadAdapterDeps = {
+  /** The shared file reader: PDF and Word text come from the document engine (BI-D1B40D43). */
+  parse?: (buffer: Buffer, mimeType: string, fileName: string) => Promise<ParsedFileContent | null>;
+};
 
-async function extractDocxText(upload: Upload): Promise<string | null> {
+const MAX_DOCUMENT_TEXT = 2000;
+
+async function extractDocumentText(upload: Upload, deps: UploadAdapterDeps): Promise<string | null> {
   try {
-    const mammoth = await import("mammoth");
-    const fn = (mammoth as unknown as { extractRawText?: (arg: { buffer: Buffer }) => Promise<{ value: string }> }).extractRawText
-      ?? (mammoth as unknown as { default?: { extractRawText?: (arg: { buffer: Buffer }) => Promise<{ value: string }> } }).default?.extractRawText;
-    if (!fn) return null;
-    const result = await fn({ buffer: upload.data });
-    const text = result?.value?.trim() ?? "";
-    return text ? text.slice(0, 2000) : null;
+    const parse = deps.parse ?? (await import("@/lib/shared/file-parsers")).parseFileContent;
+    const parsed = await parse(upload.data, upload.mimeType, upload.name);
+    const text = parsed?.type === "document" ? parsed.fullText?.trim() ?? "" : "";
+    return text ? text.slice(0, MAX_DOCUMENT_TEXT) : null;
   } catch {
     return null;
   }
@@ -80,6 +72,7 @@ async function extractDocxText(upload: Upload): Promise<string | null> {
 
 export async function uploadAdapter(
   uploads: Upload[] | undefined,
+  deps: UploadAdapterDeps = {},
 ): Promise<PartialDesignSystem> {
   if (!uploads || uploads.length === 0) {
     return {
@@ -139,7 +132,7 @@ export async function uploadAdapter(
     }
 
     if (mime === "application/pdf") {
-      const text = await extractPdfText(upload);
+      const text = await extractDocumentText(upload, deps);
       if (text) {
         partial.identity = partial.identity ?? {
           name: "",
@@ -160,7 +153,7 @@ export async function uploadAdapter(
       mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       || mime === "application/msword"
     ) {
-      const text = await extractDocxText(upload);
+      const text = await extractDocumentText(upload, deps);
       if (text) {
         partial.identity = partial.identity ?? {
           name: "",

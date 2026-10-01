@@ -57,12 +57,12 @@ describe("buildOwnerAttentionProjection", () => {
     const projection = buildOwnerAttentionProjection(
       [
         item("platform-health", {
-          title: "qdrant is offline",
+          title: "redis is offline",
           riskClass: "high-risk",
           triage: {
             timeToAct: "none",
             residueReason: "no-self-heal",
-            blastRadius: "qdrant",
+            blastRadius: "redis",
             decideEffort: "review",
             irreversible: false,
           },

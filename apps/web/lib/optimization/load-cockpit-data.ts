@@ -6,7 +6,7 @@
 // code-graph freshness/trust banner. Composed by the /ea/capabilities page.
 //
 // Degrades gracefully: when the code graph is unavailable (fresh install,
-// Neo4j down, index never built) every projection is null and the freshness
+// graph mirror down, index never built) every projection is null and the freshness
 // warnings explain why — the cockpit renders the registry + live BI status
 // and labels the blast-radius columns as unavailable.
 
@@ -144,7 +144,7 @@ async function projectBet(
     ...bet.selectors.tools.map((value) => ({ kind: "tool" as const, value })),
   ];
 
-  // A graph-store error mid-page (e.g. Neo4j restarting) degrades that
+  // A graph-store error mid-page (e.g. Postgres restarting) degrades that
   // selector to "unresolved" instead of failing the whole capabilities page.
   const traces: Array<{ kind: "model" | "tool"; value: string; result: CodeSurfaceTraceResult | null }> =
     await Promise.all(

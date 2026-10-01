@@ -2,7 +2,7 @@
 // The handler consults the organization's WWWD profile and hard leave guards,
 // then writes an AgentActionProposal. It never approves or rejects leave.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { proposeLeaveDecision } from "@/lib/workforce/leave/decide-proposal";
 import { decideLeaveRequestFromData } from "@/lib/workforce/leave/leave-decision-runtime";
 

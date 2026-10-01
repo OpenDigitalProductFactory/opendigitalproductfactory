@@ -1,7 +1,7 @@
 // apps/web/components/platform/AgentBudgetEventsPanel.tsx
 //
 // EP-COST-001 Phase 2: surfaces AgentBudgetEvent threshold crossings on
-// Admin > AI Providers so operators can see which agents are near or over
+// External Services (/platform/ai/providers) so operators can see which agents are near or over
 // their daily token budgets.
 //
 // Only warning_95 and rejected events are shown (routine inference events

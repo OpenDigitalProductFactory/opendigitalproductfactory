@@ -3,8 +3,8 @@
 // Composes the merged, tested pieces into one executable the triggers call
 // (on-demand server action, nightly scheduled task): read the canonical Prisma
 // schema → parse (Phase 1) → reconcile into EA (Phase 2) → steward drift pass
-// (Phase 4) → best-effort Neo4j projection. Postgres is the source of truth the
-// /ea/data-model view renders from; the Neo4j sync is an optimization and never
+// (Phase 4) → best-effort graph projection. Postgres is the source of truth the
+// /ea/data-model view renders from; the graph sync is an optimization and never
 // fails the run.
 
 import { prisma as defaultPrisma, readCanonicalPrismaSchema, syncEaElement, syncEaRelationship } from "@dpf/db";
@@ -20,7 +20,7 @@ export type DataModelMirrorRunResult = {
   steward: StewardResult;
   /** Growth / payload-anatomy pass (EP-A33A5C61 slice 5); null when skipped. */
   growth: GrowthResult | null;
-  neo4jSynced: number | null;
+  graphSynced: number | null;
 };
 
 type RunDeps = {
@@ -28,8 +28,8 @@ type RunDeps = {
   prisma?: unknown;
   /** Defaults to the canonical schema bundled with @dpf/db. */
   schemaSource?: string;
-  /** Best-effort Neo4j projection of the mirrored elements (default true). */
-  syncNeo4j?: boolean;
+  /** Best-effort graph projection of the mirrored elements (default true). */
+  syncGraph?: boolean;
   createdById?: string | null;
   /** Run the growth pass (default true when the client can run raw SQL). */
   growth?: boolean;
@@ -60,17 +60,17 @@ export async function runDataModelMirror(deps: RunDeps = {}): Promise<DataModelM
       ? await runTableGrowthSteward({ prisma: prisma as GrowthPrismaClient })
       : null;
 
-  let neo4jSynced: number | null = null;
-  if (deps.syncNeo4j !== false && mirror.status !== "blocked") {
-    neo4jSynced = await projectMirrorToNeo4j(prisma).catch(() => null);
+  let graphSynced: number | null = null;
+  if (deps.syncGraph !== false && mirror.status !== "blocked") {
+    graphSynced = await projectMirrorToGraph(prisma).catch(() => null);
   }
 
-  return { mirror, steward, growth, neo4jSynced };
+  return { mirror, steward, growth, graphSynced };
 }
 
 // Best-effort: sync the data-model view's mirrored elements + relationships into
-// Neo4j so the EA graph renderer reflects them. Never throws.
-async function projectMirrorToNeo4j(prisma: unknown): Promise<number> {
+// the graph mirror so the EA graph renderer reflects them. Never throws.
+async function projectMirrorToGraph(prisma: unknown): Promise<number> {
   const client = prisma as {
     eaView: { findFirst(args: unknown): Promise<{ id: string } | null> };
     eaViewElement: { findMany(args: unknown): Promise<Array<{ element: EaElementForSync }>> };

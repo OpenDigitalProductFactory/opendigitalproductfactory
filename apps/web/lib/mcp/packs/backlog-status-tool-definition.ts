@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { DEFERRAL_INPUT_SCHEMA } from "@/lib/backlog/deferral-contract";
 import { BACKLOG_STATUS_VALUES } from "@/lib/explore/backlog";
 

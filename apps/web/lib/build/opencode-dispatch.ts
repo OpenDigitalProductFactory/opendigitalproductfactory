@@ -587,13 +587,8 @@ export async function dispatchOpencodeTask(params: {
     // through onStdoutChunk; the stderr buffer is captured by the loop and
     // attached to any rejection for the catch block below.
     //
-    // BI-98572A51: opencode runs the model on the ONE local GPU. Acquire the SAME
-    // single-slot admission lane the coworker chat path uses (withLocalInferenceLock),
-    // held for the whole CLI run, so a chat local call and a build specialist (or
-    // two concurrent builds) never collide on the GPU. The portal owns admission
-    // in both cases — it awaits this docker-exec — so one in-process lane serializes
-    // them. The orchestrator's per-build MAX_CONCURRENT_TASKS=1 only serialized
-    // within a single build; this closes the chat↔build and build↔build gap.
+    // BI-98572A51: hold the shared local-GPU lane for the whole CLI run.
+    // A busy card defers before the model starts; the lane only serializes this process.
     const { stdout, durationMs: elapsed } = await withLocalInferenceLock(() =>
       runSandboxAgentCli({
         containerId,
@@ -608,6 +603,7 @@ export async function dispatchOpencodeTask(params: {
           }
         },
       }),
+      { modelId: model },
     );
 
     const content = extractOpencodeResult(stdout);
@@ -682,6 +678,7 @@ export async function dispatchOpencodeTask(params: {
       durationMs: elapsed,
     };
   } catch (err) {
+    if (err instanceof Error && err.name === "LocalProviderCapacityDeferredError") throw err;
     const durationMs = Date.now() - startMs;
     const execErr = err as { stdout?: string; stderr?: string; message?: string; killed?: boolean; code?: number | null };
     const output = (execErr.stdout ?? "") + "\n" + (execErr.stderr ?? "");

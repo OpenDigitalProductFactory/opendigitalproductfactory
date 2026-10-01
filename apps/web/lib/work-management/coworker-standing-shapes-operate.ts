@@ -63,6 +63,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
         },
         evidence: ["source-document-set"],
         effort: "low",
+        tools: ["list_bank_accounts", "get_bank_transactions"],
       },
       {
         key: "import",
@@ -89,6 +90,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
         },
         evidence: ["exception-list"],
         effort: "low",
+        tools: ["get_bank_transactions", "suggest_transaction_matches", "list_bank_rules"],
       },
       {
         key: "reconcile",
@@ -102,6 +104,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
         },
         evidence: ["reconciliation"],
         effort: "medium",
+        tools: ["get_reconciliation_summary", "get_bank_transactions"],
       },
       {
         key: "owner-close",
@@ -368,6 +371,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["search_public_web", "fetch_public_website"],
       },
       {
         key: "file",
@@ -381,6 +385,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
         },
         evidence: ["backlog-items"],
         effort: "low",
+        tools: ["query_backlog", "find_duplicate_candidates"],
       },
       {
         key: "decide",

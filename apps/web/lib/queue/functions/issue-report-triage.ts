@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // Safety-net sweep + spike detector. Since EP-INTAKE-UNIFY Phase 4, OPEN reports
@@ -9,7 +9,7 @@ import { gateAtEntry } from "../quiescence-gates";
 // event was dropped or arrived during quiescence — and is the home of spike
 // detection (which needs a historical baseline a single-report event can't see).
 // Both paths share runIssueReportTriage(), so they project identically.
-export const issueReportTriage = inngest.createFunction(
+export const issueReportTriage = jobs.createFunction(
   { id: "quality/issue-report-triage", retries: 2, triggers: [cron("3,18,33,48 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "quality/issue-report-triage");

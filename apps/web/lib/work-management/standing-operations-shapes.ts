@@ -83,6 +83,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["read_codebase_manifest", "list_patch_posture"],
       },
       {
         key: "raise",
@@ -94,6 +95,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["list_patch_posture", "query_backlog"],
       },
       {
         key: "decide",
@@ -232,7 +234,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   // ── manufactureAndDeliver · Contribution Flow ──────────────────────────────
   [PULL_REQUEST_FLOW_WATCH_SHAPE_KEY]: {
     key: PULL_REQUEST_FLOW_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Pull-request flow watch",
     description:
       "The change reviewer reads mechanical pull-request health, classifies each open change "
@@ -250,6 +252,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_pull_requests"],
       },
       {
         key: "classify",
@@ -261,6 +264,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["list_pull_requests"],
       },
       {
         key: "merge",
@@ -279,7 +283,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The forge is unreachable or returns no pull requests where the repository is known to have them — the run stops and reports rather than declaring the queue clear.", disposition: "inconclusive" },
       { kind: "budget", condition: "More than 100 pull requests in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
+    grants: ["tool:read", "tool:workroom_evidence_write", "tool:contributor_inventory_read"],
     measures: [
       { key: "changes-classified", description: "Open pull requests classified in one run." },
       { key: "stalled-changes", description: "Changes found stalled past their threshold." },
@@ -310,6 +314,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_backlog_items", "query_backlog"],
       },
       {
         key: "dedupe",
@@ -321,6 +326,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "medium",
+        tools: ["query_backlog", "find_duplicate_candidates"],
       },
       {
         key: "admit",
@@ -369,6 +375,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "medium",
+        tools: ["list_backlog_items", "get_backlog_item", "get_release_status"],
       },
       {
         key: "report",
@@ -380,6 +387,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["get_backlog_item", "get_release_status"],
       },
       {
         key: "cut",
@@ -429,6 +437,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["draft-artifact"],
         effort: "medium",
+        tools: ["list_storefront_activity", "list_customer_accounts"],
       },
       {
         key: "send",
@@ -478,6 +487,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_customer_accounts"],
       },
       {
         key: "report",
@@ -489,6 +499,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "medium",
+        tools: ["list_customer_accounts"],
       },
       {
         key: "act",
@@ -520,7 +531,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   // ── foundational · Business Administration ────────────────────────────────
   [PAYABLES_WATCH_SHAPE_KEY]: {
     key: PAYABLES_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Payables watch",
     description:
       "The finance controller reports what falls due and what is not recorded at all. Paying "
@@ -538,6 +549,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_bills"],
       },
       {
         key: "report",
@@ -549,6 +561,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["list_bills"],
       },
       {
         key: "pay",
@@ -568,7 +581,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The finance substrate cannot be read — the run stops and reports, and NEVER presents an absent amount as zero.", disposition: "inconclusive" },
       { kind: "budget", condition: "More than 100 obligations reported in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
+    grants: ["tool:read", "tool:workroom_evidence_write", "tool:payables_read"],
     measures: [
       { key: "obligations-reported", description: "Bills and commitments reported inside the horizon." },
       { key: "unrecorded-gaps", description: "Named gaps where an obligation is expected but not recorded." },
@@ -580,7 +593,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
 
   [VENDOR_RENEWAL_WATCH_SHAPE_KEY]: {
     key: VENDOR_RENEWAL_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Vendor and subscription renewal watch",
     description:
       "The finance controller reports upcoming renewals and spend against recorded "
@@ -597,6 +610,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["list_supplier_contracts"],
       },
       {
         key: "report",
@@ -608,6 +622,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["list_supplier_contracts", "list_bills"],
       },
       {
         key: "decide",
@@ -626,7 +641,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "Supplier records cannot be read — the run stops and reports, and never infers a renewal from an unread agreement.", disposition: "inconclusive" },
       { kind: "budget", condition: "More than 50 agreements assessed in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
+    grants: ["tool:read", "tool:workroom_evidence_write", "tool:payables_read"],
     measures: [
       { key: "agreements-read", description: "Supplier agreements read in one run." },
       { key: "renewals-in-horizon", description: "Renewals falling inside the look-ahead window." },
@@ -639,7 +654,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   // ── forEmployees · Contributor Relations ──────────────────────────────────
   [CONTRIBUTOR_INTAKE_WATCH_SHAPE_KEY]: {
     key: CONTRIBUTOR_INTAKE_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Contributor intake watch",
     description:
       "The platform engineer keeps the contributor inventory current and flags missing "
@@ -657,6 +672,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "low",
+        tools: ["read_contributor_inventory"],
       },
       {
         key: "flag",
@@ -668,6 +684,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["read_contributor_inventory"],
       },
       {
         key: "admit",
@@ -686,7 +703,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The contribution history cannot be read — the run stops and reports, and never records a contributor it could not observe.", disposition: "inconclusive" },
       { kind: "budget", condition: "More than 200 contributors reconciled in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
+    grants: ["tool:read", "tool:workroom_evidence_write", "tool:contributor_inventory_read"],
     measures: [
       { key: "contributors-reconciled", description: "Contributors reconciled against observed history." },
       { key: "missing-signoff", description: "Contributors flagged for a missing sign-off or licence fact." },
@@ -716,6 +733,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-run"],
         effort: "medium",
+        tools: ["get_capability_completeness"],
       },
       {
         key: "report",
@@ -727,6 +745,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         },
         evidence: ["assurance-finding"],
         effort: "low",
+        tools: ["get_capability_completeness", "list_all_capability_needs"],
       },
       {
         key: "grant",

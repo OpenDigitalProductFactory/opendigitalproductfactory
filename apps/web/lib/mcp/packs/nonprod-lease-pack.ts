@@ -11,7 +11,7 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { LocalCiHostPressure } from "@/lib/nonprod/local-ci-pool-policy";
 import type { HostResourceLeaseEvidence } from "@/lib/nonprod/environment-lease-pool-policy";
 import { HEAVY_RESOURCE_CLASSES, isHeavyResourceClass } from "@/lib/nonprod/host-resource-policy";
@@ -162,8 +162,8 @@ const definitions: ToolDefinition[] = [
     description:
       "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. " +
       "Reusing claimKey returns the same durable queue entry (idempotent wait). " +
-      "Do not claim in a tight loop without a stable claimKey. " +
-      "When queued, terminate the polling runner and resume from the returned TaskRun — do not renew or open a second claim.",
+      "Do not poll this tool. When queued, stop and resume from the returned TaskRun — do not renew or open a second claim. " +
+      "lease_terminal means this claimKey is finished (released, cancelled, or expired): do not retry it (retryable: false). A new admission needs a new claimKey, and only when the work is still wanted.",
     inputSchema: {
       type: "object",
       properties: {
@@ -174,6 +174,7 @@ const definitions: ToolDefinition[] = [
         },
         ownerSessionId: { type: "string" },
         claimKey: { type: "string", description: "Stable idempotency key reused while waiting for admission." },
+        resumeLeaseId: { type: "string", description: "The lease a resumed local-CI gate waits on. A cancelled one stays cancelled; this owner's obsolete queued wait is superseded." },
         gateIdentity: {
           type: "object",
           description: "Immutable local-CI identity components. The server derives the claim key and ignores caller claimKey.",
@@ -216,6 +217,7 @@ const definitions: ToolDefinition[] = [
           enum: [1],
           description: "Versioned local-CI slot capability. Omit for legacy singleton-only admission.",
         },
+        productionBuild: { type: "string", enum: ["local", "delegated"], description: "\"delegated\": the merge queue's required build owns the production build, so admission reserves no builder memory (BI-3A14308C). Omit for \"local\"." },
         hostPressure: {
           ...hostPressureSchema,
           description: "Recent fail-closed host observation used only to decide whether slot-1 may admit.",
@@ -525,6 +527,7 @@ async function claimNonprodEnvironmentLeaseHandler(
   }
 
   const result = await claimNonprodEnvironmentLease({
+    resumeLeaseId: stringValue("resumeLeaseId") || undefined,
     environmentKey: environmentKey as "active-candidate" | "local-integration-ci" | "host-heavy-resource",
     ownerProvider: ownerProvider as (typeof NONPROD_OWNER_PROVIDERS)[number],
     ownerSessionId,
@@ -539,14 +542,24 @@ async function claimNonprodEnvironmentLeaseHandler(
     taskRunId: stringValue("taskRunId") || undefined,
     cleanupCommand: stringValue("cleanupCommand") || undefined,
     slotManifestVersion: slotManifestVersion as 1 | undefined,
+    productionBuild: stringValue("productionBuild") === "delegated" ? "delegated" : undefined,
     hostPressure: hostPressure as LocalCiHostPressure | undefined,
     resourceClass: isHeavyResourceClass(resourceClass) ? resourceClass : undefined,
     expectedMemoryBytes,
     ownerProcessId,
     ownerProcessIdentity: ownerProcessIdentity || undefined,
     hostResource,
+  }).catch((error: unknown) => {
+    // BI-D35B85BF: a resume that would cancel a running or foreign lease is refused, not thrown.
+    const code = getErrorMessage(error);
+    if (code === "nonprod_resume_lease_active" || code === "nonprod_resume_not_owner") return { refused: code } as const;
+    throw error;
   });
+  if ("refused" in result) {
+    return { success: false, error: result.refused, message: "This claim resumes a lease it may not replace; nothing was changed." };
+  }
   const toolLease = toolSafeLease(result.lease as unknown as Record<string, unknown>);
+  const common = { poolPolicy: result.poolPolicy, gateKey, ...(result.supersededLeaseId ? { supersededLeaseId: result.supersededLeaseId } : {}) };
   if (result.status === "reused") {
     return {
       success: true,
@@ -562,8 +575,7 @@ async function claimNonprodEnvironmentLeaseHandler(
           // with the evidence's clock, not the lease's (BI-03E1139A).
           evidenceValidity: result.evidenceValidity,
         },
-        poolPolicy: result.poolPolicy,
-        gateKey,
+        ...common,
       },
     };
   }
@@ -576,8 +588,7 @@ async function claimNonprodEnvironmentLeaseHandler(
       data: {
         lease: toolLease,
         admission: { status: "blocked", reason: result.reason },
-        poolPolicy: result.poolPolicy,
-        gateKey,
+        ...common,
       },
     };
   }
@@ -595,8 +606,8 @@ async function claimNonprodEnvironmentLeaseHandler(
       success: false,
       entityId: result.lease.leaseId,
       error: "lease_terminal",
-      message: `Nonproduction lease request is already ${result.reason}; create a new claimKey to request admission again.`,
-      data: { lease: toolLease, reason: result.reason, poolPolicy: result.poolPolicy, gateKey },
+      message: `Nonproduction lease request is already ${result.reason}. Do not call again with this claimKey (retryable: false). A new admission needs a new claimKey, and only when the work is still wanted.`,
+      data: { lease: toolLease, reason: result.reason, retryable: false, ...common },
     };
   }
   if (result.status === "subscribed") {
@@ -610,8 +621,7 @@ async function claimNonprodEnvironmentLeaseHandler(
           status: "subscribed",
           executionStatus: result.executionStatus,
         },
-        poolPolicy: result.poolPolicy,
-        gateKey,
+        ...common,
       },
     };
   }
@@ -637,19 +647,14 @@ async function claimNonprodEnvironmentLeaseHandler(
           resumeMode: "durable-task",
           taskRunId: durableWait.taskRunId,
         },
-        poolPolicy: result.poolPolicy,
-        gateKey,
+        ...common,
       },
     };
   }
   if (result.lease.taskRunId) {
     const { settleNonprodLeaseWait } = await import("@/lib/nonprod/durable-wait");
-    await settleNonprodLeaseWait({
-      db: (await import("@dpf/db")).prisma,
-      taskRunId: result.lease.taskRunId,
-      leaseId: result.lease.leaseId,
-      state: "admitted",
-    });
+    const db = (await import("@dpf/db")).prisma;
+    await settleNonprodLeaseWait({ db, taskRunId: result.lease.taskRunId, leaseId: result.lease.leaseId, state: "admitted" });
   }
   return {
     success: true,
@@ -657,13 +662,8 @@ async function claimNonprodEnvironmentLeaseHandler(
     message: `Admitted nonproduction environment lease ${result.lease.leaseId} to ${result.slotKey}.`,
     data: {
       lease: toolLease,
-      admission: {
-        status: "admitted",
-        slotKey: result.slotKey,
-        waitAgeMs: result.waitAgeMs,
-      },
-      poolPolicy: result.poolPolicy,
-      gateKey,
+      admission: { status: "admitted", slotKey: result.slotKey, waitAgeMs: result.waitAgeMs },
+      ...common,
     },
   };
 }
@@ -710,9 +710,10 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
         data: { retryable: false, leaseId },
       };
     }
+    const errorCode = detail === "nonprod_lease_not_owner" ? detail : "release_failed";
     return {
       success: false,
-      error: "release_failed",
+      error: errorCode,
       message: `Could not release lease ${leaseId}: ${detail}. Do not blind-retry (retryable: false).`,
       data: { retryable: false, leaseId },
     };

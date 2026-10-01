@@ -4,6 +4,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     user: {
       findUnique: vi.fn(),
+      findMany: vi.fn(),
     },
     employeeProfile: {
       findUnique: vi.fn(),
@@ -17,6 +18,8 @@ vi.mock("@dpf/db", () => ({
     principal: {
       create: vi.fn(),
       update: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
     principalAlias: {
       findFirst: vi.fn(),
@@ -28,7 +31,9 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 import {
+  listActiveHumanPrincipalsForUsers,
   PrincipalAliasConflictError,
+  resolveActiveHumanPrincipalRecordIdForUser,
   resolvePrincipalRecordIdForSessionIdentity,
   syncAgentPrincipal,
   syncCustomerPrincipal,
@@ -90,6 +95,8 @@ describe("syncEmployeePrincipal", () => {
       displayName: "Ada Lovelace",
       sponsorPrincipalId: null,
       authorityMode: null,
+      preferredLanguage: null,
+      timeZone: null,
       sensitivityClearance: ["public"],
       createdAt: new Date("2026-04-23T00:00:00Z"),
       updatedAt: new Date("2026-04-23T00:00:00Z"),
@@ -144,6 +151,8 @@ describe("syncAgentPrincipal", () => {
       displayName: "Finance Specialist",
       sponsorPrincipalId: null,
       authorityMode: null,
+      preferredLanguage: null,
+      timeZone: null,
       sensitivityClearance: ["public"],
       createdAt: new Date("2026-04-23T00:00:00Z"),
       updatedAt: new Date("2026-04-23T00:00:00Z"),
@@ -201,6 +210,8 @@ describe("syncCustomerPrincipal", () => {
       displayName: "Buyer@Example.com",
       sponsorPrincipalId: null,
       authorityMode: null,
+      preferredLanguage: null,
+      timeZone: null,
       sensitivityClearance: ["public"],
       createdAt: new Date("2026-04-26T00:00:00Z"),
       updatedAt: new Date("2026-04-26T00:00:00Z"),
@@ -260,6 +271,8 @@ describe("syncCustomerPrincipal", () => {
       displayName: "former@example.com",
       sponsorPrincipalId: null,
       authorityMode: null,
+      preferredLanguage: null,
+      timeZone: null,
       sensitivityClearance: ["public"],
       createdAt: new Date("2026-04-26T00:00:00Z"),
       updatedAt: new Date("2026-04-26T00:00:00Z"),
@@ -358,5 +371,69 @@ describe("resolvePrincipalRecordIdForSessionIdentity", () => {
       where: { aliasType, aliasValue: id, issuer: "" },
       include: { principal: { select: { id: true } } },
     });
+  });
+});
+
+describe("resolveActiveHumanPrincipalRecordIdForUser", () => {
+  it("returns the relational Principal.id (the FK target), not the public principalId", async () => {
+    vi.mocked(prisma.principal.findFirst).mockResolvedValue({ id: "principal-db-7" } as never);
+
+    await expect(resolveActiveHumanPrincipalRecordIdForUser("user-7")).resolves.toBe("principal-db-7");
+    expect(prisma.principal.findFirst).toHaveBeenCalledWith({
+      where: {
+        kind: "human",
+        status: "active",
+        aliases: { some: { aliasType: "user", issuer: "", aliasValue: "user-7" } },
+      },
+      select: { id: true },
+    });
+  });
+
+  it("returns null when no active human principal carries the user alias", async () => {
+    // The kind/status filter above is what excludes an inactive or non-human
+    // principal linked to the same user; the database answers null for them.
+    vi.mocked(prisma.principal.findFirst).mockResolvedValue(null);
+    await expect(resolveActiveHumanPrincipalRecordIdForUser("user-agent")).resolves.toBeNull();
+  });
+
+  it("does not query for a blank user id", async () => {
+    await expect(resolveActiveHumanPrincipalRecordIdForUser("  ")).resolves.toBeNull();
+    expect(prisma.principal.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe("listActiveHumanPrincipalsForUsers", () => {
+  it("lists active human principals whose linked user is active, sorted by name", async () => {
+    vi.mocked(prisma.principal.findMany).mockResolvedValue([
+      { id: "p-zed", displayName: "Zed", aliases: [{ aliasValue: "u-zed" }] },
+      { id: "p-gone", displayName: "Gone", aliases: [{ aliasValue: "u-gone" }] },
+      { id: "p-amy", displayName: "Amy", aliases: [{ aliasValue: "u-amy" }] },
+    ] as never);
+    vi.mocked(prisma.user.findMany).mockResolvedValue([
+      { id: "u-zed", email: "zed@example.test" },
+      { id: "u-amy", email: "amy@example.test" },
+    ] as never);
+
+    await expect(listActiveHumanPrincipalsForUsers()).resolves.toEqual([
+      { id: "p-amy", displayName: "Amy", email: "amy@example.test" },
+      { id: "p-zed", displayName: "Zed", email: "zed@example.test" },
+    ]);
+    expect(prisma.principal.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        kind: "human",
+        status: "active",
+        aliases: { some: { aliasType: "user", issuer: "" } },
+      },
+    }));
+    expect(prisma.user.findMany).toHaveBeenCalledWith({
+      where: { id: { in: ["u-zed", "u-gone", "u-amy"] }, isActive: true },
+      select: { id: true, email: true },
+    });
+  });
+
+  it("skips the user query when there are no human principals", async () => {
+    vi.mocked(prisma.principal.findMany).mockResolvedValue([] as never);
+    await expect(listActiveHumanPrincipalsForUsers()).resolves.toEqual([]);
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
 });

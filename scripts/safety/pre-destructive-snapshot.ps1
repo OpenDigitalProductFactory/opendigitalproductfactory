@@ -110,25 +110,6 @@ function Invoke-PgDumpStrategy {
     }
 }
 
-function Invoke-Neo4jStrategy {
-    param([Parameter(Mandatory)][string] $Fingerprint)
-    $snapshotPath = Join-Path $snapshotDay "$Fingerprint-$ts.neo4j.dump"
-    Write-Trace "strategy=neo4j (deferred to nightly) target=$snapshotPath"
-    $neo4jDir = Join-Path $backupsHostPath 'neo4j'
-    if (Test-Path -LiteralPath $neo4jDir) {
-        $latest = Get-ChildItem -LiteralPath $neo4jDir -Directory -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        if ($latest) {
-            Write-Audit -Outcome 'DEFERRED' -Strategy 'neo4j' -SnapshotPath $latest.FullName `
-                -Reason 'deferred to nightly Neo4j backup (online dump would require stopping the DB)'
-            return 0
-        }
-    }
-    Write-Audit -Outcome 'FAILED' -Strategy 'neo4j' -SnapshotPath $snapshotPath `
-        -Reason 'no nightly Neo4j backup found to defer to'
-    return 1
-}
-
 function Invoke-GitStashStrategy {
     param([Parameter(Mandatory)][string] $Fingerprint)
     $repo = if ($env:PWD) { $env:PWD } else { $installRoot }
@@ -185,17 +166,11 @@ function Get-StrategyExitCode {
     if ($cmdLine -match '^docker\s+volume\s+rm\s+.*dpf_pgdata') {
         return (Invoke-PgDumpStrategy -Fingerprint 'docker-volume-rm-pgdata')
     }
-    if ($cmdLine -match '^docker\s+volume\s+rm\s+.*dpf_neo4jdata') {
-        return (Invoke-Neo4jStrategy -Fingerprint 'docker-volume-rm-neo4jdata')
-    }
     if ($cmdLine -match '^docker\s+volume\s+rm\s+') {
         return (Invoke-PgDumpStrategy -Fingerprint 'docker-volume-rm-other')
     }
     if ($cmdLine -match '^docker\s+compose\s+down\s.*-v') {
-        $pgRc = Invoke-PgDumpStrategy -Fingerprint 'docker-compose-down-v'
-        $neoRc = Invoke-Neo4jStrategy -Fingerprint 'docker-compose-down-v'
-        if ($pgRc -ne 0 -and $neoRc -ne 0) { return 1 }
-        return 0
+        return (Invoke-PgDumpStrategy -Fingerprint 'docker-compose-down-v')
     }
     if ($cmdLine -match '^(pnpm\s+.*\s+)?prisma\s+migrate\s+reset') {
         return (Invoke-PgDumpStrategy -Fingerprint 'prisma-migrate-reset')

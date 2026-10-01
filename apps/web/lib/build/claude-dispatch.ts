@@ -22,6 +22,7 @@ import {
 } from "./sandbox/agent-cli-runtime";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
+import { providerSetupLocation } from "@/lib/ai-provider-routes";
 
 // Timeout per task. Data-architect tasks need more time for schema design.
 const CLAUDE_TASK_TIMEOUT_MS = 900_000;        // 15 minutes default
@@ -64,7 +65,7 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
     const credential = await getDecryptedCredential(providerId);
     const apiKey = credential?.secretRef ?? credential?.cachedToken;
     if (!apiKey) {
-      throw new Error(`No Anthropic API key for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
+      throw new Error(`No Anthropic API key for provider "${providerId}". Configure via ${providerSetupLocation(providerId)}.`);
     }
     return { mode: "apikey", apiKey };
   }
@@ -75,7 +76,7 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
   // causing 401. CLAUDE_CODE_OAUTH_TOKEN takes the raw sk-ant-oat01-... string.
   const result = await getProviderBearerToken(providerId);
   if ("error" in result) {
-    throw new Error(`OAuth token refresh failed for "${providerId}": ${result.error}. Re-authenticate via Admin > AI Providers > Anthropic Subscription.`);
+    throw new Error(`OAuth token refresh failed for "${providerId}": ${result.error}. Re-authenticate via ${providerSetupLocation(providerId)}.`);
   }
   return { mode: "oauth", tokenJson: result.token };
 }

@@ -135,6 +135,8 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   "executor-changed",
   "scope-claimed",
   "scope-released",
+  // BI-CB5C0DCE: a governed move of the room's work-shape pin to a newer version.
+  "workshape-rebound",
   "work-intent-declared",
   "change-impact-planned",
   "evidence-recorded",

@@ -14,6 +14,7 @@
 // Logic lives in scripts/lib/pre-push-gate-infrastructure-probe.mjs; this file
 // is the process boundary.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { resolveWorktreeContext } from "./pregate-status.mjs";
 import { createLocalCiSlotManifest } from "./lib/local-ci-slot-manifest.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
@@ -26,23 +27,21 @@ function usage() {
 }
 
 export function parseArgs(argv, env = process.env) {
-  const options = {
-    branch: "",
-    sha: "",
-    mcpUrl: env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1",
+  const { values } = utilParseArgs({
+    args: argv,
+    options: {
+      branch: { type: "string" },
+      sha: { type: "string" },
+      "mcp-url": { type: "string" },
+      help: { type: "boolean", short: "h" },
+    },
+  });
+  if (values.help) return null;
+  return {
+    branch: values.branch ?? "",
+    sha: values.sha ?? "",
+    mcpUrl: values["mcp-url"] ?? (env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1"),
   };
-  const args = [...argv];
-  while (args.length) {
-    const arg = args.shift();
-    switch (arg) {
-      case "--branch": options.branch = args.shift() ?? ""; break;
-      case "--sha": options.sha = args.shift() ?? ""; break;
-      case "--mcp-url": options.mcpUrl = args.shift() ?? ""; break;
-      case "--help": case "-h": return null;
-      default: throw new Error(`unknown argument: ${arg}`);
-    }
-  }
-  return options;
 }
 
 async function main() {

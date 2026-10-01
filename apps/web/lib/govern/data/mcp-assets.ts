@@ -4,7 +4,7 @@
 // resolves its fields at the model-level default (coverage.ts). Kept in its own
 // module so the core assets registry stays under the module-size ceiling.
 
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 
 const CLASSIFICATION = {
   state: "confirmed",

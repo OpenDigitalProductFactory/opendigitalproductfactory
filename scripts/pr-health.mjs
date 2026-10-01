@@ -44,6 +44,7 @@ import {
   classifyLocalCiOverride,
 } from "../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { isTestStubGateRecord } from "./lib/local-ci-gate-state.mjs";
 import {
   LOCAL_CI_SLOT_KEYS,
   createLocalCiSlotManifest,
@@ -70,6 +71,8 @@ export function selectLocalCiStateRecord({ headSha, records, now = Date.now() })
   const forHead = usable.filter((r) => headSha && r.state.sha === headSha);
   const livePass = forHead.find((r) => {
     if (r.state.gatePassed !== true || r.state.evidencePending === true) return false;
+    // BI-53B189C8: a stub run passes without building anything.
+    if (isTestStubGateRecord(r.state)) return false;
     const expiry = Date.parse(r.state.expiresAt || "");
     return !Number.isFinite(expiry) || expiry > now;
   });
@@ -223,7 +226,10 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
   // blockers — agents cannot green-wash "unit tests only".
   if (localCi) {
     const rec = localCi.stateRecord;
-    const recMatchesHead = rec && localCi.headSha && rec.sha === localCi.headSha;
+    // BI-53B189C8: a DPF_ALLOW_LOCAL_CI_STUB record says passed without building
+    // anything. It counts as no record at all, and the blocker names it.
+    const stubForHead = Boolean(rec && localCi.headSha && rec.sha === localCi.headSha && isTestStubGateRecord(rec));
+    const recMatchesHead = rec && localCi.headSha && rec.sha === localCi.headSha && !stubForHead;
     if (localCi.docsOnly) {
       notes.push("local-CI gate not required — docs-only change set");
     } else if (recMatchesHead && rec.gatePassed === true) {
@@ -284,6 +290,12 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
           `unknown local-CI attestation kind ${JSON.stringify(localCi.attestation.kind)}`,
         );
       }
+    } else if (stubForHead) {
+      blockers.push(
+        `the local-CI record for head ${localCi.headSha.slice(0, 12)} was written by the ` +
+          `DPF_ALLOW_LOCAL_CI_STUB=1 test stub (branch ${rec.branch || "unknown"}) — no sandbox build ran, ` +
+          "so it is not evidence. Run `pnpm run pregate` from the branch worktree.",
+      );
     } else {
       blockers.push(
         "no local-CI sandbox evidence for the PR head SHA — run `pnpm run pregate` from the " +

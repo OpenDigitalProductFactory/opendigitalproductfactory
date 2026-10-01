@@ -1,14 +1,13 @@
 # Open Digital Product Factory -- worktree MCP config seeder (Windows PowerShell)
 #
-# Copies .mcp.json and .vscode/mcp.json from the main worktree (root clone)
-# into a target git worktree so Claude Code's /mcp connector list and the
-# VS Code MCP client can find the dpf server.
+# Copies .vscode/mcp.json (when the root clone has one) from the main worktree
+# into a target git worktree so the VS Code MCP client can find the dpf server.
+# The file is gitignored, so it does not travel with `git worktree add`.
 #
-# Predicated on platform installation: scripts/setup.ps1 must have completed
-# AND an admin must have generated an MCP token at Admin > Platform Development
-# (which writes the source files at the root clone). The two source files are
-# gitignored on purpose -- they carry a local bearer token -- so they do not
-# travel with `git worktree add`.
+# It never copies a project .mcp.json (BI-5201141C, design 12.4.4): Claude
+# Code's dpf connector is the dpf-platform plugin's URL-only descriptor, which
+# every worktree already has, and Claude Code de-duplicates plugin and project
+# servers by endpoint -- a copied .mcp.json would load as a second dpf server.
 #
 # For linked worktrees, this also writes a worktree-scoped COMPOSE_PROJECT_NAME
 # into the target .env file. docker-compose.yml defaults to the root project
@@ -146,24 +145,16 @@ if ($composeResult -like "Existing*") {
     Write-Ok $composeResult
 }
 
+# Claude Code: the dpf-platform plugin owns the connector (no project file).
 $pairs = @(
-    @{ Src = (Join-Path $mainAbs ".mcp.json");        Dst = (Join-Path $Target ".mcp.json") },
     @{ Src = (Join-Path $mainAbs ".vscode\mcp.json"); Dst = (Join-Path $Target ".vscode\mcp.json") }
 )
 
 Write-Step "Copying MCP config"
 foreach ($pair in $pairs) {
     if (-not (Test-Path -LiteralPath $pair.Src)) {
-        Write-Host ""
-        Write-Host "  [FAIL] Missing source: $($pair.Src)" -ForegroundColor Red
-        Write-Host ""
-        Write-Host "  The platform must be installed and an MCP token generated before seeding worktrees." -ForegroundColor Yellow
-        Write-Host "  Steps:" -ForegroundColor Yellow
-        Write-Host "    1. From the main worktree at $mainAbs, run scripts\setup.ps1 if you have not already." -ForegroundColor Yellow
-        Write-Host "    2. Start the platform (pnpm dev or docker compose up) and log in at http://localhost:3000 as admin@dpf.local." -ForegroundColor Yellow
-        Write-Host "    3. Open Admin > Platform Development and generate an MCP token (writes .mcp.json + .vscode\mcp.json at the root)." -ForegroundColor Yellow
-        Write-Host "    4. Re-run this script." -ForegroundColor Yellow
-        exit 1
+        Write-Skip "No $($pair.Src) in the root clone; nothing to copy."
+        continue
     }
 
     $dstDir = [System.IO.Path]::GetDirectoryName($pair.Dst)
@@ -206,7 +197,7 @@ $readinessReason = "dependencies_missing"
 $probedViaHelper = $false
 
 # BI-3047C122 (Wave 3): a cheap real probe (dependency resolution + @dpf/*
-# workspace-link locality) beats structural node_modules presence — the latter
+# workspace-link locality) beats structural node_modules presence -- the latter
 # marked a node_modules JUNCTIONED TO A STALE SIBLING WORKTREE "compile-ready"
 # on 2026-07-24, silently typechecking against the wrong source. Runs
 # unconditionally (no install; cheap) via --classify-only; falls back to the

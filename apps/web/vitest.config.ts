@@ -166,6 +166,10 @@ export default defineConfig({
         find: "@dpf/db/installation-operating-intent",
         replacement: resolve(rootDir, "packages/db/src/installation-operating-intent.ts"),
       },
+      {
+        find: "@dpf/db/backlog-portfolio",
+        replacement: resolve(rootDir, "packages/db/src/backlog-portfolio.ts"),
+      },
       { find: "@dpf/db", replacement: resolve(rootDir, "packages/db/src/client.ts") },
       {
         find: "@dpf/finance-templates",
@@ -174,6 +178,14 @@ export default defineConfig({
       {
         find: "@dpf/storefront-templates",
         replacement: resolve(rootDir, "packages/storefront-templates/src/index.ts"),
+      },
+      {
+        find: /^@dpf\/i18n\/runtime$/,
+        replacement: resolve(rootDir, "packages/i18n/src/runtime.ts"),
+      },
+      {
+        find: /^@dpf\/i18n$/,
+        replacement: resolve(rootDir, "packages/i18n/src/index.ts"),
       },
       {
         find: "@dpf/validators",

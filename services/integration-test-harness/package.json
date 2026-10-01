@@ -12,15 +12,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@stoplight/prism-cli": "5.16.0",
-    "@stoplight/prism-http": "5.16.0",
-    "pino": "^10.3.1"
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
-    "@types/pino": "^7.0.5",
-    "@types/node": "^26.2.0",
-    "tsx": "^4.23.13",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

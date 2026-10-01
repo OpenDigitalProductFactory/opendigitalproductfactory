@@ -95,10 +95,10 @@ describe("aiDecisionToAttentionItem", () => {
     expect(item.riskClass).toBe("high-risk");
     expect(item.triage.residueReason).toBe("high-risk-gate");
     expect(item.triage.blastRadius).toBe("build FB-3");
-    expect(item.deepLink).toBe("/platform/ai/decisions/DI-1");
+    expect(item.deepLink).toBe("/coworker-decisions/decisions/DI-1");
     expect(item.actions[0]).toMatchObject({
       label: "Review evidence",
-      href: "/platform/ai/decisions/DI-1",
+      href: "/coworker-decisions/decisions/DI-1",
     });
   });
 
@@ -289,7 +289,7 @@ describe("agentProposalToAttentionItem", () => {
     expect(item.title).toBe("Review proactivity: Balanced -> Assertive");
     expect(item.context).toBe("Why now: Late customer appointments should be warned earlier.");
     expect(item.triage.blastRadius).toBe("field-dispatch-appointment");
-    expect(item.actions).toContainEqual({ kind: "open-in-context", label: "Review proactivity change", href: "/platform/ai" });
+    expect(item.actions).toContainEqual({ kind: "open-in-context", label: "Review proactivity change", href: "/platform/ai/overview" });
     expect(item.actions).toContainEqual({ kind: "snooze", label: "Snooze" });
     expect(item.context).not.toMatch(/AP-|queue|diagnostic/i);
     expect(item.proactivity).toEqual({

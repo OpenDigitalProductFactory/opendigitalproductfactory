@@ -6,7 +6,7 @@ import {
   normalizePriorityClass,
   slugifyReferenceModelName,
 } from "./reference-model-import.js";
-import { readWorkbook, requireSheetData, sheetDataToObjects } from "./excel-sheet-reader.js";
+import { IT4IT_REFERENCE_JSON_PATH, loadIt4itReferenceRows } from "./it4it-reference-data.js";
 import {
   referenceModelAppliesToInstall,
   type InstallArchetype,
@@ -22,17 +22,11 @@ export {
   type InstallArchetype,
 } from "./reference-model-applicability";
 
-import type {
-  FunctionalCriteriaRow,
-  ParticipationMatrixRow,
-  ValueStreamActivityRow,
-} from "./reference-model-types.js";
 
 // __dirname is packages/db/src at runtime (tsx) — three levels up is repo root (/app in container).
 // The prior four-level climb landed at / and made the IT4IT workbook unfindable on every install.
 const REPO_ROOT = process.env.DPF_DATA_ROOT ?? join(__dirname, "..", "..", "..");
 const REFERENCE_ROOT = join(REPO_ROOT, "docs", "Reference");
-const IT4IT_WORKBOOK_PATH = join(REFERENCE_ROOT, "IT4IT_Functional_Criteria_Taxonomy.xlsx");
 
 function slugifyPart(value: string): string {
   return value
@@ -44,44 +38,6 @@ function slugifyPart(value: string): string {
 
 function buildElementSlug(kind: string, ...parts: string[]): string {
   return [kind, ...parts.map(slugifyPart)].filter(Boolean).join("__");
-}
-
-async function loadIt4itWorkbook() {
-  const workbook = await readWorkbook(IT4IT_WORKBOOK_PATH);
-
-  const functionalRows = sheetDataToObjects(requireSheetData(workbook, "IT4IT Functional Criteria"));
-  const valueStreamRows = sheetDataToObjects(requireSheetData(workbook, "Value Stream Activities"));
-  const participationRows = sheetDataToObjects(requireSheetData(workbook, "FC Participation Matrix"));
-
-  return {
-    functionalRows: functionalRows.map<FunctionalCriteriaRow>((row) => ({
-      capabilityGroup: String(row["Level 1: Capability Group"] ?? "").trim(),
-      functionName: String(row["Level 2: Function"] ?? "").trim(),
-      componentName: String(row["Level 3: Functional Component"] ?? "").trim(),
-      criteria: String(row["Functional Criteria"] ?? "").trim(),
-      referenceSection: row["Reference Section"] == null ? null : String(row["Reference Section"]).trim(),
-    })),
-    valueStreamRows: valueStreamRows.map<ValueStreamActivityRow>((row) => ({
-      valueStream: String(row["Value Stream"] ?? "").trim(),
-      valueStreamStage: String(row["Value Stream Stage"] ?? "").trim(),
-      criteria: String(row["Activity Criteria"] ?? "").trim(),
-      referenceSection: row["Reference Section"] == null ? null : String(row["Reference Section"]).trim(),
-    })),
-    participationRows: participationRows.map<ParticipationMatrixRow>((row) => {
-      const participationByColumn: Record<string, string | null> = {};
-      for (const [key, value] of Object.entries(row)) {
-        if (key === "Value Stream" || key === "Value Stream Stage" || key === "Ref") continue;
-        participationByColumn[key] = value == null ? null : String(value).trim();
-      }
-
-      return {
-        valueStream: String(row["Value Stream"] ?? "").trim(),
-        valueStreamStage: String(row["Value Stream Stage"] ?? "").trim(),
-        reference: row["Ref"] == null ? null : String(row["Ref"]).trim(),
-        participationByColumn,
-      };
-    }),
-  };
 }
 
 async function upsertElement(args: {
@@ -334,7 +290,10 @@ export async function seedEaReferenceModels(): Promise<void> {
     });
   }
 
-  const { functionalRows, valueStreamRows, participationRows } = await loadIt4itWorkbook();
+  // BI-B470264D: committed JSON generated from the workbook at dev time. The
+  // seed never parses the .xlsx, so neither a spreadsheet parser nor LFS
+  // content in the image is on the portal-init path (BI-FEE26C36).
+  const { functionalRows, valueStreamRows, participationRows } = loadIt4itReferenceRows();
 
   const domainIds = new Map<string, string>();
   const functionIds = new Map<string, string>();
@@ -541,7 +500,7 @@ export async function seedEaReferenceModels(): Promise<void> {
   });
   if (it4itElementCount === 0) {
     throw new Error(
-      `IT4IT reference model imported zero elements from ${IT4IT_WORKBOOK_PATH} — the workbook read did not throw but produced no rows (check for an LFS pointer stub or an empty/relabelled sheet).`
+      `IT4IT reference model imported zero elements from ${IT4IT_REFERENCE_JSON_PATH} — the read did not throw but produced no rows (regenerate it with scripts/generate-it4it-reference-json.ts and check for an empty/relabelled sheet).`
     );
   }
 

@@ -112,6 +112,45 @@ export function evaluateResourceBudgets({ budget, composeText }) {
   return { ok: errors.length === 0, errors, notes };
 }
 
+const GIB = 1024 ** 3;
+
+/** Compose memory limit ("2g", "512m", "1G") in bytes, or null when unreadable. */
+export function parseMemoryBytes(value) {
+  const match = /^(\d+(?:\.\d+)?)([kmg])b?$/i.exec(String(value ?? "").trim());
+  if (!match) return null;
+  const unit = { k: 1024, m: 1024 ** 2, g: GIB }[match[2].toLowerCase()];
+  return Math.round(Number(match[1]) * unit);
+}
+
+/**
+ * BI-48EACCB0 (BI-903FB5F9 slice B, WWMD DI-9DEEEA173B48): the largest VM this
+ * budget will size must still admit a local-CI build, i.e. hold the always-on
+ * stack's memory limits, the builder's measured admission reserve and the
+ * admission floor. Evidence decides the VM size; this guard makes a change to
+ * any of the three that would leave local-CI unadmittable on every install
+ * fail here instead of surfacing as a pool that never opens.
+ */
+export function evaluateLocalCiFit({ budget, builderReserveBytes, floorBytes }) {
+  const maxMemoryGb = Number(budget?.host?.wsl?.maxMemoryGb);
+  const limits = Object.values(budget?.alwaysOnServices ?? {}).map((spec) => parseMemoryBytes(spec?.memory));
+  if (
+    !Number.isFinite(maxMemoryGb) || maxMemoryGb <= 0
+    || limits.length === 0 || limits.some((bytes) => bytes === null)
+    || !Number.isFinite(builderReserveBytes) || builderReserveBytes <= 0
+    || !Number.isFinite(floorBytes) || floorBytes < 0
+  ) {
+    return { ok: false, message: "local-CI fit cannot be evaluated: the budget, builder reserve or admission floor is unreadable" };
+  }
+  const vmBytes = maxMemoryGb * GIB;
+  const alwaysOnBytes = limits.reduce((sum, bytes) => sum + bytes, 0);
+  const headroomBytes = vmBytes - alwaysOnBytes - builderReserveBytes - floorBytes;
+  const gib = (bytes) => (bytes / GIB).toFixed(2);
+  const arithmetic = `${maxMemoryGb} GiB VM - ${gib(alwaysOnBytes)} always-on - ${gib(builderReserveBytes)} builder reserve - ${gib(floorBytes)} floor`;
+  return headroomBytes >= 0
+    ? { ok: true, alwaysOnBytes, headroomBytes, message: `local-CI fits the largest budgeted VM: ${arithmetic} = ${gib(headroomBytes)} GiB headroom` }
+    : { ok: false, alwaysOnBytes, headroomBytes, message: `the largest budgeted VM cannot admit a local-CI build: ${arithmetic}, short by ${gib(-headroomBytes)} GiB` };
+}
+
 export function sizeWslCeilings(host, policy = {}) {
   const p = {
     memoryShareOfHost: 0.5,
@@ -149,10 +188,21 @@ export function sizeWslCeilings(host, policy = {}) {
   };
 }
 
-function main() {
+async function main() {
   const budget = JSON.parse(readFileSync(BUDGET_PATH, "utf8"));
   const composeText = readFileSync(COMPOSE_PATH, "utf8");
   const result = evaluateResourceBudgets({ budget, composeText });
+  // Sources of truth, read rather than copied: the measured builder reserve and
+  // the admission floor the pool applies.
+  const slotResources = JSON.parse(readFileSync(join(ROOT, "apps/web/lib/nonprod/local-ci-slot-resources.json"), "utf8"));
+  const { derivedLocalCiPoolConfig } = await import("../apps/web/lib/nonprod/local-ci-pool-policy.ts");
+  const fit = evaluateLocalCiFit({
+    budget,
+    builderReserveBytes: slotResources.builderPolicy.admissionReserveBytes,
+    floorBytes: derivedLocalCiPoolConfig(1).ceilings.minAvailableMemoryBytes,
+  });
+  if (fit.ok) result.notes.push(fit.message);
+  else { result.ok = false; result.errors.push(fit.message); }
   for (const n of result.notes) console.log(`[resource-budgets] ${n}`);
   if (!result.ok) {
     console.error("[resource-budgets] FAILED:");
@@ -162,4 +212,4 @@ function main() {
   console.log("[resource-budgets] always-on services are born-bounded. OK");
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await main();

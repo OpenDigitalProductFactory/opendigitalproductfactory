@@ -3,6 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    organization: {
+      findFirst: vi.fn().mockResolvedValue({ topAccountablePrincipal: { id: "p-1", displayName: "Avery Owner" } }),
+    },
     platformConfig: {
       findMany: vi.fn().mockResolvedValue([]),
       // loadReadabilityPolicy() reads this key; null → default policy.
@@ -15,6 +18,20 @@ vi.mock("@/components/admin/AdminTabNav", () => ({
   AdminTabNav: () => <div>admin-tab-nav</div>,
 }));
 
+vi.mock("@/components/admin/OrganizationAccountableOwnerPanel", () => ({
+  OrganizationAccountableOwnerPanel: ({ owner }: { owner: { displayName: string } | null }) => (
+    <div>accountable-owner-panel:{owner?.displayName ?? "none"}</div>
+  ),
+}));
+
+vi.mock("@/lib/i18n/locale-context.server", () => ({
+  getLocaleContext: vi.fn().mockResolvedValue({ language: "en-US" }),
+}));
+
+vi.mock("@/lib/identity/principal-linking", () => ({
+  listActiveHumanPrincipalsForUsers: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock("@/components/admin/SocialAuthPanel", () => ({
   SocialAuthPanel: () => <div>social-auth-panel</div>,
 }));
@@ -25,6 +42,14 @@ vi.mock("@/components/admin/EmailSettingsPanel", () => ({
 
 vi.mock("@/components/admin/ReadabilityPolicyPanel", () => ({
   ReadabilityPolicyPanel: () => <div>readability-policy-panel</div>,
+}));
+
+vi.mock("@/components/admin/LocalePreferencesPanel", () => ({
+  LocalePreferencesPanel: () => <div>locale-preferences-panel</div>,
+}));
+
+vi.mock("@/lib/actions/locale-preferences", () => ({
+  getLocalePreferences: vi.fn().mockResolvedValue({ preferredLanguage: null, timeZone: null, viewerIsAdmin: true }),
 }));
 
 vi.mock("@/components/admin/PlatformKeysPanel", () => ({
@@ -56,5 +81,7 @@ describe("AdminSettingsPage", () => {
 
     expect(html).toContain("File Upload Storage Path");
     expect(html).not.toContain("Brave Search API Key");
+    expect(html).toContain("locale-preferences-panel");
+    expect(html).toContain("accountable-owner-panel:Avery Owner");
   });
 });

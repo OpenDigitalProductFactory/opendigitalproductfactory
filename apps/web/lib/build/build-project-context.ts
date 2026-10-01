@@ -72,7 +72,6 @@ DEBUGGING — when something fails:
 - If a tool fails, try a different approach — do NOT call the same tool with the same arguments
 - If edit_sandbox_file fails to find text, read the file first to see exact content
 - If the schema is too large to read whole, use offset and limit parameters
-- Qdrant errors are irrelevant for most features — ignore them
 - "Sandbox not ready" usually means dependencies need installing: run_sandbox_command "pnpm install"
 
 VERIFICATION — before claiming done:

@@ -63,7 +63,7 @@ export async function collectContainerMetrics(containerName: string): Promise<Pr
   return { status, metrics, message: null };
 }
 
-// postgres-only after BET-5 retired the qdrant vector DB.
+// Postgres is the only database probed (BET-5).
 export async function collectDatabaseMetrics(dbType: "postgres"): Promise<ProbeMetrics> {
   void dbType;
   const [upResult, connResult, maxResult] = await Promise.all([
@@ -124,7 +124,7 @@ export type BridgeResult = {
 export async function runHealthProbeBridge(): Promise<BridgeResult[]> {
   const results: BridgeResult[] = [];
 
-  // Container probes (neo4j + qdrant retired by BET-5).
+  // Container probes.
   const containers = [
     "dpf-portal-1",
     "dpf-postgres-1",

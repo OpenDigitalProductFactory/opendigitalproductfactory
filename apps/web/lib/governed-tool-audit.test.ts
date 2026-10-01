@@ -4,7 +4,7 @@ import {
   setGovernedToolAuditOverridesForTests,
   writeGovernedToolAudit,
 } from "./governed-tool-audit";
-import type { ToolDefinition } from "./mcp-tools";
+import type { ToolDefinition } from "./mcp-tool-types";
 
 const baseTool: ToolDefinition = {
   name: "read_source_at_version",
@@ -78,7 +78,7 @@ describe("writeGovernedToolAudit", () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
       auditClass: "metrics_only",
       parameters: {},
-      result: {},
+      result: { error: "missing" },
     }));
   });
 });

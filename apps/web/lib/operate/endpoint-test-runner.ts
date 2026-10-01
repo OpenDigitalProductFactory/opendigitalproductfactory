@@ -14,7 +14,8 @@ import {
   type CapabilityProbe,
   type TestScenario,
 } from "./endpoint-test-registry";
-import { callProvider, type ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { callProvider } from "@/lib/ai-inference";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 

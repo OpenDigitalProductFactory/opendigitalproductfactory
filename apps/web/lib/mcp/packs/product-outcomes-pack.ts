@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   PRODUCT_OBJECTIVE_REVIEW_CADENCES,
   PRODUCT_OBJECTIVE_STATUSES,

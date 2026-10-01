@@ -293,6 +293,8 @@ export async function runPipelineStepDurable(params: {
       await heartbeat(taskRunId);
       return state;
     } catch (err) {
+      const { describeCapacityDeferral } = await import("./capacity-deferral");
+      if (describeCapacityDeferral(err)) throw err;
       attempt++;
       let errorMsg = getErrorMessage(err);
       const { getAutonomousPlaybookMode } = await import("./build-studio-config");

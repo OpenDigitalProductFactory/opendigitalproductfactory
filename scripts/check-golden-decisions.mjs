@@ -23,7 +23,8 @@
 // both engines (this scorer + the canonical vitest test) run in CI against the same
 // corpus, so any behavioral divergence surfaces as one going red.
 
-import { execFileSync } from "node:child_process";
+import { parseArgs as utilParseArgs } from "node:util";
+import { gitText } from "./lib/git.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -151,12 +152,7 @@ export function loadCommandments(dir = PRINCIPLES_DIR, professionsDir = PROFESSI
 }
 
 function defaultGit(args) {
-  return execFileSync("git", args, {
-    cwd: join(HERE, ".."),
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 32 * 1024 * 1024,
-  });
+  return gitText(args, { cwd: join(HERE, ".."), trim: false, maxBuffer: 32 * 1024 * 1024 });
 }
 
 /**
@@ -222,9 +218,11 @@ export function runCheck(dir = PRINCIPLES_DIR, { commandments } = {}) {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 const invokedDirectly = process.argv[1] && process.argv[1].replace(/\\/g, "/").endsWith("check-golden-decisions.mjs");
 if (invokedDirectly) {
-  const mergeWithIndex = process.argv.indexOf("--merge-with");
-  const mergeWith = mergeWithIndex >= 0 ? process.argv[mergeWithIndex + 1] : null;
-  if (mergeWithIndex >= 0 && !mergeWith) {
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args: process.argv.slice(2), strict: false, allowPositionals: true, options: { "merge-with": { type: "string" } } });
+  const mergeWithGiven = values["merge-with"] !== undefined;
+  const mergeWith = !mergeWithGiven ? null : typeof values["merge-with"] === "string" ? values["merge-with"] : undefined;
+  if (mergeWithGiven && !mergeWith) {
     throw new Error("--merge-with requires a Git ref");
   }
   const commandments = mergeWith

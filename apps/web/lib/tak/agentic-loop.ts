@@ -12,7 +12,8 @@ import {
   recordRepeatedToolIssue,
 } from "@/lib/tak/runtime-issues";
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
-import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
+import { PLATFORM_TOOLS, toolsToOpenAIFormat } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { createAuthorizedSurfaceTurnGovernance } from "@/lib/coworker/authorized-surface-execution-context";
 import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
@@ -26,8 +27,7 @@ import { resolveRouteContext } from "@/lib/route-context-map";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
-import type { ChatMessage } from "@/lib/ai-inference";
-import type { ToolCallEntry } from "@/lib/routing/adapter-types";
+import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
 import { prisma } from "@dpf/db";
 import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
@@ -38,10 +38,10 @@ import {
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
   resolveTurnGroundedGuidanceRoute,
   resolveTurnMinimumCapabilities,
+  type AgentMinimumCapabilities,
 } from "@/lib/routing/agent-capability-types";
 import { extractToolCalls } from "@/lib/routing/extract-tool-calls";
 import { lookupPinnedModelFamily } from "@/lib/routing/model-successor";
-import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
 import type { UserContext } from "@/lib/permissions";
 import {
   type ExecutionPlan,
@@ -908,8 +908,6 @@ export function buildToolSessionHintMessage(
     "]"
   );
 }
-
-
 
 export type RunAgenticLoopParams = {
 
@@ -2209,11 +2207,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     for (const providerToolCall of result.toolCalls) {
       let tc = providerToolCall;
       if (params.terminalToolPolicy) {
-        const normalized = normalizeTerminalToolArguments(
-          params.terminalToolPolicy,
-          tc.name,
-          tc.arguments,
-        );
+        // BI-E8237EAE: size governed reader pages to what this model can see whole.
+        const normalized = normalizeTerminalToolArguments(params.terminalToolPolicy, tc.name, tc.arguments, resolveToolResultCharCap(resolvedMaxContextTokens));
         if (normalized.kind === "refuse") {
           executedTools.push({ name: tc.name, args: tc.arguments, result: normalized.result });
           iterationResults.push({ tc, toolResult: normalized.result });
@@ -2521,7 +2516,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         // left `message` unbounded and gave the model no signal that data was
         // cut. The stored toolResult (audit/receipts) is unaffected.
         content: clampToolResultForModel(toolResult, {
-          maxChars: resolveToolResultCharCap(resolvedMaxContextTokens),
+          maxChars: resolveToolResultCharCap(resolvedMaxContextTokens), toolName: tc.name,
         }).text,
         toolCallId: tc.id,
       })),

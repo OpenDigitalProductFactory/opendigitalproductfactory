@@ -1,4 +1,4 @@
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 
 export type RunBrandExtractionInput = {
   organizationId: string;
@@ -305,7 +305,7 @@ export async function runBrandExtraction(input: RunBrandExtractionInput): Promis
   }
 }
 
-export const brandExtract = inngest.createFunction(
+export const brandExtract = jobs.createFunction(
   {
     id: "brand/extract",
     retries: 1,

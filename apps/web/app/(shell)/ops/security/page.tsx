@@ -4,7 +4,7 @@
 // decision? Are we improving? An empty board with no sources is NOT a green
 // state — the coverage card flags it.
 
-import { OpsTabNav } from "@/components/ops/OpsTabNav";
+import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
 import { StatCard, StatusBadge } from "@/components/ui/report-kit";
 import { loadSocConsole } from "@/lib/security/console-loader";
 
@@ -22,7 +22,7 @@ export default async function SecurityConsolePage() {
         </p>
       </div>
 
-      <OpsTabNav />
+      <PlatformTabNav />
 
       {!data.coverage.monitoring && (
         <p className="mt-4 text-sm text-[var(--dpf-muted)]">

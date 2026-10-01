@@ -21,7 +21,8 @@
 // behind the gate at once. `summary.consequentialGate` in the capability
 // measure reports the remaining gap so it stays visible rather than assumed.
 
-import { PLATFORM_TOOLS, type ToolDefinition } from "@/lib/mcp-tools";
+import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { CONSEQUENTIAL_DECISION_TOOLS } from "@/lib/tak/decision-routing-governance-hook";
 
 export type ConsequenceClassifiableTool = Pick<

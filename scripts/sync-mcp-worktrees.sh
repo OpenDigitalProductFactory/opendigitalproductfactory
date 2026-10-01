@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # scripts/sync-mcp-worktrees.sh
 #
-# POSIX counterpart of sync-mcp-worktrees.ps1 -- propagate the gitignored DPF
-# MCP client config (.mcp.json + .vscode/mcp.json) from the root clone into
-# every LINKED git worktree, give each linked worktree a unique
+# POSIX counterpart of sync-mcp-worktrees.ps1 -- propagate the gitignored VS
+# Code MCP client config (.vscode/mcp.json) from the root clone into every
+# LINKED git worktree, give each linked worktree a unique
 # COMPOSE_PROJECT_NAME, and stamp its compile-ready/source-only readiness.
+#
+# It never copies a project .mcp.json (BI-5201141C, design 12.4.4): Claude
+# Code's dpf connector is the dpf-platform plugin's URL-only descriptor, and
+# Claude Code de-duplicates plugin and project servers by endpoint, so a copied
+# .mcp.json would load as a second dpf server.
 #
 # Invoked automatically by the Claude Code WorktreeCreate hook through
 # scripts/hooks/run-hook.mjs (see .claude/settings.json), and runnable by hand
@@ -16,10 +21,9 @@
 # marker -- so it is cheap and safe to fire on EVERY worktree creation. Reach
 # for seed-worktree-mcp.sh when you also want the skill pack in a worktree.
 #
-# Differences vs the .ps1: copies the files (no hardlinks -- portable across
+# Differences vs the .ps1: copies the file (no hardlinks -- portable across
 # filesystems and works for worktrees anywhere, not just one drive) and
-# re-registers nothing (the .mcp.json uses ${DPF_MCP_BEARER_TOKEN} env-var
-# notation, so there is no per-token rewrite to do).
+# rewrites no token (the PowerShell twin's -Token rotation is legacy mode).
 #
 # Exit 0 ALWAYS -- a sync failure must never block worktree creation or use.
 #
@@ -38,11 +42,7 @@ GIT_COMMON_DIR="$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-co
 [ -n "$GIT_COMMON_DIR" ] || exit 0
 MAIN_ROOT="$(cd "$(dirname "$GIT_COMMON_DIR")" 2>/dev/null && pwd -P)" || exit 0
 
-SRC_MCP="$MAIN_ROOT/.mcp.json"
 SRC_VSCODE="$MAIN_ROOT/.vscode/mcp.json"
-
-# Nothing to propagate yet (platform not installed / no MCP token minted).
-[ -f "$SRC_MCP" ] || exit 0
 
 # ---- Helpers (mirror scripts/seed-worktree-mcp.sh behaviour) ----------------
 
@@ -174,7 +174,6 @@ while IFS= read -r line; do
             [ -d "$wt" ] || continue
             wt_abs="$(cd "$wt" 2>/dev/null && pwd -P)" || continue
             [ "$wt_abs" = "$MAIN_ROOT" ] && continue
-            copy_into "$SRC_MCP" "$wt_abs/.mcp.json"
             copy_into "$SRC_VSCODE" "$wt_abs/.vscode/mcp.json"
             set_compose_project_env "$wt_abs/.env" "$(compose_project_name_for "$wt_abs")"
             write_readiness_marker "$wt_abs"

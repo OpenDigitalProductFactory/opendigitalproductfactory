@@ -4,7 +4,10 @@ import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surfac
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
 import { BANKING_TOOL_GRANTS } from "./banking-tool-grants";
+import { DOCUMENT_TOOL_GRANTS } from "./document-tool-grants";
 import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
+import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-grants";
+import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -71,6 +74,14 @@ export function expandGrants(grants: readonly string[]): string[] {
     }
   }
   return Array.from(expanded);
+}
+/** THE runtime reachability rule (BI-378D3659): required grants are ALTERNATIVES — any one held after
+ *  expansion suffices; [] is universal. Report it with this, never an every-grant test; the .mjs
+ *  capability measure mirrors it (grant-reachability-parity.test.ts). */
+export function grantsSatisfyRequirement(required: readonly string[], held: readonly string[]): boolean {
+  if (required.length === 0) return true;
+  const expanded = new Set(expandGrants(held));
+  return required.some((g) => expanded.has(g));
 }
 /**
  * Read-only baseline every coworker holds, regardless of its agent-specific
@@ -157,6 +168,11 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   sweep_duplicate_demand: ["backlog_read"],
   run_capacity_drain: ["backlog_write"],
   approve_demand_for_funding: ["backlog_write"],
+  propose_epic_portfolios: ["backlog_read"],
+  confirm_epic_portfolios: ["backlog_write"],
+  propose_portfolio_budgets: ["backlog_read"],
+  set_portfolio_budget: ["backlog_write"],
+  set_portfolio_owner: ["backlog_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],
@@ -209,6 +225,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // room-engagement (read). Room admission/coordinator right enforced separately.
   invite_room_participant: ["work_room_write"],
   appoint_room_coordinator: ["work_room_write"],
+  plan_account_handover: ["work_room_write"],
+  apply_account_handover: ["work_room_write"],
   get_coworker_room_engagement: ["work_room_read"],
   create_workroom: ["work_capsule_write"],
   plan_workroom_worktree: ["work_capsule_write"],
@@ -221,6 +239,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_agent_activity: ["work_capsule_write"],
   heartbeat_workroom: ["work_capsule_write"],
   update_workroom_status: ["work_capsule_write"],
+  rebind_workroom_shape: ["work_capsule_write"],
   release_workroom_scope: ["work_capsule_write"],
   reassign_workroom_executor: ["work_capsule_write"],
   get_runtime_coordination_map: ["work_capsule_read"],
@@ -244,6 +263,11 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // tool above.
   get_queue_status: ["work_capsule_read"],
   list_at_risk_queues: ["work_capsule_read"],
+  // Surface readiness (G9, multi-client governance parity, BI-6AC65187): a
+  // client surface's self-reported heartbeat rides the same tier as the other
+  // heartbeats; the fleet rollup is an ops read like the coordination map.
+  record_surface_readiness: ["work_capsule_write"],
+  get_fleet_readiness: ["work_capsule_read"],
   register_runtime_target: ["work_capsule_write"],
   heartbeat_runtime_target: ["work_capsule_write"],
   release_runtime_target: ["work_capsule_write"],
@@ -379,7 +403,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Multi-agent collaboration (EP-A2A) — targeted handoff / summon spawn a
   // child work thread, so they require the same thread_write grant as spawn.
-  request_coworker:          ["thread_write"],
+  request_coworker:          ["thread_write", "initiative_evidence_write"],
   summon_coworker:           ["thread_write"],
 
   // Registry / Products
@@ -389,7 +413,6 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   register_digital_product_from_build: ["registry_read", "backlog_write"],
   create_build_epic: ["backlog_write"],
 
-  // Web / External
   search_public_web: ["web_search"],
   fetch_public_website: ["web_search"],
   analyze_public_website_branding: ["web_search"],
@@ -397,6 +420,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   search_integrations: ["external_registry_search", "registry_read"],
   search_tool_marketplace: ["registry_read"],
   get_my_coworker_profile: ["registry_read"],
+  get_my_approval_status: ["registry_read"],
   assess_my_capabilities: ["registry_read"],
   submit_coworker_capability_need: ["registry_read"],
   list_my_capability_needs: ["registry_read"],
@@ -415,13 +439,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   search_knowledge_base: ["registry_read"],
   create_knowledge_article: ["registry_write"],
   flag_stale_knowledge: ["registry_read"],
-  doc_save: ["document_write", "registry_write"],
-  doc_load: ["document_read", "registry_read"],
-  doc_search: ["document_read", "registry_read"],
-  doc_link: ["document_write", "registry_write"],
-  doc_version_list: ["document_read", "registry_read"],
-  doc_state_change: ["document_publish", "registry_write"],
-  doc_list_references: ["document_read", "registry_read"],
+  // Managed documents (doc_* and create_presentation) — document-tool-grants.ts.
+  ...DOCUMENT_TOOL_GRANTS,
 
   // EP-WIKI-001 Phase 3b2: Founder kernel + per-org overlay wiki
   wiki_query: ["registry_read"],
@@ -613,8 +632,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Tool evaluation (EP-GOVERN-002)
   evaluate_tool: ["tool_evaluation_create"],
 
-  // EA / Ontology Graph
-  create_ea_element:      ["ea_graph_write"],
+  create_ea_element:      ["ea_graph_write"], // EA / Ontology Graph
   create_ea_relationship: ["ea_graph_write"],
   classify_ea_element:    ["ea_graph_write"],
   import_archimate:       ["ea_graph_write"],
@@ -622,6 +640,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   run_traversal_pattern:  ["ea_graph_read"],
   export_archimate:       ["ea_graph_read"],
   describe_ea_view:       ["ea_graph_read"],
+  export_ea_view_drawing: ["ea_drawing_export"], // BI-4C17BF51: renders + stores a drawing document
 
   // Customer / CRM (EP-CRM-COWORKER). The customer workspace (accounts,
   // engagements, pipeline, opportunities, quotes, orders) had a rich backend
@@ -670,6 +689,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Finance
   get_finance_period_summary:   ["financial_report_create"],
+  ...PAYABLES_TOOL_GRANTS,
 
   // Marketing / Storefront
   // Guest activity (orders / reservations / inquiries) is the storefront's
@@ -762,17 +782,14 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // paired with apply_platform_update's admin_write as the read tier.
   summarize_upgrade_impact: ["admin_read"],
 
-  // Contributor inventory sync — admin-scope on-demand trigger so agents
-  // that just pushed a branch / opened a PR can force the cron to run
-  // out-of-band rather than waiting up to 10 minutes (BI-063BDF1B Phase 5).
+  // Contributor inventory sync: on-demand trigger so an agent need not wait for the 10-minute cron (BI-063BDF1B Phase 5).
   trigger_contributor_inventory_sync: ["admin_write"],
+  ...CONTRIBUTOR_INVENTORY_TOOL_GRANTS,
   request_self_upgrade: ["admin_write"],
   issue_ux_verification_sign_in: ["sandbox_execute"], // BI-9369DEB5: UX verification sign-in; a development token already holds it
   import_organization_join_file: ["sandbox_execute"], // BI-4DD1E739: portal-mediated organization join; the same automation grant
   issue_organization_join_file: ["sandbox_execute"], // BI-AC7BCC58: the authority portal issues the join file itself
-  // Governed self-heal for the "promoter image not built" self-upgrade skip.
-  // Same admin_write scope as request_self_upgrade so the platform-engineer
-  // ("AI Ops Engineer") coworker can build the promoter image on request.
+  // Governed self-heal for the "promoter image not built" skip: admin_write like request_self_upgrade, so platform-engineer can build it.
   repair_promoter_image: ["admin_write"],
   get_self_upgrade_queue_status: ["release_plan_read"],
   get_quiescence_status: ["release_plan_read"],
@@ -816,8 +833,6 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
  * two provably identical and deletes in one edit when the window closes.
  */
 export { WORKROOM_TOOL_ALIASES } from "./workroom-tool-aliases";
-
-
 
 /**
  * The catalog of every grant KEY known to the authority registry, derived from
@@ -901,10 +916,8 @@ export async function getAgentToolGrantsAsync(agentId: string): Promise<string[]
   return getAgentToolGrants(agentId) ?? [];
 }
 
-/** Check if a specific tool is allowed by an agent's grants. The agent's
- *  held grants are expanded through GRANT_IMPLICATIONS before the check, so
- *  a coarse legacy grant (e.g. `backlog_write`) still satisfies a tool that
- *  has been refactored to require a finer grant (e.g. `build_evidence`). */
+/** Check if a tool is allowed by an agent's grants (expanded, so a coarse legacy grant such as
+ *  `backlog_write` still satisfies a tool refactored to a finer grant such as `build_evidence`). */
 export function isToolAllowedByGrants(
   toolName: string,
   agentGrants: string[],
@@ -917,11 +930,7 @@ export function isToolAllowedByGrants(
     console.warn(`[agent-grants] Tool ${JSON.stringify(toolName)} has no TOOL_TO_GRANTS entry — denied by default`);
     return false;
   }
-  if (requiredGrants.length === 0) return true;
-  // Expand the agent's grants through GRANT_IMPLICATIONS, then check that the
-  // expanded set includes at least one of the required grants.
-  const expanded = expandGrants(agentGrants);
-  return requiredGrants.some((g) => expanded.includes(g));
+  return grantsSatisfyRequirement(requiredGrants, agentGrants);
 }
 
 export type EffectivePermission = {

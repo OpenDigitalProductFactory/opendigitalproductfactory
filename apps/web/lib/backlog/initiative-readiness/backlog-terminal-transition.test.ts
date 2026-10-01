@@ -540,6 +540,77 @@ describe("merge signal unavailability is reported, never disguised as a negative
   });
 });
 
+describe("a failed completion manifest names itself, and is never disguised as a missing reviewer (BI-9D327C32)", () => {
+  // Measured on BI-1F69D3F8: the manifest declared `ux: verified` but cited no
+  // `ux_verified` row, so `validateApplicability` failed it. Because the change
+  // had merged through branch protection the DELIVERY dimension passed anyway,
+  // the manifest's blockers were dropped, and the author was told to dispatch an
+  // independent acceptance reviewer — with `reviewerRoutes: []`. Two refusals,
+  // cleared by adding one evidence row and changing nothing else.
+  const failedManifest = {
+    kind: "evaluated" as const,
+    item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature" },
+    verdict: {
+      allowed: false,
+      noOp: false,
+      normalizedManifest: { workClass: "implementation" as const, evidenceActivityIds: ["act-1"] },
+      acceptanceEvidenceRefs: [],
+      blockers: [{ code: "missing-dimension", message: "Completion evidence is missing ux", dimension: "ux" }],
+      nextAction: "Record fresh evidence for ux with record_execution_evidence, then retry with those activity IDs.",
+    },
+  };
+
+  it("carries the manifest's own blockers onto acceptance when a merge has already excused delivery", async () => {
+    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: null, activeBuild: null, productObjectiveWork: [] });
+    const seen: Array<{ completion: { requirementReasons?: Partial<Record<string, string[]>> } }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Merged through the queue; the manifest promises a ux row it never cites.",
+      completionEvidence: { workClass: "implementation", evidenceActivityIds: ["act-1"], ux: { disposition: "verified" }, migration: { disposition: "not-applicable", reason: "no schema change" } },
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => failedManifest as never,
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => "merged" as const,
+        resolveHasDesignSpec: async () => true,
+        projectReadiness: ((input: { completion: { requirementReasons?: Partial<Record<string, string[]>> } }) => { seen.push(input); return projected("input-required"); }) as never,
+      },
+    });
+
+    const acceptance = (seen[0]?.completion.requirementReasons?.ACCEPTANCE_EVIDENCE_REQUIRED ?? []).join(" ");
+    expect(acceptance, "acceptance must say the manifest is what failed").toContain("completion manifest did not pass");
+    expect(acceptance, "acceptance must name the missing dimension").toContain("missing ux");
+    expect(acceptance, "acceptance must point at the author, not a reviewer").toContain("author's to correct");
+  });
+
+  it("says nothing extra once the manifest passes", async () => {
+    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: null, activeBuild: null, productObjectiveWork: [] });
+    const seen: Array<{ completion: { requirementReasons?: Partial<Record<string, string[]>> } }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Merged through the queue with a manifest that cites every promised dimension.",
+      completionEvidence: { workClass: "implementation", evidenceActivityIds: ["act-1"] },
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({ ...failedManifest, verdict: { ...failedManifest.verdict, allowed: true, blockers: [], nextAction: null } }) as never,
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => "merged" as const,
+        resolveHasDesignSpec: async () => true,
+        projectReadiness: ((input: { completion: { requirementReasons?: Partial<Record<string, string[]>> } }) => { seen.push(input); return projected("input-required"); }) as never,
+      },
+    });
+
+    const acceptance = (seen[0]?.completion.requirementReasons?.ACCEPTANCE_EVIDENCE_REQUIRED ?? []).join(" ");
+    expect(acceptance).not.toContain("completion manifest did not pass");
+  });
+});
+
 describe("pullRequestNumbersFromActivities (BI-AFE8BB73)", () => {
   it("reads distinct PR numbers from evidence links and ignores everything else", async () => {
     const { pullRequestNumbersFromActivities } = await import("./backlog-terminal-transition");

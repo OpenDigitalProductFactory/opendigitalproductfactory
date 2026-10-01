@@ -8,7 +8,7 @@
 // context). Definitions were moved verbatim out of the inline PLATFORM_TOOLS
 // array; grants mirror agent-grants.ts TOOL_TO_GRANTS.
 
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import { DELIVERY_SHAPE_REFS } from "@/lib/work-management/delivery-shapes";
 import type { ToolPack } from "../tool-pack";
@@ -151,7 +151,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "claim_backlog_item_for_work",
     description:
-      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason.",
+      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction, and the room is born owned: the person the work is for becomes its Process Overseer and their assistant a contributor. Pass baseSha and headSha so reviewers can be routed to the exact source. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason.",
     inputSchema: {
       type: "object",
       properties: {
@@ -160,6 +160,8 @@ const definitions: ToolDefinition[] = [
         branchName: { type: "string", description: "Branch (head) for this work — the workroom is keyed on (repo, branch)." },
         repositoryFullName: { type: "string", description: "Optional GitHub repository full name; defaults to the platform repo." },
         baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
+        baseSha: { type: "string", description: "Full 40-character SHA of the base commit. With headSha, it lets reviewers be routed to the exact source; omit only before the first commit." },
+        headSha: { type: "string", description: "Full 40-character SHA of the branch head." },
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
         workShape: {
@@ -219,8 +221,12 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
-    // changes identity or authority → consult-gated (TAK §8.4.1).
+    // changes identity or authority → consult-gated (TAK §8.4.1). A plain
+    // claim on the caller's own room narrows to ordinary (BI-2D65BD1B); a forced
+    // claim or one over another principal's live lease stays `authority`.
     consequence: "authority",
+    consequenceForCall: async (call) =>
+      (await import("@/lib/work-capsules/scope-claim-consequence")).scopeClaimConsequenceForCall(call),
   },
   {
     name: "heartbeat_workroom",
@@ -249,6 +255,28 @@ const definitions: ToolDefinition[] = [
         reason: { type: "string", description: "Reason for the status update or override." },
       },
       required: ["capsuleId", "status", "reason"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "rebind_workroom_shape",
+    description:
+      "Move a Workroom's pinned work shape (key@version) to the shape's current version (GPP §2.1.1). " +
+      "dryRun (default true) returns the binding diff and whether it widens or narrows what the room can reach, and writes nothing. " +
+      "Applying needs the room's accountable owner or a platform manager; a widening also needs a rationale. " +
+      "A task run may preview but never apply. Refusals carry a code: not_authorized, target_not_current, not_an_upgrade, " +
+      "key_change, stage_in_flight (retry after the running stage settles), rationale_required, rebind_conflict (re-read the room).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        toVersion: { type: "string", description: "The shape's current version, e.g. 1.1.0." },
+        toKey: { type: "string", description: "Optional; must equal the room's own shape key." },
+        rationale: { type: "string", description: "Why the owner approves. Required to apply a widening." },
+        dryRun: { type: "boolean", description: "Preview only (default true). Set false to apply." },
+      },
+      required: ["capsuleId", "toVersion"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
@@ -306,6 +334,13 @@ const definitions: ToolDefinition[] = [
             "The work-shape stage this evidence completes. REQUIRED for a Workroom stage to "
             + "advance: the drive earns a completing receipt from stage-scoped evidence and "
             + "never from a run's self-reported status (BI-76B35820).",
+        },
+        outcome: {
+          type: "string",
+          enum: ["completed", "blocked"],
+          description:
+            "REQUIRED with stageKey. \"completed\" when the stage's work is done — only this advances the stage. "
+            + "\"blocked\" when you could not do it (source unreachable, tool missing, authority insufficient); say what blocked you in the summary.",
         },
         summary: { type: "string", description: "Evidence summary." },
         command: { type: "string", description: "Optional command that produced the evidence." },
@@ -400,6 +435,8 @@ export const workCapsulesPack: ToolPack = {
     heartbeat_workroom: (params, userId, context) => HANDLERS().then((m) => m.heartbeatCapsuleTool(params, userId, context)),
     update_workroom_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
     release_workroom_scope: (params, userId, context) => HANDLERS().then((m) => m.releaseCapsuleScopeTool(params, userId, context)),
+    rebind_workroom_shape: (params, userId, context) =>
+      import("@/lib/work-capsules/workroom-shape-rebind-handler").then((m) => m.rebindWorkroomShapeTool(params, userId, context)),
     record_workroom_evidence: (params, userId, context) => HANDLERS().then((m) => m.recordCapsuleEvidenceTool(params, userId, context)),
     reassign_workroom_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
     start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
@@ -428,6 +465,7 @@ export const workCapsulesPack: ToolPack = {
     heartbeat_workroom: ["work_capsule_write"],
     update_workroom_status: ["work_capsule_write"],
     release_workroom_scope: ["work_capsule_write"],
+    rebind_workroom_shape: ["work_capsule_write"],
     record_workroom_evidence: ["workroom_evidence_write"],
     reassign_workroom_executor: ["work_capsule_write"],
     start_external_work: ["work_capsule_adopt"],

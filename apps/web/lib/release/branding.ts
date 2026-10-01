@@ -1,3 +1,5 @@
+import { isRecord } from "../shared/coerce";
+
 export function normalizeLogoUrl(url: string | null | undefined): string {
   if (!url) return "";
   const trimmed = url.trim();
@@ -13,10 +15,6 @@ export function resolveBrandingLogoUrl(
 }
 
 type TokenRecord = Record<string, unknown>;
-
-function isRecord(v: unknown): v is TokenRecord {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
 
 function safeString(v: unknown): string | null {
   return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;

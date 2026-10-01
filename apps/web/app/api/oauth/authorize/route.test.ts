@@ -42,7 +42,8 @@ function form(values: Record<string, string>) {
     headers: { origin: "http://127.0.0.1:3000" } });
 }
 const baseForm = { client_id: "dpfoc_x", redirect_uri: "http://127.0.0.1:1/callback", decision: "approve",
-  granted_scope: "dpf.read", default_coworker: "AGT-EXT-CODEX", acting_coworker: "AGT-EXT-CODEX" };
+  granted_scope: "dpf.read", default_coworker: "AGT-EXT-CODEX", acting_coworker: "AGT-EXT-CODEX",
+  confirm_account: "human" };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -62,7 +63,7 @@ describe("one-click consent (BI-05E0EA33)", () => {
     const res = await GET(new Request("http://127.0.0.1:3000/api/oauth/authorize?client_id=dpfoc_x&redirect_uri=x"));
     const html = await res.text();
     expect(res.status).toBe(200);
-    expect(html).toContain("It will work as <strong>Codex (external CLI)</strong>");
+    expect(html).toContain('<strong class="who default" data-agent="AGT-EXT-CODEX">Codex (external CLI)</strong>');
     expect(html).toContain("Connect Codex</button>");
     expect(mock.resolveDefault).toHaveBeenCalledWith(expect.objectContaining({ userId: "human", resource: "http://127.0.0.1:3000/api/mcp/v1" }), expect.anything());
   });
@@ -94,5 +95,79 @@ describe("one-click consent (BI-05E0EA33)", () => {
     const res = await POST(form({ ...baseForm, acting_coworker: "AGT-ADMIN", default_coworker: "AGT-ADMIN" }));
     expect(res.status).toBe(403);
     expect(mock.binding).not.toHaveBeenCalled();
+  });
+});
+
+describe("consent needs a person's explicit decision", () => {
+  it("binds nothing and asks again when Connect arrives without an assistant chosen", async () => {
+    mock.resolveDefault.mockResolvedValue({ kind: "choice", selected: codex, candidates: [codex, claude] });
+    const { acting_coworker: _a, default_coworker: _d, ...rest } = baseForm;
+    const response = await POST(form(rest));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Nothing was connected");
+    expect(mock.binding).not.toHaveBeenCalled();
+    expect(mock.code).not.toHaveBeenCalled();
+  });
+
+  it("treats a submission without the Connect decision as a refusal", async () => {
+    const { decision: _d, ...rest } = baseForm;
+    const response = await POST(form(rest));
+    expect(response.headers.get("location")).toContain("error=access_denied");
+    expect(mock.binding).not.toHaveBeenCalled();
+  });
+
+  it("refuses a decision that did not come from the consent page itself", async () => {
+    const request = form(baseForm);
+    request.headers.set("sec-fetch-site", "cross-site");
+    const response = await POST(request);
+    expect(response.status).toBe(403);
+    expect(mock.binding).not.toHaveBeenCalled();
+  });
+
+  it("records how an approved decision arrived", async () => {
+    const request = form(baseForm);
+    request.headers.set("sec-fetch-site", "same-origin");
+    request.headers.set("sec-fetch-user", "?1");
+    await POST(request);
+    expect(mock.log).toHaveBeenCalledWith({ data: expect.objectContaining({
+      rationale: expect.objectContaining({ submittedFrom: { fetchSite: "same-origin", fetchUser: "?1" } }),
+    }) });
+  });
+});
+
+// BI-07D21B4A: the account a connection binds to is a decision the person makes
+// on the page, not whatever session the browser happened to be holding.
+describe("consent binds only the account the person confirmed", () => {
+  it("binds nothing and asks again when Connect arrives without the account confirmed", async () => {
+    const { confirm_account: _c, ...rest } = baseForm;
+    const response = await POST(form(rest));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Confirm the account this connection works under");
+    expect(mock.binding).not.toHaveBeenCalled();
+    expect(mock.code).not.toHaveBeenCalled();
+  });
+
+  it("binds nothing when the confirmed account is not the session's account", async () => {
+    // The page was confirmed for one account and the session changed underneath it.
+    const response = await POST(form({ ...baseForm, confirm_account: "someone-else" }));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Nothing was connected");
+    expect(mock.binding).not.toHaveBeenCalled();
+    expect(mock.code).not.toHaveBeenCalled();
+  });
+
+  it("still lets the person cancel without confirming the account", async () => {
+    const { confirm_account: _c, ...rest } = baseForm;
+    const response = await POST(form({ ...rest, decision: "deny" }));
+    expect(response.headers.get("location")).toContain("error=access_denied");
+    expect(mock.binding).not.toHaveBeenCalled();
+  });
+
+  it("GET names the account and links to sign in as someone else, returning to this request", async () => {
+    const res = await GET(new Request("http://127.0.0.1:3000/api/oauth/authorize?client_id=dpfoc_x&redirect_uri=x"));
+    const html = await res.text();
+    expect(html).toContain('name="confirm_account" value="human" required');
+    const back = encodeURIComponent("/api/oauth/authorize?client_id=dpfoc_x&redirect_uri=x");
+    expect(html).toContain(`href="/login?callbackUrl=${back.replace(/&/g, "&amp;")}"`);
   });
 });

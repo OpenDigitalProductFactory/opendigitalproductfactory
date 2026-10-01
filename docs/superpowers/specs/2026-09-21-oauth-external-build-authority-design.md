@@ -119,9 +119,38 @@ not require coworker identity; never pass unbound credentials to room actions.
 
 One OAuth approval covers transport reconnections and concurrent tasks. Normal
 refresh is silent. Task idempotency uses the server-issued credential family,
-not an access-token row. Queued execution may survive access-token expiry only
-when a current successor preserves the same human, client, consent, resource,
-coworker and scope envelope. Expired bearer authentication remains refused.
+not an access-token row. Queued execution may survive access-token expiry when
+a current access successor or an unconsumed, unrevoked, unexpired refresh token
+preserves the same family, human, client, consent, resource, coworker and scope
+envelope. Current consent and human eligibility still apply. This server-side
+continuity does not mint credentials or consume the client's refresh token.
+Expired bearer authentication remains refused.
+
+### Expiry-gap recovery amendment (BI-1E56D891, 2026-09-27)
+
+Live evidence `cmukgs2ak1x9f01qsyd0qk12e` reproduced a queued review failing
+17 seconds after bearer expiry despite a valid refresh family; the client
+refreshed normally three minutes later. `cmukgvb5l1xdg01qsl91fezey` showed
+exact replay returning the terminal failure with a misleading resumable flag.
+The lifetime clause above closes that client-timing dependency. It does not
+extend consent, task leases, permissions or room admission.
+
+An explicit identical request under current authority may recover that narrow
+historical failure once, preserving the same TaskRun and immutable digest.
+Require the same human/family, original access expiry before failure, current
+original-family authority, an initiative review with a capacity wait, and no
+recorded reviewer write or approval envelope. Refuse cancellation, completion,
+other failures, prior recovery, or an exhausted/parked terminal-writer attempt.
+Reserve by status and updatedAt compare-and-set before the queue event; retain
+the old failure timestamp and reason and increment the dispatch generation.
+Never reset capacity or inference counters. A failed queue send remains bounded
+by the existing outbox reconciler; it is not a completed review.
+
+Terminal replay must not project a stale capacity/writer wait as resumable.
+This amendment remains subject to source review and live acceptance; the
+WWMD consult DI-9D6C401C15A7 was inconclusive because retrieval was unavailable,
+not a passing architecture receipt. The implementation follows the operator's
+explicit consent-lifetime and retry requirements within the admitted fix scope.
 
 ## Operation authority and attribution (C3)
 
@@ -145,6 +174,48 @@ the default development role. Seed policy changes through source; existing
 install grant changes require the governed approval flow, not direct DB edits.
 
 ## Task and workroom boundary (C4, F4)
+
+### Bound independent-review requests (C3 follow-up, BI-1E56D891)
+
+WWMD DI-4C12C9013D64 selects reuse of `initiative_evidence_write` for
+requesting an independent review through `request_coworker`. This capability
+does not authorize general delegation, `summon_coworker`, or any reviewer
+receipt. The existing `thread_write` lane retains its current contract.
+
+The new lane requires an active consent-bound OAuth connection, the current
+human capability, and action admission for both human and assistant to the
+exact packet Workroom. It accepts only the complete server-generated readiness
+packet: item, immutable repository/commit/blob, exact room/head, eligible
+independent reviewer, writer, reader scope, objective and idempotency key.
+Regenerate readiness on the server and compare the packet before dispatch;
+reject arbitrary objectives, stale heads, sibling rooms, self-review and packet
+changes. Never enter the portal-thread delegation branch through this lane.
+The existing task substrate owns bounded execution, refresh-stable idempotency,
+reviewer grants, author separation and the reviewer's receipt.
+
+Implementation order: first add failing disclosure and request-boundary tests;
+then compose the existing grant map, readiness projection, OAuth authority and
+exact-room resolver into one request guard; then exercise the existing external
+task adapter. About 20% of effort consolidates packet validation and reuse of
+authority helpers rather than adding a new grant or task store. No migration,
+live grant edit, new dependency or new UI control is required. Rollback removes
+the author request lane without affecting existing reviewer receipts or tasks.
+
+Acceptance: current author discovers the request tool; an exact eligible
+independent-review packet dispatches; retry across refresh returns the same
+task; missing/forged packet, changed objective/writer/reviewer/head, self-review,
+revoked human/binding/grant and non-admitted room are refused before dispatch.
+Portal thread identifiers cannot bypass the narrow guard. General delegation
+still requires `thread_write`. An actual independent reviewer must read the
+bound artifact and write its own receipt before end-to-end acceptance.
+
+The first bounded lane consumes canonical completion recovery, including
+post-implementation review. It does not authorize arbitrary design-phase
+delegation. Once a review passes and its readiness request disappears, the
+same consent family may retrieve that task's recorded writer outcome: current
+human, coworker, consent and room access still apply, the persisted task digest
+must match, and an actual writer receipt must exist. An old packet alone can
+never restart a finished or obsolete review.
 
 Use the existing work packet/session/lease flow (BI-D4C110BC). Bind task context
 to the authenticated connection, human and exact work item. A client thread
@@ -438,6 +509,26 @@ is a lookup over existing rows:
 3. The alphabetically first eligible coworker, so the outcome is total and
    deterministic.
 
+**Rule 1b, the external profile (amendment 2026-09-25).** When the
+eligible set is wider than the source-approved external development roles
+(`APPROVED_EXTERNAL_ROLES`: `AGT-EXT-CLAUDE`, `AGT-EXT-CODEX`,
+`AGT-EXT-GROK`), which only an administrator's set is, and those roles
+share one signature, the outcome is `resolved` on that class: rules 2 and 3
+run inside it, and the wider set stays under `Change`. An external AI
+client's connection is the external development profile every builder
+already gets; an administrator's extra reach (room coordinators such as the
+Mailroom) is theirs to opt into, not a question put to them on every
+connect. Live finding: an administrator connecting the Claude desktop app
+(a new name and a `claude://` redirect, so no prior consent matched) was
+shown a choice with the Mailroom coordinator preselected as least
+authority. `choice` still results when the external roles themselves
+differ, or when none is eligible.
+
+The consequence line names whichever assistant is selected under `Change`.
+The page has no script; the line holds one name per candidate and CSS
+`:has()` shows the one matching the selected option. Without `:has()` the
+line keeps the default, as before.
+
 A self-asserted name therefore picks a **label within a class the server
 has already proven authority-equivalent**. It can never select a coworker
 outside that class, never widen a scope, and never bypass eligibility,
@@ -516,6 +607,16 @@ exists and would be a second source of truth for the same fact.
   rendered before a policy change cannot bind the identity it showed.
 - Nothing is auto-approved for a DCR client. Revocation, room admission and
   `OAUTH_SETUP_REQUIRED` recovery are unchanged.
+- A `choice` is made by the person (2026-09-24). The page pre-selects
+  nothing: the select is required and starts on an empty placeholder, and a
+  Connect without a pick binds nothing and shows the screen again. Before
+  this, the least-authority candidate was pre-selected, and a live
+  acceptance run bound it without anyone choosing.
+- Only an explicit Connect or Cancel click decides. The form's first submit
+  button is disabled, so pressing Enter submits nothing. A POST whose
+  `Sec-Fetch-Site` is present and not `same-origin` is refused, as a foreign
+  `Origin` already was. The decision log records `Sec-Fetch-Site` and
+  `Sec-Fetch-User`.
 
 ### Acceptance criteria
 
@@ -575,3 +676,39 @@ this is the design extension it asked for. When admitted:
 
 Coverage: atomic under BI-05E0EA33. The parent decision id is pending the
 kernel recording named above.
+
+### Approval completes the call (BI-12E5DD91, follow-up)
+
+An approved direct MCP call used to wait for the client to send it again,
+and nothing told the client to. On approval, the platform now runs a direct
+call (no TaskRun) once, through the governed executor, as the same human and
+assistant. It runs only when three things hold. The stored arguments hash to
+the approved input fingerprint. The originating credential is live and still
+admits the tool. An OAuth credential's consent still names the same assistant.
+Otherwise the card states why it did not run. A call parked inside an external
+task (tasks/submit) resumes that task on approval (BI-9FD11E5E), from what the
+task stored at submission: the same person, requested coworker, route and
+submitting credential, held to the same checks. It is the client replay's own
+resume, reserving the waiting task with a compare-and-set, so a racing replay
+and the approval's resume cannot both run the writer, and a client that
+restarted no longer lets the approval lapse. Every approved run reserves its envelope with a
+compare-and-set, so a platform run and a client retry cannot both spend one
+approval. A retry after a successful approved run returns the recorded outcome
+instead of a second run or a second card. A decision made after the window
+closed settles the envelope as `expired`. Token-scope admission is one shared
+rule for the route and the runner (`lib/mcp/token-tool-scope.ts`).
+
+### Where WWMD, WWWD and WSID steer approvals
+
+Escalation reaches a person only when an action is damaging, or when nothing
+recorded can steer it (`escalation-gate.ts`). The three decision engines steer
+through the existing policy projector (`resolve-policy-action-authority.ts`).
+A sealed, autonomy-eligible `kernel-consult`, `build-studio` or `backlog-triage`
+judgment is WWMD authority. An `org-business` judgment is WWWD, and a
+`profession` judgment is WSID. The projector binds each to the exact action,
+subject and input fingerprint, and today it accepts only initiative-readiness
+receipt tools. Independent specialist reviewers steer as `independent-reviewer`.
+Room definitions steer as `room-authority`, and cadences as `scheduled-mandate`.
+A person's OAuth consent steers routine writes as `connection-delegation`.
+None of these can authorize a damaging action. Each decision log row records
+which one decided.

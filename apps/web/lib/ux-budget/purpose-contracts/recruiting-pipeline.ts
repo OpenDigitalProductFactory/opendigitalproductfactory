@@ -5,7 +5,7 @@
 // is the human-facing surface of the getRecruitingPipeline read model whose
 // coworker tool shipped in BI-E64D11AE.
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const RECRUITING_PIPELINE_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

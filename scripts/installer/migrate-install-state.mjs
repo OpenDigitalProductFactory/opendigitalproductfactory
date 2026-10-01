@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -71,12 +72,17 @@ export async function projectInstallState({ bytes, hostIdentity, catalog }) {
 }
 
 function parseArgs(argv) {
-  const args = { write: false };
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "--write") args.write = true;
-    else if (["--state", "--catalog", "--host-platform", "--host-arch", "--recovery-path", "--expected-source-hash", "--expected-projection-hash"].includes(arg)) args[arg.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = argv[++index];
-    else throw new Error(`unknown_argument:${arg}`);
+  const options = {
+    write: { type: "boolean" },
+    ...Object.fromEntries(["state", "catalog", "host-platform", "host-arch", "recovery-path", "expected-source-hash", "expected-projection-hash"].map((name) => [name, { type: "string" }])),
+  };
+  // strict: false plus the token check below keeps the old error code for unknown input.
+  const { values, tokens } = utilParseArgs({ args: argv, options, strict: false, allowPositionals: true, tokens: true });
+  const unknown = tokens.find((token) => token.kind !== "option" || !Object.hasOwn(options, token.name));
+  if (unknown) throw new Error(`unknown_argument:${unknown.rawName ?? unknown.value ?? "--"}`);
+  const args = { write: values.write === true };
+  for (const [name, value] of Object.entries(values)) {
+    if (name !== "write") args[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = typeof value === "string" ? value : undefined;
   }
   if (!args.state || !args.catalog || !args.hostPlatform || !args.hostArch) throw new Error("migration_arguments_required");
   return args;

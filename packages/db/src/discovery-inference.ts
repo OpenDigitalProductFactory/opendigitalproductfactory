@@ -160,7 +160,7 @@ export function inferCrossCollectorRelationships(
 
 // ─── Pass 2 & 3: Product-to-Infrastructure Inference ────────────────────────
 // Runs AFTER persistence and promotion. Queries the database for
-// DigitalProducts and InventoryEntities, then creates Neo4j edges.
+// DigitalProducts and InventoryEntities, then creates graph-mirror edges.
 
 export async function inferProductDependencies(
   db: InferenceDb,
@@ -173,7 +173,7 @@ export async function inferProductDependencies(
 
   // ── Pass 2: Promoted entity linkage ────────────────────────────────
   // Every InventoryEntity with a digitalProductId should have a
-  // DigitalProduct → InfraCI DEPENDS_ON edge in Neo4j.
+  // DigitalProduct → InfraCI DEPENDS_ON edge in the graph mirror.
   const linkedEntities = await db.inventoryEntity.findMany({
     where: {
       ...INVENTORY_ENTITY_CANONICAL_WHERE,

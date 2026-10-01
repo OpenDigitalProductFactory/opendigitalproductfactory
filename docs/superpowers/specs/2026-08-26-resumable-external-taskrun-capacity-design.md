@@ -99,10 +99,27 @@ The durable projection is:
       resumeMode: "same-taskrun",
       attempt,
       observedAt,
+      nextAttemptAt, // added 2026-09-24; absent on older rows, which are due at once
     },
   },
 }
 ```
+
+**The wait is bounded and paced (2026-09-24, BI-D25F867D).** The reconciler
+re-sends a parked task only once `nextAttemptAt` has passed: 1, 2, 4, 8, then 15
+minutes after each attempt. After `RESOURCE_WAIT_MAX_ATTEMPTS` (5, about half an
+hour) the task fails as `busy` instead of parking again. A wait keeps its
+`dispatch` history, so each re-send carries a new event id; before, the rewrite
+dropped it and the queue discarded every re-send as a duplicate of the first.
+
+**"Busy" is claimed only when waiting would help.** `All endpoints failed` is
+classified from its attempt list: a task waits only when every dispatched
+endpoint hit a limit, an overload, a network error or a local-CI capacity
+reservation (a typed `code` of `capacity`, `rate_limit`, `overloaded`,
+`transient` or `network` counts too). Anything else fails with a handoff that
+names what each endpoint hit, in plain words. On 2026-09-24 "every provider is
+busy" was covering a stopped build sandbox (the CLI providers run inside it) and
+a local model reserved for a gate; neither is fixed by waiting.
 
 An exact replay may resume only this versioned waiting shape. It uses an
 `updateMany` compare-and-set constrained by TaskRun ID, `submitted` status, and

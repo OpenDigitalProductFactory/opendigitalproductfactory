@@ -7,14 +7,14 @@ import {
   getPlatformImpactAlerts,
   getTelemetryTargetAlerts,
   isTelemetryTargetAlert,
-  type MonitoringAlert,
   type Tone,
 } from "./health-summary";
+import type { MonitoringAlert } from "@/lib/observability/monitoring-jobs";
 import {
   HEALTH_COWORKER_ROUTE_CONTEXT,
   buildHealthAlertCoworkerPrompt,
   humanizeHealthAlert,
-} from "./alert-humanize";
+} from "@/lib/observability/alert-humanize";
 import { useAlertQuery } from "./useAlertQuery";
 import { SHELL_TAP_TARGET_CLASS } from "@/lib/shell/shell-action-contract";
 

@@ -6,7 +6,7 @@
 //
 // All colors resolve to --dpf-* design tokens — never raw hex.
 
-import { intentStyle, type Intent } from "./statusColors";
+import { intentStyle, type Intent } from "@/lib/ui-model/statusColors";
 
 /** Default series color ramp, drawn from the design tokens. */
 export const DEFAULT_SERIES_PALETTE: string[] = [

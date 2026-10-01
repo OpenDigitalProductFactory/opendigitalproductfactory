@@ -28,6 +28,9 @@ export { WriteGateRequirement } from "../generated/client/client";
 // organisation's EmploymentType label (BI-C61CEEA9). Exported as a value so the
 // app composes from the generated enum instead of re-typing its members.
 export { WorkerClassification } from "../generated/client/client";
+// Document rendition kinds (BI-9D43CBEF): exported as a value so the app
+// composes from the generated enum instead of re-typing its members.
+export { DocumentRenditionKind } from "../generated/client/client";
 // Decision-resolution proposal vocabulary (BI-3D0FB84B). Exported as values so
 // the app composes from the generated enum instead of re-typing its members.
 export {
@@ -77,20 +80,20 @@ export {
   type QualityIssueDriftReport,
 } from "./quality-issue-drift-sweep";
 
-// Qdrant vector database
+// Vector store (pgvector in Postgres)
 export {
-  ensureCollections as ensureQdrantCollections,
+  ensureCollections as ensureVectorCollections,
   ensurePayloadIndexes,
   upsertVectors,
   searchSimilar,
   scrollPoints,
   deleteVectors,
-  isQdrantHealthy,
+  isVectorStoreHealthy,
   hashToNumber,
-  QDRANT_COLLECTIONS,
+  VECTOR_COLLECTIONS,
   type MatchClause,
-  type QdrantFilter,
-} from "./qdrant";
+  type VectorFilter,
+} from "./pgvector-store";
 
 // EP-WIKI-001 Phase 1a: wiki kernel + per-org overlay store helpers
 // Phase 2.1 adds the raw-source ingest helpers (upsertRawSource,
@@ -155,7 +158,7 @@ export {
   type PrincipleAppliesTo,
   type PrincipleDimension,
 } from "./wiki-taxonomy";
-export { initNeo4jSchema, backfillOsiLayers, NETWORK_RELATIONSHIP_TYPES } from "./neo4j-schema";
+export { NETWORK_RELATIONSHIP_TYPES } from "./graph-schema";
 export {
   getDownstreamImpact,
   getUpstreamDependencies,
@@ -171,14 +174,14 @@ export {
   getLayeredDependencyStack,
   getNetworkTopologyAtLayer,
   getNetworkTopologyAtLayerForScope,
-  type Neo4jTopologyScope,
+  type GraphTopologyScope,
   pruneStaleInfraCIs,
   type GraphNode,
   type GraphEdge,
   type ImpactResult,
   type LayeredDependency,
   type PruneResult,
-} from "./neo4j-graph";
+} from "./pg-graph";
 export {
   buildDiscoveryScopeKey,
   buildScopedInventoryEntityKey,

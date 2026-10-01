@@ -191,26 +191,19 @@ GROK_CONFIG_PATH="$HOME/.grok/config.toml"
 KERNEL_PRINCIPLES_DIR="$REPO_ROOT/docs/founder-kernel/wiki/principles"
 CONTRIBUTOR_MEMORY_DIR="$HOME/.claude/projects"
 PROJECT_SLUG="$(printf '%s' "$REPO_ROOT" | sed -E 's:[/:]:-:g' | sed -E 's:^-+::')"
-MCP_ENDPOINT="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
-
-# BI-FA2C46D7: on an https endpoint the client authorizes over OAuth and must
-# trust the organization's own CA. Resolve the root bundle the PKI bootstrap
-# wrote (explicit env, then the install's .env, then the default PKI dir) and
-# export it for this run's probes and the Node bridge; persist_mcp_client_env
-# below records it for shells and GUI clients beside the token.
-MCP_TRUST_BUNDLE=""
-case "$MCP_ENDPOINT" in
-  https://*)
-    for _cand in "${DPF_PKI_TRUST_BUNDLE:-}" \
-                 "$(sed -n 's/^DPF_PKI_TRUST_BUNDLE=//p' "$REPO_ROOT/.env" 2>/dev/null | tail -1)" \
-                 "$HOME/.dpf/pki/root_ca.crt"; do
-      if [ -n "$_cand" ] && [ -f "$_cand" ]; then MCP_TRUST_BUNDLE="$_cand"; break; fi
-    done
-    if [ -n "$MCP_TRUST_BUNDLE" ]; then
-      export NODE_EXTRA_CA_CERTS="$MCP_TRUST_BUNDLE"
-    fi
-    ;;
-esac
+# BI-2D545A0C (design 12.4.3): the endpoint is the install's canonical origin,
+# read from PUBLIC_URL in the install's .env, and on https Node clients trust
+# the organization's own CA (BI-FA2C46D7). One rule, shared with the installer:
+# installer/lib/mcp-client-env.sh. An explicit DPF_MCP_URL stands only when the
+# install names no https origin.
+# shellcheck source=installer/lib/mcp-client-env.sh
+. "$SCRIPT_DIR/installer/lib/mcp-client-env.sh"
+dpf_resolve_mcp_client_env "$REPO_ROOT"
+MCP_ENDPOINT="${DPF_MCP_CLIENT_URL:-http://127.0.0.1:3000/api/mcp/v1}"
+MCP_TRUST_BUNDLE="$DPF_MCP_CLIENT_CA_BUNDLE"
+if [ -n "$MCP_TRUST_BUNDLE" ]; then
+  export NODE_EXTRA_CA_CERTS="$MCP_TRUST_BUNDLE"
+fi
 SKILL_PACK_MANIFEST="$REPO_ROOT/packages/dpf-skill-pack/.claude-plugin/plugin.json"
 
 if [ ! -f "$SKILL_PACK_MANIFEST" ]; then
@@ -347,57 +340,27 @@ fi
 # persist it so a new shell, terminal-launched Claude Code, and GUI-launched
 # apps all pick it up. The plaintext is NEVER written to install-state or logs.
 
-# POSIX single-quote escaping via bash parameter expansion (no sed gymnastics):
-# each ' becomes '\'' so the value is safe inside a single-quoted shell string.
-mcp_token_envfile="$HOME/.dpf/agent-toolchain.env"
-
-# One managed env file carries everything a client process needs to reach the
-# portal: the bearer token (http installs), and on https the endpoint plus the
+# One managed env file (~/.dpf/agent-toolchain.env) carries everything a client
+# process needs to reach the portal: the bearer token (http installs), and on
+# https the endpoint plus the
 # organization root bundle so Node clients (Claude Code, Codex, the gate
-# scripts) trust the install's own CA (BI-FA2C46D7). Rewritten as a whole so a
+# scripts) trust the install's own CA (BI-FA2C46D7). The shared module
+# installer/lib/mcp-client-env.sh is the only writer of that file (the
+# installer persists the same transport lines); each value owns one line, so a
 # later mint never drops the transport lines, and vice versa. The token
 # plaintext is NEVER written to install-state or logs.
 persist_mcp_client_env_posix() {
-  mkdir -p "$HOME/.dpf"
   _tok="${DPF_MCP_BEARER_TOKEN:-}"
-  _esc=${_tok//\'/\'\\\'\'}
-  _url_esc=${MCP_ENDPOINT//\'/\'\\\'\'}
-  _bundle_esc=${MCP_TRUST_BUNDLE//\'/\'\\\'\'}
-  (
-    umask 077
-    {
-      printf '# DPF MCP client environment — managed by dpf-bootstrap-agent-toolchain.sh\n'
-      if [ -n "$_tok" ]; then
-        printf 'export DPF_MCP_BEARER_TOKEN='\''%s'\''\n' "$_esc"
-      fi
-      if [ "$MCP_ENDPOINT" != "http://127.0.0.1:3000/api/mcp/v1" ]; then
-        printf 'export DPF_MCP_URL='\''%s'\''\n' "$_url_esc"
-      fi
-      if [ -n "$MCP_TRUST_BUNDLE" ]; then
-        printf 'export NODE_EXTRA_CA_CERTS='\''%s'\''\n' "$_bundle_esc"
-      fi
-    } > "$mcp_token_envfile"
-  )
-  chmod 600 "$mcp_token_envfile" 2>/dev/null || true
-  # Source the env file from login + non-login shells (idempotent managed line).
-  _src_line=". \"$mcp_token_envfile\"  # dpf-mcp-token"
-  for _prof in "$HOME/.zshenv" "$HOME/.profile"; do
-    if [ -f "$_prof" ] && grep -q 'dpf-mcp-token' "$_prof" 2>/dev/null; then
-      continue
-    fi
-    printf '%s\n' "$_src_line" >> "$_prof"
-  done
+  dpf_set_client_env_export DPF_MCP_BEARER_TOKEN "$_tok"
+  dpf_source_client_env_from_profiles
   # GUI-launched apps (e.g. Codex.app, Claude.app) are not started from a shell,
-  # so they do not read the profile. launchctl setenv injects the vars for the
-  # current boot. (Reboot persistence for GUI apps is a follow-up; terminal
-  # clients are durable.)
-  if [ "$(uname -s)" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then
-    if [ -n "$_tok" ]; then launchctl setenv DPF_MCP_BEARER_TOKEN "$_tok" 2>/dev/null || true; fi
+  # so they do not read the profile; launchd carries the values for this boot.
+  dpf_launchd_setenv DPF_MCP_BEARER_TOKEN "$_tok"
+  if ! dpf_persist_mcp_client_env; then
+    # A non-default http endpoint the operator named keeps its line.
     if [ "$MCP_ENDPOINT" != "http://127.0.0.1:3000/api/mcp/v1" ]; then
-      launchctl setenv DPF_MCP_URL "$MCP_ENDPOINT" 2>/dev/null || true
-    fi
-    if [ -n "$MCP_TRUST_BUNDLE" ]; then
-      launchctl setenv NODE_EXTRA_CA_CERTS "$MCP_TRUST_BUNDLE" 2>/dev/null || true
+      dpf_set_client_env_export DPF_MCP_URL "$MCP_ENDPOINT"
+      dpf_launchd_setenv DPF_MCP_URL "$MCP_ENDPOINT"
     fi
   fi
 }
@@ -524,9 +487,10 @@ fi
 # On an https endpoint the transport lines (DPF_MCP_URL + NODE_EXTRA_CA_CERTS)
 # are what let a client authorize over OAuth; persist them even when no token
 # was minted this run. Never at dry-run time.
-if [ "$DRY_RUN" -eq 0 ] && [ -n "$MCP_TRUST_BUNDLE" ]; then
+case "$MCP_ENDPOINT" in https://*) _https_endpoint=1 ;; *) _https_endpoint=0 ;; esac
+if [ "$DRY_RUN" -eq 0 ] && [ "$_https_endpoint" -eq 1 ]; then
   persist_mcp_client_env_posix
-  ok "MCP client transport persisted: https endpoint + organization root bundle (NODE_EXTRA_CA_CERTS)."
+  ok "MCP client transport persisted: https endpoint${MCP_TRUST_BUNDLE:+ + organization root bundle (NODE_EXTRA_CA_CERTS)}."
 fi
 
 # --- Compute plan via Node bridge --------------------------------------------
@@ -685,7 +649,7 @@ EOF
     fi
   fi
   if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
-    info "DRY-RUN: write $PLAN_MCP_CLIENT_WRITES_COUNT MCP client config file(s) (.mcp.json / .vscode/mcp.json)"
+    info "DRY-RUN: write $PLAN_MCP_CLIENT_WRITES_COUNT MCP client config file(s) (.vscode/mcp.json; .mcp.json only on http or legacy -- the plugin owns the Claude connector on https)"
   fi
   if [ "${PLAN_MEMORY_WRITES_COUNT:-0}" -gt 0 ]; then
     info "DRY-RUN: seed $PLAN_MEMORY_WRITES_COUNT kernel principle(s) to memory"
@@ -704,7 +668,7 @@ for w in (plan.get("codex") or {}).get("writes", []):
     with open(w["path"], "wb") as f:
         f.write(w["content"].encode("utf-8"))
 
-# MCP client config writes (.mcp.json + .vscode/mcp.json — env-backed, no secret).
+# MCP client config writes (.vscode/mcp.json, and .mcp.json on http/legacy only -- env-backed, no secret).
 for w in (plan.get("mcpClientConfig") or {}).get("writes", []):
     os.makedirs(os.path.dirname(w["path"]), exist_ok=True)
     # Binary mode + explicit UTF-8 prevents CRLF translation on Windows,
@@ -786,7 +750,7 @@ EOF
   fi
 
   if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
-    ok "MCP client config written ($PLAN_MCP_CLIENT_WRITES_COUNT file(s): .mcp.json / .vscode/mcp.json)."
+    ok "MCP client config written ($PLAN_MCP_CLIENT_WRITES_COUNT file(s); the plugin owns the Claude connector on https)."
   else
     ok "MCP client config already converged."
   fi

@@ -32,6 +32,7 @@ const sections: ShellNavSection[] = [
     key: "workspace",
     label: "Workspace",
     description: "Current business work and authorized owner/manager performance.",
+    portfolioRole: null,
     items: [
       {
         key: "workspace",
@@ -59,6 +60,7 @@ const sections: ShellNavSection[] = [
     key: "business",
     label: "Business",
     description: "Run customer, people, finance, compliance, and portal operations.",
+    portfolioRole: "productsAndServicesSold",
     items: [
       {
         key: "finance",

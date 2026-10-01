@@ -8,7 +8,7 @@
 // pulls no heavy modules at registration. Grants mirror agent-grants.ts
 // TOOL_TO_GRANTS.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

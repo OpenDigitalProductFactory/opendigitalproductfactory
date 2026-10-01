@@ -317,13 +317,23 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         }
       }
     }
+    const releaseIdeateAttempt = async () => {
+      try {
+        const { releaseUnfinishedBuildPhaseRun } = await import("./build-phase-run");
+        await releaseUnfinishedBuildPhaseRun(buildId, "ideate");
+      } catch {
+        /* phase attribution remains best-effort */
+      }
+    };
     try {
       const { startBuildPhaseRun } = await import("./build-phase-run");
-      void startBuildPhaseRun(buildId, "ideate", {
+      // Await the start. A later release must not race an unawaited insert
+      // that would reopen the row after the attempt has already stopped.
+      await startBuildPhaseRun(buildId, "ideate", {
         ...(executionProfileRef ? { executionProfileRef } : {}),
-      }).catch(() => {});
+      });
     } catch {
-      /* phase attribution remains best-effort */
+      /* QuiescingError, or a start failure, must not abort the dispatch */
     }
 
     // The BI body is the canonical context for backlog-promoted drafts.
@@ -377,6 +387,7 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         // switching engines cannot help; the stranded-build reconciler re-drives
         // this build once the host frees. Stop here without a verdict.
         await logActivity(`Ideate deferred: ${(ideateResult.error ?? "").slice(0, 220)}`);
+        await releaseIdeateAttempt();
         return { kind: "deferred-capacity", reason: ideateResult.error ?? "capacity deferral", durationMs: Date.now() - startedAt };
       }
       if (ideateResult.infrastructure && !infrastructureRetried) {
@@ -416,6 +427,7 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         durationMs,
       };
       await logActivity(`Auto-dispatch failed after ${(durationMs / 1000).toFixed(1)}s: ${outcome.error.slice(0, 200)}`);
+      await releaseIdeateAttempt();
       // BI-7AD0759A: the model's output is the ONLY thing that explains why it
       // could not be parsed, and it was being dropped on the floor here — on a
       // local-only install that leaves the operator a four-minute wait and a
@@ -471,6 +483,7 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         durationMs,
       };
       await logActivity(`Auto-dispatch saved-evidence step failed after ${(durationMs / 1000).toFixed(1)}s: ${outcome.error.slice(0, 200)}`);
+      await releaseIdeateAttempt();
       return outcome;
     }
 
@@ -495,6 +508,7 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         durationMs,
       };
       await logActivity(`Auto-dispatch saved-evidence VERIFICATION FAILED after ${(durationMs / 1000).toFixed(1)}s: designDoc not present on ${buildId} after save.`);
+      await releaseIdeateAttempt();
       return outcome;
     }
 
@@ -580,6 +594,12 @@ async function dispatchIdeateForApprovedBuildInner(params: {
     const message = getErrorMessage(err);
     console.error("[ideate-on-approval] Unhandled error in auto-dispatch:", { buildId }, err);
     await logActivity(`Auto-dispatch threw unexpectedly: ${message.slice(0, 200)}`);
+    try {
+      const { releaseUnfinishedBuildPhaseRun } = await import("./build-phase-run");
+      await releaseUnfinishedBuildPhaseRun(buildId, "ideate");
+    } catch {
+      /* phase attribution remains best-effort */
+    }
     return { kind: "dispatched-failure", error: message, durationMs: 0 };
   }
 }
@@ -712,6 +732,24 @@ type DesignReviewVerdict =
  * regenerating the designDoc does NOT populate — so those escalate directly
  * rather than churn the loop. Never throws.
  */
+/**
+ * The problem a fix build's diagnosis loop investigates. BI-A9C8DA0E: the loop
+ * read only brief.problem / brief.summary, which no fix build carries (0 of 16
+ * on the dev install), so it never ran and every fix whose body lacked a
+ * structured Fix Context escalated at round 0. The statement is where the
+ * tee-up and ideate actually put it: fixContext.actual (the item body) and the
+ * design doc's problemStatement. Empty when none carries one — then escalating
+ * is still the honest answer.
+ */
+export function fixDiagnosisProblem(brief: unknown, designDoc: unknown): string {
+  const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const b = (brief && typeof brief === "object" ? brief : {}) as {
+    problem?: unknown; summary?: unknown; fixContext?: { actual?: unknown } | null;
+  };
+  const d = (designDoc && typeof designDoc === "object" ? designDoc : {}) as { problemStatement?: unknown };
+  return text(b.problem) || text(b.summary) || text(b.fixContext?.actual) || text(d.problemStatement);
+}
+
 export async function dispatchDesignReviewFixLoop(params: {
   buildId: string;
   userId: string;
@@ -748,7 +786,7 @@ export async function dispatchDesignReviewFixLoop(params: {
   try {
     const build = await prisma.featureBuild.findUnique({
       where: { buildId },
-      select: { id: true, title: true, kind: true, originatingBacklogItemId: true, designReview: true, brief: true },
+      select: { id: true, title: true, kind: true, originatingBacklogItemId: true, designReview: true, brief: true, designDoc: true },
     });
     if (!build) return { kind: "build-not-found", rounds: 0 };
 
@@ -775,13 +813,10 @@ export async function dispatchDesignReviewFixLoop(params: {
       const { buildFixDiagnosisPrompt, parseFixDiagnosis, isDiagnosisRefusal } = await import(
         "@/lib/build/fix-context-diagnosis"
       );
-      const briefForDiagnosis = (build as { brief?: unknown }).brief as
-        | { problem?: string; summary?: string; fixContext?: unknown }
-        | null;
-      const problem =
-        (typeof briefForDiagnosis?.problem === "string" && briefForDiagnosis.problem.trim())
-        || (typeof briefForDiagnosis?.summary === "string" && briefForDiagnosis.summary.trim())
-        || "";
+      const problem = fixDiagnosisProblem(
+        (build as { brief?: unknown }).brief,
+        (build as { designDoc?: unknown }).designDoc,
+      );
 
       let diagnosisRounds = 0;
       let lastRefusal = "no diagnosis attempted";

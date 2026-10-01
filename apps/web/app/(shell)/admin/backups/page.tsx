@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
  *
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.8, §4.6
  *
- * postgres-only after BET-5 retired the neo4j + qdrant stores. The operator
+ * Postgres is the only backup target (BET-5). The operator
  * never sees CLI here — clicks only — per the never-ask-user-to-run-commands
  * kernel commandment.
  */

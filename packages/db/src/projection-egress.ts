@@ -21,6 +21,7 @@ import {
   type ProjectionContractSpec,
   type RetentionClass,
 } from "./projection-serialization";
+import { isRecord } from "@dpf/validators";
 
 /** The single slice an incident projection rides in. */
 export const INCIDENT_SLICE = "incident";
@@ -51,10 +52,6 @@ export const DEFAULT_INCIDENT_PROJECTION: ProjectionContractSpec = {
   retentionClass: "short",
 };
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
 const RETENTION_CLASSES: ReadonlySet<RetentionClass> = new Set<RetentionClass>([
   "ephemeral",
   "short",
@@ -70,7 +67,7 @@ const RETENTION_CLASSES: ReadonlySet<RetentionClass> = new Set<RetentionClass>([
  * minimum-necessary, not "everything".
  */
 export function resolveIncidentProjectionSpec(stored: unknown): ProjectionContractSpec {
-  if (!isPlainObject(stored)) return DEFAULT_INCIDENT_PROJECTION;
+  if (!isRecord(stored)) return DEFAULT_INCIDENT_PROJECTION;
   const includeSlices = Array.isArray(stored.includeSlices)
     ? stored.includeSlices.filter((s): s is string => typeof s === "string")
     : [];
@@ -82,7 +79,7 @@ export function resolveIncidentProjectionSpec(stored: unknown): ProjectionContra
     : [];
 
   let fieldAllowList: Record<string, string[]> | undefined;
-  if (isPlainObject(stored.fieldAllowList)) {
+  if (isRecord(stored.fieldAllowList)) {
     fieldAllowList = {};
     for (const [slice, fields] of Object.entries(stored.fieldAllowList)) {
       if (Array.isArray(fields)) {
@@ -126,7 +123,7 @@ export function projectIncidentForEgress(
 ): IncidentEgressResult {
   const { projected, excluded } = projectEstatePayload(spec, { [INCIDENT_SLICE]: incident });
   const violations = assertNoExcludedEgress(spec, projected);
-  const payload = isPlainObject(projected[INCIDENT_SLICE])
+  const payload = isRecord(projected[INCIDENT_SLICE])
     ? (projected[INCIDENT_SLICE] as Record<string, unknown>)
     : {};
   return { payload, excluded, violations };

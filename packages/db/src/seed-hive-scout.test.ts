@@ -196,13 +196,14 @@ describe("Hive Scout seed helper", () => {
     );
   });
 
-  it("updates the existing task and preserves nextRunAt", async () => {
+  it("updates the existing task, preserves nextRunAt, and keeps its owner (BI-87AE4BF6)", async () => {
     process.env.INSTALL_TIMEZONE = "America/Chicago";
     user.findFirst.mockResolvedValue({ id: "user-admin" });
     scheduledAgentTask.findUnique.mockResolvedValue({
       taskId: HIVE_SCOUT_TASK_ID,
       schedule: HIVE_SCOUT_SCHEDULE,
       nextRunAt: new Date("2026-05-12T08:17:00Z"),
+      ownerUserId: "user-mark",
     });
 
     const result = await ensureHiveScoutScheduledTask(
@@ -210,16 +211,17 @@ describe("Hive Scout seed helper", () => {
       new Date("2026-05-11T12:00:00Z"),
     );
 
-    expect(result).toEqual({ created: false, ownerUserId: "user-admin" });
-    expect(scheduledAgentTask.update).toHaveBeenCalledWith({
-      where: { taskId: HIVE_SCOUT_TASK_ID },
-      data: expect.objectContaining({
-        agentId: HIVE_SCOUT_AGENT_ID,
-        timezone: "America/Chicago",
-        ownerUserId: "user-admin",
-        nextRunAt: new Date("2026-05-12T08:17:00Z"),
-      }),
-    });
+    // A task handed over to its portfolio's owner must not be re-owned to the
+    // oldest superuser by the next seed run (every self-upgrade runs it).
+    expect(result).toEqual({ created: false, ownerUserId: "user-mark" });
+    const data = scheduledAgentTask.update.mock.calls[0][0].data;
+    expect(data).toEqual(expect.objectContaining({
+      agentId: HIVE_SCOUT_AGENT_ID,
+      timezone: "America/Chicago",
+      nextRunAt: new Date("2026-05-12T08:17:00Z"), // clock-bomb-guard: allow the seed receives a fixed `now` (2026-05-11) argument, so no wall-clock comparison
+    }));
+    expect(data).not.toHaveProperty("ownerUserId");
+    expect(user.findFirst).not.toHaveBeenCalled();
   });
 
   it("recomputes nextRunAt when the existing task is outside the current cadence window", async () => {

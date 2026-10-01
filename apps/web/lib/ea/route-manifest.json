@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 661,
+  "routeCount": 665,
   "routes": [
     {
       "routePath": "/",
@@ -798,6 +798,38 @@
         "path"
       ],
       "file": "apps/web/app/api/docs-asset/[...path]/route.ts"
+    },
+    {
+      "routePath": "/api/documents/[documentId]/content",
+      "kind": "route",
+      "segments": [
+        "api",
+        "documents",
+        "[documentId]",
+        "content"
+      ],
+      "dynamicParams": [
+        "documentId"
+      ],
+      "file": "apps/web/app/api/documents/[documentId]/content/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/documents/[documentId]/previews/[page]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "documents",
+        "[documentId]",
+        "previews",
+        "[page]"
+      ],
+      "dynamicParams": [
+        "documentId",
+        "page"
+      ],
+      "file": "apps/web/app/api/documents/[documentId]/previews/[page]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/health",
@@ -1979,17 +2011,6 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/storefront/sign-up/route.ts"
-    },
-    {
-      "routePath": "/api/test/codex-responses",
-      "kind": "route",
-      "segments": [
-        "api",
-        "test",
-        "codex-responses"
-      ],
-      "dynamicParams": [],
-      "file": "apps/web/app/api/test/codex-responses/route.ts"
     },
     {
       "routePath": "/api/transcribe",
@@ -4086,6 +4107,30 @@
       "exposure": "authenticated"
     },
     {
+      "routePath": "/api/workbooks/export",
+      "kind": "route",
+      "segments": [
+        "api",
+        "workbooks",
+        "export"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/workbooks/export/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/area/[key]",
+      "kind": "page",
+      "segments": [
+        "area",
+        "[key]"
+      ],
+      "dynamicParams": [
+        "key"
+      ],
+      "file": "apps/web/app/(shell)/area/[key]/page.tsx"
+    },
+    {
       "routePath": "/auth/callback",
       "kind": "route",
       "segments": [
@@ -4638,6 +4683,16 @@
       "file": "apps/web/app/(shell)/customer/(crm)/engagements/page.tsx"
     },
     {
+      "routePath": "/customer/footprint",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "footprint"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/footprint/page.tsx"
+    },
+    {
       "routePath": "/customer/funnel",
       "kind": "page",
       "segments": [
@@ -4764,7 +4819,8 @@
         "delivery"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/delivery/page.tsx"
+      "file": "apps/web/app/(shell)/delivery/page.tsx",
+      "redirectTo": "/area/delivery"
     },
     {
       "routePath": "/docs/[[...slug]]",
@@ -5805,7 +5861,8 @@
       "dynamicParams": [
         "bindingId"
       ],
-      "file": "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx"
+      "file": "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx",
+      "redirectTo": "/platform/ai/assignments"
     },
     {
       "routePath": "/platform/ai/authority",
@@ -6290,7 +6347,8 @@
       "dynamicParams": [
         "bindingId"
       ],
-      "file": "apps/web/app/(shell)/platform/identity/authorization/bindings/[bindingId]/page.tsx"
+      "file": "apps/web/app/(shell)/platform/identity/authorization/bindings/[bindingId]/page.tsx",
+      "redirectTo": "/platform/identity/authorization"
     },
     {
       "routePath": "/platform/identity/directory",
@@ -7111,7 +7169,8 @@
       "dynamicParams": [
         "productId"
       ],
-      "file": "apps/web/app/(shell)/portfolio/products/[productId]/page.tsx"
+      "file": "apps/web/app/(shell)/portfolio/products/[productId]/page.tsx",
+      "redirectTo": "/portfolio/product/[id]"
     },
     {
       "routePath": "/r/[token]",

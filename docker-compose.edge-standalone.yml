@@ -2,7 +2,7 @@
 #
 # This file is COMPLETE on its own: an operator brings up an Edge Node
 # on a host that is NOT the Authority Core. There is no portal,
-# postgres, neo4j, or any other DPF service in this file — those run
+# postgres, or any other DPF service in this file — those run
 # on a different machine (the Authority Core), reachable over the LAN.
 #
 # Spec:    docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md

@@ -1,4 +1,4 @@
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 
 /** Aggregated owner/manager analytics; source records remain in their domains. */
 export const BUSINESS_PERFORMANCE_ASSETS: readonly DataAssetDefinition[] = [

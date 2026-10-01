@@ -20,7 +20,7 @@ import {
 } from "./mcp-task-durable-inference-contract";
 import { ensureDurableInferenceTaskRecipes } from "./mcp-task-durable-inference-runtime";
 import { mcpTaskNotificationBus } from "./mcp-task-notification-bus";
-import { parseResourceWaitProjection } from "./mcp-task-capacity-contract";
+import { parseResourceWaitProjection, resourceWaitDue } from "./mcp-task-capacity-contract";
 import { parseTerminalWriterWait } from "./mcp-task-replay-projection";
 import { recoverTerminalWriterEscalation, TERMINAL_WRITER_MAX_ATTEMPTS } from "./mcp-task-terminal-writer-escalation";
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
@@ -365,6 +365,12 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
       && parseResourceWaitProjection(progress) !== null;
     const isReviewerRecoveryCandidate = await automaticReviewerRecoveryWait(row, now);
     if (!isDurableCandidate && !isOrdinaryCandidate && !isResourceWaitCandidate && !isReviewerRecoveryCandidate) {
+      raced += 1;
+      continue;
+    }
+    // A task parked for capacity waits out its backoff before the next attempt (BI-D25F867D).
+    const capacityWait = parseResourceWaitProjection(progress);
+    if (capacityWait && !resourceWaitDue(capacityWait, now)) {
       raced += 1;
       continue;
     }

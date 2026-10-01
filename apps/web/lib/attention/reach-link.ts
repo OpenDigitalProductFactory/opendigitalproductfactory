@@ -17,7 +17,7 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 /** Payload carried in the link. Deliberately minimal — see the no-business-content rule. */
 export type ReachLinkPayload = {

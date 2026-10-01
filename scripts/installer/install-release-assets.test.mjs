@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
+import { ensureGitWebhookSecret, ensureInngestKeys, installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
 
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 
@@ -124,4 +124,55 @@ test("updateEnv gives a fresh install loopback and a pre-existing install its cu
   const pinned = updateEnv(Buffer.from("DPF_HOST_BIND_ADDRESS=127.0.0.1\n"), "v2.0.0", "opendigitalproductfactory").toString("utf8");
   assert.equal((pinned.match(/^DPF_HOST_BIND_ADDRESS=/gm) ?? []).length, 1);
   assert.match(pinned, /^DPF_HOST_BIND_ADDRESS=127\.0\.0\.1$/m);
+});
+
+// BI-C26D5DC5: the Git update receiver's signing secret reaches every install.
+test("an upgrade persists the secret promote.sh started the portal with, and never replaces a real one", () => {
+  const exported = "a".repeat(64);
+  const added = ensureGitWebhookSecret("DPF_IMAGE_TAG=v1\n", "\n", exported);
+  assert.match(added, new RegExp(`^DPF_GIT_WEBHOOK_SECRET=${exported}$`, "m"));
+  const placeholder = ensureGitWebhookSecret("DPF_GIT_WEBHOOK_SECRET=<generate a distinct value>\n", "\n", exported);
+  assert.match(placeholder, new RegExp(`^DPF_GIT_WEBHOOK_SECRET=${exported}$`, "m"));
+  const kept = ensureGitWebhookSecret(`DPF_GIT_WEBHOOK_SECRET=${"b".repeat(64)}\n`, "\n", exported);
+  assert.equal(kept, `DPF_GIT_WEBHOOK_SECRET=${"b".repeat(64)}\n`);
+  const generated = ensureGitWebhookSecret("", "\n", "");
+  assert.match(generated, /^DPF_GIT_WEBHOOK_SECRET=[0-9a-f]{64}$/m);
+});
+
+test("updateEnv carries the webhook secret into the committed install env", () => {
+  const previous = process.env.DPF_GIT_WEBHOOK_SECRET;
+  process.env.DPF_GIT_WEBHOOK_SECRET = "c".repeat(64);
+  try {
+    const text = updateEnv(Buffer.from("DPF_IMAGE_TAG=v1.0.0\n"), "v2.0.0", "opendigitalproductfactory").toString("utf8");
+    assert.match(text, new RegExp(`^DPF_GIT_WEBHOOK_SECRET=${"c".repeat(64)}$`, "m"));
+  } finally {
+    if (previous === undefined) delete process.env.DPF_GIT_WEBHOOK_SECRET; else process.env.DPF_GIT_WEBHOOK_SECRET = previous;
+  }
+});
+
+// BI-3267763F: no install keeps running Inngest on the keys published in the repo.
+test("an upgrade persists the Inngest keys promote.sh exported and replaces the public defaults", () => {
+  const exported = { INNGEST_SIGNING_KEY: "d".repeat(64), INNGEST_EVENT_KEY: "e".repeat(64) };
+  const fromDefaults = ensureInngestKeys("INNGEST_SIGNING_KEY=abcdef0123456789\nINNGEST_EVENT_KEY=deadbeefcafebabe\n", "\n", exported); // gitleaks:allow — the old public compose default this test refuses, not a credential (BI-3267763F)
+  assert.equal(fromDefaults, `INNGEST_SIGNING_KEY=${"d".repeat(64)}\nINNGEST_EVENT_KEY=${"e".repeat(64)}\n`);
+  const missing = ensureInngestKeys("DPF_IMAGE_TAG=v1", "\n", exported);
+  assert.match(missing, new RegExp(`^INNGEST_SIGNING_KEY=${"d".repeat(64)}$`, "m"));
+  assert.match(missing, new RegExp(`^INNGEST_EVENT_KEY=${"e".repeat(64)}$`, "m"));
+  const placeholder = ensureInngestKeys('INNGEST_SIGNING_KEY="<generate with: openssl rand -hex 32>"\n', "\n", exported);
+  assert.match(placeholder, new RegExp(`^INNGEST_SIGNING_KEY=${"d".repeat(64)}$`, "m"));
+  const real = `INNGEST_SIGNING_KEY=${"1".repeat(64)}\nINNGEST_EVENT_KEY=${"2".repeat(64)}\n`;
+  assert.equal(ensureInngestKeys(real, "\n", exported), real, "a real key is never rotated");
+});
+
+test("an exported public default is never persisted; a random key is generated instead", () => {
+  const text = ensureInngestKeys("", "\n", { INNGEST_SIGNING_KEY: "abcdef0123456789", INNGEST_EVENT_KEY: "deadbeefcafebabe" }); // gitleaks:allow — the old public compose default this test refuses, not a credential (BI-3267763F)
+  assert.match(text, /^INNGEST_SIGNING_KEY=[0-9a-f]{64}$/m);
+  assert.match(text, /^INNGEST_EVENT_KEY=[0-9a-f]{64}$/m);
+  assert.doesNotMatch(text, /abcdef0123456789|deadbeefcafebabe/);
+});
+
+test("updateEnv carries the Inngest keys into the committed install env", () => {
+  const text = updateEnv(Buffer.from("DPF_IMAGE_TAG=v1.0.0\r\nINNGEST_SIGNING_KEY=abcdef0123456789\r\n"), "v2.0.0", "opendigitalproductfactory").toString("utf8"); // gitleaks:allow — the old public compose default this test refuses, not a credential (BI-3267763F)
+  assert.match(text, /^INNGEST_SIGNING_KEY=[0-9a-f]{64}\r$/m);
+  assert.match(text, /^INNGEST_EVENT_KEY=[0-9a-f]{64}\r$/m);
 });

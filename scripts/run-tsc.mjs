@@ -8,8 +8,10 @@
 // over `cross-env` (a new dependency): this resolves `tsc` via Node's own module
 // resolution, so it is agnostic to how pnpm hoists `typescript`, and forwards any
 // extra args (e.g. `--noEmit`, `-p tsconfig.scripts.json`) straight through.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 
 // Resolve relative to the caller's cwd (the package dir) so the workspace's
@@ -18,11 +20,49 @@ import { pathToFileURL } from "node:url";
 const requireFromCwd = createRequire(pathToFileURL(`${process.cwd()}/`));
 const tscEntry = requireFromCwd.resolve("typescript/bin/tsc");
 
-const result = spawnSync(
-  process.execPath,
-  ["--max-old-space-size=8192", tscEntry, ...process.argv.slice(2)],
-  { stdio: "inherit" },
-);
+const tscArgs = ["--max-old-space-size=8192", tscEntry, ...process.argv.slice(2)];
+
+// Plan 2026-09-08 M11 step 4: with DPF_TSC_PROGRAM_REPORT=<file>, the same
+// compile also records what it checked (`--listFiles --extendedDiagnostics`)
+// into <file>, for scripts/sbom/check-typecheck-baseline.mjs. CI's Typecheck
+// job sets it so the ratchet costs no second compile. The file list is kept
+// out of the log; every other line (diagnostics, errors) passes through.
+// Parsing and judging stay in the checker: this file only records.
+const programReportPath = process.env.DPF_TSC_PROGRAM_REPORT;
+const result = programReportPath
+  ? await runWithProgramReport(programReportPath)
+  : spawnSync(process.execPath, tscArgs, { stdio: "inherit" });
+
+async function runWithProgramReport(reportPath) {
+  const child = spawn(process.execPath, [...tscArgs, "--listFiles", "--extendedDiagnostics"], {
+    stdio: ["inherit", "pipe", "inherit"],
+  });
+  const files = [];
+  const output = [];
+  // tsc prints each program file as a bare absolute path on its own line.
+  const listedFile = /^(?:\/|[A-Za-z]:[\\/]).+\.(?:[cm]?[jt]sx?|json)$/;
+  const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
+  lines.on("line", (line) => {
+    if (listedFile.test(line)) {
+      files.push(line);
+      return;
+    }
+    output.push(line);
+    process.stdout.write(`${line}\n`);
+  });
+  const [status, signal, error] = await new Promise((settle) => {
+    child.on("error", (err) => settle([null, null, err]));
+    child.on("close", (code, sig) => settle([code, sig, undefined]));
+  });
+  if (!error && !signal && status !== null) {
+    writeFileSync(
+      reportPath,
+      `${JSON.stringify({ schema: 1, cwd: process.cwd(), args: process.argv.slice(2), exitCode: status, files, output }, null, 2)}\n`,
+    );
+    process.stdout.write(`[run-tsc] program report (${files.length} files) written to ${reportPath}\n`);
+  }
+  return { status, signal, error };
+}
 
 if (result.error) {
   console.error(`[run-tsc] failed to launch tsc: ${result.error.message}`);

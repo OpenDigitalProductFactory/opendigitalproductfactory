@@ -702,6 +702,7 @@
 
   .standards-grid {
     margin-top: 26px;
+    grid-template-columns: repeat(4, 1fr);
   }
 
   .standard-card {
@@ -1067,7 +1068,8 @@
   }
 
   @media (max-width: 920px) {
-    .proof-strip {
+    .proof-strip,
+    .standards-grid {
       grid-template-columns: 1fr 1fr;
     }
 
@@ -1147,6 +1149,7 @@
 
     .proof-strip,
     .card-grid,
+    .standards-grid,
     .business-paths,
     .capability-grid,
     .status-grid,
@@ -1233,6 +1236,8 @@
         DPF gives one organization a customer experience, an operating workspace, and purposed
         AI coworkers on the same governed platform. Start from the business you run, keep
         important actions under human authority, and retain an evidence trail of what changed.
+        It is also the working test bed for four open standards for AI that is safe to delegate
+        to &mdash; implemented here first, for real businesses.
       </p>
       <div class="actions">
         <a class="button primary" href="/business-types/">Find your business</a>
@@ -1243,20 +1248,20 @@
 
     <div class="proof-strip" aria-label="Platform at a glance">
       <div class="proof">
-        <strong>100+ business types</strong>
-        <span>Packaged operating patterns, not a blank canvas</span>
+        <strong>107 business archetypes</strong>
+        <span>Packaged operating patterns across 25 industry categories</span>
       </div>
       <div class="proof">
-        <strong>One organization</strong>
-        <span>A dedicated install and data boundary</span>
+        <strong>87 AI coworker roles</strong>
+        <span>Across nine value streams, each with its own identity, grants, and supervisor</span>
       </div>
       <div class="proof">
         <strong>Local by default</strong>
         <span>External providers and integrations are explicit choices</span>
       </div>
       <div class="proof">
-        <strong>Governed change</strong>
-        <span>Authority, approvals, receipts, and PR-gated platform updates</span>
+        <strong>Four open standards</strong>
+        <span>TAK, GAID, TAK-JSI, and GPP &mdash; working drafts with DPF as reference</span>
       </div>
     </div>
   </div>
@@ -1269,6 +1274,7 @@
       <a href="#business">For your business</a>
       <a href="#system">How it works</a>
       <a href="#trust">Trust</a>
+      <a href="#standards">Standards</a>
       <a href="#install">Install</a>
       <a href="#docs">Documentation</a>
     </div>
@@ -1285,8 +1291,9 @@
     <p class="section-intro">
       Choose what your organization does and DPF shapes the public experience, everyday
       vocabulary, workflows, finance assumptions, and coworker context around that choice.
-      The detailed catalogue groups more than 100 packaged business types into approachable
-      paths without exposing internal taxonomy first.
+      The catalogue groups 107 packaged business archetypes across 25 industry categories into
+      approachable paths without exposing internal taxonomy first. Each archetype provisions its
+      own value streams, the Workrooms its stages run in, and the coworker jobs that staff them.
     </p>
 
     <div class="card-grid">
@@ -1371,7 +1378,7 @@
         <div class="system-node">
           <span class="node-number" aria-hidden="true">03</span>
           <h3>Purposed AI coworkers</h3>
-          <p>Gather context, draft, reconcile, route, and prepare decisions within role, route, and tool authority.</p>
+          <p>87 defined roles across nine value streams gather context, draft, reconcile, route, and prepare decisions within role, route, and tool authority.</p>
         </div>
       </div>
       <div class="governance-rail" aria-label="Rules shared by every surface">
@@ -1482,7 +1489,6 @@
     <span id="mcp" class="anchor-alias" aria-hidden="true"></span>
     <span id="roles" class="anchor-alias" aria-hidden="true"></span>
     <span id="privacy" class="anchor-alias" aria-hidden="true"></span>
-    <span id="standards" class="anchor-alias" aria-hidden="true"></span>
     <span id="governance" class="anchor-alias" aria-hidden="true"></span>
     <p class="eyebrow">Autonomy is earned, not assumed</p>
     <h2>A coworker can recommend. Authority still decides what happens.</h2>
@@ -1625,9 +1631,10 @@
       <h3 class="workroom-title">A recommendation is not a permission.</h3>
       <p class="section-intro">
         Consulting a corpus produces a recommendation. Permission is decided separately, when the
-        coworker reaches for a tool. Every governed tool call is classified from the tool&rsquo;s
-        own declared consequence &mdash; on the central execution path, so the classification
-        covers every call rather than a hand-maintained list of names.
+        coworker reaches for a tool. Governed tool calls are classified from the tool&rsquo;s own
+        declared consequence on the central execution path, rather than from a hand-maintained
+        list of names. Coverage is reported as a governed metric, and not every gate enforces yet:
+        some run in shadow mode, recording what they would have refused, while evidence accumulates.
       </p>
 
       <div class="capability-grid" aria-label="How a governed tool call is judged">
@@ -1690,16 +1697,90 @@
       </p>
     </div>
 
+    <div class="deep-links" aria-label="Trust and architecture deep dives">
+      <a href="/user-guide/ai-workforce/how-governed-work-runs">How governed work runs, end to end</a>
+      <a href="/user-guide/workspace/work-rooms">Workrooms guide</a>
+      <a href="/user-guide/ai-workforce/decision-perspective">Decision perspective (WWMD / WWWD / WSID)</a>
+      <a href="/user-guide/ai-workforce/coworker-proactivity">Coworker proactivity</a>
+      <a href="/user-guide/platform/identity-and-access">Identity and access guide</a>
+      <a href="/user-guide/compliance/">Compliance guide</a>
+      <a href="/user-guide/ai-workforce/">AI workforce guide</a>
+    </div>
+  </section>
+
+  <section id="standards">
+    <span id="gpp" class="anchor-alias" aria-hidden="true"></span>
+    <span id="mbse" class="anchor-alias" aria-hidden="true"></span>
+    <span id="test-bed" class="anchor-alias" aria-hidden="true"></span>
+    <p class="eyebrow">Open standards, proven in a working system</p>
+    <h2>Four cornerstones for AI you can safely delegate to.</h2>
+    <p class="section-intro">
+      DPF is two things at once. It is a workable platform that real businesses run on, and it is
+      the test bed where four open standards for governed AI are implemented first, measured
+      against real work, and contributed back to the wider ecosystem. Each standard answers one
+      question. None of them widens what another allows.
+    </p>
+
+    <div class="workroom-block">
+      <p class="eyebrow">The problem the standards answer</p>
+      <h3 class="workroom-title">Approving every tool call does not keep AI safe. People stop reading.</h3>
+      <p class="section-intro">
+        Most AI agents offer two settings: ask a person before every action, or ask nothing. The
+        first fails quietly and the second fails loudly &mdash; and the first is what drives people
+        to the second.
+      </p>
+
+      <div class="capability-grid" aria-label="Why per-call approval fails">
+        <div class="capability">
+          <strong>Per-call approval decays</strong>
+          <p>
+            One vendor reports that users approve 93&ndash;97% of permission prompts, and that in a
+            controlled study people caught a disguised dangerous command 13.6% of the time
+            &mdash; falling to about 5% after fifty prompts. The same users rejected 39% of plans.
+            People judge decisions well and keystrokes badly.
+          </p>
+        </div>
+        <div class="capability">
+          <strong>So people switch it off</strong>
+          <p>
+            Agent tools ship &ldquo;YOLO&rdquo;, always-allow, and skip-permission modes. With them
+            the agent&rsquo;s standing credentials become its authority. The 2024&ndash;2026
+            incident record &mdash; deleted production databases, leaked repositories, and agents
+            that escaped evaluation and reached production infrastructure &mdash; is largely a record
+            of broad credentials meeting no gate.
+          </p>
+        </div>
+        <div class="capability">
+          <strong>A filter is not an authority</strong>
+          <p>
+            The newest answer is a classifier that guesses which calls are safe enough to skip the
+            prompt. It helps, and it has a published miss rate and a published bypass. It also
+            cannot say who was entitled to decide.
+          </p>
+        </div>
+      </div>
+
+      <p class="note">
+        <strong>DPF&rsquo;s approach: decide once, by the right authority, then enforce every
+        call.</strong> A person or governed policy decides whether a <em>class</em> of tool use is
+        admissible for a piece of work. The runtime then enforces that decision deterministically
+        on each call. Tools outside the decision are not offered for approval &mdash; they are
+        unreachable, so they cannot be approved by fatigue. Sources, dates, and the limits of each
+        figure are in the
+        <a href="/architecture/agent-governance-market-landscape-2026">market and thought-leadership brief</a>.
+      </p>
+    </div>
+
     <div class="standards-family" aria-labelledby="standards-family-title">
       <div class="standards-family-header">
         <div>
           <p class="eyebrow">Standards for accountable autonomy</p>
-          <h3 id="standards-family-title">Three different questions. Three verifiable answers.</h3>
+          <h3 id="standards-family-title">Four different questions. Four verifiable answers.</h3>
         </div>
         <p>
-          DPF separates identity, job fitness, and permission to act. A strong model score can be
-          useful evidence, but it does not show that a particular AI coworker is qualified for a
-          real job with its data, tools, risks, and oversight requirements.
+          DPF separates identity, job fitness, who decided, and permission to act. A strong model
+          score can be useful evidence, but it does not show that a particular AI coworker is
+          qualified for a real job, or that anyone with the authority to do so agreed it may act.
         </p>
       </div>
 
@@ -1722,36 +1803,67 @@
           </span>
           <span class="standard-link">Read Job-Specific Intelligence &rarr;</span>
         </a>
+        <a class="card standard-card" href="/architecture/gated-permissions-process">
+          <span class="standard-code">GPP &middot; Who decided this may happen?</span>
+          <strong>Bind decisions to tools.</strong>
+          <span class="standard-question">
+            Pair a gate in the authority that owns the decision &mdash; platform, organization, or
+            profession &mdash; with the exact tools it admits, for one stage of one kind of work.
+          </span>
+          <span class="standard-link">Read the Gated Permissions Process &rarr;</span>
+        </a>
         <a class="card standard-card" href="/architecture/trusted-ai-kernel">
           <span class="standard-code">TAK &middot; May it act now?</span>
           <strong>Enforce runtime authority.</strong>
           <span class="standard-question">
-            Intersect the user&rsquo;s authority, coworker grants, qualification, policy, data
-            constraints, risk, and required oversight for each action.
+            Intersect the user&rsquo;s authority, coworker grants, the GPP envelope, qualification,
+            policy, data constraints, and required oversight for each action.
           </span>
           <span class="standard-link">Read the runtime standard &rarr;</span>
         </a>
       </div>
 
+      <h4>The model is the system</h4>
+      <p>
+        Model-based systems engineering has long described complex systems as connected models of
+        requirements, structure, behaviour, and verification. AI agents have not been part of that
+        discipline &mdash; until now. In DPF the model is not a diagram beside the software. Work
+        shapes, their stages, the decision gates, the tools each gate admits, the coworkers that
+        perform the work, and the receipts they leave are model elements that the running platform
+        executes and checks itself against. GPP supplies the missing link: a modelled binding
+        between who may decide and what may run, with a SysML v2 mapping and a check that the
+        model still matches what the runtime actually allows.
+      </p>
+      <p>
+        Principles guide judgment within the scope that owns the question; policies determine which
+        actions are permitted. A recommendation is evidence for a decision, not permission to
+        execute it. The working drafts compose established modeling approaches &mdash; SysML v2,
+        DMN, BPMN, and PROV &mdash; rather than inventing a new modeling language.
+        <a href="/architecture/agent-standards-external-alignment#mbse-composition-mapping">Read the modeling crosswalk</a>,
+        <a href="/architecture/trusted-ai-kernel#713-principle-directed-decision-contract">the proposed decision contract</a>,
+        and <a href="/architecture/gated-permissions-process#12-notation">the GPP notation</a>.
+      </p>
+
       <p class="standards-posture">
-        <strong>Current posture:</strong> TAK, GAID, and TAK-JSI are open working drafts, with DPF
-        as their initial implementation prototype. They define proposed conformance evidence and
+        <strong>Current posture:</strong> TAK, GAID, TAK-JSI, and GPP are open working drafts, with
+        DPF as their initial reference implementation. They define proposed conformance evidence and
         a path toward candidate specifications and independent assessment; they do not claim that
-        DPF or its coworkers are presently accredited or certified.
+        DPF or its coworkers are presently accredited or certified. Publishing a clause or a diagram
+        does not establish that its control is implemented &mdash; each GPP element is listed with
+        its current mode (enforced, shadow, or not yet built) in
+        <a href="/architecture/gated-permissions-process#annex-a-informative-dpf-realization-status">its realization annex</a>.
+        Portable executable contracts, independent assessments, published efficacy measures, and
+        Hermes and Cursor demonstrations remain work in progress.
       </p>
     </div>
 
-    <div class="deep-links" aria-label="Trust and architecture deep dives">
+    <div class="deep-links" aria-label="Standards deep dives">
       <a href="/architecture/agent-standards-family">Standards family map</a>
+      <a href="/architecture/gated-permissions-process">Gated Permissions Process (GPP)</a>
+      <a href="/architecture/agent-governance-market-landscape-2026">Market and thought-leadership brief</a>
       <a href="/architecture/agent-standards-contribution-roadmap">Standards contribution roadmap</a>
       <a href="/architecture/agent-standards-dpf-conformance">Standards conformance</a>
-      <a href="/user-guide/ai-workforce/how-governed-work-runs">How governed work runs, end to end</a>
-      <a href="/user-guide/workspace/work-rooms">Workrooms guide</a>
-      <a href="/user-guide/ai-workforce/decision-perspective">Decision perspective (WWMD / WWWD / WSID)</a>
-      <a href="/user-guide/ai-workforce/coworker-proactivity">Coworker proactivity</a>
-      <a href="/user-guide/platform/identity-and-access">Identity and access guide</a>
-      <a href="/user-guide/compliance/">Compliance guide</a>
-      <a href="/user-guide/ai-workforce/">AI workforce guide</a>
+      <a href="/architecture/2026-04-18-trusted-ai-agent-governance-white-paper">Trusted AI agent governance white paper</a>
     </div>
   </section>
 
@@ -1774,8 +1886,9 @@
         <h3>Working platform contracts</h3>
         <ul>
           <li>Single-organization, local-first deployment with a public site and internal operating workspace.</li>
-          <li>More than 100 packaged business types with business-shaped vocabulary and defaults.</li>
-          <li>Purposed coworker registry, governed tool execution, approvals, and audit evidence.</li>
+          <li>107 packaged business archetypes with business-shaped vocabulary, value streams, and defaults.</li>
+          <li>A registry of 87 purposed coworker roles (40 active), governed tool execution, approvals, and audit evidence.</li>
+          <li>Tool reach narrowed by Workroom, with enforced organization-and-profession alignment and escalation gates on consequential tools.</li>
           <li>Portfolio, backlog, customer, workforce, finance, compliance, knowledge, and platform operations.</li>
           <li>Build Studio as a governed development and evidence surface, alongside supported external contributor paths.</li>
           <li>Self-upgrade, recovery, CI, migration, and pull-request contracts for platform change.</li>
@@ -1791,6 +1904,7 @@
           <li>Build Studio continues to improve reliability, right-sized workflow, and autonomous phase handoff.</li>
           <li>Public and federated agent identity profiles remain a standards and interoperability journey.</li>
           <li>TAK-JSI defines the job-qualification direction; DPF does not yet operate the full assessment, credential, surveillance, and revalidation lifecycle.</li>
+          <li>GPP is a working draft. The Workroom-shape gate runs in shadow mode, decision-to-action authorization covers a small set of tools, and GPP efficacy measures are not yet published.</li>
           <li>Individual integrations advertise capability support; unsupported operations must remain explicit.</li>
         </ul>
         <p class="status-more">
@@ -1941,6 +2055,16 @@
           No. Build Studio is the in-platform governed development surface. Customizable installs
           also support normal editor and external agent-client workflows, with the same pull-request,
           DCO, CI, and verification expectations for upstream changes.
+        </p>
+      </details>
+      <details>
+        <summary>Why not just ask me to approve every AI action?</summary>
+        <p>
+          Because people stop reading. Vendor data shows users approve the overwhelming majority of
+          per-call prompts and rarely catch a dangerous one buried among them, so many switch
+          approvals off. DPF asks for a decision where it carries information &mdash; once, for a
+          class of work, by the authority that owns it &mdash; and then enforces that decision on
+          every call. See the <a href="/architecture/agent-governance-market-landscape-2026">evidence brief</a>.
         </p>
       </details>
       <details>

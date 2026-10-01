@@ -636,9 +636,12 @@ export function classifyOutcome(result: AgenticResult | CodexResult | ClaudeResu
   }
   if (calledBuildTools && !hasErrors) return "DONE";
   if (calledBuildTools && hasErrors) return "DONE_WITH_CONCERNS";
-  // No build tools called — normally BLOCKED, but a substantial text response
-  // without blocking language indicates the agent answered via reasoning alone.
-  if (content.length > 50) return "DONE";
+  // No build tools called. BI-38B82F67: a reply that called no tool at all
+  // changed nothing, however long — counting it DONE recorded "11/11 tasks
+  // complete" for builds that wrote no file (FB-2FE91CD3). A read-only
+  // investigation that concluded something may be legitimate (the behaviour
+  // already exists), so it is flagged for review rather than counted done.
+  if (agenticResult.executedTools.length > 0 && content.length > 50) return "DONE_WITH_CONCERNS";
   return "BLOCKED";
 }
 
@@ -789,6 +792,11 @@ async function dispatchSpecialist(params: {
     taskTitle: task.title,
     specialist: ROLE_LABELS[role],
   });
+  // A durable progress row per task: the UI and the reconcilers otherwise see
+  // nothing until the whole run ends.
+  prisma.buildActivity.create({
+    data: { buildId, tool: "specialist_dispatch", summary: `Started task "${task.title}" (${ROLE_LABELS[role]}).` },
+  }).catch(() => {});
 
   // ─── CLI dispatch path: Codex or Claude Code running inside the sandbox ──
   if (config.provider === "codex" || config.provider === "claude" || config.provider === "grok" || config.provider === "opencode") {
@@ -1062,7 +1070,59 @@ export type OrchestratorResult = {
  * This is a DIRECT DISPATCH FUNCTION — not an agentic loop.
  * It calls runAgenticLoop for each specialist, not for itself.
  */
-export async function runBuildOrchestrator(params: {
+/** Runs the orchestration registered as live, so the reconcilers leave it alone. */
+export async function runBuildOrchestrator(params: Parameters<typeof runBuildOrchestratorInner>[0]): Promise<OrchestratorResult> {
+  const { withOrchestrationRunning } = await import("./build-liveness");
+  return withOrchestrationRunning(params.buildId, () => runBuildOrchestratorInner(params));
+}
+
+/**
+ * BI-B2EEA6DE: one repair task for guard findings on an assembled build. It
+ * goes through the same specialist dispatch, engine selection and liveness as
+ * a plan task, so a repair is not a second, unaudited way to run an agent.
+ */
+export async function runGauntletRepairTask(params: {
+  buildId: string;
+  userId: string;
+  task: { title: string; implement: string; verify: string };
+}): Promise<boolean> {
+  const { withOrchestrationRunning } = await import("./build-liveness");
+  return withOrchestrationRunning(params.buildId, async () => {
+    const build = await prisma.featureBuild.findUnique({
+      where: { buildId: params.buildId },
+      select: { title: true, kind: true, threadId: true },
+    });
+    if (!build) return false;
+    const { BUILD_DISPATCH_USER_SELECT } = await import("./build-on-plan-approval");
+    const user = await prisma.user.findUnique({ where: { id: params.userId }, select: BUILD_DISPATCH_USER_SELECT });
+    if (!user) return false;
+    const buildContext = `Guard-finding repair for "${build.title}" (${build.kind})`;
+    const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
+    const dispatchConfig = await getBuildStudioConfig({
+      sensitivity: mapBuildDeliverableToRoutingSensitivity(deriveDeliverableSensitivity({ text: buildContext })),
+    });
+    const task: AssignedTask = {
+      taskIndex: 0,
+      title: params.task.title,
+      specialist: "software-engineer",
+      files: [],
+      task: { title: params.task.title, testFirst: "", implement: params.task.implement, verify: params.task.verify },
+    };
+    const result = await dispatchSpecialist({
+      task,
+      userId: params.userId,
+      platformRole: user.groups?.[0]?.platformRole?.roleId ?? null,
+      isSuperuser: user.isSuperuser ?? false,
+      buildId: params.buildId,
+      buildContext,
+      parentThreadId: build.threadId ?? `gauntlet-repair-${params.buildId}-${Date.now()}`,
+      dispatchConfig,
+    });
+    return result.success;
+  });
+}
+
+async function runBuildOrchestratorInner(params: {
   buildId: string;
   plan: BuildPlanDoc;
   userId: string;
@@ -1459,8 +1519,7 @@ export async function runBuildOrchestrator(params: {
   if (qaResult) {
     try {
       const { executeTool } = await import("@/lib/mcp-tools");
-      const qaContent = qaResult.result.content;
-      const verification = parseQAVerification(qaContent);
+      const rawQaContent = qaResult.result.content;
 
       // Scope the gate verdict to the build's changed files. A QA specialist may
       // run a wider pass than the feature's own surface (a stray "run full test
@@ -1476,6 +1535,17 @@ export async function runBuildOrchestrator(params: {
       } catch (err) {
         console.warn("[orchestrator] could not resolve changed files for gate scoping:", (err as Error)?.message);
       }
+      // An unread QA verdict is not a failing one: run the scoped checks instead.
+      const { resolveQaVerification, runDeterministicBuildVerificationFor } = await import("./deterministic-build-verification");
+      const resolved = await resolveQaVerification({
+        parsed: parseQAVerification(rawQaContent),
+        qaContent: rawQaContent,
+        changedFiles,
+        runDeterministic: (files) => runDeterministicBuildVerificationFor(buildId, files),
+      });
+      const verification = resolved.verification;
+      const qaContent = resolved.content;
+      changedFiles = resolved.changedFiles;
       const { scopeVerificationOutputForGate } = await import("@/lib/build/scoped-verification");
       const { normalizeVerificationOutput } = await import("@/lib/build/verification-output");
       const scoped = scopeVerificationOutputForGate({
@@ -1548,7 +1618,8 @@ export async function runBuildOrchestrator(params: {
           },
           reverify: async () => {
             const { runSandboxTests } = await import("./coding-agent");
-            const r = await runSandboxTests(containerId, { changedFiles });
+            const { resolveBuildWorkdir } = await import("./sandbox/build-branch");
+            const r = await runSandboxTests(containerId, { changedFiles, workdir: resolveBuildWorkdir(buildId) });
             const fullOutput = `${r.typeCheckOutput}\n${r.testOutput}`;
             const reNorm = normalizeVerificationOutput({
               typecheckPassed: r.typeCheckPassed,

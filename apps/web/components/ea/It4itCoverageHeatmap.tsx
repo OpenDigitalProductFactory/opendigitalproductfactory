@@ -16,7 +16,7 @@ import { StatCard } from "@/components/ui/report-kit/StatCard";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { DataTable, type Column } from "@/components/ui/report-kit/DataTable";
 import { ExportButton } from "@/components/ui/report-kit/ExportButton";
-import { intentStyle, resolveIntent } from "@/components/ui/report-kit/statusColors";
+import { intentStyle, resolveIntent } from "@/lib/ui-model/statusColors";
 import { setIt4itCoverageOverride } from "@/lib/actions/ea";
 import type {
   CoverageStatus,

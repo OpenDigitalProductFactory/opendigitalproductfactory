@@ -7,7 +7,7 @@
 // which owns duplicate detection and quote math. Contact-level tools live in
 // the separate crm-contacts pack.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { prisma } from "@dpf/db";
 import {

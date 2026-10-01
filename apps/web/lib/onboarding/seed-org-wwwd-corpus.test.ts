@@ -202,7 +202,7 @@ describe("seedOrgWwwdCorpus", () => {
     expect(mission!.body).toContain("Help local families breathe easier.");
     expect(mission!.pageKind).toBe("principle");
 
-    // Every published page was embedded into Qdrant
+    // Every published page was embedded into the vector store
     expect(embed).toHaveBeenCalledTimes(13);
     expect(result.embedded).toBe(true);
     expect(result.wikiPageIds).toHaveLength(13);

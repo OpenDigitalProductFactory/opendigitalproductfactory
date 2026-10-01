@@ -43,8 +43,8 @@ export interface ConfirmRestoreResult {
 }
 
 /**
- * Confirms and triggers a restore. postgres-only after BET-5 retired the neo4j
- * + qdrant stores. The confirmation text must match RESTORE exactly.
+ * Confirms and triggers a restore. Postgres is the only target (BET-5). The
+ * confirmation text must match RESTORE exactly.
  */
 export async function confirmRestoreAction(
   sourceBackupRunId: string,

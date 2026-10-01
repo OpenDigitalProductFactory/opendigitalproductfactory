@@ -1,8 +1,8 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
-export const prometheusPoll = inngest.createFunction(
+export const prometheusPoll = jobs.createFunction(
   { id: "ops/prometheus-poll", retries: 2, triggers: [cron("5 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ops/prometheus-poll");
@@ -17,7 +17,7 @@ export const prometheusPoll = inngest.createFunction(
   },
 );
 
-export const fullDiscoverySweep = inngest.createFunction(
+export const fullDiscoverySweep = jobs.createFunction(
   {
     id: "ops/full-discovery-sweep",
     retries: 2,

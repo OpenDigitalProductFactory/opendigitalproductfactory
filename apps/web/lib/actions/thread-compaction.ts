@@ -13,7 +13,7 @@
 // - Errors in the summarization call are non-fatal: the original messages are
 //   returned unchanged so the coworker can still respond.
 
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 /** Trigger compaction when message count exceeds this threshold. */
 export const COMPACTION_THRESHOLD = 20;

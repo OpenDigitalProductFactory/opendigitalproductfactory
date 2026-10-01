@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /**
@@ -9,7 +9,7 @@ import { gateAtEntry } from "../quiescence-gates";
  * and high-volume/failure tools; then closes the loop by filing critical BIs
  * and dispatching a one-shot platform-engineer (AI Ops) review task.
  */
-export const mcpCallEfficiencyScan = inngest.createFunction(
+export const mcpCallEfficiencyScan = jobs.createFunction(
   {
     id: "ops/mcp-call-efficiency-scan",
     retries: 1,

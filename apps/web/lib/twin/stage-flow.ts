@@ -11,7 +11,7 @@
 
 import type { TwinValueStreamBinding } from "@dpf/storefront-templates";
 
-import type { TwinStageFlow } from "@/components/twin/snapshot";
+import type { TwinStageFlow } from "./twin-snapshot";
 
 export interface StageDemand {
   count: number;

@@ -10,6 +10,7 @@
 // prisma.organization.findFirst() (the same pattern applyFinancialProfile uses).
 
 import { prisma } from "@dpf/db";
+import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import { getFinancialProfile } from "@dpf/finance-templates";
 import {
   buildOrgChartOfAccounts,
@@ -422,8 +423,7 @@ export type GeneralLedgerReport = {
  */
 export async function getGeneralLedgerReport(periodKey?: string): Promise<GeneralLedgerReport> {
   const org = await prisma.organization.findFirst({ select: { id: true } });
-  const settings = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
-  const currency = settings?.baseCurrency ?? "GBP";
+  const currency = await getOrgBaseCurrency();
 
   const emptyReport: GeneralLedgerReport = {
     periodKey: periodKey ?? null,
@@ -513,8 +513,7 @@ export async function postDepreciationJournal(
   const org = await prisma.organization.findFirst({ select: { id: true } });
   if (!org) return { ...zero, reason: "no-organization" };
 
-  const settings = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
-  const currency = settings?.baseCurrency ?? "GBP";
+  const currency = await getOrgBaseCurrency();
 
   const accountRows = await prisma.ledgerAccount.findMany({
     where: { organizationId: org.id, isActive: true },

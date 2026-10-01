@@ -266,6 +266,20 @@ export const STANDING_ROOM_PARENT_BY_KEY: Readonly<Record<string, string | null>
     ),
   );
 
+/**
+ * The portfolio each standing room's work shape serves, keyed by shape key.
+ * Derived from the same three arrays as the parent map; used to show which
+ * coordinators and owner roles work in an area (EP-2FB6C0CC, spec §9.3).
+ */
+export const STANDING_ROOM_PORTFOLIO_BY_SHAPE_KEY: Readonly<Record<string, PortfolioRole>> =
+  Object.freeze(
+    Object.fromEntries(
+      [...TOP_ROOMS, ...UNIVERSAL_SUB_ROOMS, ...SOFTWARE_DELIVERY_SUB_ROOMS]
+        .filter((room): room is StandingRoomDefinition & { shapeKey: string } => room.shapeKey !== null)
+        .map((room) => [room.shapeKey, room.portfolioRole]),
+    ),
+  );
+
 /** The declared work-shape keys a given archetype will actually drive. */
 export function standingRoomShapeKeys(archetype: ArchetypeDefinition): string[] {
   return deriveStandingRooms(archetype)

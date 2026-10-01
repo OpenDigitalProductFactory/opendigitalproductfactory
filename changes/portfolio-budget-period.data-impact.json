@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-9EC60FE0 (slice 3 of EP-PORTFOLIO-BUDGET-WIP). New model PortfolioBudgetPeriod: one portfolio's investment budget for one calendar quarter, in points, with an optional $ rate per point and an optional WIP allowance override. Written only by set_portfolio_budget, which requires a person and a reason. Rows are never edited; a change inserts a row that supersedes the current one (supersedesId unique, and one chain root per portfolio and period), so the chain is the audit trail and exactly one row is current. A portfolio with no row has no budget set. Portfolio.budgetKUsd is unchanged and remains the annual financial figure. Additive: a new empty table and no backfill. Migration: 20260925190000_portfolio_budget_period.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "PortfolioBudgetPeriod",
+      "lifecycleDisposition": "retain-with-item",
+      "fields": [
+        { "name": "portfolioId", "resolution": "governed", "reason": "The portfolio the budget belongs to; cascades with the portfolio.", "provenance": "Chosen by the setting person from the portfolios the proposal lists.", "flags": [] },
+        { "name": "periodStart", "resolution": "governed", "reason": "Start of the UTC calendar quarter the budget covers; budgets are quarterly by founder decision (2026-09-24).", "provenance": "Derived server-side from the requested date; the write refuses anything but a whole quarter.", "flags": [] },
+        { "name": "periodEnd", "resolution": "governed", "reason": "Exclusive end of the quarter.", "provenance": "Derived server-side with periodStart.", "flags": [] },
+        { "name": "allocatedPoints", "resolution": "governed", "reason": "The budget in investment points, the unit reservations, admission and the tie-out share.", "provenance": "Operator-entered, normally accepting or editing propose_portfolio_budgets.", "flags": [] },
+        { "name": "usdPerPoint", "resolution": "governed", "reason": "Optional price of a point for the quarter; the tie-out shows points x rate beside budgetKUsd. It never changes what is stored in points.", "provenance": "Operator-entered.", "flags": [] },
+        { "name": "wipAllowancePoints", "resolution": "governed", "reason": "Optional override of the points-in-flight allowance the admission rule (slice 6) otherwise derives from throughput.", "provenance": "Operator-entered.", "flags": [] },
+        { "name": "setById", "resolution": "governed", "reason": "The person who set the budget; the design allows no budget without an attributable actor.", "provenance": "From the authenticated caller; never client-supplied.", "flags": [] },
+        { "name": "setByAgentId", "resolution": "governed", "reason": "The AI coworker that carried the change for the person, when it is a registered agent.", "provenance": "From the tool execution context.", "flags": [] },
+        { "name": "reason", "resolution": "governed", "reason": "Why the budget is right; required so every row explains itself.", "provenance": "Operator-entered.", "flags": [] },
+        { "name": "supersedesId", "resolution": "governed", "reason": "The row this one replaces; with the unique indexes it keeps one linear history per portfolio and quarter.", "provenance": "Set server-side to the current row at write time.", "flags": [] }
+      ]
+    }
+  ]
+}

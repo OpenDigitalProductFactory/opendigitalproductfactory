@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Harness-Enforced Decision-Routing & Lease-Punt Gates
 
 **Date:** 2026-07-03
@@ -163,6 +167,8 @@ Codex remains **fail-open until the operator grants hook trust** (§11). There i
 
 **Fix:** the standalone installer (`update_agent_toolchain.py`) now (1) **merges** the five blocking plane-1 guards into `~/.codex/hooks.json` (Bash + AskUserQuestion matchers, preserving foreign hooks), (2) **detects** absent hook-trust state (`hooks.state` / `[hooks.state.*] trusted_hash` in `config.toml`), and (3) prints an **ACTION REQUIRED** block with the hook roster (BI-276EC984) plus optional exit code `2` when `--require-codex-hook-trust` or `DPF_REQUIRE_CODEX_HOOK_TRUST=1` is set. This converts the silent fail-open into a blocking install-time instruction — the acceptance path allowed when automation is impossible.
 
+**Superseded in part (2026-09-24):** the user-file copy is now a fallback only — see §13.1 (BI-2B634E68).
+
 ## 12. Addendum (2026-07-06) — match executable text, not quoted data
 
 **Observed false positive:** Gate B's patterns ran against the raw Bash command
@@ -205,6 +211,14 @@ in both guard test files — including the evidence-post repro verbatim.
 Codex remains **fail-open until the operator grants hook trust** (§11). There is still no supported non-interactive trust API ([openai/codex#21615](https://github.com/openai/codex/issues/21615)); forging `[hooks.state.*] trusted_hash` entries is explicitly out of scope (version-specific, brittle).
 
 **Fix:** the standalone installer (`update_agent_toolchain.py`) now (1) **merges** the five blocking plane-1 guards into `~/.codex/hooks.json` (Bash + AskUserQuestion matchers, preserving foreign hooks), (2) **detects** absent hook-trust state (`hooks.state` / `[hooks.state.*] trusted_hash` in `config.toml`), and (3) prints an **ACTION REQUIRED** block with the hook roster (BI-276EC984) plus optional exit code `2` when `--require-codex-hook-trust` or `DPF_REQUIRE_CODEX_HOOK_TRUST=1` is set. This converts the silent fail-open into a blocking install-time instruction — the acceptance path allowed when automation is impossible.
+
+## 13.1 Addendum (2026-09-24): one Codex hook plane, not two (BI-2B634E68)
+
+§11 and §13 never found that Codex ignores plugin-bundled hooks; only Grok does (§11.1). Codex loads the plugin's `hooks/hooks.json` from its plugin cache (`~/.codex/plugins/cache/personal/dpf-platform/<version>/`). Adding the §13 copy in `~/.codex/hooks.json` therefore ran every blocking guard twice and asked for trust twice. On codex-cli 0.155.0-alpha.16 the operator's `config.toml` held `trusted_hash` entries under both `dpf-platform@personal:hooks/hooks.json:…` and `…\.codex\hooks.json:…`, and all 13 user-file entries duplicated a plugin entry.
+
+**Change.** `install_codex_hooks` now checks for proof that the plugin plane is active. Proof means `[plugins."dpf-platform@personal"] enabled = true`, a cache directory for the delivered version, and every guard in `CODEX_BASH_GUARDS` / `CODEX_ASK_GUARDS` / `CODEX_WRITE_GUARDS` wired on its matcher in that cache's `hooks.json`. With that proof, the installer **prunes** DPF-owned entries from `~/.codex/hooks.json`. It keeps foreign hooks, drops groups the prune leaves empty, and does not create the file when it is absent. Without that proof (plugin disabled or unconfigured, no cache, or a cache missing a guard), it keeps the §13 merge as the fallback. The guard tuples stay in the code: they recognise DPF entries and define what counts as full coverage.
+
+**Trust.** The installer still never forges trust. On the plugin plane, hook trust counts as established only when `trusted_hash` is recorded for the `dpf-platform@personal:hooks/hooks.json` entries, so trust left over from the retired user-file copy cannot hide untrusted plugin guards. The ACTION REQUIRED notice tells the operator to grant trust once, on the plugin hooks. The `hook_roster` legend is numbered from the plugin `hooks.json`, which is what the operator trusts. The "Hook N" label comes from upstream (openai/codex#31469).
 
 ## 14. Post-incident addendum (2026-07-23): Gate A vocabulary gap — delivery worked, **logic** failed (BI-0F0BE69A)
 

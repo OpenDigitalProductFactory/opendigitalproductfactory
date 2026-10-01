@@ -238,3 +238,7 @@ open question below, not a decision this document makes silently.
   to avoid.
 - BI-E4DFDCB0 — MCP OAuth, independent.
 - BI-26091014 — hub-mediated cross-NAT pairing, downstream of reachability.
+- [`2026-09-29-cloudflare-tunnel.md`](../../security/tool-evaluations/2026-09-29-cloudflare-tunnel.md)
+  — the prerequisite Cloudflare Tunnel evaluation: conditional approval as an
+  opt-in provider, with four DPF defects (P1–P4) that block public reachability
+  by any provider.

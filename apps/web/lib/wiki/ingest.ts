@@ -268,7 +268,7 @@ async function commitRawSourceAndAudit(
  * ingested twice produces one row and two audit events.
  *
  * Phase 2.1 stays narrow on purpose: it does not call any LLM, does not
- * touch any wiki page, does not write to Qdrant. The returned event row
+ * touch any wiki page, does not write to the vector store. The returned event row
  * carries `touchedPageIds: []` until Phase 2.2/2.3 wires the proposal
  * pipeline through.
  *

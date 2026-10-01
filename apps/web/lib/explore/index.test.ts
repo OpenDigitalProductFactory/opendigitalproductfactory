@@ -9,8 +9,9 @@ describe("explore barrel export", () => {
 
   it("exports feature-build types", async () => {
     const mod = await import("./feature-build-types");
-    expect(mod).toHaveProperty("checkPhaseGate");
     expect(mod).toHaveProperty("VISIBLE_PHASES");
+    // checkPhaseGate lives in the matrix; the barrel re-exports it from there.
+    expect(await import("./build-process-matrix")).toHaveProperty("checkPhaseGate");
   });
 
   it("exports EA types", async () => {

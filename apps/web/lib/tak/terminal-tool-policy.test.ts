@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "../source-page-lines";
+import { DEFAULT_TOOL_RESULT_CHAR_CAP } from "./tool-result-budget";
 import {
   applyTerminalToolSurface,
   buildTerminalToolReminder,
   createInitiativeReviewTerminalToolPolicy,
   enterTerminalWriterPhase,
   normalizeTerminalToolArguments,
+  readerPageCharsForModelView,
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   summarizeTerminalToolProgress,
@@ -656,8 +658,10 @@ describe("agent loop terminal writer integration", () => {
       .mockResolvedValueOnce(response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]) as never)
       .mockResolvedValueOnce(response("Writer rejected.") as never);
     const result = await runAgenticLoop(params);
-    expect(result.executedTools[0]?.args).toEqual(policy.immutableReaderArguments);
-    expect(vi.mocked(governedExecuteTool).mock.calls[0]![0].rawParams).toEqual(policy.immutableReaderArguments);
+    // BI-E8237EAE: the server-bound read also carries the page the model can see whole.
+    const boundRead = { ...policy.immutableReaderArguments, maxChars: readerPageCharsForModelView(DEFAULT_TOOL_RESULT_CHAR_CAP) };
+    expect(result.executedTools[0]?.args).toEqual(boundRead);
+    expect(vi.mocked(governedExecuteTool).mock.calls[0]![0].rawParams).toEqual(boundRead);
     const nextHistory = vi.mocked(routeAndCall).mock.calls[1]![0];
     expect(nextHistory.find((message) => message.role === "assistant")?.toolCalls?.[0]).toEqual(nativeCall);
     expect(nextHistory.find((message) => message.role === "tool")?.content).toContain(policy.immutableReaderArguments!.version);

@@ -92,6 +92,19 @@ altered or replaced — that is what makes the history worth having. If sending
 succeeds but the copy cannot be stored, the invoice still shows as sent and the
 missing revision is visible in this list rather than being silently absent.
 
+### Invoice PDFs Use Document Conversion
+
+The invoice PDF (the **Download PDF** button, the copy attached when you send,
+and the countersigned copy sent after a customer signs) is printed by the
+platform's document conversion engine, the same one that exports documents to
+PDF. It carries your organisation's name, address, contact details and VAT number
+from the organisation record, and the details of your active bank account.
+
+If document conversion is not available on your install, **Download PDF**
+reports that the PDF could not be created, and **Send Invoice** shows the reason
+next to the button. Sending creates the PDF before the invoice is marked sent,
+so a failed send leaves the invoice as it was and you can try again.
+
 ### What You Can Edit, And When
 
 A **draft** invoice is fully editable: line items, amounts, dates, account,

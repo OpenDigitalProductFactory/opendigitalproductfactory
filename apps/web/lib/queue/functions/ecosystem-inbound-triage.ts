@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // BI-F47386ED — the inbound half of the ecosystem loop. Until this existed the
@@ -8,7 +8,7 @@ import { gateAtEntry } from "../quiescence-gates";
 //
 // Weekly, matching the ballot cadence in the ecosystem intake spec. No-ops on
 // any install whose purpose is not evolve-dpf.
-export const ecosystemInboundTriage = inngest.createFunction(
+export const ecosystemInboundTriage = jobs.createFunction(
   { id: "ecosystem/inbound-issue-triage", retries: 2, triggers: [cron("17 6 * * 1")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ecosystem/inbound-issue-triage");

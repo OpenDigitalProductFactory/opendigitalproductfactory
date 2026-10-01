@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
+import { parseArgs as utilParseArgs } from "node:util";
 import {
   appendFileSync,
   mkdirSync,
@@ -13,31 +13,24 @@ import {
   createEvidencePlan,
   loadEvidencePolicy,
 } from "./lib/ci-evidence-plan.mjs";
+import { gitText } from "./lib/git.mjs";
 
 function parseArgs(args) {
-  const values = {};
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (!arg.startsWith("--")) continue;
-    const key = arg.slice(2);
-    const value = args[index + 1];
-    if (!value || value.startsWith("--")) {
-      values[key] = true;
-    } else {
-      values[key] = value;
-      index += 1;
-    }
-  }
-  return values;
+  // strict: false keeps the old tolerance: unknown flags are ignored, and a flag
+  // given with no value reads as `true`, as before.
+  const { values } = utilParseArgs({
+    args,
+    strict: false,
+    allowPositionals: true,
+    options: Object.fromEntries([
+      "event", "base", "head", "policy", "graph-advice", "related-tests", "route-advice",
+      "known-tests", "output", "github-output",
+    ].map((name) => [name, { type: "string" }])),
+  });
+  return { ...values };
 }
 
-function git(args, cwd = process.cwd()) {
-  return execFileSync("git", args, {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-}
+const git = (args, cwd = process.cwd()) => gitText(args, { cwd });
 
 function readOptionalJson(path, label, inputErrors) {
   if (!path) return null;

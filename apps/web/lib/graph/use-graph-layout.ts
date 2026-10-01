@@ -40,20 +40,39 @@ export function useGraphLayout(
       return;
     }
 
+    // Commit an async layout only while it is still the latest request for the latest scope.
+    const commitAsync = (pending: Promise<LayoutResult>) => {
+      pending.then(
+        (nextResult) => {
+          if (
+            !isCancelled &&
+            requestId === requestIdRef.current &&
+            shouldApplyLayoutResult(dispatchScopeToken, latestScopeTokenRef.current)
+          ) {
+            setResult(nextResult);
+          }
+        },
+        (error: unknown) => {
+          console.error("[graph-layout] layout failed", error);
+        },
+      );
+    };
+
     switch (view.layout) {
       case "hierarchical": {
-        if (!isCancelled) {
-          if (view.name === "network-topology") {
-            setResult(computePhysicalTopologyLayout(filtered));
-          } else {
-            const roots = detectRoots(filtered, view);
-            setResult(
-              computeHierarchicalLayout(filtered, {
-                direction: view.direction,
-                rootIds: roots,
-              }),
-            );
-          }
+        if (view.name === "network-topology") {
+          setResult(computePhysicalTopologyLayout(filtered));
+        } else {
+          // ELK layout is async: clear the stale layout, then commit the fresh one only if
+          // it still belongs to the latest request and scope.
+          setResult(null);
+          const roots = detectRoots(filtered, view);
+          commitAsync(
+            computeHierarchicalLayout(filtered, {
+              direction: view.direction,
+              rootIds: roots,
+            }),
+          );
         }
         break;
       }
@@ -95,19 +114,13 @@ export function useGraphLayout(
           for (const n of filtered.nodes) {
             if (subnetNodes.has(n.id)) subnetNames.set(n.id, n.name);
           }
-          computeSwimLaneLayout(
-            filtered,
-            (id) => subnetMap.get(id) ?? null,
-            { partitionLabels: subnetNames },
-          ).then((nextResult) => {
-            if (
-              !isCancelled &&
-              requestId === requestIdRef.current &&
-              shouldApplyLayoutResult(dispatchScopeToken, latestScopeTokenRef.current)
-            ) {
-              setResult(nextResult);
-            }
-          });
+          commitAsync(
+            computeSwimLaneLayout(
+              filtered,
+              (id) => subnetMap.get(id) ?? null,
+              { partitionLabels: subnetNames },
+            ),
+          );
         } else {
           // Default OSI layer partitioning
           const osiMap = new Map(
@@ -116,17 +129,7 @@ export function useGraphLayout(
               (n as Record<string, unknown>).osiLayer as number | null ?? null,
             ]),
           );
-          computeSwimLaneLayout(filtered, (id) => osiMap.get(id) ?? null).then(
-            (nextResult) => {
-              if (
-                !isCancelled &&
-                requestId === requestIdRef.current &&
-                shouldApplyLayoutResult(dispatchScopeToken, latestScopeTokenRef.current)
-              ) {
-                setResult(nextResult);
-              }
-            },
-          );
+          commitAsync(computeSwimLaneLayout(filtered, (id) => osiMap.get(id) ?? null));
         }
         break;
       }

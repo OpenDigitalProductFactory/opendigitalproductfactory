@@ -20,7 +20,7 @@
 // Naming the operator's day correctly while promising sixteen destinations reads
 // as further along than saying nothing. That is the illusion this removes.
 
-import type { TwinStageFlow } from "./snapshot";
+import type { TwinStageFlow } from "@/lib/twin/twin-snapshot";
 
 export interface ValueStreamStripProps {
   stages: TwinStageFlow[];

@@ -98,7 +98,6 @@ function Grid({
 export const DPF_SERVICES: ServiceDefinition[] = [
   { name: "Portal", job: "portal" },
   { name: "PostgreSQL", job: "postgres" },
-  // BET-5 retired Neo4j + Qdrant (Postgres-only) — tiles removed (BI-2B70C92C).
   { name: "AI Inference", statusHint: "Portal metrics" },
   { name: "Sandbox", job: "sandbox" },
   { name: "Inngest", job: "inngest" },

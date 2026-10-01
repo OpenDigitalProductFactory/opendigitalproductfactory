@@ -15,7 +15,7 @@
 
 import { prisma } from "@dpf/db";
 
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { computeNextCronRun } from "@/lib/operate/cron-next-run";
 import { err, ok } from "@/lib/shared/action-result";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -284,7 +284,7 @@ export async function runWorkNow(jobId: string, actor: string): Promise<Mutation
     return err(`'${jobId}' has no manual-trigger event and no agent task behind it, so it can only run on its schedule.`);
   }
   try {
-    const result = await inngest.send({
+    const result = await jobs.send({
       name: entry.runNowEvent,
       data: { reason: "manual", triggeredBy: actor },
     });

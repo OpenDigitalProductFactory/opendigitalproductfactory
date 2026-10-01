@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
 import { DATA_CONTROL_TARGET_ADAPTERS } from "@/lib/govern/data/control-operation-adapters";
 import {
@@ -8,7 +8,7 @@ import {
   listRecoverableDataControlOperationIds,
 } from "@/lib/govern/data/control-operation-repository";
 import { reconcileDataControlOperation } from "@/lib/govern/data/control-operation-runner";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 export const DATA_CONTROL_OPERATION_RECOVERY_CRON =
@@ -51,7 +51,7 @@ export async function runDataControlOperationRecovery(input: {
   return counts;
 }
 
-export const dataControlOperationRecoveryScheduled = inngest.createFunction(
+export const dataControlOperationRecoveryScheduled = jobs.createFunction(
   {
     id: "govern/data-control-operation-recovery-scheduled",
     retries: 1,
@@ -70,7 +70,7 @@ export const dataControlOperationRecoveryScheduled = inngest.createFunction(
   },
 );
 
-export const dataControlOperationRecoveryRequested = inngest.createFunction(
+export const dataControlOperationRecoveryRequested = jobs.createFunction(
   {
     id: "govern/data-control-operation-recovery-requested",
     retries: 1,

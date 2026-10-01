@@ -301,7 +301,7 @@ export function measureAgreement(
       scope: scopeOfRow(g.sample),
       professionKey: professionKeyOf(g.sample),
       headline: `Humans agreed with ${Math.round(rate * 100)}% of ${key} recommendations`,
-      evidence: { agreed: g.agreed, total: g.total, rate: Number(rate.toFixed(2)) },
+      evidence: { agreed: g.agreed, total: g.total, rate: Number(rate.toFixed(2)), domainClass: g.sample.domainClass },
       proposedAction: "examine-weight",
     });
   }

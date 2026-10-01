@@ -5,7 +5,8 @@
 // answers the earlier question: "is this local branch ready to become or re-enter
 // a PR without letting GitHub Actions discover the first obvious blocker?"
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { parseArgs as utilParseArgs } from "node:util";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import { buildGatePlan, evaluateReadiness, formatReadinessReport } from "./pr-readiness/core.mjs";
@@ -15,42 +16,43 @@ import { buildGateContext } from "./lib/gate-context.mjs";
 import { fetchOriginMainSharedSafe, isShallowRepository } from "./lib/git-fetch-shared-safe.mjs";
 import { isEnvironmentFailureOutput } from "./lib/pregate-preflight.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { GitCommandError, runGit } from "./lib/git.mjs";
 
 function git(args, { allowFail = false } = {}) {
-  try {
-    return execFileSync("git", args, {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      maxBuffer: 32 * 1024 * 1024,
-    });
-  } catch (error) {
-    if (allowFail) return error.stdout?.toString() ?? "";
-    throw error;
-  }
+  const result = runGit(args, { cwd: process.cwd(), maxBuffer: 32 * 1024 * 1024 });
+  if (result.ok || allowFail) return result.stdout;
+  throw new GitCommandError(args, result);
 }
 
 function parseArgs(argv) {
-  const args = { prBody: process.env.PR_BODY || "", prLabelsJson: process.env.PR_LABELS_JSON || "[]", runGates: true, json: false, publishedRef: null };
-  for (let i = 2; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === "--pr-body-file") {
-      args.prBody = readFileSync(argv[++i], "utf8");
-    } else if (arg === "--pr-body") {
-      args.prBody = argv[++i] ?? "";
-    } else if (arg === "--labels-json") {
-      args.prLabelsJson = argv[++i] ?? "[]";
-    } else if (arg === "--skip-gates") {
-      args.runGates = false;
-    } else if (arg === "--published-ref") {
-      args.publishedRef = argv[++i] ?? "";
-    } else if (arg === "--json") {
-      args.json = true;
-    } else if (arg === "-h" || arg === "--help") {
-      args.help = true;
-    } else {
-      throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
+  const options = {
+    "pr-body-file": { type: "string" },
+    "pr-body": { type: "string" },
+    "labels-json": { type: "string" },
+    "skip-gates": { type: "boolean" },
+    "published-ref": { type: "string" },
+    json: { type: "boolean" },
+    help: { type: "boolean", short: "h" },
+  };
+  // strict: false plus the token check keeps the old message for unknown input and
+  // still accepts a --pr-body that starts with "-" (a markdown list, say).
+  const { values, tokens } = utilParseArgs({ args: argv.slice(2), options, strict: false, allowPositionals: true, tokens: true });
+  const unknown = tokens.find((token) => token.kind !== "option" || !Object.hasOwn(options, token.name));
+  if (unknown) throw new Error(`Unknown argument: ${unknown.rawName ?? unknown.value ?? "--"}`);
+  // A value flag given last with nothing after it falls back as before.
+  const text = (name, fallback) => (typeof values[name] === "string" ? values[name] : fallback);
+  const args = {
+    prBody: process.env.PR_BODY || "",
+    prLabelsJson: values["labels-json"] === undefined ? process.env.PR_LABELS_JSON || "[]" : text("labels-json", "[]"),
+    runGates: values["skip-gates"] !== true,
+    json: values.json === true,
+    publishedRef: values["published-ref"] === undefined ? null : text("published-ref", ""),
+  };
+  // Every --pr-body-file is read, as before; the body flag given last wins.
+  if (values["pr-body-file"] !== undefined) args.prBody = readFileSync(text("pr-body-file", undefined), "utf8");
+  const lastBody = tokens.findLast((token) => token.name === "pr-body" || token.name === "pr-body-file");
+  if (lastBody?.name === "pr-body") args.prBody = text("pr-body", "");
+  if (values.help) args.help = true;
   return args;
 }
 

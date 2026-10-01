@@ -49,6 +49,39 @@ async function resolveBacklogRowId(db: BoundWorkShapeDb, backlogItemId: string):
  * statement that its shape claim no longer stands.
  */
 export async function readBoundWorkShapeRef(db: BoundWorkShapeDb, backlogItemRef: string): Promise<string | null> {
+  const ref = await readBoundRoomClaim(db, backlogItemRef, readWorkShapeClaim);
+  return ref ? `${ref.key}@${ref.version}` : null;
+}
+
+/**
+ * The paths the bound Workroom declared it EDITS (claim_workroom_scope), read
+ * the same way as the shape: live room first, then the newest closed one, so
+ * completion re-reads what the change said it touches (BI-243BC956). Empty when
+ * no room declared any: sensitivity then falls back to what the body cites.
+ */
+export async function readBoundEditPaths(db: BoundWorkShapeDb, backlogItemRef: string): Promise<string[]> {
+  return (await readBoundRoomClaim(db, backlogItemRef, editPathsOf)) ?? [];
+}
+
+const EDIT_PATH_KINDS = new Set(["path", "module", "package"]);
+
+function editPathsOf(scopeClaims: unknown): string[] | null {
+  if (!Array.isArray(scopeClaims)) return null;
+  const paths = scopeClaims.flatMap((entry) => {
+    const claim = entry as { kind?: unknown; intent?: unknown; value?: unknown } | null;
+    return claim && EDIT_PATH_KINDS.has(String(claim.kind)) && claim.intent === "edit"
+      && typeof claim.value === "string" && claim.value.trim()
+      ? [claim.value.trim()]
+      : [];
+  });
+  return paths.length > 0 ? paths : null;
+}
+
+async function readBoundRoomClaim<T>(
+  db: BoundWorkShapeDb,
+  backlogItemRef: string,
+  read: (scopeClaims: unknown) => T | null,
+): Promise<T | null> {
   if (!db.workroom?.findFirst) return null;
   const rowId = await resolveBacklogRowId(db, backlogItemRef);
   const backlogItemId = rowId === backlogItemRef ? rowId : { in: [backlogItemRef, rowId] };
@@ -58,8 +91,8 @@ export async function readBoundWorkShapeRef(db: BoundWorkShapeDb, backlogItemRef
     orderBy: { updatedAt: "desc" },
     select: { scopeClaims: true },
   });
-  const liveRef = readWorkShapeClaim(live?.scopeClaims);
-  if (liveRef) return `${liveRef.key}@${liveRef.version}`;
+  const liveClaim = read(live?.scopeClaims);
+  if (liveClaim) return liveClaim;
 
   // No live room, or a live room that never claimed a shape. A completed or
   // archived room's claim is still the shape this work was done under.
@@ -68,6 +101,5 @@ export async function readBoundWorkShapeRef(db: BoundWorkShapeDb, backlogItemRef
     orderBy: { updatedAt: "desc" },
     select: { scopeClaims: true },
   });
-  const ref = readWorkShapeClaim(historical?.scopeClaims);
-  return ref ? `${ref.key}@${ref.version}` : null;
+  return read(historical?.scopeClaims);
 }

@@ -43,7 +43,9 @@ describe("POST /api/v1/federation/membership/sign", () => {
     const response = await POST(request(body, { "x-forwarded-for": "192.168.0.200, 10.0.0.1" }));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ accepted: true, certPem: "LEAF", chainPems: ["LEAF", "ROOT"], rootPem: "ROOT" });
-    expect(mockRelay).toHaveBeenCalledWith({ request: body, callerKey: "192.168.0.200" }, { rootPem: "ROOT" });
+    // Keyed by the entry the nearest proxy appended, not the client-supplied
+    // leftmost one, so a caller cannot rotate the key to dodge the limit.
+    expect(mockRelay).toHaveBeenCalledWith({ request: body, callerKey: "10.0.0.1" }, { rootPem: "ROOT" });
   });
 
   it("maps refusals to statuses: malformed 400, token or CA refusal 403, CA down 503, rate limit 429 with retry-after", async () => {

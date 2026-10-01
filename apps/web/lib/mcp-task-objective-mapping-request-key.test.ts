@@ -10,7 +10,7 @@ import {
   validateHistoricalObjectiveMappingRequestKey,
   type ObjectiveMappingRequestHistory,
 } from "./mcp-task-objective-mapping-request-key";
-import { canonicalJson } from "./shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 const repositoryFullName = "OpenDigitalProductFactory/opendigitalproductfactory";
 

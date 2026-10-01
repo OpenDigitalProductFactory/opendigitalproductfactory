@@ -365,12 +365,12 @@ export const voiceTtsEnabled = new Gauge({
 });
 
 // --- Dependency health (BI-963DBB05) ---
-// /metrics-less core services (neo4j, model-runner, stt) probed per /api/metrics
+// /metrics-less core services (model-runner, stt, doctools) probed per /api/metrics
 // scrape by lib/operate/dependency-health.ts. up==0 => unreachable. These cannot
 // be Prometheus scrape targets, so ContainerDown (up==0) can never see them.
 export const dependencyUp = new Gauge({
   name: "dpf_dependency_up",
-  help: "1 when a /metrics-less core dependency is reachable, 0 when down. Labelled by service (neo4j | model-runner | stt).",
+  help: "1 when a /metrics-less core dependency is reachable, 0 when down. Labelled by service (model-runner | stt | doctools).",
   labelNames: ["service"] as const,
   registers: [metricsRegistry],
 });

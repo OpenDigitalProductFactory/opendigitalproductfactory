@@ -16,6 +16,7 @@
 // Matching is by SHA, not branch. Branch names are reused across threads and
 // deleted on merge; commits are unique and permanent.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { mcpCall } from "./lib/mcp-client.mjs";
 import { spawnSync } from "node:child_process";
 
@@ -51,15 +52,24 @@ function gh(args) {
 }
 
 function parseArgs(argv) {
-  const options = { prNumber: null, json: false, all: false };
-  for (const arg of argv) {
-    if (arg === "--json") options.json = true;
-    else if (arg === "--all") options.all = true;
-    else if (arg === "--help" || arg === "-h") {
-      process.stdout.write(usage());
-      process.exit(0);
-    } else if (/^\d+$/.test(arg)) options.prNumber = Number(arg);
-    else if (/^#\d+$/.test(arg)) options.prNumber = Number(arg.slice(1));
+  let parsed;
+  try {
+    parsed = utilParseArgs({
+      args: argv,
+      allowPositionals: true,
+      options: { json: { type: "boolean" }, all: { type: "boolean" }, help: { type: "boolean", short: "h" } },
+    });
+  } catch (error) {
+    die(error.message);
+  }
+  const { values, positionals } = parsed;
+  if (values.help) {
+    process.stdout.write(usage());
+    process.exit(0);
+  }
+  const options = { prNumber: null, json: values.json === true, all: values.all === true };
+  for (const arg of positionals) {
+    if (/^#?\d+$/.test(arg)) options.prNumber = Number(arg.replace(/^#/, ""));
     else die(`unknown argument: ${arg}`);
   }
   return options;

@@ -10,6 +10,7 @@ import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
 import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
 import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import type { ListingAuthority } from "./listing-authority";
 
 type JsonRpcId = string | number | null;
 type NoMatchReason = "unknown-tool-name" | "reviewer-route-required" | "not-granted" | "intent-no-match" | "missing-query";
@@ -35,18 +36,30 @@ function isReviewerOnlyWriter(name: string): boolean {
   return INITIATIVE_READINESS_LANES[name]?.independent === true;
 }
 
+/**
+ * The legacy one-line summary of what could not be loaded. `grantedNames` must be
+ * the AUTHORIZED set the selection drew from (token ∩ role ∩ agent ∩ clearance):
+ * judging against the token-only set made an agent-grant denial read as
+ * "intent-no-match" (BI-949FBBAE). For an exact-name request it covers only the
+ * names that cannot be loaded, so a partial match still says what was left out;
+ * a callable name that merely missed this call's batch limit is not listed.
+ */
 export function classifyLoadToolsNoMatch(
   args: Record<string, unknown>,
   knownNames: ReadonlySet<string>,
   grantedNames: ReadonlySet<string>,
-  selectedCount: number,
+  selectedNames: ReadonlySet<string>,
 ): LoadToolsNoMatch | undefined {
-  if (selectedCount > 0) return undefined;
   const requestedNames = Array.isArray(args.names)
     ? args.names.filter((name): name is string => typeof name === "string")
     : [];
   if (requestedNames.length > 0) {
-    const canonicalNames = requestedNames.map(canonicalWorkroomToolName);
+    const unmatched = requestedNames.filter((name) => {
+      const canonical = canonicalWorkroomToolName(name.trim());
+      return !selectedNames.has(canonical) && !grantedNames.has(canonical);
+    });
+    if (unmatched.length === 0) return undefined;
+    const canonicalNames = unmatched.map((name) => canonicalWorkroomToolName(name.trim()));
     const reason = canonicalNames.some((name) => !knownNames.has(name))
       ? "unknown-tool-name"
       : canonicalNames.some(isReviewerOnlyWriter)
@@ -54,9 +67,130 @@ export function classifyLoadToolsNoMatch(
         : canonicalNames.some((name) => !grantedNames.has(name))
           ? "not-granted"
           : "intent-no-match";
-    return { reason, requestedNames };
+    return { reason, requestedNames: unmatched };
   }
+  if (selectedNames.size > 0) return undefined;
   return { reason: typeof args.query === "string" && args.query.trim() ? "intent-no-match" : "missing-query" };
+}
+
+// ─── Per-name status (BI-949FBBAE) ───────────────────────────────────────────
+// load_tools used to answer only for the names it loaded. Every requested name
+// now gets one entry saying which authority axis stopped it, in call order:
+// token scope, then the person's role, then the acting coworker's grants, then
+// clearance. `reviewer-route-required` keeps its place above the grant axes
+// (BI-7876699F): an author must not call a reviewer-only writer at all.
+
+export type LoadToolsStatusReason =
+  | "unknown-tool-name"
+  | "token-scope-missing"
+  | "role-capability-missing"
+  | "agent-grant-missing"
+  | "clearance-denied"
+  | "reviewer-route-required";
+
+export type LoadToolsNameStatus = {
+  name: string;
+  serverHasTool: boolean;
+  tokenGranted: boolean;
+  /** null when the connection has no acting coworker (no agent axis applies). */
+  agentGranted: boolean | null;
+  loadedInSession: boolean;
+  callableByName: boolean;
+  reason: LoadToolsStatusReason | null;
+  recovery: string | null;
+};
+
+/** What the route already knows about this caller's authority, per tool name. */
+export type LoadToolsStatusFacts = {
+  knownNames: ReadonlySet<string>;
+  /** Names tools/call would admit: token ∩ role ∩ agent grants ∩ clearance. */
+  authorizedNames: ReadonlySet<string>;
+  loadedToolNames: readonly string[];
+  /** Token coarse scope + granular grant (expanded) admit the tool. */
+  tokenGrants: (name: string) => boolean;
+  /** The acting person's platform role carries the tool's required capability. */
+  roleAllows: (name: string) => boolean;
+  authority: ListingAuthority;
+  /** The runtime grant predicate (tak/agent-grants isToolAllowedByGrants). */
+  isAllowedByGrants: (name: string, grants: string[]) => boolean;
+  requiredGrants: (name: string) => readonly string[];
+};
+
+const REVIEWER_ROUTE_RECOVERY =
+  "The author dispatches the reviewer route from get_backlog_item; this tool is for the independent reviewer.";
+
+function grantList(grants: readonly string[]): string {
+  return grants.length === 0 ? "no grant is mapped" : grants.length === 1 ? grants[0] : `any one of ${grants.join(", ")}`;
+}
+
+function recoveryFor(
+  reason: LoadToolsStatusReason,
+  grants: readonly string[],
+  authority: ListingAuthority,
+): string {
+  switch (reason) {
+    case "unknown-tool-name":
+      return "No tool by this name exists on this server. Do not retry it; use a load_tools intent query or search_tool_marketplace to find the right name.";
+    case "reviewer-route-required":
+      return REVIEWER_ROUTE_RECOVERY;
+    case "token-scope-missing":
+      return `This connection's token does not carry the grant this tool needs (${grantList(grants)}). Reissue the MCP token or re-authorize with that scope.`;
+    case "role-capability-missing":
+      return "Your platform role does not include the capability this tool requires. An administrator must change your role; a new token will not help.";
+    case "agent-grant-missing":
+      return authority.agentBound && authority.blanketDeny && authority.cause === "agent-unresolved"
+        ? "The coworker this connection acts as is not an active, resolvable identity, so none of its grants apply. Reconnect through OAuth or reissue the token with an active coworker."
+        : `The coworker this connection acts as holds none of the grants this tool needs (${grantList(grants)}). An administrator can grant it to that coworker; the token cannot widen it.`;
+    case "clearance-denied":
+      return "Your sensitivity clearance does not cover the data sensitivity of the coworker this connection acts as, so every tool through it is refused. An administrator must raise your clearance or bind the connection to a coworker at your level.";
+  }
+}
+
+/** One status entry per distinct requested name, in request order. Pure. */
+export function buildLoadToolsStatus(
+  args: Record<string, unknown>,
+  facts: LoadToolsStatusFacts,
+): LoadToolsNameStatus[] {
+  const requested = Array.isArray(args.names)
+    ? args.names.filter((name): name is string => typeof name === "string").map((name) => name.trim()).filter(Boolean)
+    : [];
+  const loaded = new Set(facts.loadedToolNames);
+  const { authority } = facts;
+  const seen = new Set<string>();
+  const status: LoadToolsNameStatus[] = [];
+  for (const name of requested) {
+    const canonical = canonicalWorkroomToolName(name);
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    const serverHasTool = facts.knownNames.has(canonical);
+    const tokenGranted = serverHasTool && facts.tokenGrants(canonical);
+    const agentUnresolved = authority.agentBound && authority.blanketDeny && authority.cause === "agent-unresolved";
+    const agentGranted = !authority.agentBound
+      ? null
+      : serverHasTool && !agentUnresolved && facts.isAllowedByGrants(canonical, authority.agentGrants);
+    const callableByName = facts.authorizedNames.has(canonical);
+    const loadedInSession = loaded.has(canonical);
+    const reason: LoadToolsStatusReason | null = callableByName
+      ? null
+      : !serverHasTool
+        ? "unknown-tool-name"
+        : isReviewerOnlyWriter(canonical)
+          ? "reviewer-route-required"
+          : !tokenGranted
+            ? "token-scope-missing"
+            : !facts.roleAllows(canonical)
+              ? "role-capability-missing"
+              : agentGranted === false
+                ? "agent-grant-missing"
+                : "clearance-denied";
+    const recovery = reason
+      ? recoveryFor(reason, facts.requiredGrants(canonical), authority)
+      : loadedInSession
+        ? null
+        : "Callable, but not loaded by this call: it hit the per-call load limit. Call load_tools again with this name.";
+    status.push({ name, serverHasTool, tokenGranted, agentGranted, loadedInSession, callableByName, reason, recovery });
+  }
+  return status;
 }
 
 /**
@@ -115,8 +249,11 @@ export function buildLoadToolsResult(
   selected: ReadonlyArray<{ name: string; description: string }>,
   loadedToolNames: string[],
   noMatch?: LoadToolsNoMatch,
+  status: LoadToolsNameStatus[] = [],
 ): { content: Array<{ type: "text"; text: string }>; structuredContent: Record<string, unknown> } {
-  const noMatchRecovery = selected.length === 0 && noMatch
+  // Populated for a partial match too (BI-949FBBAE): loading one name of four
+  // must still say why the other three were not loaded.
+  const noMatchRecovery = noMatch
     ? {
       ...noMatch,
       ...(noMatch.reason === "reviewer-route-required"
@@ -137,14 +274,18 @@ export function buildLoadToolsResult(
     count: selected.length,
     listChanged: selected.length > 0,
     noMatch: noMatchRecovery,
+    status,
     recovery:
       selected.length > 0
         ? { reListTools: true, programmaticCatalogFallback: true }
         : undefined,
     note:
-      selected.length > 0
+      (selected.length > 0
         ? "Tools loaded for this session. Honor notifications/tools/list_changed or re-fetch tools/list. If the host top-level registry remains unchanged, invoke the loaded tool through its programmatic tool catalog; this remains governed MCP."
-        : "No granted tools matched. Pass exact names or a broader query, or call search_tool_marketplace to find tool names.",
+        : "No granted tools matched. Pass exact names or a broader query, or call search_tool_marketplace to find tool names.")
+      + (status.some((entry) => entry.reason !== null || !entry.loadedInSession)
+        ? " Each requested name has a status entry saying why it was or was not loaded."
+        : ""),
   };
   if (JSON.stringify(data).length > MCP_ROUTE_TOOL_RESULT_CHAR_CAP) {
     data = {
@@ -152,6 +293,10 @@ export function buildLoadToolsResult(
       newlyLoaded: selected.map((t) => ({ name: t.name, description: "" })),
       _summariesTruncated: true,
     };
+  }
+  if (JSON.stringify(data).length > MCP_ROUTE_TOOL_RESULT_CHAR_CAP) {
+    // A very long names list: keep every verdict, drop the repeated prose.
+    data = { ...data, status: status.map((entry) => ({ ...entry, recovery: null })), _statusRecoveryTruncated: true };
   }
   return {
     content: [{ type: "text", text: JSON.stringify({ success: true, ...data }, null, 2) }],

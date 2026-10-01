@@ -27,7 +27,11 @@ import {
   parseWorkspacePackageGlobs,
   shouldEscalateConvergence,
   shouldForceConvergenceAfterInstall,
+  parseLsofCwd,
+  readProcessCwd,
+  resolveInstallWaitConfig,
   stalePackagePathsForRelink,
+  waitForSandboxInstalls,
 } from "./sandbox-freshness.mjs";
 
 const LOCKFILE = `lockfileVersion: '9.0'
@@ -117,6 +121,201 @@ test("detectInstallProcesses parses ps output and excludes self", () => {
   assert.deepEqual(found.map((p) => p.pid), [123, 789]);
   assert.equal(found[0].etimeMinutes, 62);
   assert.equal(found[1].etimeMinutes, 2 * 24 * 60 + 3 * 60 + 4);
+});
+
+// BI-8DC6F267: the duplicate-install guard protects ONE node_modules. An
+// install in another worktree does not touch this sandbox, so only installs
+// whose working directory is the sandbox root (or inside it) count.
+const SCOPE_PS = [
+  "  101 01:46 pnpm install",
+  "  102 00:30 pnpm install --frozen-lockfile",
+  "  103 00:12 pnpm --filter web install",
+  "  104 00:05 pnpm install",
+  "  105 00:05 pnpm install",
+].join("\n");
+const SCOPE_CWDS = {
+  101: "/work/worktrees/other-session",
+  102: "/work/sandbox",
+  103: "/work/sandbox/apps/web",
+  104: "/work/sandbox-2",
+  // 105: cwd unreadable
+};
+const fakeReadCwd = (pid) => SCOPE_CWDS[pid] ?? null;
+
+test("AC-1: an install running in another directory is not counted against the sandbox", () => {
+  const found = detectInstallProcesses(SCOPE_PS, { rootDir: "/work/sandbox", readCwd: fakeReadCwd });
+  const pids = found.map((p) => p.pid);
+  assert.equal(pids.includes(101), false, "another worktree's install must not block this sandbox");
+  // A sibling whose path merely starts with the sandbox path is still another directory.
+  assert.equal(pids.includes(104), false, "/work/sandbox-2 is not inside /work/sandbox");
+});
+
+test("AC-2: an install running in the sandbox root or a package inside it still counts", () => {
+  const found = detectInstallProcesses(SCOPE_PS, { rootDir: "/work/sandbox", readCwd: fakeReadCwd });
+  const byPid = new Map(found.map((p) => [p.pid, p]));
+  assert.ok(byPid.has(102), "install at the sandbox root must count");
+  assert.ok(byPid.has(103), "install in a workspace package of the sandbox must count");
+  assert.equal(byPid.get(102).cwd, "/work/sandbox");
+});
+
+test("AC-4: an install whose cwd cannot be read is counted (never risk a duplicate install)", () => {
+  const found = detectInstallProcesses(SCOPE_PS, { rootDir: "/work/sandbox", readCwd: fakeReadCwd });
+  const unknown = found.find((p) => p.pid === 105);
+  assert.ok(unknown, "unreadable cwd must fall back to blocking");
+  assert.equal(unknown.cwd, null);
+  assert.equal(unknown.cwdUnknown, true);
+  const throwing = detectInstallProcesses("  7 00:01 pnpm install", {
+    rootDir: "/work/sandbox",
+    readCwd: () => {
+      throw new Error("EPERM");
+    },
+  });
+  assert.deepEqual(throwing.map((p) => p.pid), [7]);
+});
+
+test("detectInstallProcesses matches the sandbox through any of its path spellings", () => {
+  // macOS: the sandbox is addressed as /var/... while lsof reports /private/var/...
+  const found = detectInstallProcesses("  8 00:01 pnpm install", {
+    rootDir: ["/var/folders/x/sandbox", "/private/var/folders/x/sandbox"],
+    readCwd: () => "/private/var/folders/x/sandbox",
+  });
+  assert.deepEqual(found.map((p) => p.pid), [8]);
+});
+
+test("detectInstallProcesses without a rootDir keeps the host-wide behaviour", () => {
+  const found = detectInstallProcesses(SCOPE_PS);
+  assert.deepEqual(found.map((p) => p.pid), [101, 102, 103, 104, 105]);
+});
+
+test("parseLsofCwd reads the name field of `lsof -a -p PID -d cwd -Fn`", () => {
+  assert.equal(parseLsofCwd("p4242\nfcwd\nn/Users/me/dpf/.local-ci-runner-slot-1\n"), "/Users/me/dpf/.local-ci-runner-slot-1");
+  assert.equal(parseLsofCwd("n/path with spaces/x\n"), "/path with spaces/x");
+  assert.equal(parseLsofCwd(""), null);
+  assert.equal(parseLsofCwd("p4242\n"), null);
+});
+
+test("readProcessCwd uses lsof on macOS", () => {
+  const calls = [];
+  const cwd = readProcessCwd(4242, {
+    platform: "darwin",
+    spawn: (cmd, args) => {
+      calls.push([cmd, ...args]);
+      return { status: 0, stdout: "p4242\nfcwd\nn/work/sandbox\n" };
+    },
+    readlink: () => {
+      throw new Error("must not read /proc on macOS");
+    },
+  });
+  assert.equal(cwd, "/work/sandbox");
+  assert.deepEqual(calls, [["lsof", "-a", "-p", "4242", "-d", "cwd", "-Fn"]]);
+});
+
+test("readProcessCwd reads /proc/PID/cwd on Linux, falling back to lsof", () => {
+  assert.equal(
+    readProcessCwd(77, {
+      platform: "linux",
+      readlink: (p) => {
+        assert.equal(p, "/proc/77/cwd");
+        return "/work/sandbox";
+      },
+      spawn: () => {
+        throw new Error("lsof not needed when /proc answers");
+      },
+    }),
+    "/work/sandbox",
+  );
+  assert.equal(
+    readProcessCwd(77, {
+      platform: "linux",
+      readlink: () => {
+        throw new Error("ENOENT");
+      },
+      spawn: () => ({ status: 0, stdout: "p77\nfcwd\nn/elsewhere\n" }),
+    }),
+    "/elsewhere",
+  );
+});
+
+test("readProcessCwd returns null when the cwd cannot be read", () => {
+  assert.equal(readProcessCwd(5, { platform: "darwin", spawn: () => ({ status: 1, stdout: "" }) }), null);
+  assert.equal(readProcessCwd(5, { platform: "darwin", spawn: () => ({ error: new Error("ENOENT"), status: null }) }), null);
+  assert.equal(
+    readProcessCwd(5, {
+      platform: "linux",
+      readlink: () => {
+        throw new Error("EACCES");
+      },
+      spawn: () => ({ status: 1, stdout: "" }),
+    }),
+    null,
+  );
+  assert.equal(readProcessCwd(5, { platform: "win32" }), null);
+});
+
+function fakeClock() {
+  let now = 0;
+  return {
+    now: () => now,
+    sleep: async (ms) => {
+      now += ms;
+    },
+  };
+}
+
+test("AC-3: waitForSandboxInstalls waits for a same-sandbox install that finishes within the bound", async () => {
+  const clock = fakeClock();
+  let scans = 0;
+  const running = [{ pid: 102, etime: "00:30", etimeMinutes: 0, command: "pnpm install", cwd: "/work/sandbox" }];
+  const result = await waitForSandboxInstalls({
+    scan: () => (++scans <= 3 ? running : []),
+    timeoutMs: 600_000,
+    pollMs: 5_000,
+    ...clock,
+  });
+  assert.equal(result.timedOut, false);
+  assert.equal(result.waited, true);
+  assert.deepEqual(result.processes, []);
+  assert.equal(result.waitedMs, 15_000);
+  assert.deepEqual(result.observedPids, [102]);
+});
+
+test("waitForSandboxInstalls does not wait when nothing is running", async () => {
+  const clock = fakeClock();
+  const result = await waitForSandboxInstalls({ scan: () => [], timeoutMs: 600_000, pollMs: 5_000, ...clock });
+  assert.equal(result.waited, false);
+  assert.equal(result.timedOut, false);
+  assert.equal(result.waitedMs, 0);
+});
+
+test("waitForSandboxInstalls reports a timeout when the install outlives the bound", async () => {
+  const clock = fakeClock();
+  const running = [{ pid: 102, etime: "45:00", etimeMinutes: 45, command: "pnpm install", cwd: "/work/sandbox" }];
+  let scans = 0;
+  const result = await waitForSandboxInstalls({
+    scan: () => {
+      scans += 1;
+      return running;
+    },
+    timeoutMs: 20_000,
+    pollMs: 5_000,
+    ...clock,
+  });
+  assert.equal(result.timedOut, true);
+  assert.deepEqual(result.processes.map((p) => p.pid), [102]);
+  assert.ok(clock.now() <= 20_000, `wait must stay within its bound, slept ${clock.now()}ms`);
+  assert.ok(scans <= 6, `polling must be bounded, saw ${scans} scans`);
+});
+
+test("resolveInstallWaitConfig defaults to a 10 minute bound and honours env overrides", () => {
+  assert.deepEqual(resolveInstallWaitConfig({}), { timeoutMs: 600_000, pollMs: 5_000 });
+  assert.deepEqual(
+    resolveInstallWaitConfig({ DPF_LOCAL_CI_FRESHNESS_INSTALL_WAIT_MS: "120000", DPF_LOCAL_CI_FRESHNESS_INSTALL_POLL_MS: "250" }),
+    { timeoutMs: 120_000, pollMs: 250 },
+  );
+  // 0 disables the wait (report not-ready immediately); junk falls back to the default.
+  assert.equal(resolveInstallWaitConfig({ DPF_LOCAL_CI_FRESHNESS_INSTALL_WAIT_MS: "0" }).timeoutMs, 0);
+  assert.equal(resolveInstallWaitConfig({ DPF_LOCAL_CI_FRESHNESS_INSTALL_WAIT_MS: "soon" }).timeoutMs, 600_000);
+  assert.equal(resolveInstallWaitConfig({ DPF_LOCAL_CI_FRESHNESS_INSTALL_POLL_MS: "-5" }).pollMs, 5_000);
 });
 
 test("parseEtimeMinutes handles mm:ss, hh:mm:ss and dd-hh:mm:ss", () => {

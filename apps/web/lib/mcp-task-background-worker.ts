@@ -16,6 +16,7 @@ import {
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import { mcpTaskNotificationBus } from "./mcp-task-notification-bus";
 import {
+  parseResourceWaitProjection,
   remoteTaskRequestDigest,
   remoteTaskRequestMatches,
 } from "./mcp-task-capacity-contract";
@@ -27,10 +28,8 @@ import { admitDurableInferenceTask } from "./mcp-task-durable-inference-runtime"
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { automaticReviewerRecoveryWait } from "./mcp-task-background-dispatch";
-import type {
-  RemoteTaskSubmitAuth,
-  RemoteTaskSubmitParams,
-} from "./mcp-task-submit";
+import type { RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
 type PersistedRemoteTask = {
   id: string;
@@ -635,10 +634,16 @@ export async function executePersistedRemoteTask(input: {
     };
   }
 
+  // A task parked for capacity resumes as its next attempt on the same TaskRun,
+  // so the wait's bound counts real attempts instead of restarting at 1 (BI-D25F867D).
+  const capacityWait = parseResourceWaitProjection(row.progressPayload);
   const outcome = await executeRemoteTaskAttempt({
     ...reconstructed.data,
-    idempotentReplay: false,
-    capacityAttempt: 1,
+    expectedReservation: string(progress["resumeReservedAt"]),
+    expectedDispatchClaim: claimedAt.toISOString(),
+    idempotentReplay: capacityWait !== null,
+    capacityAttempt: capacityWait ? capacityWait.attempt + 1 : 1,
+    ...(capacityWait ? { resumeKind: "capacity" as const } : {}),
     terminalWriterAttempt: 1,
   });
   const outcomeStatus = outcome.kind === "result" ? outcome.result["status"] : null;

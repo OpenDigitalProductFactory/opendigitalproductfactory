@@ -10,7 +10,7 @@
 // the 100 longest-waiting and say so, future dates left out of the ordering,
 // missing dates shown last, read-only over the stored listing date.
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const ADOPTION_WAITING_LIST_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

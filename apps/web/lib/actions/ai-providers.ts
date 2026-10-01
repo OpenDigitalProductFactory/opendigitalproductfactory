@@ -29,6 +29,10 @@ import { activateProvider } from "@/lib/govern/activate-provider";
 import { seedAiProviderFinanceBridge } from "@/lib/finance/ai-provider-finance";
 import { autoConfigureBuildStudio } from "@/lib/ai-provider-build-studio-config";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { buildResponsesUrl, isChatGptBackend } from "@/lib/routing/responses-contract";
+import { assertResponsesCompleted } from "@/lib/routing/responses-readiness";
+import { clearProviderCapacityStatus } from "@/lib/routing/provider-capacity/store";
+import { resolveResponsesProbeBaseUrl } from "@/lib/routing/responses-provider";
 
 const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
 const SHARED_ACCOUNT_LINKED_PROVIDERS = new Set(["zai"]);
@@ -313,43 +317,12 @@ export async function configureProvider(input: {
   return {};
 }
 
-function buildResponsesProbeUrl(providerId: string, baseUrl: string): string {
-  if (providerId === "chatgpt" || baseUrl.includes("chatgpt.com/backend-api")) {
-    return `${baseUrl}/codex/responses`;
-  }
-  return baseUrl.endsWith("/v1") ? `${baseUrl}/responses` : `${baseUrl}/v1/responses`;
-}
-
-async function resolveResponsesProbeBaseUrl(provider: {
-  providerId: string;
-  authMethod: string;
-  baseUrl: string | null;
-  endpoint: string | null;
-}): Promise<string> {
-  if (provider.providerId === "codex" && provider.authMethod === "oauth2_authorization_code") {
-    const chatgptProvider = await prisma.modelProvider.findUnique({
-      where: { providerId: "chatgpt" },
-      select: { baseUrl: true, endpoint: true },
-    });
-    return chatgptProvider?.baseUrl ?? chatgptProvider?.endpoint ?? "https://chatgpt.com/backend-api";
-  }
-  return provider.baseUrl ?? provider.endpoint ?? "";
-}
-
-function buildResponsesProbeBody(providerId: string): Record<string, unknown> {
-  return {
-    model: providerId === "chatgpt" ? "gpt-5.4" : "gpt-5.3-codex",
-    input: [{ role: "user", content: "ping" }],
-    store: false,
-  };
-}
-
 function formatResponsesScopeError(body: string): string | null {
   if (!body.includes("api.responses.write")) return null;
   return "OAuth token is missing Responses API scope (api.responses.write) — disconnect and sign in again";
 }
 
-export async function testProviderAuth(providerId: string): Promise<{ ok: boolean; message: string }> {
+export async function testProviderAuth(providerId: string, refreshCatalog = true): Promise<{ ok: boolean; message: string }> {
   await requireManageProviders();
 
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
@@ -380,6 +353,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
 
   const testUrl = getTestUrl(providerRow);
   if (!testUrl) return { ok: false, message: "No base URL or custom endpoint configured" };
+  let attemptedUrl = testUrl;
 
   const headers: Record<string, string> = {
     ...getProviderExtraHeaders(providerId),
@@ -421,35 +395,52 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
       }
 
       const baseUrl = await resolveResponsesProbeBaseUrl(provider);
-      const responsesUrl = buildResponsesProbeUrl(providerId, baseUrl);
+      attemptedUrl = buildResponsesUrl(providerId, baseUrl);
+      const model = await prisma.modelProfile.findFirst({
+        where: { providerId, modelStatus: "active" },
+        orderBy: [{ lastSeenAt: "desc" }, { modelId: "asc" }],
+        select: { modelId: true },
+      });
+      if (!model) return { ok: false, message: "No active model found — refresh the model catalog and retry" };
+      const streaming = isChatGptBackend(providerId, baseUrl);
       headers["Content-Type"] = "application/json";
-      res = await fetch(responsesUrl, {
+      res = await fetch(attemptedUrl, {
         method: "POST",
         headers,
-        body: JSON.stringify(buildResponsesProbeBody(providerId)),
-        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify({
+          model: model.modelId,
+          instructions: "Reply with OK only.",
+          input: [{ role: "user", content: [{ type: "input_text", text: "ping" }] }],
+          store: false, stream: streaming, reasoning: { effort: "low" },
+          ...(!streaming ? { max_output_tokens: 32 } : {}),
+        }),
+        signal: AbortSignal.timeout(30_000),
       });
 
-      if (res.ok || res.status === 400) {
+      const body = await res.text();
+      if (res.ok) {
+        assertResponsesCompleted(body, streaming);
+        await clearProviderCapacityStatus({ providerId, source: "oauth" });
         await activateProvider(providerId, {
           trigger: "test_auth",
+          skipDiscovery: !refreshCatalog,
           ...getLinkedActivationOptions(providerId, provider.authMethod),
         });
         return { ok: true, message: "Connected via OAuth — Responses API verified" };
       }
 
-      const body = await res.text().catch(() => "");
       const scopeError = formatResponsesScopeError(body);
       if (scopeError) {
         return { ok: false, message: scopeError };
       }
-      return { ok: false, message: `HTTP ${res.status} — ${body.slice(0, 200)}` };
+      return { ok: false, message: `HTTP ${res.status} — ${body.slice(0, 200)} — tried ${attemptedUrl}` };
     }
 
     // Anthropic subscription tokens (OAuth) can't access /models — test with a minimal /messages call instead
     if (isAnthropicProvider(providerId) && provider.authMethod === "oauth2_authorization_code") {
       const baseUrl = provider.baseUrl ?? provider.endpoint ?? "";
       const messagesUrl = `${baseUrl}/messages`;
+      attemptedUrl = messagesUrl;
       headers["Content-Type"] = "application/json";
       res = await fetch(messagesUrl, {
         method: "POST",
@@ -463,7 +454,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
       });
       // A 200 or even a 400 "max_tokens too low" means auth worked
       if (res.ok || res.status === 400) {
-        await activateProvider(providerId, { trigger: "test_auth" });
+        await activateProvider(providerId, { trigger: "test_auth", skipDiscovery: !refreshCatalog });
         return { ok: true, message: `Connected via subscription token — auth verified` };
       }
       const body = await res.text().catch(() => "");
@@ -476,6 +467,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
       // hosted connections remain public-only until business terms are reviewed.
       await activateProvider(providerId, {
         trigger: "test_auth",
+        skipDiscovery: !refreshCatalog,
         ...getLinkedActivationOptions(providerId, provider.authMethod),
       });
       return { ok: true, message: `Connected — HTTP ${res.status}` };
@@ -483,7 +475,7 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
     return { ok: false, message: `HTTP ${res.status} — ${res.statusText}` };
   } catch (err) {
     const detail = err instanceof Error ? err.message : "Network error";
-    return { ok: false, message: `${detail} — tried ${testUrl}` };
+    return { ok: false, message: `${detail} — tried ${attemptedUrl}` };
   }
 }
 

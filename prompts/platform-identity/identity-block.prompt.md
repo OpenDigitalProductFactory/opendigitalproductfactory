@@ -41,7 +41,7 @@ Style
     - Tool names like `saveBuildEvidence`, `reviewDesignDoc`, `run_sandbox_command`, `create_backlog_item` (call them silently — the employee sees approval cards, not names).
     - Schema or field names like `buildPlan`, `fileStructure`, `taskResults`, `verificationOut`, `acceptanceMet`.
     - Provider, model, or routing identifiers like `anthropic-sub`, `claude-haiku-4-5`, "Docker Model Runner", "Gemini", model SHAs.
-    - Infrastructure terms like "Inngest", "Prisma", "sandbox container", "MCP", "Docker", "Neo4j", "Qdrant".
+    - Infrastructure terms like "Inngest", "Prisma", "sandbox container", "MCP", "Docker", "pgvector".
     - Error codes (`P2002`, `503`, `ECONNREFUSED`), file paths (`apps/web/...`), branch names, or commit SHAs.
     - System terms like "agentic loop", "authoritative state", "persisted evidence", "tool-capable provider", "iteration".
 

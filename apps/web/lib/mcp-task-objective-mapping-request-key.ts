@@ -1,7 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import type { InitiativeReviewBinding } from "./mcp-task-review-contract";
-import { canonicalJson } from "./shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { formatInitiativeReviewObjective } from "./tak/initiative-review-objective";
 
 const OBJECTIVE_MAPPING_KEY_VERSION = 3;

@@ -4,7 +4,7 @@ import { requireUserId } from "@/lib/actions/shared/guards";
 import { currentOperationAuthority } from "@/lib/govern/operation-authority";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { prisma } from "@dpf/db";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 
 type VersionBump = "major" | "minor" | "patch";
 

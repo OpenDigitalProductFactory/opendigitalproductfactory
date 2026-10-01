@@ -10,8 +10,8 @@ vi.mock("@/lib/change-review/semantic-review-background", () => ({
   reconcileSemanticReviews: (...args: unknown[]) => native.reconcile(...args),
 }));
 
-vi.mock("../inngest-client", () => ({
-  inngest: { createFunction: (...args: unknown[]) => inngestMock.createFunction(...args) },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { createFunction: (...args: unknown[]) => inngestMock.createFunction(...args) },
 }));
 vi.mock("@/lib/mcp-task-background-worker", () => ({
   executePersistedRemoteTask: (...args: unknown[]) => worker.execute(...args),
@@ -20,6 +20,9 @@ vi.mock("@/lib/mcp-task-background-dispatch", () => ({
   REMOTE_TASK_EXECUTION_EVENT: "mcp/task-run.execute",
   externalMcpTaskAsyncEnabled: (...args: unknown[]) => feature.enabled(...args),
   reconcilePersistedRemoteTaskDispatches: (...args: unknown[]) => dispatch.reconcile(...args),
+}));
+vi.mock("@/lib/backlog/initiative-readiness/server-reviewer-dispatch", () => ({
+  dispatchOwedIndependentReviews: vi.fn(async () => []),
 }));
 vi.mock("../quiescence-gates", () => ({
   gateBetweenSteps: vi.fn().mockResolvedValue({ resumedAfterWait: false }),

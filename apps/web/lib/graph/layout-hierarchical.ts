@@ -1,5 +1,5 @@
-import dagre from "dagre";
 import type { GraphData } from "@/lib/actions/graph";
+import { computeLayeredPositions } from "./elk-runner";
 import type { LayoutResult, PositionedNode } from "./types";
 
 type HierarchicalOptions = {
@@ -11,10 +11,16 @@ type HierarchicalOptions = {
   rootIds?: string[];
 };
 
-export function computeHierarchicalLayout(
+/**
+ * Ranked (Sugiyama) layout for the topology views, on ELK `layered`.
+ *
+ * Returns node CENTRE points, which is what the canvas renderer draws around. ELK reports
+ * top-left corners, so each position is shifted by half the node footprint.
+ */
+export async function computeHierarchicalLayout(
   data: GraphData,
   options: HierarchicalOptions = {},
-): LayoutResult {
+): Promise<LayoutResult> {
   const {
     direction = "TB",
     nodeWidth = 60,
@@ -27,30 +33,18 @@ export function computeHierarchicalLayout(
     return { nodes: [], links: [] };
   }
 
-  const g = new dagre.graphlib.Graph({ directed: true, compound: false, multigraph: false });
-  g.setGraph({ rankdir: direction, ranksep: rankSep, nodesep: nodeSep });
-  g.setDefaultEdgeLabel(() => ({}));
-
-  const nodeIds = new Set(data.nodes.map((n) => n.id));
-
-  for (const node of data.nodes) {
-    g.setNode(node.id, { width: nodeWidth, height: nodeHeight, label: node.name });
-  }
-
-  for (const link of data.links) {
-    if (nodeIds.has(link.source) && nodeIds.has(link.target)) {
-      g.setEdge(link.source, link.target);
-    }
-  }
-
-  dagre.layout(g);
+  const positions = await computeLayeredPositions(
+    data.nodes.map((node) => ({ id: node.id, width: nodeWidth, height: nodeHeight })),
+    data.links,
+    { direction, rankSep, nodeSep },
+  );
 
   const nodes: PositionedNode[] = data.nodes.map((node) => {
-    const gNode = g.node(node.id);
+    const topLeft = positions.get(node.id) ?? { x: 0, y: 0 };
     return {
       ...node,
-      x: gNode?.x ?? 0,
-      y: gNode?.y ?? 0,
+      x: topLeft.x + nodeWidth / 2,
+      y: topLeft.y + nodeHeight / 2,
     };
   });
 

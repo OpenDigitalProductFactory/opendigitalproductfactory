@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -11,8 +12,9 @@ const canonical = (v) => JSON.stringify(v, Object.keys(v).sort());
 const catalogBytes = (v) => `${JSON.stringify(stable(v), null, 2)}\n`;
 const sha = (v) => createHash("sha256").update(v).digest("hex");
 const sign = (v, secret) => createHmac("sha256", secret).update(canonical(v)).digest("hex");
-const stateDirFlag = process.argv.indexOf("--state-dir");
-const stateDir = stateDirFlag >= 0 ? process.argv[stateDirFlag + 1] : (process.env.DPF_PROMOTER_STATE_DIR ?? "/dpf-state");
+// strict: false keeps the old tolerance: flags this script does not read are ignored.
+const { values: flags } = utilParseArgs({ args: process.argv.slice(2), strict: false, allowPositionals: true, options: { "state-dir": { type: "string" } } });
+const stateDir = flags["state-dir"] === undefined ? (process.env.DPF_PROMOTER_STATE_DIR ?? "/dpf-state") : typeof flags["state-dir"] === "string" ? flags["state-dir"] : undefined;
 const receiptDir = join(stateDir, "runtime-capability-transitions");
 const applyLock = join(stateDir, ".runtime-transition-apply.lock");
 const rotationLock = join(stateDir, ".runtime-transition-secret.lock");

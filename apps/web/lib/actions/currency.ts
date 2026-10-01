@@ -1,6 +1,6 @@
  "use server";
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
 import { deriveLocaleCurrencyFromCountry } from "@/lib/org-locale/org-locale";
 
@@ -108,7 +108,7 @@ export async function calculateFxGainLoss(invoiceAmountBase: number, paymentAmou
 export async function storeExchangeRates(
   rates: Array<{ base: string; target: string; rate: number }>,
   source = "ecb",
-) {
+): Promise<Prisma.BatchPayload> {
   return prisma.exchangeRate.createMany({
     data: rates.map((r) => ({
       baseCurrency: r.base,

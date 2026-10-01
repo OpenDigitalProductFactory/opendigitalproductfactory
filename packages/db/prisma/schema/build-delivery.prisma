@@ -1242,6 +1242,14 @@ model QuiescenceRun {
   shipForceEscalatedAt DateTime?
   shipForceEscalatedBy String?
 
+  // BI-F9EE05E5: operator Abort, recorded durably before any wake-up event is
+  // sent. The job engine delivers an event only to a step already waiting for
+  // it, so an Abort sent while the coordinator is mid-check would otherwise be
+  // lost. The coordinator reads these on every check and ends the drain as
+  // aborted; the swap guard refuses a run that carries them. First writer wins.
+  abortRequestedAt DateTime?
+  abortRequestedBy String?
+
   @@index([trigger, startedAt])
   // Stuck-coordinator query: status NOT IN (terminal) AND lastHeartbeatAt < cutoff.
   @@index([status, lastHeartbeatAt])

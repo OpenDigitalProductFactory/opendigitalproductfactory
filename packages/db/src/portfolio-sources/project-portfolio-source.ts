@@ -19,6 +19,7 @@ import {
   type PortfolioSourceProjector,
   type ProjectedPortfolioEntry,
 } from "./types";
+import { isRecord } from "@dpf/validators";
 
 /** Structural client — satisfied by the real PrismaClient and by test fakes. */
 export type ProjectPortfolioClient = {
@@ -40,10 +41,6 @@ export type ProjectPortfolioResult = {
   /** Skipped: portfolio missing, or row exists but is owned by operator/registry. */
   skipped: number;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * DigitalProduct lifecycle stage/status is derived from the coverage axis so the

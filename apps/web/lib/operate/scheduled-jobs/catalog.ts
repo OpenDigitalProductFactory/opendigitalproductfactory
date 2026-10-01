@@ -500,6 +500,19 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "budget-reservation-settle",
+    inngestId: "portfolio/budget-reservation-settle",
+    honorsEnabledGate: true,
+    name: "Budget reservation settlement",
+    purpose:
+      "BI-EF265C9A: settles open portfolio budget reservations against their items' status (done consumes, retired or deferred releases, a re-size adjusts and records the change), covering status writers that do not settle at once.",
+    cron: "11,26,41,56 * * * *",
+    cadence: "Every 15 minutes, offset by 11 minutes",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "a2a-collaboration-health-scan",
     inngestId: "ops/a2a-collaboration-health-scan",
     honorsEnabledGate: true,

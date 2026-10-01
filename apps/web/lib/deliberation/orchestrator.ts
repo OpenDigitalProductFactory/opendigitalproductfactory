@@ -45,6 +45,7 @@ import {
 } from "./consensus";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { BOOTSTRAPPED_TASK_RUN_PREFIX } from "./bootstrapped-task-run";
+import { TASK_IN_FLIGHT_STATES, type TaskState } from "@/lib/tak/task-states";
 
 /* -------------------------------------------------------------------------- */
 /* Public shapes                                                              */
@@ -339,6 +340,13 @@ export async function orchestrateDeliberation(
     }
     taskRunDbId = existing.id;
   } else {
+    // TASK_STATES only — "active" is refused with 23514 (BI-CB4A6435). A dispatcher
+    // runs the branches here, so born working + first heartbeat; else the async
+    // runner (deliberation-run.ts) moves it to working via markTaskRunWorking.
+    const bornAt = new Date();
+    const birth = input.dispatcher
+      ? { status: "working" satisfies TaskState, startedAt: bornAt, lastHeartbeatAt: bornAt }
+      : { status: "submitted" satisfies TaskState };
     const created = await prisma.taskRun.create({
       data: {
         taskRunId: `${BOOTSTRAPPED_TASK_RUN_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -351,7 +359,7 @@ export async function orchestrateDeliberation(
         title: `Deliberation: ${input.patternSlug}`,
         objective: `Run ${pattern.name} over artifactType=${input.artifactType}`,
         source: "proactive",
-        status: "active",
+        ...birth,
         authorityScope: input.parentAuthorityScope ?? [],
       },
       select: { id: true, taskRunId: true },
@@ -737,7 +745,7 @@ async function settleBootstrapTaskRun(
   await prisma.taskRun.updateMany({
     where: {
       taskRunId,
-      status: { in: ["active", "working", "queued", "running"] },
+      status: { in: [...TASK_IN_FLIGHT_STATES] },
     },
     data: {
       status,

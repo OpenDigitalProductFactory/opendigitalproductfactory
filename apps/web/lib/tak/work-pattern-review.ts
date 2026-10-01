@@ -11,6 +11,7 @@ import {
   parseWorkPatternCaseStagingState,
   type WorkPatternCaseStagingState,
 } from "./work-pattern-case-staging";
+import { isRecord } from "@/lib/shared/coerce";
 
 export const WORK_PATTERN_REVIEW_ACTIONS = ["approve", "reject", "defer"] as const;
 export type WorkPatternReviewAction = (typeof WORK_PATTERN_REVIEW_ACTIONS)[number];
@@ -74,10 +75,6 @@ export type BuildWorkPatternReviewInput = {
   reviewedAt: Date;
   reviewerNote?: string | null;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function isAction(value: unknown): value is WorkPatternReviewAction {
   return typeof value === "string" && WORK_PATTERN_REVIEW_ACTIONS.includes(value as WorkPatternReviewAction);

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { ProviderWithCredential } from "@/lib/ai-provider-types";
 import type { RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
-import { intentStyle } from "@/components/ui/report-kit/statusColors";
+import { intentStyle } from "@/lib/ui-model/statusColors";
 
 type Props = {
   endpointType: string;

@@ -61,7 +61,7 @@ vi.mock("@dpf/db/ea-validation", () => ({
   checkEaDqRules:         vi.fn(),
 }));
 
-// Mock neo4j sync
+// Mock graph sync
 vi.mock("@dpf/db/graph-sync", () => ({
   syncEaElement:        vi.fn(),
   syncEaRelationship:   vi.fn(),
@@ -227,14 +227,14 @@ describe("advanceEaLifecycle", () => {
 // ─── deleteEaElement ──────────────────────────────────────────────────────────
 
 describe("deleteEaElement", () => {
-  it("deletes element from Postgres and fires Neo4j sync", async () => {
+  it("deletes element from Postgres and fires graph sync", async () => {
     mockPrisma.eaElement.delete.mockResolvedValue({ id: "el-1" });
     const { deleteEaElement: neoDeleteSpy } = await import("@dpf/db/graph-sync");
 
     await deleteEaElement("el-1");
 
     expect(mockPrisma.eaElement.delete).toHaveBeenCalledWith({ where: { id: "el-1" } });
-    // Neo4j delete is fire-and-forget; assert it was called (the mock returns void)
+    // Graph delete is fire-and-forget; assert it was called (the mock returns void)
     expect(neoDeleteSpy).toHaveBeenCalledWith("el-1");
   });
 });

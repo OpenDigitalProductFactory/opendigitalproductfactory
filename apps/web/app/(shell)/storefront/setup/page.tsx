@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
+import { setupCurrencyPrefill } from "@/lib/org-locale/org-locale";
 import { SetupWizard } from "@/components/storefront-admin/SetupWizard";
 import { getSetupContext } from "@/lib/actions/setup-progress";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
@@ -14,7 +15,7 @@ export default async function StorefrontSetupPage() {
   const existing = await prisma.storefrontConfig.findFirst({ select: { id: true } });
   if (existing) redirect("/storefront");
 
-  const [archetypes, setupContext, org, bc] = await Promise.all([
+  const [archetypes, setupContext, org, bc, currencySettings] = await Promise.all([
     prisma.storefrontArchetype.findMany({
       where: { isActive: true },
       select: {
@@ -34,6 +35,7 @@ export default async function StorefrontSetupPage() {
     getSetupContext(),
     prisma.organization.findFirst({ select: { name: true } }),
     prisma.businessContext.findFirst({ select: { industry: true } }),
+    prisma.orgSettings.findFirst({ select: { baseCurrency: true, countryCode: true } }),
   ]);
 
   // Pre-bootstrap — no archetype yet. Fall back to industry if any.
@@ -60,7 +62,7 @@ export default async function StorefrontSetupPage() {
       suggestedArchetypeName={setupContext?.suggestedArchetypeName ?? null}
       archetypeConfidence={setupContext?.archetypeConfidence ?? null}
       suggestedCompanyName={setupContext?.suggestedCompanyName ?? null}
-      suggestedCurrency={setupContext?.suggestedCurrency ?? null}
+      suggestedCurrency={setupCurrencyPrefill(currencySettings, setupContext?.suggestedCurrency)}
       portalLabel={vocab.portalLabel}
       stakeholderLabel={vocab.stakeholderLabel}
     />

@@ -8,6 +8,7 @@ import {
   resolveHospitalityResourceForProvider,
 } from "@/lib/storefront/hospitality-capacity-repository.server";
 import { HospitalityCapacityConflictError } from "@/lib/storefront/hospitality-capacity";
+import { clientAddressKey } from "@/lib/security/client-address";
 
 export async function POST(
   req: NextRequest,
@@ -44,10 +45,7 @@ export async function POST(
   }
 
   const now = new Date();
-  const clientIp =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    req.headers.get("x-real-ip") ??
-    "unknown";
+  const clientIp = clientAddressKey(req.headers);
 
   // Rate limit: max 50 concurrent active holds per storefront
   const globalCount = await prisma.bookingHold.count({

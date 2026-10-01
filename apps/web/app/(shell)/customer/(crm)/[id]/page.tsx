@@ -1,5 +1,6 @@
 // apps/web/app/(shell)/customer/[id]/page.tsx — Account detail with timeline
 import Link from "next/link";
+import { orgCurrencyFromSettings } from "@/lib/org-locale/org-locale";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
@@ -217,7 +218,7 @@ export default async function AccountDetailPage({
   // Billable time (EP-LABOR-ECONOMICS) — labour archetypes only, and only
   // once this account actually has approved billable hours.
   const laborOrgSettings = await prisma.orgSettings.findFirst({
-    select: { appliedProfileSlug: true, baseCurrency: true },
+    select: { appliedProfileSlug: true, baseCurrency: true, countryCode: true },
   });
   const billableTimeEnabled =
     (laborOrgSettings?.appliedProfileSlug
@@ -318,7 +319,7 @@ export default async function AccountDetailPage({
           accountId={account.id}
           accountName={account.name}
           economics={laborEconomics}
-          currency={laborOrgSettings?.baseCurrency ?? "GBP"}
+          currency={orgCurrencyFromSettings(laborOrgSettings)}
         />
       )}
 

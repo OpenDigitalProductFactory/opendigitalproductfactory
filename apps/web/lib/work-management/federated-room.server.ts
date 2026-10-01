@@ -19,6 +19,7 @@ import {
 } from "./federated-room";
 import { persistExplicitWorkroomAssignmentsForWorkItem } from "./room-participant-assignment.server";
 import { appendRoomPolicyParticipant } from "./room-policy";
+import { loadRoomMembersForWorkItem } from "./room-policy-members.server";
 import { decodeWorkCaseKey } from "./workspace-case-loader";
 
 function a2aFederationEnabled(): boolean {
@@ -83,7 +84,7 @@ export async function admitFederatedRoomParticipant(input: {
     roles: ["contributor"],
     canAct: input.canAct,
     enteredReason: `Federated participant via link ${input.federationLinkId}`,
-  });
+  }, await loadRoomMembersForWorkItem(item.id));
   await prisma.workItem.update({ where: { id: item.id }, data: { evidence: newEvidence as never } });
   await persistExplicitWorkroomAssignmentsForWorkItem({
     workItemId: item.id,

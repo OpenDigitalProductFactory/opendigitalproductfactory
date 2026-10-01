@@ -1,0 +1,11 @@
+-- BI-543819B1 (S7 of BI-815D40C6): page previews become a DocumentRendition kind.
+--
+-- A generated document (a deck, a report) carries one PNG preview per page.
+-- The version's `preview` rendition points at a small manifest blob listing
+-- those page images in order (apps/web/lib/documents/preview-manifest.ts); the
+-- table keeps its one-rendition-per-kind unique key.
+--
+-- Forward-only and additive. Adding an enum member touches no row, so it applies
+-- the same against an empty table and a populated one. IF NOT EXISTS keeps a
+-- re-run harmless.
+ALTER TYPE "DocumentRenditionKind" ADD VALUE IF NOT EXISTS 'preview';

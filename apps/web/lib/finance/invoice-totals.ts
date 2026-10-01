@@ -7,6 +7,10 @@
  * customer already holds. Both callers go through here instead.
  */
 
+import type { InvoiceLineItemInput } from "@dpf/types";
+
+export type { InvoiceLineItemInput };
+
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -31,15 +35,6 @@ export function calcLineItem(
   const lineTax = round2(lineAfterDiscount * (taxRate / 100));
   const lineTotal = round2(lineAfterDiscount + lineTax);
   return { lineSubtotal, lineDiscount, lineAfterDiscount, lineTax, lineTotal };
-}
-
-export interface InvoiceLineItemInput {
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  taxRate?: number;
-  discountPercent?: number;
-  accountCode?: string;
 }
 
 export interface InvoiceLineItemRow {

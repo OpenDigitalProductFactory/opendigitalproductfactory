@@ -94,7 +94,23 @@ export type GauntletEvidencePayload = {
   durationMs: number;
   completedAt: string;
   gatePassed: boolean;
+} & Partial<GauntletEvidenceBindingFields>;
+
+/**
+ * BI-AF531123: what a failure analysis needs to cite this record. The resolver
+ * rechecks every field against the Workroom, so a stale or mismatched record
+ * never counts.
+ */
+type GauntletEvidenceBindingFields = {
+  sha: string;
+  headTreeHash: string;
+  diffDigest: string;
+  commands: string[];
+  evidenceValidity: { expiresAt: string };
 };
+
+/** How long an executed in-platform record stays citable. A head change invalidates it sooner. */
+export const IN_PLATFORM_EVIDENCE_VALIDITY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Build the `evidence` object for `recordLocalIntegrationResult`.
@@ -111,8 +127,18 @@ export function buildGauntletEvidence(input: {
   output: string;
   durationMs: number;
   completedAt?: Date;
+  binding?: { sha: string; headTreeHash: string; diffDigest: string };
 }): GauntletEvidencePayload {
+  const completedAt = input.completedAt ?? new Date();
+  const bound: Partial<GauntletEvidenceBindingFields> = input.binding
+    ? {
+      ...input.binding,
+      commands: ["node scripts/pregate-preflight.mjs"],
+      evidenceValidity: { expiresAt: new Date(completedAt.getTime() + IN_PLATFORM_EVIDENCE_VALIDITY_MS).toISOString() },
+    }
+    : {};
   return {
+    ...bound,
     gateKey: deriveGauntletGateKey(input.identity),
     tier: IN_PLATFORM_PREFLIGHT_GATE_KIND,
     coverage: { guards: true, typecheck: false, unitTests: false, productionBuild: false, image: false },
@@ -122,7 +148,7 @@ export function buildGauntletEvidence(input: {
     failedGuards: [...input.failedGuards],
     output: input.output,
     durationMs: input.durationMs,
-    completedAt: (input.completedAt ?? new Date()).toISOString(),
+    completedAt: completedAt.toISOString(),
     gatePassed: input.passed,
   };
 }
@@ -138,4 +164,25 @@ export function summarizeGauntlet(input: { passed: boolean; failedGuards: readon
   const named = input.failedGuards.slice(0, 3).join(", ");
   const more = count > 3 ? `, +${count - 3} more` : "";
   return `Guard gauntlet failed for tree ${tree}: ${count} guard(s) — ${named}${more}`;
+}
+
+/**
+ * BI-AF531123: the binding for an in-platform evidence record. The digest is of
+ * the trimmed captured diff, exactly as the Build Studio semantic review hashes
+ * it, so the record, the failure analysis and the review share one identity.
+ * Returns undefined rather than a partial binding: an unbound record is honest,
+ * a half-bound one would mislead the resolver.
+ */
+export function resolveInPlatformEvidenceBinding(input: {
+  headSha: string | null | undefined;
+  headTreeHash: string | null | undefined;
+  diffPatch: string | null | undefined;
+}): { sha: string; headTreeHash: string; diffDigest: string } | undefined {
+  const diff = input.diffPatch?.trim() ?? "";
+  if (!input.headSha || !input.headTreeHash || !diff) return undefined;
+  return {
+    sha: input.headSha,
+    headTreeHash: input.headTreeHash,
+    diffDigest: createHash("sha256").update(diff).digest("hex"),
+  };
 }

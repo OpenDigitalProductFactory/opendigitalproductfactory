@@ -1,12 +1,18 @@
-// Universal Grid & Workbooks — native .xlsx export (EP-GRID-WORKBOOKS).
+// Universal Grid & Workbooks — data-only .xlsx fallback (EP-GRID-WORKBOOKS).
+//
+// Since BI-4865EB4D the grid exports .xlsx through the document engine
+// (grid-office-export.ts), with formats, formulas and rules. This writer stays
+// only as the fallback for an install with no engine (no docker socket, or a
+// watchlist target without the dpf-doctools image), so .xlsx export never
+// disappears there. Retire it once every install shape runs the engine.
 //
 // A dependency-free writer for the minimal subset of the Office Open XML
 // SpreadsheetML (.xlsx) format: a ZIP (stored / uncompressed) of a handful of XML
 // parts. This keeps the platform fully local — no spreadsheet library, no vendor —
-// and pairs with the existing read-excel-file import so the grid round-trips with
-// Excel. Numbers are written as numeric cells (so Excel treats them as numbers);
-// everything else is an inline string. Pure + unit-testable; the round-trip test
-// parses the output back with read-excel-file to prove the file is valid.
+// and round-trips through the Workbooks sheet import (the document engine), so
+// it opens in Excel. Numbers are written as numeric cells (so Excel treats them as numbers);
+// everything else is an inline string. Pure + unit-testable; grid-xlsx.docker.test.ts
+// reads the output back through the engine to prove the file is valid.
 
 /** A cell value to export: number → numeric cell, string/null → inline string. */
 export type XlsxValue = string | number | null;

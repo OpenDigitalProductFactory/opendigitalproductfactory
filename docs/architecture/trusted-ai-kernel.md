@@ -703,6 +703,41 @@ action of its own domain rather than a generic capability probe (see §16.1).
 These criteria `SHOULD` be machine-evaluable. An admission rule that depends on human recollection
 degrades silently as the tool surface and the agent roster grow.
 
+### 7.13 Principle-Directed Decision Contract
+
+**Working-draft amendment, EP-B932453F / BI-A484D58F.** The stable clause IDs below
+identify proposed requirements for independent review. They are not a statement
+that DPF or another implementation currently satisfies them. A conformance claim
+to this amendment names its reviewed document revision as well as the TAK profile.
+
+A principle directs judgment; a policy constrains action; a grant establishes
+authority. A vector or other ranking mechanism can implement preferences, but
+cannot replace any of these distinct responsibilities. This contract does not
+require a particular model, scoring algorithm, numerical representation or vendor.
+
+| Clause | Requirement |
+|---|---|
+| `TAK-PD-001` | Before resolving a governed decision, the runtime `MUST` identify the owning authority scope, accountable principal and applicable doctrine. It `MUST NOT` treat advice from a neighboring scope as binding authority without an attributable decision by the owning scope. |
+| `TAK-PD-002` | The decision record `MUST` bind the evaluated versions of the work definition, operating profile, applicable principles/policies and material evidence. It `MUST` distinguish observed facts, assumptions and model judgments, including unavailable or stale evidence. |
+| `TAK-PD-003` | The decision procedure `MUST` apply hard constraints before ranking eligible alternatives. It `MUST NOT` compensate for a failed constraint with a preference score, confidence score, low cost or urgency. If vectors are used, axis definitions, direction, scale and weight versions `MUST` be recorded. |
+| `TAK-PD-004` | A recommendation `MUST` remain distinct from authorization. Before a consequential effect, the runtime `MUST` apply the current effective-permission rule of §7.2 and the applicable qualification/oversight ceilings to the exact proposed action. |
+| `TAK-PD-005` | An unresolved material fact, scope conflict or authority gap `MUST` produce a recorded disposition that prevents the dependent effect and identifies the needed evidence or accountable resolver. Bounded evidence collection may continue only within existing authority. |
+| `TAK-PD-006` | Authorization `MUST` bind the action, parameters or their canonical digest, target, purpose, operating profile and validity conditions. The execution boundary `MUST` reject material substitution, expired/revoked authority or stale preconditions before the effect. The implementation `MUST` document how it prevents or contains a race between validation and use. |
+| `TAK-PD-007` | An ambiguous result after submission `MUST` be recorded as an uncertain effect. Before retrying, the runtime `MUST` reconcile the effect or use a verified idempotency contract. It `MUST NOT` equate transport failure with evidence that no effect occurred. |
+| `TAK-PD-008` | Autonomous decision loops `MUST` have declared work, time/resource and retry bounds, stop conditions and an accountable recovery path. Exhaustion `MUST NOT` relax authority or mandatory controls. Recovery from a hold `MUST` re-evaluate changed facts and current authority. |
+
+These clauses refine §§7.2, 7.7, 8.7, 8.11 and 13.3. They do not create a second
+authorization engine. An implementation statement identifies the enforcement
+boundary for each reachable effect, including effects reachable through shell,
+browser, code execution, delegation and model-provider calls. Prompt instructions
+alone do not establish complete mediation. Host compromise and controls outside
+the declared boundary remain explicit assurance limits.
+
+The [assertion rubric](tak-conformance-tests.md#principle-directed-amendment-assertions)
+maps these clauses to observable challenges. The informative
+[composition design](../superpowers/specs/2026-09-27-principle-directed-agent-composition-design.md)
+describes MBSE views and the DPF scope binding without adding normative owners.
+
 ## 8. Tool Execution and Action Gating
 
 ### 8.1 Tool Definitions
@@ -1228,6 +1263,24 @@ The runtime `SHOULD` document summarization and truncation behavior so operators
 ### 12.4 Memory Validation
 
 For `TAK-Assured`, memory that materially affects consequential action `SHOULD` be treated as advisory until revalidated against a current source of truth.
+
+### 12.5 Data Admission and Processing Boundaries
+
+The following working-draft clauses belong to the same amendment as §7.13.
+They make admission and downstream processing separately testable.
+
+| Clause | Requirement |
+|---|---|
+| `TAK-DG-001` | Before admitting data to an agent context, the runtime `MUST` resolve its classification, permitted purpose and source-access constraints against the actual principal, agent context and workroom. Missing classification `MUST NOT` silently become Public. |
+| `TAK-DG-002` | Where grants enumerate permitted data classes, the runtime `MUST` use set membership/intersection. It `MUST NOT` infer intermediate or lower classes from the highest listed class unless the governing policy explicitly defines that inheritance. |
+| `TAK-DG-003` | The runtime `MUST` preserve applicable source restrictions and provenance through retrieval, attachments, summaries, memory, caches and derived context. Recall and egress `MUST` apply current access, purpose and revocation rules; transformation alone `MUST NOT` declassify data. |
+| `TAK-DG-004` | Before a processing or disclosure boundary, the runtime `MUST` evaluate the actual destination account/connection and applicable data, purpose, residency and contract constraints. Fallback and outbound tool results `MUST` undergo the same evaluation. A model name, Public repository or room assignment `MUST NOT` substitute for destination approval. |
+
+Classification changes require the existing accountable data authority and an
+attributable record. These controls govern eligibility independently of whether
+the model is local, hosted or embedded in hardware. Audit visibility remains
+subject to minimization and access control; a denial need not disclose protected
+source content to explain the unsatisfied condition.
 
 ## 13. Audit, Evidence, and Non-Repudiation
 

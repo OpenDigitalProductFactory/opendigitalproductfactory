@@ -322,3 +322,40 @@ describe("the capacity reply names the window when it knows one", () => {
     expect(describeToolRouteFailure(thrown.message, 0, thrown)).toMatch(/about 2 minutes/);
   });
 });
+
+// BI-D25F867D — on 2026-09-24 "every provider is busy, nothing is
+// misconfigured" covered a stopped sandbox container and a local model held by
+// a local-CI gate. Only a wholly transient failure is busy; anything else names
+// what each endpoint hit.
+describe("all-endpoints-failed classification", () => {
+  const aggregate = (attempts: Array<{ endpointId: string; error: string; code?: string }>) =>
+    `All endpoints failed for external-mcp. Attempts: ${JSON.stringify(attempts)}`;
+  const stoppedSandbox = { endpointId: "anthropic-sub", error: "Sandbox file write failed (exit 1): Error response from daemon: container 25e992095b77 is not running\n" };
+  const reserved = { endpointId: "local", error: "local-ci-active-capacity-reservation" };
+
+  it("names a stopped sandbox and a reserved local model instead of calling them busy", () => {
+    const outcome = describeToolRouteFailureOutcome(aggregate([stoppedSandbox, reserved, stoppedSandbox]), 3);
+    expect(outcome.kind).toBe("unknown");
+    expect(outcome.message).toContain("build sandbox, which is not running");
+    expect(outcome.message).toContain("reserved for a running local-CI gate");
+    expect(outcome.message).not.toContain("Nothing is misconfigured");
+  });
+
+  it("treats limits, overloads, capacity reservations and typed rate limits as a wait", () => {
+    for (const attempts of [
+      [reserved, { endpointId: "codex", error: "codex pool exhausted — resets in ~120s (EP-COST pool check)" }],
+      [{ endpointId: "anthropic-sub", error: "Claude CLI usage limit reached" }],
+      [{ endpointId: "openai", error: "upstream said no", code: "rate_limit" }],
+    ]) {
+      const outcome = describeToolRouteFailureOutcome(aggregate(attempts), 3);
+      expect(outcome.kind).toBe("busy");
+      expect(outcome.message).toContain("busy right now");
+    }
+  });
+
+  it("keeps an authentication failure mixed with a limit out of the wait", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      aggregate([{ endpointId: "codex", error: "invalid API key" }, reserved]), 3);
+    expect(outcome.kind).not.toBe("busy");
+  });
+});

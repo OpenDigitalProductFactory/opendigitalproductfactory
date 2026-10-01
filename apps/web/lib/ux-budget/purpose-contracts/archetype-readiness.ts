@@ -1,6 +1,6 @@
 // Ratified page-purpose contract for /platform/archetype-readiness (BI-1A222A7A).
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const ARCHETYPE_READINESS_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

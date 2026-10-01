@@ -14,17 +14,109 @@
 // workspace bootstrap copies before installing.
 //
 // Fails closed: an unparseable Dockerfile stage graph is a failure, not a skip.
+//
+// Second check, same input: every `pnpm install` in every Dockerfile in the repo
+// runs `--frozen-lockfile`, and nothing turns it off. services/edge-node shipped
+// with `--no-frozen-lockfile` from its first skeleton (#501, which had no
+// lockfile in the build context at all) until plan 2026-09-08 S12's follow-up:
+// a lockfile that disagreed with a package.json or the catalog was re-resolved
+// from the registry inside the image instead of failing the build, so the image
+// could ship versions nobody vetted. A bare `pnpm install` counts too: outside
+// CI, pnpm only freezes when told to (the harness image used one until S12).
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = process.cwd();
 
-// Dockerfiles whose stages may run `pnpm install`. Every Dockerfile in the repo
-// is inspected; this list only records which ones are EXPECTED to be checked, so
-// a newly added Dockerfile cannot quietly opt out.
-const DOCKERFILES = ["Dockerfile", "Dockerfile.sandbox", "Dockerfile.promoter"];
+// Dockerfiles built with the repo root as their context, so repo-relative COPY
+// sources (patches/, scripts/...) mean what they say. The patch check and
+// check-dockerfile-copied-script-imports.mjs inspect these. Listing them keeps a
+// root-context Dockerfile from quietly opting out; the frozen-lockfile check
+// below needs no list and walks every Dockerfile.
+export const ROOT_CONTEXT_DOCKERFILES = [
+  "Dockerfile",
+  "Dockerfile.sandbox",
+  "Dockerfile.promoter",
+  "services/adp/Dockerfile",
+  "services/edge-node/Dockerfile",
+  "services/integration-test-harness/Dockerfile",
+];
+const DOCKERFILES = ROOT_CONTEXT_DOCKERFILES;
+
+const WALK_SKIP = new Set(["node_modules", ".git", ".next", "dist", ".worktrees", ".pnpm-store"]);
+
+/** Is this file name a Dockerfile (Dockerfile, Dockerfile.x, x.Dockerfile)? */
+export function isDockerfileName(name) {
+  if (name.endsWith(".dockerignore")) return false;
+  return name === "Dockerfile" || name.startsWith("Dockerfile.") || name.endsWith(".Dockerfile");
+}
+
+/** Repo-relative paths of every Dockerfile under `root`, sorted. */
+export function findDockerfiles(root = REPO_ROOT) {
+  const out = [];
+  const walk = (rel) => {
+    for (const entry of readdirSync(join(root, rel), { withFileTypes: true })) {
+      if (WALK_SKIP.has(entry.name)) continue;
+      const childRel = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(childRel);
+      else if (entry.isFile() && isDockerfileName(entry.name)) out.push(childRel);
+    }
+  };
+  walk("");
+  return out.sort();
+}
+
+// Anything that switches frozen-lockfile off: the CLI flag, `=false` spellings
+// of the flag or config key, and the npm_config/pnpm env form.
+const UNFROZEN_RE =
+  /--no-frozen-lockfile\b|frozen[-_]lockfile\s*=\s*false\b|frozen[-_]lockfile["']?\s+["']?false\b/i;
+
+/**
+ * Instructions in a Dockerfile that install without a frozen lockfile.
+ * Comments are ignored, continuations joined; each `&&`/`;`/`||` segment of a
+ * RUN that invokes `pnpm install` (or `pnpm i`) must carry `--frozen-lockfile`.
+ *
+ * @returns {{ line: string, reason: string }[]}
+ */
+export function findUnfrozenInstalls(dockerfileText) {
+  const problems = [];
+  const text = dockerfileText.replace(/\\\r?\n\s*/g, " ");
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#")) continue;
+    if (!/^(RUN|ENV|ARG)\b/i.test(line)) continue;
+    if (UNFROZEN_RE.test(line)) {
+      problems.push({ line, reason: "turns frozen-lockfile off" });
+      continue;
+    }
+    if (!/^RUN\b/i.test(line)) continue;
+    for (const segment of line.slice(3).split(/&&|\|\||;/)) {
+      if (!/\bpnpm\s+(?:install|i)(?:\s|$)/.test(segment)) continue;
+      if (!/--frozen-lockfile\b/.test(segment)) {
+        problems.push({ line, reason: "runs `pnpm install` without --frozen-lockfile" });
+      }
+    }
+  }
+  return problems;
+}
+
+/** The frozen-lockfile check over every Dockerfile in the repo. */
+export function checkFrozenLockfile(root = REPO_ROOT) {
+  const problems = [];
+  const checked = findDockerfiles(root);
+  for (const dockerfile of checked) {
+    for (const { line, reason } of findUnfrozenInstalls(readFileSync(join(root, dockerfile), "utf8"))) {
+      problems.push(
+        `${dockerfile} ${reason}: \`${line.length > 160 ? `${line.slice(0, 157)}...` : line}\`. ` +
+          "An image install must use --frozen-lockfile so a lockfile that disagrees with a " +
+          "package.json or the catalog fails the build instead of resolving unvetted registry versions.",
+      );
+    }
+  }
+  return { ok: problems.length === 0, problems, checked };
+}
 
 // Shell entrypoints baked into an image that run `pnpm install` against a
 // directory they populate themselves, rather than against the build context.
@@ -278,14 +370,16 @@ const isMain =
 
 if (isMain) {
   const result = checkPatchContext();
-  if (!result.ok) {
+  const frozen = checkFrozenLockfile();
+  if (!result.ok || !frozen.ok) {
     console.error("Docker Patch Context Guard: FAIL\n");
-    console.error(result.problems.map((p) => `  - ${p}`).join("\n"));
+    console.error([...result.problems, ...frozen.problems].map((p) => `  - ${p}`).join("\n"));
     process.exit(1);
   }
   console.log(
     `Docker Patch Context Guard: ${result.entries.length} patched ` +
       `${result.entries.length === 1 ? "dependency" : "dependencies"} reachable from ` +
-      `${new Set(result.checkedStages).size} installing stage(s) — ok.`,
+      `${new Set(result.checkedStages).size} installing stage(s); every pnpm install in ` +
+      `${frozen.checked.length} Dockerfile(s) uses --frozen-lockfile — ok.`,
   );
 }

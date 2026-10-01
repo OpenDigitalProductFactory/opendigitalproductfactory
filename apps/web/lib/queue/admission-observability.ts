@@ -9,7 +9,7 @@
 // Spec: docs/superpowers/specs/2026-06-09-instance-admission-control-design.md §4.5
 
 import { BUILD_PIPELINE_LANE_KEY } from "./admission";
-import type { QuiescenceBlockerLine } from "@/lib/self-upgrade/quiescence";
+import type { QuiescenceBlockerLine } from "@/lib/self-upgrade/run-types";
 
 export type AdmissionSnapshot = {
   lane: { enabled: boolean; limit: number | null; key: string };

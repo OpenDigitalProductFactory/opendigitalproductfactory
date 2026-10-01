@@ -33,10 +33,8 @@ import {
   CF_OPERATORS,
   CF_OPERATOR_LABELS,
   CF_COLORS,
-  rowColorClass,
-  blankRule,
-  operatorNeedsValue,
-} from "./grid-conditional-format";
+} from "@/lib/workbooks/conditional-format";
+import { rowColorClass, blankRule, operatorNeedsValue } from "./grid-conditional-format";
 import { ROW_HEIGHTS, type RowHeight } from "./grid-view-options";
 import {
   availableAggs,

@@ -86,38 +86,53 @@ describe("parseActiveWorktreePaths", () => {
 });
 
 describe("loadActiveWorkroomPaths — fail safe, never fail open", () => {
-  it("is UNAVAILABLE without a token, rather than an empty success", () => {
+  it("is UNAVAILABLE without a token, rather than an empty success", async () => {
     // The lease loader returns "" here, which reads downstream as "nothing is
     // leased" and protects nothing. This must not repeat that.
-    const result = loadActiveWorkroomPaths({ env: {}, run: () => { throw new Error("unused"); } });
+    const result = await loadActiveWorkroomPaths({ env: {}, fetchImpl: () => { throw new Error("unused"); } });
     assert.equal(result.available, false);
     assert.match(result.reason, /token/i);
   });
 
-  it("is UNAVAILABLE when the query fails", () => {
-    const result = loadActiveWorkroomPaths({
+  it("is UNAVAILABLE when the query returns an HTTP error", async () => {
+    const result = await loadActiveWorkroomPaths({
       env: { DPF_MCP_BEARER_TOKEN: "t" },
-      run: () => ({ status: 7, stdout: "", stderr: "connection refused" }),
+      fetchImpl: async () => new Response("unauthorized", { status: 401 }),
     });
     assert.equal(result.available, false);
+    assert.match(result.reason, /HTTP 401/);
   });
 
-  it("is UNAVAILABLE when the runner throws", () => {
-    const result = loadActiveWorkroomPaths({
+  it("is UNAVAILABLE when the transport fails", async () => {
+    const result = await loadActiveWorkroomPaths({
       env: { DPF_MCP_BEARER_TOKEN: "t" },
-      run: () => { throw new Error("curl missing"); },
+      fetchImpl: async () => { throw new Error("connection refused"); },
     });
     assert.equal(result.available, false);
-    assert.match(result.reason, /curl missing/);
+    assert.match(result.reason, /connection refused/);
   });
 
-  it("is AVAILABLE and returns claims on success", () => {
-    const result = loadActiveWorkroomPaths({
+  it("asks the default loopback endpoint and sends the tool call", async () => {
+    let seen = null;
+    await loadActiveWorkroomPaths({
       env: { DPF_MCP_BEARER_TOKEN: "t" },
-      run: () => ({
-        status: 0,
-        stdout: roomsPayload([{ capsuleId: "WC-8", status: "working", worktreePath: "D:/wt/live" }]),
-      }),
+      fetchImpl: async (url, init) => {
+        seen = { url, body: JSON.parse(init.body) };
+        return new Response("", { status: 500 });
+      },
+    });
+    assert.equal(seen.url, "http://127.0.0.1:3000/api/mcp/v1");
+    assert.equal(seen.body.method, "tools/call");
+    assert.equal(seen.body.params.name, "list_workrooms");
+  });
+
+  it("is AVAILABLE and returns claims on success", async () => {
+    const result = await loadActiveWorkroomPaths({
+      env: { DPF_MCP_BEARER_TOKEN: "t" },
+      fetchImpl: async () =>
+        new Response(roomsPayload([{ capsuleId: "WC-8", status: "working", worktreePath: "D:/wt/live" }]), {
+          status: 200,
+        }),
     });
     assert.equal(result.available, true);
     assert.ok(pathHasActiveClaim(result.activePaths, "D:/wt/live"));

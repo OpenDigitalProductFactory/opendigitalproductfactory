@@ -167,7 +167,7 @@ export interface BacklogIngestDeps {
   listRepoFiles?: () => Promise<string[]>;
   /**
    * Meaning-based duplicate search (BI-3722E9A1). Injectable so tests need
-   * no Qdrant and no embedding model, and so an install without them files
+   * no vector store and no embedding model, and so an install without them files
    * normally with a lexical-only advisory.
    */
   searchSimilarItems?: (query: string) => Promise<{

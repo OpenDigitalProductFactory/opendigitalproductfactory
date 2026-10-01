@@ -5,7 +5,7 @@
 // coworker; analyze MCP/governed-tool call efficiency (thrash, retries,
 // volume) from ToolExecution; and analyze A2A coworker↔coworker edge health.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

@@ -13,6 +13,10 @@ import {
   resolveCommandInvocation,
   isHostProcessLaunchFailure,
   EXIT_STAGE_INCONCLUSIVE,
+  DELEGATED_BUILD_STRATEGY,
+  buildIsDelegated,
+  defaultBuildStrategy,
+  localBuildStrategy,
 } from "./local-integration-ci.mjs";
 
 describe("createLocalIntegrationPlan", () => {
@@ -87,6 +91,8 @@ describe("createLocalIntegrationPlan", () => {
       mode: "single-branch",
       siblingBranches: [],
       hostPlatform: "linux",
+      // These assert the LOCAL build path, now an explicit opt-in (BI-3A14308C).
+      env: { DPF_LOCAL_CI_BUILD_STRATEGY: "local" },
     });
 
     assert.deepEqual(plan.commands.map((command) => command.join(" ")), [
@@ -124,6 +130,8 @@ describe("createLocalIntegrationPlan", () => {
       mode: "single-branch",
       siblingBranches: [],
       hostPlatform: "win32",
+      // These assert the LOCAL build path, now an explicit opt-in (BI-3A14308C).
+      env: { DPF_LOCAL_CI_BUILD_STRATEGY: "local" },
       slotKey: "slot-0",
     });
     assert.equal(plan.commands.at(-1).join(" "),
@@ -288,6 +296,8 @@ describe("createLocalIntegrationPlan", () => {
       mode: "single-branch",
       siblingBranches: [],
       hostPlatform: "linux",
+      // These assert the LOCAL build path, now an explicit opt-in (BI-3A14308C).
+      env: { DPF_LOCAL_CI_BUILD_STRATEGY: "local" },
     });
     const commands = plan.commands.map((command) => command.join(" "));
     const typecheckIndex = commands.indexOf(
@@ -325,6 +335,8 @@ describe("createLocalIntegrationPlan", () => {
       mode: "single-branch",
       siblingBranches: [],
       hostPlatform: "win32",
+      // These assert the LOCAL build path, now an explicit opt-in (BI-3A14308C).
+      env: { DPF_LOCAL_CI_BUILD_STRATEGY: "local" },
     });
 
     assert.ok(plan.commands.map((command) => command.join(" ")).includes(
@@ -631,5 +643,47 @@ describe("a stage reporting itself inconclusive is not a verdict (BI-27D3DCCD)",
     const result = runOne(EXIT_STAGE_INCONCLUSIVE);
     assert.deepEqual(result.failedCommand, ["node", "scripts/local-ci-typecheck-runner.mjs"]);
     assert.equal(result.completedCommandCount, 0);
+  });
+});
+
+describe("production build delegated to the merge queue (BI-3A14308C)", () => {
+  const base = {
+    candidateBranch: "fix/example",
+    siblingBranches: [],
+    mode: "single-branch",
+  };
+
+  it("is the default on every host: the plan ends at vitest and builds nothing", () => {
+    for (const hostPlatform of ["win32", "linux", "darwin"]) {
+      const plan = createLocalIntegrationPlan({ ...base, hostPlatform, env: {} });
+      assert.equal(plan.buildStrategy, DELEGATED_BUILD_STRATEGY);
+      const flat = plan.commands.map((command) => command.join(" "));
+      assert.ok(flat.some((command) => command.includes("local-ci-vitest-runner.mjs")));
+      assert.ok(!flat.some((command) => command.includes("local-ci-bounded-build.mjs")), hostPlatform);
+      assert.ok(!flat.some((command) => / next build$/.test(command)), hostPlatform);
+      assert.match(plan.commands.at(-1).join(" "), /local-ci-vitest-runner\.mjs/);
+    }
+  });
+
+  it("builds locally only when the operator asks", () => {
+    assert.equal(defaultBuildStrategy("win32", { DPF_LOCAL_CI_BUILD_STRATEGY: "local" }), "docker-build");
+    assert.equal(defaultBuildStrategy("linux", { DPF_LOCAL_CI_BUILD_STRATEGY: "local" }), "host-next");
+    assert.equal(defaultBuildStrategy("linux", { DPF_LOCAL_CI_BUILD_STRATEGY: "docker-build" }), "docker-build");
+    assert.equal(defaultBuildStrategy("win32", { DPF_LOCAL_CI_BUILD_STRATEGY: "nonsense" }), DELEGATED_BUILD_STRATEGY);
+    assert.equal(localBuildStrategy("win32"), "docker-build");
+  });
+
+  it("names the merge queue as the build owner instead of inventing an artifact", () => {
+    const artifact = createProductionArtifactIdentity({ buildStrategy: DELEGATED_BUILD_STRATEGY, integrationTreeSha: "abc" });
+    assert.equal(artifact.kind, "delegated");
+    assert.equal(artifact.identity, DELEGATED_BUILD_STRATEGY);
+    assert.ok(buildIsDelegated(DELEGATED_BUILD_STRATEGY));
+    assert.ok(!buildIsDelegated("docker-build"));
+  });
+
+  it("never reuses a verdict across delegated and local runs", () => {
+    const delegated = createToolchainFingerprint({ buildStrategy: DELEGATED_BUILD_STRATEGY });
+    const local = createToolchainFingerprint({ buildStrategy: "docker-build" });
+    assert.notEqual(delegated.toolchainFingerprint, local.toolchainFingerprint);
   });
 });

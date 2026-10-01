@@ -175,7 +175,7 @@ nvidia-smi dmon -c 5                                              # live GPU uti
 ### B5. Gotchas
 
 - **Self-upgrade swap disconnects the agent's MCP client AND can strand in-flight builds.** After a `/ops/self-upgrade`, the `dpf` MCP connector may drop — reconnect, and re-check any build that was mid-flight (it may have been stranded by the container swap). See `project_self_upgrade_deploy_stamps_merge_commit`.
-- **WIP cap is 3.** No more than 3 builds in flight; a 4th won't start. If a build "won't start," check the in-flight count before assuming a defect.
+- **Admission is by points in flight, not a build count** (BI-3430B3A4). A start is refused for an autonomous caller when the item's portfolio has no room for its points (allowance: the quarter's `wipAllowancePoints`, else throughput x 2 weeks, floor 8 points); a person's start proceeds with a recorded warning. The refusal reason is on the item as a `wip_admission` activity. Separately, the sandbox pool (`DPF_SANDBOX_POOL_SIZE`) limits how many builds execute at once; extra builds queue for a sandbox rather than fail.
 
 ---
 

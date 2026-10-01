@@ -481,3 +481,34 @@ test("localCi: gate-infrastructure-unavailable as a PR-body trailer is a blocker
   assert.equal(r.ready, false);
   assert.match(r.blockers.join("\n"), /a trailer is prose, not evidence/);
 });
+
+// BI-53B189C8. A DPF_ALLOW_LOCAL_CI_STUB run records gatePassed:true without
+// building anything. It is marked testStub, and it must never clear the
+// local-CI requirement for a PR.
+test("selectLocalCiStateRecord: a test-stub PASS for HEAD is not the live pass", () => {
+  const picked = selectLocalCiStateRecord({
+    headSha: HEAD_SHA,
+    records: [
+      { slotKey: "slot-0", state: { branch: "fix/admitted-owner-recovery", sha: HEAD_SHA, gatePassed: true, status: "passed", testStub: true, expiresAt: future } },
+      { slotKey: "slot-1", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: false, skipped: true, skipReason: "docs-adjacent: only" } },
+    ],
+  });
+  assert.equal(picked.slotKey, "slot-1");
+});
+
+test("localCi: a test-stub record for the head SHA is a blocker, not a pass", () => {
+  const r = evaluatePrHealth({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD_SHA,
+      docsOnly: false,
+      attestation: null,
+      stateRecord: { branch: "fix/admitted-owner-recovery", sha: HEAD_SHA, gatePassed: true, status: "passed", testStub: true },
+    },
+  });
+  assert.equal(r.ready, false);
+  assert.doesNotMatch(r.notes.join("\n"), /local-CI sandbox gate passed/);
+  assert.match(r.blockers.join("\n"), /DPF_ALLOW_LOCAL_CI_STUB/);
+});

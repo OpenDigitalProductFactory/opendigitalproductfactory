@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 
 type AccessDecision = "request" | "approval";
 

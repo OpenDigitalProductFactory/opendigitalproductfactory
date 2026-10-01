@@ -19,6 +19,7 @@
 //
 // Usage: node scripts/sbom/runtime-surface.mjs   (alias: pnpm surface)
 
+import { parseImporters, parsePackageKeys, parseSnapshots } from "../lib/pnpm-lock.mjs";
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,7 +27,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const DEPLOYED = ["apps/web", "services/adp", "services/edge-node"];
 
-export function unquote(s) { return s.replace(/^['"]|['"]$/g, ""); }
+export { unquote } from "../lib/pnpm-lock.mjs";
 export function baseKey(key) { return key.split("(")[0]; } // strip peer suffix → name@version
 function posixJoin(base, rel) {
   const out = [];
@@ -37,54 +38,27 @@ function posixJoin(base, rel) {
   return out.join("/");
 }
 
-function parseImporters(lines, from, to) {
+// importers → { [ws]: { prod: [{name, value}], dev: [...] } }, where prod is
+// dependencies + optionalDependencies and value is the raw locked version.
+function toProdDev(importers) {
   const map = {};
-  let ws = null, kind = null, name = null;
-  for (let i = from + 1; i < to; i++) {
-    const l = lines[i];
-    let m = l.match(/^ {2}(\S.*):$/);
-    if (m) { ws = m[1]; map[ws] = { prod: [], dev: [] }; kind = null; name = null; continue; }
-    let k = l.match(/^ {4}(dependencies|devDependencies|optionalDependencies):$/);
-    if (k) { kind = k[1]; name = null; continue; }
-    let n = l.match(/^ {6}(\S.*):$/);
-    if (n && kind) { name = unquote(n[1]); continue; }
-    let v = l.match(/^ {8}version: (.+)$/);
-    if (v && ws && kind && name) {
-      const entry = { name, value: unquote(v[1].trim()) };
-      if (kind === "devDependencies") map[ws].dev.push(entry); else map[ws].prod.push(entry);
-      name = null;
-    }
-  }
-  return map;
-}
-
-function parseSnapshots(lines, from) {
-  const map = new Map();
-  let key = null, inDeps = false;
-  for (let i = from + 1; i < lines.length; i++) {
-    const l = lines[i];
-    let m = l.match(/^ {2}(\S.*?):(?:\s*\{\})?$/);
-    if (m) { key = unquote(m[1]); map.set(key, []); inDeps = false; continue; }
-    let k = l.match(/^ {4}(dependencies|optionalDependencies):$/);
-    if (k) { inDeps = true; continue; }
-    if (/^ {4}\S/.test(l)) inDeps = false;
-    let d = l.match(/^ {6}(\S.*?): (.+)$/);
-    if (d && key && inDeps) map.get(key).push(`${unquote(d[1])}@${unquote(d[2].trim())}`);
+  for (const [ws, entry] of Object.entries(importers)) {
+    const pick = (list) => list.map((d) => ({ name: d.name, value: d.version }));
+    map[ws] = {
+      prod: [...pick(entry.dependencies), ...pick(entry.optionalDependencies)],
+      dev: pick(entry.devDependencies),
+    };
   }
   return map;
 }
 
 export function loadGraph(root = ROOT) {
-  const lines = readFileSync(`${root}/pnpm-lock.yaml`, "utf8").replace(/\r\n/g, "\n").split("\n");
-  const iImp = lines.indexOf("importers:"), iPkg = lines.indexOf("packages:"), iSnap = lines.indexOf("snapshots:");
-  const importers = parseImporters(lines, iImp, iPkg);
-  const snapshots = parseSnapshots(lines, iSnap);
-  const totalExternal = new Set();
-  for (let i = iPkg + 1; i < iSnap; i++) {
-    const m = lines[i].match(/^ {2}(\S.*):$/);
-    if (m) totalExternal.add(unquote(m[1]));
-  }
-  return { importers, snapshots, totalExternal };
+  const text = readFileSync(`${root}/pnpm-lock.yaml`, "utf8");
+  return {
+    importers: toProdDev(parseImporters(text)),
+    snapshots: parseSnapshots(text),
+    totalExternal: new Set(parsePackageKeys(text)),
+  };
 }
 
 // production-`dependencies` root snapshot keys for a set of workspaces,

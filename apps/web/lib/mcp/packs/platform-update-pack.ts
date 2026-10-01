@@ -8,7 +8,7 @@
 // shared platform-dev-config server action that also backs the in-portal Apply
 // Update button, so both surfaces produce identical merge behavior.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 

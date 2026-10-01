@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 // The Inngest client pulls in the whole queue graph at import; stub it.
-vi.mock("../inngest-client", () => ({ inngest: { createFunction: () => ({}) } }));
+vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: () => ({}) } }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: vi.fn() }));
 
 import { claimEvalSlot } from "./eval-background";

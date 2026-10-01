@@ -206,6 +206,6 @@ export async function runResearchExecution(
  *  `onApproved` seam at the approval call site (slice E). Fire-and-forget at the
  *  call site; the Inngest job carries retries. */
 export async function enqueueResearchExecution(proposal: RunResearchExecutionInput): Promise<void> {
-  const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({ name: "research/execute.run", data: proposal });
+  const { jobs } = await import("@/lib/jobs");
+  await jobs.send({ name: "research/execute.run", data: proposal });
 }

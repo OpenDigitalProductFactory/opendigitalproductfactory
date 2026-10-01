@@ -7,13 +7,13 @@ import {
   type CompletionEvidenceRuntimeDb,
   type ResolveCompletionEvidenceResult,
 } from "@/lib/backlog/completion-evidence-runtime";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isReachableFromTrunk, trunkHasMergedPullRequest, trunkRefCommittedAt, trunkRefExists } from "@/lib/work-capsules/git-scanner";
 
 import { projectBacklogItemReadiness, readinessShapeFromWorkShape, type InitiativeReadinessActivity } from "./entry-adapter";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
-import { type BoundWorkShapeDb, readBoundWorkShapeRef } from "./bound-work-shape";
-import { deriveDeliverableSensitivity } from "@/lib/explore/build-process-matrix";
+import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from "./bound-work-shape";
+import { assessDeliverySensitivity } from "./delivery-sensitivity";
 import {
   reconcileInitiativeObjectives,
   type ObjectiveReconciliationActivity,
@@ -99,6 +99,32 @@ function deliveryReasons(result: ResolveCompletionEvidenceResult): string[] {
   const reasons = result.verdict.blockers.map((entry) => entry.message);
   if (result.verdict.nextAction) reasons.push(result.verdict.nextAction);
   return reasons;
+}
+
+/**
+ * BI-9D327C32. A `verified` ux or migration disposition is a PROMISE of an
+ * evidence row: `validateApplicability` adds that dimension to the required set,
+ * and citing no `ux_verified` / `migration_pass` activity fails the manifest.
+ *
+ * That failure used to disappear. A merge through branch protection passes the
+ * DELIVERY dimension on its own (BI-B04A0203), so `deliveryReasons` was dropped,
+ * and `smallShapeAcceptance` — which needs `verdict.allowed` — silently went
+ * false. What the author saw was ACCEPTANCE_EVIDENCE_REQUIRED and "a medium item
+ * owes an independent acceptance receipt… a coworker qualifies", alongside
+ * `reviewerRoutes: []`: told to dispatch a reviewer for a defect only they could
+ * fix, and given no route to dispatch one. Measured on BI-1F69D3F8, two refusals,
+ * and cleared by adding one `ux_verified` row with nothing else changed.
+ *
+ * The merge may excuse the delivery dimension. It must never silence a manifest
+ * the author can correct, so the manifest's own blockers are carried onto the
+ * requirement the author is actually being asked about.
+ */
+function unreadManifestReasons(result: ResolveCompletionEvidenceResult): string[] {
+  if (result.kind !== "evaluated" || result.verdict.allowed) return [];
+  return [
+    "The completion manifest did not pass, so acceptance could not read its evidence. This is the author's to correct, not a reviewer's:",
+    ...deliveryReasons(result),
+  ];
 }
 
 /**
@@ -503,7 +529,11 @@ export async function completeBacklogItemTransition(args: {
           ...lockedItem,
           activeBuildKind: lockedItem.activeBuild?.kind ?? null,
           workShape: boundWorkShape,
-          deliverySensitivity: deriveDeliverableSensitivity({ text: `${lockedItem.title ?? ""}\n${lockedItem.body ?? ""}`, workType: lockedItem.workType }),
+          // BI-243BC956: completion re-reads the room's declared edit scope.
+          deliverySensitivity: assessDeliverySensitivity({
+            ...lockedItem,
+            declaredPaths: await readBoundEditPaths(tx as unknown as BoundWorkShapeDb, lockedItem.itemId).catch(() => []),
+          }),
         },
         activities: activities as InitiativeReadinessActivity[],
         inheritedScope,
@@ -529,9 +559,9 @@ export async function completeBacklogItemTransition(args: {
           },
           requirementReasons: {
             DELIVERY_EVIDENCE_REQUIRED: mergedThroughGates === "merged"
-              ? []
+              ? unreadManifestReasons(completion)
               : [...mergeSignalReasons, ...deliveryReasons(completion)],
-            ACCEPTANCE_EVIDENCE_REQUIRED: mergeSignalReasons,
+            ACCEPTANCE_EVIDENCE_REQUIRED: [...mergeSignalReasons, ...unreadManifestReasons(completion)],
             OBJECTIVE_RECONCILIATION_REQUIRED: mergeSignalReasons,
           },
         },

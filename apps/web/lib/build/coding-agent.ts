@@ -4,6 +4,7 @@
 import { execInSandbox } from "@/lib/sandbox";
 import { getProviderPriority } from "@/lib/ai-provider-priority";
 import { routeAndCall } from "@/lib/routed-inference";
+import { buildPhaseRouteOptions } from "@/lib/build/build-phase-route-options";
 import type { FeatureBrief } from "@/lib/feature-build-types";
 import type { AgentEvent } from "@/lib/agent-event-bus";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -510,7 +511,7 @@ export async function executeBuildPlan(params: {
       [{ role: "user", content: prompt }],
       "You are a code generation agent. Output file contents in the specified format. Do not explain — just write code.",
       "internal",
-      { taskType: "code_generation" },
+      buildPhaseRouteOptions({ taskType: "code_generation" }),
     );
     llmResponse = result.content;
     providerId = result.providerId;

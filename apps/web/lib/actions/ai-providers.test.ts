@@ -11,8 +11,10 @@ const {
   mockSeedAiProviderFinanceBridge,
   mockRecordProviderTrustEvidence,
   mockSupersedeProviderTrustEvidenceClaim,
+  mockClearCapacity,
 } = vi.hoisted(() => ({
   mockPrisma: {
+    modelProfile: { findFirst: vi.fn() },
     modelProvider: {
       findUnique: vi.fn(),
       update: vi.fn(),
@@ -36,6 +38,7 @@ const {
     },
   },
   mockAutoDiscoverAndProfile: vi.fn(),
+  mockClearCapacity: vi.fn(),
   mockGetDecryptedCredential: vi.fn(),
   mockGetProviderBearerToken: vi.fn(),
   mockCan: vi.fn(),
@@ -55,6 +58,7 @@ vi.mock("@dpf/db", () => ({
 vi.mock("@/lib/auth", () => ({
   auth: mockAuth,
 }));
+vi.mock("@/lib/routing/provider-capacity/store", () => ({ clearProviderCapacityStatus: mockClearCapacity }));
 
 vi.mock("@/lib/permissions", () => ({
   can: mockCan,
@@ -264,6 +268,7 @@ describe("updateProviderConnectionPosture", () => {
 describe("testProviderAuth", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrisma.modelProfile.findFirst.mockResolvedValue({ modelId: "discovered-current-model" });
 
     mockAuth.mockResolvedValue({
       user: {
@@ -294,7 +299,7 @@ describe("testProviderAuth", () => {
         ok: true,
         status: 200,
         statusText: "OK",
-        text: async () => "",
+        text: async () => 'data: {"type":"response.completed","response":{"status":"completed"}}\n',
       }),
     );
   });
@@ -389,6 +394,38 @@ describe("testProviderAuth", () => {
         activateLinked: true,
       }),
     );
+    const request = vi.mocked(fetch).mock.calls[0]![1]!;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      model: "discovered-current-model", stream: true, instructions: "Reply with OK only.", store: false,
+    });
+    expect(mockClearCapacity).toHaveBeenCalledWith({ providerId: "chatgpt", source: "oauth" });
+  });
+
+  it.each([400, 429, 500])("does not clear capacity or activate on HTTP %s", async (status) => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "chatgpt", baseUrl: "https://chatgpt.com/backend-api", authMethod: "oauth2_authorization_code",
+      families: [], enabledFamilies: [], supportedAuthMethods: [],
+    });
+    mockGetProviderBearerToken.mockResolvedValue({ token: "token-1" });
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({ status: "ok", cachedToken: "encrypted" });
+    vi.mocked(fetch).mockResolvedValue(new Response("rejected", { status }));
+    expect(await testProviderAuth("chatgpt")).toMatchObject({ ok: false, message: expect.stringContaining("/codex/responses") });
+    expect(mockClearCapacity).not.toHaveBeenCalled();
+    expect(mockActivateProvider).not.toHaveBeenCalled();
+  });
+
+  it.each(["network", "incomplete"])("preserves capacity after %s failure and reports the attempted endpoint", async (failure) => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "chatgpt", baseUrl: "https://chatgpt.com/backend-api", authMethod: "oauth2_authorization_code",
+      families: [], enabledFamilies: [], supportedAuthMethods: [],
+    });
+    mockGetProviderBearerToken.mockResolvedValue({ token: "token-1" });
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({ status: "ok", cachedToken: "encrypted" });
+    if (failure === "network") vi.mocked(fetch).mockRejectedValue(new Error("fetch failed"));
+    else vi.mocked(fetch).mockResolvedValue(new Response('data: {"type":"response.incomplete"}\n'));
+    expect(await testProviderAuth("chatgpt")).toMatchObject({ ok: false, message: expect.stringContaining("/codex/responses") });
+    expect(mockClearCapacity).not.toHaveBeenCalled();
+    expect(mockActivateProvider).not.toHaveBeenCalled();
   });
 
   it("returns a reconnect hint when the OAuth token is missing Responses scope", async () => {
