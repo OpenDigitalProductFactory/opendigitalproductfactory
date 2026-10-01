@@ -1588,6 +1588,7 @@
         "heartbeat_workroom",
         "plan_capsule_worktree",
         "plan_workroom_worktree",
+        "rebind_workroom_shape",
         "record_capsule_evidence",
         "record_runtime_verification",
         "record_workroom_evidence",
