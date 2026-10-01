@@ -3,33 +3,11 @@
 // BI-20599979 / BI-B6433DC6 — one honesty helper for every diff-scoped guard.
 // "I could not compute the diff" is not "the diff was empty".
 
-import { execFileSync } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { runGit } from "./git.mjs";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-/**
- * Run git in the repo. Distinguishes success from failure — never collapse a
- * failed invocation into an empty string (BI-B6433DC6).
- */
-export function runGit(args, { exec = execFileSync, cwd = REPO_ROOT } = {}) {
-  try {
-    const stdout = exec("git", args, {
-      cwd,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { ok: true, stdout: String(stdout ?? ""), stderr: "" };
-  } catch (e) {
-    return {
-      ok: false,
-      stdout: (e.stdout && e.stdout.toString()) || "",
-      stderr: (e.stderr && e.stderr.toString()) || e.message || "",
-      status: e.status ?? 1,
-    };
-  }
-}
+// Run git: the shared runner (scripts/lib/git.mjs), re-exported for existing importers.
+export { runGit };
 
 /**
  * When set to "1", every diff-scoped gate also counts uncommitted work: staged,

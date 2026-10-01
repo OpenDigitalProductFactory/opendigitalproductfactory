@@ -11,7 +11,7 @@
 
 import { BACKLOG_STATUS_VALUES, BACKLOG_WORK_TYPE_VALUES } from "@/lib/explore/backlog";
 import { getCoworkerBacklogSlice } from "@/lib/coworker-record/surface-backlog";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { coworkerNotBoundRefusal, currentCoworkerId } from "./coworker-scope";

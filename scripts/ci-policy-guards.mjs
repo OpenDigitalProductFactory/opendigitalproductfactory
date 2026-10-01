@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { appendFileSync, writeFileSync } from "node:fs";
 
 import {
@@ -10,8 +11,15 @@ import {
 import { isEntryModule } from "./lib/entry-module.mjs";
 
 function argument(name) {
-  const index = process.argv.indexOf(name);
-  return index >= 0 ? process.argv[index + 1] : undefined;
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({
+    args: process.argv.slice(2),
+    strict: false,
+    allowPositionals: true,
+    options: { "profile": { type: "string" }, "results": { type: "string" } },
+  });
+  const value = values[name.replace(/^--/, "")];
+  return typeof value === "string" ? value : undefined;
 }
 
 function markdown(profile, result) {

@@ -10,7 +10,7 @@
 // The rate tables are org configuration, not personal data, so they are
 // registered at internal sensitivity with metadata projection.
 
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 import type { DataCategory, DataFieldId } from "./taxonomy";
 
 const CLASSIFICATION = {

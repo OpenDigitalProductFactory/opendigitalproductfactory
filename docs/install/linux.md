@@ -73,6 +73,15 @@ For unattended (CI / scripted) install:
 bash install-dpf.sh --headless --release
 ```
 
+#### Contributor: office document conversion
+
+Office document conversion works in both modes with no extra step. A
+Customizable install does not build the converter image: the portal pins
+the `dpf-doctools` image published for the release your clone descends
+from, by digest, and pins it again after every upgrade. Only when no
+published image can be reached (offline or air-gapped) does it build
+`Dockerfile.doctools` from your clone instead.
+
 #### Contributor: separate dev workspace from install (recommended, BI-0856A4CE Phase 1)
 
 The clone at the install path doubles as a dev tree by default — that works,
@@ -129,7 +138,10 @@ single-tree mode — the current default and fully back-compat.
     `https://localhost` when it serves only this machine, or the machine's
     DNS name when the network resolves it here. It writes `PUBLIC_URL` and
     trusts the certificate for your user (`sudo` asks for your password once). AI clients such as
-    Claude Code sign in with OAuth only over https. If this step fails, the
+    Claude Code sign in with OAuth only over https. It also saves the AI
+    client address (`DPF_MCP_URL`) and the certificate bundle
+    (`NODE_EXTRA_CA_CERTS`) in `~/.dpf/agent-toolchain.env`, loaded by your
+    shell profile, on every run. If this step fails, the
     portal stays at `http://localhost:3000` and the installer says so.
 11. **`docker compose up -d`** on the Linux overlay (which adds the
     `ollama` service for local LLM hosting, cAdvisor, node-exporter,
@@ -431,6 +443,9 @@ kernel, your specific Docker version, with your specific user setup.
    > `ADMIN_PASSWORD` and `INNGEST_SIGNING_KEY`. Rotate each of them in `.env`
    > and restart the stack. `CREDENTIAL_ENCRYPTION_KEY` decrypts stored
    > credentials, so re-enter any provider secrets after rotating it.
+   > `INNGEST_SIGNING_KEY` and `INNGEST_EVENT_KEY` are shared by the portal
+   > and the `inngest` service, so recreate both services together after
+   > rotating either one.
 
 We especially want reports from:
 

@@ -1,5 +1,6 @@
 import { newId } from "@/lib/shared/new-id";
 import { prisma, type Prisma } from "@dpf/db";
+import { generatePaymentRef } from "@/lib/finance/invoice-payment-refs";
 import {
   recordAiProviderSubscriptionPaymentSchema,
   type ActivateAiProviderContractInput,
@@ -190,13 +191,6 @@ function nextBillingDateFromPaidAt(paidAt: Date, billingDayOfMonth: number): Dat
   const daysInTargetMonth = new Date(Date.UTC(paidAt.getUTCFullYear(), nextMonth + 1, 0)).getUTCDate();
   const day = Math.min(billingDayOfMonth, daysInTargetMonth);
   return new Date(Date.UTC(paidAt.getUTCFullYear(), nextMonth, day));
-}
-
-async function generatePaymentRef(): Promise<string> {
-  const year = new Date().getFullYear();
-  const count = await prisma.payment.count();
-  const seq = String(count + 1).padStart(4, "0");
-  return `PAY-${year}-${seq}`;
 }
 
 function getMissingAiProviderPlanFields(

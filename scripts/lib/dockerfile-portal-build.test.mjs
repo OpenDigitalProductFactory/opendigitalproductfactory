@@ -38,5 +38,9 @@ test("docker build context includes profession corpus markdown", () => {
 });
 
 test("source content hash includes bundled profession corpus assets", () => {
-  assert.match(dockerfile, /find \/app\/apps\/web-src \/app\/packages-src \/app\/scripts \/app\/docs\/professions -type f/);
+  // The hashed roots grow over time (config, patches); assert the corpus is one
+  // of them rather than pinning the whole list.
+  const hashFind = dockerfile.match(/RUN \(find ([^\n]*?) -type f/);
+  assert.ok(hashFind, "source content hash find command not found");
+  assert.match(hashFind[1], /(^| )\/app\/docs\/professions( |$)/);
 });

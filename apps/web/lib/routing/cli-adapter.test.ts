@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
-vi.mock("@/lib/ai-inference", () => {
+vi.mock("@/lib/routing/inference-error", () => {
   class InferenceError extends Error {
     name = "InferenceError";
     constructor(
@@ -71,6 +71,7 @@ vi.mock("@/lib/shared/lazy-node", () => ({
 // can assert on the (path, content, mode) it was handed WITHOUT the content ever
 // touching a command string.
 const mockWriteSandboxFile = vi.fn((..._args: unknown[]): Promise<void> => Promise.resolve());
+vi.mock("./cli-pool-status", () => ({ recordCliRateLimit: vi.fn(), clearCliRateLimit: vi.fn() }));
 vi.mock("@/lib/build/sandbox/agent-cli-runtime", () => ({
   writeSandboxFile: (...args: unknown[]) => mockWriteSandboxFile(...args),
 }));
@@ -90,7 +91,7 @@ function sandboxWriteFor(pathSubstring: string): SandboxWriteParams | undefined 
     .map((c) => c[0] as unknown as SandboxWriteParams)
     .find((p) => p.path.includes(pathSubstring));
 }
-import { InferenceError } from "@/lib/ai-inference";
+import { InferenceError } from "@/lib/routing/inference-error";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 import { EventEmitter } from "events";

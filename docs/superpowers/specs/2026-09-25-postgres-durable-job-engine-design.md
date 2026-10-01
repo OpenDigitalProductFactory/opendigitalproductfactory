@@ -1,11 +1,11 @@
 ---
-status: draft
+status: active
 ---
 
 # Durable jobs on Postgres: replace the Inngest server with an owned `@dpf/jobs` engine
 
 **Plan:** [dependency diet, move M3](../plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md) · **Epic:** `EP-8DC217EB` · **Backlog:** `BI-068BBA33` · **Sequenced behind:** BET-11 scheduling substrate (`BI-B72328D5`) · **Doctrine:** `absorb-dont-adopt` (commandment)
-**Decision:** open. §8 has the `principle_decide` inputs (`own_postgres_jobs` vs `keep_inngest` vs `rent_pg_boss`). This spec recommends an option; it does not ratify one. It was written in a session where the DPF MCP server was unreachable, so no decision record exists yet.
+**Decision:** `own_postgres_jobs`, founder, 2026-09-26 (plan §10.6.1). §8 keeps the inputs, which the `principle_decide` record still owes. The DPF MCP server was unreachable from the deciding session. The §7 benchmarks gate turning the Postgres engine on (§6 step 2), not the facade (§6 step 1).
 
 ## 1. Problem
 

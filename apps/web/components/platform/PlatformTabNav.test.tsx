@@ -102,7 +102,7 @@ describe("PlatformTabNav", () => {
     expect(html).toContain('aria-label="AI Operations view"');
     expect(html).toContain('class="grid gap-2 lg:hidden"');
     expect(html).toContain('class="hidden lg:block"');
-    expect(html).toContain('<option value="/platform/ai" selected="">AI Operations</option>');
+    expect(html).toContain('<option value="/platform/ai/overview" selected="">AI Operations</option>');
     expect(html).toContain('<option value="/platform/ai/overview" selected="">Workforce</option>');
   });
 

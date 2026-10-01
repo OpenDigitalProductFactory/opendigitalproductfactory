@@ -36,7 +36,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
 import { join, dirname, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
+import { gitText } from "./lib/git.mjs";
 
 const REPO_ROOT = process.env.DOC_STALE_ROOT
   ? resolve(process.env.DOC_STALE_ROOT)
@@ -50,9 +50,7 @@ const LINK_RE = /!?\[[^\]]*\]\(\s*((?:[^()\s]|\([^()]*\))+)(?:\s+"[^"]*")?\s*\)/
 const FENCE_RE = /^([`~]{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm;
 const isExternal = (h) => /^(https?:|mailto:|tel:|data:|#)/i.test(h);
 
-function git(args) {
-  return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-}
+const git = (args) => gitText(args, { cwd: REPO_ROOT, trim: false, maxBuffer: 64 * 1024 * 1024 });
 
 /** path → most-recent commit unix-ts, from a single git-log pass over the whole tree. */
 function lastCommitTimes() {

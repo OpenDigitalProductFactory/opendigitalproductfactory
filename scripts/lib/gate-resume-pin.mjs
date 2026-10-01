@@ -1,6 +1,6 @@
-import { spawnSync } from "node:child_process";
 
 import { RESUME_MARKER_ENV } from "./durable-wait-resumer.mjs";
+import { gitTextOrNull } from "./git.mjs";
 
 // BI-D35B85BF. The decisions a RESUMED local-CI gate makes that a fresh run
 // does not, kept pure so they are tested without a gate process:
@@ -16,10 +16,7 @@ export function isResumedGateRun({ resumeLeaseId, env = process.env }) {
   return Boolean(resumeLeaseId) || env[RESUME_MARKER_ENV] === "1";
 }
 
-function git(worktreePath, args) {
-  const result = spawnSync("git", args, { cwd: worktreePath, encoding: "utf8", windowsHide: true });
-  return result.status === 0 ? String(result.stdout).trim() : null;
-}
+const git = (worktreePath, args) => gitTextOrNull(args, { cwd: worktreePath });
 
 /**
  * Does the worktree still hold exactly the pinned candidate?

@@ -8,7 +8,7 @@
 
 import type { CSSProperties } from "react";
 
-import { intentStyle, resolveIntent, type Intent } from "./statusColors";
+import { intentStyle, resolveIntent, type Intent } from "@/lib/ui-model/statusColors";
 
 type Variant = "soft" | "outline" | "solid";
 type Size = "sm" | "md";

@@ -11,53 +11,81 @@
  *
  * Sequencing inside the function (drain order from spec §4.5 / §6.8):
  *   1. snapshot-initial — capture surfaces before flipping level
- *   2. enter-draining + flip-level + broadcast + flip-taskruns-to-quiescing
- *   3. wait loop with re-snapshot every 5s up to budget
- *   4. either ready-to-swap (await caller swap-complete event)
- *      OR deferred (hard blocker exceeded budget)
- *      OR aborted/failed (caller event or coordinator crash)
+ *   2. enter-draining + flip-level (admission closes) + broadcast
+ *   3. wait loop: one check step per tick (re-snapshot, persist live progress,
+ *      heartbeat, re-read the moving bound and the force flag), then sleep on
+ *      the operator-control event (abort / keep-waiting / force) with a timeout
+ *   4. either ready-to-swap (TaskRuns flipped to quiescing only now, then await
+ *      the caller's swap-complete event)
+ *      OR, for an upgrade, awaiting-operator at the bound (level stays draining)
+ *      until the operator chooses or the work clears (spec §11a, BI-F9EE05E5)
+ *      OR deferred at the bound (other triggers: teardown, manual)
+ *      OR aborted/failed (operator event or coordinator crash)
  *   5. emit platform.quiescence-cleared (CRITICAL — every terminal path)
  *
  * Resumable on worker restart via Inngest step checkpointing.
  * Single-flight via concurrency: { limit: 1, scope: "fn" }.
  *
  * Spec: docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md
- *   §5.2 (state machine), §5.3 (this function), §5.7 (timeout = 60min — see comment),
- *   §6.8 (drain order).
+ *   §5.2 (state machine), §5.3 (this function), §5.7 (stuck-coordinator
+ *   watchdog), §6.8 (drain order), §11a (an upgrade waits for work, BI-F9EE05E5).
  *
  * BI-QUIESCE-002.
  */
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import {
   captureActiveSessionBlockers,
   flipActiveTaskRunsToQuiescing,
-  heartbeatQuiescenceRun,
   invalidateQuiescenceCache,
-  isShipForceEscalated,
   pickPrimaryBlocker,
   setQuiescenceLevel,
   transitionState,
   type ActiveSessionBlockers,
 } from "@/lib/self-upgrade/quiescence";
+import {
+  isDrainWaitingStatus,
+  QUIESCENCE_CONTROL_EVENT,
+  QUIESCENCE_READY_EVENT,
+  readDrainControl,
+  recordDrainProgress,
+} from "@/lib/self-upgrade/drain-wait";
+import { reassertDrainingLevel } from "@/lib/self-upgrade/drain-admission";
 
 export const QUIESCENCE_RUN_FUNCTION_ID = "ops/quiescence-run";
 export const QUIESCENCE_START_EVENT = "ops/quiescence.start";
 export const QUIESCENCE_SWAP_COMPLETE_EVENT = "ops/quiescence.swap-complete";
+
+/** Margin over the promoter's own budget before the coordinator gives up on a swap. */
+export const SWAP_COMPLETE_MARGIN_MINUTES = 10;
 export const QUIESCENCE_CLEARED_EVENT = "platform.quiescence-cleared";
 
-// Per spec §5.7: 60 minutes — gives 2× headroom over the longest legitimate
-// single-surface wait (build-phase budget = 30 min). At 30 min coordinator
-// timeout the watchdog would race a legitimate completion of a long build
-// and flip level back to normal mid-wait, causing awaitReady to return
-// failed even when nothing is wrong. 60min absorbs that.
-const COORDINATOR_TIMEOUT_MS = 60 * 60 * 1000;
+// Wait-loop check cadence (BI-F9EE05E5). Between checks the coordinator sleeps
+// on the operator-control event, so Abort / Keep waiting / Force act at once and
+// a 60-minute wait costs ~180 checks, not ~720 five-second sleeps. Each check is
+// two steps (check + wait); the job engine caps steps per run (Inngest: 1000),
+// so MAX_WAIT_CHECKS bounds the whole wait under that cap. Both timeouts stay
+// well inside the 2-minute stuck-coordinator reaper (taskrun-watchdog.ts).
+const DRAIN_CHECK_TIMEOUT = "20s";
+const AWAITING_OPERATOR_CHECK_TIMEOUT = "60s";
+// Other triggers (teardown, manual) keep their short, bounded drain.
+const BOUNDED_DRAIN_CHECK_TIMEOUT = "5s";
+// 180 checks at 20s fill the default hour; the remaining ~260 at 60s give the
+// operator about 4 more hours before the coordinator gives up and reopens.
+export const MAX_WAIT_CHECKS = 440;
 
-// Wait-loop tick interval. 5s is fast enough that ready-to-swap fires
-// within 5s of the last blocker clearing; cheap enough that even hundreds
-// of ticks don't impact DB.
-const WAIT_TICK_MS = 5_000;
+type DrainCheck = {
+  /** Operator who pressed Abort (durable marker), when set. */
+  abortedBy: string | null;
+  pastBound: boolean;
+  hardBlockers: number;
+  primaryBlocker: string | null;
+  status: string;
+  now: number;
+  deadlineAt: number;
+  drainStartedAt: number;
+};
 
-export const quiescenceRun = inngest.createFunction(
+export const quiescenceRun = jobs.createFunction(
   {
     id: QUIESCENCE_RUN_FUNCTION_ID,
     retries: 0,
@@ -65,7 +93,7 @@ export const quiescenceRun = inngest.createFunction(
     triggers: [{ event: QUIESCENCE_START_EVENT }],
     // Coordinator timeout is enforced externally by the watchdog
     // (BI-QUIESCE-007) reading QuiescenceRun.lastHeartbeatAt. step.waitForEvent
-    // adds its own 10m timeout on the swap-complete handshake; if the caller
+    // adds its own timeout on the swap-complete handshake (the promoter budget plus a margin); if the caller
     // never signals, the function exits via the no-signal failure path.
   },
   async ({ event, step }) => {
@@ -73,18 +101,25 @@ export const quiescenceRun = inngest.createFunction(
     const budgetMs = (event.data.budgetMs as number) ?? 5 * 60 * 1000;
     const triggerRefId = (event.data.triggerRefId as string | null) ?? null;
     const shipForce = !!event.data.shipForce;
+    // BI-F9EE05E5: the self-upgrade trigger waits for work and pauses for the
+    // operator at the bound instead of deferring (spec §11a, decision 7).
+    const awaitOperator = !!event.data.awaitOperatorAtBudget;
 
     // ─── Step 1: initial snapshot + preparing transition ─────────────────
 
+    // Recency window for the soft tool-execution signal: other triggers use
+    // their (minutes-long) budget as before; an hour-long upgrade budget must not
+    // turn an hour of past clicks into "activity", so it uses the default.
+    const snapshotOpts = awaitOperator ? undefined : { thresholdMs: budgetMs };
     const initialSnapshot = (await step.run("snapshot-initial", () =>
-      captureActiveSessionBlockers({ thresholdMs: budgetMs }),
+      captureActiveSessionBlockers(snapshotOpts),
     )) as ActiveSessionBlockers;
 
     await step.run("enter-preparing", () =>
       transitionState(runId, "preparing", { initialSnapshot }),
     );
 
-    // ─── Step 2: enter draining — flip level, broadcast, flip TaskRuns ──
+    // ─── Step 2: enter draining — close admission, broadcast ─────────────
 
     await step.run("enter-draining", () => transitionState(runId, "draining"));
     await step.run("flip-level-draining", () => setQuiescenceLevel("draining", runId));
@@ -103,63 +138,143 @@ export const quiescenceRun = inngest.createFunction(
       return { broadcast: "draining", runId };
     });
 
-    const flippedCount = (await step.run("flip-taskruns-quiescing", () =>
-      flipActiveTaskRunsToQuiescing(),
-    )) as number;
+    // Other triggers stop coworker loops at drain start, as before. An upgrade
+    // does not: in-flight work runs to completion (spec §11a item 1), and the
+    // flip happens only once the hard blockers reach zero, or on force.
+    const flippedCount = awaitOperator
+      ? 0
+      : ((await step.run("flip-taskruns-quiescing", () => flipActiveTaskRunsToQuiescing())) as number);
 
-    // ─── Step 3: wait loop with re-snapshot ──────────────────────────────
+    // ─── Step 3: wait loop ───────────────────────────────────────────────
 
-    const drainStart = Date.now();
-    const deadline = drainStart + budgetMs;
-    let lastSnapshot: ActiveSessionBlockers | null = initialSnapshot;
+    // BI-F9EE05E5: every check re-reads the row, so the bound follows Keep
+    // waiting (drainStart + current budgetMs) and a mid-flight Force now
+    // (BI-4F3B2FA9, shipForceEscalatedAt) is honoured within one check. All
+    // clock reads happen inside steps so a replay sees the recorded values.
+    let check: DrainCheck | null = null;
+    let end: "ready" | "deferred" | "aborted" | "exhausted" = "exhausted";
+    let abortedBy = "unknown";
 
-    // Bounded outer iteration count — defensive against runaway loops
-    // even with a sane deadline.
-    const maxTicks = Math.ceil(budgetMs / WAIT_TICK_MS) + 5;
+    for (let tick = 0; tick < MAX_WAIT_CHECKS; tick++) {
+      check = (await step.run(`drain-check-${tick}`, async () => {
+        const control = await readDrainControl(runId);
+        // This coordinator is alive and its drain is waiting: admission must be
+        // closed. A portal restart mid-drain resets the level on boot; close it
+        // again within one check (BI-F9EE05E5).
+        if (control && isDrainWaitingStatus(control.status)) {
+          await reassertDrainingLevel(runId);
+        }
+        const snapshot = await captureActiveSessionBlockers(snapshotOpts);
+        const now = Date.now();
+        await recordDrainProgress(runId, snapshot, new Date(now));
+        const drainStartedAt = control ? Date.parse(control.drainStartedAt) : now;
+        const deadlineAt = drainStartedAt + (control?.budgetMs ?? budgetMs);
+        const hardBlockers = countEffectiveHardBlockers(snapshot, shipForce || !!control?.forced);
+        let status = control?.status ?? "draining";
+        // At the bound an upgrade pauses for the operator (level stays
+        // draining); after Keep waiting moves the bound it returns to draining.
+        // Done here, not in a step of its own, so Keep waiting costs no steps
+        // against the engine's per-run cap.
+        if (awaitOperator && hardBlockers > 0 && !control?.abortRequestedBy) {
+          const want = now >= deadlineAt ? "awaiting-operator" : "draining";
+          if (status !== want) {
+            await transitionState(runId, want);
+            status = want;
+          }
+        }
+        return {
+          abortedBy: control?.abortRequestedBy ?? null,
+          pastBound: now >= deadlineAt,
+          hardBlockers,
+          primaryBlocker: pickPrimaryBlocker(snapshot),
+          status,
+          now,
+          deadlineAt,
+          drainStartedAt,
+        };
+      })) as DrainCheck;
 
-    // BI-4F3B2FA9: a drain started non-forced can be promoted to forced
-    // MID-FLIGHT when an operator clicks "Force Now" (escalateQuiescenceToForced
-    // writes shipForceEscalatedAt). Re-read that flag each tick — once set, the
-    // effective shipForce sticks and the next blocker check returns 0, so the
-    // drain reaches ready-to-swap within one tick without restarting the run.
-    let effectiveShipForce = shipForce;
-
-    for (let tick = 0; tick < maxTicks; tick++) {
-      if (!effectiveShipForce) {
-        effectiveShipForce = (await step.run(`check-escalation-${tick}`, () =>
-          isShipForceEscalated(runId),
-        )) as boolean;
+      // A durable Abort wins over everything, even blockers that just cleared:
+      // the operator's event may have been dropped while this check ran.
+      if (check.abortedBy) {
+        end = "aborted";
+        abortedBy = check.abortedBy;
+        break;
       }
-      // Re-check the hard-blocker count from the prior snapshot before
-      // sleeping. Lets the first tick exit fast in the no-blockers case.
-      const hardBlockers = countEffectiveHardBlockers(lastSnapshot, effectiveShipForce);
-      if (hardBlockers === 0) break;
-      if (Date.now() >= deadline) break;
+      if (check.hardBlockers === 0) {
+        end = "ready";
+        break;
+      }
+      const pastBound = check.pastBound;
+      if (pastBound && !awaitOperator) {
+        end = "deferred";
+        break;
+      }
 
-      await step.sleep(`drain-tick-${tick}`, `${Math.floor(WAIT_TICK_MS / 1000)}s`);
-
-      lastSnapshot = (await step.run(`snapshot-tick-${tick}`, () =>
-        captureActiveSessionBlockers({ thresholdMs: budgetMs }),
-      )) as ActiveSessionBlockers;
-
-      await step.run(`heartbeat-${tick}`, () => heartbeatQuiescenceRun(runId));
+      const control = await step.waitForEvent(`drain-control-${tick}`, {
+        event: QUIESCENCE_CONTROL_EVENT,
+        timeout: !awaitOperator
+          ? BOUNDED_DRAIN_CHECK_TIMEOUT
+          : pastBound
+            ? AWAITING_OPERATOR_CHECK_TIMEOUT
+            : DRAIN_CHECK_TIMEOUT,
+        if: `async.data.runId == "${runId}"`,
+      });
+      if (control?.data.action === "abort") {
+        end = "aborted";
+        abortedBy = (control.data.operatorUserId as string | undefined) ?? "unknown";
+        break;
+      }
+      // keep-waiting / force: the decision is already on the row; the next
+      // check reads it.
     }
 
-    if (!effectiveShipForce) {
-      effectiveShipForce = (await step.run("check-escalation-final", () =>
-        isShipForceEscalated(runId),
-      )) as boolean;
+    const actualWaitMs = check ? check.now - check.drainStartedAt : 0;
+
+    // ─── Step 4a: operator abort mid-drain (BI-F9EE05E5) ─────────────────
+
+    if (end === "aborted") {
+      await step.run("enter-aborted-draining", () =>
+        transitionState(runId, "aborted", {
+          outcome: "aborted-by-operator",
+          completionSource: "caller",
+          outcomeNotes: `Aborted by operator ${abortedBy} while waiting for in-flight work; admission reopened`,
+          completedAt: new Date(),
+          actualWaitMs,
+        }),
+      );
+      await step.run("flip-level-normal-abort-draining", () => setQuiescenceLevel("normal", null));
+      await step.run("emit-cleared-aborted-draining", () =>
+        emitCleared({ runId, outcome: "aborted", triggerRefId, reason: abortedBy }),
+      );
+      return { ok: false, outcome: "aborted", runId };
     }
-    const finalHardBlockers = countEffectiveHardBlockers(lastSnapshot, effectiveShipForce);
-    const actualWaitMs = Date.now() - drainStart;
 
-    // ─── Step 4a: defer path ─────────────────────────────────────────────
+    // ─── Step 4b: wait-step ceiling reached — reopen admission ───────────
 
-    if (finalHardBlockers > 0) {
-      const blockingSurface = pickPrimaryBlocker(lastSnapshot);
+    if (end === "exhausted") {
+      await step.run("enter-failed-exhausted", () =>
+        transitionState(runId, "failed", {
+          outcome: "failed",
+          completionSource: "caller",
+          outcomeNotes: `Still waiting for in-flight work after ${MAX_WAIT_CHECKS} checks with no operator decision; admission reopened`,
+          completedAt: new Date(),
+          actualWaitMs,
+        }),
+      );
+      await step.run("flip-level-normal-exhausted", () => setQuiescenceLevel("normal", null));
+      await step.run("emit-cleared-failed-exhausted", () =>
+        emitCleared({ runId, outcome: "failed", triggerRefId, reason: "wait-exhausted" }),
+      );
+      return { ok: false, outcome: "failed", reason: "wait-exhausted", runId };
+    }
+
+    // ─── Step 4c: defer path (other triggers only) ───────────────────────
+
+    if (end === "deferred") {
+      const blockingSurface = check?.primaryBlocker ?? null;
       await step.run("enter-deferred", () =>
         transitionState(runId, "deferred", {
-          finalSnapshot: lastSnapshot,
           deferReason: `Hard blocker exceeded ${budgetMs}ms budget`,
           deferSurface: blockingSurface ?? "unknown",
           outcome: "deferred-by-surface",
@@ -175,18 +290,29 @@ export const quiescenceRun = inngest.createFunction(
       return { ok: false, outcome: "deferred", deferSurface: blockingSurface, runId, flippedCount };
     }
 
-    // ─── Step 4b: ready-to-swap — await caller signal ────────────────────
+    // Blockers are clear (or forced through): only now stop the coworker loops
+    // so the swap does not cut one mid-iteration (BI-F9EE05E5).
+    if (awaitOperator) {
+      await step.run("flip-taskruns-quiescing", () => flipActiveTaskRunsToQuiescing());
+    }
 
-    await step.run("enter-ready-to-swap", () =>
-      transitionState(runId, "ready-to-swap", {
-        finalSnapshot: lastSnapshot,
-        actualWaitMs,
-      }),
+    // ─── Step 4d: ready-to-swap — await caller signal ────────────────────
+
+    // The latest snapshot is already on finalSnapshot (persisted each check).
+    await step.run("enter-ready-to-swap", () => transitionState(runId, "ready-to-swap", { actualWaitMs }));
+    // Wake the waiting self-upgrade job now rather than on its next poll.
+    await step.run("announce-ready-to-swap", () =>
+      jobs.send({ name: QUIESCENCE_READY_EVENT, data: { runId, triggerRefId } }),
     );
 
+    // BI-F9EE05E5: wait as long as the promoter may take (its own budget,
+    // 25 min by default) plus a margin. A fixed 10m failed the drain while a
+    // slow image build was still running (SUR-3B7203FD, 2026-09-30).
+    const { resolvePromoterTimeoutMs } = await import("@/lib/self-upgrade/promoter");
+    const swapWaitMinutes = Math.ceil(resolvePromoterTimeoutMs({}) / 60_000) + SWAP_COMPLETE_MARGIN_MINUTES;
     const swap = await step.waitForEvent("await-swap-complete", {
       event: QUIESCENCE_SWAP_COMPLETE_EVENT,
-      timeout: "10m",
+      timeout: `${swapWaitMinutes}m`,
       if: `async.data.runId == "${runId}"`,
     });
 
@@ -197,7 +323,7 @@ export const quiescenceRun = inngest.createFunction(
         transitionState(runId, "failed", {
           outcome: "failed",
           completionSource: "caller",
-          outcomeNotes: "swap-complete signal never received within 10m",
+          outcomeNotes: `swap-complete signal never received within ${swapWaitMinutes}m`,
           completedAt: new Date(),
         }),
       );
@@ -208,7 +334,7 @@ export const quiescenceRun = inngest.createFunction(
       return { ok: false, outcome: "failed", reason: "no-signal", runId };
     }
 
-    // ─── Step 4c: caller signaled — branch on outcome ────────────────────
+    // ─── Step 4e: caller signaled — branch on outcome ────────────────────
 
     const callerOutcome = (swap.data.outcome as string) ?? "succeeded";
 
@@ -349,7 +475,7 @@ async function emitCleared(payload: {
     console.warn("[quiescence-run] broadcastSystem failed:", err);
   }
 
-  await inngest.send({
+  await jobs.send({
     name: QUIESCENCE_CLEARED_EVENT,
     data: {
       runId: payload.runId,

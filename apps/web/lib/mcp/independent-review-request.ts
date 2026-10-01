@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { can } from "@/lib/permissions";
@@ -8,7 +8,7 @@ import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-
 import { OAUTH_EXECUTION_AUTHORITY_SELECT, isCurrentOAuthExecutionAuthority } from "@/lib/auth/oauth-tokens";
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { resolveMcpTaskAuthorityKey } from "@/lib/auth/oauth-task-authority";
 import { deterministicExternalTaskRunId, remoteTaskRequestMatches } from "@/lib/mcp-task-capacity-contract";
 import { loadTaskInitiativeReviewOutcome } from "@/lib/mcp-task-review-outcome";
@@ -48,6 +48,7 @@ const deny = (message: string): RequestAuthority => ({ bounded: true, refusal: {
  * when a portal thread happens to be present in the execution context. */
 export async function authorizeCoworkerRequest(
   params: Record<string, unknown>, userId: string, context?: ToolExecutionContext,
+  options?: { sourceOnly: boolean },
 ): Promise<RequestAuthority> {
   // BI-817556D8: a personal access token has no acting coworker, so it can never
   // pass this guard. Say which connection can, instead of only what is missing.
@@ -61,7 +62,7 @@ export async function authorizeCoworkerRequest(
   if (!agent || agent.status !== "active" || agent.archived) return deny("The acting coworker is not active.");
   const grants = expandGrants(agent.toolGrants.map((grant) => grant.grantKey));
   const scopes = expandGrants(context.tokenGrantScopes ?? []);
-  if (grants.includes("thread_write") && (!context.apiTokenId || scopes.includes("thread_write"))) {
+  if (!options?.sourceOnly && grants.includes("thread_write") && (!context.apiTokenId || scopes.includes("thread_write"))) {
     return { bounded: false };
   }
   if (context.authSource !== "oauth" || !context.apiTokenId
@@ -76,6 +77,10 @@ export async function authorizeCoworkerRequest(
   }
   const binding = parseInitiativeReviewBinding(params.initiativeReviewBinding);
   const lane = binding && INITIATIVE_READINESS_LANES[binding.writerToolName];
+  if (options?.sourceOnly && (!binding || binding.eligibleEvidenceActivityIds?.length
+    || !["record_initiative_design_review", "record_initiative_architecture_review"].includes(binding.writerToolName))) {
+    return deny("This review does not have a source-only activity contract.");
+  }
   if (!binding?.workroomRef || !lane?.independent || !lane.gates.some((gate) => gate === binding.gate)
     || params.targetAgent === context.agentId) return deny("Use an independent review request supplied by the item's readiness check.");
   const human = await currentUserContext(userId);
@@ -92,17 +97,23 @@ export async function authorizeCoworkerRequest(
   // hashes and packet-shaped JSON are never evidence of server authorization.
   const { getBacklogItem } = await import("./packs/backlog-pack-read-tools");
   const item = await getBacklogItem({ itemId: binding.itemId }, context.agentId);
-  const readiness = item.data?.readiness as { decisions?: { completion?: InitiativeReadinessDecision } } | undefined;
-  const decision = readiness?.decisions?.completion;
-  if (!item.success || !decision) return deny("This item's readiness could not be resolved.");
-  if (decision.verdict === "allowed") return await hasCompletedReview(params, userId, context)
+  if (options?.sourceOnly && item.data?.scopeKind !== "platform") {
+    return deny("Source-only classification requires a platform-scoped review.");
+  }
+  const readiness = item.data?.readiness as { decisions?: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>> } | undefined;
+  if (!item.success || !readiness?.decisions) return deny("This item's readiness could not be resolved.");
+  const { decisionForIndependentReview } = await import("@/lib/backlog/initiative-readiness/design-phase-recovery");
+  const decision = decisionForIndependentReview(binding.writerToolName, readiness.decisions);
+  if (!decision) return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
+    ? { bounded: true } : deny("This item has no pending review for the requested lane.");
+  if (decision.verdict === "allowed") return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
     ? { bounded: true } : deny("This item has no pending independent completion review.");
   const { resolveTerminalInitiativeRecovery } = await import("@/lib/backlog/initiative-readiness/terminal-recovery");
   const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: context.agentId,
     refusedWorkroomId: binding.workroomRef.workroomId });
   if (!recovery.reviewerRoutes.some((route) => route.independent
     && canonicalJson(route.requestCoworker) === canonicalJson(params))) {
-    if (await hasCompletedReview(params, userId, context)) return { bounded: true };
+    if (!options?.sourceOnly && await hasCompletedReview(params, userId, context)) return { bounded: true };
     return deny("The review request has changed or is no longer eligible. Refresh readiness to get the current request.");
   }
   return { bounded: true };

@@ -8,6 +8,7 @@
 // Design: docs/superpowers/specs/2026-08-26-mcp-client-self-authentication-design.md §9
 
 import { isLoopbackHostname } from "@/lib/auth/oauth-metadata";
+import { isConfiguredCanonicalOrigin } from "@/lib/canonical-host";
 
 function envFlag(name: string): boolean | null {
   const raw = process.env[name];
@@ -27,13 +28,19 @@ function envInt(name: string, fallback: number, min: number, max: number): numbe
 }
 
 /**
- * §9.1 — Dynamic Client Registration default.
+ * §9.1 / §12.4.5 — Dynamic Client Registration default.
  *
- * Enabled on loopback only. Registration alone grants nothing (every token
- * still needs an authenticated human to consent), but an open `/register` on a
- * reachable install is a junk-row and phishing-surface vector: a self-
- * registered client picks its own `client_name`, which is why the consent
- * screen marks DCR clients as self-asserted.
+ * Enabled on loopback and on the install's configured canonical origin
+ * (`PUBLIC_URL`, plus `PUBLIC_URL_ALIASES` hosts on its scheme), and refused on
+ * every other host. Registration alone grants nothing (every token still needs
+ * an authenticated human to consent), but an open `/register` on an arbitrary
+ * reachable host is a junk-row and phishing-surface vector: a self-registered
+ * client picks its own `client_name`, which is why the consent screen marks DCR
+ * clients as self-asserted. The canonical origin is the one name the operator's
+ * install answers to, so widening to it — and only it — is the §12.8 boundary.
+ *
+ * A non-loopback canonical origin must be https (OAuth 2.1: https except
+ * loopback); an http PUBLIC_URL does not open registration.
  *
  * `DPF_OAUTH_DCR` forces it on or off regardless of origin.
  */
@@ -41,11 +48,19 @@ export function isDcrEnabled(origin: string | null): boolean {
   const forced = envFlag("DPF_OAUTH_DCR");
   if (forced !== null) return forced;
   if (!origin) return false;
+  let parsed: URL;
   try {
-    return isLoopbackHostname(new URL(origin).hostname);
+    parsed = new URL(origin);
   } catch {
     return false;
   }
+  // URL keeps the brackets on an IPv6 literal; isLoopbackHostname takes it bare.
+  if (isLoopbackHostname(parsed.hostname.replace(/^\[(.*)\]$/, "$1"))) return true;
+  if (parsed.protocol !== "https:") return false;
+  return isConfiguredCanonicalOrigin(origin, {
+    canonicalUrl: process.env.PUBLIC_URL,
+    aliases: process.env.PUBLIC_URL_ALIASES ?? "",
+  });
 }
 
 /** §9.2 — access-token lifetime. 1h recommended: shorter buys little on a

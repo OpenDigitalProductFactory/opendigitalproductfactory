@@ -3,12 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   BUILD_PROCESS_SIZES,
   BUILD_PROCESS_TYPE_VALUES,
+  checkPhaseGate,
   getProcessPolicy,
   type BuildProcessSize,
   type BuildProcessType,
 } from "./build-process-matrix";
 import { checkVerificationDepthSatisfied } from "./verification-depth-requirement";
-import { checkPhaseGate, normalizeHappyPathState, type BuildPhase } from "./feature-build-types";
+import { normalizeHappyPathState, type BuildPhase } from "./feature-build-types";
 
 /**
  * BLAST RADIUS OF THE VERIFICATION-DEPTH BINDING.

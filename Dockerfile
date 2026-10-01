@@ -46,6 +46,7 @@ COPY packages/api-client/package.json ./packages/api-client/
 COPY packages/coworker-sim-harness/package.json ./packages/coworker-sim-harness/
 COPY packages/dpf-bootstrap/package.json ./packages/dpf-bootstrap/
 COPY packages/finance-templates/package.json ./packages/finance-templates/
+COPY packages/i18n/package.json ./packages/i18n/
 COPY packages/integration-shared/package.json ./packages/integration-shared/
 COPY packages/storefront-templates/package.json ./packages/storefront-templates/
 COPY packages/types/package.json ./packages/types/
@@ -128,10 +129,12 @@ COPY scripts/installer/install-state.v1.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v2.schema.json ./scripts/installer/
 COPY scripts/installer/native-edge-host.ps1 ./scripts/installer/
 COPY scripts/bootstrap-organization-pki.ps1 ./scripts/
+COPY scripts/publish-host-gpu.ps1 ./scripts/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/compose-chain.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/canonical-origin.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/machine-trust.ps1 ./scripts/installer/lib/
+COPY scripts/installer/lib/mcp-client-env.ps1 ./scripts/installer/lib/
 # The consumer installer copies the kernel-commandment shell guard out of the
 # install dir, which on that path IS the release-asset bundle. The init stage
 # COPYs each asset explicitly, so the guard must be pulled in here before the
@@ -173,6 +176,10 @@ COPY scripts/worktree-janitor.mjs ./scripts/
 COPY scripts/lib/worktree-janitor-core.mjs ./scripts/lib/
 COPY scripts/lib/worktree-session-heartbeat.mjs ./scripts/lib/
 COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
+# worktree-janitor.mjs and worktree-liveness.mjs query leases and Workroom
+# claims through the shared MCP client (plan 2026-09-08 §10.5 S8).
+COPY scripts/lib/mcp-client.mjs ./scripts/lib/
+COPY scripts/lib/mcp-credential.mjs ./scripts/lib/
 COPY scripts/lib/junction-safe-worktree-remove.mjs ./scripts/lib/
 COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
 COPY scripts/lib/module-size-scope.mjs ./scripts/lib/
@@ -183,6 +190,8 @@ COPY scripts/lib/git-fetch-shared-safe.mjs ./scripts/lib/
 # unresolvable-diff helper; without this COPY the init image dies at
 # ERR_MODULE_NOT_FOUND (BI-20599979).
 COPY scripts/lib/git-changed-files.mjs ./scripts/lib/
+# The shared git runner every migrated script imports (plan 2026-09-08 S1).
+COPY scripts/lib/git.mjs ./scripts/lib/
 COPY scripts/lib/entry-module.mjs ./scripts/lib/
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
 COPY scripts/module-size-baseline.txt ./scripts/
@@ -265,7 +274,7 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml docker-compose.edge-actions.yml /dpf-release-assets/ && \
     mkdir -p /dpf-release-assets/scripts/pki && cp scripts/pki/edge-client.tpl /dpf-release-assets/scripts/pki/ && \
     cp uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat /dpf-release-assets/ && \
-    cp scripts/bootstrap-organization-pki.ps1 /dpf-release-assets/scripts/ && \
+    cp scripts/bootstrap-organization-pki.ps1 scripts/publish-host-gpu.ps1 /dpf-release-assets/scripts/ && \
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
     cp scripts/installer/local-model-policy.json /dpf-release-assets/scripts/installer/ && \
@@ -276,7 +285,7 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/installer/install-state.v1.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/native-edge-host.ps1 /dpf-release-assets/scripts/installer/ && \
-    cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 scripts/installer/lib/canonical-origin.ps1 scripts/installer/lib/machine-trust.ps1 /dpf-release-assets/scripts/installer/lib/ && \
+    cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 scripts/installer/lib/canonical-origin.ps1 scripts/installer/lib/machine-trust.ps1 scripts/installer/lib/mcp-client-env.ps1 /dpf-release-assets/scripts/installer/lib/ && \
     cp config/consumer-install/agent-pointer.md /dpf-release-assets/AGENTS.md && \
     mkdir -p /dpf-release-assets/scripts/safety && \
     cp scripts/safety/dpf-shell-guard.ps1 scripts/safety/dpf-shell-guard.sh \
@@ -466,6 +475,7 @@ COPY promoter-contract.json /promoter/promoter-contract.json
 COPY scripts/promote.sh /promoter/scripts/promote.sh
 COPY scripts/governed-teardown.mjs /promoter/scripts/governed-teardown.mjs
 COPY scripts/salvage-sweep.mjs /promoter/scripts/salvage-sweep.mjs
+COPY scripts/lib/git.mjs /promoter/scripts/lib/git.mjs
 COPY Dockerfile /promoter/Dockerfile
 COPY scripts/apply-runtime-capability-transition.mjs /promoter/scripts/apply-runtime-capability-transition.mjs
 COPY scripts/runtime-transition-authority.mjs /promoter/scripts/runtime-transition-authority.mjs

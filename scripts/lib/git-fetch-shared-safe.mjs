@@ -15,7 +15,7 @@
  *  3. `assertRepoNotShallow` fails loud for shared root / multi-worktree clones.
  */
 
-import { execFileSync } from "node:child_process";
+import { gitText } from "./git.mjs";
 
 import { isEntryModule } from "./entry-module.mjs";
 
@@ -31,6 +31,21 @@ export function isShallowRepository(git) {
   }
 }
 
+export const SHALLOW_DEEPEN_STEP = 50;
+export const SHALLOW_DEEPEN_MAX_STEPS = 10;
+
+/**
+ * @param {(args: string[]) => string} git
+ * @returns {boolean} whether origin/main and HEAD share an ancestor locally
+ */
+export function hasMergeBaseWithOriginMain(git) {
+  try {
+    return String(git(["merge-base", "origin/main", "HEAD"]) ?? "").trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Fetch origin/main without writing .git/shallow into a full clone.
  *
@@ -41,10 +56,28 @@ export function fetchOriginMainSharedSafe(git, opts = {}) {
   const allowDepthIfAlreadyShallow = opts.allowDepthIfAlreadyShallow !== false;
   const shallow = isShallowRepository(git);
   if (shallow && allowDepthIfAlreadyShallow) {
-    // Already shallow (typical CI): deepen/refresh with depth is fine — cannot
-    // make it worse. Prefer fetching the needed tip without converting others.
+    // Already shallow (typical CI): refresh the tip with depth rather than
+    // pulling all of main's history.
     git(["fetch", "--no-tags", "--depth=1", "origin", "main"]);
-    return { mode: "depth-on-already-shallow" };
+    // A depth-1 refresh CAN make it worse: once main has moved past the
+    // branch's base, the new shallow boundary at main's tip cuts the shared
+    // ancestor, and every `origin/main...HEAD` guard then reports "no merge
+    // base" and does not run. Observed in cloud agent sessions (shallow
+    // clones). A CI merge ref has main's tip as a parent, so it finds the
+    // merge base at once; a branch cut from an older main deepens in steps
+    // until the shared ancestor is back, bounded so a truly unrelated HEAD
+    // cannot fetch forever.
+    for (let step = 0; step < SHALLOW_DEEPEN_MAX_STEPS; step++) {
+      if (hasMergeBaseWithOriginMain(git)) {
+        return { mode: "depth-on-already-shallow", deepenedBy: step * SHALLOW_DEEPEN_STEP };
+      }
+      git(["fetch", "--no-tags", `--deepen=${SHALLOW_DEEPEN_STEP}`, "origin", "main"]);
+    }
+    return {
+      mode: "depth-on-already-shallow",
+      deepenedBy: SHALLOW_DEEPEN_MAX_STEPS * SHALLOW_DEEPEN_STEP,
+      mergeBase: hasMergeBaseWithOriginMain(git),
+    };
   }
   // Full clone / linked worktree: NEVER pass --depth.
   git(["fetch", "--no-tags", "origin", "main"]);
@@ -96,10 +129,7 @@ export function unshallowRootSharedSafe(git, opts = {}) {
 
 /** Default git runner for CLI use. */
 export function defaultGit(args) {
-  return execFileSync("git", args, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
+  return gitText(args, { cwd: process.cwd(), trim: false });
 }
 
 // CLI: node scripts/lib/git-fetch-shared-safe.mjs assert|fetch

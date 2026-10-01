@@ -35,10 +35,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
 import { listChangedFiles } from "./lib/git-changed-files.mjs";
 import { findCanonicalSeedContentPaths } from "./lib/seed-fit-gate.mjs";
 import { PR_TRAILER_NAMES } from "./lib/pr-trailer-contract.mjs";
+import { runGit } from "./lib/git.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const REGISTRY_PATH = path.join(REPO_ROOT, "scripts", "convergence-surfaces.json");
@@ -190,13 +190,8 @@ function assertSafeRef(ref, label) {
   if (!REF_RE.test(ref) || ref.startsWith("-")) throw new Error(`[convergence-impact-gate] refusing unsafe ${label}: ${JSON.stringify(ref)}`);
   return ref;
 }
-function git(...args) {
-  try {
-    return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch (e) {
-    return (e.stdout && e.stdout.toString()) || "";
-  }
-}
+// Fail-open as before: partial stdout (or "") when git fails.
+const git = (...args) => runGit(args, { cwd: REPO_ROOT }).stdout;
 
 export function runGate({ base = process.env.BASE_SHA || "origin/main", changed, commitMessages, prBody = process.env.PR_BODY || "" } = {}) {
   assertSafeRef(base, "BASE_SHA");

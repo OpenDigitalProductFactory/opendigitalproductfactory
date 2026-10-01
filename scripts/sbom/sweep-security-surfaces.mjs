@@ -23,6 +23,7 @@
 // run or an air-gapped install degrades loudly rather than reporting a false
 // all-clear.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { writeFileSync } from "node:fs";
 
 const REPO = process.env.GITHUB_REPOSITORY ?? "OpenDigitalProductFactory/opendigitalproductfactory";
@@ -30,8 +31,15 @@ const TOKEN = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? "";
 const API = process.env.GITHUB_API_URL ?? "https://api.github.com";
 
 const argOf = (flag) => {
-  const i = process.argv.indexOf(flag);
-  return i === -1 ? null : process.argv[i + 1];
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({
+    args: process.argv.slice(2),
+    strict: false,
+    allowPositionals: true,
+    options: { "md": { type: "string" }, "json": { type: "string" } },
+  });
+  const value = values[flag.replace(/^--/, "")];
+  return value === undefined ? null : typeof value === "string" ? value : undefined;
 };
 
 /**

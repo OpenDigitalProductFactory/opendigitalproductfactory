@@ -3,7 +3,7 @@
 // and re-runs it, then records scoped tests and writes the failure analysis.
 import { describe, expect, it, vi } from "vitest";
 
-import { runBuildStudioFinalize, type FinalizeDeps } from "./finalize-stage-runner";
+import { finalizeAllowsSemanticReview, runBuildStudioFinalize, type FinalizeDeps, type FinalizeOutcome } from "./finalize-stage-runner";
 
 const binding = { sha: "c".repeat(40), headTreeHash: "a".repeat(40), diffDigest: "b".repeat(64) };
 const narrative = JSON.stringify({
@@ -88,3 +88,62 @@ describe("runBuildStudioFinalize", () => {
     expect(d.log).toHaveBeenCalledWith(expect.stringContaining("re-running once"));
   });
 });
+
+// BI-FBA2FDBE — live 2026-09-29: FB-C36BC1AD re-ran the full gauntlet 20+
+// times on one tree, and every build in review repeated a verdict it already
+// had, every few minutes, while the semantic review that followed could only
+// fail for want of a failure analysis.
+describe("finalize does not repeat a verdict it already has", () => {
+  it("reuses a recorded failure for the same gate identity instead of re-running the gauntlet", async () => {
+    const d = deps({ priorFailure: vi.fn().mockResolvedValue({ failedGuards: ["Data-Impact Gate", "Derived Artifact Registry"] }) });
+    const out = await runBuildStudioFinalize("FB-86B4CCA3", d);
+    expect(out).toMatchObject({ status: "gauntlet-failed", failedGuards: ["Data-Impact Gate", "Derived Artifact Registry"], reused: true });
+    expect(d.runGauntlet).not.toHaveBeenCalled();
+    expect(d.capture).not.toHaveBeenCalled();
+  });
+
+  it("runs the gauntlet when no failure is recorded for this identity", async () => {
+    const d = deps({ priorFailure: vi.fn().mockResolvedValue(null) });
+    const out = await runBuildStudioFinalize("FB-D671B016", d);
+    expect(out.status).toBe("ready");
+    expect(d.runGauntlet).toHaveBeenCalled();
+  });
+
+  it("reports guards that could not run as inconclusive, never as a failing verdict", async () => {
+    const notRun = { ran: true, passed: false, failedGuards: ["Spec/Plan/Doc Gate"], recordId: "g1", binding,
+      output: "[spec-plan-doc-gate] cannot resolve origin/main — the guard did not run. This is not a pass." };
+    const d = deps({ runGauntlet: vi.fn().mockResolvedValue(notRun) });
+    const out = await runBuildStudioFinalize("FB-C36BC1AD", d);
+    expect(out.status).toBe("gauntlet-not-run");
+  });
+});
+
+describe("an unmitigated risk ends finalize as a verdict", () => {
+  it("returns the risks bound to the gated tree and saves no analysis", async () => {
+    const blocked = narrative.replace('"disposition":"mitigated"', '"disposition":"blocked"');
+    const d = deps({ llm: vi.fn(async (prompt: string) => prompt.includes("gate decisions")
+      ? "Docs-Impact-Decision: internal seed validation, no user-visible change\nSeed-Fit-Decision: global-default"
+      : blocked) });
+    const out = await runBuildStudioFinalize("FB-8AB05E04", d);
+    expect(out).toMatchObject({ status: "risk-blocked", treeSha: binding.headTreeHash, risks: [{ key: "bad-tier", disposition: "blocked" }] });
+    expect(d.saved).toHaveLength(0);
+  });
+});
+
+describe("finalizeAllowsSemanticReview", () => {
+  it("allows the semantic review only after a finished finalize", () => {
+    expect(finalizeAllowsSemanticReview({ status: "ready", evidenceIds: ["g", "t"] })).toBe(true);
+    const unfinished: FinalizeOutcome[] = [
+      { status: "gauntlet-failed", failedGuards: ["x"] },
+      { status: "gauntlet-not-run", reason: "r" },
+      { status: "decisions-exhausted", failedGuards: ["x"] },
+      { status: "unbound" },
+      { status: "tests-failed" },
+      { status: "risk-blocked", risks: [], treeSha: "t" },
+    ];
+    for (const outcome of unfinished) {
+      expect(finalizeAllowsSemanticReview(outcome)).toBe(false);
+    }
+  });
+});
+

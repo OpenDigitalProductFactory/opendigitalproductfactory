@@ -1,13 +1,13 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { authorizeWorkroomAccess, type WorkroomAccessDecision, type WorkroomAccessLevel } from "./room-participation";
-import { readWorkroomBoundaryClaim } from "./workroom-boundary-claim";
+import { resolveRoomSensitivityCeiling } from "./room-sensitivity-ceiling.server";
 import { readWorkspaceRoomPolicy } from "./workspace-room-access";
 
 const principalSelect = { id: true, principalId: true, kind: true, status: true, sensitivityClearance: true } as const;
 const denied: WorkroomAccessDecision = { level: "none", reason: "not-admitted" };
 type Principal = { id: string; principalId: string; sensitivityClearance: string[] };
-type Membership = { principalId: string; lifecycle: string; roles: string[] };
+type Membership = { principalId: string; lifecycle: string; roles: string[]; principal?: { kind: string } | null };
 
 /** Persisted narrowing/removal wins over historical creation and lease fields. */
 function admitted(principal: Principal, participants: Membership[], holders: (string | null)[], action: boolean) {
@@ -21,13 +21,15 @@ const OWNER_ROLES = ["coordinator", "accountable"];
 const owns = (row: Membership) => row.lifecycle === "active" && row.roles.some((role) => OWNER_ROLES.includes(role));
 
 /**
- * Whether a person owns a room: they oversee it, or (for a room nobody
- * oversees yet) they created, requested, or hold it.
+ * Whether a person owns a room: they oversee it, or (for a room no other
+ * person oversees) they created, requested, or hold it. An AI coworker
+ * appointed to coordinate acts for people and never displaces them
+ * (BI-A27B903D).
  */
 function ownsRoom(principal: Principal, participants: Membership[], holders: (string | null)[]) {
   const row = participants.find((entry) => entry.principalId === principal.id);
   if (row) return owns(row);
-  return !participants.some(owns) && holders.includes(principal.id);
+  return !participants.some((entry) => owns(entry) && entry.principal?.kind !== "agent") && holders.includes(principal.id);
 }
 
 /**
@@ -49,8 +51,8 @@ export async function resolveAgentWorkroomAccess(input: {
     db.principalAlias.findFirst({ where: { aliasType: "agent", aliasValue: input.agentId, issuer: "" }, select: { principal: { select: principalSelect } } }),
     db.agent.findUnique({ where: { agentId: input.agentId }, select: { status: true, archived: true } }),
     db.workroom.findUnique({ where: { id: input.workroomId }, select: {
-      createdByPrincipalId: true, requestedByPrincipalId: true, leaseHolderPrincipalId: true, scopeClaims: true,
-      participants: { select: { principalId: true, lifecycle: true, roles: true } },
+      createdByPrincipalId: true, requestedByPrincipalId: true, leaseHolderPrincipalId: true, scopeClaims: true, backlogItemId: true,
+      participants: { select: { principalId: true, lifecycle: true, roles: true, principal: { select: { kind: true } } } },
       workItem: { select: { evidence: true } },
     } }),
   ]);
@@ -61,7 +63,7 @@ export async function resolveAgentWorkroomAccess(input: {
     || !agent || agent.status !== "active" || agent.archived) return fail();
   const holders = [room.createdByPrincipalId, room.requestedByPrincipalId, room.leaseHolderPrincipalId];
   const policy = readWorkspaceRoomPolicy(room.workItem?.evidence);
-  const ceiling = readWorkroomBoundaryClaim(room.scopeClaims)?.sensitivityCeiling ?? "internal";
+  const ceiling = await resolveRoomSensitivityCeiling(room, db);
   const handover = input.handover === true && input.requested === "action"
     && !room.participants.some((row) => row.principalId === assistant.id) && ownsRoom(human, room.participants, holders);
   for (const principal of [human, assistant]) {

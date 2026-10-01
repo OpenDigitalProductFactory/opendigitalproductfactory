@@ -31,6 +31,13 @@ import SelfUpgradeJobEngineHealthAlert, {
 } from "@/components/ops/SelfUpgradeJobEngineHealthAlert";
 import { useOptionalSelfUpgradeLive } from "@/components/ops/SelfUpgradeLiveProvider";
 
+// A run in one of these states has finished; its outcome is on the page and a
+// fresh trigger is legitimate again (a skipped or failed run is exactly when
+// the operator should be able to retry).
+const SETTLED_RUN_STATUSES: ReadonlySet<string> = new Set([
+  "succeeded", "failed", "cancelled", "skipped", "rolled_back",
+]);
+
 type Props = {
   enabled: boolean;
   actionState: SelfUpgradeActionState;
@@ -76,12 +83,26 @@ export default function SelfUpgradeTriggerControl({
   const [restarting, setRestarting] = useState(false);
   const restartBaselineRef = useRef<string | null>(null);
   const admissionBaselineRef = useRef<string | null>(null);
+  const triggerBaselineRunIdRef = useRef<string | null>(null);
 
   const draining = !!quiescence && quiescence.level !== "normal";
   const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
   const upgradeInFlight = queuedRun || latestRun?.status === "running" || draining;
   const triggerBusy = isPending || admissionUncertain;
   const updateAvailable = actionState === SELF_UPGRADE_ACTION_STATE.UPDATE_AVAILABLE;
+  // BI-CE244260: from admission until the admitted run is visible and settled
+  // there is nothing to press. The button used to come back here, guarded only
+  // by the sentence "do not click again"; a warning is not a control. (The
+  // server refuses a second trigger anyway — this stops the page inviting one.)
+  // Without a run id, the admitted run is whichever run replaces the one that
+  // was latest when the operator clicked.
+  const admitted = triggerResult?.queued === true;
+  const admittedRunId = admitted ? triggerResult?.runId ?? null : null;
+  const admittedRunVisible = latestRun != null && (admittedRunId !== null
+    ? latestRun.runId === admittedRunId
+    : latestRun.runId !== triggerBaselineRunIdRef.current);
+  const awaitingAdmittedRun = admitted
+    && !(admittedRunVisible && SETTLED_RUN_STATUSES.has(latestRun!.status));
 
   // A compact fingerprint of the server-derived state. When it changes after
   // a swap-induced disconnect, the new container has answered and the
@@ -136,6 +157,7 @@ export default function SelfUpgradeTriggerControl({
     setInFlightError(null);
     const force = override;
     admissionBaselineRef.current = serverSignature();
+    triggerBaselineRunIdRef.current = latestRun?.runId ?? null;
     startTransition(async () => {
       try {
         const result = await triggerSelfUpgrade({
@@ -268,7 +290,7 @@ export default function SelfUpgradeTriggerControl({
         </div>
 
         <div className="flex items-center gap-3">
-          {upgradeInFlight ? (
+          {upgradeInFlight || awaitingAdmittedRun ? (
             // BI-4F3B2FA9: a run is in flight. Never a dead-end disabled
             // button — when the portal is draining, surface Force Now / Abort
             // so the operator's emergency lever actually works mid-flight.
@@ -356,7 +378,9 @@ export default function SelfUpgradeTriggerControl({
                       : latestRun?.dispatchStatus === "admission_pending"
                         ? `Upgrade ${latestRun.runId} admitted — waiting for dispatch…`
                         : "Upgrade queued — waiting for the worker…"
-                  : "Upgrade in progress…"}
+                  : awaitingAdmittedRun && !admittedRunVisible
+                    ? `Upgrade${admittedRunId ? ` ${admittedRunId}` : ""} admitted — waiting for dispatch…`
+                    : "Upgrade in progress…"}
               </span>
             )
           ) : (
@@ -412,25 +436,20 @@ export default function SelfUpgradeTriggerControl({
           data-upgrade-starting="true"
           aria-live="polite"
         >
-          Recording this upgrade before dispatch. Keep this page open; the durable
-          run will appear below as soon as admission commits.
+          Recording this upgrade. It continues if you leave this page.
         </div>
       )}
 
-      {updateAvailable && triggerResult && (
+      {updateAvailable && triggerResult && !triggerResult.queued && (
         <div
           className={`p-3 rounded-lg text-sm ${
             triggerResult.uncertain
               ? "bg-[var(--dpf-info)]/10 text-[var(--dpf-text)] border border-[var(--dpf-info)]/30"
-              : triggerResult.queued
-              ? "bg-[var(--dpf-success)]/10 text-[var(--dpf-success)] border border-[var(--dpf-success)]/30"
               : "bg-[var(--dpf-destructive)]/10 text-[var(--dpf-destructive)] border border-[var(--dpf-destructive)]/30"
           }`}
         >
           {triggerResult.uncertain
-            ? `Admission response interrupted: ${triggerResult.reason} The server record is being checked; do not click again.`
-            : triggerResult.queued
-            ? `Upgrade admitted${triggerResult.runId ? ` as ${triggerResult.runId}` : ""}. Dispatch is tracked by this run; do not click again.`
+            ? `Admission response interrupted: ${triggerResult.reason} Checking the server record…`
             : `Not admitted: ${triggerResult.reason}`}
         </div>
       )}

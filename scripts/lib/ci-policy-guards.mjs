@@ -83,6 +83,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-3B6DC1DC: the TaskRun working-write guard now scopes by model, so its
       // own behaviour is under test rather than trusted.
       node("--test", "scripts/check-no-bare-working-write.test.mjs"),
+      // BI-903FB5F9: no checked-in recipe may drop the Docker VM page cache by hand.
+      node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
@@ -108,6 +110,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-D908DA0A: a parked claim says whether it waits behind work or behind
       // a closed pool; the two used to print identically.
       node("--test", "scripts/gate-worktree-pool-closed.test.mjs"),
+      // BI-D3BF53A9: every gate records the builder's measured cgroup peak, the
+      // evidence the admission reserve is calibrated from.
+      node("--test", "scripts/local-ci-builder-memory.test.mjs"),
       // BI-FFCFCCE0: --finalize-evidence resolved its record before admission
       // and so always read slot-0, while pregate:status reconciles every slot.
       // A real pending PASS on slot-1 was unfinalizable. Registered here for the
@@ -150,6 +155,20 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("guard-diff-honesty", "Guard Diff Honesty", [
       node("--test", "scripts/check-guard-diff-honesty.test.mjs"),
       node("scripts/check-guard-diff-honesty.mjs"),
+      // One git runner for every script, failure behaviour chosen by name
+      // (plan 2026-09-08 §10.5 S1).
+      node("--test", "scripts/lib/git.test.mjs"),
+      conformanceTest("scripts/check-no-direct-git-spawn.test.mjs"),
+      node("scripts/check-no-direct-git-spawn.mjs"),
+      // One MCP JSON-RPC client for scripts: loopback check, credential
+      // resolution and transport in one place (plan 2026-09-08 §10.5 S8).
+      node("--test", "scripts/lib/mcp-client.test.mjs"),
+      conformanceTest("scripts/check-no-hand-rolled-mcp-jsonrpc.test.mjs"),
+      node("scripts/check-no-hand-rolled-mcp-jsonrpc.mjs"),
+      // One argument parser for every script: node:util parseArgs
+      // (plan 2026-09-08 §10.5 S2).
+      conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
+      node("scripts/check-no-hand-rolled-argv.mjs"),
     ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
@@ -178,6 +197,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/installer/pki-contract.test.mjs"),
       // BI-6DC1CD5B: canonical https origin resolver, machine trust, installer wiring.
       conformanceTest("scripts/installer/canonical-origin.test.mjs"),
+      // BI-2D545A0C: installer + bootstrap persist DPF_MCP_URL (from PUBLIC_URL) and
+      // NODE_EXTRA_CA_CERTS idempotently; machine trust with a fake store per OS.
+      conformanceTest("scripts/installer/mcp-client-env.test.mjs"),
+      // BI-698B7F9A: both installers pull the release's dpf-doctools with the
+      // other release images and never fail the install on it.
+      conformanceTest("scripts/installer/doctools-prepull.test.mjs"),
+      // BI-7371D444: .wslconfig keys land in the section WSL reads them from
+      // (autoMemoryReclaim under [experimental]). Skips where no PowerShell exists.
+      conformanceTest("scripts/installer/wslconfig-sections.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
@@ -224,7 +252,17 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/installer/lib/state-lock-timeout.test.mjs",
         "scripts/installer/lib/doctor-redaction.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
+        // BI-58C58CB6: these sat on the test-inventory allowlist, ran nowhere
+        // in CI, and drifted on every host until BI-76334D21 caught them.
+        "scripts/installer/install-state-transaction.test.mjs",
+        "scripts/installer/migrate-install-state.test.mjs",
+        "scripts/installer/resolve-host-identity.test.mjs",
+        "scripts/installer/validate-install-state.test.mjs",
+        "scripts/installer/native-edge-host-contract.test.mjs",
       ),
+      // BI-3267763F: no compose default, installer output or self-upgrade
+      // leaves Inngest on the signing/event keys once published in this repo.
+      conformanceTest("scripts/installer/inngest-keys-contract.test.mjs"),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
@@ -326,6 +364,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("mobile-jest-pin-guard", "Mobile Jest Pin Guard", [
       node("scripts/check-mobile-jest-pin.mjs"),
+      node("scripts/check-mobile-react-pin.mjs"),
+      node("--test", "scripts/check-mobile-react-pin.test.mjs"),
     ], { inputs: ["code"] }),
     guard("diagram-dependency-pin-guard", "Diagram Dependency Pin Guard", [
       node("scripts/check-diagram-dependency-pins.mjs"),
@@ -339,8 +379,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // A `patchedDependencies` entry whose patch file never reaches the Docker
       // build context fails `pnpm install` with ENOENT and breaks every image
       // build (SUR-8AB3353C, regression from #4321).
+      // The same guard refuses an unfrozen `pnpm install` in any Dockerfile.
       node("scripts/check-docker-patch-context.mjs"),
       node("--test", "scripts/check-docker-patch-context.test.mjs"),
+      // The service images (adp, edge-node, integration-test-harness) run
+      // this after `pnpm deploy`: the legacy deploy skips the lockfile under
+      // node-linker=hoisted, so each image asserts its deploy tree against
+      // pnpm-lock.yaml instead of trusting the config.
+      node("--test", "scripts/sbom/assert-deploy-matches-lockfile.test.mjs"),
       // Same failure family, different input: the Dockerfile copies scripts by
       // name, so extracting a helper out of one silently drops it from the image
       // and `pnpm install` dies on ERR_MODULE_NOT_FOUND in postinstall
@@ -348,6 +394,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // the image — so it reaches main green and breaks the release chain.
       node("scripts/check-dockerfile-copied-script-imports.mjs"),
       node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
+      // The test-fixture twin: a contract test that cpSync's modules into a temp
+      // tree one at a time dies on ERR_MODULE_NOT_FOUND when a copied module
+      // gains a static import the fixture never copies. Hit twice on 2026-09-25
+      // in tests/release/pregate-node-gate-contract.test.mjs (#5690, #5707),
+      // and only Janitor Tests noticed.
+      node("scripts/check-fixture-copied-script-imports.mjs"),
+      conformanceTest("scripts/check-fixture-copied-script-imports.test.mjs"),
       // The FLAG half of the same class (BI-8914E888). The guard above catches a
       // script the image never receives; this catches a switch the install can
       // never set. Both are "the capability was built and the last wire was never
@@ -374,6 +427,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("application-boundary-guard", "Application Boundary Guard", [
       node("--test", "scripts/check-application-boundaries.test.mjs"),
       node("scripts/check-application-boundaries.mjs"),
+      // One durable-job facade: only apps/web/lib/jobs/ reaches the engine
+      // (plan 2026-09-08 move M3; spec 2026-09-25 postgres job engine §6).
+      conformanceTest("scripts/check-no-direct-job-engine-import.test.mjs"),
+      node("scripts/check-no-direct-job-engine-import.mjs"),
     ], { inputs: ["code"] }),
     guard("label-association-guard", "Label Association Guard", [
       // A <label> bound to nothing renders, screenshots and inspects correctly
@@ -444,6 +501,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("ux-primitive-adoption-guard", "UX Primitive Adoption Guard", [
       node("--test", "scripts/check-ux-primitive-adoption.test.mjs"),
       node("scripts/check-ux-primitive-adoption.mjs"),
+      // One home per display formatter: dates in lib/datetime, money in
+      // lib/org-locale (plan 2026-09-08 §10.5 S6).
+      conformanceTest("scripts/check-no-local-formatters.test.mjs"),
+      node("scripts/check-no-local-formatters.mjs"),
     ]),
     // BI-101C107C: the Build Studio operator UI surface (component count +
     // non-test LOC under apps/web/components/build) may only shrink against
@@ -572,8 +633,31 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("mcp-tool-pack-guard", "MCP Tool Pack Guard", [
       node("scripts/check-mcp-tool-pack.mjs"),
     ], { inputs: ["code"] }),
+    // One kebab-case slug transform (plan 2026-09-08 §10.5 S7); copies whose
+    // output differs stay allowlisted with a reason, since slugs are persisted.
+    guard("local-slugify-guard", "Local Slugify Guard", [
+      conformanceTest("scripts/check-no-local-slugify.test.mjs"),
+      node("scripts/check-no-local-slugify.mjs"),
+    ]),
+    // One markdown renderer, on markdown-it with raw HTML off (plan 2026-09-08
+    // M5, WWMD DI-D9292D812CFF): no other file imports a markdown library.
+    guard("local-markdown-renderer-guard", "Local Markdown Renderer Guard", [
+      conformanceTest("scripts/check-no-local-markdown-renderer.test.mjs"),
+      node("scripts/check-no-local-markdown-renderer.mjs"),
+    ]),
+    // One canonical-JSON form for hashes and signatures per import boundary
+    // (plan 2026-09-08 §10.5 S4). Every remaining copy differs from it and
+    // feeds a persisted or signed value, so each stays allowlisted with its
+    // exact difference until a per-call-site migration decides otherwise.
+    guard("local-canonical-json-guard", "Local Canonical JSON Guard", [
+      conformanceTest("scripts/check-no-local-canonical-json.test.mjs"),
+      node("scripts/check-no-local-canonical-json.mjs"),
+    ]),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
+      // One home for the shared wire types (plan 2026-09-08 §10.5 S9).
+      conformanceTest("scripts/check-no-local-dpf-type-redeclaration.test.mjs"),
+      node("scripts/check-no-local-dpf-type-redeclaration.mjs"),
     ]),
     // BI-96033E25 — a vitest test must resolve repo paths from __dirname, not
     // process.cwd(), or `vitest run --root <pkg>` reads outside the repo and
@@ -587,6 +671,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("sbom-divergence-guard", "SBOM Divergence Guard", [
       node("--test", "scripts/sbom/check-sbom-drift.test.mjs"),
+      // The typecheck program ratchet (plan 2026-09-08 M11 step 4) needs a full
+      // web compile, so the gate itself runs in ci.yml's Typecheck job; its
+      // comparison logic is tested here.
+      node("--test", "scripts/sbom/check-typecheck-baseline.test.mjs"),
       conformanceTest("scripts/sbom/lockfile-roots.test.mjs"),
       node("scripts/sbom/check-sbom-drift.mjs"),
       // One lockfile reader for every script (plan 2026-09-08 §10.5 S3).
@@ -658,6 +746,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-DBAD1A1B: SessionEnd process matching accepts only the canonical
         // worktree itself or descendants, never sibling worktrees/CI runners.
         "scripts/hooks/session-reaper.test.mjs",
+        // BI-8A562681: the health hook resolves DPF_MCP_URL then the plugin
+        // default; hook curl calls carry the install CA bundle on https.
+        "scripts/hooks/mcp-health.test.mjs",
+        // BI-1229E42C: the installed plugin descriptor carries a literal URL so
+        // the desktop app can start sign-in.
+        "scripts/hooks/pin-plugin-mcp-url.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
@@ -794,12 +888,21 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "packages/dpf-skill-pack/hooks/command-text.test.mjs",
       ),
       node("--test", "packages/dpf-skill-pack/hooks/root-clone-guard.test.mjs"),
+      // The publish guard and its cloud-agent-session allowance share the
+      // override reason with .githooks/pre-push-gate.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/pregate-evidence-guard.test.mjs",
+        "packages/dpf-skill-pack/hooks/lib/local-ci-override.cloud-session.test.mjs",
+      ),
       node("--test", "packages/dpf-skill-pack/hooks/compose-guard.test.mjs"),
       // BI-F87BD9BF: raw tsc / root-level vitest / npx are refused with the
       // checked-in routine named, instead of costing an OOM and a retry.
       node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
+      // BI-77BE1389: install-folder sessions get the source contract at start.
+      node("--test", "packages/dpf-skill-pack/hooks/install-folder-contract.test.mjs"),
       // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the
       // SessionStart readiness banner. Both are hand-added here for the same
       // reason as every entry above — an unlisted test file never runs.
@@ -841,6 +944,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/process-spine-conformance.test.mjs",
         "scripts/lib/ensure-post-checkout-hook.test.mjs",
+      ),
+      // BI-545943EE: the SessionStart process-spine verdict and the generated
+      // operating contract it carries when the spine is unproven. Moved off the
+      // test-inventory allowlist: unlisted = never run.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/process-spine-health.test.mjs",
+        "packages/dpf-skill-pack/scripts/generate-operating-contract.test.mjs",
       ),
       node(
         "--test",

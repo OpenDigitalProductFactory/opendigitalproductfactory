@@ -2,7 +2,7 @@
 #
 # Provisions a single Ubuntu 24.04 EC2 instance and runs install-dpf.sh
 # via cloud-init. The installer pulls pre-built GHCR images (--release flag)
-# and starts the full DPF stack (portal, postgres, neo4j, qdrant, edge-node).
+# and starts the full DPF stack (portal, postgres, edge-node).
 #
 # Typical time from `terraform apply` to healthy portal: ~8-12 minutes.
 # Track progress: aws ssm start-session --target <instance_id> then

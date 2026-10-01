@@ -17,7 +17,7 @@ userInvocable: true
 agentInvocable: false
 allowedTools: ["Bash"]
 composesFrom: []
-contextRequirements: ["git available; scripts/seed-worktree-mcp.{ps1,sh} present; .mcp.json populated in root clone; worktree verification readiness must be classified"]
+contextRequirements: ["git available; scripts/seed-worktree-mcp.{ps1,sh} present; dpf-platform plugin installed (it supplies the dpf MCP connector); worktree verification readiness must be classified"]
 riskBand: medium
 
 # Kernel principle enforcement
@@ -83,13 +83,13 @@ For normal feature/fix work: commit from the worktree, then route runtime-bound 
    - **Canonical worktree base** (the 2026-06-05 unified-delivery-surfaces decision #1): both host surfaces (Claude Code and Codex) put topic worktrees in the dedicated sibling dir `D:/DPF-worktrees/<slug>` on Windows, `~/dpf-worktrees/<slug>` on macOS/Linux. Do NOT use Claude Code's default `.claude/worktrees/<random>` nesting inside the root clone, and do NOT use the older `D:/DPF-<slug>` alongside-the-clone form — one base, both surfaces. The dedicated base keeps worktrees out of the root clone's tree and gives the janitor one place to reap. → spec [`2026-06-05-unified-delivery-surfaces-execution-alignment-design.md`](../../../../docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) §4.1 + decision #1.
    - **Never** branch from local `main` — local main may carry unpushed commits that sweep into your PR and fail DCO.
 
-3. **Seed the MCP config + agent toolchain.** `.mcp.json` and `.vscode/mcp.json` are gitignored (they carry your local `dpfmcp_...` bearer token), so `git worktree add` does NOT carry them across. Run the bootstrap from inside the new worktree:
+3. **Seed the worktree + agent toolchain.** Claude Code's `dpf` connector is the `dpf-platform` plugin's URL-only descriptor, so every worktree already has it; no project `.mcp.json` is copied (a second `dpf` entry would load beside the plugin's — BI-5201141C). `.vscode/mcp.json` (VS Code's MCP config) is gitignored, so `git worktree add` does not carry it. Run the bootstrap from inside the new worktree:
    - Windows: `pwsh scripts/dpf-bootstrap-agent-toolchain.ps1`
    - macOS / Linux: `bash scripts/dpf-bootstrap-agent-toolchain.sh`
 
-   The bootstrap copies `.mcp.json` and `.vscode/mcp.json` from the root clone, sets `COMPOSE_PROJECT_NAME=dpf-<slug>` in `.env`, converges the Claude Code + Codex client profiles to the DPF-scoped baseline (DPF MCP only + `dpf-platform` only; generic plugins/MCP servers disabled; the canonical worktree base + this worktree trusted in Codex), and writes the explicit `?tier=full` endpoint required by those lazy-host registries. It seeds kernel memory, runs probes, and prints a readiness banner that flags residual drift. The legacy `scripts/seed-worktree-mcp.{ps1,sh}` shim still works for one release cycle.
+   The bootstrap copies `.vscode/mcp.json` from the root clone when it has one, sets `COMPOSE_PROJECT_NAME=dpf-<slug>` in `.env`, converges the Claude Code + Codex client profiles to the DPF-scoped baseline (DPF MCP only + `dpf-platform` only; generic plugins/MCP servers disabled; the canonical worktree base + this worktree trusted in Codex), and writes the explicit `?tier=full` endpoint required by those lazy-host registries. It seeds kernel memory, runs probes, and prints a readiness banner that flags residual drift. The legacy `scripts/seed-worktree-mcp.{ps1,sh}` shim still works for one release cycle.
 
-4. **Restart your agent in the worktree.** Claude Code / Codex need a fresh session to pick up the new `.mcp.json` — the `dpf` MCP connector won't appear in `/mcp` otherwise.
+4. **Restart your agent in the worktree.** Claude Code / Codex need a fresh session started in the worktree — `/mcp` should then list exactly one `dpf` server, from the plugin. A second `dpf` entry means a leftover project `.mcp.json`; see the MCP authorization runbook, "One dpf connector per client".
 
    If the connector is healthy but a named DPF tool is absent from the attached set, use `load_tools` with an exact `names` entry or natural-language `query`. Notification-aware/generic clients then honor `notifications/tools/list_changed` or re-fetch `tools/list`. Codex must receive the full authorized catalogue at initial connection through its bootstrapped `?tier=full` URL because its HTTP requests do not reliably identify the client and its top-level registry does not refresh mid-turn: inspect `ALL_TOOLS` inside `functions.exec` and invoke a present governed call through `tools.mcp__dpf__<tool_name>(arguments)`. If a fresh task still omits the tool, confirm the configured URL contains `tier=full` and re-run bootstrap/restart the client before classifying it. If `load_tools` succeeds but the qualified tool remains absent from `ALL_TOOLS`, stop and diagnose the Codex connector/session snapshot; do not claim it is callable, install another plugin, use raw JSON-RPC, or bypass MCP authority.
 
@@ -148,7 +148,7 @@ This is a *false green*, not a flake: nothing errors, and the pass is real — f
 - Topic: <slug>
 - Path: <D:\DPF-worktrees\slug | ~/dpf-worktrees/slug>
 - Branch: <prefix>/<slug>  (based on origin/main, 0 ahead)
-- MCP seed: done (.mcp.json + .vscode/mcp.json copied; COMPOSE_PROJECT_NAME=dpf-<slug> set in .env)
+- Seed: done (.vscode/mcp.json copied if present; COMPOSE_PROJECT_NAME=dpf-<slug> set in .env; dpf connector from the plugin)
 - Verification readiness: <compile-ready | source-only> (<reason from .dpf-worktree-readiness.json>)
 - Next step: restart Claude Code / Codex in <path>, then verify `/mcp` shows the dpf connector.
 ```
@@ -158,7 +158,7 @@ This is a *false green*, not a flake: nothing errors, and the pass is real — f
 - **Never share a working tree across sessions.** Branches alone don't help; index/HEAD collisions are silent and corrupting.
 - **Never run `docker compose up`/`down`/`rm` from a worktree without `COMPOSE_PROJECT_NAME` set.** A `docker compose down --volumes` against the root `dpf` project from a worktree is the destructive operation that wiped the volume in the 2026-05-23 incident (`project_2026_05_23_volume_wipe_recovery`).
 - **Never base a topic branch on local `main`.** Always `origin/main` after `git fetch`.
-- **Never commit MCP config files.** `.mcp.json` and `.vscode/mcp.json` are gitignored for a reason — they carry bearer tokens.
+- **Never commit MCP config files.** `.mcp.json` and `.vscode/mcp.json` are gitignored for a reason — a legacy-mode file can carry a bearer token.
 - **Never modify or move the root clone for active feature work.** The root clone is the merge/release/install worktree per `keep-root-clone-as-merge-worktree`; raw `git switch`, `git checkout`, `git reset`, `git pull`, `git merge`, and `git rebase` in that clone are root mutations, not setup.
 - Don't treat the worktree as a runtime by default. Commit from the worktree, verify against the canonical install. 'Make the worktree runnable' is a dedicated platform task, not a side-effect of every feature thread.
 - **Never claim unrun gates passed.** A `source-only` worktree can hold correct code, but its local typecheck/build/test status is unknown until proven in that worktree or in canonical runtime/local-CI.

@@ -1,4 +1,5 @@
 import type { getAiSpendOverview, listAiProviderFinanceProfiles } from "@/lib/finance/ai-provider-finance";
+import { isRecord } from "@/lib/shared/coerce";
 
 type Overview = Awaited<ReturnType<typeof getAiSpendOverview>>;
 type Rows = Awaited<ReturnType<typeof listAiProviderFinanceProfiles>>;
@@ -35,10 +36,6 @@ export function humanizeFinanceLabel(value: string | null | undefined) {
     .join(" ")
     .toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function stringValue(value: unknown): string | undefined {

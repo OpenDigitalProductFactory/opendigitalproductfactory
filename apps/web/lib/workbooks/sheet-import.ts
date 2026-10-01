@@ -3,9 +3,11 @@
 // Pure logic that turns a parsed sheet matrix (first row = headers) into a
 // workbook table definition: deduped column names, an inferred field type per
 // column, and typed cell rows. Kept pure + unit-testable; the server action wires
-// it to the .xlsx parser (read-excel-file) and the workbook service.
+// it to the sheet reader and the workbook service.
 // readSheetMatrix is the one file → matrix reader both import actions share: it
-// converts .xls/.ods to .xlsx through the document converter first (BI-81524041).
+// converts every workbook (.xlsx, .xls, .ods) to .ods through the document
+// engine and reads the first sheet with DPF's own OpenDocument reader
+// (BI-81524041, BI-D1B40D43).
 
 import {
   convertForIngestion,
@@ -13,12 +15,14 @@ import {
   sniffOfficeContainer,
   type ConvertForIngestion,
 } from "@/lib/shared/file-parsers";
-import { conversionRouteFor } from "@/lib/shared/office-conversion";
+import { readOdfContentXml, readOdfSheet, type OdfCell } from "@/lib/shared/odf-content";
+import { conversionRouteFor, conversionRouteForName, type ConversionRoute } from "@/lib/shared/office-conversion";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import type { CellValue, FieldType } from "./types";
 
-/** What read-excel-file yields per cell. */
-export type SheetCell = string | number | boolean | Date | null;
+/** A sheet cell as the reader types it: text, number, boolean, date or blank. */
+export type SheetCell = OdfCell;
 
 export interface ImportedColumn {
   name: string;
@@ -33,11 +37,11 @@ export interface ImportedTable {
 }
 
 /**
- * Why these bytes cannot go to the .xlsx reader, in plain language, or null
- * when they may. An Excel 97-2003 file, RTF, OpenDocument or a Word/PowerPoint
- * package would otherwise fail inside read-excel-file with an error that names
- * neither the file nor a fix (BI-65D65EC0). Unrecognised bytes pass through and
- * the reader decides, as before.
+ * Why these bytes are not a spreadsheet, in plain language, or null when they
+ * may be one. RTF, a non-sheet OpenDocument file or a Word/PowerPoint package
+ * would otherwise fail inside the engine with an error that names neither the
+ * file nor a fix (BI-65D65EC0). Unrecognised bytes pass through and the engine
+ * decides.
  */
 export function unreadableSheetReason(bytes: Uint8Array): string | null {
   const container = sniffOfficeContainer(bytes);
@@ -55,45 +59,39 @@ export type SheetReadResult = ActionResult<SheetCell[][]>;
 
 export type SheetReadDeps = {
   convert?: ConvertForIngestion;
-  readSheet?: (input: ArrayBuffer) => Promise<SheetCell[][]>;
 };
 
-// The universal entry, not /browser: this runs in server actions, and the
-// browser entry needs a DOMParser that Node does not have (BI-81524041).
-async function defaultReadSheet(input: ArrayBuffer): Promise<SheetCell[][]> {
-  const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/universal");
-  return (await readSheet(input)) as SheetCell[][];
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const copy = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(copy).set(bytes);
-  return copy;
-}
+/** A workbook the sniffer could not place goes to the engine as .xlsx, which then says whether it can read it. */
+const UNRECOGNISED_WORKBOOK: ConversionRoute = conversionRouteForName("upload.xlsx", "")!;
 
 /**
- * Read an uploaded spreadsheet (not CSV) into a row matrix. An Excel 97-2003 or
- * OpenDocument spreadsheet is converted to .xlsx first, so it imports exactly
- * as an .xlsx does; with no converter it is refused with S0's plain-language
- * reason. Anything else unreadable is refused before the .xlsx reader sees it.
+ * Read an uploaded spreadsheet (not CSV) into a row matrix. Every workbook —
+ * .xlsx, Excel 97-2003 or OpenDocument — is converted to .ods by the document
+ * engine and its first sheet read with typed cells; with no converter it is
+ * refused with a plain-language reason. Anything recognisably not a sheet is
+ * refused before the engine sees it.
  */
 export async function readSheetMatrix(
   input: ArrayBuffer | Uint8Array,
   fileName: string,
   deps: SheetReadDeps = {},
 ): Promise<SheetReadResult> {
-  let bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   const route = conversionRouteFor(sniffOfficeContainer(bytes), bytes, fileName);
-  if (route?.family === "sheet") {
-    const buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const converted = await convertForIngestion(buffer, route, deps.convert);
-    if (!converted.ok) return converted;
-    bytes = converted.data;
-  } else {
+  if (route?.family !== "sheet") {
     const unreadable = unreadableSheetReason(bytes);
     if (unreadable) return err(unreadable);
   }
-  return ok(await (deps.readSheet ?? defaultReadSheet)(toArrayBuffer(bytes)));
+  const sheetRoute = route?.family === "sheet" ? route : UNRECOGNISED_WORKBOOK;
+  const buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const converted = await convertForIngestion(buffer, sheetRoute, deps.convert);
+  if (!converted.ok) return converted;
+  try {
+    return ok(readOdfSheet(readOdfContentXml(converted.data)).rows);
+  } catch (error) {
+    console.warn(`[sheet-import] converted ${sheetRoute.from} could not be read: ${getErrorMessage(error)}`);
+    return err("DPF could not read this workbook; it may be damaged or password-protected. Save it as .xlsx or CSV and upload it again.");
+  }
 }
 
 export const MAX_IMPORT_COLUMNS = 100;

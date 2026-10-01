@@ -84,8 +84,6 @@ done
 # Plus the third-party base images from docker-compose.yml.
 for img in \
   postgres:16-alpine \
-  neo4j:5-community \
-  qdrant/qdrant:latest \
   prom/prometheus:latest \
   grafana/grafana-oss:latest \
   gcr.io/cadvisor/cadvisor:latest \
@@ -98,7 +96,7 @@ done
 
 # Capture digest-pinned manifest.
 docker images --no-trunc --format '{{.Repository}}:{{.Tag}}@{{.Digest}}' \
-  | grep -E '(opendigitalproductfactory|postgres|neo4j|qdrant|prom|grafana|cadvisor|redis|inngest)' \
+  | grep -E '(opendigitalproductfactory|postgres|prom|grafana|cadvisor|redis|inngest)' \
   | sort -u > images-manifest.txt
 
 cat images-manifest.txt

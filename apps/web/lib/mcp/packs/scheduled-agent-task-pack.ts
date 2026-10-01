@@ -10,7 +10,7 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { SCHEDULED_AGENT_TASK_KINDS } from "@/lib/operate/scheduled-jobs/agent-task-kind";
 import {

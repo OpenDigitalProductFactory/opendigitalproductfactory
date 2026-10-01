@@ -17,7 +17,16 @@ WORKDIR /app
 # PR #853 (SNMP ifTable / LLDP) introduced @dpf/validators as a direct
 # dependency of services/edge-node, so the workspace context has to
 # come along; we can no longer install from just the edge-node
-# package.json.
+# package.json. pnpm-workspace.yaml also carries the catalog the
+# package.json "catalog:" specifiers resolve against, the overrides,
+# and the minimumReleaseAge floor.
+#
+# The root .npmrc is NOT copied, on purpose. It sets node-linker=hoisted,
+# and under the hoisted linker the legacy `pnpm deploy` below skips the
+# lockfile and resolves every range afresh from the registry (replayed:
+# net-snmp 3.29.1 shipped while the lockfile locks 3.26.3). The isolated
+# default makes the deploy read the lockfile. The assertion after the
+# deploy fails the build if that ever stops being true.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 
 # patchedDependencies in pnpm-workspace.yaml makes patches/ an INPUT to the
@@ -41,8 +50,16 @@ COPY services/edge-node/package.json services/edge-node/tsconfig.json ./services
 # transitive deps (`...` suffix). --ignore-scripts skips esbuild's
 # postinstall (only used by tsx / vitest devDeps that the runtime
 # image doesn't consume).
+#
+# --frozen-lockfile, like services/adp and the integration test harness.
+# This used to be --no-frozen-lockfile, a leftover from the first skeleton
+# (#501), which installed from services/edge-node/package.json alone with
+# no lockfile at all. #876 moved the install to the workspace and kept the
+# flag, so a lockfile that disagreed with a package.json or the catalog was
+# silently re-resolved from the registry at build time instead of failing.
+# scripts/check-docker-patch-context.mjs refuses the flag in any Dockerfile.
 RUN corepack enable && pnpm install --filter dpf-edge-node... \
-    --no-frozen-lockfile --ignore-scripts
+    --frozen-lockfile --ignore-scripts
 
 COPY services/edge-node/src ./services/edge-node/src
 RUN pnpm --filter dpf-edge-node build
@@ -65,6 +82,17 @@ RUN pnpm --config.allowUnusedPatches=true deploy \
 # pnpm deploy --prod strips devDependencies but ALSO doesn't include
 # our just-built dist/. Copy it in explicitly.
 RUN cp -r /app/services/edge-node/dist /app/deploy/edge-node/dist
+
+# Fail the image build if the deploy tree ships anything the lockfile did
+# not lock (see the .npmrc note above), then load the compiled modules that
+# reach net-snmp, undici and zod so a broken runtime tree fails here rather
+# than at the first container start.
+COPY scripts/lib/pnpm-lock.mjs ./scripts/lib/
+COPY scripts/sbom/runtime-surface.mjs scripts/sbom/assert-deploy-matches-lockfile.mjs ./scripts/sbom/
+RUN node scripts/sbom/assert-deploy-matches-lockfile.mjs \
+    --root /app --importer services/edge-node --deploy /app/deploy/edge-node
+WORKDIR /app/deploy/edge-node
+RUN node -e "['./dist/api-client.js', './dist/collectors/snmp-interface-metrics.js', './dist/collectors/lldp-collector.js', './dist/lib/federation-contract.js'].forEach((m) => require(m)); console.log('edge-node runtime imports OK')"
 
 FROM node:24-alpine AS runner
 

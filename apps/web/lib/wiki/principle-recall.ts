@@ -1,5 +1,5 @@
 // Phase 2 Task 2.2 of the principles-as-wiki-kind plan:
-// recallPrincipleContext — Postgres-first commandment retrieval + Qdrant
+// recallPrincipleContext — Postgres-first commandment retrieval + the vector store
 // relevance for core + threshold-gated contextual retrieval, formatted as
 // a distinct Governance Principles block so the prompt assembler can
 // split governance from background wiki context.
@@ -31,7 +31,7 @@ export type RecallPrincipleContextInput = {
   organizationId: string | null;
   /** Population whose principles should apply — filters by principleAppliesTo. */
   callingPopulation: PrincipleAppliesToPopulation;
-  /** Top-K relevant core principles to surface from Qdrant. Default 5. */
+  /** Top-K relevant core principles to surface from the vector store. Default 5. */
   coreLimit?: number;
   /** Similarity threshold for contextual principles (cosine). Default 0.75. */
   contextualSimilarityThreshold?: number;
@@ -181,9 +181,9 @@ export function formatPrincipleContext(input: {
  *
  * Per spec §12.1:
  * 1. Always inject in-scope commandments from Postgres (cap 10).
- *    Independent of Qdrant — commandments still come back if Qdrant is down.
- * 2. Top-K relevant core principles from Qdrant (default 5). Silently
- *    empty on Qdrant failure.
+ *    Independent of the vector store — commandments still come back if the vector store is down.
+ * 2. Top-K relevant core principles from the vector store (default 5). Silently
+ *    empty on a vector store failure.
  * 3. Contextual principles only above similarity threshold (default 0.75).
  *    Same silent-degradation as core.
  *
@@ -213,7 +213,7 @@ export async function recallPrincipleContext(
   // ── Branch 1: commandments from Postgres ──
   // Pass ringScope through to listPrinciplesByTier so the Prisma AND/OR
   // clause does the heavy filtering server-side. Post-filter is still
-  // applied below to enforce the contract symmetrically with the Qdrant
+  // applied below to enforce the contract symmetrically with the vector
   // branches (and to catch any Prisma client that didn't propagate the
   // arg through, e.g. in tests with a narrow mock).
   let commandmentsRaw: RecalledCommandment[] = [];
@@ -230,7 +230,7 @@ export async function recallPrincipleContext(
     console.warn("[recallPrincipleContext] commandment Postgres lookup failed:", err);
   }
 
-  // ── Branch 2: relevant core principles from Qdrant ──
+  // ── Branch 2: relevant core principles from the vector store ──
   let coreRaw: WikiSearchResult[] = [];
   try {
     coreRaw = await searchWikiPages({
@@ -243,7 +243,7 @@ export async function recallPrincipleContext(
       limit: coreLimit,
     });
   } catch (err) {
-    console.warn("[recallPrincipleContext] core Qdrant lookup failed:", err);
+    console.warn("[recallPrincipleContext] core vector lookup failed:", err);
   }
 
   // ── Branch 3: contextual principles above similarity threshold ──
@@ -260,12 +260,12 @@ export async function recallPrincipleContext(
       scoreThreshold: contextualThreshold,
     });
   } catch (err) {
-    console.warn("[recallPrincipleContext] contextual Qdrant lookup failed:", err);
+    console.warn("[recallPrincipleContext] contextual vector lookup failed:", err);
   }
 
   // Post-filter (cheap belt-and-suspenders). Empty principleRingScope
   // passes (backward-compat); `universal-ring` always passes; otherwise
-  // intersection check. Identical to the upstream Qdrant + Prisma rules.
+  // intersection check. Identical to the upstream vector store + Prisma rules.
   let commandmentsExcluded = 0;
   let coreExcluded = 0;
   let contextualExcluded = 0;

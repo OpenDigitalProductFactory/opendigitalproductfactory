@@ -4,7 +4,7 @@
 // scattered across six surfaces, each with its own status vocabulary:
 //   - workspace/command-center.ts        (metric tiles)
 //   - operate/scheduled-jobs/work-model.ts (deriveHealth → ok|error|overdue|never|spent)
-//   - operate/dependency-health.ts       (boolean probes: neo4j / model-runner / stt)
+//   - operate/dependency-health.ts       (boolean probes: model-runner / stt / doctools)
 //   - operate/health-probe-bridge.ts     (container/service probe metrics)
 //   - observability/alert-sources.ts     (alert feed)
 //   - tak/mcp-server-health.ts           (MCP server reachability)
@@ -19,7 +19,7 @@
 export type ComponentHealth = "healthy" | "degraded" | "down" | "unknown";
 
 export interface HealthComponent {
-  /** Stable component name, e.g. "scheduled-jobs", "neo4j", "mcp:filesystem". */
+  /** Stable component name, e.g. "scheduled-jobs", "model-runner", "mcp:filesystem". */
   name: string;
   status: ComponentHealth;
   /** Optional human-readable detail for the surfacing UI. */

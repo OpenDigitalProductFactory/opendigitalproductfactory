@@ -8,12 +8,20 @@
 // Spec: docs/superpowers/specs/2026-09-24-portfolio-budget-and-investment-wip-design.md
 
 import { prisma } from "@dpf/db";
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import {
   confirmEpicPortfolios,
   loadEpicPortfolioProposals,
   type EpicPortfolioConfirmation,
 } from "@/lib/portfolio/epic-portfolio-attribution";
+import { quarterBounds } from "@/lib/portfolio/investment-points";
+import {
+  loadPortfolioBudgets,
+  portfolioBudgetLabel,
+  proposePortfolioBudgets,
+  setPortfolioBudget,
+} from "@/lib/portfolio/portfolio-budget";
+import { setPortfolioOwner } from "@/lib/portfolio/accountable-owner";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -61,7 +69,124 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
+  {
+    name: "propose_portfolio_budgets",
+    description:
+      "Show each portfolio's current budget for a quarter (or 'No budget set', never zero) beside a proposal derived from the previous quarter's delivered points per portfolio, including the delivered points no portfolio can carry. Read-only: the proposal is never applied. Set a budget with set_portfolio_budget.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        quarterOf: { type: "string", description: "ISO date inside the target quarter (UTC). Defaults to the current quarter." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "set_portfolio_budget",
+    description:
+      "Set one portfolio's budget for one quarter, in investment points, with an optional $ rate per point and an optional WIP allowance override. A reason is required and the setting person is recorded. A change never edits the old budget: it adds a row that supersedes it, so the history stays.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        portfolioId: { type: "string", description: "Portfolio id, as returned by propose_portfolio_budgets." },
+        quarterOf: { type: "string", description: "ISO date inside the target quarter (UTC). Defaults to the current quarter." },
+        allocatedPoints: { type: "integer", description: "Budget in investment points (the 1/3/8/20 scale), zero or more." },
+        usdPerPoint: { type: "number", description: "Optional dollars per point for this quarter." },
+        wipAllowancePoints: { type: "integer", description: "Optional override of the points-in-flight allowance for this quarter." },
+        reason: { type: "string", description: "Why this budget is right. Recorded on the row." },
+      },
+      required: ["portfolioId", "allocatedPoints", "reason"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  // BI-67B27832: one accountable person per portfolio owns its automatic work.
+  {
+    name: "set_portfolio_owner",
+    description:
+      "Set or clear the one person accountable for a portfolio. That person owns the portfolio's automatic work: scheduled builds, the rooms they open, and the approvals they raise. Only an active person with an active account can be chosen, never a coworker. A reason is required and the setting person is recorded. Pass principalRef null to clear; automatic work then falls to the Foundational owner, then the organization's top accountable.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        portfolioId: { type: "string", description: "Portfolio id, as returned by propose_portfolio_budgets." },
+        principalRef: { type: ["string", "null"], description: "The person's principal id (PRN-*), or null to clear." },
+        reason: { type: "string", description: "Why this person answers for the portfolio. Recorded with it." },
+      },
+      required: ["portfolioId", "principalRef", "reason"],
+    },
+    requiredCapability: "manage_platform",
+    sideEffect: true,
+    // Changes who decides the approvals this portfolio's work raises.
+    consequence: "authority",
+  },
 ];
+
+function targetQuarter(params: Record<string, unknown>) {
+  const raw = typeof params["quarterOf"] === "string" ? new Date(params["quarterOf"]) : new Date();
+  return quarterBounds(Number.isNaN(raw.getTime()) ? new Date() : raw);
+}
+
+async function proposePortfolioBudgetsHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const period = targetQuarter(params);
+  const [proposal, budgets] = await Promise.all([
+    proposePortfolioBudgets(prisma as never, period),
+    loadPortfolioBudgets(prisma as never, period),
+  ]);
+  const current = new Map(budgets.map((b) => [b.id, b.budget]));
+  return {
+    success: true,
+    message: `${budgets.filter((b) => b.budget).length} of ${budgets.length} portfolio(s) have a budget for ${period.start.toISOString().slice(0, 10)}.`,
+    data: {
+      ...proposal,
+      rows: proposal.rows.map((row) => ({
+        ...row,
+        currentBudget: current.get(row.id) ?? null,
+        currentBudgetLabel: portfolioBudgetLabel(current.get(row.id) ?? null),
+      })),
+    },
+  };
+}
+
+async function setPortfolioBudgetHandler(
+  params: Record<string, unknown>,
+  userId: string,
+  context?: ToolExecutionContext,
+): Promise<ToolResult> {
+  const optionalNumber = (value: unknown) => (typeof value === "number" ? value : null);
+  const result = await setPortfolioBudget(prisma as never, {
+    portfolioId: String(params["portfolioId"] ?? ""),
+    period: targetQuarter(params),
+    allocatedPoints: Number(params["allocatedPoints"]),
+    usdPerPoint: optionalNumber(params["usdPerPoint"]),
+    wipAllowancePoints: optionalNumber(params["wipAllowancePoints"]),
+    reason: typeof params["reason"] === "string" ? params["reason"] : "",
+    actor: { userId: userId || null, agentId: context?.agentId ?? null },
+  });
+  if (!result.ok) return { success: false, error: result.error, message: result.message };
+  return { success: true, entityId: result.data.budgetId, message: "Portfolio budget set.", data: result.data };
+}
+
+async function setPortfolioOwnerHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
+  const principalRef = typeof params["principalRef"] === "string" && params["principalRef"].trim()
+    ? params["principalRef"].trim()
+    : null;
+  const result = await setPortfolioOwner(prisma as never, {
+    portfolioId: String(params["portfolioId"] ?? ""),
+    principalRef,
+    reason: typeof params["reason"] === "string" ? params["reason"] : "",
+    actor: { userId: userId || null },
+  });
+  if (!result.ok) return { success: false, error: result.error, message: result.message };
+  return {
+    success: true,
+    entityId: result.data.portfolioId,
+    message: result.data.accountablePrincipalId ? "Portfolio owner set." : "Portfolio owner cleared.",
+    data: result.data,
+  };
+}
 
 async function proposeEpicPortfoliosHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const onlyUnconfirmed = params["onlyUnconfirmed"] !== false;
@@ -107,9 +232,15 @@ export const portfolioBudgetPack: ToolPack = {
   handlers: {
     propose_epic_portfolios: (params) => proposeEpicPortfoliosHandler(params),
     confirm_epic_portfolios: (params, userId, context) => confirmEpicPortfoliosHandler(params, userId, context),
+    propose_portfolio_budgets: (params) => proposePortfolioBudgetsHandler(params),
+    set_portfolio_budget: (params, userId, context) => setPortfolioBudgetHandler(params, userId, context),
+    set_portfolio_owner: (params, userId) => setPortfolioOwnerHandler(params, userId),
   },
   grants: {
     propose_epic_portfolios: ["backlog_read"],
     confirm_epic_portfolios: ["backlog_write"],
+    propose_portfolio_budgets: ["backlog_read"],
+    set_portfolio_budget: ["backlog_write"],
+    set_portfolio_owner: ["backlog_write"],
   },
 };

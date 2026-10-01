@@ -4,6 +4,10 @@ import {
   contractLocalCiPoolAfterGateResult,
   type PlatformConfigCircuitBreakerStore,
 } from "./local-ci-pool-circuit-breaker";
+import {
+  recordLocalCiBuilderMemorySample,
+  type BuilderCalibrationStore,
+} from "./local-ci-builder-memory-calibration";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
 import type { LocalIntegrationStatus } from "../../../../scripts/lib/local-integration-status.mjs";
 
@@ -40,7 +44,47 @@ type LocalIntegrationDependencies = {
    * never reach it.
    */
   writeEvidenceBlob?: import("@/lib/evidence/bounded-evidence-output").EvidenceBlobWriter;
+  /** BI-903FB5F9: where measured builder peaks accumulate. Defaults to PlatformConfig. */
+  builderCalibration?: BuilderCalibrationStore;
 };
+
+/**
+ * BI-F5344F65. `scripts/gate-worktree.mjs` run with DPF_ALLOW_LOCAL_CI_STUB=1
+ * builds nothing, yet walks the whole pass path under a real lease and reports
+ * status "passed". Since BI-53B189C8 it marks that payload `evidence.testStub:
+ * true`; `isTestStubGateRecord` in scripts/lib/local-ci-gate-state.mjs is the
+ * same mark on the gate's local record.
+ *
+ * A stub run measured nothing, so nothing of it is kept: no evidence row a PR
+ * could cite as Local-CI-Evidence, no pool-policy change, no builder
+ * calibration. The refusal carries a stable code, which the MCP handler turns
+ * into a named error, so the gate fails closed instead of holding a PASS
+ * nobody built.
+ *
+ * The rule lives here, not in a shared module: the build-evidence pack loads
+ * this file with a dynamic import, and a module imported statically on both
+ * sides of that boundary made Turbopack emit two different chunks to one path.
+ */
+export const TEST_STUB_EVIDENCE_REFUSED = "test_stub_evidence_refused";
+
+export class TestStubEvidenceRefusedError extends Error {
+  readonly code = TEST_STUB_EVIDENCE_REFUSED;
+
+  constructor() {
+    super(
+      "This local-CI result came from the DPF_ALLOW_LOCAL_CI_STUB=1 test stub, which builds nothing. "
+      + "It is not recorded as evidence. Run the real gate: pnpm run pregate",
+    );
+    this.name = "TestStubEvidenceRefusedError";
+  }
+}
+
+function isTestStubEvidence(evidence: unknown): boolean {
+  return typeof evidence === "object"
+    && evidence !== null
+    && !Array.isArray(evidence)
+    && (evidence as Record<string, unknown>).testStub === true;
+}
 
 export async function recordLocalIntegrationResult(
   input: LocalIntegrationResultInput,
@@ -49,6 +93,10 @@ export async function recordLocalIntegrationResult(
     environmentLease: prisma.nonProductionEnvironmentLease,
   },
 ) {
+  // BI-F5344F65: first, before any lease, pool or evidence write.
+  if (isTestStubEvidence(input.evidence)) {
+    throw new TestStubEvidenceRefusedError();
+  }
   const gateKey = input.gateKey?.trim().toLowerCase();
   const leaseId = input.leaseId?.trim();
   if (Boolean(gateKey) !== Boolean(leaseId)) {
@@ -89,6 +137,16 @@ export async function recordLocalIntegrationResult(
     status: input.status,
     evidence: input.evidence,
   });
+  // BI-903FB5F9: only a canonical leased gate run measured the real builder,
+  // so only it feeds the admission reserve. Best-effort: calibration refines
+  // admission and is never a reason to lose the gate's verdict.
+  const builderMemoryCalibration = gateKey && leaseId
+    ? (await recordLocalCiBuilderMemorySample({
+      platformConfig: dependencies.builderCalibration ?? prisma.platformConfig,
+      evidence: input.evidence,
+      now: new Date(),
+    }).catch(() => ({ status: "error" as const }))).status
+    : "not-leased";
   if (circuitBreaker.status === "concurrent-update-exhausted") {
     throw new Error(
       "Local-CI capacity circuit breaker could not persist a safe singleton policy",
@@ -122,6 +180,7 @@ export async function recordLocalIntegrationResult(
         }
         : {}),
       capacityCircuitBreaker: circuitBreaker.status,
+      builderMemoryCalibration,
       evidence: boundedEvidence,
     } as Prisma.InputJsonValue,
   });

@@ -19,8 +19,8 @@
 // autonomous work away. Bounded so a persistently-saturated box eventually stops
 // (those coworkers stay un-promoted, never failed).
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /** Max capacity-backpressure requeue attempts, and the sleep between them. With
@@ -55,7 +55,7 @@ export async function runCoworkerCertificationJob(
   };
 }
 
-export const coworkerCertificationNightly = inngest.createFunction(
+export const coworkerCertificationNightly = jobs.createFunction(
   {
     id: "ops/coworker-certification-nightly",
     retries: 1,
@@ -85,7 +85,7 @@ export const coworkerCertificationNightly = inngest.createFunction(
   },
 );
 
-export const coworkerCertificationRunNow = inngest.createFunction(
+export const coworkerCertificationRunNow = jobs.createFunction(
   {
     id: "ops/coworker-certification-run-now",
     retries: 0,

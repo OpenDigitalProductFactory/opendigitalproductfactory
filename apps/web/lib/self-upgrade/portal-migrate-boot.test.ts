@@ -245,10 +245,6 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
     }
   }, TIMEOUT_MS);
 
-  // (Removed: the BET-5 boot backfill degrade-open test — the one-time Neo4j/Qdrant→Postgres
-  // boot backfill was retired once the fleet finished migrating, BI-2A3BE4D7. Boot no longer
-  // runs it, so there is nothing to degrade open around.)
-
   it("FAILS CLOSED — does not start the server when migrations cannot apply", () => {
     const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
     try {

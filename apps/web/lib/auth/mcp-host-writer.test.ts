@@ -68,6 +68,33 @@ describe("writeMcpJsonToHost", () => {
     expect(fs.mkdirSync).toHaveBeenCalledWith("/host-dpf/.vscode", { recursive: true });
   });
 
+  // BI-5201141C (design 12.4.4): on https the dpf-platform plugin's URL-only
+  // connector is the one Claude Code connector. A project .mcp.json at another
+  // URL loads beside it (Claude Code de-duplicates by endpoint), so in OAuth
+  // mode the host writer writes nothing.
+  it("writes nothing on an https install in OAuth mode (the plugin owns the connector)", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);
+    vi.mocked(fs.mkdirSync).mockImplementation(() => undefined);
+
+    writeMcpJsonToHost(TOKEN, "https://localhost");
+
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+    expect(fs.mkdirSync).not.toHaveBeenCalled();
+  });
+
+  it("still writes the compatibility config in explicit legacy mode", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);
+    vi.mocked(fs.mkdirSync).mockImplementation(() => undefined);
+
+    writeMcpJsonToHost(TOKEN, "https://localhost", "legacy");
+
+    const firstCall = vi.mocked(fs.writeFileSync).mock.calls[0];
+    expect(firstCall[0]).toBe("/host-dpf/.mcp.json");
+    expect(firstCall[1]).toContain("Bearer ${DPF_MCP_BEARER_TOKEN}");
+  });
+
   it("swallows write errors without propagating", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.writeFileSync).mockImplementation(() => {

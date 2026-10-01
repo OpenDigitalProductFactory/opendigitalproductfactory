@@ -276,8 +276,12 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   // copies-scripts-by-name trap as the modules above - without this the temp
   // tree dies on ERR_MODULE_NOT_FOUND before the stub-refusal path can run.
   cpSync(join(repoRoot, "scripts", "lib", "durable-wait-resumer.mjs"), join(temp, "scripts", "lib", "durable-wait-resumer.mjs"));
+  // BI-27A37D27: durable-wait-resumer.mjs imports the Windows job-breakaway launcher.
+  cpSync(join(repoRoot, "scripts", "lib", "win32-job-breakaway.mjs"), join(temp, "scripts", "lib", "win32-job-breakaway.mjs"));
   // BI-D35B85BF: the resumed-gate decisions (pin, drift, cancellation).
   cpSync(join(repoRoot, "scripts", "lib", "gate-resume-pin.mjs"), join(temp, "scripts", "lib", "gate-resume-pin.mjs"));
+  // gate-resume-pin.mjs runs git through the shared runner (plan 2026-09-08 S1).
+  cpSync(join(repoRoot, "scripts", "lib", "git.mjs"), join(temp, "scripts", "lib", "git.mjs"));
   cpSync(
     join(repoRoot, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
     join(temp, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),

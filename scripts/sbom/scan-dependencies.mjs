@@ -28,6 +28,7 @@
 //
 // Env: OSV_BASE_URL (default https://api.osv.dev) — point at an offline mirror.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,14 +42,25 @@ const BASELINE_PATH = join(ROOT, "sbom", "vuln-baseline.json");
 const SEV_RANK = { critical: 4, high: 3, moderate: 2, medium: 2, low: 1, unknown: 0 };
 
 function parseArgs(argv) {
-  const out = { failOn: "none", writeBaseline: false, requireOnline: false, out: join(ROOT, "sbom") };
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--fail-on") out.failOn = (argv[++i] ?? "none").toLowerCase();
-    else if (argv[i] === "--write-baseline") out.writeBaseline = true;
-    else if (argv[i] === "--require-online") out.requireOnline = true;
-    else if (argv[i] === "--out") out.out = resolve(argv[++i]);
-  }
-  return out;
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: {
+      "fail-on": { type: "string" },
+      "write-baseline": { type: "boolean" },
+      "require-online": { type: "boolean" },
+      out: { type: "string" },
+    },
+  });
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  return {
+    failOn: (text(values["fail-on"]) ?? "none").toLowerCase(),
+    writeBaseline: values["write-baseline"] === true,
+    requireOnline: values["require-online"] === true,
+    out: text(values.out) === undefined ? join(ROOT, "sbom") : resolve(values.out),
+  };
 }
 
 async function postJson(url, body, { tries = 3, timeoutMs = 20000 } = {}) {

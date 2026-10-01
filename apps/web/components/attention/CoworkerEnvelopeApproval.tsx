@@ -18,6 +18,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
+import { envelopeInboxRoute } from "@/lib/coworker/envelope-routes";
 
 type Outcome = "authorized" | "declined" | "settled";
 
@@ -48,9 +49,14 @@ export function CoworkerEnvelopeApproval({
         { method: "POST", headers: { "content-type": "application/json" } },
       );
       if (response.ok) {
-        const body = (await response.json().catch(() => null)) as { execution?: Execution } | null;
+        const body = (await response.json().catch(() => null)) as { execution?: Execution; outcomeWarning?: string } | null;
         if (body?.execution) setExecution(body.execution);
         setOutcome(choice === "approve" ? "authorized" : "declined");
+        if (body?.outcomeWarning) {
+          setError(body.outcomeWarning);
+          return;
+        }
+        router.replace(envelopeInboxRoute(approval.envelopeId));
         router.refresh();
         return;
       }
@@ -63,6 +69,7 @@ export function CoworkerEnvelopeApproval({
           setExecution({ status: "not-run", message: body.error });
         }
         setOutcome("settled");
+        router.replace(envelopeInboxRoute(approval.envelopeId));
         router.refresh();
         return;
       }

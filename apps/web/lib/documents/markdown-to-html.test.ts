@@ -50,9 +50,11 @@ describe("markdownToHtmlDocument", () => {
       'T <1> & "q"',
     );
     expect(html).not.toContain("<script>");
-    expect(html).toContain("A &lt; B &amp; \"C\"");
-    expect(html).not.toContain("javascript:");
+    expect(html).toContain("A &lt; B &amp; &quot;C&quot;");
+    // A refused link stays as literal text: never an href.
+    expect(html).not.toMatch(/href="javascript:/);
+    expect(html).toContain("[bad](javascript:alert(1))");
     expect(html).toContain('<a href="https://dpf.example/a?b=1&amp;c=2">good</a>');
-    expect(html).toContain("<title>T &lt;1&gt; &amp; \"q\"</title>");
+    expect(html).toContain("<title>T &lt;1&gt; &amp; &quot;q&quot;</title>");
   });
 });

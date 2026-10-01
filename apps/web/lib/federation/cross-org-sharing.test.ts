@@ -6,6 +6,7 @@ import {
   mayShareDemandCrossOrg,
   mayShareSameOrgDemand,
   DEFAULT_BACKLOG_SENSITIVITY,
+  effectiveBacklogSensitivity,
   isBacklogSensitivity,
   mayCrossOrgBoundary,
   normalizeSensitivity,
@@ -94,5 +95,20 @@ describe("mayShareSameOrgDemand — trust-by-default within one org (BI-8A7E3E56
   it("keeps the genuinely-sensitive tier local even same-org (HR/confidential)", () => {
     expect(mayShareSameOrgDemand("confidential")).toBe(false);
     expect(mayShareSameOrgDemand("restricted")).toBe(false);
+  });
+});
+
+describe("effectiveBacklogSensitivity (BI-0A5EE9C1)", () => {
+  it.each([
+    [{ sensitivity: "internal", scopeKind: "platform" }, "public"],
+    [{ sensitivity: "internal", scopeKind: "common" }, "public"],
+    [{ sensitivity: "internal", digitalProductId: "dpf-portal" }, "public"],
+    [{ sensitivity: "confidential", scopeKind: "platform" }, "confidential"],
+    [{ sensitivity: "restricted", digitalProductId: "dpf-portal" }, "restricted"],
+    [{ sensitivity: "internal", scopeKind: "archetype-leaf" }, "internal"],
+    [{ sensitivity: "public", scopeKind: null }, "public"],
+    [{ sensitivity: null, scopeKind: null }, "internal"],
+  ] as const)("%j reads as %s", (ctx, expected) => {
+    expect(effectiveBacklogSensitivity(ctx)).toBe(expected);
   });
 });

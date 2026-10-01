@@ -16,6 +16,7 @@ import {
   type CapabilityProductizationStatus,
   type CapabilityStrategicOwnership,
 } from "./capability-maturity";
+import { isRecord } from "@dpf/validators";
 
 const DATA_DIR = join(__dirname, "..", "data");
 const SEED_FILE = "agent_control_plane_maturity_seed.json";
@@ -68,10 +69,6 @@ function readJson<T>(filename: string): T {
   return JSON.parse(readFileSync(join(DATA_DIR, filename), "utf-8")) as T;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function assertString(value: unknown, field: string, assessmentId: string): asserts value is string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`Seed row ${assessmentId} has invalid ${field}; expected a non-empty string.`);
@@ -89,7 +86,7 @@ function includesValue<T extends readonly string[]>(values: T, value: unknown): 
 }
 
 function parseSeedRow(raw: unknown): AgentControlPlaneMaturitySeedRow {
-  if (!isPlainObject(raw)) {
+  if (!isRecord(raw)) {
     throw new Error("Agent control plane maturity seed row must be an object.");
   }
 

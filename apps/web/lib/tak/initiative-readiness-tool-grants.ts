@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { ARTIFACT_AUTHOR_RECOVERY, readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
+import type { InitiativeGateKey } from "@/lib/backlog/initiative-readiness/receipt-schema";
 import type {
-  InitiativeGateKey,
   InitiativeReadinessDecision,
   ReadinessCode,
   ReadinessRequirementResult,
-} from "@/lib/backlog/initiative-readiness";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+} from "@/lib/backlog/initiative-readiness/types";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
 import { formatInitiativeReviewObjective, IMMUTABLE_REVIEW_READER_TOOL as IMMUTABLE_READER_TOOL } from "./initiative-review-objective";
 
@@ -618,7 +618,15 @@ function requestCoworkerPacket(args: {
       ? `${base.requestKey}:plan:${createHash("sha256").update(canonicalJson({
         binding, targetAgent: args.targetAgentId, objective,
       })).digest("hex")}`
-      : base.requestKey;
+      // BI-D3E1F6D9: an independent review issued once the baseline exists binds
+      // it, so it must not share a key with the same head's pre-baseline packet. The
+      // TaskRun id derives from the key, so a shared key made the refreshed packet
+      // an idempotency conflict and the review unobtainable at that head.
+      : args.independent && args.expectedCurrentBaselineId
+        ? `${base.requestKey}:baseline:${createHash("sha256").update(canonicalJson({
+          binding, targetAgent: args.targetAgentId, objective,
+        })).digest("hex")}`
+        : base.requestKey;
   return {
     ...base,
     requestKey,

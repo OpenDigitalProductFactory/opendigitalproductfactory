@@ -1,8 +1,5 @@
 import { isBrandDesignSystem, type BrandDesignSystem } from "./types";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
+import { isRecord } from "../shared/coerce";
 
 function extractBrandDesignSystemFromArtifacts(artifacts: unknown): BrandDesignSystem | null {
   if (!Array.isArray(artifacts)) return null;

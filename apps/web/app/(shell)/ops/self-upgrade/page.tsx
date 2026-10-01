@@ -8,7 +8,7 @@ import { buildOwnerReleaseSummary } from "@/lib/self-upgrade/owner-summary";
 import SelfUpgradeClient from "@/components/ops/SelfUpgradeClient";
 import SelfUpgradeTriggerControl from "@/components/ops/SelfUpgradeTriggerControl";
 import { OwnerReleaseCard } from "@/components/ops/OwnerReleaseCard";
-import { OpsTabNav } from "@/components/ops/OpsTabNav";
+import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
 import { PlatformUpdateApplyPanel } from "@/components/admin/PlatformUpdateApplyPanel";
 import { LocalChangesLedger } from "@/components/ops/LocalChangesLedger";
 import { getLocalChangesLedger } from "@/lib/self-upgrade/local-changes-ledger";
@@ -230,7 +230,7 @@ export default async function SelfUpgradePage() {
         </p>
       </div>
 
-      <OpsTabNav />
+      <PlatformTabNav />
 
       <div className="mt-4">
         <OwnerReleaseCard

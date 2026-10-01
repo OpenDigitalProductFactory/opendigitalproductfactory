@@ -4,7 +4,7 @@
 // any point: where is this animal, and how many kennels are free. This route
 // answers those two and provides the shortest safe action path to correct them.
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const WARD_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

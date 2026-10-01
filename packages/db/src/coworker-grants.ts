@@ -84,7 +84,11 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // grants resolve from THIS map (the slug agent row the coworker queries by
   // agentId "customer-advisor"), not from agent_registry.json — so the CRM
   // grants must live here to actually reach the coworker's tool surface.
-  "customer-advisor": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search", "workroom_evidence_write"],
+  // storefront_read (BI-43C3E914): inquiry-response-watch's draft stage reads the
+  // waiting inquiries through list_storefront_activity. Without it the stage's
+  // declared tool was unreachable and the coworker reported no way to read them.
+  // Read-only; agent_registry.json AGT-WS-CUSTOMER carries the same grant.
+  "customer-advisor": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search", "workroom_evidence_write", "storefront_read"],
   // The Data Steward owns master-data quality: it runs the dedup/staleness
   // sweep, merges duplicates, and proposes enrichment. crm_write reaches the
   // mdm-stewardship pack tools (run_mdm_steward_sweep, merge_customer_*,
@@ -110,7 +114,9 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // issues it detects. Its runtime grants resolve from THIS map (not
   // agent_registry.json, which already intends backlog access), so backlog_read/
   // backlog_write must live here to reach its tool surface (BI-CAP-CBC41758).
-  "platform-engineer": ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read", "backlog_read", "backlog_write", "tool_script_exec", "workroom_evidence_write"],
+  // contributor_inventory_read: contributor-intake-watch reads the recorded
+  // inventory it keeps current (read_contributor_inventory).
+  "platform-engineer": ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read", "backlog_read", "backlog_write", "tool_script_exec", "workroom_evidence_write", "contributor_inventory_read"],
   "build-specialist": [
     "file_read",
     "code_graph_read",
@@ -154,6 +160,9 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     // Standing-room stage evidence. Does not edit code, advance a build, waive
     // findings, or publish a release (BI-CAP-AB63E190).
     "workroom_evidence_write",
+    // pull-request-flow-watch reads recorded pull-request health
+    // (list_pull_requests). Read-only; the merge stays a human stage.
+    "contributor_inventory_read",
   ],
   // EP-A33A5C61 slice 7: the Data Architect owns data lifecycle, not only
   // schema structure — it reads growth/conformance findings and telemetry,
@@ -203,7 +212,10 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "registry_read",
   ],
   "legal-operations-counsel": ["file_read", "document_read", "document_write", "registry_read"],
-  "finance-controller": ["registry_read", "backlog_read", "portfolio_read", "workroom_evidence_write"],
+  // payables_read: payables-watch and vendor-renewal-watch read recorded bills
+  // and supplier agreements (list_bills, list_supplier_contracts). Paying,
+  // renewing and cancelling stay human stages.
+  "finance-controller": ["registry_read", "backlog_read", "portfolio_read", "workroom_evidence_write", "payables_read"],
   // Bookkeeper (S-BK): the day-to-day books loop. banking_read/banking_write drive
   // the governed banking tools (S-FIN); enrichment_write resolves vendor→supplier
   // (BI-B2497DFB); crm_read/write for counterparties; document_read for

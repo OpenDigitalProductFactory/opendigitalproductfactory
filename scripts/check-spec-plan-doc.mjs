@@ -35,7 +35,6 @@
 // external_coding_agent, profile=platform). The companion soft, non-blocking
 // interactive nudge is scripts/hooks/spec-plan-doc-precheck.mjs.
 
-import { execFileSync } from "node:child_process";
 import { listChangedFiles, runGit, exitUnresolvable } from "./lib/git-changed-files.mjs";
 import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
 // Canonical sensitivity constants (single source, shared with the gate-context
@@ -78,13 +77,8 @@ function assertSafePath(path) {
 
 // execFile with an arg array — bypasses the shell, so $, `, ;, &, | in args are
 // inert; the ref validator guards against `--upload-pack`-style option injection.
-function git(...args) {
-  try {
-    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch (e) {
-    return (e.stdout && e.stdout.toString()) || "";
-  }
-}
+// Fail-open as before: partial stdout (or "") when git fails.
+const git = (...args) => runGit(args, { cwd: process.cwd() }).stdout;
 
 const base = assertSafeRef(process.env.BASE_SHA || "origin/main", "BASE_SHA");
 // BI-1ADD56FC: never write .git/shallow into a full shared clone (breaks worktrees).

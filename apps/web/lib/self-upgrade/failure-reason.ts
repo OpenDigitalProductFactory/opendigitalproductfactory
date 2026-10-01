@@ -58,6 +58,12 @@ const EXPLANATIONS: Readonly<Record<string, FailureReasonExplanation>> = {
       "The component that installs updates couldn't start. Nothing was installed and the platform is untouched.",
     retryable: true,
   },
+  "doctools-prepull-failed": {
+    title: "The update's document reader didn't download",
+    detail:
+      "The update brings a new version of the tool that reads Word, Excel and PDF files, and it couldn't be downloaded before switching over. Nothing was installed and the platform kept running the version you already had. This is usually a temporary network problem.",
+    retryable: true,
+  },
   "dirty-tree": {
     title: "Uncommitted changes are in the way",
     detail:

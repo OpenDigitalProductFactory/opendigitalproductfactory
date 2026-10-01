@@ -23,6 +23,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { runApprovedExternalRequest } from "@/lib/coworker/approved-request-run";
 import { approveEnvelope } from "@/lib/coworker/envelope-actions";
+import { recordApprovalOutcome } from "@/lib/coworker/approval-outcome-store";
 
 type RouteContext = {
   params: Promise<{ envelopeId: string }>;
@@ -54,5 +55,15 @@ export async function POST(_request: Request, context: RouteContext): Promise<Re
     status: "failed" as const,
     message: error instanceof Error ? error.message : "The approved action could not be run.",
   }));
-  return NextResponse.json({ ok: true, envelope: result.envelope, execution });
+  const response = { ok: true, envelope: result.envelope, execution };
+  try {
+    await recordApprovalOutcome(envelopeId, session.user.id, execution);
+  } catch {
+    // Approval/execution may already have happened. Never return an ordinary
+    // retryable decision error that invites another authorization attempt.
+    return NextResponse.json({ ...response,
+      outcomeWarning: "The decision was saved, but its result could not be saved. Do not approve again; your assistant must check the target before retrying.",
+    });
+  }
+  return NextResponse.json(response);
 }

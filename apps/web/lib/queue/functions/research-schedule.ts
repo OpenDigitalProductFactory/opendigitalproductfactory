@@ -4,11 +4,11 @@
 // nothing executes here. Cadence is a conservative weekly default — tune the
 // cron below.
 
-import { cron } from "inngest";
-import { inngest } from "@/lib/queue/inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { proposeScheduledResearch } from "@/lib/wiki/research-schedule";
 
-export const researchScheduleScan = inngest.createFunction(
+export const researchScheduleScan = jobs.createFunction(
   { id: "research/schedule-scan", retries: 1, triggers: [cron("0 9 * * 1")] }, // Mon 09:00
   async ({ step }) => {
     const result = await step.run("propose-scheduled-research", async () =>

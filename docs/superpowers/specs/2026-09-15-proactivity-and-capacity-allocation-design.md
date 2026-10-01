@@ -28,7 +28,7 @@ Verified in code. None of this is rebuilt.
 
 | Capability | Where |
 | --- | --- |
-| Use-it-or-lose-it drain, hourly, near weekly reset | `queue/functions/capacity-drain.ts`, `capacity/evaluate-drain.ts`, `run_capacity_drain` |
+| Use-it-or-lose-it drain, hourly, near weekly reset | `queue/functions/capacity-drain.ts`, `capacity/evaluate-capacity-drain.ts`, `run_capacity_drain` |
 | Real weekly quota (opt-in, fail-closed) | `routing/weekly-quota-collector.ts` |
 | Demand scoring and policy | `demand-scoring-pack`, `set_demand_policy` |
 | Spend per agent | `AgentBudgetEvent` — `amountUsd`, `tokensTotal`, `modelId` |
@@ -41,7 +41,7 @@ not revisit that; it widens what the drain may fund.
 
 ## 3. The five gaps
 
-1. **Allocation cannot reach the business.** `evaluate-drain.ts` dispatches Build
+1. **Allocation cannot reach the business.** `evaluate-capacity-drain.ts` dispatches Build
    Studio builds only, bounded by `BUILD_WIP_CAP`. There is no path from spare
    weekly capacity to an archetype workroom.
 2. **No situational intent.** `set_demand_policy` expresses an investment horizon

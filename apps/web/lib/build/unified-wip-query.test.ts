@@ -6,7 +6,7 @@ import {
   TERMINAL_CAPSULE_STATUSES,
   type UnifiedWipDb,
 } from "./unified-wip-query";
-import { decideUnifiedWip, BUILD_WIP_CAP } from "./wip-cap";
+import { decideUnifiedWip, sandboxPoolSize } from "./wip-cap";
 
 type CapsuleRow = {
   executorKind: string | null;
@@ -124,9 +124,9 @@ describe("loadActiveUnifiedWip (BI-937128F6)", () => {
 });
 
 describe("unified WIP gate end-to-end (BI-937128F6 regression pin)", () => {
-  it("blocks a new BS build once 3 builds are active — the exact pre-refactor behavior", async () => {
+  it("reports the bs-sandbox pool full once builds fill the physical sandbox pool (BI-3430B3A4)", async () => {
     const { db } = makeDb({
-      activeBsBuilds: 3,
+      activeBsBuilds: sandboxPoolSize(),
       // A pile of active external capsules MUST NOT affect the bs-sandbox gate:
       // they contend on other pools.
       capsules: [
@@ -137,14 +137,14 @@ describe("unified WIP gate end-to-end (BI-937128F6 regression pin)", () => {
     const summary = await loadActiveUnifiedWip(db);
     const decision = decideUnifiedWip("bs-sandbox", poolPressure(summary, "bs-sandbox"));
 
-    expect(decision.pressure).toBe(3);
-    expect(decision.capacity).toBe(BUILD_WIP_CAP);
+    expect(decision.pressure).toBe(sandboxPoolSize());
+    expect(decision.capacity).toBe(sandboxPoolSize());
     expect(decision.admitted).toBe(false);
   });
 
-  it("admits a new BS build at 2 active builds even with many external capsules in flight", async () => {
+  it("counts only BS builds against the sandbox pool, however many external capsules are in flight", async () => {
     const { db } = makeDb({
-      activeBsBuilds: 2,
+      activeBsBuilds: sandboxPoolSize() - 1,
       capsules: Array.from({ length: 10 }, (_, i) => ({
         executorKind: "claude-desktop",
         worktreePath: `/w/${i}`,
@@ -154,7 +154,7 @@ describe("unified WIP gate end-to-end (BI-937128F6 regression pin)", () => {
     const summary = await loadActiveUnifiedWip(db);
     const decision = decideUnifiedWip("bs-sandbox", poolPressure(summary, "bs-sandbox"));
 
-    expect(decision.pressure).toBe(2);
+    expect(decision.pressure).toBe(sandboxPoolSize() - 1);
     expect(decision.admitted).toBe(true);
   });
 });

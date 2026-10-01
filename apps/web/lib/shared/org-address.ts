@@ -17,6 +17,8 @@
 // timezone-from-location here — that module imports this one (resolveTimezone-
 // FromAddress), so the dependency must stay one-directional.
 
+import { isRecord } from "./coerce";
+
 /**
  * Canonical Organization.address shape. Display fields (`region`, `country`) are
  * human-readable so existing readers render nicely; the normalized `stateCode` /
@@ -234,10 +236,6 @@ export function applyStateSelection(address: OrgAddress, value: string): OrgAddr
 export function countryName(code: string | null | undefined): string | null {
   const c = code?.trim().toUpperCase();
   return (c && COUNTRY_NAME_BY_CODE.get(c)) || null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function str(value: unknown): string | undefined {

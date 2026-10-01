@@ -14,6 +14,7 @@ import {
 } from "./renditions";
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const PDF = "application/pdf";
 
 type Row = Record<string, unknown>;
 
@@ -92,6 +93,11 @@ describe("needsRenditions", () => {
     expect(needsRenditions({ contentFormat: DOCX, contentBlobId: null })).toBe(false);
     expect(needsRenditions({ contentFormat: "text/markdown", contentBlobId: "b" })).toBe(false);
   });
+
+  it("is true for a PDF stored as a blob, so its text is read (BI-26CD1D1E)", () => {
+    expect(needsRenditions({ contentFormat: PDF, contentBlobId: "b" })).toBe(true);
+    expect(needsRenditions({ contentFormat: PDF, contentBlobId: null })).toBe(false);
+  });
 });
 
 describe("generateDocumentRenditions", () => {
@@ -120,6 +126,37 @@ describe("generateDocumentRenditions", () => {
       fullTextIndexedAt: new Date("2026-09-25T06:00:00Z"),
       semanticIndexedAt: new Date("2026-09-25T06:00:00Z"),
     });
+  });
+
+  it("reads a PDF original for text only: one plain_text rendition, no pdf rendition, indexed (BI-26CD1D1E)", async () => {
+    const { deps, upserts, documentUpdates } = makeDeps(
+      { readBlob: vi.fn(async () => Buffer.from("%PDF-1.7 adoption policy")) },
+      versionRow({ contentFormat: PDF }),
+    );
+    const outcome = await generateDocumentRenditions("ver-1", deps);
+
+    expect(outcome).toEqual({ status: "rendered", kinds: ["plain_text"] });
+    expect(deps.convert).toHaveBeenCalledTimes(1);
+    expect(deps.convert).toHaveBeenCalledWith(expect.objectContaining({ from: "pdf", to: "txt" }));
+    expect(deps.storeBlob).not.toHaveBeenCalled();
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0]!.create).toMatchObject({ renditionKind: "plain_text", contentText: "Quarterly adoption figures rose.", blobId: null });
+    expect(deps.indexVector).toHaveBeenCalledWith(expect.objectContaining({
+      documentVersionId: "ver-1",
+      contentFormat: PDF,
+      contentText: "Quarterly adoption figures rose.",
+    }));
+    expect(documentUpdates.at(-1)!.data).toEqual({
+      fullTextIndexedAt: new Date("2026-09-25T06:00:00Z"),
+      semanticIndexedAt: new Date("2026-09-25T06:00:00Z"),
+    });
+  });
+
+  it("leaves a PDF that already has its text rendition alone, never asking for a pdf one", async () => {
+    const { deps } = makeDeps({}, versionRow({ contentFormat: PDF, renditions: [{ renditionKind: "plain_text" }] }));
+    expect(await generateDocumentRenditions("ver-1", deps)).toEqual({ status: "skipped", reason: "already-rendered" });
+    expect(deps.readBlob).not.toHaveBeenCalled();
+    expect(deps.convert).not.toHaveBeenCalled();
   });
 
   it("is idempotent: a version that already has both renditions is left alone", async () => {
@@ -241,11 +278,11 @@ describe("generateDocumentRenditions", () => {
 describe("backfillDocumentRenditions", () => {
   it("does nothing, and records nothing, while the converter is unavailable", async () => {
     const { deps, db } = makeDeps({ availability: vi.fn(async () => ({ available: false, detail: "no docker socket" })) });
-    expect(await backfillDocumentRenditions({}, deps)).toEqual({ status: "converter-unavailable", detail: "no docker socket", processed: 0, results: [] });
+    expect(await backfillDocumentRenditions({}, deps)).toEqual({ status: "converter-unavailable", detail: "no docker socket", processed: 0, results: [], nextCursor: null });
     expect(db.documentVersion.findMany).not.toHaveBeenCalled();
   });
 
-  it("sweeps current office versions missing a rendition, bounded by the limit", async () => {
+  it("sweeps current office versions missing a rendition and PDFs missing text, bounded by the limit", async () => {
     const { deps, db } = makeDeps();
     db.documentVersion.findMany.mockResolvedValueOnce([{ id: "ver-1" }]);
     const outcome = await backfillDocumentRenditions({ limit: 5000 }, deps);
@@ -254,14 +291,57 @@ describe("backfillDocumentRenditions", () => {
     expect(outcome.results).toEqual([{ documentVersionId: "ver-1", status: "rendered", kinds: ["pdf", "plain_text"] }]);
     const query = (db.documentVersion.findMany.mock.calls as unknown as unknown[][])[0]![0] as unknown as Row;
     expect(query.take).toBe(100);
-    expect(query.where).toMatchObject({
-      contentBlobId: { not: null },
-      currentForDocuments: { some: {} },
+    const where = query.where as unknown as { OR: Row[] } & Row;
+    expect(where).toMatchObject({ contentBlobId: { not: null }, currentForDocuments: { some: {} } });
+    expect(where.OR).toHaveLength(2);
+    expect(where.OR[0]).toEqual({
+      contentFormat: { in: expect.arrayContaining([DOCX]) },
       OR: [
         { renditions: { none: { renditionKind: "pdf" } } },
         { renditions: { none: { renditionKind: "plain_text" } } },
       ],
     });
-    expect((query.where as unknown as Row).contentFormat).toEqual({ in: expect.arrayContaining([DOCX]) });
+    expect((where.OR[0]!.contentFormat as { in: string[] }).in).not.toContain(PDF);
+    // A PDF original never gets a pdf rendition, so only a missing text one selects it.
+    expect(where.OR[1]).toEqual({
+      contentFormat: { in: [PDF] },
+      renditions: { none: { renditionKind: "plain_text" } },
+    });
+  });
+});
+
+// BI-153EC72C: a pass continues from the previous pass's cursor, so a drain
+// never re-selects a version it already tried (a failed one stays pending), and
+// every pass logs its counts.
+describe("backfillDocumentRenditions passes (BI-153EC72C)", () => {
+  it("continues after the cursor and hands back the next one when the page was full", async () => {
+    const { deps, db } = makeDeps({}, null);
+    db.documentVersion.findMany.mockResolvedValueOnce([{ id: "ver-2" }, { id: "ver-3" }]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const outcome = await backfillDocumentRenditions({ limit: 2, cursor: "ver-1", reason: "portal-start" }, deps);
+
+    const query = (db.documentVersion.findMany.mock.calls as unknown as unknown[][])[0]![0] as unknown as Row;
+    expect(query).toMatchObject({ cursor: { id: "ver-1" }, skip: 1, take: 2, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
+    expect(outcome.nextCursor).toBe("ver-3");
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^\[renditions\] backfill pass \(portal-start\): 2 selected, 0 rendered, 0 failed, 2 skipped/));
+    log.mockRestore();
+  });
+
+  it("ends the drain when the page was not full", async () => {
+    const { deps, db } = makeDeps();
+    db.documentVersion.findMany.mockResolvedValueOnce([{ id: "ver-1" }]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const outcome = await backfillDocumentRenditions({ limit: 2 }, deps);
+    expect(outcome.nextCursor).toBeNull();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("1 selected, 1 rendered, 0 failed, 0 skipped"));
+    log.mockRestore();
+  });
+
+  it("logs a pass that found the converter unavailable", async () => {
+    const { deps } = makeDeps({ availability: vi.fn(async () => ({ available: false, detail: "image missing" })) });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect((await backfillDocumentRenditions({ reason: "release-change" }, deps)).nextCursor).toBeNull();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("[renditions] backfill pass (release-change): converter unavailable (image missing)"));
+    log.mockRestore();
   });
 });

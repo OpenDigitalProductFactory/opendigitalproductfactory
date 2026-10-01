@@ -29,6 +29,7 @@ import { COWORKER_STANDING_SHAPES_OPERATE } from "./coworker-standing-shapes-ope
 import { DELIVERY_SHAPES } from "./delivery-shapes";
 import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { STANDING_SHAPES } from "./standing-operations-shapes";
+import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 import type { WorkShapeEvidenceKind } from "./work-shape-evidence-kinds";
 
 /** §8.11.1 trigger vocabulary, verbatim and closed. */
@@ -63,6 +64,25 @@ export type WorkShapeStage = {
    *  against the vocabulary record_workroom_evidence accepts, so a stage cannot
    *  declare evidence it has no way to record. */
   evidence: readonly WorkShapeEvidenceKind[];
+  /**
+   * The platform tools this stage needs, by exact PLATFORM_TOOLS name.
+   *
+   * GPP (docs/architecture/gated-permissions-process.md, draft 0.1) binding
+   * element 2 "Attachment" — a binding attaches to a stage, not only to a whole
+   * shape — and element 5 "Capability set" (§7.1). This is the first stage-level
+   * realization of both: the shape's `grants` stays the coarse per-shape room
+   * ceiling, and this names the concrete tools inside it the stage reaches.
+   *
+   * Declaring a tool here never grants it. The dispatcher PINS the named tools
+   * into the run's attachment budget (they are otherwise ranked out by prompt
+   * relevance), and the agent ∩ user grant filter still decides whether each is
+   * reachable at all. stage-tool-parity.test.ts checks the declaration: C-2
+   * (every name resolves to a registered tool), C-4's necessary first condition
+   * (the accountable agent holds the grant), and pin capacity.
+   *
+   * Omitted means undeclared: the stage dispatches exactly as before.
+   */
+  tools?: readonly string[];
 };
 
 export type WorkShapeStopCondition = {
@@ -267,6 +287,14 @@ export function listWorkShapes(): WorkShapeDefinition[] {
 
 export function getWorkShape(key: string): WorkShapeDefinition | null {
   return ALL_SHAPES[key] ?? null;
+}
+
+/** An exact `key@version`: the current definition, or a superseded one a live
+ *  room may still pin (work-shape-prior-versions.ts). Null when neither holds it. */
+export function getWorkShapeVersion(key: string, version: string): WorkShapeDefinition | null {
+  const current = getWorkShape(key);
+  if (current?.version === version) return current;
+  return WORK_SHAPE_PRIOR_VERSIONS.find((shape) => shape.key === key && shape.version === version) ?? null;
 }
 
 /** Does this shape describe work that RECURS rather than finishing?

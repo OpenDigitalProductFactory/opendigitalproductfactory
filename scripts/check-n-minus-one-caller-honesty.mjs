@@ -29,10 +29,11 @@
 //
 // Exit 0 = honest, 1 = violation, 2 = could not evaluate (missing base ref).
 
-import { execFileSync } from "node:child_process";
+import { parseArgs as utilParseArgs } from "node:util";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { gitText } from "./lib/git.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -53,9 +54,7 @@ const HARNESS_SCAFFOLDING = new Map([
   ["COMPOSE_PARALLEL_LIMIT", "bounds hosted-runner concurrency; not part of the promoter contract"],
 ]);
 
-function git(args) {
-  return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 1e8 });
-}
+const git = (args) => gitText(args, { cwd: REPO_ROOT, trim: false, maxBuffer: 1e8 });
 
 function readAtRef(ref, path) {
   try {
@@ -149,8 +148,9 @@ function resolveBaseRef(explicit) {
 
 function main(argv) {
   const asJson = argv.includes("--json");
-  const baseIndex = argv.indexOf("--base");
-  const baseRef = resolveBaseRef(baseIndex >= 0 ? argv[baseIndex + 1] : undefined);
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args: argv, strict: false, allowPositionals: true, options: { base: { type: "string" } } });
+  const baseRef = resolveBaseRef(typeof values.base === "string" ? values.base : undefined);
 
   if (!baseRef) {
     console.error("[n1-caller-honesty] no base ref (origin/main or main) — cannot establish the baseline caller.");

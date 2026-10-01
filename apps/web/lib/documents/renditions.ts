@@ -8,6 +8,8 @@
 //   - plain_text: kept inline (up to the inline limit) and indexed for
 //     full-text search (DocumentRendition."searchVector") and semantic search
 //     (storeDocumentVector), so doc_search finds the body text.
+// A PDF original gets the plain_text rendition only (BI-26CD1D1E): it already
+// is the PDF, and the engine's pdftotext path is the portal's one PDF reader.
 //
 // It runs as a durable background job (queue/functions/document-renditions.ts),
 // requested from the version save in document-store.ts and swept by a bounded
@@ -23,7 +25,13 @@ import { EMBEDDED_OBJECTS_REASON, odfEmbeddedObjects } from "@/lib/shared/odf-em
 import { DOCUMENT_TEXT_INLINE_LIMIT_BYTES, readDocumentBlob, storeDocumentBlob } from "./blob-storage";
 import { getConverterAvailability } from "./conversion/availability";
 import { convertDocument, type ConversionFailureReason } from "./conversion/convert";
-import { OFFICE_SOURCE_MIME_TYPES, officeSourceExtension, type ConverterTarget } from "./conversion/formats";
+import {
+  OFFICE_SOURCE_MIME_TYPES,
+  TEXT_ONLY_SOURCE_MIME_TYPES,
+  officeSourceExtension,
+  textOnlySourceExtension,
+  type ConverterTarget,
+} from "./conversion/formats";
 import { storeDocumentVector, type StoreDocumentVectorInput } from "./embeddings";
 
 /** Rendition kinds in the order they are produced; the engine target for each. */
@@ -31,6 +39,20 @@ export const RENDITION_TARGETS: ReadonlyArray<readonly [DocumentRenditionKind, C
   [DocumentRenditionKind.pdf, "pdf"],
   [DocumentRenditionKind.plain_text, "txt"],
 ];
+
+/** A text-only source (a PDF original) gets its text and nothing else. */
+const TEXT_ONLY_RENDITION_TARGETS: ReadonlyArray<readonly [DocumentRenditionKind, ConverterTarget]> = [
+  [DocumentRenditionKind.plain_text, "txt"],
+];
+
+/** The engine source extension and the renditions a stored format owes, or null. */
+function renditionSource(contentFormat: string) {
+  const office = officeSourceExtension(contentFormat);
+  if (office) return { from: office, targets: RENDITION_TARGETS };
+  const textOnly = textOnlySourceExtension(contentFormat);
+  if (textOnly) return { from: textOnly, targets: TEXT_ONLY_RENDITION_TARGETS };
+  return null;
+}
 
 export const DEFAULT_BACKFILL_LIMIT = 25;
 export const MAX_BACKFILL_LIMIT = 100;
@@ -55,6 +77,8 @@ export type BackfillOutcome = {
   detail?: string;
   processed: number;
   results: Array<{ documentVersionId: string } & RenditionOutcome>;
+  /** Where the next pass continues; null when this pass reached the end. */
+  nextCursor: string | null;
 };
 
 type RenditionDb = typeof prisma;
@@ -198,11 +222,12 @@ export async function generateDocumentRenditions(
   const deps: RenditionDeps = { ...defaultDeps(), ...overrides };
   const version = await loadVersion(deps.db, documentVersionId);
   if (!version) return { status: "skipped", reason: "not-found" };
-  const from = officeSourceExtension(version.contentFormat);
-  if (!from || !version.contentBlob) return { status: "skipped", reason: "not-office" };
+  const source = renditionSource(version.contentFormat);
+  if (!source || !version.contentBlob) return { status: "skipped", reason: "not-office" };
+  const { from } = source;
 
   const existing = new Set(version.renditions.map((rendition) => rendition.renditionKind));
-  const missing = RENDITION_TARGETS.filter(([kind]) => !existing.has(kind));
+  const missing = source.targets.filter(([kind]) => !existing.has(kind));
   if (missing.length === 0) return { status: "skipped", reason: "already-rendered" };
 
   let original: Buffer;
@@ -246,30 +271,43 @@ export async function generateDocumentRenditions(
 }
 
 /**
- * The bounded one-shot sweep: current office versions that lack a rendition,
- * newest first, at most `limit` (capped at 100) per pass. Run when the
- * converter becomes available (rendition-trigger.ts); while it is unavailable
- * the sweep does nothing and records nothing.
+ * One bounded backfill pass: current office versions that lack a rendition,
+ * and current PDF versions that lack their text (BI-26CD1D1E), newest first,
+ * at most `limit` (capped at 100) per pass. A pass continues after `cursor`,
+ * so a drain (rendition-backfill-drain.ts) visits each version once even when
+ * it fails and stays pending (BI-153EC72C). While the converter is unavailable
+ * the pass does nothing and records nothing. Each pass logs its counts.
  */
 export async function backfillDocumentRenditions(
-  input: { limit?: number } = {},
+  input: { limit?: number; cursor?: string | null; reason?: string } = {},
   overrides: Partial<RenditionDeps> = {},
 ): Promise<BackfillOutcome> {
   const deps: RenditionDeps = { ...defaultDeps(), ...overrides };
+  const label = `[renditions] backfill pass (${input.reason ?? "requested"})`;
   const availability = await deps.availability();
   if (!availability.available) {
-    return { status: "converter-unavailable", detail: availability.detail, processed: 0, results: [] };
+    console.log(`${label}: converter unavailable (${availability.detail}); nothing swept`);
+    return { status: "converter-unavailable", detail: availability.detail, processed: 0, results: [], nextCursor: null };
   }
   const requested = Number.isFinite(input.limit) ? Math.trunc(input.limit!) : DEFAULT_BACKFILL_LIMIT;
   const take = Math.min(Math.max(requested, 1), MAX_BACKFILL_LIMIT);
   const pending = await deps.db.documentVersion.findMany({
     where: {
       contentBlobId: { not: null },
-      contentFormat: { in: [...OFFICE_SOURCE_MIME_TYPES] },
       currentForDocuments: { some: {} },
-      OR: RENDITION_TARGETS.map(([renditionKind]) => ({ renditions: { none: { renditionKind } } })),
+      OR: [
+        {
+          contentFormat: { in: [...OFFICE_SOURCE_MIME_TYPES] },
+          OR: RENDITION_TARGETS.map(([renditionKind]) => ({ renditions: { none: { renditionKind } } })),
+        },
+        {
+          contentFormat: { in: [...TEXT_ONLY_SOURCE_MIME_TYPES] },
+          renditions: { none: { renditionKind: DocumentRenditionKind.plain_text } },
+        },
+      ],
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
     take,
     select: { id: true },
   });
@@ -278,5 +316,10 @@ export async function backfillDocumentRenditions(
   for (const { id } of pending) {
     results.push({ documentVersionId: id, ...(await generateDocumentRenditions(id, deps)) });
   }
-  return { status: "swept", processed: results.length, results };
+  const count = (status: RenditionOutcome["status"]) => results.filter((result) => result.status === status).length;
+  console.log(
+    `${label}: ${results.length} selected, ${count("rendered")} rendered, ${count("failed")} failed, ${count("skipped")} skipped`,
+  );
+  const nextCursor = pending.length === take ? pending[pending.length - 1]!.id : null;
+  return { status: "swept", processed: results.length, results, nextCursor };
 }

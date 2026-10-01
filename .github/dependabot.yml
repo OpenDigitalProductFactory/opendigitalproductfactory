@@ -117,12 +117,6 @@ updates:
       # (0.27.19 → 0.27.20) fail the guard, so block the family; it moves with
       # the guard's override list, not independently.
       - dependency-name: "@floating-ui/*"
-      # read-excel-file is pinned to an exact 9.2.0. The 9.3.x line is a breaking
-      # change — `readFiles(...)` no longer returns a thenable, so
-      # excel-sheet-reader.test.ts fails with "readFiles(...).then is not a
-      # function". Block until the reader is migrated to the new 9.3+ API and the
-      # pin is bumped deliberately.
-      - dependency-name: "read-excel-file"
 
   # apps/mobile resolves in its own workspace and lockfile (plan 2026-09-08 M6),
   # so root updates no longer reach it. Same cooldown as the root. The Expo /
@@ -162,14 +156,14 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "@react-native/*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      # React must match the renderer React Native embeds (BI-E5E72FE3; pinned in
-      # apps/mobile/pnpm-workspace.yaml), so it moves with an SDK upgrade.
+      # React must EXACTLY equal the renderer React Native embeds (BI-E5E72FE3;
+      # pinned in apps/mobile/pnpm-workspace.yaml), so even a patch breaks boot
+      # ("Incompatible React versions"). No update type flows automatically; it
+      # moves by hand with an SDK upgrade. Patches used to flow and kept landing
+      # 19.2.8 against the 19.2.3 renderer (#5705, #5736).
       - dependency-name: "react"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "react-dom"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "react-test-renderer"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
 

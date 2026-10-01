@@ -7,7 +7,7 @@ import {
 
 // BI-5FE47130. The rename pass is what makes a corpus migration non-destructive:
 // it moves the lookup key while the row (and therefore its version history,
-// decision references, and Qdrant point) stays put. These tests pin the
+// decision references, and vector point) stays put. These tests pin the
 // properties that make that true — especially the refusal to merge, which is
 // the difference between "preserved history" and "silently discarded history".
 

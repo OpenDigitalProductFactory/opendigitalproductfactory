@@ -72,11 +72,6 @@ services:
       retries: 5
       start_period: 10s
 
-  # BET-5 (BI-A1E864A5): Neo4j/Qdrant retired — platform runs on Postgres
-  # (pgvector + graph mirror). Legacy env on portal/sandbox targets surviving
-  # containers during the one-time upgrade backfill; containers are removed by
-  # scripts/decommission-neo4j-qdrant.{sh,ps1}.
-
   # ─── AI Inference ────────────────────────────────────────────────────────────
   # Docker Model Runner (built into Docker Desktop 4.40+) provides local LLM
   # inference via OpenAI-compatible API at http://model-runner.docker.internal/v1.
@@ -142,7 +137,7 @@ services:
       # them through /api/build/<buildId>/evidence/<fileName> (auth-gated).
       # Read-only from the portal's side — only browser-use should write.
       - browser_evidence:/evidence:ro
-      # Platform-managed backups (daily Postgres; Neo4j + Qdrant retired by BET-5).
+      # Platform-managed backups (daily Postgres).
       # Host bind mount (NOT a Docker volume) so `docker compose down -v`,
       # `docker volume rm`, or worktree-induced compose re-labelling cannot
       # destroy backups. Same path the promoter writes pre-promote dumps to.
@@ -307,8 +302,12 @@ services:
       HIVE_CONTRIBUTION_TOKEN: ${HIVE_CONTRIBUTION_TOKEN:-}
       HIVE_OPS_TOKEN: ${HIVE_OPS_TOKEN:-}
       INNGEST_BASE_URL: http://inngest:8288
-      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-deadbeefcafebabe}
-      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-abcdef0123456789}
+      # No default (BI-3267763F). A published fallback let anyone who could
+      # reach /api/inngest forge signed invocations. The installers generate
+      # both keys; scripts/promote.sh replaces a missing or known-default key
+      # and recreates inngest with the portal so the two always agree.
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:?INNGEST_EVENT_KEY is required - the installer or a self-upgrade writes a random value into .env (BI-3267763F)}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:?INNGEST_SIGNING_KEY is required - the installer or a self-upgrade writes a random value into .env (BI-3267763F)}
       INNGEST_DEV: ${INNGEST_DEV:-0}
       # Self-hosted Inngest (INNGEST_DEV=0) does NOT auto-discover apps, so the
       # portal must register its function catalog on boot — instrumentation.ts
@@ -673,7 +672,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # BET-5 (BI-A1E864A5): Neo4j/Qdrant retired — platform runs on Postgres
   dev-init:
     build:
       context: .
@@ -762,7 +760,7 @@ services:
     logging: *default-logging
     # Opt-in (BI architecture-review footprint cut). Grafana is the power-user
     # escape hatch: the platform renders its own context-aware dashboards
-    # (Postgres + Neo4j + Prometheus) on the System Health tab and delivers
+    # (Postgres + Prometheus) on the System Health tab and delivers
     # alerts via the Inngest poll-bridge, so Grafana is not on the operational or
     # alerting path. The whole monitoring stack follows the deep-observability
     # capability; the legacy alias selects the same portable service closure:
@@ -976,8 +974,9 @@ services:
       - "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8288:8288"
       - "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8289:8289"
     environment:
-      - INNGEST_EVENT_KEY=${INNGEST_EVENT_KEY:-deadbeefcafebabe}
-      - INNGEST_SIGNING_KEY=${INNGEST_SIGNING_KEY:-abcdef0123456789}
+      # Must match the portal's keys; no default (BI-3267763F).
+      - INNGEST_EVENT_KEY=${INNGEST_EVENT_KEY:?INNGEST_EVENT_KEY is required - the installer or a self-upgrade writes a random value into .env (BI-3267763F)}
+      - INNGEST_SIGNING_KEY=${INNGEST_SIGNING_KEY:?INNGEST_SIGNING_KEY is required - the installer or a self-upgrade writes a random value into .env (BI-3267763F)}
       - INNGEST_POSTGRES_URI=postgres://${POSTGRES_USER:-dpf}:${POSTGRES_PASSWORD:-dpf_dev}@postgres:5432/inngest
       - INNGEST_REDIS_URI=redis://redis:6379
     depends_on:
@@ -1064,9 +1063,6 @@ services:
 volumes:
   pgdata:
   redis_data:
-  # BET-5 (BI-A1E864A5): neo4jdata / qdrant_data / dev_neo4jdata / dev_qdrant_data
-  # volume declarations removed — Neo4j/Qdrant retired (Postgres pgvector + graph
-  # mirror). Runtime volumes are deleted by scripts/decommission-neo4j-qdrant.{sh,ps1}.
   dpf-source-code:
   browser_evidence:
   # Service-account browser profiles (EP-BROWSER-DRIVE, spec §8.9). Holds

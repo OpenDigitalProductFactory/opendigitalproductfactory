@@ -24,7 +24,7 @@ The first question is not "which module do you want". It is **what kind of busin
 
 Pick that, and the platform arrives already shaped: the right words, the right forms, the right daily board, and coworkers that know the job. A plumbing business gets jobs, trucks, parts, and techs. A dental practice gets appointments, patients, forms, and practitioners. A pet boarding business gets stays, pets, and care notes.
 
-There are **103 business types across 23 categories** to start from:
+There are **107 business types across 25 categories** to start from:
 
 | If you run… | Categories that cover it |
 |---|---|
@@ -37,6 +37,7 @@ There are **103 business types across 23 categories** to start from:
 | Property or assets | HOA and property management · Asset rental · Real estate and construction |
 | A mission or a community | Nonprofit and community · Public sector and civic |
 | Money and trust | Banking and financial services · Security services |
+| Land, livestock, or a plant floor | Agriculture and ranching · Manufacturing |
 
 Do not worry about finding a perfect match. Pick the closest one — you can refine the details afterwards, and the vocabulary follows your business, not the other way round.
 
@@ -60,25 +61,28 @@ The full list, and what each category changes, is in [Market Archetypes And Cowo
 
 ## Finding Your Way Around
 
-Down the left side is a rail, grouped by the kind of work rather than by screen.
+Down the left side is a rail, grouped by what you come to do rather than by how the platform is built.
 
 | Group | What lives there | Who uses it most |
 |---|---|---|
-| **Workspace** | Operations for current work; Performance for authorized owners and managers | Everyone daily; managers for trends |
-| **Business** | Customers, people, money, compliance, and your public portal | Owners and managers |
-| **Knowledge** | Shared reference, documents, and this guide | Everyone |
-| **Products** | Portfolio, backlog, and architecture | Businesses that build a product |
-| **Delivery** | Build and ship work from one place | Businesses that build a product |
-| **Platform** | AI coworker settings and platform administration | Whoever administers the install |
+| **Today** | Operations for what needs you now; Performance for authorized owners and managers; documents and mail | Everyone daily |
+| **Serve & grow** | Customers or supporters, money, compliance, your public storefront, and what you offer | Owners and managers |
+| **Team** | The people and the AI coworkers who do the work | Owners and managers |
+| **Improve & deliver** | Requests for change, work in progress, and Build Studio | Anyone asking for or shipping a change |
+| **Run the platform** | Access, connections, updates, audit, and administration | Whoever administers the install |
+| **Learn** | Architecture, your knowledge base, and this guide | Everyone |
+
+**Each group heading is a door.** Serve & grow, Team, Improve & deliver and Run the platform are *areas*. Click the heading to open the area's home, which has three views:
+
+- **Work** — the Workrooms in motion in that area.
+- **Team** — the people and AI coworkers who work there, and what each may do: who looks after it, who coordinates, who signs off.
+- **Setup** — the settings that area's work actually uses, each opening its one home. For example, connecting GitHub is under **Improve & deliver › Setup › Contributing & GitHub**, and business hours are under **Serve & grow › Setup**.
 
 **If that feels like too much, switch the rail to Simple.** It hides everything except the day-to-day business work. The full rail is always one toggle away, so you cannot get stranded.
 
 You only ever see what your role allows and what your business type actually turned on. An empty group is not a fault — it means that part does not apply to you.
 
-The three groups most owners live in are **Workspace**, **Business**, and
-**Knowledge**. In Workspace, choose **Operations** for what needs attention now
-and **Performance** for results and trends. If you run a business rather than
-build software, you may never need Products or Delivery at all.
+Most owners live in **Today** and **Serve & grow**. In Today, choose **Operations** for what needs attention now and **Performance** for results and trends. If you run a business rather than build software, you may rarely need Improve & deliver.
 
 ## Your AI Coworker
 

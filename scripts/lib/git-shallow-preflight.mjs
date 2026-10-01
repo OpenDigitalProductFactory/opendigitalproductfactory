@@ -7,6 +7,7 @@
 import { existsSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { runGit } from "./git.mjs";
 
 import { isEntryModule } from "./entry-module.mjs";
 
@@ -15,7 +16,7 @@ import { isEntryModule } from "./entry-module.mjs";
  * @param {string[]} args
  */
 function git(cwd, args) {
-  return spawnSync("git", args, { cwd, encoding: "utf8" });
+  return runGit(args, { cwd: cwd ?? process.cwd() });
 }
 
 /**

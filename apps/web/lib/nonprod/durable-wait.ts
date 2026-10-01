@@ -293,8 +293,8 @@ export async function publishNonprodCapacityForHead(input: {
   });
   const occurredAt = (input.now ?? new Date()).toISOString();
   const emit = input.emit ?? (async (event: NonprodCapacityEvent) => {
-    const { inngest } = await import("@/lib/queue/inngest-client");
-    return inngest.send({ name: "nonprod/capacity.available", data: event });
+    const { jobs } = await import("@/lib/jobs");
+    return jobs.send({ name: "nonprod/capacity.available", data: event });
   });
   let notified = 0;
   for (const task of tasks) {

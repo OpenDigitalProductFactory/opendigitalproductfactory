@@ -106,14 +106,14 @@ export async function dispatchConsolidationBet(input: {
       continue;
     }
 
-    // WIP cap check per item, same shape as the promote_to_build_studio tool:
-    // the cap can fill mid-dispatch, so re-check before each promotion.
-    const { wipCapReached, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
-    const activeBuilds = await prisma.featureBuild.count({
-      where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
-    });
-    if (wipCapReached(activeBuilds)) {
-      skipped.push({ itemId, reason: "promotion-error", detail: "wip_cap_reached" });
+    // Admission by points in flight (BI-3430B3A4), re-checked per item because
+    // each promotion adds points. dispatch-bet is autonomous: refused past the
+    // allowance, with the reason recorded on the item.
+    const { evaluateItemAdmission, recordAdmissionOutcome, blocksStart } = await import("@/lib/build/investment-admission");
+    const admission = await evaluateItemAdmission(prisma as never, { itemId, startKind: "autonomous" });
+    await recordAdmissionOutcome(prisma as never, admission, { source: "dispatch-bet", userId: input.userId });
+    if (blocksStart(admission)) {
+      skipped.push({ itemId, reason: "promotion-error", detail: `wip_allowance_reached: ${admission.reason}` });
       continue;
     }
 

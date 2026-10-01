@@ -8,8 +8,6 @@ function base(overrides: Partial<DrainPolicyInput> = {}): DrainPolicyInput {
     windowResetAt: new Date("2026-07-12T18:00:00Z"), // 6h out
     drainWindowHours: 12,
     poolExhausted: false,
-    activeBuilds: 1,
-    wipCap: 4,
     maxDispatch: 3,
     ...overrides,
   };
@@ -36,17 +34,18 @@ describe("nextWeeklyReset", () => {
 });
 
 describe("evaluateDrain", () => {
-  it("drains when near reset, pool healthy, slots free", () => {
+  it("drains when near reset and the pool is healthy", () => {
     const d = evaluateDrain(base());
     expect(d.drain).toBe(true);
-    expect(d.targetDispatch).toBe(3); // min(headroom 3, maxDispatch 3)
+    expect(d.targetDispatch).toBe(3); // maxDispatch 3; each start then meets the points allowance
     expect(d.hoursUntilReset).toBe(6);
   });
 
-  it("caps dispatch at WIP headroom", () => {
-    const d = evaluateDrain(base({ activeBuilds: 3, wipCap: 4, maxDispatch: 3 }));
-    expect(d.drain).toBe(true);
-    expect(d.targetDispatch).toBe(1); // headroom 1 < maxDispatch 3
+  it("no longer sizes dispatch by a count of builds (BI-3430B3A4)", () => {
+    const d = evaluateDrain(base({ maxDispatch: 3 }));
+    expect(d.targetDispatch).toBe(3);
+    expect(d.reason).toMatch(/admitted by points in flight/);
+    expect(d.reason).not.toMatch(/slots/);
   });
 
   it("does not drain when disabled", () => {
@@ -63,12 +62,6 @@ describe("evaluateDrain", () => {
     const d = evaluateDrain(base({ windowResetAt: new Date("2026-07-14T12:00:00Z") })); // 48h out
     expect(d.drain).toBe(false);
     expect(d.reason).toMatch(/not in drain window/);
-  });
-
-  it("does not drain when WIP cap reached", () => {
-    const d = evaluateDrain(base({ activeBuilds: 4, wipCap: 4 }));
-    expect(d.drain).toBe(false);
-    expect(d.reason).toMatch(/WIP cap reached/);
   });
 
   it("reports the proxy signal when no fresh snapshot is present", () => {
@@ -101,9 +94,8 @@ describe("evaluateDrain — real weekly-quota signal", () => {
   });
 
   it("scales targetDispatch down as remaining shrinks", () => {
-    // wipCap 8, activeBuilds 0 → headroom 8; maxDispatch 4.
-    const plenty = evaluateDrain(base({ weeklyRemainingRatio: 0.95, activeBuilds: 0, wipCap: 8, maxDispatch: 4 }));
-    const little = evaluateDrain(base({ weeklyRemainingRatio: 0.15, activeBuilds: 0, wipCap: 8, maxDispatch: 4 }));
+    const plenty = evaluateDrain(base({ weeklyRemainingRatio: 0.95, maxDispatch: 4 }));
+    const little = evaluateDrain(base({ weeklyRemainingRatio: 0.15, maxDispatch: 4 }));
     expect(plenty.targetDispatch).toBe(4); // ceil(4 * 0.95) = 4, bounded by cap
     expect(little.targetDispatch).toBe(1); // ceil(4 * 0.15) = 1
   });

@@ -8,7 +8,7 @@ import {
   recordInitiativeObjectiveMappingProposal,
   recordInitiativeSpecApproval,
 } from "@/lib/backlog/initiative-readiness";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   INITIATIVE_READINESS_LANES as LANES,
   type InitiativeReadinessLane as Lane,

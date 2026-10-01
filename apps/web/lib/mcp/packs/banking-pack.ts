@@ -16,7 +16,7 @@
 // owner approval. Grants mirror agent-grants.ts TOOL_TO_GRANTS (the gating
 // source); the tool-registry drift test asserts parity.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import {
   createBankAccountSchema,

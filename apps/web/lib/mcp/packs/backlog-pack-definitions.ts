@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import {
   backlogScopeCreateProperties,
   backlogScopeFilterProperties,
@@ -13,6 +13,7 @@ import {
   EPIC_STATUSES,
 } from "@/lib/explore/backlog";
 import { DEFERRAL_INPUT_SCHEMA } from "@/lib/backlog/deferral-contract";
+import { BACKLOG_SENSITIVITY_VALUES } from "@/lib/federation/cross-org-sharing";
 import { backlogStatusToolDefinition } from "./backlog-status-tool-definition";
 
 export const backlogPackDefinitions: ToolDefinition[] = [
@@ -125,6 +126,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
         workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Reclassify what kind of work this is (closed enum)." },
         source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Reclassify the intake origin." },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory recommendation; non-binding on triage" },
+        sensitivity: { type: "string", enum: [...BACKLOG_SENSITIVITY_VALUES], description: "Who may see this item's information. Platform work (scopeKind platform/common) reads as public because DPF is open source; set confidential or restricted to keep an item closed. Audited." },
         ...backlogScopeUpdateProperties,
         ...backlogProductScopeUpdateProperties,
         taxonomyNodeId: { type: "string", description: "Associate this item with a portfolio taxonomy node by its nodeId (e.g. 'for_employees/financial_management'). Used to derive the portfolio when no product link exists." },

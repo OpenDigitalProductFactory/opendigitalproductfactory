@@ -304,6 +304,7 @@ describe("governed backlog tee-up", () => {
       prisma: mockPrisma,
       userId: "user-1",
       trigger: "daily",
+      admit: async () => ({ verdict: "admit" as const, reason: "fits" }),
     });
 
     expect(result).toEqual({
@@ -316,6 +317,7 @@ describe("governed backlog tee-up", () => {
         { backlogItemId: "BI-EPIC-1", buildId: "FB-11111111" },
         { backlogItemId: "BI-BOOT-2", buildId: "FB-22222222" },
       ],
+      refused: [],
     });
 
     expect(mockPrisma.featureBuild.create).toHaveBeenNthCalledWith(
@@ -407,6 +409,26 @@ describe("governed backlog tee-up", () => {
     );
   });
 
+  it("refuses a candidate past its portfolio's points-in-flight allowance with the reason (BI-3430B3A4 AC-2)", async () => {
+    mockPrisma.backlogItem.findMany.mockResolvedValue([{ id: "r", itemId: "BI-LARGE-1", title: "t", body: "b", status: "open", triageOutcome: "build", effortSize: "large", activeBuildId: null, digitalProductId: null, portfolioId: "p1", epicId: null, createdAt: new Date("2026-04-24T10:00:00.000Z"), epic: null }]);
+    const { runGovernedBacklogTeeUp } = await import("./governed-backlog-tee-up");
+    const reason = "Starting this takes the portfolio to 16 of 8 points in flight (8 over).";
+    const result = await runGovernedBacklogTeeUp({ prisma: mockPrisma, userId: "user-1", trigger: "daily", admit: async () => ({ verdict: "refuse" as const, reason }) });
+    expect(result).toMatchObject({ createdCount: 0, skippedCount: 1, refused: [{ backlogItemId: "BI-LARGE-1", reason }] });
+    expect(mockPrisma.featureBuild.create).not.toHaveBeenCalled();
+  });
+
+  it("makes the item's portfolio owner the owner of a scheduled build (BI-67B27832 AC-3)", async () => {
+    const item = { id: "backlog-epic", itemId: "BI-EPIC-1", title: "t", body: "b", status: "open", triageOutcome: "build", effortSize: "medium", activeBuildId: null, digitalProductId: null, portfolioId: "portfolio-1", epicId: "epic-1", createdAt: new Date("2026-04-24T10:00:00.000Z"), epic: { status: "open" } };
+    mockPrisma.backlogItem.findMany.mockResolvedValue([item]); mockPrisma.backlogItem.findUnique.mockResolvedValueOnce({ ...item, taxonomyNodeId: null, epic: { epicId: "EP-1" } });
+    mockPrisma.featureBuild.create.mockResolvedValueOnce({ id: "build-row-1", buildId: "FB-11111111" });
+    const ownerForPortfolio = vi.fn(async (portfolioId: string | null) => (portfolioId === "portfolio-1" ? "owner-of-portfolio-1" : "someone-else"));
+    const { runGovernedBacklogTeeUp } = await import("./governed-backlog-tee-up");
+    await runGovernedBacklogTeeUp({ prisma: mockPrisma, userId: "run-owner", trigger: "daily", ownerForPortfolio, admit: async () => ({ verdict: "admit" as const, reason: "fits" }) });
+    expect(ownerForPortfolio).toHaveBeenCalledWith("portfolio-1");
+    expect(mockPrisma.featureBuild.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ createdById: "owner-of-portfolio-1" }) }));
+  });
+
   it("skips processing when governed backlog mode is disabled", async () => {
     mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
       id: "singleton",
@@ -419,6 +441,7 @@ describe("governed backlog tee-up", () => {
       prisma: mockPrisma,
       userId: "user-1",
       trigger: "manual",
+      admit: async () => ({ verdict: "admit" as const, reason: "fits" }),
     });
 
     expect(result).toEqual({
@@ -428,6 +451,7 @@ describe("governed backlog tee-up", () => {
       createdCount: 0,
       skippedCount: 0,
       builds: [],
+      refused: [],
     });
     expect(mockPrisma.backlogItem.findMany).not.toHaveBeenCalled();
     expect(mockPrisma.featureBuild.create).not.toHaveBeenCalled();

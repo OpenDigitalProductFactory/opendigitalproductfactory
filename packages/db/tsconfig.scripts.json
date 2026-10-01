@@ -22,6 +22,11 @@
     "scripts/reconcile-catalog-capabilities.ts",
     "scripts/reconcile-catalog-capabilities.test.ts",
     "scripts/restore-workrooms.ts",
+    "scripts/generate-it4it-reference-json.ts",
+    "scripts/lib/excel-sheet-reader.ts",
+    "scripts/lib/excel-sheet-reader.test.ts",
+    "scripts/lib/it4it-reference-document.ts",
+    "scripts/lib/it4it-reference-document.test.ts",
     "generated"
   ]
 }

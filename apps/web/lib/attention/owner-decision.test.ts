@@ -155,7 +155,7 @@ describe("translateAttentionToOwnerDecision", () => {
   });
 
   it("never exposes the raw title above technical detail", () => {
-    const raw = "qdrant is offline";
+    const raw = "redis is offline";
     const card = translateAttentionToOwnerDecision(
       item({ source: "platform-health", title: raw, deepLink: "/ops/health" }),
       Date.now(),

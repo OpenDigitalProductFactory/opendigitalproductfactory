@@ -24,8 +24,6 @@ export type BuildExecutionState = {
   retryCount: number;
   containerId?: string;
   dbContainerId?: string;
-  neo4jContainerId?: string;
-  qdrantContainerId?: string;
   networkId?: string;
   hostPort?: number;
   sourceCurrency?: SandboxSourceCurrencySnapshot | null;

@@ -137,7 +137,9 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
     });
 
     expect(screen.getByRole("button", { name: /upgrade now/i })).toBeDisabled();
-    expect(screen.getByText(/do not click again/i)).toBeInTheDocument();
+    // The button is disabled, so the copy no longer tells the operator not to press it (BI-CE244260).
+    expect(screen.getByText(/Checking the server record/i)).toBeInTheDocument();
+    expect(screen.queryByText(/do not click again/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Not admitted:/i)).not.toBeInTheDocument();
   });
 

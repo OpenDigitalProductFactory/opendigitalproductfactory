@@ -7,6 +7,19 @@ param(
 
 Set-Location $DPF_DIR
 
+# Host GPU snapshot for local-model admission. Non-fatal when the publisher
+# is absent; a missing snapshot does not disable the local model.
+$gpuPublisher = Join-Path $DPF_DIR "scripts\publish-host-gpu.ps1"
+if (Test-Path -LiteralPath $gpuPublisher) {
+    try {
+        Start-Process -FilePath "powershell.exe" -WindowStyle Hidden -ArgumentList @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $gpuPublisher
+        ) | Out-Null
+    } catch {
+        Write-Host "[!] Host GPU publisher did not start (non-fatal)." -ForegroundColor Yellow
+    }
+}
+
 # Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design section 5).
 # Include the local Edge Node overlay ONLY when this install enabled it.
 # -WithEdge / -NoEdge override; otherwise resolve from install-state.json

@@ -1,4 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+
+const mockExec = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/shared/lazy-node", async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  lazyExec: () => mockExec,
+}));
+
 import {
   buildSandboxAppsWebCopyCommand,
   buildSandboxDevServerStopCommand,
@@ -12,6 +19,7 @@ import {
   buildSandboxRootScriptsCopyCommand,
   buildSandboxStageCommand,
   buildSandboxWorkspaceCleanupCommand,
+  listReleasableSandboxFiles,
   parseSandboxPort,
   parseSandboxChangedFiles,
   prefixSafeWorkspaceCommand,
@@ -74,12 +82,12 @@ describe("buildSandboxCreateArgs", () => {
     const args = buildSandboxCreateArgs("FB-X", 3002, {
       envVars: {
         DATABASE_URL: "postgresql://dpf:dpf_sandbox@db:5432/dpf",
-        NEO4J_URI: "bolt://neo4j:7687",
+        REDIS_URL: "redis://redis:6379",
       },
     });
     expect(args).toContain("-e");
     expect(args).toContain("DATABASE_URL=postgresql://dpf:dpf_sandbox@db:5432/dpf");
-    expect(args).toContain("NEO4J_URI=bolt://neo4j:7687");
+    expect(args).toContain("REDIS_URL=redis://redis:6379");
   });
 });
 
@@ -115,7 +123,7 @@ describe("prefixSafeWorkspaceCommand", () => {
     const command = prefixSafeWorkspaceCommand("git -C /workspace/.builds/FB-1 rev-parse HEAD^{tree}");
 
     expect(command).toContain("git config --global --add safe.directory '*'");
-    expect(command).toContain("git config --global --get-all safe.directory 2>/dev/null | grep -qx '\\*' ||");
+    expect(command).toContain("git config --global --get-all safe.directory 2>/dev/null | grep -qxF '*' ||");
     expect(command.indexOf("safe.directory '*'")).toBeLessThan(command.indexOf("git -C /workspace/.builds/FB-1"));
   });
 });
@@ -202,7 +210,7 @@ describe("buildSandboxListReleasableFilesCommand", () => {
     // both appear, which is what the PR #850 gate needs to recognize.
     const command = buildSandboxListReleasableFilesCommand("/workspace", "client/abc-123");
 
-    expect(command).toContain("git diff --cached 'client/abc-123' --name-only -- .");
+    expect(command).toContain(`git diff --cached "$(git merge-base HEAD 'client/abc-123' 2>/dev/null || echo 'client/abc-123')" --name-only -- .`);
     expect(command).toContain(":(exclude)**/.next/**");
     expect(command).toContain(":(exclude)apps/web/next-env.d.ts");
   });
@@ -227,7 +235,7 @@ describe("buildSandboxDiffForFilesCommand", () => {
       "client/abc-123",
     );
 
-    expect(command).toContain("git diff --cached 'client/abc-123' -- 'apps/web/lib/foo.ts'");
+    expect(command).toContain(`git diff --cached "$(git merge-base HEAD 'client/abc-123' 2>/dev/null || echo 'client/abc-123')" -- 'apps/web/lib/foo.ts'`);
   });
 });
 
@@ -313,5 +321,37 @@ describe("parseSandboxChangedFiles", () => {
       "apps/web/lib/a.ts",
       "apps/web/lib/b.ts",
     ]);
+  });
+});
+
+// BI-5C4933EB: the ship-path release check must read the build's own worktree.
+describe("listReleasableSandboxFiles", () => {
+  beforeEach(() => {
+    mockExec.mockReset();
+    mockExec.mockResolvedValue({ stdout: "apps/web/a.ts\n", stderr: "" });
+  });
+
+  it("stages, lists and resets in the given build workdir", async () => {
+    const files = await listReleasableSandboxFiles("sb-1", {
+      baseRef: "client/x",
+      workspace: "/workspace/.builds/FB-1",
+    });
+
+    expect(files).toEqual(["apps/web/a.ts"]);
+    const commands = mockExec.mock.calls.map((call) => call[0] as string);
+    expect(commands.length).toBeGreaterThan(0);
+    for (const command of commands) {
+      expect(command).toContain("cd /workspace/.builds/FB-1 &&");
+    }
+  });
+
+  it("defaults to the shared /workspace", async () => {
+    await listReleasableSandboxFiles("sb-1", { baseRef: "client/x" });
+
+    const commands = mockExec.mock.calls.map((call) => call[0] as string);
+    for (const command of commands) {
+      expect(command).toContain("cd /workspace &&");
+      expect(command).not.toContain(".builds");
+    }
   });
 });

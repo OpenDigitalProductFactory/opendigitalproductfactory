@@ -16,6 +16,7 @@
 // owns the lease-gated local-CI run and `pnpm pregate:preflight` the full
 // 40+ guard parity pass. This is the subset an author iterates against.
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -43,14 +44,19 @@ export const LOCAL_GATES = Object.freeze([
 ]);
 
 export function parseArgs(argv) {
-  const out = { messageFile: null, committed: false, only: null };
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === "--message-file") out.messageFile = argv[++i] ?? null;
-    else if (arg === "--committed") out.committed = true;
-    else if (arg === "--only") out.only = (argv[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  }
-  return out;
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: { "message-file": { type: "string" }, committed: { type: "boolean" }, only: { type: "string" } },
+  });
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  return {
+    messageFile: text(values["message-file"]) ?? null,
+    committed: values.committed === true,
+    only: values.only === undefined ? null : (text(values.only) ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+  };
 }
 
 export function buildGateEnv({ base = process.env, messageFile = null, committed = false, readFile = (p) => readFileSync(p, "utf8") } = {}) {

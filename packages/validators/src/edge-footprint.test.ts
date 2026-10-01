@@ -3,7 +3,7 @@
 // The edge-footprint spec (docs/superpowers/specs/
 // 2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md
 // §6, §11.2) requires per-node batch/payload caps to be enforced BEFORE
-// data hits Postgres/Neo4j/Prometheus/Grafana. This file locks in the two
+// data hits Postgres/Prometheus/Grafana. This file locks in the two
 // array-cardinality caps that live in the wire-contract schemas
 // themselves (the earliest possible enforcement point — before the 64 KB
 // body-size cap on /api/v1/edge/metrics and /api/v1/edge/events even

@@ -260,6 +260,7 @@ export async function claimNonprodEnvironmentLease(input: {
   taskRunId?: string;
   cleanupCommand?: string;
   slotManifestVersion?: 1;
+  productionBuild?: "local" | "delegated"; // BI-3A14308C: "delegated" waives only the builder reserve
   hostPressure?: LocalCiHostPressure;
   capacityBroker?: LocalCiCapacityBroker;
   resourceClass?: HeavyResourceClass;
@@ -284,6 +285,7 @@ export async function claimNonprodEnvironmentLease(input: {
       // exclusion pool, but do not request a runner slot and must not reserve a
       // build stage they never execute.
       reserveAdmissionHeadroom: input.slotManifestVersion === 1,
+      reserveBuilderHeadroom: input.productionBuild !== "delegated",
       now,
     });
   if (

@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   findMissingCopiedImports,
+  findMissingCopiedImportsInRepo,
   logicalLines,
   parseStages,
   staticRelativeImports,
@@ -129,6 +130,14 @@ test("the checked-in Dockerfile satisfies the invariant", () => {
   });
   assert.deepEqual(
     violations.map((v) => `${v.stage}: ${v.importer} -> ${v.missing}`),
+    [],
+  );
+});
+
+test("every root-context Dockerfile satisfies the invariant, service images included", () => {
+  const violations = findMissingCopiedImportsInRepo(REPO_ROOT);
+  assert.deepEqual(
+    violations.map((v) => `${v.dockerfile} ${v.stage}: ${v.importer} -> ${v.missing}`),
     [],
   );
 });

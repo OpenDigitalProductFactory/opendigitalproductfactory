@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-F9EE05E5 (slice A of the upgrade-waits-for-work plan, spec §11a). QuiescenceRun gains abortRequestedAt and abortRequestedBy, mirroring shipForceEscalatedAt/By. An operator Abort of a self-upgrade drain is written here before any wake-up event is sent, so an Abort the job engine dropped (it delivers only to a step already waiting) still ends the drain and is never followed by a swap. Additive: two nullable columns, no backfill. The model's existing lifecycle (telemetry-bounded, 90d) applies unchanged. Migration: 20260930180000_quiescence_run_abort_request.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "QuiescenceRun",
+      "lifecycleDisposition": "retain-with-item",
+      "fields": [
+        {
+          "name": "abortRequestedAt",
+          "resolution": "inherited",
+          "reason": "When an operator pressed Abort on a running drain. Coordination audit timestamp; inherits the row's 90-day telemetry retention.",
+          "provenance": "Written once by abortQuiescence (recordDrainAbort) from the authenticated operator action; NULL when no Abort was pressed.",
+          "flags": []
+        },
+        {
+          "name": "abortRequestedBy",
+          "resolution": "inherited",
+          "reason": "Which operator pressed Abort, for the run's audit trail; the same kind of operator user id already stored in shipForceEscalatedBy. Inherits the row's 90-day telemetry retention.",
+          "provenance": "The operator user id from requireOpsAccess, written once by abortQuiescence (recordDrainAbort).",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

@@ -3,7 +3,8 @@
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { getPlatformDevPolicyState, type PlatformDevPolicyState } from "@/lib/platform-dev-policy";
+import { getPlatformDevPolicyState } from "@/lib/platform-dev-policy";
+import { PLATFORM_DEV_CONFIG_INCLUDE, type PlatformDevConfigView } from "@/lib/platform-dev-config-view";
 import {
   detectAuthMethod,
   isMissingGitReferenceError,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/platform/platform-dev-config-core";
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
 import { lazyChildProcess, lazyFs, lazyPath, lazyUtil } from "@/lib/shared/lazy-node";
 import { revalidatePath } from "next/cache";
 
@@ -97,13 +99,10 @@ export async function savePlatformDevConfig(mode: ContributionMode) {
   revalidatePath("/admin/platform-development");
 }
 
-export async function getPlatformDevConfig() {
+export async function getPlatformDevConfig(): Promise<PlatformDevConfigView | null> {
   const config = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
-    include: {
-      configuredBy: { select: { email: true } },
-      dcoAcceptedBy: { select: { email: true } },
-    },
+    include: PLATFORM_DEV_CONFIG_INCLUDE,
   });
 
   if (!config) return null;
@@ -746,10 +745,7 @@ async function ensureWorkspaceSafeDirectory(
   gitOpts: ExecUpdateOptions,
   workspace: string,
 ): Promise<void> {
-  await execUpdate(
-    `git config --global --add safe.directory ${shellQuote(workspace)} >/dev/null 2>&1 || true`,
-    gitOpts,
-  );
+  await execUpdate(ensureGlobalSafeDirectoryCommand(shellQuote(workspace)), gitOpts);
 }
 
 /**

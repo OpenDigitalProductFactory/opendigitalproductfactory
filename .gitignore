@@ -65,12 +65,16 @@ tmp/
 .codex-runtime/
 docs/prompts/
 
-# MCP client configs contain live bearer tokens — must never be committed.
-# .mcp.json (Claude Code CLI) and .vscode/mcp.json (Claude Code VS Code
-# extension via VS Code's native MCP store) both carry an Authorization
-# header in plaintext. Use the "Connect Claude Code" flow from
-# Admin > Platform Development to (re)generate these locally.
+# MCP client configs are local files — must never be committed.
+# .vscode/mcp.json (VS Code's native MCP store) is written per host by
+# scripts/dpf-bootstrap-agent-toolchain.* and copied into worktrees by
+# scripts/sync-mcp-worktrees.*. On https, Claude Code's dpf connector is the
+# dpf-platform plugin (BI-5201141C); a project .mcp.json is written only on a
+# plain-http install or in explicit legacy mode, and never copied into
+# worktrees. .mcp.json was tracked despite this rule until BI-A5C757A2; the
+# tracked http+header shape overrode every https bootstrap.
 .mcp.json
+.mcp.json.pre-single-connector
 .vscode/mcp.json
 
 # services/adp ships in its own Docker image (services/adp/Dockerfile) which

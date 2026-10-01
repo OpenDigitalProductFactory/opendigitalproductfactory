@@ -1,5 +1,6 @@
 import { buildDiscoveryDescriptor } from "./discovery-attribution";
 import type { TriageActorType, TriageOutcome } from "./discovery-triage-enums";
+import { isRecord } from "@dpf/validators";
 
 export type DiscoveryTriageTaxonomyCandidate = {
   nodeId: string;
@@ -165,10 +166,6 @@ export const DEFAULT_DISCOVERY_TRIAGE_THRESHOLDS: DiscoveryTriageThresholds = {
 
 function clampScore(value: number): number {
   return Math.max(0, Math.min(1, Number(value.toFixed(3))));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function asStringArray(value: unknown): string[] {

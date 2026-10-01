@@ -1,3 +1,4 @@
+import { workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import {
   createAutonomousWorkRun,
   type AutonomousWorkRunRef,
@@ -139,7 +140,20 @@ function promptNamesTool(lowerPrompt: string, toolName: string): boolean {
 }
 
 /**
- * The governed writers this prompt names that are authorized but NOT attached.
+ * The tools this run must reach that are authorized but NOT attached.
+ *
+ * Two sources, in priority order:
+ *   1. the governed writers the prompt names (scheduledRequiredToolNames) —
+ *      first, because the run's verdict is judged on them;
+ *   2. the tools the Workroom stage DECLARES it needs (WorkShapeStage.tools,
+ *      carried as taskConfig.workroomStage.tools — BI-43C3E914).
+ *
+ * Pinning only prompt-named tools was a GPP C-6 "Reach reconciliation" gap in
+ * the reverse direction: the stage's model admitted a tool the run never
+ * reached, because ranking by prompt relevance dropped it from the attachment
+ * budget and coworkers reported "no tool to read X". Declared tools are pinned
+ * here; they stay subject to the agent ∩ user grant filter, which pinning never
+ * bypasses — a declared name the run is not authorized for is simply absent.
  *
  * Returns an empty list when nothing needs pinning, so the caller re-resolves
  * only when a required tool would otherwise have to be discovered at runtime.
@@ -148,11 +162,17 @@ export function scheduledToolsNeedingPin(input: {
   prompt: string;
   attached: Array<{ name: string; sideEffect?: boolean }>;
   deferred: Array<{ name: string; sideEffect?: boolean }>;
+  /** The Workroom stage's declared tools. Omitted/empty: behaviour unchanged. */
+  declaredStageTools?: readonly string[];
+  /** The task's taskConfig; its workroomStage record supplies declaredStageTools
+   *  when they are not passed directly (BI-43C3E914, GPP element 5). */
+  taskConfig?: unknown;
 }): string[] {
-  const required = scheduledRequiredToolNames({
+  const promptRequired = scheduledRequiredToolNames({
     prompt: input.prompt,
     authorizedTools: [...input.attached, ...input.deferred],
   });
+  const required = [...new Set([...promptRequired, ...(input.declaredStageTools ?? workroomStageToolsFromTaskConfig(input.taskConfig))])];
   if (required.length === 0) return [];
   const deferredNames = new Set(input.deferred.map((tool) => tool.name));
   return required.some((name) => deferredNames.has(name)) ? required : [];

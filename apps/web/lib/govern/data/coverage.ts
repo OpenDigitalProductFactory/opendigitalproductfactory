@@ -14,7 +14,7 @@
 // functions; the immutable baseline is generated once from that same parser output so
 // the two never disagree.
 
-import type { DataAssetRegistry } from "./assets";
+import type { DataAssetRegistry } from "./asset-types";
 import type { LegacyCoverageBaseline } from "./legacy-coverage-baseline";
 
 /** Minimal shape the coverage algorithm needs — satisfied by PrismaModelFact. */

@@ -61,6 +61,8 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/canonical-origin.sh"
 # shellcheck source=scripts/installer/lib/machine-trust.sh
 . "$LIB_DIR/machine-trust.sh"
+# shellcheck source=scripts/installer/lib/mcp-client-env.sh
+. "$LIB_DIR/mcp-client-env.sh"
 # shellcheck source=scripts/installer/lib/github-cli.sh
 . "$LIB_DIR/github-cli.sh"
 # shellcheck source=scripts/installer/native-edge-host.sh
@@ -755,6 +757,18 @@ if [ "$_git_webhook_secret" != "kept" ]; then
   info "Generated DPF_GIT_WEBHOOK_SECRET in .env (read it there to configure the GitHub webhook)"
 fi
 
+# Inngest signing and event keys (BI-3267763F). The portal and the inngest
+# service verify each other with them, so a value published in the repository
+# lets anyone who can reach /api/inngest forge signed invocations. Filled when
+# missing, a placeholder, or the old public compose default; a real value is
+# kept. Never printed.
+for _inngest_key in INNGEST_SIGNING_KEY INNGEST_EVENT_KEY; do
+  if [ "$(dpf_env_ensure_secret_hex "$_inngest_key" .env 32 \
+    "# Inngest ${_inngest_key} (BI-3267763F). Portal and inngest must share it.")" != "kept" ]; then
+    info "Generated ${_inngest_key} in .env"
+  fi
+done
+
 # Persist the same canonical host identity written to install-state.json. These
 # installer-owned values are the portal/promoter authority; container OS is not.
 dpf_platform
@@ -919,6 +933,28 @@ export PATH="$SAFETY_BIN:$PATH"
 ok "Shell guard installed at $SAFETY_BIN"
 info "  Open a new terminal for the PATH change to take effect in other shells."
 
+# 9b. The document converter (dpf-doctools, BI-698B7F9A). It is not a compose
+#     service (AC-ODC-003), so compose never pulls it; pull it here with the
+#     other release images so the portal reads Word, Excel and PDF files at
+#     first boot. Only an immutable release tag names one converter (the portal
+#     refuses a moving tag), so `latest` pulls nothing. It never fails the
+#     install: a release with no converter is simply converter-less, and any
+#     other failure is retried by the portal's own reconciler once it starts.
+dpf_prepull_doctools() {
+  local tag="${1:-}" owner="${2:-}" image out
+  printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$' || return 0
+  owner="$(printf '%s' "${owner:-opendigitalproductfactory}" | tr '[:upper:]' '[:lower:]')"
+  image="ghcr.io/${owner}/dpf-doctools:${tag}"
+  if out="$(docker pull "$image" 2>&1)"; then
+    ok "Document converter image ready ($image)"
+  elif printf '%s' "$out" | grep -Eqi 'not found|manifest unknown|name unknown'; then
+    info "This release ships no document converter; Office files will not be converted."
+  else
+    warn "Could not download the document converter image; the platform retries after it starts."
+  fi
+  return 0
+}
+
 # 9c. Customer mode pulls pre-built GHCR images (parity with the Windows
 #     consumer path). During early access those images may require a (free)
 #     GitHub login. Probe once and point the operator at `docker login`
@@ -935,6 +971,7 @@ if [ "$DPF_INSTALL_MODE" = "customer" ]; then
     info "    docker login ghcr.io"
     info "  Then re-run install-dpf.sh. (Contributor mode builds from source instead.)"
   fi
+  dpf_prepull_doctools "$(_dpf_env_value DPF_IMAGE_TAG)" "$(_dpf_env_value GHCR_OWNER)"
 fi
 
 # 10. Bring up the platform-aware compose stack. Per the doctrine's
@@ -983,6 +1020,15 @@ else
     warn "HTTPS could not be configured. The portal stays at http://localhost:3000;"
     warn "AI clients that require https cannot sign in until the installer is run again."
   fi
+fi
+
+# This machine's AI clients find the install at its canonical origin and trust
+# its CA (BI-2D545A0C): DPF_MCP_URL and NODE_EXTRA_CA_CERTS are persisted for
+# the installing user on every run, in both install modes, so a re-run or an
+# origin change converges without the agent-toolchain bootstrap.
+dpf_resolve_mcp_client_env "$REPO_ROOT"
+if dpf_persist_mcp_client_env; then
+  ok "AI clients on this machine will connect to $DPF_MCP_CLIENT_URL"
 fi
 
 step "Bringing up the platform"

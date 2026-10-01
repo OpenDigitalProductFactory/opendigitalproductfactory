@@ -2928,7 +2928,8 @@
           "registry_read",
           "initiative_design_review",
           "initiative_domain_review",
-          "workroom_evidence_write"
+          "workroom_evidence_write",
+          "contributor_inventory_read"
         ]
       }
     },
@@ -2973,7 +2974,8 @@
           "crm_read",
           "crm_write",
           "web_search",
-          "workroom_evidence_write"
+          "workroom_evidence_write",
+          "storefront_read"
         ]
       }
     },
@@ -3376,7 +3378,8 @@
           "registry_read",
           "registry_write",
           "web_search",
-          "workroom_evidence_write"
+          "workroom_evidence_write",
+          "contributor_inventory_read"
         ]
       }
     },
@@ -4311,7 +4314,8 @@
           "registry_read",
           "backlog_read",
           "portfolio_read",
-          "workroom_evidence_write"
+          "workroom_evidence_write",
+          "payables_read"
         ]
       }
     },

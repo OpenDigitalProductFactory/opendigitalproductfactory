@@ -12,7 +12,7 @@
 // create_presentation (BI-543819B1) produces a branded deck from an outline on
 // the document generation facility and stores it here as a managed document.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import type { PresentationOutline } from "@/lib/documents/generation/create-presentation";
@@ -175,7 +175,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         query: { type: "string", description: "Phrase or natural-language concept to search for." },
-        mode: { type: "string", enum: ["metadata", "full-text", "semantic", "hybrid"], description: "Search mode. Hybrid combines Postgres filters and Qdrant semantic results." },
+        mode: { type: "string", enum: ["metadata", "full-text", "semantic", "hybrid"], description: "Search mode. Hybrid combines Postgres filters and pgvector semantic results." },
         state: { type: "string", enum: ["draft", "published", "archived"], description: "Lifecycle state filter." },
         documentKind: { type: "string", description: "Kind filter." },
         ownerPrincipalId: { type: "string", description: "Principal DB id for owner filter." },

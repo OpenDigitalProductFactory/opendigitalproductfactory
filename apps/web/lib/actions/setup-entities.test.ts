@@ -6,6 +6,12 @@ const mocks = vi.hoisted(() => ({
   organizationCreate: vi.fn(),
   organizationUpdate: vi.fn(),
   linkSetupToOrg: vi.fn(),
+  linkSetupToUser: vi.fn(),
+  organizationUpdateMany: vi.fn(),
+  userFindUnique: vi.fn(),
+  userCreate: vi.fn(),
+  setupProgressFindUnique: vi.fn(),
+  syncUserPrincipal: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -15,24 +21,32 @@ vi.mock("@dpf/db", () => ({
       findUnique: mocks.organizationFindUnique,
       create: mocks.organizationCreate,
       update: mocks.organizationUpdate,
+      updateMany: mocks.organizationUpdateMany,
     },
     user: {
-      findUnique: vi.fn(),
-      create: vi.fn(),
+      findUnique: mocks.userFindUnique,
+      create: mocks.userCreate,
+    },
+    platformSetupProgress: {
+      findUnique: mocks.setupProgressFindUnique,
     },
   },
 }));
 
+vi.mock("@/lib/identity/principal-linking", () => ({
+  syncUserPrincipal: mocks.syncUserPrincipal,
+}));
+
 vi.mock("./setup-progress", () => ({
   linkSetupToOrg: mocks.linkSetupToOrg,
-  linkSetupToUser: vi.fn(),
+  linkSetupToUser: mocks.linkSetupToUser,
 }));
 
 vi.mock("../password", () => ({
   hashPassword: vi.fn(),
 }));
 
-import { createOrganization } from "./setup-entities";
+import { createOrganization, createOwnerAccount } from "./setup-entities";
 
 describe("createOrganization", () => {
   beforeEach(() => {
@@ -101,5 +115,69 @@ describe("createOrganization", () => {
     });
     expect(mocks.linkSetupToOrg).toHaveBeenCalledWith("setup-2", "org-new");
     expect(result.id).toBe("org-new");
+  });
+});
+
+describe("createOwnerAccount", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.userFindUnique.mockResolvedValue(null);
+    mocks.userCreate.mockResolvedValue({ id: "user-owner", email: "owner@example.test" });
+    mocks.syncUserPrincipal.mockResolvedValue({
+      id: "principal-owner",
+      principalId: "PRN-owner",
+      kind: "human",
+      status: "active",
+    });
+    mocks.setupProgressFindUnique.mockResolvedValue({ organizationId: "org-setup" });
+    mocks.organizationUpdateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it("records the new owner as the organization's accountable owner when none is set", async () => {
+    await expect(
+      createOwnerAccount("setup-1", { name: "Org", email: "owner@example.test", password: "password1" }),
+    ).resolves.toEqual({ userId: "user-owner", email: "owner@example.test" });
+
+    expect(mocks.syncUserPrincipal).toHaveBeenCalledWith("user-owner");
+    expect(mocks.setupProgressFindUnique).toHaveBeenCalledWith({
+      where: { id: "setup-1" },
+      select: { organizationId: true },
+    });
+    // The null guard lives in the WHERE clause, so an existing choice is never overwritten.
+    expect(mocks.organizationUpdateMany).toHaveBeenCalledWith({
+      where: { id: "org-setup", topAccountablePrincipalId: null },
+      data: { topAccountablePrincipalId: "principal-owner" },
+    });
+  });
+
+  it("leaves an existing accountable owner untouched", async () => {
+    mocks.organizationUpdateMany.mockResolvedValue({ count: 0 });
+    await createOwnerAccount("setup-1", { name: "Org", email: "owner@example.test", password: "password1" });
+    expect(mocks.organizationUpdateMany).toHaveBeenCalledTimes(1);
+    expect(mocks.organizationUpdate).not.toHaveBeenCalled();
+    expect(mocks.organizationUpdateMany.mock.calls[0][0].where).toEqual({
+      id: "org-setup",
+      topAccountablePrincipalId: null,
+    });
+  });
+
+  it("applies the same unset-only rule when setup is re-run for an existing user", async () => {
+    mocks.userFindUnique.mockResolvedValue({ id: "user-existing", email: "owner@example.test" });
+    await createOwnerAccount("setup-1", { name: "Org", email: "owner@example.test", password: "password1" });
+    expect(mocks.userCreate).not.toHaveBeenCalled();
+    expect(mocks.syncUserPrincipal).toHaveBeenCalledWith("user-existing");
+    expect(mocks.organizationUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "org-setup", topAccountablePrincipalId: null },
+    }));
+  });
+
+  it("still completes account creation when the principal cannot be linked", async () => {
+    mocks.syncUserPrincipal.mockRejectedValue(new Error("alias conflict"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(
+      createOwnerAccount("setup-1", { name: "Org", email: "owner@example.test", password: "password1" }),
+    ).resolves.toEqual({ userId: "user-owner", email: "owner@example.test" });
+    expect(mocks.organizationUpdateMany).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 });

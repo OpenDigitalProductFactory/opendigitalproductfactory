@@ -24,7 +24,7 @@ import { randomUUID } from "crypto";
 
 import { prisma, Prisma } from "@dpf/db";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
 /** Minimal shape of the persistence layer, injected so the decision + wording
  *  logic stays unit-testable without a database. */

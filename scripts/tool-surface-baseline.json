@@ -3,14 +3,14 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 417,
-      "reason": "export_ea_view_drawing (BI-4C17BF51) lets the Enterprise Architect coworker hand a person an EA view as a file they can open without DPF (.odg for Draw, .svg, .pdf). No existing tool can: export_archimate emits the ArchiMate model-exchange XML, which is a model, not a picture, and needs an ArchiMate tool to read; describe_ea_view returns statistics; create_presentation makes decks, not diagrams. It is not folded into export_archimate because the two answer different requests (move my model vs. show my diagram) with different outputs and a different side effect (this one stores a document), and a coworker choosing between them should see two clearly named tools, not one tool with a mode flag.",
-      "recordedAt": "2026-09-25"
+      "value": 428,
+      "reason": "BI-EBF0F6EE: list_pull_requests, read_contributor_inventory, list_supplier_contracts and list_bills give four standing-room stages (pull-request flow, contributor intake, vendor renewal, payables) a read over data the install already holds; without them those rooms recorded 'no tool can read X' every cycle. Each is read-only, page-capped, granted only to that stage's accountable agent, and declared on the stage so the GPP parity test (C-1/C-2/C-4) proves it real and granted. Claim to check: those rooms' runs call these tools and record completed or inconclusive evidence instead of blocked.",
+      "recordedAt": "2026-10-01"
     },
     "registry.packFiles": {
-      "value": 103,
-      "reason": "New portfolio-budget-pack.ts (EP-PORTFOLIO-BUDGET-WIP). It holds the epic attribution tools now and the budget tools the next slices add (set_portfolio_budget, propose_portfolio_budgets), so the budget domain has one pack rather than growing demand-scoring-pack, which is already large and owns funding decisions, not portfolio budgets.",
-      "recordedAt": "2026-09-25"
+      "value": 105,
+      "reason": "BI-EBF0F6EE: contributor-inventory-pack.ts and payables-pack.ts. Contributor inventory had a sync trigger but no reader and no pack of its own; payables/supplier reads are a finance-operations domain distinct from banking and reporting packs, granted to a narrower key (payables_read) than financial_read.",
+      "recordedAt": "2026-10-01"
     },
     "tier.coreToolNames": {
       "value": 35,

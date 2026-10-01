@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -100,6 +101,41 @@ export function ensureGitWebhookSecret(text, newline, secret = process.env[GIT_W
   return `${text}${text && !text.endsWith("\n") ? newline : ""}${why}${newline}${GIT_WEBHOOK_SECRET_KEY}=${value}${newline}`;
 }
 
+// BI-3267763F: Inngest signing and event keys. Compose used to fall back to
+// values published in the repository, so installs verified /api/inngest
+// signatures against a public key. promote.sh exports the value the recreated
+// portal and inngest were started with; persisting that same value keeps them
+// and the install .env in step. Unlike the webhook secret, a known public
+// default is replaced, not kept.
+export const INNGEST_KEYS = ["INNGEST_SIGNING_KEY", "INNGEST_EVENT_KEY"];
+export const INNGEST_PUBLIC_DEFAULTS = new Set(["abcdef0123456789", "deadbeefcafebabe"]);
+
+function envValue(text, key) {
+  const matches = [...text.matchAll(new RegExp(`^${key}=(.*)$`, "gm"))];
+  const last = matches.at(-1);
+  return last ? last[1].trim().replace(/^["']|["']$/g, "") : "";
+}
+
+export function isRealInngestKey(value) {
+  return typeof value === "string" && value.length > 0 && !value.startsWith("<") && !INNGEST_PUBLIC_DEFAULTS.has(value);
+}
+
+export function ensureInngestKeys(text, newline, exported = process.env) {
+  for (const key of INNGEST_KEYS) {
+    if (isRealInngestKey(envValue(text, key))) continue;
+    const candidate = exported[key]?.trim();
+    const value = isRealInngestKey(candidate) ? candidate : randomBytes(32).toString("hex");
+    const pattern = new RegExp(`^${key}=.*$`, "gm");
+    if (pattern.test(text)) {
+      text = text.replace(pattern, `${key}=${value}`);
+      continue;
+    }
+    const why = `# Inngest ${key} (BI-3267763F). Portal and inngest must share it.`;
+    text = `${text}${text && !text.endsWith("\n") ? newline : ""}${why}${newline}${key}=${value}${newline}`;
+  }
+  return text;
+}
+
 export function updateEnv(bytes, releaseTag, ghcrOwner) {
   let text = bytes?.toString("utf8") ?? "";
   const preExisting = text.trim().length > 0;
@@ -117,6 +153,7 @@ export function updateEnv(bytes, releaseTag, ghcrOwner) {
     text += `${text && !text.endsWith("\n") ? newline : ""}${why}${newline}${HOST_BIND_KEY}=${value}${newline}`;
   }
   text = ensureGitWebhookSecret(text, newline);
+  text = ensureInngestKeys(text, newline);
   return Buffer.from(text);
 }
 
@@ -176,9 +213,14 @@ export async function installReleaseAssets(options) {
 }
 
 function parseArgs(argv) {
-  const result = {};
-  for (let i = 0; i < argv.length; i += 2) result[argv[i].replace(/^--/, "")] = argv[i + 1];
-  return result;
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: Object.fromEntries(["source", "install", "state", "tag", "owner", "recovery"].map((name) => [name, { type: "string" }])),
+  });
+  return Object.fromEntries(Object.entries(values).map(([name, value]) => [name, typeof value === "string" ? value : undefined]));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

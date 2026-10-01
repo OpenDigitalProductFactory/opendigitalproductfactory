@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import { declareBreakFix, type DeclareBreakFixDb } from "./declare-break-fix";
 import { workCapsuleActor } from "./handler-actor";
 

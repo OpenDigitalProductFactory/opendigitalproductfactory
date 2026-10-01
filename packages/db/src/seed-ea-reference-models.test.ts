@@ -46,8 +46,8 @@ vi.mock("fs", async (importOriginal) => {
   };
 });
 
-const { mockReadWorkbook } = vi.hoisted(() => ({
-  mockReadWorkbook: vi.fn(),
+const { mockLoadIt4itReferenceRows } = vi.hoisted(() => ({
+  mockLoadIt4itReferenceRows: vi.fn(),
 }));
 
 vi.mock("./client.js", () => ({
@@ -66,24 +66,11 @@ vi.mock("./client.js", () => ({
   },
 }));
 
-vi.mock("./excel-sheet-reader.js", () => ({
-  readWorkbook: mockReadWorkbook,
-  requireSheetData: vi.fn((workbook: Array<{ sheet: string; data: unknown[] }>, sheetName: string) => {
-    const sheet = workbook.find((entry) => entry.sheet === sheetName);
-    if (!sheet) throw new Error(`Missing worksheet: ${sheetName}`);
-    return sheet.data;
-  }),
-  sheetDataToObjects: vi.fn((sheetData: unknown[][]) => {
-    const [headers = [], ...rows] = sheetData;
-    return rows.map((row) =>
-      headers.reduce<Record<string, unknown>>((record, header, index) => {
-        if (typeof header === "string" && header.length > 0) {
-          record[header] = row[index] ?? null;
-        }
-        return record;
-      }, {})
-    );
-  }),
+// BI-B470264D: the seed reads committed JSON. The real document is exercised by
+// it4it-reference-data.test.ts and the drift check in scripts/lib.
+vi.mock("./it4it-reference-data.js", () => ({
+  IT4IT_REFERENCE_JSON_PATH: "packages/db/data/it4it_functional_criteria_taxonomy.json",
+  loadIt4itReferenceRows: mockLoadIt4itReferenceRows,
 }));
 
 import { prisma } from "./client.js";
@@ -145,29 +132,33 @@ beforeEach(() => {
   // ea-reference-model-applicability.test.ts and by the case at the end here.
   givenInstallArchetype({ archetypeId: "community-bank", category: "banking-financial-services" });
 
-  mockReadWorkbook.mockResolvedValue([
-    {
-      sheet: "IT4IT Functional Criteria",
-      data: [
-        ["Level 1: Capability Group", "Level 2: Function", "Level 3: Functional Component", "Functional Criteria", "Reference Section"],
-        ["Strategy to Portfolio", "Strategy Function", "Policy", "Shall align and map to Enterprise Architecture", "6.1.1"],
-      ],
-    },
-    {
-      sheet: "Value Stream Activities",
-      data: [
-        ["Value Stream", "Value Stream Stage", "Activity Criteria", "Reference Section"],
-        ["Evaluate", "Gather Influencers Stage", "Shall define Strategic Themes and Strategic Objectives", "5.1.2"],
-      ],
-    },
-    {
-      sheet: "FC Participation Matrix",
-      data: [
-        ["Value Stream", "Value Stream Stage", "Ref", "Policy"],
-        ["Evaluate", "Gather Influencers Stage", "5.1.2", "●"],
-      ],
-    },
-  ]);
+  mockLoadIt4itReferenceRows.mockReturnValue({
+    functionalRows: [
+      {
+        capabilityGroup: "Strategy to Portfolio",
+        functionName: "Strategy Function",
+        componentName: "Policy",
+        criteria: "Shall align and map to Enterprise Architecture",
+        referenceSection: "6.1.1",
+      },
+    ],
+    valueStreamRows: [
+      {
+        valueStream: "Evaluate",
+        valueStreamStage: "Gather Influencers Stage",
+        criteria: "Shall define Strategic Themes and Strategic Objectives",
+        referenceSection: "5.1.2",
+      },
+    ],
+    participationRows: [
+      {
+        valueStream: "Evaluate",
+        valueStreamStage: "Gather Influencers Stage",
+        reference: "5.1.2",
+        participationByColumn: { Policy: "●" },
+      },
+    ],
+  });
 });
 
 describe("seedEaReferenceModels", () => {
@@ -236,7 +227,7 @@ describe("seedEaReferenceModels", () => {
     }
   });
 
-  it("throws when the IT4IT workbook read produces zero elements (BI-98D19DF2)", async () => {
+  it("throws when the IT4IT reference import produces zero elements (BI-98D19DF2)", async () => {
     mockPrisma.eaReferenceModelElement.count.mockResolvedValue(0);
 
     await expect(seedEaReferenceModels()).rejects.toThrow(/IT4IT reference model imported zero elements/);

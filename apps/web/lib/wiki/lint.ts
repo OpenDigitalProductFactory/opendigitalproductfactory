@@ -11,7 +11,7 @@
 //
 // Phase 4b1 ships the orchestrator + scheduled job only. Phase 4b2
 // adds the admin UI + MCP tool. Phase 4b3 adds detectContradictions
-// (Qdrant cosine + LLM judge) and detectMissingXrefs (entity NER).
+// (vector cosine + LLM judge) and detectMissingXrefs (entity NER).
 
 import {
   runDetectors,

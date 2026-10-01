@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import ReactMarkdown from "react-markdown";
+import { MarkdownHtml } from "@/components/shared/MarkdownHtml";
+import { DOCUMENT_MARKDOWN_OPTIONS } from "@/components/shared/markdown-document-options";
 import { Archive, ArchiveRestore, ArrowLeft, CheckCircle2, FileText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { listManagedDocumentReferences, loadManagedDocument } from "@/lib/documents/document-store";
@@ -124,9 +125,7 @@ export default async function DocumentDetailPage({ params }: Props) {
               />
             </div>
           ) : document.contentFormat === "text/markdown" ? (
-            <div className="prose prose-sm max-w-none text-[var(--dpf-text)] prose-headings:text-[var(--dpf-text)] prose-p:text-[var(--dpf-text)] prose-strong:text-[var(--dpf-text)]">
-              <ReactMarkdown>{content}</ReactMarkdown>
-            </div>
+            <MarkdownHtml source={content} options={DOCUMENT_MARKDOWN_OPTIONS} />
           ) : (
             <pre className="whitespace-pre-wrap text-sm leading-6 text-[var(--dpf-text)]">{content || "Binary or external content is stored as a managed blob."}</pre>
           )}

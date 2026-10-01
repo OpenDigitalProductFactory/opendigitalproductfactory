@@ -11,6 +11,8 @@ const autonomous = vi.hoisted(() => ({
   resolveTools: vi.fn(),
 }));
 const pirContext = vi.hoisted(() => vi.fn(async () => ""));
+const sensitivity = vi.hoisted(() => vi.fn(async (_parsed: unknown, _token: unknown, fallback: string) => fallback));
+vi.mock("./mcp-task-review-sensitivity", () => ({ remoteReviewSensitivity: sensitivity }));
 vi.mock("./pir-evidence-context", () => ({ loadPirEvidenceContext: pirContext }));
 vi.mock("./mcp-task-review-outcome", () => ({
   loadInitiativeReviewOutcome: vi.fn(async (_binding: unknown, receiptId: string) => ({
@@ -24,6 +26,7 @@ vi.mock("@dpf/db", () => ({
     taskRun: {
       findUnique: (...args: unknown[]) => db.findTaskRun(...args),
       update: (...args: unknown[]) => db.updateTaskRun(...args),
+      updateMany: (...args: unknown[]) => db.updateTaskRun(...args),
     },
   },
 }));
@@ -37,7 +40,7 @@ vi.mock("./mcp/external-approval-location-lookup", () => ({
   withTaskRunApprovalLocation: vi.fn(async (value: unknown) => value),
 }));
 
-import { executeRemoteTaskAttempt, remoteTaskConversation } from "./mcp-task-execution";
+import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 
 const writerToolName = "record_initiative_evidence";
@@ -70,6 +73,15 @@ const parsed = {
 };
 
 describe("remote task terminal-writer postcondition", () => {
+  it.each([undefined, "capacity"] as const)("revalidates activity classification without replacing the task on %s", async (resumeKind) => {
+    sensitivity.mockResolvedValueOnce("development");
+    autonomous.execute.mockResolvedValue({ content: "Still reviewing", executedTools: [] });
+    const token = { tokenId: "oauth", userId: "human", capability: "write" as const, source: "oauth" as const };
+    await executeRemoteTaskAttempt({ run: { id: "original", taskRunId: "TR-ORIGINAL", contextId: "thread-1" }, threadId: "thread-1",
+      token, userContext: {} as never, parsed, idempotentReplay: Boolean(resumeKind), resumeKind, capacityAttempt: 2 });
+    expect(sensitivity).toHaveBeenCalledWith(parsed, token, expect.any(String));
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({ sensitivity: "development", taskRunId: "TR-ORIGINAL" }));
+  });
   it.each([undefined, "terminal-writer"] as const)("supplies current PIR observations on initial execution and same-task recovery (%s)", async (resumeKind) => {
     pirContext.mockResolvedValueOnce("Runtime observation RV-LIVE: deployed repair verified.");
     autonomous.execute.mockResolvedValue({ content: "Need review.", executedTools: [] });
@@ -118,7 +130,7 @@ describe("remote task terminal-writer postcondition", () => {
     vi.clearAllMocks();
     db.findModelConfig.mockResolvedValue(null);
     db.findTaskRun.mockResolvedValue({ status: "working" });
-    db.updateTaskRun.mockResolvedValue({});
+    db.updateTaskRun.mockResolvedValue({ count: 1 });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "AGT-WS-PORTFOLIO",
       displayName: "Portfolio Advisor",
@@ -254,7 +266,7 @@ describe("remote task terminal-writer postcondition", () => {
     });
 
     expect(db.updateTaskRun).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-7991D9CAE467" },
+      where: expect.objectContaining({ taskRunId: "TR-MCP-7991D9CAE467", status: "working" }),
       data: expect.objectContaining({
         status: "input-required",
         completedAt: null,
@@ -323,7 +335,7 @@ describe("remote task terminal-writer postcondition", () => {
     });
 
     expect(db.updateTaskRun).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-APPROVAL-PROJECTION" },
+      where: expect.objectContaining({ taskRunId: "TR-MCP-APPROVAL-PROJECTION", status: "input-required" }),
       data: expect.objectContaining({
         status: "input-required",
         completedAt: null,
@@ -517,7 +529,7 @@ describe("remote task terminal-writer postcondition", () => {
     });
 
     expect(db.updateTaskRun).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-7ECDD7A53D18" },
+      where: expect.objectContaining({ taskRunId: "TR-MCP-7ECDD7A53D18", status: "working" }),
       data: expect.objectContaining({
         status: "input-required",
         completedAt: null,
@@ -582,7 +594,7 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
     vi.clearAllMocks();
     db.findModelConfig.mockResolvedValue(null);
     db.findTaskRun.mockResolvedValue({ status: "working" });
-    db.updateTaskRun.mockResolvedValue({});
+    db.updateTaskRun.mockResolvedValue({ count: 1 });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "AGT-WS-PORTFOLIO",
       displayName: "Portfolio Advisor",
@@ -702,34 +714,6 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
   });
 });
 
-describe("remoteTaskConversation", () => {
-  it("merges hydrated terminal-writer context into the sole system prompt", () => {
-    expect(remoteTaskConversation({
-      systemPrompt: "Review independently.",
-      prompt: "Record the exact governed receipt.",
-      resumeKind: "terminal-writer",
-      terminalWriterContext: "Immutable artifact evidence",
-    })).toEqual({
-      systemPrompt: "Review independently.\n\nImmutable artifact evidence",
-      chatHistory: [
-        { role: "user", content: "Record the exact governed receipt." },
-      ],
-    });
-  });
-
-  it("keeps an ordinary task system prompt and user history unchanged", () => {
-    expect(remoteTaskConversation({
-      systemPrompt: "Review independently.",
-      prompt: "Inspect the artifact.",
-    })).toEqual({
-      systemPrompt: "Review independently.",
-      chatHistory: [
-        { role: "user", content: "Inspect the artifact." },
-      ],
-    });
-  });
-});
-
 // BI-8CFA1CA8 — residency is a stated policy, not a side effect of a routing
 // preference. Before this, `pinnedProviderId === "local"` also set
 // residencyPolicy "local_only", so an operator clearing a provider preference
@@ -739,7 +723,7 @@ describe("agent residency policy is read, never inferred from a pin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db.findTaskRun.mockResolvedValue({ status: "working" });
-    db.updateTaskRun.mockResolvedValue({});
+    db.updateTaskRun.mockResolvedValue({ count: 1 });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "AGT-WS-PORTFOLIO",
       displayName: "Portfolio Advisor",

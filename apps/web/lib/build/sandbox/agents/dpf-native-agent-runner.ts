@@ -28,7 +28,8 @@
 // complete and selectable without throwing.
 
 import { prisma } from "@dpf/db";
-import { callProvider, type ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { callProvider } from "@/lib/inference/ai-inference";
 import type { AssignedTask } from "../../task-dependency-graph";
 import type {
   AgentCredential,

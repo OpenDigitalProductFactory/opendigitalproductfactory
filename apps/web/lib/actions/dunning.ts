@@ -4,6 +4,7 @@ import { prisma } from "@dpf/db";
 import { composeDunningEmail, sendEmail } from "@/lib/email";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { resolveAppBaseUrl } from "@/lib/app-url";
+import { tokenLinkUrl } from "@/lib/routes";
 
 // ─── Default dunning sequence ─────────────────────────────────────────────────
 
@@ -138,7 +139,9 @@ export async function runDunning(): Promise<{ remindersSent: number }> {
     // Compose and send reminder email
     if (recipientEmail) {
       const payUrl =
-        baseUrl && invoice.payToken ? `${baseUrl}/pay/${invoice.payToken}` : undefined;
+        baseUrl && invoice.payToken
+          ? tokenLinkUrl(baseUrl, "invoicePayment", invoice.payToken)
+          : undefined;
 
       const emailParams = composeDunningEmail({
         to: recipientEmail,

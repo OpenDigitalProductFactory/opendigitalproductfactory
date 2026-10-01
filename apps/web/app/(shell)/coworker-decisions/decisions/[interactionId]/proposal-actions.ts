@@ -17,6 +17,7 @@ import { captureOrgBusinessAnswer } from "@/lib/wiki/capture-org-answer";
 import { createProductionInference } from "@/lib/wiki/inference-adapter";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { ruleWeightAdjustmentProposal } from "@/lib/decision-perspective/weight-proposal-store";
+import { approveHeldProfessionMaterial } from "@/lib/decision-perspective/held-material-store";
 import {
   ALREADY_RULED,
   isProposalActionKind,
@@ -156,6 +157,8 @@ export async function ruleProposal(input: RuleProposalInput): Promise<RulePropos
             },
           });
         },
+        releaseHeldMaterial: ({ profileId }) =>
+          approveHeldProfessionMaterial(prisma as never, { profileId, approvedByUserId: userId }),
       },
       {
         actionKind: row.actionKind,

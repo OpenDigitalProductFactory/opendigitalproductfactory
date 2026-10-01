@@ -93,6 +93,19 @@ Verify AC-MCP-RECOVERY-1 through AC-MCP-RECOVERY-7 and operator-readable agreeme
 
 ## Refactoring, risks and rollback
 
+### Source-review classification continuation (2026-09-27)
+
+Under BI-CF118B6D/WC-068FE3AD, extend AC-RECOVERY-GATE-4 in this order:
+reproduce generic coworker classification on a validated source-only request;
+reuse canonical request validation to derive the bounded activity classification;
+carry it through initial and resumed attempts without new persisted authority;
+exercise mixed/PIR/unknown, stale/forged, residency and sensitive-payload negatives;
+then run affected tests, typecheck, canonical gates, independent review and normal
+release. Verify the original live task's real receipt and readiness advancement.
+Spend approximately 20% on consolidating request projection/validation rather than
+adding a second gate table. No provider configuration, grant or retry-budget edit
+belongs to this continuation. The design addendum defines its trust boundary.
+
 Allocate 20–30% of effort to removing duplicate guidance, deriving recovery from existing profile policy and unifying reader projections. Measure definitions removed and consumers verified; formatting is not evidence.
 
 Risks are authority expansion, inconsistent state, stale reviewer identity and legacy response breakage. Preserve negative authorization tests and immutable version checks. Revert the scoped projector and adapters together without deleting receipts, changing existing Workroom identities or disabling governance. No new database model, orchestrator or migration is proposed.

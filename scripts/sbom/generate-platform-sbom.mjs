@@ -22,6 +22,7 @@
 //   node scripts/sbom/generate-platform-sbom.mjs
 //   node scripts/sbom/generate-platform-sbom.mjs --root <repoRoot> --out <dir> --git-ref <sha>
 
+import { parseArgs as utilParseArgs } from "node:util";
 import {
   DEPENDENCY_KINDS,
   parseImporters as parseLockImporters,
@@ -37,16 +38,21 @@ import { fileURLToPath } from "node:url";
 
 // ── args ──────────────────────────────────────────────────────────────
 function parseArgs(argv) {
-  const out = { root: process.cwd(), out: null, gitRef: null };
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--root") out.root = argv[++i];
-    else if (argv[i] === "--out") out.out = argv[++i];
-    else if (argv[i] === "--git-ref") out.gitRef = argv[++i];
-  }
-  out.root = resolve(out.root);
-  out.out = out.out ? resolve(out.out) : join(out.root, "sbom");
-  out.gitRef = out.gitRef ?? process.env.GITHUB_SHA ?? process.env.GIT_COMMIT ?? "unknown";
-  return out;
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: { root: { type: "string" }, out: { type: "string" }, "git-ref": { type: "string" } },
+  });
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  const root = resolve(text(values.root) ?? process.cwd());
+  const out = text(values.out);
+  return {
+    root,
+    out: out ? resolve(out) : join(root, "sbom"),
+    gitRef: text(values["git-ref"]) ?? process.env.GITHUB_SHA ?? process.env.GIT_COMMIT ?? "unknown",
+  };
 }
 
 // ── lockfile parsing (line-based; mirrors pnpm-lock-parser.ts shape) ────
@@ -75,16 +81,19 @@ function parseImporters(lockText) {
   return importers;
 }
 
-// Registry names our own workspaces declare with different specifiers, even when
-// they resolve to one version today. "^3.14.0" beside "^3.26.3" resolves alike
-// until a lockfile refresh, then silently splits (plan 2026-09-08 S11).
-// Workspace, link, file and catalog specifiers are first-party plumbing, not drift.
+// Registry names that two or more of our workspaces declare without one shared
+// `catalog:` specifier (plan 2026-09-08 S11). "^3.14.0" beside "^3.26.3"
+// resolves alike until a lockfile refresh, then silently splits; the same range
+// typed in two places drifts on the next one-sided bump. A shared name is clean
+// only when every declaration is the same catalog reference, whose range lives
+// once in pnpm-workspace.yaml. Workspace, link and file specifiers are
+// first-party plumbing, not registry dependencies.
 export function findSpecifierDrift(importers) {
   const bySpec = new Map();
   for (const [ws, imp] of Object.entries(importers)) {
     for (const kind of DEPENDENCY_KINDS) {
       for (const d of imp[kind] ?? []) {
-        if (!d.specifier || /^(workspace|link|file|catalog):/.test(d.specifier)) continue;
+        if (!d.specifier || /^(workspace|link|file):/.test(d.specifier)) continue;
         if (!bySpec.has(d.name)) bySpec.set(d.name, new Map());
         const specs = bySpec.get(d.name);
         if (!specs.has(d.specifier)) specs.set(d.specifier, new Set());
@@ -93,7 +102,11 @@ export function findSpecifierDrift(importers) {
     }
   }
   return [...bySpec.entries()]
-    .filter(([, specs]) => specs.size > 1)
+    .filter(([, specs]) => {
+      const workspaces = new Set([...specs.values()].flatMap((ws) => [...ws]));
+      if (workspaces.size < 2) return false;
+      return specs.size > 1 || !/^catalog:/.test([...specs.keys()][0]);
+    })
     .map(([name, specs]) => ({
       name,
       specifiers: Object.fromEntries([...specs.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([s, ws]) => [s, [...ws].sort()])),

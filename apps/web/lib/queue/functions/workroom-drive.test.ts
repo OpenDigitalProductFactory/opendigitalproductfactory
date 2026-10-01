@@ -17,7 +17,7 @@ import { readWorkShapeDefinitionContract, getWorkShape } from "@/lib/work-manage
 const driveDb = {
   workroom: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   workroomActivity: { create: vi.fn() },
-  scheduledAgentTask: { upsert: vi.fn() },
+  scheduledAgentTask: { upsert: vi.fn(), findUnique: vi.fn() },
   $transaction: vi.fn(),
 };
 
@@ -212,6 +212,7 @@ describe("applyDrivePlan lease expiry", () => {
   function persistedLease(status = "ready") {
     const persisted = { expiresAt: null as Date | null, holder: "prn-row-coord", status };
     driveDb.scheduledAgentTask.upsert.mockReset().mockResolvedValue({});
+    driveDb.scheduledAgentTask.findUnique.mockReset().mockResolvedValue(null);
     driveDb.$transaction.mockImplementation(async (run) => run(driveDb));
     driveDb.workroom.findUnique.mockResolvedValue({ workspaceState: {} });
     driveDb.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
@@ -385,5 +386,71 @@ describe("applyDrivePlan hold", () => {
     }
     expect(notifyStall).toHaveBeenCalledTimes(1);
     expect(notifyStall).toHaveBeenCalledWith(expect.objectContaining({ hold: expect.objectContaining({ stuckTicks: 4 }) }));
+  });
+});
+
+// BI-43C3E914 — a stage names the tools it needs (GPP element 2 "Attachment",
+// element 5 "Capability set"), and the drive carries them to the run.
+describe("stage-declared tools reach the dispatched task", () => {
+  const declaredRoom = () => room({
+    scopeClaims: [buildWorkShapeClaim({ key: "dependency-advisory-watch", version: "1.0.0" })],
+  });
+
+  it("passes a declared stage's tools to the task and names them in the brief", async () => {
+    const fx = effects();
+    const result = await runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [declaredRoom()],
+      effects: fx,
+    });
+    expect(result.dispatched).toBe(1);
+    const call = fx.upsertAgentTask.mock.calls[0]?.[0];
+    expect(call?.stage).toEqual({
+      shapeKey: "dependency-advisory-watch",
+      shapeVersion: "1.0.0",
+      stageKey: "sweep",
+      tools: ["read_codebase_manifest", "list_patch_posture"],
+    });
+    expect(call?.prompt).toContain("Tools for this stage: read_codebase_manifest, list_patch_posture.");
+  });
+
+  it("leaves an undeclared stage exactly as before: no tools, no tools line", async () => {
+    const fx = effects();
+    // obligation-assurance-watch/sweep is on KNOWN_STAGE_TOOL_GAPS.
+    await runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [room()],
+      effects: fx,
+    });
+    const call = fx.upsertAgentTask.mock.calls[0]?.[0];
+    expect(call?.stage.tools).toEqual([]);
+    expect(call?.stage.stageKey).toBe("sweep");
+    expect(call?.prompt).not.toContain("Tools for this stage");
+  });
+
+  it("writes the stage record to taskConfig.workroomStage, preserving other taskConfig keys", async () => {
+    driveDb.$transaction.mockImplementation(async (run) => run(driveDb));
+    driveDb.workroom.updateMany.mockResolvedValue({ count: 1 });
+    driveDb.scheduledAgentTask.upsert.mockReset().mockResolvedValue({});
+    driveDb.scheduledAgentTask.findUnique.mockReset().mockResolvedValue({
+      taskConfig: { trigger: { kind: "time", recordedAt: "2026-08-01T00:00:00.000Z" } },
+    });
+    const fx = createWorkroomDriveEffects(async () => driveDb as never, () => new Date("2026-09-01T00:00:00.000Z"));
+    const stage = { shapeKey: "dependency-advisory-watch", shapeVersion: "1.0.0", stageKey: "sweep", tools: ["read_codebase_manifest"] };
+    await expect(fx.upsertAgentTask({
+      taskId: "task-1",
+      agentId: "security-engineer",
+      ownerUserId: "user-1",
+      title: "t",
+      prompt: "p",
+      stage,
+      now: new Date("2026-09-01T00:00:00.000Z"),
+      lease: { roomId: "row-1", expiresAt: new Date("2026-09-01T00:10:00.000Z"), holderPrincipalId: null },
+    })).resolves.toBe(true);
+    const args = driveDb.scheduledAgentTask.upsert.mock.calls[0]?.[0];
+    const expected = {
+      trigger: { kind: "time", recordedAt: "2026-08-01T00:00:00.000Z" },
+      workroomStage: stage,
+    };
+    expect(args?.create?.taskConfig).toEqual(expected);
+    expect(args?.update?.taskConfig).toEqual(expected);
   });
 });

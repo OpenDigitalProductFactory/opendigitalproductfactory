@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-3430B3A4 (slice 6 of EP-PORTFOLIO-BUDGET-WIP). PlatformDevConfig gains wipAdmissionMode (enum WipAdmissionMode: shadow|enforce, default shadow). Points-in-flight admission records every admit, warn and refuse decision on the item; it blocks autonomous starts only when the mode is enforce. Shadow first per WWMD DI-D83D9C13686B, because the live install measured every portfolio 2-15x over its allowance from idle Workrooms and unaccepted items, and enforcing at once would halt every autonomous start. Set through set_backlog_delivery_budget. Additive: a column with a default. Migration: 20260925210000_wip_admission_mode.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "PlatformDevConfig",
+      "lifecycleDisposition": "retain-with-item",
+      "fields": [
+        {
+          "name": "wipAdmissionMode",
+          "resolution": "governed",
+          "reason": "Whether points-in-flight admission blocks autonomous starts (enforce) or only records what it would do (shadow). Platform configuration, not personal data.",
+          "provenance": "Default shadow on every install; operator-set through set_backlog_delivery_budget, which records the change.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

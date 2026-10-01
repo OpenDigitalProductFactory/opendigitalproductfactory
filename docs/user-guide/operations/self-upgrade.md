@@ -63,6 +63,20 @@ MCP writes. Delivery agents can still read quiescence status and release an
 owned nonproduction lease, then retry evidence publication after the portal
 returns to normal.
 
+### When work is still running
+
+An upgrade no longer gives up because work is in progress. When you press
+**Upgrade now**, or the hourly check starts one, the portal stops accepting
+new work and waits for builds and coworker tasks that are already running to
+finish. It does not interrupt them. The upgrade installs as soon as they are
+done. The wait lasts up to 60 minutes by default (`drainWaitBudgetMs` in the
+self-upgrade settings). If work is still running after that, the upgrade
+pauses as **awaiting operator**: new work stays paused, nothing is
+interrupted, and you decide whether to keep waiting, force the upgrade now
+(the existing **Emergency override**), or abort and reopen the portal to new
+work. Buttons for those choices on the upgrade page are coming in a follow-up
+change.
+
 ## What Happens If You Do Nothing
 
 The install stays on its current version. The consumer channel keeps being

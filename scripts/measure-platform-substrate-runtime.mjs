@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { readFile } from "node:fs/promises";
 import { platform, arch, homedir } from "node:os";
 import { resolve, join } from "node:path";
@@ -7,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { atomicWriteFile } from "./measure-platform-substrate.mjs";
 import { stableSerialize } from "./lib/platform-substrate-measurements.mjs";
 import { resolveCapabilityServiceProjection } from "./lib/capability-service-projection.mjs";
+import { mcpPost } from "./lib/mcp-client.mjs";
 
 const scriptRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const REQUIRED_ENVIRONMENT = "local-integration-ci";
@@ -79,15 +81,17 @@ async function defaultVerifyLease(request, options) {
   if (!token) throw new Error("Governed lease verification requires DPF_MCP_BEARER_TOKEN");
   const portalUrl = String(options.portalUrl ?? "").replace(/\/$/, "");
   const mcpUrl = options.mcpUrl ?? process.env.DPF_MCP_URL ?? `${portalUrl}/api/mcp/v1`;
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const response = await fetchImpl(mcpUrl, {
-    method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_nonprod_environment_leases", arguments: {} } }),
-    signal: AbortSignal.timeout(10_000),
+  const response = await mcpPost("tools/call", { name: "list_nonprod_environment_leases", arguments: {} }, {
+    mcpUrl,
+    bearerToken: token,
+    timeoutMs: 10_000,
+    fetchImpl: options.fetchImpl,
+    // Every source of this endpoint is operator input (--mcp-url, DPF_MCP_URL,
+    // --portal-url, DPF_PORTAL_URL) or the loopback default, never on-disk config.
+    allowNonLoopbackEndpoint: true,
   });
-  if (!response.ok) throw new Error(`Lease coordination plane returned HTTP ${response.status}`);
-  const result = unwrapMcpToolResult(await response.json());
+  if (response.status < 200 || response.status >= 300) throw new Error(`Lease coordination plane returned HTTP ${response.status}`);
+  const result = unwrapMcpToolResult(JSON.parse(response.text));
   const leases = result?.leases ?? result?.data?.leases;
   if (!Array.isArray(leases)) throw new Error("Lease coordination plane returned no verifiable lease inventory");
   return leases.find((lease) => lease.leaseId === request.id) ?? null;
@@ -321,17 +325,23 @@ export async function runRuntimeMeasurement(options = {}) {
 
 function parseArgs(argv) {
   const options = { lease: { id: process.env.DPF_NONPROD_LEASE_ID, environmentKey: process.env.DPF_NONPROD_ENVIRONMENT_KEY, ownerSessionId: process.env.DPF_NONPROD_OWNER_SESSION_ID }, portalUrl: process.env.DPF_PORTAL_URL ?? "http://127.0.0.1:3000" };
-  const paths = { "--manifest": "manifestPath", "--baseline": "baselinePath", "--operational-state": "operationalStatePath", "--catalog": "catalogPath", "--install-state": "installStatePath", "--portal-url": "portalUrl", "--lease-id": "leaseId", "--environment-key": "environmentKey", "--owner-session-id": "ownerSessionId", "--mcp-url": "mcpUrl" };
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--json") options.json = true;
-    else if (argv[i] === "--update") options.update = true;
-    else if (paths[argv[i]] && argv[i + 1]) {
-      const key = paths[argv[i]], value = argv[++i];
-      if (key === "leaseId") options.lease.id = value;
-      else if (key === "environmentKey") options.lease.environmentKey = value;
-      else if (key === "ownerSessionId") options.lease.ownerSessionId = value;
-      else options[key] = key.endsWith("Path") ? resolve(value) : value;
-    } else throw new Error(`Unknown or incomplete argument: ${argv[i]}`);
+  const keys = { manifest: "manifestPath", baseline: "baselinePath", "operational-state": "operationalStatePath", catalog: "catalogPath", "install-state": "installStatePath", "portal-url": "portalUrl", "lease-id": "leaseId", "environment-key": "environmentKey", "owner-session-id": "ownerSessionId", "mcp-url": "mcpUrl" };
+  const { values } = utilParseArgs({
+    args: argv,
+    options: {
+      json: { type: "boolean" },
+      update: { type: "boolean" },
+      ...Object.fromEntries(Object.keys(keys).map((name) => [name, { type: "string" }])),
+    },
+  });
+  for (const [name, value] of Object.entries(values)) {
+    if (value === "") throw new Error(`Unknown or incomplete argument: --${name}`);
+    const key = keys[name];
+    if (!key) options[name] = value;
+    else if (key === "leaseId") options.lease.id = value;
+    else if (key === "environmentKey") options.lease.environmentKey = value;
+    else if (key === "ownerSessionId") options.lease.ownerSessionId = value;
+    else options[key] = key.endsWith("Path") ? resolve(value) : value;
   }
   return options;
 }

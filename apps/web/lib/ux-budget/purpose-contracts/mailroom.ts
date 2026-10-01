@@ -2,7 +2,7 @@
 // (design 2026-09-09 §4.9/§6, BI-727D5FD9). The purpose-identity ratchet
 // refuses to grandfather a NEW route, so the Mailroom arrives ratified.
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const MAILROOM_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

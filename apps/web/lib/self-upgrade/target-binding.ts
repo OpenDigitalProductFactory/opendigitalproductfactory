@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 export type SelfUpgradeBoundTarget = {

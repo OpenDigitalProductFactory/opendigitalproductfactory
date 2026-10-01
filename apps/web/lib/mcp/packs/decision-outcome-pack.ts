@@ -16,7 +16,7 @@
 // appends a record, it never changes what the kernel decided. The two columns
 // it writes are the only decision columns absent from SEALED_IMMUTABLE_FIELDS.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

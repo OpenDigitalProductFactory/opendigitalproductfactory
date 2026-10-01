@@ -1,5 +1,7 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
+import { runGit } from "../lib/git.mjs";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -8,28 +10,17 @@ const VALID_PLATFORMS = new Set(["linux", "macos"]);
 const VALID_ONLY = new Set(["all", "digest-pinned"]);
 
 function parseArgs(argv) {
+  const { values } = utilParseArgs({
+    args: argv,
+    options: { mode: { type: "string" }, platform: { type: "string" }, only: { type: "string" } },
+  });
+  const empty = Object.keys(values).find((name) => !values[name]);
+  if (empty) throw new Error(`Unknown or incomplete argument: --${empty}`);
   const options = {
-    mode: "release",
-    platform: "linux",
-    only: "digest-pinned",
+    mode: values.mode ?? "release",
+    platform: values.platform ?? "linux",
+    only: values.only ?? "digest-pinned",
   };
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    const next = argv[i + 1];
-    if (arg === "--mode" && next) {
-      options.mode = next;
-      i += 1;
-    } else if (arg === "--platform" && next) {
-      options.platform = next;
-      i += 1;
-    } else if (arg === "--only" && next) {
-      options.only = next;
-      i += 1;
-    } else {
-      throw new Error(`Unknown or incomplete argument: ${arg}`);
-    }
-  }
 
   if (!VALID_MODES.has(options.mode)) {
     throw new Error(`--mode must be one of: ${Array.from(VALID_MODES).join(", ")}`);
@@ -45,10 +36,8 @@ function parseArgs(argv) {
 }
 
 function repoRoot() {
-  const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
-    encoding: "utf8",
-  });
-  if (result.status !== 0) {
+  const result = runGit(["rev-parse", "--show-toplevel"], { cwd: process.cwd() });
+  if (!result.ok) {
     throw new Error(`git rev-parse failed: ${result.stderr.trim()}`);
   }
   return result.stdout.trim();
@@ -77,9 +66,10 @@ function composeEnv() {
     CREDENTIAL_ENCRYPTION_KEY:
       process.env.CREDENTIAL_ENCRYPTION_KEY ??
       "0000000000000000000000000000000000000000000000000000000000000000",
+    INNGEST_SIGNING_KEY: process.env.INNGEST_SIGNING_KEY ?? "1".repeat(64),
+    INNGEST_EVENT_KEY: process.env.INNGEST_EVENT_KEY ?? "2".repeat(64),
     ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ?? "ci-placeholder",
     POSTGRES_PASSWORD: process.env.POSTGRES_PASSWORD ?? "ci-placeholder",
-    NEO4J_AUTH: process.env.NEO4J_AUTH ?? "neo4j/ci-placeholder",
     DATABASE_URL:
       process.env.DATABASE_URL ??
       "postgresql://dpf:ci-placeholder@postgres:5432/dpf",

@@ -516,6 +516,37 @@ function Export-DPFConsumerReleaseAssets {
     }
 }
 
+function Invoke-DPFDoctoolsPrePull {
+    # The document converter (dpf-doctools, BI-698B7F9A). It is not a compose
+    # service (AC-ODC-003), so compose pull never fetches it; pull it with the
+    # other release images so the portal reads Word, Excel and PDF files at
+    # first boot. Only an immutable release tag names one converter (the portal
+    # refuses a moving tag), so "latest" pulls nothing. It never fails the
+    # install: a release with no converter is simply converter-less, and any
+    # other failure is retried by the portal's own reconciler once it starts.
+    param(
+        [Parameter(Mandatory)][string]$Version,
+        [string]$Owner = "opendigitalproductfactory"
+    )
+    if ($Version -cnotmatch '^v\d+\.\d+\.\d+([-+][A-Za-z0-9.-]+)?$') { return "not-release" }
+    $image = "ghcr.io/$($Owner.ToLowerInvariant())/dpf-doctools:$Version"
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $output = (docker pull $image 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $pullExit = $LASTEXITCODE
+    $ErrorActionPreference = $oldEAP
+    if ($pullExit -eq 0) {
+        Write-OK "Document converter image ready ($image)"
+        return "pulled"
+    }
+    if ($output -match 'not found|manifest unknown|name unknown') {
+        Write-Host "  This release ships no document converter; Office files will not be converted." -ForegroundColor Gray
+        return "not-published"
+    }
+    Write-Warn "Could not download the document converter image; the platform retries after it starts."
+    return "failed"
+}
+
 function Set-DPFReleaseEnvIdentityAtomic {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -629,6 +660,19 @@ param(
 )
 
 Set-Location $DPF_DIR
+
+# Host GPU snapshot for local-model admission. Non-fatal when the publisher
+# is absent; a missing snapshot does not disable the local model.
+$gpuPublisher = Join-Path $DPF_DIR "scripts\publish-host-gpu.ps1"
+if (Test-Path -LiteralPath $gpuPublisher) {
+    try {
+        Start-Process -FilePath "powershell.exe" -WindowStyle Hidden -ArgumentList @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $gpuPublisher
+        ) | Out-Null
+    } catch {
+        Write-Host "[!] Host GPU publisher did not start (non-fatal)." -ForegroundColor Yellow
+    }
+}
 
 # The generated entrypoint consumes the same checked-in adapter and state
 # helper as install/setup; it never snapshots service/profile logic.
@@ -799,6 +843,93 @@ function Invoke-DPFEdgeNodeConvergence {
         return $true
     }
     return $false
+}
+
+# Insert each desired key into its .wslconfig section when the key is absent
+# from the whole file. Operator-authored values are never replaced or
+# duplicated, in either section. WSL reads memory/processors/maxCrashDumpCount
+# only under [wsl2] and autoMemoryReclaim only under [experimental]; a key in
+# the wrong section is silently ignored (BI-7371D444).
+function Add-WslConfigKeysIfMissing {
+    param(
+        [string]$Path,
+        [System.Collections.Specialized.OrderedDictionary]$Desired,
+        [string]$Section = "wsl2"
+    )
+    $changed = $false
+    $added = New-Object System.Collections.Generic.List[string]
+    if (Test-Path -LiteralPath $Path) {
+        $lines = @(Get-Content -LiteralPath $Path)
+    } else {
+        $lines = @()
+    }
+    $header = "[$Section]"
+    $headerPattern = "^\s*\[" + [regex]::Escape($Section) + "\]\s*$"
+
+    foreach ($key in $Desired.Keys) {
+        # NOTE: "-notmatch" against an array filters elements; use Count on -match.
+        if (@($lines -match ("^\s*" + [regex]::Escape($key) + "\s*=")).Count -gt 0) {
+            continue
+        }
+        $entry = "$key=$($Desired[$key])"
+        if (@($lines -match $headerPattern).Count -gt 0) {
+            $newLines = New-Object System.Collections.Generic.List[string]
+            $inserted = $false
+            foreach ($line in $lines) {
+                $newLines.Add($line)
+                if (-not $inserted -and $line -match $headerPattern) {
+                    $newLines.Add($entry)
+                    $inserted = $true
+                }
+            }
+            $lines = @($newLines)
+        } elseif ($lines.Count -eq 0) {
+            $lines = @($header, $entry)
+        } else {
+            $lines = @($lines) + @("", $header, $entry)
+        }
+        $added.Add($entry)
+        $changed = $true
+    }
+
+    if ($changed) {
+        Set-Content -LiteralPath $Path -Value $lines
+    }
+    return @{ Changed = $changed; Added = $added }
+}
+
+# Installers before BI-7371D444 wrote autoMemoryReclaim under [wsl2], where WSL
+# ignores it. Move such a key into [experimental], keeping its value, unless
+# [experimental] already declares it. Re-running the installer thereby repairs
+# an existing install; the change applies at the next 'wsl --shutdown'.
+function Move-WslConfigKeyToSection {
+    param(
+        [string]$Path,
+        [string]$Key,
+        [string]$FromSection,
+        [string]$ToSection
+    )
+    if (-not (Test-Path -LiteralPath $Path)) { return @{ Moved = $false } }
+    $lines = @(Get-Content -LiteralPath $Path)
+    $keyPattern = "^\s*" + [regex]::Escape($Key) + "\s*="
+    $section = $null
+    $fromIndex = -1
+    $inTarget = $false
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match "^\s*\[([^\]]+)\]\s*$") { $section = $Matches[1]; continue }
+        if ($lines[$i] -match $keyPattern) {
+            if ($section -eq $ToSection) { $inTarget = $true }
+            elseif ($section -eq $FromSection -and $fromIndex -lt 0) { $fromIndex = $i }
+        }
+    }
+    if ($inTarget -or $fromIndex -lt 0) { return @{ Moved = $false } }
+    $entry = $lines[$fromIndex].Trim()
+    $remaining = New-Object System.Collections.Generic.List[string]
+    for ($i = 0; $i -lt $lines.Count; $i++) { if ($i -ne $fromIndex) { $remaining.Add($lines[$i]) } }
+    Set-Content -LiteralPath $Path -Value @($remaining)
+    $value = ($entry -split "=", 2)[1].Trim()
+    $result = Add-WslConfigKeysIfMissing -Path $Path -Desired ([ordered]@{ $Key = $value }) -Section $ToSection
+    return @{ Moved = $result.Changed; Entry = $entry }
 }
 
 if ($LibraryOnly -or $env:DPF_INSTALLER_LIBRARY_ONLY -eq "1") {
@@ -982,57 +1113,21 @@ $wslDesiredKeys = [ordered]@{
     "maxCrashDumpCount" = "$crashDumpCap"
     "memory"            = "${wslMemoryGb}GB"
     "processors"        = "$wslProcessors"
+}
+# gradual: WWMD DI-BC3B38A641C7 (measured on the DEV host since 2026-09-06).
+$wslExperimentalKeys = [ordered]@{
     "autoMemoryReclaim" = $wslAutoMemoryReclaim
 }
 
-function Add-WslConfigKeysIfMissing {
-    param(
-        [string]$Path,
-        [System.Collections.Specialized.OrderedDictionary]$Desired
-    )
-    $changed = $false
-    $added = New-Object System.Collections.Generic.List[string]
-    if (Test-Path -LiteralPath $Path) {
-        $lines = @(Get-Content -LiteralPath $Path)
-    } else {
-        $lines = @()
-    }
-
-    foreach ($key in $Desired.Keys) {
-        # NOTE: "-notmatch" against an array filters elements; use Count on -match.
-        if (@($lines -match ("^\s*" + [regex]::Escape($key) + "\s*=")).Count -gt 0) {
-            continue
-        }
-        $entry = "$key=$($Desired[$key])"
-        if (@($lines -match "^\s*\[wsl2\]\s*$").Count -gt 0) {
-            $newLines = New-Object System.Collections.Generic.List[string]
-            $inserted = $false
-            foreach ($line in $lines) {
-                $newLines.Add($line)
-                if (-not $inserted -and $line -match "^\s*\[wsl2\]\s*$") {
-                    $newLines.Add($entry)
-                    $inserted = $true
-                }
-            }
-            $lines = @($newLines)
-        } elseif ($lines.Count -eq 0) {
-            $lines = @("[wsl2]", $entry)
-        } else {
-            $lines = @($lines) + @("", "[wsl2]", $entry)
-        }
-        $added.Add($entry)
-        $changed = $true
-    }
-
-    if ($changed) {
-        Set-Content -LiteralPath $Path -Value $lines
-    }
-    return @{ Changed = $changed; Added = $added }
+$wslResult = Add-WslConfigKeysIfMissing -Path $wslConfigPath -Desired $wslDesiredKeys -Section "wsl2"
+$wslReclaimMove = Move-WslConfigKeyToSection -Path $wslConfigPath -Key "autoMemoryReclaim" -FromSection "wsl2" -ToSection "experimental"
+if ($wslReclaimMove.Moved) {
+    Write-OK ("Moved {0} from [wsl2], where WSL ignores it, to [experimental]" -f $wslReclaimMove.Entry)
 }
-
-$wslResult = Add-WslConfigKeysIfMissing -Path $wslConfigPath -Desired $wslDesiredKeys
-if ($wslResult.Changed) {
-    Write-OK ("Born-bounded WSL ceilings written to .wslconfig (host {0}GB RAM / {1} CPUs): {2}" -f $hostRamGb, $hostCpus, ($wslResult.Added -join ", "))
+$wslExperimentalResult = Add-WslConfigKeysIfMissing -Path $wslConfigPath -Desired $wslExperimentalKeys -Section "experimental"
+if ($wslResult.Changed -or $wslExperimentalResult.Changed) {
+    $wslAdded = @($wslResult.Added) + @($wslExperimentalResult.Added)
+    Write-OK ("Born-bounded WSL ceilings written to .wslconfig (host {0}GB RAM / {1} CPUs): {2}" -f $hostRamGb, $hostCpus, ($wslAdded -join ", "))
     Write-Host "  Note: .wslconfig is inert until the next 'wsl --shutdown' (stops containers)." -ForegroundColor Yellow
     Write-Host "  Sweep in-flight pregate/local-CI work before cycling WSL (BI-4F3AB6B3)." -ForegroundColor Yellow
 }
@@ -1587,6 +1682,24 @@ if ($gitWebhookValue.Length -eq 0 -or $gitWebhookValue.StartsWith("<")) {
     Write-Host "  Generated DPF_GIT_WEBHOOK_SECRET in .env (read it there to configure the GitHub webhook)"
 }
 
+# Inngest signing and event keys (BI-3267763F). The portal and the inngest
+# service verify each other with them; compose no longer supplies a default,
+# because the old one was published in the repository and let anyone who could
+# reach /api/inngest forge signed invocations. Generated the same way as
+# AUTH_SECRET when missing, a placeholder, or that old public default; a real
+# value is never rotated. Values are never printed.
+$inngestPublicDefaults = @("abcdef0123456789", "deadbeefcafebabe")
+foreach ($inngestKey in @("INNGEST_SIGNING_KEY", "INNGEST_EVENT_KEY")) {
+    $inngestEnv = Get-Content -Path "$DPF_DIR\.env" -Raw -ErrorAction SilentlyContinue
+    if ($null -eq $inngestEnv) { $inngestEnv = "" }
+    $inngestMatches = [System.Text.RegularExpressions.Regex]::Matches($inngestEnv, "(?m)^$inngestKey=(.*)$")
+    $inngestValue = if ($inngestMatches.Count -gt 0) { $inngestMatches[$inngestMatches.Count - 1].Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+    if ($inngestValue.Length -eq 0 -or $inngestValue.StartsWith("<") -or $inngestPublicDefaults -contains $inngestValue) {
+        Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key $inngestKey -Value (New-RandomPassword 32)
+        Write-Host "  Generated $inngestKey in .env"
+    }
+}
+
 if ($InstallMode -eq "consumer") {
     Set-DPFConsumerReleaseIdentity -InstallDir $DPF_DIR -Version $Version
 }
@@ -1759,6 +1872,22 @@ if ($OrganizationJoinPackagePath) {
     }
 }
 
+# This machine's AI clients find the install at its canonical origin and trust
+# its CA (BI-2D545A0C): DPF_MCP_URL and NODE_EXTRA_CA_CERTS are persisted in the
+# installing user's environment on every run, in both install modes, so a
+# re-run or an origin change converges without the agent-toolchain bootstrap.
+$clientEnvLib = Join-Path $DPF_DIR "scripts\installer\lib\mcp-client-env.ps1"
+if (-not (Test-Path -LiteralPath $clientEnvLib)) { $clientEnvLib = Join-Path $PSScriptRoot "scripts\installer\lib\mcp-client-env.ps1" }
+try {
+    . $clientEnvLib
+    $clientEnv = Resolve-DpfMcpClientEnv -InstallDir $DPF_DIR
+    if ((Set-DpfMcpClientEnv -ClientEnv $clientEnv) -ne "not-https") {
+        Write-OK "AI clients on this machine will connect to $($clientEnv.McpUrl)"
+    }
+} catch {
+    Write-Host "  [!] The AI client address could not be saved: $_" -ForegroundColor Yellow
+}
+
 Write-Step 7 10 "Starting the platform..."
 if (-not (Test-StepDone "started")) {
     Set-Location $DPF_DIR
@@ -1811,6 +1940,7 @@ if (-not (Test-StepDone "started")) {
             Write-Warn "You can retry after fixing connectivity by running dpf-start."
             exit 1
         }
+        Invoke-DPFDoctoolsPrePull -Version $Version | Out-Null
     } else {
         # --- Docker VM memory preflight (customizer source-build only) --------
         # The Next.js production build needs ~4 GB of Node.js heap

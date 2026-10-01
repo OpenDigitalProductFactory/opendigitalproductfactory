@@ -35,7 +35,6 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { callTool, DEFAULT_ENDPOINT } from "./check-doc-anchor-existence.mjs";
@@ -113,13 +112,6 @@ export function interpretStatus(id, body) {
 }
 
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
-function git(...args) {
-  try {
-    return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch (e) {
-    return (e.stdout && e.stdout.toString()) || "";
-  }
-}
 
 function isScannedSource(file) {
   return (file.startsWith("apps/") || file.startsWith("packages/"))

@@ -27,16 +27,43 @@ const DESIGN_REVIEW_CODES = new Set<string>([
   "PLAN_REVIEW_REQUIRED",
 ]);
 
+/**
+ * BI-EE99767C: a fix-profile item never carries SPEC_APPROVAL_REQUIRED. Its spec
+ * approval is owed as OBJECTIVE_BASELINE_REQUIRED held by the design-checklist
+ * reviewer, because that approval mints the baseline. A body baseline is held by
+ * the product owner and is never routed to a spec approval.
+ */
+function isDesignReviewEntry(entry: { code: string; accountableRole?: string }): boolean {
+  return DESIGN_REVIEW_CODES.has(entry.code)
+    || (entry.code === "OBJECTIVE_BASELINE_REQUIRED" && entry.accountableRole === "design-checklist-reviewer");
+}
+
 export function designPhaseReviewDecision(
   decision: InitiativeReadinessDecision,
 ): InitiativeReadinessDecision | null {
-  const isDesignReview = (entry: { code: string }) => DESIGN_REVIEW_CODES.has(entry.code);
+  const isDesignReview = isDesignReviewEntry;
   if (![...decision.blockers, ...decision.unmet].some(isDesignReview)) return null;
   return {
     ...decision,
     blockers: decision.blockers.filter(isDesignReview),
     unmet: decision.unmet.filter(isDesignReview),
   };
+}
+
+/** Validate pre-delivery packets against the same obligations their claim uses.
+ * Terminal acceptance/research prerequisites cannot suppress an owed design
+ * review. Keep filtering in the shared design-phase policy, not the OAuth guard.
+ * Exact packet equality still decides whether the requested gate was issued. */
+export function decisionForIndependentReview(
+  writerToolName: string,
+  decisions: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>>,
+): InitiativeReadinessDecision | null {
+  if (writerToolName === "record_initiative_design_review"
+    || writerToolName === "record_initiative_architecture_review") {
+    const decision = decisions.implementation ?? decisions.plan;
+    return decision ? designPhaseReviewDecision(decision) : null;
+  }
+  return decisions.completion ?? null;
 }
 
 /**

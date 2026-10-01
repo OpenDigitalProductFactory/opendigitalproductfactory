@@ -1,0 +1,51 @@
+{
+  "page": {
+    "heading": "Market footprint",
+    "intro": "Where you sell, where your {$people} are, and where you are deployed, by country.",
+    "statTargets": "Target markets",
+    "statPlaced": "{$people} placed",
+    "statNotPlaced": "Not placed",
+    "statNotPlacedHint": "No site or no country on the address",
+    "statDeployments": "Deployments",
+    "emptyHeading": "Nothing to show on the map yet",
+    "emptyTargets": "Add the countries you sell to or operate in to your business context.",
+    "emptySites": "Give each of your {$people} a site with an address.",
+    "nextPlaceCustomers": "Add addresses for {$people} not yet on the map",
+    "nextOpenAccounts": "Open accounts"
+  },
+  "layers": {
+    "groupLabel": "Map layer",
+    "targets": "Target markets",
+    "targetsDescription": "Countries you sell to or operate in.",
+    "customersDescription": "{$people} with a site in each country.",
+    "deployments": "Deployments",
+    "deploymentsDescription": "Customer sites running an installed node with an active fulfilment.",
+    "language": "Language fit",
+    "languageDescription": "Countries where a language the platform supports is official (filled), where one is planned (striped), and where none is yet (dotted)."
+  },
+  "map": {
+    "label": "World map, {$layer} layer. The table below lists the same countries.",
+    "caption": "Country outlines: Natural Earth (public domain). Equal Earth projection."
+  },
+  "values": {
+    "targetYes": "Target market",
+    "targetNo": "Not targeted",
+    "customers": "{$people}: {$count}",
+    "deployments": "Deployments: {$count}",
+    "languageSupported": "Supported ({$languages})",
+    "languagePlanned": "Planned ({$languages})",
+    "languageNone": "No supported language yet"
+  },
+  "table": {
+    "label": "Market footprint by country",
+    "country": "Country",
+    "target": "Target market",
+    "deployments": "Deployments",
+    "language": "Language",
+    "yes": "Yes",
+    "no": "No",
+    "empty": "No countries to show yet.",
+    "notPlaced": "Not placed:",
+    "notPlacedDetail": "{$people}: {$customers} · Deployments: {$deployments} — no site, or no country on the site address."
+  }
+}

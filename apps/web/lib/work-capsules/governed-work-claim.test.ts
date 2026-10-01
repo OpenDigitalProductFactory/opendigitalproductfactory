@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
+import {
+  READINESS_GOVERNING_PRINCIPLE,
+  governingPrinciplesFor,
+  governingRulesLine,
+} from "@/lib/kernel/governing-principles";
 import type { CapsuleDb } from "./work-capsule-store-types";
 
 const actor = { userId: "user-1", agentId: "AGT-1", principalId: "PRN-1" };
@@ -582,5 +587,71 @@ describe("claimGovernedBacklogWorkspace", () => {
     const message = result.ok ? "" : String(result.error);
     expect(message).toContain("executor ref");
     expect(message).toContain("foreign-session");
+  });
+});
+
+// BI-DEDAC950: a refusal names the principle page behind each unmet code,
+// beside the readiness decision and never inside it (decisions replay by deep
+// equality), and the message carries one wiki_query line.
+describe("claimGovernedBacklogWorkspace governing principles", () => {
+  it("cites the governing principles beside a not-ready decision and names them in the message", async () => {
+    const result = await claimGovernedBacklogWorkspace({
+      db: database(),
+      input,
+      actor,
+      workIntent: null,
+      now: new Date("2026-08-22T00:00:00.000Z"),
+      dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const expected = governingPrinciplesFor(result.data.readiness);
+    expect(Object.keys(expected).length).toBeGreaterThan(0);
+    expect(result.data.governingPrinciples).toEqual(expected);
+    expect(result.data.readiness).not.toHaveProperty("governingPrinciples");
+    expect(String(result.error)).toContain(governingRulesLine(expected)!);
+  });
+
+  it("cites the workroom principle on an identity mismatch", async () => {
+    const db = database();
+    const claimWorkspace = vi.fn().mockResolvedValue({
+      capsuleId: "WC-ENTRY",
+      backlogItemId: "BI-ENTRY",
+      headBranch: input.headBranch,
+      worktreePath: input.worktreePath,
+      claimed: true,
+      conflict: null,
+    });
+    const declareIntent = vi.fn().mockResolvedValue({ id: "intent-row" });
+    (db.workroom.findUnique as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      capsuleId: "WC-ENTRY",
+      backlogItemId: "BI-ENTRY",
+      status: "ready",
+      archivedAt: null,
+      repositoryFullName: input.repositoryFullName,
+      headBranch: input.headBranch,
+      worktreePath: input.worktreePath,
+      executorKind: input.executorKind,
+      executorRef: "foreign-session",
+      leaseHolderPrincipalId: actor.principalId,
+      leaseExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+    });
+
+    const result = await claimGovernedBacklogWorkspace({
+      db,
+      input,
+      actor,
+      workIntent: "design",
+      now: new Date("2026-08-22T00:00:00.000Z"),
+      dependencies: { claimWorkspace, declareIntent, discoverCanonicalArtifact },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.data.governingPrinciples).toMatchObject({
+      CAPSULE_IDENTITY_MISMATCH: READINESS_GOVERNING_PRINCIPLE.CAPSULE_IDENTITY_MISMATCH,
+    });
+    expect(String(result.error)).toContain("Governing rules: CAPSULE_IDENTITY_MISMATCH → claim-a-workroom-before-you-work");
   });
 });

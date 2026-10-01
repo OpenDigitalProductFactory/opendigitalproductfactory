@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { prisma } from "@dpf/db";
 
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 import { projectBacklogItemReadiness, type InitiativeReadinessActivity } from "./entry-adapter";
 import { reconcileInitiativeObjectives, type ObjectiveReconciliationActivity } from "./objective-reconciliation";

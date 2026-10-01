@@ -23,6 +23,33 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 import { newestSignal, isStale } from "@/lib/shared/staleness";
 import { resolveReadOnlyToolNames } from "./read-only-tool-signal";
+import type { QuiescenceBlockerLine } from "./run-types";
+import {
+  QUIESCENCE_RUN_STATUSES,
+  TERMINAL_QUIESCENCE_STATUSES,
+  isTerminalQuiescenceStatus,
+  type ActiveSessionBlockers,
+  type BlockerVerdict,
+  type EnteredStateAt,
+  type QuiescenceOutcome,
+  type QuiescenceRunStatus,
+  type SurfaceBlocker,
+} from "./quiescence-contract";
+
+// The pure contract lives in a leaf module (BI-F9EE05E5, import-cycle ratchet);
+// re-exported so every existing importer of this module is unchanged.
+export {
+  QUIESCENCE_RUN_STATUSES,
+  TERMINAL_QUIESCENCE_STATUSES,
+  isTerminalQuiescenceStatus,
+  type ActiveSessionBlockers,
+  type BlockerSignal,
+  type BlockerVerdict,
+  type EnteredStateAt,
+  type QuiescenceOutcome,
+  type QuiescenceRunStatus,
+  type SurfaceBlocker,
+} from "./quiescence-contract";
 
 // ─── Quiescence level — runtime state, hot-read by middleware + gates ────
 
@@ -143,38 +170,7 @@ export async function setQuiescenceLevel(
 
 // ─── QuiescenceRun lifecycle helpers ─────────────────────────────────────
 
-export const QUIESCENCE_RUN_STATUSES = [
-  "pending",
-  "preparing",
-  "draining",
-  "ready-to-swap",
-  "swapping",
-  "completed",
-  "deferred",
-  "aborted",
-  "failed",
-] as const;
-
-export type QuiescenceRunStatus = (typeof QUIESCENCE_RUN_STATUSES)[number];
-
-export const TERMINAL_QUIESCENCE_STATUSES: ReadonlySet<QuiescenceRunStatus> = new Set([
-  "completed",
-  "deferred",
-  "aborted",
-  "failed",
-]);
-
-export function isTerminalQuiescenceStatus(status: string): boolean {
-  return TERMINAL_QUIESCENCE_STATUSES.has(status as QuiescenceRunStatus);
-}
-
 export type QuiescenceTrigger = "self-upgrade" | "manual" | "sandbox-recovery" | "installation-teardown";
-
-/**
- * Per-state entry timestamps stored in QuiescenceRun.enteredStateAt.
- * Recorded as ISO strings so the JSON column is human-readable.
- */
-export type EnteredStateAt = Partial<Record<QuiescenceRunStatus, string>>;
 
 /**
  * Single canonical state transition. Updates status + the per-state entry
@@ -281,11 +277,6 @@ export async function flipActiveTaskRunsToQuiescing(now: Date = new Date()): Pro
 
 // ─── Caller API ──────────────────────────────────────────────────────────
 
-export type QuiescenceOutcome =
-  | { ok: true; outcome: "ready-to-swap"; runId: string; finalSnapshot: ActiveSessionBlockers }
-  | { ok: false; outcome: "deferred"; runId: string; deferSurface: string | null; finalSnapshot: ActiveSessionBlockers | null }
-  | { ok: false; outcome: "aborted" | "failed"; runId: string; reason: string };
-
 export type StartQuiescenceOpts = {
   trigger: QuiescenceTrigger;
   triggerRefId?: string;
@@ -348,82 +339,25 @@ export async function startQuiescence(opts: StartQuiescenceOpts): Promise<{
     },
   });
 
-  const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
+  const { jobs } = await import("@/lib/jobs");
+  await jobs.send({
     name: "ops/quiescence.start",
     data: {
       runId,
       budgetMs,
       triggerRefId: opts.triggerRefId ?? null,
       shipForce: !!opts.shipForce,
+      // BI-F9EE05E5 (spec §11a): an upgrade waits for work and, at the bound,
+      // pauses for the operator. Other triggers keep the bounded defer.
+      awaitOperatorAtBudget: opts.trigger === "self-upgrade",
     },
   });
 
   return {
     runId,
-    awaitReady: () => awaitQuiescenceReady(runId, budgetMs + 60_000),
+    awaitReady: async () =>
+      (await import("./drain-wait")).awaitQuiescenceReady(runId, { budgetMs, followDrain: opts.trigger === "self-upgrade" }),
   };
-}
-
-/**
- * Polls QuiescenceRun.status until it reaches `ready-to-swap` or a terminal
- * state. Returns a structured outcome the caller can act on.
- *
- * `outerTimeoutMs` is the absolute ceiling — budget + safety buffer. If
- * exceeded (coordinator crashed silently), returns `failed`.
- */
-async function awaitQuiescenceReady(
-  runId: string,
-  outerTimeoutMs: number,
-): Promise<QuiescenceOutcome> {
-  const deadline = Date.now() + outerTimeoutMs;
-  while (Date.now() < deadline) {
-    const row = await prisma.quiescenceRun.findUnique({
-      where: { runId },
-      select: {
-        status: true,
-        finalSnapshot: true,
-        deferSurface: true,
-        outcome: true,
-        outcomeNotes: true,
-      },
-    });
-    if (!row) {
-      return { ok: false, outcome: "failed", runId, reason: "QuiescenceRun row disappeared" };
-    }
-    if (row.status === "ready-to-swap") {
-      return {
-        ok: true,
-        outcome: "ready-to-swap",
-        runId,
-        finalSnapshot: (row.finalSnapshot as unknown as ActiveSessionBlockers) ?? null!,
-      };
-    }
-    if (row.status === "deferred") {
-      return {
-        ok: false,
-        outcome: "deferred",
-        runId,
-        deferSurface: row.deferSurface,
-        finalSnapshot: (row.finalSnapshot as unknown as ActiveSessionBlockers | null) ?? null,
-      };
-    }
-    if (row.status === "aborted" || row.status === "failed") {
-      return {
-        ok: false,
-        outcome: row.status,
-        runId,
-        reason: row.outcomeNotes ?? `Quiescence ${row.status}`,
-      };
-    }
-    if (row.status === "completed" || row.status === "swapping") {
-      // Caller didn't observe ready-to-swap (e.g., another caller raced).
-      // Surface as failed so caller doesn't double-swap.
-      return { ok: false, outcome: "failed", runId, reason: `Coordinator already ${row.status}` };
-    }
-    await sleep(2_000);
-  }
-  return { ok: false, outcome: "failed", runId, reason: "awaitReady outer timeout" };
 }
 
 /**
@@ -445,7 +379,7 @@ export async function signalSwapStarting(runId: string, now: Date = new Date()):
  * drives the coordinator's terminal transition (completed/failed/aborted) and
  * flips the quiescence level back to normal — losing it leaves the platform
  * draining until the watchdog reaps the coordinator minutes later. A transient
- * inngest.send failure (network blip, rate limit) shouldn't cost that. After the
+ * jobs.send failure (network blip, rate limit) shouldn't cost that. After the
  * final attempt the error is rethrown so the caller's own failure handling runs.
  */
 async function withSwapSignalRetry(
@@ -481,9 +415,9 @@ async function withSwapSignalRetry(
  * platform.quiescence-cleared to wake suspended Inngest functions.
  */
 export async function signalSwapComplete(runId: string): Promise<void> {
-  const { inngest } = await import("@/lib/queue/inngest-client");
+  const { jobs } = await import("@/lib/jobs");
   await withSwapSignalRetry(`swap-complete(succeeded) ${runId}`, () =>
-    inngest.send({
+    jobs.send({
       name: "ops/quiescence.swap-complete",
       data: { runId, outcome: "succeeded" },
     }),
@@ -500,9 +434,9 @@ export async function signalSwapComplete(runId: string): Promise<void> {
  * new bundle came up but didn't match expected version.
  */
 export async function failQuiescenceSwap(runId: string, reason: string): Promise<void> {
-  const { inngest } = await import("@/lib/queue/inngest-client");
+  const { jobs } = await import("@/lib/jobs");
   await withSwapSignalRetry(`swap-complete(failed) ${runId}`, () =>
-    inngest.send({
+    jobs.send({
       name: "ops/quiescence.swap-complete",
       data: { runId, outcome: "failed", reason },
     }),
@@ -515,13 +449,18 @@ export async function failQuiescenceSwap(runId: string, reason: string): Promise
  * emits platform.quiescence-cleared.
  */
 export async function abortQuiescence(runId: string, operatorUserId: string): Promise<void> {
-  const { inngest } = await import("@/lib/queue/inngest-client");
+  // BI-F9EE05E5: durable first — the events below are only wake-ups.
+  await (await import("./drain-wait")).recordDrainAbort(runId, operatorUserId);
+  const { jobs } = await import("@/lib/jobs");
   await withSwapSignalRetry(`swap-complete(aborted) ${runId}`, () =>
-    inngest.send({
+    jobs.send({
       name: "ops/quiescence.swap-complete",
       data: { runId, outcome: "aborted", operatorUserId },
     }),
   );
+  // BI-F9EE05E5: a coordinator still draining (or awaiting the operator) waits
+  // on the control event, not swap-complete — send both so Abort works mid-drain.
+  await (await import("./drain-wait")).sendQuiescenceControl(runId, "abort", operatorUserId);
 }
 
 /**
@@ -566,6 +505,8 @@ export async function escalateQuiescenceToForced(
       ] as unknown as object,
     },
   });
+  // BI-F9EE05E5: wake a waiting coordinator now (it also re-reads the flag each check).
+  await (await import("./drain-wait")).sendQuiescenceControl(runId, "force", operatorUserId);
   return { ok: true };
 }
 
@@ -609,8 +550,8 @@ async function broadcastQuiescenceCleared(payload: {
     const msg = getErrorMessage(err);
     console.warn(sanitizeForLog(`[quiescence-reconcile] broadcastSystem failed: ${msg}`));
   }
-  const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
+  const { jobs } = await import("@/lib/jobs");
+  await jobs.send({
     name: "platform.quiescence-cleared",
     data: {
       runId: payload.runId,
@@ -711,9 +652,13 @@ export async function reconcileQuiescenceOnBoot(opts: {
               startedAt: { lt: new Date(now.getTime() - staleAfterMs) },
             }
           : { status: { in: [...NON_TERMINAL_QUIESCENCE_STATUSES] } },
-      select: { runId: true, targetVersion: true, targetBundleHash: true, triggerRefId: true },
+      select: { runId: true, targetVersion: true, targetBundleHash: true, triggerRefId: true, lastHeartbeatAt: true },
     });
     for (const run of inFlight) {
+      // BI-F9EE05E5: an upgrade drain may wait an hour or more for work. One that
+      // is still heartbeating is live, whatever its startedAt — never fail it.
+      const { isDrainHeartbeatLive } = await import("./drain-wait");
+      if (staleAfterMs > 0 && isDrainHeartbeatLive({ lastHeartbeatAt: run.lastHeartbeatAt, now, thresholdMs: staleAfterMs })) continue;
       if (quiescenceTargetMatchesRunningBundle(run, opts.currentVersion, opts.currentBundleHash)) {
         // We booted on this run's target → the swap landed. Complete the
         // handshake the dying portal couldn't: the live coordinator resumes
@@ -794,62 +739,7 @@ export async function reconcileQuiescenceOnBoot(opts: {
 }
 
 // ─── Active session blockers — evidence capture ──────────────────────────
-
-/**
- * Spec §5.6 — structured snapshot of what's in flight across all surfaces.
- * Populates parent spec's Layer 1 `activeSessionBlockers` column.
- */
-export type ActiveSessionBlockers = {
-  capturedAt: string;
-  thresholdMs: number;
-  totalBlockers: number;
-  hardBlockers: number;
-  softBlockers: number;
-  unobservableSurfaces: string[];
-  surfaces: SurfaceBlocker[];
-  /**
-   * Health verdict on the blocker set (BI-12E24186). Non-null when the capture
-   * auto-discounted a provably-empty deliberation loop cohort from the HARD
-   * blockers so the drain proceeds on its own. Per the WWMD decision
-   * (auto-discount + disclose, never silent), the panel renders this as the
-   * hero line so the operator sees a diagnosis — "stuck loop, not live work" —
-   * instead of a raw "AI coworker working ×N" that sends them to an empty page.
-   */
-  verdict?: BlockerVerdict | null;
-};
-
-/**
- * A one-line health diagnosis surfaced above the blocker list. Today the only
- * kind is the empty-deliberation-loop (the stub deliberation engine, BI-7B6B3C5C,
- * makes plan gates loop forever producing no output); the shape is left open for
- * future pathological patterns.
- */
-export type BlockerVerdict = {
-  kind: "empty-deliberation-loop";
-  /** How many hard coworker-loop surfaces were reclassified to soft. */
-  discountedCount: number;
-  /** The builds whose plan deliberations are looping empty. */
-  buildIds: string[];
-  message: string;
-};
-
-export type SurfaceBlocker = {
-  surface: string;
-  detectionClass: "A" | "B" | "C" | "D" | "E" | "F" | "G";
-  kind: "hard" | "soft";
-  blockerSignal: BlockerSignal;
-  estimatedWaitMs: number | null;
-  evidence: Record<string, unknown>;
-};
-
-export type BlockerSignal =
-  | { class: "A"; model: string; rowId: string; status: string }
-  | { class: "B"; model: string; mostRecentAt: string; windowMs: number; count: number }
-  | { class: "C"; model: string; rowId: string; lastHeartbeatAt: string; staleAfterMs: number }
-  | { class: "D"; functionId: string; runId: string; status: "Running" | "Scheduled"; currentStep?: string }
-  | { class: "E"; registry: string; subscriberCount: number; sampleIds?: string[] }
-  | { class: "F"; endpoint: string; observation: unknown }
-  | { class: "G"; reason: string; mitigations: string[] };
+// (Evidence shapes: quiescence-contract.ts.)
 
 const TOOL_EXECUTION_RECENCY_MS = 5 * 60 * 1000;
 const EDGE_AGENT_PREFIX = "edge-node:";
@@ -1100,13 +990,20 @@ export async function captureActiveSessionBlockers(opts?: {
   // of holding the drain open. A reaped row is ALSO closed (completedAt set)
   // below, so the repair is permanent: the build UI, cost rollups, and the next
   // capture all see a settled phase rather than re-evaluating the same corpse.
+  // BI-F9EE05E5: a TaskRun flipped to `quiescing` is still finishing its
+  // iteration (heartbeat() stops writing once it leaves working/active, so its
+  // newest signal is quiescedAt), and its build is live — never reap that phase.
+  const quiescing = (await prisma.taskRun.findMany({
+    where: { status: "quiescing", buildId: { not: null } },
+    select: { buildId: true, lastHeartbeatAt: true, quiescedAt: true },
+    take: 100,
+  })) ?? [];
   const buildLastHeartbeat = new Map<string, Date>();
-  for (const tr of activeTaskRuns) {
-    if (!tr.buildId || !tr.lastHeartbeatAt) continue;
+  for (const tr of [...activeTaskRuns, ...quiescing]) {
+    const signal = newestSignal(tr.lastHeartbeatAt, "quiescedAt" in tr ? tr.quiescedAt : null);
+    if (!tr.buildId || !signal) continue;
     const prev = buildLastHeartbeat.get(tr.buildId);
-    if (!prev || tr.lastHeartbeatAt.getTime() > prev.getTime()) {
-      buildLastHeartbeat.set(tr.buildId, tr.lastHeartbeatAt);
-    }
+    if (!prev || signal.getTime() > prev.getTime()) buildLastHeartbeat.set(tr.buildId, signal);
   }
   const reapedPhases: { buildId: string; phase: string }[] = [];
   for (const row of inFlightPhases) {
@@ -1322,35 +1219,6 @@ export function pickPrimaryBlocker(snapshot: ActiveSessionBlockers | null): stri
 // ─── Operator-facing activity summary (Self-Upgrade panel) ───────────────
 
 /**
- * One aggregated blocker line for the operator panel: a surface name, a
- * human-readable label, how many in-flight items share it, and the worst-case
- * wait. Built by collapsing the raw ActiveSessionBlockers.surfaces list (which
- * has one entry per in-flight item) by surface name.
- */
-export type QuiescenceBlockerLine = {
-  surface: string;
-  label: string;
-  kind: "hard" | "soft";
-  count: number;
-  estimatedWaitMs: number | null;
-  /**
-   * Operator-facing identity of a representative in-flight item on this surface
-   * (BI-D0F4C6FB): the coworker/agent and its task title, so the panel can say
-   * WHICH coworker is blocking instead of a bare "AI coworker working". Null for
-   * surfaces without a per-item identity (e.g. recent-tool-execution).
-   */
-  sampleAgent?: string | null;
-  sampleTitle?: string | null;
-  /** Oldest last-signal (heartbeat, or start if newer) across the collapsed
-   *  group, ISO — drives the panel's "last active …" staleness line. */
-  oldestSignalAt?: string | null;
-  /** True when that oldest signal was already stale past the coworker liveness
-   *  window at capture — a corpse the drain auto-reaps (BI-1C4179D0), shown to
-   *  the operator as "unresponsive — clears automatically". */
-  stale?: boolean;
-};
-
-/**
  * Extract a representative operator identity + liveness signal from one raw
  * surface blocker's evidence (BI-D0F4C6FB). Surface-shaped: coworker loops carry
  * agent + title + heartbeat/start; build phases carry a phase name + start;
@@ -1360,21 +1228,25 @@ function blockerIdentity(s: SurfaceBlocker): {
   agent: string | null;
   title: string | null;
   signalAt: string | null;
+  buildId: string | null;
 } {
   const ev = (s.evidence ?? {}) as Record<string, unknown>;
   const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+  // BI-F9EE05E5: the build id lets the waiting-upgrade panel name the work.
+  const buildId = str(ev.buildId);
   if (s.surface === "coworker.reasoning-loop") {
     return {
       agent: str(ev.agentId),
       title: str(ev.title),
       signalAt: newestIso(str(ev.lastHeartbeatAt), str(ev.startedAt)),
+      buildId,
     };
   }
   if (s.surface.startsWith("build-studio.phase.")) {
     const phase = str(ev.phase);
-    return { agent: null, title: phase ? `${phase} phase` : null, signalAt: str(ev.startedAt) };
+    return { agent: null, title: phase ? `${phase} phase` : null, signalAt: str(ev.startedAt), buildId };
   }
-  return { agent: null, title: null, signalAt: null };
+  return { agent: null, title: null, signalAt: null, buildId: null };
 }
 
 /** The later of two ISO instants (either may be null). */
@@ -1492,6 +1364,7 @@ export function summarizeBlockers(
       // panel surfaces the worst laggard in a collapsed group.
       existing.sampleAgent = existing.sampleAgent ?? id.agent;
       existing.sampleTitle = existing.sampleTitle ?? id.title;
+      existing.sampleBuildId = existing.sampleBuildId ?? id.buildId;
       existing.oldestSignalAt = oldestIso(existing.oldestSignalAt ?? null, id.signalAt);
     } else {
       bySurface.set(s.surface, {
@@ -1502,6 +1375,7 @@ export function summarizeBlockers(
         estimatedWaitMs: s.estimatedWaitMs,
         sampleAgent: id.agent,
         sampleTitle: id.title,
+        sampleBuildId: id.buildId,
         oldestSignalAt: id.signalAt,
       });
     }

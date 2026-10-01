@@ -1,6 +1,7 @@
 "use server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
+import { sanitizeUntrustedText } from "@dpf/validators";
 import { validateMessageInput, type AgentMessageRow } from "@/lib/agent-coworker-types";
 import { generateCannedResponse } from "@/lib/agent-routing";
 import { loadOpeningBriefingPayload } from "@/lib/agent/opening-briefing-loader";
@@ -12,7 +13,8 @@ import {
   NoProvidersAvailableError,
 } from "@/lib/ai-provider-priority";
 import { NoEligibleEndpointsError } from "@/lib/routed-inference";
-import { logTokenUsage, type ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { logTokenUsage } from "@/lib/ai-inference";
 import { buildCoworkerContextKey } from "@/lib/agent-coworker-context";
 import { resolveWithheldHistory } from "@/lib/tak/thread-history-withholding";
 import { getKnowledgePointersForRoute } from "@/lib/actions/route-knowledge-pointers";
@@ -23,7 +25,7 @@ import {
 } from "@/lib/agent-form-assist";
 // mcp-tools is imported dynamically at call sites to avoid NFT whole-project tracing;
 // type-only imports are erased at build time and safe.
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getActionsForRoute } from "@/lib/agent-action-registry";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
@@ -468,9 +470,8 @@ export async function sendMessage(input: {
     select: { fileName: true, parsedContent: true, mimeType: true },
   });
   let attachmentContext: string | null = null;
-  // Images are injected as vision content blocks (below), not as text — exclude
-  // them from the textual file-context summary so they don't surface as
-  // "uploaded but content not available".
+  // Images ride as vision content blocks (below), not text — excluded here so
+  // they don't surface as "uploaded but content not available".
   const docAttachments = threadAttachments.filter((att) => !att.mimeType?.startsWith("image/"));
   if (docAttachments.length > 0) {
     const summaries = docAttachments.map((att) => {
@@ -489,13 +490,13 @@ export async function sendMessage(input: {
       const text = typeof parsed.fullText === "string" ? `\n  Content: ${(parsed.fullText as string).slice(0, 2000)}` : "";
       return `- ${att.fileName}: ${summary}${columns}${sampleData}${text}`;
     });
-    attachmentContext = [
+    attachmentContext = sanitizeUntrustedText([ // stored raw; cleaned for the model (BI-7AD0DA3D)
       "",
       "FILE UPLOADS — THE USER HAS UPLOADED FILES. THEIR CONTENT IS BELOW.",
       "You CAN see this data. Do NOT say you cannot read files. Use this data to answer the user's question.",
       "",
       ...summaries,
-    ].join("\n");
+    ].join("\n")).text;
   }
 
   // If the message's attachment is an image, build a vision content block from
@@ -2453,7 +2454,7 @@ export async function sendMessage(input: {
     await resolveAIDocForAgent(agent.agentId).catch(() => null)
   )?.operating_profile_fingerprint ?? null;
 
-  // Fire-and-forget: store conversation memories in Qdrant
+  // Fire-and-forget: store conversation memories in the vector store
   import("@/lib/semantic-memory").then(({ storeConversationMemory }) => {
     const memBase = {
       userId: user.id!,

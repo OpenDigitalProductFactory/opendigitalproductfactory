@@ -53,7 +53,25 @@ export type RoomStallRow = {
    *  item addressed to a derived owner would make the room look owned to the very
    *  surface reporting that it is not. */
   ladderOwner?: RoomOwner | null;
+  /** The latest blocked stage evidence's own words, when the room recorded one
+   *  (BI-A9998FBB): the coworker usually says exactly what it could not reach. */
+  blockedCause?: string | null;
 };
+
+/** Refusals an appointment can actually clear. Anything else — above all a stage
+ *  whose coworker ran and left no result — is NOT fixed by naming an owner, and
+ *  telling the operator to appoint one sends them to do something that cannot
+ *  help (BI-A9998FBB: ten of 23 "Needs you" cards on 2026-10-01). */
+const APPOINTMENT_FIXES: ReadonlySet<string> = new Set([
+  "missing_explicit_coordinator",
+  "coordinator_authority_binding_ineligible",
+  "coordinator_jsi_ineligible",
+  "coordinator_lacks_authority",
+  "coordinator_ineligible",
+  "unknown_principal",
+]);
+
+const WRITEBACK_UNAVAILABLE = "executor_writeback_unavailable";
 
 /** Portfolio role as stored on the Workroom → the cockpit's portfolio key. */
 const PORTFOLIO_BY_ROLE: Record<string, AttentionPortfolio> = {
@@ -99,7 +117,11 @@ export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
   const reason = typeof drive.reason === "string" ? drive.reason : "unknown";
   // The named deviations are the actionable part; the drive's own reason code is
   // the fallback when conformance recorded none (a budget or stop-condition halt).
-  const why = codes.length > 0 ? codes.join(", ") : reason;
+  const writeback = reason === WRITEBACK_UNAVAILABLE;
+  const why = writeback
+    ? `its coworker could not finish the current stage — ${row.blockedCause ? `it reported: "${row.blockedCause}"` : "the run left no result"}`
+    : codes.length > 0 ? codes.join(", ") : reason;
+  const appointmentHelps = [reason, ...codes].some((code) => APPOINTMENT_FIXES.has(code));
 
   // An unowned room must NOT be assigned to a principal — the missing principal
   // is the finding. It goes to the operator, who can appoint one.
@@ -113,8 +135,9 @@ export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
   })}`;
 
   // Naming who should drive turns a diagnosis into a one-step instruction.
-  const suggestion =
-    row.ladderOwner === undefined
+  const suggestion = writeback
+    ? " Appointing an owner will not change this. It retries on the next cycle; what unblocks it is the cause above, usually a missing tool or an unavailable AI provider."
+    : !appointmentHelps || row.ladderOwner === undefined
       ? ""
       : row.ladderOwner
         ? ` Its work shape says ${row.ladderOwner.principalRef} should drive it (resolved from the ${row.ladderOwner.source}) — appoint them to unblock it.`
@@ -126,7 +149,7 @@ export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
     title: `${row.title} — stalled`,
     context:
       `${row.title} (${row.capsuleId}) has refused ${row.consecutivePauses} consecutive wakes: ` +
-      `${why}. It will keep refusing until this is resolved.${suggestion}`,
+      `${why}.${writeback ? "" : " It will keep refusing until this is resolved."}${suggestion}`,
     decisionClass: { scorability: "unscorable" },
     riskClass: "read",
     triage: {
@@ -177,6 +200,7 @@ type StallScanRow = {
   stuckSince: string | null;
   /** scopeClaims, from which the room's workShape ref is read. */
   scopeClaims: unknown;
+  id: string;
 };
 
 /**
@@ -201,7 +225,8 @@ export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
       w."workspaceState" -> 'workroomDrive' AS "drive",
       w."scopeClaims"    AS "scopeClaims",
       COALESCE((w."workspaceState" #>> '{workroomDrive,hold,stuckTicks}')::int, 0) AS "consecutivePauses",
-      w."workspaceState" #>> '{workroomDrive,hold,stuckSince}' AS "stuckSince"
+      w."workspaceState" #>> '{workroomDrive,hold,stuckSince}' AS "stuckSince",
+      w."id"             AS "id"
     FROM "WorkCapsule" w
     WHERE w."archivedAt" IS NULL
       AND w."status" NOT IN ('abandoned', 'archived', 'complete')
@@ -210,6 +235,9 @@ export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
     ORDER BY "consecutivePauses" DESC, w."updatedAt" ASC
     LIMIT ${ROOM_STALL_SCAN_LIMIT}
   `;
+  const causes = await loadBlockedCauses(db, rows
+    .filter((r) => asRecord(r.drive)?.reason === WRITEBACK_UNAVAILABLE)
+    .map((r) => r.id));
   return rows.map((r) => ({
     capsuleId: r.capsuleId,
     title: r.title,
@@ -219,7 +247,26 @@ export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
     consecutivePauses: Number(r.consecutivePauses),
     stuckSince: r.stuckSince,
     ladderOwner: resolveLadderOwner(r.scopeClaims),
+    blockedCause: causes.get(r.id) ?? null,
   }));
+}
+
+/**
+ * The latest blocked stage evidence for the writeback-stalled rooms only — a
+ * separate, bounded read on the (workCapsuleId, kind, recordedAt) index, so the
+ * stall scan itself stays a single read of room rows (BI-70B2ED84).
+ */
+async function loadBlockedCauses(db: Db, roomIds: string[]): Promise<Map<string, string>> {
+  if (roomIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<Array<{ id: string; summary: string }>>`
+    SELECT DISTINCT ON (a."workCapsuleId") a."workCapsuleId" AS "id", a."summary" AS "summary"
+    FROM "WorkCapsuleActivity" a
+    WHERE a."workCapsuleId" = ANY(${roomIds})
+      AND a."kind" = 'evidence-recorded'
+      AND a."payload" ->> 'outcome' = 'blocked'
+    ORDER BY a."workCapsuleId", a."recordedAt" DESC
+  `;
+  return new Map(rows.map((row) => [row.id, row.summary.slice(0, 280)]));
 }
 
 export async function loadWorkroomStallItems(db: Db): Promise<AttentionItem[]> {

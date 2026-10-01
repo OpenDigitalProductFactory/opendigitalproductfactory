@@ -104,11 +104,9 @@ export async function reconcileSelfUpgradeRunsOnBoot(
     const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
     const { completeRun, failRun } = await import("@/lib/self-upgrade/run-store");
     const deployedSha = await getDeployedSha();
-    // staleAfterMs > 0 → PERIODIC mode (called in-process on an interval, not just
-    // on boot): only touch runs stuck "running" well past a normal upgrade (~7
-    // min), so an in-flight swap is never reconciled out from under itself.
-    // staleAfterMs = 0 (boot default) reconciles every "running" row, because a
-    // boot means the orchestrating process is already gone.
+    // staleAfterMs > 0 → PERIODIC mode: only runs stuck "running" well past a normal
+    // upgrade, so an in-flight swap is never reconciled out from under itself.
+    // staleAfterMs = 0 (boot) reconciles every "running" row: the orchestrator is gone.
     const staleAfterMs = opts.staleAfterMs ?? 0;
     const now = opts.now?.() ?? new Date();
     const running = await prisma.selfUpgradeRun.findMany({
@@ -122,7 +120,11 @@ export async function reconcileSelfUpgradeRunsOnBoot(
     });
     let succeeded = 0;
     let failed = 0;
+    // BI-F9EE05E5: a run whose drain still heartbeats is waiting for work (maybe an hour), not stuck.
+    const { selfUpgradeRunsWithLiveDrain } = await import("@/lib/self-upgrade/drain-wait");
+    const waiting = staleAfterMs > 0 ? await selfUpgradeRunsWithLiveDrain(running.map((r) => r.runId), now, staleAfterMs) : new Set();
     for (const run of running) {
+      if (waiting.has(run.runId)) continue;
       const expectedDeployedSha = run.deployedSha ?? run.targetSha ?? null;
       if (
         deployedSha &&
@@ -139,8 +141,7 @@ export async function reconcileSelfUpgradeRunsOnBoot(
       // recreated it on the target. Failing here is a false negative: the promoter may still
       // complete the swap (it did for SUR-F4209F75 — failed on a mid-swap boot although the
       // portal then came up healthy on the target). Leave the run "running"; the staleness-
-      // guarded periodic watchdog (staleAfterMs>0) fails it only if the swap genuinely never
-      // lands. The watchdog path never takes this branch, so a truly stuck run is still reaped.
+      // guarded periodic watchdog (staleAfterMs>0) fails it only if the swap never lands.
       if (
         staleAfterMs === 0 &&
         deployedSha &&
@@ -165,9 +166,8 @@ export async function reconcileSelfUpgradeRunsOnBoot(
     // In PERIODIC mode, also fail runs stuck "queued"/"pending" that never
     // started — the dispatch event was dropped (e.g. the job engine was down),
     // so they can never run, yet requestPortalSelfUpgradeAction silently no-ops
-    // on a queued/pending row and blocks every future upgrade. (SUR-B26DF3E4 had
-    // to be cleared by hand during the 2026-06-14 incident.) Boot mode leaves
-    // these alone — a freshly-queued run there may still be mid-dispatch.
+    // on a queued/pending row and blocks every future upgrade (SUR-B26DF3E4).
+    // Boot mode leaves these alone — a freshly-queued run may be mid-dispatch.
     if (staleAfterMs > 0) {
       const staleQueued = await prisma.selfUpgradeRun.findMany({
         where: {
@@ -234,12 +234,10 @@ export async function reconcileQuiescenceRunsOnBoot(
 }
 
 /**
- * Self-heal a stuck quiescence level on boot. A real upgrade flips the level to
- * "draining"/"swapping" and recreates the portal — killing both the
- * orchestrator and the coordinator before either can flip it back to "normal".
- * The new portal would then read the stuck level and refuse all gated requests
- * ("portal_quiescing" 503) forever. We just booted, so any prior quiescence is
- * over: reset to normal. Non-fatal.
+ * Self-heal a stuck quiescence level on boot: a swap recreates the portal before
+ * anything flips the level back, so the new portal would refuse gated requests
+ * ("portal_quiescing" 503) forever. Reset it to normal unless a live self-upgrade
+ * drain owns it. Non-fatal.
  */
 export async function resetStuckQuiescenceLevelOnBoot(
   logger: Pick<Console, "log" | "error"> = console,
@@ -247,13 +245,13 @@ export async function resetStuckQuiescenceLevelOnBoot(
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return false;
   try {
     const { prisma } = await import("@dpf/db");
-    const { QUIESCENCE_CONFIG_KEY, setQuiescenceLevel } = await import(
-      "@/lib/self-upgrade/quiescence"
-    );
-    const row = await prisma.platformConfig.findUnique({
-      where: { key: QUIESCENCE_CONFIG_KEY },
-    });
-    const level = (row?.value as { level?: string } | null)?.level ?? "normal";
+    const { QUIESCENCE_CONFIG_KEY, setQuiescenceLevel } = await import("@/lib/self-upgrade/quiescence");
+    const row = await prisma.platformConfig.findUnique({ where: { key: QUIESCENCE_CONFIG_KEY } });
+    const value = row?.value as { level?: string; runId?: string | null } | null;
+    const level = value?.level ?? "normal";
+    // BI-F9EE05E5: reset only an orphaned drain; a live one outlives the restart.
+    const { isLiveSelfUpgradeDrain } = await import("@/lib/self-upgrade/drain-wait");
+    if (level !== "normal" && (await isLiveSelfUpgradeDrain(value?.runId ?? null))) return false;
     if (level !== "normal") {
       await setQuiescenceLevel("normal", null);
       logger.log(
@@ -1109,7 +1107,7 @@ export async function register() {
         await reconcileProviderConnectionState().catch(() => {});
         setInterval(() => void reconcileProviderConnectionState().catch(() => {}), 20 * 60 * 1000);
       })();
-      void import("@/lib/build/issue-bridge-sweep").then((m) => m.startUpstreamClosureSweep()); void import("@/lib/self-upgrade/doctools-release-image").then((m) => m.startDoctoolsReleaseImageReconciler()).catch((error) => console.error("[doctools-image] reconciler failed to start", error)); // BI-9A2EC54A: dpf-doctools release pin, boot + 20 min
+      void import("@/lib/build/issue-bridge-sweep").then((m) => m.startUpstreamClosureSweep()); void import("@/lib/documents/document-engine-boot").then((m) => m.startDocumentEngineOnBoot()).catch((error) => console.error("[doctools-image] document engine boot failed", error)); // BI-9A2EC54A/BI-903D22D0/BI-153EC72C: doctools pin at boot + 20 min, rendition backfill at start + on pin change
     }
 
     // Backfill the operational value stream (OVSM) EA view for any storefront

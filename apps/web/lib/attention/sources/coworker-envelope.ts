@@ -184,12 +184,14 @@ export async function loadCoworkerEnvelopeItems(
   db: Db,
   delegatingUserId: string | undefined,
   nowMs: number = Date.now(),
+  envelopeId?: string,
 ): Promise<AttentionItem[]> {
   if (!delegatingUserId) return [];
   const now = new Date(nowMs);
   const rows = await db.coworkerActionEnvelope.findMany({
     where: {
       delegatingUserId,
+      ...(envelopeId ? { id: envelopeId } : {}),
       status: DECIDABLE_STATUS,
       OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
     },

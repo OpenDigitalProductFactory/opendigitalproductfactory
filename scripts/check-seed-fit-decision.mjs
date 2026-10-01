@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
 
 import {
   evaluateSeedFitGate,
@@ -9,6 +8,7 @@ import {
 } from "./lib/seed-fit-gate.mjs";
 import { describeScopeMechanism } from "./lib/seed-fit-mechanism.mjs";
 import { requireChangedFiles } from "./lib/git-changed-files.mjs";
+import { runGit } from "./lib/git.mjs";
 
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
 
@@ -19,13 +19,8 @@ function safeRef(ref, label) {
   return ref;
 }
 
-function git(...args) {
-  try {
-    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch (error) {
-    return error.stdout?.toString() ?? "";
-  }
-}
+// Fail-open as before: partial stdout (or "") when git fails.
+const git = (...args) => runGit(args, { cwd: process.cwd() }).stdout;
 
 if (process.env.GITHUB_EVENT_NAME && process.env.GITHUB_EVENT_NAME !== "pull_request") {
   console.log("[seed-fit-gate] Non-PR event has no review metadata; PR gate is not applicable.");

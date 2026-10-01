@@ -12,6 +12,7 @@
 // origin="document", trust="derived" — which, per the founder's draft-by-default
 // decision, lands the derived material as a draft for review.
 
+import { sanitizeUntrustedText } from "@dpf/validators";
 import {
   saveManagedDocument,
   type SaveManagedDocumentInput,
@@ -108,7 +109,9 @@ export async function captureBusinessDocument(
       organizationId: input.organizationId,
       documentId: doc.documentId,
       title,
-      text,
+      // The document is stored as written; the enrichment model gets the
+      // hidden-Unicode-free copy (BI-7AD0DA3D).
+      text: sanitizeUntrustedText(text).text,
     });
     enrichmentQueued = true;
   }

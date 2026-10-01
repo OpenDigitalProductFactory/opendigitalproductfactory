@@ -104,7 +104,7 @@ Governed self-upgrade carries the enabled capability snapshot forward and recomp
 
 ## Backup and health semantics
 
-PostgreSQL remains the mandatory scheduled core backup and trial-restore target. For enabled non-core services, `backupPolicy: included` means their canonical data is already covered by the core backup owner; `separate-required` means the projection selects the target but a dedicated runner must exist. A selected `separate-required` target without a runner reports `optional_degraded`. Disabled targets receive an `optional_inactive` receipt and do not create an independent failing schedule. External provider runtimes are never local backup targets. Neo4j and Qdrant schedules remain deactivated; this capability work does not resurrect the retired BET-5 stores.
+PostgreSQL remains the mandatory scheduled core backup and trial-restore target. For enabled non-core services, `backupPolicy: included` means their canonical data is already covered by the core backup owner; `separate-required` means the projection selects the target but a dedicated runner must exist. A selected `separate-required` target without a runner reports `optional_degraded`. Disabled targets receive an `optional_inactive` receipt and do not create an independent failing schedule. External provider runtimes are never local backup targets. The retired BET-5 graph and vector backup schedules remain deactivated; this capability work does not resurrect them.
 
 The shared health projector exposes four explicit states:
 

@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
@@ -12,28 +12,21 @@ import { loadReleaseInstallContext, resolveUpgradeStrategy, type ReleaseTargetRe
 import { resolveWorkerReleaseTarget } from "@/lib/self-upgrade/worker-release-target";
 import { countPendingUpstreamCommits, evaluateReleaseBatch } from "@/lib/self-upgrade/release-batch";
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
-// Pure constant only: never statically import the spawn-heavy promoter runtime
-// that is what the dynamic loadPromoterRuntime() below is for.
-import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter-exit-codes";
 import {
-  resolveReadinessBackupHostPath,
   runCandidatePreflight,
   loadInstallStateSigningContext,
   verifyMigrationHandoff,
-  refreshMigrationHandoffAfterDrain,
 } from "@/lib/self-upgrade/preflight";
 import { evaluateHostMemoryGuard } from "@/lib/self-upgrade/host-memory-preflight";
-import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
+import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
-import { classifyBuildFailure, formatClassifiedExcerpt } from "@/lib/self-upgrade/build-failure-classifier";
 import {
   createRun,
   startRun,
-  completeRun,
   failRun,
   skipRun,
+  cancelRun,
   updateRunPlan,
-  recordRunRecoveryPoint,
   recordPromoterReadiness,
   getLatestRun,
   getLatestSucceededRun,
@@ -42,21 +35,13 @@ import {
   getCooldownUntil,
   isInCooldown,
   recordCooldown,
-  clearCooldown,
   DEFAULT_COOLDOWN_MINUTES,
 } from "@/lib/self-upgrade/cooldown";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
-import {
-  createSelfUpgradeRecoveryPoint,
-  summarizeRecoveryPointDegradation,
-  summarizeRecoveryPointFailure,
-} from "@/lib/self-upgrade/recovery-point";
-import {
-  startQuiescence,
-  signalSwapStarting,
-  signalSwapComplete,
-  failQuiescenceSwap,
-} from "@/lib/self-upgrade/quiescence";
+import { startQuiescence, type QuiescenceOutcome } from "@/lib/self-upgrade/quiescence";
+import { DEFAULT_DRAIN_WAIT_BUDGET_MS } from "@/lib/self-upgrade/drain-wait";
+import { finishSelfUpgrade, type SelfUpgradeSwapContext } from "./self-upgrade-swap";
+import { runSelfUpgradeInSteps, type SelfUpgradeBegin, type SelfUpgradePhases } from "./self-upgrade-steps";
 import { rejectDuplicateSelfUpgradeDelivery } from "@/lib/self-upgrade/delivery-admission";
 import { evaluateScheduledGate, recordScheduledDecline } from "@/lib/self-upgrade/scheduled-gate";
 import {
@@ -84,11 +69,29 @@ async function loadPromoterRuntime(): Promise<PromoterRuntime> {
   return await import("@/lib/self-upgrade/promoter");
 }
 
+/**
+ * The whole upgrade in-process: pre-drain, wait, swap. The job functions below
+ * run the same phases as separate steps (runSelfUpgradeInSteps); this composed
+ * form keeps a single call for tests and in-process callers.
+ */
 export async function runSelfUpgrade(
   params: SelfUpgradeRunEventData,
 ): Promise<Record<string, unknown>> {
+  const begun = await beginSelfUpgrade(params);
+  if ("done" in begun) return begun.done;
+  const ctx = begun.draining;
+  if (begun.awaitReady) {
+    const settled = await settleDrainOutcome(ctx, await begun.awaitReady());
+    if (settled) return settled;
+  }
+  return await finishSelfUpgrade(ctx);
+}
+
+/** Everything before the swap: gates, source prep, preflight, and the drain start. */
+export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise<SelfUpgradeBegin> {
+  const done = (result: Record<string, unknown>): SelfUpgradeBegin => ({ done: result });
   const duplicate = await rejectDuplicateSelfUpgradeDelivery(params.runId);
-  if (duplicate) return duplicate;
+  if (duplicate) return done(duplicate);
   const config = await getSelfUpgradeConfig();
   const now = new Date();
   const cooldownMinutes = config.cooldownMinutes ?? DEFAULT_COOLDOWN_MINUTES;
@@ -97,19 +100,28 @@ export async function runSelfUpgrade(
     reason: string,
     persistedReason = reason,
     extra: Record<string, unknown> = {},
-  ): Promise<Record<string, unknown>> {
+  ): Promise<SelfUpgradeBegin> {
     if (params.runId) await skipRun(params.runId, persistedReason);
     // BI-3CA18934: the scheduled cron carries no runId, so without this a
     // declined unattended tick left NO trace at all — no row, no reason — and
     // the only evidence was the absence of a run, which reads like a broken
     // scheduler. Record it where the status tool can retrieve it.
     else if (params.scheduled) await recordScheduledDecline(persistedReason, now);
-    return {
+    return done({
       skipped: true,
       reason,
       ...(params.runId ? { runId: params.runId } : {}),
       ...extra,
-    };
+    });
+  }
+
+  // An upgrade can now wait hours for work. A scheduled fire during one exits
+  // here, before any costly check: no drain, no cooldown (BI-F9EE05E5).
+  const activeRunOf = (r: Awaited<ReturnType<typeof getLatestRun>>) =>
+    r && ["running", "queued", "pending"].includes(r.status) && r.runId !== params.runId ? r : null;
+  const activeAtStart = params.scheduled ? activeRunOf(await getLatestRun()) : null;
+  if (activeAtStart) {
+    return await skipAttempt("active-run", `active-run: ${activeAtStart.runId}`, { activeRunId: activeAtStart.runId });
   }
 
   const support = await readSelfUpgradeSupport(config.enabled);
@@ -188,7 +200,7 @@ export async function runSelfUpgrade(
     // Reusing a stale-but-present image means a promote.sh fix shipped in the portal never
     // reaches the promoter that runs it — the live symptom: an install whose dpf-promoter
     // predated BET-5 ran the old promote.sh, so the pgvector-recreate (step 3a) and the
-    // Neo4j/Qdrant decommission (step 7c) silently never executed and the upgrade died at
+    // legacy-datastore decommission (step 7c) silently never executed and the upgrade died at
     // migrate. ensurePromoterImage() rebuilds JIT-buildable images from the portal's baked
     // /promoter/ files every time (custom/registry images are still left to the operator's
     // pull), keeping the promoter's promote.sh in lock-step with the running portal.
@@ -203,49 +215,11 @@ export async function runSelfUpgrade(
     }
   }
 
-  // Activity precheck — skip BEFORE any drain (mirrors the promoter precheck
-  // above). This fixes the live periodic bad-state bug (BI-F36E7510): the
-  // coordinator flips the portal to `draining` (refusing every mutation/MCP
-  // action) and THEN waits the full ~5min budget for the in-flight BuildPhaseRun
-  // / coworker loop to quiesce — but Build Studio phases routinely outlast the
-  // budget, so it times out and defers ("quiescence-deferred:
-  // build-studio.phase.plan") having refused work the entire time, then sets a
-  // cooldown and retries, repeating the drain every cycle. Snapshot the active
-  // surfaces FIRST; if anything is in flight, skip cleanly (no drain, no
-  // cooldown) and let the next tick retry once the surfaces are idle. This is the
-  // same snapshot the coordinator drains against, so "empty here" means the drain
-  // would converge immediately. force/dryRun bypass (the operator is asking now).
-  if (!params.dryRun && !params.force) {
-    const { captureActiveSessionBlockers } = await import("@/lib/self-upgrade/quiescence");
-    const snapshot = await captureActiveSessionBlockers();
-    // A manual operator "Upgrade now" must not silently no-op on the operator's
-    // OWN session. The B-class soft blocker `request.recent-tool-execution`
-    // fires on the very clicks / MCP calls that drove this trigger, so counting
-    // soft surfaces here makes a manual upgrade un-runnable while the operator is
-    // driving the portal — forcing Emergency override for a routine deploy
-    // (BI-CC82B9A8). Only genuine in-flight work (hard blockers: coworker
-    // reasoning loops, build-studio phases) early-skips a MANUAL trigger;
-    // otherwise it proceeds into the quiescence drain, which converges
-    // immediately when no hard work is running (a forced run reaches
-    // ready-to-swap at once with only soft activity present) and otherwise
-    // defers with a real run + reason rather than a silent skip. The unattended
-    // scheduled poll keeps the conservative "any surface skips" behavior — it
-    // must never start a drain while ANY work is in flight (BI-F36E7510).
-    // EP-ZERO-CONFIG-FEDERATION §5.5: the scheduled poll uses the SAME rule.
-    // "Any surface skips" meant an install with an edge node (heartbeat every
-    // minute) or a waiting agent session never had a quiet second at the top of
-    // the hour and never upgraded unattended (BI-A9F04B91). Soft signals enter
-    // the drain, which converges immediately when nothing hard is running.
-    const blocking = snapshot.surfaces.filter((s) => s.kind === "hard");
-    if (blocking.length > 0) {
-      const surfaces = blocking.map((s) => s.surface);
-      return await skipAttempt(
-        "activity-in-flight",
-        `activity-in-flight: ${surfaces.join(", ")}`,
-        { surfaces },
-      );
-    }
-  }
+  // BI-F9EE05E5 (spec §11a): no activity precheck. Work in flight never skips
+  // an upgrade (that skip, BI-F36E7510, ended 92 of 134 live runs "skipped"):
+  // manual and scheduled runs both enter the drain below, which closes
+  // admission to new work, lets in-flight work finish, and waits up to
+  // drainWaitBudgetMs before pausing for the operator.
 
   // A real target check is proceeding now — reset the interval clock
   // (scheduled, manual, or forced; never on dryRun). Keep this after local
@@ -300,7 +274,7 @@ export async function runSelfUpgrade(
       context: releaseInstall,
       currentConfigDigest,
     });
-    if (resolution.kind === "handled") return resolution.response;
+    if (resolution.kind === "handled") return done(resolution.response);
     if (resolution.kind === "unavailable") {
       return await skipAttempt(
         "no-published-target",
@@ -358,14 +332,8 @@ export async function runSelfUpgrade(
     }
   }
 
-  const latestRun = await getLatestRun();
-  if (
-    latestRun &&
-    (latestRun.status === "running" ||
-      latestRun.status === "queued" ||
-      latestRun.status === "pending") &&
-    latestRun.runId !== params.runId
-  ) {
+  const latestRun = activeRunOf(await getLatestRun());
+  if (latestRun) {
     return await skipAttempt("active-run", `active-run: ${latestRun.runId}`, {
       activeRunId: latestRun.runId,
     });
@@ -411,13 +379,13 @@ export async function runSelfUpgrade(
       // resolution) doesn't re-attempt every tick and spam failed runs.
       await recordCooldown(now, cooldownMinutes);
       await emitUpgradeEvent({ type: "upgrade.failed", runId: failedRun.runId });
-      return {
+      return done({
         ok: false,
         status: prep.reason === "merge-conflict" ? "deferred-conflict" : "failed",
         runId: failedRun.runId,
         reason: prep.reason,
         conflictFiles: prep.reason === "merge-conflict" ? prep.conflictFiles : undefined,
-      };
+      });
     }
     builtStamp = prep.stamp;
     upstreamSha = prep.upstreamSha ?? upstreamSha;
@@ -469,7 +437,7 @@ export async function runSelfUpgrade(
   const signingContext = await loadInstallStateSigningContext({
     dryRun: params.dryRun, runId: run.runId, failRun, emitFailure,
   });
-  if (!signingContext.ok) return { ok: false, status: "failed", runId: run.runId, reason: "installer-state-repair-required", excerpt: signingContext.reason };
+  if (!signingContext.ok) return done({ ok: false, status: "failed", runId: run.runId, reason: "installer-state-repair-required", excerpt: signingContext.reason });
   const { runtimeTransitionSecret, hostIdentity } = signingContext;
   const release = releaseTarget && releaseInstall
     ? { tag: releaseTarget.tag, ghcrOwner: releaseInstall.ghcrOwner, channelDigest: releaseTarget.channelDigest,
@@ -478,8 +446,8 @@ export async function runSelfUpgrade(
     : undefined;
   // Kept as a value so the post-drain handoff refresh can re-run the SAME
   // readiness (identical candidate, target and identity) if the install-state
-  // moved while the portal drained.
-  const preflightParams: Parameters<typeof runCandidatePreflight>[0] = {
+  // moved while the portal drained. The plain part crosses to the swap step.
+  const preflightPlan: SelfUpgradeSwapContext["preflight"] = {
     dryRun: params.dryRun, readinessMode: config.readinessMode, readinessOwner: config.readinessOwner,
     promoterImage: config.promoterImage, callerProtocolVersion: config.callerProtocolVersion,
     candidatePromoterReference: release
@@ -491,268 +459,110 @@ export async function runSelfUpgrade(
     canonicalInstallPath: hostInstallPathResolved, targetSha: builtStamp, baselineSha: deployedSha,
     runId: run.runId, composeFiles: promotionComposeFiles ?? [], composeProject,
     healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
-    runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun,
-    emitFailure,
-    hostIdentity, runtimeTransitionSecret,
   };
-  const preflight = await runCandidatePreflight(preflightParams);
+  const preflight = await runCandidatePreflight({
+    ...preflightPlan, runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun,
+    emitFailure, hostIdentity, runtimeTransitionSecret,
+  });
   if (!preflight.ok) {
     // Back off so a residual preflight failure (an OOM under the guard floor, or a
     // readiness refusal) doesn't re-attempt the heavy build every cron tick.
     await recordCooldown(now, cooldownMinutes);
-    return { ok: false, status: "failed", runId: run.runId, reason: preflight.reason };
+    return done({ ok: false, status: "failed", runId: run.runId, reason: preflight.reason });
   }
-  let resolvedPromoterDigest = preflight.resolvedPromoterDigest;
-  let migrationHandoff = preflight.migrationHandoff;
+  const resolvedPromoterDigest = preflight.resolvedPromoterDigest;
+  const migrationHandoff = preflight.migrationHandoff;
   const handoff = await verifyMigrationHandoff({
     dryRun: params.dryRun, runId: run.runId, migrationHandoff, resolvedPromoterDigest,
     runtimeTransitionSecret, hostIdentity, failRun, emitFailure,
   });
-  if (!handoff.ok) return { ok: false, status: "failed", runId: run.runId, reason: "installer-state-repair-required", excerpt: handoff.reason };
+  if (!handoff.ok) return done({ ok: false, status: "failed", runId: run.runId, reason: "installer-state-repair-required", excerpt: handoff.reason });
 
-  // BI-QUIESCE-010 keystone integration: replaces the single-signal
-  // getPortalActivity check with the full Activity Quiescence Protocol
-  // coordinator (BI-QUIESCE-002). The coordinator inventories all 30
-  // active surfaces, drains them in dependency order, and either
-  // signals ready-to-swap or defers with a specific blocker surface.
+  // BI-QUIESCE-010 keystone integration: the full Activity Quiescence Protocol
+  // coordinator (BI-QUIESCE-002) drains every active surface in dependency
+  // order. BI-F9EE05E5: admission closes first; in-flight work is not stopped;
+  // the drain waits up to drainWaitBudgetMs (default 60 min), then pauses as
+  // awaiting-operator rather than deferring.
   //
   // dryRun bypasses the drain entirely (no level flip, no caller
   // events). force surfaces as shipForce so the coordinator records
   // the override on forcedSurfaces.
   let quiescenceRunId: string | null = null;
+  let awaitReady: (() => Promise<QuiescenceOutcome>) | undefined;
   if (!params.dryRun) {
-    const { runId: qRunId, awaitReady } = await startQuiescence({
+    const started = await startQuiescence({
       trigger: "self-upgrade",
       triggerRefId: run.runId,
-      budgetMs: params.budgetMs,
+      budgetMs: params.budgetMs ?? config.drainWaitBudgetMs ?? DEFAULT_DRAIN_WAIT_BUDGET_MS,
       shipForce: params.force,
       // Stamp the QuiescenceRun with the real target identity so the drain is
-      // never recorded against an empty bundle. We only reach here once a
-      // concrete bundle to swap to has been resolved (the nothing-newer guard
-      // above already short-circuited the no-op case).
+      // never recorded against an empty bundle (the nothing-newer guard above
+      // already short-circuited the no-op case).
       targetVersion: upstreamSha ?? builtStamp,
       targetBundleHash: builtStamp,
     });
-    quiescenceRunId = qRunId;
-
-    const outcome = await awaitReady();
-    if (!outcome.ok) {
-      // Coordinator deferred / aborted / failed — no swap should happen.
-      // The upgrade run itself is marked failed so the audit trail is
-      // complete; the next cron tick will retry.
-      await failRun(
-        run.runId,
-        outcome.outcome === "deferred"
-          ? `quiescence-deferred: ${outcome.deferSurface ?? "unknown"}`
-          : `quiescence-${outcome.outcome}: ${("reason" in outcome ? outcome.reason : null) ?? "unknown"}`,
-      );
-      // Back off before the next attempt. A defer means an active session held
-      // the drain; without a cooldown the next trigger would re-drain within
-      // seconds and refuse work again. The level is already back to normal
-      // (coordinator on defer/abort/fail) — the cooldown keeps it that way.
-      await recordCooldown(now, cooldownMinutes);
-      await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
-      return {
-        ok: false,
-        status: "deferred",
-        runId: run.runId,
-        quiescenceRunId,
-        reason: outcome.outcome,
-        deferSurface: outcome.outcome === "deferred" ? outcome.deferSurface : null,
-      };
-    }
+    quiescenceRunId = started.runId;
+    awaitReady = started.awaitReady;
   }
 
-  const recoveryPoint = await createSelfUpgradeRecoveryPoint({
-    runId: run.runId,
-    dryRun: params.dryRun,
-  });
-  await recordRunRecoveryPoint(run.runId, recoveryPoint);
-  if (recoveryPoint.status === "degraded") {
-    // A best-effort (derived-store) backup failed — neo4j (code/knowledge
-    // graph) and qdrant (vectors) rebuild from source, so this does NOT block
-    // the upgrade. Record it loudly for the operator audit trail and proceed.
-    const note = summarizeRecoveryPointDegradation(recoveryPoint);
-    if (note) console.warn(`[self-upgrade] ${run.runId}: ${note}`);
-  }
-  if (recoveryPoint.status === "failed") {
-    const reason = summarizeRecoveryPointFailure(recoveryPoint);
-    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, reason);
-    await failRun(run.runId, reason);
-    await recordCooldown(now, cooldownMinutes);
-    await emitUpgradeEvent({
-      type: "upgrade.failed",
-      runId: run.runId,
-      payload: { reason },
-    });
-    return {
-      ok: false,
-      status: "failed",
-      runId: run.runId,
-      quiescenceRunId,
-      reason: "recovery-point-failed",
-      recoveryPoint,
-      excerpt: reason,
-    };
-  }
-
-  // Signal swap-starting for audit; record the moment we cross the
-  // ready-to-swap → actually-swapping boundary on the QuiescenceRun.
-  // No-op when quiescenceRunId is null (dryRun path).
-  if (quiescenceRunId) {
-    await signalSwapStarting(quiescenceRunId);
-  }
-
-  // The drain and recovery point above take minutes; the handoff was verified
-  // BEFORE them. Re-bind it to the bytes the promoter will actually migrate,
-  // re-running readiness if a host-side writer moved the state meanwhile
-  // (SUR-4758058F, BI-95DF1BFC). Fail-closed on anything that is not a
-  // legitimate state move or TTL expiry.
-  const refreshed = await refreshMigrationHandoffAfterDrain({
-    dryRun: params.dryRun, runId: run.runId, migrationHandoff, resolvedPromoterDigest,
-    runtimeTransitionSecret, hostIdentity, failRun, emitFailure,
-    rerunPreflight: () => runCandidatePreflight(preflightParams),
-  });
-  if (!refreshed.ok) {
-    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, refreshed.reason);
-    await recordCooldown(now, cooldownMinutes);
-    return { ok: false, status: "failed", runId: run.runId, quiescenceRunId, reason: "installer-state-repair-required", excerpt: refreshed.reason };
-  }
-  if (refreshed.data.refreshed) console.warn(`[self-upgrade] ${run.runId}: install-state handoff re-bound after the drain (${refreshed.data.code})`);
-  migrationHandoff = refreshed.data.migrationHandoff;
-  resolvedPromoterDigest = refreshed.data.resolvedPromoterDigest;
-
-  let result: { exitCode: number; stdout: string; stderr: string };
-  try {
-    const { runPromoter } = await loadPromoterRuntime();
-    result = await runPromoter({
-      // HOST path of the install tree, bind-mounted into the promoter container.
-      // Daemon-resolved host path, not an in-portal path; hostSourceMountPath
-      // is no longer passed — runPromoter mounts to a fixed /host-source.
-      // BI-A8A7CCFD — when isolated workspace is on, the promoter builds from
-      // the workspace HOST path, not the operator install. It mounts whatever we hand it
-      // here at `/host-source:ro` — same contract, just a different host dir.
+  // Plain JSON for the swap step; functions and the signing secret are
+  // re-supplied there (self-upgrade-swap.ts).
+  const ctx: SelfUpgradeSwapContext = {
+    runId: run.runId, quiescenceRunId, dryRun: params.dryRun, force: params.force, buildId: params.buildId, cooldownMinutes, builtStamp,
+    promoter: {
       hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
       canonicalInstallPath: hostInstallPathResolved,
-      // The honest built identity from source prep (merge-commit SHA in upstream
-      // mode, HEAD/-dirty in local mode). promote.sh re-derives this from the
-      // tree's HEAD and cross-checks against it.
-      targetSha: builtStamp,
-      backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${run.runId}`,
-      backupHostPath: resolveReadinessBackupHostPath(process.env.DPF_BACKUPS_HOST_PATH, hostInstallPathResolved ?? ""),
-      composeEnvFileHostPath: hostInstallPathResolved
-        ? `${hostInstallPathResolved.replace(/\/$/, "")}/.env`
-        : undefined,
-      // Recreate the portal with the install's own platform chain so an overlay
-      // (linux ollama URL, macOS host TTS) is applied only on the host that
-      // recorded it — never force-applied to the wrong substrate.
-      composeFiles: promotionComposeFiles,
-      composeProject,
+      composeFiles: promotionComposeFiles, composeProject,
       healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
-      promoterImage: resolvedPromoterDigest ?? config.promoterImage,
-      release,
-      stateDirHostPath: process.env.DPF_STATE_DIR_HOST,
-      installStateMigrationEnvelope: migrationHandoff ? Buffer.from(JSON.stringify(migrationHandoff.envelope)).toString("base64url") : undefined,
-      installStateMigrationSignature: migrationHandoff?.signature,
-      installStateMigrationRunId: migrationHandoff?.envelope.runId,
-      installStateMigrationHandoff: migrationHandoff,
-      dryRun: params.dryRun,
-      // Deterministic name so a stalled build can be force-removed by name on
-      // timeout (runPromoter) or by the watchdog backstop. docker names allow
-      // [A-Za-z0-9_.-]; runId (e.g. SUR-756751D1) is already safe.
-      containerName: `dpf-promoter-${run.runId}`,
-    });
-  } catch (err) {
-    // The promoter failed to even spawn (e.g. docker missing). Without this
-    // catch the rejection would bubble up as an Inngest function error and
-    // leave the run stuck "running" — blocking every future trigger.
-    const msg = err instanceof Error ? err.message : String(err);
-    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, msg);
-    await failRun(run.runId, `promoter-spawn-error: ${msg}`);
-    await recordCooldown(now, cooldownMinutes);
-    await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
-    return { ok: false, status: "failed", runId: run.runId, quiescenceRunId, excerpt: msg };
-  }
-
-  if (result.exitCode === PROMOTER_ALREADY_RUNNING_EXIT_CODE) {
-    // A concurrent/retried dispatch for THIS runId found a promoter already
-    // building it (runPromoter's idempotency guard declined to launch a
-    // duplicate). Leave run state untouched — the owning dispatch, and as a
-    // backstop the stuck-run watchdog, finalizes the run. Calling failRun here
-    // is exactly the SUR-E2BF265E defect: a healthy in-flight build recorded as
-    // failed because a second `docker run` collided on the deterministic name.
-    // No cooldown, no failure event — this dispatch is a no-op, not a failure.
-    return {
-      ok: true,
-      status: "already-in-flight",
-      runId: run.runId,
-      quiescenceRunId,
-      note: result.stderr.trim(),
-    };
-  }
-
-  if (result.exitCode === 0) {
-    // Signal swap-complete BEFORE marking the upgrade succeeded so the
-    // coordinator transitions through swapping→completed and flips the
-    // level back to normal as fast as possible. Suspended Inngest
-    // functions wake up via platform.quiescence-cleared.
-    if (quiescenceRunId) {
-      await signalSwapComplete(quiescenceRunId);
-    }
-    await completeRun(run.runId);
-    // Clear any prior cooldown — a swap succeeded, so the backoff from an
-    // earlier defer/fail no longer applies.
-    if (!params.dryRun) await clearCooldown();
-    await emitUpgradeEvent({ type: "upgrade.succeeded", runId: run.runId });
-    const deployed = params.buildId ? await isFeatureBuildDeployed(params.buildId) : null;
-    return { ok: true, status: "succeeded", runId: run.runId, quiescenceRunId, deployed };
-  }
-
-  // Persist a tail of BOTH streams: with the classic builder the failing RUN
-  // step's output (e.g. pnpm's actual fetch error) is on stdout while compose
-  // writes only progress lines to stderr — `stderr || stdout` threw the real
-  // error away (SUR-73668D5C persisted no pnpm output at all).
-  const streamTail = (s: string) => (s.length > 4000 ? `…${s.slice(-4000)}` : s);
-  const rawExcerpt =
-    [
-      result.stderr && `--- stderr (tail) ---\n${streamTail(result.stderr)}`,
-      result.stdout && `--- stdout (tail) ---\n${streamTail(result.stdout)}`,
-    ]
-      .filter(Boolean)
-      .join("\n") || "unknown error";
-  // Classify the build-gate failure into a known recurring class so the
-  // persisted failure — and the BLOCKED reason an agent reads downstream —
-  // leads with an actionable diagnosis instead of a raw log to reproduce from
-  // zero (BI-E4CBC7C1; spec §3.3).
-  const failureClass = classifyBuildFailure({
-    log: `${result.stdout}\n${result.stderr}`,
-  });
-  const excerpt = formatClassifiedExcerpt(failureClass, rawExcerpt);
-  // Promoter failed — signal failure to the coordinator so it transitions
-  // to failed + flips level back to normal (critical: without this, the
-  // portal stays draining forever after a failed swap).
-  if (quiescenceRunId) {
-    await failQuiescenceSwap(quiescenceRunId, excerpt);
-  }
-  await failRun(run.runId, excerpt);
-  await recordCooldown(now, cooldownMinutes);
-  await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
-  return {
-    ok: false,
-    status: "failed",
-    runId: run.runId,
-    quiescenceRunId,
-    exitCode: result.exitCode,
-    failureClass: failureClass.class,
-    excerpt,
+      promoterImage: config.promoterImage, release,
+    },
+    preflight: preflightPlan, migrationHandoff, resolvedPromoterDigest,
   };
+  return { draining: ctx, awaitReady };
 }
+
+/**
+ * Record what the drain ended in. Returns the run's final result to stop, or
+ * null to go on to the swap. BI-F9EE05E5: waiting is never a failure — this
+ * runs only once the drain has an outcome. An operator Abort ends the run
+ * cancelled with its reason (no failure record, no cooldown); a coordinator
+ * failure or a (non-upgrade) defer still fails the run and backs off.
+ */
+export async function settleDrainOutcome(
+  ctx: SelfUpgradeSwapContext,
+  outcome: QuiescenceOutcome,
+): Promise<Record<string, unknown> | null> {
+  if (outcome.ok) return null;
+  const base = { ok: false, runId: ctx.runId, quiescenceRunId: ctx.quiescenceRunId, reason: outcome.outcome };
+  if (outcome.outcome === "aborted") {
+    await cancelRun(ctx.runId, `operator-aborted: ${outcome.reason}`);
+    await emitUpgradeEvent({ type: "upgrade.cancelled", runId: ctx.runId });
+    return { ...base, status: "aborted" };
+  }
+  await failRun(
+    ctx.runId,
+    outcome.outcome === "deferred"
+      ? `quiescence-deferred: ${outcome.deferSurface ?? "unknown"}`
+      : `quiescence-${outcome.outcome}: ${outcome.reason ?? "unknown"}`,
+  );
+  // Back off so a failed drain is not re-entered within seconds. The level is
+  // already back to normal (the coordinator's terminal path).
+  await recordCooldown(new Date(), ctx.cooldownMinutes);
+  await emitUpgradeEvent({ type: "upgrade.failed", runId: ctx.runId });
+  return { ...base, status: "deferred", deferSurface: outcome.outcome === "deferred" ? outcome.deferSurface : null };
+}
+
+const SELF_UPGRADE_PHASES: SelfUpgradePhases = {
+  begin: beginSelfUpgrade,
+  settle: settleDrainOutcome,
+  finish: finishSelfUpgrade,
+};
 
 // Self-upgrade is the PRIORITY LANE (admission-control spec §4.3): deliberately
 // NOT enrolled in the dpf-build-pipeline lane (apps/web/lib/queue/admission.ts),
 // so when an operator caps that lane it always has account-concurrency headroom
 // below the build/agent flood — a queued "Upgrade now" never sits behind builds.
-export const selfUpgradeScheduled = inngest.createFunction(
+export const selfUpgradeScheduled = jobs.createFunction(
   {
     id: SELF_UPGRADE_FUNCTION_ID_SCHEDULED,
     retries: 1,
@@ -760,13 +570,12 @@ export const selfUpgradeScheduled = inngest.createFunction(
     triggers: [cron(SELF_UPGRADE_CRON)],
   },
   async ({ step }) => {
-    return await step.run("run-self-upgrade-scheduled", () =>
-      runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true }),
-    );
+    // BI-F9EE05E5: pre-drain / wait / swap as separate steps (self-upgrade-steps.ts).
+    return await runSelfUpgradeInSteps(step, { triggeredBy: "scheduled", scheduled: true }, SELF_UPGRADE_PHASES);
   },
 );
 
-export const selfUpgradeManual = inngest.createFunction(
+export const selfUpgradeManual = jobs.createFunction(
   {
     id: SELF_UPGRADE_FUNCTION_ID_MANUAL,
     retries: 0,
@@ -776,7 +585,7 @@ export const selfUpgradeManual = inngest.createFunction(
   async ({ event, step }) => {
     const data = event.data as SelfUpgradeRunEventData;
     try {
-      return await step.run("run-self-upgrade-manual", () => runSelfUpgrade(data));
+      return await runSelfUpgradeInSteps(step, data, SELF_UPGRADE_PHASES);
     } catch (err) {
       if (data.runId) {
         const msg = err instanceof Error ? err.message : String(err);
