@@ -109,6 +109,19 @@ copied `package.json` as written, which is harmless: the runtime stage only runs
 versions. `apps/mobile` resolves in its own single-workspace lockfile root, so it
 has no second workspace to drift against and no catalog.
 
+Two things keep those images on the lockfile. `scripts/check-docker-patch-context.mjs`
+fails any Dockerfile whose `pnpm install` lacks `--frozen-lockfile` or turns it
+off. `services/edge-node` used `--no-frozen-lockfile` until 2026-09-30, so a stale
+lockfile was quietly re-resolved from the registry at build time. The second is
+the `.npmrc`: the image builds do not copy the root `.npmrc`, and they must not.
+Its `node-linker=hoisted` makes `pnpm deploy --legacy` skip the lockfile and
+resolve every range afresh, even after a frozen install and even with
+`--frozen-lockfile` on the deploy. Replayed on the edge-node build stage, that
+shipped net-snmp 3.29.1 against a locked 3.26.3. The edge-node image therefore
+runs `scripts/sbom/assert-deploy-matches-lockfile.mjs` after its deploy, which
+fails the build when the deploy tree holds any version outside the lockfile's
+production closure for that importer.
+
 ### Shape budgets (the surface only shrinks)
 
 The same guard also **hard-fails a PR that pushes the dependency shape above its

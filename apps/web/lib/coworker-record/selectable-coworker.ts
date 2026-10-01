@@ -55,6 +55,21 @@ export function dropDualSeedAliasAgents<T extends { agentId: string }>(
 }
 
 /**
+ * The slug ids that only MIRROR a canonical AGT-* identity. A surface that
+ * offers coworkers for a person to CHOOSE, and binds the choice (OAuth consent,
+ * BI-A771AF73), must exclude these at the query: a post-filter cannot stop a
+ * mirror requested by id, and a binding on a mirror splits one coworker across
+ * two records.
+ */
+export function dualSeedMirrorSlugs(
+  slugToCanonical: Readonly<Record<string, string>> = COWORKER_SLUG_TO_CANONICAL_AGENT_ID,
+): string[] {
+  return Object.entries(slugToCanonical)
+    .filter(([slug, canonical]) => slug !== canonical)
+    .map(([slug]) => slug);
+}
+
+/**
  * Collapse dual-seed DUPLICATES only — the narrow sibling of
  * dropDualSeedAliasAgents above.
  *

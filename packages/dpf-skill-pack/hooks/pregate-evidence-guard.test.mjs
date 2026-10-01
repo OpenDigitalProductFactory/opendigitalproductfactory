@@ -270,3 +270,25 @@ test("without the reader, a test-stub record is never a pass", () => {
   assert.equal(verdict.block, true);
   assert.match(verdict.reason, /DPF_ALLOW_LOCAL_CI_STUB/);
 });
+
+test("a cloud agent session (CLAUDE_CODE_REMOTE=true) publishes without a gate record; the git hook records it", () => {
+  const head = headWithRecord(null);
+  assert.equal(decide("git push -u origin HEAD", { CLAUDE_CODE_REMOTE: "true" }, { head }).block, false);
+  assert.equal(decide("gh pr create --title t --body b", { CLAUDE_CODE_REMOTE: "true" }, { head }).block, false);
+});
+
+test("the cloud-session allowance needs exactly CLAUDE_CODE_REMOTE=true and still refuses a bad explicit override", () => {
+  const head = headWithRecord(null);
+  assert.equal(decide("git push", {}, { head }).block, true);
+  assert.equal(decide("git push", { CLAUDE_CODE_REMOTE: "false" }, { head }).block, true);
+  assert.equal(decide("git push", { CLAUDE_CODE_REMOTE: "1" }, { head }).block, true);
+  assert.equal(
+    decide("git push", {
+      CLAUDE_CODE_REMOTE: "true",
+      DPF_SKIP_PREPUSH_GATE: "1",
+      DPF_SKIP_PREPUSH_GATE_REASON: "unit tests only",
+    }, { head }).block,
+    true,
+    "an explicit free-text override is still refused in a cloud session",
+  );
+});
