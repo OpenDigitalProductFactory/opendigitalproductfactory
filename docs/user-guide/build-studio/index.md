@@ -98,7 +98,7 @@ If a task stops before it finishes, Build Studio distinguishes *why*. When the c
 
 Quality gates verify the feature is ready: documentation evidence is present, all tests pass, typecheck is clean, acceptance criteria are met, and accessibility checks pass. The AI Coworker presents a plain-language summary of the results.
 
-If the repository's automated checks find problems in the build's own change, such as a missing data-impact note or out-of-date generated files, Build Studio hands the build back to the AI Coworker with the findings to fix, then reviews it again. This happens at most twice. If the checks still fail, the build is escalated to you with the remaining findings instead of retrying forever.
+If the repository's automated checks or the independent code review find problems in the build's own change, such as a missing data-impact note, out-of-date generated files or a bug the reviewer spotted, Build Studio hands the build back to the AI Coworker with the findings to fix, then reviews it again. This happens at most twice. If the checks still fail, the build is escalated to you with the remaining findings instead of retrying forever.
 
 ### Ship
 
