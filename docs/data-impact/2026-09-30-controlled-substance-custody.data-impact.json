@@ -2,7 +2,7 @@
   "version": "1",
   "accountableOwner": "business-operator",
   "affectedCopies": [
-    "No copies. Balances are derived from ControlledSubstanceMovement; no other table projects these rows yet. The future physical stock-lot ledger (BI-9B2ED87F) may project from movements, never the reverse."
+    "No copies. Balances are derived from ControlledSubstanceMovement; no other table projects these rows yet. The future physical stock-lot ledger (veterinary design §7) may project from movements, never the reverse."
   ],
   "privacyAssessment": {
     "personalData": true,

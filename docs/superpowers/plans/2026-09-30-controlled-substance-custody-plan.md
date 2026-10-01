@@ -21,7 +21,7 @@ Each row is independently shippable and maps to one backlog item.
 | D5 | `BI-CSC-005` | Portal UI: register, movement entry with witness, count sheet, discrepancy queue | D2–D4 | Spec §9 | UX gate on leased preview |
 | D6 | `BI-CSC-006` | Advise-safe coworker read tools (balances, due counts, open cases) | D2–D4 | Spec §9 | MCP parity tests |
 | D7 | `BI-CSC-007` | Jurisdiction overlays: state annual inventory and wastage-witness rules (Illinois first), UK register profile | D2, D3 | Spec §§2, 9 | Policy tests per profile |
-| D8 | `BI-CSC-008` | Archetype composition: veterinary encounter and procedure wiring (`BI-88D28A7E`), shelter euthanasia (`BI-6AA4C3BD`), medical-practice dispensing, staffing key-holder presence, seeded count obligations | D2–D5 | Spec §9 | Archetype acceptance journeys |
+| D8 | `BI-CSC-008` | Archetype composition: veterinary encounter and procedure wiring (veterinary design pharmacy slice), shelter euthanasia (`BI-6AA4C3BD`), medical-practice dispensing, staffing key-holder presence, seeded count obligations | D2–D5 | Spec §9 | Archetype acceptance journeys |
 | D9 | `BI-CSC-009` | Ordering (Form 222/CSOS), EPCS, PDMP integration evaluation | D2 | Spec §9 | Tool evaluation, then design |
 | D10 | `BI-CSC-010` | Licensed SME and compliance validation of rule text before customer-facing claims | D2–D4 | Spec §2 claim boundary | Signed review record |
 

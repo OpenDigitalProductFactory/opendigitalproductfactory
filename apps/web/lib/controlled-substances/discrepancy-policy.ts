@@ -50,9 +50,33 @@ export const SIGNIFICANCE_FACTORS = [
 
 // ─── Deadlines ──────────────────────────────────────────────────────────────
 
+/**
+ * Calendar parts of an instant in a timezone. The formatter's locale is left
+ * to the runtime default and forced to Latin digits and the Gregorian
+ * calendar, because only the numeric parts are read; nothing here is shown
+ * to a person.
+ */
+function zonedParts(instant: Date, timeZone: string): Record<"year" | "month" | "day" | "hour" | "minute" | "second", number> {
+  const parts = new Intl.DateTimeFormat(undefined, {
+    timeZone,
+    calendar: "gregory",
+    numberingSystem: "latn",
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(instant);
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+  return { year: get("year"), month: get("month"), day: get("day"), hour: get("hour"), minute: get("minute"), second: get("second") };
+}
+
 /** YYYY-MM-DD in the register's timezone. */
 function localDate(instant: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
+  const { year, month, day } = zonedParts(instant, timeZone);
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function addDays(isoDate: string, days: number): string {
@@ -68,19 +92,9 @@ function isWeekend(isoDate: string): boolean {
 
 /** UTC offset of a timezone at an instant, in minutes. */
 function offsetMinutes(instant: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(instant);
-  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value);
-  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
-  return Math.round((asUtc - instant.getTime()) / 60000);
+  const p = zonedParts(instant, timeZone);
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  return Math.round((asUtc - Math.floor(instant.getTime() / 1000) * 1000) / 60000);
 }
 
 /** The last millisecond of a local calendar day, as an instant. */

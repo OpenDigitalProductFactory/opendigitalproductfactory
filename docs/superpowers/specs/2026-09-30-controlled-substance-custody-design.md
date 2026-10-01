@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: draft
 ---
 
 # Controlled-Substance Custody — Shared Design
@@ -11,7 +11,7 @@ practitioner and a compliance reviewer, before any archetype tells customers it 
 **Scope:** Common substrate used by every archetype that holds controlled drugs:
 `healthcare-wellness/*` (medical, dental, veterinary, home health), shelter and rescue
 (euthanasia solution), and mobile veterinary services.
-**Consumers:** veterinary `BI-88D28A7E` (pharmacy and controlled drugs), the pet-rescue
+**Consumers:** the veterinary design's pharmacy and controlled-drug slice (its §14 traceability table), the pet-rescue
 operating model (§4 controlled-substance log), and the workforce staffing design
 (named-capability presence for an authorized key-holder).
 
@@ -82,7 +82,7 @@ regulated count and loss-reporting clocks.
 | Site | `CareLocation` (optional; shelters without a care site use an organization-level register with a storage label) |
 | Patient | `PatientProfile` (human, and veterinary animal per DI-8BCD8C073E0D) or `AnimalProfile` (shelter animal). A movement names at most one, by real foreign key, never by a free-text subject ref. |
 | Row lifecycle | `RecordLifecycle` enum convention |
-| Physical general stock | Not reused. `StockItem` stays a retail snapshot. The future physical stock-lot ledger (`BI-9B2ED87F`) may *project* from controlled movements, never the other way around. |
+| Physical general stock | Not reused. `StockItem` stays a retail snapshot. The future physical stock-lot ledger (veterinary design §7) may *project* from controlled movements, never the other way around. |
 
 ## 5. Data contract
 
@@ -177,7 +177,7 @@ human judgment, recorded with its rationale.
 - Jurisdiction overlays: state annual inventory, state wastage witness rules, UK register.
 - Ordering (DEA Form 222 / CSOS), e-prescribing of controlled substances (EPCS), and
   state prescription-monitoring program checks.
-- Archetype composition: veterinary encounter and procedure wiring (`BI-88D28A7E`), the
+- Archetype composition: veterinary encounter and procedure wiring (veterinary design pharmacy slice), the
   shelter euthanasia workflow, medical-practice dispensing, the staffing key-holder
   presence rule, and seeded compliance obligations for counts.
 - Licensed SME and compliance validation of the rule text before customer-facing claims.

@@ -99,10 +99,10 @@ describe("nextCountDue", () => {
     ];
     expect(nextCountDue(history, NOW)).toMatchObject({
       kind: "biennial",
-      dueAt: new Date("2026-03-01T12:00:00Z"),
+      dueAt: new Date("2026-03-01T12:00:00Z"), // clock-bomb-guard: allow nextCountDue takes an explicit `now`; no wall clock is read
       overdue: true,
     });
     const withBiennial = [...history, { kind: "biennial" as const, takenAt: new Date("2026-02-15T12:00:00Z") }];
-    expect(nextCountDue(withBiennial, NOW)).toMatchObject({ dueAt: new Date("2028-02-15T12:00:00Z"), overdue: false });
+    expect(nextCountDue(withBiennial, NOW)).toMatchObject({ dueAt: new Date("2028-02-15T12:00:00Z"), overdue: false }); // clock-bomb-guard: allow nextCountDue takes an explicit `now`; no wall clock is read
   });
 });
