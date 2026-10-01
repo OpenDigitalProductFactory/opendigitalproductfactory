@@ -11,6 +11,8 @@ Each slice is its own PR, gated, reversible, and verified on the live install be
 
 ## Slice A — the drain waits instead of skipping or stopping work
 
+**Status (2026-10-01): implemented on `feat/upgrade-drain-waits-for-work`.** Items 1–10 are done. Item 0 (build before the door closes) has a concrete proposal (a promoter build-only mode) and is deferred to its own PR, because it changes the promoter shell contract. The review added: a durable abort (`QuiescenceRun.abortRequestedAt/By`, migration `20260930180000`), admission re-asserted after a portal restart mid-drain, a swap guard that never swaps with admission open, and a swap-complete wait sized to the promoter budget.
+
 The core behavior. After A, "Upgrade now" with a build in flight waits for it and then installs.
 
 0. **Build before the door closes.** Build and verify the candidate image before `startQuiescence`, so admission is closed only for the swap. Live evidence, SUR-3B7203FD (2026-09-30): admission closed at 17:04, the promoter was then killed mid-`next build` (`promoter-timeout`), and the drain held the door about 10 minutes for nothing. Check how `runPromoter` splits build and swap before changing the order.

@@ -98,7 +98,7 @@ This banner is not a browser polling loop. It reflects the latest server-side pl
 
 The operations self-upgrade path is separate from the shared-workspace banner. It lives at `/ops/self-upgrade` and records `SelfUpgradeRun` history for governed portal upgrades.
 
-When scheduled Inngest functions are enabled for the install and `PlatformConfig["self_upgrade"].enabled` is true, the `ops/self-upgrade-scheduled` function runs hourly. Each run checks the configured target branch, skips when the install is disabled, outside its maintenance window, already up to date, missing a target, or already running an upgrade, and otherwise runs the same quiescence, promotion, health, and rollback path used by manual self-upgrade requests.
+When scheduled Inngest functions are enabled for the install and `PlatformConfig["self_upgrade"].enabled` is true, the `ops/self-upgrade-scheduled` function runs hourly. Each run checks the configured target branch, skips when the install is disabled, outside its maintenance window, already up to date, missing a target, or already running an upgrade (it no longer skips because work is in flight; it waits for that work, see [Self-upgrade](operations/self-upgrade.md)), and otherwise runs the same quiescence, promotion, health, and rollback path used by manual self-upgrade requests.
 
 The manual operation uses the `ops/self-upgrade.run` event and the same runner. This path answers "can the running portal upgrade itself under governed operations controls?" The shared-workspace banner answers "does the local install workspace need to merge newer platform source?"
 

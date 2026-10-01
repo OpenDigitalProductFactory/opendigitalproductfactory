@@ -460,14 +460,14 @@ describe("isTerminalQuiescenceStatus + TERMINAL_QUIESCENCE_STATUSES", () => {
     }
   });
 
-  it("QUIESCENCE_RUN_STATUSES contains exactly the 9 spec values", () => {
-    // Locked because the coordinator state machine, the watchdog, and the
-    // operator UI all depend on this exact set.
-    expect(QUIESCENCE_RUN_STATUSES).toHaveLength(9);
+  it("QUIESCENCE_RUN_STATUSES contains exactly the 10 spec values (§11a adds awaiting-operator)", () => {
+    // Locked: the coordinator state machine, the watchdog, and the operator UI all depend on this set.
+    expect(QUIESCENCE_RUN_STATUSES).toHaveLength(10);
     expect(QUIESCENCE_RUN_STATUSES).toEqual([
       "pending",
       "preparing",
       "draining",
+      "awaiting-operator",
       "ready-to-swap",
       "swapping",
       "completed",

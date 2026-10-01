@@ -590,10 +590,11 @@ function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
-export async function cancelRun(runId: string) {
+export async function cancelRun(runId: string, reason?: string) {
   const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
-    data: { status: "cancelled", completedAt: new Date() },
+    // BI-F9EE05E5: an operator Abort records why the upgrade ended.
+    data: { status: "cancelled", completedAt: new Date(), ...(reason ? { reason } : {}) },
   });
   notifyRunState(updated.runId, "cancelled");
   await safeSyncSelfUpgradeChangeRecord(runId);
