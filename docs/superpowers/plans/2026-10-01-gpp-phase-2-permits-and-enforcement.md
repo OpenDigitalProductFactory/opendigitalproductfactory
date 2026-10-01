@@ -567,6 +567,32 @@ AC-FORGERY.
 
 **Satisfies:** OBJ-CRITICAL, OBJ-NODISRUPT; AC-ENFORCE.
 
+**As built (PR-E).** Where the build refines this section, the change and its reason:
+
+- **A binding covers its tools, not only the calls its gate admitted.** For enforcement, an enforced
+  binding covers every call to a tool it names, so a call its gate did not admit needs a presented
+  permit from that gate (test 1's "a call without a handle"). Shadow minting still follows admission.
+- **Promotion needs an explicit `tools` list** (new optional `GppBinding.tools`). A predicate-wide
+  binding, such as either seed, would demand its gate for every O/A/I call, including calls where that
+  gate never runs (Constraint 1). The ratchet also refuses an alignment-admit binding over a tool the
+  alignment gate does not run for outside a Workroom.
+- **Dynamic direct sites block every promotion.** A dynamic `executeTool` site can reach any tool. On
+  2026-10-01 there are four, so no binding is promotable until they pass the monitor.
+- **The enforcement entry declares `lineage: "sealed-required" | "unsealed-accepted"`** (criterion 4
+  made explicit). Under `sealed-required`, an unsealed decision downgrades that call to shadow.
+- **`unsigned` and infrastructure faults downgrade, never refuse.** The decision is in
+  `lib/gpp/permit-enforcement.ts`. It checks the install first (the `shadow-all` override, then the
+  signing key). Next it checks what the presenter controls: a permit is present, the MAC verifies, the
+  permit is from the enforced binding, the arguments match, the permit is unexpired, unrevoked and
+  unspent and covers the tool, and its decision exists. Any failure there is refused. Only then does
+  it consider unsealed lineage and infrastructure faults (mint, lookup, ledger read), which downgrade
+  the call to shadow and record `enforcement_downgraded` with the reason. A missing key cannot be seen
+  statically, so the runtime downgrades instead of refusing every call.
+- **The refusal mirrors the MCP extension draft** (BI-899C3844 §5). `data.authorization` carries the
+  denial envelope and one `transaction_authorization` hint per enforced gate, with `condition` and a
+  `gate` descriptor whose `obtain` is `out_of_band`. `permit_required` has disposition `awaiting-input`.
+- **Test seams for fixture bindings and enforcement entries refuse outside the test runner.**
+
 ## PR-F: one Build Studio plan→build transition function (C-8)
 
 **Goal.**
@@ -690,11 +716,11 @@ satisfied.
 - [ ] Operator asked, in chat, to configure `DPF_GPP_PERMIT_SECRET`. The agent never handles it.
 
 ### PR-E
-- [ ] `binding-enforcement.ts` (empty enforcement table, `KNOWN_SHADOW_BINDINGS`, `shadow-all` override)
-- [ ] `permit_required` rejection and disposition
-- [ ] Ratchet: enforcement entries need a DI id, O/A/I-only tools and no direct sites
-- [ ] AC-ENFORCE tests; Annex A note; local-CI gate; PR
-- [ ] Promotion procedure documented; no binding promoted
+- [x] `binding-enforcement.ts` (empty enforcement table, `KNOWN_SHADOW_BINDINGS`, `shadow-all` override)
+- [x] `permit_required` rejection and disposition
+- [x] Ratchet: enforcement entries need a DI id, O/A/I-only tools and no direct sites
+- [ ] AC-ENFORCE tests; Annex A note; local-CI gate; PR (tests and Annex A note done; local-CI gate and PR pending)
+- [x] Promotion procedure documented; no binding promoted
 
 ### PR-F
 - [ ] Git-history note in the PR body: when each of the five plan→build paths gained or lacked the WWMD gate

@@ -78,6 +78,12 @@ import {
 } from "./tak/gaid-actor-envelope";
 import { setGppPermitStoreOverrideForTests, type GppPermitStore } from "./gpp/permit-store";
 import { recordPermitObservation, resolveMonitorPermit, type MonitorPermitOutcome } from "./gpp/permit-verdict";
+import {
+  decidePermitEnforcement,
+  enforcementObservation,
+  permitRequiredData,
+  permitRequiredMessage,
+} from "./gpp/permit-enforcement";
 
 export function registerToolLifecycleHook(hook: ToolLifecycleHook): () => void {
   _lifecycleHooks = [..._lifecycleHooks.filter((existing) => existing.id !== hook.id), hook];
@@ -473,7 +479,7 @@ export async function governedExecuteTool(
   const gppPermit = consequence.consequential
     ? await resolveMonitorPermit({
         toolName: args.toolName,
-        tool: { consequential: true },
+        tool: { consequential: true, name: args.toolName },
         alignmentApproved: alignmentDecision?.verdict === "approve",
         alignmentInteractionId: alignmentDecision?.interactionId ?? null,
         approvedEnvelopeId: approvedAuthorityEnvelopeId,
@@ -487,6 +493,38 @@ export async function governedExecuteTool(
         params: args.rawParams,
       })
     : null;
+  // GPP Phase 2 PR-E: only a binding in the checked-in enforcement table acts
+  // on the verdict. With none covering the call (the shipped state) this is
+  // `not-applicable` and the observation and path below are unchanged.
+  const permitEnforcement = gppPermit
+    ? decidePermitEnforcement({ tool: { consequential: true, name: args.toolName }, outcome: gppPermit })
+    : { kind: "not-applicable" as const };
+  const enforcementRecord = enforcementObservation(permitEnforcement);
+  const observePermit = async (permit: MonitorPermitOutcome, toolExecutionId: string | null) => recordPermitObservation({
+    permitRowId: permit.permitRowId, bindingId: permit.bindingId, toolName: args.toolName, verdict: permit.verdict,
+    path: "monitor", toolExecutionId, callerSite: null,
+    ...(enforcementRecord.enforcement ? { enforcement: enforcementRecord.enforcement } : {}),
+    detail: { ...permit.detail, source: args.source, ...enforcementRecord.detail },
+  });
+  if (gppPermit && permitEnforcement.kind === "refuse") {
+    const refused: GovernedExecuteResult = {
+      ...rejectionResult(args.toolName, "permit_required", permitRequiredMessage(permitEnforcement)),
+      data: permitRequiredData(permitEnforcement, gppPermit.verdict),
+    };
+    const auditRow = await writeAudit({
+      toolName: args.toolName, rawParams: args.rawParams, result: refused, userId: args.userId,
+      source: args.source, context: args.context, durationMs: 0,
+      alignmentDecision, preconditionDecision, envelopeId: approvedAuthorityEnvelopeId, gppPermit,
+    });
+    await observePermit(gppPermit, auditRow?.id ?? null);
+    if (auditRow?.id) {
+      await writeToolExecutionReceipt({
+        auditRowId: auditRow.id, buildId: null, rawParams: args.rawParams, result: refused,
+        toolName: args.toolName, context: args.context, consequential: true, governedArgs: args,
+      });
+    }
+    return refused;
+  }
 
   let reservedAuditId: string | null = null;
   let reservedReceiptId: string | null = null;
@@ -500,18 +538,7 @@ export async function governedExecuteTool(
       alignmentDecision, preconditionDecision, envelopeId: approvedAuthorityEnvelopeId, gppPermit,
     });
     reservedAuditId = reservedAudit?.id ?? null;
-    if (gppPermit) {
-      await recordPermitObservation({
-        permitRowId: gppPermit.permitRowId,
-        bindingId: gppPermit.bindingId,
-        toolName: args.toolName,
-        verdict: gppPermit.verdict,
-        path: "monitor",
-        toolExecutionId: reservedAuditId,
-        callerSite: null,
-        detail: { ...gppPermit.detail, source: args.source },
-      });
-    }
+    if (gppPermit) await observePermit(gppPermit, reservedAuditId);
     const reservedReceipt = reservedAuditId
       ? await reserveConsequentialToolExecutionReceipt({
           auditRowId: reservedAuditId, args, alignmentDecision, preconditionDecision,

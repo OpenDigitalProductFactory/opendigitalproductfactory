@@ -16,7 +16,7 @@
 
 import type { GppPermitVerdict } from "@dpf/db";
 
-import { GPP_BINDINGS, bindingForAdmittedCall, type GppBindingToolFacts } from "./bindings";
+import { bindingForAdmittedCall, gppBindings, type GppBindingToolFacts } from "./bindings";
 import { computeParamHash } from "./param-hash";
 import { parsePermitHandle, verifyPermitMac, type ParsedPermitHandle } from "./permit-handle";
 import { mintShadowPermit, type MintedPermit } from "./permit-mint";
@@ -80,7 +80,7 @@ export function verdictFromChecks(checks: PermitChecks): GppPermitVerdict {
  * minted it. Null with a reason when there is nothing to look up.
  */
 function lineageRefOf(row: PermitRow): { ref: PermitLineageRef } | { missing: string } {
-  const binding = GPP_BINDINGS.find((candidate) => candidate.bindingId === row.bindingId);
+  const binding = gppBindings().find((candidate) => candidate.bindingId === row.bindingId);
   if (!binding) return { missing: "unknown-binding" };
   if (binding.admission === "alignment-approve") {
     return row.gateDecisionId
@@ -194,17 +194,21 @@ function presentedHandle(value: unknown): string | null {
   return handle;
 }
 
-async function findPresented(handle: string, parsed: ParsedPermitHandle | null): Promise<PermitRow | null> {
+/** `failed` tells an infrastructure fault apart from an unknown handle (PR-E never refuses on a fault). */
+async function findPresented(
+  handle: string,
+  parsed: ParsedPermitHandle | null,
+): Promise<{ row: PermitRow | null; failed: boolean }> {
   try {
     // A signed handle names its permit; anything else is looked up as a bare
     // permit id (the PR-C opaque handle, and the handle of an unsigned permit).
-    return await gppPermitStore().findPermitByPermitId(parsed ? parsed.permitId : handle);
+    return { row: await gppPermitStore().findPermitByPermitId(parsed ? parsed.permitId : handle), failed: false };
   } catch (err) {
     console.error(
       "[gpp-permit] presented-handle lookup failed: %s",
       err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
     );
-    return null;
+    return { row: null, failed: true };
   }
 }
 
@@ -263,7 +267,8 @@ export async function resolveMonitorPermit(input: MonitorPermitInput): Promise<M
       return { verdict: "ungoverned", permitId: null, permitRowId: null, bindingId: null, handle: null, detail: {} };
     }
     const parsed = handle ? parsePermitHandle(handle) : null;
-    const evaluated = handle ? await findPresented(handle, parsed) : minted?.row ?? null;
+    const presented = handle ? await findPresented(handle, parsed) : null;
+    const evaluated = presented ? presented.row : minted?.row ?? null;
     const call = { toolName: input.toolName, params: input.params, now: input.now };
     const checks = evaluated ? await checkPermit(evaluated, parsed, call) : null;
     const verdict: GppPermitVerdict = checks ? verdictFromChecks(checks) : "absent";
@@ -283,6 +288,7 @@ export async function resolveMonitorPermit(input: MonitorPermitInput): Promise<M
         ...(binding ? { admittedBy: binding.bindingId, bindingVersion: binding.version } : {}),
         ...(minted && minted.row.id !== evaluated?.id ? { mintedPermitId: minted.row.permitId } : {}),
         ...(binding && !minted ? { mintFailed: true } : {}),
+        ...(presented?.failed ? { presentedLookupFailed: true } : {}),
       },
     };
   } catch (err) {

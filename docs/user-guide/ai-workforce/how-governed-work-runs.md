@@ -238,7 +238,10 @@ affected. A call made around the governed path is recorded as unmediated. Each p
 and tied to the call's exact arguments. A permit that was altered after it was issued, or reused for
 different arguments, is recorded as such. An install that has no permit signing key records its
 permits as unsigned. Enforcement is switched on one binding at a time, and only after its shadow record
-has been reviewed.
+has been reviewed and a recorded decision approves it. No binding is switched on yet. When one is, a
+call under it without a valid permit is held with "permit required", which names the approval to
+obtain; the call is not lost, and it runs once that approval is in place. If the install has no signing
+key, the platform keeps that binding in shadow and records why, rather than holding every call.
 
 Denials come back as named reasons — a missing decision interaction, a missing envelope, a
 tripped stop condition, a missing verification receipt — not as a generic refusal. A denial
