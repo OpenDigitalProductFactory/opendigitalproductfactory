@@ -1914,6 +1914,7 @@
         "1-scope",
         "2-conformance",
         "21-versioning",
+        "211-binding-revision-versus-shape-version",
         "3-references",
         "31-normative-references",
         "32-informative-references",

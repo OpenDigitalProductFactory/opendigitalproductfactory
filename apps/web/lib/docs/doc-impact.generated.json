@@ -1319,6 +1319,9 @@
     "apps/web/lib/tak/route-context.ts": [
       "docs/user-guide/ai-workforce/decision-perspective.md"
     ],
+    "apps/web/lib/tak/scheduled-task-runs.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/tak/tool-intent.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -1411,6 +1414,9 @@
     ],
     "apps/web/lib/work-management/room-types.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
+    "apps/web/lib/work-management/stage-tool-parity.test.ts": [
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/work-management/work-shapes.ts": [
       "docs/architecture/gated-permissions-process.md",
@@ -3039,6 +3045,8 @@
       "packages/storefront-templates/src/archetypes/index.ts"
     ],
     "docs/architecture/gated-permissions-process.md": [
+      "apps/web/lib/tak/scheduled-task-runs.ts",
+      "apps/web/lib/work-management/stage-tool-parity.test.ts",
       "apps/web/lib/work-management/work-shapes.ts"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
