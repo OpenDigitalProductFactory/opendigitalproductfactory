@@ -6,7 +6,7 @@ import {
   removeStorefrontServiceLine,
 } from "@/lib/storefront/service-line-actions";
 import type { StorefrontCompositionView, StorefrontServiceLineView } from "@/lib/storefront/composition-view";
-import { intentStyle } from "@/components/ui/report-kit/statusColors";
+import { intentStyle } from "@/lib/ui-model/statusColors";
 import { confirmDialog } from "@/components/ui/Dialog";
 import { SearchableSelect } from "@/components/ui/form";
 

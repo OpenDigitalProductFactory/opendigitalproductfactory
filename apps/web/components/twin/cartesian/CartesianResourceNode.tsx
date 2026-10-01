@@ -3,7 +3,7 @@
 import { memo, type CSSProperties } from "react";
 import type { NodeProps } from "@xyflow/react";
 
-import { intentStyle } from "@/components/ui/report-kit/statusColors";
+import { intentStyle } from "@/lib/ui-model/statusColors";
 import type { CartesianPlacementNodeData } from "@/lib/twin/cartesian-scene";
 
 type InteractivePlacementNodeData = CartesianPlacementNodeData & {

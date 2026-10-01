@@ -427,6 +427,9 @@
     "apps/web/components/finance/InvoiceSendButton.tsx": [
       "docs/testing/pending-backlog-items.md"
     ],
+    "apps/web/components/i18n/MessagesProvider.tsx": [
+      "docs/architecture/localization-runbook.md"
+    ],
     "apps/web/components/monitoring/health-summary.ts": [
       "docs/install/platform-support-watchlist.md"
     ],
@@ -480,9 +483,6 @@
       "docs/platform-usability-standards.md"
     ],
     "apps/web/components/ui/form/SelectField.tsx": [
-      "docs/platform-usability-standards.md"
-    ],
-    "apps/web/components/ui/report-kit/statusColors.ts": [
       "docs/platform-usability-standards.md"
     ],
     "apps/web/components/workbooks/GridExportMenu.tsx": [
@@ -863,6 +863,9 @@
     "apps/web/lib/govern/permissions.ts": [
       "docs/architecture/delivery-ia.md"
     ],
+    "apps/web/lib/hooks/system-events.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
     "apps/web/lib/hooks/useBackgroundOperationObserver.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
@@ -870,6 +873,9 @@
       "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/lib/i18n/locale-context.server.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
+    "apps/web/lib/i18n/messages-context.ts": [
       "docs/architecture/localization-runbook.md"
     ],
     "apps/web/lib/identity/aidoc-resolver.ts": [
@@ -1350,6 +1356,9 @@
     ],
     "apps/web/lib/tools/integration-settings-href.ts": [
       "docs/testing/pre-pr-gate.md"
+    ],
+    "apps/web/lib/ui-model/statusColors.ts": [
+      "docs/platform-usability-standards.md"
     ],
     "apps/web/lib/ux-budget/budgets.ts": [
       "docs/platform-usability-standards.md"
@@ -2809,6 +2818,7 @@
       "apps/web/components/platform/OllamaManagement.tsx",
       "apps/web/components/platform/SystemEventProvider.tsx",
       "apps/web/lib/architecture/background-operation-observation-contract.test.ts",
+      "apps/web/lib/hooks/system-events.ts",
       "apps/web/lib/hooks/useBackgroundOperationObserver.ts",
       "apps/web/lib/hooks/useResilientEventSource.ts",
       "apps/web/lib/inference/local-model-operations.ts",
@@ -3070,7 +3080,9 @@
       "packages/db/data/agent_registry.json"
     ],
     "docs/architecture/localization-runbook.md": [
+      "apps/web/components/i18n/MessagesProvider.tsx",
       "apps/web/lib/i18n/locale-context.server.ts",
+      "apps/web/lib/i18n/messages-context.ts",
       "apps/web/lib/org-locale/locale-context.ts",
       "apps/web/lib/org-locale/org-locale.ts",
       "packages/i18n/src/catalog.ts",
@@ -3490,7 +3502,6 @@
       "apps/web/components/storefront-admin/ServiceLinesPanel.tsx",
       "apps/web/components/ui/SaveStateIndicator.tsx",
       "apps/web/components/ui/form/SelectField.tsx",
-      "apps/web/components/ui/report-kit/statusColors.ts",
       "apps/web/design/tokens-utilities.test.ts",
       "apps/web/lib/marketing/archetype-fit.ts",
       "apps/web/lib/readability/policy.ts",
@@ -3499,6 +3510,7 @@
       "apps/web/lib/shell/shell-action-contract.ts",
       "apps/web/lib/tak/escalation-ladder.ts",
       "apps/web/lib/tak/prompt-assembler.ts",
+      "apps/web/lib/ui-model/statusColors.ts",
       "apps/web/lib/ux-budget/budgets.ts",
       "apps/web/lib/ux-budget/measure.ts",
       "apps/web/lib/workforce/oversight-copy.ts",

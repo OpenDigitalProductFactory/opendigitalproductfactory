@@ -1,4 +1,4 @@
-// apps/web/components/compliance/compliance-nav.ts
+// apps/web/lib/navigation/compliance-nav.ts
 //
 // Pure data module for the Compliance secondary nav. Lifted out of ComplianceTabNav.tsx
 // (EP-NAV-COHERENCE P3/P5) so the navigation surface can ingest it without importing a

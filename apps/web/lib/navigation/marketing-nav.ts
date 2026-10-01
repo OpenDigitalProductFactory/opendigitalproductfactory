@@ -1,4 +1,4 @@
-// apps/web/components/customer-marketing/marketing-nav.ts
+// apps/web/lib/navigation/marketing-nav.ts
 //
 // Pure data for the Marketing secondary nav, lifted out of MarketingTabNav.tsx
 // (EP-NAV-COHERENCE P3/P5) so the navigation surface can ingest it without importing a

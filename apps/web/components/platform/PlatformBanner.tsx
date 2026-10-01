@@ -28,7 +28,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import { useSystemEvent } from "@/components/platform/SystemEventProvider";
+import { useSystemEvent } from "@/lib/hooks/system-events";
 
 type BannerState =
   | { kind: "hidden" }

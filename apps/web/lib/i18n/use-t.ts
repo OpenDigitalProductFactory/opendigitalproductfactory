@@ -3,7 +3,7 @@
 import type { MessageKey, Namespace } from "@dpf/i18n";
 import { formatSource, type MessageArgs } from "@dpf/i18n/runtime";
 
-import { useMessagesContext } from "@/components/i18n/MessagesProvider";
+import { useMessagesContext } from "./messages-context";
 
 /**
  * A translator for client components (EP-6B33A840 L0.2). The namespace must be

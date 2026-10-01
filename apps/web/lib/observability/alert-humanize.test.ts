@@ -5,7 +5,7 @@ import {
   friendlyServiceName,
   humanizeHealthAlert,
 } from "./alert-humanize";
-import type { MonitoringAlert } from "./health-summary";
+import type { MonitoringAlert } from "./monitoring-jobs";
 
 function alert(
   labels: Record<string, string>,

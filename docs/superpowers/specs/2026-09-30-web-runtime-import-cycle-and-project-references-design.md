@@ -171,7 +171,7 @@ Whether M11 step 2 is re-scoped from "project references for the four heavy doma
 
 - **Keep** `check-no-web-import-cycle-growth.mjs` (all imports, shrink-only). Retighten it when cut-4 merges (81 → 75).
 - **Add a runtime mode** to the same guard, not a second guard: classify edges as §1 does and fail if the static value graph has any SCC. PR-2 cut all three SCCs (17 files) in the same change, so the mode landed as forbid (budget 0) with no baseline step. The classifier now lives in the guard (`classifyEdges`, `stronglyConnectedComponents`), so §2's static-value numbers are reproducible from it.
-- **Add a `lib → ui` edge budget** (44, shrink-only) in the same guard family until PR-3 takes it to 0.
+- **Add a `lib → ui` edge budget** (44, shrink-only) in the same guard family until PR-3 takes it to 0. *Landed with PR-3 at 0:* `scripts/application-boundaries.json` declares `app` and `components` as `outerLayers`, and `check-application-boundaries.mjs` refuses any import from `apps/web/lib` into them, every kind counted (value, `import type`, dynamic, `import("x").T`). An edge that cannot move yet needs an owned, dated exception in the same file.
 - **Typecheck baseline:** `sbom/typecheck-baseline.json` keeps ratcheting lines. After PR-1 its `Check time` stays informational (it measures cache state, not code). Measure cold time with `check-typecheck-baseline.mjs --measure` under `flock`, as today.
 - **Re-measure before PR-5:** rerun the four §3 configurations on the tree PR-4 leaves behind. PR-5 proceeds only if a UI-only cold check still saves 40% or more against the whole program on CI hardware.
 

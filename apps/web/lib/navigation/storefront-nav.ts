@@ -1,4 +1,4 @@
-// apps/web/components/storefront-admin/storefront-nav.ts
+// apps/web/lib/navigation/storefront-nav.ts
 //
 // Pure data for the Storefront secondary nav (EP-NAV-COHERENCE P3). The top tabs in
 // StorefrontAdminTabNav are archetype-DYNAMIC (vocabulary labels + conditional
