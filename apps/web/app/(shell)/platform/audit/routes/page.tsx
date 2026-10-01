@@ -1,5 +1,9 @@
 // apps/web/app/(shell)/platform/audit/routes/page.tsx
+import { namespaceMessages } from "@dpf/i18n";
+
 import { RouteDecisionLogClient } from "@/components/platform/RouteDecisionLogClient";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import {
   getRouteDecisionLogs,
   getRouteDecisionStats,
@@ -18,9 +22,10 @@ const STAT_CARDS: Array<{
 ];
 
 export default async function AuditRoutesPage() {
-  const [rows, stats] = await Promise.all([
+  const [rows, stats, locale] = await Promise.all([
     getRouteDecisionLogs(200),
     getRouteDecisionStats(),
+    getLocaleContext(),
   ]);
 
   return (
@@ -64,7 +69,12 @@ export default async function AuditRoutesPage() {
         </div>
       )}
 
-      <RouteDecisionLogClient rows={rows} />
+      <MessagesProvider
+        locale={locale.language}
+        messages={{ routeAudit: namespaceMessages(locale.language, "routeAudit") }}
+      >
+        <RouteDecisionLogClient rows={rows} />
+      </MessagesProvider>
     </div>
   );
 }

@@ -1,7 +1,26 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { namespaceMessages } from "@dpf/i18n";
+
 import { CallParameters, RoutingConfidence, RouteDecisionLogClient } from "./RouteDecisionLogClient";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+
+/**
+ * Render inside the namespace the page provides, so these assertions check the
+ * real catalog copy rather than the `namespace.key` fallback useT emits when no
+ * provider is present.
+ */
+function withMessages(node: React.ReactNode) {
+  return renderToStaticMarkup(
+    <MessagesProvider
+      locale="en-US"
+      messages={{ routeAudit: namespaceMessages("en-US", "routeAudit") }}
+    >
+      {node}
+    </MessagesProvider>,
+  );
+}
 import type { RouteDecisionLogRow } from "@/lib/actions/route-decision-logs";
 
 describe("RouteDecisionLogClient", () => {
@@ -52,7 +71,7 @@ describe("RouteDecisionLogClient", () => {
 // row's collapsed detail region, which static markup never reaches.
 describe("CallParameters", () => {
   it("shows each value with the plain-language reason it is that value", () => {
-    const html = renderToStaticMarkup(
+    const html = withMessages(
       <CallParameters
         receipt={{
           sampling: { temperature: 0.6, topP: 0.95, topK: 20 },
@@ -72,7 +91,7 @@ describe("CallParameters", () => {
   });
 
   it("states plainly when a provider could not accept the requested reasoning", () => {
-    const html = renderToStaticMarkup(
+    const html = withMessages(
       <CallParameters
         receipt={{ sampling: {}, provenance: {}, mode: "default", maxTokens: 4096, effortUnexpressed: true }}
       />,
@@ -83,7 +102,7 @@ describe("CallParameters", () => {
   });
 
   it("names the parameters a model refused", () => {
-    const html = renderToStaticMarkup(
+    const html = withMessages(
       <CallParameters
         receipt={{
           sampling: {}, provenance: {}, mode: "default", maxTokens: 4096,
@@ -96,7 +115,7 @@ describe("CallParameters", () => {
   });
 
   it("reports constrained decoding when the response had to satisfy a schema", () => {
-    const html = renderToStaticMarkup(
+    const html = withMessages(
       <CallParameters
         receipt={{
           sampling: { temperature: 0 }, provenance: { temperature: "contract" },
@@ -112,7 +131,7 @@ describe("CallParameters", () => {
 // BI-A08285BC — a below-floor run is visible, and a confident one is silent.
 describe("RoutingConfidence", () => {
   it("names what went wrong when the floor was relaxed", () => {
-    const html = renderToStaticMarkup(
+    const html = withMessages(
       <RoutingConfidence signal={{ qualityFloorRelaxed: true, candidateCount: 3 }} />,
     );
     expect(html).toContain("Ran with low confidence");
@@ -120,19 +139,19 @@ describe("RoutingConfidence", () => {
   });
 
   it("calls out a single candidate as an outcome rather than a choice", () => {
-    const html = renderToStaticMarkup(<RoutingConfidence signal={{ candidateCount: 1 }} />);
+    const html = withMessages(<RoutingConfidence signal={{ candidateCount: 1 }} />);
     expect(html).toContain("nothing competed");
   });
 
   it("names a fallback win", () => {
-    const html = renderToStaticMarkup(
+    const html = withMessages(
       <RoutingConfidence signal={{ fallbackUsed: true, candidateCount: 5 }} />,
     );
     expect(html).toContain("not the ranked choice");
   });
 
   it("renders nothing when routing was confident, so it never becomes noise", () => {
-    const html = renderToStaticMarkup(
+    const html = withMessages(
       <RoutingConfidence signal={{ qualityFloorRelaxed: false, candidateCount: 8 }} />,
     );
     expect(html).toBe("");

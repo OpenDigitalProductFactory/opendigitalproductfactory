@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import type { RouteDecisionLogRow } from "@/lib/actions/route-decision-logs";
 import type { RoutingConfidenceSignal } from "@/lib/deliberation/routing-confidence";
+import { useT } from "@/lib/i18n/use-t";
 import {
   describeProvenance,
   describeVariability,
@@ -123,26 +124,27 @@ function SuitabilityReceipt({ receipt }: { receipt: ProviderSuitabilityRouteRece
 // than an arbitrary choice, which is the difference that decides whether an
 // operator trusts it.
 
-const PARAMETER_LABELS: Record<string, string> = {
-  temperature: "Temperature",
-  topP: "Top-p",
-  topK: "Top-k",
-  minP: "Min-p",
-  repeatPenalty: "Repeat penalty",
-};
+/** Catalog keys for the sampling labels, so the names travel with the copy. */
+const PARAMETER_KEYS = ["temperature", "topP", "topK", "minP", "repeatPenalty"] as const;
+type ParameterKey = (typeof PARAMETER_KEYS)[number];
+
+function isParameterKey(key: string): key is ParameterKey {
+  return (PARAMETER_KEYS as readonly string[]).includes(key);
+}
 
 export function CallParameters({ receipt }: { receipt: CallParameterReceipt }) {
-  const entries = Object.entries(receipt.sampling) as Array<[keyof typeof PARAMETER_LABELS, number]>;
+  const t = useT("routeAudit");
+  const entries = Object.entries(receipt.sampling) as Array<[string, number]>;
 
   return (
     <div style={{ marginTop: 12, padding: 10, background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 6 }}>
       <div style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 6 }}>
-        How it was called
+        {t("callParameters.heading")}
       </div>
 
       {entries.length === 0 ? (
         <div style={{ fontSize: 11, color: "var(--dpf-muted)" }}>
-          Provider defaults — nothing set.
+          {t("callParameters.providerDefaults")}
         </div>
       ) : (
         <div style={{ display: "grid", gap: 4, fontSize: 11 }}>
@@ -150,7 +152,9 @@ export function CallParameters({ receipt }: { receipt: CallParameterReceipt }) {
             const origin = receipt.provenance[key as keyof typeof receipt.provenance];
             return (
               <div key={key} style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "baseline" }}>
-                <span style={{ color: "var(--dpf-muted)", minWidth: 96 }}>{PARAMETER_LABELS[key] ?? key}</span>
+                <span style={{ color: "var(--dpf-muted)", minWidth: 96 }}>
+                  {isParameterKey(key) ? t(`callParameters.${key}`) : key}
+                </span>
                 <span style={{ color: "var(--dpf-text)", fontFamily: "monospace", fontWeight: 600 }}>{value}</span>
                 {key === "temperature" && (
                   <span style={{ color: "var(--dpf-muted)" }}>({describeVariability(value)})</span>
@@ -167,30 +171,34 @@ export function CallParameters({ receipt }: { receipt: CallParameterReceipt }) {
       )}
 
       <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 12, fontSize: 11, color: "var(--dpf-muted)" }}>
-        <span>Output ceiling: <span style={{ color: "var(--dpf-text)", fontFamily: "monospace" }}>{receipt.maxTokens}</span></span>
+        <span>{t("callParameters.outputCeiling")} <span style={{ color: "var(--dpf-text)", fontFamily: "monospace" }}>{receipt.maxTokens}</span></span>
         {receipt.effort && (
           <span>
-            Reasoning: <span style={{ color: "var(--dpf-success)" }}>on</span>
+            {t("callParameters.reasoningLabel")}{" "}
+            <span style={{ color: "var(--dpf-success)" }}>{t("callParameters.reasoningOn")}</span>
             {receipt.effort.budgetTokens !== undefined && (
-              <span style={{ fontFamily: "monospace" }}> ({receipt.effort.budgetTokens} tokens)</span>
+              <span style={{ fontFamily: "monospace" }}>
+                {" "}
+                {t("callParameters.reasoningBudget", { tokens: receipt.effort.budgetTokens })}
+              </span>
             )}
             <span style={{ fontFamily: "monospace" }}> · {receipt.effort.expressedAs}</span>
           </span>
         )}
-        {receipt.constrainedDecoding && <span style={{ color: "var(--dpf-success)" }}>JSON constrained</span>}
-        {receipt.recipeId && <span>Recipe: <span style={{ fontFamily: "monospace", color: "var(--dpf-text)" }}>{receipt.recipeId.slice(0, 10)}…</span></span>}
+        {receipt.constrainedDecoding && <span style={{ color: "var(--dpf-success)" }}>{t("callParameters.jsonConstrained")}</span>}
+        {receipt.recipeId && <span>{t("callParameters.recipe")} <span style={{ fontFamily: "monospace", color: "var(--dpf-text)" }}>{receipt.recipeId.slice(0, 10)}…</span></span>}
       </div>
 
       {receipt.effortUnexpressed && (
         // The honest version of a silent no-op.
         <div style={{ marginTop: 8, fontSize: 11, color: "var(--dpf-warning)" }}>
-          Asked for extended reasoning. This model has no way to accept it, so it ran without.
+          {t("callParameters.effortUnexpressed")}
         </div>
       )}
 
       {receipt.dropped && receipt.dropped.length > 0 && (
         <div style={{ marginTop: 6, fontSize: 11, color: "var(--dpf-muted)" }}>
-          Not accepted by this model: {receipt.dropped.join(", ")}.
+          {t("callParameters.dropped", { names: receipt.dropped.join(", ") })}
         </div>
       )}
     </div>
@@ -204,6 +212,7 @@ export function CallParameters({ receipt }: { receipt: CallParameterReceipt }) {
 // confident so it never becomes noise on a healthy decision.
 
 export function RoutingConfidence({ signal }: { signal: RoutingConfidenceSignal }) {
+  const t = useT("routeAudit");
   const belowFloor = signal.qualityFloorRelaxed === true;
   const noChoice = typeof signal.candidateCount === "number" && signal.candidateCount <= 1;
   if (!belowFloor && !noChoice && !signal.fallbackUsed) return null;
@@ -211,12 +220,12 @@ export function RoutingConfidence({ signal }: { signal: RoutingConfidenceSignal 
   return (
     <div style={{ marginTop: 12, padding: 10, background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-warning)", borderRadius: 6 }}>
       <div style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-warning)", marginBottom: 4 }}>
-        Ran with low confidence
+        {t("lowConfidence.heading")}
       </div>
       <div style={{ fontSize: 11, color: "var(--dpf-muted)", display: "grid", gap: 2 }}>
-        {belowFloor && <div>No model met the quality bar; the best available ran.</div>}
-        {noChoice && <div>Only one model available — nothing competed.</div>}
-        {signal.fallbackUsed && <div>A fallback ran, not the ranked choice.</div>}
+        {belowFloor && <div>{t("lowConfidence.belowFloor")}</div>}
+        {noChoice && <div>{t("lowConfidence.noChoice")}</div>}
+        {signal.fallbackUsed && <div>{t("lowConfidence.fallback")}</div>}
       </div>
     </div>
   );
