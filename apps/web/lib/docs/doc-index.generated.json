@@ -12867,6 +12867,7 @@
       "anchors": [
         "use-this-doc-for",
         "which-files-are-read",
+        "hidden-characters-are-removed",
         "when-the-converter-is-off"
       ]
     },

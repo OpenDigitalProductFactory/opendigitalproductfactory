@@ -14,3 +14,4 @@ export * from "./field-dispatch-policy";
 export * from "./readability";
 export * from "./setup-ux";
 export * from "./storefront";
+export * from "./untrusted-text";
