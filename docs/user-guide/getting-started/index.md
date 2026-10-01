@@ -24,7 +24,7 @@ The first question is not "which module do you want". It is **what kind of busin
 
 Pick that, and the platform arrives already shaped: the right words, the right forms, the right daily board, and coworkers that know the job. A plumbing business gets jobs, trucks, parts, and techs. A dental practice gets appointments, patients, forms, and practitioners. A pet boarding business gets stays, pets, and care notes.
 
-There are **103 business types across 23 categories** to start from:
+There are **107 business types across 25 categories** to start from:
 
 | If you run… | Categories that cover it |
 |---|---|
@@ -37,6 +37,7 @@ There are **103 business types across 23 categories** to start from:
 | Property or assets | HOA and property management · Asset rental · Real estate and construction |
 | A mission or a community | Nonprofit and community · Public sector and civic |
 | Money and trust | Banking and financial services · Security services |
+| Land, livestock, or a plant floor | Agriculture and ranching · Manufacturing |
 
 Do not worry about finding a perfect match. Pick the closest one — you can refine the details afterwards, and the vocabulary follows your business, not the other way round.
 

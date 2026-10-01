@@ -187,7 +187,11 @@ single-tree mode persists — current behavior, full back-compat.
     `https://localhost` when it serves only this machine, or the machine's
     DNS name when the network resolves it here. It writes `PUBLIC_URL` and
     trusts the certificate for your user (macOS asks for your keychain password once). AI clients such as
-    Claude Code sign in with OAuth only over https. If this step fails, the
+    Claude Code sign in with OAuth only over https. It also saves the AI
+    client address (`DPF_MCP_URL`) and the certificate bundle
+    (`NODE_EXTRA_CA_CERTS`) in `~/.dpf/agent-toolchain.env`, loaded by your
+    shell profile, on every run; apps opened from the Dock see the same
+    values until the Mac restarts. If this step fails, the
     portal stays at `http://localhost:3000` and the installer says so.
 12. **`docker compose up -d`** on the macOS overlay.
 13. **Health check** — polls `http://localhost:3000/api/health` for up

@@ -1485,7 +1485,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 47
+    "textMass": 45
   },
   "apps/web/app/(shell)/layout.tsx": {
     "vocabulary": 0,
@@ -9734,5 +9734,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 0
+  },
+  "apps/web/components/knowledge/knowledge-status-summary.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
   }
 }

@@ -370,6 +370,20 @@ Accountability is answerability for the work. It is deliberately separate from w
 the room and from what any AI coworker is permitted to do — a coworker doing the work does not
 become accountable for it.
 
+### When an account stops being used
+
+Rooms, Build Studio builds and scheduled coworker tasks belong to an account. If that account stops
+being used (a person leaves, or work was set up under a setup account by mistake), everything it
+owns keeps sending its approvals to an inbox nobody reads.
+
+An administrator can hand all of it over in one step. Ask your AI coworker to plan a handover for
+that account. It shows every live room the account alone coordinates, every live build it
+created and every scheduled task it owns, and who each will go to: the accountable person of the
+item's portfolio, or Foundational's, or the organization's owner. Anything with nobody chosen is
+listed as refused rather than guessed. Approve the handover in your inbox and exactly that list
+moves; if anything changed in between, nothing moves and the plan has to be run again. Every room,
+build and task records who handed it over and why.
+
 Beneath that, the room lists the workers in it. An AI coworker reached through several tools is
 one worker, not one row per tool, and any subagents it delegated appear grouped beneath it. Where
 delegation was never recorded, the room says so instead of placing workers under a likely parent.

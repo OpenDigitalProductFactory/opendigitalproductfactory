@@ -22,8 +22,10 @@
 //               No first-party diff explains these. HARD budget, with a 1%
 //               tolerance so a patch bump of a typed dependency does not fail.
 //
-// Check time is recorded, never gated: wall-clock varies by machine and load.
-// Budgets only go down (--update-baseline); raising one takes a recorded
+// Check time is recorded, never gated: wall-clock varies by machine and load,
+// and CI's Typecheck job restores a warm tsbuildinfo, so a CI report's Check
+// time reflects cache state (and is absent when nothing needed checking).
+// --listFiles still lists the whole program on a warm run. Budgets only go down (--update-baseline); raising one takes a recorded
 // reason (--raise-budget "<reason>"), exactly like check-sbom-drift.mjs.
 //
 // Usage:
@@ -309,7 +311,9 @@ function measure() {
   const reportPath = join(dir, "report.json");
   try {
     process.stdout.write("Measuring: pnpm --filter web typecheck (full compile, about 5.5 GB peak)...\n");
-    const run = spawnSync("pnpm", ["--filter", "web", "typecheck"], {
+    // `--incremental false` ignores the worktree's apps/web/tsconfig.tsbuildinfo,
+    // so the recorded Check time is a cold compile, not local cache state.
+    const run = spawnSync("pnpm", ["--filter", "web", "typecheck", "--incremental", "false"], {
       cwd: ROOT,
       stdio: ["ignore", "inherit", "inherit"],
       env: { ...process.env, DPF_TSC_PROGRAM_REPORT: reportPath },

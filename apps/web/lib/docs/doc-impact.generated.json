@@ -571,6 +571,9 @@
     "apps/web/lib/attention/owner-projection.ts": [
       "docs/user-guide/workspace/attention-inbox.md"
     ],
+    "apps/web/lib/auth/oauth-policy.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/auth/oauth-scope-map.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
@@ -1413,6 +1416,7 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/work-shapes.ts": [
+      "docs/architecture/gated-permissions-process.md",
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/work-unit.ts": [
@@ -2134,6 +2138,9 @@
     ],
     "scripts/hooks/converge-git-hooks.mjs": [
       "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/hooks/lib/retire-project-dpf-connector.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/hooks/run-hook.mjs": [
       "docs/install/platform-support-watchlist.md",
@@ -3037,6 +3044,9 @@
     "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md": [
       "packages/storefront-templates/src/archetypes/index.ts"
     ],
+    "docs/architecture/gated-permissions-process.md": [
+      "apps/web/lib/work-management/work-shapes.ts"
+    ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
       "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
@@ -3062,6 +3072,7 @@
     "docs/architecture/mcp-tool-authorization-runbook.md": [
       "apps/web/app/api/mcp/v1/route.ts",
       "apps/web/lib/agent-grants.ts",
+      "apps/web/lib/auth/oauth-policy.ts",
       "apps/web/lib/auth/oauth-scope-map.ts",
       "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts",
       "apps/web/lib/govern/manager-scope.ts",
@@ -3073,6 +3084,7 @@
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
       "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs",
       "scripts/gate-worktree.mjs",
+      "scripts/hooks/lib/retire-project-dpf-connector.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/mcp-client.mjs",
       "scripts/lib/mcp-credential.mjs",

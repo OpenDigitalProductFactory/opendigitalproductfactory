@@ -84,7 +84,11 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // grants resolve from THIS map (the slug agent row the coworker queries by
   // agentId "customer-advisor"), not from agent_registry.json — so the CRM
   // grants must live here to actually reach the coworker's tool surface.
-  "customer-advisor": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search", "workroom_evidence_write"],
+  // storefront_read (BI-43C3E914): inquiry-response-watch's draft stage reads the
+  // waiting inquiries through list_storefront_activity. Without it the stage's
+  // declared tool was unreachable and the coworker reported no way to read them.
+  // Read-only; agent_registry.json AGT-WS-CUSTOMER carries the same grant.
+  "customer-advisor": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search", "workroom_evidence_write", "storefront_read"],
   // The Data Steward owns master-data quality: it runs the dedup/staleness
   // sweep, merges duplicates, and proposes enrichment. crm_write reaches the
   // mdm-stewardship pack tools (run_mdm_steward_sweep, merge_customer_*,

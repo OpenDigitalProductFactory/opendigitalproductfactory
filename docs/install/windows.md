@@ -115,7 +115,10 @@ published image can be reached (offline or air-gapped) does it build
    DNS name when the network resolves it here. It writes `PUBLIC_URL` and
    adds the certificate to your user's trusted roots, so Windows asks you to
    confirm once. AI clients such as Claude Code sign in with OAuth only over
-   https. If this step fails, the portal stays at `http://localhost:3000` and
+   https. It also saves the AI client address (`DPF_MCP_URL`) and the
+   certificate bundle (`NODE_EXTRA_CA_CERTS`) in your user environment on
+   every run, so clients you open afterwards find the install. If this step
+   fails, the portal stays at `http://localhost:3000` and
    the installer says so.
 7. **`docker compose up -d`** — brings up postgres, portal-init
    (migrations + seed), and the portal.

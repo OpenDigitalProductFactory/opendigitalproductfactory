@@ -138,7 +138,10 @@ single-tree mode — the current default and fully back-compat.
     `https://localhost` when it serves only this machine, or the machine's
     DNS name when the network resolves it here. It writes `PUBLIC_URL` and
     trusts the certificate for your user (`sudo` asks for your password once). AI clients such as
-    Claude Code sign in with OAuth only over https. If this step fails, the
+    Claude Code sign in with OAuth only over https. It also saves the AI
+    client address (`DPF_MCP_URL`) and the certificate bundle
+    (`NODE_EXTRA_CA_CERTS`) in `~/.dpf/agent-toolchain.env`, loaded by your
+    shell profile, on every run. If this step fails, the
     portal stays at `http://localhost:3000` and the installer says so.
 11. **`docker compose up -d`** on the Linux overlay (which adds the
     `ollama` service for local LLM hosting, cAdvisor, node-exporter,
