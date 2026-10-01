@@ -28,8 +28,13 @@ function fakeDb(overrides: Partial<{ rooms: unknown[]; builds: unknown[]; tasks:
       update: vi.fn(async () => ({})),
     },
     buildActivity: { create: vi.fn(async () => ({})) },
+    agent: { findMany: vi.fn(async () => [{ agentId: "AGT-1", portfolioId: "pf-found" }]) },
     scheduledAgentTask: {
-      findMany: vi.fn(async () => overrides.tasks ?? [{ id: "t1", taskId: "task-1", agent: { portfolioId: null } }]),
+      // Like Prisma: ScheduledAgentTask has no `agent` relation, only the agentId string.
+      findMany: vi.fn(async ({ select }: { select: Record<string, unknown> }) => {
+        if ("agent" in select) throw new Error("Unknown field `agent` for select statement on model `ScheduledAgentTask`.");
+        return overrides.tasks ?? [{ id: "t1", taskId: "task-1", agentId: "AGT-1" }];
+      }),
       update: vi.fn(async () => ({})),
     },
   };
@@ -55,6 +60,11 @@ describe("planAccountHandover", () => {
       ["scheduled-task", "task-1", "u-mark"],
     ]);
     expect(plan.data.digest).toBe(handoverDigest(plan.data.items, "u-admin"));
+  });
+
+  it("finds a scheduled task's portfolio through its agent", async () => {
+    await planAccountHandover(fakeDb(), { sourceAccount: "admin@dpf.local" });
+    expect(resolveWorkOwner.mock.calls.map((c) => c[1].portfolioId)).toEqual(["pf-sold", "pf-found", "pf-found"]);
   });
 
   it("leaves a room that someone else also coordinates", async () => {
