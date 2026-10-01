@@ -6,7 +6,7 @@
 // treat every method as fallible and swallow its errors: a permit write is
 // audit evidence, never a precondition of the call (plan Constraint 1, R3).
 
-import { prisma, type GppObservationPath, type GppPermitVerdict, type Prisma } from "@dpf/db";
+import { prisma, type GppObservationPath, type GppPermitEnforcement, type GppPermitVerdict, type Prisma } from "@dpf/db";
 
 import type { PermitClaims } from "./permit-claims";
 import type { PermitSignature } from "./permit-handle";
@@ -41,6 +41,12 @@ export type PermitObservationCreate = {
   toolExecutionId: string | null;
   callerSite: string | null;
   detail: Record<string, unknown>;
+  /**
+   * PR-E: set only when an enforced binding covers the call — `enforced` when
+   * it was enforced, `shadow` when enforcement was downgraded for this call.
+   * Omitted otherwise, and the column keeps its `shadow` default.
+   */
+  enforcement?: GppPermitEnforcement;
 };
 
 export type GppPermitStore = {

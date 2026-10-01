@@ -869,6 +869,11 @@
     "apps/web/lib/govern/permissions.ts": [
       "docs/architecture/delivery-ia.md"
     ],
+    "apps/web/lib/gpp/binding-enforcement.ts": [
+      "docs/architecture/ai-agent-meta-model.md",
+      "docs/architecture/gated-permissions-process.md",
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/gpp/bindings.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
@@ -2818,6 +2823,7 @@
       "apps/web/app/api/mcp/v1/route.ts",
       "apps/web/lib/agent-grants.ts",
       "apps/web/lib/ai-inference.ts",
+      "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/identity/aidoc-resolver.ts",
       "apps/web/lib/identity/principal-linking.ts",
       "apps/web/lib/mcp-governed-execute.ts",
@@ -3095,6 +3101,7 @@
       "apps/web/lib/ea/reconcile-sysml-projections.ts",
       "apps/web/lib/explore/build-process-matrix.ts",
       "apps/web/lib/explore/feature-build-types.ts",
+      "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/bindings.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
@@ -3133,6 +3140,7 @@
       "apps/web/lib/auth/oauth-scope-map.ts",
       "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts",
       "apps/web/lib/govern/manager-scope.ts",
+      "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/permit-carriage.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/tak/tool-result-budget.ts",

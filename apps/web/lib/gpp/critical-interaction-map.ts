@@ -10,6 +10,7 @@
 
 import type { ConsequentialToolClassification } from "@/lib/tak/consequential-tool-policy";
 
+import { resolveBindingMode } from "./binding-enforcement";
 import { bindingsForTool } from "./bindings";
 
 export type GuardMode = "enforced" | "shadow" | "none";
@@ -51,7 +52,11 @@ export type CriticalInteractionEntry = {
     escalation: GuardMode;
     projector: GuardMode;
     shapeGate: GuardMode;
-    /** GPP Phase 2 permit (PR-C): `shadow` when a declared binding covers the tool, else `none`. */
+    /**
+     * GPP Phase 2 permit: `enforced` when a binding promoted in the checked-in
+     * enforcement table covers the tool (PR-E), `shadow` when only shadow
+     * bindings cover it (PR-C), else `none`.
+     */
     permit: GuardMode;
   };
   directSites: string[];
@@ -69,6 +74,12 @@ export type CriticalInteractionMap = {
   /** Direct sites whose tool name is a variable (approved proposals, dispatch proxies). */
   dynamicDirectSites: string[];
 };
+
+function permitGuardMode(name: string, consequential: boolean): GuardMode {
+  const covering = bindingsForTool({ consequential, name });
+  if (covering.some((binding) => resolveBindingMode(binding.bindingId).mode === "enforced")) return "enforced";
+  return covering.length ? "shadow" : "none";
+}
 
 export function buildCriticalInteractionMap(
   tools: readonly MapToolInput[],
@@ -96,7 +107,7 @@ export function buildCriticalInteractionMap(
         escalation: sideEffect ? "enforced" : "none",
         projector: deps.projectableTools.has(tool.name) ? "enforced" : "none",
         shapeGate: shape ? deps.shapeGateMode : "none",
-        permit: bindingsForTool({ consequential: classification.consequential }).length ? "shadow" : "none",
+        permit: permitGuardMode(tool.name, classification.consequential),
       },
       directSites: [...(deps.directSites.get(tool.name) ?? [])],
       critical: classification.consequential,
