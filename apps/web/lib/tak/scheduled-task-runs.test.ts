@@ -422,3 +422,51 @@ describe("a tool name is a token, not a substring (BI-4F64C5D3 follow-on)", () =
     ).toEqual({ kind: "executed" });
   });
 });
+
+// BI-43C3E914 — a Workroom stage's declared tools are pinned alongside the
+// writers the prompt names. Pinning only prompt-named tools was a GPP C-6
+// "Reach reconciliation" gap in the reverse direction.
+describe("scheduledToolsNeedingPin with a stage's declared tools", () => {
+  const PROMPT = "Record what you did by calling record_workroom_evidence.";
+  const WRITER = { name: "record_workroom_evidence", sideEffect: true };
+  const MANIFEST = { name: "read_codebase_manifest", sideEffect: false };
+  const POSTURE = { name: "list_patch_posture", sideEffect: false };
+
+  it("pins declared tools after the prompt's writer when a declared tool is deferred", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    expect(scheduledToolsNeedingPin({
+      prompt: PROMPT,
+      attached: [WRITER],
+      deferred: [MANIFEST, POSTURE],
+      declaredStageTools: ["read_codebase_manifest", "list_patch_posture"],
+    })).toEqual(["record_workroom_evidence", "read_codebase_manifest", "list_patch_posture"]);
+  });
+
+  it("pins nothing when every required and declared tool is already attached", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    expect(scheduledToolsNeedingPin({
+      prompt: PROMPT,
+      attached: [WRITER, MANIFEST],
+      deferred: [POSTURE],
+      declaredStageTools: ["read_codebase_manifest"],
+    })).toEqual([]);
+  });
+
+  it("an undeclared stage pins exactly as before", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    const before = { prompt: PROMPT, attached: [MANIFEST], deferred: [WRITER, POSTURE] };
+    expect(scheduledToolsNeedingPin(before)).toEqual(["record_workroom_evidence"]);
+    expect(scheduledToolsNeedingPin({ ...before, declaredStageTools: [] })).toEqual(["record_workroom_evidence"]);
+    expect(scheduledToolsNeedingPin({ prompt: "nothing named", attached: [], deferred: [POSTURE] })).toEqual([]);
+  });
+
+  it("does not repeat a declared tool the prompt also requires", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    expect(scheduledToolsNeedingPin({
+      prompt: PROMPT,
+      attached: [],
+      deferred: [WRITER],
+      declaredStageTools: ["record_workroom_evidence"],
+    })).toEqual(["record_workroom_evidence"]);
+  });
+});
