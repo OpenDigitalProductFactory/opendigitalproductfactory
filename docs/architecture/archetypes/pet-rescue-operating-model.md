@@ -99,7 +99,7 @@ the law?* These are the ones that must not be optional.
 | **Spay/neuter before adoption** | Statutory in many jurisdictions; where deferred, a compliance obligation follows the adopter. |
 | **Medication administration** | Missed doses harm animals. Must be scheduled, timed and signed. |
 | **Isolation / biosecurity** | An outbreak can kill an entire ward. |
-| **Controlled substance log** | Euthanasia solution must reconcile. Failure is a criminal matter. |
+| **Controlled substance log** | Euthanasia solution must reconcile. Failure is a criminal matter. Recorded on the shared custody register ([design](../../superpowers/specs/2026-09-30-controlled-substance-custody-design.md), `EP-CSC-CUSTODY`), with the draw linked to the animal's `AnimalProfile`. |
 | **Cruelty-case evidence chain** | Animals held as evidence cannot be rehomed; documentation must survive court. |
 | **Interstate transport health certificate** | A CVI is required to move animals across state lines. |
 | **Outcome statistics** | Usually contractual with the municipality and required for grants. |
