@@ -118,6 +118,18 @@ describe("finalize does not repeat a verdict it already has", () => {
   });
 });
 
+describe("an unmitigated risk ends finalize as a verdict", () => {
+  it("returns the risks bound to the gated tree and saves no analysis", async () => {
+    const blocked = narrative.replace('"disposition":"mitigated"', '"disposition":"blocked"');
+    const d = deps({ llm: vi.fn(async (prompt: string) => prompt.includes("gate decisions")
+      ? "Docs-Impact-Decision: internal seed validation, no user-visible change\nSeed-Fit-Decision: global-default"
+      : blocked) });
+    const out = await runBuildStudioFinalize("FB-8AB05E04", d);
+    expect(out).toMatchObject({ status: "risk-blocked", treeSha: binding.headTreeHash, risks: [{ key: "bad-tier", disposition: "blocked" }] });
+    expect(d.saved).toHaveLength(0);
+  });
+});
+
 describe("finalizeAllowsSemanticReview", () => {
   it("allows the semantic review only after a finished finalize", () => {
     expect(finalizeAllowsSemanticReview({ status: "ready", evidenceIds: ["g", "t"] })).toBe(true);
@@ -127,6 +139,7 @@ describe("finalizeAllowsSemanticReview", () => {
       { status: "decisions-exhausted", failedGuards: ["x"] },
       { status: "unbound" },
       { status: "tests-failed" },
+      { status: "risk-blocked", risks: [], treeSha: "t" },
     ];
     for (const outcome of unfinished) {
       expect(finalizeAllowsSemanticReview(outcome)).toBe(false);

@@ -80,6 +80,13 @@ describe("review-finding repair", () => {
     expect(guards.implement).toContain("Data-Impact Gate");
   });
 
+  it("briefs an unmitigated risk as something to mitigate in code, never to relabel", () => {
+    const risk = repairTaskFor({ source: "risk", findings: [{ severity: "high", description: "telemetry-write: adapter writes with an undefined client → inference fails" }], failedGuards: ["Failure analysis"], treeSha: "t", recordId: null, attempts: 1 }, "");
+    expect(risk.title).toMatch(/Mitigate/);
+    expect(risk.implement).toContain("undefined client");
+    expect(risk.implement).toMatch(/never describe a risk as mitigated without the code/i);
+  });
+
   it("shares one attempt bound with guard hand-backs", () => {
     const afterGuards = { source: "guards" as const, failedGuards: ["x"], treeSha: "t", recordId: "r", attempts: GAUNTLET_REPAIR_MAX_ATTEMPTS };
     expect(decideGauntletRepair(afterGuards, { treeSha: "t2", recordId: null, failedGuards: ["Semantic change review"], source: "review", findings }).action).toBe("escalate");
