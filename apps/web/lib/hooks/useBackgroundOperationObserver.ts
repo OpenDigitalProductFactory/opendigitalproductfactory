@@ -5,7 +5,7 @@ import {
   useSystemEvent,
   useSystemEventConnectionStatus,
   type SystemEventType,
-} from "@/components/platform/SystemEventProvider";
+} from "./system-events";
 
 export type BackgroundOperationObserverOptions<TSnapshot> = {
   endpoint: string;

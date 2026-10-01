@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 724,
+  "pageCount": 726,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -626,6 +626,23 @@
         "adding-another-consequential-gate"
       ]
     },
+    "docs/architecture/agent-governance-market-landscape-2026.md": {
+      "publicHref": "/architecture/agent-governance-market-landscape-2026/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "ai-agent-governance-market-and-thought-leadership-landscape-2026",
+        "1-the-problem-in-one-paragraph",
+        "2-evidence-that-per-call-approval-fails",
+        "3-incident-record-20242026",
+        "4-frameworks-and-thought-leadership",
+        "5-products-and-adjacent-approaches",
+        "6-the-gap-gpp-addresses",
+        "7-implications-for-dpfs-public-claims",
+        "8-what-this-brief-could-not-verify"
+      ]
+    },
     "docs/architecture/agent-skill-index.md": {
       "publicHref": "/architecture/agent-skill-index/",
       "portalHref": null,
@@ -727,6 +744,7 @@
         "104-proactivity-is-not-autonomy",
         "105-validation-does-not-survive-material-change-silently",
         "106-evidence-closes-the-lifecycle",
+        "107-approval-is-a-decision-not-a-keystroke",
         "11-standards-contribution-profile",
         "12-implementation-and-claiming-guidance",
         "13-open-standardization-questions",
@@ -746,6 +764,7 @@
         "enterprise-operating-model-bridge",
         "composition-rule",
         "principle-directed-work-and-mbse-composition",
+        "gated-permissions-and-approval-fatigue",
         "adjacent-dpf-concepts",
         "source-of-truth-rule"
       ]
@@ -889,6 +908,7 @@
       "anchors": [
         "application-boundaries",
         "governed-dependency-direction",
+        "outer-layers-lib-never-imports-the-ui",
         "why-this-direction",
         "exception-contract",
         "refactoring-pattern",
@@ -1068,6 +1088,7 @@
         "the-scoring-math",
         "a-worked-example",
         "from-scores-to-an-outcome",
+        "from-a-decision-to-a-permission",
         "jsi-weights-that-learn-the-job",
         "earning-autonomy-from-passive-to-proactive",
         "the-decision-ledger",
@@ -1463,6 +1484,7 @@
         "lockfile-roots",
         "pruning-overrides",
         "typecheck-program-budget-checked-lines-only-grow-with-the-diff",
+        "warm-start-in-ci",
         "axis-2-vulnerability-lifecycle-the-local-dependabot-equivalent",
         "the-remediation-ladder-when-a-floor-wont-work",
         "owning-a-fix-pnpm-patch-when-upstream-is-dead",
@@ -1881,6 +1903,57 @@
         "core-assertion-set",
         "evidence-publication-guidance",
         "use-in-dpf"
+      ]
+    },
+    "docs/architecture/gated-permissions-process.md": {
+      "publicHref": "/architecture/gated-permissions-process/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "gated-permissions-process-gpp",
+        "abstract",
+        "1-scope",
+        "2-conformance",
+        "21-versioning",
+        "211-binding-revision-versus-shape-version",
+        "3-references",
+        "31-normative-references",
+        "32-informative-references",
+        "33-reuse-rule",
+        "4-terms-and-definitions",
+        "5-core-principle",
+        "6-relationship-to-the-family",
+        "7-the-gated-permission-binding",
+        "71-capability-vocabulary",
+        "72-gate-resolution-semantics",
+        "73-the-pairing-at-a-glance",
+        "8-capability-co-occurrence",
+        "9-bindings-over-time",
+        "91-decide-once-act-within",
+        "92-phase-boundaries",
+        "93-expiry-revocation-and-material-change",
+        "94-narrowing-only",
+        "10-completeness-and-consistency",
+        "11-evidence-and-efficacy-measures",
+        "12-notation",
+        "121-textual-form",
+        "122-sysml-v2-mapping",
+        "123-the-binding-as-a-model",
+        "124-from-model-to-running-system",
+        "1241-the-model-is-executable-or-verified",
+        "1242-the-model-is-visible-at-design-time-and-at-runtime",
+        "1243-dpf-status",
+        "13-hazards",
+        "14-security-and-privacy-considerations",
+        "annex-a-informative-dpf-realization-status",
+        "annex-b-informative-proposed-assertions",
+        "annex-c-informative-build-studio-as-a-gpp-model",
+        "c1-the-model",
+        "c2-one-binding-written-out",
+        "c3-what-modeling-it-revealed",
+        "c4-path-to-conformance",
+        "revision-history"
       ]
     },
     "docs/architecture/initiative-readiness-runbook.md": {
@@ -2590,6 +2663,7 @@
         "the-brief-and-what-advances-a-stage",
         "failing-closed-is-not-the-same-as-locking",
         "a-named-governed-writer-must-be-attached-not-discovered",
+        "a-stage-names-the-tools-it-needs",
         "related-references",
         "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601"
       ]
@@ -12794,8 +12868,10 @@
         "what-how-hard-should-it-push-now-reaches",
         "setting-a-default-for-every-room",
         "giving-a-room-its-shape",
+        "a-shape-is-a-model-the-platform-checks",
         "incomplete-or-unavailable-rooms",
         "who-is-accountable-and-who-is-working",
+        "when-an-account-stops-being-used",
         "opening-a-workroom-that-has-no-work-item"
       ]
     },

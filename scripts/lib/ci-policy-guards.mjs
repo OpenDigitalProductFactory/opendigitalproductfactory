@@ -197,6 +197,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/installer/pki-contract.test.mjs"),
       // BI-6DC1CD5B: canonical https origin resolver, machine trust, installer wiring.
       conformanceTest("scripts/installer/canonical-origin.test.mjs"),
+      // BI-2D545A0C: installer + bootstrap persist DPF_MCP_URL (from PUBLIC_URL) and
+      // NODE_EXTRA_CA_CERTS idempotently; machine trust with a fake store per OS.
+      conformanceTest("scripts/installer/mcp-client-env.test.mjs"),
       // BI-698B7F9A: both installers pull the release's dpf-doctools with the
       // other release images and never fail the install on it.
       conformanceTest("scripts/installer/doctools-prepull.test.mjs"),
@@ -376,8 +379,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // A `patchedDependencies` entry whose patch file never reaches the Docker
       // build context fails `pnpm install` with ENOENT and breaks every image
       // build (SUR-8AB3353C, regression from #4321).
+      // The same guard refuses an unfrozen `pnpm install` in any Dockerfile.
       node("scripts/check-docker-patch-context.mjs"),
       node("--test", "scripts/check-docker-patch-context.test.mjs"),
+      // The service images (adp, edge-node, integration-test-harness) run
+      // this after `pnpm deploy`: the legacy deploy skips the lockfile under
+      // node-linker=hoisted, so each image asserts its deploy tree against
+      // pnpm-lock.yaml instead of trusting the config.
+      node("--test", "scripts/sbom/assert-deploy-matches-lockfile.test.mjs"),
       // Same failure family, different input: the Dockerfile copies scripts by
       // name, so extracting a helper out of one silently drops it from the image
       // and `pnpm install` dies on ERR_MODULE_NOT_FOUND in postinstall
@@ -737,6 +746,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-DBAD1A1B: SessionEnd process matching accepts only the canonical
         // worktree itself or descendants, never sibling worktrees/CI runners.
         "scripts/hooks/session-reaper.test.mjs",
+        // BI-8A562681: the health hook resolves DPF_MCP_URL then the plugin
+        // default; hook curl calls carry the install CA bundle on https.
+        "scripts/hooks/mcp-health.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
@@ -873,6 +885,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "packages/dpf-skill-pack/hooks/command-text.test.mjs",
       ),
       node("--test", "packages/dpf-skill-pack/hooks/root-clone-guard.test.mjs"),
+      // The publish guard and its cloud-agent-session allowance share the
+      // override reason with .githooks/pre-push-gate.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/pregate-evidence-guard.test.mjs",
+        "packages/dpf-skill-pack/hooks/lib/local-ci-override.cloud-session.test.mjs",
+      ),
       node("--test", "packages/dpf-skill-pack/hooks/compose-guard.test.mjs"),
       // BI-F87BD9BF: raw tsc / root-level vitest / npx are refused with the
       // checked-in routine named, instead of costing an OOM and a retry.

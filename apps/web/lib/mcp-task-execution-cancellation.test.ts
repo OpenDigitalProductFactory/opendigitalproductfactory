@@ -41,7 +41,6 @@ vi.mock("./mcp/external-approval-location-lookup", () => ({
 }));
 
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
-import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 
 const writerToolName = "record_initiative_evidence";
 const parsed = {

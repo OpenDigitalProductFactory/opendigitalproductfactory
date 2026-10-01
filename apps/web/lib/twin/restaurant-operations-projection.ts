@@ -1,9 +1,4 @@
-import type {
-  CapacityChipData,
-  QuestData,
-  QueueItemData,
-  ResourceUnitData,
-} from "@/components/twin";
+import type { CapacityChipData, QuestData, QueueItemData, ResourceUnitData } from "./kit-types";
 import {
   capacityStateIntent,
   capacityStateLabel,

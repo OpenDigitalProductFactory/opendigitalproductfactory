@@ -62,11 +62,14 @@ function makeDeps(overrides?: {
     }),
     fetchToolEvidence: vi.fn().mockResolvedValue(overrides?.governedEvidence ?? []),
     fetchAgentGrants: vi.fn().mockResolvedValue(overrides?.agentGrants ?? []),
+    resolveOwnerUserId: vi.fn(async () => {
+      const owner = overrides?.superuser === undefined ? { id: "usr-1" } : overrides.superuser;
+      if (!owner) throw new Error("No accountable owner");
+      return owner.id;
+    }),
     db: {
       user: {
-        findFirst: vi
-          .fn()
-          .mockResolvedValue(overrides?.superuser === undefined ? { id: "usr-1" } : overrides.superuser),
+        findUnique: vi.fn().mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] }),
       },
       assuranceRun: {
         create: vi.fn().mockImplementation(async (args: { data: unknown }) => {
@@ -541,5 +544,22 @@ describe("certification state derivation", () => {
     expect(states.get("b")?.status).toBe("failed");
     expect(states.get("c")?.status).toBe("stale");
     expect(states.get("d")?.status).toBe("never");
+  });
+});
+
+// BI-87AE4BF6: certification runs as the portfolio-aligned owner, never the
+// oldest superuser, and with that person's real permissions.
+describe("certification identity", () => {
+  it("runs as whoever the scheduled-work owner lookup returns", async () => {
+    const { resolveCertificationUserContext } = await import("./certification-runner");
+    const db = { user: { findUnique: vi.fn().mockResolvedValue({ isActive: true, isSuperuser: false, groups: [{ platformRole: { roleId: "HR-300" } }] }) } };
+    const ctx = await resolveCertificationUserContext(db as never, async () => "u-mark");
+    expect(ctx).toEqual({ userId: "u-mark", platformRole: "HR-300", isSuperuser: false });
+  });
+
+  it("returns null when no owner can be resolved", async () => {
+    const { resolveCertificationUserContext } = await import("./certification-runner");
+    const ctx = await resolveCertificationUserContext({ user: { findUnique: vi.fn() } } as never, async () => { throw new Error("none"); });
+    expect(ctx).toBeNull();
   });
 });

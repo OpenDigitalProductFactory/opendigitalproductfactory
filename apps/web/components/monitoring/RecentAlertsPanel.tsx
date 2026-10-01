@@ -1,6 +1,8 @@
 "use client";
 
-import { TONE_COLOR, type MonitoringAlert, type Tone } from "./health-summary";
+import type { MonitoringAlert } from "@/lib/observability/monitoring-jobs";
+
+import { TONE_COLOR, type Tone } from "./health-summary";
 import { useAlertQuery } from "./useAlertQuery";
 
 export function RecentAlertsPanel() {

@@ -278,6 +278,7 @@ export async function resolveAutonomousWorkTools(input: {
     const {
       selectCoworkerToolBudget,
       deriveCoworkerToolCap,
+      REQUIRED_TOOL_PIN_CAPACITY,
       LOAD_TOOLS_TOOL,
       LOAD_TOOLS_TOOL_NAME,
     } =
@@ -331,7 +332,7 @@ export async function resolveAutonomousWorkTools(input: {
       // cap the writer competed with the surface on intent relevance and could
       // lose — and narrowInitiativeReviewTools then filtered the attached set to
       // required names only, handing the model zero tools.
-      requiredNames: new Set((input.requiredToolNames ?? []).slice(0, 4)),
+      requiredNames: new Set((input.requiredToolNames ?? []).slice(0, REQUIRED_TOOL_PIN_CAPACITY)),
       alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
       cap: effectiveCap,
       intentQuery: input.intentQuery,

@@ -367,9 +367,6 @@
     "apps/web/app/api/platform/ai/local-models/status/route.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
-    "apps/web/app/api/test/codex-responses/route.ts": [
-      "docs/security/tool-evaluations/2026-09-29-cloudflare-tunnel.md"
-    ],
     "apps/web/app/api/v1/auth/provider-oauth/callback/route.ts": [
       "docs/user-guide/ai-workforce/provider-developer-notes.md"
     ],
@@ -430,6 +427,9 @@
     "apps/web/components/finance/InvoiceSendButton.tsx": [
       "docs/testing/pending-backlog-items.md"
     ],
+    "apps/web/components/i18n/MessagesProvider.tsx": [
+      "docs/architecture/localization-runbook.md"
+    ],
     "apps/web/components/monitoring/health-summary.ts": [
       "docs/install/platform-support-watchlist.md"
     ],
@@ -485,9 +485,6 @@
     "apps/web/components/ui/form/SelectField.tsx": [
       "docs/platform-usability-standards.md"
     ],
-    "apps/web/components/ui/report-kit/statusColors.ts": [
-      "docs/platform-usability-standards.md"
-    ],
     "apps/web/components/workbooks/GridExportMenu.tsx": [
       "docs/user-guide/workspace/workbooks.md"
     ],
@@ -517,7 +514,8 @@
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/actions/build.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/actions/compliance.ts": [
       "docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md"
@@ -573,6 +571,9 @@
     ],
     "apps/web/lib/attention/owner-projection.ts": [
       "docs/user-guide/workspace/attention-inbox.md"
+    ],
+    "apps/web/lib/auth/oauth-policy.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "apps/web/lib/auth/oauth-scope-map.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
@@ -671,6 +672,9 @@
     ],
     "apps/web/lib/build/wip-cap.ts": [
       "docs/architecture/delivery-surfaces-runbook.md"
+    ],
+    "apps/web/lib/canonical-host.ts": [
+      "docs/security/tool-evaluations/2026-09-29-cloudflare-tunnel.md"
     ],
     "apps/web/lib/change-management/register-change.ts": [
       "docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md"
@@ -793,6 +797,9 @@
     "apps/web/lib/ea/reconcile-ai-routing-architecture.ts": [
       "docs/architecture/ai-routing-document-map.md"
     ],
+    "apps/web/lib/ea/reconcile-sysml-projections.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/ea/table-growth.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
@@ -806,10 +813,12 @@
       "docs/architecture/backlog-archetype-scope.md"
     ],
     "apps/web/lib/explore/build-process-matrix.ts": [
+      "docs/architecture/gated-permissions-process.md",
       "docs/security/tool-evaluations/2026-09-15-bmad-method.md"
     ],
     "apps/web/lib/explore/feature-build-types.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/federation/demand-response.ts": [
       "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
@@ -860,6 +869,9 @@
     "apps/web/lib/govern/permissions.ts": [
       "docs/architecture/delivery-ia.md"
     ],
+    "apps/web/lib/hooks/system-events.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
     "apps/web/lib/hooks/useBackgroundOperationObserver.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
@@ -867,6 +879,9 @@
       "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/lib/i18n/locale-context.server.ts": [
+      "docs/architecture/localization-runbook.md"
+    ],
+    "apps/web/lib/i18n/messages-context.ts": [
       "docs/architecture/localization-runbook.md"
     ],
     "apps/web/lib/identity/aidoc-resolver.ts": [
@@ -1183,6 +1198,9 @@
     "apps/web/lib/runtime/measurement-runtime.ts": [
       "docs/testing/ci-evidence.md"
     ],
+    "apps/web/lib/security/client-address.ts": [
+      "docs/security/tool-evaluations/2026-09-29-cloudflare-tunnel.md"
+    ],
     "apps/web/lib/security/safe-log.ts": [
       "docs/security/codeql-advanced-setup.md"
     ],
@@ -1316,6 +1334,9 @@
     "apps/web/lib/tak/route-context.ts": [
       "docs/user-guide/ai-workforce/decision-perspective.md"
     ],
+    "apps/web/lib/tak/scheduled-task-runs.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/tak/tool-intent.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -1341,6 +1362,9 @@
     ],
     "apps/web/lib/tools/integration-settings-href.ts": [
       "docs/testing/pre-pr-gate.md"
+    ],
+    "apps/web/lib/ui-model/statusColors.ts": [
+      "docs/platform-usability-standards.md"
     ],
     "apps/web/lib/ux-budget/budgets.ts": [
       "docs/platform-usability-standards.md"
@@ -1409,7 +1433,11 @@
     "apps/web/lib/work-management/room-types.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
+    "apps/web/lib/work-management/stage-tool-parity.test.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/work-management/work-shapes.ts": [
+      "docs/architecture/gated-permissions-process.md",
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/work-unit.ts": [
@@ -1740,6 +1768,9 @@
     "packages/dpf-skill-pack/hooks/design-grounding-precheck.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "packages/dpf-skill-pack/hooks/operating-contract.generated.mjs": [
       "docs/architecture/skill-surfaces-runbook.md"
     ],
@@ -1910,6 +1941,9 @@
     ],
     "scripts/check-doc-reference-integrity.mjs": [
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "scripts/check-docker-patch-context.mjs": [
+      "docs/architecture/dependency-reduction-routine.md"
     ],
     "scripts/check-docs-impact.mjs": [
       "docs/architecture/enforced-ci-gates.md"
@@ -2126,6 +2160,9 @@
     "scripts/hooks/converge-git-hooks.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/hooks/lib/retire-project-dpf-connector.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "scripts/hooks/run-hook.mjs": [
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
@@ -2328,6 +2365,9 @@
     ],
     "scripts/safety/transcript-snapshot.ps1": [
       "docs/operations/session-transcript-recovery.md"
+    ],
+    "scripts/sbom/assert-deploy-matches-lockfile.mjs": [
+      "docs/architecture/dependency-reduction-routine.md"
     ],
     "scripts/sbom/audit-provenance.mjs": [
       "docs/architecture/dependency-reduction-routine.md"
@@ -2784,6 +2824,7 @@
       "apps/web/components/platform/OllamaManagement.tsx",
       "apps/web/components/platform/SystemEventProvider.tsx",
       "apps/web/lib/architecture/background-operation-observation-contract.test.ts",
+      "apps/web/lib/hooks/system-events.ts",
       "apps/web/lib/hooks/useBackgroundOperationObserver.ts",
       "apps/web/lib/hooks/useResilientEventSource.ts",
       "apps/web/lib/inference/local-model-operations.ts",
@@ -2820,6 +2861,7 @@
       "apps/web/lib/build/gauntlet-repair.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
+      "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs",
       "pnpm-lock.yaml",
       "scripts/check-build-script-policy.mjs",
       "scripts/check-no-server-imports-in-client.mjs",
@@ -2946,8 +2988,10 @@
       "apps/web/lib/assurance/cyclonedx-generator.ts",
       "pnpm-lock.yaml",
       "scripts/check-diagram-dependency-pins.mjs",
+      "scripts/check-docker-patch-context.mjs",
       "scripts/lib/mermaid-renderer.mjs",
       "scripts/run-tsc.mjs",
+      "scripts/sbom/assert-deploy-matches-lockfile.mjs",
       "scripts/sbom/audit-provenance.mjs",
       "scripts/sbom/check-lockfile-release-age.mjs",
       "scripts/sbom/check-new-dependencies.mjs",
@@ -3022,6 +3066,15 @@
     "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md": [
       "packages/storefront-templates/src/archetypes/index.ts"
     ],
+    "docs/architecture/gated-permissions-process.md": [
+      "apps/web/lib/actions/build.ts",
+      "apps/web/lib/ea/reconcile-sysml-projections.ts",
+      "apps/web/lib/explore/build-process-matrix.ts",
+      "apps/web/lib/explore/feature-build-types.ts",
+      "apps/web/lib/tak/scheduled-task-runs.ts",
+      "apps/web/lib/work-management/stage-tool-parity.test.ts",
+      "apps/web/lib/work-management/work-shapes.ts"
+    ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
       "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
@@ -3037,7 +3090,9 @@
       "packages/db/data/agent_registry.json"
     ],
     "docs/architecture/localization-runbook.md": [
+      "apps/web/components/i18n/MessagesProvider.tsx",
       "apps/web/lib/i18n/locale-context.server.ts",
+      "apps/web/lib/i18n/messages-context.ts",
       "apps/web/lib/org-locale/locale-context.ts",
       "apps/web/lib/org-locale/org-locale.ts",
       "packages/i18n/src/catalog.ts",
@@ -3047,6 +3102,7 @@
     "docs/architecture/mcp-tool-authorization-runbook.md": [
       "apps/web/app/api/mcp/v1/route.ts",
       "apps/web/lib/agent-grants.ts",
+      "apps/web/lib/auth/oauth-policy.ts",
       "apps/web/lib/auth/oauth-scope-map.ts",
       "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts",
       "apps/web/lib/govern/manager-scope.ts",
@@ -3058,6 +3114,7 @@
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
       "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs",
       "scripts/gate-worktree.mjs",
+      "scripts/hooks/lib/retire-project-dpf-connector.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/mcp-client.mjs",
       "scripts/lib/mcp-credential.mjs",
@@ -3455,7 +3512,6 @@
       "apps/web/components/storefront-admin/ServiceLinesPanel.tsx",
       "apps/web/components/ui/SaveStateIndicator.tsx",
       "apps/web/components/ui/form/SelectField.tsx",
-      "apps/web/components/ui/report-kit/statusColors.ts",
       "apps/web/design/tokens-utilities.test.ts",
       "apps/web/lib/marketing/archetype-fit.ts",
       "apps/web/lib/readability/policy.ts",
@@ -3464,6 +3520,7 @@
       "apps/web/lib/shell/shell-action-contract.ts",
       "apps/web/lib/tak/escalation-ladder.ts",
       "apps/web/lib/tak/prompt-assembler.ts",
+      "apps/web/lib/ui-model/statusColors.ts",
       "apps/web/lib/ux-budget/budgets.ts",
       "apps/web/lib/ux-budget/measure.ts",
       "apps/web/lib/workforce/oversight-copy.ts",
@@ -3536,7 +3593,8 @@
       "tools/doctools/smoke.sh"
     ],
     "docs/security/tool-evaluations/2026-09-29-cloudflare-tunnel.md": [
-      "apps/web/app/api/test/codex-responses/route.ts"
+      "apps/web/lib/canonical-host.ts",
+      "apps/web/lib/security/client-address.ts"
     ],
     "docs/specs/device-identification-and-portfolio-placement-spec.md": [
       "apps/web/lib/queue/functions/hive-scout-ingest.ts",

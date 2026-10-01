@@ -34,6 +34,36 @@ const LOOPBACK_MCP_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 // username and the real host is remote.
 const LOOPBACK_MCP_URL = /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?(?:\/.*)?$/i;
 
+/** Parse `value` into a URL origin key (`scheme//host[:port]`, lowercased,
+ *  default port dropped), or null when it is absent, malformed, not http(s)
+ *  or carries credentials in its authority. */
+function originKey(value) {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  let parsed;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  if (parsed.username !== "" || parsed.password !== "") return null;
+  return `${parsed.protocol}//${parsed.host.toLowerCase()}`;
+}
+
+/**
+ * The origins the install is CONFIGURED on, from the environment: the
+ * canonical `PUBLIC_URL` (design §12.4.1) and the origin of the operator-set
+ * `DPF_MCP_URL` / `DPF_MCP_ENDPOINT`, which S2 persists as
+ * `<PUBLIC_URL>/api/mcp/v1?tier=full`. Environment is stated configuration,
+ * unlike an on-disk `.mcp.json`, so an endpoint on one of these origins is the
+ * install itself rather than whatever host a file happens to name.
+ */
+function configuredMcpOrigins(env) {
+  return [env?.PUBLIC_URL, env?.DPF_MCP_URL, env?.DPF_MCP_ENDPOINT]
+    .map(originKey)
+    .filter((origin) => origin !== null);
+}
+
 /**
  * Is this an MCP endpoint a `dpfmcp_...` bearer token may be sent to?
  *
@@ -44,12 +74,14 @@ const LOOPBACK_MCP_URL = /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1
  * the token to whatever host it names, which is uncontrolled credential
  * disclosure (CWE-200) rather than a connection failure.
  *
- * Operators who genuinely front the portal from another host say so explicitly
- * with `DPF_MCP_URL` / `--mcp-url`, which is intent rather than ambient state
- * and is not narrowed here.
+ * Allowed: loopback (`127.0.0.1`, `localhost`, `[::1]`), and an endpoint whose
+ * origin (scheme, host and port) equals one the install is configured on in
+ * the environment -- `PUBLIC_URL`, `DPF_MCP_URL` or `DPF_MCP_ENDPOINT`
+ * (BI-8A562681, design §12.4.5). Everything else is refused, including a
+ * credentials-in-authority URL that merely looks like an allowed host.
  */
-export function isAllowedMcpEndpoint(candidate) {
-  if (typeof candidate !== "string" || !LOOPBACK_MCP_URL.test(candidate)) return false;
+export function isAllowedMcpEndpoint(candidate, env = process.env) {
+  if (typeof candidate !== "string") return false;
   let parsed;
   try {
     parsed = new URL(candidate);
@@ -58,7 +90,9 @@ export function isAllowedMcpEndpoint(candidate) {
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
   if (parsed.username !== "" || parsed.password !== "") return false;
-  return LOOPBACK_MCP_HOSTS.has(parsed.hostname);
+  if (LOOPBACK_MCP_URL.test(candidate) && LOOPBACK_MCP_HOSTS.has(parsed.hostname)) return true;
+  const candidateOrigin = originKey(candidate);
+  return candidateOrigin !== null && configuredMcpOrigins(env).includes(candidateOrigin);
 }
 
 /**
@@ -120,24 +154,19 @@ export async function mcpPost(method, params, {
   // on this module). Enforcing it here inverts the failure mode -- a caller that
   // never thought about the endpoint now fails closed instead of leaking.
   //
-  // The documented operator escape is preserved without touching any call site:
-  // an endpoint the operator set EXPLICITLY in the environment is intent, so it
-  // is honoured even off loopback. An endpoint that merely appeared in ambient
-  // state -- a copied-in, stale or tampered `.mcp.json` -- matches neither
-  // branch and is refused. Callers with their own operator signal (a --mcp-url
-  // flag) can still pass allowNonLoopbackEndpoint directly.
+  // The install's configured origins (PUBLIC_URL, and the origin of an
+  // operator-set DPF_MCP_URL / DPF_MCP_ENDPOINT) are configuration, so an
+  // endpoint on one of them is honoured off loopback. An endpoint that merely
+  // appeared in ambient state -- a copied-in, stale or tampered `.mcp.json`
+  // -- naming any other host is refused. Callers with their own operator signal
+  // (a --mcp-url flag) can still pass allowNonLoopbackEndpoint directly.
   if (!allowNonLoopbackEndpoint && !isAllowedMcpEndpoint(mcpUrl)) {
-    const operatorSupplied = [process.env.DPF_MCP_URL, process.env.DPF_MCP_ENDPOINT]
-      .map((value) => (typeof value === "string" ? value.trim() : ""))
-      .filter((value) => value.length > 0);
-    if (!operatorSupplied.includes(mcpUrl.trim())) {
-      throw new Error(
-        `mcpCall: refusing to send a bearer token to ${mcpUrl}. Only loopback MCP `
-        + "endpoints are allowed unless the operator set this exact endpoint in "
-        + "DPF_MCP_URL or DPF_MCP_ENDPOINT. An endpoint read from on-disk config is "
-        + "ambient state, not operator intent, and a live credential is not sent to it.",
-      );
-    }
+    throw new Error(
+      `mcpCall: refusing to send a bearer token to ${mcpUrl}. Only loopback MCP `
+      + "endpoints and the install's configured origin (PUBLIC_URL, DPF_MCP_URL or "
+      + "DPF_MCP_ENDPOINT) are allowed. An endpoint read from on-disk config is "
+      + "ambient state, not operator intent, and a live credential is not sent to it.",
+    );
   }
 
   const callLabel = label ?? (method === "tools/call" && params?.name ? params.name : method);

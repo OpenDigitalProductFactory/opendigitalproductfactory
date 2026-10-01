@@ -108,11 +108,13 @@ else
     fi
 fi
 
-# Seed MCP config (.mcp.json / .vscode + worktree-scoped COMPOSE_PROJECT_NAME) so
-# the dpf connector and isolated compose stack work in the new worktree.
+# Seed the worktree (.vscode/mcp.json when the root has one + worktree-scoped
+# COMPOSE_PROJECT_NAME) so the isolated compose stack works in the new
+# worktree. Claude Code's dpf connector is the dpf-platform plugin; no project
+# .mcp.json is copied (BI-5201141C).
 if [ -x "$root/scripts/seed-worktree-mcp.sh" ]; then
     "$root/scripts/seed-worktree-mcp.sh" "$target" || \
-        printf '  [warn] MCP seed skipped (root .mcp.json not present yet)\n' >&2
+        printf '  [warn] worktree seed failed; see the output above\n' >&2
 fi
 
 # Claim a Workroom for the new branch (BI-0B292D84 layer 1).

@@ -1,4 +1,4 @@
-// apps/web/components/ui/report-kit/statusColors.ts
+// apps/web/lib/ui-model/statusColors.ts
 //
 // Central status/severity color semantics for the reporting palette.
 //
