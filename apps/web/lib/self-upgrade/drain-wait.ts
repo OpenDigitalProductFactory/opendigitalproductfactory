@@ -195,7 +195,10 @@ export async function sendQuiescenceControl(
     const { jobs } = await import("@/lib/jobs");
     await jobs.send({ name: QUIESCENCE_CONTROL_EVENT, data: { runId, action, operatorUserId } });
   } catch (err) {
-    console.warn(sanitizeForLog(`[quiescence] control(${action}) ${runId} not sent: ${getErrorMessage(err)}`));
+    // runId and action arrive from the operator's request, so they stay out of
+    // the log line (CodeQL js/log-injection, alert 426); the decision itself is
+    // already durable on the run row.
+    console.warn("[quiescence] operator control event not sent; the coordinator applies it on its next check: %s", sanitizeForLog(getErrorMessage(err)));
   }
 }
 
