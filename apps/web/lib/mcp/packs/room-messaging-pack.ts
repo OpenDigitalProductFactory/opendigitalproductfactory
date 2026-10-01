@@ -22,6 +22,7 @@ import { heartbeatAgentWorkItemPresence } from "@/lib/work-management/room-agent
 import { postWorkItemComment, type PostCommentDb } from "@/lib/work-management/post-work-item-comment";
 import { persistExplicitWorkroomAssignmentsForWorkItem } from "@/lib/work-management/room-participant-assignment.server";
 import { appendRoomPolicyParticipant } from "@/lib/work-management/room-policy";
+import { loadRoomMembersForWorkItem } from "@/lib/work-management/room-policy-members.server";
 import type { WorkroomParticipantRole } from "@/lib/work-management/room-types";
 import { resolveAgentRoomAccess } from "@/lib/work-management/room-agent-access.server";
 import { decodeWorkCaseKey } from "@/lib/work-management/workspace-case-loader";
@@ -253,7 +254,7 @@ async function inviteRoomParticipantHandler(
     principalRef: inviteePrincipalId,
     roles,
     canAct,
-  });
+  }, await loadRoomMembersForWorkItem(item.id));
   await prisma.workItem.update({ where: { id: item.id }, data: { evidence: newEvidence as never } });
   await persistExplicitWorkroomAssignmentsForWorkItem({
     workItemId: item.id,
