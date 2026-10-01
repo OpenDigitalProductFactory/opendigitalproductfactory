@@ -138,14 +138,15 @@ export function WorkroomHeader({ room, summary, workforce, stageDecision, shapeR
               {room.work.attentionRequired || stageDecision || shapeRebind ? <AlertTriangle className="size-4 text-[var(--dpf-warning)]" aria-hidden="true" /> : null}
               Attention
             </p>
-            {stageDecision ? <WorkroomStageDecision view={stageDecision} /> : shapeRebind ? null : (
+            {stageDecision ? <WorkroomStageDecision view={stageDecision} /> : null}
+            {shapeRebind ? <WorkroomShapeRebind view={shapeRebind} /> : null}
+            {stageDecision || shapeRebind ? null : (
               <p className="mt-2 text-sm font-medium text-[var(--dpf-text)]">
                 {room.work.attentionRequired
                   ? room.work.attentionReason ?? "Attention is required."
                   : "No immediate attention needed."}
               </p>
             )}
-            {shapeRebind ? <WorkroomShapeRebind view={shapeRebind} /> : null}
           </section>
           <section aria-label="Next action" className="rounded-lg border border-[var(--dpf-accent)] p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">Next action</p>
