@@ -191,7 +191,16 @@ Clients that send nothing are unaffected.
 In Phase 2 the handle is **observed, never required**. For an outward, authority or irreversible call,
 the monitor records a verdict for the presented handle, or for the permit minted when a gate admits the
 call: `valid`, `absent`, `expired`, `revoked`, `exhausted`, `tool_not_in_capabilities`, `ungoverned`
-or `unmediated`. The verdict never changes the call's outcome. Enforcement is promoted per binding
+or `unmediated`. The verdict never changes the call's outcome.
+
+A signed handle has the form `gpp1.<permitId>.<keyId>.<mac>`. The MAC is an HMAC-SHA256 over the
+permit's claims, and the claims bind the exact call's arguments. Replay the handle with the arguments
+it was minted for. The monitor also records `mac_invalid` (the permit row does not match its MAC),
+`param_mismatch` (the handle was replayed with other arguments), `lineage_missing` or
+`lineage_unsealed` (the decision that admitted the call is absent or not sealed), and `unsigned`
+(the install has no permit key, so it cannot verify). A bare permit id is still accepted as a handle
+and is checked against the row's stored MAC. The handle is not yet returned in the `tools/call`
+response; today the monitor returns it to in-process callers only (`governance.permit`). Enforcement is promoted per binding
 later, by recorded decision (plan `docs/superpowers/plans/2026-10-01-gpp-phase-2-permits-and-enforcement.md`).
 The carriage key follows the MCP extension draft
 (`docs/superpowers/specs/2026-10-01-mcp-transaction-authorization-sep-draft.md`), which has not been

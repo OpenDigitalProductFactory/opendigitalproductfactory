@@ -1,20 +1,36 @@
 // Persistence seam for GPP permits and permit observations.
 //
 // GPP Phase 2, PR-C. The only module that touches the GppPermit and
-// GppPermitObservation tables. Callers (permit-mint.ts, permit-verdict.ts)
+// GppPermitObservation tables, and (PR-D) the only place the permit code reads
+// the decision ledger to check a permit's lineage. Callers (permit-mint.ts, permit-verdict.ts)
 // treat every method as fallible and swallow its errors: a permit write is
 // audit evidence, never a precondition of the call (plan Constraint 1, R3).
 
 import { prisma, type GppObservationPath, type GppPermitVerdict, type Prisma } from "@dpf/db";
 
 import type { PermitClaims } from "./permit-claims";
+import type { PermitSignature } from "./permit-handle";
 
-/** A GppPermit row as the verdict needs it. */
+/** A GppPermit row as the verdict needs it. `keyId`/`mac` are null when minted unsigned. */
 export type PermitRow = PermitClaims & {
   id: string;
   useCount: number;
   revokedAt: Date | null;
+  keyId: string | null;
+  mac: string | null;
 };
+
+/**
+ * Where a permit's lineage is recorded. The alignment gate writes a
+ * DecisionInteraction (hash-chained when sealed); a human checkpoint writes an
+ * AuthorizationDecisionLog row, which is not chained.
+ */
+export type PermitLineageRef =
+  | { kind: "decision-interaction"; interactionId: string }
+  | { kind: "authorization-decision"; decisionId: string };
+
+/** `sealed` is true only for a DecisionInteraction carrying chainEntryHash and sealedAt. */
+export type PermitLineage = { found: false } | { found: true; sealed: boolean };
 
 export type PermitObservationCreate = {
   permitRowId: string | null;
@@ -28,11 +44,12 @@ export type PermitObservationCreate = {
 };
 
 export type GppPermitStore = {
-  createPermit: (claims: PermitClaims) => Promise<PermitRow>;
+  createPermit: (claims: PermitClaims, signature: PermitSignature | null) => Promise<PermitRow>;
   findPermitByPermitId: (permitId: string) => Promise<PermitRow | null>;
   /** Count one use, compare-and-set on `useCount < maxUses`. */
   consumePermit: (row: Pick<PermitRow, "id" | "maxUses">) => Promise<void>;
   createObservation: (data: PermitObservationCreate) => Promise<void>;
+  findLineage: (ref: PermitLineageRef) => Promise<PermitLineage>;
 };
 
 // Column names differ from the spec's claim names where the FK Index Coverage
@@ -45,7 +62,7 @@ const PERMIT_SELECT = {
   gateKey: true, authority: true, gateDecisionRef: true, authorityDecisionRef: true, envelopeId: true,
   actorGaid: true, actorUserRef: true, actorAgentRef: true, workroomRef: true, subjectScope: true,
   capabilities: true, paramHash: true, enforcement: true, notBefore: true, expiresAt: true,
-  maxUses: true, useCount: true, nonce: true, parentPermitId: true, revokedAt: true,
+  maxUses: true, useCount: true, nonce: true, parentPermitId: true, revokedAt: true, keyRef: true, mac: true,
 } as const;
 
 type PermitDbRow = {
@@ -55,6 +72,7 @@ type PermitDbRow = {
   actorAgentRef: string | null; workroomRef: string | null; subjectScope: string | null; capabilities: unknown;
   paramHash: string | null; enforcement: PermitClaims["enforcement"]; notBefore: Date; expiresAt: Date;
   maxUses: number; useCount: number; nonce: string; parentPermitId: string | null; revokedAt: Date | null;
+  keyRef: string | null; mac: string | null;
 };
 
 function toPermitRow(row: PermitDbRow): PermitRow {
@@ -85,11 +103,13 @@ function toPermitRow(row: PermitDbRow): PermitRow {
     nonce: row.nonce,
     parentPermitId: row.parentPermitId,
     revokedAt: row.revokedAt,
+    keyId: row.keyRef,
+    mac: row.mac,
   };
 }
 
 const prismaStore: GppPermitStore = {
-  async createPermit(claims) {
+  async createPermit(claims, signature) {
     const created = await prisma.gppPermit.create({
       data: {
         gppPermitId: claims.permitId,
@@ -115,6 +135,8 @@ const prismaStore: GppPermitStore = {
         maxUses: claims.maxUses,
         nonce: claims.nonce,
         parentPermitId: claims.parentPermitId,
+        keyRef: signature?.keyId ?? null,
+        mac: signature?.mac ?? null,
       },
       select: PERMIT_SELECT,
     });
@@ -136,6 +158,20 @@ const prismaStore: GppPermitStore = {
       data: { ...rest, bindingKey: bindingId, detail: detail as Prisma.InputJsonValue },
       select: { id: true },
     });
+  },
+  async findLineage(ref) {
+    if (ref.kind === "decision-interaction") {
+      const decision = await prisma.decisionInteraction.findUnique({
+        where: { interactionId: ref.interactionId },
+        select: { chainEntryHash: true, sealedAt: true },
+      });
+      return decision ? { found: true, sealed: Boolean(decision.chainEntryHash && decision.sealedAt) } : { found: false };
+    }
+    const decision = await prisma.authorizationDecisionLog.findUnique({
+      where: { decisionId: ref.decisionId },
+      select: { id: true },
+    });
+    return decision ? { found: true, sealed: false } : { found: false };
   },
 };
 

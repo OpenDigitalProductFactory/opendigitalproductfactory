@@ -8,7 +8,13 @@ import { GPP_BINDINGS } from "./bindings";
 import { canonicalPermitClaims } from "./permit-claims";
 import { GPP_PERMIT_TTL_MS, shadowPermitClaims } from "./permit-mint";
 import { setGppPermitStoreOverrideForTests } from "./permit-store";
-import { evaluatePermitVerdict, recordPermitObservation, resolveMonitorPermit } from "./permit-verdict";
+import {
+  evaluatePermitVerdict,
+  recordPermitObservation,
+  resolveMonitorPermit,
+  verdictFromChecks,
+  type PermitChecks,
+} from "./permit-verdict";
 
 const NOW = new Date("2026-10-01T12:00:00Z");
 const row = (patch: Partial<Parameters<typeof evaluatePermitVerdict>[0] & object> = {}) => ({
@@ -64,7 +70,9 @@ describe("shadow permit claims", () => {
 
 describe("fail-open sinks", () => {
   const boom = async () => { throw new Error("db down"); };
-  const failing = { createPermit: boom, findPermitByPermitId: boom, consumePermit: boom, createObservation: boom };
+  const failing = {
+    createPermit: boom, findPermitByPermitId: boom, consumePermit: boom, createObservation: boom, findLineage: boom,
+  };
 
   it("recordPermitObservation never throws", async () => {
     setGppPermitStoreOverrideForTests(failing);
@@ -94,6 +102,32 @@ describe("fail-open sinks", () => {
       alignmentInteractionId: null, approvedEnvelopeId: null, authorityDecisionId: null,
       actorUserId: "u1", actorAgentId: null, workroomId: null,
     });
-    expect(outcome).toEqual({ verdict: "ungoverned", permitId: null, permitRowId: null, bindingId: null, detail: {} });
+    expect(outcome).toEqual({
+      verdict: "ungoverned", permitId: null, permitRowId: null, bindingId: null, handle: null, detail: {},
+    });
+  });
+});
+
+describe("verdictFromChecks (PR-D verification order)", () => {
+  const clean: PermitChecks = { mac: "ok", paramHash: "match", lineage: "sealed", state: "valid" };
+
+  it("is the PR-C state when every PR-D check passes", () => {
+    expect(verdictFromChecks(clean)).toBe("valid");
+    expect(verdictFromChecks({ ...clean, state: "expired" })).toBe("expired");
+  });
+
+  it("orders MAC, then paramHash, then lineage, then state", () => {
+    const all: PermitChecks = { mac: "invalid", paramHash: "mismatch", lineage: "missing", state: "expired" };
+    expect(verdictFromChecks(all)).toBe("mac_invalid");
+    expect(verdictFromChecks({ ...all, mac: "unsigned" })).toBe("unsigned");
+    expect(verdictFromChecks({ ...all, mac: "ok" })).toBe("param_mismatch");
+    expect(verdictFromChecks({ ...all, mac: "ok", paramHash: "match" })).toBe("lineage_missing");
+    expect(verdictFromChecks({ ...all, mac: "ok", paramHash: "match", lineage: "unsealed" })).toBe("lineage_unsealed");
+  });
+
+  it("decides nothing on a failed lineage lookup or an unbound / unchecked paramHash", () => {
+    expect(verdictFromChecks({ ...clean, lineage: "lookup_failed" })).toBe("valid");
+    expect(verdictFromChecks({ ...clean, paramHash: "not_bound" })).toBe("valid");
+    expect(verdictFromChecks({ ...clean, paramHash: "not_checked" })).toBe("valid");
   });
 });

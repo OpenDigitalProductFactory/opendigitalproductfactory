@@ -234,8 +234,11 @@ offered. See the
 irreversible call, the platform now records a permit for it: which gate admitted the call, for which
 tool, and until when. The call's receipt notes the permit's verdict. This runs in shadow mode. A
 missing or expired permit is recorded, never refused, and routine reads and ordinary writes are not
-affected. A call made around the governed path is recorded as unmediated. Enforcement is switched on
-one binding at a time, and only after its shadow record has been reviewed.
+affected. A call made around the governed path is recorded as unmediated. Each permit is also signed
+and tied to the call's exact arguments. A permit that was altered after it was issued, or reused for
+different arguments, is recorded as such. An install that has no permit signing key records its
+permits as unsigned. Enforcement is switched on one binding at a time, and only after its shadow record
+has been reviewed.
 
 Denials come back as named reasons — a missing decision interaction, a missing envelope, a
 tripped stop condition, a missing verification receipt — not as a generic refusal. A denial
