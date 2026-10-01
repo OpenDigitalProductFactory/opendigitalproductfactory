@@ -535,7 +535,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     };
     let { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools(toolArgs);
     const pinned = scheduledToolsNeedingPin({
-      prompt: task.prompt, attached: tools, deferred: deferredTools,
+      prompt: task.prompt, attached: tools, deferred: deferredTools, taskConfig: task.taskConfig,
     });
     if (pinned.length > 0) {
       ({ tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({

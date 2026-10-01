@@ -13,7 +13,7 @@ import {
   resolveDriveConclusion,
 } from "@/lib/work-management/drive-conclusion";
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
-import type { PrismaClient } from "@dpf/db";
+import type { Prisma, PrismaClient } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
 import {
   COORDINATION_RESOURCE_TYPE,
@@ -22,7 +22,8 @@ import {
   resolveCoordinatorEligibility,
 } from "@/lib/work-management/coordinator-eligibility";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
-import { buildStageBrief, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
+import { buildStageBrief, stageBriefInputFromDefinition, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
+import { withWorkroomStageTaskConfig, type WorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import { driveTickIsNews, nextDriveHold, readDriveHold, stallNoticeDue, type WorkroomDriveHold } from "@/lib/work-management/workroom-drive-hold";
 
 import {
@@ -131,6 +132,8 @@ export type WorkroomDriveEffects = {
     ownerUserId: string;
     title: string;
     prompt: string;
+    /** Stage + declared tools, written to taskConfig.workroomStage for the scheduler's pin (BI-43C3E914). */
+    stage: WorkroomStageTaskConfig;
     now: Date;
     lease: { roomId: string; expiresAt: Date; holderPrincipalId: string | null };
   }) => Promise<boolean>;
@@ -337,6 +340,10 @@ export async function applyDrivePlan(input: {
       });
       return "skipped";
     }
+    // GPP element 2 "Attachment" + element 5 "Capability set": the brief and the
+    // task carry the stage's declared tools; the scheduler pins them (BI-43C3E914).
+    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null,
+      shapeKey: plan.shapeKey ?? "", shapeVersion: plan.shapeVersion ?? "", definition: plan.definition ?? null, stageKey: plan.stageKey ?? "" });
     const scheduled = await effects.upsertAgentTask({
       taskId: plan.taskId,
       agentId: plan.agentId,
@@ -346,20 +353,8 @@ export async function applyDrivePlan(input: {
       // answered it with prose and zero tool calls (BI-4A394B21). The shape
       // already carries the objective, the definition of done and the evidence
       // to leave; send it.
-      prompt: buildStageBrief({
-        capsuleId: room.capsuleId,
-        roomObjective: room.objective ?? null,
-        shapeKey: plan.shapeKey ?? "",
-        shapeVersion: plan.shapeVersion ?? "",
-        shapeTitle: plan.definition?.title ?? null,
-        shapeDescription: plan.definition?.description ?? null,
-        stageKey: plan.stageKey ?? "",
-        stageTitle: plan.definition?.stages.find((stage) => stage.key === plan.stageKey)?.title ?? null,
-        doneWhen:
-          plan.definition?.stages.find((stage) => stage.key === plan.stageKey)?.advance.condition ?? null,
-        evidenceKinds: stageEvidenceKinds(plan.definition ?? null, plan.stageKey),
-        stopConditions: (plan.definition?.stopConditions ?? []).map((entry) => entry.condition),
-      }),
+      prompt: buildStageBrief(brief),
+      stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...(brief.stageTools ?? [])] },
       now,
       lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });
@@ -734,6 +729,9 @@ export function createWorkroomDriveEffects(
           data: { leaseExpiresAt: input.lease.expiresAt },
         });
         if (owned.count !== 1) return false;
+        // Merge, never replace: taskConfig is shared JSON; only workroomStage is this writer's.
+        const current = await tx.scheduledAgentTask.findUnique({ where: { taskId: input.taskId }, select: { taskConfig: true } });
+        const taskConfig = withWorkroomStageTaskConfig(current?.taskConfig ?? null, input.stage) as Prisma.InputJsonValue;
         await tx.scheduledAgentTask.upsert({
           where: { taskId: input.taskId },
           create: {
@@ -747,11 +745,13 @@ export function createWorkroomDriveEffects(
             ownerUserId: input.ownerUserId,
             nextRunAt: input.now,
             isActive: true,
+            taskConfig,
           },
           update: {
             agentId: input.agentId,
             title: input.title,
             prompt: input.prompt,
+            taskConfig,
             nextRunAt: input.now,
             isActive: true,
           },
