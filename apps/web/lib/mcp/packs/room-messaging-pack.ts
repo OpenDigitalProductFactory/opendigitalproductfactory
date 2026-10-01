@@ -287,6 +287,50 @@ async function inviteRoomParticipantHandler(
   };
 }
 
+/** The person behind the call must be able to manage the platform; the assistant borrows nothing. */
+async function requirePlatformManager(userId: string): Promise<ToolResult | null> {
+  const { currentUserContext } = await import("@/lib/govern/current-user-context");
+  const { can } = await import("@/lib/govern/permissions");
+  const human = userId ? await currentUserContext(userId) : null;
+  if (!human || !can(human, "manage_platform")) {
+    return { success: false, error: "forbidden", message: "Handing over an account's work needs a person with platform-management permission." };
+  }
+  return null;
+}
+
+async function planAccountHandoverHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
+  const refusal = await requirePlatformManager(userId);
+  if (refusal) return refusal;
+  const { planAccountHandover } = await import("@/lib/work-management/account-handover");
+  const plan = await planAccountHandover(prisma as never, { sourceAccount: str(params, "sourceAccount") ?? "" });
+  if (!plan.ok) return { success: false, error: "handover_refused", message: plan.error };
+  const count = (kind: string) => plan.data.items.filter((i) => i.kind === kind).length;
+  return {
+    success: true,
+    message: `${plan.data.items.length} item(s) would move from ${plan.data.sourceEmail}: ${count("room")} room(s), ${count("build")} build(s), ${count("scheduled-task")} scheduled task(s). ${plan.data.refused.length} refused.`,
+    data: plan.data,
+  };
+}
+
+async function applyAccountHandoverHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
+  const refusal = await requirePlatformManager(userId);
+  if (refusal) return refusal;
+  const { applyAccountHandover } = await import("@/lib/work-management/account-handover");
+  const result = await applyAccountHandover(prisma as never, {
+    sourceAccount: str(params, "sourceAccount") ?? "",
+    digest: str(params, "digest") ?? "",
+    reason: str(params, "reason") ?? "",
+    actor: { userId },
+  });
+  if (!result.ok) return { success: false, error: "handover_refused", message: result.error };
+  const { rooms, builds, scheduledTasks, failed } = result.data;
+  return {
+    success: failed.length === 0,
+    message: `Handed over ${rooms} room(s), ${builds} build(s) and ${scheduledTasks} scheduled task(s).${failed.length ? ` ${failed.length} item(s) could not move; run the dry run again for the rest.` : ""}`,
+    data: result.data,
+  };
+}
+
 async function appointRoomCoordinatorHandler(
   params: Record<string, unknown>,
   _userId: string,
@@ -300,83 +344,24 @@ async function appointRoomCoordinatorHandler(
       message: "capsuleId and principalRef are required.",
     };
   }
-  const { prisma } = await import("@dpf/db");
-  const { planCoordinatorAppointment, COORDINATOR_ROLES, rolesAfterStandDown } = await import(
-    "@/lib/work-management/appoint-room-coordinator"
+  const { executeCoordinatorAppointment } = await import(
+    "@/lib/work-management/execute-coordinator-appointment.server"
   );
-  const { persistWorkroomParticipantAssignment } = await import(
-    "@/lib/work-management/room-participant-assignment.server"
-  );
-
-  const plan = await planCoordinatorAppointment({
-    db: prisma as never,
+  const { COORDINATOR_ROLES } = await import("@/lib/work-management/appoint-room-coordinator");
+  const result = await executeCoordinatorAppointment({
     capsuleId,
     principalRef,
     replaceExisting: params["replaceExisting"] === true,
+    reason: str(params, "reason") || null,
   });
-  if (!plan.ok) {
-    const [code] = plan.error.split(":");
-    return { success: false, error: code ?? "appointment_refused", message: plan.error };
-  }
-  const appointed = plan.data;
-
-  // A handover must stand the incumbent DOWN, not merely permit a second row.
-  // replaceExisting used to authorize the appointment and then write only the
-  // appointee, leaving the room with two active coordinators — which conformance
-  // treats as blocking, so the "replacement" left the room more stuck than
-  // before (BI-061B2BC0). Demote first: a room briefly with no coordinator is
-  // recoverable, a room with two is the exact state we are fixing.
-  for (const outgoing of appointed.standDown) {
-    await prisma.workroomParticipant.update({
-      where: { id: outgoing.participantId },
-      data: {
-        roles: rolesAfterStandDown(outgoing.roles),
-        lifecycleReason:
-          `Stood down as Process Overseer: handed over to ${appointed.principalRef}.`,
-      },
-    });
-    // The design of record makes a hand-off a first-class activity, not a silent
-    // role edit, so the room's trail explains why its owner changed.
-    await prisma.workroomActivity.create({
-      data: {
-        workCapsuleId: appointed.workroomId,
-        kind: "coworker-handoff",
-        summary:
-          `Process Overseer handed over to ${appointed.displayName} (${appointed.principalRef}).`,
-        payload: {
-          fromPrincipalId: outgoing.principalId,
-          toPrincipalRef: appointed.principalRef,
-          rolesRetained: rolesAfterStandDown(outgoing.roles),
-          reason: str(params, "reason") || null,
-        },
-      },
-    });
-  }
-
-  const written = await persistWorkroomParticipantAssignment({
-    workroomId: appointed.workroomId,
-    principalRef: appointed.principalRef,
-    roles: COORDINATOR_ROLES,
-    assignmentSource: "explicit",
-    enteredReason: str(params, "reason") || "Appointed as the room's Process Overseer.",
-    currentWorkSummary: null,
-  });
-  if (!written) {
-    return {
-      success: false,
-      error: "assignment_failed",
-      message: "The participant row could not be written.",
-    };
+  if (!result.ok) {
+    const [code] = result.error.split(":");
+    return { success: false, error: code ?? "appointment_refused", message: result.error };
   }
   return {
     success: true,
-    message: `${appointed.displayName} is now the Process Overseer for ${appointed.capsuleId}.`,
-    data: {
-      capsuleId: appointed.capsuleId,
-      principalRef: appointed.principalRef,
-      displayName: appointed.displayName,
-      roles: COORDINATOR_ROLES,
-    },
+    message: `${result.data.displayName} is now the Process Overseer for ${result.data.capsuleId}.`,
+    data: { ...result.data, roles: COORDINATOR_ROLES },
   };
 }
 
@@ -487,6 +472,39 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_operations",
     sideEffect: false,
   },
+  // BI-F25A5FC7: hand over everything an absent account owns, in one approval.
+  {
+    name: "plan_account_handover",
+    description:
+      "Dry run of handing over an account's live work: every live room it alone coordinates, every live Build Studio build it created, and every scheduled coworker task it owns, each with its new owner (the accountable person of the item's portfolio, then Foundational, then the organization). Items with no chosen owner are refused, never given a guessed one. Returns a digest; apply_account_handover moves exactly that set. Writes nothing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sourceAccount: { type: "string", description: "The account handing over its work: email or user id." },
+      },
+      required: ["sourceAccount"],
+    },
+    requiredCapability: "manage_platform",
+    sideEffect: false,
+  },
+  {
+    name: "apply_account_handover",
+    description:
+      "Move exactly the set a plan_account_handover dry run returned to each item's new owner. Pass the dry run's digest: if the account's work changed since, nothing moves. Rooms are re-appointed through the same rule as appoint_room_coordinator; builds and scheduled tasks change owner; every item records who asked and why. Runs under the approving person's authority, who needs manage_platform.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sourceAccount: { type: "string", description: "The account handing over its work: email or user id." },
+        digest: { type: "string", description: "The digest from plan_account_handover." },
+        reason: { type: "string", description: "Why this account's work is being handed over. Recorded on every item." },
+      },
+      required: ["sourceAccount", "digest", "reason"],
+    },
+    requiredCapability: "manage_platform",
+    sideEffect: true,
+    // Changes who owns rooms, builds and scheduled work, and so who decides their approvals.
+    consequence: "authority",
+  },
 ];
 
 export const roomMessagingPack: ToolPack = {
@@ -497,6 +515,8 @@ export const roomMessagingPack: ToolPack = {
     read_room_messages: (params, userId, context) => readRoomMessagesHandler(params, userId, context),
     invite_room_participant: (params, userId, context) => inviteRoomParticipantHandler(params, userId, context),
     appoint_room_coordinator: (params, userId) => appointRoomCoordinatorHandler(params, userId),
+    plan_account_handover: (params, userId) => planAccountHandoverHandler(params, userId),
+    apply_account_handover: (params, userId) => applyAccountHandoverHandler(params, userId),
     get_coworker_room_engagement: (params, userId, context) => getCoworkerRoomEngagementHandler(params, userId, context),
   },
   grants: {
@@ -504,6 +524,8 @@ export const roomMessagingPack: ToolPack = {
     read_room_messages: ["work_room_read"],
     invite_room_participant: ["work_room_write"],
     appoint_room_coordinator: ["work_room_write"],
+    plan_account_handover: ["work_room_write"],
+    apply_account_handover: ["work_room_write"],
     get_coworker_room_engagement: ["work_room_read"],
   },
 };
