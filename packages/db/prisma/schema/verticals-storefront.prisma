@@ -685,6 +685,8 @@ model AnimalProfile {
   applications    AnimalAdoptionApplication[]
   placements      AnimalPlacement[]
 
+  controlledSubstanceMovements ControlledSubstanceMovement[]
+
   @@unique([organizationId, animalRef])
   @@unique([organizationId, externalSourceKey])
   @@unique([id, organizationId])
