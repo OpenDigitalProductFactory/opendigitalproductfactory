@@ -121,6 +121,13 @@ export type GovernedExecuteContext = {
    * gate treats it as the human's recorded delegation to `agentId`.
    */
   connectionDelegation?: { authorityBindingId: string; agentId: string };
+  /**
+   * GPP Phase 2 PR-C (BI-69415B68): a permit handle the caller presented —
+   * an external client replaying the opaque permit id it was given, carried on
+   * the MCP route as `params._meta["com.opendigitalproductfactory/authorization-handle"]`.
+   * Shadow only: the monitor records the handle's verdict and never refuses on it.
+   */
+  permitHandle?: string;
 };
 
 export type GovernedExecuteArgs = {

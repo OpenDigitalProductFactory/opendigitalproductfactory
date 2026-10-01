@@ -76,6 +76,8 @@ import {
   setGaidActorResolverOverrideForTests,
   type GaidActorResolver,
 } from "./tak/gaid-actor-envelope";
+import { setGppPermitStoreOverrideForTests, type GppPermitStore } from "./gpp/permit-store";
+import { recordPermitObservation, resolveMonitorPermit, type MonitorPermitOutcome } from "./gpp/permit-verdict";
 
 export function registerToolLifecycleHook(hook: ToolLifecycleHook): () => void {
   _lifecycleHooks = [..._lifecycleHooks.filter((existing) => existing.id !== hook.id), hook];
@@ -118,6 +120,7 @@ export function _setGovernanceForTests(overrides: {
   alignmentGate?: AlignmentGate | null;
   preconditionGate?: PreconditionGate | null;
   gaidActorResolver?: GaidActorResolver | null;
+  gppPermitStore?: GppPermitStore | null;
 }): void {
   _resolveAgentGrants = overrides.resolveAgentGrants ?? null;
   _isAllowedByGrants = overrides.isAllowedByGrants ?? null;
@@ -133,6 +136,7 @@ export function _setGovernanceForTests(overrides: {
   setAlignmentGateOverrideForTests(overrides.alignmentGate ?? null);
   setPreconditionGateOverrideForTests(overrides.preconditionGate ?? null);
   setGaidActorResolverOverrideForTests(overrides.gaidActorResolver ?? null);
+  setGppPermitStoreOverrideForTests(overrides.gppPermitStore ?? null);
 }
 
 let _executeToolOverride:
@@ -204,6 +208,7 @@ async function writeAudit(data: {
   alignmentDecision?: AlignmentGateDecision | null;
   preconditionDecision?: PreconditionOrderingDecision | null;
   envelopeId?: string | null;
+  gppPermit?: MonitorPermitOutcome | null;
 }): Promise<{ id: string } | null> {
   const tool = findTool(data.toolName);
   return writeGovernedToolAudit({ ...data, tool });
@@ -459,6 +464,27 @@ export async function governedExecuteTool(
   preconditionDecision = preexecution.preconditionDecision;
   if (preexecution.result) return preexecution.result;
 
+  // GPP Phase 2 PR-C (BI-69415B68): shadow permit. For an outward, authority or
+  // irreversible call only, mint a permit under the binding whose gate just
+  // admitted it, verify the presented handle or the minted permit, and record
+  // the verdict. Shadow by contract: the verdict never changes the outcome,
+  // and mint/record failures are swallowed inside the gpp modules. Routine
+  // reads and ordinary writes take no new path.
+  const gppPermit = consequence.consequential
+    ? await resolveMonitorPermit({
+        toolName: args.toolName,
+        tool: { consequential: true },
+        alignmentApproved: alignmentDecision?.verdict === "approve",
+        alignmentInteractionId: alignmentDecision?.interactionId ?? null,
+        approvedEnvelopeId: approvedAuthorityEnvelopeId,
+        authorityDecisionId: authorityDecisionId ?? null,
+        actorUserId: args.userId,
+        actorAgentId: args.context?.agentId ?? null,
+        workroomId: args.context?.roomAuthority?.workroomId ?? null,
+        permitHandle: args.context?.permitHandle,
+      })
+    : null;
+
   let reservedAuditId: string | null = null;
   let reservedReceiptId: string | null = null;
   if (consequence.consequential) {
@@ -468,9 +494,21 @@ export async function governedExecuteTool(
     const reservedAudit = await writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result: reservationResult,
       userId: args.userId, source: args.source, context: args.context, durationMs: 0,
-      alignmentDecision, preconditionDecision, envelopeId: approvedAuthorityEnvelopeId,
+      alignmentDecision, preconditionDecision, envelopeId: approvedAuthorityEnvelopeId, gppPermit,
     });
     reservedAuditId = reservedAudit?.id ?? null;
+    if (gppPermit) {
+      await recordPermitObservation({
+        permitRowId: gppPermit.permitRowId,
+        bindingId: gppPermit.bindingId,
+        toolName: args.toolName,
+        verdict: gppPermit.verdict,
+        path: "monitor",
+        toolExecutionId: reservedAuditId,
+        callerSite: null,
+        detail: { ...gppPermit.detail, source: args.source },
+      });
+    }
     const reservedReceipt = reservedAuditId
       ? await reserveConsequentialToolExecutionReceipt({
           auditRowId: reservedAuditId, args, alignmentDecision, preconditionDecision,
@@ -510,6 +548,7 @@ export async function governedExecuteTool(
       tokenGrantScopes: args.context?.tokenGrantScopes,
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
       authorityDecisionId,
+      ...(gppPermit?.permitId ? { gppPermitId: gppPermit.permitId } : {}),
       governedDispatch: async (nestedToolName, nestedParams, surfaceInvocation) => {
         const nestedTool = findTool(nestedToolName);
         if (!nestedTool) {
@@ -540,6 +579,9 @@ export async function governedExecuteTool(
           rawParams: nestedParams,
           context: {
             ...args.context,
+            // A presented permit handle names the outer call; a nested surface
+            // action is its own call and is admitted (or not) on its own.
+            permitHandle: undefined,
             ...(surfaceInvocation ? { surfaceInvocation } : {}),
           },
         });
@@ -615,7 +657,7 @@ export async function governedExecuteTool(
     auditRow = await writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result, userId: args.userId,
       source: args.source, context: args.context, durationMs,
-      alignmentDecision, preconditionDecision, envelopeId: approvedAuthorityEnvelopeId,
+      alignmentDecision, preconditionDecision, envelopeId: approvedAuthorityEnvelopeId, gppPermit,
     });
   }
   if (auditRow?.id && shouldWriteReceipt && !reservedReceiptId) {

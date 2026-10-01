@@ -869,6 +869,9 @@
     "apps/web/lib/govern/permissions.ts": [
       "docs/architecture/delivery-ia.md"
     ],
+    "apps/web/lib/gpp/bindings.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/hooks/system-events.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
@@ -1590,7 +1593,8 @@
     ],
     "packages/db/prisma/schema/ai-coworker.prisma": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
+      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
+      "docs/architecture/gated-permissions-process.md"
     ],
     "packages/db/prisma/schema/build-delivery.prisma": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
@@ -3088,10 +3092,12 @@
       "apps/web/lib/ea/reconcile-sysml-projections.ts",
       "apps/web/lib/explore/build-process-matrix.ts",
       "apps/web/lib/explore/feature-build-types.ts",
+      "apps/web/lib/gpp/bindings.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
       "apps/web/lib/work-management/work-shapes.ts",
-      "apps/web/scripts/gpp-critical-interaction-map.ts"
+      "apps/web/scripts/gpp-critical-interaction-map.ts",
+      "packages/db/prisma/schema/ai-coworker.prisma"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
