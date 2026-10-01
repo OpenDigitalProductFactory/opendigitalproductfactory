@@ -1622,6 +1622,7 @@ test(
   "signal while queued cancels the durable claim exactly once",
   { skip: process.platform === "win32" ? "Windows child.kill terminates without delivering POSIX signal handlers" : false },
   async () => {
+  const SLOW_PRE_CLAIM_MS = 2_500;
   const calls = [];
   let gateChild;
   let signalled = false;
@@ -1632,28 +1633,35 @@ test(
       const payload = JSON.parse(body);
       const tool = payload.params.name;
       calls.push(tool);
-      const result = tool === "claim_nonprod_environment_lease"
-        ? {
-          success: true,
-          entityId: "NPEL-SIGNAL-TEST",
-          data: {
-            lease: { leaseId: "NPEL-SIGNAL-TEST" },
-            admission: { status: "queued", queuePosition: 1, waitAgeMs: 25 },
-          },
-        }
-        : { success: true };
-      response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify({
-        jsonrpc: "2.0",
-        id: payload.id,
-        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
-      }));
-      if (tool === "claim_nonprod_environment_lease" && !signalled) {
-        signalled = true;
-        setTimeout(() => gateChild?.kill("SIGTERM"), 25);
-      }
+      // A loaded host is slow before its first claim (observed: load ~50 on
+      // macOS). Make that slowness deterministic, so the admission budget can
+      // never be what ends this run - only the signal may.
+      const delayMs = tool === "get_quiescence_status" ? SLOW_PRE_CLAIM_MS : 0;
+      setTimeout(() => respond(response, tool, payload), delayMs);
     });
   });
+  const respond = (response, tool, payload) => {
+    const result = tool === "claim_nonprod_environment_lease"
+      ? {
+        success: true,
+        entityId: "NPEL-SIGNAL-TEST",
+        data: {
+          lease: { leaseId: "NPEL-SIGNAL-TEST" },
+          admission: { status: "queued", queuePosition: 1, waitAgeMs: 25 },
+        },
+      }
+      : { success: true };
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({
+      jsonrpc: "2.0",
+      id: payload.id,
+      result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+    }));
+    if (tool === "claim_nonprod_environment_lease" && !signalled) {
+      signalled = true;
+      setTimeout(() => gateChild?.kill("SIGTERM"), 25);
+    }
+  };
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
 
@@ -1665,13 +1673,19 @@ test(
         "--worktree", makeTempWorktree(),
         "--expires-minutes", "0.05",
         "--poll-seconds", "0.05",
-        "--lease-wait-seconds", "2",
+        // The signal ends this run. The admission budget must outlast a slow
+        // pre-claim phase, or the gate times out before the signal lands.
+        "--lease-wait-seconds", "30",
         "--mcp-url", `http://127.0.0.1:${address.port}`,
         "--no-push",
       ], {
         cwd: process.cwd(),
         env: {
           ...process.env,
+          // Spawned directly for the kill handle, so it does not get run()'s
+          // fixed host pressure; without it the gate samples the real host.
+          NODE_ENV: "test",
+          DPF_LOCAL_CI_HOST_PRESSURE_JSON: JSON.stringify(TEST_HOST_PRESSURE),
           DPF_MCP_BEARER_TOKEN: "test-token",
           DPF_ALLOW_LOCAL_CI_STUB: "1",
           DPF_GATE_RETRY_JITTER: "0",
