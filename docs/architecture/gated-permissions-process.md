@@ -1,6 +1,6 @@
 # Gated Permissions Process (GPP)
 
-**Status:** working draft 0.3 · **Date:** 2026-10-01 · **Epic:** EP-B932453F · **Backlog:** BI-2C3B3AC9
+**Status:** working draft 0.4 · **Date:** 2026-10-01 · **Epic:** EP-B932453F · **Backlog:** BI-2C3B3AC9
 **Placement decision:** DI-5E0B3CA09D27 (WWMD, high confidence). GPP is the fourth member of the
 [standards family](agent-standards-family.md) and owns the binding semantic only.
 
@@ -370,6 +370,7 @@ bindings and report every violation:
 | C-6 Reach reconciliation | A tool reachable at runtime for an actor in a stage is not admitted by any binding (the model under-describes reality) |
 | C-7 Mode honesty | A binding is presented as enforced while its gate runs in shadow or off |
 | C-8 Transition path uniqueness | Two runtime paths perform the same stage transition while enforcing different gate sets. Every path that advances work from stage *A* to stage *B* `MUST` enforce the gate set the model declares for that transition. |
+| C-9 Unmediated reach | A side-effecting tool can be reached by a code path that does not pass the reference monitor. Existing paths sit on a shrink-only list, and a new path fails the check. |
 
 C-6 is the most important check. A model that the runtime does not match is documentation, not
 governance. C-8 is its counterpart for transitions: a gate that one code path enforces and another
@@ -601,6 +602,9 @@ mode column says which.
 | Required-approver enforcement | `required-approvers.ts` computes who must approve | Not wired to an enforcement point (BI-F9ED8151) |
 | Qualification precondition | `coordinator-eligibility.ts` | No JSI qualification table; returns not-applicable |
 | Receipts | `ToolExecutionReceipt`, GAID actor envelope, mandatory receipt reservation for consequential calls | Enforced on the governed path |
+| Critical-interaction map (Phase 1) | `apps/web/scripts/gpp-critical-interaction-map.ts` over `lib/gpp/critical-interaction-map.ts`. For every tool it shows: consequence class; grants and holders; alignment, escalation, projector and shape-gate modes, taken from the runtime classifier and gate-mode resolver; and direct call sites. On 2026-10-01 it reported 436 tools: 246 side-effecting, 65 critical, 183 side-effecting with no consequence class, and 28 direct call sites (4 with a dynamic tool name). | On demand; not a CI gate |
+| Consequence-classification ratchet (Phase 1) | `lib/gpp/consequence-classification-ratchet.test.ts` with the shrink-only `KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS` (183 entries) | **Enforced in CI** for new tools only. Existing gaps are listed, not fixed. |
+| Unmediated-reach ratchet, C-9 (Phase 1) | `lib/gpp/unmediated-reach-ratchet.test.ts` with the per-file, shrink-only `KNOWN_UNMEDIATED_EXECUTE_SITES` (28 sites, 15 files) | **Enforced in CI** for new paths only. Existing paths, including Build Studio's pipeline, are allowlisted, not routed. |
 | Evidence for §11 | `AuthorizationDecisionLog`, `ToolExecution`, `DecisionInteraction`, `CoworkerActionEnvelope`, `WorkroomActivity` | Records exist; about 28 direct `executeTool` call sites bypass the governed audit; no published measures |
 
 **Overall DPF status:**
@@ -627,6 +631,7 @@ mode column says which.
 | GPP-012 | Each consequential receipt resolves to its binding version and gate decision. |
 | GPP-013 | Every runtime path that advances a stage transition enforces the transition's declared gate set (C-8). |
 | GPP-014 | A live Workroom's runtime view resolves each node to its design element identifier and version (V-3). |
+| GPP-015 | Every side-effecting tool is reachable only through the reference monitor, or its path is on the shrink-only list (C-9). |
 
 These are assessment designs. None has been executed by writing this draft. Executable form
 belongs with the family's conformance work (BI-2AB781FA).
@@ -752,3 +757,4 @@ obvious. This is the practical argument for MBSE.
 | 0.1 | 2026-09-30 | Initial working draft (BI-2C3B3AC9). |
 | 0.2 | 2026-10-01 | Added §2.1.1 binding revision versus shape version. Annex A now cites the first stage-level binding slice (BI-43C3E914, PR #5846). |
 | 0.3 | 2026-10-01 | Added the §7.3 pairing diagram and §12.3 model diagram. Added §12.4 model-to-running-system requirements (executability, V-1…V-4 visibility). Added check C-8 and assertions GPP-013/014. Added Annex C, Build Studio as a GPP model (BI-D0AB33B5). |
+| 0.4 | 2026-10-01 | Added check C-9 (unmediated reach) and assertion GPP-015. Annex A cites the Phase 1 critical-interaction map and both ratchets (BI-69415B68). |

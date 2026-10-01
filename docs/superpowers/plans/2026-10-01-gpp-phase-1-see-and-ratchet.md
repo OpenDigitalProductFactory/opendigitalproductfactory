@@ -90,12 +90,14 @@ any phase relies on them (see the footnotes).
 | 28 | `actions/demand-estimate.ts:77` | `record_effort_estimate` | W, no class | Allowlisted |
 | 29 | `build/ship-on-review-approval.ts:538` | `register_digital_product_from_build` | side effect, no class | Allowlisted; T2 lists it as unclassified |
 
-¹ The `start_build` reading came from a quick declaration scan and may have picked up a neighbouring
-declaration. T1 reads the resolved `ToolDefinition` from the registry, not source text.
+¹ Resolved by T1 from the live registry: `start_build` is side-effecting with **no** consequence
+class, so it is not critical and stays allowlisted. The quick scan had picked up a neighbouring
+declaration.
 ² A tool that writes data, or advances a phase, while declaring `sideEffect: false` is a
 classification defect. T2 surfaces these and does not fix them in Phase 1.
 
-Rows 12–17 are the six `saveBuildEvidence` sites and rows 18–23 the six `reviewDesignDoc` sites, so the table accounts for all 29 (11 + 6 + 6 + 3 + 3).
+On `main` at 93a75c07, row 2 (`build-review-verification.ts`) no longer calls `executeTool`, so the
+T3 seed holds 28 sites in 15 files. Rows 12–17 are the six `saveBuildEvidence` sites and rows 18–23 the six `reviewDesignDoc` sites, so the table accounts for all 29 (11 + 6 + 6 + 3 + 3).
 The T3 ratchet seeds per-file counts from exactly these sites.
 
 **Phase 1 routes none of them.** Rows 1–10 are the only sites that Phase 2 changes, and only for
