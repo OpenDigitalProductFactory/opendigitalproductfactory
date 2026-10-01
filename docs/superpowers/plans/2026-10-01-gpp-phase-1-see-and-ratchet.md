@@ -203,6 +203,23 @@ plan→build via `save_phase_handoff` is refused when the WWMD gate refuses.
 - GPP Annex A: cite the map, both ratchets and the C-8 shadow event. State the mode as **observe**.
 - Spec §8: mark Phase 1 delivered when merged.
 
+## Traceability to the scope baseline
+
+The baseline is the spec's §11, minted by spec-approval on 2026-10-01 at 11:40. Phase 1 delivers
+PR-A and PR-B. Phase 2 deliverables are listed so that every acceptance criterion has an owner; each
+gets its own detailed plan before it is built.
+
+| Deliverable | Phase | Objectives | Acceptance | Contracts | Flows |
+|---|---|---|---|---|---|
+| PR-A | 1 | OBJ-VISIBLE, OBJ-MEDIATION, OBJ-CRITICAL | AC-MAP, AC-RATCHET-CLASS, AC-RATCHET-REACH | contract:tool-consequence-declaration, contract:known-unclassified-side-effect-tools, contract:known-unmediated-execute-sites | flow:registry-to-map-report, flow:source-tree-to-ratchet |
+| PR-B | 1 | OBJ-TRANSITION, OBJ-NODISRUPT | AC-C8-SHADOW | contract:save-phase-handoff-auto-advance, contract:gate-skipped-activity-event | flow:plan-phase-handoff-to-shadow-event |
+| PR-C | 2 | OBJ-PERMIT, OBJ-NODISRUPT | AC-SHADOW-PERMIT | contract:permit-claim-set, contract:permit-handle-mac | flow:gate-admit-to-permit-mint, flow:monitor-shadow-verdict |
+| PR-D | 2 | OBJ-PERMIT | AC-FORGERY | contract:permit-handle-mac | flow:monitor-mac-verification |
+| PR-E | 2 | OBJ-CRITICAL, OBJ-NODISRUPT | AC-ENFORCE | contract:binding-enforcement-mode | flow:binding-promotion-to-enforced |
+| PR-F | 2 | OBJ-TRANSITION | AC-SINGLE-TRANSITION | contract:shared-transition-function | flow:all-phase-paths-through-transition-function |
+
+PR-C through PR-F depend on PR-A. PR-F also depends on PR-B's shadow evidence.
+
 ## Verification
 
 - `pnpm --filter web exec vitest run` for the new tests and the touched Build Studio pack tests.
