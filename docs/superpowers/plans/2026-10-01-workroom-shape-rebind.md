@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Workroom shape rebind — implementation plan
 
 - **Spec:** [2026-10-01-workroom-shape-rebind-design.md](../specs/2026-10-01-workroom-shape-rebind-design.md)

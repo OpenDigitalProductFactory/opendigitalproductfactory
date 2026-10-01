@@ -1,9 +1,12 @@
+---
+status: active
+---
+
 # Governed rebind of a live Workroom to a new work-shape version
 
 - **Backlog:** BI-CB5C0DCE · Epic EP-B932453F
 - **Unblocks:** BI-EBF0F6EE (branch `feat/standing-room-read-tools`, held)
 - **Doctrine:** kernel decision DI-E4DAF14D9343 (bump-and-rebind, margin 0.80); GPP working draft 0.2 §2.1.1 ([gated-permissions-process.md](../../architecture/gated-permissions-process.md))
-- **Status:** design
 
 ## 1. Problem
 
