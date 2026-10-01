@@ -11,7 +11,7 @@
 // Pure module: no React, no client/server directives — imported by client
 // components AND the server-side attention source.
 
-import { JOB_PRESENTATION, type MonitoringAlert } from "./health-summary";
+import { JOB_PRESENTATION, type MonitoringAlert } from "./monitoring-jobs";
 
 export type HumanizedAlert = {
   /** Plain-language headline, e.g. "Build sandbox is offline". */

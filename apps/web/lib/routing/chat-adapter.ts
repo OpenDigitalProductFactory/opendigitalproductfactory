@@ -14,16 +14,15 @@
 
 import type { ToolCallEntry } from "./chat-message-types";
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
+import { InferenceError, classifyHttpError } from "./inference-error";
 import {
-  InferenceError,
-  classifyHttpError,
   extractAnthropicToolCalls,
   extractOpenAIToolCalls,
   extractTextualToolCalls,
   formatMessageForAnthropic,
   formatMessageForOpenAI,
   formatMessageForResponses,
-} from "@/lib/ai-inference";
+} from "./provider-message-format";
 import { isAnthropic } from "./provider-utils";
 import { formatMessagesForGemini } from "./gemini-messages";
 import { captureAnthropicWeeklyQuota } from "./cli-pool-status";

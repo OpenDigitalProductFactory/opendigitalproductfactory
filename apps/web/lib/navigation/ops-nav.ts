@@ -1,4 +1,4 @@
-// apps/web/components/ops/ops-nav.ts
+// apps/web/lib/navigation/ops-nav.ts
 //
 // Pure data for the Ops secondary nav, lifted out of OpsTabNav.tsx (EP-NAV-COHERENCE
 // P3/P5) so the navigation surface can ingest it without importing a client component —

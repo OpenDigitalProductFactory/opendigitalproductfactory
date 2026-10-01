@@ -63,24 +63,49 @@ try {
     }
     if ([string]::IsNullOrWhiteSpace($url)) { $url = 'http://127.0.0.1:3000/api/mcp/v1' }
 
-    # A "localhost" url is a latent failure on hosts where localhost resolves to
-    # ::1 and IPv6 is not answering; 127.0.0.1 is the safe literal.
-    if ($url -match 'localhost') {
+    # A plain-http "localhost" url is a latent failure on hosts where localhost
+    # resolves to ::1 and IPv6 is not answering; 127.0.0.1 is the safe literal.
+    # Not on https: there https://localhost is the install's canonical origin
+    # (design 12.4.1), and OAuth tokens are bound to that exact host.
+    if ($url -like 'http://*' -and $url -match 'localhost') {
         Write-Output "NOTE: DPF MCP -- the dpf endpoint is '$url'. If localhost resolves to ::1 and IPv6 is not answering, the client cannot connect; use the 127.0.0.1 literal instead."
     }
 
-    # BI-46B636B0: the client authorizes over OAuth only on https, and a pinned
-    # Authorization header disables OAuth. A repo .mcp.json is a second, legacy
-    # connector: when one is present, diagnose its header against the endpoint
-    # at session start instead of at the first refused tool call. When it is
-    # absent there is nothing to diagnose -- the plugin connector is the config.
+    # A repo .mcp.json is a legacy connector. On https the dpf-platform plugin
+    # is the one dpf connector (BI-5201141C, design 12.4.4) and no writer
+    # produces a project file, so a leftover dpf entry loads as a second dpf
+    # server (Claude Code de-duplicates plugin and project servers by
+    # endpoint). On plain http (BI-46B636B0) the client cannot use OAuth, so
+    # the file's header is the only credential path: diagnose a missing one at
+    # session start. When the file is absent there is nothing to diagnose.
     $hasHeader = $false
+    $hasDpf = $false
     $cfg = Join-Path $root '.mcp.json'
     if (Test-Path -LiteralPath $cfg) {
-        try { $hasHeader = ((Get-Content -Raw -LiteralPath $cfg) -match '"Authorization"') } catch { }
+        try {
+            $cfgText = Get-Content -Raw -LiteralPath $cfg
+            $hasHeader = ($cfgText -match '"Authorization"')
+            $hasDpf = ($cfgText -match '"dpf"')
+        } catch { }
         if ($url -like 'https://*') {
-            if ($hasHeader) {
-                Write-Output "NOTE: DPF MCP -- .mcp.json pins headers.Authorization on an https endpoint; that disables the client's OAuth fallback. Re-run the toolchain bootstrap (it omits the header for https) or remove it by hand. Runbook: $runbook."
+            # Existing machines converge here (AC-CANON-3): a platform-written
+            # dpf entry is retired when the installed plugin's connector is
+            # confirmed URL-only. The JSON edit lives once, in node, shared
+            # with the sh twin.
+            $retireRc = 11
+            $converger = Join-Path $PSScriptRoot 'lib\retire-project-dpf-connector.mjs'
+            $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+            if ($null -ne $nodeCmd -and (Test-Path -LiteralPath $converger)) {
+                try {
+                    $retireOut = & $nodeCmd.Source $converger $root $url
+                    $retireRc = $LASTEXITCODE
+                    if ($retireOut) { $retireOut | ForEach-Object { Write-Output $_ } }
+                } catch { $retireRc = 11 }
+            } elseif (-not $hasDpf) {
+                $retireRc = 10
+            }
+            if ($retireRc -ne 0 -and $retireRc -ne 10) {
+                Write-Output "NOTE: DPF MCP -- $cfg defines a 'dpf' server. On https the dpf-platform plugin is the one dpf connector, and Claude Code loads a project server at a different URL as a second dpf connector. It was left in place because the installed plugin's connector could not be confirmed URL-only or the entry does not point at this install; remove the dpf entry from $cfg (delete the file if dpf is its only server), then restart the client. Runbook: $runbook."
             }
         }
         elseif (-not $hasHeader) {

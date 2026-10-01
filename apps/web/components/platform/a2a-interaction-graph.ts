@@ -6,7 +6,7 @@
 // State colour semantics flow through report-kit `statusColors`
 // (`a2aInteraction` domain) — there is intentionally no local colour map here.
 
-import { resolveIntent, type Intent } from "@/components/ui/report-kit/statusColors";
+import { resolveIntent, type Intent } from "@/lib/ui-model/statusColors";
 import type {
   OperationsMapA2aEdge,
   OperationsMapA2aEdgeKind,

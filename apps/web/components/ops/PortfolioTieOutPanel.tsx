@@ -16,10 +16,8 @@ import { fieldControlClass, fieldErrorClass, fieldHintClass, fieldLabelClass } f
 import { DataTable, Notice, StatusBadge, type Column } from "@/components/ui/report-kit";
 import { confirmEpicPortfoliosAction, setPortfolioBudgetAction } from "@/lib/actions/portfolio-budget";
 import type { PortfolioTieOut, TieOutRow } from "@/lib/portfolio/tie-out";
-import { budgetText, forecastText, overCommitmentText, tieOutHeadline, tracedText } from "@/lib/portfolio/tie-out-view";
+import { budgetText, forecastText, overCommitmentText, tieOutHeadline, tracedText, type UnconfirmedEpic } from "@/lib/portfolio/tie-out-view";
 import { aiLatencyText, aiSpendText, aiTokensText } from "@/lib/portfolio/ai-resource";
-
-export type UnconfirmedEpic = { epicId: string; title: string; portfolioId: string; portfolioName: string; confidence: "high" | "low" };
 
 type Props = {
   tieOut: PortfolioTieOut;

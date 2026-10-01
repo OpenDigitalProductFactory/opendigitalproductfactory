@@ -1,4 +1,4 @@
-import type { TwinOutcome } from "@/components/twin";
+import type { TwinOutcome } from "./twin-snapshot";
 import { formatMoney } from "@/lib/org-locale/org-locale";
 
 /** Gifts recorded in one currency. Several of these means the org genuinely

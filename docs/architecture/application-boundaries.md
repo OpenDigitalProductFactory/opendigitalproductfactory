@@ -21,6 +21,12 @@ An outer context may import any context to its right. A context may not import a
 
 This first governed cohort was selected from measured size and reciprocal-dependency hotspots. It does not claim that every `apps/web/lib` directory is already a mature bounded context. Additional contexts enter the registry only when ownership and dependency direction are explicit.
 
+## Outer layers: lib never imports the UI
+
+`outerLayers` in the registry names directories that sit above `apps/web/lib`: `apps/web/app` (routes and layouts) and `apps/web/components` (React UI). No file under `apps/web/lib` may import either, whatever its context, and every import kind counts: value imports, `import type`, dynamic `import()`, and `import("x").T` type queries. A type-only edge still ties `lib` and the UI into one TypeScript program, which blocks the `lib`/`ui` project split in the [import-cycle spec](../superpowers/specs/2026-09-30-web-runtime-import-cycle-and-project-references-design.md) (§4.3, §6 PR-3).
+
+The count was 44 edges on 2026-09-30 and is 0 now. The fixes followed one rule: move the shared type, constant or pure helper down into `lib`, and have the component import it from there. For example, the status→intent registry now lives in `lib/ui-model/statusColors.ts` (the report-kit barrel re-exports it), the domain nav tables in `lib/navigation/*-nav.ts`, and the twin snapshot contract in `lib/twin/`. Where `lib` hooks read a React context, the context and its hooks live in `lib` and the provider component in `components/` fills it (`lib/i18n/messages-context.ts`, `lib/hooks/system-events.ts`). If `lib` genuinely needs to render or call UI, invert the dependency (the UI registers itself or passes a callback); an edge that cannot move yet needs an owned, dated exception like any other.
+
 ## Why this direction
 
 The initial ordering minimizes disruption while establishing a real target. Across the eight contexts, the 2026-08-01 baseline contains 498 distinct cross-context import statements. The chosen acyclic order permits 433 and records 65 reverse imports as debt. It preserves dominant flows such as MCP adapters into integration/application behavior, actions into orchestration, integration into build/inference/routing, and inference into routing.
@@ -59,7 +65,7 @@ node --test scripts/check-application-boundaries.test.mjs
 node scripts/check-application-boundaries.mjs
 ```
 
-The guard is part of the canonical source policy-guard profile and is also available as `pnpm check:application-boundaries`. It uses only Node built-ins, so it can run in source-only CI before workspace dependencies are installed.
+The guard is part of the canonical source policy-guard profile and is also available as `pnpm check:application-boundaries`. The context pass uses only Node built-ins. The outer-layer pass reads specifiers with the pinned guard TypeScript (`@dpf/repo-guard-runtime`, which the source profile installs) so that import-shaped text inside a prompt template literal is not mistaken for an import.
 
 ## Ownership and successor work
 

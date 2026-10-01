@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 666,
+  "routeCount": 665,
   "routes": [
     {
       "routePath": "/",
@@ -2011,17 +2011,6 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/storefront/sign-up/route.ts"
-    },
-    {
-      "routePath": "/api/test/codex-responses",
-      "kind": "route",
-      "segments": [
-        "api",
-        "test",
-        "codex-responses"
-      ],
-      "dynamicParams": [],
-      "file": "apps/web/app/api/test/codex-responses/route.ts"
     },
     {
       "routePath": "/api/transcribe",

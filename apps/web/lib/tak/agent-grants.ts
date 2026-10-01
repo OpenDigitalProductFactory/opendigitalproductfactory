@@ -239,6 +239,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_agent_activity: ["work_capsule_write"],
   heartbeat_workroom: ["work_capsule_write"],
   update_workroom_status: ["work_capsule_write"],
+  rebind_workroom_shape: ["work_capsule_write"],
   release_workroom_scope: ["work_capsule_write"],
   reassign_workroom_executor: ["work_capsule_write"],
   get_runtime_coordination_map: ["work_capsule_read"],

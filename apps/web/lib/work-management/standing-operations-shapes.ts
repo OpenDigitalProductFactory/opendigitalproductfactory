@@ -229,7 +229,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   // ── manufactureAndDeliver · Contribution Flow ──────────────────────────────
   [PULL_REQUEST_FLOW_WATCH_SHAPE_KEY]: {
     key: PULL_REQUEST_FLOW_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Pull-request flow watch",
     description:
       "The change reviewer reads mechanical pull-request health, classifies each open change "
@@ -517,7 +517,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   // ── foundational · Business Administration ────────────────────────────────
   [PAYABLES_WATCH_SHAPE_KEY]: {
     key: PAYABLES_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Payables watch",
     description:
       "The finance controller reports what falls due and what is not recorded at all. Paying "
@@ -577,7 +577,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
 
   [VENDOR_RENEWAL_WATCH_SHAPE_KEY]: {
     key: VENDOR_RENEWAL_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Vendor and subscription renewal watch",
     description:
       "The finance controller reports upcoming renewals and spend against recorded "
@@ -636,7 +636,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   // ── forEmployees · Contributor Relations ──────────────────────────────────
   [CONTRIBUTOR_INTAKE_WATCH_SHAPE_KEY]: {
     key: CONTRIBUTOR_INTAKE_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Contributor intake watch",
     description:
       "The platform engineer keeps the contributor inventory current and flags missing "

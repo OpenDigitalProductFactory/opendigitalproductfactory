@@ -3,7 +3,7 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 427,
+      "value": 428,
       "reason": "BI-EBF0F6EE: list_pull_requests, read_contributor_inventory, list_supplier_contracts and list_bills give four standing-room stages (pull-request flow, contributor intake, vendor renewal, payables) a read over data the install already holds; without them those rooms recorded 'no tool can read X' every cycle. Each is read-only, page-capped, granted only to that stage's accountable agent, and declared on the stage so the GPP parity test (C-1/C-2/C-4) proves it real and granted. Claim to check: those rooms' runs call these tools and record completed or inconclusive evidence instead of blocked.",
       "recordedAt": "2026-10-01"
     },

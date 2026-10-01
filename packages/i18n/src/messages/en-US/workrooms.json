@@ -6,10 +6,43 @@
     "decide": "Decide",
     "found": "What the room found",
     "choice": "Decision",
-    "choices": { "accept": "Accept", "patch": "Patch", "defer": "Defer" },
+    "choices": {
+      "accept": "Accept",
+      "patch": "Patch",
+      "defer": "Defer"
+    },
     "deferUntil": "Defer until",
     "rationale": "Rationale",
     "record": "Record decision",
     "cancel": "Cancel"
+  },
+  "shapeRebind": {
+    "available": "A newer version of this room's work is ready ({$from} → {$to}).",
+    "widens": "It widens what the room can reach.",
+    "narrows": "It only narrows what the room can reach.",
+    "review": "Review",
+    "changes": "What changes",
+    "stage": "Stage {$stage}",
+    "shapeLevel": "Whole room",
+    "kinds": {
+      "stage-added": "New stage: {$detail}",
+      "stage-removed": "Stage removed: {$detail}",
+      "tool-added": "Can now use {$detail}",
+      "tool-removed": "No longer uses {$detail}",
+      "evidence-added": "Can record {$detail}",
+      "evidence-removed": "No longer records {$detail}",
+      "accountable-changed": "Answered for by someone else: {$detail}",
+      "advance-relaxed": "No longer needs a decision to move on",
+      "advance-tightened": "Now needs a decision to move on",
+      "text-changed": "Wording changed",
+      "grant-added": "New permission: {$detail}",
+      "grant-removed": "Permission removed: {$detail}"
+    },
+    "rationale": "Why you approve",
+    "rationaleHint": "Required, because this widens what the room can reach.",
+    "rebind": "Move to {$to}",
+    "cancel": "Cancel",
+    "notYours": "{$name} decides whether this room moves.",
+    "keepsRunning": "Until then the room keeps running on {$from}."
   }
 }

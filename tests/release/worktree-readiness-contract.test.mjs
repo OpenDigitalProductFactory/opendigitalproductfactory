@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -30,7 +31,7 @@ function run(command, args, options = {}) {
   return result;
 }
 
-function createRepoWithWorktree(name = "topic") {
+function createRepoWithWorktree(name = "topic", { rootMcpJson = true } = {}) {
   const root = mkdtempSync(join(tmpdir(), "dpf-worktree-readiness-"));
   const origin = join(root, "origin.git");
   const repo = join(root, "repo");
@@ -41,7 +42,7 @@ function createRepoWithWorktree(name = "topic") {
   run("git", ["config", "user.email", "test@example.com"], { cwd: repo });
   run("git", ["config", "user.name", "test"], { cwd: repo });
   mkdirSync(join(repo, ".vscode"), { recursive: true });
-  writeFileSync(join(repo, ".mcp.json"), '{"mcpServers":{"dpf":{"url":"http://127.0.0.1:3000/api/mcp/v1"}}}\n');
+  if (rootMcpJson) writeFileSync(join(repo, ".mcp.json"), '{"mcpServers":{"dpf":{"url":"http://127.0.0.1:3000/api/mcp/v1"}}}\n');
   writeFileSync(join(repo, ".vscode", "mcp.json"), '{"servers":{"dpf":{"url":"http://127.0.0.1:3000/api/mcp/v1"}}}\n');
   writeFileSync(join(repo, "README.md"), "# test\n");
   run("git", ["add", "README.md"], { cwd: repo });
@@ -55,12 +56,19 @@ function readReadiness(worktree) {
   return JSON.parse(readFileSync(join(worktree, ".dpf-worktree-readiness.json"), "utf8"));
 }
 
-test("seed-worktree-mcp.sh writes MCP config, Compose isolation, and source-only readiness", () => {
+// BI-5201141C (design 12.4.4): the dpf-platform plugin's URL-only connector is
+// the one Claude Code dpf connector. A copied project .mcp.json loads beside it
+// (Claude Code de-duplicates by endpoint), so the seed and sync never copy one.
+function assertNoProjectMcpJson(worktree) {
+  assert.equal(existsSync(join(worktree, ".mcp.json")), false, "a project .mcp.json would be a second dpf connector");
+}
+
+test("seed-worktree-mcp.sh writes VS Code MCP config, Compose isolation, and source-only readiness", () => {
   const fixture = createRepoWithWorktree("seed-topic");
   try {
     run("sh", [seedScript.pathname, fixture.worktree]);
 
-    assert.equal(readFileSync(join(fixture.worktree, ".mcp.json"), "utf8"), readFileSync(join(fixture.repo, ".mcp.json"), "utf8"));
+    assertNoProjectMcpJson(fixture.worktree);
     assert.equal(
       readFileSync(join(fixture.worktree, ".vscode", "mcp.json"), "utf8"),
       readFileSync(join(fixture.repo, ".vscode", "mcp.json"), "utf8"),
@@ -106,7 +114,7 @@ test("seed-worktree-mcp.sh keeps core worktree setup even when optional skill bo
     assert.match(result.stderr, /skill pack bootstrap failed/i);
     assert.match(readFileSync(join(fixture.worktree, ".env"), "utf8"), /^COMPOSE_PROJECT_NAME=dpf-bootstrap-fails$/m);
     assert.equal(readReadiness(fixture.worktree).state, "source-only");
-    assert.equal(readFileSync(join(fixture.worktree, ".mcp.json"), "utf8"), readFileSync(join(fixture.repo, ".mcp.json"), "utf8"));
+    assertNoProjectMcpJson(fixture.worktree);
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
@@ -122,7 +130,20 @@ test("seed-worktree-mcp.sh core-only writes worktree metadata without invoking s
 
     assert.match(readFileSync(join(fixture.worktree, ".env"), "utf8"), /^COMPOSE_PROJECT_NAME=dpf-core-only$/m);
     assert.equal(readReadiness(fixture.worktree).reason, "node_modules_missing");
-    assert.equal(readFileSync(join(fixture.worktree, ".mcp.json"), "utf8"), readFileSync(join(fixture.repo, ".mcp.json"), "utf8"));
+    assertNoProjectMcpJson(fixture.worktree);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("seed-worktree-mcp.sh succeeds when the root clone has no project .mcp.json", () => {
+  const fixture = createRepoWithWorktree("no-root-mcp", { rootMcpJson: false });
+  try {
+    run("sh", [seedScript.pathname, fixture.worktree, "--core-only"]);
+
+    assertNoProjectMcpJson(fixture.worktree);
+    assert.match(readFileSync(join(fixture.worktree, ".env"), "utf8"), /^COMPOSE_PROJECT_NAME=dpf-no-root-mcp$/m);
+    assert.equal(readReadiness(fixture.worktree).state, "source-only");
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
@@ -138,7 +159,26 @@ test("sync-mcp-worktrees.sh refreshes linked worktrees and stamps readiness mark
 
     assert.match(readFileSync(join(fixture.worktree, ".env"), "utf8"), /^COMPOSE_PROJECT_NAME=dpf-sync-topic$/m);
     assert.equal(readReadiness(fixture.worktree).reason, "node_modules_missing");
-    assert.equal(readFileSync(join(fixture.worktree, ".mcp.json"), "utf8"), readFileSync(join(fixture.repo, ".mcp.json"), "utf8"));
+    assertNoProjectMcpJson(fixture.worktree);
+    assert.equal(
+      readFileSync(join(fixture.worktree, ".vscode", "mcp.json"), "utf8"),
+      readFileSync(join(fixture.repo, ".vscode", "mcp.json"), "utf8"),
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("sync-mcp-worktrees.sh still isolates and stamps worktrees when the root has no project .mcp.json", () => {
+  const fixture = createRepoWithWorktree("sync-no-root-mcp", { rootMcpJson: false });
+  try {
+    mkdirSync(join(fixture.repo, "scripts"), { recursive: true });
+    copyFileSync(syncScript.pathname, join(fixture.repo, "scripts", "sync-mcp-worktrees.sh"));
+
+    run("sh", [join(fixture.repo, "scripts", "sync-mcp-worktrees.sh")]);
+
+    assert.match(readFileSync(join(fixture.worktree, ".env"), "utf8"), /^COMPOSE_PROJECT_NAME=dpf-sync-no-root-mcp$/m);
+    assertNoProjectMcpJson(fixture.worktree);
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
@@ -157,7 +197,10 @@ test("PowerShell worktree sync/seed scripts retain readiness-marker parity", () 
     assert.match(contents, /source-only/, `${path} must preserve source-only classification`);
     assert.match(contents, /node_modules_missing/, `${path} must report missing node_modules`);
     assert.match(contents, /pnpm_corepack_missing/, `${path} must report missing package manager`);
+    // BI-5201141C: the twins copy no project .mcp.json into a worktree.
+    assert.doesNotMatch(contents, /Join-Path \$(?:Target|wt) "\.mcp\.json"/, `${path} must not copy a project .mcp.json`);
   }
+  assert.match(syncPs1, /if \(-not \$rotating\)/, "sync script registers a user-scope dpf server only on explicit legacy rotation");
 
   assert.match(syncPs1, /Copy-WorktreeFile/, "sync script should copy MCP files portably");
   assert.doesNotMatch(syncPs1, /fsutil\s+hardlink/i, "sync script must not regress to D-drive-only hardlinks");

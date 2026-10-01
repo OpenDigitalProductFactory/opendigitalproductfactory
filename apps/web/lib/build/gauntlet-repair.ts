@@ -17,7 +17,20 @@ export const GAUNTLET_REPAIR_MAX_ATTEMPTS = 2;
 /** Tail of the guard output carried into the brief; the failure summary is at the end. */
 const BRIEF_OUTPUT_CHARS = 8_000;
 
-export type GauntletFailure = { treeSha: string | null; recordId: string | null; failedGuards: string[] };
+export type ReviewFinding = { severity: string; description: string; location?: string; suggestion?: string };
+
+/**
+ * What failed. `source` "review" is a semantic change review that asked for
+ * repair (BI-50E8802C); its findings are carried on the state because a review
+ * receipt is not a gauntlet record. Guard and review hand-backs share one bound.
+ */
+export type GauntletFailure = {
+  treeSha: string | null;
+  recordId: string | null;
+  failedGuards: string[];
+  source?: "guards" | "review";
+  findings?: ReviewFinding[];
+};
 
 export type GauntletRepairState = GauntletFailure & { attempts: number; escalated?: boolean };
 
@@ -72,6 +85,38 @@ export function buildGauntletRepairTask(input: { failedGuards: string[]; output:
   };
 }
 
+export function buildReviewRepairTask(input: { findings: ReviewFinding[] }): GauntletRepairTask {
+  const lines = input.findings.map((f) => [
+    `- [${f.severity}] ${f.description}`,
+    f.location ? `  at ${f.location}` : null,
+    f.suggestion ? `  suggestion: ${f.suggestion}` : null,
+  ].filter(Boolean).join("\n"));
+  return {
+    title: `Fix review findings (${input.findings.length})`,
+    implement: [
+      "The independent code review of this build's change found blocking problems. Fix each one in the change itself.",
+      "",
+      "Findings:",
+      ...lines,
+      "",
+      "Rules:",
+      "- Fix the cause in the code; add or correct tests where a finding says behavior is unverified.",
+      "- Never weaken, skip or delete a test, guard or review policy to make the review pass.",
+      "- Keep the fix to what the findings report; do not rework unrelated code.",
+      "- Commit the fix on this build's branch.",
+    ].join("\n"),
+    verify: "Each finding above is resolved in the committed tree, and the build's scoped tests and typecheck pass.",
+  };
+}
+
+/** The repair brief for a hand-back, chosen by what failed. */
+export function repairTaskFor(state: GauntletRepairState, guardOutput: string): GauntletRepairTask {
+  if (state.source === "review" && state.findings && state.findings.length > 0) {
+    return buildReviewRepairTask({ findings: state.findings });
+  }
+  return buildGauntletRepairTask({ failedGuards: state.failedGuards, output: guardOutput });
+}
+
 function readState(verificationOut: unknown): GauntletRepairState | undefined {
   if (!verificationOut || typeof verificationOut !== "object" || Array.isArray(verificationOut)) return undefined;
   const state = (verificationOut as { gauntletRepair?: unknown }).gauntletRepair;
@@ -84,6 +129,8 @@ function readState(verificationOut: unknown): GauntletRepairState | undefined {
     failedGuards: s.failedGuards,
     attempts: s.attempts,
     escalated: s.escalated === true,
+    source: s.source === "review" ? "review" : "guards",
+    findings: Array.isArray(s.findings) ? s.findings : undefined,
   };
 }
 
@@ -128,7 +175,9 @@ export async function routeGauntletFailureToRepair(buildId: string, failure: Gau
       originatingBacklogItemId: build.originatingBacklogItemId,
       phase: "review",
       rounds: decision.next.attempts,
-      issues: failure.failedGuards.map((guard) => ({ severity: "important", description: `Guard still failing after ${decision.next.attempts} repair attempt(s): ${guard}` })),
+      issues: failure.source === "review" && failure.findings?.length
+        ? failure.findings.map((f) => ({ severity: f.severity, description: `Review finding still open after ${decision.next.attempts} repair attempt(s): ${f.description}` }))
+        : failure.failedGuards.map((guard) => ({ severity: "important", description: `Guard still failing after ${decision.next.attempts} repair attempt(s): ${guard}` })),
       log,
     });
     return "escalated";
@@ -161,7 +210,10 @@ export async function routeGauntletFailureToRepair(buildId: string, failure: Gau
     },
   });
   if (moved.count === 0) return "not-in-review";
-  await log(`Guards failed on this build's change (${failure.failedGuards.join(", ")}); handed back to the coding agent, attempt ${decision.next.attempts} of ${GAUNTLET_REPAIR_MAX_ATTEMPTS}.`);
+  const what = failure.source === "review"
+    ? `The code review found ${failure.findings?.length ?? 0} blocking problem(s) in this build's change`
+    : `Guards failed on this build's change (${failure.failedGuards.join(", ")})`;
+  await log(`${what}; handed back to the coding agent, attempt ${decision.next.attempts} of ${GAUNTLET_REPAIR_MAX_ATTEMPTS}.`);
 
   const { jobs } = await import("@/lib/jobs");
   await jobs.send({ name: "build/gauntlet.repair", data: { buildId } });
@@ -187,7 +239,7 @@ export async function runGauntletRepair(buildId: string): Promise<RepairRunOutco
     const evidence = (record?.details as { evidence?: { output?: unknown } } | null)?.evidence;
     output = typeof evidence?.output === "string" ? evidence.output : "";
   }
-  const task = buildGauntletRepairTask({ failedGuards: state.failedGuards, output });
+  const task = repairTaskFor(state, output);
 
   const { runGauntletRepairTask } = await import("./build-orchestrator");
   const dispatched = await runGauntletRepairTask({ buildId, userId: build.createdById, task }).catch(() => false);

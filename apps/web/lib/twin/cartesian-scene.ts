@@ -8,7 +8,7 @@ import type {
   SceneEntityRef,
 } from "@dpf/storefront-templates";
 
-import type { Intent } from "@/components/ui/report-kit";
+import type { Intent } from "@/lib/ui-model/statusColors";
 import { isRecord } from "@/lib/shared/coerce";
 
 export const MAX_CARTESIAN_SCENE_ZONES = 6;

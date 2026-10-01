@@ -13,7 +13,10 @@
 // Filesystem/process collection lives in scripts/sandbox-freshness-preflight.mjs.
 
 import { baseVersion, findImporterDependency, parseImporters } from "./pnpm-lock.mjs";
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
+import process from "node:process";
 
 /**
  * Packages whose on-disk resolution must match the lockfile before any build
@@ -54,9 +57,20 @@ export function parseLockedVersion(lockfileText, importerPath, packageName) {
  * Parse `ps -axo pid=,etime=,command=` style lines and return pnpm install
  * processes. `selfPids` excludes this process tree (a preflight-owned
  * convergence install must not flag itself).
+ *
+ * Scope (BI-8DC6F267): the duplicate-install guard protects ONE node_modules.
+ * An install in another worktree cannot touch this sandbox (pnpm's
+ * content-addressable store is safe for concurrent use), so when `rootDir` is
+ * given only installs whose working directory is the sandbox root or inside it
+ * count. `rootDir` may be an array of spellings of the same directory (e.g.
+ * /var/... and its realpath /private/var/... on macOS). `readCwd(pid)` returns
+ * the process's cwd or null; an unreadable cwd keeps the conservative
+ * behaviour and COUNTS the process (cwdUnknown: true) — never a duplicate
+ * install. Without `rootDir` every install on the host counts, as before.
  */
-export function detectInstallProcesses(psText, { selfPids = [] } = {}) {
+export function detectInstallProcesses(psText, { selfPids = [], rootDir, readCwd = readProcessCwd } = {}) {
   const excluded = new Set(selfPids.map(Number));
+  const roots = (Array.isArray(rootDir) ? rootDir : [rootDir]).filter(Boolean);
   const processes = [];
   for (const raw of String(psText ?? "").split("\n")) {
     const line = raw.trim();
@@ -66,9 +80,113 @@ export function detectInstallProcesses(psText, { selfPids = [] } = {}) {
     const pid = Number(pidText);
     if (excluded.has(pid)) continue;
     if (!isPnpmInstallCommand(command)) continue;
-    processes.push({ pid, etime, etimeMinutes: parseEtimeMinutes(etime), command });
+    const proc = { pid, etime, etimeMinutes: parseEtimeMinutes(etime), command };
+    if (roots.length > 0) {
+      let cwd = null;
+      try {
+        cwd = readCwd(pid) || null;
+      } catch {
+        cwd = null;
+      }
+      if (cwd === null) {
+        processes.push({ ...proc, cwd: null, cwdUnknown: true });
+        continue;
+      }
+      if (!roots.some((root) => isInsidePath(root, cwd))) continue;
+      processes.push({ ...proc, cwd });
+      continue;
+    }
+    processes.push(proc);
   }
   return processes;
+}
+
+/** Name field of `lsof -a -p PID -d cwd -Fn` output ("p<pid>\nfcwd\nn<path>"), or null. */
+export function parseLsofCwd(text) {
+  for (const line of String(text ?? "").split("\n")) {
+    if (line.startsWith("n") && line.length > 1) return line.slice(1);
+  }
+  return null;
+}
+
+/**
+ * Best-effort working directory of another process, or null when it cannot be
+ * read. Linux reads /proc/PID/cwd; macOS (and Linux without /proc access)
+ * asks lsof. Collaborators are injectable so tests need no real processes.
+ */
+export function readProcessCwd(pid, {
+  platform = process.platform,
+  readlink = (target) => fs.readlinkSync(target),
+  spawn = (cmd, args) => spawnSync(cmd, args, { encoding: "utf8", timeout: 5_000 }),
+} = {}) {
+  if (platform === "win32") return null;
+  if (platform === "linux") {
+    try {
+      const cwd = readlink(`/proc/${pid}/cwd`);
+      if (cwd) return cwd;
+    } catch {
+      // fall through to lsof
+    }
+  }
+  try {
+    const result = spawn("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"]);
+    if (!result || result.error || result.status !== 0) return null;
+    return parseLsofCwd(result.stdout);
+  } catch {
+    return null;
+  }
+}
+
+export const DEFAULT_INSTALL_WAIT_MS = 10 * 60 * 1000;
+export const DEFAULT_INSTALL_POLL_MS = 5_000;
+
+/**
+ * Bound for waiting on a same-sandbox install (BI-8DC6F267).
+ * DPF_LOCAL_CI_FRESHNESS_INSTALL_WAIT_MS (0 = do not wait) and
+ * DPF_LOCAL_CI_FRESHNESS_INSTALL_POLL_MS override the defaults.
+ */
+export function resolveInstallWaitConfig(env = process.env) {
+  const read = (value, fallback, { allowZero }) => {
+    if (value === undefined || value === null || String(value).trim() === "") return fallback;
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0 || (!allowZero && n === 0)) return fallback;
+    return Math.floor(n);
+  };
+  return {
+    timeoutMs: read(env.DPF_LOCAL_CI_FRESHNESS_INSTALL_WAIT_MS, DEFAULT_INSTALL_WAIT_MS, { allowZero: true }),
+    pollMs: read(env.DPF_LOCAL_CI_FRESHNESS_INSTALL_POLL_MS, DEFAULT_INSTALL_POLL_MS, { allowZero: false }),
+  };
+}
+
+/**
+ * Wait, bounded, for same-sandbox installs to finish (BI-8DC6F267). `scan()`
+ * returns the installs currently running in the sandbox. Returns once none
+ * remain, or when `timeoutMs` elapses (timedOut: true, with the installs still
+ * running). Never sleeps past the bound.
+ */
+export async function waitForSandboxInstalls({
+  scan,
+  timeoutMs = DEFAULT_INSTALL_WAIT_MS,
+  pollMs = DEFAULT_INSTALL_POLL_MS,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  now = () => Date.now(),
+  onWait = () => {},
+}) {
+  const startedAt = now();
+  const observed = new Set();
+  let processes = scan();
+  const waited = processes.length > 0;
+  while (processes.length > 0) {
+    for (const proc of processes) observed.add(proc.pid);
+    const elapsed = now() - startedAt;
+    if (elapsed >= timeoutMs) {
+      return { waited, timedOut: true, waitedMs: elapsed, timeoutMs, processes, observedPids: [...observed] };
+    }
+    onWait(processes, elapsed);
+    await sleep(Math.min(pollMs, timeoutMs - elapsed));
+    processes = scan();
+  }
+  return { waited, timedOut: false, waitedMs: now() - startedAt, timeoutMs, processes, observedPids: [...observed] };
 }
 
 /**
@@ -148,7 +266,7 @@ export function evaluateFreshness(state) {
     for (const proc of state.installProcesses) {
       failures.push({
         kind: "install_in_progress",
-        message: `pnpm install already running (pid ${proc.pid}, elapsed ${proc.etime}); refusing to build or start a duplicate install`,
+        message: `pnpm install already running (pid ${proc.pid}, elapsed ${proc.etime}${proc.cwdUnknown ? ", cwd unreadable so counted conservatively" : proc.cwd ? `, in ${proc.cwd}` : ""}); refusing to build or start a duplicate install`,
       });
     }
   }

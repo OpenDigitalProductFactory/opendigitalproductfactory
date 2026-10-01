@@ -928,11 +928,40 @@ never as clear: `list_bills` on an install with no bills returns
 records branches, worktrees and pull requests, not people, so the intake `flag`
 stage reads sign-off and licence facts as unknown until a source records them.
 
-Shape versions were not bumped. GPP §2.1 treats a capability-set change as a
-material change, but a room's `workShape` claim pins an exact version and
-`resolveWorkShapeClaim` drops a room whose version no longer matches, which
-would stop every live standing room. Versioning capability sets without
-orphaning rooms is a follow-on.
+These four shapes moved to version 1.1.0, because adding a tool widens a
+binding. Their rooms reach 1.1.0 only by rebind, as described in the next
+section.
+
+## A new shape version reaches a live room only by rebind (BI-CB5C0DCE)
+
+A room pins `key@version`. GPP §2.1.1 says narrowing a binding may apply in
+place, but widening one (a new tool, stage, evidence kind or grant, a changed
+accountable principal, or a governed decision relaxed to a status change)
+needs a new version and a fresh gate decision. Kernel decision DI-E4DAF14D9343
+chose bump-and-rebind. Design:
+[spec](../superpowers/specs/2026-10-01-workroom-shape-rebind-design.md).
+
+- **A bump never stops a room.** The superseded definition moves to
+  `WORK_SHAPE_PRIOR_VERSIONS` (`work-shape-prior-versions.ts`) in the same
+  change. `resolveWorkShapeClaim` resolves it, so pinned rooms keep running.
+  `normalizePersistedScope` still admits only the current version for a new
+  room or an adopted claim.
+- **The diff decides what kind of change it is.** `diffWorkShapeBinding`
+  (`work-shape-binding-diff.ts`) matches stages by key and classifies each
+  row; any widening row makes the whole change a widening.
+- **One governed action moves the pin.** `rebindWorkroomShapeForUser`
+  (`workroom-shape-rebind.server.ts`) checks the following, in order:
+  - The caller is the room's accountable owner or a platform manager.
+  - The target is the current version of the room's own shape.
+  - No dispatched stage is still running.
+  - A widening carries a rationale.
+
+  It then writes the claim behind the store's compare-and-set. It records the
+  decision as `decision-record` evidence with no stage key, so a rebind can
+  never complete a stage, and adds a `workshape-rebound` activity. Receipts
+  are keyed by stage, so a stage whose binding did not change does not re-run.
+- **MCP:** `rebind_workroom_shape` previews by default (`dryRun`). A task run
+  may preview but never apply: the decision is a person's.
 
 ## Related references
 
@@ -951,7 +980,8 @@ fallback or grants execution authority.
 
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
-- [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI and the composition rule
+- [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI, GPP and the composition rule
+- [Gated Permissions Process (GPP)](gated-permissions-process.md) — the standard that models each shape stage's gate and the tools it admits; see its [pairing diagram](gated-permissions-process.md#73-the-pairing-at-a-glance) and the [binding as a model](gated-permissions-process.md#123-the-binding-as-a-model)
 - [A Governance Gate on Consequential Tool Use](../superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md) — the target architecture
 - [Work Rooms](../user-guide/workspace/work-rooms.md) — the end-user view
 

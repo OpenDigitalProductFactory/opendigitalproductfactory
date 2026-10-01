@@ -6,7 +6,7 @@
 
 import { intentStyle, type Intent } from "@/components/ui/report-kit";
 
-import type { CapacityChipData } from "./types";
+import type { CapacityChipData } from "@/lib/twin/kit-types";
 
 function chipStyle(intent: Intent | undefined) {
   const style = intentStyle(intent ?? "neutral");

@@ -391,7 +391,7 @@ if ($plan.codex -and $plan.codex.writes.Count -gt 0) {
 
 # 2c. Grok CLI: dedicated config.toml wiring (like Codex) from grok config plan.
 # Writes the mcp_servers.dpf section (from grok.mcp.json) into the Grok TOML.
-# Generic MCP client config (above) covers .mcp.json side; this is the native Grok config.
+# Generic MCP client config (below) covers the repo-root files; this is the native Grok config.
 if ($plan.grok -and $plan.grok.config -and $plan.grok.config.writes.Count -gt 0) {
     foreach ($write in $plan.grok.config.writes) {
         if ($DryRun.IsPresent) {
@@ -425,7 +425,7 @@ if ($AgyPresent) {
     Write-Skip "Antigravity CLI not installed; skipping (pass -InstallAntigravity to opt in)."
 }
 
-# 2b. MCP client config (.mcp.json + .vscode/mcp.json) -- env-backed, no secret.
+# 2b. MCP client config (.vscode/mcp.json, and .mcp.json on http/legacy only; on https the plugin owns the Claude connector) -- env-backed, no secret.
 if ($plan.mcpClientConfig -and $plan.mcpClientConfig.writes.Count -gt 0) {
     foreach ($write in $plan.mcpClientConfig.writes) {
         if ($DryRun.IsPresent) {
@@ -438,7 +438,7 @@ if ($plan.mcpClientConfig -and $plan.mcpClientConfig.writes.Count -gt 0) {
             [System.IO.File]::WriteAllText($write.path, $write.content, [System.Text.Encoding]::UTF8)
         }
     }
-    Write-Ok "MCP client config written ($($plan.mcpClientConfig.writes.Count) file(s): .mcp.json / .vscode/mcp.json)."
+    Write-Ok "MCP client config written ($($plan.mcpClientConfig.writes.Count) file(s); the plugin owns the Claude connector on https)."
 } else {
     Write-Ok "MCP client config already converged."
 }

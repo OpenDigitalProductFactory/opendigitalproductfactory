@@ -9,7 +9,7 @@
  */
 
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
-import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
+import { InferenceError, classifyHttpError } from "./inference-error";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { resolveOpenAiCompatibleApiBase } from "./openai-base";
 

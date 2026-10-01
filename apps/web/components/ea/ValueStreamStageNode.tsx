@@ -4,7 +4,7 @@ import { Handle, Position } from "@xyflow/react";
 
 import type { SerializedViewElement } from "@/lib/ea-types";
 
-import { estimateStageWidth } from "./value-stream-layout";
+import { estimateStageWidth } from "@/lib/ea/value-stream-layout";
 
 type Props = {
   data: SerializedViewElement;
