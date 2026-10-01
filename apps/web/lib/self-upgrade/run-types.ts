@@ -73,6 +73,8 @@ export type QuiescenceBlockerLine = {
    */
   sampleAgent?: string | null;
   sampleTitle?: string | null;
+  /** Build the item belongs to, when it has one (BI-F9EE05E5 live progress). */
+  sampleBuildId?: string | null;
   /** Oldest last-signal (heartbeat, or start if newer) across the collapsed
    *  group, ISO — drives the panel's "last active …" staleness line. */
   oldestSignalAt?: string | null;

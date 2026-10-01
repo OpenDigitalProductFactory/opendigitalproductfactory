@@ -64,9 +64,11 @@ export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<num
   const stuckCoordinators = await prisma.quiescenceRun.findMany({
     where: {
       // Only reap coordinators wedged in a DRAIN phase (pending/preparing/
-      // draining). Those heartbeat every wait-tick, so a >2min gap means the
-      // coordinator crashed and is holding the platform draining — the exact
-      // case this reaper exists for.
+      // draining/awaiting-operator). Those heartbeat on every wait check (at
+      // most ~60s apart, BI-F9EE05E5), so a >2min gap means the coordinator
+      // crashed and is holding the platform draining — the exact case this
+      // reaper exists for. Keyed on lastHeartbeatAt, never on how long the
+      // drain has waited: an upgrade may legitimately wait an hour or more.
       //
       // Do NOT reap `ready-to-swap` or `swapping`: at ready-to-swap the
       // coordinator parks in `step.waitForEvent(swap-complete)` and stops
