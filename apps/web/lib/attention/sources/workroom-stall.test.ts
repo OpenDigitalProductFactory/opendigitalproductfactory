@@ -290,3 +290,41 @@ describe("the emitted room link is reachable", () => {
     expect(routeExists(item?.deepLink ?? "")).toBe(true);
   });
 });
+
+// ─── A writeback stall says its cause, not "appoint" (BI-A9998FBB) ───────────
+//
+// Live, 2026-10-01: ten of 23 "Needs you" cards told the operator to appoint a
+// coordinator for rooms whose coworker ran and could not finish. Appointment
+// does not release the writeback latch; the cause was missing read tools or no
+// AI provider, and the room's own blocked evidence already said so.
+
+describe("projectRoomStall for a stage that could not finish", () => {
+  const owner = { principalRef: "agent:security-engineer", source: "shape" } as const;
+
+  it("quotes the coworker's blocked evidence and does not suggest an appointment", () => {
+    const item = projectRoomStall(row({
+      drive: pause("executor_writeback_unavailable"),
+      ladderOwner: owner,
+      blockedCause: "Credential inventory not accessible: no tool provides read access",
+    }));
+    expect(item?.context).toContain("Credential inventory not accessible");
+    expect(item?.context).not.toContain("appoint them");
+    expect(item?.context).toContain("will not change this");
+  });
+
+  it("says the run left no result when nothing was recorded", () => {
+    const item = projectRoomStall(row({ drive: pause("executor_writeback_unavailable"), ladderOwner: owner, blockedCause: null }));
+    expect(item?.context).toContain("the run left no result");
+    expect(item?.context).not.toContain("appoint them");
+  });
+
+  it("still suggests the appointment when the refusal is about a missing coordinator", () => {
+    const item = projectRoomStall(row({ ladderOwner: owner }));
+    expect(item?.context).toContain("appoint them");
+  });
+
+  it("does not suggest an appointment for a budget or stop-condition halt", () => {
+    const item = projectRoomStall(row({ drive: pause("budget_exhausted"), ladderOwner: owner }));
+    expect(item?.context).not.toContain("appoint them");
+  });
+});
