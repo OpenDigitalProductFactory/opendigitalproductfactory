@@ -968,6 +968,28 @@ The protocol is complete when:
 - **The actual container swap, health check, smoke window, rollback.** These are parent spec §5.5 remainder (Phase 5 BIs). Quiescence is the prerequisite; swap is the next layer.
 - **Upgrade-window scheduling beyond what `PlatformConfig.maintenanceWindows` already supports.** Existing parent-spec mechanism.
 
+## 11a. Amendment 2026-09-30 — an upgrade waits for work; it never ends "skipped" (BI-F9EE05E5)
+
+**Operator direction (Mark, 2026-09-30):** "Is there a way to trigger an upgrade that waits until work settles and stops new submissions? Skipped is useless." Confirmed: close admission, wait up to 60 minutes with live progress, then ask. Never skip.
+
+**What is live today, and how it drifted from this spec (verified 2026-09-30):**
+- A manual or scheduled upgrade with any hard blocker returns `skipped` before a drain starts (`queue/functions/self-upgrade.ts` "activity-in-flight"). This was added for BI-F36E7510 and is not a spec decision. Live: 92 of 134 skipped runs were `activity-in-flight`, and zero `QuiescenceRun` rows are `deferred`, because the drain never starts.
+- §5.5's `max(regimeBudget, phaseBudget)` and its "operator prompt at 80% budget" were never built. The drain budget is a flat 5 minutes.
+- The coordinator flips every live TaskRun to `quiescing` at the start of the drain (§5.3). The dead-phase reaper then treats those builds as heartbeat-less and closes their phase rows, so the drain converges by stopping work, contrary to §6.5/§6.8 ("never force-cancel the phase").
+- Admission is not closed at every entry point. `ideate`, `plan→build`, `review→ship` and design-review transitions swallow the `QuiescingError` from `startBuildPhaseRun` and proceed with no phase row. The manual tee-up event has no gate. `build/execute.run` resumes after 30 minutes even while still draining.
+- The operator's own Force now / Abort server actions are refused by the proxy gate while draining (§6.4). `shipForceEscalatedAt` has never been set across 301 runs.
+
+**Amended behavior (supersedes §12 decision 1 for the self-upgrade trigger, and the BI-F36E7510 early skip):**
+1. **Admission closes first; work is not stopped.** A manual or scheduled upgrade enters the drain whatever is in flight. New work is refused at every entry point. In-flight phases run to completion; the next phase of a build is parked at its boundary with a durable reason and resumed after the swap. TaskRuns are flipped to `quiescing` only after hard blockers reach zero, or on operator force.
+2. **Bounded wait of 60 minutes by default** (the operator's decision; configurable). Progress is visible live: each build and phase still running, and the time waited.
+3. **At the bound, the run pauses in a new non-terminal status, `awaiting-operator`.** The level stays `draining` and the operator chooses **Keep waiting** (extends the bound), **Force now** (the existing emergency path), or **Abort** (reopens admission). The run is never recorded as `skipped` or `deferred` without an operator choice.
+4. **Operator controls work while draining.** One authenticated control route is allow-listed in the proxy gate; every other mutation stays refused.
+5. **The scheduled check follows the same rule.**
+
+`QUIESCENCE_RUN_STATUSES` gains `awaiting-operator`. The column is a code-typed string by design (§5.1, no DB constraint); AGENTS.md §8 prefers a Prisma enum for closed sets, and that conversion is tracked separately rather than folded into this change.
+
+**Delivery:** docs/superpowers/plans/2026-09-30-upgrade-waits-for-work-plan.md.
+
 ## 12. Operator Decisions (Locked Defaults)
 
 The six questions originally listed here have been resolved with the recommended defaults below (operator-acknowledged 2026-05-24 during in-session implementation directive). Each decision is locked into the implementation BIs and can be revisited via a follow-up spec edit + corresponding BI if a default needs to flip.
@@ -978,6 +1000,7 @@ The six questions originally listed here have been resolved with the recommended
 4. **Phase 1 vs Phase 2 client-side cut line** — **DECIDED**: v1 = Proxy + Node state route + global banner stream + resilient EventSource migration for the 5 current consumers (BI-QUIESCE-003 + 006 + 008). Phase 2 = broad `usePlatformReady()` action gate across high-traffic forms (BI-QUIESCE-009, post-v1). Locked in §7.6.
 5. **`system:quiescence` event on operator-triggered manual quiescence** — **DECIDED**: yes, same event fires for `trigger: "manual"` and `trigger: "sandbox-recovery"`. Operators triggering manual maintenance want users to see the banner. Locked in §7.1. BI-QUIESCE-006 implements (no special-case filtering).
 6. **Proxy fail-open vs fail-closed on state-route timeout** — **DECIDED**: fail open for GET / page-data revalidation (read-only paths); preserve last known non-normal state for mutation POSTs / server actions / new SSE handshakes (the safety-critical paths). Rationale: reads must never break due to coordinator availability, but writes during an in-progress drain should fail safely toward the previously-observed drain posture. Locked in §6.4. BI-QUIESCE-003 implements.
+7. **Self-upgrade waits instead of skipping** — **DECIDED 2026-09-30 (operator):** an upgrade closes admission, waits up to 60 minutes for in-flight work with live progress, then pauses in `awaiting-operator` for Keep waiting / Force now / Abort. It is never `skipped` for activity in flight. This supersedes decision 1's 5-minute normal drain for the self-upgrade trigger. See §11a. BI-F9EE05E5 implements.
 
 ## 13. References
 
