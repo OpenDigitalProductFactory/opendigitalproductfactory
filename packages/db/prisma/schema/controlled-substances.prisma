@@ -1,0 +1,359 @@
+// Controlled-substance custody (EP-CSC-CUSTODY, BI-CSC-001).
+// Spec: docs/superpowers/specs/2026-09-30-controlled-substance-custody-design.md
+//
+// One custody substrate shared by every archetype that holds controlled drugs
+// (healthcare, veterinary, shelter euthanasia). The movement ledger is the
+// record; balances are derived from it. Movements, counts and count lines are
+// append-only at the database (trigger-enforced); corrections reverse and
+// restate. Every table is organization-isolated by RLS on app.organization_id.
+
+/// Federal (US DEA) schedule. Other jurisdictions arrive as overlay profiles;
+/// widening this set is a migration.
+enum ControlledSubstanceSchedule {
+  c_i
+  c_ii
+  c_ii_n
+  c_iii
+  c_iii_n
+  c_iv
+  c_v
+}
+
+/// The base unit a product's ledger quantities are kept in.
+enum ControlledSubstanceUnit {
+  tablet
+  capsule
+  milliliter
+  milligram
+  gram
+  patch
+  each
+}
+
+/// What a person may do on a register (21 CFR 1301.71-1301.76 access control).
+enum ControlledSubstanceHandlerScope {
+  receive
+  administer
+  dispense
+  waste
+  witness
+  transfer
+  destroy
+  count
+  reconcile
+}
+
+enum ControlledSubstanceMovementKind {
+  receipt
+  administration
+  dispense
+  waste
+  return_to_supplier
+  transfer_out
+  transfer_in
+  destruction
+  loss_theft
+  count_adjustment
+  reversal
+}
+
+enum ControlledSubstanceCountKind {
+  initial
+  biennial
+  state_annual
+  periodic
+  shift_change
+  discrepancy_recount
+  newly_controlled
+}
+
+/// 21 CFR 1304.11(a): an inventory states whether it was taken at the opening
+/// or the close of business.
+enum ControlledSubstanceCountTiming {
+  opening_of_business
+  close_of_business
+}
+
+enum ControlledSubstanceCountMethod {
+  exact
+  estimated
+}
+
+enum ControlledSubstanceDiscrepancyClass {
+  unclassified
+  recording_error
+  breakage_or_spill
+  unexplained_variance
+  suspected_theft
+  significant_loss
+}
+
+/// Mirrors the veterinary design's discrepancy lifecycle; detection never
+/// auto-adjusts the ledger.
+enum ControlledSubstanceDiscrepancyStatus {
+  detected
+  contained
+  investigating
+  adjustment_approved
+  escalated
+  reconciled
+  closed
+}
+
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=21_CFR_1304.04_controlled_substance_records minYears=7 owner=business-operator steward=data-steward
+model ControlledSubstanceProduct {
+  id                   String                      @id @default(cuid())
+  productRef           String                      @unique
+  organizationId       String
+  name                 String
+  activeIngredient     String
+  strength             String
+  dosageForm           String
+  schedule             ControlledSubstanceSchedule
+  ndcCode              String?
+  baseUnit             ControlledSubstanceUnit
+  /// Units per sealed container, when the product is stocked in containers.
+  containerUnits       Decimal?                    @db.Decimal(18, 4)
+  /// Policy: does a partial-dose waste need a witness? Defaults true for
+  /// Schedule II at creation time; the rule stays a product policy.
+  wasteWitnessRequired Boolean                     @default(true)
+  lifecycle            RecordLifecycle             @default(active)
+  lifecycleAt          DateTime?
+  lifecycleReason      String?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+
+  organization  Organization                     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  movements     ControlledSubstanceMovement[]
+  countLines    ControlledSubstanceCountLine[]
+  discrepancies ControlledSubstanceDiscrepancy[]
+
+  @@unique([organizationId, name, strength, dosageForm])
+  @@unique([id, organizationId])
+  @@index([organizationId, schedule])
+}
+
+/// A custody account: one registration, one site, one storage point.
+/// Exactly one registrant licence record (database CHECK).
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=21_CFR_1304.04_controlled_substance_records minYears=7 owner=business-operator steward=data-steward
+model ControlledSubstanceRegister {
+  id                          String          @id @default(cuid())
+  registerRef                 String          @unique
+  organizationId              String
+  organizationLicenseRecordId String?
+  personLicenseRecordId       String?
+  careLocationId              String?
+  storageLabel                String
+  lifecycle                   RecordLifecycle @default(active)
+  lifecycleAt                 DateTime?
+  lifecycleReason             String?
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
+
+  organization              Organization                              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organizationLicenseRecord OrganizationLicenseRecord?                @relation(fields: [organizationLicenseRecordId], references: [id], onDelete: Restrict)
+  personLicenseRecord       PersonLicenseRecord?                      @relation(fields: [personLicenseRecordId], references: [id], onDelete: Restrict)
+  careLocation              CareLocation?                             @relation(fields: [careLocationId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  handlerAuthorizations     ControlledSubstanceHandlerAuthorization[]
+  movements                 ControlledSubstanceMovement[]
+  counts                    ControlledSubstanceCount[]
+  discrepancies             ControlledSubstanceDiscrepancy[]
+
+  @@unique([organizationId, storageLabel])
+  @@unique([id, organizationId])
+  @@index([organizationLicenseRecordId])
+  @@index([personLicenseRecordId])
+  @@index([careLocationId, organizationId])
+}
+
+/// Effective-dated grant of one scope on one register to one person.
+/// Revocation sets effectiveTo; rows are kept as history.
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=21_CFR_1301.71_access_control_evidence minYears=7 owner=business-operator steward=data-steward
+model ControlledSubstanceHandlerAuthorization {
+  id                   String                          @id @default(cuid())
+  authorizationRef     String                          @unique
+  organizationId       String
+  registerId           String
+  principalId          String
+  scope                ControlledSubstanceHandlerScope
+  grantedByPrincipalId String
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
+  revokedByPrincipalId String?
+  revocationReason     String?
+  createdAt            DateTime                        @default(now())
+  updatedAt            DateTime                        @updatedAt
+
+  organization       Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  register           ControlledSubstanceRegister @relation(fields: [registerId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  principal          Principal                   @relation("ControlledSubstanceHandler", fields: [principalId], references: [id], onDelete: Restrict)
+  grantedByPrincipal Principal                   @relation("ControlledSubstanceHandlerGrantor", fields: [grantedByPrincipalId], references: [id], onDelete: Restrict)
+  revokedByPrincipal Principal?                  @relation("ControlledSubstanceHandlerRevoker", fields: [revokedByPrincipalId], references: [id], onDelete: Restrict)
+
+  @@index([registerId, organizationId])
+  @@index([registerId, principalId, scope])
+  @@index([organizationId])
+  @@index([principalId])
+  @@index([grantedByPrincipalId])
+  @@index([revokedByPrincipalId])
+}
+
+/// Append-only quantity movement (trigger-enforced). Per (register, product) a
+/// monotonic sequence and a SHA-256 hash chain make history tamper-evident.
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=21_CFR_1304.04_controlled_substance_records minYears=7 owner=business-operator steward=data-steward
+model ControlledSubstanceMovement {
+  id                       String                          @id @default(cuid())
+  movementRef              String                          @unique
+  organizationId           String
+  registerId               String
+  productId                String
+  sequence                 Int
+  kind                     ControlledSubstanceMovementKind
+  quantityDelta            Decimal                         @db.Decimal(18, 4)
+  balanceBefore            Decimal                         @db.Decimal(18, 4)
+  balanceAfter             Decimal                         @db.Decimal(18, 4)
+  lotNumber                String?
+  lotExpiresAt             DateTime?
+  occurredAt               DateTime
+  recordedAt               DateTime                        @default(now())
+  actorPrincipalId         String
+  witnessPrincipalId       String?
+  patientProfileId         String?
+  animalProfileId          String?
+  counterpartyName         String?
+  counterpartyRegistration String?
+  documentRef              String?
+  reason                   String?
+  reversesMovementId       String?                         @unique
+  countId                  String?
+  discrepancyId            String?
+  previousHash             String?
+  entryHash                String                          @unique
+
+  organization     Organization                    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  register         ControlledSubstanceRegister     @relation(fields: [registerId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  product          ControlledSubstanceProduct      @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  actorPrincipal   Principal                       @relation("ControlledSubstanceMovementActor", fields: [actorPrincipalId], references: [id], onDelete: Restrict)
+  witnessPrincipal Principal?                      @relation("ControlledSubstanceMovementWitness", fields: [witnessPrincipalId], references: [id], onDelete: Restrict)
+  patientProfile   PatientProfile?                 @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  animalProfile    AnimalProfile?                  @relation(fields: [animalProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  reversesMovement ControlledSubstanceMovement?    @relation("ControlledSubstanceMovementReversal", fields: [reversesMovementId], references: [id], onDelete: Restrict)
+  reversedBy       ControlledSubstanceMovement?    @relation("ControlledSubstanceMovementReversal")
+  count            ControlledSubstanceCount?       @relation(fields: [countId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  discrepancy      ControlledSubstanceDiscrepancy? @relation(fields: [discrepancyId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([registerId, productId, sequence])
+  @@index([registerId, organizationId])
+  @@index([organizationId, occurredAt])
+  @@index([productId, organizationId])
+  @@index([actorPrincipalId])
+  @@index([witnessPrincipalId])
+  @@index([patientProfileId, organizationId])
+  @@index([animalProfileId, organizationId])
+  @@index([countId, organizationId])
+  @@index([discrepancyId, organizationId])
+}
+
+/// A physical inventory (21 CFR 1304.11). Append-only (trigger-enforced).
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=21_CFR_1304.11_inventory_records minYears=7 owner=business-operator steward=data-steward
+model ControlledSubstanceCount {
+  id                 String                         @id @default(cuid())
+  countRef           String                         @unique
+  organizationId     String
+  registerId         String
+  kind               ControlledSubstanceCountKind
+  timing             ControlledSubstanceCountTiming
+  takenAt            DateTime
+  takenByPrincipalId String
+  witnessPrincipalId String?
+  notes              String?
+  recordedAt         DateTime                       @default(now())
+
+  organization     Organization                   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  register         ControlledSubstanceRegister    @relation(fields: [registerId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  takenByPrincipal Principal                      @relation("ControlledSubstanceCountTaker", fields: [takenByPrincipalId], references: [id], onDelete: Restrict)
+  witnessPrincipal Principal?                     @relation("ControlledSubstanceCountWitness", fields: [witnessPrincipalId], references: [id], onDelete: Restrict)
+  lines            ControlledSubstanceCountLine[]
+  movements        ControlledSubstanceMovement[]
+
+  @@unique([id, organizationId])
+  @@index([registerId, organizationId])
+  @@index([registerId, kind, takenAt])
+  @@index([organizationId])
+  @@index([takenByPrincipalId])
+  @@index([witnessPrincipalId])
+}
+
+/// One product's line on a count. Append-only (trigger-enforced).
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=21_CFR_1304.11_inventory_records minYears=7 owner=business-operator steward=data-steward
+model ControlledSubstanceCountLine {
+  id               String                         @id @default(cuid())
+  countLineRef     String                         @unique
+  organizationId   String
+  countId          String
+  productId        String
+  expectedQuantity Decimal                        @db.Decimal(18, 4)
+  countedQuantity  Decimal                        @db.Decimal(18, 4)
+  varianceQuantity Decimal                        @db.Decimal(18, 4)
+  method           ControlledSubstanceCountMethod
+  openedContainer  Boolean                        @default(false)
+  containerUnits   Decimal?                       @db.Decimal(18, 4)
+
+  organization  Organization                     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  count         ControlledSubstanceCount         @relation(fields: [countId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  product       ControlledSubstanceProduct       @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  discrepancies ControlledSubstanceDiscrepancy[]
+
+  @@unique([countId, productId])
+  @@unique([id, organizationId])
+  @@index([countId, organizationId])
+  @@index([organizationId])
+  @@index([productId, organizationId])
+}
+
+/// Discrepancy case: a mutable workflow over immutable evidence.
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=21_CFR_1301.76_theft_and_loss_records minYears=7 owner=business-operator steward=data-steward
+model ControlledSubstanceDiscrepancy {
+  id                      String                               @id @default(cuid())
+  discrepancyRef          String                               @unique
+  organizationId          String
+  registerId              String
+  productId               String
+  countLineId             String?
+  varianceQuantity        Decimal                              @db.Decimal(18, 4)
+  classification          ControlledSubstanceDiscrepancyClass  @default(unclassified)
+  classificationRationale String?
+  status                  ControlledSubstanceDiscrepancyStatus @default(detected)
+  discoveredAt            DateTime
+  openedByPrincipalId     String
+  /// 21 CFR 1301.76(b)(1)-(6) significance factors, as captured by the reviewer.
+  significanceFactors     Json?
+  regulatorNoticeDueAt    DateTime?
+  regulatorNoticeGivenAt  DateTime?
+  regulatorNoticeRef      String?
+  lossReportDueAt         DateTime?
+  lossReportFiledAt       DateTime?
+  lossReportRef           String?
+  resolution              String?
+  resolvedByPrincipalId   String?
+  closedAt                DateTime?
+  createdAt               DateTime                             @default(now())
+  updatedAt               DateTime                             @updatedAt
+
+  organization        Organization                  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  register            ControlledSubstanceRegister   @relation(fields: [registerId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  product             ControlledSubstanceProduct    @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  countLine           ControlledSubstanceCountLine? @relation(fields: [countLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  openedByPrincipal   Principal                     @relation("ControlledSubstanceDiscrepancyOpener", fields: [openedByPrincipalId], references: [id], onDelete: Restrict)
+  resolvedByPrincipal Principal?                    @relation("ControlledSubstanceDiscrepancyResolver", fields: [resolvedByPrincipalId], references: [id], onDelete: Restrict)
+  movements           ControlledSubstanceMovement[]
+
+  @@unique([id, organizationId])
+  @@index([registerId, organizationId])
+  @@index([registerId, status])
+  @@index([organizationId, status])
+  @@index([productId, organizationId])
+  @@index([countLineId, organizationId])
+  @@index([openedByPrincipalId])
+  @@index([resolvedByPrincipalId])
+}

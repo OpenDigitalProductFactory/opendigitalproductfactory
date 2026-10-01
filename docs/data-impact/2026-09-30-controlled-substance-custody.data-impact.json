@@ -1,0 +1,818 @@
+{
+  "version": "1",
+  "accountableOwner": "business-operator",
+  "affectedCopies": [
+    "No copies. Balances are derived from ControlledSubstanceMovement; no other table projects these rows yet. The future physical stock-lot ledger (BI-9B2ED87F) may project from movements, never the reverse."
+  ],
+  "privacyAssessment": {
+    "personalData": true,
+    "sensitivity": "confidential: which person handled or witnessed which controlled drug, and which patient (human or animal) received it",
+    "dataSubjectRights": "Patients and staff are referenced by foreign key only. Rows are statutory evidence (21 CFR 1304.04) and are retained; a data-subject erasure request is answered by the owning patient/person record's process, and these references are restricted rather than deleted.",
+    "reviewDisposition": "Organization-isolated by FORCE row-level security on app.organization_id. Written only through the custody commands, which check handler authorization per register."
+  },
+  "migration": {
+    "name": "20260930120000_controlled_substance_custody",
+    "backfill": "None. Creates nine enums and seven new tables with constraints, append-only triggers and RLS policies; no existing row, column or constraint is touched, so it applies cleanly against any existing data state.",
+    "rollback": "Forward-only. Older code never reads the new tables."
+  },
+  "tests": [
+    "packages/db/src/controlled-substance-enums.test.ts",
+    "packages/db/src/controlled-substance-custody-migration.test.ts",
+    "apps/web/lib/controlled-substances/ledger-policy.test.ts",
+    "apps/web/lib/controlled-substances/count-policy.test.ts",
+    "apps/web/lib/controlled-substances/discrepancy-policy.test.ts",
+    "apps/web/lib/controlled-substances/custody-repository.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:controlled-substance-product",
+      "prismaModel": "ControlledSubstanceProduct",
+      "lifecycleDisposition": "New regulated-record model; retention=retained basis 21 CFR 1304.04/1304.11/1301.76 with a 7-year platform minimum. Movement, count and count line are append-only (trigger-enforced); discrepancy and handler authorization cannot be deleted.",
+      "fields": [
+        {
+          "fieldId": "data:controlled-substance-product#id",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#productRef",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Stable human-facing reference for the row (semantic id), used in records, reports and regulator correspondence."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#organizationId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#name",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#activeIngredient",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#strength",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#dosageForm",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#schedule",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#ndcCode",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#baseUnit",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#containerUnits",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#wasteWitnessRequired",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#lifecycle",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#lifecycleAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#lifecycleReason",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceProduct; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#createdAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        },
+        {
+          "fieldId": "data:controlled-substance-product#updatedAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:controlled-substance-register",
+      "prismaModel": "ControlledSubstanceRegister",
+      "lifecycleDisposition": "New regulated-record model; retention=retained basis 21 CFR 1304.04/1304.11/1301.76 with a 7-year platform minimum. Movement, count and count line are append-only (trigger-enforced); discrepancy and handler authorization cannot be deleted.",
+      "fields": [
+        {
+          "fieldId": "data:controlled-substance-register#id",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        },
+        {
+          "fieldId": "data:controlled-substance-register#registerRef",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Stable human-facing reference for the row (semantic id), used in records, reports and regulator correspondence."
+        },
+        {
+          "fieldId": "data:controlled-substance-register#organizationId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceRegister; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-register#organizationLicenseRecordId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceRegister; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-register#personLicenseRecordId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceRegister; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-register#careLocationId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceRegister; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-register#storageLabel",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceRegister; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-register#lifecycle",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceRegister; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-register#lifecycleAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceRegister; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-register#lifecycleReason",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceRegister; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-register#createdAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        },
+        {
+          "fieldId": "data:controlled-substance-register#updatedAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:controlled-substance-handler-authorization",
+      "prismaModel": "ControlledSubstanceHandlerAuthorization",
+      "lifecycleDisposition": "New regulated-record model; retention=retained basis 21 CFR 1304.04/1304.11/1301.76 with a 7-year platform minimum. Movement, count and count line are append-only (trigger-enforced); discrepancy and handler authorization cannot be deleted.",
+      "fields": [
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#id",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        },
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#authorizationRef",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Stable human-facing reference for the row (semantic id), used in records, reports and regulator correspondence."
+        },
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#organizationId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceHandlerAuthorization; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#registerId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceHandlerAuthorization; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#principalId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "flags": [
+            "sensitive"
+          ],
+          "reason": "Attributes the act (handling, witnessing, counting, granting, resolving) to a person, as access-control and record-keeping rules require.",
+          "fieldPolicy": "Principal reference only; ON DELETE RESTRICT so attribution survives; the policy refuses AI coworker principals for handling and witnessing."
+        },
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#scope",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceHandlerAuthorization; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#grantedByPrincipalId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "flags": [
+            "sensitive"
+          ],
+          "reason": "Attributes the act (handling, witnessing, counting, granting, resolving) to a person, as access-control and record-keeping rules require.",
+          "fieldPolicy": "Principal reference only; ON DELETE RESTRICT so attribution survives; the policy refuses AI coworker principals for handling and witnessing."
+        },
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#effectiveFrom",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceHandlerAuthorization; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#effectiveTo",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceHandlerAuthorization; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#revokedByPrincipalId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "flags": [
+            "sensitive"
+          ],
+          "reason": "Attributes the act (handling, witnessing, counting, granting, resolving) to a person, as access-control and record-keeping rules require.",
+          "fieldPolicy": "Principal reference only; ON DELETE RESTRICT so attribution survives; the policy refuses AI coworker principals for handling and witnessing."
+        },
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#revocationReason",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceHandlerAuthorization; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#createdAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        },
+        {
+          "fieldId": "data:controlled-substance-handler-authorization#updatedAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:controlled-substance-movement",
+      "prismaModel": "ControlledSubstanceMovement",
+      "lifecycleDisposition": "New regulated-record model; retention=retained basis 21 CFR 1304.04/1304.11/1301.76 with a 7-year platform minimum. Movement, count and count line are append-only (trigger-enforced); discrepancy and handler authorization cannot be deleted.",
+      "fields": [
+        {
+          "fieldId": "data:controlled-substance-movement#id",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#movementRef",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Stable human-facing reference for the row (semantic id), used in records, reports and regulator correspondence."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#organizationId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#registerId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#productId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#sequence",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#kind",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#quantityDelta",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#balanceBefore",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#balanceAfter",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#lotNumber",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#lotExpiresAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#occurredAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#recordedAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#actorPrincipalId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "flags": [
+            "sensitive"
+          ],
+          "reason": "Attributes the act (handling, witnessing, counting, granting, resolving) to a person, as access-control and record-keeping rules require.",
+          "fieldPolicy": "Principal reference only; ON DELETE RESTRICT so attribution survives; the policy refuses AI coworker principals for handling and witnessing."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#witnessPrincipalId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "flags": [
+            "sensitive"
+          ],
+          "reason": "Attributes the act (handling, witnessing, counting, granting, resolving) to a person, as access-control and record-keeping rules require.",
+          "fieldPolicy": "Principal reference only; ON DELETE RESTRICT so attribution survives; the policy refuses AI coworker principals for handling and witnessing."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#patientProfileId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "flags": [
+            "subject"
+          ],
+          "reason": "Patient the dose was administered or dispensed to, as 21 CFR 1304.22(c) requires. A foreign key only; no clinical or demographic content is copied.",
+          "fieldPolicy": "Organization-isolated by RLS and a composite (id, organizationId) foreign key; ON DELETE RESTRICT because the record is retained statutory evidence; access follows the patient record's purpose-of-use controls in the owning care surface."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#animalProfileId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "flags": [
+            "subject"
+          ],
+          "reason": "Patient the dose was administered or dispensed to, as 21 CFR 1304.22(c) requires. A foreign key only; no clinical or demographic content is copied.",
+          "fieldPolicy": "Organization-isolated by RLS and a composite (id, organizationId) foreign key; ON DELETE RESTRICT because the record is retained statutory evidence; access follows the patient record's purpose-of-use controls in the owning care surface."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#counterpartyName",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#counterpartyRegistration",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#documentRef",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#reason",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#reversesMovementId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#countId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#discrepancyId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#previousHash",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-movement#entryHash",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceMovement; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:controlled-substance-count",
+      "prismaModel": "ControlledSubstanceCount",
+      "lifecycleDisposition": "New regulated-record model; retention=retained basis 21 CFR 1304.04/1304.11/1301.76 with a 7-year platform minimum. Movement, count and count line are append-only (trigger-enforced); discrepancy and handler authorization cannot be deleted.",
+      "fields": [
+        {
+          "fieldId": "data:controlled-substance-count#id",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        },
+        {
+          "fieldId": "data:controlled-substance-count#countRef",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Stable human-facing reference for the row (semantic id), used in records, reports and regulator correspondence."
+        },
+        {
+          "fieldId": "data:controlled-substance-count#organizationId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCount; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count#registerId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCount; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count#kind",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCount; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count#timing",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCount; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count#takenAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCount; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count#takenByPrincipalId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "flags": [
+            "sensitive"
+          ],
+          "reason": "Attributes the act (handling, witnessing, counting, granting, resolving) to a person, as access-control and record-keeping rules require.",
+          "fieldPolicy": "Principal reference only; ON DELETE RESTRICT so attribution survives; the policy refuses AI coworker principals for handling and witnessing."
+        },
+        {
+          "fieldId": "data:controlled-substance-count#witnessPrincipalId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "flags": [
+            "sensitive"
+          ],
+          "reason": "Attributes the act (handling, witnessing, counting, granting, resolving) to a person, as access-control and record-keeping rules require.",
+          "fieldPolicy": "Principal reference only; ON DELETE RESTRICT so attribution survives; the policy refuses AI coworker principals for handling and witnessing."
+        },
+        {
+          "fieldId": "data:controlled-substance-count#notes",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCount; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count#recordedAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:controlled-substance-count-line",
+      "prismaModel": "ControlledSubstanceCountLine",
+      "lifecycleDisposition": "New regulated-record model; retention=retained basis 21 CFR 1304.04/1304.11/1301.76 with a 7-year platform minimum. Movement, count and count line are append-only (trigger-enforced); discrepancy and handler authorization cannot be deleted.",
+      "fields": [
+        {
+          "fieldId": "data:controlled-substance-count-line#id",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        },
+        {
+          "fieldId": "data:controlled-substance-count-line#countLineRef",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Stable human-facing reference for the row (semantic id), used in records, reports and regulator correspondence."
+        },
+        {
+          "fieldId": "data:controlled-substance-count-line#organizationId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCountLine; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count-line#countId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCountLine; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count-line#productId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCountLine; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count-line#expectedQuantity",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCountLine; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count-line#countedQuantity",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCountLine; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count-line#varianceQuantity",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCountLine; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count-line#method",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCountLine; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count-line#openedContainer",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCountLine; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-count-line#containerUnits",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceCountLine; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:controlled-substance-discrepancy",
+      "prismaModel": "ControlledSubstanceDiscrepancy",
+      "lifecycleDisposition": "New regulated-record model; retention=retained basis 21 CFR 1304.04/1304.11/1301.76 with a 7-year platform minimum. Movement, count and count line are append-only (trigger-enforced); discrepancy and handler authorization cannot be deleted.",
+      "fields": [
+        {
+          "fieldId": "data:controlled-substance-discrepancy#id",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#discrepancyRef",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Stable human-facing reference for the row (semantic id), used in records, reports and regulator correspondence."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#organizationId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#registerId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#productId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#countLineId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#varianceQuantity",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#classification",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#classificationRationale",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#status",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#discoveredAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#openedByPrincipalId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "flags": [
+            "sensitive"
+          ],
+          "reason": "Attributes the act (handling, witnessing, counting, granting, resolving) to a person, as access-control and record-keeping rules require.",
+          "fieldPolicy": "Principal reference only; ON DELETE RESTRICT so attribution survives; the policy refuses AI coworker principals for handling and witnessing."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#significanceFactors",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#regulatorNoticeDueAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#regulatorNoticeGivenAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#regulatorNoticeRef",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#lossReportDueAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#lossReportFiledAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#lossReportRef",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#resolution",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#resolvedByPrincipalId",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "flags": [
+            "sensitive"
+          ],
+          "reason": "Attributes the act (handling, witnessing, counting, granting, resolving) to a person, as access-control and record-keeping rules require.",
+          "fieldPolicy": "Principal reference only; ON DELETE RESTRICT so attribution survives; the policy refuses AI coworker principals for handling and witnessing."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#closedAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "governed",
+          "reason": "Regulated custody fact on ControlledSubstanceDiscrepancy; retained per 21 CFR 1304.04 (platform minimum 7 years)."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#createdAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        },
+        {
+          "fieldId": "data:controlled-substance-discrepancy#updatedAt",
+          "provenance": "Written only by apps/web/lib/controlled-substances/* commands from the authenticated caller's context and validated command facts.",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time."
+        }
+      ]
+    }
+  ]
+}
