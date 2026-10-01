@@ -152,7 +152,9 @@ async function buildNestedData(input: BindingBaseInput) {
   };
 }
 
-export async function createAuthorityBinding(input: CreateAuthorityBindingInput) {
+export async function createAuthorityBinding(
+  input: CreateAuthorityBindingInput,
+): Promise<Prisma.AuthorityBindingModel> {
   assertGenericEditorOwnsResourceType(input.resourceType);
   const nested = await buildNestedData(input);
 
@@ -179,7 +181,10 @@ export async function createAuthorityBinding(input: CreateAuthorityBindingInput)
   });
 }
 
-export async function updateAuthorityBinding(bindingId: string, input: UpdateAuthorityBindingInput) {
+export async function updateAuthorityBinding(
+  bindingId: string,
+  input: UpdateAuthorityBindingInput,
+): Promise<Prisma.AuthorityBindingModel> {
   const existing = await prisma.authorityBinding.findUnique({
     where: { bindingId },
     select: { resourceType: true, oauthPurpose: true },
