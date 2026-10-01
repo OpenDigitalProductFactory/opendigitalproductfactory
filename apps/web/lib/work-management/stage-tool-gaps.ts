@@ -39,19 +39,19 @@ export const KNOWN_STAGE_TOOL_GAPS: readonly StageToolGap[] = [
     shapeKey: "repository-policy-drift-watch",
     stageKey: "read",
     reason: "No tool reads enforced branch protection, sign-off enforcement or token grants from the forge.",
-    backlogRef: "BI-EBF0F6EE",
+    backlogRef: "BI-73FD4513",
   },
   {
     shapeKey: "repository-policy-drift-watch",
     stageKey: "diff",
     reason: "The diff needs the enforced-policy read that does not exist yet.",
-    backlogRef: "BI-EBF0F6EE",
+    backlogRef: "BI-73FD4513",
   },
   {
     shapeKey: "credential-hygiene-watch",
     stageKey: "scan",
     reason: "No tool reports credential age or exposure status.",
-    backlogRef: "BI-EBF0F6EE",
+    backlogRef: "BI-A0296614",
   },
   {
     shapeKey: "licence-currency-watch",
