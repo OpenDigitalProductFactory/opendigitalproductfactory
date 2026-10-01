@@ -61,6 +61,37 @@ Metrics instead of filling the journal with low-value chatter.
    fitness evidence, and excluded alternatives. Routing evidence does not widen
    the actor's authority.
 
+### What A Route Decision Records About The Call
+
+Expand a row and two further panels appear when the platform has something to
+report about how the model was called, not only which one was chosen.
+
+**How it was called** lists the sampling values the call actually used —
+temperature, top-p, top-k, min-p, repeat penalty — the output ceiling, whether
+extended reasoning was switched on, and whether the response was constrained to
+valid JSON as it was generated. Each value says where it came from:
+
+| Provenance | Meaning |
+| --- | --- |
+| the model's published setting | the vendor documents this value for this model; on a reasoning call it is the vendor's reasoning-mode setting |
+| what this kind of task needs | the task's own shape asked for it — a schema-bound extraction is deterministic whatever budget it ran on |
+| what measured best for this model on this task | a recorded recipe, learned from production |
+| an override set for this install | an operator chose it explicitly |
+
+Two honest absences are reported rather than hidden. A model that refuses a
+setting has it listed as not accepted. A task that asked for extended reasoning
+on a model with no way to receive that instruction says so, instead of appearing
+to have reasoned.
+
+**Ran with low confidence** appears only when routing itself had little
+confidence in the answer: no model met the quality bar and the best available ran
+instead, only one model was available so nothing competed, or a fallback ran
+rather than the ranked choice. On a confident decision the panel is absent, so
+its presence is the signal.
+
+Rows recorded before these panels existed show neither. That reads as *not
+recorded* — not as a call made with no parameters, and not as a confident route.
+
 ## Separate The Failure Domains
 
 - **Route not visible** — inspect the user's platform role and authority
