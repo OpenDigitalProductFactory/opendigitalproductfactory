@@ -58,6 +58,10 @@ describe("controlled-substance custody migration shape", () => {
 describeDatabase("controlled-substance custody migration against live Postgres", () => {
   let client: Client;
   let schema: string;
+  // Row-level security binds only roles without BYPASSRLS, and a superuser
+  // always bypasses it. The isolation assertion runs as a dedicated
+  // non-superuser role so it tests the policy, not the connecting role.
+  const tenantRole = `cs_rls_${randomUUID().replaceAll("-", "").slice(0, 16)}`;
 
   async function asOrg(org: string): Promise<void> {
     await client.query(`SELECT set_config('app.organization_id', $1, false)`, [org]);
@@ -95,7 +99,9 @@ describeDatabase("controlled-substance custody migration against live Postgres",
 
   afterAll(async () => {
     if (!client) return;
+    await client.query("RESET ROLE");
     await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    await client.query(`DROP ROLE IF EXISTS "${tenantRole}"`);
     await client.end();
   });
 
@@ -157,12 +163,24 @@ describeDatabase("controlled-substance custody migration against live Postgres",
     ).rejects.toThrow(/exactly_one_registrant/);
   });
 
-  it("hides one organization's register from another", async () => {
-    await asOrg("org-b");
-    const hidden = await client.query(`SELECT count(*)::int AS n FROM "ControlledSubstanceMovement"`);
-    expect(hidden.rows[0].n).toBe(0);
-    await asOrg("org-a");
-    const visible = await client.query(`SELECT count(*)::int AS n FROM "ControlledSubstanceMovement"`);
-    expect(visible.rows[0].n).toBe(1);
+  it("hides one organization's register from another for a role bound by row-level security", async () => {
+    await client.query(`CREATE ROLE "${tenantRole}" NOLOGIN NOSUPERUSER NOBYPASSRLS`);
+    await client.query(`GRANT USAGE ON SCHEMA "${schema}" TO "${tenantRole}"`);
+    await client.query(`GRANT SELECT ON "ControlledSubstanceMovement" TO "${tenantRole}"`);
+    try {
+      await client.query(`SET ROLE "${tenantRole}"`);
+      await asOrg("org-b");
+      const hidden = await client.query(`SELECT count(*)::int AS n FROM "ControlledSubstanceMovement"`);
+      expect(hidden.rows[0].n).toBe(0);
+      await asOrg("org-a");
+      const visible = await client.query(`SELECT count(*)::int AS n FROM "ControlledSubstanceMovement"`);
+      expect(visible.rows[0].n).toBe(1);
+      await client.query(`SELECT set_config('app.organization_id', '', false)`);
+      const unset = await client.query(`SELECT count(*)::int AS n FROM "ControlledSubstanceMovement"`);
+      expect(unset.rows[0].n).toBe(0);
+    } finally {
+      await client.query("RESET ROLE");
+      await asOrg("org-a");
+    }
   });
 });
