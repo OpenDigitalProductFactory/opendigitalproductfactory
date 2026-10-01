@@ -19,8 +19,12 @@ test("stable releases publish integrity-bound native Edge binaries", async () =>
     workflow.indexOf('git checkout --detach "refs/tags/${TAG}"') < workflow.indexOf("make -C services/edge-node-go"),
     "release binaries must be built from the resolved tag",
   );
-  assert.match(workflow, /make\s+-C\s+services\/edge-node-go\s+build-darwin-arm64/);
-  assert.match(workflow, /make\s+-C\s+services\/edge-node-go\s+build-windows-amd64/);
+  // The release builds the full Makefile matrix and refuses to publish a
+  // partial one, so the host-native targets must be in that published set.
+  assert.match(workflow, /make\s+-C\s+services\/edge-node-go\s+build-all/);
+  const assets = workflow.match(/EDGE_ASSETS="([^"]+)"/)?.[1].split(/\s+/) ?? [];
+  assert.ok(assets.includes("dpf-edge-node-darwin-arm64"), "release must publish the Apple silicon Edge binary");
+  assert.ok(assets.includes("dpf-edge-node-windows-amd64.exe"), "release must publish the Windows Edge binary");
   assert.match(workflow, /dpf-edge-node-checksums\.sha256/);
   assert.match(workflow, /gh release upload/);
 });

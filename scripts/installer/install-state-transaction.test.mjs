@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, readdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdtemp, readFile, realpath, symlink, writeFile, readdir } from "node:fs/promises";
+import { hostname, tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { acquireInstallStateLock, restoreInstallState, sha256, updateInstallState } from "./install-state-transaction.mjs";
 
@@ -11,6 +11,47 @@ const fixture = async () => {
   await writeFile(statePath, '{"schemaVersion":2,"installerVersion":"test","platform":"linux","arch":"amd64","enabledRuntimeCapabilities":["runtime:core"],"capabilityCatalogHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","capabilityStateVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n');
   return { dir, statePath };
 };
+
+const posixOnly = { skip: process.platform === "win32" ? "symlink rules are POSIX-only" : false };
+
+test("a state path below a trusted symlinked ancestor resolves to its canonical target", posixOnly, async () => {
+  const { dir, statePath } = await fixture();
+  const link = join(await mkdtemp(join(tmpdir(), "dpf-state-link-")), "via-link");
+  await symlink(dirname(dir), link);
+  await updateInstallState(join(link, basename(dir), "install-state.json"), state => ({ ...state, installerVersion: "through-link" }));
+  assert.equal(JSON.parse(await readFile(join(await realpath(dir), "install-state.json"), "utf8")).installerVersion, "through-link");
+  assert.equal(JSON.parse(await readFile(statePath, "utf8")).installerVersion, "through-link");
+});
+
+// Root is always a trusted owner, so the stub cannot make a root-owned link foreign.
+test("an ancestor symlink owned by another user is refused as an escape", { skip: process.platform === "win32" || process.getuid?.() === 0 ? "needs a non-root POSIX user" : false }, async () => {
+  const { dir } = await fixture();
+  const link = join(await mkdtemp(join(tmpdir(), "dpf-state-foreign-")), "via-link");
+  await symlink(dirname(dir), link);
+  const getuid = process.getuid;
+  process.getuid = () => getuid() + 4242;
+  try {
+    await assert.rejects(updateInstallState(join(link, basename(dir), "install-state.json"), state => state), /state_path_escape/);
+  } finally { process.getuid = getuid; }
+});
+
+test("a symlinked state directory is refused as an escape", posixOnly, async () => {
+  const dir = join(await mkdtemp(join(tmpdir(), "dpf-state-root-")), "state");
+  const elsewhere = await mkdtemp(join(tmpdir(), "dpf-state-elsewhere-"));
+  await symlink(elsewhere, dir);
+  await assert.rejects(acquireInstallStateLock(join(dir, "install-state.json"), { timeoutMs: 50 }), /state_path_escape/);
+  assert.deepEqual(await readdir(elsewhere), []);
+});
+
+test("a symlinked state file is refused", posixOnly, async () => {
+  const { dir } = await fixture();
+  const outside = join(await mkdtemp(join(tmpdir(), "dpf-state-outside-")), "target.json");
+  await writeFile(outside, "{}");
+  const linked = join(dir, "linked-state.json");
+  await symlink(outside, linked);
+  await assert.rejects(updateInstallState(linked, state => state), /state_path_symlink/);
+  assert.equal(await readFile(outside, "utf8"), "{}");
+});
 
 test("exclusive lock carries interoperable versioned owner metadata", async () => {
   const { statePath } = await fixture();
@@ -46,11 +87,11 @@ test("reconciliation restores recovery when an interrupted canonical file is inv
 test("expired dead ownership is recovered but an expired live owner is not", async () => {
   const { statePath } = await fixture();
   const lockPath = `${statePath}.lock`;
-  await writeFile(lockPath, JSON.stringify({ protocolVersion: 1, ownerId: "dead", pid: 99999999, hostname: process.env.COMPUTERNAME ?? "", acquiredAt: "2000-01-01T00:00:00.000Z", expiresAt: "2000-01-01T00:00:01.000Z", expiresAtEpoch: 946684801 }));
+  await writeFile(lockPath, JSON.stringify({ protocolVersion: 1, ownerId: "dead", pid: 99999999, hostname: hostname(), acquiredAt: "2000-01-01T00:00:00.000Z", expiresAt: "2000-01-01T00:00:01.000Z", expiresAtEpoch: 946684801 }));
   const recovered = await acquireInstallStateLock(statePath, { timeoutMs: 100 });
   assert.ok((await readdir(dirname(lockPath))).includes(`${basename(lockPath)}.reclaim-${sha256("dead").slice(0, 24)}`));
   await recovered.release();
-  await writeFile(lockPath, JSON.stringify({ protocolVersion: 1, ownerId: "live", pid: process.pid, hostname: process.env.COMPUTERNAME ?? "", acquiredAt: "2000-01-01T00:00:00.000Z", expiresAt: "2000-01-01T00:00:01.000Z", expiresAtEpoch: 946684801 }));
+  await writeFile(lockPath, JSON.stringify({ protocolVersion: 1, ownerId: "live", pid: process.pid, hostname: hostname(), acquiredAt: "2000-01-01T00:00:00.000Z", expiresAt: "2000-01-01T00:00:01.000Z", expiresAtEpoch: 946684801 }));
   await assert.rejects(acquireInstallStateLock(statePath, { timeoutMs: 25 }), /lock_timeout/);
 });
 
@@ -138,7 +179,7 @@ test("temp is adjacent, canonical path never disappears, replacement is validate
   await updateInstallState(statePath, s => ({ ...s, installerVersion: "next" }), { onStage: async (stage, context) => {
     if (stage === "temp-flushed") {
       observedTemp = context.tempPath;
-      assert.equal(dirname(context.tempPath), dirname(statePath));
+      assert.equal(dirname(context.tempPath), await realpath(dirname(statePath)));
       assert.ok(basename(context.tempPath).startsWith(".install-state.json.tmp-"));
       assert.equal(JSON.parse(await readFile(statePath, "utf8")).installerVersion, "test");
     }

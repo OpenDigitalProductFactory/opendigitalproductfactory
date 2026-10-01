@@ -2,9 +2,9 @@
 import { parseArgs as utilParseArgs } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, open, readFile, readdir, rename, rm, lstat, realpath } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, readlink, rename, rm, lstat, realpath } from "node:fs/promises";
 import contract from "./install-state-lock-contract.json" with { type: "json" };
 import { parseAndValidateInstallStateBytes, validateInstallState } from "./validate-install-state.mjs";
 
@@ -19,14 +19,41 @@ const pidIsLive = pid => {
   try { process.kill(pid, 0); return true; } catch (error) { return error?.code === "EPERM"; }
 };
 
+// Resolve an ancestor directory component by component, following a symlink
+// only when root or the invoking user owns it. System links such as macOS
+// /var -> /private/var and /tmp -> /private/tmp are root-owned, so they resolve;
+// a link another user planted (for example in a shared /tmp) is refused.
+async function resolveTrustedAncestor(directory) {
+  const trustedOwners = new Set([0, process.getuid()]);
+  const pending = directory.split(sep).filter(Boolean);
+  let current = sep;
+  for (let hops = 0; pending.length;) {
+    const next = join(current, pending.shift());
+    const stat = await lstat(next);
+    if (!stat.isSymbolicLink()) { current = next; continue; }
+    if (!trustedOwners.has(stat.uid) || ++hops > 40) throw new Error("state_path_escape");
+    const target = await readlink(next);
+    pending.unshift(...target.split(sep).filter(Boolean));
+    if (isAbsolute(target)) current = sep;
+  }
+  return current;
+}
+
+// The state directory and the state file must be real; only ancestors above
+// the state directory may be symlinks, and only trusted ones. Every lock, temp
+// and recovery path derives from the canonical target this returns.
 async function assertSafeTarget(statePath) {
   const absolute = resolve(statePath);
   const parent = dirname(absolute);
   await mkdir(parent, { recursive: true, mode: 0o700 });
-  const canonicalParent = await realpath(parent);
-  if (dirname(absolute) !== canonicalParent && process.platform !== "win32") throw new Error("state_path_escape");
-  try { if ((await lstat(absolute)).isSymbolicLink()) throw new Error("state_path_symlink"); } catch (error) { if (error?.code !== "ENOENT") throw error; }
-  return absolute;
+  let target = absolute;
+  if (process.platform !== "win32") {
+    if ((await lstat(parent)).isSymbolicLink()) throw new Error("state_path_escape");
+    target = join(await resolveTrustedAncestor(dirname(parent)), basename(parent), basename(absolute));
+    if (dirname(target) !== await realpath(parent)) throw new Error("state_path_escape");
+  }
+  try { if ((await lstat(target)).isSymbolicLink()) throw new Error("state_path_symlink"); } catch (error) { if (error?.code !== "ENOENT") throw error; }
+  return target;
 }
 
 async function staleOwner(lockPath, now) {
