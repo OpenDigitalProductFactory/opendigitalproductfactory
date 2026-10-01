@@ -2039,6 +2039,7 @@
       "anchors": [
         "scoped-mcp-tool-packs",
         "the-shape",
+        "read-packs-for-standing-stages",
         "migration-discipline-parity-first",
         "first-pack",
         "second-pack-lazy-handlers",

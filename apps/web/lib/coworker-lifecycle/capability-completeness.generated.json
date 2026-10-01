@@ -5941,7 +5941,8 @@
             "registry_read",
             "initiative_design_review",
             "initiative_domain_review",
-            "workroom_evidence_write"
+            "workroom_evidence_write",
+            "contributor_inventory_read"
           ],
           "services": 0,
           "unbackedSkillIds": [],
@@ -6821,7 +6822,8 @@
             "registry_read",
             "backlog_read",
             "portfolio_read",
-            "workroom_evidence_write"
+            "workroom_evidence_write",
+            "payables_read"
           ],
           "services": 1,
           "unbackedSkillIds": [
@@ -7881,7 +7883,8 @@
             "backlog_read",
             "backlog_write",
             "tool_script_exec",
-            "workroom_evidence_write"
+            "workroom_evidence_write",
+            "contributor_inventory_read"
           ],
           "services": 0,
           "unbackedSkillIds": [],

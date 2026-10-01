@@ -64,6 +64,22 @@ edge into the runner, the readiness composer or `lib/self-upgrade/quiescence.ts`
 
 A definition also declares its reach. `sideEffect` plus `consequence` (`outward` | `irreversible` | `authority`) is what puts a tool behind the consult-before-consequential-act gate, and an `outward` tool additionally names whose stance governs it with `consequenceScope`: `business` (default, WWWD-alignment-gated) or `platform` (platform development or operations that leave the install, such as `create_portal_pr` or `contribute_to_hive`; receipted and outward-reviewed, never scored against the customer business stance). Declare both on the tool; never infer them from the pack name (BI-63B14D4B).
 
+## Read packs for standing stages
+
+Some packs exist so a standing Workroom stage can read the record it reports on.
+They are read-only (`sideEffect: false`, `readOnlyHint: true`), each sits behind
+its own narrow grant held only by the stage's accountable agent, and each
+reports an empty or unconfigured source as unknown rather than as an empty
+queue:
+
+| Pack | Tools | Grant | Reads |
+|---|---|---|---|
+| [`contributor-inventory-pack.ts`](../../apps/web/lib/mcp/packs/contributor-inventory-pack.ts) | `list_pull_requests`, `read_contributor_inventory` | `contributor_inventory_read` | `ContributorInventorySnapshot`, through the change-lanes read model's `loadContributorInventorySource` |
+| [`payables-pack.ts`](../../apps/web/lib/mcp/packs/payables-pack.ts) | `list_bills`, `list_supplier_contracts` | `payables_read` | `Bill`, `SupplierContract`, `Supplier` |
+
+Stage bindings and the gap list they shrank are in
+[work shapes and the decision gate](work-shapes-and-the-decision-gate.md).
+
 ## Migration discipline (parity first)
 
 Extraction is incremental and **parity-preserving** — never a behavior change:
