@@ -18,7 +18,7 @@ export type StageToolGap = {
   stageKey: string;
   /** Why no existing tool can be declared, in plain words. */
   reason: string;
-  /** The backlog item that closes the gap. "BI-pending" until one is filed. */
+  /** The backlog item that closes the gap. every entry cites a filed item. */
   backlogRef: string;
 };
 
@@ -27,127 +27,127 @@ export const KNOWN_STAGE_TOOL_GAPS: readonly StageToolGap[] = [
     shapeKey: "obligation-assurance-watch",
     stageKey: "sweep",
     reason: "No read tool over Obligation, Control review dates or LicenseRequirementReference staleness.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-C882005C",
   },
   {
     shapeKey: "obligation-assurance-watch",
     stageKey: "raise",
     reason: "Raising needs the same obligation/control read as sweep; no such tool exists.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-C882005C",
   },
   {
     shapeKey: "repository-policy-drift-watch",
     stageKey: "read",
     reason: "No tool reads enforced branch protection, sign-off enforcement or token grants from the forge.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-EBF0F6EE",
   },
   {
     shapeKey: "repository-policy-drift-watch",
     stageKey: "diff",
     reason: "The diff needs the enforced-policy read that does not exist yet.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-EBF0F6EE",
   },
   {
     shapeKey: "credential-hygiene-watch",
     stageKey: "scan",
     reason: "No tool reports credential age or exposure status.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-EBF0F6EE",
   },
   {
     shapeKey: "pull-request-flow-watch",
     stageKey: "read",
     reason: "No tool reads mechanical pull-request health (the pr:health check is a CLI script, not a platform tool).",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-EBF0F6EE",
   },
   {
     shapeKey: "pull-request-flow-watch",
     stageKey: "classify",
     reason: "Classification needs the pull-request health read that does not exist yet.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-EBF0F6EE",
   },
   {
     shapeKey: "payables-watch",
     stageKey: "read",
     reason: "No read tool over recorded bills or recurring commitments.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-EBF0F6EE",
   },
   {
     shapeKey: "payables-watch",
     stageKey: "report",
     reason: "Reporting needs the bills/commitments read that does not exist yet.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-EBF0F6EE",
   },
   {
     shapeKey: "vendor-renewal-watch",
     stageKey: "read",
     reason: "No read tool over supplier agreements or spend against them.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-EBF0F6EE",
   },
   {
     shapeKey: "vendor-renewal-watch",
     stageKey: "report",
     reason: "Reporting needs the supplier-agreement read that does not exist yet.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-EBF0F6EE",
   },
   {
     shapeKey: "contributor-intake-watch",
     stageKey: "sync",
     reason: "trigger_contributor_inventory_sync dispatches a sync, but no tool reads the recorded contributor inventory to confirm it matches.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-EBF0F6EE",
   },
   {
     shapeKey: "contributor-intake-watch",
     stageKey: "flag",
     reason: "No tool reads per-contributor sign-off or licence facts.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-EBF0F6EE",
   },
   {
     shapeKey: "licence-currency-watch",
     stageKey: "determine",
     reason: "No read tool over recorded licence requirements for the legal-operations counsel.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-C882005C",
   },
   {
     shapeKey: "outward-surface-review",
     stageKey: "storefront-fit",
     reason: "No tool reads storefront offers, prices or availability; list_storefront_activity reads guest activity, not the offer record.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-C882005C",
   },
   {
     shapeKey: "mailroom-triage-and-dispatch",
     stageKey: "intake",
     reason: "No platform tool reads a mailbox; the mailroom coordinator holds only room and registry reads.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-C882005C",
   },
   {
     shapeKey: "mailroom-triage-and-dispatch",
     stageKey: "triage-and-route",
     reason: "No tool reads routed mail or its target queues within the coordinator's grants.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-C882005C",
   },
   {
     shapeKey: "mailroom-triage-and-dispatch",
     stageKey: "chase",
     reason: "Queue reads (get_queue_status, list_at_risk_queues) need work_capsule_read, which the coordinator does not hold.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-C882005C",
   },
   {
     shapeKey: "bookkeeping-period-cycle",
     stageKey: "import",
     reason: "Import is a write stage; it has no read tool to declare, and write capability sets wait on GPP write bindings.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-C882005C",
   },
   {
     shapeKey: "time-off-policy-currency",
     stageKey: "detect-drift",
     reason: "list_policies/get_policy exist but need policy_read, which the time-off advisor does not hold; granting it is a separate authority decision.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-C882005C",
   },
   {
     shapeKey: "time-off-policy-currency",
     stageKey: "draft-revision",
     reason: "Same as detect-drift: the policy read needs policy_read, which the time-off advisor does not hold.",
-    backlogRef: "BI-pending",
+    backlogRef: "BI-C882005C",
   },
 ];
 
