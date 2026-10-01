@@ -13,6 +13,7 @@ subjects.
 | Trusted AI Kernel (`TAK`) | [trusted-ai-kernel.md](trusted-ai-kernel.md) | May this agent act, under whose authority, through which tools and data, with what oversight and evidence? | Runtime harness, authority, action gating, memory, audit, safety, and earned-autonomy enforcement |
 | Global AI Agent Identification and Governance (`GAID`) | [GAID.md](GAID.md) | Who is this agent, which operating profile is active, what claims are advertised, and how can a relying party verify their status? | Identity, AIDoc, claims, badges, receipts, lifecycle, and cross-boundary verification |
 | Job-Specific Intelligence profile (`TAK-JSI`) | [job-specific-intelligence.md](job-specific-intelligence.md) | Is this identified operating profile qualified for this job, activity, data scope, and risk context, and what evidence keeps that qualification current? | Job definition, qualification scheme, evidence, surveillance, revalidation, and qualification-to-autonomy boundaries |
+| Gated Permissions Process (`GPP`) — working draft | [gated-permissions-process.md](gated-permissions-process.md) | Which decision, in which owning authority scope, admits this class of tool use for this stage of this work, and is the model of that envelope complete and actually enforced? | The Gated Permission binding (scope gate × capability set × work-shape stage × subject × validity), the capability vocabulary, co-occurrence constraints, model completeness checks, and efficacy measures. Owns no runtime control. |
 
 The family's relationship to NIST, ISO/IEC, IEEE, W3C, IETF, OpenID, 1EdTech, and adjacent
 protocol work is maintained in the informative
@@ -26,7 +27,7 @@ sequencing, readiness gates, contribution packages, and go/no-go criteria.
 
 The
 [Portfolio Aligned Agent and Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
-is an adjacent enterprise standard, not a fourth member of the agent-assurance family. It owns where
+is an adjacent enterprise standard, not a member of the agent-assurance family. It owns where
 AI coworkers sit in the four portfolios, how business Products and industry value streams relate to
 DigitalProducts, how human/AI work is allocated, and how the resulting trace and gaps are assessed.
 It composes this family whenever an AI coworker is realized as both a managed DigitalProduct and an
@@ -37,17 +38,21 @@ identity-bearing Performer; it does not redefine TAK, GAID, or TAK-JSI controls.
 The standards compose around one governed action:
 
 1. `GAID` resolves the enduring AI Coworker identity and the versioned operating profile.
-2. `TAK-JSI` determines whether that profile is qualified for the requested job/activity scope.
-3. `TAK` intersects the principal's authority, the coworker's grants, the route/workflow policy,
-   the data constraints, and the applicable qualification/autonomy ceiling at execution time.
-4. `GAID` binds the resulting action receipt and current qualification status back to the
-   identifiable subject.
+2. `GPP` resolves the envelope: the satisfied Gated Permissions for the actor's Workroom and
+   work-shape stage, each traceable to a gate decision in its owning scope.
+3. `TAK-JSI` determines whether that profile is qualified for the requested job/activity scope.
+4. `TAK` intersects the principal's authority, the coworker's grants, the GPP envelope (the
+   route/workflow term of TAK §7.2), the data constraints, and the applicable
+   qualification/autonomy ceiling at execution time.
+5. `GAID` binds the resulting action receipt, the binding and gate-decision references, and the
+   current qualification status back to the identifiable subject.
 
 No document widens another document's authority:
 
 - a `GAID` claim is not live authorization
 - a `TAK-JSI` qualification is not permission to act
 - a `TAK` permission is not evidence of job competence
+- a `GPP` binding is not a grant; it can only narrow what `TAK` would otherwise allow
 - a model card, system card, or generic benchmark is not a job qualification
 
 ## Principle-directed work and MBSE composition
@@ -67,6 +72,14 @@ general-purpose modeling language or a claim of full interchange conformance.
 These amendments and their proposed assertions still require independent review
 and execution evidence. Existing implementations do not become conformant by
 publishing the amended text.
+
+## Gated permissions and approval fatigue
+
+Per-call approval fails in practice because people stop reading prompts, and blanket approval
+fails because it removes the decision altogether. `GPP` places the decision at the class of work:
+one recorded decision by the owning scope admits a bounded capability set for a work-shape stage,
+and `TAK` enforces it on every call. The evidence and market context are in the informative
+[market and thought-leadership landscape](agent-governance-market-landscape-2026.md).
 
 ## Adjacent DPF concepts
 
@@ -88,6 +101,8 @@ Normative requirements belong in exactly one standard:
 - runtime controls go in `TAK`
 - identity and claim-envelope controls go in `GAID`
 - job qualification controls go in `TAK-JSI`
+- the gate-to-capability binding model, its vocabulary, completeness checks and efficacy
+  measures go in `GPP`
 - enterprise portfolio, Product/value-flow, work-allocation, and dual-aspect controls go in the
   [Portfolio Aligned Agent and Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
 

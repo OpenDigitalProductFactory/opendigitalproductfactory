@@ -207,7 +207,7 @@ export function findMissingCopiedImports(dockerfileText, readSource) {
 
 /**
  * Violations across every Dockerfile built from the repo root (the service
- * images copy scripts by name too: services/edge-node runs the deploy-lockfile
+ * images copy scripts by name too: each service image runs the deploy-lockfile
  * assertion), tagged with the Dockerfile they came from.
  */
 export function findMissingCopiedImportsInRepo(root = REPO_ROOT) {

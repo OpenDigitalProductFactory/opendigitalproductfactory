@@ -157,9 +157,9 @@ function readMcpConnectionFile(configPath) {
   if (!mcpUrl || !bearerToken) return null;
   if (!isAllowedMcpEndpoint(mcpUrl)) {
     throw new Error(
-      `${configPath} points the dpf MCP server at ${mcpUrl}, which is not a local endpoint; `
-      + "refusing to send the bearer token off-box. Set DPF_MCP_BEARER_TOKEN (and DPF_MCP_URL) "
-      + "to reach a non-loopback endpoint deliberately.",
+      `${configPath} points the dpf MCP server at ${mcpUrl}, which is neither loopback nor the `
+      + "install's configured origin (PUBLIC_URL / DPF_MCP_URL); refusing to send the bearer token "
+      + "there. Set DPF_MCP_BEARER_TOKEN (and DPF_MCP_URL) to reach another endpoint deliberately.",
     );
   }
   return { mcpUrl, bearerToken };

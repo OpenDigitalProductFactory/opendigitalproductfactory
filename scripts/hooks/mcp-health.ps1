@@ -44,39 +44,48 @@ try {
         $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
     }
 
-    # Probe URL: read the dpf server url from .mcp.json when present so the probe
-    # tracks the real client config; otherwise use the known local bind.
-    $url = 'http://127.0.0.1:3000/api/mcp/v1'
-    $cfg = Join-Path $root '.mcp.json'
-    if (Test-Path -LiteralPath $cfg) {
-        try {
-            $u = (Get-Content -Raw -LiteralPath $cfg | ConvertFrom-Json).mcpServers.dpf.url
-            if (-not [string]::IsNullOrWhiteSpace($u)) { $url = $u }
+    # Probe URL (BI-8A562681, design 12.4.5): the client's connector is the
+    # plugin descriptor, `${DPF_MCP_URL:-<plugin default>}`, so resolve the
+    # endpoint the same way: DPF_MCP_URL first, then the default written in the
+    # shipped plugin descriptor, then the known local bind.
+    $url = $env:DPF_MCP_URL
+    if ([string]::IsNullOrWhiteSpace($url)) {
+        $url = $null
+        $pluginCfg = Join-Path $root 'packages\dpf-skill-pack\claude.mcp.json'
+        if (Test-Path -LiteralPath $pluginCfg) {
+            try {
+                $u = [string](Get-Content -Raw -LiteralPath $pluginCfg | ConvertFrom-Json).mcpServers.dpf.url
+                if ($u -match '^\$\{DPF_MCP_URL:-(.+)\}$') { $url = $Matches[1] }
+                elseif (-not [string]::IsNullOrWhiteSpace($u) -and -not $u.StartsWith('$')) { $url = $u }
+            }
+            catch { }  # malformed descriptor -> fall back to the default bind
         }
-        catch { }  # malformed/partial config -> fall back to the default bind
     }
+    if ([string]::IsNullOrWhiteSpace($url)) { $url = 'http://127.0.0.1:3000/api/mcp/v1' }
 
     # A "localhost" url is a latent failure on hosts where localhost resolves to
     # ::1 and IPv6 is not answering; 127.0.0.1 is the safe literal.
     if ($url -match 'localhost') {
-        Write-Output "NOTE: DPF MCP -- .mcp.json points dpf at '$url'. If localhost resolves to ::1 and IPv6 is not answering, the client cannot connect; use the 127.0.0.1 literal instead."
+        Write-Output "NOTE: DPF MCP -- the dpf endpoint is '$url'. If localhost resolves to ::1 and IPv6 is not answering, the client cannot connect; use the 127.0.0.1 literal instead."
     }
 
     # BI-46B636B0: the client authorizes over OAuth only on https, and a pinned
-    # Authorization header disables OAuth. On plain http the header reference is
-    # the ONLY credential path; on https it must be absent. Diagnose the config
-    # at session start instead of at the first refused tool call.
+    # Authorization header disables OAuth. A repo .mcp.json is a second, legacy
+    # connector: when one is present, diagnose its header against the endpoint
+    # at session start instead of at the first refused tool call. When it is
+    # absent there is nothing to diagnose -- the plugin connector is the config.
     $hasHeader = $false
+    $cfg = Join-Path $root '.mcp.json'
     if (Test-Path -LiteralPath $cfg) {
         try { $hasHeader = ((Get-Content -Raw -LiteralPath $cfg) -match '"Authorization"') } catch { }
-    }
-    if ($url -like 'https://*') {
-        if ($hasHeader) {
-            Write-Output "NOTE: DPF MCP -- .mcp.json pins headers.Authorization on an https endpoint; that disables the client's OAuth fallback. Re-run the toolchain bootstrap (it omits the header for https) or remove it by hand. Runbook: $runbook."
+        if ($url -like 'https://*') {
+            if ($hasHeader) {
+                Write-Output "NOTE: DPF MCP -- .mcp.json pins headers.Authorization on an https endpoint; that disables the client's OAuth fallback. Re-run the toolchain bootstrap (it omits the header for https) or remove it by hand. Runbook: $runbook."
+            }
         }
-    }
-    elseif (-not $hasHeader) {
-        Write-Output "WARNING: DPF MCP -- .mcp.json points dpf at plain-http '$url' with NO headers.Authorization. The client refuses OAuth over http, so this config cannot authenticate by ANY path (BI-46B636B0). Fix: re-run the toolchain bootstrap (scripts/dpf-bootstrap-agent-toolchain.ps1) to restore the `${DPF_MCP_BEARER_TOKEN} header fallback, or serve the portal over https (docker-compose.tls.yml) and point .mcp.json at it. Runbook: $runbook."
+        elseif (-not $hasHeader) {
+            Write-Output "WARNING: DPF MCP -- .mcp.json configures dpf on plain-http '$url' with NO headers.Authorization. The client refuses OAuth over http, so this config cannot authenticate by ANY path (BI-46B636B0). Fix: re-run the toolchain bootstrap (scripts/dpf-bootstrap-agent-toolchain.ps1) to restore the `${DPF_MCP_BEARER_TOKEN} header fallback, or serve the portal over https (docker-compose.tls.yml) and point DPF_MCP_URL at it. Runbook: $runbook."
+        }
     }
 
     # BI-FA2C46D7: on https the client authorizes itself over OAuth, so no token
