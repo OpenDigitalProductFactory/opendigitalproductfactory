@@ -1,4 +1,4 @@
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { TestInfo } from "@playwright/test";
 import {
@@ -7,6 +7,7 @@ import {
   type FunctionalFailureEvidence,
   type FunctionalFailureEvidenceInput,
 } from "../../apps/web/lib/testing/functional-evidence";
+import { resolveDpfMcpConfig } from "../../apps/web/lib/ux-audit/dpf-mcp-client";
 
 export async function attachFunctionalFailureEvidence(
   testInfo: TestInfo,
@@ -31,7 +32,7 @@ export async function attachFunctionalFailureEvidence(
 }
 
 async function publishFunctionalFailureEvidence(evidence: FunctionalFailureEvidence) {
-  const config = await readMcpConfig();
+  const config = resolveDpfMcpConfig();
   if (!config) {
     throw new Error("DPF_RECORD_FUNCTIONAL_FAILURES=1 but no DPF MCP config was found");
   }
@@ -61,27 +62,4 @@ async function publishFunctionalFailureEvidence(evidence: FunctionalFailureEvide
   if (payload.result?.isError) {
     throw new Error(payload.result.content?.[0]?.text ?? "Functional evidence MCP publish failed");
   }
-}
-
-async function readMcpConfig(): Promise<{ url: string; authorization: string } | null> {
-  const explicitUrl = process.env.DPF_MCP_URL;
-  // Active standard is DPF_MCP_BEARER_TOKEN; keep DPF_MCP_TOKEN as back-compat (BI-14E9F7CE).
-  const explicitToken = process.env.DPF_MCP_BEARER_TOKEN ?? process.env.DPF_MCP_TOKEN;
-  if (explicitUrl && explicitToken) {
-    return {
-      url: explicitUrl,
-      authorization: explicitToken.startsWith("Bearer ") ? explicitToken : `Bearer ${explicitToken}`,
-    };
-  }
-
-  const raw = await readFile(".mcp.json", "utf8").catch(() => null);
-  if (!raw) return null;
-
-  const parsed = JSON.parse(raw) as {
-    mcpServers?: { dpf?: { url?: string; headers?: { Authorization?: string } } };
-  };
-  const server = parsed.mcpServers?.dpf;
-  if (!server?.url || !server.headers?.Authorization) return null;
-
-  return { url: server.url, authorization: server.headers.Authorization };
 }

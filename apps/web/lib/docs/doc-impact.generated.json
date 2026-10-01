@@ -1325,6 +1325,9 @@
     "apps/web/lib/tak/route-context.ts": [
       "docs/user-guide/ai-workforce/decision-perspective.md"
     ],
+    "apps/web/lib/tak/scheduled-task-runs.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/tak/tool-intent.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -1420,6 +1423,9 @@
     ],
     "apps/web/lib/work-management/room-types.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
+    "apps/web/lib/work-management/stage-tool-parity.test.ts": [
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/work-management/work-shapes.ts": [
       "docs/architecture/gated-permissions-process.md",
@@ -2144,6 +2150,9 @@
     ],
     "scripts/hooks/converge-git-hooks.mjs": [
       "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/hooks/lib/retire-project-dpf-connector.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/hooks/run-hook.mjs": [
       "docs/install/platform-support-watchlist.md",
@@ -3049,6 +3058,8 @@
       "packages/storefront-templates/src/archetypes/index.ts"
     ],
     "docs/architecture/gated-permissions-process.md": [
+      "apps/web/lib/tak/scheduled-task-runs.ts",
+      "apps/web/lib/work-management/stage-tool-parity.test.ts",
       "apps/web/lib/work-management/work-shapes.ts"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
@@ -3090,6 +3101,7 @@
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
       "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs",
       "scripts/gate-worktree.mjs",
+      "scripts/hooks/lib/retire-project-dpf-connector.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/mcp-client.mjs",
       "scripts/lib/mcp-credential.mjs",

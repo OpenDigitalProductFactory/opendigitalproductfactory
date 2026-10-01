@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/ai-inference", () => ({
+const aiInferenceFake = vi.hoisted(() => ({
   InferenceError: class InferenceError extends Error {
     constructor(
       message: string,
@@ -18,6 +18,8 @@ vi.mock("@/lib/ai-inference", () => ({
   formatMessageForOpenAI: vi.fn(),
   formatMessageForResponses: vi.fn(),
 }));
+vi.mock("@/lib/routing/inference-error", () => aiInferenceFake);
+vi.mock("@/lib/routing/provider-message-format", () => aiInferenceFake);
 
 import type { AdapterRequest } from "./adapter-types";
 import { chatAdapter } from "./chat-adapter";

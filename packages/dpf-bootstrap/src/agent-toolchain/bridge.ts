@@ -67,7 +67,7 @@ export type AgentToolchainPlan = {
   antigravity: { present: boolean } | null;
   /** TOML upsert plan for the contributor's Codex config (null when Codex CLI absent). */
   codex: CodexConfigPlan | null;
-  /** Repo-root .mcp.json + .vscode/mcp.json writes (env-backed, secret-free). */
+  /** Repo-root .vscode/mcp.json writes, plus .mcp.json on http/legacy only (env-backed, secret-free). */
   mcpClientConfig: McpClientConfigPlan;
   /** JSON upsert plan for installed_plugins.json (null when Claude CLI absent). */
   claude: ClaudePluginConfigPlan | null;
@@ -241,9 +241,10 @@ export function computeAgentToolchainPlan(
     },
   );
 
-  // MCP client config (.mcp.json + .vscode/mcp.json) — always planned: the
-  // files are env-backed (no secret), so they converge whether or not a token
-  // exists yet. The clients read the token from DPF_MCP_BEARER_TOKEN at runtime.
+  // MCP client config (.vscode/mcp.json, plus .mcp.json only where Claude
+  // cannot authorize by OAuth -- on https the dpf-platform plugin owns the
+  // Claude connector, BI-5201141C) -- always planned: the files are env-backed
+  // (no secret), so they converge whether or not a token exists yet.
   const { mcpJsonPath, vscodeJsonPath } = mcpClientConfigPaths(options.repoRoot);
   const mcpClientConfig = planMcpClientConfig(
     options.repoRoot,

@@ -649,7 +649,7 @@ EOF
     fi
   fi
   if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
-    info "DRY-RUN: write $PLAN_MCP_CLIENT_WRITES_COUNT MCP client config file(s) (.mcp.json / .vscode/mcp.json)"
+    info "DRY-RUN: write $PLAN_MCP_CLIENT_WRITES_COUNT MCP client config file(s) (.vscode/mcp.json; .mcp.json only on http or legacy -- the plugin owns the Claude connector on https)"
   fi
   if [ "${PLAN_MEMORY_WRITES_COUNT:-0}" -gt 0 ]; then
     info "DRY-RUN: seed $PLAN_MEMORY_WRITES_COUNT kernel principle(s) to memory"
@@ -668,7 +668,7 @@ for w in (plan.get("codex") or {}).get("writes", []):
     with open(w["path"], "wb") as f:
         f.write(w["content"].encode("utf-8"))
 
-# MCP client config writes (.mcp.json + .vscode/mcp.json — env-backed, no secret).
+# MCP client config writes (.vscode/mcp.json, and .mcp.json on http/legacy only -- env-backed, no secret).
 for w in (plan.get("mcpClientConfig") or {}).get("writes", []):
     os.makedirs(os.path.dirname(w["path"]), exist_ok=True)
     # Binary mode + explicit UTF-8 prevents CRLF translation on Windows,
@@ -750,7 +750,7 @@ EOF
   fi
 
   if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
-    ok "MCP client config written ($PLAN_MCP_CLIENT_WRITES_COUNT file(s): .mcp.json / .vscode/mcp.json)."
+    ok "MCP client config written ($PLAN_MCP_CLIENT_WRITES_COUNT file(s); the plugin owns the Claude connector on https)."
   else
     ok "MCP client config already converged."
   fi

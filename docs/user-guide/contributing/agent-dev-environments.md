@@ -312,9 +312,9 @@ Older clients authenticate with a `DPF_MCP_BEARER_TOKEN` environment variable, r
 - **Scopes.** Coarse `read` / `write` / `admin` plus granular per-tool grants. Default is `read` and cannot call side-effecting tools. Use **Issue write token** in Improve & deliver › Setup › Contributing & GitHub (MCP tokens) when an agent must create/update backlog items, evidence, workrooms, or coordination records.
 - **Scope escalation.** If a tool returns `insufficient_token_scope`, *stop* — do not fall back to `psql`/Prisma/direct DB edits. Issue a scoped token in the portal, update the client, call `/api/mcp/token/refresh`, and retry through MCP. (A client connected over the browser flow never sees this; it gets the approval prompt described above.)
 - **Rotation** (no file edits): set the `DPF_MCP_BEARER_TOKEN` user environment variable to the new value, `POST /api/mcp/token/refresh` with the new token, then retry in the running session.
-- **Endpoint trust.** A gate script that falls back to reading the token out of `.mcp.json` checks the endpoint that file names first, and accepts only loopback (`127.0.0.1`, `localhost`, `[::1]`) or your install's own configured address (the origin of `PUBLIC_URL` or `DPF_MCP_URL`). A config naming any other host stops the run rather than sending your token there — set `DPF_MCP_BEARER_TOKEN` and `DPF_MCP_URL` to reach a portal at another address deliberately. Full rule: [MCP tool authorization runbook](../../architecture/mcp-tool-authorization-runbook.md).
+- **Endpoint trust.** Gate scripts take the address from `DPF_MCP_URL` (else the local endpoint) and accept only loopback (`127.0.0.1`, `localhost`, `[::1]`) or your install's own configured address (the origin of `PUBLIC_URL` or `DPF_MCP_URL`) before sending a token; they no longer read a token out of `.mcp.json`. Full rule: [MCP tool authorization runbook](../../architecture/mcp-tool-authorization-runbook.md).
 
-`.mcp.json` and `.vscode/mcp.json` remain **gitignored credential files** — never commit them. A client connected over the browser flow stores its own credential and needs neither file for authentication.
+**One `dpf` connector per client.** Claude Code's `dpf` server comes from the `dpf-platform` plugin and signs in over the browser flow. Nothing writes a project `.mcp.json` beside it on an https install: Claude Code matches servers by address, so a second `dpf` entry at a different address would show up as a second connector. If an older `.mcp.json` in your checkout still has a `dpf` entry from before this change, the session-start check retires that entry for you (it keeps a backup and any other servers), and the next session shows one `dpf` server. `.mcp.json` and `.vscode/mcp.json` stay **gitignored** — never commit them.
 
 ---
 
@@ -375,7 +375,7 @@ cd ~/dpf-worktrees/<slug>
 
 `new-dev-worktree.sh` resolves the true root clone, bases the new branch on `origin/main`, places the worktree at the canonical sibling base (`~/dpf-worktrees/<slug>` / `D:/DPF-worktrees/<topic>`), and runs the MCP + toolchain seed so the `dpf` connector and an **isolated Docker Compose stack** work immediately. Each worktree gets its own `COMPOSE_PROJECT_NAME=dpf-<topic>` so its containers and volumes can't join the root `dpf` project.
 
-> **`.mcp.json` does not travel with a worktree** — it's gitignored (it carries your local token). The seed step copies it in. If you create a worktree by hand, run `scripts/dpf-bootstrap-agent-toolchain.sh` from inside it, then restart the client.
+> **The `dpf` connector travels with every worktree** — it is the `dpf-platform` plugin, not a per-worktree file, so no `.mcp.json` is copied in. The seed step copies `.vscode/mcp.json` (VS Code's config) when the root clone has one. If you create a worktree by hand, run `scripts/dpf-bootstrap-agent-toolchain.sh` from inside it, then restart the client.
 
 #### Commit and push fast
 

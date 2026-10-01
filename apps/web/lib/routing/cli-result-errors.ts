@@ -1,4 +1,4 @@
-import { InferenceError } from "@/lib/ai-inference";
+import { InferenceError } from "./inference-error";
 
 // CLI-owned banner, including the organization spend cap observed in BI-EDF1BD54.
 // Anchor it so a successful explanation mentioning a limit is not a failure.
