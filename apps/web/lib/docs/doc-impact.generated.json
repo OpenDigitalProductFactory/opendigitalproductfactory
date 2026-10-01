@@ -1410,6 +1410,7 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/work-shapes.ts": [
+      "docs/architecture/gated-permissions-process.md",
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/work-unit.ts": [
@@ -3033,6 +3034,9 @@
     ],
     "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md": [
       "packages/storefront-templates/src/archetypes/index.ts"
+    ],
+    "docs/architecture/gated-permissions-process.md": [
+      "apps/web/lib/work-management/work-shapes.ts"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
