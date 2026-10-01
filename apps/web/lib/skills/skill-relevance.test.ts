@@ -116,7 +116,14 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
    *  role's set; never raise one without saying why in the PR. */
   const ELIGIBLE_BASELINE: Record<string, number> = {
     "admin-assistant": 7,
-    "build-specialist": 29,
+    // ── BI-4CE4F52F / BI-5C1978C7 pattern: five services in the coworker service
+    //    catalog advertised a backingSkillId that resolved to NOTHING — an
+    //    advertised capability with no skill behind it. Each of these five roles
+    //    gains exactly the one skill that backs its own service, derived from the
+    //    inputs, outputs and authority boundary that service already declares.
+    //    Additive capability, not drift: the service was already published, so
+    //    this makes an existing promise real rather than adding a new one.
+    "build-specialist": 30,
     // 9 -> 10: compliance-requirements-review was added to back
     // svc-compliance-pci-requirements, whose backingSkillId resolved to nothing
     // (BI-5C1978C7) — an advertised service with no skill behind it. The raise is
@@ -125,7 +132,7 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     // and no skill becomes unreachable. Peers run 14-32.
     "compliance-officer": 10,
     coo: 8,
-    "customer-advisor": 9,
+    "customer-advisor": 10,
     "data-architect": 9,
     "doc-specialist": 11,
     "documentation-specialist": 10,
@@ -133,6 +140,8 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     "external-catalog-scout": 8,
     "external-coding-agent": 18,
     "farm-ranch-steward": 6,
+    // No entry before: the ratchet read it as 0 (BI-4CE4F52F).
+    "finance-controller": 7,
     "hr-specialist": 9,
     "inventory-specialist": 14,
     "market-research-analyst": 7,
@@ -141,7 +150,7 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     // Additive capability, not drift. At 13 the set is one over
     // DEFAULT_SKILL_SUMMARY_CAP, so relevance ranking picks per turn; its narrow
     // triggerPattern (deck, slides, presentation, pptx) ranks it only when asked.
-    "marketing-specialist": 13,
+    "marketing-specialist": 14,
     "onboarding-coo": 6,
     "ops-coordinator": 13,
     "platform-engineer": 32,
@@ -156,7 +165,7 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     "external-claude-code": 7,
     "external-codex": 7,
     "external-grok": 7,
-    "legal-operations-counsel": 7,
+    "legal-operations-counsel": 8,
     "licensing-specialist": 7,
     "soc-incident-commander": 7,
     "soc-investigator": 7,

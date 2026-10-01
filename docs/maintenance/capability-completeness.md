@@ -34,11 +34,10 @@ the platform is not".
 - Distinct agent identities measured: **87**
   - canonical agent registry: 87 · workforce roster: 48 · profession roles: 99
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
-- At 100% of attainable: **30**
+- At 100% of attainable: **32**
 - Median attainable: **76%** · median absolute: **70%**
-- Skills: **140** total, **0** stranded, **32** able to declare a cadence
+- Skills: **145** total, **0** stranded, **32** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`, `software-engineer`
-- Unbacked `backingSkillIds`: `build-sensitive-domain-requirements`, `customer-intake-triage`, `external-catalog-scout`, `marketing-collaboration-intake`, `prepare-counsel-packet`, `provider-cost-intake`
 
 ## Consequential-tool gate coverage
 
@@ -73,7 +72,7 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | Governance / WWWD | 2 | 3 | 0 | 0 | 0 | 87 | 87/87 |
 | Shape | 1 | 2 | 39 | 0 | 48 | 0 | 48/87 |
 | Cadence | 1 | 3 | 46 | 0 | 9 | 32 | 32/87 |
-| Tools + Skills | 2 | 3 | 0 | 45 | 5 | 37 | 37/87 |
+| Tools + Skills | 2 | 3 | 0 | 44 | 0 | 43 | 43/87 |
 | Evidence | 1 | 2 | 39 | 1 | 47 | 0 | 47/87 |
 
 ### Planes the substrate currently caps
@@ -195,17 +194,15 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-907` | defined-roster | 76% | 70% | 2 | 3 | 3 | 2 | 2 | 1 | 2 |
 | `AGT-WS-INTEGRATION` | defined-roster | 76% | 70% | 2 | 3 | 3 | 2 | 2 | 1 | 2 |
 | `AGT-WS-TIME-OFF` | defined-roster | 76% | 70% | 2 | 3 | 3 | 2 | 2 | 1 | 2 |
-| `AGT-WS-BUILD` | active-roster | 80% | 74% | 3 | 3 | 3 | 2 | 0 | 2 | 2 |
-| `AGT-WS-CUSTOMER` | active-roster | 80% | 74% | 3 | 3 | 3 | 2 | 0 | 2 | 2 |
-| `AGT-WS-FINANCE` | active-roster | 80% | 74% | 3 | 3 | 3 | 2 | 2 | 1 | 2 |
 | `AGT-WS-MARKET-RESEARCH` | defined-roster | 84% | 78% | 2 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-ONBOARD` | active-roster | 84% | 78% | 3 | 3 | 3 | 2 | 0 | 3 | 1 |
-| `AGT-WS-MARKETING` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 2 | 2 | 2 |
+| `AGT-WS-BUILD` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
+| `AGT-WS-CUSTOMER` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-PORTFOLIO` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-ORCH-000` | defined-roster | 92% | 85% | 2 | 3 | 3 | 2 | 2 | 3 | 2 |
 | `AGT-WS-FARM-RANCH` | defined-roster | 92% | 85% | 2 | 3 | 3 | 2 | 2 | 3 | 2 |
-| `AGT-WS-LEGAL` | active-roster | 92% | 85% | 3 | 3 | 3 | 2 | 3 | 2 | 2 |
-| `AGT-WS-SCOUT` | active-roster | 92% | 85% | 3 | 3 | 3 | 2 | 3 | 2 | 2 |
+| `AGT-WS-FINANCE` | active-roster | 96% | 89% | 3 | 3 | 3 | 2 | 2 | 3 | 2 |
+| `AGT-WS-MARKETING` | active-roster | 96% | 89% | 3 | 3 | 3 | 2 | 2 | 3 | 2 |
 | `AGT-WS-PLATFORM` | active-roster | 96% | 89% | 3 | 3 | 3 | 2 | 2 | 3 | 2 |
 | `AGT-900` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-903` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
@@ -234,8 +231,10 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-WS-EA` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-HR` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-INVENTORY` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-WS-LEGAL` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-MAILROOM` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-OPS` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-WS-SCOUT` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-STOREFRONT` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 
 ## Widest gaps — detail
