@@ -6,8 +6,8 @@
 // the guard permits those import statements, blocks new ones, and reports
 // exceptions that can be deleted after the source edge disappears.
 //
-// Outer layers (M11 step 2 PR-3, docs/superpowers/specs/
-// 2026-09-30-web-runtime-import-cycle-and-project-references-design.md §4.3):
+// Outer layers (M11 step 2 PR-3; see the 2026-09-30 web runtime import cycle
+// and project references design spec, section 4.3):
 // `outerLayers` names directories that NO file under `root` may import —
 // apps/web/app and apps/web/components sit above apps/web/lib. Every import
 // kind counts (value, `import type`, dynamic `import()`, `import("x").T`),
