@@ -735,6 +735,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-DBAD1A1B: SessionEnd process matching accepts only the canonical
         // worktree itself or descendants, never sibling worktrees/CI runners.
         "scripts/hooks/session-reaper.test.mjs",
+        // BI-8A562681: the health hook resolves DPF_MCP_URL then the plugin
+        // default; hook curl calls carry the install CA bundle on https.
+        "scripts/hooks/mcp-health.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
