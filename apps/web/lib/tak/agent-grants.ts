@@ -6,6 +6,8 @@ import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-gr
 import { BANKING_TOOL_GRANTS } from "./banking-tool-grants";
 import { DOCUMENT_TOOL_GRANTS } from "./document-tool-grants";
 import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
+import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-grants";
+import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -687,6 +689,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Finance
   get_finance_period_summary:   ["financial_report_create"],
+  ...PAYABLES_TOOL_GRANTS,
 
   // Marketing / Storefront
   // Guest activity (orders / reservations / inquiries) is the storefront's
@@ -779,17 +782,14 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // paired with apply_platform_update's admin_write as the read tier.
   summarize_upgrade_impact: ["admin_read"],
 
-  // Contributor inventory sync — admin-scope on-demand trigger so agents
-  // that just pushed a branch / opened a PR can force the cron to run
-  // out-of-band rather than waiting up to 10 minutes (BI-063BDF1B Phase 5).
+  // Contributor inventory sync: on-demand trigger so an agent need not wait for the 10-minute cron (BI-063BDF1B Phase 5).
   trigger_contributor_inventory_sync: ["admin_write"],
+  ...CONTRIBUTOR_INVENTORY_TOOL_GRANTS,
   request_self_upgrade: ["admin_write"],
   issue_ux_verification_sign_in: ["sandbox_execute"], // BI-9369DEB5: UX verification sign-in; a development token already holds it
   import_organization_join_file: ["sandbox_execute"], // BI-4DD1E739: portal-mediated organization join; the same automation grant
   issue_organization_join_file: ["sandbox_execute"], // BI-AC7BCC58: the authority portal issues the join file itself
-  // Governed self-heal for the "promoter image not built" self-upgrade skip.
-  // Same admin_write scope as request_self_upgrade so the platform-engineer
-  // ("AI Ops Engineer") coworker can build the promoter image on request.
+  // Governed self-heal for the "promoter image not built" skip: admin_write like request_self_upgrade, so platform-engineer can build it.
   repair_promoter_image: ["admin_write"],
   get_self_upgrade_queue_status: ["release_plan_read"],
   get_quiescence_status: ["release_plan_read"],

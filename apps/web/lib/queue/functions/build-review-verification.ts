@@ -179,6 +179,24 @@ export const buildReviewVerification = jobs.createFunction(
         });
         return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
       }
+      // BI-83E1ADF8: a failure analysis that names a risk the change does not
+      // mitigate goes back through the same bounded hand-back, then the owner.
+      if (finalize.status === "risk-blocked") {
+        const routed = await step.run("route-unmitigated-risk-to-repair", async () => {
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, {
+            treeSha: finalize.treeSha,
+            recordId: null,
+            failedGuards: ["Failure analysis"],
+            source: "risk",
+            findings: finalize.risks.map((risk) => ({
+              severity: risk.severity,
+              description: `${risk.key}: ${risk.trigger} → ${risk.effect}. Why it is not mitigated: ${risk.rationale}`,
+            })),
+          });
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
       return { status: "finalize-incomplete", finalize: finalize.status };
     }
 

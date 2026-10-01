@@ -57,6 +57,7 @@ export async function ensureSysmlProjectionScheduledTask(
     select: { taskId: true, nextRunAt: true },
   });
 
+  // An existing task keeps its owner: an account handover must survive re-seeding (BI-ED055D45).
   if (existing) {
     await prisma.scheduledAgentTask.update({
       where: { taskId: SYSML_PROJECTION_TASK_ID },
@@ -67,7 +68,6 @@ export async function ensureSysmlProjectionScheduledTask(
         routeContext: SYSML_PROJECTION_ROUTE_CONTEXT,
         schedule: SYSML_PROJECTION_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
         isActive: true,
         nextRunAt: existing.nextRunAt ?? nextRunAt,
       },

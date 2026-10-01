@@ -360,8 +360,9 @@ The founder decided the four open calls in the dependency-architecture thread on
 | S10 `elkjs` only | DI-459D332D727F |
 | M5 `markdown-it`, raw HTML off | DI-D9292D812CFF |
 | One branch and one PR per move | DI-8578ECC7DA6C |
+| M11 step 2 `rescope_to_measured_levers` (filed 2026-10-01, after the re-scope had shipped; spec §7) | DI-F2DCF2FEDBE7 |
 
-The `record_decision_outcome` step could not be filed: the connection's coworker lacks the `decision_record_create` grant (`agent-grant-missing`). The four outcomes stay unrecorded in that column until an administrator grants it.
+The `record_decision_outcome` step could not be filed: the connection's coworker lacks the `decision_record_create` grant (`agent-grant-missing`). The outcomes stay unrecorded in that column until an administrator grants it. A retry on 2026-10-01 for DI-F2DCF2FEDBE7 was refused the same way; the decision is pointed at from Workroom WC-6E73264F instead.
 
 | Call | Decision | Consequence |
 |---|---|---|
@@ -407,13 +408,13 @@ M8 and the §7 ratchet ran against BI-5265CAD0 (M7 + M8). The S-moves were deliv
 | S9 | BI-FF951FC9 | done (#5762) |
 | S10 | BI-1023CDD1 | done (#5766) |
 | S11 | BI-3D37F899 | done (#5693) |
-| S12 | BI-82052153 | done (#5702) |
+| S12 | BI-82052153 | done (#5702; images frozen and asserted against the lockfile, #5829, #5837) |
 | M2 | BI-DBDB8C6D | awaiting acceptance (#5253, #5724) |
 | M3 | BI-068BBA33 | open: phase 1 done (#5760); phases 2 and 3 open |
-| M5 | BI-0AB1FD47 | open: M5b done (#5770); markdown open |
+| M5 | BI-0AB1FD47 | awaiting acceptance (#5770, #5803) |
 | M7 + M8 | BI-5265CAD0 | awaiting acceptance (#5289, #5670) |
 | M9 | BI-B1977CEE | awaiting acceptance (#5285, #5774) |
-| M11 | BI-0A3B155F | open: step 2 blocked by the import cycle |
-| M11 precursor | BI-F68CD3E3 | open: break the 657-file import cycle, starting with the 610 type-only imports |
+| M11 | BI-0A3B155F | open: steps 1 and 4 done; step 2 re-scoped (DI-F2DCF2FEDBE7) and delivered through PR-4 (#5830, #5838, #5848, #5849, #5862); PR-5 waits on its re-measurement, which did not run on 2026-10-01 because the local-integration-ci lease was busy; step 3 unchanged |
+| M11 precursor | BI-F68CD3E3 | retirement as superseded requested 2026-10-01, awaiting operator approval: its premise was corrected on 2026-09-29, and the cycle is at its floor of 75, held by `check-no-web-import-cycle-growth.mjs` (#5797, #5805, #5813, #5825) |
 
-M2, M7 + M8 and M9 stop at awaiting acceptance. The readiness gate refused `done` for each: it wants research, plan-coverage and acceptance evidence those older items never recorded (`initiative_not_ready`: RESEARCH_REQUIRED, PLAN_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED, OBJECTIVE_BASELINE_REQUIRED, OBJECTIVE_RECONCILIATION_REQUIRED). The work is merged; acceptance is a reviewer's step.
+M2, M7 + M8 and M9 stop at awaiting acceptance. The readiness gate refused `done` for each: it wants research, plan-coverage and acceptance evidence those older items never recorded (`initiative_not_ready`: RESEARCH_REQUIRED, PLAN_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED, OBJECTIVE_BASELINE_REQUIRED, OBJECTIVE_RECONCILIATION_REQUIRED). The work is merged; acceptance is a reviewer's step. A retry on 2026-10-01 for M2 was refused with the same five codes; the research lane also refuses a receipt unless a live Workroom is bound to the item's branch, and these items predate one.
