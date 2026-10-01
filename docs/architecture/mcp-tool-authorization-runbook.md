@@ -181,6 +181,22 @@ decision brief is
 [`docs/superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md`](../superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md).
 No revision has been retired under this section yet.
 
+## GPP permit handles (shadow, Phase 2)
+
+An external client may send a GPP permit handle with a `tools/call`, as
+`params._meta["com.opendigitalproductfactory/authorization-handle"]` (a string). The route reads it in
+`apps/web/lib/gpp/permit-carriage.ts` and passes it to the reference monitor as `context.permitHandle`.
+Clients that send nothing are unaffected.
+
+In Phase 2 the handle is **observed, never required**. For an outward, authority or irreversible call,
+the monitor records a verdict for the presented handle, or for the permit minted when a gate admits the
+call: `valid`, `absent`, `expired`, `revoked`, `exhausted`, `tool_not_in_capabilities`, `ungoverned`
+or `unmediated`. The verdict never changes the call's outcome. Enforcement is promoted per binding
+later, by recorded decision (plan `docs/superpowers/plans/2026-10-01-gpp-phase-2-permits-and-enforcement.md`).
+The carriage key follows the MCP extension draft
+(`docs/superpowers/specs/2026-10-01-mcp-transaction-authorization-sep-draft.md`), which has not been
+submitted. A permit handle is not an OAuth token and never replaces the bearer credential.
+
 ## Terminal-readiness recovery packets
 
 An `initiative_not_ready` result from BacklogItem or Workroom completion may

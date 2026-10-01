@@ -10,6 +10,8 @@
 
 import type { ConsequentialToolClassification } from "@/lib/tak/consequential-tool-policy";
 
+import { bindingsForTool } from "./bindings";
+
 export type GuardMode = "enforced" | "shadow" | "none";
 
 export type MapToolInput = {
@@ -49,6 +51,8 @@ export type CriticalInteractionEntry = {
     escalation: GuardMode;
     projector: GuardMode;
     shapeGate: GuardMode;
+    /** GPP Phase 2 permit (PR-C): `shadow` when a declared binding covers the tool, else `none`. */
+    permit: GuardMode;
   };
   directSites: string[];
   /** Outward, authority or irreversible: the calls GPP gates. C-5 combinations are not computed in Phase 1. */
@@ -92,6 +96,7 @@ export function buildCriticalInteractionMap(
         escalation: sideEffect ? "enforced" : "none",
         projector: deps.projectableTools.has(tool.name) ? "enforced" : "none",
         shapeGate: shape ? deps.shapeGateMode : "none",
+        permit: bindingsForTool({ consequential: classification.consequential }).length ? "shadow" : "none",
       },
       directSites: [...(deps.directSites.get(tool.name) ?? [])],
       critical: classification.consequential,
@@ -117,8 +122,8 @@ export function buildCriticalInteractionMap(
 /** Markdown summary: critical tools first, then unclassified side-effecting tools. */
 export function renderCriticalInteractionMarkdown(map: CriticalInteractionMap): string {
   const row = (e: CriticalInteractionEntry) =>
-    `| \`${e.name}\` | ${e.consequence ?? "—"} | ${e.guards.alignment}${e.guards.alignmentInWorkroom ? " (+ in Workroom)" : ""} | ${e.guards.escalation} | ${e.guards.projector} | ${e.guards.shapeGate} | ${e.holders.length} | ${e.directSites.join(", ") || "—"} |`;
-  const head = "| Tool | Consequence | Alignment | Escalation | Projector | Shape gate | Holders | Direct sites |\n|---|---|---|---|---|---|---|---|";
+    `| \`${e.name}\` | ${e.consequence ?? "—"} | ${e.guards.alignment}${e.guards.alignmentInWorkroom ? " (+ in Workroom)" : ""} | ${e.guards.escalation} | ${e.guards.projector} | ${e.guards.shapeGate} | ${e.guards.permit} | ${e.holders.length} | ${e.directSites.join(", ") || "—"} |`;
+  const head = "| Tool | Consequence | Alignment | Escalation | Projector | Shape gate | Permit | Holders | Direct sites |\n|---|---|---|---|---|---|---|---|---|";
   const t = map.totals;
   return [
     `# Critical-interaction map`,
