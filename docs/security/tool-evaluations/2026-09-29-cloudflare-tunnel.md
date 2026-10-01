@@ -1,7 +1,7 @@
 # Tool Evaluation: Cloudflare Tunnel (`cloudflared`) v2026.9.3
 
 **Backlog item:** `BI-E2E8BD27`
-**Epic:** EP-1FABA22D — install public reachability
+**Epic:** EP-8B03CB06 — per-install edge reachability and connectivity topology
 **Design:** [`2026-09-02-install-public-reachability-design.md`](../../superpowers/specs/2026-09-02-install-public-reachability-design.md)
 **Decision:** conditional approval as the first *opt-in* reachability provider. **Not** approved for any install until the four pre-exposure defects below are fixed.
 **Risk:** medium (high until the pre-exposure defects are closed)
@@ -54,6 +54,9 @@ a missing or public key and recreates `inngest` with the portal.
   `AUTH_URL` mandatory, with a startup refusal on a malformed value, before
   any install enables a public hostname. No public exposure path exists until
   that overlay ships, so the behaviour is decided there, not changed here.
+  Tracked as BI-19D3A187.
+
+P2, P3 and the rate-limit half of P4 are tracked as BI-88FCDA4C.
 
 P1–P3 are fixes in DPF, not tunnel configuration. Denying the paths at the tunnel
 ingress is a useful second layer but is not a substitute: the LAN exposure of P1
@@ -178,9 +181,16 @@ are "inherently external" and cases where "the operator explicitly opts in".
 Neither makes Cloudflare the default. **This evaluation therefore approves
 Cloudflare only as an opt-in provider, and records the self-hostable,
 non-decrypting provider (VPS with SNI passthrough) as the gap to close.** The
-trade-off between the two providers is a WWMD decision; `principle_decide` was
-not reachable from this session (DPF MCP offline), so it has not been scored and
-must be before implementation starts.
+trade-off between the two providers is a WWMD decision.
+
+**Scored 2026-10-01, for operator access only** (DI-D96FB0FE7C1F): reaching the
+operator's own prod and dev instances from outside the LAN goes over a private
+WireGuard overlay, with nothing publicly routable. Scores: overlay 7.67; overlay
+now plus opt-in Cloudflare later for public prod surfaces 7.04; VPS with SNI
+passthrough 3.53; Cloudflare Tunnel for both instances 2.64. Confidence high,
+margin 0.63. Setup is BI-CAF86466. That score does not choose the provider for a
+public hostname (federation, storefront, customer mobile); condition 9 still
+applies there before implementation starts.
 
 ## Integration evidence
 
