@@ -58,8 +58,9 @@ Three properties make the chain trustworthy:
 
 1. **Determinism.** The same model always compiles to the same executable shape.
 2. **Losslessness.** Decompiling an existing shape and recompiling it reproduces it exactly.
-3. **Enforcement.** What the model admits is all the runtime can reach. A tool is unreachable unless a
-   live permit, minted by the stage's gate, names it.
+3. **Enforcement where it matters.** For critical tools (outward, authority, irreversible) under an
+   enforced binding, a tool is unreachable unless a live permit minted by the stage's gate names it.
+   Other tools keep today's grant checks (§5.0).
 
 ## 4. Part I: The GPP shape language
 
@@ -87,7 +88,7 @@ style, to meet the theme rule and accessibility.
 | 1 | **Trigger** | Thin circle with a class marker: hand (claim), clock (cadence), calendar (deadline horizon), shield (authority change), drift (estate drift), hourglass (evidence decay), up-arrow (escalation) | What may start an instance | Creates an instance with one token at the first stage | `triggers[]` (closed vocabulary) | At least one trigger; cadence requires a review point |
 | 2 | **Stage** | Rounded rectangle. Header: accountable principal. Corner glyph: person (human), cog (coworker), split (shared) | A unit of work with one accountable principal | Active while it holds a token. Only its capability set is reachable (§5). | `stages[i]` (`key`, `title`, `accountablePrincipalRef`) | Accountable principal resolves (C-4) |
 | 3 | **Capability set** | Port strip on the stage's lower edge: one chip per tool, badged by consequence class (R read, W write, A authority, O outward, I irreversible) | The exact tools the stage may reach | Defines the stage's binding. A permit for the stage names exactly these tools. | `stages[i].tools` + binding record | Each tool resolves to a registered tool and grant (C-2); C-5 co-occurrence |
-| 4 | **Gate** | Diamond. Inner glyph names the owning authority: column (WWMD platform), building (WWWD organization), badge (WSID profession). Border: solid = enforced and blocking; dashed = shadow; dotted = advisory. | Who decides that the next stage's class of action may begin | On arrival, the gate's resolver is consulted and returns admit / hold / escalate / refuse. **Admit** seals a decision, moves the token on, and mints the next stage's permit. **Hold** keeps the token and requests evidence. **Escalate** keeps the token and routes to the escalation path. **Refuse** follows the refuse edge or stops. | `stages[i].advance` = `{kind:"governed-decision", authority, gateKey, mode, blocking, resolution}` (**new typed fields**) | Exactly one owning authority (C-3); declared mode is honest (C-7); every runtime path for this transition enforces it (C-8) |
+| 4 | **Gate** | Diamond. Inner glyph names the owning authority: column (WWMD platform), building (WWWD organization), badge (WSID profession). Border: solid = enforced and blocking; dashed = shadow; dotted = advisory. | Who decides that the next stage's class of action may begin | On arrival, the gate's resolver is consulted and returns admit / hold / escalate / refuse. **Admit** seals a decision and moves the token on. If the next stage holds O, A or I tools, admit also mints that stage's permit. **Hold** keeps the token and requests evidence. **Escalate** keeps the token and routes to the escalation path. **Refuse** follows the refuse edge or stops. | `stages[i].advance` = `{kind:"governed-decision", authority, gateKey, mode, blocking, resolution}` (**new typed fields**) | Exactly one owning authority (C-3); declared mode is honest (C-7); every runtime path for this transition enforces it (C-8) |
 | 5 | **Advisory consult** | Small diamond in an attached annotation, same authority glyphs | A scope that informs the gate without deciding | Consulted before the gate. Its result is recorded and never changes the gate verdict. | `advance.advisory[]` (new) | An advisory consult cannot be the only gate on a consequential transition |
 | 6 | **Status transition** | Plain arrow | The stage completes on a condition, with no decision | Token moves when the condition is recorded | `advance = {kind:"status-change"}` | Not allowed into a stage whose capability set includes O, A or I without a gate |
 | 7 | **Human checkpoint** | Person-with-tick glyph on a gate or transition | A named role must confirm | Exact-action approval. The approval is bound to a hash of the canonical tool name and arguments. | Gate `resolution: accountable-human`, plus `checkpoint.role` | Role resolves; approval binding required for I and O tools |
@@ -140,10 +141,33 @@ shape document ──parse──▶ AST ──resolve──▶ typed model ─�
 
 ## 5. Part II: Un-bypassable enforcement
 
+### 5.0 Adoption constraints (founder, 2026-10-01)
+
+These four constraints override anything in this part that conflicts with them.
+
+1. **No disruption to current operations.** A tool with no declared binding behaves exactly as it
+   does today. The reference monitor records it as "not governed by GPP" and lets it through. A
+   permit is required only where a binding declares `enforcement: enforced`, and every binding
+   starts in `shadow`. A gate that has not been implemented can never refuse a call.
+2. **Gate the critical interactions, not every call.** Permits apply only to stages whose capability
+   set includes outward (O), authority (A) or irreversible (I) tools, or which assemble the C-5
+   capability combination. Read (R) and ordinary internal-write (W) tools stay on today's TAK
+   intersection with no permit. The design view exists to show where these critical edges are, so
+   that attention goes to the calls that matter.
+3. **Ratchet, don't flip.** Every new structural check ships with today's exceptions on a
+   shrink-only list, the same pattern as `KNOWN_STAGE_TOOL_GAPS`. CI breaks only when a *new* hole
+   is added, never because of existing ones. No global switch is ever turned on. Build Studio paths
+   change only where a defect fix needs it, and each such change ships with a test.
+4. **Development reality is stated, not hidden.** On this install, agents can read source and reach
+   the database. Until key custody and credential separation are in place (§5.6), DPF *detects*
+   permit forgery but does not *prevent* it. Public claims say so.
+
 ### 5.1 Principle
 
-The gate is in the call path. Authority is a value the call must carry, not a flag the server reads.
-A tool that no live permit names is unreachable. It is neither offered nor prompted.
+For the interactions that matter, the gate is in the call path. Authority becomes a value the call
+must carry, not a flag the server reads. Under an enforced binding, a critical tool that no live
+permit names is unreachable: it is neither offered nor prompted. Everywhere else, §5.0 applies, and
+behavior is unchanged until a binding says otherwise.
 
 ### 5.2 The permit (DI-2DE3951FBB28)
 
@@ -195,9 +219,44 @@ offline sub-agent delegation needs it.
 
 ### 5.4 Rollout
 
-Permit enforcement starts in **shadow** for each tool class. The monitor records the verdict it would
-have given (GPP M-6), and promotion to enforced follows the existing ratification pattern
-(DI-6D5D686464DC): read tools last, consequential tools first.
+Enforcement is per binding, never global:
+
+- **Absent.** There is no binding for this tool in this stage. Today's behavior applies, and the
+  call is recorded as "ungoverned".
+- **Shadow.** A binding exists. The monitor computes the verdict it would give and records any
+  divergence (GPP M-6), but never refuses.
+- **Enforced.** Promoted per binding after its shadow evidence is ratified (DI-6D5D686464DC
+  pattern). Only O/A/I bindings are ever promoted. R and W tools have no permit requirement to
+  promote.
+
+**Ordering.** A binding cannot reach `enforced` until its gate is implemented and emits decisions.
+The compiler refuses to publish an enforced binding whose gate has no resolver. A permit therefore
+cannot be demanded by a gate that does not exist yet.
+
+### 5.6 Permit integrity: what a tenacious agent cannot fabricate
+
+The permit id travels with the call. It is useful to the transaction only if the monitor can prove
+three things: it was minted by the gate, it is unchanged, and it is being used for this call.
+
+- **Handle format.** `gpp1.<permitId>.<keyId>.<mac>`, where
+  `mac = HMAC-SHA256(key[keyId], canonical(claims))`. This reuses the existing signing pattern in
+  `delegation-receipt.ts` and `reach-link.ts`: a key id plus an environment secret, constant-time
+  comparison, and no fallback constant. No new cryptographic dependency is added.
+- **Verification.** The monitor loads the row by `permitId`, recomputes the MAC over the row's
+  claims, and compares. Editing a row, or inventing one, fails unless the forger also holds the key.
+- **Binding to the transaction.** For O/A/I calls the claims include `paramHash`, so a valid permit
+  cannot be replayed for different arguments. `nonce` / `maxUses` stop reuse, and `stage` plus
+  `workroom` stop reuse elsewhere.
+- **Lineage.** Every permit references a `gateDecisionId` whose `DecisionInteraction` is sealed in
+  the hash-chained decision ledger (`chainEntryHash`). A permit with no sealed decision behind it
+  is invalid even if its MAC verifies.
+- **Key custody is the real boundary.** The key lives only in the portal process's secret store.
+  It is not in the repository, not in the database, and not in agent-visible context. The
+  installation's step-ca is the longer-term custody option. While agents on this development
+  install can read host secrets or write to the database directly, forgery is **detectable**
+  (MAC failure, a missing sealed decision, a chain break), not **impossible**. Prevention needs
+  agent runtimes that hold no database credentials and cannot read the signing key. That is a
+  deployment property for production installs, and GPP Annex A must report it per install.
 
 ## 6. Part III: Beyond MCP: a transaction-scoped authorization extension
 
@@ -262,8 +321,8 @@ Sources are cited in the research briefs recorded with BI-6DA17863 and in the
 | Phase | Outcome | Backlog |
 |---|---|---|
 | 0 | This design reviewed; GPP normative amendments drafted: typed gate fields in the binding, §5.3 as normative text, C-9 | BI-6DA17863, BI-69415B68 |
-| 1 | **Mediation closure.** Registry-wrapped handlers, architectural test, the 33 direct sites routed or proven read-only, a single transition function | BI-69415B68 slice 1; BI-45F9CB7A |
-| 2 | **Permits** on the projector substrate. Minted at gate admit, verified at the monitor, shadow first, then enforced for consequential tools | BI-69415B68 slice 2 |
+| 1 | **See and ratchet, without blocking.** A critical-interaction map: every O/A/I tool, how it can be reached, and which gate (if any) guards it. An architectural test whose shrink-only allowlist holds today's direct `executeTool` paths. Fix the BI-45F9CB7A transition bypass, with a regression test. **No permit, no new refusal, no Build Studio behavior change otherwise.** | BI-69415B68 slice 1; BI-45F9CB7A |
+| 2 | **Permits, shadow only, O/A/I only.** Minted at gate admit with the §5.6 MAC handle, carried in `_meta`, verified and recorded at the monitor, never refusing. Promoted per binding after ratification. | BI-69415B68 slice 2 |
 | 3 | **Shape document schema and compiler**, with the decompile/recompile acceptance test over all 47 shapes; typed gate fields added to `WorkShapeDefinition` | BI-6DA17863 slice 1 |
 | 4 | **Canvas.** GPP element types and icon registry in EA; typed property editor; DRC on save; governed publish; runtime overlay (V-2) | BI-6DA17863 slice 2; feeds EP-MBSE-WORKROOM-SPINE |
 | 5 | **Build Studio as one declared shape** (GPP Annex C steps 1–6) | new BI |
