@@ -1,3 +1,4 @@
+import { sanitizeUntrustedValue } from "@dpf/validators";
 import type { ConversionResult } from "@/lib/documents/conversion/convert";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -266,7 +267,17 @@ async function parseConverted(buffer: Buffer, route: ConversionRoute, convert?: 
   }
 }
 
+/**
+ * Parse an uploaded file. Its text reaches a coworker's prompt, so hidden
+ * Unicode (Tags-block smuggling, zero-width splitting, bidi controls) is
+ * removed from every string in the result (BI-7AD0DA3D).
+ */
 export async function parseFileContent(buffer: Buffer, mimeType: string, fileName: string, deps: ParseFileDeps = {}): Promise<ParsedFileContent | null> {
+  const parsed = await parseFileContentUnsanitized(buffer, mimeType, fileName, deps);
+  return parsed ? sanitizeUntrustedValue(parsed).value : null;
+}
+
+async function parseFileContentUnsanitized(buffer: Buffer, mimeType: string, fileName: string, deps: ParseFileDeps): Promise<ParsedFileContent | null> {
   const ext = fileName.split(".").pop()?.toLowerCase();
   // The bytes decide before the name does: a real .doc is an OLE file, RTF
   // would otherwise be stored as control words, and a .docx renamed .doc is

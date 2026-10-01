@@ -2,6 +2,11 @@ import {
   maskForContext,
   type ContextMaskAuthority,
 } from "@/lib/govern/data/mask-for-context";
+import {
+  invisibleRemovalNotice,
+  looksLikeSmuggling,
+  sanitizeUntrustedValue,
+} from "@dpf/validators";
 
 /**
  * Tool-result token-budget guard.
@@ -73,6 +78,10 @@ export type ClampedToolResult = {
   originalChars: number;
   /** Opaque only; raw token maps never leave the controlled runtime. */
   rehydrationHandle?: string;
+  /** Hidden Unicode characters removed before the model saw the result. */
+  hiddenCharsRemoved: number;
+  /** The removed characters had the shape of a deliberate hidden payload. */
+  smugglingSuspected: boolean;
 };
 
 function buildFullText(result: ModelFacingToolResult): string {
@@ -107,13 +116,22 @@ export function clampToolResultForModel(
 ): ClampedToolResult {
   const maxChars = Math.max(0, opts?.maxChars ?? DEFAULT_TOOL_RESULT_CHAR_CAP);
   const masked = opts?.contextMask ? maskForContext(result, opts.contextMask) : null;
-  const full = buildFullText(masked?.value ?? result);
+  // Every tool result is untrusted text on its way into a model: web pages,
+  // files, mail, third-party MCP servers, peer-synced work, other agents'
+  // messages. Hidden Unicode is removed here, the one boundary all of them
+  // cross (BI-7AD0DA3D); a payload-shaped removal is announced to the model.
+  const sanitized = sanitizeUntrustedValue(masked?.value ?? result);
+  const smugglingSuspected = looksLikeSmuggling(sanitized);
+  const body = buildFullText(sanitized.value);
+  const full = smugglingSuspected ? `${invisibleRemovalNotice(sanitized)}\n${body}` : body;
   const handle = masked?.rehydrationHandle;
+  const hidden = { hiddenCharsRemoved: sanitized.total, smugglingSuspected };
   if (full.length <= maxChars) {
     return {
       text: full,
       truncated: false,
       originalChars: full.length,
+      ...hidden,
       ...(handle ? { rehydrationHandle: handle } : {}),
     };
   }
@@ -124,7 +142,7 @@ export function clampToolResultForModel(
   if (page?.version === 1 && (typeof page.observationId === "string" || page.disposition === "restart-required")) {
     const error = JSON.stringify({ success: false, error: "page_budget_too_small", recovery: "Restart list_workrooms without cursor and with limit:1; preserve filters." });
     return { text: error.length <= maxChars ? error : maxChars >= 2 ? "{}" : "", truncated: true, originalChars: full.length,
-      ...(handle ? { rehydrationHandle: handle } : {}) };
+      ...hidden, ...(handle ? { rehydrationHandle: handle } : {}) };
   }
   const notice =
     `\n…[truncated ${full.length - maxChars} of ${full.length} chars — result exceeds the per-call ` +
@@ -134,6 +152,7 @@ export function clampToolResultForModel(
     text: full.slice(0, keep) + notice,
     truncated: true,
     originalChars: full.length,
+    ...hidden,
     ...(handle ? { rehydrationHandle: handle } : {}),
   };
 }
