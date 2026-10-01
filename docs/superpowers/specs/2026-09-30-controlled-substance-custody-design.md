@@ -122,8 +122,13 @@ All models are organization-scoped and carry semantic ids (`CSP-`, `CSR-`, `CSM-
   resolver. Closing a theft or loss case without both evidences is refused in the domain
   layer.
 
-Every table is organization-isolated by row-level security on `app.organization_id`,
-matching the care tables. Every relation uses `onDelete: Restrict`; retained evidence is
+Organization isolation is enforced primarily by the custody commands, which scope every
+read and write to the caller's organization, and by composite `(id, organizationId)`
+foreign keys, which the database enforces for every role. Every table also carries a FORCE
+row-level-security policy on `app.organization_id`, matching the care tables, as defense in
+depth. That policy binds only roles without `BYPASSRLS`. The portal's runtime role is
+currently a superuser, so the policy does not filter at runtime until `BI-30EA38F7` moves the
+portal to a non-bypassing role. Every relation uses `onDelete: Restrict`; retained evidence is
 never cascaded away. Metadata: `@dpf lifecycle=regulated-record retention=retained
 basis=21_CFR_1304.04 minYears=7 sensitivity=confidential`.
 

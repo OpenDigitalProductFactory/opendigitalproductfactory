@@ -5,7 +5,10 @@
 // (healthcare, veterinary, shelter euthanasia). The movement ledger is the
 // record; balances are derived from it. Movements, counts and count lines are
 // append-only at the database (trigger-enforced); corrections reverse and
-// restate. Every table is organization-isolated by RLS on app.organization_id.
+// restate. Organization isolation comes from the custody commands and composite
+// (id, organizationId) foreign keys; each table also carries a FORCE RLS policy on
+// app.organization_id as defense in depth, which binds only non-BYPASSRLS roles
+// (the portal role does not yet qualify; see BI-30EA38F7).
 
 /// Federal (US DEA) schedule. Other jurisdictions arrive as overlay profiles;
 /// widening this set is a migration.
