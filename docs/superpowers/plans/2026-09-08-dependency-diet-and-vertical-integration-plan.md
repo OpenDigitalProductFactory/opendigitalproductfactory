@@ -277,7 +277,7 @@ _Founder direction, 2026-09-25: too many dependencies, too much complexity, too 
 | M8 override prune | done | #5670 |
 | M9 retired-substrate sweep | done: backup engines deleted (#5285); Neo4j and Qdrant residue swept and `check-retired-substrate.mjs` now forbids it (#5774) | #5285, #5774 |
 | M11 step 1 separate test program | done | #5268, #5292 |
-| M11 step 2 project references | in progress. Project references need the all-imports graph (`import type` included) acyclic. Corrected 2026-09-29: the earlier "657 files, 610 type-only imports" came from a regex that also matched `import type`; converting imports to `import type` would have removed nothing. Measured with the TypeScript parser: the largest all-imports cycle was 678 files (519 without inline `import("x").T` type queries); the runtime cycle is 75. Moving the tool contract types out of `lib/mcp-tools.ts` took it to 134 (#5797), and the guard `check-no-web-import-cycle-growth.mjs` now holds it; moving the governed-execute contract types took it to 92 (#5805); the `ChatMessage`/`ContentBlock` and task-submit leaves took it to 81 (#5813); the approval, readiness, quiescence, data-asset and purpose-contract leaves took it to 75 and removed three more cycles (27, 18, 17) (#5825). 75 is the floor for type-only moves. It closes only through dynamic `import()` calls; counting static value imports alone, the load-order cycles are 11, 4 and 2 files, all around `lib/ai-inference.ts`. The design spec (2026-09-30 web runtime import cycle) measures what project references would buy and re-scopes step 2 | #5797, #5805, #5813, #5825 |
+| M11 step 2 project references | re-scoped by the 2026-09-30 spec (#5830) and delivered through its PR-4; PR-5 (`lib`/`ui` references) is conditional on a re-measurement. Project references need the all-imports graph (`import type` included) acyclic. Corrected 2026-09-29: the earlier "657 files, 610 type-only imports" came from a regex that also matched `import type`; converting imports to `import type` would have removed nothing. Measured with the TypeScript parser: the largest all-imports cycle was 678 files (519 without inline `import("x").T` type queries); the runtime cycle is 75. Moving the tool contract types out of `lib/mcp-tools.ts` took it to 134 (#5797), and the guard `check-no-web-import-cycle-growth.mjs` now holds it; moving the governed-execute contract types took it to 92 (#5805); the `ChatMessage`/`ContentBlock` and task-submit leaves took it to 81 (#5813); the approval, readiness, quiescence, data-asset and purpose-contract leaves took it to 75 and removed three more cycles (27, 18, 17) (#5825). 75 is the floor for type-only moves. It closes only through dynamic `import()` calls; counting static value imports alone, the load-order cycles are 11, 4 and 2 files, all around `lib/ai-inference.ts`. The design spec (2026-09-30 web runtime import cycle) measured what project references would buy and re-scoped step 2. Delivered against it: PR-1 warm-starts the CI typecheck from a main-written tsbuildinfo cache (#5838, with the retried pinned-pnpm fetch from #5844); PR-2 cut the three static load-order cycles to none and the cycle guard now forbids any (#5848); PR-3 took `lib` imports of `app/` and `components/` from 44 to 0, held by the application-boundary guard (#5849); PR-4 made `lib` declaration emit clean, 31 `TS2883` to 0 (#5862) | #5797, #5805, #5813, #5825, #5830, #5838, #5848, #5849, #5862 |
 | M11 step 4 measure, then ratchet | done: the web typecheck records its program in the same compile, and CI fails a PR that grows it by lines no diff explains (dependency types, excluded files pulled back in, a new source directory). Anchor `sbom/typecheck-baseline.json`: 8,223 files, 2,973,637 checked lines; the generated Prisma client is 54% of them, the largest remaining lever | #5793 |
 | §7 budgets ratchet | done | #5670 |
 
@@ -360,8 +360,9 @@ The founder decided the four open calls in the dependency-architecture thread on
 | S10 `elkjs` only | DI-459D332D727F |
 | M5 `markdown-it`, raw HTML off | DI-D9292D812CFF |
 | One branch and one PR per move | DI-8578ECC7DA6C |
+| M11 step 2 `rescope_to_measured_levers` (filed 2026-10-01, after the re-scope had shipped; spec §7) | DI-F2DCF2FEDBE7 |
 
-The `record_decision_outcome` step could not be filed: the connection's coworker lacks the `decision_record_create` grant (`agent-grant-missing`). The four outcomes stay unrecorded in that column until an administrator grants it.
+The `record_decision_outcome` step could not be filed: the connection's coworker lacks the `decision_record_create` grant (`agent-grant-missing`). The outcomes stay unrecorded in that column until an administrator grants it. A retry on 2026-10-01 for DI-F2DCF2FEDBE7 was refused the same way; the decision is pointed at from Workroom WC-6E73264F instead.
 
 | Call | Decision | Consequence |
 |---|---|---|
@@ -386,8 +387,8 @@ Every S-move and M1, M2, M4, M5, M6, M7, M8 and M9 are done. Open:
 
 - **M3 phases 2 and 3.** The Postgres engine behind a flag (BI-85E6EF14, design on `claude/m3-postgres-jobs`, waiting on independent review), then Inngest retires. Needs a Postgres runtime for the §7 benchmarks.
 - **M5 markdown.** Done in #5803 (BI-0AB1FD47).
-- **M11 step 2.** The all-imports cycle is at its type-only floor of 75 (§10.1). The design spec (2026-09-30 web runtime import cycle) found the four heavy domains are 13% of check time and the Prisma client costs lines but no check time (`@ts-nocheck`), and recommends warm-starting the CI typecheck first, then breaking the three static load-order cycles. Step 4 is done (#5793). Step 3 (CI shape) is unchanged.
-- **edge-node image installs without `--frozen-lockfile`.** Found 2026-09-30: its deploy resolved net-snmp 3.29.1 against locked 3.26.3, so the image can ship unvetted versions. Fix in progress.
+- **M11 step 2.** Delivered through PR-4 of the 2026-09-30 spec (§10.1). PR-5, `lib` and `ui` as project references, proceeds only if a re-measurement on the PR-4 tree shows a UI-only cold check saving 40% or more. No guard yet holds `lib` declaration emit at 0: the cheapest is `"declaration": true` under `noEmit` in `apps/web/tsconfig.json` (about 60 s on one cold run), after the 14 declaration errors in `app/` and `proxy.ts` are fixed. Step 4 is done (#5793). Step 3 (CI shape) is unchanged.
+- **edge-node image installs without `--frozen-lockfile`.** Done: every Dockerfile installs `--frozen-lockfile`, enforced by `check-docker-patch-context.mjs` (#5829). Because `pnpm deploy --legacy` ignores the lockfile under the hoisted linker, the edge-node, adp and integration-test-harness images now assert their deployed tree against the lockfile (`scripts/sbom/assert-deploy-matches-lockfile.mjs`, #5829, #5837).
 - **Owed records.** Filed 2026-09-29; see §10.6.1 and §10.7. Only the decision-outcome column remains, blocked on a grant.
 
 ### 10.7 Backlog coverage
@@ -407,13 +408,13 @@ M8 and the §7 ratchet ran against BI-5265CAD0 (M7 + M8). The S-moves were deliv
 | S9 | BI-FF951FC9 | done (#5762) |
 | S10 | BI-1023CDD1 | done (#5766) |
 | S11 | BI-3D37F899 | done (#5693) |
-| S12 | BI-82052153 | done (#5702) |
+| S12 | BI-82052153 | done (#5702; images frozen and asserted against the lockfile, #5829, #5837) |
 | M2 | BI-DBDB8C6D | awaiting acceptance (#5253, #5724) |
 | M3 | BI-068BBA33 | open: phase 1 done (#5760); phases 2 and 3 open |
-| M5 | BI-0AB1FD47 | open: M5b done (#5770); markdown open |
+| M5 | BI-0AB1FD47 | awaiting acceptance (#5770, #5803) |
 | M7 + M8 | BI-5265CAD0 | awaiting acceptance (#5289, #5670) |
 | M9 | BI-B1977CEE | awaiting acceptance (#5285, #5774) |
-| M11 | BI-0A3B155F | open: step 2 blocked by the import cycle |
-| M11 precursor | BI-F68CD3E3 | open: break the 657-file import cycle, starting with the 610 type-only imports |
+| M11 | BI-0A3B155F | open: steps 1 and 4 done; step 2 re-scoped (DI-F2DCF2FEDBE7) and delivered through PR-4 (#5830, #5838, #5848, #5849, #5862); PR-5 waits on its re-measurement, which did not run on 2026-10-01 because the local-integration-ci lease was busy; step 3 unchanged |
+| M11 precursor | BI-F68CD3E3 | retirement as superseded requested 2026-10-01, awaiting operator approval: its premise was corrected on 2026-09-29, and the cycle is at its floor of 75, held by `check-no-web-import-cycle-growth.mjs` (#5797, #5805, #5813, #5825) |
 
-M2, M7 + M8 and M9 stop at awaiting acceptance. The readiness gate refused `done` for each: it wants research, plan-coverage and acceptance evidence those older items never recorded (`initiative_not_ready`: RESEARCH_REQUIRED, PLAN_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED, OBJECTIVE_BASELINE_REQUIRED, OBJECTIVE_RECONCILIATION_REQUIRED). The work is merged; acceptance is a reviewer's step.
+M2, M7 + M8 and M9 stop at awaiting acceptance. The readiness gate refused `done` for each: it wants research, plan-coverage and acceptance evidence those older items never recorded (`initiative_not_ready`: RESEARCH_REQUIRED, PLAN_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED, OBJECTIVE_BASELINE_REQUIRED, OBJECTIVE_RECONCILIATION_REQUIRED). The work is merged; acceptance is a reviewer's step. A retry on 2026-10-01 for M2 was refused with the same five codes; the research lane also refuses a receipt unless a live Workroom is bound to the item's branch, and these items predate one.

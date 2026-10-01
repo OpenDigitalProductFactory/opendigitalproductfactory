@@ -2,7 +2,7 @@
 
 import path from "node:path";
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -174,15 +174,19 @@ export async function createGovernedWorkAction(input: {
   };
 }
 
-export async function getCapsuleDetail(capsuleId: string) {
+const CAPSULE_DETAIL_INCLUDE = {
+  activities: {
+    orderBy: { recordedAt: "desc" },
+    take: 25,
+  },
+} satisfies Prisma.WorkroomInclude;
+
+type CapsuleDetail = Prisma.WorkroomGetPayload<{ include: typeof CAPSULE_DETAIL_INCLUDE }>;
+
+export async function getCapsuleDetail(capsuleId: string): Promise<CapsuleDetail | null> {
   await requireBuildAccess();
   return prisma.workroom.findUnique({
     where: { capsuleId },
-    include: {
-      activities: {
-        orderBy: { recordedAt: "desc" },
-        take: 25,
-      },
-    },
+    include: CAPSULE_DETAIL_INCLUDE,
   });
 }

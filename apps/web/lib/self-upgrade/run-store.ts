@@ -16,6 +16,16 @@ import type {
 
 export type { SelfUpgradeRunStatus } from "@/lib/self-upgrade/run-types";
 
+/**
+ * A full `SelfUpgradeRun` row: what every writer and reader below returns.
+ * An interface rather than a type alias: Prisma's model type is a mapped type
+ * whose alias name does not survive into a caller's inferred return type, so a
+ * caller such as `getSelfUpgradeStatus` would otherwise force declaration emit
+ * to spell the generated `SelfUpgradeDispatchStatus` enum it cannot import
+ * (TS2883). The interface adds no members.
+ */
+export interface SelfUpgradeRunRow extends Prisma.SelfUpgradeRunModel {}
+
 export async function createRun(params: {
   runId?: string;
   triggeredBy?: string;
@@ -24,7 +34,7 @@ export async function createRun(params: {
   expectedDeployedSha?: string;
   /** Link to the UpgradeImpactSummary the operator reviewed (best effort). */
   impactSummaryId?: string | null;
-}) {
+}): Promise<SelfUpgradeRunRow> {
   const runId = params.runId ?? `SUR-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   const created = await prisma.selfUpgradeRun.create({
     data: {
@@ -350,7 +360,7 @@ export async function updateRunPlan(
     toVersion?: string;
     expectedDeployedSha?: string;
   },
-) {
+): Promise<SelfUpgradeRunRow> {
   return prisma.selfUpgradeRun.update({
     where: { runId },
     data: {
@@ -361,7 +371,7 @@ export async function updateRunPlan(
   });
 }
 
-export async function startRun(runId: string) {
+export async function startRun(runId: string): Promise<SelfUpgradeRunRow> {
   const current = await prisma.selfUpgradeRun.findUnique({ where: { runId } });
   if (current?.status === "running") return current;
   const updated = await prisma.selfUpgradeRun.update({
@@ -374,7 +384,7 @@ export async function startRun(runId: string) {
   return updated;
 }
 
-export async function completeRun(runId: string) {
+export async function completeRun(runId: string): Promise<SelfUpgradeRunRow> {
   const completedAt = new Date();
   const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
@@ -395,7 +405,7 @@ export async function completeRun(runId: string) {
   return updated;
 }
 
-export async function failRun(runId: string, error: string, reason?: string) {
+export async function failRun(runId: string, error: string, reason?: string): Promise<SelfUpgradeRunRow> {
   // Record WHY, not just the log. `skipRun` has always written a structured
   // `reason` that the Upgrade Center renders in plain language; `failRun` wrote
   // only `failureLog`, so a failed run showed the operator nothing but raw
@@ -448,7 +458,7 @@ export async function failRun(runId: string, error: string, reason?: string) {
   return updated;
 }
 
-export async function skipRun(runId: string, reason: string) {
+export async function skipRun(runId: string, reason: string): Promise<SelfUpgradeRunRow> {
   const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
     data: { status: "skipped", completedAt: new Date(), reason },
@@ -463,7 +473,7 @@ export async function skipRun(runId: string, reason: string) {
 export async function recordRunRecoveryPoint(
   runId: string,
   recoveryPoint: unknown,
-) {
+): Promise<SelfUpgradeRunRow> {
   const current = await prisma.selfUpgradeRun.findUnique({
     where: { runId },
     select: { completionEvidence: true },
@@ -493,7 +503,7 @@ export async function recordRunRecoveryPoint(
 export async function recordInterruptionEvidence(
   runId: string,
   interruption: unknown,
-) {
+): Promise<SelfUpgradeRunRow> {
   const current = await prisma.selfUpgradeRun.findUnique({
     where: { runId },
     select: { completionEvidence: true },
@@ -554,7 +564,7 @@ export function sanitizePromoterReadinessReport(report: PromoterReadinessReport)
 }
 
 /** Read/merge/write keeps recovery and rollback evidence while replacing only readiness. */
-export async function recordPromoterReadiness(runId: string, report: PromoterReadinessReport) {
+export async function recordPromoterReadiness(runId: string, report: PromoterReadinessReport): Promise<SelfUpgradeRunRow> {
   const current = await prisma.selfUpgradeRun.findUnique({
     where: { runId },
     select: { completionEvidence: true },
@@ -590,7 +600,7 @@ function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
-export async function cancelRun(runId: string, reason?: string) {
+export async function cancelRun(runId: string, reason?: string): Promise<SelfUpgradeRunRow> {
   const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
     // BI-F9EE05E5: an operator Abort records why the upgrade ended.
@@ -601,7 +611,7 @@ export async function cancelRun(runId: string, reason?: string) {
   return updated;
 }
 
-export async function appendLog(runId: string, chunk: string) {
+export async function appendLog(runId: string, chunk: string): Promise<SelfUpgradeRunRow> {
   const current = await prisma.selfUpgradeRun.findUniqueOrThrow({
     where: { runId },
     select: { failureLog: true },
@@ -612,7 +622,7 @@ export async function appendLog(runId: string, chunk: string) {
   });
 }
 
-export async function getLatestRun() {
+export async function getLatestRun(): Promise<SelfUpgradeRunRow | null> {
   return prisma.selfUpgradeRun.findFirst({
     orderBy: { createdAt: "desc" },
   });
@@ -625,14 +635,14 @@ export async function getLatestRun() {
  * `deployedSha`, which in merge mode is the merge-commit identity, not the
  * upstream SHA it absorbed.
  */
-export async function getLatestSucceededRun() {
+export async function getLatestSucceededRun(): Promise<SelfUpgradeRunRow | null> {
   return prisma.selfUpgradeRun.findFirst({
     where: { status: "succeeded" },
     orderBy: { createdAt: "desc" },
   });
 }
 
-export async function getRun(runId: string) {
+export async function getRun(runId: string): Promise<SelfUpgradeRunRow | null> {
   return prisma.selfUpgradeRun.findUnique({ where: { runId } });
 }
 
