@@ -52,6 +52,7 @@ import { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } from "@/lib/coworker/auth
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { getAgentToolGrantsAsync, isToolAllowedByGrants, TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 
+import { roomAuthorizesTool, roomGrantsFromWorkShape } from "./room-turn-authority";
 import { STAGE_EVIDENCE_TOOL, stageDeclaredTools } from "./stage-briefing";
 import { KNOWN_STAGE_TOOL_GAPS, stageToolGapKey } from "./stage-tool-gaps";
 import { listWorkShapes, readWorkShapeDefinitionContract } from "./work-shapes";
@@ -120,6 +121,35 @@ describe("GPP C-1 Stage coverage (GPP-001) — standing agent stages declare too
     expect(by.get("coworker-fitness-watch/measure")).toEqual(["get_capability_completeness"]);
     expect(by.get("adopter-health-watch/read")).toEqual(["list_customer_accounts"]);
     expect(by.get("inquiry-response-watch/draft")).toContain("list_storefront_activity");
+  });
+
+  it("the standing read-tool slice covers pull-request flow, contributor intake, vendor renewal and payables", () => {
+    const by = new Map(declaring().map((stage) => [stageToolGapKey(stage.shapeKey, stage.stageKey), stage.tools]));
+    expect(by.get("pull-request-flow-watch/read")).toEqual(["list_pull_requests"]);
+    expect(by.get("pull-request-flow-watch/classify")).toEqual(["list_pull_requests"]);
+    expect(by.get("contributor-intake-watch/sync")).toEqual(["read_contributor_inventory"]);
+    expect(by.get("contributor-intake-watch/flag")).toEqual(["read_contributor_inventory"]);
+    expect(by.get("vendor-renewal-watch/read")).toEqual(["list_supplier_contracts"]);
+    expect(by.get("vendor-renewal-watch/report")).toEqual(["list_supplier_contracts", "list_bills"]);
+    expect(by.get("payables-watch/read")).toEqual(["list_bills"]);
+    expect(by.get("payables-watch/report")).toEqual(["list_bills"]);
+  });
+
+  it("a shape whose stage declares a tool behind a non-baseline grant lets its room surface carry that grant", () => {
+    // The room narrows a coworker turn to roomGrantsFromWorkShape(shape.grants);
+    // `tool:read` expands only to the read baseline. Scoped to the shapes this
+    // slice touches; see the report for the shapes declared before it.
+    const shapes = ["pull-request-flow-watch", "contributor-intake-watch", "vendor-renewal-watch", "payables-watch"];
+    const unauthorized = declaring()
+      .filter((stage) => shapes.includes(stage.shapeKey))
+      .flatMap((stage) => {
+        const shape = listWorkShapes().find((candidate) => candidate.key === stage.shapeKey)!;
+        const surface = roomGrantsFromWorkShape(shape.grants);
+        return stage.tools
+          .filter((name) => !roomAuthorizesTool(name, surface))
+          .map((name) => `${stageToolGapKey(stage.shapeKey, stage.stageKey)}: ${name}`);
+      });
+    expect(unauthorized).toEqual([]);
   });
 });
 

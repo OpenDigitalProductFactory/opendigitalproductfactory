@@ -969,6 +969,9 @@
     "apps/web/lib/mcp/packs/compliance-scope-pack.ts": [
       "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
     ],
+    "apps/web/lib/mcp/packs/contributor-inventory-pack.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
     "apps/web/lib/mcp/packs/coworker-pack.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
@@ -976,6 +979,9 @@
       "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/mcp/packs/feedback-pack.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/mcp/packs/payables-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/mcp/packs/profession-decision-pack.ts": [
@@ -3130,8 +3136,10 @@
       "apps/web/lib/mcp-governed-execute-types.ts",
       "apps/web/lib/mcp-task-submit-types.ts",
       "apps/web/lib/mcp-tool-types.ts",
+      "apps/web/lib/mcp/packs/contributor-inventory-pack.ts",
       "apps/web/lib/mcp/packs/deliberation-siem-pack.ts",
       "apps/web/lib/mcp/packs/feedback-pack.ts",
+      "apps/web/lib/mcp/packs/payables-pack.ts",
       "apps/web/lib/mcp/packs/runtime-coordination-pack.ts",
       "apps/web/lib/mcp/packs/work-capsules-pack.ts",
       "apps/web/lib/mcp/packs/workbooks-pack.ts",

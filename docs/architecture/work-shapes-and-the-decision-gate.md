@@ -908,9 +908,29 @@ goes on `KNOWN_STAGE_TOOL_GAPS` (`stage-tool-gaps.ts`) with the reason. One gap
 closed as part of this work: `customer-advisor` gained `storefront_read`, so the
 inquiry draft stage can call `list_storefront_activity`.
 
-Shape versions were not bumped by that change, because at the time a bump
-stopped every room pinned to the old version. The next section covers how a
-widening now lands.
+A second slice (BI-EBF0F6EE) added four read tools where the substrate already
+held the data but no tool read it, and closed eight gaps:
+
+| Shape / stages | Tools | Grant (holder) |
+|---|---|---|
+| `pull-request-flow-watch` read, classify | `list_pull_requests` | `contributor_inventory_read` (`change-reviewer`) |
+| `contributor-intake-watch` sync, flag | `read_contributor_inventory` | `contributor_inventory_read` (`platform-engineer`) |
+| `vendor-renewal-watch` read; report | `list_supplier_contracts`; plus `list_bills` | `payables_read` (`finance-controller`) |
+| `payables-watch` read, report | `list_bills` | `payables_read` (`finance-controller`) |
+
+Each grant is new and held only by the accountable agent, in both
+`coworker-grants.ts` and `agent_registry.json`. Each of the four shapes also
+names its grant in `grants` (for example `tool:payables_read`), because a room
+narrows a coworker turn to the shape's grants and `tool:read` expands only to
+the read baseline. The tools report an empty or unconfigured source as unknown,
+never as clear: `list_bills` on an install with no bills returns
+`{ items: [], note: "No bills are recorded." }`. The contributor inventory
+records branches, worktrees and pull requests, not people, so the intake `flag`
+stage reads sign-off and licence facts as unknown until a source records them.
+
+These four shapes moved to version 1.1.0, because adding a tool widens a
+binding. Their rooms reach 1.1.0 only by rebind, as described in the next
+section.
 
 ## A new shape version reaches a live room only by rebind (BI-CB5C0DCE)
 
