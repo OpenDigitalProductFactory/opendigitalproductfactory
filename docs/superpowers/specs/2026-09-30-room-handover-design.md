@@ -2,7 +2,7 @@
 status: draft
 ---
 
-# Hand over an account's rooms in one governed approval
+# Hand over an account's live work in one governed approval
 
 **Backlog:** BI-F25A5FC7. **Epic:** EP-31815F97. **Depends on:** BI-67B27832
 (`Portfolio.accountablePrincipalId`, `resolveWorkOwner`).
@@ -27,6 +27,24 @@ The rooms themselves were never repaired. While admin coordinates them:
 The only repair today is `appoint_room_coordinator`, one room per call, and
 each call needs its own approval that expires in fifteen minutes. That means
 187 approvals. The same need recurs whenever a person leaves the organization.
+
+### 1.1 Scope widened after live inventory (2026-10-01)
+
+After BI-67B27832 deployed and the four portfolios were given an accountable
+person, the account still owns more than rooms:
+
+| Live work owned by `admin@dpf.local` | Count |
+|---|---|
+| Workrooms it coordinates, not terminal | 187 |
+| Build Studio builds it created, in plan, ideate, build, ship or review | 127 |
+| Scheduled coworker tasks (`ScheduledAgentTask.ownerUserId`) | 93 (20 active) |
+
+Each of these routes its approvals and actions to the absent account. A builder
+that re-homes only rooms leaves builds and scheduled tasks orphaned. The
+handover therefore covers all three kinds, chosen per item by the same
+portfolio rule (§3.3). The code paths that still mint new admin-owned work are
+fixed separately, by the item that removes the remaining "first superuser"
+fallbacks.
 
 ## 2. Research and benchmarking
 
@@ -59,10 +77,19 @@ approval for the whole set.
 
 ### 3.2 Selection
 
-A room is in the set when it is not `complete`, `abandoned` or `archived`, and
-its only active coordinator is the named source account's principal. A room
-with no coordinator, or with some other coordinator, is outside the set: no
-overwrite.
+The set has three kinds of item, all owned by the named source account:
+
+- **Rooms:** not `complete`, `abandoned` or `archived`, and the source
+  account's principal is the only active coordinator. A room with no
+  coordinator, or with some other coordinator, is outside the set: no
+  overwrite.
+- **Builds:** `createdById` is the source account and the phase is not
+  terminal (`complete`, `failed` or `abandoned`). The new owner comes from the
+  build's portfolio. Only ownership changes; the build's history and phase stay
+  as they are.
+- **Scheduled tasks:** `ownerUserId` is the source account. The new owner comes
+  from the task's portfolio when it has one, otherwise Foundational. Paused
+  tasks move too, so they are not orphaned when resumed.
 
 ### 3.3 The new owner per room
 
@@ -83,7 +110,7 @@ The tool is `hand_over_rooms`: capability `manage_platform`, consequence
 1. **Dry run** (default) writes nothing. It returns every room with its
    current coordinator, its new owner and the source of that choice, the rooms
    it refuses, and a `planDigest`: a hash of the sorted
-   (capsuleId, from, to) triples.
+   (kind, id, from, to) tuples.
 2. **Apply** takes the same source account and the `planDigest`. The approval
    envelope's input fingerprint covers both, so one approval authorizes exactly
    that set.
@@ -138,8 +165,8 @@ second path.
 
 ## 4. Acceptance
 
-- **AC-1:** One approval re-appoints every live room of the named account, and
-  each room records the handover.
+- **AC-1:** One approval re-homes every live room, live build and scheduled
+  task of the named account, and each item records the handover.
 - **AC-2:** A dry run returns the exact room list, the new owner per room and
   the plan digest, and writes nothing.
 - **AC-3:** A room whose coordinator changed between the dry run and the
