@@ -125,7 +125,8 @@ export type GovernedExecuteContext = {
    * GPP Phase 2 PR-C (BI-69415B68): a permit handle the caller presented —
    * an external client replaying the opaque permit id it was given, carried on
    * the MCP route as `params._meta["com.opendigitalproductfactory/authorization-handle"]`.
-   * Shadow only: the monitor records the handle's verdict and never refuses on it.
+   * The monitor records the handle's verdict; it refuses on it only for a
+   * binding promoted to enforced (PR-E, lib/gpp/binding-enforcement.ts).
    */
   permitHandle?: string;
 };
@@ -152,7 +153,12 @@ export type GovernedExecuteRejection =
   | "alignment_bypass_forbidden"
   | "receipt_reservation_failed"
   | "precondition_denied"
-  | "precondition_escalation_required";
+  | "precondition_escalation_required"
+  /**
+   * GPP Phase 2 PR-E: an enforced binding covers the call and it carries no
+   * valid permit. A hold, not a settled no: pass the named gate and call again.
+   */
+  | "permit_required";
 
 export type GovernedExecuteResult = ToolResult & {
   governance?: {

@@ -29,10 +29,12 @@ export type GppBindingAdmission =
   /** The coworker authority gate admitted on an approved human checkpoint (CoworkerActionEnvelope). */
   | "approved-envelope";
 
-/** What the binding knows about a tool: the runtime classification, nothing more. */
+/** What the binding knows about a tool: its name and the runtime classification, nothing more. */
 export type GppBindingToolFacts = {
   /** classifyConsequentialTool(...).consequential — the O/A/I set. */
   consequential: boolean;
+  /** The canonical tool name. Needed only by a binding that names its tools (`tools`). */
+  name?: string;
 };
 
 export type GppBinding = {
@@ -44,6 +46,14 @@ export type GppBinding = {
   resolver: { module: string; exportName: string };
   admission: GppBindingAdmission;
   toolPredicate: (tool: GppBindingToolFacts) => boolean;
+  /**
+   * PR-E: an explicit tool list. When present the binding covers only these
+   * names (and only where `toolPredicate` also holds). The two seeds have none:
+   * they cover every O/A/I call in shadow. A binding must name its tools before
+   * it can be promoted to enforced (binding-enforcement.ts promotionRefusals),
+   * so the enforced set is always a reviewable list, never a predicate.
+   */
+  tools?: readonly string[];
   reason: "oai" | "c5";
 };
 
@@ -76,6 +86,36 @@ export const GPP_BINDINGS: readonly GppBinding[] = [
   },
 ] as const;
 
+/**
+ * Test seams in the GPP modules run only under the test runner. A seam that
+ * changed bindings or enforcement in a running server would be a path around
+ * review, so it refuses rather than trusting every caller.
+ */
+export function assertGppTestSeam(seam: string): void {
+  if (process.env.VITEST === "true" || process.env.NODE_ENV === "test") return;
+  throw new Error(`${seam} is a test seam and runs only under the test runner`);
+}
+
+let bindingsOverride: readonly GppBinding[] | null = null;
+
+/** Test seam: replace the declared binding table (fixture bindings). Null restores it. */
+export function setGppBindingsOverrideForTests(bindings: readonly GppBinding[] | null): void {
+  if (bindings) assertGppTestSeam("setGppBindingsOverrideForTests");
+  bindingsOverride = bindings;
+}
+
+/** The binding table in force: GPP_BINDINGS, unless a test installed fixtures. */
+export function gppBindings(): readonly GppBinding[] {
+  return bindingsOverride ?? GPP_BINDINGS;
+}
+
+/** Whether `binding` covers this tool: its predicate holds and, when it names tools, the tool is named. */
+export function bindingCoversTool(binding: GppBinding, tool: GppBindingToolFacts): boolean {
+  if (!binding.toolPredicate(tool)) return false;
+  if (!binding.tools) return true;
+  return tool.name !== undefined && binding.tools.includes(tool.name);
+}
+
 /** `id@version`, the form the plan, the map and observations cite. */
 export function bindingRef(binding: Pick<GppBinding, "bindingId" | "version">): string {
   return `${binding.bindingId}@${binding.version}`;
@@ -83,7 +123,7 @@ export function bindingRef(binding: Pick<GppBinding, "bindingId" | "version">): 
 
 /** Bindings that could cover this tool at all (used by the map). */
 export function bindingsForTool(tool: GppBindingToolFacts): GppBinding[] {
-  return GPP_BINDINGS.filter((binding) => binding.toolPredicate(tool));
+  return gppBindings().filter((binding) => bindingCoversTool(binding, tool));
 }
 
 /**
@@ -97,8 +137,8 @@ export function bindingForAdmittedCall(input: {
   alignmentApproved: boolean;
   approvedEnvelopeId: string | null;
 }): GppBinding | null {
-  for (const binding of GPP_BINDINGS) {
-    if (!binding.toolPredicate(input.tool)) continue;
+  for (const binding of gppBindings()) {
+    if (!bindingCoversTool(binding, input.tool)) continue;
     if (binding.admission === "alignment-approve" && input.alignmentApproved) return binding;
     if (binding.admission === "approved-envelope" && input.approvedEnvelopeId) return binding;
   }
