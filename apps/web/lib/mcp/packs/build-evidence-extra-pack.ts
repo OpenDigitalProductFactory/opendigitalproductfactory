@@ -293,6 +293,17 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
           }
         } else {
           await prisma.featureBuild.update({ where: { buildId: latestBuild.buildId }, data: { phase: toPhase } });
+          // GPP C-8 shadow (BI-45F9CB7A). advanceBuildPhase also enforces the
+          // blocking WWMD plan-advancement gate on plan→build. This path predates
+          // that gate and skips it. Record the skip so live evidence can decide
+          // enforcement; the outcome here is deliberately unchanged.
+          if (latestBuild.phase === "plan" && toPhase === "build") {
+            logBuildActivity(
+              latestBuild.buildId,
+              "gpp-c8-transition-gate-skipped",
+              "plan → build advanced by save_phase_handoff without the WWMD plan-advancement gate (shadow; not enforced)",
+            );
+          }
         }
         if (toPhase === "review") {
           const { queueBuildReviewVerification } = await import("@/lib/build-review-verification-trigger");
