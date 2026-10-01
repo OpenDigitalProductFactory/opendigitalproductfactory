@@ -6,7 +6,7 @@
 // Spec: docs/superpowers/specs/2026-10-01-workroom-shape-rebind-design.md §4.3
 
 import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
-import { diffWorkShapeBinding, type WorkShapeBindingDiff } from "./work-shape-binding-diff";
+import { diffWorkShapeBinding, type BindingChangeKind, type WorkShapeBindingDiff } from "./work-shape-binding-diff";
 import { isCompletingWorkroomDriveReceipt } from "./workroom-drive-receipts";
 import { getWorkShape, getWorkShapeVersion, readWorkShapeDefinitionContract } from "./work-shapes";
 import { readWorkShapeClaim } from "./workroom-shape-claim";
@@ -123,3 +123,17 @@ export function buildRebindEvidence(input: {
     },
   };
 }
+
+/** What the room page shows (workroom-shape-rebind.server.ts builds it). */
+export type WorkroomShapeRebindView = {
+  caseKey: string;
+  roomRowId: string;
+  fromRef: string;
+  toRef: string;
+  toVersion: string;
+  classification: "widening" | "narrowing" | "unchanged";
+  changes: Array<{ kind: BindingChangeKind; stageKey: string | null; detail: string }>;
+  canRebind: boolean;
+  /** Why the caller cannot rebind now (not the owner, or a stage is running). */
+  refusal: string | null;
+};

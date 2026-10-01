@@ -9,6 +9,8 @@ import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity
 import { recordWorkCapsuleActivity, recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-activity-store";
 import type { CapsuleDb } from "@/lib/work-capsules/work-capsule-store-types";
 import { loadRoomAccountabilityBatch, type RoomWorkforceDb } from "./room-workforce.server";
+import { getWorkShape } from "./work-shapes";
+import { readWorkShapeClaim } from "./workroom-shape-claim";
 import { resolveStageDecider, stageDeciderRefusal, type StageDecider } from "./workroom-stage-decision";
 import {
   buildRebindEvidence,
@@ -16,6 +18,7 @@ import {
   rebindRefusal,
   type RebindPlanData,
   type RebindRefusal,
+  type WorkroomShapeRebindView,
 } from "./workroom-shape-rebind";
 
 type FindFirst = { findFirst(args: unknown): Promise<Record<string, unknown> | null> };
@@ -61,7 +64,7 @@ async function callerHumanPrincipalId(db: ShapeRebindDb, userId: string): Promis
   return typeof principal?.id === "string" ? principal.id : null;
 }
 
-async function loadRoom(db: ShapeRebindDb, input: ShapeRebindInput): Promise<RoomRow | null> {
+async function loadRoom(db: ShapeRebindDb, input: Pick<ShapeRebindInput, "roomRowId" | "capsuleId">): Promise<RoomRow | null> {
   const where = input.roomRowId ? { id: input.roomRowId } : input.capsuleId ? { capsuleId: input.capsuleId } : null;
   if (!where) return null;
   const room = await db.workroom.findUnique({
@@ -129,4 +132,38 @@ export async function rebindWorkroomShapeForUser(db: ShapeRebindDb, input: Shape
     return rebindRefusal("rebind_conflict", "The room changed while you were deciding. Review the current version and try again.");
   }
   return ok({ ...planned, applied: true, capsuleId: room.capsuleId });
+}
+
+/** The room page's read model; null when the room is not behind its shape's current version. */
+export async function loadWorkroomShapeRebindView(
+  db: ShapeRebindDb,
+  input: { caseKey: string; roomRowId: string; userId: string; callerHasManagePlatform: boolean },
+): Promise<WorkroomShapeRebindView | null> {
+  const room = await loadRoom(db, { roomRowId: input.roomRowId });
+  const pinned = room ? readWorkShapeClaim(room.scopeClaims) : null;
+  const current = pinned ? getWorkShape(pinned.key) : null;
+  if (!room || !pinned || !current || current.version === pinned.version) return null;
+  const preview = (authorized: boolean) => rebindWorkroomShapeForUser(db, {
+    roomRowId: input.roomRowId,
+    toVersion: current.version,
+    dryRun: true,
+    userId: input.userId,
+    callerHasManagePlatform: authorized,
+  });
+  const asCaller = await preview(input.callerHasManagePlatform);
+  // A caller who may not decide still sees what would change.
+  const shown = asCaller.ok || asCaller.code !== "not_authorized" ? asCaller : await preview(true);
+  if (!shown.ok && shown.code !== "stage_in_flight") return null;
+  const diff = shown.ok ? shown.data.diff : null;
+  return {
+    caseKey: input.caseKey,
+    roomRowId: room.id,
+    fromRef: `${pinned.key}@${pinned.version}`,
+    toRef: `${current.key}@${current.version}`,
+    toVersion: current.version,
+    classification: diff?.classification ?? "widening",
+    changes: diff?.changes.map(({ kind, stageKey, detail }) => ({ kind, stageKey, detail })) ?? [],
+    canRebind: asCaller.ok,
+    refusal: asCaller.ok ? null : asCaller.error,
+  };
 }

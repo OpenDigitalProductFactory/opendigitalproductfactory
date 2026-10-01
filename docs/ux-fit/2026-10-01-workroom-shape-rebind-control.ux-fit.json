@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-disclosure",
+  "decisionInteractionId": "DI-732CC7162108",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/WorkroomHeader.tsx",
+      "apps/web/components/workspace/workroom/WorkroomShapeRebind.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["progressive-disclosure", "always-open-diff", "separate-page"]
+  }
+}

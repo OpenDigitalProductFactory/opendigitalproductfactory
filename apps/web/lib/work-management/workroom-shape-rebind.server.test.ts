@@ -27,7 +27,7 @@ vi.mock("@/lib/work-capsules/activity-events", () => ({ publishRecordedWorkCapsu
 vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn() }));
 
 import { getWorkShape } from "./work-shapes";
-import { rebindWorkroomShapeForUser, type ShapeRebindDb } from "./workroom-shape-rebind.server";
+import { loadWorkroomShapeRebindView, rebindWorkroomShapeForUser, type ShapeRebindDb } from "./workroom-shape-rebind.server";
 
 const current = getWorkShape(KEY)!;
 
@@ -147,5 +147,34 @@ describe("a successful rebind (AC-GATE-2)", () => {
     const { db, activities } = makeDb(room(`${KEY}@0.8.0`), { casMiss: true });
     expect(await rebindWorkroomShapeForUser(db, base)).toMatchObject({ ok: false, code: "rebind_conflict" });
     expect(activities).toHaveLength(0);
+  });
+});
+
+describe("the room page's rebind view (AC-OWNER-2)", () => {
+  const viewFor = (db: ShapeRebindDb, callerHasManagePlatform = false) =>
+    loadWorkroomShapeRebindView(db, { caseKey: "case-1", roomRowId: "row-1", userId: "user-1", callerHasManagePlatform });
+
+  it("is absent for a room on the current version", async () => {
+    expect(await viewFor(makeDb(room(`${KEY}@${current.version}`)).db)).toBeNull();
+  });
+
+  it("offers the owner the rebind, with the diff behind it", async () => {
+    const view = await viewFor(makeDb(room(`${KEY}@0.9.0`)).db);
+    expect(view).toMatchObject({ canRebind: true, refusal: null, classification: "widening", toVersion: current.version, fromRef: `${KEY}@0.9.0` });
+    expect(view!.changes.some((change) => change.kind === "grant-added")).toBe(true);
+  });
+
+  it("shows someone else what would change and who decides, without the control", async () => {
+    const view = await viewFor(makeDb(room(`${KEY}@0.9.0`), { callerPrincipal: "PRN-SOMEONE" }).db);
+    expect(view).toMatchObject({ canRebind: false, classification: "widening" });
+    expect(view!.refusal).toMatch(/Owner Person/);
+    expect(view!.changes.length).toBeGreaterThan(0);
+  });
+
+  it("says a running stage holds the rebind", async () => {
+    const stageKey = current.stages[0]!.key;
+    const view = await viewFor(makeDb(room(`${KEY}@0.9.0`, { workroomDrive: { action: "dispatch_agent", stageKey, receipts: [] } })).db);
+    expect(view).toMatchObject({ canRebind: false });
+    expect(view!.refusal).toMatch(/running/);
   });
 });
