@@ -1479,6 +1479,9 @@
     "apps/web/lib/workspace-home/profiles.ts": [
       "docs/testing/archetype-job-validation.md"
     ],
+    "apps/web/scripts/gpp-critical-interaction-map.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/scripts/issue-edge-bootstrap-token.ts": [
       "docs/install/verification-runbook.md"
     ],
@@ -3076,7 +3079,8 @@
       "apps/web/lib/explore/feature-build-types.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
-      "apps/web/lib/work-management/work-shapes.ts"
+      "apps/web/lib/work-management/work-shapes.ts",
+      "apps/web/scripts/gpp-critical-interaction-map.ts"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
