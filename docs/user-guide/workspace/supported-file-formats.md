@@ -34,6 +34,14 @@ to the coworker and to onboarding; they do not become a Workbook table.
 Size limits do not change with the format. A coworker attachment is limited to
 10 MB.
 
+## Hidden characters are removed
+
+Text can hide characters that do not show on screen but that an AI model still
+reads. Attackers use them to slip instructions into a document, a web page or
+an email. Before a coworker reads an uploaded file, the platform removes these
+hidden characters. Emoji, flags and the joining marks some languages need, such
+as Persian and Hindi, are kept. The file you uploaded is stored unchanged.
+
 ## When the converter is off
 
 The document converter is part of the platform, but not every installation has
