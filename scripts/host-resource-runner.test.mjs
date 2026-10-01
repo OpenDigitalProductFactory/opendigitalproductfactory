@@ -198,7 +198,7 @@ test("a .mcp.json naming a remote endpoint stops rather than sending the token o
   const cwd = seedMcpConfig("https://mcp.example.com/api/mcp/v1");
   assert.throws(
     () => withoutMcpEnv(() => readMcpConnection(cwd)),
-    /not a local endpoint; refusing to send the bearer token off-box/,
+    /neither loopback nor the install.s configured origin .*refusing to send the bearer token/,
   );
 });
 
