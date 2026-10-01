@@ -342,3 +342,27 @@ Sources are cited in the research briefs recorded with BI-6DA17863 and in the
 
 This is design documentation only. Doc checks run; no runtime change is made. Independent design
 review is required before Phase 1.
+
+## 11. Objectives and acceptance (scope baseline for BI-69415B68)
+
+These statements are the machine-readable scope baseline for the structural-enforcement item
+(BI-69415B68), which covers design Phases 1 and 2. The notation and compiler work (BI-6DA17863)
+gets its own baseline when it is planned.
+
+- **OBJ-NODISRUPT:** No tool call that succeeds today fails because of GPP enforcement unless a binding for that tool and stage has been promoted to enforced after its shadow evidence was ratified.
+- **OBJ-CRITICAL:** Permits are required only for outward, authority-changing and irreversible tools, and for C-5 capability combinations, under enforced bindings; read and internal-write tools keep today's checks.
+- **OBJ-MEDIATION:** Every side-effecting tool is reachable only through the reference monitor, and every existing exception sits on a shrink-only list.
+- **OBJ-TRANSITION:** Every stage transition that a model guards is performed through one transition function that enforces the transition's declared gate set.
+- **OBJ-PERMIT:** A permit is minted only at gate admit. It carries a MAC over its claims, is bound to the exact transaction for outward, authority and irreversible calls, and traces to a sealed decision in the hash-chained ledger.
+- **OBJ-VISIBLE:** Critical interactions, the gates that guard them and each gate's enforcement mode are visible on demand and reported honestly.
+
+| Acceptance | Objectives | Statement |
+|---|---|---|
+| AC-RATCHET-CLASS | OBJ-VISIBLE, OBJ-CRITICAL | A test fails when a new side-effecting tool is added without a consequence class, and passes on the main branch at the time of merge. |
+| AC-RATCHET-REACH | OBJ-MEDIATION | A test fails when a new direct executeTool call site is added outside the reference monitor, and passes on the main branch at the time of merge. |
+| AC-MAP | OBJ-VISIBLE | The critical-interaction map lists every registered tool exactly once with its consequence class, guards, guard modes and direct call sites. |
+| AC-C8-SHADOW | OBJ-TRANSITION, OBJ-NODISRUPT | When save_phase_handoff advances a build from plan to build, a gate-skipped event is recorded and the transition outcome is unchanged. |
+| AC-SHADOW-PERMIT | OBJ-PERMIT, OBJ-NODISRUPT | In shadow mode the monitor records a permit verdict for every outward, authority and irreversible call under a binding and refuses none. |
+| AC-FORGERY | OBJ-PERMIT | A permit whose row was edited or invented fails MAC verification and is recorded as forged. |
+| AC-ENFORCE | OBJ-CRITICAL, OBJ-NODISRUPT | A tool under an enforced binding is refused without a valid permit, while tools without a binding behave exactly as before. |
+| AC-SINGLE-TRANSITION | OBJ-TRANSITION | Every code path that performs a governed stage transition calls the shared transition function. |
