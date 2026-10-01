@@ -221,7 +221,58 @@ The rules match the shape budgets above:
 To measure locally, run
 `flock /tmp/dpf-heavy.lock node scripts/sbom/check-typecheck-baseline.mjs --measure`.
 It runs a full web typecheck, about 150 s at 5.5 GB peak on the sandbox. Add
-`--update-baseline` to lock in a reduction.
+`--update-baseline` to lock in a reduction. `--measure` passes
+`--incremental false`, so it compiles cold even when the worktree holds a
+`tsconfig.tsbuildinfo`.
+
+#### Warm start in CI
+
+Both apps/web programs are `incremental`, and tsc writes their build info
+next to the tsconfig: `apps/web/tsconfig.tsbuildinfo` and
+`apps/web/tsconfig.test.tsbuildinfo`. The Typecheck and Typecheck (web tests)
+jobs restore both through `.github/actions/web-tsbuildinfo-cache` before they
+compile. The key is the TypeScript version, a hash of the lockfile and the
+three tsconfigs, then the commit SHA. The restore key drops the SHA, so a run
+gets the newest `main` entry with the same inputs. Only the push-to-main job
+`typecheck-cache` saves (spec 2026-09-30 web-runtime-import-cycle §6 PR-1);
+PR and merge_group runs never write. That job is separate because a push whose
+merge-group evidence is reused skips Typecheck entirely. A miss restores
+nothing, and the compile runs cold as before.
+
+The ratchet is unaffected. `--listFiles` prints every program file on a warm
+run too, so the report's file list and totals match a cold run's. Only
+`Check time` changes, and it is absent when nothing needed checking. It was
+informational before and stays so.
+
+Build info from another commit is safe. tsc versions each file by a hash of
+its text. It re-checks a changed file and every file that imports a changed
+declaration signature. It discards build info from another TypeScript
+version or other compiler options. This was checked on 2026-10-01 against
+`origin/main` `fbee99d6c`, with build info from `origin/main~15` (180 files
+changed, 25 added). Three errors were injected:
+
+- a type error in a file the range changed;
+- a changed exported return type in a changed file, which broke 13 importers,
+  10 of them unchanged in the range;
+- a deleted module that the range left unchanged, imported by 4 files, 3 of
+  them unchanged.
+
+Cold, warm from `main~15` and warm from `main` reported the same 24 errors
+and the same file list.
+
+Wall time in the sandbox, including `next typegen`:
+
+| Production program | Wall time |
+| --- | --- |
+| Cold | 240 s |
+| Warm, no change | 31 s |
+| Warm, comment in `components/ui/Button.tsx` | 46 s |
+| Warm, new export in `lib/shared/coerce.ts` | 133 s |
+| Warm from 15 commits back (165 program files changed, the `@dpf/i18n` catalog among them) | 248 s (no gain) |
+
+The test program takes 365 s cold and 41 s warm with no change. A change to a
+file nearly everything imports, such as the i18n catalog, the Prisma client or
+`.next/types`, re-checks most of the program. Expect a near-cold time then.
 
 Known gap: a production file that starts importing an existing file from an
 accepted directory adds lines that no diff line wrote. The file is still

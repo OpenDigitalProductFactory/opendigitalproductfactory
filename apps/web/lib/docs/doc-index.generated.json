@@ -1463,6 +1463,7 @@
         "lockfile-roots",
         "pruning-overrides",
         "typecheck-program-budget-checked-lines-only-grow-with-the-diff",
+        "warm-start-in-ci",
         "axis-2-vulnerability-lifecycle-the-local-dependabot-equivalent",
         "the-remediation-ladder-when-a-floor-wont-work",
         "owning-a-fix-pnpm-patch-when-upstream-is-dead",
