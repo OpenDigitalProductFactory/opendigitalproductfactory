@@ -28,20 +28,30 @@ describe("planMcpClientConfig", () => {
     expect(mcp.content).not.toMatch(/dpfmcp_/);
   });
 
-  // BI-46B636B0: the header is the only credential path over plain http; over
-  // https it would disable the client's OAuth, so it is omitted there.
-  it("omits the bearer header for an https endpoint so OAuth takes over", () => {
+  // BI-5201141C (design 12.4.4): on https the dpf-platform plugin's URL-only
+  // connector is the one Claude Code connector. Claude Code de-duplicates
+  // plugin and project servers by endpoint, so a repo .mcp.json at another URL
+  // would load as a second dpf server; in OAuth mode the planner writes none.
+  it("plans no repo .mcp.json on https in OAuth mode (the plugin owns the Claude connector)", () => {
     const plan = planMcpClientConfig(REPO, "https://dpf.example.com/api/mcp/v1", null, null);
-    const mcp = JSON.parse(plan.writes.find((w) => w.path.endsWith("/.mcp.json"))!.content) as Record<string, any>;
-    const vs = JSON.parse(plan.writes.find((w) => w.path.endsWith("/.vscode/mcp.json"))!.content) as Record<string, any>;
-    expect(mcp.mcpServers.dpf.url).toBe("https://dpf.example.com/api/mcp/v1?tier=full");
-    expect("headers" in mcp.mcpServers.dpf).toBe(false);
+    expect(plan.writes.map((w) => w.path)).toEqual(["/Users/dev/dpf/.vscode/mcp.json"]);
+    const vs = JSON.parse(plan.writes[0].content) as Record<string, any>;
+    // BI-46B636B0: over https a header would disable OAuth, so it is omitted.
     expect("headers" in vs.servers.dpf).toBe(false);
-    // BI-3D2FD68C: the pin is what turns the OAuth consent into a write grant;
-    // without it the client asks for the advertised read scope and stays there.
-    expect(mcp.mcpServers.dpf.oauth).toEqual({ scopes: "dpf.read dpf.work dpf.build" });
     // VS Code has no oauth.scopes field; its entry stays url-only.
     expect("oauth" in vs.servers.dpf).toBe(false);
+  });
+
+  it("leaves an existing repo .mcp.json untouched on https (never rewrites the operator's file)", () => {
+    const existing = JSON.stringify({ mcpServers: { dpf: { url: "https://localhost/api/mcp/v1?tier=full" } } });
+    const plan = planMcpClientConfig(REPO, "https://localhost/api/mcp/v1", existing, null);
+    expect(plan.writes.some((w) => w.path.endsWith("/.mcp.json"))).toBe(false);
+  });
+
+  it("still plans the repo .mcp.json in explicit legacy mode", () => {
+    const plan = planMcpClientConfig(REPO, "https://dpf.example.com/api/mcp/v1", null, null, "legacy");
+    const mcp = JSON.parse(plan.writes.find((w) => w.path.endsWith("/.mcp.json"))!.content) as Record<string, any>;
+    expect(mcp.mcpServers.dpf.headers.Authorization).toBe("Bearer ${DPF_MCP_BEARER_TOKEN}");
   });
 
   it("carries no oauth block on plain http, where the header is the credential", () => {
@@ -97,14 +107,14 @@ describe("planMcpClientConfig", () => {
 });
 
 
-it("preserves unrelated JSON servers while removing only managed OAuth-blocking headers", () => {
-  const original = JSON.stringify({mcpServers: {other: {url: "https://other.example"}, dpf: {url: "https://old.example", timeout: 45, headers: {Authorization: "Bearer ${DPF_MCP_BEARER_TOKEN}", "X-Tenant": "sample"}}}});
-  const plan = planMcpClientConfig("/tmp/repo", "https://dpf.example/api/mcp/v1", original, null);
+it("preserves unrelated JSON servers and user-owned options when converging the managed entry", () => {
+  const original = JSON.stringify({mcpServers: {other: {url: "https://other.example"}, dpf: {url: "http://old.example", timeout: 45, headers: {"X-Tenant": "sample"}}}});
+  const plan = planMcpClientConfig("/tmp/repo", "http://127.0.0.1:3000/api/mcp/v1", original, null);
   const content = JSON.parse(plan.writes.find(w => w.path.endsWith("/.mcp.json"))!.content);
   expect(content.mcpServers.other.url).toBe("https://other.example");
   expect(content.mcpServers.dpf.timeout).toBe(45);
-  expect(content.mcpServers.dpf.headers).toEqual({"X-Tenant": "sample"});
-  expect(planMcpClientConfig("/tmp/repo", "https://dpf.example/api/mcp/v1", JSON.stringify(content, null, 2), plan.writes.find(w => w.path.endsWith("/.vscode/mcp.json"))!.content).writes).toEqual([]);
+  expect(content.mcpServers.dpf.headers).toEqual({"X-Tenant": "sample", Authorization: "Bearer ${DPF_MCP_BEARER_TOKEN}"});
+  expect(planMcpClientConfig("/tmp/repo", "http://127.0.0.1:3000/api/mcp/v1", JSON.stringify(content, null, 2), plan.writes.find(w => w.path.endsWith("/.vscode/mcp.json"))!.content).writes).toEqual([]);
 });
 
 it("preserves custom credentials and headers when compatibility is required", () => {

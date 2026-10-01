@@ -2136,6 +2136,9 @@
     "scripts/hooks/converge-git-hooks.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/hooks/lib/retire-project-dpf-connector.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "scripts/hooks/run-hook.mjs": [
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
@@ -3078,6 +3081,7 @@
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
       "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs",
       "scripts/gate-worktree.mjs",
+      "scripts/hooks/lib/retire-project-dpf-connector.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/mcp-client.mjs",
       "scripts/lib/mcp-credential.mjs",
