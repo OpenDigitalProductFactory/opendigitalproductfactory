@@ -1,8 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 // ── Mocks (must be declared before imports) ──────────────────────────────────
-
-// Mock ai-inference: provide real pure functions but avoid DB imports
-vi.mock("@/lib/ai-inference", () => {
+// Fake both inference leaves (error, message format) with copies of their pure functions.
+const aiInferenceFake = vi.hoisted(() => {
   class InferenceError extends Error {
     name = "InferenceError";
     constructor(
@@ -137,13 +136,14 @@ vi.mock("@/lib/ai-inference", () => {
     formatMessageForResponses,
   };
 });
+vi.mock("@/lib/routing/inference-error", () => aiInferenceFake);
+vi.mock("@/lib/routing/provider-message-format", () => aiInferenceFake);
 
 // ── Imports (after mocks) ────────────────────────────────────────────────────
-
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 import { chatAdapter, withLocalInferenceLock } from "./chat-adapter";
-import { InferenceError } from "@/lib/ai-inference";
+import { InferenceError } from "@/lib/routing/inference-error";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
