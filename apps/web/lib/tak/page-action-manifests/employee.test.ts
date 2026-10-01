@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { employeeActions } from "./manifest";
+import { employeeActions } from "./employee";
 
 describe("employee action manifest", () => {
   it("has route /employee", () => {

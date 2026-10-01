@@ -67,7 +67,7 @@ import {
   type RestaurantCapacitySnapshot,
 } from "@/lib/storefront/restaurant-capacity";
 
-import type { Intent } from "@/components/ui/report-kit";
+import type { Intent } from "@/lib/ui-model/statusColors";
 import {
   formatMoney,
   resolveOrgLocale,
@@ -85,12 +85,10 @@ import type {
   QuestData,
   ResourceUnitData,
   TwinActor,
-  TwinCogSnapshot,
-  TwinQueueSnapshot,
-  TwinZoneSnapshot,
   UtilityMeterData,
   WorkItemData,
-} from "@/components/twin";
+} from "./kit-types";
+import type { TwinCogSnapshot, TwinQueueSnapshot, TwinZoneSnapshot } from "./twin-snapshot";
 
 // ── Structural client (satisfied by the real PrismaClient and by test fakes) ──
 type FindMany = (args: unknown) => Promise<unknown>;

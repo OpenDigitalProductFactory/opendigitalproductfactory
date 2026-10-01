@@ -2973,7 +2973,8 @@
           "crm_read",
           "crm_write",
           "web_search",
-          "workroom_evidence_write"
+          "workroom_evidence_write",
+          "storefront_read"
         ]
       }
     },

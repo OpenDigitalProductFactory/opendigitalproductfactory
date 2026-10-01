@@ -518,7 +518,7 @@ technical names for a real mechanism, not language a business owner can act on.
 - **Oversight language comes from one module.** `apps/web/lib/workforce/oversight-copy.ts`
   is the single source of truth: **Employee only / Needs approval / Employee review /
   Runs on its own**, with colour resolved through the `employeeOversight` intent
-  namespace in `apps/web/components/ui/report-kit/statusColors.ts`. Never declare a
+  namespace in `apps/web/lib/ui-model/statusColors.ts`. Never declare a
   local tier→label or tier→colour map. Six components carried drifted ones — two with
   raw hex — before this rule existed.
 - **Resolve the role in prose.** Use **employee** for a workforce member and **owner**

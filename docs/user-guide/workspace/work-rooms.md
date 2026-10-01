@@ -341,6 +341,26 @@ room behaves for reasons nobody chose.
 Most rooms created before this existed are unshaped. Giving them a shape is worthwhile for
 any room where pace or verification actually matters.
 
+### A shape is a model the platform checks
+
+A shape is more than a label. It is a small engineering model of the work:
+
+- the stages the work moves through
+- who answers for each stage
+- which decision moves it forward, and which authority owns that decision: the platform (WWMD),
+  your business (WWWD) or the profession (WSID)
+- which tools each stage may use
+
+The platform runs the room *from* that model and checks the room *against* it. A tool the current
+stage does not admit is not offered to a coworker at all, rather than offered and then asked about.
+That is why one well-placed decision can replace a stream of approval prompts.
+
+This way of working, where the model *is* the system rather than a diagram beside it, is called
+model-based systems engineering. The standard that defines it for AI coworkers is the
+[Gated Permissions Process](../../architecture/gated-permissions-process.md). Its
+[Build Studio walkthrough](../../architecture/gated-permissions-process.md#annex-c-informative-build-studio-as-a-gpp-model)
+shows the stages, decisions and tool permissions of a delivery room end to end.
+
 ## Incomplete or Unavailable Rooms
 
 If a room boundary is incomplete, the page identifies the missing elements instead of inventing them. If the source is unavailable, the last available projection is marked clearly and the page gives one recovery direction. If an AI coworker's current status is unavailable, the participant panel says so and directs you back to the room's next action instead of implying that the coworker is still working.
@@ -369,6 +389,20 @@ lease are all available, and all of them would be a guess presented as a decisio
 Accountability is answerability for the work. It is deliberately separate from who coordinates
 the room and from what any AI coworker is permitted to do — a coworker doing the work does not
 become accountable for it.
+
+### When an account stops being used
+
+Rooms, Build Studio builds and scheduled coworker tasks belong to an account. If that account stops
+being used (a person leaves, or work was set up under a setup account by mistake), everything it
+owns keeps sending its approvals to an inbox nobody reads.
+
+An administrator can hand all of it over in one step. Ask your AI coworker to plan a handover for
+that account. It shows every live room the account alone coordinates, every live build it
+created and every scheduled task it owns, and who each will go to: the accountable person of the
+item's portfolio, or Foundational's, or the organization's owner. Anything with nobody chosen is
+listed as refused rather than guessed. Approve the handover in your inbox and exactly that list
+moves; if anything changed in between, nothing moves and the plan has to be run again. Every room,
+build and task records who handed it over and why.
 
 Beneath that, the room lists the workers in it. An AI coworker reached through several tools is
 one worker, not one row per tool, and any subagents it delegated appear grouped beneath it. Where

@@ -7,7 +7,7 @@ import {
   HEALTH_COWORKER_ROUTE_CONTEXT,
   buildHealthAlertCoworkerPrompt,
   humanizeHealthAlert,
-} from "./alert-humanize";
+} from "@/lib/observability/alert-humanize";
 import { useAlertQuery } from "./useAlertQuery";
 
 type Props = {

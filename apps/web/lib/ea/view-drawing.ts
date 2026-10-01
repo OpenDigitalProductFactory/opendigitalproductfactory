@@ -10,7 +10,7 @@
 //   placement rules for nodes it has not saved (a grid for a fresh view,
 //   neighbour-aware placement for a newly added node);
 // - value-stream stages sit inside their band, laid out by the canvas's band
-//   layout (components/ea/value-stream-layout.ts);
+//   layout (lib/ea/value-stream-layout.ts);
 // - colours are the canvas's ArchiMate/BPMN layer palette (LAYER_COLOURS, their
 //   one home), with the text and connector colours taken from the --dpf-* token
 //   values resolved on the server (view-drawing-export.ts), not from a second
@@ -22,7 +22,7 @@
 // MM_PER_CANVAS_PX, and the whole drawing is shifted onto the page and, when
 // it would overflow the spec's bounds, scaled down uniformly.
 
-import { buildValueStreamGroupLayout } from "@/components/ea/value-stream-layout";
+import { buildValueStreamGroupLayout } from "./value-stream-layout";
 import { buildStructuredViewElements } from "@/lib/ea-structure";
 import { LAYER_COLOURS, layerFromNeoLabel, type CanvasState, type SerializedEdge, type SerializedViewElement } from "@/lib/ea-types";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";

@@ -18,6 +18,12 @@ RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
 # Workspace skeleton: the lockfile and pnpm-workspace.yaml (overrides,
 # minimumReleaseAge, patchedDependencies) govern this install. pnpm hashes
 # every referenced patch while resolving, so patches/ must be present.
+#
+# The root .npmrc is NOT copied, on purpose. It sets node-linker=hoisted,
+# and under the hoisted linker the legacy `pnpm deploy` below skips the
+# lockfile and resolves every range afresh from the registry. The
+# isolated default makes the deploy read the lockfile. The assertion
+# after the deploy fails the build if that ever stops being true.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
 COPY patches ./patches
 COPY packages/integration-shared ./packages/integration-shared
@@ -44,6 +50,13 @@ RUN pnpm --filter dpf-adp-mcp build
 RUN pnpm --config.allowUnusedPatches=true deploy \
     --filter dpf-adp-mcp --prod --legacy --ignore-scripts /app/deploy/adp \
   && cp -r /app/services/adp/dist /app/deploy/adp/dist
+
+# Fail the image build if the deploy tree ships anything the lockfile did
+# not lock (see the .npmrc note above).
+COPY scripts/lib/pnpm-lock.mjs ./scripts/lib/
+COPY scripts/sbom/runtime-surface.mjs scripts/sbom/assert-deploy-matches-lockfile.mjs ./scripts/sbom/
+RUN node scripts/sbom/assert-deploy-matches-lockfile.mjs \
+    --root /app --importer services/adp --deploy /app/deploy/adp
 
 # Fail the image build, not the first container start, if the runtime tree
 # cannot load: import every compiled module that reaches integration-shared.

@@ -13,7 +13,7 @@ import type { CellValue, ColumnDefinition } from "@/lib/workbooks/types";
 import type { WorkbookExportCell, WorkbookExportModel } from "@/lib/workbooks/export-fods";
 import type { WorkbookExportFormat } from "@/lib/workbooks/export-workbook";
 import type { GridRowData } from "./cell-editors";
-import type { ConditionalRule } from "./grid-conditional-format";
+import type { ConditionalRule } from "@/lib/workbooks/conditional-format";
 import { cellSearchText } from "./grid-filter";
 import { buildXlsx, type XlsxValue } from "./grid-xlsx";
 

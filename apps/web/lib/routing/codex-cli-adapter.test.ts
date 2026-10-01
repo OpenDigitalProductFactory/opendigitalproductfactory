@@ -7,7 +7,7 @@ import { EventEmitter } from "events";
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock("@/lib/ai-inference", () => {
+vi.mock("@/lib/routing/inference-error", () => {
   class InferenceError extends Error {
     name = "InferenceError";
     constructor(

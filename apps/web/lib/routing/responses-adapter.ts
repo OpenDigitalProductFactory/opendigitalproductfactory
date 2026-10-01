@@ -5,11 +5,8 @@
 
 import type { ToolCallEntry } from "./chat-message-types";
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
-import {
-  InferenceError,
-  classifyHttpError,
-  formatMessageForResponses,
-} from "@/lib/ai-inference";
+import { InferenceError, classifyHttpError } from "./inference-error";
+import { formatMessageForResponses } from "./provider-message-format";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { buildResponsesUrl, isChatGptBackend } from "./responses-contract";
 

@@ -35,6 +35,26 @@ Verified against `origin/main` at `6f876d19`.
 default Inngest key, the installers generate both keys, and a self-upgrade replaces
 a missing or public key and recreates `inngest` with the portal.
 
+**Status (2026-10-01):** P2, P3 and the rate-limit half of P4 are fixed in DPF.
+
+- **P2 — fixed.** The unused `/api/test/codex-responses` route is deleted, so
+  nothing anonymous can spend the stored Codex token.
+- **P3 — fixed for the public path.** `/api/metrics` returns 404 to a request
+  that arrived through the `PUBLIC_URL` hostname (`arrivedViaPublicHost` in
+  `apps/web/lib/canonical-host.ts`). The internal Prometheus scrape on
+  `portal:3000` and LAN callers are unchanged. Condition 4's ingress deny is
+  still required; this is the second layer behind it.
+- **P4, rate-limit keys — fixed.** Per-client limits and the storefront hold
+  record key on the `X-Forwarded-For` entry the nearest proxy appended, through
+  one helper (`clientAddressKey` in `apps/web/lib/security/client-address.ts`),
+  so a caller can no longer rotate the client-supplied leftmost entry to dodge
+  a limit.
+- **P4, `PUBLIC_URL` fail-open — governed by the reachability overlay.** It is
+  the design's open question 1, and condition 7 already makes `PUBLIC_URL` and
+  `AUTH_URL` mandatory, with a startup refusal on a malformed value, before
+  any install enables a public hostname. No public exposure path exists until
+  that overlay ships, so the behaviour is decided there, not changed here.
+
 P1–P3 are fixes in DPF, not tunnel configuration. Denying the paths at the tunnel
 ingress is a useful second layer but is not a substitute: the LAN exposure of P1
 exists today without any tunnel.

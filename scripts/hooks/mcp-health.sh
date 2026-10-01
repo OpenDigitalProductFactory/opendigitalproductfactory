@@ -60,27 +60,42 @@ fi
 
 runbook="docs/architecture/mcp-tool-authorization-runbook.md"
 
-# A "localhost" url is a latent failure on hosts where localhost resolves to ::1
-# and IPv6 is not answering; 127.0.0.1 is the safe literal.
+# A plain-http "localhost" url is a latent failure on hosts where localhost
+# resolves to ::1 and IPv6 is not answering; 127.0.0.1 is the safe literal.
+# Not on https: there https://localhost is the install's canonical origin
+# (design 12.4.1), and OAuth tokens are bound to that exact host.
 case "$url" in
-  *localhost*)
+  http://*localhost*)
     printf '%s\n' "NOTE: DPF MCP -- the dpf endpoint is '$url'. If localhost resolves to ::1 and IPv6 is not answering, the client cannot connect; use the 127.0.0.1 literal instead."
     ;;
 esac
 
-# BI-46B636B0: the client authorizes over OAuth only on https, and a pinned
-# Authorization header disables OAuth. A repo .mcp.json is a second, legacy
-# connector: when one is present, diagnose its header against the endpoint at
-# session start instead of at the first refused tool call. When it is absent
-# there is nothing to diagnose -- the plugin connector is the client config.
+# A repo .mcp.json is a legacy connector. On https the dpf-platform plugin is
+# the one dpf connector (BI-5201141C, design 12.4.4) and no writer produces a
+# project file, so a leftover dpf entry loads as a second dpf server (Claude
+# Code de-duplicates plugin and project servers by endpoint). On plain http
+# (BI-46B636B0) the client cannot use OAuth, so the file's header is the only
+# credential path: diagnose a missing one at session start. When the file is
+# absent there is nothing to diagnose -- the plugin connector is the config.
 has_header=0
 cfg="${root:-.}/.mcp.json"
 if [ -f "$cfg" ]; then
   if grep -q '"Authorization"' "$cfg" 2>/dev/null; then has_header=1; fi
   case "$url" in
     https://*)
-      if [ "$has_header" = "1" ]; then
-        printf '%s\n' "NOTE: DPF MCP -- .mcp.json pins headers.Authorization on an https endpoint; that disables the client's OAuth fallback. Re-run the toolchain bootstrap (it omits the header for https) or remove it by hand. Runbook: $runbook."
+      # Existing machines converge here (AC-CANON-3): a platform-written dpf
+      # entry is retired when the installed plugin's connector is confirmed
+      # URL-only. The JSON edit lives once, in node, shared with the ps1 twin.
+      retire_rc=11
+      converger="$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)/lib/retire-project-dpf-connector.mjs"
+      if command -v node >/dev/null 2>&1 && [ -f "$converger" ]; then
+        node "$converger" "${root:-.}" "$url"
+        retire_rc=$?
+      elif ! grep -q '"dpf"' "$cfg" 2>/dev/null; then
+        retire_rc=10
+      fi
+      if [ "$retire_rc" != "0" ] && [ "$retire_rc" != "10" ]; then
+        printf '%s\n' "NOTE: DPF MCP -- $cfg defines a 'dpf' server. On https the dpf-platform plugin is the one dpf connector, and Claude Code loads a project server at a different URL as a second dpf connector. It was left in place because the installed plugin's connector could not be confirmed URL-only or the entry does not point at this install; remove the dpf entry from $cfg (delete the file if dpf is its only server), then restart the client. Runbook: $runbook."
       fi
       ;;
     *)
