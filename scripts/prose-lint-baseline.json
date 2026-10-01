@@ -2863,14 +2863,6 @@
     "longSentences": 0,
     "textMass": 4
   },
-  "apps/web/app/api/test/codex-responses/route.ts": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 53
-  },
   "apps/web/app/api/v1/admin/operating-hours/route.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

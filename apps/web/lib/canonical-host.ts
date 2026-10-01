@@ -51,6 +51,26 @@ function parseAliases(raw: string): string[] {
     .filter((s) => s.length > 0);
 }
 
+/** Did this request arrive through the configured public hostname?
+ *
+ *  True when PUBLIC_URL is set and the Host or X-Forwarded-Host header names
+ *  its host. Internal callers (Prometheus on `portal:3000`, loopback, LAN
+ *  aliases) never match. Used to keep internal-only surfaces off the public
+ *  name; it is a second layer behind the reachability ingress, never an
+ *  authorization check. */
+export function arrivedViaPublicHost(args: {
+  host: string | null | undefined;
+  forwardedHost: string | null | undefined;
+  canonicalUrl: string | undefined;
+}): boolean {
+  if (!args.canonicalUrl) return false;
+  const canonical = parseCanonicalHost(args.canonicalUrl);
+  if (!canonical) return false;
+  return [args.host, args.forwardedHost].some(
+    (value) => typeof value === "string" && value.trim().toLowerCase() === canonical.host,
+  );
+}
+
 /**
  * Is `origin` one of the install's configured canonical origins — PUBLIC_URL's
  * own origin, or a PUBLIC_URL_ALIASES host on PUBLIC_URL's scheme?
