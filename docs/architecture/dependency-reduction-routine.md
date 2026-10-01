@@ -117,10 +117,12 @@ the `.npmrc`: the image builds do not copy the root `.npmrc`, and they must not.
 Its `node-linker=hoisted` makes `pnpm deploy --legacy` skip the lockfile and
 resolve every range afresh, even after a frozen install and even with
 `--frozen-lockfile` on the deploy. Replayed on the edge-node build stage, that
-shipped net-snmp 3.29.1 against a locked 3.26.3. The edge-node image therefore
-runs `scripts/sbom/assert-deploy-matches-lockfile.mjs` after its deploy, which
-fails the build when the deploy tree holds any version outside the lockfile's
-production closure for that importer.
+shipped net-snmp 3.29.1 against a locked 3.26.3; on the adp build stage it
+shipped tdigest 0.1.3 against a locked 0.1.2. All three service images
+(`services/adp`, `services/edge-node`, `services/integration-test-harness`)
+therefore run `scripts/sbom/assert-deploy-matches-lockfile.mjs` after their
+deploy, which fails the build when the deploy tree holds any version outside
+the lockfile's production closure for that importer.
 
 ### Shape budgets (the surface only shrinks)
 
