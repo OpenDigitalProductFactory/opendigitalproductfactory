@@ -9,7 +9,12 @@
 //   3. the workspace links (e.g. apps/web/node_modules/next) resolve on disk
 //      to the locked versions — this is the check that catches a stale
 //      next@16.2.7 store link while the lockfile requires 16.2.9,
-//   4. no other pnpm install is running (duplicate/hung installs poison state).
+//   4. no other pnpm install is running IN THIS SANDBOX (duplicate/hung
+//      installs poison its node_modules). Installs in other directories are
+//      ignored; an install whose cwd cannot be read still counts. A
+//      same-sandbox install is waited for, bounded by
+//      DPF_LOCAL_CI_FRESHNESS_INSTALL_WAIT_MS (default 10 min), then the
+//      sandbox is re-evaluated; only a timeout reports not-ready (BI-8DC6F267).
 //
 // With --converge, drift triggers ONE sandbox-owned `pnpm install
 // --frozen-lockfile` (guarded by a lock directory so two gates can never race
@@ -40,8 +45,10 @@ import {
   exitCodeForVerdict,
   parseLockedVersion,
   parseWorkspacePackageGlobs,
+  resolveInstallWaitConfig,
   shouldEscalateConvergence,
   stalePackagePathsForRelink,
+  waitForSandboxInstalls,
 } from "./lib/sandbox-freshness.mjs";
 import { gitTextOrNull } from "./lib/git.mjs";
 
@@ -157,6 +164,30 @@ function missingEntrypointImports(packageDir, entrypoints = []) {
   return [...new Set(missing)];
 }
 
+// Every spelling of the sandbox root, so a cwd reported through a symlink-free
+// path (macOS: /var -> /private/var) still matches.
+const sandboxRoots = (() => {
+  const roots = new Set([rootDir]);
+  try {
+    roots.add(fs.realpathSync(rootDir));
+  } catch {
+    // keep the resolved spelling only
+  }
+  return [...roots];
+})();
+
+// pnpm installs running in THIS sandbox (BI-8DC6F267). An install in another
+// worktree cannot touch this node_modules, so it does not count; an install
+// whose cwd cannot be read does (never risk a duplicate install).
+function scanSandboxInstalls() {
+  if (skipInstallScan) return [];
+  const ps = spawnSync("ps", ["-axo", "pid=,etime=,command="], { encoding: "utf8" });
+  return detectInstallProcesses(ps.status === 0 ? ps.stdout : "", {
+    selfPids: [process.pid],
+    rootDir: sandboxRoots,
+  });
+}
+
 function collectState() {
   const lockfileText = readFileIfExists(path.join(rootDir, "pnpm-lock.yaml"));
   const installedLockPath = path.join(rootDir, "node_modules", ".pnpm", "lock.yaml");
@@ -190,11 +221,7 @@ function collectState() {
     });
   }
 
-  let installProcesses = [];
-  if (!skipInstallScan) {
-    const ps = spawnSync("ps", ["-axo", "pid=,etime=,command="], { encoding: "utf8" });
-    installProcesses = detectInstallProcesses(ps.status === 0 ? ps.stdout : "", { selfPids: [process.pid] });
-  }
+  const installProcesses = scanSandboxInstalls();
 
   return {
     requestedBranch,
@@ -226,6 +253,7 @@ function writeReport(state, evaluation, convergence) {
     failures: evaluation.failures,
     packages: state.packages,
     installProcesses: state.installProcesses,
+    installWait,
     convergence,
   };
   try {
@@ -251,6 +279,35 @@ function finish(state, evaluation, convergence) {
 let state = collectState();
 let evaluation = evaluateFreshness(state);
 let convergence = null;
+let installWait = null;
+
+// A same-sandbox install is the one thing the sandbox can recover from by
+// itself: wait for it (bounded), then re-evaluate. Only a timeout reports
+// not-ready. Exit classification is unchanged.
+if (state.installProcesses.length > 0) {
+  const { timeoutMs, pollMs } = resolveInstallWaitConfig(process.env);
+  const pids = state.installProcesses.map((proc) => proc.pid).join(", ");
+  log(`pnpm install already running in this sandbox (pid ${pids}); waiting up to ${Math.round(timeoutMs / 1000)}s for it to finish`);
+  let first = true;
+  installWait = await waitForSandboxInstalls({
+    scan: () => {
+      if (first) {
+        first = false;
+        return state.installProcesses;
+      }
+      return scanSandboxInstalls();
+    },
+    timeoutMs,
+    pollMs,
+  });
+  if (installWait.timedOut) {
+    log(`same-sandbox install still running after ${Math.round(installWait.waitedMs / 1000)}s; reporting not-ready`);
+  } else {
+    log(`same-sandbox install finished after ${Math.round(installWait.waitedMs / 1000)}s; re-evaluating`);
+  }
+  state = collectState();
+  evaluation = evaluateFreshness(state);
+}
 
 if (evaluation.verdict === "green" || !converge) {
   finish(state, evaluation, convergence);
