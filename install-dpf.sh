@@ -61,6 +61,8 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/canonical-origin.sh"
 # shellcheck source=scripts/installer/lib/machine-trust.sh
 . "$LIB_DIR/machine-trust.sh"
+# shellcheck source=scripts/installer/lib/mcp-client-env.sh
+. "$LIB_DIR/mcp-client-env.sh"
 # shellcheck source=scripts/installer/lib/github-cli.sh
 . "$LIB_DIR/github-cli.sh"
 # shellcheck source=scripts/installer/native-edge-host.sh
@@ -1018,6 +1020,15 @@ else
     warn "HTTPS could not be configured. The portal stays at http://localhost:3000;"
     warn "AI clients that require https cannot sign in until the installer is run again."
   fi
+fi
+
+# This machine's AI clients find the install at its canonical origin and trust
+# its CA (BI-2D545A0C): DPF_MCP_URL and NODE_EXTRA_CA_CERTS are persisted for
+# the installing user on every run, in both install modes, so a re-run or an
+# origin change converges without the agent-toolchain bootstrap.
+dpf_resolve_mcp_client_env "$REPO_ROOT"
+if dpf_persist_mcp_client_env; then
+  ok "AI clients on this machine will connect to $DPF_MCP_CLIENT_URL"
 fi
 
 step "Bringing up the platform"

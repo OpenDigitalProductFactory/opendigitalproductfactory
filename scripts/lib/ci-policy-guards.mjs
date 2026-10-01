@@ -197,6 +197,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/installer/pki-contract.test.mjs"),
       // BI-6DC1CD5B: canonical https origin resolver, machine trust, installer wiring.
       conformanceTest("scripts/installer/canonical-origin.test.mjs"),
+      // BI-2D545A0C: installer + bootstrap persist DPF_MCP_URL (from PUBLIC_URL) and
+      // NODE_EXTRA_CA_CERTS idempotently; machine trust with a fake store per OS.
+      conformanceTest("scripts/installer/mcp-client-env.test.mjs"),
       // BI-698B7F9A: both installers pull the release's dpf-doctools with the
       // other release images and never fail the install on it.
       conformanceTest("scripts/installer/doctools-prepull.test.mjs"),
