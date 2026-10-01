@@ -3,6 +3,7 @@ import { prisma, type Prisma } from "@dpf/db";
 import { can } from "@/lib/govern/permissions";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import type { PublicScope } from "./oauth-public-scopes";
+import { dualSeedMirrorSlugs } from "@/lib/coworker-record/selectable-coworker";
 
 type Db = Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding">;
 /** The source-approved external development roles: the connection profile any
@@ -38,6 +39,9 @@ export async function eligibleOAuthCoworkers(
       ...(selection.agentId ? { agentId: selection.agentId } : selection.after ? { agentId: { gt: selection.after } } : {}),
       toolGrants: { some: { grantKey: "work_room_write" } },
       ...(!administrator ? { OR: [delegation, ...approvedExternalRole] } : {}),
+      // One choice per assistant: slug mirrors of a canonical AGT-* identity are
+      // never offered or bound, even when requested by id (BI-A771AF73).
+      AND: [{ agentId: { notIn: dualSeedMirrorSlugs() } }],
     },
     select: { id: true, agentId: true, displayName: true },
     orderBy: { agentId: "asc" },
