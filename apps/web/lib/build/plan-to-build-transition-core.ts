@@ -5,12 +5,17 @@
 // file only so that callers inside the MCP tool-pack graph (save_phase_handoff)
 // can import it without joining apps/web's import cycle
 // (scripts/check-no-web-import-cycle-growth.mjs) or adding a build → mcp edge
-// (scripts/check-application-boundaries.mjs): it imports only the database
-// client, and the caller hands in its activity logger. It is not a second
+// (scripts/check-application-boundaries.mjs): it imports the database client
+// and the canonical initiative readiness gate, and the caller hands in its
+// activity logger. It is not a second
 // transition: plan-to-build-transition.ts re-exports everything here and
 // performPlanToBuildTransition calls this function like every other path.
 
 import { prisma } from "@dpf/db";
+import {
+  checkBuildPhaseInitiativeReadiness,
+  enforceBuildInitiativeReadiness,
+} from "@/lib/build/build-entry-gate";
 
 // ── GPP C-8: one plan→build transition function (PR-F, BI-45F9CB7A) ─────────
 //
@@ -24,9 +29,12 @@ import { prisma } from "@dpf/db";
 // This is a defect-fix refactor with STRICT behaviour preservation: every path
 // keeps exactly its gate set, order, modes, refusal forms, activity entries and
 // side effects (pinned by the *.characterization.test.ts files beside each
-// caller). The gate BODIES stay with their callers, because their inputs and
-// refusal shapes differ (a returned value, a thrown error, an HTTP 422, a soft
-// tool message). Unifying the gate sets is a separate, recorded decision; the
+// caller). Where a path's initiative readiness is `blocking`, the transition
+// calls the canonical gate (lib/build/build-entry-gate.ts) itself, with the
+// exact call that path made before, and returns a typed `readiness-refused`
+// that the caller maps to its own refusal form. The other gate BODIES stay
+// with their callers, because their inputs and refusal shapes differ (a
+// returned value, a thrown error, an HTTP 422, a soft tool message). Unifying the gate sets is a separate, recorded decision; the
 // first candidate is enforcing WWMD on `save_phase_handoff` once the PR-B
 // `gpp-c8-transition-gate-skipped` shadow evidence is reviewed.
 //
@@ -111,6 +119,14 @@ export type PlanToBuildGateProfile = {
   readonly callerEffectsAfter: readonly string[];
   /** Activity summary for `not-evaluated-recorded`; absent otherwise. */
   readonly gateSkippedSummary?: string;
+  /**
+   * Which canonical initiative readiness gate (lib/build/build-entry-gate.ts)
+   * the transition itself calls, present exactly when `initiative-readiness`
+   * is `blocking`. Each is the call that path made before PR-F, unchanged:
+   * - `checkBuildPhaseInitiativeReadiness({ buildId, currentPhase: "plan", targetPhase: "build" })`
+   * - `enforceBuildInitiativeReadiness({ buildId, target: "implementation", targetPhase: "build", expectedPhase: "plan" })`
+   */
+  readonly initiativeReadinessGate?: "checkBuildPhaseInitiativeReadiness" | "enforceBuildInitiativeReadiness";
 };
 
 /** Activity tool name for a recorded WWMD skip (PR-B; AC-C8-SHADOW). */
@@ -125,6 +141,7 @@ export const PLAN_TO_BUILD_GATE_PROFILES = {
   "advance-build-phase": {
     entryPoint: "lib/actions/build.ts advanceBuildPhase (Build Studio UI)",
     wwmdMode: "blocking",
+    initiativeReadinessGate: "checkBuildPhaseInitiativeReadiness",
     gates: {
       "initiative-readiness": "blocking",
       "structural-phase-gate": "blocking",
@@ -169,6 +186,7 @@ export const PLAN_TO_BUILD_GATE_PROFILES = {
     entryPoint:
       "lib/build/plan-to-build-transition.ts performPlanToBuildTransition (reviewBuildPlan, pre-build resume reconciler)",
     wwmdMode: "autonomous-mode",
+    initiativeReadinessGate: "enforceBuildInitiativeReadiness",
     gates: {
       "initiative-readiness": "blocking",
       "structural-phase-gate": "blocking",
@@ -233,8 +251,13 @@ export const PLAN_TO_BUILD_GATE_PROFILES = {
 } as const satisfies Record<PlanToBuildPath, PlanToBuildGateProfile>;
 
 type PlanToBuildProfiles = typeof PLAN_TO_BUILD_GATE_PROFILES;
-/** The steps a given path must supply, derived from its profile. */
-export type PlanToBuildStepsOf<P extends PlanToBuildPath> = PlanToBuildProfiles[P]["steps"][number];
+/** Every step a path's profile declares, in order. */
+export type PlanToBuildDeclaredStepsOf<P extends PlanToBuildPath> = PlanToBuildProfiles[P]["steps"][number];
+/**
+ * The steps a caller must supply: every declared step except initiative
+ * readiness, which the transition evaluates itself with the canonical gate.
+ */
+export type PlanToBuildStepsOf<P extends PlanToBuildPath> = Exclude<PlanToBuildDeclaredStepsOf<P>, "initiative-readiness">;
 
 export type PlanToBuildStepResult<R> = { readonly pass: true } | { readonly pass: false; readonly refusal: R };
 export const PLAN_TO_BUILD_PASS = { pass: true } as const;
@@ -252,14 +275,40 @@ type PlanToBuildLoggerArg<P extends PlanToBuildPath> =
 
 export type PlanToBuildTransitionResult<P extends PlanToBuildPath, R> =
   | { kind: "advanced" }
-  | { kind: "refused"; step: PlanToBuildStepsOf<P>; refusal: R };
+  | { kind: "refused"; step: PlanToBuildStepsOf<P>; refusal: R }
+  // The canonical initiative readiness gate refused. The caller maps `message`
+  // to its own refusal form, exactly as it did before PR-F.
+  | { kind: "readiness-refused"; message: string };
+
+/**
+ * Evaluate the canonical initiative readiness gate the profile names, with the
+ * exact arguments that path used before PR-F. Returns the refusal message, or
+ * null when readiness allows the transition.
+ */
+async function evaluateInitiativeReadiness(
+  buildId: string,
+  gate: NonNullable<PlanToBuildGateProfile["initiativeReadinessGate"]>,
+): Promise<string | null> {
+  if (gate === "checkBuildPhaseInitiativeReadiness") {
+    return checkBuildPhaseInitiativeReadiness({ buildId, currentPhase: "plan", targetPhase: "build" });
+  }
+  const readiness = await enforceBuildInitiativeReadiness({
+    buildId,
+    target: "implementation",
+    targetPhase: "build",
+    expectedPhase: "plan",
+  });
+  return readiness.allowed ? null : readiness.message;
+}
 
 /**
  * The one plan→build transition. Runs the path's declared steps in its declared
- * order (each step is supplied by the caller and either passes, returns a
- * refusal, or throws, exactly as that caller's code did before), then
- * `beforeWrite`, then the phase write, then, for `not-evaluated-recorded`, the
- * gate-skipped record. It reads nothing itself and adds no gate.
+ * order, then `beforeWrite`, then the phase write, then, for
+ * `not-evaluated-recorded`, the gate-skipped record. Where the profile makes
+ * initiative readiness `blocking`, the transition calls the canonical gate
+ * itself (`initiativeReadinessGate`); every other step is supplied by the
+ * caller and passes, returns a refusal, or throws, exactly as that caller's
+ * code did before. It adds no gate to any path.
  */
 export async function transitionPlanToBuild<P extends PlanToBuildPath, R = never>(args: {
   buildId: string;
@@ -269,9 +318,14 @@ export async function transitionPlanToBuild<P extends PlanToBuildPath, R = never
 } & PlanToBuildLoggerArg<P>): Promise<PlanToBuildTransitionResult<P, R>> {
   const { buildId, path, steps, beforeWrite } = args;
   const profile: PlanToBuildGateProfile = PLAN_TO_BUILD_GATE_PROFILES[path];
-  for (const step of profile.steps as readonly PlanToBuildStepsOf<P>[]) {
-    const result = await steps[step]();
-    if (!result.pass) return { kind: "refused", step, refusal: result.refusal };
+  for (const step of profile.steps as readonly PlanToBuildDeclaredStepsOf<P>[]) {
+    if (step === "initiative-readiness") {
+      const refusal = await evaluateInitiativeReadiness(buildId, profile.initiativeReadinessGate!);
+      if (refusal !== null) return { kind: "readiness-refused", message: refusal };
+      continue;
+    }
+    const result = await steps[step as PlanToBuildStepsOf<P>]();
+    if (!result.pass) return { kind: "refused", step: step as PlanToBuildStepsOf<P>, refusal: result.refusal };
   }
   if (beforeWrite) await beforeWrite();
   await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });

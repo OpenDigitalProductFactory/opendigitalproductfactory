@@ -16,6 +16,8 @@ import type { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
+  checkReadiness: vi.fn(),
+  enforceReadiness: vi.fn(),
   transition: vi.fn(),
   update: vi.fn(),
   findUnique: vi.fn(),
@@ -56,9 +58,9 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContextForBuild: vi.fn() }));
 vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 vi.mock("@/lib/build/build-entry-gate", () => ({
-  enforceBuildInitiativeReadiness: async () => ({ allowed: true, message: "allowed" }),
+  enforceBuildInitiativeReadiness: (...a: unknown[]) => m.enforceReadiness(...a),
   assertBuildPhaseInitiativeReadiness: vi.fn(),
-  checkBuildPhaseInitiativeReadiness: async () => null,
+  checkBuildPhaseInitiativeReadiness: (...a: unknown[]) => m.checkReadiness(...a),
 }));
 vi.mock("@/lib/work-posture/verification-depth-gate", () => ({ checkBuildPhaseGate: async () => ({ allowed: true }) }));
 vi.mock("@/lib/auth/ephemeral-ship-tokens", () => ({ manageEphemeralShipTokensForTransition: async () => undefined }));
@@ -96,6 +98,8 @@ const EVALUATED = new Set(["blocking", "blocking-soft", "autonomous-mode"]);
 beforeEach(() => {
   vi.clearAllMocks();
   m.transition.mockResolvedValue({ kind: "advanced" });
+  m.checkReadiness.mockResolvedValue(null);
+  m.enforceReadiness.mockResolvedValue({ allowed: true, message: "allowed" });
   m.update.mockResolvedValue({});
 });
 
@@ -117,6 +121,11 @@ describe("PLAN_TO_BUILD_GATE_PROFILES are consistent", () => {
     const gateSteps = profile.steps.filter((s) => (PLAN_TO_BUILD_GATE_SET as readonly string[]).includes(s));
     expect([...gateSteps].sort()).toEqual([...evaluated].sort());
     expect(new Set(profile.steps).size).toBe(profile.steps.length);
+  });
+
+  it.each(PATHS)("%s: names the canonical readiness gate exactly when readiness is blocking", (path) => {
+    const profile = profiles[path];
+    expect(Boolean(profile.initiativeReadinessGate)).toBe(profile.gates["initiative-readiness"] === "blocking");
   });
 
   it.each(PATHS)("%s: the WWMD mode matches the WWMD gate, and only a recorded skip carries a summary", (path) => {
@@ -146,6 +155,63 @@ describe("transitionPlanToBuild", () => {
     expect(m.update).toHaveBeenCalledTimes(1);
     expect(m.update).toHaveBeenCalledWith({ where: { buildId: "FB-1" }, data: { phase: "build" } });
     expect(m.activity).not.toHaveBeenCalled();
+  });
+
+  it("calls the canonical readiness gate itself, with each path's exact arguments, first in order", async () => {
+    const order: string[] = [];
+    m.checkReadiness.mockImplementation(async () => { order.push("readiness"); return null; });
+    const step = (name: string) => () => { order.push(name); return PLAN_TO_BUILD_PASS; };
+    await actualTransition({
+      buildId: "FB-1",
+      path: "advance-build-phase",
+      steps: {
+        "wwmd-plan-advancement": step("wwmd"),
+        "build-studio-decision-record": step("decision"),
+        "dependency-gate": step("dependency"),
+        "structural-phase-gate": step("structural"),
+      },
+    });
+    expect(order).toEqual(["readiness", "structural", "dependency", "decision", "wwmd"]);
+    expect(m.checkReadiness).toHaveBeenCalledWith({ buildId: "FB-1", currentPhase: "plan", targetPhase: "build" });
+    expect(m.enforceReadiness).not.toHaveBeenCalled();
+
+    m.checkReadiness.mockClear();
+    const pass = () => PLAN_TO_BUILD_PASS;
+    await actualTransition({
+      buildId: "FB-2",
+      path: "perform-plan-to-build-transition",
+      steps: {
+        "escalation-tracker": pass, "structural-phase-gate": pass, "dependency-gate": pass,
+        "wwmd-plan-advancement": pass, "autonomous-eligibility": pass, "build-branch-init": pass,
+      },
+    });
+    expect(m.enforceReadiness).toHaveBeenCalledWith({ buildId: "FB-2", target: "implementation", targetPhase: "build", expectedPhase: "plan" });
+    expect(m.checkReadiness).not.toHaveBeenCalled();
+  });
+
+  it("a readiness refusal returns readiness-refused with its message, runs no later step and writes nothing", async () => {
+    m.enforceReadiness.mockResolvedValue({ allowed: false, message: "PLAN_COVERAGE_REQUIRED" });
+    const later = vi.fn(() => PLAN_TO_BUILD_PASS);
+    const out = await actualTransition({
+      buildId: "FB-1",
+      path: "perform-plan-to-build-transition",
+      steps: {
+        "escalation-tracker": later, "structural-phase-gate": later, "dependency-gate": later,
+        "wwmd-plan-advancement": later, "autonomous-eligibility": later, "build-branch-init": later,
+      },
+    });
+    expect(out).toEqual({ kind: "readiness-refused", message: "PLAN_COVERAGE_REQUIRED" });
+    expect(later).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it("paths whose readiness is upstream or not evaluated never call a readiness gate", async () => {
+    const pass = () => PLAN_TO_BUILD_PASS;
+    await actualTransition({ buildId: "FB-1", path: "advance-phase-route", steps: { "structural-phase-gate": pass, "wwmd-plan-advancement": pass } });
+    await actualTransition({ buildId: "FB-1", path: "save-phase-handoff", steps: { "structural-phase-gate": pass }, logActivity: () => {} });
+    await actualTransition({ buildId: "FB-1", path: "build-on-plan-approval", steps: {} });
+    expect(m.checkReadiness).not.toHaveBeenCalled();
+    expect(m.enforceReadiness).not.toHaveBeenCalled();
   });
 
   it("stops at the first refusal and returns it, with no write", async () => {
@@ -209,7 +275,8 @@ describe("AC-SINGLE-TRANSITION: every plan→build path calls transitionPlanToBu
     return m.transition.mock.calls[0]![0] as { buildId: string; path: PlanToBuildPath; steps: Record<string, unknown> };
   }
   function expectStepsMatchProfile(call: { path: PlanToBuildPath; steps: Record<string, unknown> }) {
-    expect(Object.keys(call.steps).sort()).toEqual([...profiles[call.path].steps].sort());
+    // Initiative readiness is evaluated inside the transition, never supplied by the caller.
+    expect(Object.keys(call.steps).sort()).toEqual(profiles[call.path].steps.filter((s) => s !== "initiative-readiness").sort());
   }
 
   const planBuild = {

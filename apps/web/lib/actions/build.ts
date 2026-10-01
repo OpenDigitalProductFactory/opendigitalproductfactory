@@ -446,7 +446,6 @@ export async function advanceBuildPhase(
       buildId,
       path: "advance-build-phase",
       steps: {
-        "initiative-readiness": async () => { const refusal = await checkBuildPhaseInitiativeReadiness({ buildId, currentPhase, targetPhase }); return refusal ? refusePlanToBuild({ ok: false, message: refusal }) : PLAN_TO_BUILD_PASS; }, // BI-C5D978E9: refusals return
         "structural-phase-gate": async () => { const refusal = await evaluateStructuralGate(); return refusal ? refusePlanToBuild(refusal) : PLAN_TO_BUILD_PASS; },
         "dependency-gate": () => {
           assertFeatureBuildDependencyGate({ id: build.id, buildId: build.buildId, title: build.title, parentEpicId: build.parentEpicId, phase: build.phase, dependenciesOut: build.dependenciesOut });
@@ -506,6 +505,7 @@ export async function advanceBuildPhase(
         },
       },
     });
+    if (transition.kind === "readiness-refused") return { ok: false, message: transition.message }; // BI-C5D978E9: refusals return
     if (transition.kind === "refused") return transition.refusal;
   } else if (targetPhase === "complete") await assertFeatureBuildCompletion({ buildId, expectedPhase: currentPhase });
   else { const refusal = await checkBuildPhaseInitiativeReadiness({ buildId, currentPhase, targetPhase }); if (refusal) return { ok: false, message: refusal }; } // BI-C5D978E9: refusals return

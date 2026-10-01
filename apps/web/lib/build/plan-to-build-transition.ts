@@ -43,7 +43,6 @@ import { resolvePlannedFilePaths } from "@/lib/decision-perspective/planned-file
 import type { DecisionOutcomeType } from "@/lib/decision-perspective/types";
 import type { AutonomousBuildExecutionProfileRefV1 } from "@/lib/build/autonomous-build-eligibility-reader";
 import type { AutonomousPlaybookMode } from "@/lib/build/build-studio-config";
-import { enforceBuildInitiativeReadiness } from "@/lib/build/build-entry-gate";
 import {
   PLAN_TO_BUILD_PASS,
   refusePlanToBuild,
@@ -63,6 +62,7 @@ export {
 } from "@/lib/build/plan-to-build-transition-core";
 export type {
   PlanToBuildActivityLogger,
+  PlanToBuildDeclaredStepsOf,
   PlanToBuildGate,
   PlanToBuildGateMode,
   PlanToBuildGateProfile,
@@ -314,19 +314,9 @@ export async function performPlanToBuildTransition(params: {
     buildId,
     path: "perform-plan-to-build-transition",
     steps: {
-      "initiative-readiness": async () => {
-        const initiativeReadiness = await enforceBuildInitiativeReadiness({
-          buildId,
-          target: "implementation",
-          targetPhase: "build",
-          expectedPhase: "plan",
-        });
-        if (!initiativeReadiness.allowed) {
-          logBuildActivity(buildId, "phase:gate-blocked", initiativeReadiness.message);
-          return refusePlanToBuild({ kind: "gate-blocked", reason: initiativeReadiness.message });
-        }
-        return PLAN_TO_BUILD_PASS;
-      },
+      // Initiative readiness: evaluated inside transitionPlanToBuild with the
+      // canonical gate (enforceBuildInitiativeReadiness, implementation target);
+      // its refusal is mapped below.
 
       // Already escalated → do not re-attempt the failing transition; keep the
       // resume loop cheap (a single DB read). Operator recovery: re-promote, or
@@ -565,6 +555,10 @@ export async function performPlanToBuildTransition(params: {
       }
     },
   });
+  if (transition.kind === "readiness-refused") {
+    logBuildActivity(buildId, "phase:gate-blocked", transition.message);
+    return { kind: "gate-blocked", reason: transition.message };
+  }
   if (transition.kind === "refused") return transition.refusal;
 
   if (context?.threadId) {
