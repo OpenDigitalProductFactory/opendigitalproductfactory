@@ -40,27 +40,32 @@ test("the portal leaf is issued for a year, on a provisioner whose claims allow 
 });
 
 test("the toolchain bootstrap persists the organization root and the https endpoint beside the token", async () => {
-  const shell = await read("scripts/dpf-bootstrap-agent-toolchain.sh");
+  const [shell, lib] = await Promise.all([
+    read("scripts/dpf-bootstrap-agent-toolchain.sh"),
+    read("scripts/installer/lib/mcp-client-env.sh"),
+  ]);
 
-  // Resolution order: explicit env, the install's .env, the default PKI dir — https only.
-  assert.match(shell, /case "\$MCP_ENDPOINT" in\n\s+https:\/\/\*\)/);
-  assert.match(shell, /DPF_PKI_TRUST_BUNDLE/);
-  assert.match(shell, /\$HOME\/\.dpf\/pki\/root_ca\.crt/);
+  // Resolution lives once in the shared module (BI-2D545A0C): PUBLIC_URL from the
+  // install's .env, then explicit env; the bundle from explicit env, the .env, the
+  // default PKI dir — https only. Behaviour: scripts/installer/mcp-client-env.test.mjs.
+  assert.match(shell, /dpf_resolve_mcp_client_env "\$REPO_ROOT"/);
   assert.match(shell, /export NODE_EXTRA_CA_CERTS="\$MCP_TRUST_BUNDLE"/);
-  // One managed env file, rewritten whole: token, DPF_MCP_URL, NODE_EXTRA_CA_CERTS.
+  assert.match(lib, /DPF_PKI_TRUST_BUNDLE/);
+  assert.match(lib, /\$HOME\/\.dpf\/pki\/root_ca\.crt/);
+  // One managed env file with one writer (the shared module): token, DPF_MCP_URL, NODE_EXTRA_CA_CERTS.
   assert.match(shell, /persist_mcp_client_env_posix\(\)/);
-  assert.match(shell, /export DPF_MCP_URL=/);
-  assert.match(shell, /export NODE_EXTRA_CA_CERTS=/);
-  assert.match(shell, /export DPF_MCP_BEARER_TOKEN=/);
+  assert.match(shell, /dpf_set_client_env_export DPF_MCP_BEARER_TOKEN/);
+  assert.match(shell, /dpf_persist_mcp_client_env/);
+  assert.doesNotMatch(shell, /> "\$mcp_token_envfile"/, "the bootstrap no longer writes the env file itself");
+  assert.equal((lib.match(/> "\$tmp"/g) ?? []).length, 1, "exactly one writer of the managed env file");
   // GUI clients on macOS get the same three through launchd.
-  assert.match(shell, /launchctl setenv DPF_MCP_URL/);
-  assert.match(shell, /launchctl setenv NODE_EXTRA_CA_CERTS/);
-  assert.match(shell, /launchctl setenv DPF_MCP_BEARER_TOKEN/);
-  // The transport lines are persisted even when no token is minted, never at dry-run.
-  assert.match(shell, /\[ "\$DRY_RUN" -eq 0 \] && \[ -n "\$MCP_TRUST_BUNDLE" \]/);
+  assert.match(shell, /dpf_launchd_setenv DPF_MCP_BEARER_TOKEN/);
+  assert.match(lib, /dpf_launchd_setenv DPF_MCP_URL/);
+  assert.match(lib, /dpf_launchd_setenv NODE_EXTRA_CA_CERTS/);
+  // The transport lines are persisted on any https endpoint, even with no token, never at dry-run.
+  assert.match(shell, /\[ "\$DRY_RUN" -eq 0 \] && \[ "\$_https_endpoint" -eq 1 \]/);
   // The token mint path still routes through the same writer (no second env file).
   assert.match(shell, /persist_mcp_token_posix\(\) \{\n\s+DPF_MCP_BEARER_TOKEN="\$1"\n\s+persist_mcp_client_env_posix\n\}/);
-  assert.equal((shell.match(/> "\$mcp_token_envfile"/g) ?? []).length, 1, "exactly one writer of the managed env file");
   // The scope probe presents the bundle to curl.
   assert.match(shell, /_scope_probe="\$\(curl -s --max-time 5 \$\{NODE_EXTRA_CA_CERTS:\+--cacert "\$NODE_EXTRA_CA_CERTS"\}/);
 });

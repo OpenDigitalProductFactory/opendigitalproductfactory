@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 
-import { buildJsonRpcBody, mcpCall, mcpPost } from "./mcp-client.mjs";
+import { buildJsonRpcBody, isAllowedMcpEndpoint, mcpCall, mcpPost } from "./mcp-client.mjs";
 
 test("MCP calls abort within the configured transport deadline", async () => {
   const server = createServer((_request, _response) => {
@@ -54,7 +54,7 @@ async function withEnv(patch, run) {
 }
 
 test("refuses to send a bearer token to a non-loopback endpoint", async () => {
-  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined }, async () => {
+  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined, PUBLIC_URL: undefined }, async () => {
     await assert.rejects(
       mcpCall("test_tool", {}, { mcpUrl: REMOTE, bearerToken: "dpfmcp_test" }),
       /refusing to send a bearer token/,
@@ -63,7 +63,7 @@ test("refuses to send a bearer token to a non-loopback endpoint", async () => {
 });
 
 test("refuses a credentials-in-authority endpoint that only looks like loopback", async () => {
-  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined }, async () => {
+  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined, PUBLIC_URL: undefined }, async () => {
     await assert.rejects(
       mcpCall("test_tool", {}, {
         mcpUrl: "http://127.0.0.1@evil.example.com/api/mcp/v1",
@@ -76,7 +76,7 @@ test("refuses a credentials-in-authority endpoint that only looks like loopback"
 
 test("honours a non-loopback endpoint the operator set explicitly", async () => {
   // Operator intent, not ambient state. It must fail on transport, not policy.
-  await withEnv({ DPF_MCP_URL: REMOTE, DPF_MCP_ENDPOINT: undefined }, async () => {
+  await withEnv({ DPF_MCP_URL: REMOTE, DPF_MCP_ENDPOINT: undefined, PUBLIC_URL: undefined }, async () => {
     await assert.rejects(
       mcpCall("test_tool", {}, { mcpUrl: REMOTE, bearerToken: "dpfmcp_test", timeoutMs: 50 }),
       (error) => !/refusing to send a bearer token/.test(error.message),
@@ -86,7 +86,7 @@ test("honours a non-loopback endpoint the operator set explicitly", async () => 
 
 test("refuses an endpoint that differs from the one the operator set", async () => {
   // The tampered/stale .mcp.json case: something on disk names another host.
-  await withEnv({ DPF_MCP_URL: "http://10.0.0.5:3000/api/mcp/v1", DPF_MCP_ENDPOINT: undefined }, async () => {
+  await withEnv({ DPF_MCP_URL: "http://10.0.0.5:3000/api/mcp/v1", DPF_MCP_ENDPOINT: undefined, PUBLIC_URL: undefined }, async () => {
     await assert.rejects(
       mcpCall("test_tool", {}, { mcpUrl: REMOTE, bearerToken: "dpfmcp_test" }),
       /refusing to send a bearer token/,
@@ -95,7 +95,7 @@ test("refuses an endpoint that differs from the one the operator set", async () 
 });
 
 test("an explicit call-site opt-in still allows a non-loopback endpoint", async () => {
-  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined }, async () => {
+  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined, PUBLIC_URL: undefined }, async () => {
     await assert.rejects(
       mcpCall("test_tool", {}, {
         mcpUrl: REMOTE,
@@ -104,6 +104,67 @@ test("an explicit call-site opt-in still allows a non-loopback endpoint", async 
         allowNonLoopbackEndpoint: true,
       }),
       (error) => !/refusing to send a bearer token/.test(error.message),
+    );
+  });
+});
+
+// BI-8A562681 (S4, design §12.4.5): the install's canonical origin is
+// configuration, not ambient state. An endpoint on the PUBLIC_URL origin, or on
+// the origin of DPF_MCP_URL (which S2 persists as <PUBLIC_URL>/api/mcp/v1?...),
+// is the install itself; any other non-loopback host is still refused.
+
+test("isAllowedMcpEndpoint accepts an endpoint on the PUBLIC_URL origin", () => {
+  const env = { PUBLIC_URL: "https://dpf.example.lan" };
+  assert.equal(isAllowedMcpEndpoint("https://dpf.example.lan/api/mcp/v1", env), true);
+  assert.equal(isAllowedMcpEndpoint("https://DPF.example.lan:443/api/mcp/v1?tier=full", env), true);
+});
+
+test("isAllowedMcpEndpoint accepts any path on the DPF_MCP_URL origin", () => {
+  const env = { DPF_MCP_URL: "https://dpf.example.lan/api/mcp/v1?tier=full" };
+  assert.equal(isAllowedMcpEndpoint("https://dpf.example.lan/api/mcp/v1", env), true);
+});
+
+test("isAllowedMcpEndpoint still refuses a host the install is not configured on", () => {
+  const env = { PUBLIC_URL: "https://dpf.example.lan", DPF_MCP_URL: "https://dpf.example.lan/api/mcp/v1" };
+  for (const url of [
+    REMOTE,
+    "https://evil.example.com/api/mcp/v1",
+    "http://dpf.example.lan/api/mcp/v1", // scheme differs from the configured origin
+    "https://dpf.example.lan:8443/api/mcp/v1", // port differs
+    "https://dpf.example.lan.evil.com/api/mcp/v1",
+    "https://dpf.example.lan@evil.example.com/api/mcp/v1",
+    "https://user:pw@dpf.example.lan/api/mcp/v1",
+  ]) {
+    assert.equal(isAllowedMcpEndpoint(url, env), false, url);
+  }
+});
+
+test("isAllowedMcpEndpoint refuses a non-loopback host when nothing is configured", () => {
+  assert.equal(isAllowedMcpEndpoint("https://dpf.example.lan/api/mcp/v1", {}), false);
+  assert.equal(isAllowedMcpEndpoint("https://dpf.example.lan/api/mcp/v1", { PUBLIC_URL: "not a url" }), false);
+});
+
+test("mcpCall sends to the PUBLIC_URL origin without an explicit opt-in", async () => {
+  await withEnv({ PUBLIC_URL: "https://dpf.example.lan", DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined }, async () => {
+    const seen = [];
+    const result = await mcpCall("test_tool", {}, {
+      mcpUrl: "https://dpf.example.lan/api/mcp/v1",
+      bearerToken: "dpfmcp_test",
+      fetchImpl: async (url) => {
+        seen.push(url);
+        return new Response(JSON.stringify({ result: { content: [{ type: "text", text: "{\"ok\":true}" }] } }));
+      },
+    });
+    assert.deepEqual(result, { ok: true });
+    assert.deepEqual(seen, ["https://dpf.example.lan/api/mcp/v1"]);
+  });
+});
+
+test("mcpCall still refuses an arbitrary host when PUBLIC_URL names another", async () => {
+  await withEnv({ PUBLIC_URL: "https://dpf.example.lan", DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined }, async () => {
+    await assert.rejects(
+      mcpCall("test_tool", {}, { mcpUrl: REMOTE, bearerToken: "dpfmcp_test" }),
+      /refusing to send a bearer token/,
     );
   });
 });
@@ -140,7 +201,7 @@ test("mcpPost returns the raw reply without interpreting the HTTP status", async
 });
 
 test("mcpPost enforces the loopback rule on the fetchImpl path too", async () => {
-  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined }, async () => {
+  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined, PUBLIC_URL: undefined }, async () => {
     await assert.rejects(
       mcpPost("tools/call", { name: "t", arguments: {} }, {
         mcpUrl: REMOTE,

@@ -1872,6 +1872,22 @@ if ($OrganizationJoinPackagePath) {
     }
 }
 
+# This machine's AI clients find the install at its canonical origin and trust
+# its CA (BI-2D545A0C): DPF_MCP_URL and NODE_EXTRA_CA_CERTS are persisted in the
+# installing user's environment on every run, in both install modes, so a
+# re-run or an origin change converges without the agent-toolchain bootstrap.
+$clientEnvLib = Join-Path $DPF_DIR "scripts\installer\lib\mcp-client-env.ps1"
+if (-not (Test-Path -LiteralPath $clientEnvLib)) { $clientEnvLib = Join-Path $PSScriptRoot "scripts\installer\lib\mcp-client-env.ps1" }
+try {
+    . $clientEnvLib
+    $clientEnv = Resolve-DpfMcpClientEnv -InstallDir $DPF_DIR
+    if ((Set-DpfMcpClientEnv -ClientEnv $clientEnv) -ne "not-https") {
+        Write-OK "AI clients on this machine will connect to $($clientEnv.McpUrl)"
+    }
+} catch {
+    Write-Host "  [!] The AI client address could not be saved: $_" -ForegroundColor Yellow
+}
+
 Write-Step 7 10 "Starting the platform..."
 if (-not (Test-StepDone "started")) {
     Set-Location $DPF_DIR

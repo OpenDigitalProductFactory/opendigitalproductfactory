@@ -846,9 +846,10 @@ model runs, and pins it through `requiredToolNames`. One rule, two uses, asserte
 equal by test: otherwise a run can be failed for a tool the pin never attached,
 which is precisely the live defect.
 
-Pinning stays narrow. Read-only tools are not pinned (they load on demand
-safely), unnamed side-effecting tools are not pinned (that would defeat the
-budget), and nothing unauthorized is pinned — authorization remains upstream.
+Pinning stays narrow. Unnamed side-effecting tools are not pinned (that would
+defeat the budget), and nothing unauthorized is pinned — authorization remains
+upstream. Read-only tools are pinned only when a stage declares them, as the
+next section describes.
 
 **The richer brief made the failure worse before it made it better.** Given the
 full objective and definition of done but still no reachable tools, the same
@@ -858,6 +859,60 @@ clean."* Specific counts, no tool call, entirely invented. A brief that presses
 for an answer without the means to obtain one converts an honest failure into a
 confident falsehood — which is why the governed-evidence requirement is the load
 -bearing guard here, not the prompt.
+
+## A stage names the tools it needs
+
+Pinning the writer the prompt names was not enough. Live standing rooms kept
+reporting that they had no tool to read what their stage was about: the
+dependency sweep could not see the manifest, the triage stage could not see the
+backlog, the inquiry draft could not see the inquiries. The scheduled run
+attaches the agent's granted tools, caps them, ranks them by prompt relevance,
+and pins only what the prompt names. The shape's `grants` field was never
+consulted on that path, so a stage had no way to say what it needs.
+
+A stage now declares it. `WorkShapeStage.tools` lists the platform tools the
+stage reaches, by exact name. This is the first stage-level realization of the
+Gated Permissions Process (GPP draft 0.1, `docs/architecture/gated-permissions-process.md`,
+in review): binding element 2, *Attachment* (a binding attaches to a stage, not
+only to a shape), and element 5, *Capability set*. The shape's `grants` stays
+the coarse per-shape ceiling a room narrows to; `tools` names what is used
+inside it.
+
+The path from declaration to run:
+
+1. The drive reads the stage's tools (`stageDeclaredTools`) and writes them to
+   the dispatched task's `taskConfig.workroomStage`, next to the shape and
+   stage keys. The record has its own key, so the posture `trigger` reader can
+   never read it, and the reverse holds too.
+2. The brief carries one line naming the tools.
+3. The scheduler adds the declared tools to the run's pinned tools, after any
+   writer the prompt names. Pinning orders inside the attachment budget; the
+   agent and user grant filter still decides whether each tool is reachable.
+
+A stage that declares nothing is dispatched exactly as before.
+
+`stage-tool-parity.test.ts` checks the declarations against the GPP checks:
+
+| Check | What the test asserts |
+|---|---|
+| C-1 Stage coverage (GPP-001) | Every agent stage of a cadence shape declares tools or is on `KNOWN_STAGE_TOOL_GAPS`. The gap list only shrinks. |
+| C-2 Vocabulary resolution (GPP-002) | Every declared name is a registered platform tool with a grant mapping. Scope is stage `tools` only; the shape-level `tool:write-source` token is tracked separately (BI-00588B51). |
+| C-4 Accountable authority, first condition | The stage's accountable agent holds a grant each declared tool requires, resolved by the runtime's own grant resolver. Holding the grant is necessary, not all of C-4. |
+| Pin capacity | Declared tools plus `record_workroom_evidence` fit the four-tool pin (`REQUIRED_TOOL_PIN_CAPACITY`). |
+
+Pinning only prompt-named tools was a C-6 *Reach reconciliation* gap in the
+reverse direction: the shape admitted a tool the run never reached.
+
+Where no existing tool reads what a stage needs, nothing is invented. The stage
+goes on `KNOWN_STAGE_TOOL_GAPS` (`stage-tool-gaps.ts`) with the reason. One gap
+closed as part of this work: `customer-advisor` gained `storefront_read`, so the
+inquiry draft stage can call `list_storefront_activity`.
+
+Shape versions were not bumped. GPP §2.1 treats a capability-set change as a
+material change, but a room's `workShape` claim pins an exact version and
+`resolveWorkShapeClaim` drops a room whose version no longer matches, which
+would stop every live standing room. Versioning capability sets without
+orphaning rooms is a follow-on.
 
 ## Related references
 

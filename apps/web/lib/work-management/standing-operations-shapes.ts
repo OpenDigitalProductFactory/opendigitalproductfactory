@@ -82,6 +82,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every advisory source in scope has been read and correlated to the recorded manifest.",
         },
         evidence: ["assurance-run"],
+        tools: ["read_codebase_manifest", "list_patch_posture"],
       },
       {
         key: "raise",
@@ -92,6 +93,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each advisory that reaches a recorded dependency has an open finding; each one that no longer does is reconciled.",
         },
         evidence: ["assurance-finding"],
+        tools: ["list_patch_posture", "query_backlog"],
       },
       {
         key: "decide",
@@ -302,6 +304,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every untriaged issue in scope is classified by kind and severity.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_backlog_items", "query_backlog"],
       },
       {
         key: "dedupe",
@@ -312,6 +315,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each issue is matched to an existing backlog item or carries a proposed new one.",
         },
         evidence: ["assurance-finding"],
+        tools: ["query_backlog", "find_duplicate_candidates"],
       },
       {
         key: "admit",
@@ -359,6 +363,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every required gate has its evidence collected or is explicitly recorded as missing.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_backlog_items", "get_backlog_item", "get_release_status"],
       },
       {
         key: "report",
@@ -369,6 +374,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each missing gate is named with what would satisfy it. An absent gate is never reported as passing.",
         },
         evidence: ["assurance-finding"],
+        tools: ["get_backlog_item", "get_release_status"],
       },
       {
         key: "cut",
@@ -417,6 +423,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every waiting inquiry has a draft reply whose every claim cites recorded evidence.",
         },
         evidence: ["draft-artifact"],
+        tools: ["list_storefront_activity", "list_customer_accounts"],
       },
       {
         key: "send",
@@ -465,6 +472,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every recorded adopter relationship has been read, with unknowns named as unknown.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_customer_accounts"],
       },
       {
         key: "report",
@@ -475,6 +483,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each at-risk relationship is reported with the signal it rests on and what to record to make an unknown known.",
         },
         evidence: ["assurance-finding"],
+        tools: ["list_customer_accounts"],
       },
       {
         key: "act",
@@ -695,6 +704,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every registered coworker has a measured capability and qualification state.",
         },
         evidence: ["assurance-run"],
+        tools: ["get_capability_completeness"],
       },
       {
         key: "report",
@@ -705,6 +715,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each unresolved gap or stale qualification is reported with what would close it.",
         },
         evidence: ["assurance-finding"],
+        tools: ["get_capability_completeness", "list_all_capability_needs"],
       },
       {
         key: "grant",

@@ -1,4 +1,4 @@
-// apps/web/components/ea/ea-nav.ts
+// apps/web/lib/navigation/ea-nav.ts
 //
 // Pure data for the EA (Architecture) secondary nav, lifted out of EaTabNav.tsx
 // (EP-NAV-COHERENCE P3/P5) so the navigation surface can ingest it without importing a

@@ -3,9 +3,9 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 421,
-      "reason": "BI-67B27832: set_portfolio_owner records the one person accountable for a portfolio, who then owns its automatic work (scheduled builds, their rooms, their approvals). No existing tool writes accountability: set_portfolio_budget sets money, appoint_room_coordinator sets one room, and scheduled work otherwise fell to the oldest superuser (a bootstrap account nobody reads). It is an authority-consequence write in the existing portfolio-budget pack, not a new pack.",
-      "recordedAt": "2026-09-29"
+      "value": 423,
+      "reason": "BI-F25A5FC7: plan_account_handover (read-only dry run with a digest) and apply_account_handover (authority-consequence apply bound to that digest) re-home everything an absent account owns: rooms, live builds and scheduled tasks. appoint_room_coordinator moves one room per approval and is refused for an assistant not admitted to the room; nothing re-homed builds or scheduled tasks at all. On the live install that is 410 items. Both tools live in the existing room-messaging pack beside appoint_room_coordinator and share its write path.",
+      "recordedAt": "2026-10-01"
     },
     "registry.packFiles": {
       "value": 103,

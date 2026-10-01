@@ -1,5 +1,5 @@
 import type { prisma as defaultPrisma } from "@dpf/db";
-import type { TileStatus } from "@/components/shell/WorkspaceTiles";
+import type { TileStatus } from "./types";
 import { resolveApplicableRegulationDbIds } from "@/lib/compliance-library";
 
 export type SixCKey =

@@ -64,23 +64,13 @@ export async function ensureHiveScoutScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean; ownerUserId: string }> {
-  const owner = await prisma.user.findFirst({
-    where: { isSuperuser: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-
-  if (!owner) {
-    throw new Error("seed: no superuser found - cannot seed Hive Scout scheduled task");
-  }
-
   const timezone = process.env.INSTALL_TIMEZONE ?? HIVE_SCOUT_DEFAULT_TIMEZONE;
   const prompt = buildHiveScoutScheduledPrompt();
   const nextRunAt = computeNextCronRun(HIVE_SCOUT_SCHEDULE, now);
 
   const existingTask = await prisma.scheduledAgentTask.findUnique({
     where: { taskId: HIVE_SCOUT_TASK_ID },
-    select: { taskId: true, schedule: true, nextRunAt: true },
+    select: { taskId: true, schedule: true, nextRunAt: true, ownerUserId: true },
   });
 
   const nextScheduledRunAt =
@@ -90,7 +80,9 @@ export async function ensureHiveScoutScheduledTask(
       ? existingTask.nextRunAt ?? nextRunAt
       : nextRunAt;
 
+  let ownerUserId: string;
   if (existingTask) {
+    ownerUserId = existingTask.ownerUserId;
     await prisma.scheduledAgentTask.update({
       where: { taskId: HIVE_SCOUT_TASK_ID },
       data: {
@@ -100,12 +92,24 @@ export async function ensureHiveScoutScheduledTask(
         routeContext: HIVE_SCOUT_ROUTE_CONTEXT,
         schedule: HIVE_SCOUT_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
+        // The owner is never rewritten: a task handed over to its portfolio's
+        // accountable person stays theirs across seed runs (BI-87AE4BF6).
         isActive: true,
         nextRunAt: nextScheduledRunAt,
       },
     });
   } else {
+    // Only a NEW task needs an owner. On a fresh install the oldest superuser is
+    // the only one there is; an existing task keeps whoever owns it now.
+    const owner = await prisma.user.findFirst({
+      where: { isSuperuser: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    if (!owner) {
+      throw new Error("seed: no superuser found - cannot seed Hive Scout scheduled task");
+    }
+    ownerUserId = owner.id;
     await prisma.scheduledAgentTask.create({
       data: {
         taskId: HIVE_SCOUT_TASK_ID,
@@ -115,7 +119,7 @@ export async function ensureHiveScoutScheduledTask(
         routeContext: HIVE_SCOUT_ROUTE_CONTEXT,
         schedule: HIVE_SCOUT_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
+        ownerUserId,
         nextRunAt,
       },
     });
@@ -138,6 +142,6 @@ export async function ensureHiveScoutScheduledTask(
 
   return {
     created: !existingTask,
-    ownerUserId: owner.id,
+    ownerUserId,
   };
 }

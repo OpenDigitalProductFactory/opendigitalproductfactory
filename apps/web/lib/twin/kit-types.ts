@@ -1,4 +1,4 @@
-// apps/web/components/twin/types.ts
+// apps/web/lib/twin/kit-types.ts
 //
 // Shared prop vocabulary for the Operational Twin grammar kit (EP-LIVING-BUSINESS-VIZ P2).
 // These are the ten primitives every twin — floor, map, yard, or board — composes from,
@@ -10,7 +10,7 @@
 // snapshot-shaped rather than profile-shaped is deliberate — the same primitive
 // renders a restaurant table and a SaaS tenant.
 
-import type { Intent } from "@/components/ui/report-kit";
+import type { Intent } from "@/lib/ui-model/statusColors";
 
 /** The defining doctrine of the operating twin: humans, AI coworkers, and
  *  external partners (resellers/franchisees) inhabit the SAME surface. Every

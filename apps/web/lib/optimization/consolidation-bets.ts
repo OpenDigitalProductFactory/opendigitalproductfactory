@@ -228,7 +228,7 @@ export const CONSOLIDATION_BETS: readonly ConsolidationBet[] = [
       tools: [],
       files: [
         "apps/web/components/ui/report-kit/index.ts",
-        "apps/web/components/ui/report-kit/statusColors.ts",
+        "apps/web/lib/ui-model/statusColors.ts",
       ],
     },
   },

@@ -766,8 +766,8 @@ export function describePolicy(type: BuildProcessType, size: BuildProcessSize): 
 // ─── checkPhaseGate — policy-driven gate ────────────────────────────────────
 //
 // Lives here (not in feature-build-types.ts) so the matrix module owns the
-// gate logic + policy table together. feature-build-types.ts re-exports
-// `checkPhaseGate` so existing import sites keep working unchanged.
+// gate logic + policy table together. The lib/feature-build-types.ts shim re-exports
+// it; lib/explore/feature-build-types.ts must not (that closes a load-order cycle).
 
 import type { PhaseGateResult } from "./feature-build-types";
 

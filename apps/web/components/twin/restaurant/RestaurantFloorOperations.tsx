@@ -12,7 +12,7 @@ import {
   intentStyle,
   resolveIntent,
   type Intent,
-} from "@/components/ui/report-kit/statusColors";
+} from "@/lib/ui-model/statusColors";
 import { CartesianSceneCanvas } from "@/components/twin/cartesian/CartesianSceneCanvas";
 import {
   RestaurantCapacityTimeline,

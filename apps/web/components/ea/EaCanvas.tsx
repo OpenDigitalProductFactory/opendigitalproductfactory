@@ -37,7 +37,7 @@ import {
   saveCanvasState,
   getDefaultRelTypeIdForView,
 } from "@/lib/actions/ea";
-import { buildValueStreamGroupLayout, estimateStageWidth } from "./value-stream-layout";
+import { buildValueStreamGroupLayout, estimateStageWidth } from "@/lib/ea/value-stream-layout";
 
 const NODE_TYPES = { eaElement: EaElementNode, eaContainer: EaContainerNode };
 const EDGE_TYPES = { eaRelationship: EaRelationshipEdge };

@@ -1,4 +1,4 @@
-// apps/web/components/twin/demo-snapshot.ts
+// apps/web/lib/twin/demo-twin-snapshot.ts
 //
 // Deterministic demo data for a `TwinView` (EP-LIVING-BUSINESS-VIZ P3). Fills a
 // `TwinSnapshot` from any `TwinProfile` so the twin is demonstrable BEFORE the
@@ -9,10 +9,10 @@
 
 import type { TwinProfile } from "@dpf/storefront-templates";
 
-import type { Intent } from "@/components/ui/report-kit";
+import type { Intent } from "@/lib/ui-model/statusColors";
 
-import type { TwinSnapshot, TwinZoneSnapshot } from "./snapshot";
-import type { CapacityChipData, ResourceUnitData } from "./types";
+import type { TwinSnapshot, TwinZoneSnapshot } from "./twin-snapshot";
+import type { CapacityChipData, ResourceUnitData } from "./kit-types";
 
 const STATE_CYCLE: Array<{ state: string; intent: Intent }> = [
   { state: "Active", intent: "success" },

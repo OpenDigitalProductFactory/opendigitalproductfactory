@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getFinanceFamily, FINANCE_FAMILIES } from "@/components/finance/finance-nav";
+import { getFinanceFamily, FINANCE_FAMILIES } from "@/lib/navigation/finance-nav";
 
 describe("finance-nav", () => {
   it("defines the top-level finance workflow families", () => {

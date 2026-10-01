@@ -59,7 +59,7 @@
     "scripts/decommission-neo4j-qdrant.ps1": "Live: the Windows twin of the decommission script, for operators on installs that predate BET-5.",
     "scripts/promote.sh": "Live: step 7c passes the legacy container and volume names to the decommission script.",
     "docs/runbooks/bet5-windows-self-upgrade.md": "Runbook for upgrading an install that still runs the retired stores; it has to name them.",
-    "apps/web/components/monitoring/alert-humanize.ts": "Live: humanizes a stale QdrantDown / Neo4jDown alert or scrape label that an install can still hold until monitoring reloads (BI-31FDC859, BI-49C4EA5D).",
+    "apps/web/lib/observability/alert-humanize.ts": "Live: humanizes a stale QdrantDown / Neo4jDown alert or scrape label that an install can still hold until monitoring reloads (BI-31FDC859, BI-49C4EA5D).",
     "apps/web/components/ops/SelfUpgradeClient.test.tsx": "Test fixture: recovery points recorded before BET-5 carry neo4j and qdrant members, and the Upgrade Center still renders them.",
     "apps/web/lib/queue/functions/self-upgrade.test.ts": "Test fixture: pre-BET-5 recovery-point members that the self-upgrade run history still holds.",
     "apps/web/lib/self-upgrade/recovery-point.test.ts": "Test fixture: legacy recovery-point members must be read back without error.",

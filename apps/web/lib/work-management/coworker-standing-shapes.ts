@@ -127,6 +127,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Techniques and asset classes with no detection are enumerated, not characterised.",
         },
         evidence: ["assurance-finding"],
+        tools: ["query_detections", "query_security_events"],
       },
       {
         key: "hunt",
@@ -137,6 +138,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each hunt records what was looked for and what was found, including when nothing was.",
         },
         evidence: ["assurance-run"],
+        tools: ["query_security_events", "query_detections"],
       },
       {
         key: "activate-content",
@@ -185,6 +187,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Both readings completed for every asset class in scope, with unreadable classes named.",
         },
         evidence: ["assurance-run"],
+        tools: ["summarize_estate_posture", "review_estate_identity"],
       },
       {
         key: "assess",
@@ -197,6 +200,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "with the evidence for the classification.",
         },
         evidence: ["assurance-finding"],
+        tools: ["summarize_estate_posture", "explain_blast_radius"],
       },
       {
         key: "inventory",
@@ -207,6 +211,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Assets present in one reading and absent from the other are listed with their last-seen evidence.",
         },
         evidence: ["assurance-finding"],
+        tools: ["review_estate_identity", "summarize_estate_posture"],
       },
       {
         key: "accept-or-remediate",
@@ -253,6 +258,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each capability in scope is compared, and capabilities with no recorded architecture are named as such.",
         },
         evidence: ["assurance-finding"],
+        tools: ["query_ontology_graph", "describe_ea_view"],
       },
       {
         key: "ratify",
@@ -301,6 +307,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "source, and the check's outcome is recorded whether or not the rule changed.",
         },
         evidence: ["assurance-run"],
+        tools: ["search_public_web", "fetch_public_website"],
       },
       {
         key: "determine",
@@ -477,6 +484,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each claim in the draft is traceable to something the business actually offers.",
         },
         evidence: ["manual-check"],
+        tools: ["get_marketing_summary", "get_content_calendar"],
       },
       {
         key: "storefront-fit",
@@ -497,6 +505,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "User-facing documentation affected by the change is updated, or recorded as unaffected with a reason.",
         },
         evidence: ["manual-check"],
+        tools: ["doc_search", "doc_load"],
       },
       {
         key: "accessibility",
@@ -509,6 +518,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "blocking rather than advisory.",
         },
         evidence: ["ux-verified"],
+        tools: ["evaluate_page"],
       },
       {
         key: "publish",
@@ -622,6 +632,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each candidate carries its source, licence, and what gap it would close.",
         },
         evidence: ["assurance-finding"],
+        tools: ["search_tool_marketplace", "search_integrations"],
       },
       {
         key: "adopt",

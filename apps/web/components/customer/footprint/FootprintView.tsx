@@ -13,7 +13,7 @@ import { WORLD_COUNTRY_PATHS } from "@/lib/footprint/world-country-paths";
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import { DataTable, type Column } from "@/components/ui/report-kit";
-import { useMessagesContext } from "@/components/i18n/MessagesProvider";
+import { useMessagesContext } from "@/lib/i18n/messages-context";
 import { useT } from "@/lib/i18n/use-t";
 
 type FootprintT = ReturnType<typeof useT<"footprint">>;

@@ -245,6 +245,11 @@ jobs:
         if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter @dpf/db exec prisma generate
 
+      # Restore only: the typecheck-cache job (push to main) is the one writer.
+      - name: Restore web tsbuildinfo (warm start)
+        if: needs.changes.outputs.heavy == 'true'
+        uses: ./.github/actions/web-tsbuildinfo-cache
+
       - name: Typecheck all workspaces
         if: needs.changes.outputs.heavy == 'true'
         # Raise the V8 heap: tsc over the whole (large, growing) workspace OOMs on
@@ -300,11 +305,70 @@ jobs:
         if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter @dpf/db exec prisma generate
 
+      # Restore only: the typecheck-cache job (push to main) is the one writer.
+      - name: Restore web tsbuildinfo (warm start)
+        if: needs.changes.outputs.heavy == 'true'
+        uses: ./.github/actions/web-tsbuildinfo-cache
+
       - name: Typecheck the web test program
         if: needs.changes.outputs.heavy == 'true'
         env:
           NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm --filter web typecheck:tests
+
+  # The single writer of the web tsbuildinfo warm-start cache (spec
+  # 2026-09-30 web-runtime-import-cycle §6 PR-1). Every push to main saves an
+  # entry keyed on its own SHA; PR and merge_group runs of the two Typecheck
+  # jobs above restore the latest one and never save. It is its own job
+  # because a push whose merge-group evidence is reused skips Typecheck
+  # entirely, which would otherwise leave the cache stale. It is never a
+  # verdict: merge_group already typechecked this tree, so a failed compile
+  # here still saves (a build info with errors is valid warm state) and the
+  # job stays green. It restores the previous main entry first, so it is
+  # itself a warm run.
+  typecheck-cache:
+    name: Typecheck warm-start cache
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' && needs.changes.result == 'success'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm with cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Generate Prisma client
+        run: pnpm --filter @dpf/db exec prisma generate
+
+      - name: Restore web tsbuildinfo (previous main entry)
+        id: tsbuildinfo
+        uses: ./.github/actions/web-tsbuildinfo-cache
+
+      - name: Refresh the production program build info
+        if: steps.tsbuildinfo.outputs.cache-hit != 'true'
+        continue-on-error: true
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm --filter web typecheck
+
+      - name: Refresh the test program build info
+        if: steps.tsbuildinfo.outputs.cache-hit != 'true'
+        continue-on-error: true
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm --filter web typecheck:tests
+
+      - name: Save web tsbuildinfo
+        if: >-
+          steps.tsbuildinfo.outputs.cache-hit != 'true' &&
+          hashFiles('apps/web/tsconfig.tsbuildinfo', 'apps/web/tsconfig.test.tsbuildinfo') != ''
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            apps/web/tsconfig.tsbuildinfo
+            apps/web/tsconfig.test.tsbuildinfo
+          key: ${{ steps.tsbuildinfo.outputs.key }}
 
   # BI-0580AFD3. These profiles replace 34 startup-heavy policy jobs with one
   # checkout/runtime per profile. The registry preserves each former job's
@@ -891,6 +955,7 @@ jobs:
       - exact-tree-evidence-shadow
       - typecheck
       - typecheck-tests
+      - typecheck-cache
       - policy-guards-source
       - policy-guards-workspace
       - policy-guards-pr
