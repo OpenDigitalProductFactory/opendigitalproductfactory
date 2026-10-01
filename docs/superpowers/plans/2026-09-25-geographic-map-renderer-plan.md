@@ -16,9 +16,16 @@ status: draft
 
 - Parent: `BI-814F86E1`
 - Decision: atomic
-- Receipt: blocked-by: record_plan_backlog_coverage returned traceability-incomplete on 2026-10-01 because no initiative scope baseline exists for BI-814F86E1; the baseline is minted by the spec-approval review routed to an independent reviewer
+- Baseline: the spec-approval baseline minted from the design's objective and acceptance markers on 2026-10-01
+- Receipt: blocked-by: record_plan_backlog_coverage binds the immutable blob of this exact file, so the receipt can only be minted after this commit is pushed; it is then held in the live backlog against BI-814F86E1 rather than copied back here, because copying it would change the blob it binds
 - Rationale: see "Coverage decision" below; no phase gives an owner a usable outcome on its own.
-- Dependencies: none (downstream: `BI-4EC1D572`, `BI-3DAE2169`, `BI-560128FB`)
+- Dependencies: none (downstream: `BI-3DAE2169`, `BI-560128FB`, `BI-6CC10E4C`)
+
+### Traceability
+
+| Deliverable | Objectives | Contracts | Flow | Acceptance |
+|---|---|---|---|---|
+| geographic-renderer (`BI-814F86E1`, phases 1–4) | OBJ-GEO-RENDER, OBJ-GEO-PACK, OBJ-GEO-DEGRADE, OBJ-GEO-ISOLATE | `apps/web/app/api/map-assets/[packId]/route.ts`, `apps/web/app/api/map-assets/runtime/[file]/route.ts`, `apps/web/lib/twin/map-assets.server.ts` | GeographicSceneCanvas loads a region pack over HTTP range requests from the install | AC-GEO-RENDER-1, AC-GEO-RENDER-2, AC-GEO-PACK-1, AC-GEO-PACK-2, AC-GEO-DEGRADE-1, AC-GEO-ISOLATE-1 |
 
 ## Coverage decision: atomic
 
