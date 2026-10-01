@@ -7,13 +7,16 @@
 import { serve } from "inngest/next";
 
 import { inngestClient } from "./inngest-adapter";
+import { isPostgresFunction } from "./postgres/registry";
 import type { JobFunction } from "./types";
 
 type InngestServeFunctions = Parameters<typeof serve>[0]["functions"];
 
 export function serveJobs(functions: readonly JobFunction[]) {
+  // Functions routed to the owned Postgres engine are not Inngest's to serve.
+  const inngestFunctions = functions.some(isPostgresFunction) ? functions.filter((fn) => !isPostgresFunction(fn)) : functions;
   return serve({
     client: inngestClient,
-    functions: functions as unknown as InngestServeFunctions,
+    functions: inngestFunctions as unknown as InngestServeFunctions,
   });
 }

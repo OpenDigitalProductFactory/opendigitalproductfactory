@@ -1,0 +1,91 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "JobEvent, JobRun, JobStep, JobWait, JobConcurrencySlot, JobCronState: engine state of the owned durable-job engine, written and read only by apps/web/lib/jobs/postgres (store.ts) behind the @/lib/jobs facade",
+    "Populated only when DPF_JOBS_ENGINE=postgres routes functions to the engine; with the flag unset (the default) nothing writes them",
+    "The same event payloads and step outputs are what Inngest stores today in its own `inngest` database (events, history, traces); routing a function here moves that copy, it does not add a new kind of data"
+  ],
+  "privacyAssessment": {
+    "personalData": true,
+    "sensitivity": "internal: job event payloads and step outputs carry whatever their senders put there, mostly record identifiers (buildId, organizationId, operationId, workItemId); some may name a user id",
+    "dataSubjectRights": "No column is a person's record. Payloads are pruned with their finished run after the retention window (7 days by default), so they are not a durable copy. Deleting a person does not need to reach these rows: they expire.",
+    "reviewDisposition": "Not shown on any surface. Visible to database administrators only, as Inngest's own tables are today."
+  },
+  "migration": {
+    "name": "20261001180000_durable_job_engine",
+    "backfill": "None. One enum and six new tables nothing existing references; every function stays on Inngest until the flag routes it. IF NOT EXISTS and duplicate_object guards make a re-run harmless, so it applies cleanly against any existing data state (verified: fresh database, twice; a copy of the live schema, twice).",
+    "rollback": "Forward-only. With the flag unset the tables stay empty and unused; older code ignores them."
+  },
+  "tests": [
+    "apps/web/lib/jobs/postgres/engine.pg.test.ts",
+    "apps/web/lib/jobs/postgres/units.test.ts",
+    "apps/web/lib/operate/cron-next-run.test.ts",
+    "apps/web/lib/jobs/index.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:job-event",
+      "prismaModel": "JobEvent",
+      "lifecycleDisposition": "New engine state. Pruned by the engine (store.ts pruneFinished) once fanned out, older than the retention window and no longer referenced by an unfinished run.",
+      "fields": [
+        { "fieldId": "data:job-event#id", "resolution": "not-applicable", "reason": "Sender dedupe key or generated id.", "provenance": "spec 2026-09-25 §5.2; BI-85E6EF14" },
+        { "fieldId": "data:job-event#name", "resolution": "not-applicable", "reason": "Event name, a code constant.", "provenance": "spec 2026-09-25 §5.2" },
+        { "fieldId": "data:job-event#data", "resolution": "governed", "reason": "Sender-supplied payload, mostly record identifiers.", "provenance": "spec 2026-09-25 §5.2; the same payloads Inngest stores today", "flags": ["personal"], "fieldPolicy": "Engine state only; never displayed; pruned after the retention window." },
+        { "fieldId": "data:job-event#ts", "resolution": "not-applicable", "reason": "When the event happened.", "provenance": "spec 2026-09-25 §5.2" },
+        { "fieldId": "data:job-event#receivedAt", "resolution": "not-applicable", "reason": "When the engine recorded it; orders fan-out and bounds wait matching.", "provenance": "spec 2026-09-25 §5.3" },
+        { "fieldId": "data:job-event#fannedOutAt", "resolution": "not-applicable", "reason": "When the worker turned it into runs, cancels and resolved waits.", "provenance": "BI-85E6EF14" }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:job-run",
+      "prismaModel": "JobRun",
+      "lifecycleDisposition": "New engine state. Finished runs (completed, failed, cancelled) are deleted after the retention window; steps, waits and slots cascade.",
+      "fields": [
+        { "fieldId": "data:job-run#event", "resolution": "governed", "reason": "The triggering event as the handler receives it.", "provenance": "spec 2026-09-25 §5.2", "flags": ["personal"], "fieldPolicy": "Engine state only; never displayed; pruned with the run." },
+        { "fieldId": "data:job-run#output", "resolution": "governed", "reason": "The handler's return value.", "provenance": "spec 2026-09-25 §5.2", "flags": ["personal"], "fieldPolicy": "Engine state only; pruned with the run." },
+        { "fieldId": "data:job-run#error", "resolution": "governed", "reason": "Last error text, for diagnosis.", "provenance": "spec 2026-09-25 §5.3", "fieldPolicy": "Engine state only; pruned with the run." },
+        { "fieldId": "data:job-run#status", "resolution": "not-applicable", "reason": "JobRunStatus enum.", "provenance": "spec 2026-09-25 §5.2" },
+        { "fieldId": "data:job-run#leaseOwner", "resolution": "not-applicable", "reason": "Worker id holding the run; not a person.", "provenance": "spec 2026-09-25 §5.3" }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:job-step",
+      "prismaModel": "JobStep",
+      "lifecycleDisposition": "New engine state; cascades with its run.",
+      "fields": [
+        { "fieldId": "data:job-step#output", "resolution": "governed", "reason": "Memoised step result returned on replay.", "provenance": "spec 2026-09-25 §5.3", "flags": ["personal"], "fieldPolicy": "Engine state only; deleted with its run." }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:job-wait",
+      "prismaModel": "JobWait",
+      "lifecycleDisposition": "New engine state; deleted when the wait resolves or times out, and with its run.",
+      "fields": [
+        { "fieldId": "data:job-wait#matchExpr", "resolution": "not-applicable", "reason": "The waitForEvent condition, written in code; may embed a record id.", "provenance": "spec 2026-09-25 §5.3" }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:job-concurrency-slot",
+      "prismaModel": "JobConcurrencySlot",
+      "lifecycleDisposition": "New engine state; a row lives only while its run is running.",
+      "fields": [
+        { "fieldId": "data:job-concurrency-slot#laneKey", "resolution": "not-applicable", "reason": "Function id plus the evaluated concurrency key (a record id).", "provenance": "spec 2026-09-25 §5.3 (amended 2026-09-29)" }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:job-cron-state",
+      "prismaModel": "JobCronState",
+      "lifecycleDisposition": "New engine state; one row per cron function, kept while the function exists.",
+      "fields": [
+        { "fieldId": "data:job-cron-state#cron", "resolution": "not-applicable", "reason": "Cron expression from code.", "provenance": "spec 2026-09-25 §5.4" }
+      ]
+    }
+  ]
+}

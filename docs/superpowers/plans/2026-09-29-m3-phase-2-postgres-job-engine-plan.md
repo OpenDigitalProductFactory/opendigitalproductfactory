@@ -1,3 +1,6 @@
+---
+status: active
+---
 # M3 phase 2: the Postgres durable-job engine behind the `@/lib/jobs` facade
 
 **Spec:** [Durable jobs on Postgres](../specs/2026-09-25-postgres-durable-job-engine-design.md) §5 (as amended 2026-09-29) and §6 step 2 · **Backlog:** `BI-85E6EF14` (child of `BI-068BBA33`) · **Epic:** `EP-8DC217EB` · **Decision:** `own_postgres_jobs`, WWMD DI-E52E32AEA1E4 · **Phase 1:** #5760
