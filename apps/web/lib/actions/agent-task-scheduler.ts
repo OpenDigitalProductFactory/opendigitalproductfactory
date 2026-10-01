@@ -636,9 +636,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     // records status=failed and the BI-754C9E82 retry cadence takes over,
     // instead of completing quietly with a healthy lastStatus. BI-D48B3B0F: judge what the run PERSISTED too.
     const verdictTools = withPersistedExecutions(executedTools, await prisma.toolExecution.findMany({ where: { taskRunId: taskRunRef.taskRunId, success: true }, select: { toolName: true, result: true } }));
-    const runFailure = detectScheduledRunFailure({
-      prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, content: result.content,
-    });
+    const runFailure = detectScheduledRunFailure({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, content: result.content });
     if (runFailure) throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
 
     const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools });
