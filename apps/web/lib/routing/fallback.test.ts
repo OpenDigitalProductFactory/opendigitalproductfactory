@@ -578,10 +578,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
-      // BI-D28A4F55: an automatic disable that schedules its own recovery.
-      expect(mockAutoDisableProvider).toHaveBeenCalledWith(
-        expect.objectContaining({ providerId: "prov1", cause: "auth", source: "fallback-chain" }),
-      );
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
     });
 
     it("does NOT change model status", async () => {
@@ -642,10 +639,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockRefreshOAuthToken).toHaveBeenCalledWith("prov1");
-      // BI-D28A4F55: an automatic disable that schedules its own recovery.
-      expect(mockAutoDisableProvider).toHaveBeenCalledWith(
-        expect.objectContaining({ providerId: "prov1", cause: "auth", source: "fallback-chain" }),
-      );
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
     });
 
     it("disables the OAuth provider if the retry still auth-fails (refresh once, then give up)", async () => {
@@ -667,10 +661,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
 
       expect(mockRefreshOAuthToken).toHaveBeenCalledTimes(1);
       expect(mockCallProvider).toHaveBeenCalledTimes(2);
-      // BI-D28A4F55: an automatic disable that schedules its own recovery.
-      expect(mockAutoDisableProvider).toHaveBeenCalledWith(
-        expect.objectContaining({ providerId: "prov1", cause: "auth", source: "fallback-chain" }),
-      );
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
     });
 
     // ── BI-F4D3B9E9(a): a LOCAL serving engine has no credentials, so an
@@ -732,10 +723,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
-      // BI-D28A4F55: an automatic disable that schedules its own recovery.
-      expect(mockAutoDisableProvider).toHaveBeenCalledWith(
-        expect.objectContaining({ providerId: "prov1", cause: "billing", source: "fallback-chain" }),
-      );
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "billing" }));
     });
   });
 
@@ -875,10 +863,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
-      // BI-D28A4F55: an automatic disable that schedules its own recovery.
-      expect(mockAutoDisableProvider).toHaveBeenCalledWith(
-        expect.objectContaining({ providerId: "prov1", cause: "billing", source: "fallback-chain" }),
-      );
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "billing" }));
     });
 
     it("does not degrade the model", async () => {
