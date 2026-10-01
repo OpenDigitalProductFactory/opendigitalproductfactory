@@ -13,7 +13,7 @@
 // readers and this reader is tolerant of both the array form and a legacy
 // object form.
 
-import { getWorkShape, type WorkShapeDefinition } from "./work-shapes";
+import { getWorkShape, getWorkShapeVersion, type WorkShapeDefinition } from "./work-shapes";
 import { WORKROOM_SHAPE_KEYS, type WorkroomShapeKey } from "./room-shapes";
 
 export type WorkroomShapeClaimEntry = {
@@ -135,10 +135,19 @@ export function withWorkShapeClaim(
 }
 
 /**
- * Resolve the declared `key@version` against the canonical registry.
- * Unknown key, version mismatch, or unparseable claim → null, never throws.
+ * Resolve the declared `key@version` against the canonical registry, including
+ * a superseded version a live room still pins, so a version bump never silently
+ * stops a room (BI-CB5C0DCE). Unknown key or version, or an unparseable claim
+ * → null, never throws.
  */
 export function resolveWorkShapeClaim(scopeClaims: unknown): WorkShapeDefinition | null {
+  const ref = readWorkShapeClaim(scopeClaims);
+  return ref ? getWorkShapeVersion(ref.key, ref.version) : null;
+}
+
+/** Resolve only the registry's CURRENT version. Creating a room or adopting a
+ *  claim must never pin a superseded version. */
+export function resolveCurrentWorkShapeClaim(scopeClaims: unknown): WorkShapeDefinition | null {
   const ref = readWorkShapeClaim(scopeClaims);
   if (!ref) return null;
   const shape = getWorkShape(ref.key);
