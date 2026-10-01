@@ -1,5 +1,5 @@
 /**
- * Controlled-substance movement commands (EP-CSC-CUSTODY, BI-CSC-002).
+ * Controlled-substance movement commands (EP-CSC-CUSTODY, BI-16172EAF).
  *
  * Record a movement or reverse one. Each runs in one serializable transaction
  * with the organization's RLS context, locks the register-and-product chain,

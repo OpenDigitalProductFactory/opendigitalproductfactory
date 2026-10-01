@@ -1,5 +1,5 @@
 /**
- * Controlled-substance discrepancy command (EP-CSC-CUSTODY, BI-CSC-004).
+ * Controlled-substance discrepancy command (EP-CSC-CUSTODY, BI-E979538E).
  *
  * Moves a discrepancy case through its lifecycle. Classifying a case as
  * suspected theft or significant loss stamps the 21 CFR 1301.76(b) deadlines,

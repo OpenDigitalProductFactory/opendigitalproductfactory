@@ -1,5 +1,5 @@
 /**
- * Controlled-substance ledger rules (EP-CSC-CUSTODY, BI-CSC-002).
+ * Controlled-substance ledger rules (EP-CSC-CUSTODY, BI-16172EAF).
  *
  * Pure: every rule a movement must satisfy before it is written, the
  * canonical hash that chains movements per register and product, and the

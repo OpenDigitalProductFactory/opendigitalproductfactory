@@ -1,5 +1,5 @@
 /**
- * Controlled-substance count command (EP-CSC-CUSTODY, BI-CSC-003).
+ * Controlled-substance count command (EP-CSC-CUSTODY, BI-6322FB1A).
  *
  * Records a physical inventory (21 CFR 1304.11). Expected quantities come from
  * the ledger as of the count; each non-zero variance opens a discrepancy case.

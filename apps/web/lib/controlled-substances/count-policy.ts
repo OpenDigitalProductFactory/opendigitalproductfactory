@@ -1,5 +1,5 @@
 /**
- * Controlled-substance count rules (EP-CSC-CUSTODY, BI-CSC-003).
+ * Controlled-substance count rules (EP-CSC-CUSTODY, BI-6322FB1A).
  *
  * Pure. 21 CFR 1304.11: an initial inventory, then a new one at least every two
  * years; an exact count for Schedule I/II; an estimate is allowed for an opened

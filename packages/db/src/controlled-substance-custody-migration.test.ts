@@ -1,4 +1,4 @@
-// EP-CSC-CUSTODY / BI-CSC-001: the controlled-substance custody migration must
+// EP-CSC-CUSTODY / BI-3810ED3A: the controlled-substance custody migration must
 // apply against any data state (AGENTS.md §2) and must make history
 // append-only, tenant-safe and arithmetically sound at the database (AC-CSC-001).
 import { randomUUID } from "node:crypto";

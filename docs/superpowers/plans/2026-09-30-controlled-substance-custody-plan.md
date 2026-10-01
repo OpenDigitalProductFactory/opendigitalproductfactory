@@ -14,16 +14,16 @@ Each row is independently shippable and maps to one backlog item.
 
 | Key | BI | Deliverable | Depends on | Requirements | Verification |
 |---|---|---|---|---|---|
-| D1 | `BI-CSC-001` | Schema, enums, migration (append-only triggers, CHECKs, RLS), TS unions | — | Spec §§4–5 | AC-CSC-001; migration applies; schema validate; typecheck |
-| D2 | `BI-CSC-002` | Ledger policy and recording command, hash-chain verifier | D1 | Spec §6 | AC-CSC-002, AC-CSC-003; vitest |
-| D3 | `BI-CSC-003` | Count policy and recording command; variance opens discrepancy | D1, D2 | Spec §7 | AC-CSC-004; vitest |
-| D4 | `BI-CSC-004` | Discrepancy lifecycle and loss/theft clock | D1 | Spec §8 | AC-CSC-005; vitest |
-| D5 | `BI-CSC-005` | Portal UI: register, movement entry with witness, count sheet, discrepancy queue | D2–D4 | Spec §9 | UX gate on leased preview |
-| D6 | `BI-CSC-006` | Advise-safe coworker read tools (balances, due counts, open cases) | D2–D4 | Spec §9 | MCP parity tests |
-| D7 | `BI-CSC-007` | Jurisdiction overlays: state annual inventory and wastage-witness rules (Illinois first), UK register profile | D2, D3 | Spec §§2, 9 | Policy tests per profile |
-| D8 | `BI-CSC-008` | Archetype composition: veterinary encounter and procedure wiring (veterinary design pharmacy slice), shelter euthanasia (`BI-6AA4C3BD`), medical-practice dispensing, staffing key-holder presence, seeded count obligations | D2–D5 | Spec §9 | Archetype acceptance journeys |
-| D9 | `BI-CSC-009` | Ordering (Form 222/CSOS), EPCS, PDMP integration evaluation | D2 | Spec §9 | Tool evaluation, then design |
-| D10 | `BI-CSC-010` | Licensed SME and compliance validation of rule text before customer-facing claims | D2–D4 | Spec §2 claim boundary | Signed review record |
+| D1 | `BI-3810ED3A` | Schema, enums, migration (append-only triggers, CHECKs, RLS), TS unions | — | Spec §§4–5 | AC-CSC-001; migration applies; schema validate; typecheck |
+| D2 | `BI-16172EAF` | Ledger policy and recording command, hash-chain verifier | D1 | Spec §6 | AC-CSC-002, AC-CSC-003; vitest |
+| D3 | `BI-6322FB1A` | Count policy and recording command; variance opens discrepancy | D1, D2 | Spec §7 | AC-CSC-004; vitest |
+| D4 | `BI-E979538E` | Discrepancy lifecycle and loss/theft clock | D1 | Spec §8 | AC-CSC-005; vitest |
+| D5 | `BI-4D742581` | Portal UI: register, movement entry with witness, count sheet, discrepancy queue | D2–D4 | Spec §9 | UX gate on leased preview |
+| D6 | `BI-6F04E770` | Advise-safe coworker read tools (balances, due counts, open cases) | D2–D4 | Spec §9 | MCP parity tests |
+| D7 | `BI-13A770C9` | Jurisdiction overlays: state annual inventory and wastage-witness rules (Illinois first), UK register profile | D2, D3 | Spec §§2, 9 | Policy tests per profile |
+| D8 | `BI-786DF028` | Archetype composition: veterinary encounter and procedure wiring (veterinary design pharmacy slice), shelter euthanasia (`BI-6AA4C3BD`), medical-practice dispensing, staffing key-holder presence, seeded count obligations | D2–D5 | Spec §9 | Archetype acceptance journeys |
+| D9 | `BI-617718ED` | Ordering (Form 222/CSOS), EPCS, PDMP integration evaluation | D2 | Spec §9 | Tool evaluation, then design |
+| D10 | `BI-7A2D52E3` | Licensed SME and compliance validation of rule text before customer-facing claims | D2–D4 | Spec §2 claim boundary | Signed review record |
 
 This branch delivers **D1–D4**. D5–D10 stay open with their dependencies.
 

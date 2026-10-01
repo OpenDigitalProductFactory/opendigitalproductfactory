@@ -1,5 +1,5 @@
 /**
- * Controlled-substance discrepancy cases (EP-CSC-CUSTODY, BI-CSC-004).
+ * Controlled-substance discrepancy cases (EP-CSC-CUSTODY, BI-E979538E).
  *
  * Pure. The case lifecycle follows the veterinary design (detection never
  * auto-adjusts the ledger). For suspected theft or significant loss, 21 CFR
