@@ -44,11 +44,12 @@ export async function rebindWorkroomShapeTool(
     callerHasManagePlatform: Boolean(human && can(human, "manage_platform")),
   });
   if (!result.ok) return { success: false, error: result.code, message: result.error };
+  const rebind = result.data;
   return {
     success: true,
-    message: result.applied
-      ? `Rebound ${result.capsuleId} from ${result.fromRef} to ${result.toRef}.`
-      : `Preview: ${result.fromRef} -> ${result.toRef} is a ${result.diff.classification}. Nothing was written.`,
-    data: { applied: result.applied, from: result.fromRef, to: result.toRef, diff: result.diff },
+    message: rebind.applied
+      ? `Rebound ${rebind.capsuleId} from ${rebind.fromRef} to ${rebind.toRef}.`
+      : `Preview: ${rebind.fromRef} -> ${rebind.toRef} is a ${rebind.diff.classification}. Nothing was written.`,
+    data: { applied: rebind.applied, from: rebind.fromRef, to: rebind.toRef, diff: rebind.diff },
   };
 }

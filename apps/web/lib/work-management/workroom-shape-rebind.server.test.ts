@@ -108,7 +108,7 @@ describe("rebind refusals (AC-GATE-1)", () => {
     const widening = makeDb(room(`${KEY}@0.9.0`));
     expect(await rebindWorkroomShapeForUser(widening.db, base)).toMatchObject({ code: "rationale_required" });
     const narrowing = makeDb(room(`${KEY}@0.8.0`));
-    expect(await rebindWorkroomShapeForUser(narrowing.db, base)).toMatchObject({ ok: true, applied: true });
+    expect(await rebindWorkroomShapeForUser(narrowing.db, base)).toMatchObject({ ok: true, data: { applied: true } });
   });
 
   it("refuses a room that does not exist", async () => {
@@ -121,8 +121,8 @@ describe("a successful rebind (AC-GATE-2)", () => {
   it("dryRun returns the diff and writes nothing", async () => {
     const { db, updates, activities } = makeDb(room(`${KEY}@0.9.0`));
     const result = await rebindWorkroomShapeForUser(db, { ...base, dryRun: true });
-    expect(result).toMatchObject({ ok: true, applied: false });
-    if (result.ok) expect(result.diff.classification).toBe("widening");
+    expect(result).toMatchObject({ ok: true, data: { applied: false } });
+    if (result.ok) expect(result.data.diff.classification).toBe("widening");
     expect(updates).toHaveLength(0);
     expect(activities).toHaveLength(0);
   });
@@ -130,7 +130,7 @@ describe("a successful rebind (AC-GATE-2)", () => {
   it("writes the claim behind compare-and-set, the decision evidence, and the activity", async () => {
     const { db, updates, activities } = makeDb(room(`${KEY}@0.9.0`));
     const result = await rebindWorkroomShapeForUser(db, { ...base, rationale: "The new read tools are needed." });
-    expect(result).toMatchObject({ ok: true, applied: true, fromRef: `${KEY}@0.9.0`, toRef: `${KEY}@${current.version}` });
+    expect(result).toMatchObject({ ok: true, data: { applied: true, fromRef: `${KEY}@0.9.0`, toRef: `${KEY}@${current.version}` } });
     expect(updates).toHaveLength(1);
     expect(updates[0]!.where).toMatchObject({ capsuleId: "WC-ROOM", updatedAt: new Date("2026-10-01T00:00:00Z") });
     const claims = (updates[0]!.data as { scopeClaims: Array<Record<string, unknown>> }).scopeClaims;

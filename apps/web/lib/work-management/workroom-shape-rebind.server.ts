@@ -3,6 +3,7 @@
 // decide, and writes the claim behind compare-and-set together with the
 // decision evidence and a `workshape-rebound` activity.
 
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import { adoptionScopePatch, scopeChangeEvidence, scopeWriteWhere } from "@/lib/work-capsules/scope-input";
 import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 import { recordWorkCapsuleActivity, recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-activity-store";
@@ -13,7 +14,7 @@ import {
   buildRebindEvidence,
   planWorkroomShapeRebind,
   rebindRefusal,
-  type RebindPlan,
+  type RebindPlanData,
   type RebindRefusal,
 } from "./workroom-shape-rebind";
 
@@ -50,7 +51,7 @@ export type ShapeRebindInput = {
   now?: Date;
 };
 
-export type ShapeRebindResult = (RebindPlan & { applied: boolean; capsuleId: string }) | RebindRefusal;
+export type ShapeRebindResult = ActionSuccess<RebindPlanData & { applied: boolean; capsuleId: string }> | RebindRefusal;
 
 async function callerHumanPrincipalId(db: ShapeRebindDb, userId: string): Promise<string | null> {
   const principal = await db.principal.findFirst({
@@ -90,10 +91,11 @@ export async function rebindWorkroomShapeForUser(db: ShapeRebindDb, input: Shape
     preview: input.dryRun === true,
   });
   if (!plan.ok) return plan;
-  if (input.dryRun) return { ...plan, applied: false, capsuleId: room.capsuleId };
+  const planned = plan.data;
+  if (input.dryRun) return ok({ ...planned, applied: false, capsuleId: room.capsuleId });
 
   const now = input.now ?? new Date();
-  const patch = adoptionScopePatch(room as unknown as Record<string, unknown>, { workShape: plan.toRef }, now);
+  const patch = adoptionScopePatch(room as unknown as Record<string, unknown>, { workShape: planned.toRef }, now);
   const actor = { userId: input.userId, agentId: input.agentId ?? null, principalId: callerPrincipalId };
   const write = async (tx: ShapeRebindDb) => {
     const updated = await tx.workroom.update({ where: scopeWriteWhere(room as unknown as Record<string, unknown>), data: patch });
@@ -101,7 +103,7 @@ export async function rebindWorkroomShapeForUser(db: ShapeRebindDb, input: Shape
       db: tx,
       capsuleId: room.capsuleId,
       evidence: buildRebindEvidence({
-        plan,
+        plan: planned,
         rationale,
         decidedBy: isOwner ? "accountable-owner" : "platform-manager",
         deciderName: isOwner && decider.state === "resolved" ? decider.name : "A platform manager",
@@ -112,8 +114,8 @@ export async function rebindWorkroomShapeForUser(db: ShapeRebindDb, input: Shape
     return recordWorkCapsuleActivity(tx, {
       workCapsuleId: room.id,
       kind: "workshape-rebound",
-      summary: `Rebound from ${plan.fromRef} to ${plan.toRef}.`,
-      payload: { scopeChanges: scopeChangeEvidence(room as unknown as Record<string, unknown>, updated), classification: plan.diff.classification },
+      summary: `Rebound from ${planned.fromRef} to ${planned.toRef}.`,
+      payload: { scopeChanges: scopeChangeEvidence(room as unknown as Record<string, unknown>, updated), classification: planned.diff.classification },
       actor,
     }, { deferPublication: true });
   };
@@ -126,5 +128,5 @@ export async function rebindWorkroomShapeForUser(db: ShapeRebindDb, input: Shape
     if (!isCasMiss(error)) throw error;
     return rebindRefusal("rebind_conflict", "The room changed while you were deciding. Review the current version and try again.");
   }
-  return { ...plan, applied: true, capsuleId: room.capsuleId };
+  return ok({ ...planned, applied: true, capsuleId: room.capsuleId });
 }

@@ -5,6 +5,7 @@
 // and the write cannot disagree.
 // Spec: docs/superpowers/specs/2026-10-01-workroom-shape-rebind-design.md §4.3
 
+import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 import { diffWorkShapeBinding, type WorkShapeBindingDiff } from "./work-shape-binding-diff";
 import { isCompletingWorkroomDriveReceipt } from "./workroom-drive-receipts";
 import { getWorkShape, getWorkShapeVersion, readWorkShapeDefinitionContract } from "./work-shapes";
@@ -23,11 +24,12 @@ export const REBIND_REFUSAL_CODES = [
 ] as const;
 export type RebindRefusalCode = (typeof REBIND_REFUSAL_CODES)[number];
 
-export type RebindRefusal = { ok: false; code: RebindRefusalCode; error: string };
-export type RebindPlan = { ok: true; diff: WorkShapeBindingDiff; fromRef: string; toRef: string };
+export type RebindRefusal = ActionFailure & { code: RebindRefusalCode };
+export type RebindPlanData = { diff: WorkShapeBindingDiff; fromRef: string; toRef: string };
+export type RebindPlan = ActionSuccess<RebindPlanData>;
 
 export function rebindRefusal(code: RebindRefusalCode, error: string): RebindRefusal {
-  return { ok: false, code, error };
+  return { ...err(error), code };
 }
 
 function semverBelow(a: string, b: string): boolean {
@@ -96,12 +98,12 @@ export function planWorkroomShapeRebind(input: {
   if (!input.preview && diff.classification === "widening" && !input.rationale?.trim()) {
     return rebindRefusal("rationale_required", "This version widens what the room can reach. Say why you are approving it.");
   }
-  return { ok: true, diff, fromRef: `${pinned.key}@${pinned.version}`, toRef: `${current.key}@${current.version}` };
+  return ok({ diff, fromRef: `${pinned.key}@${pinned.version}`, toRef: `${current.key}@${current.version}` });
 }
 
 /** The decision evidence. No stageKey: a rebind must never complete a stage. */
 export function buildRebindEvidence(input: {
-  plan: RebindPlan;
+  plan: RebindPlanData;
   rationale: string | null;
   decidedBy: "accountable-owner" | "platform-manager";
   deciderName: string;
