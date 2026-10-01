@@ -19,6 +19,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+// An argv element compared by equality: curl receives the endpoint as one argument.
+const CANONICAL_MCP_URL = "https://dpf.example.lan/api/mcp/v1";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const healthHook = join(here, "mcp-health.sh");
 const reaperHook = join(here, "session-reaper.sh");
@@ -142,8 +145,8 @@ test("mcp-health still diagnoses a repo .mcp.json that is present", { skip: !pos
 test("mcp-health passes the install CA bundle on https", { skip: !posix }, () => {
   const sb = makeSandbox();
   try {
-    runHealth(sb, { DPF_MCP_URL: "https://dpf.example.lan/api/mcp/v1", NODE_EXTRA_CA_CERTS: sb.caBundle });
-    const call = sb.curlCalls().find((argv) => argv.includes("https://dpf.example.lan/api/mcp/v1"));
+    runHealth(sb, { DPF_MCP_URL: CANONICAL_MCP_URL, NODE_EXTRA_CA_CERTS: sb.caBundle });
+    const call = sb.curlCalls().find((argv) => argv.some((arg) => arg === CANONICAL_MCP_URL));
     assert.ok(call, JSON.stringify(sb.curlCalls()));
     assert.equal(call[call.indexOf("--cacert") + 1], sb.caBundle);
   } finally {
@@ -161,7 +164,7 @@ test("session-reaper passes --cacert on its https MCP calls", { skip: !hasJq }, 
   const sb = makeSandbox();
   try {
     runReaper(sb, {
-      DPF_MCP_URL: "https://dpf.example.lan/api/mcp/v1",
+      DPF_MCP_URL: CANONICAL_MCP_URL,
       DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
       NODE_EXTRA_CA_CERTS: sb.caBundle,
     });
@@ -169,7 +172,7 @@ test("session-reaper passes --cacert on its https MCP calls", { skip: !hasJq }, 
     assert.ok(calls.length > 0, "reaper made no MCP call");
     for (const argv of calls) {
       assert.equal(argv[argv.indexOf("--cacert") + 1], sb.caBundle, JSON.stringify(argv));
-      assert.ok(argv.includes("https://dpf.example.lan/api/mcp/v1"));
+      assert.ok(argv.some((arg) => arg === CANONICAL_MCP_URL), JSON.stringify(argv));
     }
   } finally {
     sb.cleanup();
