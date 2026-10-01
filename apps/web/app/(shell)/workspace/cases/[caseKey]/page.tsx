@@ -6,7 +6,7 @@ import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { RoomWorkforcePanel } from "@/components/workspace/workroom/RoomWorkforcePanel";
 import { WorkCaseDetailView } from "@/components/workspace/WorkCaseDetailView";
 import { auth } from "@/lib/auth";
-import { getGrantedCapabilities } from "@/lib/permissions";
+import { can, getGrantedCapabilities } from "@/lib/permissions";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import { loadPrismaWorkroomParticipants } from "@/lib/work-management/room-participation-prisma.server";
@@ -18,6 +18,8 @@ import { loadRoomWorkforce } from "@/lib/work-management/room-workforce.server";
 import { loadWorkspaceWorkCaseDetail } from "@/lib/work-management/workspace-case-loader";
 import { loadWorkroomOnlyCaseDetail } from "@/lib/work-management/workroom-only-case-projection";
 import { loadWorkroomStageDecisionView } from "@/lib/work-management/workroom-stage-decision.server";
+import { loadWorkroomShapeRebindView } from "@/lib/work-management/workroom-shape-rebind.server";
+import { currentUserContext } from "@/lib/govern/current-user-context";
 
 type Props = {
   params: Promise<{ caseKey: string }>;
@@ -85,14 +87,22 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
       caseKey, roomRowId: detailOrRoom.workroomRowId, userId: session.user.id,
     }).catch(() => null)
     : null;
+  // A newer version of the room's work shape, when the room is behind (BI-CB5C0DCE).
+  const human = await currentUserContext(session.user.id).catch(() => null);
+  const shapeRebind = detailOrRoom.workroomRowId
+    ? await loadWorkroomShapeRebindView(prisma as never, {
+      caseKey, roomRowId: detailOrRoom.workroomRowId, userId: session.user.id,
+      callerHasManagePlatform: Boolean(human && can(human, "manage_platform")),
+    }).catch(() => null)
+    : null;
   const locale = await getLocaleContext();
 
   return (
     <>
-      {stageDecision ? (
-        // The decision control translates with useT("workrooms"); provide it only when rendered.
+      {stageDecision || shapeRebind ? (
+        // The decision controls translate with useT("workrooms"); provide it only when rendered.
         <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
-          <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} stageDecision={stageDecision} navigationContext={query} />
+          <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} stageDecision={stageDecision} shapeRebind={shapeRebind} navigationContext={query} />
         </MessagesProvider>
       ) : (
         <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} navigationContext={query} />

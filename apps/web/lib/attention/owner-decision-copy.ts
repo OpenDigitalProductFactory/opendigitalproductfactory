@@ -28,6 +28,7 @@ const HEADLINE: Record<AttentionSource, string> = {
   "coworker-envelope": "Authorize this coworker record?",
   "skill-proposal": "Approve this change to a coworker skill?",
   "workroom-stall": "Who should own this stuck work?",
+  "workroom-rebind": "Should this room move to the newer version of its work?",
   "orphaned-approval": "Who should answer these AI approvals?",
 };
 
@@ -56,6 +57,7 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "coworker-envelope": "Digital workforce",
   "skill-proposal": "Digital workforce",
   "workroom-stall": "Digital workforce",
+  "workroom-rebind": "Digital workforce",
   "orphaned-approval": "Digital workforce",
 };
 
