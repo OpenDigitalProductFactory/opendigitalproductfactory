@@ -1,4 +1,4 @@
-// apps/web/components/twin/snapshot.ts
+// apps/web/lib/twin/twin-snapshot.ts
 //
 // The render contract for a live operational twin (EP-LIVING-BUSINESS-VIZ P3).
 // A `TwinProfile` (@dpf/storefront-templates, merged P1) says WHICH template and
@@ -11,7 +11,7 @@
 // spine, scheduling — keyed by the profile. Until then `buildDemoTwinSnapshot`
 // (demo-snapshot.ts) fills it deterministically for the fixture.
 
-import type { Intent } from "@/components/ui/report-kit";
+import type { Intent } from "@/lib/ui-model/statusColors";
 
 import type {
   CapacityChipData,
@@ -22,7 +22,7 @@ import type {
   TwinActor,
   UtilityMeterData,
   WorkItemData,
-} from "./types";
+} from "./kit-types";
 
 /** Live units for one of the profile's zones (keyed to `TwinProfile.zones[].key`). */
 export interface TwinZoneSnapshot {

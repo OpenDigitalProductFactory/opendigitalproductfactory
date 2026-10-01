@@ -2,7 +2,7 @@ import { ArrowLeft, CalendarClock, MessageCircle, ShieldCheck } from "lucide-rea
 
 import { LocalTime } from "@/components/ui/LocalTime";
 import { StatusBadge } from "@/components/ui/report-kit";
-import type { Intent } from "@/components/ui/report-kit/statusColors";
+import type { Intent } from "@/lib/ui-model/statusColors";
 import type { PortalWorkCaseDetailView } from "@/lib/work-management/portal-case-loader";
 
 type Props = {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { WorkspaceTiles } from "@/components/shell/WorkspaceTiles";
-import type { TileStatus } from "@/components/shell/WorkspaceTiles";
+import type { TileStatus } from "@/lib/workspace-home/types";
 import type { WorkspaceSection } from "@/lib/permissions";
 
 type WorkspaceAreaLauncherProps = {

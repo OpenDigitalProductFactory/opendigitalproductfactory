@@ -13,7 +13,7 @@
 // is the caller's cue to fall back to the data-only .xlsx writer
 // (components/workbooks/grid-xlsx.ts), which needs no engine.
 
-import { CF_COLORS, CF_OPERATORS } from "@/components/workbooks/grid-conditional-format";
+import { CF_COLORS, CF_OPERATORS } from "./conditional-format";
 import { isRecord } from "@/lib/shared/coerce";
 import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 import type { ConversionFailureReason } from "@/lib/documents/conversion/convert";

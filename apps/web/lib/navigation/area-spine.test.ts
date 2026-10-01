@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { ADMIN_FAMILIES } from "@/components/admin/admin-nav";
+import { ADMIN_FAMILIES } from "@/lib/navigation/admin-nav";
 import { getShellNavSections } from "@/lib/govern/permissions";
 
 import { WORK_PORTFOLIO_ROLE_KEYS } from "./area-portfolio";

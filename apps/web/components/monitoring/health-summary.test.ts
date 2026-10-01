@@ -9,11 +9,11 @@ import {
   friendlyJobLabel,
   humanizeJobList,
   isHostTelemetryConfigured,
-  type MonitoringAlert,
   type PrometheusActiveTarget,
   type PrometheusInstantResult,
   type ServiceDefinition,
 } from "./health-summary";
+import type { MonitoringAlert } from "@/lib/observability/monitoring-jobs";
 import type {
   CapabilityHealthAggregate,
   CapabilityHealthState,

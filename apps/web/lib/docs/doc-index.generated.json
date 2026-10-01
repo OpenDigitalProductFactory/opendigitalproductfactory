@@ -908,6 +908,7 @@
       "anchors": [
         "application-boundaries",
         "governed-dependency-direction",
+        "outer-layers-lib-never-imports-the-ui",
         "why-this-direction",
         "exception-contract",
         "refactoring-pattern",

@@ -20,8 +20,8 @@ import {
   type TwinProfile,
 } from "@dpf/storefront-templates";
 
-import { buildDemoTwinSnapshot } from "@/components/twin/demo-snapshot";
-import type { TwinSnapshot } from "@/components/twin/snapshot";
+import { buildDemoTwinSnapshot } from "@/lib/twin/demo-twin-snapshot";
+import type { TwinSnapshot } from "@/lib/twin/twin-snapshot";
 import { loadVersionedOperationsSnapshot } from "@/lib/twin/operations-loader";
 import {
   toLivingBusinessSnapshot,

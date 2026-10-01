@@ -19,7 +19,7 @@
 //     document mode, not dpf-convert; BI-BFF142A1).
 // Pure and deterministic: the same model always yields the same XML.
 
-import type { CfColor, CfOperator } from "@/components/workbooks/grid-conditional-format";
+import type { CfColor, CfOperator } from "./conditional-format";
 import type { FieldType } from "./types";
 import { normalizeName } from "./formula/evaluate";
 import { columnLetter, toOpenFormula } from "./formula/to-openformula";

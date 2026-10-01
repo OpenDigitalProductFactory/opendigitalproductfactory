@@ -6,6 +6,9 @@
 import type { TieOutRow } from "./tie-out";
 import { portfolioBudgetLabel } from "./budget-label";
 
+/** An epic whose proposed portfolio no person has confirmed yet (BI-A73A7DA3). */
+export type UnconfirmedEpic = { epicId: string; title: string; portfolioId: string; portfolioName: string; confidence: "high" | "low" };
+
 export type TieOutTone = "danger" | "warning" | "success" | "neutral";
 
 export function budgetText(row: Pick<TieOutRow, "budget" | "portfolioId">, formatLocale?: string | null): string {

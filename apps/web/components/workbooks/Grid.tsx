@@ -102,11 +102,8 @@ import {
 } from "./grid-filter-builder";
 import { rowsToCsv } from "./grid-csv";
 import { exportWorkbookView } from "./grid-office-export";
-import {
-  type ConditionalRule,
-  rowColor,
-  rowColorClass,
-} from "./grid-conditional-format";
+import type { ConditionalRule } from "@/lib/workbooks/conditional-format";
+import { rowColor, rowColorClass } from "./grid-conditional-format";
 import {
   GridFilterPanel,
   GridSummaryPanel,

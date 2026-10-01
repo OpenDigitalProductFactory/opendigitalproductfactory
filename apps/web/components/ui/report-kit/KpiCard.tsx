@@ -14,7 +14,7 @@
 
 import Link from "next/link";
 
-import { intentStyle, type Intent } from "./statusColors";
+import { intentStyle, type Intent } from "@/lib/ui-model/statusColors";
 
 type Size = "sm" | "md" | "lg";
 type Align = "start" | "center";

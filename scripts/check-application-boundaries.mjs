@@ -5,13 +5,23 @@
 // apps/web/lib contexts. Existing reverse dependencies are exact, owned debt:
 // the guard permits those import statements, blocks new ones, and reports
 // exceptions that can be deleted after the source edge disappears.
+//
+// Outer layers (M11 step 2 PR-3, docs/superpowers/specs/
+// 2026-09-30-web-runtime-import-cycle-and-project-references-design.md §4.3):
+// `outerLayers` names directories that NO file under `root` may import —
+// apps/web/app and apps/web/components sit above apps/web/lib. Every import
+// kind counts (value, `import type`, dynamic `import()`, `import("x").T`),
+// because a type-only edge still joins lib and the UI into one TypeScript
+// project. This pass reads specifiers with the pinned guard TypeScript's
+// preProcessFile, so an import-shaped line inside a prompt template literal
+// is not mistaken for an import.
 
 import {
   readFileSync,
   readdirSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { validateBudget } from "./lib/baseline-budget.mjs";
@@ -171,17 +181,69 @@ export function validateBoundaryRegistry(registry, { today = new Date().toISOStr
     }
   }
 
+  const outerLayers = registry?.outerLayers ?? {};
+  if (!outerLayers || typeof outerLayers !== "object" || Array.isArray(outerLayers)) {
+    failures.push("Registry outerLayers must be an object when present.");
+  } else {
+    for (const [name, layer] of Object.entries(outerLayers)) {
+      if (name in contexts) failures.push(`Outer layer ${name} collides with a context of the same name.`);
+      if (!layer?.owner?.trim()) failures.push(`Outer layer ${name} requires an owner.`);
+      if (!layer?.description?.trim()) failures.push(`Outer layer ${name} requires a description.`);
+      if (typeof layer?.path !== "string" || !layer.path.trim()) {
+        failures.push(`Outer layer ${name} requires a repository-relative path.`);
+      }
+    }
+  }
+
   const cycle = findCycle(contexts);
   if (cycle) failures.push(`Allowed dependency cycle: ${cycle.join(" -> ")}.`);
   return failures;
 }
 
-export async function analyzeApplicationBoundaries({ repoRoot, registry }) {
+/**
+ * Imports from any file under `registry.root` into a declared outer layer.
+ * `@/` resolves against the root's parent (apps/web), the same alias the
+ * app's tsconfig declares; relative specifiers resolve against the importer.
+ */
+export function findOuterLayerEdges({ repoRoot, registry, ts }) {
+  const layers = Object.entries(registry.outerLayers ?? {}).map(([name, layer]) => ({
+    name,
+    absolute: resolve(repoRoot, layer.path),
+  }));
+  if (!layers.length) return [];
+  const contextRoot = join(repoRoot, registry.root);
+  const aliasBase = dirname(contextRoot);
+  const edgesByKey = new Map();
+  for (const sourceFile of walkSourceFiles(contextRoot)) {
+    const source = normalizePath(relative(repoRoot, sourceFile));
+    const sourceContext = relative(contextRoot, sourceFile).split(/[\\/]/)[0];
+    const { importedFiles } = ts.preProcessFile(readFileSync(sourceFile, "utf8"), true, true);
+    for (const { fileName: specifier } of importedFiles) {
+      let target;
+      if (specifier.startsWith("@/")) target = resolve(aliasBase, specifier.slice(2));
+      else if (specifier.startsWith(".")) target = resolve(dirname(sourceFile), specifier);
+      else continue;
+      const layer = layers.find(({ absolute }) => target === absolute || target.startsWith(absolute + sep));
+      if (!layer) continue;
+      const key = `${source}|${specifier}|${layer.name}`;
+      edgesByKey.set(key, { source, sourceContext, targetContext: layer.name, specifier, key, outerLayer: true });
+    }
+  }
+  return [...edgesByKey.values()].sort((a, b) => a.key.localeCompare(b.key));
+}
+
+async function loadGuardTypeScript() {
+  const { loadPinnedGuardTypeScript } = await import("./lib/load-pinned-guard-typescript.mjs");
+  return loadPinnedGuardTypeScript({ repoRoot: DEFAULT_REPO_ROOT });
+}
+
+export async function analyzeApplicationBoundaries({ repoRoot, registry, ts }) {
   const registryFailures = validateBoundaryRegistry(registry);
   if (registryFailures.length) {
     return {
       registryFailures,
       edges: [],
+      outerLayerEdges: [],
       newForbiddenEdges: [],
       staleExceptions: [],
     };
@@ -212,14 +274,21 @@ export async function analyzeApplicationBoundaries({ repoRoot, registry }) {
 
   const edges = [...edgesByKey.values()].sort((a, b) => a.key.localeCompare(b.key));
   const exceptionKeys = new Set((registry.exceptions ?? []).map(({ key }) => key));
-  const currentForbidden = edges.filter((edge) => (
-    !registry.contexts[edge.sourceContext].allowedDependencies.includes(edge.targetContext)
-  ));
+  const outerLayerEdges = Object.keys(registry.outerLayers ?? {}).length
+    ? findOuterLayerEdges({ repoRoot, registry, ts: ts ?? await loadGuardTypeScript() })
+    : [];
+  const currentForbidden = [
+    ...edges.filter((edge) => (
+      !registry.contexts[edge.sourceContext].allowedDependencies.includes(edge.targetContext)
+    )),
+    ...outerLayerEdges,
+  ];
   const currentForbiddenKeys = new Set(currentForbidden.map(({ key }) => key));
 
   return {
     registryFailures: [],
     edges,
+    outerLayerEdges,
     newForbiddenEdges: currentForbidden.filter(({ key }) => !exceptionKeys.has(key)),
     staleExceptions: [...exceptionKeys].filter((key) => !currentForbiddenKeys.has(key)).sort(),
   };
@@ -231,12 +300,17 @@ function loadRegistry(path = DEFAULT_REGISTRY_PATH) {
 
 function writeCurrentBaseline(registry, analysis, path = DEFAULT_REGISTRY_PATH) {
   const existingByKey = new Map((registry.exceptions ?? []).map((entry) => [entry.key, entry]));
-  const currentForbidden = analysis.edges.filter((edge) => (
-    !registry.contexts[edge.sourceContext].allowedDependencies.includes(edge.targetContext)
-  ));
+  const currentForbidden = [
+    ...analysis.edges.filter((edge) => (
+      !registry.contexts[edge.sourceContext].allowedDependencies.includes(edge.targetContext)
+    )),
+    ...analysis.outerLayerEdges,
+  ];
   registry.exceptions = currentForbidden.map((edge) => existingByKey.get(edge.key) ?? {
     key: edge.key,
-    owner: registry.contexts[edge.sourceContext].owner,
+    owner: edge.outerLayer
+      ? registry.outerLayers[edge.targetContext].owner
+      : registry.contexts[edge.sourceContext].owner,
     rationale: "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
     // A new exception inherits the registry-level budget expiry (BI-3F17B16B)
     // rather than a hardcoded date that goes stale and is born expired.
@@ -271,6 +345,11 @@ async function runCli() {
     for (const edge of analysis.newForbiddenEdges) {
       console.error(`  - ${edge.sourceContext} -> ${edge.targetContext}: ${edge.source} imports ${edge.specifier}`);
     }
+    if (analysis.newForbiddenEdges.some(({ outerLayer }) => outerLayer)) {
+      console.error("apps/web/lib may not import app/** or components/**. Move the shared type, constant or pure");
+      console.error("helper down into lib and import it from there; if lib must render or call UI, invert it");
+      console.error("(the UI passes a callback or registers itself) instead of importing upward.");
+    }
     console.error("Refactor toward the allowed DAG. Do not expand the exception baseline without an owned architecture decision.");
     process.exitCode = 1;
     return;
@@ -282,7 +361,9 @@ async function runCli() {
   }
   console.log(
     `Application boundaries OK — ${Object.keys(registry.contexts).length} contexts, ` +
-    `${analysis.edges.length} cross-context import(s), ${registry.exceptions.length} owned exception(s).`,
+    `${analysis.edges.length} cross-context import(s), ` +
+    `${analysis.outerLayerEdges.length} outer-layer import(s) (${Object.keys(registry.outerLayers ?? {}).join(", ") || "none declared"}), ` +
+    `${registry.exceptions.length} owned exception(s).`,
   );
 }
 
