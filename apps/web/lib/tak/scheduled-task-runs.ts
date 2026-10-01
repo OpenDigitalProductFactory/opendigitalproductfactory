@@ -1,3 +1,4 @@
+import { workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import {
   createAutonomousWorkRun,
   type AutonomousWorkRunRef,
@@ -163,12 +164,15 @@ export function scheduledToolsNeedingPin(input: {
   deferred: Array<{ name: string; sideEffect?: boolean }>;
   /** The Workroom stage's declared tools. Omitted/empty: behaviour unchanged. */
   declaredStageTools?: readonly string[];
+  /** The task's taskConfig; its workroomStage record supplies declaredStageTools
+   *  when they are not passed directly (BI-43C3E914, GPP element 5). */
+  taskConfig?: unknown;
 }): string[] {
   const promptRequired = scheduledRequiredToolNames({
     prompt: input.prompt,
     authorizedTools: [...input.attached, ...input.deferred],
   });
-  const required = [...new Set([...promptRequired, ...(input.declaredStageTools ?? [])])];
+  const required = [...new Set([...promptRequired, ...(input.declaredStageTools ?? workroomStageToolsFromTaskConfig(input.taskConfig))])];
   if (required.length === 0) return [];
   const deferredNames = new Set(input.deferred.map((tool) => tool.name));
   return required.some((name) => deferredNames.has(name)) ? required : [];

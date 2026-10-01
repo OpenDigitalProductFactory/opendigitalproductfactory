@@ -457,6 +457,13 @@ describe("scheduledToolsNeedingPin with a stage's declared tools", () => {
     const before = { prompt: PROMPT, attached: [MANIFEST], deferred: [WRITER, POSTURE] };
     expect(scheduledToolsNeedingPin(before)).toEqual(["record_workroom_evidence"]);
     expect(scheduledToolsNeedingPin({ ...before, declaredStageTools: [] })).toEqual(["record_workroom_evidence"]);
+    // The scheduler passes the task's taskConfig; its workroomStage record supplies the tools.
+    expect(
+      scheduledToolsNeedingPin({
+        ...before,
+        taskConfig: { workroomStage: { shapeKey: "s", shapeVersion: "1", stageKey: "x", tools: ["read_codebase_manifest"] } },
+      }),
+    ).toContain("read_codebase_manifest");
     expect(scheduledToolsNeedingPin({ prompt: "nothing named", attached: [], deferred: [POSTURE] })).toEqual([]);
   });
 

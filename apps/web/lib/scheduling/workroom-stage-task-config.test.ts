@@ -66,7 +66,7 @@ describe("scheduler wiring", () => {
 
   it("passes the stage's declared tools into scheduledToolsNeedingPin", () => {
     expect(scheduler).toMatch(
-      /scheduledToolsNeedingPin\(\{[\s\S]*?declaredStageTools:\s*workroomStageToolsFromTaskConfig\(task\.taskConfig\)/,
+      /scheduledToolsNeedingPin\(\{[\s\S]*?taskConfig:\s*task\.taskConfig/,
     );
   });
 });

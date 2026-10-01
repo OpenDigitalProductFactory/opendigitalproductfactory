@@ -35,7 +35,6 @@ import { assertScheduledResearchCapability, resolveScheduledTurnExternalAccess }
 import { resolveUserAwareProactivityPlan } from "@/lib/proactivity/proactivity-resolver.server";
 import { resolveDelegatedPosture } from "@/lib/proactivity/delegated-posture";
 import { resolveScheduledTickPlan } from "@/lib/scheduling/scheduled-work-posture.server";
-import { workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
 import {
   isCoworkerSelfTaskId,
@@ -535,12 +534,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       intentQuery: task.prompt,
     };
     let { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools(toolArgs);
-    // BI-43C3E914: a Workroom stage's declared tools (GPP element 5, carried on
-    // taskConfig.workroomStage by the drive) are pinned alongside the writers
-    // the prompt names. A task with no stage record pins exactly as before.
     const pinned = scheduledToolsNeedingPin({
-      prompt: task.prompt, attached: tools, deferred: deferredTools,
-      declaredStageTools: workroomStageToolsFromTaskConfig(task.taskConfig),
+      prompt: task.prompt, attached: tools, deferred: deferredTools, taskConfig: task.taskConfig,
     });
     if (pinned.length > 0) {
       ({ tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
