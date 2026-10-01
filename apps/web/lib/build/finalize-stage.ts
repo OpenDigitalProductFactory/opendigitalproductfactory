@@ -183,14 +183,44 @@ function failureAnalysisPrompt(input: { evidence: readonly FailureVerificationEv
   ].filter(Boolean).join("\n");
 }
 
-/** Narrative from the model, identity from the platform, verdict from the validator. One retry. */
+/** A risk the analysis says this change does not mitigate, as handed back for repair. */
+export type UnmitigatedRisk = {
+  key: string; severity: "low" | "medium" | "high" | "critical";
+  trigger: string; effect: string; disposition: string; rationale: string;
+};
+
+const DISPOSITION_REASON = /^risk-disposition-requires-authority:/;
+
+function unmitigatedRisks(analysis: FailureAnalysis): UnmitigatedRisk[] {
+  return analysis.scenarios
+    .filter((s) => s.residualRisk.disposition !== "mitigated")
+    .map((s) => ({
+      key: s.key, severity: s.severity, trigger: s.trigger, effect: s.effect,
+      disposition: s.residualRisk.disposition, rationale: s.residualRisk.rationale,
+    }));
+}
+
+/**
+ * Narrative from the model, identity from the platform, verdict from the validator. One retry.
+ *
+ * BI-83E1ADF8: an analysis that fails only because a risk is not mitigated is a
+ * verdict on the change, not a malformed answer. "blocked" is what the prompt
+ * asks for when a real risk is unmitigated, so it is never retried — a retry
+ * only pressures the model to relabel the risk "mitigated". Accepted/deferred
+ * get the one retry (the prompt forbids them); still unmitigated after it, the
+ * risks are returned for the build to repair. The validator rule is unchanged.
+ */
 export async function authorFailureAnalysis(input: {
   llm: (prompt: string) => Promise<string>;
   identity: FailureAnalysisIdentity;
   designReference: string;
   evidence: readonly FailureVerificationEvidence[];
   diffSummary: string;
-}): Promise<{ kind: "ok"; failureAnalysis: FailureAnalysis } | { kind: "invalid"; reasons: string[] }> {
+}): Promise<
+  | { kind: "ok"; failureAnalysis: FailureAnalysis }
+  | { kind: "risk-blocked"; risks: UnmitigatedRisk[] }
+  | { kind: "invalid"; reasons: string[] }
+> {
   let reasons: string[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
     const raw = extractJson(await input.llm(failureAnalysisPrompt({ ...input, retryReasons: reasons })));
@@ -207,6 +237,10 @@ export async function authorFailureAnalysis(input: {
     const verdict = validateFailureAnalysis(candidate, input.identity, input.evidence);
     if (verdict.valid && verdict.analysis) return { kind: "ok", failureAnalysis: verdict.analysis };
     reasons = verdict.reasons;
+    if (verdict.analysis && reasons.length > 0 && reasons.every((r) => DISPOSITION_REASON.test(r))) {
+      const risks = unmitigatedRisks(verdict.analysis);
+      if (attempt === 1 || risks.some((r) => r.disposition === "blocked")) return { kind: "risk-blocked", risks };
+    }
   }
   return { kind: "invalid", reasons };
 }

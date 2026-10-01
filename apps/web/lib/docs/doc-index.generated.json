@@ -2130,6 +2130,7 @@
       "anchors": [
         "scoped-mcp-tool-packs",
         "the-shape",
+        "read-packs-for-standing-stages",
         "migration-discipline-parity-first",
         "first-pack",
         "second-pack-lazy-handlers",
@@ -12867,6 +12868,7 @@
       "anchors": [
         "use-this-doc-for",
         "which-files-are-read",
+        "hidden-characters-are-removed",
         "when-the-converter-is-off"
       ]
     },

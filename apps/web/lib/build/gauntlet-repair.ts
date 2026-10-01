@@ -22,13 +22,15 @@ export type ReviewFinding = { severity: string; description: string; location?: 
 /**
  * What failed. `source` "review" is a semantic change review that asked for
  * repair (BI-50E8802C); its findings are carried on the state because a review
- * receipt is not a gauntlet record. Guard and review hand-backs share one bound.
+ * receipt is not a gauntlet record. `source` "risk" is a failure analysis that
+ * named a risk the change does not mitigate (BI-83E1ADF8); its findings are the
+ * risks. Guard, review and risk hand-backs share one bound.
  */
 export type GauntletFailure = {
   treeSha: string | null;
   recordId: string | null;
   failedGuards: string[];
-  source?: "guards" | "review";
+  source?: "guards" | "review" | "risk";
   findings?: ReviewFinding[];
 };
 
@@ -109,8 +111,32 @@ export function buildReviewRepairTask(input: { findings: ReviewFinding[] }): Gau
   };
 }
 
+export function buildRiskRepairTask(input: { findings: ReviewFinding[] }): GauntletRepairTask {
+  const lines = input.findings.map((f) => `- [${f.severity}] ${f.description}`);
+  return {
+    title: `Mitigate unmitigated risks (${input.findings.length})`,
+    implement: [
+      "The failure analysis of this build's change named risks the change does not mitigate. Change the code so each one is prevented or contained.",
+      "",
+      "Risks:",
+      ...lines,
+      "",
+      "Rules:",
+      "- Mitigate the risk in the code: guard the input, handle the failure, add the missing check, and add a test that shows the mitigation works.",
+      "- If a risk comes from the build environment rather than this change (for example a tool or test runner that was unavailable), do not change unrelated code to hide it; leave the change as it is.",
+      "- Never remove a check, test or guard, and never describe a risk as mitigated without the code that mitigates it.",
+      "- Keep the fix to the risks listed; do not rework unrelated code.",
+      "- Commit the fix on this build's branch.",
+    ].join("\n"),
+    verify: "Each risk above is prevented or contained by the committed tree, and the build's scoped tests and typecheck pass.",
+  };
+}
+
 /** The repair brief for a hand-back, chosen by what failed. */
 export function repairTaskFor(state: GauntletRepairState, guardOutput: string): GauntletRepairTask {
+  if (state.source === "risk" && state.findings && state.findings.length > 0) {
+    return buildRiskRepairTask({ findings: state.findings });
+  }
   if (state.source === "review" && state.findings && state.findings.length > 0) {
     return buildReviewRepairTask({ findings: state.findings });
   }
@@ -129,7 +155,7 @@ function readState(verificationOut: unknown): GauntletRepairState | undefined {
     failedGuards: s.failedGuards,
     attempts: s.attempts,
     escalated: s.escalated === true,
-    source: s.source === "review" ? "review" : "guards",
+    source: s.source === "review" || s.source === "risk" ? s.source : "guards",
     findings: Array.isArray(s.findings) ? s.findings : undefined,
   };
 }
@@ -175,8 +201,11 @@ export async function routeGauntletFailureToRepair(buildId: string, failure: Gau
       originatingBacklogItemId: build.originatingBacklogItemId,
       phase: "review",
       rounds: decision.next.attempts,
-      issues: failure.source === "review" && failure.findings?.length
-        ? failure.findings.map((f) => ({ severity: f.severity, description: `Review finding still open after ${decision.next.attempts} repair attempt(s): ${f.description}` }))
+      issues: failure.source !== "guards" && failure.source && failure.findings?.length
+        ? failure.findings.map((f) => ({
+          severity: f.severity,
+          description: `${failure.source === "risk" ? "Unmitigated risk" : "Review finding"} still open after ${decision.next.attempts} repair attempt(s): ${f.description}`,
+        }))
         : failure.failedGuards.map((guard) => ({ severity: "important", description: `Guard still failing after ${decision.next.attempts} repair attempt(s): ${guard}` })),
       log,
     });
@@ -212,7 +241,9 @@ export async function routeGauntletFailureToRepair(buildId: string, failure: Gau
   if (moved.count === 0) return "not-in-review";
   const what = failure.source === "review"
     ? `The code review found ${failure.findings?.length ?? 0} blocking problem(s) in this build's change`
-    : `Guards failed on this build's change (${failure.failedGuards.join(", ")})`;
+    : failure.source === "risk"
+      ? `The failure analysis named ${failure.findings?.length ?? 0} risk(s) this build's change does not mitigate`
+      : `Guards failed on this build's change (${failure.failedGuards.join(", ")})`;
   await log(`${what}; handed back to the coding agent, attempt ${decision.next.attempts} of ${GAUNTLET_REPAIR_MAX_ATTEMPTS}.`);
 
   const { jobs } = await import("@/lib/jobs");

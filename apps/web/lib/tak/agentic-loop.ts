@@ -2516,7 +2516,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         // left `message` unbounded and gave the model no signal that data was
         // cut. The stored toolResult (audit/receipts) is unaffected.
         content: clampToolResultForModel(toolResult, {
-          maxChars: resolveToolResultCharCap(resolvedMaxContextTokens),
+          maxChars: resolveToolResultCharCap(resolvedMaxContextTokens), toolName: tc.name,
         }).text,
         toolCallId: tc.id,
       })),

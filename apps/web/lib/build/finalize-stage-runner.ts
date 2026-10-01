@@ -7,7 +7,7 @@
 
 import type { FailureVerificationEvidence } from "@/lib/change-review/failure-analysis";
 import type { SandboxTestResult } from "./coding-agent";
-import { authorFailureAnalysis, authorGateDecisions, trailerKeysForFailedGuards } from "./finalize-stage";
+import { authorFailureAnalysis, authorGateDecisions, trailerKeysForFailedGuards, type UnmitigatedRisk } from "./finalize-stage";
 import type { GauntletRun } from "./sandbox/run-and-record-gauntlet";
 
 /** Decision rounds after the first gauntlet run. */
@@ -46,7 +46,8 @@ export type FinalizeOutcome =
   | { status: "unbound" }
   | { status: "tests-failed" }
   | { status: "evidence-unresolvable"; resolved: number }
-  | { status: "analysis-invalid"; reasons: string[] };
+  | { status: "analysis-invalid"; reasons: string[] }
+  | { status: "risk-blocked"; risks: UnmitigatedRisk[]; treeSha: string };
 
 /**
  * The semantic review needs the failure analysis only a finished finalize
@@ -126,6 +127,9 @@ export async function runBuildStudioFinalize(buildId: string, deps: FinalizeDeps
     evidence,
     diffSummary: captured.changedFiles.join("\n"),
   });
+  if (analysis.kind === "risk-blocked") {
+    return done(deps, buildId, { status: "risk-blocked", risks: analysis.risks, treeSha: gauntlet.binding.headTreeHash });
+  }
   if (analysis.kind !== "ok") return done(deps, buildId, { status: "analysis-invalid", reasons: analysis.reasons });
   await deps.saveFailureAnalysis(analysis.failureAnalysis);
   return done(deps, buildId, { status: "ready", evidenceIds });
@@ -136,6 +140,7 @@ function done(deps: FinalizeDeps, buildId: string, outcome: FinalizeOutcome): Fi
     : "missing" in outcome ? `: missing ${outcome.missing.join(", ")}`
     : "reasons" in outcome ? `: ${outcome.reasons.slice(0, 3).join(", ")}`
     : "reason" in outcome ? `: ${outcome.reason}`
+    : "risks" in outcome ? `: ${outcome.risks.map((r) => `${r.key} (${r.disposition})`).slice(0, 3).join(", ")}`
     : "";
   deps.log(`Finalize ${buildId}: ${outcome.status}${detail}`);
   return outcome;

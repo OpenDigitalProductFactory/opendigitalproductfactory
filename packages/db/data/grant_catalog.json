@@ -380,6 +380,17 @@
       "implies": []
     },
     {
+      "key": "contributor_inventory_read",
+      "description": "Read the recorded contributor inventory: pull requests (state, draft, merge state), branches and worktrees from the last successful sync. Records no contributor identities, sign-off or licence facts.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "list_pull_requests",
+        "read_contributor_inventory"
+      ],
+      "implies": []
+    },
+    {
       "key": "conway_validate",
       "description": "Validate conway.",
       "category": "governance",
@@ -996,6 +1007,17 @@
       "category": "consume",
       "sensitivity": "internal",
       "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "payables_read",
+      "description": "Read what the business owes suppliers: recorded bills (due dates, amounts due) and supplier agreements (renewal dates, committed amounts, billed to date). Never pays, renews or cancels.",
+      "category": "consume",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "list_bills",
+        "list_supplier_contracts"
+      ],
       "implies": []
     },
     {
