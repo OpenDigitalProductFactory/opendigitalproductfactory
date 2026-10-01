@@ -338,3 +338,18 @@ test("repo .claude/settings.json ALSO wires every PreToolUse guard (belt-and-bra
     );
   }
 });
+
+test("the prose-channel decision guard rides Stop on both planes (BI-E4DE3825)", () => {
+  const stopCommands = (cfg) =>
+    (cfg?.hooks?.Stop ?? []).flatMap((entry) => (entry?.hooks ?? []).map((h) => String(h?.command ?? "")));
+  const plugin = stopCommands(loadHooksJson()).filter((c) => c.includes("decision-menu-stop-guard.mjs"));
+  assert.equal(plugin.length, 1, "plugin hooks.json must wire decision-menu-stop-guard.mjs on Stop exactly once");
+  assert.ok(plugin[0].includes("${CLAUDE_PLUGIN_ROOT}"), "plugin-plane Stop guard must load from ${CLAUDE_PLUGIN_ROOT}");
+  assert.ok(existsSync(join(here, "decision-menu-stop-guard.mjs")), "decision-menu-stop-guard.mjs is missing");
+  const settingsPath = join(here, "..", "..", "..", ".claude", "settings.json");
+  if (!existsSync(settingsPath)) return; // standalone plugin install
+  const settings = stopCommands(JSON.parse(readFileSync(settingsPath, "utf8")))
+    .filter((c) => c.includes("decision-menu-stop-guard.mjs"));
+  assert.equal(settings.length, 1, "settings.json must also wire the Stop guard (race-immune plane); its once-per-turn marker absorbs the double fire");
+  assert.ok(settings[0].includes("${CLAUDE_PROJECT_DIR}"), "settings-plane Stop guard must reference the checked-in script");
+});

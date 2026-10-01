@@ -882,6 +882,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/check-plan-backlog-coverage.test.mjs",
       ),
       node("--test", "packages/dpf-skill-pack/hooks/lease-guard.test.mjs"),
+      // BI-E4DE3825: Gate A prose channel (Stop guard).
+      node("--test", "packages/dpf-skill-pack/hooks/decision-menu-stop-guard.test.mjs"),
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/lease-punt-guard.test.mjs",

@@ -234,6 +234,15 @@
             "statusMessage": "Refresh this session heartbeat to protect active work"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/decision-menu-stop-guard.mjs\"",
+            "statusMessage": "Route an operator decision menu through the kernel first"
+          }
+        ]
       }
     ]
   }

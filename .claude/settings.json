@@ -184,6 +184,15 @@
             "async": false
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/decision-menu-stop-guard.mjs\"",
+            "async": false
+          }
+        ]
       }
     ]
   },
