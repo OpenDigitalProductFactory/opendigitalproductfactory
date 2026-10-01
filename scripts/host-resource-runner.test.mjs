@@ -123,32 +123,6 @@ test("canonical heavyweight package scripts cannot bypass the governed runner", 
 });
 
 
-// scripts/lib/mcp-client.mjs's own test file is a live-socket timing test held out
-// of CI by scripts/ci-policy-test-inventory-allowlist.txt, so the endpoint guard is
-// covered here -- next to the .mcp.json reader that is the reason it exists.
-
-function seedMcpConfig(url, token = "dpfmcp_seeded") {
-  const dir = mkdtempSync(join(tmpdir(), "dpf-mcp-config-"));
-  writeFileSync(join(dir, ".mcp.json"), JSON.stringify({
-    mcpServers: { dpf: { url, headers: { Authorization: `Bearer ${token}` } } },
-  }));
-  return dir;
-}
-
-function withoutMcpEnv(run) {
-  const { DPF_MCP_BEARER_TOKEN: token, DPF_MCP_URL: url } = process.env;
-  delete process.env.DPF_MCP_BEARER_TOKEN;
-  delete process.env.DPF_MCP_URL;
-  try {
-    return run();
-  } finally {
-    if (token === undefined) delete process.env.DPF_MCP_BEARER_TOKEN;
-    else process.env.DPF_MCP_BEARER_TOKEN = token;
-    if (url === undefined) delete process.env.DPF_MCP_URL;
-    else process.env.DPF_MCP_URL = url;
-  }
-}
-
 test("the loopback endpoints scripts/sync-mcp-worktrees.ps1 writes are accepted", () => {
   for (const url of [
     "http://127.0.0.1:3000/api/mcp/v1",
@@ -186,41 +160,54 @@ test("an endpoint that would put the bearer token on another host is rejected", 
   assert.equal(isAllowedMcpEndpoint({ toString: () => "http://127.0.0.1:3000/" }), false);
 });
 
-test("a seeded loopback .mcp.json still yields a usable connection", () => {
-  const cwd = seedMcpConfig("http://127.0.0.1:3000/api/mcp/v1");
-  assert.deepEqual(withoutMcpEnv(() => readMcpConnection(cwd)), {
+
+// BI-5201141C: the admission connection no longer reads a project .mcp.json --
+// on https no writer produces one, and it was ambient state copied between
+// worktrees. It resolves like every other gate script (scripts/pregate.mjs):
+// DPF_MCP_URL, else the local default, with the credential from
+// scripts/lib/mcp-credential.mjs (client_credentials, then the legacy PAT).
+// An env with no credential file keeps the operator's real one out of the test.
+const NO_CLIENT_FILE = { DPF_MCP_CLIENT_CREDENTIALS_FILE: join(tmpdir(), "dpf-no-such-client-credentials.json") };
+
+test("a project .mcp.json is not a credential source", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "dpf-mcp-config-"));
+  writeFileSync(join(cwd, ".mcp.json"), JSON.stringify({
+    mcpServers: { dpf: { url: "http://127.0.0.1:3000/api/mcp/v1", headers: { Authorization: "Bearer dpfmcp_seeded" } } },
+  }));
+  const previous = process.cwd();
+  process.chdir(cwd);
+  try {
+    assert.equal(readMcpConnection({ ...NO_CLIENT_FILE }), null);
+  } finally {
+    process.chdir(previous);
+  }
+});
+
+test("no credential is an admission failure", () => {
+  assert.equal(readMcpConnection({ ...NO_CLIENT_FILE }), null);
+});
+
+test("the legacy PAT reaches the local default endpoint when DPF_MCP_URL is unset", () => {
+  assert.deepEqual(readMcpConnection({ ...NO_CLIENT_FILE, DPF_MCP_BEARER_TOKEN: "dpfmcp_env" }), {
     mcpUrl: "http://127.0.0.1:3000/api/mcp/v1",
-    bearerToken: "dpfmcp_seeded",
+    bearerToken: "dpfmcp_env",
   });
 });
 
-test("a .mcp.json naming a remote endpoint stops rather than sending the token off-box", () => {
-  const cwd = seedMcpConfig("https://mcp.example.com/api/mcp/v1");
-  assert.throws(
-    () => withoutMcpEnv(() => readMcpConnection(cwd)),
-    /neither loopback nor the install.s configured origin .*refusing to send the bearer token/,
+test("DPF_MCP_URL stays operator intent and is not narrowed to loopback", () => {
+  assert.deepEqual(
+    readMcpConnection({ ...NO_CLIENT_FILE, DPF_MCP_BEARER_TOKEN: "dpfmcp_env", DPF_MCP_URL: "https://mcp.example.com/api/mcp/v1" }),
+    { mcpUrl: "https://mcp.example.com/api/mcp/v1", bearerToken: "dpfmcp_env" },
   );
 });
 
-test("an absent .mcp.json is still an admission failure, not an endpoint refusal", () => {
-  const cwd = mkdtempSync(join(tmpdir(), "dpf-mcp-config-"));
-  assert.equal(withoutMcpEnv(() => readMcpConnection(cwd)), null);
-});
-
-test("DPF_MCP_URL stays operator intent and is not narrowed to loopback", () => {
-  const cwd = seedMcpConfig("https://mcp.example.com/api/mcp/v1");
-  const previous = { ...process.env };
-  process.env.DPF_MCP_BEARER_TOKEN = "dpfmcp_env";
-  process.env.DPF_MCP_URL = "https://mcp.example.com/api/mcp/v1";
-  try {
-    assert.deepEqual(readMcpConnection(cwd), {
-      mcpUrl: "https://mcp.example.com/api/mcp/v1",
-      bearerToken: "dpfmcp_env",
-    });
-  } finally {
-    if (previous.DPF_MCP_BEARER_TOKEN === undefined) delete process.env.DPF_MCP_BEARER_TOKEN;
-    else process.env.DPF_MCP_BEARER_TOKEN = previous.DPF_MCP_BEARER_TOKEN;
-    if (previous.DPF_MCP_URL === undefined) delete process.env.DPF_MCP_URL;
-    else process.env.DPF_MCP_URL = previous.DPF_MCP_URL;
-  }
+test("a client_credentials client wins over the PAT", () => {
+  const connection = readMcpConnection({
+    ...NO_CLIENT_FILE,
+    DPF_MCP_CLIENT_ID: "client-1",
+    DPF_MCP_CLIENT_SECRET: "secret-1",
+    DPF_MCP_BEARER_TOKEN: "dpfmcp_env",
+  });
+  assert.equal(connection.mcpUrl, "http://127.0.0.1:3000/api/mcp/v1");
+  assert.equal(typeof connection.bearerToken.get, "function");
 });
