@@ -7,6 +7,7 @@ import {
   looksLikeSmuggling,
   sanitizeUntrustedValue,
 } from "@dpf/validators";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 
 /**
  * Tool-result token-budget guard.
@@ -124,7 +125,7 @@ export function clampToolResultForModel(
   const smugglingSuspected = looksLikeSmuggling(sanitized);
   if (smugglingSuspected) {
     // An attack signal, not formatting noise. The payload never reaches the model.
-    console.warn(`[tool-result] hidden-unicode payload removed tool=${opts?.toolName ?? "unknown"} removed=${sanitized.total}`);
+    console.warn("[tool-result] hidden-unicode payload removed tool=%s removed=%d", sanitizeForLog(opts?.toolName ?? "unknown"), sanitized.total);
   }
   const body = buildFullText(sanitized.value);
   const full = smugglingSuspected ? `${invisibleRemovalNotice(sanitized)}\n${body}` : body;

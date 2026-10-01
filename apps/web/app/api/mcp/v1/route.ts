@@ -84,6 +84,7 @@ import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, buildUnk
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
 // ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
@@ -592,7 +593,7 @@ async function handleToolsCall(
   const cleaned = sanitizeUntrustedValue({ message: executed.message, error: executed.error, data: executed.data });
   const smugglingSuspected = looksLikeSmuggling(cleaned);
   if (smugglingSuspected) {
-    console.warn(`[mcp/v1] hidden-unicode payload removed from tool result tool=${toolName} removed=${cleaned.total}`);
+    console.warn("[mcp/v1] hidden-unicode payload removed from tool result tool=%s removed=%d", sanitizeForLog(toolName), cleaned.total);
   }
   const result = {
     ...executed,
