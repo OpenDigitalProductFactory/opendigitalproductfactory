@@ -201,8 +201,10 @@ Every governed tool call is classified into one of three consequence classes:
   destroys state.
 
 Classification is not a hand-maintained list of tool names. It runs from the declared
-consequence on the tool itself, on the central governed execution path, so it covers every
-governed call. A consequential tool also carries the collaboration shape its use implies —
+consequence on the tool itself, on the central governed execution path. How many tools carry a
+declared consequence, and how many consequential tools are actually gated, is reported as a governed
+metric, because not every gate enforces yet. Some run in shadow mode, recording what they would have
+refused. A consequential tool also carries the collaboration shape its use implies —
 which is how a tool reaching outward pulls `outward-review` into the picture even when
 nobody named it.
 
@@ -220,6 +222,13 @@ Two independent checks then apply, and both must pass:
 The posture from step 3 and the envelope are one projection, and **the stricter of the two
 wins**. A proactivity setting cannot buy autonomy the envelope would deny, and an autonomous
 envelope cannot act on work whose shape declared that it must be proposed.
+
+The decision from step 4 and the permission in this step are deliberately separate, and the
+[Gated Permissions Process](../../architecture/gated-permissions-process.md) is the standard that
+pairs them. For each stage of the work, it records which authority's decision admits which tools.
+One recorded decision then covers every call inside that envelope, and anything outside it is never
+offered. See the
+[pairing diagram](../../architecture/gated-permissions-process.md#73-the-pairing-at-a-glance).
 
 Denials come back as named reasons — a missing decision interaction, a missing envelope, a
 tripped stop condition, a missing verification receipt — not as a generic refusal. A denial
@@ -317,6 +326,7 @@ Stated plainly, so nothing here reads as more finished than it is:
 - [Priority, Outcomes & Calibration](priority-and-outcomes.md) — the cost/quality/time half, and its receipts
 - [AI Workforce](index.md) — the coworker directory, grants, and availability
 - [Work shapes and the decision gate](../../architecture/work-shapes-and-the-decision-gate.md) — the architecture behind steps 2 and 5
+- [Gated Permissions Process (GPP)](../../architecture/gated-permissions-process.md) — the standard that binds step 4's decision to step 5's tool permissions
 
 ## The pace a room runs at
 

@@ -931,7 +931,8 @@ fallback or grants execution authority.
 
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
-- [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI and the composition rule
+- [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI, GPP and the composition rule
+- [Gated Permissions Process (GPP)](gated-permissions-process.md) — the standard that models each shape stage's gate and the tools it admits; see its [pairing diagram](gated-permissions-process.md#73-the-pairing-at-a-glance) and the [binding as a model](gated-permissions-process.md#123-the-binding-as-a-model)
 - [A Governance Gate on Consequential Tool Use](../superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md) — the target architecture
 - [Work Rooms](../user-guide/workspace/work-rooms.md) — the end-user view
 

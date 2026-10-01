@@ -30,9 +30,19 @@ INSTALLED="$HOME/.claude/plugins/installed_plugins.json"
 PLUGIN_KEY="dpf-platform@dpf-platform-local"
 MARKETPLACE="dpf-platform-local"
 
+# Give the installed descriptor this machine's literal endpoint (every session,
+# after any reconcile): the desktop app cannot parse the descriptor's
+# ${DPF_MCP_URL:-...} and refuses sign-in. Shared with the ps1 twin.
+pin_mcp_url() {
+  pinner="$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)/lib/pin-plugin-mcp-url.mjs"
+  if command -v node >/dev/null 2>&1 && [ -f "$pinner" ]; then
+    node "$pinner" "$INSTALLED" "$REPO_ROOT" 2>/dev/null || true
+  fi
+}
+
 # Preconditions: committed manifest present + python3 for safe JSON.
 [ -f "$MANIFEST" ] || exit 0
-command -v python3 >/dev/null 2>&1 || exit 0
+command -v python3 >/dev/null 2>&1 || { pin_mcp_url; exit 0; }
 
 # Resolve the claude binary (not PATH-only: GUI / ~/.claude/local installs are
 # common and absent from a non-interactive hook PATH).
@@ -48,10 +58,10 @@ else
     [ -x "$c" ] && { CLAUDE_BIN="$c"; break; }
   done
 fi
-[ -n "$CLAUDE_BIN" ] || exit 0
+[ -n "$CLAUDE_BIN" ] || { pin_mcp_url; exit 0; }
 
-WANT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$MANIFEST" 2>/dev/null)" || exit 0
-[ -n "$WANT" ] || exit 0
+WANT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$MANIFEST" 2>/dev/null)" || { pin_mcp_url; exit 0; }
+[ -n "$WANT" ] || { pin_mcp_url; exit 0; }
 
 # Decide ok|drift for THIS repo. Drift = no entry for this repo, version
 # mismatch, or a missing installPath (wiped cache -- the "failed to load"
@@ -79,7 +89,11 @@ print("drift")
 PY
 }
 
-[ "$(drift_state)" = "drift" ] || exit 0
+
+if [ "$(drift_state)" != "drift" ]; then
+  pin_mcp_url
+  exit 0
+fi
 
 # Prune every install record for THIS repo before reinstalling. This is the
 # load-bearing fix: `claude plugin install` no-ops when ANY project record for
@@ -141,4 +155,5 @@ if [ "$(drift_state)" = "ok" ]; then
 else
   printf 'DPF platform plugin reconcile could NOT converge to v%s (still drifted). Run: %s plugin install %s --scope project\n' "$WANT" "$CLAUDE_BIN" "$PLUGIN_KEY"
 fi
+pin_mcp_url
 exit 0

@@ -514,7 +514,8 @@
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/actions/build.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/actions/compliance.ts": [
       "docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md"
@@ -796,6 +797,9 @@
     "apps/web/lib/ea/reconcile-ai-routing-architecture.ts": [
       "docs/architecture/ai-routing-document-map.md"
     ],
+    "apps/web/lib/ea/reconcile-sysml-projections.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/ea/table-growth.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
@@ -809,10 +813,12 @@
       "docs/architecture/backlog-archetype-scope.md"
     ],
     "apps/web/lib/explore/build-process-matrix.ts": [
+      "docs/architecture/gated-permissions-process.md",
       "docs/security/tool-evaluations/2026-09-15-bmad-method.md"
     ],
     "apps/web/lib/explore/feature-build-types.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/federation/demand-response.ts": [
       "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
@@ -2154,6 +2160,9 @@
     "scripts/hooks/converge-git-hooks.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/hooks/lib/pin-plugin-mcp-url.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "scripts/hooks/lib/retire-project-dpf-connector.mjs": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
@@ -3061,6 +3070,10 @@
       "packages/storefront-templates/src/archetypes/index.ts"
     ],
     "docs/architecture/gated-permissions-process.md": [
+      "apps/web/lib/actions/build.ts",
+      "apps/web/lib/ea/reconcile-sysml-projections.ts",
+      "apps/web/lib/explore/build-process-matrix.ts",
+      "apps/web/lib/explore/feature-build-types.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
       "apps/web/lib/work-management/work-shapes.ts"
@@ -3104,6 +3117,7 @@
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
       "scripts/check-no-hand-rolled-mcp-jsonrpc.mjs",
       "scripts/gate-worktree.mjs",
+      "scripts/hooks/lib/pin-plugin-mcp-url.mjs",
       "scripts/hooks/lib/retire-project-dpf-connector.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/mcp-client.mjs",
