@@ -30,7 +30,7 @@ apps/web/lib/actions/compliance.ts	867
 apps/web/lib/actions/crm.ts	1043
 apps/web/lib/actions/ea.ts	918
 apps/web/lib/actions/mcp-tokens.test.ts	1369
-apps/web/lib/actions/platform-dev-config.ts	1252
+apps/web/lib/actions/platform-dev-config.ts	1250
 apps/web/lib/actions/promotions.self-upgrade.test.ts	1096
 apps/web/lib/actions/promotions.ts	982
 apps/web/lib/actions/tax-remittance.test.ts	1084

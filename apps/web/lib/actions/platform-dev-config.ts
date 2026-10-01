@@ -3,7 +3,8 @@
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { getPlatformDevPolicyState, type PlatformDevPolicyState } from "@/lib/platform-dev-policy";
+import { getPlatformDevPolicyState } from "@/lib/platform-dev-policy";
+import { PLATFORM_DEV_CONFIG_INCLUDE, type PlatformDevConfigView } from "@/lib/platform-dev-config-view";
 import {
   detectAuthMethod,
   isMissingGitReferenceError,
@@ -98,13 +99,10 @@ export async function savePlatformDevConfig(mode: ContributionMode) {
   revalidatePath("/admin/platform-development");
 }
 
-export async function getPlatformDevConfig() {
+export async function getPlatformDevConfig(): Promise<PlatformDevConfigView | null> {
   const config = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
-    include: {
-      configuredBy: { select: { email: true } },
-      dcoAcceptedBy: { select: { email: true } },
-    },
+    include: PLATFORM_DEV_CONFIG_INCLUDE,
   });
 
   if (!config) return null;
