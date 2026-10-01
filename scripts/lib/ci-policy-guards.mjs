@@ -742,6 +742,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-8A562681: the health hook resolves DPF_MCP_URL then the plugin
         // default; hook curl calls carry the install CA bundle on https.
         "scripts/hooks/mcp-health.test.mjs",
+        // BI-1229E42C: the installed plugin descriptor carries a literal URL so
+        // the desktop app can start sign-in.
+        "scripts/hooks/pin-plugin-mcp-url.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
