@@ -241,7 +241,7 @@ WWMD gate refuses")`).
   O/A/I, record one `unmediated` observation, fire-and-forget. **No other change.** This gives AC-SHADOW-PERMIT
   coverage for direct sites 1–10 of the Phase 1 inventory without touching Build Studio files.
 - `apps/web/app/api/mcp/v1/route.ts` (`handleToolsCall`): read
-  `params._meta["io.opendigitalproductfactory/permit"]` when it is a string, and pass it as
+  `params._meta["com.opendigitalproductfactory/authorization-handle"]` (the carriage key settled in the MCP extension draft, BI-899C3844; it supersedes the spec's `io.` key) when it is a string, and pass it as
   `context.permitHandle`. The change is additive, and clients that send nothing are unaffected.
 - `apps/web/lib/gpp/critical-interaction-map.ts`: add `guards.permit: GuardMode`, which is `shadow`
   when a binding matches and `none` otherwise, so the map shows the new guard (OBJ-VISIBLE).
@@ -367,7 +367,7 @@ model GppPermitObservation {
 - `apps/web/lib/mcp-tools.unmediated-observation.test.ts` (new): a direct `executeTool` of an O/A/I tool
   without `governedSource` records one `unmediated` observation. With `governedSource` set, it records
   none.
-- `apps/web/app/api/mcp/v1/route.permit-meta.test.ts` (new): `params._meta[...permit]` reaches
+- `apps/web/app/api/mcp/v1/route.permit-meta.test.ts` (new): `params._meta[...authorization-handle]` reaches
   `governedExecuteTool` as `context.permitHandle`. A request without `_meta` produces the same
   `governedExecuteTool` arguments as today.
 - Existing suites stay green unchanged:
