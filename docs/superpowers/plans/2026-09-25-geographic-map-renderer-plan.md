@@ -12,6 +12,14 @@ status: draft
 
 > **For agentic workers:** one BI, one branch, one PR. Use `dpf-tdd` red-green for each phase, run the fast local gate before push, and use `dpf-pr-with-dco` for handoff.
 
+## Backlog coverage
+
+- Parent: `BI-814F86E1`
+- Decision: atomic
+- Receipt: blocked-by: record_plan_backlog_coverage returned traceability-incomplete on 2026-10-01 because no initiative scope baseline exists for BI-814F86E1; the baseline is minted by the spec-approval review routed to an independent reviewer
+- Rationale: see "Coverage decision" below; no phase gives an owner a usable outcome on its own.
+- Dependencies: none (downstream: `BI-4EC1D572`, `BI-3DAE2169`, `BI-560128FB`)
+
 ## Coverage decision: atomic
 
 The phases below are one indivisible capability. A dependency with no renderer ships unused code. A renderer with no worker route cannot start. A range route with no renderer has no caller. So there is no independently usable owner outcome short of all four phases, and the coverage receipt records `atomic` against `BI-814F86E1`.
