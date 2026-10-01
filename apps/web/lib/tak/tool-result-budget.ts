@@ -112,7 +112,7 @@ function buildFullText(result: ModelFacingToolResult): string {
  */
 export function clampToolResultForModel(
   result: ModelFacingToolResult,
-  opts?: { maxChars?: number; contextMask?: ContextMaskAuthority },
+  opts?: { maxChars?: number; contextMask?: ContextMaskAuthority; toolName?: string },
 ): ClampedToolResult {
   const maxChars = Math.max(0, opts?.maxChars ?? DEFAULT_TOOL_RESULT_CHAR_CAP);
   const masked = opts?.contextMask ? maskForContext(result, opts.contextMask) : null;
@@ -122,6 +122,10 @@ export function clampToolResultForModel(
   // cross (BI-7AD0DA3D); a payload-shaped removal is announced to the model.
   const sanitized = sanitizeUntrustedValue(masked?.value ?? result);
   const smugglingSuspected = looksLikeSmuggling(sanitized);
+  if (smugglingSuspected) {
+    // An attack signal, not formatting noise. The payload never reaches the model.
+    console.warn(`[tool-result] hidden-unicode payload removed tool=${opts?.toolName ?? "unknown"} removed=${sanitized.total}`);
+  }
   const body = buildFullText(sanitized.value);
   const full = smugglingSuspected ? `${invisibleRemovalNotice(sanitized)}\n${body}` : body;
   const handle = masked?.rehydrationHandle;

@@ -2508,25 +2508,18 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         content: result.content,
         toolCalls: iterationResults.map(({ tc }) => tc.gemini ? result.toolCalls!.find((original) => original.id === tc.id) ?? tc : tc),
       },
-      ...iterationResults.map(({ tc, toolResult }) => {
+      ...iterationResults.map(({ tc, toolResult }) => ({
+        role: "tool" as const,
         // G1/P6 (context-engineering-standards.md): bound the model-facing
         // serialization to a window-proportional cap with an explicit
         // truncation notice. Replaces the prior silent `slice(0, 3000)`, which
         // left `message` unbounded and gave the model no signal that data was
         // cut. The stored toolResult (audit/receipts) is unaffected.
-        const clamped = clampToolResultForModel(toolResult, {
-          maxChars: resolveToolResultCharCap(resolvedMaxContextTokens),
-        });
-        if (clamped.smugglingSuspected) {
-          // A hidden-Unicode payload in a tool result is an attack signal,
-          // not formatting noise (BI-7AD0DA3D). The text never reached the model.
-          console.warn(
-            `[agentic-loop] hidden-unicode payload removed from tool result ` +
-            `tool=${tc.name} removed=${clamped.hiddenCharsRemoved}`,
-          );
-        }
-        return { role: "tool" as const, content: clamped.text, toolCallId: tc.id };
-      }),
+        content: clampToolResultForModel(toolResult, {
+          maxChars: resolveToolResultCharCap(resolvedMaxContextTokens), toolName: tc.name,
+        }).text,
+        toolCallId: tc.id,
+      })),
     ];
   }
 

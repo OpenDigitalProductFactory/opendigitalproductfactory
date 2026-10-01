@@ -1867,6 +1867,9 @@
     "packages/validators/src/readability.ts": [
       "docs/platform-usability-standards.md"
     ],
+    "packages/validators/src/untrusted-text.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "pnpm-lock.yaml": [
       "docs/architecture/build-gate-runbook.md",
       "docs/architecture/dependency-reduction-routine.md",
@@ -2950,6 +2953,7 @@
       "packages/db/src/seed-retention-floor-obligations.ts",
       "packages/integration-shared/src/canonical-json.ts",
       "packages/validators/src/guards.ts",
+      "packages/validators/src/untrusted-text.ts",
       "scripts/check-model-metadata-tags.mjs",
       "scripts/check-no-local-canonical-json.mjs",
       "scripts/check-no-local-formatters.mjs",
