@@ -46,6 +46,7 @@ vi.mock("@dpf/db", () => ({
 import {
   CODING_POOL_STATUSES,
   extractBacklogItemIdsFromText,
+  extractDeliveredBacklogItemIds,
   fileAcceptanceMiss,
   parseGitHubPullRequestEvent,
   shouldMarkAwaitingAcceptance,
@@ -99,6 +100,56 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
       "BI-SIG-463E478D",
     ]);
     expect(extractBacklogItemIdsFromText("no ids here")).toEqual([]);
+  });
+
+  it("counts a body id only where the PR declares it delivers that item", () => {
+    expect(extractDeliveredBacklogItemIds(
+      "fix(routing): bound retry windows",
+      [
+        "Backlog: BI-7792327A",
+        "The lease pool admitted nothing on this host (BI-B0122A22), so the gate is unrun.",
+        "Resolves BI-49B0C9C7 and BI-76334D21.",
+        "This PR completes only BI-705F481D. Umbrella: BI-D5228299",
+        "- Linked BI(s): BI-CA54ACC8, BI-SIG-463E478D",
+        "Fixes #12, unrelated to BI-11111111.",
+      ].join("\n"),
+    ).sort()).toEqual([
+      "BI-49B0C9C7",
+      "BI-705F481D",
+      "BI-76334D21",
+      "BI-7792327A",
+      "BI-CA54ACC8",
+      "BI-SIG-463E478D",
+    ]);
+    expect(extractDeliveredBacklogItemIds("fix(x): pin the gate (BI-ABCDEF12)", "Context: BI-99999999 regressed it.")).toEqual(["BI-ABCDEF12"]);
+  });
+
+  it("loads only declared items, never incidental mentions", async () => {
+    mockWorkroomFindMany.mockResolvedValue([]);
+    mockBacklogFindMany.mockResolvedValue([]);
+    await applyGitHubPullRequestToBacklog(prPayload({
+      pull_request: { ...prPayload().pull_request, title: "fix: something", body: "Backlog: BI-AAAA1111\nSee BI-BBBB2222 for history." },
+    }));
+    expect(mockBacklogFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { itemId: { in: ["BI-AAAA1111"] } },
+    }));
+  });
+
+  it("a doc PR advances a doc item but leaves feature and bug items it only designs or plans", async () => {
+    mockWorkroomFindMany.mockResolvedValue([]);
+    mockBacklogFindMany.mockResolvedValue([
+      { id: "row-1", itemId: "BI-5201141C", status: "triaging", claimStatus: null, workType: "bug" },
+      { id: "row-2", itemId: "BI-1AE9D368", status: "open", claimStatus: null, workType: "doc" },
+    ]);
+    const result = await applyGitHubPullRequestToBacklog(prPayload({
+      pull_request: {
+        ...prPayload().pull_request,
+        title: "doc(mcp): canonical install address plan (BI-5201141C, BI-1AE9D368)",
+        body: "",
+      },
+    }));
+    expect(result.moved).toEqual(["BI-1AE9D368"]);
+    expect(result.skipped).toBe(1);
   });
 
   it("never overwrites current Workroom PR identity from a branch-only delivery event", async () => {
