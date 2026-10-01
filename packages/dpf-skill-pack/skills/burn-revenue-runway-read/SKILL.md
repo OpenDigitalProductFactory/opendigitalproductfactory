@@ -7,7 +7,7 @@ user-invocable: true
 allowed-tools: Read Grep
 
 # DPF fields (Surface B — in-portal seed loader)
-category: finance
+category: operations
 assignTo: ["finance-controller"]
 capability: "view_finance"
 taskType: "recurring"

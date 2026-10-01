@@ -7,7 +7,7 @@ user-invocable: true
 allowed-tools: Read Grep
 
 # DPF fields (Surface B — in-portal seed loader)
-category: marketing
+category: customer
 assignTo: ["marketing-specialist"]
 capability: "view_marketing"
 taskType: "recurring"
