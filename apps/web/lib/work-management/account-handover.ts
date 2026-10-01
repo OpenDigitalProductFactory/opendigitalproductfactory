@@ -59,6 +59,7 @@ export type AccountHandoverDb = {
   user: Pick<Db["user"], "findFirst">;
   principalAlias: Pick<Db["principalAlias"], "findFirst">;
   portfolio: Pick<Db["portfolio"], "findMany">;
+  agent: Pick<Db["agent"], "findMany">;
   workroom: Pick<Db["workroom"], "findMany">;
   featureBuild: Pick<Db["featureBuild"], "findMany" | "update">;
   buildActivity: Pick<Db["buildActivity"], "create">;
@@ -131,9 +132,17 @@ export async function planAccountHandover(
       : Promise.resolve([]),
     db.scheduledAgentTask.findMany({
       where: { ownerUserId: source.id },
-      select: { id: true, taskId: true, agent: { select: { portfolioId: true } } },
+      select: { id: true, taskId: true, agentId: true },
     }),
   ]);
+  // ScheduledAgentTask holds the agent's id as a plain string, with no relation.
+  const taskAgentIds = [...new Set((tasks as Array<{ agentId: string }>).map((t) => t.agentId))];
+  const agentPortfolio = new Map(
+    (taskAgentIds.length
+      ? await db.agent.findMany({ where: { agentId: { in: taskAgentIds } }, select: { agentId: true, portfolioId: true } })
+      : []
+    ).map((a) => [a.agentId, a.portfolioId] as const),
+  );
 
   // Only rooms the leaving account coordinates ALONE: anyone else's room stays theirs.
   const ownRooms = (rooms as Array<{ id: string; capsuleId: string; portfolioRole: string | null; participants: Array<{ principalId: string }> }>)
@@ -147,8 +156,8 @@ export async function planAccountHandover(
       ref: r.capsuleId,
       portfolioId: (r.portfolioRole && portfolioIdBySlug.get(SLUG_BY_ROLE[r.portfolioRole] ?? "")) || null,
     })),
-    ...(tasks as Array<{ id: string; taskId: string; agent: { portfolioId: string | null } | null }>).map((t) => ({
-      kind: "scheduled-task" as const, id: t.id, ref: t.taskId, portfolioId: t.agent?.portfolioId ?? null,
+    ...(tasks as Array<{ id: string; taskId: string; agentId: string }>).map((t) => ({
+      kind: "scheduled-task" as const, id: t.id, ref: t.taskId, portfolioId: agentPortfolio.get(t.agentId) ?? null,
     })),
   ]);
 
