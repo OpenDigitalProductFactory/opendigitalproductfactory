@@ -17,7 +17,7 @@
 // explicitly (a `dpf worktree --bootstrap` CLI / the seed script / an opt-in env),
 // so worktree creation stays fast and convergence is a deliberate step.
 
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseAllowBuilds } from "../check-build-script-policy.mjs";
@@ -455,6 +455,33 @@ export function formatReadinessBanner(readiness, worktreePath) {
 }
 
 /**
+ * The install arguments for this worktree's node_modules (BI-7DD16424).
+ *
+ * pnpm purges a modules dir it cannot reuse (another store, another layout)
+ * and asks before it does. The bootstrap runs without a TTY, so the prompt
+ * aborts it with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY and a stale
+ * worktree stays source-only. When node_modules is this worktree's own
+ * directory (or absent), that purge is the remedy, so skip the prompt. When it
+ * is a symlink or junction, the purge would empty the tree it points at — the
+ * root clone, in the 2026-06-19 wipe — so keep pnpm's refusal in place.
+ *
+ * @param {string} worktreePath
+ * @param {{ lstat?: (p: string) => { isSymbolicLink(): boolean } }} [deps]
+ */
+export function managedInstallArgs(worktreePath, deps = {}) {
+  const args = ["install", "--prefer-offline", "--frozen-lockfile"];
+  const lstat = deps.lstat ?? ((p) => lstatSync(p));
+  let isLink;
+  try {
+    isLink = lstat(`${norm(worktreePath)}/node_modules`).isSymbolicLink();
+  } catch (cause) {
+    if (cause?.code !== "ENOENT") return args; // unknown shape: let pnpm ask (and refuse)
+    isLink = false;
+  }
+  return isLink ? args : [...args, "--config.confirm-modules-purge=false"];
+}
+
+/**
  * Run a managed dependency bootstrap in `worktreePath` and return its readiness.
  * - Never mutates the root clone; never junctions; uses pnpm's shared content
  *   store with --prefer-offline so installs are fast and disk-light.
@@ -498,7 +525,7 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
         const { ok: _ok, ...failure } = runner.failure;
         return { status: "source-only", reason: "package_manager_probe_failed", failure: { phase: "version", ...failure } };
       }
-      const install = runner.run(["install", "--prefer-offline", "--frozen-lockfile"]);
+      const install = runner.run(managedInstallArgs(worktreePath, opts));
       if (!install.ok) {
         const { ok: _ok, ...failure } = install;
         return { status: "source-only", reason: "managed_install_failed", failure: { phase: "install", ...failure } };
