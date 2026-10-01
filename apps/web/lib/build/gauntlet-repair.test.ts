@@ -3,7 +3,7 @@
 // escalated to the operator. Never an endless re-review of the same tree.
 import { describe, expect, it } from "vitest";
 
-import { buildGauntletRepairTask, decideGauntletRepair, GAUNTLET_REPAIR_MAX_ATTEMPTS } from "./gauntlet-repair";
+import { buildGauntletRepairTask, buildReviewRepairTask, decideGauntletRepair, GAUNTLET_REPAIR_MAX_ATTEMPTS, repairTaskFor } from "./gauntlet-repair";
 
 const failure = { treeSha: "t1", recordId: "rec-1", failedGuards: ["Data-Impact Gate", "Derived Artifact Registry"] };
 
@@ -49,5 +49,46 @@ describe("buildGauntletRepairTask", () => {
     const task = buildGauntletRepairTask({ failedGuards: ["Derived Artifact Registry"], output });
     expect(task.implement.length).toBeLessThan(12_000);
     expect(task.implement).toContain("FINAL SUMMARY: Derived Artifact Registry STALE");
+  });
+});
+
+// BI-50E8802C — a semantic review that asks for repair goes back to the coding
+// agent through the same hand-back (live 2026-10-01: FB-328CF75B passed every
+// guard, then sat in review with 4 blocking findings nothing consumed).
+describe("review-finding repair", () => {
+  const findings = [
+    { severity: "critical", description: "db client is undefined when the adapter writes telemetry", location: "apps/web/lib/routing/adapter-telemetry-writer.ts:42", suggestion: "inject the client" },
+    { severity: "important", description: "no test covers the failure path" },
+  ];
+
+  it("briefs every blocking finding with its location and suggestion", () => {
+    const task = buildReviewRepairTask({ findings });
+    expect(task.implement).toContain("db client is undefined");
+    expect(task.implement).toContain("adapter-telemetry-writer.ts:42");
+    expect(task.implement).toContain("inject the client");
+    expect(task.implement).toContain("no test covers the failure path");
+  });
+
+  it("forbids weakening tests, guards or the review to make it pass", () => {
+    expect(buildReviewRepairTask({ findings }).implement).toMatch(/never (weaken|skip|delete)/i);
+  });
+
+  it("picks the brief by the hand-back's source", () => {
+    const review = repairTaskFor({ source: "review", findings, failedGuards: ["Semantic change review"], treeSha: "t", recordId: null, attempts: 1 }, "");
+    expect(review.implement).toContain("db client is undefined");
+    const guards = repairTaskFor({ source: "guards", failedGuards: ["Data-Impact Gate"], treeSha: "t", recordId: "r", attempts: 1 }, "[data-impact] FAILED");
+    expect(guards.implement).toContain("Data-Impact Gate");
+  });
+
+  it("briefs an unmitigated risk as something to mitigate in code, never to relabel", () => {
+    const risk = repairTaskFor({ source: "risk", findings: [{ severity: "high", description: "telemetry-write: adapter writes with an undefined client → inference fails" }], failedGuards: ["Failure analysis"], treeSha: "t", recordId: null, attempts: 1 }, "");
+    expect(risk.title).toMatch(/Mitigate/);
+    expect(risk.implement).toContain("undefined client");
+    expect(risk.implement).toMatch(/never describe a risk as mitigated without the code/i);
+  });
+
+  it("shares one attempt bound with guard hand-backs", () => {
+    const afterGuards = { source: "guards" as const, failedGuards: ["x"], treeSha: "t", recordId: "r", attempts: GAUNTLET_REPAIR_MAX_ATTEMPTS };
+    expect(decideGauntletRepair(afterGuards, { treeSha: "t2", recordId: null, failedGuards: ["Semantic change review"], source: "review", findings }).action).toBe("escalate");
   });
 });

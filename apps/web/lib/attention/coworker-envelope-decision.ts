@@ -150,6 +150,7 @@ const ACTION_LABELS: Record<string, string> = {
   update_backlog_item_status: "Change the status of a backlog item",
   create_workroom: "Open a new Workroom",
   update_workroom_status: "Change the status of a Workroom",
+  rebind_workroom_shape: "Move a Workroom to a newer version of its work shape",
   invite_room_participant: "Give a participant access to a room",
   manage_coworker_tool_grant: "Change the tool permissions of a coworker",
   claim_backlog_item_for_work: "Claim a backlog item for work",

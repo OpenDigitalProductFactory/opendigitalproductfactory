@@ -3,14 +3,14 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 423,
-      "reason": "BI-F25A5FC7: plan_account_handover (read-only dry run with a digest) and apply_account_handover (authority-consequence apply bound to that digest) re-home everything an absent account owns: rooms, live builds and scheduled tasks. appoint_room_coordinator moves one room per approval and is refused for an assistant not admitted to the room; nothing re-homed builds or scheduled tasks at all. On the live install that is 410 items. Both tools live in the existing room-messaging pack beside appoint_room_coordinator and share its write path.",
+      "value": 428,
+      "reason": "BI-EBF0F6EE: list_pull_requests, read_contributor_inventory, list_supplier_contracts and list_bills give four standing-room stages (pull-request flow, contributor intake, vendor renewal, payables) a read over data the install already holds; without them those rooms recorded 'no tool can read X' every cycle. Each is read-only, page-capped, granted only to that stage's accountable agent, and declared on the stage so the GPP parity test (C-1/C-2/C-4) proves it real and granted. Claim to check: those rooms' runs call these tools and record completed or inconclusive evidence instead of blocked.",
       "recordedAt": "2026-10-01"
     },
     "registry.packFiles": {
-      "value": 103,
-      "reason": "New portfolio-budget-pack.ts (EP-PORTFOLIO-BUDGET-WIP). It holds the epic attribution tools now and the budget tools the next slices add (set_portfolio_budget, propose_portfolio_budgets), so the budget domain has one pack rather than growing demand-scoring-pack, which is already large and owns funding decisions, not portfolio budgets.",
-      "recordedAt": "2026-09-25"
+      "value": 105,
+      "reason": "BI-EBF0F6EE: contributor-inventory-pack.ts and payables-pack.ts. Contributor inventory had a sync trigger but no reader and no pack of its own; payables/supplier reads are a finance-operations domain distinct from banking and reporting packs, granted to a narrower key (payables_read) than financial_read.",
+      "recordedAt": "2026-10-01"
     },
     "tier.coreToolNames": {
       "value": 35,

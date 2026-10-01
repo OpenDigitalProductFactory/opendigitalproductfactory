@@ -26,21 +26,39 @@
       "anchors": [
         "trusted-ai-agent-governance",
         "executive-summary",
-        "1-the-market-problem",
+        "1-the-defining-problem-approval-fatigue",
+        "11-per-call-approval-does-not-survive-contact-with-people",
+        "12-so-people-switch-it-off",
+        "13-the-incident-record",
+        "14-classifiers-are-an-improvement-not-an-authority",
+        "15-what-oversight-regulation-asks-for",
         "2-why-current-standards-and-protocols-fall-short",
         "3-public-policy-and-industry-signals",
-        "4-the-case-for-a-trusted-ai-kernel-tak",
-        "5-the-case-for-a-global-ai-agent-identification-and-governance-framework-gaid",
-        "6-the-case-for-job-specific-intelligence-tak-jsi",
-        "7-why-the-standards-belong-together",
-        "8-dpf-as-a-proving-ground",
-        "9-a-neutral-reference-model",
-        "10-why-a-staged-adoption-model-is-the-most-credible-path",
+        "4-four-cornerstones",
+        "41-gaid-who-is-it",
+        "42-tak-jsi-is-it-fit-for-this-job",
+        "43-gpp-who-decided-this-may-happen",
+        "44-tak-may-it-act-now",
+        "5-why-the-standards-belong-together",
+        "6-decisions-belong-to-their-scope",
+        "7-mbse-with-ai-as-a-first-class-participant",
+        "71-the-gap-in-systems-engineering",
+        "72-the-model-is-the-system",
+        "73-why-this-matters-beyond-dpf",
+        "74-from-model-to-machine",
+        "8-dpf-the-working-instantiation",
+        "81-scale-of-the-reference-system",
+        "82-claim-to-evidence-ledger",
+        "83-what-building-it-taught-us",
+        "84-portability",
+        "9-measuring-whether-it-works",
+        "10-a-neutral-reference-model",
         "11-public-verification-architecture-options-for-gaid",
-        "12-dpf-as-an-initial-prototype-and-outcome-framework",
-        "13-recommendations-for-governments-standards-bodies-and-enterprises",
-        "14-conclusion",
-        "references"
+        "12-why-staged-adoption-is-the-credible-path",
+        "13-recommendations",
+        "14-a-call-to-the-ecosystem",
+        "references",
+        "revision-history"
       ]
     },
     "docs/architecture/2026-06-09-dap-experience-layer-design.md": {
@@ -2112,6 +2130,7 @@
       "anchors": [
         "scoped-mcp-tool-packs",
         "the-shape",
+        "read-packs-for-standing-stages",
         "migration-discipline-parity-first",
         "first-pack",
         "second-pack-lazy-handlers",
@@ -2664,6 +2683,7 @@
         "failing-closed-is-not-the-same-as-locking",
         "a-named-governed-writer-must-be-attached-not-discovered",
         "a-stage-names-the-tools-it-needs",
+        "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
         "related-references",
         "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601"
       ]
@@ -12452,6 +12472,7 @@
         "use-this-doc-for",
         "overview",
         "workflow",
+        "when-work-is-still-running",
         "what-happens-if-you-do-nothing",
         "what-is-reversible",
         "recovery-and-help",
@@ -12468,6 +12489,7 @@
         "why-it-matters",
         "choose-a-provider",
         "geography-hint",
+        "using-the-free-nominatim-service",
         "setup-steps",
         "what-to-watch",
         "related"
@@ -12847,6 +12869,7 @@
       "anchors": [
         "use-this-doc-for",
         "which-files-are-read",
+        "hidden-characters-are-removed",
         "when-the-converter-is-off"
       ]
     },

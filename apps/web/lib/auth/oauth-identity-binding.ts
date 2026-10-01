@@ -52,7 +52,7 @@ export async function eligibleOAuthCoworkers(
 export async function createOAuthConsentBinding(input: {
   userId: string; clientId: string; resource: string; agentId: string;
   scopes: PublicScope[];
-}, db: Db) {
+}, db: Db): Promise<Prisma.AuthorityBindingModel> {
   const eligible = await eligibleOAuthCoworkers(input.userId, input.clientId, input.resource, db, { agentId: input.agentId });
   const agent = eligible.find((candidate) => candidate.agentId === input.agentId);
   if (!agent) throw new Error(OAUTH_SETUP_REQUIRED);
@@ -120,7 +120,17 @@ export function sameRedirectFamily(a: readonly string[], b: readonly string[]): 
       const u = new URL(raw);
       const host = u.hostname.toLowerCase();
       const loopback = host === "127.0.0.1" || host === "localhost" || host === "[::1]" || host === "::1";
-      return `${u.protocol}//${host}${loopback ? "" : `:${u.port}`}${u.pathname}`;
+      // A loopback native app picks an ephemeral port AND, for some clients,
+      // a per-session path suffix (Codex: /callback/<nonce>; the nonce changed
+      // between 2026-09-23 and 2026-10-01 and defeated prior-consent reuse on
+      // the live install). Neither is identity. The family of a loopback
+      // redirect is its scheme, host and FIRST path segment; a non-loopback
+      // redirect keeps port and full path, matching the registration rule.
+      if (loopback) {
+        const first = u.pathname.split("/").filter(Boolean)[0] ?? "";
+        return `${u.protocol}//${host}/${first}`;
+      }
+      return `${u.protocol}//${host}:${u.port}${u.pathname}`;
     } catch {
       return null;
     }

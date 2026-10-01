@@ -270,6 +270,16 @@ model Principal {
   requestedWorkrooms                  Workroom[]                          @relation("WorkroomRequester")
   workroomParticipations              WorkroomParticipant[]               @relation("WorkroomParticipantPrincipal")
 
+  controlledSubstanceHandlerGrants         ControlledSubstanceHandlerAuthorization[] @relation("ControlledSubstanceHandler")
+  controlledSubstanceHandlerGrantsIssued   ControlledSubstanceHandlerAuthorization[] @relation("ControlledSubstanceHandlerGrantor")
+  controlledSubstanceHandlerGrantsRevoked  ControlledSubstanceHandlerAuthorization[] @relation("ControlledSubstanceHandlerRevoker")
+  controlledSubstanceMovementsActed        ControlledSubstanceMovement[]             @relation("ControlledSubstanceMovementActor")
+  controlledSubstanceMovementsWitnessed    ControlledSubstanceMovement[]             @relation("ControlledSubstanceMovementWitness")
+  controlledSubstanceCountsTaken           ControlledSubstanceCount[]                @relation("ControlledSubstanceCountTaker")
+  controlledSubstanceCountsWitnessed       ControlledSubstanceCount[]                @relation("ControlledSubstanceCountWitness")
+  controlledSubstanceDiscrepanciesOpened   ControlledSubstanceDiscrepancy[]          @relation("ControlledSubstanceDiscrepancyOpener")
+  controlledSubstanceDiscrepanciesResolved ControlledSubstanceDiscrepancy[]          @relation("ControlledSubstanceDiscrepancyResolver")
+
   @@index([sponsorPrincipalId])
   @@index([kind, authorityMode])
 }
@@ -586,6 +596,14 @@ model Organization {
 
   // FK-leading: resolve the accountable principal's organizations, and detect
   // orphaned bindings when a principal is retired.
+  controlledSubstanceProducts              ControlledSubstanceProduct[]
+  controlledSubstanceRegisters             ControlledSubstanceRegister[]
+  controlledSubstanceHandlerAuthorizations ControlledSubstanceHandlerAuthorization[]
+  controlledSubstanceMovements             ControlledSubstanceMovement[]
+  controlledSubstanceCounts                ControlledSubstanceCount[]
+  controlledSubstanceCountLines            ControlledSubstanceCountLine[]
+  controlledSubstanceDiscrepancies         ControlledSubstanceDiscrepancy[]
+
   @@index([topAccountablePrincipalId])
 }
 

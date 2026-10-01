@@ -908,11 +908,60 @@ goes on `KNOWN_STAGE_TOOL_GAPS` (`stage-tool-gaps.ts`) with the reason. One gap
 closed as part of this work: `customer-advisor` gained `storefront_read`, so the
 inquiry draft stage can call `list_storefront_activity`.
 
-Shape versions were not bumped. GPP §2.1 treats a capability-set change as a
-material change, but a room's `workShape` claim pins an exact version and
-`resolveWorkShapeClaim` drops a room whose version no longer matches, which
-would stop every live standing room. Versioning capability sets without
-orphaning rooms is a follow-on.
+A second slice (BI-EBF0F6EE) added four read tools where the substrate already
+held the data but no tool read it, and closed eight gaps:
+
+| Shape / stages | Tools | Grant (holder) |
+|---|---|---|
+| `pull-request-flow-watch` read, classify | `list_pull_requests` | `contributor_inventory_read` (`change-reviewer`) |
+| `contributor-intake-watch` sync, flag | `read_contributor_inventory` | `contributor_inventory_read` (`platform-engineer`) |
+| `vendor-renewal-watch` read; report | `list_supplier_contracts`; plus `list_bills` | `payables_read` (`finance-controller`) |
+| `payables-watch` read, report | `list_bills` | `payables_read` (`finance-controller`) |
+
+Each grant is new and held only by the accountable agent, in both
+`coworker-grants.ts` and `agent_registry.json`. Each of the four shapes also
+names its grant in `grants` (for example `tool:payables_read`), because a room
+narrows a coworker turn to the shape's grants and `tool:read` expands only to
+the read baseline. The tools report an empty or unconfigured source as unknown,
+never as clear: `list_bills` on an install with no bills returns
+`{ items: [], note: "No bills are recorded." }`. The contributor inventory
+records branches, worktrees and pull requests, not people, so the intake `flag`
+stage reads sign-off and licence facts as unknown until a source records them.
+
+These four shapes moved to version 1.1.0, because adding a tool widens a
+binding. Their rooms reach 1.1.0 only by rebind, as described in the next
+section.
+
+## A new shape version reaches a live room only by rebind (BI-CB5C0DCE)
+
+A room pins `key@version`. GPP §2.1.1 says narrowing a binding may apply in
+place, but widening one (a new tool, stage, evidence kind or grant, a changed
+accountable principal, or a governed decision relaxed to a status change)
+needs a new version and a fresh gate decision. Kernel decision DI-E4DAF14D9343
+chose bump-and-rebind. Design:
+[spec](../superpowers/specs/2026-10-01-workroom-shape-rebind-design.md).
+
+- **A bump never stops a room.** The superseded definition moves to
+  `WORK_SHAPE_PRIOR_VERSIONS` (`work-shape-prior-versions.ts`) in the same
+  change. `resolveWorkShapeClaim` resolves it, so pinned rooms keep running.
+  `normalizePersistedScope` still admits only the current version for a new
+  room or an adopted claim.
+- **The diff decides what kind of change it is.** `diffWorkShapeBinding`
+  (`work-shape-binding-diff.ts`) matches stages by key and classifies each
+  row; any widening row makes the whole change a widening.
+- **One governed action moves the pin.** `rebindWorkroomShapeForUser`
+  (`workroom-shape-rebind.server.ts`) checks the following, in order:
+  - The caller is the room's accountable owner or a platform manager.
+  - The target is the current version of the room's own shape.
+  - No dispatched stage is still running.
+  - A widening carries a rationale.
+
+  It then writes the claim behind the store's compare-and-set. It records the
+  decision as `decision-record` evidence with no stage key, so a rebind can
+  never complete a stage, and adds a `workshape-rebound` activity. Receipts
+  are keyed by stage, so a stage whose binding did not change does not re-run.
+- **MCP:** `rebind_workroom_shape` previews by default (`dryRun`). A task run
+  may preview but never apply: the decision is a person's.
 
 ## Related references
 

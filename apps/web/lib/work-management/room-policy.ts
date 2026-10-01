@@ -23,15 +23,31 @@ export interface RoomParticipantInvite {
   enteredReason?: string | null;
 }
 
+/** Someone already active in the room, and whether they may act there. */
+export interface RoomMember {
+  principalRef: string;
+  canAct: boolean;
+}
+
 /**
  * Append a policy snapshot to the room's evidence that admits `invite`.
  * Returns the new evidence array (the caller persists it to WorkItem.evidence).
+ *
+ * Room access treats an explicit policy as a restriction, so a snapshot must
+ * keep everyone already in the room. The first invite once wrote a policy
+ * admitting only the invitee and locked the room's own coordinator and
+ * assistant out (BI-16DA79C5). `members` are the room's current active members;
+ * a member who has left is simply not passed, so an invite never re-admits them.
  */
-export function appendRoomPolicyParticipant(evidence: unknown, invite: RoomParticipantInvite): unknown[] {
+export function appendRoomPolicyParticipant(
+  evidence: unknown,
+  invite: RoomParticipantInvite,
+  members: readonly RoomMember[] = [],
+): unknown[] {
   const current = readWorkspaceRoomPolicy(evidence);
 
-  const admitted = new Set([...(current.admittedPrincipalRefs ?? []), invite.principalRef]);
-  const action = new Set(current.actionPrincipalRefs ?? []);
+  const admitted = new Set([...(current.admittedPrincipalRefs ?? []), ...members.map((m) => m.principalRef), invite.principalRef]);
+  const action = new Set([...(current.actionPrincipalRefs ?? []), ...members.filter((m) => m.canAct).map((m) => m.principalRef)]);
   if (invite.canAct) action.add(invite.principalRef);
 
   const roles = invite.roles.length > 0 ? invite.roles : (["observer"] as WorkroomParticipantRole[]);

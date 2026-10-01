@@ -1,5 +1,5 @@
 // apps/web/lib/auth.ts
-import NextAuth from "next-auth";
+import NextAuth, { type NextAuthResult } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import Apple from "next-auth/providers/apple";
@@ -123,7 +123,7 @@ const isHttps = publicUrl.startsWith("https://");
 export const SESSION_COOKIE_NAME = sessionCookieName;
 export const SESSION_COOKIE_SECURE = isHttps;
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+const nextAuth: NextAuthResult = NextAuth({
   trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
@@ -335,3 +335,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
   },
 });
+
+// Each export names its NextAuthResult member so `lib` declaration emit never
+// has to spell next-auth's internal route-handler types (TS2883).
+export const handlers: NextAuthResult["handlers"] = nextAuth.handlers;
+export const signIn: NextAuthResult["signIn"] = nextAuth.signIn;
+export const signOut: NextAuthResult["signOut"] = nextAuth.signOut;
+export const auth: NextAuthResult["auth"] = nextAuth.auth;

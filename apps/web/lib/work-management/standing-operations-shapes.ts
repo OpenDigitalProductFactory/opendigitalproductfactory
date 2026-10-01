@@ -229,7 +229,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   // ── manufactureAndDeliver · Contribution Flow ──────────────────────────────
   [PULL_REQUEST_FLOW_WATCH_SHAPE_KEY]: {
     key: PULL_REQUEST_FLOW_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Pull-request flow watch",
     description:
       "The change reviewer reads mechanical pull-request health, classifies each open change "
@@ -246,6 +246,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open pull request in scope has a mechanically-read health state — never a visual scan of some checks.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_pull_requests"],
       },
       {
         key: "classify",
@@ -256,6 +257,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each open change is classified stalled, conflicted, awaiting-review, or ready, with the blocking reason named.",
         },
         evidence: ["assurance-finding"],
+        tools: ["list_pull_requests"],
       },
       {
         key: "merge",
@@ -274,7 +276,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The forge is unreachable or returns no pull requests where the repository is known to have them — the run stops and reports rather than declaring the queue clear.", disposition: "inconclusive" },
       { kind: "budget", condition: "More than 100 pull requests in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
+    grants: ["tool:read", "tool:workroom_evidence_write", "tool:contributor_inventory_read"],
     measures: [
       { key: "changes-classified", description: "Open pull requests classified in one run." },
       { key: "stalled-changes", description: "Changes found stalled past their threshold." },
@@ -515,7 +517,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   // ── foundational · Business Administration ────────────────────────────────
   [PAYABLES_WATCH_SHAPE_KEY]: {
     key: PAYABLES_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Payables watch",
     description:
       "The finance controller reports what falls due and what is not recorded at all. Paying "
@@ -532,6 +534,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every recorded bill and recurring commitment inside the horizon has been read.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_bills"],
       },
       {
         key: "report",
@@ -542,6 +545,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each obligation inside the horizon is reported, and gaps are named as unknown with what to record — never as zero.",
         },
         evidence: ["assurance-finding"],
+        tools: ["list_bills"],
       },
       {
         key: "pay",
@@ -561,7 +565,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The finance substrate cannot be read — the run stops and reports, and NEVER presents an absent amount as zero.", disposition: "inconclusive" },
       { kind: "budget", condition: "More than 100 obligations reported in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
+    grants: ["tool:read", "tool:workroom_evidence_write", "tool:payables_read"],
     measures: [
       { key: "obligations-reported", description: "Bills and commitments reported inside the horizon." },
       { key: "unrecorded-gaps", description: "Named gaps where an obligation is expected but not recorded." },
@@ -573,7 +577,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
 
   [VENDOR_RENEWAL_WATCH_SHAPE_KEY]: {
     key: VENDOR_RENEWAL_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Vendor and subscription renewal watch",
     description:
       "The finance controller reports upcoming renewals and spend against recorded "
@@ -589,6 +593,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every recorded supplier agreement and its spend to date has been read.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_supplier_contracts"],
       },
       {
         key: "report",
@@ -599,6 +604,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each renewal inside the horizon is reported with spend against its commitment, and unknowns are named.",
         },
         evidence: ["assurance-finding"],
+        tools: ["list_supplier_contracts", "list_bills"],
       },
       {
         key: "decide",
@@ -617,7 +623,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "Supplier records cannot be read — the run stops and reports, and never infers a renewal from an unread agreement.", disposition: "inconclusive" },
       { kind: "budget", condition: "More than 50 agreements assessed in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
+    grants: ["tool:read", "tool:workroom_evidence_write", "tool:payables_read"],
     measures: [
       { key: "agreements-read", description: "Supplier agreements read in one run." },
       { key: "renewals-in-horizon", description: "Renewals falling inside the look-ahead window." },
@@ -630,7 +636,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   // ── forEmployees · Contributor Relations ──────────────────────────────────
   [CONTRIBUTOR_INTAKE_WATCH_SHAPE_KEY]: {
     key: CONTRIBUTOR_INTAKE_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Contributor intake watch",
     description:
       "The platform engineer keeps the contributor inventory current and flags missing "
@@ -647,6 +653,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "The recorded contributor inventory matches the observed contribution history.",
         },
         evidence: ["assurance-run"],
+        tools: ["read_contributor_inventory"],
       },
       {
         key: "flag",
@@ -657,6 +664,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every contributor missing a required sign-off or licence fact is flagged with what is missing.",
         },
         evidence: ["assurance-finding"],
+        tools: ["read_contributor_inventory"],
       },
       {
         key: "admit",
@@ -675,7 +683,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The contribution history cannot be read — the run stops and reports, and never records a contributor it could not observe.", disposition: "inconclusive" },
       { kind: "budget", condition: "More than 200 contributors reconciled in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
+    grants: ["tool:read", "tool:workroom_evidence_write", "tool:contributor_inventory_read"],
     measures: [
       { key: "contributors-reconciled", description: "Contributors reconciled against observed history." },
       { key: "missing-signoff", description: "Contributors flagged for a missing sign-off or licence fact." },

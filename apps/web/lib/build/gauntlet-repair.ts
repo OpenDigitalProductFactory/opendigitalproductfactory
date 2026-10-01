@@ -17,7 +17,22 @@ export const GAUNTLET_REPAIR_MAX_ATTEMPTS = 2;
 /** Tail of the guard output carried into the brief; the failure summary is at the end. */
 const BRIEF_OUTPUT_CHARS = 8_000;
 
-export type GauntletFailure = { treeSha: string | null; recordId: string | null; failedGuards: string[] };
+export type ReviewFinding = { severity: string; description: string; location?: string; suggestion?: string };
+
+/**
+ * What failed. `source` "review" is a semantic change review that asked for
+ * repair (BI-50E8802C); its findings are carried on the state because a review
+ * receipt is not a gauntlet record. `source` "risk" is a failure analysis that
+ * named a risk the change does not mitigate (BI-83E1ADF8); its findings are the
+ * risks. Guard, review and risk hand-backs share one bound.
+ */
+export type GauntletFailure = {
+  treeSha: string | null;
+  recordId: string | null;
+  failedGuards: string[];
+  source?: "guards" | "review" | "risk";
+  findings?: ReviewFinding[];
+};
 
 export type GauntletRepairState = GauntletFailure & { attempts: number; escalated?: boolean };
 
@@ -72,6 +87,62 @@ export function buildGauntletRepairTask(input: { failedGuards: string[]; output:
   };
 }
 
+export function buildReviewRepairTask(input: { findings: ReviewFinding[] }): GauntletRepairTask {
+  const lines = input.findings.map((f) => [
+    `- [${f.severity}] ${f.description}`,
+    f.location ? `  at ${f.location}` : null,
+    f.suggestion ? `  suggestion: ${f.suggestion}` : null,
+  ].filter(Boolean).join("\n"));
+  return {
+    title: `Fix review findings (${input.findings.length})`,
+    implement: [
+      "The independent code review of this build's change found blocking problems. Fix each one in the change itself.",
+      "",
+      "Findings:",
+      ...lines,
+      "",
+      "Rules:",
+      "- Fix the cause in the code; add or correct tests where a finding says behavior is unverified.",
+      "- Never weaken, skip or delete a test, guard or review policy to make the review pass.",
+      "- Keep the fix to what the findings report; do not rework unrelated code.",
+      "- Commit the fix on this build's branch.",
+    ].join("\n"),
+    verify: "Each finding above is resolved in the committed tree, and the build's scoped tests and typecheck pass.",
+  };
+}
+
+export function buildRiskRepairTask(input: { findings: ReviewFinding[] }): GauntletRepairTask {
+  const lines = input.findings.map((f) => `- [${f.severity}] ${f.description}`);
+  return {
+    title: `Mitigate unmitigated risks (${input.findings.length})`,
+    implement: [
+      "The failure analysis of this build's change named risks the change does not mitigate. Change the code so each one is prevented or contained.",
+      "",
+      "Risks:",
+      ...lines,
+      "",
+      "Rules:",
+      "- Mitigate the risk in the code: guard the input, handle the failure, add the missing check, and add a test that shows the mitigation works.",
+      "- If a risk comes from the build environment rather than this change (for example a tool or test runner that was unavailable), do not change unrelated code to hide it; leave the change as it is.",
+      "- Never remove a check, test or guard, and never describe a risk as mitigated without the code that mitigates it.",
+      "- Keep the fix to the risks listed; do not rework unrelated code.",
+      "- Commit the fix on this build's branch.",
+    ].join("\n"),
+    verify: "Each risk above is prevented or contained by the committed tree, and the build's scoped tests and typecheck pass.",
+  };
+}
+
+/** The repair brief for a hand-back, chosen by what failed. */
+export function repairTaskFor(state: GauntletRepairState, guardOutput: string): GauntletRepairTask {
+  if (state.source === "risk" && state.findings && state.findings.length > 0) {
+    return buildRiskRepairTask({ findings: state.findings });
+  }
+  if (state.source === "review" && state.findings && state.findings.length > 0) {
+    return buildReviewRepairTask({ findings: state.findings });
+  }
+  return buildGauntletRepairTask({ failedGuards: state.failedGuards, output: guardOutput });
+}
+
 function readState(verificationOut: unknown): GauntletRepairState | undefined {
   if (!verificationOut || typeof verificationOut !== "object" || Array.isArray(verificationOut)) return undefined;
   const state = (verificationOut as { gauntletRepair?: unknown }).gauntletRepair;
@@ -84,6 +155,8 @@ function readState(verificationOut: unknown): GauntletRepairState | undefined {
     failedGuards: s.failedGuards,
     attempts: s.attempts,
     escalated: s.escalated === true,
+    source: s.source === "review" || s.source === "risk" ? s.source : "guards",
+    findings: Array.isArray(s.findings) ? s.findings : undefined,
   };
 }
 
@@ -128,7 +201,12 @@ export async function routeGauntletFailureToRepair(buildId: string, failure: Gau
       originatingBacklogItemId: build.originatingBacklogItemId,
       phase: "review",
       rounds: decision.next.attempts,
-      issues: failure.failedGuards.map((guard) => ({ severity: "important", description: `Guard still failing after ${decision.next.attempts} repair attempt(s): ${guard}` })),
+      issues: failure.source !== "guards" && failure.source && failure.findings?.length
+        ? failure.findings.map((f) => ({
+          severity: f.severity,
+          description: `${failure.source === "risk" ? "Unmitigated risk" : "Review finding"} still open after ${decision.next.attempts} repair attempt(s): ${f.description}`,
+        }))
+        : failure.failedGuards.map((guard) => ({ severity: "important", description: `Guard still failing after ${decision.next.attempts} repair attempt(s): ${guard}` })),
       log,
     });
     return "escalated";
@@ -161,7 +239,12 @@ export async function routeGauntletFailureToRepair(buildId: string, failure: Gau
     },
   });
   if (moved.count === 0) return "not-in-review";
-  await log(`Guards failed on this build's change (${failure.failedGuards.join(", ")}); handed back to the coding agent, attempt ${decision.next.attempts} of ${GAUNTLET_REPAIR_MAX_ATTEMPTS}.`);
+  const what = failure.source === "review"
+    ? `The code review found ${failure.findings?.length ?? 0} blocking problem(s) in this build's change`
+    : failure.source === "risk"
+      ? `The failure analysis named ${failure.findings?.length ?? 0} risk(s) this build's change does not mitigate`
+      : `Guards failed on this build's change (${failure.failedGuards.join(", ")})`;
+  await log(`${what}; handed back to the coding agent, attempt ${decision.next.attempts} of ${GAUNTLET_REPAIR_MAX_ATTEMPTS}.`);
 
   const { jobs } = await import("@/lib/jobs");
   await jobs.send({ name: "build/gauntlet.repair", data: { buildId } });
@@ -187,7 +270,7 @@ export async function runGauntletRepair(buildId: string): Promise<RepairRunOutco
     const evidence = (record?.details as { evidence?: { output?: unknown } } | null)?.evidence;
     output = typeof evidence?.output === "string" ? evidence.output : "";
   }
-  const task = buildGauntletRepairTask({ failedGuards: state.failedGuards, output });
+  const task = repairTaskFor(state, output);
 
   const { runGauntletRepairTask } = await import("./build-orchestrator");
   const dispatched = await runGauntletRepairTask({ buildId, userId: build.createdById, task }).catch(() => false);

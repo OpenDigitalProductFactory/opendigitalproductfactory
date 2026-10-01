@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { err, ok } from "@/lib/shared/action-result";
 import { createHash } from "node:crypto";
 import { configureReleaseUpgradeTest, registerCoreSelfUpgradeSuccessTest, registerInstallStateHandoffTests, registerReleaseWorkerTargetRecoveryTests, registerSelfUpgradeFunctionTests } from "./self-upgrade-handoff.test-support";
 
@@ -23,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   completeRun: vi.fn(),
   failRun: vi.fn(),
   skipRun: vi.fn(),
+  cancelRun: vi.fn(),
   deferAdmittedRunForRedispatch: vi.fn(),
   updateRunPlan: vi.fn(),
   recordRunRecoveryPoint: vi.fn(),
@@ -49,6 +51,7 @@ const mocks = vi.hoisted(() => ({
   signalSwapStarting: vi.fn(),
   signalSwapComplete: vi.fn(),
   failQuiescenceSwap: vi.fn(),
+  guardAdmissionClosedForSwap: vi.fn(async (..._a: unknown[]): ReturnType<typeof import("@/lib/self-upgrade/drain-admission").guardAdmissionClosedForSwap> => ok({ reasserted: false })),
   captureActiveSessionBlockers: vi.fn().mockResolvedValue({ surfaces: [] }),
   resolveAutoUpgradeWindow: vi.fn().mockReturnValue({ kind: "operating-hours" }),
   getActiveSelfUpgradeBlackout: vi.fn().mockResolvedValue(null),
@@ -121,6 +124,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   completeRun: mocks.completeRun,
   failRun: mocks.failRun,
   skipRun: mocks.skipRun,
+  cancelRun: mocks.cancelRun,
   deferAdmittedRunForRedispatch: mocks.deferAdmittedRunForRedispatch,
   updateRunPlan: mocks.updateRunPlan,
   recordRunRecoveryPoint: mocks.recordRunRecoveryPoint,
@@ -175,6 +179,8 @@ vi.mock("@/lib/self-upgrade/quiescence", () => ({
   failQuiescenceSwap: mocks.failQuiescenceSwap,
   captureActiveSessionBlockers: mocks.captureActiveSessionBlockers,
 }));
+
+vi.mock("@/lib/self-upgrade/drain-admission", () => ({ guardAdmissionClosedForSwap: mocks.guardAdmissionClosedForSwap }));
 
 import {
   selfUpgradeScheduled,
@@ -440,64 +446,52 @@ describe("success path", () => {
     expect(mocks.runPromoter).toHaveBeenCalled();
   });
 
-  it("skips BEFORE draining when activity is in flight — no drain/defer/cooldown cycle (BI-F36E7510)", async () => {
-    // Build Studio work in flight: the activity precheck must skip cleanly
-    // instead of flipping the portal to draining and burning the full budget
-    // waiting for a BuildPhaseRun that outlasts it (the periodic bad-state bug).
-    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
-      surfaces: [{ surface: "build-studio.phase.plan", kind: "hard" }],
-    });
+  // BI-F9EE05E5 (spec §11a) supersedes the BI-F36E7510 early skip: an upgrade
+  // with work in flight is never "skipped". It enters the drain, which closes
+  // admission and waits (default 60 min) for the work to finish.
+  it("manual trigger with a hard blocker in flight enters the drain instead of skipping (BI-F9EE05E5)", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValue({ surfaces: [{ surface: "build-studio.phase.plan", kind: "hard" }] });
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
-    // The whole point: no drain, no cooldown — the portal never refuses actions.
-    expect(mocks.startQuiescence).not.toHaveBeenCalled();
-    expect(mocks.recordCooldown).not.toHaveBeenCalled();
+    expect(result).not.toMatchObject({ skipped: true });
+    expect(mocks.skipRun).not.toHaveBeenCalled();
+    expect(mocks.startQuiescence).toHaveBeenCalledWith(expect.objectContaining({ trigger: "self-upgrade", budgetMs: 60 * 60 * 1000 }));
   });
 
-  it("force bypasses the activity precheck and proceeds to drain", async () => {
-    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
-      surfaces: [{ surface: "build-studio.phase.plan", kind: "hard" }],
-    });
-    await runSelfUpgrade({ triggeredBy: "ops", force: true });
-    expect(mocks.startQuiescence).toHaveBeenCalled();
-  });
-
-  // BI-CC82B9A8 — a manual operator "Upgrade now" must not silently no-op on the
-  // operator's OWN session. Soft blockers (e.g. request.recent-tool-execution,
-  // which fires on the very clicks that drove this trigger) must NOT early-skip a
-  // manual trigger; it proceeds into the drain, which converges when no hard work
-  // is running. Without this, a routine deploy is un-runnable without Emergency
-  // override while the operator is driving the portal.
-  it("manual trigger does NOT early-skip on a soft blocker — proceeds to drain (BI-CC82B9A8)", async () => {
-    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
-      surfaces: [{ surface: "request.recent-tool-execution", kind: "soft" }],
-    });
-    const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).not.toMatchObject({ reason: "activity-in-flight" });
-    expect(mocks.startQuiescence).toHaveBeenCalled();
-  });
-
-  it("manual trigger STILL early-skips on a hard blocker (BI-F36E7510 preserved)", async () => {
-    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
-      surfaces: [
-        { surface: "coworker.reasoning-loop", kind: "hard" },
-        { surface: "request.recent-tool-execution", kind: "soft" },
-      ],
-    });
-    const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
-    // Only the hard surface is reported as the blocker; the soft one is filtered.
-    expect(result).toMatchObject({ surfaces: ["coworker.reasoning-loop"] });
-    expect(mocks.startQuiescence).not.toHaveBeenCalled();
-  });
-
-  it("scheduled poll drains on a soft blocker and skips only on a hard one (BI-A9F04B91)", async () => {
-    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({ surfaces: [{ surface: "request.recent-tool-execution", kind: "soft" }] });
+  it("scheduled poll with a hard blocker in flight enters the drain too (BI-F9EE05E5)", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValue({ surfaces: [{ surface: "coworker.reasoning-loop", kind: "hard" }] });
     expect(await runSelfUpgrade({ triggeredBy: "cron", scheduled: true })).not.toMatchObject({ reason: "activity-in-flight" });
-    expect(mocks.startQuiescence).toHaveBeenCalled();
-    mocks.startQuiescence.mockClear(); mocks.captureActiveSessionBlockers.mockResolvedValueOnce({ surfaces: [{ surface: "build-studio.phase.plan", kind: "hard" }] });
-    expect(await runSelfUpgrade({ triggeredBy: "cron", scheduled: true })).toMatchObject({ skipped: true, reason: "activity-in-flight" });
-    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+    expect(mocks.startQuiescence).toHaveBeenCalledWith(expect.objectContaining({ budgetMs: 60 * 60 * 1000 }));
+  });
+
+  it("the drain budget comes from drainWaitBudgetMs; an event budgetMs still overrides it", async () => {
+    mocks.getSelfUpgradeConfig.mockResolvedValue({ ...ENABLED_CONFIG, drainWaitBudgetMs: 15 * 60 * 1000 });
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.startQuiescence).toHaveBeenLastCalledWith(expect.objectContaining({ budgetMs: 15 * 60 * 1000 }));
+    await runSelfUpgrade({ triggeredBy: "ops", budgetMs: 1234 });
+    expect(mocks.startQuiescence).toHaveBeenLastCalledWith(expect.objectContaining({ budgetMs: 1234 }));
+  });
+
+  it("never swaps with admission open: a refused swap guard fails the run and the drain (BI-F9EE05E5)", async () => {
+    mocks.guardAdmissionClosedForSwap.mockResolvedValueOnce(err("admission reopened; work started: build-studio.phase.plan"));
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ ok: false, status: "failed", reason: "admission-reopened-before-swap" });
+    expect(mocks.guardAdmissionClosedForSwap).toHaveBeenCalledWith("QR-2026-05-24-test1234", { forced: undefined });
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+    expect(mocks.failQuiescenceSwap).toHaveBeenCalledWith("QR-2026-05-24-test1234", expect.stringContaining("admission reopened"));
+  });
+
+  it("a scheduled fire during an active run exits at once: no promoter build, no drain, no cooldown", async () => {
+    mocks.getLatestRun.mockResolvedValue({ runId: "SUR-WAITING", status: "running" });
+    const result = await runSelfUpgrade({ triggeredBy: "cron", scheduled: true });
+    expect(result).toMatchObject({ skipped: true, reason: "active-run", activeRunId: "SUR-WAITING" });
+    for (const fn of [mocks.ensurePromoterImage, mocks.readSelfUpgradeSupport, mocks.startQuiescence, mocks.recordCooldown, mocks.recordCheckedAt]) {
+      expect(fn).not.toHaveBeenCalled();
+    }
+  });
+
+  it("force still proceeds to drain", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops", force: true });
+    expect(mocks.startQuiescence).toHaveBeenCalledWith(expect.objectContaining({ shipForce: true }));
   });
   it("runs the promoter with the host install path, backup, image, and health paths", async () => {
     vi.stubEnv("DPF_STATE_DIR_HOST", "/Users/me/.dpf");
@@ -1107,25 +1101,17 @@ describe("quiescence-defer path (BI-QUIESCE-010)", () => {
     expect(mocks.runPromoter).not.toHaveBeenCalled();
   });
 
-  it("returns aborted when operator aborts", async () => {
+  it("an operator abort ends the run cancelled with a clear reason — no failure, no cooldown (BI-F9EE05E5)", async () => {
     mocks.startQuiescence.mockResolvedValue({
       runId: "QR-ABORT",
-      awaitReady: () =>
-        Promise.resolve({
-          ok: false,
-          outcome: "aborted",
-          runId: "QR-ABORT",
-          reason: "operator-abort",
-        }),
+      awaitReady: () => Promise.resolve({ ok: false, outcome: "aborted", runId: "QR-ABORT", reason: "Aborted by operator op-1" }),
     });
-
     const result = await runSelfUpgrade({ triggeredBy: "scheduled" });
-
-    expect(result).toMatchObject({
-      ok: false,
-      status: "deferred",
-      reason: "aborted",
-    });
+    expect(result).toMatchObject({ ok: false, status: "aborted", reason: "aborted", quiescenceRunId: "QR-ABORT" });
+    expect(mocks.cancelRun).toHaveBeenCalledWith("SUR-DEFER", "operator-aborted: Aborted by operator op-1");
+    expect(mocks.failRun).not.toHaveBeenCalled();
+    expect(mocks.recordCooldown).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
   });
 });
 
