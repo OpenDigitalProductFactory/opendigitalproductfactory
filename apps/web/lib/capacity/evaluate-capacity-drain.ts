@@ -129,6 +129,11 @@ export async function evaluateAndDrainCapacity(input: {
     userId,
     trigger: "capacity-drain",
     limit: decision.targetDispatch,
+    // Each build belongs to its item's portfolio owner (BI-67B27832).
+    ownerForPortfolio: async (portfolioId) => {
+      const { resolveScheduledOwnerUserId } = await import("@/lib/queue/scheduled-owner");
+      return resolveScheduledOwnerUserId(undefined, { portfolioId });
+    },
     // Let the drain try past the normal daily cap; the tee-up admits each start
     // against its portfolio's points-in-flight allowance (BI-3430B3A4).
     capOverride: decision.targetDispatch,

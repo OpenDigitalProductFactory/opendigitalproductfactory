@@ -3,9 +3,9 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 420,
-      "reason": "BI-AFEAAA76: get_my_approval_status reads the exact requesting human and assistant approval outcome. Existing tools expose pending tasks or broad administrative records, but none safely distinguishes completed, failed, not-run and expired requests after the Inbox card disappears. A read-only status door removes repeated approvals and legacy-token workarounds without exposing arguments, granting room admission, or permitting execution.",
-      "recordedAt": "2026-09-27"
+      "value": 423,
+      "reason": "BI-F25A5FC7: plan_account_handover (read-only dry run with a digest) and apply_account_handover (authority-consequence apply bound to that digest) re-home everything an absent account owns: rooms, live builds and scheduled tasks. appoint_room_coordinator moves one room per approval and is refused for an assistant not admitted to the room; nothing re-homed builds or scheduled tasks at all. On the live install that is 410 items. Both tools live in the existing room-messaging pack beside appoint_room_coordinator and share its write path.",
+      "recordedAt": "2026-10-01"
     },
     "registry.packFiles": {
       "value": 103,

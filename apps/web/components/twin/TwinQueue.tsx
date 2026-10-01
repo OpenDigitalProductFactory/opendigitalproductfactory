@@ -7,7 +7,7 @@
 
 import { Bot } from "lucide-react";
 
-import type { QueueItemData } from "./types";
+import type { QueueItemData } from "@/lib/twin/kit-types";
 
 export interface TwinQueueProps {
   label: string;

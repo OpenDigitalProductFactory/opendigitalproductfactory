@@ -7,7 +7,7 @@
 // budget and confirming an epic's portfolio are the only writes, both by a
 // person with a reason. Nothing here dispatches work.
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
@@ -16,10 +16,8 @@ import { fieldControlClass, fieldErrorClass, fieldHintClass, fieldLabelClass } f
 import { DataTable, Notice, StatusBadge, type Column } from "@/components/ui/report-kit";
 import { confirmEpicPortfoliosAction, setPortfolioBudgetAction } from "@/lib/actions/portfolio-budget";
 import type { PortfolioTieOut, TieOutRow } from "@/lib/portfolio/tie-out";
-import { budgetText, forecastText, overCommitmentText, tieOutHeadline, tracedText } from "@/lib/portfolio/tie-out-view";
+import { budgetText, forecastText, overCommitmentText, tieOutHeadline, tracedText, type UnconfirmedEpic } from "@/lib/portfolio/tie-out-view";
 import { aiLatencyText, aiSpendText, aiTokensText } from "@/lib/portfolio/ai-resource";
-
-export type UnconfirmedEpic = { epicId: string; title: string; portfolioId: string; portfolioName: string; confidence: "high" | "low" };
 
 type Props = {
   tieOut: PortfolioTieOut;
@@ -28,9 +26,11 @@ type Props = {
   unconfirmedEpics: UnconfirmedEpic[];
   /** Viewer's format locale from getLocaleContext(). */
   formatLocale?: string;
+  /** Further portfolio controls that belong behind the same disclosure (the accountable owners, BI-67B27832). */
+  children?: ReactNode;
 };
 
-export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics, formatLocale }: Props) {
+export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics, formatLocale, children }: Props) {
   const t = useT("portfolio");
   const [editing, setEditing] = useState<string | null>(null);
   const quarter = `${new Date(tieOut.period.start).toISOString().slice(0, 10)} to ${new Date(new Date(tieOut.period.end).getTime() - 1).toISOString().slice(0, 10)}`;
@@ -112,6 +112,7 @@ export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics,
         />
       ) : null}
       <EpicAttribution epics={unconfirmedEpics} />
+      {children}
       </details>
     </Surface>
   );

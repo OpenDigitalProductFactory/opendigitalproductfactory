@@ -74,6 +74,18 @@
       "allowedDependencies": []
     }
   },
+  "outerLayers": {
+    "app": {
+      "owner": "web-application",
+      "path": "apps/web/app",
+      "description": "Next.js routes, layouts and route-local UI. Sits above lib: lib may not import it (M11 step 2 PR-3, spec 2026-09-30 §4.3)."
+    },
+    "components": {
+      "owner": "web-application",
+      "path": "apps/web/components",
+      "description": "React UI components. Sits above lib: shared types, constants and pure helpers live in lib and components import them, never the reverse (M11 step 2 PR-3, spec 2026-09-30 §4.3)."
+    }
+  },
   "exceptions": [
     {
       "key": "apps/web/lib/actions/coworker-tool-budget.ts|@/lib/mcp/tool-tier|mcp",

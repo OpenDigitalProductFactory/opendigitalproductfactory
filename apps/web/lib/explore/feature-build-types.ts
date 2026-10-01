@@ -980,20 +980,11 @@ export function isFixContextComplete(fc: FixContext | null | undefined): boolean
   return Boolean(fc.reproSteps?.trim() && fc.rootCause?.trim() && fc.fixApproach?.trim());
 }
 
-/**
- * Phase gate — re-exported from build-process-matrix.ts.
- *
- * The implementation moved to build-process-matrix.ts so the right-sizing
- * matrix module owns the gate logic and the LifecyclePolicy table together.
- * This re-export preserves every existing import site that reaches
- * checkPhaseGate via @/lib/feature-build-types.
- *
- * Back-compat invariant: when `evidence.kind` is absent (or "feature") and
- * `evidence.processSize` is absent (or "medium"), the resolved policy is
- * the default feature-standard cell — byte-identical to the pre-matrix
- * behavior. See docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md.
- */
-export { checkPhaseGate } from "./build-process-matrix";
+// Phase gate: checkPhaseGate lives in build-process-matrix.ts, which owns the
+// gate logic and the LifecyclePolicy table together. It is NOT re-exported
+// here: the matrix imports this module's helpers, so a re-export closed a
+// module load-order cycle (spec 2026-09-30 §4.2). The `@/lib/feature-build-types`
+// shim re-exports it, so import sites on that path are unchanged.
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 

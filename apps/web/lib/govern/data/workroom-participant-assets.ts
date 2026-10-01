@@ -2,7 +2,7 @@
 // The live-schema coverage gate requires every Prisma model to be registered or
 // baselined. Fields resolve at the model-level default.
 
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 
 const CLASSIFICATION = {
   state: "confirmed",

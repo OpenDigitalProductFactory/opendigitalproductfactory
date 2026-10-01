@@ -51,6 +51,60 @@ function parseAliases(raw: string): string[] {
     .filter((s) => s.length > 0);
 }
 
+/** Did this request arrive through the configured public hostname?
+ *
+ *  True when PUBLIC_URL is set and the Host or X-Forwarded-Host header names
+ *  its host. Internal callers (Prometheus on `portal:3000`, loopback, LAN
+ *  aliases) never match. Used to keep internal-only surfaces off the public
+ *  name; it is a second layer behind the reachability ingress, never an
+ *  authorization check. */
+export function arrivedViaPublicHost(args: {
+  host: string | null | undefined;
+  forwardedHost: string | null | undefined;
+  canonicalUrl: string | undefined;
+}): boolean {
+  if (!args.canonicalUrl) return false;
+  const canonical = parseCanonicalHost(args.canonicalUrl);
+  if (!canonical) return false;
+  return [args.host, args.forwardedHost].some(
+    (value) => typeof value === "string" && value.trim().toLowerCase() === canonical.host,
+  );
+}
+
+/**
+ * Is `origin` one of the install's configured canonical origins — PUBLIC_URL's
+ * own origin, or a PUBLIC_URL_ALIASES host on PUBLIC_URL's scheme?
+ *
+ * Unlike `decideHostMatch`, an unset or malformed PUBLIC_URL is NOT a pass: a
+ * caller asking this question is deciding whether to extend trust to an origin
+ * (design §12.4.5, DCR on the canonical origin), so absence of configuration
+ * answers "no" rather than failing open. Scheme, host and port must all match;
+ * the scheme's default port is equivalent to no port.
+ */
+export function isConfiguredCanonicalOrigin(origin: string, config: CanonicalHostConfig): boolean {
+  if (!config.canonicalUrl) return false;
+  const canonical = parseCanonicalHost(config.canonicalUrl);
+  if (!canonical) return false;
+  let candidate: URL;
+  try {
+    candidate = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (candidate.username !== "" || candidate.password !== "") return false;
+  const canonicalScheme = new URL(canonical.origin).protocol;
+  if (candidate.protocol !== canonicalScheme) return false;
+  const candidateHost = candidate.host.toLowerCase();
+  if (candidateHost === canonical.host) return true;
+  return parseAliases(config.aliases).some((alias) => {
+    try {
+      return new URL(`${canonicalScheme}//${alias}`).host === candidateHost;
+    } catch {
+      return false;
+    }
+  });
+}
+
 /** Decide whether a request should pass through unchanged or be redirected
  *  to the canonical origin. See module comment for rules. */
 export function decideHostMatch(args: {

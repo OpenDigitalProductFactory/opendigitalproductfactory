@@ -53,15 +53,32 @@ export type LatestRun = {
   impact?: RunImpactDigest | null;
 };
 
+/**
+ * One aggregated blocker line for the operator panel: a surface name, a
+ * human-readable label, how many in-flight items share it, and the worst-case
+ * wait. Built by collapsing the raw ActiveSessionBlockers.surfaces list (which
+ * has one entry per in-flight item) by surface name.
+ */
 export type QuiescenceBlockerLine = {
   surface: string;
   label: string;
   kind: "hard" | "soft";
   count: number;
   estimatedWaitMs: number | null;
+  /**
+   * Operator-facing identity of a representative in-flight item on this surface
+   * (BI-D0F4C6FB): the coworker/agent and its task title, so the panel can say
+   * WHICH coworker is blocking instead of a bare "AI coworker working". Null for
+   * surfaces without a per-item identity (e.g. recent-tool-execution).
+   */
   sampleAgent?: string | null;
   sampleTitle?: string | null;
+  /** Oldest last-signal (heartbeat, or start if newer) across the collapsed
+   *  group, ISO — drives the panel's "last active …" staleness line. */
   oldestSignalAt?: string | null;
+  /** True when that oldest signal was already stale past the coworker liveness
+   *  window at capture — a corpse the drain auto-reaps (BI-1C4179D0), shown to
+   *  the operator as "unresponsive — clears automatically". */
   stale?: boolean;
 };
 

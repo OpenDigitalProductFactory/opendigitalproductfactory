@@ -3,10 +3,10 @@ import { toRoomAuthorityContext, type RoomTurnAuthority } from "@/lib/work-manag
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import type { MessageOrigin } from "@/lib/inference/data-screening/types";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-review";
 import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { AgentEvent } from "@/lib/tak/agent-event-bus";
 import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
 import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
@@ -278,6 +278,7 @@ export async function resolveAutonomousWorkTools(input: {
     const {
       selectCoworkerToolBudget,
       deriveCoworkerToolCap,
+      REQUIRED_TOOL_PIN_CAPACITY,
       LOAD_TOOLS_TOOL,
       LOAD_TOOLS_TOOL_NAME,
     } =
@@ -331,7 +332,7 @@ export async function resolveAutonomousWorkTools(input: {
       // cap the writer competed with the surface on intent relevance and could
       // lose — and narrowInitiativeReviewTools then filtered the attached set to
       // required names only, handing the model zero tools.
-      requiredNames: new Set((input.requiredToolNames ?? []).slice(0, 4)),
+      requiredNames: new Set((input.requiredToolNames ?? []).slice(0, REQUIRED_TOOL_PIN_CAPACITY)),
       alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
       cap: effectiveCap,
       intentQuery: input.intentQuery,

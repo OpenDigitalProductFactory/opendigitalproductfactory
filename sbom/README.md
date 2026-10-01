@@ -9,6 +9,11 @@ Platform SBOM + dependency-reduction outputs. See
   the accepted set of first-party version splits and the dependency-shape
   `budgets`. The CI **SBOM Divergence Guard** fails when a new split appears or
   a total exceeds its budget.
+- `typecheck-baseline.json` — anchor for `scripts/sbom/check-typecheck-baseline.mjs`:
+  the web production program's budgets for lines no diff explains (dependency
+  types, excluded files pulled back in) and the accepted outside source
+  directories, plus the reference `--extendedDiagnostics` numbers. CI's
+  **Typecheck** job runs the ratchet on the report from its own compile.
 - `README.md` — this file.
 
 **Generated (git-ignored, produced by `pnpm sbom`):**

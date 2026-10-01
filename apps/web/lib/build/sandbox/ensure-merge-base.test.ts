@@ -30,4 +30,15 @@ describe("ensureMergeBaseWithMain", () => {
     const exec = vi.fn(async (_c: string, cmd: string) => (cmd.includes("merge-base") ? "__MB_NONE__\n" : ""));
     expect(await ensureMergeBaseWithMain({ exec, containerId: "c", workdir: "/w", maxRounds: 3 })).toEqual({ found: false, deepened: 3 });
   });
+
+  // BI-E4AD091E (live, 2026-09-29): a stale .git/shallow.lock failed every
+  // deepen for four days, and the helper swallowed the error, so the builds
+  // simply never found a merge base with no reason recorded anywhere.
+  it("reports the fetch failure instead of swallowing it", async () => {
+    const lockError = "fatal: Unable to create '/workspace/.git/shallow.lock': File exists.";
+    const exec = vi.fn(async (_c: string, cmd: string) => (cmd.includes("merge-base") ? "__MB_NONE__\n" : `${lockError}\n`));
+    const result = await ensureMergeBaseWithMain({ exec, containerId: "c", workdir: "/w", maxRounds: 2 });
+    expect(result.found).toBe(false);
+    expect(result.fetchError).toContain("shallow.lock");
+  });
 });

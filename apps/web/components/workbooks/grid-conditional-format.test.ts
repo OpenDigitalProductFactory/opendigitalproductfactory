@@ -4,8 +4,8 @@ import {
   rowColor,
   rowColorClass,
   operatorNeedsValue,
-  type ConditionalRule,
 } from "./grid-conditional-format";
+import type { ConditionalRule } from "@/lib/workbooks/conditional-format";
 import type { GridRowData } from "./cell-editors";
 
 const rule = (over: Partial<ConditionalRule>): ConditionalRule => ({

@@ -182,7 +182,7 @@ describe("generatePackId", () => {
 
 // ─── Phase Gate Tests (Build Disciplines) ────────────────────────────────────
 
-import { checkPhaseGate } from "./feature-build-types";
+import { checkPhaseGate } from "./build-process-matrix";
 
 describe("canTransitionPhase — review→build backward transition", () => {
   it("allows review to build (backward transition for changes)", () => {

@@ -1,4 +1,4 @@
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { orchestrateDeliberation } from "@/lib/deliberation/orchestrator";
 import {
   isDeliberationArtifactType,

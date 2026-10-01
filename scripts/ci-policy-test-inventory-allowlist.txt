@@ -7,7 +7,6 @@ packages/dpf-skill-pack/hooks/decision-routing-guard.test.mjs
 packages/dpf-skill-pack/hooks/governance-freshness-check.test.mjs
 packages/dpf-skill-pack/hooks/grok-skill-exposure-adapter.test.mjs
 packages/dpf-skill-pack/hooks/hook-io.test.mjs
-packages/dpf-skill-pack/hooks/pregate-evidence-guard.test.mjs
 packages/dpf-skill-pack/hooks/tool-economy-precheck.test.mjs
 packages/dpf-skill-pack/hooks/worktree-session-hygiene.test.mjs
 scripts/agent-host-resource-charter.contract.test.mjs
@@ -51,6 +50,7 @@ scripts/check-no-type-reexport-in-use-server.test.mjs
 scripts/check-no-unhonored-grant-growth.test.mjs
 scripts/check-no-unlocalized-ui.test.mjs
 scripts/check-no-unresolved-prometheus-targets.test.mjs
+scripts/check-no-web-import-cycle-growth.test.mjs
 scripts/check-reporting-composition.test.mjs
 scripts/check-style-drift.test.mjs
 scripts/ci-evidence-receipt-discovery.test.mjs

@@ -12,7 +12,7 @@
 //
 // Routing decides WHERE a branch runs. This module makes it run.
 
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 /** What a branch came back with, in the shape the synthesizer consumes. */
 export type BranchPosition = {

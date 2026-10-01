@@ -245,6 +245,11 @@ jobs:
         if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter @dpf/db exec prisma generate
 
+      # Restore only: the typecheck-cache job (push to main) is the one writer.
+      - name: Restore web tsbuildinfo (warm start)
+        if: needs.changes.outputs.heavy == 'true'
+        uses: ./.github/actions/web-tsbuildinfo-cache
+
       - name: Typecheck all workspaces
         if: needs.changes.outputs.heavy == 'true'
         # Raise the V8 heap: tsc over the whole (large, growing) workspace OOMs on
@@ -252,7 +257,29 @@ jobs:
         # threshold the codebase recently crossed, breaking Typecheck for every PR.
         env:
           NODE_OPTIONS: --max-old-space-size=8192
+          # The same web compile records what it checked for the ratchet below.
+          DPF_TSC_PROGRAM_REPORT: ${{ runner.temp }}/web-tsc-program.json
         run: pnpm typecheck
+
+      # Plan 2026-09-08 M11 step 4: fail a PR that grows the web production
+      # program by lines its diff does not explain (dependency types, excluded
+      # files pulled back in, a new source directory). Reads the report the
+      # step above wrote, so it costs no second compile.
+      - name: Typecheck program ratchet
+        if: needs.changes.outputs.heavy == 'true'
+        run: >-
+          node scripts/sbom/check-typecheck-baseline.mjs
+          --report "$RUNNER_TEMP/web-tsc-program.json"
+          --write-analysis "$RUNNER_TEMP/typecheck-program-analysis.json"
+
+      - name: Upload typecheck program analysis
+        if: always() && needs.changes.outputs.heavy == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: typecheck-program-analysis
+          path: ${{ runner.temp }}/typecheck-program-analysis.json
+          if-no-files-found: ignore
+          retention-days: 14
 
   # apps/web's test files (37% of its TypeScript lines) are checked as their
   # own program (apps/web/tsconfig.test.json) so the production program the
@@ -278,11 +305,70 @@ jobs:
         if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter @dpf/db exec prisma generate
 
+      # Restore only: the typecheck-cache job (push to main) is the one writer.
+      - name: Restore web tsbuildinfo (warm start)
+        if: needs.changes.outputs.heavy == 'true'
+        uses: ./.github/actions/web-tsbuildinfo-cache
+
       - name: Typecheck the web test program
         if: needs.changes.outputs.heavy == 'true'
         env:
           NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm --filter web typecheck:tests
+
+  # The single writer of the web tsbuildinfo warm-start cache (spec
+  # 2026-09-30 web-runtime-import-cycle §6 PR-1). Every push to main saves an
+  # entry keyed on its own SHA; PR and merge_group runs of the two Typecheck
+  # jobs above restore the latest one and never save. It is its own job
+  # because a push whose merge-group evidence is reused skips Typecheck
+  # entirely, which would otherwise leave the cache stale. It is never a
+  # verdict: merge_group already typechecked this tree, so a failed compile
+  # here still saves (a build info with errors is valid warm state) and the
+  # job stays green. It restores the previous main entry first, so it is
+  # itself a warm run.
+  typecheck-cache:
+    name: Typecheck warm-start cache
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' && needs.changes.result == 'success'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm with cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Generate Prisma client
+        run: pnpm --filter @dpf/db exec prisma generate
+
+      - name: Restore web tsbuildinfo (previous main entry)
+        id: tsbuildinfo
+        uses: ./.github/actions/web-tsbuildinfo-cache
+
+      - name: Refresh the production program build info
+        if: steps.tsbuildinfo.outputs.cache-hit != 'true'
+        continue-on-error: true
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm --filter web typecheck
+
+      - name: Refresh the test program build info
+        if: steps.tsbuildinfo.outputs.cache-hit != 'true'
+        continue-on-error: true
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm --filter web typecheck:tests
+
+      - name: Save web tsbuildinfo
+        if: >-
+          steps.tsbuildinfo.outputs.cache-hit != 'true' &&
+          hashFiles('apps/web/tsconfig.tsbuildinfo', 'apps/web/tsconfig.test.tsbuildinfo') != ''
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            apps/web/tsconfig.tsbuildinfo
+            apps/web/tsconfig.test.tsbuildinfo
+          key: ${{ steps.tsbuildinfo.outputs.key }}
 
   # BI-0580AFD3. These profiles replace 34 startup-heavy policy jobs with one
   # checkout/runtime per profile. The registry preserves each former job's
@@ -823,6 +909,8 @@ jobs:
     env:
       AUTH_SECRET: ci-placeholder
       CREDENTIAL_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      INNGEST_SIGNING_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
+      INNGEST_EVENT_KEY: "2222222222222222222222222222222222222222222222222222222222222222"
       COMPOSE_PROJECT_NAME: dpf-ci-${{ github.run_id }}-${{ github.run_attempt }}
     # Brings up the fake-server harness, runs the e2e test suite against it,
     # then tears down. The harness default token matches HARNESS_CONTROL_TOKEN
@@ -867,6 +955,7 @@ jobs:
       - exact-tree-evidence-shadow
       - typecheck
       - typecheck-tests
+      - typecheck-cache
       - policy-guards-source
       - policy-guards-workspace
       - policy-guards-pr

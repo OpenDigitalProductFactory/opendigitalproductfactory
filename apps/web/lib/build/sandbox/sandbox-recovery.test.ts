@@ -1,7 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { recoverSandbox, type SandboxRecoveryDb } from "./sandbox-recovery";
 import type { SandboxReadinessSnapshot } from "./sandbox-admin-types";
+
+const originalIsolation = process.env.DPF_BUILD_WORKTREE_ISOLATION;
+afterEach(() => {
+  if (originalIsolation === undefined) delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
+  else process.env.DPF_BUILD_WORKTREE_ISOLATION = originalIsolation;
+});
 
 function snapshot(overrides: Partial<SandboxReadinessSnapshot> = {}): SandboxReadinessSnapshot {
   return {
@@ -134,6 +140,8 @@ describe("recoverSandbox", () => {
   });
 
   it("checks out the registered build branch after preserving stale in-flight work", async () => {
+    // Legacy shared-tree behaviour (isolation off). BI-5C4933EB.
+    process.env.DPF_BUILD_WORKTREE_ISOLATION = "0";
     const runCommand = vi.fn().mockResolvedValue("");
     const recordActivity = vi.fn();
     const db = makeDb({
@@ -177,6 +185,42 @@ describe("recoverSandbox", () => {
     expect(command).toContain("preserve in-flight build work before branch switch");
     expect(command).toContain("git reset --hard HEAD");
     expect(command).toContain("git -C /workspace update-index --skip-worktree apps/web/next-env.d.ts");
+    expect(recordActivity).toHaveBeenCalledWith(
+      "FB-TEST",
+      "sandbox_recovery: checkout_registered_branch build/FB-TEST",
+    );
+    expect(result.snapshot?.state).toBe("healthy");
+  });
+  // BI-5C4933EB: with isolation on the build branch lives in its own worktree;
+  // never check it out in the shared /workspace (which stays on client/<id>).
+  it("re-materializes the build worktree instead of checking out in /workspace when isolation is on", async () => {
+    delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
+    const runCommand = vi.fn().mockResolvedValue("");
+    const recordActivity = vi.fn();
+    const ensureWorktree = vi.fn().mockResolvedValue({ materialized: true, workdir: "/workspace/.builds/FB-TEST" });
+    const db = makeDb({
+      featureBuild: {
+        findUnique: vi.fn().mockResolvedValue({ buildBranch: "build/FB-TEST" }),
+        update: vi.fn(),
+      },
+    });
+
+    const result = await recoverSandbox({
+      buildId: "FB-TEST",
+      action: "checkout_registered_branch",
+      confirmation: null,
+      diagnose: vi.fn()
+        .mockResolvedValueOnce(snapshot({ state: "branch_mismatch", branchName: null }))
+        .mockResolvedValueOnce(snapshot({ state: "healthy", canDeploy: true, canContribute: true, summary: "healthy" })),
+      runCommand,
+      recordActivity,
+      ensureWorktree,
+      db,
+    });
+
+    expect(result.success).toBe(true);
+    expect(ensureWorktree).toHaveBeenCalledWith("FB-TEST");
+    expect(runCommand).not.toHaveBeenCalled();
     expect(recordActivity).toHaveBeenCalledWith(
       "FB-TEST",
       "sandbox_recovery: checkout_registered_branch build/FB-TEST",

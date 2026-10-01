@@ -1,6 +1,6 @@
 // Data-governance registration for work-coordination relation rows (BI-662254C6).
 
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 
 const CLASSIFICATION = {
   state: "confirmed",

@@ -23,7 +23,7 @@ import { resolveDemoFlavor } from "./demo-flavor";
  * Plan:   docs/superpowers/plans/2026-07-15-archetype-demo-factory-execution.md P1
  *
  * PURE + DB-free + deterministic (mirrors twin-profile.ts / operational-value-
- * stream.ts / components/twin/demo-snapshot.ts — no `Math.random`/`Date` in the
+ * stream.ts / lib/twin/demo-twin-snapshot.ts — no `Math.random`/`Date` in the
  * core), so demos are reproducible, snapshot-testable, and diffable. Coverage is
  * 94/94 from a single generator; a thin per-archetype {@link DemoFlavor} raises
  * fidelity without touching the derivation. Anything time/DB-stamped (`seededAt`,

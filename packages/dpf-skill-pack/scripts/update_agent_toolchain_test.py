@@ -855,21 +855,24 @@ class AntigravityMcpConfigTest(unittest.TestCase):
         self.assertEqual(status, "skipped: Antigravity CLI (agy) not found")
 
     def test_upserts_dpf_server_env_backed_and_idempotent(self) -> None:
+        # Plain http: the header is the only credential path there. The https
+        # default carries no header (OnePluginOwnedConnectorTest).
+        http_url = "http://127.0.0.1:3000/api/mcp/v1"
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
                 first = updater.ensure_antigravity_mcp_config(
-                    home, updater.DEFAULT_MCP_URL, dry_run=False
+                    home, http_url, dry_run=False
                 )
                 second = updater.ensure_antigravity_mcp_config(
-                    home, updater.DEFAULT_MCP_URL, dry_run=False
+                    home, http_url, dry_run=False
                 )
             self.assertEqual(first, "converged")
             self.assertEqual(second, "already current")
             cfg = json.loads(updater.antigravity_mcp_config_path(home).read_text())
             dpf = cfg["mcpServers"]["dpf"]
             self.assertEqual(dpf["type"], "http")
-            self.assertEqual(dpf["url"], updater.DEFAULT_MCP_URL)
+            self.assertEqual(dpf["url"], http_url)
             self.assertEqual(dpf["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN}")
             # No plaintext secret is ever written.
             self.assertNotIn("dpfmcp_", updater.antigravity_mcp_config_path(home).read_text())
@@ -1422,10 +1425,59 @@ class ClaudeMcpConfigSchemeAwarenessTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             pack = Path(tmp)
             updater.ensure_claude_repo_mcp_config(
-                pack, "http://127.0.0.1:3000/api/mcp/v1", dry_run=False
+                pack, updater.DEFAULT_MCP_URL, dry_run=False
             )
             generated = (pack / "claude.mcp.json").read_text()
         self.assertEqual(generated, repo_descriptor.read_text())
+
+
+class OnePluginOwnedConnectorTest(unittest.TestCase):
+    """BI-5201141C (design 12.4.4): the plugin descriptor is THE dpf connector.
+
+    Claude Code matches a plugin server against configured servers by endpoint,
+    so a descriptor whose default differs from the install's canonical origin
+    loads beside any other connector instead of replacing it. Every shipped
+    descriptor is therefore URL-only on the canonical loopback https origin,
+    authenticates by OAuth (no bearer header), and Claude keeps its scope pin.
+    Grok keeps its compatibility bearer until S6 (it has no OAuth client).
+    """
+
+    PACK = Path(__file__).resolve().parents[1]
+
+    def _read(self, name: str) -> dict:
+        return json.loads((self.PACK / name).read_text())
+
+    def test_default_endpoint_is_the_canonical_loopback_https_origin(self) -> None:
+        self.assertEqual(updater.DEFAULT_MCP_URL, "https://localhost/api/mcp/v1")
+
+    def test_claude_descriptor_is_url_only_https_with_the_scope_pin(self) -> None:
+        server = self._read("claude.mcp.json")["mcpServers"]["dpf"]
+        self.assertEqual(server["url"], "${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}")
+        self.assertNotIn("headers", server)
+        self.assertEqual(server["oauth"], {"scopes": updater.MCP_CLIENT_OAUTH_SCOPE_PIN})
+
+    def test_antigravity_descriptor_is_url_only_https(self) -> None:
+        server = self._read("antigravity.mcp.json")["mcpServers"]["dpf"]
+        self.assertEqual(server["url"], "${DPF_MCP_URL:-https://localhost/api/mcp/v1}")
+        self.assertNotIn("headers", server)
+
+    def test_checked_in_antigravity_descriptor_matches_the_generator(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = Path(tmp)
+            updater.ensure_antigravity_plugin_descriptor(pack, updater.DEFAULT_MCP_URL, dry_run=False)
+            generated = (pack / "antigravity.mcp.json").read_text()
+        self.assertEqual(generated, (self.PACK / "antigravity.mcp.json").read_text())
+
+    def test_antigravity_descriptor_keeps_the_header_only_where_oauth_cannot_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = Path(tmp)
+            updater.ensure_antigravity_plugin_descriptor(pack, "http://127.0.0.1:3000/api/mcp/v1", dry_run=False)
+            server = json.loads((pack / "antigravity.mcp.json").read_text())["mcpServers"]["dpf"]
+        self.assertEqual(server["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN:-}")
+
+    def test_grok_descriptor_keeps_its_compatibility_bearer_until_s6(self) -> None:
+        server = self._read("grok.mcp.json")["mcp_servers"]["dpf"]
+        self.assertEqual(server["bearer_token_env_var"], "DPF_MCP_BEARER_TOKEN")
 
 
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { MonitoringAlert } from "./health-summary";
+import type { MonitoringAlert } from "@/lib/observability/monitoring-jobs";
 
 type AlertQueryState = {
   alerts: MonitoringAlert[];

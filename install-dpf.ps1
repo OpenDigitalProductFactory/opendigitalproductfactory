@@ -1682,6 +1682,24 @@ if ($gitWebhookValue.Length -eq 0 -or $gitWebhookValue.StartsWith("<")) {
     Write-Host "  Generated DPF_GIT_WEBHOOK_SECRET in .env (read it there to configure the GitHub webhook)"
 }
 
+# Inngest signing and event keys (BI-3267763F). The portal and the inngest
+# service verify each other with them; compose no longer supplies a default,
+# because the old one was published in the repository and let anyone who could
+# reach /api/inngest forge signed invocations. Generated the same way as
+# AUTH_SECRET when missing, a placeholder, or that old public default; a real
+# value is never rotated. Values are never printed.
+$inngestPublicDefaults = @("abcdef0123456789", "deadbeefcafebabe")
+foreach ($inngestKey in @("INNGEST_SIGNING_KEY", "INNGEST_EVENT_KEY")) {
+    $inngestEnv = Get-Content -Path "$DPF_DIR\.env" -Raw -ErrorAction SilentlyContinue
+    if ($null -eq $inngestEnv) { $inngestEnv = "" }
+    $inngestMatches = [System.Text.RegularExpressions.Regex]::Matches($inngestEnv, "(?m)^$inngestKey=(.*)$")
+    $inngestValue = if ($inngestMatches.Count -gt 0) { $inngestMatches[$inngestMatches.Count - 1].Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+    if ($inngestValue.Length -eq 0 -or $inngestValue.StartsWith("<") -or $inngestPublicDefaults -contains $inngestValue) {
+        Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key $inngestKey -Value (New-RandomPassword 32)
+        Write-Host "  Generated $inngestKey in .env"
+    }
+}
+
 if ($InstallMode -eq "consumer") {
     Set-DPFConsumerReleaseIdentity -InstallDir $DPF_DIR -Version $Version
 }
@@ -1852,6 +1870,22 @@ if ($OrganizationJoinPackagePath) {
         Write-Host "      The portal stays at http://localhost:3000. AI clients that require https" -ForegroundColor Yellow
         Write-Host "      cannot sign in until the installer is run again." -ForegroundColor Yellow
     }
+}
+
+# This machine's AI clients find the install at its canonical origin and trust
+# its CA (BI-2D545A0C): DPF_MCP_URL and NODE_EXTRA_CA_CERTS are persisted in the
+# installing user's environment on every run, in both install modes, so a
+# re-run or an origin change converges without the agent-toolchain bootstrap.
+$clientEnvLib = Join-Path $DPF_DIR "scripts\installer\lib\mcp-client-env.ps1"
+if (-not (Test-Path -LiteralPath $clientEnvLib)) { $clientEnvLib = Join-Path $PSScriptRoot "scripts\installer\lib\mcp-client-env.ps1" }
+try {
+    . $clientEnvLib
+    $clientEnv = Resolve-DpfMcpClientEnv -InstallDir $DPF_DIR
+    if ((Set-DpfMcpClientEnv -ClientEnv $clientEnv) -ne "not-https") {
+        Write-OK "AI clients on this machine will connect to $($clientEnv.McpUrl)"
+    }
+} catch {
+    Write-Host "  [!] The AI client address could not be saved: $_" -ForegroundColor Yellow
 }
 
 Write-Step 7 10 "Starting the platform..."

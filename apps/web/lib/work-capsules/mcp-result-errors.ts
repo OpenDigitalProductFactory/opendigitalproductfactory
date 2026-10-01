@@ -1,4 +1,4 @@
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
 import { ScopeClaimLeaseHeldError } from "./scope-claim-lease";
 import { ScopeOverlapError } from "./work-capsule-store";

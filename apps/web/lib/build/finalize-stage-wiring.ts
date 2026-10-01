@@ -85,5 +85,38 @@ export async function finalizeBuildForReview(build: FinalizeBuild): Promise<Fina
     log: (summary) => {
       prisma.buildActivity.create({ data: { buildId: build.buildId, tool: "finalize", summary: summary.slice(0, 1000) } }).catch(() => {});
     },
+    // BI-FBA2FDBE: the latest gauntlet recorded for this exact gate identity.
+    // A pass or a could-not-run is never reused: only a real failing verdict.
+    priorFailure: async () => {
+      const { currentGauntletGateKey } = await import("./sandbox/run-and-record-gauntlet");
+      const { GUARD_DID_NOT_RUN_MARKER } = await import("./finalize-stage-runner");
+      const gateKey = await currentGauntletGateKey(build).catch(() => null);
+      if (!gateKey) return null;
+      const record = await prisma.externalEvidenceRecord.findFirst({
+        where: {
+          buildId: build.buildId,
+          operationType: "local_integration_ci",
+          details: { path: ["evidence", "gateKey"], equals: gateKey },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, details: true },
+      });
+      const prior = priorGauntletFailure(record?.details, GUARD_DID_NOT_RUN_MARKER);
+      return prior && record ? { ...prior, recordId: record.id } : prior;
+    },
   });
+}
+
+/** A reusable failing verdict from a recorded gauntlet's details, or null. */
+export function priorGauntletFailure(details: unknown, didNotRunMarker: string): { failedGuards: string[]; treeSha: string | null } | null {
+  const evidence = details && typeof details === "object" ? (details as { evidence?: unknown }).evidence : null;
+  if (!evidence || typeof evidence !== "object") return null;
+  const { passed, failedGuards, output } = evidence as { passed?: unknown; failedGuards?: unknown; output?: unknown };
+  if (passed !== false || !Array.isArray(failedGuards) || failedGuards.length === 0) return null;
+  if (typeof output === "string" && output.includes(didNotRunMarker)) return null;
+  const treeSha = (evidence as { treeSha?: unknown }).treeSha;
+  return {
+    failedGuards: failedGuards.filter((g): g is string => typeof g === "string"),
+    treeSha: typeof treeSha === "string" ? treeSha : null,
+  };
 }

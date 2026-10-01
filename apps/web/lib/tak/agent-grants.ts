@@ -170,6 +170,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   confirm_epic_portfolios: ["backlog_write"],
   propose_portfolio_budgets: ["backlog_read"],
   set_portfolio_budget: ["backlog_write"],
+  set_portfolio_owner: ["backlog_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],
@@ -222,6 +223,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // room-engagement (read). Room admission/coordinator right enforced separately.
   invite_room_participant: ["work_room_write"],
   appoint_room_coordinator: ["work_room_write"],
+  plan_account_handover: ["work_room_write"],
+  apply_account_handover: ["work_room_write"],
   get_coworker_room_engagement: ["work_room_read"],
   create_workroom: ["work_capsule_write"],
   plan_workroom_worktree: ["work_capsule_write"],

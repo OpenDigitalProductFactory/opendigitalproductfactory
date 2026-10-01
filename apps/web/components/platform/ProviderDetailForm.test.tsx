@@ -82,7 +82,11 @@ describe("ProviderDetailForm", () => {
     render(<ProviderDetailForm pw={providerFixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
     fireEvent.click(screen.getByRole("button", { name: "Save & ready provider" }));
     await waitFor(() => expect(screen.getByText(/Setup failed\. Retry\./)).toBeTruthy());
-    expect((screen.getByRole("button", { name: "Save & ready provider" }) as HTMLButtonElement).disabled).toBe(false);
+    // The failure message is set inside the transition; the button label and
+    // disabled state only reset once the transition settles, which can be a
+    // later render than the one that shows the message.
+    const button = await screen.findByRole("button", { name: "Save & ready provider" });
+    expect((button as HTMLButtonElement).disabled).toBe(false);
     expect(testProviderAuth).not.toHaveBeenCalled();
   });
   it("reuses the catalog prepared by saving and surfaces a failed probe", async () => {

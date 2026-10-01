@@ -1,4 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+
+const mockExec = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/shared/lazy-node", async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  lazyExec: () => mockExec,
+}));
+
 import {
   buildSandboxAppsWebCopyCommand,
   buildSandboxDevServerStopCommand,
@@ -12,6 +19,7 @@ import {
   buildSandboxRootScriptsCopyCommand,
   buildSandboxStageCommand,
   buildSandboxWorkspaceCleanupCommand,
+  listReleasableSandboxFiles,
   parseSandboxPort,
   parseSandboxChangedFiles,
   prefixSafeWorkspaceCommand,
@@ -313,5 +321,37 @@ describe("parseSandboxChangedFiles", () => {
       "apps/web/lib/a.ts",
       "apps/web/lib/b.ts",
     ]);
+  });
+});
+
+// BI-5C4933EB: the ship-path release check must read the build's own worktree.
+describe("listReleasableSandboxFiles", () => {
+  beforeEach(() => {
+    mockExec.mockReset();
+    mockExec.mockResolvedValue({ stdout: "apps/web/a.ts\n", stderr: "" });
+  });
+
+  it("stages, lists and resets in the given build workdir", async () => {
+    const files = await listReleasableSandboxFiles("sb-1", {
+      baseRef: "client/x",
+      workspace: "/workspace/.builds/FB-1",
+    });
+
+    expect(files).toEqual(["apps/web/a.ts"]);
+    const commands = mockExec.mock.calls.map((call) => call[0] as string);
+    expect(commands.length).toBeGreaterThan(0);
+    for (const command of commands) {
+      expect(command).toContain("cd /workspace/.builds/FB-1 &&");
+    }
+  });
+
+  it("defaults to the shared /workspace", async () => {
+    await listReleasableSandboxFiles("sb-1", { baseRef: "client/x" });
+
+    const commands = mockExec.mock.calls.map((call) => call[0] as string);
+    for (const command of commands) {
+      expect(command).toContain("cd /workspace &&");
+      expect(command).not.toContain(".builds");
+    }
   });
 });

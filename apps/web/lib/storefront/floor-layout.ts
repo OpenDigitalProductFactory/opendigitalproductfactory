@@ -14,7 +14,7 @@
 //
 // Spec: docs/superpowers/specs/2026-07-21-spatial-operational-views-design.md §3–4
 
-import type { Intent } from "@/components/ui/report-kit/statusColors";
+import type { Intent } from "@/lib/ui-model/statusColors";
 
 import {
   capacityStateIntent,

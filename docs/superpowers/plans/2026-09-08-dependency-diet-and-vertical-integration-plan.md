@@ -269,15 +269,16 @@ _Founder direction, 2026-09-25: too many dependencies, too much complexity, too 
 |---|---|---|
 | M1 production dependency set in the image | done | #5267 |
 | M2 diagram toolchain out of the workspace | done: mermaid out (#5253); `docx` retired, the architecture `.docx` builds through dpf-doctools (#5724) | #5253, #5724 |
-| M3 durable jobs onto Postgres | decided `own_postgres_jobs` (§10.6.1). Phase 1 done: every durable job goes through the `@/lib/jobs` facade (#5760). Phase 2 (the Postgres engine behind a flag) and phase 3 (retire Inngest) are open; the spec's §7 benchmarks need a Postgres runtime | #5760, [design](../specs/2026-09-25-postgres-durable-job-engine-design.md) |
+| M3 durable jobs onto Postgres | decided `own_postgres_jobs` (§10.6.1). Phase 1 done: every durable job goes through the `@/lib/jobs` facade (#5760). Phase 2 (the Postgres engine behind a flag) is BI-85E6EF14: on 2026-09-29 the spec was amended for concurrency limit N, cron and engine selection, and a phase-2 plan written, on branch `claude/m3-postgres-jobs`. Implementation is not admitted yet: the independent design reviews are blocked by platform defects (reviewers parking without their receipt writer, BI-EDC0DAF2; capacity-failed reviews not retryable at the same head, BI-4C4F7139). Phase 3 (retire Inngest) follows phase 2. The spec's §7 benchmarks need a Postgres runtime | #5760, [design](../specs/2026-09-25-postgres-durable-job-engine-design.md), BI-85E6EF14 |
 | M4 Prism replaced in the harness | done: an owned OpenAPI contract runtime; Prism retired on the dependency allowlist | [design](../specs/2026-09-25-harness-owned-contract-validator-design.md) |
-| M5 document cluster | partly absorbed by the office-document engine; its S9 (BI-D1B40D43, 2026-09-26) retired mammoth, read-excel-file and pdf-parse (with pdfjs-dist and @napi-rs/canvas): 39 resolved components, now on the sbom deny list. M5b done: invoice PDFs render through the dpf-doctools export path and `@react-pdf/renderer` is retired (#5770). The markdown half (`renderMarkdown()` on `markdown-it`, §10.6.1) was built on 2026-09-26 but not pushed: the pre-push UX-fit gate refuses it until it has evidence, either a sweep against a running portal or a propose-n-pick decision recorded through the DPF MCP. That session had neither | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md), #5770 |
+| M5 document cluster | partly absorbed by the office-document engine; its S9 (BI-D1B40D43, 2026-09-26) retired mammoth, read-excel-file and pdf-parse (with pdfjs-dist and @napi-rs/canvas): 39 resolved components, now on the sbom deny list. M5b done: invoice PDFs render through the dpf-doctools export path and `@react-pdf/renderer` is retired (#5770). The markdown half is done (2026-09-29, BI-0AB1FD47): one `renderMarkdown()` on `markdown-it` 14 with raw HTML off (§10.6.1, DI-D9292D812CFF) serves the user guide, wiki, coworker chat, build brief, workspace documents and the office export; `react-markdown` and `remark-gfm` are retired on the sbom allowlist, and `check-no-local-markdown-renderer.mjs` holds it at one renderer. Platform lockfile 959 → 872 resolved components | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md), #5770, #5803 |
 | M6 mobile workspace split | done (follow-ups: the Jest 30.5.2 patch landed deduped, #5727; the React pin is declared, guarded by `check-mobile-react-pin.mjs` and excluded from Dependabot, #5759): founder-approved 2026-09-25; `apps/mobile` resolves in its own workspace and lockfile; platform tree 1759 → 1062 packages, duplicated names 165 → 68 | `apps/mobile/pnpm-workspace.yaml`, `scripts/sbom/lockfile-roots.mjs` |
-| M7 multi-version cleanup | done: first pass #5289, second pass #5670 | #5289, #5670 |
+| M7 multi-version cleanup | done: first pass #5289, second pass #5670, third pass #5795 (Playwright 1.63 drops the second `fsevents`; `@inngest/ai` 0.1.8 drops the last TypeScript 5); nodemailer 10 (#5798) clears GHSA-6vj9-mwq6-2f5v and GHSA-8vvx-rff5-p5rq and leaves one nodemailer. Every remaining duplicate is held by an upstream pin or needs an override; the #5795 PR body lists them by cause | #5289, #5670, #5795, #5798 |
 | M8 override prune | done | #5670 |
 | M9 retired-substrate sweep | done: backup engines deleted (#5285); Neo4j and Qdrant residue swept and `check-retired-substrate.mjs` now forbids it (#5774) | #5285, #5774 |
 | M11 step 1 separate test program | done | #5268, #5292 |
-| M11 step 2 project references | blocked: a 657-file import cycle across `lib/mcp`, build, TAK and `app/actions` stops the split into referenced projects. Breaking the cycle comes first, starting with the 610 imports that are type-only. Baseline for the later steps: web typecheck 153 s wall, 5,558 MB peak RSS, 8,208 files | measured 2026-09-26 |
+| M11 step 2 project references | in progress. Project references need the all-imports graph (`import type` included) acyclic. Corrected 2026-09-29: the earlier "657 files, 610 type-only imports" came from a regex that also matched `import type`; converting imports to `import type` would have removed nothing. Measured with the TypeScript parser: the largest all-imports cycle was 678 files (519 without inline `import("x").T` type queries); the runtime cycle is 75. Moving the tool contract types out of `lib/mcp-tools.ts` took it to 134 (#5797), and the guard `check-no-web-import-cycle-growth.mjs` now holds it; moving the governed-execute contract types took it to 92 (#5805); the `ChatMessage`/`ContentBlock` and task-submit leaves took it to 81 (#5813); the approval, readiness, quiescence, data-asset and purpose-contract leaves took it to 75 and removed three more cycles (27, 18, 17) (#5825). 75 is the floor for type-only moves. It closes only through dynamic `import()` calls; counting static value imports alone, the load-order cycles are 11, 4 and 2 files, all around `lib/ai-inference.ts`. The design spec (2026-09-30 web runtime import cycle) measures what project references would buy and re-scopes step 2 | #5797, #5805, #5813, #5825 |
+| M11 step 4 measure, then ratchet | done: the web typecheck records its program in the same compile, and CI fails a PR that grows it by lines no diff explains (dependency types, excluded files pulled back in, a new source directory). Anchor `sbom/typecheck-baseline.json`: 8,223 files, 2,973,637 checked lines; the generated Prisma client is 54% of them, the largest remaining lever | #5793 |
 | §7 budgets ratchet | done | #5670 |
 
 ### 10.2 The totals regrew because nothing held them
@@ -338,7 +339,7 @@ The founder direction extends past packages to our own source. A read-only surve
 | S8 | hand-written MCP JSON-RPC clients in `scripts/` and packages | 7 beside `scripts/lib/mcp-client.mjs` | the existing client | S to M. **Done 2026-09-26** (#5725): scripts use the one MCP JSON-RPC client |
 | S9 | types redeclared outside `@dpf/types` | 13 pairs. `MeResponse` has already drifted (`platformRole: string \| null` vs `string`) | `@dpf/types`, with routes using `satisfies` | S. **Done 2026-09-26** (#5762): one declaration per `@dpf/types` wire type |
 | S10 | two graph-layout engines | `dagre` in `lib/graph`, `elkjs` in `lib/ea` | one engine (elkjs already covers layered layout); a dependency removal | M, WWMD. **Done 2026-09-26** (#5766): founder chose elkjs (§10.6.1); the dagre layouts are ported and `dagre` is retired |
-| S11 | first-party range drift | `net-snmp` `^3.26.3` vs `^3.14.0`; `dotenv` `^17.2.3` vs `^17.4.2`; `@prisma/client` `^7.9.0` vs `prisma` `^7.9.1`; exact `typescript` in `repo-guard-runtime`; `bcryptjs`, `read-excel-file` and `undici` declared in several workspaces | one specifier per package, then a pnpm `catalog:` so the next drift cannot happen | S. **Done 2026-09-25**: `dotenv`, `net-snmp` and `@prisma/client` aligned; the Prisma family now resolves to 7.9.1 together, where the client had been 7.9.0. `check-sbom-drift` now fails on specifier drift, with the accepted exceptions recorded in `sbom/baseline.json` (only the exact `typescript` pin). `catalog:` is deferred: the adp and harness images build without the workspace file |
+| S11 | first-party range drift | `net-snmp` `^3.26.3` vs `^3.14.0`; `dotenv` `^17.2.3` vs `^17.4.2`; `@prisma/client` `^7.9.0` vs `prisma` `^7.9.1`; exact `typescript` in `repo-guard-runtime`; `bcryptjs`, `read-excel-file` and `undici` declared in several workspaces | one specifier per package, then a pnpm `catalog:` so the next drift cannot happen | S. **Done 2026-09-25**: `dotenv`, `net-snmp` and `@prisma/client` aligned; the Prisma family now resolves to 7.9.1 together, where the client had been 7.9.0. `check-sbom-drift` now fails on specifier drift, with the accepted exceptions recorded in `sbom/baseline.json` (only the exact `typescript` pin). `catalog:` done 2026-09-30 (#5819): the 15 registry packages two or more platform workspaces declare are written once in the default catalog, and `check-sbom-drift` fails a shared package declared without the same `catalog:` reference. S12 had already moved every image onto the workspace file, so the deferral no longer held |
 | S12 | service images installing without the lockfile | `services/adp` and `services/integration-test-harness` ran `pnpm install` against their own `package.json`: no lockfile, overrides, release-age floor or patches. Measured on 2026-09-25, the harness resolved 25 versions and adp 13 versions that the lockfile of the day did not have (adp shipped `undici` 8.11.2 and `zod` 4.6.5 against locked 8.10.0 and 4.4.3); every registry release reached the image unvetted. The adp image also could not start: since 2026-07-10 `@dpf/integration-shared` has exported extensionless TypeScript source that Node cannot load from `node_modules` | both install `--frozen-lockfile` from the workspace and ship a `pnpm deploy --prod` tree, as edge-node does; `integration-shared/scripts/prepare-dist.mjs` makes its `dist/` Node-loadable; the adp build fails if its runtime imports do not load | S. **Done 2026-09-25** |
 
 Each S-move ships its ratchet in the same PR, in the shape the `check-no-local-*` guards already use. S1 to S3 and S5 are hygiene with no decision. S10 is an own-versus-rent call.
@@ -351,7 +352,16 @@ Each S-move ships its ratchet in the same PR, in the shape the `check-no-local-*
 
 ### 10.6.1 Founder decisions, 2026-09-26
 
-The founder decided the four open calls in the dependency-architecture thread on 2026-09-26, each on the recommended option. The DPF MCP server was unreachable from that session, so the `principle_decide` / decision-outcome records are still owed. This section is the durable record until they are filed.
+The founder decided the four open calls in the dependency-architecture thread on 2026-09-26, each on the recommended option. The DPF MCP server was unreachable from that session; the decisions were filed in the WWMD decision ledger on 2026-09-29 (`principle_decide`, platform-development), each recommending the founder's option with high confidence:
+
+| Call | Ledger record |
+|---|---|
+| M3 `own_postgres_jobs` (supersedes DI-66B0DEBEA992, keep Inngest, under that record's re-open trigger (a)) | DI-E52E32AEA1E4 |
+| S10 `elkjs` only | DI-459D332D727F |
+| M5 `markdown-it`, raw HTML off | DI-D9292D812CFF |
+| One branch and one PR per move | DI-8578ECC7DA6C |
+
+The `record_decision_outcome` step could not be filed: the connection's coworker lacks the `decision_record_create` grant (`agent-grant-missing`). The four outcomes stay unrecorded in that column until an administrator grants it.
 
 | Call | Decision | Consequence |
 |---|---|---|
@@ -360,25 +370,50 @@ The founder decided the four open calls in the dependency-architecture thread on
 | M5 markdown | one `renderMarkdown()` on `markdown-it`, raw HTML off | `react-markdown` and `remark-gfm` retire behind one primitive. |
 | Delivery | one branch and one PR per move | Moves ship in parallel on `claude/<move>` branches. |
 
-### 10.6.2 Re-measurement and what remains, 2026-09-29
+### 10.6.2 Re-measurement and what remains, 2026-09-29 (updated 2026-09-30)
 
-Measured with `node scripts/sbom/check-sbom-drift.mjs` on `main` at `fab98a17b`. The platform totals count the platform lockfile only; since M6, `apps/mobile` has its own lockfile and its own budget.
+Measured with `node scripts/sbom/check-sbom-drift.mjs` on `main` at `fab98a17b`, again at `38d6f07b7` after #5795, #5798 and #5803, and at `3d7a7bde1` after #5819, #5824 and #5825 (totals unchanged by those; #5824 moved brace-expansion to 5.0.12 and @grpc/grpc-js to 1.14.5 to clear GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7 and GHSA-m9gg-hp2v-232j). The platform totals count the platform lockfile only; since M6, `apps/mobile` has its own lockfile and its own budget.
 
 | Measure | 2026-09-08 | 2026-09-25 before | 2026-09-29 |
 |---|---|---|---|
-| Resolved components (platform) | 2000 | 1907 | 959 |
-| Duplicated names (platform) | 227 | 216 | 58 |
-| Excess instances (platform) | 291 | 261 | 61 |
-| Multi-major names (platform) | — | 124 | 27 |
+| Resolved components (platform) | 2000 | 1907 | 868 |
+| Duplicated names (platform) | 227 | 216 | 55 |
+| Excess instances (platform) | 291 | 261 | 58 |
+| Multi-major names (platform) | — | 124 | 25 |
 | Mobile lockfile | — | — | 951 components, 87 duplicated names |
 
-Every S-move and M1, M2, M4, M6, M7, M8 and M9 are done. Open:
+Every S-move and M1, M2, M4, M5, M6, M7, M8 and M9 are done. Open:
 
-- **M3 phases 2 and 3.** The Postgres engine behind a flag, then Inngest retires. Needs a Postgres runtime for the §7 benchmarks.
-- **M5 markdown.** Built but not pushed; it needs UX-fit evidence before `check-ux-fit-decision` lets it through. A session with a running portal or DPF MCP access lands it.
-- **M11 steps 2 to 4.** Step 2 waits on breaking the import cycle in §10.1. Step 4 (the `extendedDiagnostics` baseline) does not depend on step 2 and can go first.
-- **Owed records.** The §10.6.1 `principle_decide` records and the §10.7 backlog items, once a session has DPF MCP access.
+- **M3 phases 2 and 3.** The Postgres engine behind a flag (BI-85E6EF14, design on `claude/m3-postgres-jobs`, waiting on independent review), then Inngest retires. Needs a Postgres runtime for the §7 benchmarks.
+- **M5 markdown.** Done in #5803 (BI-0AB1FD47).
+- **M11 step 2.** The all-imports cycle is at its type-only floor of 75 (§10.1). The design spec (2026-09-30 web runtime import cycle) found the four heavy domains are 13% of check time and the Prisma client costs lines but no check time (`@ts-nocheck`), and recommends warm-starting the CI typecheck first, then breaking the three static load-order cycles. Step 4 is done (#5793). Step 3 (CI shape) is unchanged.
+- **edge-node image installs without `--frozen-lockfile`.** Found 2026-09-30: its deploy resolved net-snmp 3.29.1 against locked 3.26.3, so the image can ship unvetted versions. Fix in progress.
+- **Owed records.** Filed 2026-09-29; see §10.6.1 and §10.7. Only the decision-outcome column remains, blocked on a grant.
 
 ### 10.7 Backlog coverage
 
-The DPF MCP server was unreachable from the session that wrote this section, so M8 and the §7 ratchet ran against BI-5265CAD0 (M7 + M8), already filed. The S-moves need backlog items under `EP-8DC217EB` before they are implemented, and the next session with MCP access files them.
+M8 and the §7 ratchet ran against BI-5265CAD0 (M7 + M8). The S-moves were delivered before their backlog items existed; the items were filed under `EP-8DC217EB` on 2026-09-29 and closed with their PRs as evidence. The M-items were linked to the same epic.
+
+| Move | Item | State |
+|---|---|---|
+| S1 | BI-92ED9ECF | done (#5707, #5717) |
+| S2 | BI-0FEDF412 | done (#5718) |
+| S3 | BI-BA138E88 | done (#5690) |
+| S4 | BI-2CD11286 | done (#5773) |
+| S5 | BI-4D521509 | done (#5722) |
+| S6 | BI-210F06A4 | done (#5764) |
+| S7 | BI-CB991A70 | done (#5723) |
+| S8 | BI-5F59E987 | done (#5725) |
+| S9 | BI-FF951FC9 | done (#5762) |
+| S10 | BI-1023CDD1 | done (#5766) |
+| S11 | BI-3D37F899 | done (#5693) |
+| S12 | BI-82052153 | done (#5702) |
+| M2 | BI-DBDB8C6D | awaiting acceptance (#5253, #5724) |
+| M3 | BI-068BBA33 | open: phase 1 done (#5760); phases 2 and 3 open |
+| M5 | BI-0AB1FD47 | open: M5b done (#5770); markdown open |
+| M7 + M8 | BI-5265CAD0 | awaiting acceptance (#5289, #5670) |
+| M9 | BI-B1977CEE | awaiting acceptance (#5285, #5774) |
+| M11 | BI-0A3B155F | open: step 2 blocked by the import cycle |
+| M11 precursor | BI-F68CD3E3 | open: break the 657-file import cycle, starting with the 610 type-only imports |
+
+M2, M7 + M8 and M9 stop at awaiting acceptance. The readiness gate refused `done` for each: it wants research, plan-coverage and acceptance evidence those older items never recorded (`initiative_not_ready`: RESEARCH_REQUIRED, PLAN_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED, OBJECTIVE_BASELINE_REQUIRED, OBJECTIVE_RECONCILIATION_REQUIRED). The work is merged; acceptance is a reviewer's step.

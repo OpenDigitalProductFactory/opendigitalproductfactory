@@ -144,6 +144,15 @@ for _env_file in apps/web/.env.local .env; do
   fi
 done
 
+# Inngest signing and event keys (BI-3267763F): the root .env feeds the compose
+# stack, which refuses to render without them. Generated when missing, a
+# placeholder, or the old public default; never rotated once set.
+for _inngest_key in INNGEST_SIGNING_KEY INNGEST_EVENT_KEY; do
+  if [ "$(dpf_env_ensure_secret_hex "$_inngest_key" .env 32)" != "kept" ]; then
+    ok "Generated ${_inngest_key} in .env"
+  fi
+done
+
 # ── Compose services ─────────────────────────────────────────────────────────
 
 # PostgreSQL owns relational, vector, and graph persistence.

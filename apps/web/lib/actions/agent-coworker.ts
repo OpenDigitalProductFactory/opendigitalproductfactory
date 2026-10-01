@@ -12,7 +12,8 @@ import {
   NoProvidersAvailableError,
 } from "@/lib/ai-provider-priority";
 import { NoEligibleEndpointsError } from "@/lib/routed-inference";
-import { logTokenUsage, type ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { logTokenUsage } from "@/lib/ai-inference";
 import { buildCoworkerContextKey } from "@/lib/agent-coworker-context";
 import { resolveWithheldHistory } from "@/lib/tak/thread-history-withholding";
 import { getKnowledgePointersForRoute } from "@/lib/actions/route-knowledge-pointers";
@@ -23,7 +24,7 @@ import {
 } from "@/lib/agent-form-assist";
 // mcp-tools is imported dynamically at call sites to avoid NFT whole-project tracing;
 // type-only imports are erased at build time and safe.
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getActionsForRoute } from "@/lib/agent-action-registry";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";

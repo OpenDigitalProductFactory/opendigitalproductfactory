@@ -1,4 +1,4 @@
-import type { ChatMessage } from "./ai-inference";
+import type { ChatMessage } from "../routing/chat-message-types";
 import type { AsyncOperationRecord } from "./async-operation-lifecycle";
 import {
   AsyncProviderPollError,

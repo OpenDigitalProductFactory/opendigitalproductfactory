@@ -14,7 +14,7 @@
 // (2026-06-15): ai/gemma4:12B scores a clean single-action card at 0.10 and a
 // dense 24-card dashboard at 0.75 via the OpenAI-compatible image_url path.
 
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 export interface VisualCognitiveLoad {
   /** 0..1 — higher means harder for a first-time user to understand. */

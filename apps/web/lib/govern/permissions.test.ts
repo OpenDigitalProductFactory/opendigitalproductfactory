@@ -238,9 +238,11 @@ describe("getAccessibleSectionNavEntries()", () => {
       "Quotes",
       "Orders",
       "Sales Funnel",
+      "Footprint",
       "Marketing",
     ]);
     expect(tabs.map((tab) => tab.href)).toContain("/customer/marketing");
+    expect(tabs.map((tab) => tab.href)).toContain("/customer/footprint");
   });
 
   it("keeps marketing reachable for marketing-only users without exposing CRM tabs", () => {

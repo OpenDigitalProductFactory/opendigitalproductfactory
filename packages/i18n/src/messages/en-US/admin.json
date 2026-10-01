@@ -1,0 +1,15 @@
+{
+  "accountableOwner": {
+    "label": "Accountable owner:",
+    "unset": "No accountable owner recorded",
+    "change": "Change",
+    "set": "Set",
+    "consequence": "Every workroom without its own owner answers to this person.",
+    "picker": "Accountable owner",
+    "choose": "Choose a person",
+    "option": "{$name} ({$email})",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel"
+  }
+}

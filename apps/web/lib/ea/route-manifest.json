@@ -2013,17 +2013,6 @@
       "file": "apps/web/app/api/storefront/sign-up/route.ts"
     },
     {
-      "routePath": "/api/test/codex-responses",
-      "kind": "route",
-      "segments": [
-        "api",
-        "test",
-        "codex-responses"
-      ],
-      "dynamicParams": [],
-      "file": "apps/web/app/api/test/codex-responses/route.ts"
-    },
-    {
       "routePath": "/api/transcribe",
       "kind": "route",
       "segments": [
@@ -4692,6 +4681,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/customer/(crm)/engagements/page.tsx"
+    },
+    {
+      "routePath": "/customer/footprint",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "footprint"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/footprint/page.tsx"
     },
     {
       "routePath": "/customer/funnel",

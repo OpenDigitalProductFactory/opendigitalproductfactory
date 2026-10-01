@@ -1,14 +1,12 @@
 import { prisma } from "@dpf/db";
 import { isCurrentOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT } from "@/lib/auth/oauth-tokens";
 import { currentUserContext } from "@/lib/govern/current-user-context";
+import type { ExistingRemoteTask, RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
+import type { RemoteRiskClass } from "./mcp-task-submit-params";
 import {
   parseInitiativeReviewBinding,
   parseRemoteTaskSubmitParams,
   resumeWaitingRemoteTask,
-  type ExistingRemoteTask,
-  type RemoteRiskClass,
-  type RemoteTaskSubmitAuth,
-  type RemoteTaskSubmitOutcome,
 } from "./mcp-task-submit";
 import {
   deterministicExternalTaskRunId,

@@ -132,8 +132,8 @@
     ]
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.12.1",
-    "@playwright/test": "^1.62.0",
-    "tsx": "^4.23.15"
+    "@axe-core/playwright": "catalog:",
+    "@playwright/test": "^1.63.0",
+    "tsx": "catalog:"
   }
 }

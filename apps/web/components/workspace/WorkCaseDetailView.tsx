@@ -8,14 +8,16 @@ import { WorkroomBody } from "@/components/workspace/workroom/WorkroomBody";
 import { WorkroomHeader } from "@/components/workspace/workroom/WorkroomHeader";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
 import type { RoomWorkforce } from "@/lib/work-management/room-workforce.server";
+import type { WorkroomStageDecisionView } from "@/lib/work-management/workroom-stage-decision";
 
 type Props = {
   detail: WorkspaceWorkCaseDetailView;
   navigationContext?: Record<string, string | string[] | undefined>;
   workforce?: Pick<RoomWorkforce, "accountability" | "accountableDisplayName"> | null;
+  stageDecision?: WorkroomStageDecisionView | null;
 };
 
-export function WorkCaseDetailView({ detail, workforce, navigationContext = {} }: Props) {
+export function WorkCaseDetailView({ detail, workforce, stageDecision, navigationContext = {} }: Props) {
   if (detail.roomChoices?.length) {
     return (
       <Surface as="section" className="space-y-4 text-[var(--dpf-text)]" aria-labelledby="room-choice-title">
@@ -66,7 +68,7 @@ export function WorkCaseDetailView({ detail, workforce, navigationContext = {} }
 
   return (
     <div className="space-y-5 text-[var(--dpf-text)]">
-      <WorkroomHeader room={detail.room} summary={detail.summary} workforce={workforce} />
+      <WorkroomHeader room={detail.room} summary={detail.summary} workforce={workforce} stageDecision={stageDecision} />
       <WorkroomBody detail={detail} room={detail.room} />
     </div>
   );

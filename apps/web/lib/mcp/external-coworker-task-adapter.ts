@@ -1,10 +1,10 @@
 import type { UserContext } from "@/lib/permissions";
-import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import {
   parseInitiativeReviewBinding,
   submitRemoteCoworkerTask,
   validateInitiativeReviewAuthorityScope,
-  type InitiativeReviewBinding,
 } from "@/lib/mcp-task-submit";
 import { validateObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
 

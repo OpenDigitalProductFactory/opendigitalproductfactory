@@ -548,7 +548,10 @@ describe("generated route-shell registry", () => {
     // 214 -> 213: /delivery is now a redirect to the Improve & deliver area home
     // (EP-2FB6C0CC), so there is nothing to measure there. The area home itself is
     // a dynamic ([key]) route, excluded until the fixture mints one.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(213);
+    // 213 -> 214: /customer/footprint (BI-4EC1D572) — the market footprint reads
+    // business context, customer site addresses and active fulfilments; a static
+    // SVG with no wall-clock or live-orchestration state, so it is measurable.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(214);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.

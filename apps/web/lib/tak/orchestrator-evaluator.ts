@@ -10,7 +10,7 @@ import { loadEndpoints } from "./agent-router-data";
 import { getTaskType } from "@/lib/task-types";
 import { updateEndpointDimensionScores } from "../routing/production-feedback";
 import type { SensitivityLevel } from "./agent-router-types";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 

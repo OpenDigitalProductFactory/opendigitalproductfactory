@@ -1,9 +1,8 @@
 import {
   purposeContractSourceSchema,
+  type PurposeContractModule,
   type PurposeContractSource,
 } from "../page-purpose";
-
-export type PurposeContractModule = readonly PurposeContractSource[];
 
 import { ARCHETYPE_READINESS_PURPOSE_CONTRACTS } from "./archetype-readiness";
 import { GRAPH_EXPLORER_PURPOSE_CONTRACTS } from "./graph-explorer";
@@ -20,6 +19,7 @@ import { ADOPTION_WAITING_LIST_PURPOSE_CONTRACTS } from "./adoption-waiting-list
 import { PET_RESCUE_PURPOSE_CONTRACTS } from "./pet-rescue";
 import { MAILROOM_PURPOSE_CONTRACTS } from "./mailroom";
 import { AREA_HOME_PURPOSE_CONTRACTS } from "./area-home";
+import { MARKET_FOOTPRINT_PURPOSE_CONTRACTS } from "./market-footprint";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   ARCHETYPE_READINESS_PURPOSE_CONTRACTS,
@@ -37,6 +37,7 @@ const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   PET_RESCUE_PURPOSE_CONTRACTS,
   MAILROOM_PURPOSE_CONTRACTS,
   AREA_HOME_PURPOSE_CONTRACTS,
+  MARKET_FOOTPRINT_PURPOSE_CONTRACTS,
 ];
 
 export function buildPurposeContractSourceIndex(

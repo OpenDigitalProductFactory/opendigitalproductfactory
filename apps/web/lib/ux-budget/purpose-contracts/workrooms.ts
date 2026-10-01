@@ -1,4 +1,4 @@
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const WORKROOM_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

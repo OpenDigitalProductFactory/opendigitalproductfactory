@@ -19,7 +19,7 @@ import { prisma } from "@dpf/db";
 import { SANDBOX_RECOVERY_ACTIONS, isSandboxRecoveryAction } from "@/lib/build/sandbox/sandbox-admin-types";
 import { lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { resolveActiveBuildId, extractBuildIdHint, logBuildActivity } from "@/lib/mcp/build-tool-helpers";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 function optionalString(value: unknown): string | null {

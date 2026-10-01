@@ -21,6 +21,7 @@ model User {
   agentThreads                     AgentThread[]
   apiTokens                        ApiToken[]
   mcpApiTokens                     McpApiToken[]
+  portfolioAccountableSets         Portfolio[]                         @relation("PortfolioAccountableSetBy")
   ownedOAuthClients                OAuthClient[]                       @relation("OAuthClientOwner")
   oauthAuthorizationCodes          OAuthAuthorizationCode[]
   oauthAuthorityBindings           AuthorityBinding[]
@@ -205,6 +206,7 @@ model Principal {
   deferredBacklogItems                BacklogItem[]                       @relation("BacklogDeferralOwner")
   sponsorPrincipal                    Principal?                          @relation("PrincipalSponsor", fields: [sponsorPrincipalId], references: [id])
   accountableForOrganizations         Organization[]                      @relation("OrganizationTopAccountable")
+  accountableForPortfolios            Portfolio[]                         @relation("PortfolioAccountable")
   sponsoredPrincipals                 Principal[]                         @relation("PrincipalSponsor")
   communicationChannelBindings        CommunicationChannelBinding[]
   mailboxAccountsCreated              MailboxAccount[]                    @relation("MailboxAccountCreatedBy")

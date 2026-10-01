@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { AiReadinessSummaryPanel } from "./AiReadinessSummaryPanel";
-import type { AiReadinessSummary } from "@/lib/ai-readiness/readiness-summary";
+import type { AiReadinessSummary } from "@/lib/ai-readiness/readiness-summary-types";
 
 const summary: AiReadinessSummary = {
   state: "blocked",

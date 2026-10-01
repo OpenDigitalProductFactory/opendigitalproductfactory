@@ -11,7 +11,7 @@ import {
   getRecruitingPipeline,
   type RecruitingPipelineClient,
 } from "@/lib/recruiting/pipeline-read-model";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 

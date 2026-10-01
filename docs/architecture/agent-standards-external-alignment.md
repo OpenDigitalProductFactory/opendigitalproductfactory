@@ -388,6 +388,22 @@ Action receipts and operational surveillance feed subsequent qualification and a
 The standards family therefore connects pre-deployment evaluation to runtime behavior and
 post-deployment revalidation rather than treating testing as a one-time gate.
 
+### 10.7 Approval Is a Decision, Not a Keystroke
+
+The working-draft [Gated Permissions Process (`GPP`)](gated-permissions-process.md) binds each
+consequential capability class to a gate in a named owning authority scope, attached to a
+work-shape stage. External work on agent authorization covers parts of this:
+
+- MCP OAuth scopes and tool annotations work at the server or scope level.
+- Cedar- and OPA-based gateways decide principal × tool × context per call.
+- Identity platforms record an accountable sponsor.
+
+None of these records which authority may decide that a class of action is admissible for a given
+piece of work. `GPP` supplies that binding and composes the others beneath it. It can compile to a
+policy engine, and it is carried by the protocol's own authorization. The evidence base, nearest
+prior work (including arXiv 2606.03518 and ITIL change enablement) and its limits are recorded in
+the informative [market and thought-leadership landscape](agent-governance-market-landscape-2026.md).
+
 ## 11. Standards-Contribution Profile
 
 A contribution derived from this family should contain:
