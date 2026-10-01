@@ -148,7 +148,7 @@ export function retireProjectDpfConnector({ root, url, env = process.env }) {
 }
 
 if (isEntryModule(import.meta.url)) {
-  let code = EXIT_LEFT_ALONE;
+  let code;
   try {
     const [root, url] = process.argv.slice(2);
     const result = retireProjectDpfConnector({ root: root || process.cwd(), url });
