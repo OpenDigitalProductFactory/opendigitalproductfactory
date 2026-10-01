@@ -21,6 +21,21 @@ The phase ships as one PR because nothing in it is reachable until the flag is s
 | 7 | **Engine selection.** `DPF_JOBS_ENGINE` (`inngest` default, `postgres`) and `DPF_JOBS_POSTGRES_FUNCTIONS`; a routing client behind `jobs` that registers each function with its engine and sends to both engines while any function remains on Inngest. `serveJobs` serves only Inngest-routed functions. | `apps/web/lib/jobs/index.ts`, `routing.ts`, `serve.ts` | flag unset: every existing job test passes and the Inngest adapter is byte-for-byte the call path (AC-1) |
 | 8 | **Benchmarks and drills (spec §7).** A script that drives the engine against the platform Postgres (or its `local-integration-ci` slot) at 10× the busiest observed hour, measures event-to-first-step p50/p99 against Inngest on the same host, claim throughput for 125 functions / 84 keys in an overlapping cron minute, extra WAL and connections, and kills the worker mid-step, mid-sleep and mid-wait. Results are written into the spec's §7, pass or fail. | `apps/web/scripts/job-engine-bench.ts`, spec §7 | the numbers themselves, recorded |
 
+## Traceability
+
+Objectives and acceptance statements are the spec's §6.1 governed scope manifest. Contracts and flows name the spec sections and code each step realizes.
+
+| Step | Requirements | Contracts | Flows | Verification |
+|---|---|---|---|---|
+| 1 | OBJ-M3-SCHEMA | contract:job-engine-tables (spec §5.2) | flow:migration-apply | AC-M3-MIGRATION |
+| 2 | OBJ-M3-SEMANTICS | contract:cron-evaluator (lib/operate/cron-next-run.ts) | flow:cron-tick (spec §5.4) | AC-M3-PARK |
+| 3 | OBJ-M3-SEMANTICS | contract:jobs-client (apps/web/lib/jobs/types.ts JobsClient) | flow:step-replay (spec §5.3) | AC-M3-REPLAY, AC-M3-PARK, AC-M3-FAIL |
+| 4 | OBJ-M3-CONCURRENCY, OBJ-M3-RECOVERY | contract:concurrency-slots (spec §5.3) | flow:claim-and-lease (spec §5.3) | AC-M3-LIMIT, AC-M3-LEASE |
+| 5 | OBJ-M3-SEMANTICS | contract:jobs-client (apps/web/lib/jobs/types.ts JobsClient) | flow:send-wait-cancel (spec §5.3) | AC-M3-DEDUPE, AC-M3-PARK, AC-M3-FAIL |
+| 6 | OBJ-M3-RECOVERY | contract:worker-loop | flow:cron-tick (spec §5.4) | AC-M3-LEASE |
+| 7 | OBJ-M3-PARITY | contract:engine-selection (spec §5.5) | flow:engine-routing | AC-M3-FLAG-OFF |
+| 8 | OBJ-M3-EVIDENCE | contract:benchmark-record (spec §7) | flow:benchmark-and-drills | AC-M3-BENCH |
+
 ## Guardrails
 
 - The `inngest` import stays confined to `lib/jobs/inngest-adapter.ts` and `serve.ts` (`check-no-direct-job-engine-import.mjs`); the Postgres engine lives under `lib/jobs/postgres/` and imports neither.
