@@ -30,7 +30,10 @@ export async function listCoworkerDataAccessChoices(userId: string): Promise<Cow
 }
 
 /** Shared by the page and mutation; login claims never decide current access. */
-export async function coworkerDataAccessEditor(userId: string, db: Prisma.TransactionClient = prisma) {
+export async function coworkerDataAccessEditor(
+  userId: string,
+  db: Prisma.TransactionClient = prisma,
+): Promise<Prisma.PrincipalModel["sensitivityClearance"] | null> {
   const human = await currentUserContext(userId, db);
   if (!human || !can(human, "manage_agents")) return null;
   const owner = await db.principalAlias.findFirst({

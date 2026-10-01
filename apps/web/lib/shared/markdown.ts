@@ -10,7 +10,8 @@
 // rendered, so model output, wiki bodies and uploaded documents cannot inject
 // markup. Link and image URLs go through markdown-it's validateLink, which
 // refuses javascript:, vbscript:, file: and non-image data: URLs; a refused
-// link stays as literal text.
+// link stays as literal text. Images render only from this origin or embedded
+// data unless the caller passes resolveImage (see the image rule below).
 //
 // GFM coverage: tables, strikethrough and autolinked URLs come from
 // markdown-it's defaults plus linkify; task-list items (`- [ ]`, `- [x]`) are
@@ -50,7 +51,10 @@ export type RenderMarkdownOptions = {
   resolveLink?: (href: string) => MarkdownLink;
   /** With no resolveLink: open absolute http(s) links in a new tab. */
   externalLinksInNewTab?: boolean;
-  /** Rewrite an image source. Null renders the image as `[alt]` text. */
+  /**
+   * Rewrite an image source. Null renders the image as `[alt]` text. Without
+   * it, only same-origin and embedded images render: off-origin ones are text.
+   */
   resolveImage?: (src: string, alt: string) => string | null;
   /**
    * Render a fenced block yourself. Return trusted HTML, or null for the
@@ -177,15 +181,44 @@ md.renderer.rules.link_open = (tokens, idx, _opts, env) => {
   return renderToken(tokens, idx, _opts);
 };
 
+// An image loads the moment the HTML is shown, so an image URL in model
+// output, a wiki body or an uploaded document is a request the reader never
+// chose to make. A host-bearing URL can carry data out in its query string
+// (the EchoLeak pattern, BI-94E08D68). With no resolveImage, an image renders
+// only when it stays on this origin or is embedded; a caller that shows
+// trusted off-origin images says so by passing resolveImage.
+const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+const EMBEDDED_IMAGE = /^data:image\//i;
+const NETWORK_PATH = /^[\\/]{2}/;
+
+function decoded(src: string): string {
+  try {
+    return decodeURIComponent(src);
+  } catch {
+    return src;
+  }
+}
+
+function staysOnOrigin(src: string): boolean {
+  // Judge the decoded form, so `/%5Chost` is read as the `/\host` it encodes
+  // rather than trusting how a browser will treat the escape.
+  const value = decoded(src).trim();
+  if (EMBEDDED_IMAGE.test(value)) return true;
+  return value !== "" && !URL_SCHEME.test(value) && !NETWORK_PATH.test(value);
+}
+
+function sameOriginImage(src: string): string | null {
+  return staysOnOrigin(src) ? src : null;
+}
+
 md.renderer.rules.image = (tokens, idx, opts, env, self) => {
   const token = tokens[idx];
   const options = optionsOf(env);
   const alt = self.renderInlineAsText(token.children ?? [], opts, env);
-  if (options.resolveImage) {
-    const src = options.resolveImage(token.attrGet("src") ?? "", alt);
-    if (src === null) return alt ? escapeHtml(`[${alt}]`) : "";
-    token.attrSet("src", src);
-  }
+  const resolve = options.resolveImage ?? sameOriginImage;
+  const src = resolve(token.attrGet("src") ?? "", alt);
+  if (src === null) return alt ? escapeHtml(`[${alt}]`) : "";
+  token.attrSet("src", src);
   token.attrSet("alt", alt);
   return renderToken(tokens, idx, opts);
 };

@@ -1,11 +1,11 @@
 import { normalizeWorkCapsuleScopeInput, parseScopeClaims, type ScopeClaim, type WorkCapsuleScopeInput } from "@/lib/work-capsules";
-import { readWorkShapeClaim, readWorkroomShapeClaim, resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { readWorkShapeClaim, readWorkroomShapeClaim, resolveCurrentWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 /** Persistence accepts only an executable, exact definition version. */
 export function normalizePersistedScope(input?: WorkCapsuleScopeInput | null) {
   const scope = normalizeWorkCapsuleScopeInput(input);
-  if (scope.workShape && !resolveWorkShapeClaim([{ workShape: scope.workShape }])) {
+  if (scope.workShape && !resolveCurrentWorkShapeClaim([{ workShape: scope.workShape }])) {
     throw new Error(`workShape ${scope.workShape} is not an available execution definition version.`);
   }
   return scope;

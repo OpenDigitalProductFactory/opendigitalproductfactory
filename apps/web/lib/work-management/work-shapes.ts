@@ -29,6 +29,7 @@ import { COWORKER_STANDING_SHAPES_OPERATE } from "./coworker-standing-shapes-ope
 import { DELIVERY_SHAPES } from "./delivery-shapes";
 import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { STANDING_SHAPES } from "./standing-operations-shapes";
+import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 import type { WorkShapeEvidenceKind } from "./work-shape-evidence-kinds";
 
 /** §8.11.1 trigger vocabulary, verbatim and closed. */
@@ -286,6 +287,14 @@ export function listWorkShapes(): WorkShapeDefinition[] {
 
 export function getWorkShape(key: string): WorkShapeDefinition | null {
   return ALL_SHAPES[key] ?? null;
+}
+
+/** An exact `key@version`: the current definition, or a superseded one a live
+ *  room may still pin (work-shape-prior-versions.ts). Null when neither holds it. */
+export function getWorkShapeVersion(key: string, version: string): WorkShapeDefinition | null {
+  const current = getWorkShape(key);
+  if (current?.version === version) return current;
+  return WORK_SHAPE_PRIOR_VERSIONS.find((shape) => shape.key === key && shape.version === version) ?? null;
 }
 
 /** Does this shape describe work that RECURS rather than finishing?

@@ -908,11 +908,40 @@ goes on `KNOWN_STAGE_TOOL_GAPS` (`stage-tool-gaps.ts`) with the reason. One gap
 closed as part of this work: `customer-advisor` gained `storefront_read`, so the
 inquiry draft stage can call `list_storefront_activity`.
 
-Shape versions were not bumped. GPP §2.1 treats a capability-set change as a
-material change, but a room's `workShape` claim pins an exact version and
-`resolveWorkShapeClaim` drops a room whose version no longer matches, which
-would stop every live standing room. Versioning capability sets without
-orphaning rooms is a follow-on.
+Shape versions were not bumped by that change, because at the time a bump
+stopped every room pinned to the old version. The next section covers how a
+widening now lands.
+
+## A new shape version reaches a live room only by rebind (BI-CB5C0DCE)
+
+A room pins `key@version`. GPP §2.1.1 says narrowing a binding may apply in
+place, but widening one (a new tool, stage, evidence kind or grant, a changed
+accountable principal, or a governed decision relaxed to a status change)
+needs a new version and a fresh gate decision. Kernel decision DI-E4DAF14D9343
+chose bump-and-rebind. Design:
+[spec](../superpowers/specs/2026-10-01-workroom-shape-rebind-design.md).
+
+- **A bump never stops a room.** The superseded definition moves to
+  `WORK_SHAPE_PRIOR_VERSIONS` (`work-shape-prior-versions.ts`) in the same
+  change. `resolveWorkShapeClaim` resolves it, so pinned rooms keep running.
+  `normalizePersistedScope` still admits only the current version for a new
+  room or an adopted claim.
+- **The diff decides what kind of change it is.** `diffWorkShapeBinding`
+  (`work-shape-binding-diff.ts`) matches stages by key and classifies each
+  row; any widening row makes the whole change a widening.
+- **One governed action moves the pin.** `rebindWorkroomShapeForUser`
+  (`workroom-shape-rebind.server.ts`) checks the following, in order:
+  - The caller is the room's accountable owner or a platform manager.
+  - The target is the current version of the room's own shape.
+  - No dispatched stage is still running.
+  - A widening carries a rationale.
+
+  It then writes the claim behind the store's compare-and-set. It records the
+  decision as `decision-record` evidence with no stage key, so a rebind can
+  never complete a stage, and adds a `workshape-rebound` activity. Receipts
+  are keyed by stage, so a stage whose binding did not change does not re-run.
+- **MCP:** `rebind_workroom_shape` previews by default (`dryRun`). A task run
+  may preview but never apply: the decision is a person's.
 
 ## Related references
 
