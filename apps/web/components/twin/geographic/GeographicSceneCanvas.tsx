@@ -20,22 +20,13 @@ import {
   geographicRendererCapability,
   type GeographicRendererCapability,
   type InstalledPack,
-} from "./geographic-capability";
+} from "@/lib/twin/geographic-capability";
 import {
   buildGeographicStyle,
   GEOGRAPHIC_SOURCE_IDS,
   type GeographicStyleTokens,
 } from "@dpf/types";
-
-/** The CSS custom properties each style token is read from on the web. */
-export const GEOGRAPHIC_TOKEN_VARIABLES: Record<keyof GeographicStyleTokens, string> = {
-  background: "--dpf-bg",
-  surface: "--dpf-surface-2",
-  text: "--dpf-text",
-  muted: "--dpf-muted",
-  border: "--dpf-border",
-  accent: "--dpf-accent",
-};
+import { GEOGRAPHIC_TOKEN_VARIABLES } from "./geographic-token-variables";
 
 type MapLibreModule = typeof import("maplibre-gl");
 type PMTilesModule = typeof import("pmtiles");

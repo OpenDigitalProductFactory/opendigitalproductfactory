@@ -2,7 +2,7 @@
 // same scene the web customer map draws, plus the installed packs that cover
 // it, so the phone can pick a street map or say why there is none.
 
-import { packCoveringBounds } from "@/components/twin/geographic/geographic-capability";
+import { packCoveringBounds } from "@/lib/twin/geographic-capability";
 import type { CustomerMap, CustomerMapSite } from "@/lib/crm/customer-map";
 import { buildGeographicSceneModel, type GeographicSceneModel } from "@/lib/twin/geographic-scene";
 

@@ -37,6 +37,14 @@ const EXEMPT_DEDUP = new Set([
   // pinned an older @types/node major, four copies of one types package
   // (plan 2026-09-08 M7, BI-5265CAD0). Not a CVE floor.
   "@types/node@<26",
+  // apps/mobile only: the injected @dpf/* packages declare shared deps as
+  // "catalog:", which pnpm refuses in a file: dependency when the mobile tree
+  // re-resolves. These map each to the root catalog range (BI-3DAE2169). Not a
+  // CVE floor.
+  "@dpf/validators>zod",
+  "@dpf/validators>typescript",
+  "@dpf/types>typescript",
+  "@dpf/api-client>typescript",
 ]);
 
 // Documented workaround families (not CVE floors): the jest-30 unification block
