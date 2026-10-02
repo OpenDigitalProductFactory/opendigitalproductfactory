@@ -140,6 +140,8 @@ export function GeographicSceneCanvas({
   useEffect(() => {
     let cancelled = false;
     let observer: MutationObserver | null = null;
+    let colorScheme: MediaQueryList | null = null;
+    let removeColorScheme: () => void = () => {};
     const element = container.current;
     if (!element) return;
 
@@ -186,12 +188,18 @@ export function GeographicSceneCanvas({
       instance.on("click", (event) => {
         onPlace.current?.(event.lngLat.lat, event.lngLat.lng);
       });
-      // Rebuild the style when the theme changes; sources come back empty, so refill them.
-      observer = new MutationObserver(() => {
+      // Rebuild the style when the theme changes, whether the app switches its
+      // theme class or the device switches colour scheme; sources come back
+      // empty, so refill them.
+      const restyle = () => {
         instance.setStyle(style());
         instance.once("style.load", () => pushData(instance));
-      });
+      };
+      observer = new MutationObserver(restyle);
       observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "style"] });
+      colorScheme = window.matchMedia?.("(prefers-color-scheme: dark)") ?? null;
+      colorScheme?.addEventListener("change", restyle);
+      removeColorScheme = () => colorScheme?.removeEventListener("change", restyle);
     })().catch(() => {
       if (!cancelled) setPhase({ kind: "failed" });
     });
@@ -199,6 +207,7 @@ export function GeographicSceneCanvas({
     return () => {
       cancelled = true;
       observer?.disconnect();
+      removeColorScheme();
       map.current?.remove();
       map.current = null;
     };
