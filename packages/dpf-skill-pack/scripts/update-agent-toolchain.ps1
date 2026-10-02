@@ -2,6 +2,7 @@ param(
     [string]$SkillPackPath = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
     [string]$McpUrl = $(if ($env:DPF_MCP_URL) { $env:DPF_MCP_URL } else { "http://127.0.0.1:3000/api/mcp/v1" }),
     [switch]$CodexOnly,
+    [switch]$CodexPluginOnly,
     [switch]$ClaudeOnly,
     [switch]$SkipClaudeCliInstall,
     [switch]$DryRun
@@ -23,6 +24,7 @@ $argsList = @(
     "--mcp-url", $McpUrl
 )
 if ($CodexOnly) { $argsList += "--codex-only" }
+if ($CodexPluginOnly) { $argsList += "--codex-plugin-only" }
 if ($ClaudeOnly) { $argsList += "--claude-only" }
 if ($SkipClaudeCliInstall) { $argsList += "--skip-claude-cli-install" }
 if ($DryRun) { $argsList += "--dry-run" }

@@ -603,6 +603,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-self-task-cadence-parity.test.mjs"),
       node("scripts/check-self-task-cadence-parity.mjs"),
     ]),
+    // A pack skill's `category` groups the default-visible catalog on
+    // /platform/ai/skills, so an invented value permanently adds a group header to
+    // a page under a shrink-only words-on-arrival ratchet. The sibling `capability`
+    // field is NOT re-validated here — skill-capability-key-guard owns it.
+    guard("skill-pack-category", "Skill Pack Category", [
+      node("--test", "scripts/check-skill-pack-category.test.mjs"),
+      node("scripts/check-skill-pack-category.mjs"),
+    ]),
     guard("archetype-completeness-guard", "Archetype Completeness Guard", [
       node("--test", "scripts/check-archetype-completeness.test.mjs"),
       node("scripts/check-archetype-completeness.mjs"),
