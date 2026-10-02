@@ -38,6 +38,8 @@ The core behavior. After A, "Upgrade now" with a build in flight waits for it an
 
 ## Slice C — the operator can act while it waits
 
+**Status (2026-10-01):** implemented. `POST /api/ops/self-upgrade/control` (view_operations; lib/self-upgrade/drain-control.ts) carries keep-waiting / force / abort. It is the only `/api/ops` path allow-listed in lib/proxy/quiescence-gate.ts. The upgrade page shows time waited against the limit and offers Keep waiting at `awaiting-operator`; Force now and Abort now post to the route. MCP safe list (item 19): `heartbeat_workroom` and `heartbeat_runtime_target` are allowed during a drain (liveness only); evidence writes stay refused and are retried after. The `activity-in-flight` skip copy is kept, because historical runs still carry it.
+
 17. Move Force now / Keep waiting / Abort to one authenticated route (`/api/ops/self-upgrade/control`, `requireOpsAccess`). Allow-list only that route in `lib/proxy/quiescence-gate.ts`; every other mutation stays refused. Test both.
 18. The upgrade page shows a waiting panel (builds and phases still running, time waited, the limit). On `awaiting-operator` it shows Keep waiting / Force now / Abort. Remove the skip/defer copy for this path; retire `activity-in-flight` in `skip-reason.ts`. A 503 during a drain is not shown as "restarting".
 19. Decide which MCP evidence and heartbeat tools join the drain's safe list, so external agents are not locked out for an hour.

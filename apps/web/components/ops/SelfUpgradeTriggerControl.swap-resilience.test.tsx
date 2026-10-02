@@ -86,8 +86,12 @@ const drainingQuiescence = {
   blockers: [],
 };
 
+const fetchMock = vi.fn();
+
 beforeEach(() => {
   vi.clearAllMocks();
+  fetchMock.mockReset();
+  vi.stubGlobal("fetch", fetchMock);
 });
 
 // ─── isExpectedDuringSwap (pure) ───────────────────────────────────────────
@@ -159,7 +163,7 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
   });
 
   it("treats a severed Force-now request during a drain as applying, not a crash", async () => {
-    forceMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
 
     render(
       <SelfUpgradeTriggerControl
@@ -177,6 +181,34 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
     await waitFor(() => {
       expect(screen.getByText(/Applying the upgrade/i)).toBeInTheDocument();
     });
+  });
+
+  // BI-F9EE05E5 slice C: the drain controls post to a route the proxy admits
+  // during a drain; a server action to the page is refused exactly then.
+  it("sends Force now through the drain control route", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    render(<SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} quiescence={drainingQuiescence} />);
+    fireEvent.click(screen.getByRole("button", { name: /Force upgrade run QR-DRAIN now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /confirm force/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/ops/self-upgrade/control");
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ runId: "QR-DRAIN", action: "force" });
+    expect(forceMock).not.toHaveBeenCalled();
+  });
+
+  it("offers Keep waiting only once the upgrade pauses for the operator, and says why", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const { rerender } = render(<SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} quiescence={drainingQuiescence} />);
+    expect(screen.queryByRole("button", { name: /Keep waiting/i })).toBeNull();
+    expect(screen.getByText(/Waiting for running work to finish before installing/i)).toBeInTheDocument();
+
+    const paused = { ...drainingQuiescence, run: { ...drainingQuiescence.run, status: "awaiting-operator" } };
+    rerender(<SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} quiescence={paused} />);
+    expect(screen.getByText(/Work is still running after .* min. New work stays paused/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Keep waiting/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body))).toEqual({ runId: "QR-DRAIN", action: "keep-waiting" });
   });
 
   it("clears the indeterminate admission latch once a durable run appears", async () => {

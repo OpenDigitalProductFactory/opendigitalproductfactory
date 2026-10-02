@@ -17,7 +17,20 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { triggerSelfUpgrade, forceActiveRun, abortActiveRun } from "@/lib/actions/promotions";
+import { triggerSelfUpgrade } from "@/lib/actions/promotions";
+
+// BI-F9EE05E5 slice C: drain controls go through a route the proxy admits
+// during a drain; a server action posts to the page and is refused then.
+async function postDrainControl(runId: string, action: "keep-waiting" | "force" | "abort"): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch("/api/ops/self-upgrade/control", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runId, action }),
+  });
+  if (res.ok) return { ok: true };
+  const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+  return { ok: false, error: body?.error?.message ?? `Request failed (${res.status})` };
+}
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 import {
   describeSelfUpgradeActionState,
@@ -203,7 +216,7 @@ export default function SelfUpgradeTriggerControl({
     setInFlightError(null);
     startTransition(async () => {
       try {
-        const r = await forceActiveRun(runId);
+        const r = await postDrainControl(runId, "force");
         setForceConfirm(false);
         if (!r.ok) setInFlightError(r.error ?? "Force failed");
         refreshStatus();
@@ -226,7 +239,7 @@ export default function SelfUpgradeTriggerControl({
     setInFlightError(null);
     startTransition(async () => {
       try {
-        const r = await abortActiveRun(runId);
+        const r = await postDrainControl(runId, "abort");
         setAbortConfirm(false);
         if (!r.ok) setInFlightError(r.error ?? "Abort failed");
         refreshStatus();
@@ -240,6 +253,34 @@ export default function SelfUpgradeTriggerControl({
       }
     });
   }
+
+  // At the bound the upgrade pauses for the operator; Keep waiting extends it.
+  function handleKeepWaiting() {
+    const runId = quiescence?.run?.runId;
+    if (!runId) return;
+    setInFlightError(null);
+    startTransition(async () => {
+      try {
+        const r = await postDrainControl(runId, "keep-waiting");
+        if (!r.ok) setInFlightError(r.error ?? "Keep waiting failed");
+        refreshStatus();
+      } catch (err) {
+        setInFlightError(getErrorMessage(err) || "Keep waiting failed");
+      }
+    });
+  }
+
+  const drainRun = quiescence?.run ?? null;
+  const awaitingOperator = drainRun?.status === "awaiting-operator";
+  const waitedMinutes = drainRun?.drainStartedAt
+    ? Math.max(0, Math.round((Date.now() - Date.parse(drainRun.drainStartedAt)) / 60_000))
+    : null;
+  const limitMinutes = drainRun?.budgetMs ? Math.round(drainRun.budgetMs / 60_000) : null;
+  const waitingLine = drainRun && waitedMinutes !== null
+    ? awaitingOperator
+      ? `Work is still running after ${waitedMinutes} min. New work stays paused. Keep waiting, force the upgrade now, or abort it.`
+      : `Waiting for running work to finish before installing — ${waitedMinutes}${limitMinutes ? ` of ${limitMinutes}` : ""} min. New work is paused.`
+    : null;
 
   if (!enabled) {
     return (
@@ -295,7 +336,12 @@ export default function SelfUpgradeTriggerControl({
             // button — when the portal is draining, surface Force Now / Abort
             // so the operator's emergency lever actually works mid-flight.
             draining && quiescence?.run?.runId ? (
-              <div className="flex items-center gap-2" role="group" aria-label="In-flight upgrade controls">
+              <div className="flex flex-wrap items-center gap-2" role="group" aria-label="In-flight upgrade controls">
+                {waitingLine && (
+                  <span className="text-xs text-[var(--dpf-muted)]" role="status" aria-live="polite" data-drain-waiting={awaitingOperator ? "awaiting-operator" : "draining"}>
+                    {waitingLine}
+                  </span>
+                )}
                 {inFlightError && (
                   <span className="text-xs text-[var(--dpf-warning)]" role="status" aria-live="polite">
                     {inFlightError}
@@ -345,6 +391,17 @@ export default function SelfUpgradeTriggerControl({
                   </div>
                 ) : (
                   <>
+                    {awaitingOperator && (
+                      <button
+                        type="button"
+                        onClick={handleKeepWaiting}
+                        disabled={isPending}
+                        aria-label={`Keep waiting for upgrade run ${drainRun?.runId ?? ""}`}
+                        className="px-3 py-1.5 text-xs rounded-lg border border-[var(--dpf-accent)] text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)] transition-colors disabled:opacity-50"
+                      >
+                        Keep waiting
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => { setAbortConfirm(false); setForceConfirm(true); }}
