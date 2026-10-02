@@ -243,7 +243,7 @@ test("Windows: DPF_MCP_URL and NODE_EXTRA_CA_CERTS go to the User env once; a re
       $store = @{ DPF_MCP_URL = 'http://127.0.0.1:3000/api/mcp/v1' }; $script:writes = 0
       $get = { param($n) $store[$n] }
       $set = { param($n, $v) $script:writes++; $store[$n] = $v }
-      $clientEnv = Resolve-DpfMcpClientEnv -InstallDir '${q(install)}' -ExplicitUrl '' -HomeDir '${q(home)}'
+      $clientEnv = Resolve-DpfMcpClientEnv -InstallDir '${q(install)}' -ExplicitUrl '' -HomeDir '${q(home)}' -GetUserEnv { param($n) '' }
       $first = Set-DpfMcpClientEnv -ClientEnv $clientEnv -GetUserEnv $get -SetUserEnv $set
       $firstWrites = $script:writes
       $second = Set-DpfMcpClientEnv -ClientEnv $clientEnv -GetUserEnv $get -SetUserEnv $set
@@ -257,7 +257,7 @@ test("Windows: no https origin persists nothing", NEEDS_POWERSHELL, () => {
     writeFileSync(join(install, ".env"), "PUBLIC_URL=http://localhost:3000\n");
     const out = powershell(`. '${q(envLibPs)}'
       $script:writes = 0
-      $clientEnv = Resolve-DpfMcpClientEnv -InstallDir '${q(install)}' -ExplicitUrl '' -HomeDir '${q(home)}'
+      $clientEnv = Resolve-DpfMcpClientEnv -InstallDir '${q(install)}' -ExplicitUrl '' -HomeDir '${q(home)}' -GetUserEnv { param($n) '' }
       $result = Set-DpfMcpClientEnv -ClientEnv $clientEnv -GetUserEnv { param($n) $null } -SetUserEnv { param($n, $v) $script:writes++ }
       "$result|$($script:writes)"`);
     assert.equal(out, "not-https|0");
@@ -297,4 +297,57 @@ test("the Windows consumer release carries the client-env module", () => {
   const dockerfile = readFileSync(join(root, "Dockerfile"), "utf8");
   assert.match(dockerfile, /COPY scripts\/installer\/lib\/mcp-client-env\.ps1 \.\/scripts\/installer\/lib\//);
   assert.match(dockerfile, /cp [^\n]*scripts\/installer\/lib\/mcp-client-env\.ps1[^\n]*\/dpf-release-assets\/scripts\/installer\/lib\//);
+});
+
+// BI-9F258707: a GUI-launched process may predate the persisted user environment.
+test("worktree recovers saved HTTPS endpoint and quoted CA without executing saved shell text", NEEDS_BASH, () => {
+  withHome(({ home, install }) => {
+    const cert = join(home, "organization's CA.pem");
+    writeFileSync(cert, "fixture\n");
+    const sentinel = join(home, "must-not-exist");
+    const script = `. "$ENV_LIB"; dpf_set_client_env_export DPF_MCP_URL 'https://desk.lan/api/mcp/v1?tier=full'; dpf_set_client_env_export NODE_EXTRA_CA_CERTS "$CERT"; printf '\\ntouch "%s"\\n' "$SENTINEL" >> "$(dpf_mcp_client_env_file)"; dpf_resolve_mcp_client_env "$INSTALL"; printf '%s|%s' "$DPF_MCP_CLIENT_URL" "$DPF_MCP_CLIENT_CA_BUNDLE"`;
+    const out = bash(script, { home, env: { INSTALL: posix(install), CERT: posix(cert), SENTINEL: posix(sentinel) } });
+    assert.equal(out.status, 0, out.stderr);
+    assert.equal(out.stdout, `https://desk.lan/api/mcp/v1?tier=full|${posix(cert)}`);
+    assert.equal(existsSync(sentinel), false);
+  });
+});
+
+test("saved endpoint is below explicit process URL and canonical install origin", NEEDS_BASH, () => {
+  withHome(({ home, install }) => {
+    const prepare = `. "$ENV_LIB"; dpf_set_client_env_export DPF_MCP_URL 'https://saved.lan/api/mcp/v1'; `;
+    const out = bash(prepare + resolveScript, { home, env: { INSTALL: posix(install), DPF_MCP_URL: "http://explicit.lan/mcp" } });
+    assert.equal(out.stdout, "http://explicit.lan/mcp|");
+    writeFileSync(join(install, ".env"), "PUBLIC_URL=https://install.lan\n");
+    const canonical = bash(resolveScript, { home, env: { INSTALL: posix(install), DPF_MCP_URL: "https://explicit.lan/mcp" } });
+    assert.equal(canonical.stdout, "https://install.lan/api/mcp/v1?tier=full|");
+  });
+});
+
+test("Windows resolver recovers persisted User endpoint and CA for an older process", NEEDS_POWERSHELL, () => {
+  withHome(({ home, install }) => {
+    const cert = writeRoot(home);
+    const out = powershell(`. '${q(envLibPs)}'
+      $saved = @{ DPF_MCP_URL = 'https://saved.lan/api/mcp/v1?tier=full'; NODE_EXTRA_CA_CERTS = '${q(cert)}' }
+      $r = Resolve-DpfMcpClientEnv -InstallDir '${q(install)}' -ExplicitUrl '' -ExplicitBundle '' -HomeDir '${q(home)}' -GetUserEnv { param($n) $saved[$n] }
+      "$($r.McpUrl)|$($r.CaBundle)"`);
+    assert.equal(out, `https://saved.lan/api/mcp/v1?tier=full|${cert}`);
+  });
+});
+
+
+test("saved export parsing rejects executable assignments and leaves credential exports unread", NEEDS_BASH, () => {
+  withHome(({ home, install }) => {
+    mkdirSync(join(home, ".dpf"));
+    const file = join(home, ".dpf", "agent-toolchain.env");
+    const sentinel = posix(join(home, "executed"));
+    writeFileSync(file, `export DPF_MCP_URL=$(touch "${sentinel}")\nexport DPF_MCP_BEARER_TOKEN='fixture-secret'\n`);
+    const out = bash(resolveScript, { home, env: { INSTALL: posix(install) } });
+    assert.equal(out.status, 0, out.stderr);
+    assert.equal(out.stdout, "|");
+    assert.equal(existsSync(sentinel), false);
+    const secret = bash(`. "$ENV_LIB"; dpf_mcp_saved_env_value DPF_MCP_BEARER_TOKEN`, { home });
+    assert.equal(secret.status, 64);
+    assert.equal(secret.stdout, "");
+  });
 });

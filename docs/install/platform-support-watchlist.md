@@ -147,3 +147,8 @@ URL/port, a shell builtin), ask: *"does this assume Windows/GNU/Docker-Desktop,
 and which substrate overlay should own it?"* Put substrate-specific deltas in
 the owning overlay (`docker-compose.{macos,linux}.yml`, `prometheus.{macos,linux}.yml`),
 never in the shared base.
+
+
+### Persisted MCP endpoint recovery (BI-9F258707)
+
+A bootstrap launched from a worktree may have no install PUBLIC_URL and may inherit a process environment older than setup. The existing client-environment resolver now reads the persisted user endpoint after the canonical install origin and explicit process override. POSIX decodes only managed export values as data; Windows reads the User environment. The saved Node CA bundle is considered before the default PKI file. OAuth credentials, grants, trust stores and unrelated exports are unchanged. Re-run the supported bootstrap to converge native client configuration; verify its effective endpoint, not only the saved environment. Tests cover POSIX recovery and precedence; native Windows execution must be verified on a Windows host.
