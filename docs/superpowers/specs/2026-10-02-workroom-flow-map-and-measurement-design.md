@@ -8,8 +8,8 @@ status: active
 |---|---|
 | Date | 2026-10-02 |
 | Founder decision | Direction approved by the founder on 2026-10-02 (notation hybrid, stage = queue, four disclosure levels on existing routes, version-keyed improvement loop, new composing epic) |
-| Epic | Proposed: EP "Workroom flow — measured, visual and improved per portfolio" (see §11; not yet filed) |
-| Backlog | Proposed items F1–F7 (§11). Filing is pending: the `dpf` MCP connector was not authorized in the authoring session, so live backlog was read directly from PostgreSQL (read-only) and nothing was written |
+| Epic | EP-B70E718D |
+| Backlog | F1 BI-2A3C63FA · F2 BI-4ADFFEDB · F3 BI-FC0F4BD6 · F4 BI-C5CD9EAE · F5 BI-0FB4A049 · F6 BI-1737A427 · F7 BI-F19A1128 · F8 BI-3C98682D |
 | Composes | GPP shape notation ([2026-10-02](2026-10-02-gpp-shape-notation-and-compiler-design.md)) · shared queue flow telemetry (EP-3516E23D, [plan](../plans/2026-07-06-queue-flow-telemetry-spine-plan.md)) · Living Business twin ([2026-07-11](2026-07-11-living-business-workforce-visualization-design.md)) · portfolio-shaped areas ([2026-08-14 §9](2026-08-14-portfolio-shaped-information-architecture-design.md)) · portfolio budget and WIP ([2026-09-24](2026-09-24-portfolio-budget-and-investment-wip-design.md)) |
 | Decision relied on | DI-035897A0F1D6 (WWMD): shape source of truth is the JSON-Schema superset of `WorkShapeDefinition`; iconography derives from BPMN on the `@xyflow/react` EA canvas; BPMN-subset and SysML v2 are export formats only. This spec does **not** reopen notation. It adds a measurement overlay and an actor-lane projection to that notation |
 | Prototype | [assets/2026-10-02-workroom-flow-map-prototype.html](assets/2026-10-02-workroom-flow-map-prototype.html) (illustrative data, labelled as such) |
@@ -256,7 +256,7 @@ For DPF's own install, L0 is the delivery stream of the Manufacturing and Delive
 
 ## 11. Delivery slices (proposed backlog)
 
-Proposed epic: **Workroom flow — measured, visual and improved per portfolio.** It composes and does not duplicate:
+Epic EP-B70E718D: **Workroom flow — measured, visual and improved per portfolio.** It composes and does not duplicate:
 
 - EP-B932453F (GPP notation and canvas): consumes its glyphs; fills its V-2.
 - EP-39F60B06 (value-stream shape graph: interaction-shape measurement): different graph.
@@ -265,14 +265,14 @@ Proposed epic: **Workroom flow — measured, visual and improved per portfolio.*
 
 | Key | Slice | Depends on | Shippable alone | Closes / feeds |
 |---|---|---|---|---|
-| F1 | `WorkroomFlowState` classifier + parity test over the drive reason vocabulary + shape signature generator (pure, tested) | — | Yes (signature visible in room header) | §4.1, §5.1 |
-| F2 | Stage = queue emitter + `held`/`released` transitions + three snapshot columns (one migration) + idempotent backfill | F1 | Yes (numbers in queue health, Prometheus, coworker queue pack) | §6 |
-| F3 | `WorkroomFlowMap` at L3 (room detail) replacing the HTML strip | F1, F2 | Yes | BI-C7E2E924 follow-on |
-| F4 | L2 shape drill-in on `/area/[key]?view=work&shape=` with version picker | F3 | Yes | §7, §8 step 4 |
-| F5 | L1 five tiles per portfolio on `/area/[key]` and `/portfolio`; portfolio colours to tokens | F2; portfolio placement BI-FB6389E0 / BI-C30A4694 for correct grouping (until then an explicit "unplaced" fifth column, never a silent default) | Yes | §7 |
-| F6 | AI cost attribution to room and stage (trace `TokenUsage.traceId` → TaskRun → room; schema only if the trace path proves incomplete) | — | Yes | §5.2 cost |
-| F7 | L0 hero stream: twin binding to `wr:` keys, bottleneck callout, "not yet measured" state | F2; BI-B8B3FB70 stage reference | Yes | BI-AF50DBD5, BI-58A9FC76 (partial: flow measures, not business metrics) |
-| F8 | Flow review receipt at review point + bottleneck → backlog via EP-C00F61F4 routing | F2, F4 | Yes | §8 |
+| F1 (BI-2A3C63FA) | `WorkroomFlowState` classifier + parity test over the drive reason vocabulary + shape signature generator (pure, tested) | — | Yes (signature visible in room header) | §4.1, §5.1 |
+| F2 (BI-4ADFFEDB) | Stage = queue emitter + `held`/`released` transitions + three snapshot columns (one migration) + idempotent backfill | F1 | Yes (numbers in queue health, Prometheus, coworker queue pack) | §6 |
+| F3 (BI-FC0F4BD6) | `WorkroomFlowMap` at L3 (room detail) replacing the HTML strip | F1, F2 | Yes | Succeeds BI-23DB08BB (stale since 2026-08-22; its HTML strip shipped, the SVG renderer did not) and follows BI-C7E2E924 |
+| F4 (BI-C5CD9EAE) | L2 shape drill-in on `/area/[key]?view=work&shape=` with version picker | F3 | Yes | §7, §8 step 4 |
+| F5 (BI-0FB4A049) | L1 five tiles per portfolio on `/area/[key]` and `/portfolio`; portfolio colours to tokens | F2; portfolio placement BI-FB6389E0 / BI-C30A4694 for correct grouping (until then an explicit "unplaced" fifth column, never a silent default) | Yes | §7 |
+| F6 (BI-1737A427) | AI cost attribution to room and stage (trace `TokenUsage.traceId` → TaskRun → room; schema only if the trace path proves incomplete) | — | Yes | §5.2 cost |
+| F7 (BI-F19A1128) | L0 hero stream: twin binding to `wr:` keys, bottleneck callout, "not yet measured" state | F2; BI-B8B3FB70 stage reference | Yes | BI-AF50DBD5, BI-58A9FC76 (partial: flow measures, not business metrics) |
+| F8 (BI-3C98682D) | Flow review receipt at review point + bottleneck → backlog via EP-C00F61F4 routing | F2, F4 | Yes | §8 |
 
 ## 12. Objectives and acceptance
 
