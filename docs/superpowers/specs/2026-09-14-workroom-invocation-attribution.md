@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Workroom executor and invocation attribution
 
 Backlog: BI-1B5BE5F4. Delivery shape: medium. Status: implementation design.
