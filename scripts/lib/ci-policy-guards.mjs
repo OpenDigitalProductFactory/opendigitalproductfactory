@@ -596,6 +596,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-tool-surface.test.mjs"),
       node("scripts/check-tool-surface.mjs"),
     ], { inputs: ["code"] }),
+    // A coworker's standing rhythm is declared twice on purpose — the registry
+    // the scheduler reads, and the coworker's own recurring skill. Nothing kept
+    // them equal, so the skill could describe a rhythm nobody runs (BI-4CE4F52F).
+    guard("self-task-cadence-parity", "Self-Task Cadence Parity", [
+      node("--test", "scripts/check-self-task-cadence-parity.test.mjs"),
+      node("scripts/check-self-task-cadence-parity.mjs"),
+    ]),
     guard("archetype-completeness-guard", "Archetype Completeness Guard", [
       node("--test", "scripts/check-archetype-completeness.test.mjs"),
       node("scripts/check-archetype-completeness.mjs"),
