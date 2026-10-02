@@ -30,7 +30,9 @@ describe("buildGeographicStyle", () => {
     expect(style).not.toHaveProperty("glyphs");
     expect(style).not.toHaveProperty("sprite");
     for (const url of urls(style)) {
-      expect(url.startsWith("pmtiles://https://dpf.example/api/map-assets/") || url.startsWith(origin)).toBe(true);
+      const target = new URL(url.replace(/^pmtiles:\/\//, ""));
+      expect(target.origin).toBe(origin);
+      expect(target.pathname.startsWith("/api/map-assets/")).toBe(true);
     }
   });
 
