@@ -263,6 +263,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-3267763F: no compose default, installer output or self-upgrade
       // leaves Inngest on the signing/event keys once published in this repo.
       conformanceTest("scripts/installer/inngest-keys-contract.test.mjs"),
+      // BI-8541D491: every install path provisions the GPP permit signing key
+      // and a self-upgrade never rotates it.
+      conformanceTest("scripts/installer/gpp-permit-secret-contract.test.mjs"),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),

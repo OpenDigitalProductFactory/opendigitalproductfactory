@@ -2221,8 +2221,12 @@
     "scripts/installer/doctools-prepull.test.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
+    "scripts/installer/gpp-permit-secret-contract.test.mjs": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "scripts/installer/install-release-assets.mjs": [
-      "docs/architecture/build-gate-runbook.md"
+      "docs/architecture/build-gate-runbook.md",
+      "docs/architecture/gated-permissions-process.md"
     ],
     "scripts/installer/install-state.schema.json": [
       "docs/operations/install.md"
@@ -2388,6 +2392,7 @@
     ],
     "scripts/promote.sh": [
       "docs/architecture/build-gate-runbook.md",
+      "docs/architecture/gated-permissions-process.md",
       "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
     "scripts/publish-host-gpu.ps1": [
@@ -3122,7 +3127,10 @@
       "apps/web/lib/work-management/work-shape-grants-resolve.test.ts",
       "apps/web/lib/work-management/work-shapes.ts",
       "apps/web/scripts/gpp-critical-interaction-map.ts",
-      "packages/db/prisma/schema/ai-coworker.prisma"
+      "packages/db/prisma/schema/ai-coworker.prisma",
+      "scripts/installer/gpp-permit-secret-contract.test.mjs",
+      "scripts/installer/install-release-assets.mjs",
+      "scripts/promote.sh"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
