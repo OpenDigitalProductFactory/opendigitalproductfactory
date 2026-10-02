@@ -1,7 +1,7 @@
 ---
 title: Build Studio large-lane independent reviews — routing the owed receipts to reviewer coworkers
 status: draft
-review-history: design-spec and architecture-review passed at 85cc9b34 (2026-10-02); spec-approval re-requested on this revision
+review-history: design-spec and architecture-review passed at 85cc9b34 (2026-10-02); spec-approval re-requested on this revision (objective and acceptance markers added for the baseline manifest)
 date: 2026-10-02
 backlog: BI-926A7E90
 epic: EP-984E4124
@@ -116,22 +116,24 @@ A reviewer that fails the design, an accepted or deferred residual risk, and a
 build whose shape is `xlarge` still escalate to the owner. This design routes
 requests; it approves nothing.
 
+## Objectives
+
+**OBJ-ROUTE:** Every large-shape Build Studio build in plan has its owed design-spec, spec-approval, architecture-review and plan-review requests routed by the server dispatcher to an independent reviewer coworker, with no human click.
+
+**OBJ-BIND:** Each routed review and its receipt bind to the immutable Build Studio design revision (revision id and value digest), so a changed design yields a new request and a receipt can never attach to a tip.
+
+**OBJ-PRESERVE:** The dispatcher's existing awaiting-acceptance behaviour, cooldown and per-call limit are unchanged, and nothing in this design approves a build on its own.
+
 ## Acceptance
 
-- AC-1: a large-shape Build Studio build in plan receives routed requests for
-  design-spec, spec-approval, architecture-review and plan-review within one
-  dispatcher cycle, each recorded on its room with the request key.
-- AC-2: the reviewer coworker can read the bound revision through
-  `read_build_artifact_revision` and the resulting receipt binds to the same
-  revision id; the readiness decision then clears `CANONICAL_DESIGN_REQUIRED`,
-  `SPEC_APPROVAL_REQUIRED`, `ARTIFACT_AUTHOR_REQUIRED` and
-  `OBJECTIVE_BASELINE_REQUIRED` from that receipt.
-- AC-3: the existing awaiting-acceptance behaviour of the dispatcher is
-  unchanged; its tests pass as written.
-- AC-4: a request for a design that changed since the last request has a new
-  request key; a repeat inside the cooldown is recorded `cooling-down`.
-- AC-5: live proof on the install: one previously blocked large build crosses
-  plan→build with no human click.
+| ID | Objectives | Acceptance statement |
+|---|---|---|
+| AC-1 | OBJ-ROUTE | A large-shape Build Studio build in plan receives routed requests for design-spec, spec-approval, architecture-review and plan-review within one dispatcher cycle, each recorded on its room with the request key. |
+| AC-2 | OBJ-BIND | The reviewer coworker reads the bound revision through `read_build_artifact_revision`; the resulting receipt binds to the same revision id, and the readiness decision then clears CANONICAL_DESIGN_REQUIRED, SPEC_APPROVAL_REQUIRED, ARTIFACT_AUTHOR_REQUIRED and OBJECTIVE_BASELINE_REQUIRED from that receipt. |
+| AC-3 | OBJ-PRESERVE | The existing awaiting-acceptance behaviour of the dispatcher is unchanged and its tests pass as written. |
+| AC-4 | OBJ-BIND | A request for a design that changed since the last request has a new request key, and a repeat inside the cooldown is recorded cooling-down. |
+| AC-5 | OBJ-ROUTE | Live proof on the install: one previously blocked large build crosses plan to build with no human click. |
+| AC-6 | OBJ-PRESERVE | A failed review, an accepted or deferred residual risk, and an xlarge build still escalate to the owner; no receipt is minted by the executing surface. |
 
 ## Delivery sequence
 
