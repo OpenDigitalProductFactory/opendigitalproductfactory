@@ -293,7 +293,7 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return null;
   try {
     const { prisma, Prisma } = await import("@dpf/db");
-    const { planExecStateRecovery } = await import("@/lib/build/build-exec-types");
+    const { planExecStateRecovery, infrastructureRestartsExhausted } = await import("@/lib/build/build-exec-types");
     type ExecStateLike = import("@/lib/build/build-exec-types").ExecStateLike;
     // Scan only rows still in the build phase; filter the null/contradictory
     // discrimination in JS to avoid Prisma JSON-null filter subtleties.
@@ -311,25 +311,7 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
         build.buildExecState as ExecStateLike | null,
         build.verificationOut,
       );
-      if (plan.action === "none") continue;
-      if (plan.reason === "infrastructure-failed") {
-        // Bounded: an infrastructure fault that recurs after two clean
-        // restarts is no longer "the sandbox was broken that day" — leave it
-        // on the failed step for a person, with the breadcrumb intact.
-        const priorInfraRestarts = await prisma.buildActivity.count({
-          where: {
-            buildId: build.buildId,
-            tool: "recoverContradictoryBuildExecStatesOnBoot",
-            summary: { contains: "reason=infrastructure-failed" },
-          },
-        });
-        if (priorInfraRestarts >= 2) {
-          logger.log(
-            `[build-exec-recover] ${build.buildId} -> left failed: infrastructure fault recurred after ${priorInfraRestarts} clean restarts`,
-          );
-          continue;
-        }
-      }
+      if (plan.action === "none" || (plan.reason === "infrastructure-failed" && await infrastructureRestartsExhausted(prisma, build.buildId, logger))) continue;
       if (plan.action === "clear") {
         await prisma.featureBuild.update({
           where: { buildId: build.buildId },

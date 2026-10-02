@@ -224,3 +224,29 @@ export function planExecStateRecovery(
   // restart clean: none of these has a trustworthy step to resume from.
   return { action: "clear", reason };
 }
+
+/** Clean restarts an infrastructure-failed checkpoint may receive before it is left for a person. */
+export const INFRASTRUCTURE_RESTART_LIMIT = 2;
+
+/**
+ * Bounded restart: an infrastructure fault that recurs after
+ * INFRASTRUCTURE_RESTART_LIMIT clean restarts is no longer "the sandbox was
+ * broken that day" — the build stays on its failed step for a person, with
+ * the breadcrumb intact. Counts the boot recovery's own activity rows.
+ */
+export async function infrastructureRestartsExhausted(
+  db: { buildActivity: { count(args: unknown): Promise<number> } },
+  buildId: string,
+  logger: { log(message: string): void } = console,
+): Promise<boolean> {
+  const prior = await db.buildActivity.count({
+    where: {
+      buildId,
+      tool: "recoverContradictoryBuildExecStatesOnBoot",
+      summary: { contains: "reason=infrastructure-failed" },
+    },
+  });
+  if (prior < INFRASTRUCTURE_RESTART_LIMIT) return false;
+  logger.log(`[build-exec-recover] ${buildId} -> left failed: infrastructure fault recurred after ${prior} clean restarts`);
+  return true;
+}

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  infrastructureRestartsExhausted,
   planExecStateRecovery,
   classifyContradictoryExecState,
   isInfrastructureFailure,
@@ -157,5 +158,15 @@ describe("infrastructure-failed checkpoints restart on their own (AGENTS.md §4:
     expect(classifyContradictoryExecState(product)).toBeNull();
     expect(planExecStateRecovery(product)).toEqual({ action: "none" });
     expect(isInfrastructureFailure(null)).toBe(false);
+  });
+});
+
+describe("infrastructureRestartsExhausted", () => {
+  const silent = { log: () => undefined };
+  it("allows a clean restart until the limit, then leaves the build for a person", async () => {
+    const db = (n: number) => ({ buildActivity: { count: async () => n } });
+    expect(await infrastructureRestartsExhausted(db(0), "FB-1", silent)).toBe(false);
+    expect(await infrastructureRestartsExhausted(db(1), "FB-1", silent)).toBe(false);
+    expect(await infrastructureRestartsExhausted(db(2), "FB-1", silent)).toBe(true);
   });
 });
