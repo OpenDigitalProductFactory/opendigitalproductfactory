@@ -156,7 +156,15 @@ export function extractMermaidFences(markdown) {
 export function writeMermaidFenceSources(markdown, diagramsDir, stem) {
   extractMermaidFences(markdown).forEach((source, i) => {
     const file = join(diagramsDir, `${fenceFile(stem, i + 1)}.mmd`);
-    if (!existsSync(file) || readFileSync(file, "utf8") !== source) writeFileSync(file, source);
+    // Read and compare instead of check-then-read, so there is no window in
+    // which the file can change between an existence check and the read.
+    let current = null;
+    try {
+      current = readFileSync(file, "utf8");
+    } catch {
+      current = null;
+    }
+    if (current !== source) writeFileSync(file, source);
   });
 }
 
