@@ -102,6 +102,24 @@ This plan is **atomic**. Schema/backfill, shared resolution, listing, invocation
 
 Run focused tests, enum/schema generation checks, migration smoke against populated data, typecheck, production build, `pnpm run pregate:preflight`, exact-tree `pnpm run pregate`, independent semantic review, and canonical-runtime functional verification. Prove one unmapped tool is absent/refused before any remote call and one explicitly mapped tool succeeds with a decision record. Update external-agent and operator documentation before closing BI-8B7B2FE9.
 
+## Acceptance criteria (quoted from BI-8B7B2FE9)
+
+- An unmapped dynamically discovered MCP tool is absent from an AI coworker's available tool surface, including when External Access is enabled.
+- A mapped tool is visible only when the acting human capability, agent grant, execution mode, and external-access requirements all pass.
+- Execution rechecks the same effective policy so a stale/discovered tool list cannot bypass authorization.
+- Side-effect and execution metadata come from a DPF-owned policy overlay; remote annotations are treated only as untrusted hints.
+- Inventory reports every active discovered tool as mapped, deliberately denied, or quarantined, without silently authorizing an unknown state.
+- **A rediscovery that changes an approved tool's description or inputSchema quarantines it; the model never sees the changed text before re-approval; the operator sees the diff.**
+- Tests cover no-grant, unknown-tool, read-only, side-effecting, advise-mode, stale-list, server/tool rename, **and description/schema change after approval** cases.
+- Canonical-runtime evidence proves an unmapped tool is refused and a correctly mapped tool succeeds.
+
+## Traceability
+
+- **Requirements:** OBJ-MCP-AUTH-001, OBJ-MCP-AUTH-002, OBJ-MCP-AUTH-003.
+- **Contracts:** CONTRACT-MCP-POLICY-PROJECTION (`McpServerTool` policy columns + `approvedContentDigest`), CONTRACT-MCP-POLICY-RESOLVER (`resolveDiscoveredToolPolicy` / `evaluateDiscoveredToolAccess`), CONTRACT-MCP-POLICY-ENFORCEMENT (`getAvailableTools`, `governedExecuteTool`, `executeMcpServerTool`).
+- **Flows:** FLOW-MCP-DISCOVER-QUARANTINE-APPROVE (discovery → quarantine → operator approval → listing → governed call → remote call), FLOW-MCP-REDISCOVER-CHANGED (rediscovery with changed text → quarantine → side-by-side review → re-approval).
+- **Verification:** AC-MCP-AUTH-001 through AC-MCP-AUTH-007 (spec §11 acceptance contract).
+
 ## Backlog coverage
 
 - **Decision:** atomic.
