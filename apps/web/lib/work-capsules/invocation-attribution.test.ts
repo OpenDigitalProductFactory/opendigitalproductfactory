@@ -9,6 +9,9 @@ describe("workroom invocation attribution", () => {
     expect(projectInvocationAttribution({ activities: [{ kind: "concierge-sweep" }] })).toMatchObject({ executor: "dpf-native", invocation: expect.stringContaining("concierge-sweep") });
     expect(projectInvocationAttribution({ title: "Decision governance" })).toMatchObject({ executor: "Executor not recorded" });
   });
+  it("does not attribute an external executor's session to old native activity", () => {
+    expect(projectInvocationAttribution({ executorKind: "codex-desktop", executorRef: "session-2", activities: [{ kind: "concierge-sweep" }] })).toEqual({ executor: "codex-desktop", invocation: "session-2" });
+  });
   it("does not call scheduled dispatch A2A or manual", () => {
     const result = projectInvocationAttribution({ source: "manual", workspaceState: { workroomDrive: { action: "dispatch_agent", taskId: "task-1", stageKey: "read" } } }, { agentId: "customer-advisor" });
     expect(result.invocation).toContain("Scheduled");

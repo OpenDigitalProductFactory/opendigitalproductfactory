@@ -51,7 +51,7 @@ export function projectInvocationAttribution(room: AttributionRoom, scheduledTas
       drive.stageKey ? `stage ${drive.stageKey}` : null].filter(Boolean).join(" · "),
   };
   const native = room.activities?.find(({ kind }) => kind === "concierge-sweep" || kind === "embedding-coverage");
-  if (native) return { executor: room.executorKind || "dpf-native", invocation: `Native automation · ${native.kind}` };
+  if (native && (!room.executorKind || room.executorKind === "dpf-native")) return { executor: "dpf-native", invocation: `Native automation · ${native.kind}` };
   if (room.executorKind) return { executor, invocation: room.executorRef || "Invocation reference not recorded" };
   return { executor, invocation: room.status === "draft" ? "No invocation recorded" : "Invocation history not recorded" };
 }

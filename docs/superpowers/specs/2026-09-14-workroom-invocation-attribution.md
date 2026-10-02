@@ -16,7 +16,7 @@ Verified against source on 2026-10-01: `WorkroomInventory.tsx` displays null exe
 
 - AC1: Every roster row presents executor and an evidenced invocation path. Historical absence is explicitly identified as missing recorded attribution, never invented identity.
 - AC2: Governance and corpus maintenance writers record dpf-native and a stable executor reference on both creation and subsequent runs. Existing history may identify these native paths from their recorded activity kind.
-- AC3: Scheduled work shows task, target agent and stage when recorded. New dispatch snapshots persist the selected agent. Creation source manual must not overwrite scheduled invocation evidence.
+- AC3: Scheduled work shows task, target agent and stage when recorded. Resolve the selected agent from the existing ScheduledAgentTask record referenced by the dispatch snapshot. Creation source manual must not overwrite scheduled invocation evidence.
 - AC4: Linked TaskRun provenance exposes initiating/current agent, run and parent identifiers. A2A is shown only when supported by recorded run evidence, never inferred merely from scheduling.
 - AC5: Regression tests cover external execution, native automation, schedule, A2A, uninvoked drafts, and historical gaps. No confidential payloads are exposed.
 
