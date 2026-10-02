@@ -293,7 +293,7 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return null;
   try {
     const { prisma, Prisma } = await import("@dpf/db");
-    const { planExecStateRecovery } = await import("@/lib/build/build-exec-types");
+    const { planExecStateRecovery, infrastructureRestartsExhausted } = await import("@/lib/build/build-exec-types");
     type ExecStateLike = import("@/lib/build/build-exec-types").ExecStateLike;
     // Scan only rows still in the build phase; filter the null/contradictory
     // discrimination in JS to avoid Prisma JSON-null filter subtleties.
@@ -311,7 +311,7 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
         build.buildExecState as ExecStateLike | null,
         build.verificationOut,
       );
-      if (plan.action === "none") continue;
+      if (plan.action === "none" || (plan.reason === "infrastructure-failed" && await infrastructureRestartsExhausted(prisma, build.buildId, logger))) continue;
       if (plan.action === "clear") {
         await prisma.featureBuild.update({
           where: { buildId: build.buildId },

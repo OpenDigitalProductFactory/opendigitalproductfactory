@@ -106,9 +106,32 @@ export type ExecStateLike = {
 
 /** Why a checkpoint is contradictory — drives the recovery decision + the log line. */
 export type ContradictoryExecReason =
-  | "missing-step"        // state object has content but no `step` (restart-killed before step 1)
-  | "error-without-fail"  // a non-`failed` step carrying an error/failedAt breadcrumb
-  | "complete-no-verify"; // step=complete but verificationOut never populated
+  | "missing-step"          // state object has content but no `step` (restart-killed before step 1)
+  | "error-without-fail"    // a non-`failed` step carrying an error/failedAt breadcrumb
+  | "complete-no-verify"    // step=complete but verificationOut never populated
+  | "infrastructure-failed"; // step=failed on a sandbox/git infrastructure fault, not on the build's own work
+
+/**
+ * Failure text that names the sandbox or its git plumbing rather than the
+ * build's change. Such a `failed` step is not a verdict on the work (AGENTS.md
+ * §4: a gate that could not run is not a verdict; fail open on infrastructure)
+ * — once the fault is repaired the pipeline must restart on its own instead of
+ * waiting for a person to press Retry. Observed live 2026-09-23 → 2026-10-02:
+ * five decomposition heads sat on "dubious ownership" for nine days and every
+ * sibling waited on them.
+ */
+const INFRASTRUCTURE_FAILURE_SIGNATURES: readonly RegExp[] = [
+  /detected dubious ownership/i,
+  /safe\.directory/i,
+  /No such container/i,
+  /not a git repository/i,
+  /Sandbox container is not running/i,
+];
+
+export function isInfrastructureFailure(error: string | null | undefined): boolean {
+  if (typeof error !== "string" || !error) return false;
+  return INFRASTRUCTURE_FAILURE_SIGNATURES.some((signature) => signature.test(error));
+}
 
 /**
  * Classify a buildExecState (+ optional verificationOut) as one of the three
@@ -136,6 +159,12 @@ export function classifyContradictoryExecState(
   // via advance-phase (verificationOut null blocks the review gate).
   if (state.step === "complete" && verificationOut == null) {
     return "complete-no-verify";
+  }
+  // A terminal `failed` step is a legitimate verdict on the build's work — but
+  // not when what failed was the sandbox itself. That shape has nothing to
+  // retry from and a person was never the right owner of it.
+  if (state.step === "failed" && isInfrastructureFailure(state.error)) {
+    return "infrastructure-failed";
   }
   return null;
 }
@@ -191,6 +220,33 @@ export function planExecStateRecovery(
     return { action: "to-failed", reason, state: recovered };
   }
 
-  // missing-step / complete-no-verify → clear and restart clean.
+  // missing-step / complete-no-verify / infrastructure-failed → clear and
+  // restart clean: none of these has a trustworthy step to resume from.
   return { action: "clear", reason };
+}
+
+/** Clean restarts an infrastructure-failed checkpoint may receive before it is left for a person. */
+export const INFRASTRUCTURE_RESTART_LIMIT = 2;
+
+/**
+ * Bounded restart: an infrastructure fault that recurs after
+ * INFRASTRUCTURE_RESTART_LIMIT clean restarts is no longer "the sandbox was
+ * broken that day" — the build stays on its failed step for a person, with
+ * the breadcrumb intact. Counts the boot recovery's own activity rows.
+ */
+export async function infrastructureRestartsExhausted(
+  db: { buildActivity: { count(args: unknown): Promise<number> } },
+  buildId: string,
+  logger: { log(message: string): void } = console,
+): Promise<boolean> {
+  const prior = await db.buildActivity.count({
+    where: {
+      buildId,
+      tool: "recoverContradictoryBuildExecStatesOnBoot",
+      summary: { contains: "reason=infrastructure-failed" },
+    },
+  });
+  if (prior < INFRASTRUCTURE_RESTART_LIMIT) return false;
+  logger.log(`[build-exec-recover] ${buildId} -> left failed: infrastructure fault recurred after ${prior} clean restarts`);
+  return true;
 }
