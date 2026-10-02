@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 729,
+  "pageCount": 730,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -9558,6 +9558,22 @@
         "integration-evidence",
         "conditions",
         "sources"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-10-02-maplibre-react-native.md": {
+      "publicHref": "/security/tool-evaluations/2026-10-02-maplibre-react-native/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-maplibre-react-native",
+        "what-is-evaluated",
+        "cosai-security-findings",
+        "compliance",
+        "architecture-fit",
+        "integration-test",
+        "conditions",
+        "approval"
       ]
     },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
