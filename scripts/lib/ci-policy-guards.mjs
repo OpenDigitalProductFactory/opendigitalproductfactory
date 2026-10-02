@@ -364,6 +364,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // pointer nobody followed. Listed here so CI runs them: an automation
         // whose own test does not run is the manual process with extra steps.
         "scripts/land-branch.test.mjs",
+        "scripts/lib/script-argv.test.mjs",
         "scripts/gate-local.test.mjs",
         "scripts/pre-push-dco-check.test.mjs",
       ),

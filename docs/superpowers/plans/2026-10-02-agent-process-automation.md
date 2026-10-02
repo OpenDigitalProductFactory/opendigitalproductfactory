@@ -110,8 +110,22 @@ guards did.
    landing spine (`land`, `gate:local`, `gate:context`, `gate:wait`) uses it.
    **51** other scripts parse with those options and still drop the flag; they
    need the helper and a guard that requires it.
-6. **`gate:local` is not the full deterministic set.** On `land`'s first real run
-   it passed, then preflight refused two guards (`gate-context` image closure,
-   spec-status frontmatter). The refusal came before any lease, so it was cheap;
-   `land` now says so instead of pointing at a stale `pregate:status`. Running
-   preflight pre-commit costs ~3.5 min on every landing — not yet worth it.
+6. **`gate:local` is not the full deterministic set.** `land`'s first two real
+   runs passed it, then preflight refused three guards: spec-status frontmatter,
+   the CI test inventory, and the `gate-context` image closure. The first two are
+   sub-second and now run in `gate:local`; the closure test does not yet. Each
+   refusal came before any lease, and `land` now says so instead of pointing at
+   a stale `pregate:status`. Running all of preflight pre-commit costs ~3.5 min
+   per landing — not yet worth it.
+6. **`pregate:status` reports STALE from a metadata record that lags the gate
+   record, and the text is actively misleading.** Hit three times in one
+   session. The gate record can say `gated <HEAD> (0m ago)` while the metadata
+   still carries the previous `candidateSha`, and the status then prints
+   `metadata record gated <old>, not HEAD <new> — re-run pregate`. Re-running is
+   the wrong action when a run is already in flight for the current HEAD: it
+   queues a second claim. Either project HEAD onto the metadata when a run is
+   claimed (the code already does this for a reused PASS), or distinguish "stale"
+   from "a run for this HEAD is in flight".
+7. **`land` should merge forward BEFORE gating when behind base.** Done by hand
+   on PR #5958: 30 commits behind, merged forward (clean), regenerated, gated
+   once — instead of gate / drift / re-gate. Pairs with item 4.
