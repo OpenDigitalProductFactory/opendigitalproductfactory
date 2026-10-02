@@ -1,0 +1,26 @@
+{
+  "s-1-unreachable-stage.gpp.json": {
+    "rule": "S-1",
+    "elementId": "stage:c"
+  },
+  "s-2-no-success-exit.gpp.json": {
+    "rule": "S-2",
+    "elementId": "stage:b"
+  },
+  "s-3-unpaired-split.gpp.json": {
+    "rule": "S-3",
+    "elementId": "node:p"
+  },
+  "s-4-unrouted-stage.gpp.json": {
+    "rule": "S-4",
+    "elementId": "stage:c"
+  },
+  "s-5-unbounded-cycle.gpp.json": {
+    "rule": "S-5",
+    "elementId": "edge:b->a"
+  },
+  "s-6-no-budget-stop.gpp.json": {
+    "rule": "S-6",
+    "elementId": "shape:soundness-no-budget-stop@1.0.0"
+  }
+}
