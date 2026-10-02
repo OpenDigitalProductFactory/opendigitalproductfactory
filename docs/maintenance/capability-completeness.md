@@ -36,7 +36,7 @@ the platform is not".
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
 - At 100% of attainable: **36**
 - Median attainable: **88%** · median absolute: **81%**
-- Skills: **154** total, **0** stranded, **41** able to declare a cadence
+- Skills: **156** total, **0** stranded, **41** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`, `software-engineer`
 
 ## Consequential-tool gate coverage
@@ -72,7 +72,7 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | Governance / WWWD | 2 | 3 | 0 | 0 | 0 | 87 | 87/87 |
 | Shape | 1 | 2 | 39 | 0 | 48 | 0 | 48/87 |
 | Cadence | 1 | 3 | 46 | 0 | 0 | 41 | 41/87 |
-| Tools + Skills | 2 | 3 | 0 | 40 | 0 | 47 | 47/87 |
+| Tools + Skills | 2 | 3 | 0 | 38 | 0 | 49 | 49/87 |
 | Evidence | 1 | 2 | 39 | 1 | 47 | 0 | 47/87 |
 
 ### Planes the substrate currently caps
@@ -188,13 +188,13 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-S2P-PFB` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-S2P-POL` | deliberately-unstaffed | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-904` | superseded | 64% | 59% | 1 | 3 | 3 | 0 | 0 | 3 | 0 |
-| `AGT-WS-SECURITY` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
-| `AGT-WS-REVIEW` | active-roster | 72% | 67% | 3 | 3 | 3 | 2 | 0 | 1 | 2 |
 | `AGT-WS-MARKET-RESEARCH` | defined-roster | 84% | 78% | 2 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-ONBOARD` | active-roster | 84% | 78% | 3 | 3 | 3 | 2 | 0 | 3 | 1 |
+| `AGT-WS-SECURITY` | defined-roster | 84% | 78% | 2 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-BUILD` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-CUSTOMER` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-PORTFOLIO` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
+| `AGT-WS-REVIEW` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-906` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-907` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-ORCH-000` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
