@@ -1,4 +1,85 @@
 {
+  "c-1-uncovered-agent-stage.gpp.json": {
+    "rule": "C-1",
+    "elementId": "stage:read"
+  },
+  "c-2-unregistered-tool.gpp.json": {
+    "rule": "C-2",
+    "elementId": "tool:a:no_such_platform_tool"
+  },
+  "c-3-binding-without-gate.gpp.json": {
+    "rule": "C-3",
+    "elementId": "binding:drc-fixture-binding@1"
+  },
+  "c-4-grant-not-held.gpp.json": {
+    "rule": "C-4",
+    "elementId": "tool:a:list_bills"
+  },
+  "c-7-enforced-gate-without-resolver.gpp.json": {
+    "rule": "C-7",
+    "elementId": "gate:a"
+  },
+  "c-9-unmediated-tool.gpp.json": {
+    "rule": "C-9",
+    "elementId": "tool:a:record_effort_estimate"
+  },
+  "d-1-status-into-oai.gpp.json": {
+    "rule": "D-1",
+    "elementId": "stage:a"
+  },
+  "d-2-shadow-gate-into-oai.gpp.json": {
+    "rule": "D-2",
+    "elementId": "gate:a"
+  },
+  "d-3-checkpoint-not-exact.gpp.json": {
+    "rule": "D-3",
+    "elementId": "gate:a"
+  },
+  "d-4-no-decision-record.gpp.json": {
+    "rule": "D-4",
+    "elementId": "stage:a"
+  },
+  "d-5-unregistered-egress.gpp.json": {
+    "rule": "D-5",
+    "elementId": "binding:drc-environment-binding@1"
+  },
+  "d-6-non-blocking-gate.gpp.json": {
+    "rule": "D-6",
+    "elementId": "gate:a"
+  },
+  "d-7-missing-resolver.gpp.json": {
+    "rule": "D-7",
+    "elementId": "gate:a"
+  },
+  "d-8-unratified-gate.gpp.json": {
+    "rule": "D-8",
+    "elementId": "gate:a"
+  },
+  "e-not-executable-parallel-split.gpp.json": {
+    "rule": "E-NOT-EXECUTABLE",
+    "elementId": "node:p",
+    "construct": "parallel-split-join"
+  },
+  "e-not-executable-refuse-edge.gpp.json": {
+    "rule": "E-NOT-EXECUTABLE",
+    "elementId": "gate:a",
+    "construct": "rework-edge"
+  },
+  "e-not-executable-rework-edge.gpp.json": {
+    "rule": "E-NOT-EXECUTABLE",
+    "elementId": "edge:b->a",
+    "construct": "rework-edge"
+  },
+  "e-not-executable-stage-deadline.gpp.json": {
+    "rule": "E-NOT-EXECUTABLE",
+    "elementId": "stage:a",
+    "construct": "stage-deadline"
+  },
+  "e-not-executable-sub-shape.gpp.json": {
+    "rule": "E-NOT-EXECUTABLE",
+    "elementId": "stage:a",
+    "construct": "sub-shape"
+  },
   "s-1-unreachable-stage.gpp.json": {
     "rule": "S-1",
     "elementId": "stage:c"
@@ -22,5 +103,9 @@
   "s-6-no-budget-stop.gpp.json": {
     "rule": "S-6",
     "elementId": "shape:soundness-no-budget-stop@1.0.0"
+  },
+  "w-orphan-layout.gpp.json": {
+    "rule": "W-ORPHAN-LAYOUT",
+    "elementId": "shape:drc-w-orphan-layout@1.0.0"
   }
 }

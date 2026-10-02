@@ -101,9 +101,11 @@ describe("every registry shape is sound", () => {
 });
 
 describe("one seeded violation per rule (S-1 to S-6)", () => {
-  it("the fixture set covers each of S-1 to S-6 exactly once, and expected.json lists exactly the fixtures", () => {
+  it("the fixture set covers each of S-1 to S-6 exactly once, and expected.json lists exactly the S fixtures", () => {
     expect(SOUNDNESS_FIXTURES.map((name) => EXPECTED[name]?.rule).sort()).toEqual(["S-1", "S-2", "S-3", "S-4", "S-5", "S-6"]);
-    expect(Object.keys(EXPECTED).sort()).toEqual(SOUNDNESS_FIXTURES);
+    // The rest of the corpus (C, D, E, W fixtures) is PR-3b-3's; drc-corpus.test.ts checks it.
+    const soundnessEntries = Object.keys(EXPECTED).filter((name) => EXPECTED[name]?.rule.startsWith("S-"));
+    expect(soundnessEntries.sort()).toEqual(SOUNDNESS_FIXTURES);
   });
 
   it.each(SOUNDNESS_FIXTURES)("%s yields exactly its rule on its element", (name) => {

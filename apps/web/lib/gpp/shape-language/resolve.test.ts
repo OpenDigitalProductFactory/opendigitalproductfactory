@@ -58,6 +58,7 @@ function fakeSources(overrides: Partial<GppResolveSources> = {}) {
     grantsFor: (agentId) => (agentId === "customer-advisor" ? ["storefront_read", "customer_read"] : []),
     knownAgents: new Set(["customer-advisor"]),
     classify: (toolName) => (toolName === "send_customer_email" ? OUTWARD : READ),
+    consequence: (toolName) => (toolName === "send_customer_email" ? "outward" : null),
     grantRequirement: (toolName) => (toolName === "list_customer_accounts" ? ["customer_read"] : toolName === "nope" ? null : ["storefront_read"]),
     importResolver: async (module, exportName) => {
       calls.importResolver.push([module, exportName]);
@@ -94,6 +95,7 @@ describe("resolveShapeDocument returns facts from its injected sources", () => {
               consequenceClass: "routine-read",
               consequential: false,
               alignmentRequired: false,
+              consequence: null,
               grantRequirement: ["storefront_read"],
             },
             {
@@ -104,6 +106,7 @@ describe("resolveShapeDocument returns facts from its injected sources", () => {
               consequenceClass: "routine-read",
               consequential: false,
               alignmentRequired: false,
+              consequence: null,
               grantRequirement: ["customer_read"],
             },
           ],
@@ -136,16 +139,22 @@ describe("resolveShapeDocument returns facts from its injected sources", () => {
         consequenceClass: null,
         consequential: null,
         alignmentRequired: null,
+        consequence: null,
         grantRequirement: null,
       },
     ]);
   });
 
-  it("the O/A/I fact comes from classify", async () => {
+  it("the O/A/I fact comes from classify, and the letter from the declared consequence", async () => {
     const document: GppShapeDocument = clone(WORKED_EXAMPLE);
     document.stages[1].tools = ["send_customer_email"];
     const [, send] = (await resolveShapeDocument(document, fakeSources().sources)).stages;
-    expect(send.tools?.[0]).toMatchObject({ consequential: true, consequenceClass: "consequential-mutation", alignmentRequired: true });
+    expect(send.tools?.[0]).toMatchObject({
+      consequential: true,
+      consequenceClass: "consequential-mutation",
+      alignmentRequired: true,
+      consequence: "outward",
+    });
   });
 
   it("gate resolvers, sub-shape references and binding egress are each looked up", async () => {

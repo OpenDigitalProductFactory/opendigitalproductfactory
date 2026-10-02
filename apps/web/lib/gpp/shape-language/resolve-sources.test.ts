@@ -137,6 +137,14 @@ describe("defaultResolveSources composes the runtime's own registries (R5)", () 
     expect(sources.classify("no_such_tool")).toBeNull();
   });
 
+  it("consequence is each tool's own declared consequence, and null for an unregistered name", () => {
+    for (const tool of modules.PLATFORM_TOOLS) {
+      expect(sources.consequence(tool.name), tool.name).toBe(tool.consequence ?? null);
+    }
+    expect(modules.PLATFORM_TOOLS.some((tool) => tool.consequence === "authority")).toBe(true);
+    expect(sources.consequence("no_such_tool")).toBeNull();
+  });
+
   it("grantRequirement is TOOL_TO_GRANTS, and never an inherited Object property", () => {
     for (const tool of modules.PLATFORM_TOOLS) {
       expect(sources.grantRequirement(tool.name), tool.name).toEqual(modules.TOOL_TO_GRANTS[tool.name] ?? null);

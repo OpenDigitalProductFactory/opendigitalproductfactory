@@ -24,6 +24,7 @@
 // OFFLINE TOOLING in Phase 3b: nothing in the running app imports this module.
 
 import type { ConsequenceClass, ConsequentialToolClassification } from "@/lib/tak/consequential-tool-policy";
+import type { ToolConsequence } from "@/lib/tool-consequence";
 
 import { bindingElementId, gateElementId, shapeElementId, stageElementId, toolElementId } from "./element-ids";
 import type { GppShapeDocument } from "./gpp-shape-schema";
@@ -38,6 +39,13 @@ export type GppResolveSources = {
   knownAgents: ReadonlySet<string>;
   /** classifyConsequentialTool for a registered tool; null for a name that is not registered. */
   classify(toolName: string): ConsequentialToolClassification | null;
+  /**
+   * The tool's declared `consequence` (outward / irreversible / authority, the
+   * O / I / A letters of spec §5 construct 3); null when it declares none or
+   * is not registered. classify alone cannot tell A from I: both classify as
+   * "declared-irreversible".
+   */
+  consequence(toolName: string): ToolConsequence | null;
   /** TOOL_TO_GRANTS: the grants any one of which allows the tool; null when the tool has no mapping. */
   grantRequirement(toolName: string): readonly string[] | null;
   /** True when `module` (web-root relative, no extension) exports a function named `exportName`. */
@@ -56,6 +64,8 @@ export type GppResolvedTool = {
   /** The O/A/I fact: classifyConsequentialTool(...).consequential. null when not registered. */
   consequential: boolean | null;
   alignmentRequired: boolean | null;
+  /** The declared consequence (O / I / A); null when none is declared or the tool is not registered. */
+  consequence: ToolConsequence | null;
   /** null when TOOL_TO_GRANTS has no entry (the runtime denies such a tool by default). */
   grantRequirement: readonly string[] | null;
 };
@@ -100,6 +110,7 @@ function resolveTool(stageKey: string, toolName: string, sources: GppResolveSour
     consequenceClass: classification?.class ?? null,
     consequential: classification ? classification.consequential : null,
     alignmentRequired: classification ? classification.alignmentRequired : null,
+    consequence: registered ? sources.consequence(toolName) : null,
     grantRequirement: requirement ? [...requirement] : null,
   };
 }

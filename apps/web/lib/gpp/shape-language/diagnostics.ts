@@ -15,13 +15,17 @@
 // - `rule` is the closed set of rule ids §7.2 names. Each id is a stable code;
 //   renaming one is a breaking change for every consumer.
 // - `code` refines `rule` where one rule has several distinct failures (a
-//   PARSE finding is a BOM, a CRLF, a duplicate key, ...). It is also closed.
+//   PARSE finding is a BOM, a CRLF, a duplicate key, ...; a C-7 finding is
+//   one of three clauses; an E-NOT-EXECUTABLE finding names its construct).
+//   It is also closed.
 // - `path` is an RFC 6901 JSON Pointer into the document text as written
 //   ("" is the whole document).
 // - `elementId` is the nearest §9.1 derived element id, so the same finding
 //   lands on the same node in the design view and the room view.
 //
 // OFFLINE TOOLING in Phase 3b: nothing in the running app imports this module.
+
+import { GPP_CONSTRUCTS, type GppConstruct } from "./executable-constructs";
 
 /** Severities. `not-evaluated` is a check that could not run, never a pass (spec §7.2, C-5). */
 export const GPP_DIAGNOSTIC_SEVERITIES = ["error", "warning", "info", "not-evaluated"] as const;
@@ -86,8 +90,30 @@ export const GPP_SCHEMA_CODES = [
 ] as const;
 export type GppSchemaCode = (typeof GPP_SCHEMA_CODES)[number];
 
+/**
+ * C-7 Mode honesty refinements (spec §7.2): an enforced binding with no entry
+ * in GPP_BINDING_ENFORCEMENT; an enforced doctrine gate that names no
+ * resolver; and the build-sandbox containment clause, which is always
+ * `not-evaluated` until Build Studio is modelled (Phase 5). Closed.
+ */
+export const GPP_C7_CODES = ["C-7/ENFORCEMENT-ENTRY", "C-7/RESOLVER", "C-7/SANDBOX-CONTAINMENT"] as const;
+export type GppC7Code = (typeof GPP_C7_CODES)[number];
+
+/**
+ * E-NOT-EXECUTABLE refinements: one per notation construct (spec §5,
+ * executable-constructs.ts), so the set is total over constructs and does not
+ * change when a flag flips. Closed.
+ */
+export const GPP_NOT_EXECUTABLE_CODES = GPP_CONSTRUCTS.map((construct) => `E-NOT-EXECUTABLE/${construct}` as const);
+export type GppNotExecutableCode = `E-NOT-EXECUTABLE/${GppConstruct}`;
+
 /** The code of a finding whose rule has a single failure mode is the rule id itself. */
-export type GppDiagnosticCode = GppParseCode | GppSchemaCode | Exclude<GppRuleId, "PARSE" | "SCHEMA">;
+export type GppDiagnosticCode =
+  | GppParseCode
+  | GppSchemaCode
+  | GppC7Code
+  | GppNotExecutableCode
+  | Exclude<GppRuleId, "PARSE" | "SCHEMA" | "C-7" | "E-NOT-EXECUTABLE">;
 
 /** The element id used when no derived element can be named (for example, the text is not JSON). */
 export const GPP_DOCUMENT_ELEMENT_ID = "document";

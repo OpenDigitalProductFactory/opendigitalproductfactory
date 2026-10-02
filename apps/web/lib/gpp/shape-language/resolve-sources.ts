@@ -7,8 +7,9 @@
 // risks R5 and R6).
 //
 // Same registries as stage-tool-parity.test.ts, composed the same way (R5):
-// - tools: PLATFORM_TOOLS; class: classifyConsequentialTool; grant
-//   requirement: TOOL_TO_GRANTS.
+// - tools: PLATFORM_TOOLS; class: classifyConsequentialTool; declared
+//   consequence: the ToolDefinition's own `consequence`; grant requirement:
+//   TOOL_TO_GRANTS.
 // - grants: the runtime's getAgentToolGrantsAsync is DB-first (AgentToolGrant,
 //   seeded on every boot from HARDCODED_COWORKER_GRANTS by slug), then falls
 //   back to agent_registry.json. Here the seed stands in for the seeded table
@@ -20,6 +21,10 @@
 // - sub-shapes: getWorkShapeVersion (current and frozen prior versions).
 // - gate resolvers: a dynamic import of the named web-root module, the
 //   bindings.test.ts rule (D-7), restricted to `lib/...` paths.
+// - direct execute sites (DRC C-9, PR-3b-3): liveDirectExecuteSites builds
+//   the critical-interaction map's `directSites` input exactly as
+//   scripts/gpp-critical-interaction-map.ts does —
+//   findUnmediatedExecuteSites(readWebSourceFiles()), keyed by tool name.
 //
 // R6 — "does this pull a database client into an offline script?" Measured:
 // - `@dpf/db/workforce-seed` is safe: it re-exports HARDCODED_COWORKER_GRANTS
@@ -49,7 +54,8 @@ import { classifyConsequentialTool } from "@/lib/tak/consequential-tool-policy";
 import { getWorkShapeVersion } from "@/lib/work-management/work-shapes";
 
 import agentRegistryData from "../../../../../packages/db/data/agent_registry.json";
-import { WEB_ROOT } from "../source-files";
+import { readWebSourceFiles, WEB_ROOT } from "../source-files";
+import { findUnmediatedExecuteSites } from "../unmediated-execute-sites";
 import { GPP_SHAPE_REF_PATTERN } from "./gpp-shape-schema";
 import type { GppResolveSources } from "./resolve";
 
@@ -80,6 +86,9 @@ export function defaultResolveSources(): GppResolveSources {
       const tool = tools.get(toolName);
       return tool ? classifyConsequentialTool({ tool, toolName }) : null;
     },
+    consequence(toolName) {
+      return tools.get(toolName)?.consequence ?? null;
+    },
     grantRequirement(toolName) {
       const requirement = Object.prototype.hasOwnProperty.call(TOOL_TO_GRANTS, toolName) ? TOOL_TO_GRANTS[toolName] : undefined;
       return requirement ? [...requirement] : null;
@@ -99,4 +108,19 @@ export function defaultResolveSources(): GppResolveSources {
       return getWorkShapeVersion(ref.slice(0, at), ref.slice(at + 1)) !== null;
     },
   };
+}
+
+/**
+ * Every direct `executeTool(` site outside the reference monitor, keyed by the
+ * literal tool name ("dynamic" when the name is a variable), as
+ * "<path>:<line>". The same input, built the same way, as the
+ * critical-interaction map's `directSites` (scripts/gpp-critical-interaction-map.ts).
+ * Reads the web source tree; DRC C-9 takes the result as an injected fact.
+ */
+export function liveDirectExecuteSites(): ReadonlyMap<string, readonly string[]> {
+  const sites = new Map<string, string[]>();
+  for (const site of findUnmediatedExecuteSites(readWebSourceFiles())) {
+    sites.set(site.toolName, [...(sites.get(site.toolName) ?? []), `${site.path}:${site.line}`]);
+  }
+  return sites;
 }
