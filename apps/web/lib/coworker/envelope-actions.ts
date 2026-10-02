@@ -40,6 +40,7 @@ export interface EnvelopeRow {
   chatMessageId: string | null;
   manifestActionId: string;
   argsJson: unknown;
+  approvalBindingFingerprint?: string | null;
   rationale: string;
   status: EnvelopeStatus;
   createdAt: Date;
@@ -133,16 +134,21 @@ export async function approveEnvelope(
     };
   }
 
+  // Bound authority envelopes store metadata, not executable arguments. Screen
+  // action envelopes replay argsJson verbatim, so never add metadata to them.
+  const boundArgs = load.envelope.approvalBindingFingerprint
+    && isRecord(load.envelope.argsJson) && isRecord(load.envelope.argsJson.approvalBinding)
+    ? load.envelope.argsJson : null;
   const updated = await prisma.coworkerActionEnvelope.update({
     where: { id: envelopeId },
     data: {
       status: "approved",
       // BI-E6E2E704: distinguish an authenticated person's decision from a
       // policy-projected envelope. Preserve the existing exact-call binding.
-      argsJson: {
-        ...(isRecord(load.envelope.argsJson) ? load.envelope.argsJson : {}),
+      ...(boundArgs ? { argsJson: {
+        ...boundArgs,
         humanApproval: humanApprovalMarker(callerUserId),
-      } as Prisma.InputJsonObject,
+      } as Prisma.InputJsonObject } : {}),
     },
   });
   // Approving does NOT mark the waiting task working here, and must not.

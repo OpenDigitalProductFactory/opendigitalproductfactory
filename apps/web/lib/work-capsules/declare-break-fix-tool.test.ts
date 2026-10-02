@@ -74,9 +74,14 @@ describe("human-approved break-fix declaration", () => {
   });
 
   it("does not confuse a claimed shape with the audited declaration", async () => {
-    mocks.room.mockResolvedValue({ id: "r1", capsuleId: "WC-ONE", scopeClaims: [{ workShape: "delivery-break-fix@1.0.0", source: "declared" }] });
+    const pathClaim = { kind: "path", value: "apps/web/lib/example.ts", intent: "edit" };
+    mocks.room.mockResolvedValue({ id: "r1", capsuleId: "WC-ONE", scopeClaims: [pathClaim, { workShape: "delivery-break-fix@1.0.0", source: "declared" }] });
     expect(await declareBreakFixTool(params, "u1", context)).toMatchObject({ success: true });
     expect(mocks.create).toHaveBeenCalledOnce();
+    expect(mocks.update).toHaveBeenCalledWith({
+      where: { capsuleId: "WC-ONE" },
+      data: { scopeClaims: [pathClaim, { workShape: "delivery-break-fix@1.0.0", source: "declared", recordedAt: expect.any(String), declaredByUserId: "u1" }] },
+    });
   });
 
   it("keeps the missed-PIR refusal after human approval", async () => {
