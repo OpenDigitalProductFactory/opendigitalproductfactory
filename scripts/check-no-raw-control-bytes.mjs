@@ -12,10 +12,11 @@
  *
  *   node scripts/check-no-raw-control-bytes.mjs   # check (CI)
  */
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { gitText } from "./lib/git.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE_GLOBS = ["*.ts", "*.tsx", "*.mts", "*.cts", "*.js", "*.jsx", "*.mjs", "*.cjs"];
@@ -35,7 +36,7 @@ export function findRawControlBytes(bytes) {
 }
 
 function trackedSourceFiles() {
-  return execFileSync("git", ["ls-files", "-z", "--", ...SOURCE_GLOBS], { cwd: REPO_ROOT, encoding: "utf8" })
+  return gitText(["ls-files", "-z", "--", ...SOURCE_GLOBS], { cwd: REPO_ROOT, trim: false, maxBuffer: 64 * 1024 * 1024 })
     .split("\0")
     .filter((path) => path && !path.includes("node_modules/"));
 }
