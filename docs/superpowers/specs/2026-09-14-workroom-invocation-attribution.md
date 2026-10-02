@@ -35,4 +35,8 @@ One atomic deliverable maps to BI-1B5BE5F4: trustworthy roster attribution. Writ
 
 ## Risk, convergence and rollback
 
+## Operator-authorized execution exception — 2026-10-01
+
+For this thread's BI-1B5BE5F4 run only, the operator instructed continuation after the explicit request to skip the broken plan-coverage receipt. Scope: `record_plan_backlog_coverage` remains **unrun/not satisfied** following `traceability-incomplete`; no receipt is fabricated. Implementation readiness independently allowed the medium fix (IRD-11F041E61E8F), but coverage requires a persisted scope baseline that its supplied recovery does not produce. The atomic coverage mapping above remains the reviewable plan. This exception does not bypass grant intersection, DCO, PR protection, tests, independent acceptance, runtime verification, or deployment integrity. It expires with this item's delivery and does not change platform policy. Install permission work BI-9FA87F90 is excluded.
+
 No schema change or new dependency. Limit selected activity history and project only known identifiers; avoid per-row unbounded reads. Preserve a recorded executor instead of overwriting it with guesses. Native writers converge existing rows on their next run, while historical display derives only from stored evidence. Installation permission changes remain in BI-9FA87F90. Rollback is a single PR revert; added JSON evidence is backward-compatible and may remain in history.
