@@ -2455,8 +2455,12 @@
     "scripts/set-hooks-path.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/setup.ps1": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/setup.sh": [
-      "docs/install/macos.md"
+      "docs/install/macos.md",
+      "docs/install/platform-support-watchlist.md"
     ],
     "scripts/style-drift-baseline.json": [
       "docs/architecture/ui-token-styling.md"
@@ -3455,6 +3459,8 @@
       "scripts/lib/entry-module.mjs",
       "scripts/lib/host-available-memory.mjs",
       "scripts/publish-host-gpu.ps1",
+      "scripts/setup.ps1",
+      "scripts/setup.sh",
       "tests/release/pregate-node-gate-contract.test.mjs"
     ],
     "docs/install/scratch-install-rehearsal.md": [

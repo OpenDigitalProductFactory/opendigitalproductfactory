@@ -136,6 +136,25 @@ export async function reconcileSelfUpgradeRunsOnBoot(
         logger.log(`[self-upgrade-reconcile] ${run.runId} -> succeeded (deployed ${deployedSha})`);
         continue;
       }
+      // BI-75ECED42: the container engine restarted under this run (Docker
+      // Desktop updating itself, a host reboot). The promoter died with it, so
+      // the swap can never land: name the cause now instead of waiting for the
+      // watchdog to blame the swap.
+      if (run.startedAt) {
+        const { engineRestartedDuringRun, readDatabaseStartedAt, engineRestartFailureLog, ENGINE_RESTARTED_REASON } =
+          await import("@/lib/self-upgrade/engine-restart");
+        const databaseStartedAt = await readDatabaseStartedAt();
+        if (databaseStartedAt && engineRestartedDuringRun(run.startedAt, databaseStartedAt)) {
+          await failRun(
+            run.runId,
+            engineRestartFailureLog({ runStartedAt: run.startedAt, databaseStartedAt, deployedSha, targetSha: run.targetSha ?? null }),
+            ENGINE_RESTARTED_REASON,
+          );
+          failed++;
+          logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (container engine restarted during the run)`);
+          continue;
+        }
+      }
       // Swap PENDING, not orphaned. On boot (staleAfterMs===0) we may come up still on the
       // run's PRE-upgrade SHA — e.g. the old portal restarted mid-swap before the promoter
       // recreated it on the target. Failing here is a false negative: the promoter may still
