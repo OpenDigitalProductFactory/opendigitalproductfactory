@@ -1639,6 +1639,8 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
         ps = (repo / "scripts/dpf-bootstrap-agent-toolchain.ps1").read_text()
         self.assertLess(sh.index('bash "$PLUGIN_UPDATER"'), sh.index('if ! pnpm "${bridge_args[@]}"'))
         self.assertLess(ps.index('& $PluginUpdater'), ps.index('$planJson = & pnpm'))
+        self.assertIn('--codex-plugin-only', sh[:sh.index('# --- Compute plan via Node bridge')])
+        self.assertIn('-CodexPluginOnly', ps[:ps.index('# --- Compute plan via Node bridge')])
 
     def test_shell_bootstrap_refresh_propagates_failure_and_dry_run(self):
         source = Path(__file__).resolve().parents[3] / "scripts/dpf-bootstrap-agent-toolchain.sh"
@@ -1658,9 +1660,26 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
                     capture_output=True, text=True,
                 )
                 self.assertIn("--dry-run", result.stdout)
+                self.assertIn("--codex-plugin-only", result.stdout)
                 self.assertIn("https://example.invalid/api/mcp/v1", result.stdout)
                 self.assertEqual(result.returncode, 0 if exit_code == 0 else 1)
                 self.assertEqual("PLAN_REACHED" in result.stdout, exit_code == 0)
+
+    def test_registration_only_mode_does_not_write_connectors_or_other_clients(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, native, _ = self.fixture(home)
+            connector = '[mcp_servers.dpf]\nurl = "https://example.invalid/operator-choice"\ncustom = "retain"\n'
+            config.write_text(config.read_text() + connector)
+            with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), \
+                    patch.object(updater, "resolve_codex_binary", return_value="/fake/codex"), \
+                    patch("subprocess.run", side_effect=native):
+                code = updater.main(["--codex-plugin-only"])
+            self.assertEqual(code, 0)
+            self.assertIn(connector, config.read_text())
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), False)
+            for path in (home / ".claude", home / ".grok", home / ".gemini", updater.shared_managed_plugin_path(home)):
+                self.assertFalse(path.exists(), str(path))
 
     def test_unknown_enabled_dpf_source_is_reported_without_retiring_known_source(self):
         with tempfile.TemporaryDirectory() as tmp:

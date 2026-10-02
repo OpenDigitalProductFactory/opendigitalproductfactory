@@ -185,9 +185,13 @@ The Codex manifest declares `interface.logo` using the packaged
 `assets/dpf-logo.svg`, copied from the platform's
 `apps/web/public/logos/open-digital-product-factory-logo.svg`. The asset travels
 with standalone copies and participates in the content-version digest.
-The repository's shell and PowerShell bootstraps invoke this same updater before
-computing their configuration plan, so the plan reads the migrated preferences.
-They stop on refresh failure and honor dry-run mode. Claude, Grok, and Antigravity
+The repository's shell and PowerShell bootstraps invoke this updater with
+`--codex-plugin-only` before computing their configuration plan, so the plan reads
+the migrated preferences. This mode refreshes only the Codex package, marketplace
+and plugin toggles: it does not write MCP connectors, hook configuration, or other
+clients. The existing planner remains the normal-path configuration writer; the
+full standalone updater remains its failure fallback.
+Both adapters stop on refresh failure and honor dry-run mode. Claude, Grok, and Antigravity
 retain their existing native installation identities. This migration does not
 add another Codex registration when only the canonical registration exists.
 

@@ -496,7 +496,11 @@ fi
 # Refresh native plugin registrations before the config plan reads preferences.
 # The standalone updater owns this migration on every bootstrap path.
 PLUGIN_UPDATER="$REPO_ROOT/packages/dpf-skill-pack/scripts/update-agent-toolchain.sh"
-plugin_update_args=(--mcp-url "$MCP_ENDPOINT")
+if [ ! -f "$PLUGIN_UPDATER" ]; then
+  fail "Standalone updater missing at $PLUGIN_UPDATER; cannot proceed."
+  exit 1
+fi
+plugin_update_args=(--codex-plugin-only --mcp-url "$MCP_ENDPOINT")
 [ "$DRY_RUN" -eq 1 ] && plugin_update_args+=(--dry-run)
 if ! bash "$PLUGIN_UPDATER" "${plugin_update_args[@]}"; then
   fail "Plugin refresh failed; configuration planning stopped."
@@ -538,8 +542,14 @@ bridge_args=(
 PLAN_TMP="$(mktemp)"
 trap 'rm -f "$PLAN_TMP"' EXIT
 if ! pnpm "${bridge_args[@]}" > "$PLAN_TMP" 2>&1; then
-  warn "compute-plan failed; standalone plugin refresh completed, repository readiness is unverified."
+  warn "compute-plan failed; using standalone skill-pack updater fallback."
   cat "$PLAN_TMP" >&2
+  fallback_args=(--mcp-url "$MCP_ENDPOINT")
+  [ "$DRY_RUN" -eq 1 ] && fallback_args+=(--dry-run)
+  if ! bash "$PLUGIN_UPDATER" "${fallback_args[@]}"; then
+    fail "Standalone updater failed."
+    exit 1
+  fi
   seed_worktree_core "post-fallback"
   exit 0
 fi

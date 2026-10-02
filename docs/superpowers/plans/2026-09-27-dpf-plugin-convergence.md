@@ -34,6 +34,7 @@ No new manifest format is needed for this repair. Native `codex plugin remove`
 explicitly removes its cache, so this migration uses disable-not-delete.
 One active plugin is the verifiable runtime contract; removal of the redundant
 row from the desktop installed list needs separate visual evidence.
+This repair declares `interface.logo`; it does not add a separate composer icon.
 
 Baseline on the refreshed branch: 85 updater tests pass using the bundled
 modern Python runtime, with no skips. macOS system Python passes with four
@@ -86,6 +87,13 @@ updater only on fallback. Coverage was refreshed as
 `d42541e60885e5eedbe008d34b9da2a0aeca12b3` before editing the shell and PowerShell
 adapters. Both normal paths now refresh plugins before their configuration plan
 reads preferences; they share the updater rather than duplicate its migration.
+Independent review required narrowing that delegation to registration only.
+The `--codex-plugin-only` mode owns Codex package/marketplace/registration refresh;
+the normal configuration planner continues owning connector configuration and
+other clients. The full updater runs only as the standalone command or the
+existing failed-plan fallback. A regression preserves an operator-owned MCP
+table byte-for-byte and proves no other client directories are written by the
+registration-only mode.
 
 ## Separate access review
 

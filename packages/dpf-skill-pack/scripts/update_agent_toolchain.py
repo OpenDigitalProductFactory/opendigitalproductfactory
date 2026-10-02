@@ -1005,6 +1005,10 @@ def resolve_codex_binary() -> str | None:
     return None
 
 
+def is_dpf_registration(row: dict) -> bool:
+    return row.get("name") == PLUGIN_NAME or str(row.get("pluginId", "")).startswith(PLUGIN_NAME + "@")
+
+
 def read_codex_plugin_inventory(codex: str, home: Path) -> tuple[list[dict], str | None]:
     """Read all marketplaces: a personal-only query hides the migrated install."""
     try:
@@ -1017,7 +1021,7 @@ def read_codex_plugin_inventory(codex: str, home: Path) -> tuple[list[dict], str
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             return [], "Codex plugin list returned an invalid inventory"
         for row in rows:
-            if row.get("name") == PLUGIN_NAME or str(row.get("pluginId", "")).startswith(PLUGIN_NAME + "@"):
+            if is_dpf_registration(row):
                 if not isinstance(row.get("pluginId"), str) or type(row.get("installed")) is not bool or type(row.get("enabled")) is not bool:
                     return [], "Codex plugin list returned an invalid DPF registration"
         return rows, None
@@ -1078,7 +1082,7 @@ def install_codex_plugin(home: Path, dry_run: bool) -> str:
     if not desired_enabled:
         return "installed, disabled by operator, and verified; legacy registrations unchanged"
     active = [p for p in inventory if p.get("installed") and p.get("enabled")
-              and (p.get("name") == PLUGIN_NAME or str(p.get("pluginId", "")).startswith(PLUGIN_NAME + "@"))]
+              and is_dpf_registration(p)]
     if any(p["pluginId"] not in (CODEX_PLUGIN_ID, *CODEX_LEGACY_PLUGIN_IDS) for p in active):
         return "failed: unknown active DPF registration; legacy registrations unchanged"
     aliases = [p["pluginId"] for p in active if p["pluginId"] in CODEX_LEGACY_PLUGIN_IDS]
@@ -1089,7 +1093,7 @@ def install_codex_plugin(home: Path, dry_run: bool) -> str:
         write_text_if_changed(config, text)
         final, error = read_codex_plugin_inventory(codex, home)
         enabled_dpf = [p["pluginId"] for p in final if p.get("installed") and p.get("enabled")
-                       and (p.get("name") == PLUGIN_NAME or str(p.get("pluginId", "")).startswith(PLUGIN_NAME + "@"))]
+                       and is_dpf_registration(p)]
         if error or enabled_dpf != [CODEX_PLUGIN_ID]:
             # A failed readback cannot prove convergence. Restore only the
             # toggles this migration changed, retaining all caches and options.
@@ -1931,6 +1935,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL", DEFAULT_MCP_URL))
     parser.add_argument("--auth-mode", choices=("oauth", "legacy"), default=os.environ.get("DPF_MCP_AUTH_MODE", "oauth"))
     parser.add_argument("--codex-only", action="store_true")
+    parser.add_argument("--codex-plugin-only", action="store_true",
+                        help="Refresh only Codex plugin files and registration; the repository planner owns connector configuration.")
     parser.add_argument("--claude-only", action="store_true")
     parser.add_argument("--skip-codex-cli-install", action="store_true")
     parser.add_argument("--skip-claude-cli-install", action="store_true")
@@ -1973,6 +1979,21 @@ def main(argv: list[str]) -> int:
     home = home_dir()
     codex_managed = codex_managed_plugin_path(home)
     shared_managed = shared_managed_plugin_path(home)
+
+    if args.codex_plugin_only:
+        if args.claude_only or args.codex_only or args.skip_codex_cli_install:
+            parser.error("--codex-plugin-only cannot be combined with client selection or skip-install flags")
+        if resolve_codex_binary() is None:
+            print("Codex plugin refresh skipped: Codex CLI not found")
+            return 0
+        copy_skill_pack(skill_pack, codex_managed, args.dry_run)
+        codex_version = codex_content_version(skill_pack)
+        if not args.dry_run:
+            write_json(codex_managed / ".codex-plugin" / "plugin.json", {**manifest, "version": codex_version})
+        ensure_codex_marketplace(home, codex_version, args.dry_run)
+        status = install_codex_plugin(home, args.dry_run)
+        print(f"Codex plugin refresh: {status}")
+        return 1 if status.startswith("failed:") else 0
 
     print(f"DPF agent toolchain updater")
     print(f"  skill pack : {skill_pack}")
