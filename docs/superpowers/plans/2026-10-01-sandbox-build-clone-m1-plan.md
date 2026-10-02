@@ -36,7 +36,7 @@ The shared repo serves as the reference. A dedicated bare mirror is not needed w
 1. **This PR:** the clone path behind `DPF_BUILD_WORKSPACE_MODE=clone`, with the default still `worktree`.
    - Unit tests run the generated commands against real git repos (create, commit and sync-on-delete, promotion merge, reuse keeps uncommitted work, worktree conversion keeps in-flight work).
    - Verified inside dpf-sandbox-1 on 2026-10-01 against the real repo on a throwaway branch: created in 13 s before install, own `.git`, `origin/main` and identity resolve, and the branch was recorded in `/workspace` after a commit and delete.
-2. **Next PR:** flip the default to `clone`, with `DPF_BUILD_WORKSPACE_MODE=worktree` as the rollback. Deploy through `/ops/self-upgrade`, then watch the next builds through plan → build → review on the live install.
+2. **Next PR (2026-10-02, after #5930 merged and deployed in `aeb6607e4`):** flip the default to `clone`, with `DPF_BUILD_WORKSPACE_MODE=worktree` as the rollback. Deploy through `/ops/self-upgrade`, then watch the next builds through plan → build → review on the live install.
 3. **After a clean live run:** retire the worktree path, the BI-7FCF10FE prune lock workaround, and the shared-root `startBuildBranch` reset sequence.
 
 ## Found while mapping, not in M1

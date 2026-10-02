@@ -117,12 +117,12 @@ describe("build clone (W1, M1)", () => {
 });
 
 describe("buildWorkspaceMode", () => {
-  it("defaults to worktree until the clone mode is verified live", () => {
+  it("defaults to clone; worktree is the rollback", () => {
     const prev = process.env.DPF_BUILD_WORKSPACE_MODE;
     delete process.env.DPF_BUILD_WORKSPACE_MODE;
-    expect(buildWorkspaceMode()).toBe("worktree");
-    process.env.DPF_BUILD_WORKSPACE_MODE = "clone";
     expect(buildWorkspaceMode()).toBe("clone");
+    process.env.DPF_BUILD_WORKSPACE_MODE = "worktree";
+    expect(buildWorkspaceMode()).toBe("worktree");
     if (prev === undefined) delete process.env.DPF_BUILD_WORKSPACE_MODE;
     else process.env.DPF_BUILD_WORKSPACE_MODE = prev;
   });
