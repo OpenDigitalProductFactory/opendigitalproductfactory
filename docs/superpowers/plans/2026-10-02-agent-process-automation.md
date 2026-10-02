@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: active
 ---
 
 # Agent process automation — what the grunt work actually cost, and what remains
@@ -93,9 +93,12 @@ guards did.
 2. **Waiting still burns agent context.** `gate:wait` moves the loop into a
    subprocess, but the agent still blocks on it. The room should own the wait and
    notify. This is the largest remaining token win.
-3. **PR creation is still `gh` from the agent.** `create_portal_pr` exists in the
-   MCP surface; `land` should prefer it so the platform records the PR rather
-   than the client.
+3. **PR creation is still `gh` from the agent — and `create_portal_pr` cannot
+   replace it as-is.** It resolves an *active Build Studio build* and publishes
+   that build's `diffPatch` (`apps/web/lib/mcp/build-ship-handlers.ts`,
+   `buildPhases: ["ship"]`); a CLI worktree has no `FeatureBuild`, so it returns
+   "No active build." Platform-recorded PRs from external surfaces need a
+   contract that registers an existing branch/PR against the workroom.
 4. ~~**Drift handling is manual.**~~ `land` now fetches, counts commits behind
    `origin/main`, and merges forward (merge, not rebase — safe on a shallow
    clone) **before** context and regeneration, so the gate sees the merged tree.
@@ -107,3 +110,8 @@ guards did.
    landing spine (`land`, `gate:local`, `gate:context`, `gate:wait`) uses it.
    **51** other scripts parse with those options and still drop the flag; they
    need the helper and a guard that requires it.
+6. **`gate:local` is not the full deterministic set.** On `land`'s first real run
+   it passed, then preflight refused two guards (`gate-context` image closure,
+   spec-status frontmatter). The refusal came before any lease, so it was cheap;
+   `land` now says so instead of pointing at a stale `pregate:status`. Running
+   preflight pre-commit costs ~3.5 min on every landing — not yet worth it.

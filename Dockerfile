@@ -155,6 +155,8 @@ COPY scripts/salvage-sweep.mjs ./scripts/
 # at runtime. Package its exact transitive source closure into the image so a
 # mutable /host-dpf checkout can never substitute different rule bytes.
 COPY scripts/gate-context.mjs ./scripts/
+# gate-context reads its argv through script-argv (a forwarded `--` must not drop flags).
+COPY scripts/lib/script-argv.mjs ./scripts/lib/
 COPY scripts/check-design-grounding-decision.mjs ./scripts/
 COPY scripts/check-data-impact.mjs ./scripts/
 # gate-context advertises the Convergence-Impact trailer (BI-B19BE117); the

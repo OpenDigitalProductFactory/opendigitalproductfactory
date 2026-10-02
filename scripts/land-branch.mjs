@@ -140,6 +140,31 @@ export function syncAction({ base, behind }) {
   return behind === 0 ? "current" : "merge";
 }
 
+/** pregate:status --json, or null when the output is below its field floor. */
+export function parseGateStatus(text) {
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  try {
+    const status = JSON.parse(text.slice(start));
+    return typeof status?.verdict === "string" && typeof status.headSha === "string" ? status : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where a failed gate:wait stopped. A record bound to an older SHA means
+ * nothing was recorded for this one — the refusal came from preflight, which
+ * claims no lease and writes no record, so pointing the reader at
+ * pregate:status sends them to a stale verdict about different bytes.
+ *
+ * @returns {"preflight"|"verdict"|"unknown"}
+ */
+export function gateFailureSite(status, headSha) {
+  if (!status || !headSha) return "unknown";
+  return status.boundSha === headSha ? "verdict" : "preflight";
+}
+
 function fail(step, message, next) {
   process.stderr.write(`\n[land] STOPPED at ${step}\n\n  ${message}\n`);
   if (next) process.stderr.write(`\n  next: ${next}\n`);
@@ -293,8 +318,18 @@ function main() {
         + "diff. This is not a failure of the code.", "re-run pnpm land when the queue drains");
     }
     if (!r.ok) {
-      return fail("gate", "the gate failed for this SHA.",
-        "read `pnpm pregate:status` and the full log it names");
+      const status = parseGateStatus(
+        run("pnpm", ["-s", "pregate:status", "--json"], { capture: true, allowFail: true }).out);
+      const where = gateFailureSite(status, git("rev-parse", "HEAD"));
+      if (where === "preflight") {
+        return fail("gate", "a deterministic guard refused BEFORE a lease was claimed, so no gate "
+          + "record exists for this SHA — the findings and their remedies are in the preflight "
+          + "output above, not in pregate:status.", "fix them, then re-run pnpm land");
+      }
+      return fail("gate", where === "verdict"
+        ? `the gate recorded ${status.verdict} for this SHA.`
+        : "the gate failed and its status could not be read.",
+        status?.logFile ? `read the full log: ${status.logFile}` : "pnpm pregate:status");
     }
   }
 

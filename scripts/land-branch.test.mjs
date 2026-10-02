@@ -13,7 +13,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { buildGateContext } from "./lib/gate-context.mjs";
-import { STEPS, bodyRequiredTrailers, missingBodyAttestations, parseContext, syncAction } from "./land-branch.mjs";
+import { STEPS, bodyRequiredTrailers, missingBodyAttestations, parseContext, syncAction, parseGateStatus, gateFailureSite } from "./land-branch.mjs";
 import { parseArgs as gateLocalArgs } from "./gate-local.mjs";
 import { obligationLines } from "./pregate-preflight.mjs";
 
@@ -105,4 +105,15 @@ test("a `--` forwarded by pnpm does not swallow the flag after it", () => {
   // ["--", "--message-file", "m"]; util.parseArgs would read that as positionals.
   assert.equal(gateLocalArgs(["--", "--message-file", "m"]).messageFile, "m");
   assert.equal(gateLocalArgs(["--message-file", "m"]).messageFile, "m");
+});
+
+test("a refusal before the lease is not reported as a verdict on this SHA", () => {
+  // Observed on this branch's first landing: preflight refused, the record was
+  // still bound to an older SHA, and the old message sent the reader to it.
+  const stale = parseGateStatus(JSON.stringify({ verdict: "STALE", headSha: "b", boundSha: "a" }));
+  assert.equal(gateFailureSite(stale, "b"), "preflight");
+  const bound = parseGateStatus(JSON.stringify({ verdict: "FAIL", headSha: "b", boundSha: "b" }));
+  assert.equal(gateFailureSite(bound, "b"), "verdict");
+  assert.equal(gateFailureSite(parseGateStatus("ELIFECYCLE"), "b"), "unknown");
+  assert.equal(parseGateStatus(JSON.stringify({ verdict: "PASS" })), null, "below the floor");
 });
