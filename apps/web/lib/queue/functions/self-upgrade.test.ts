@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { err, ok } from "@/lib/shared/action-result";
 import { createHash } from "node:crypto";
-import { configureReleaseUpgradeTest, registerCoreSelfUpgradeSuccessTest, registerInstallStateHandoffTests, registerReleaseWorkerTargetRecoveryTests, registerSelfUpgradeFunctionTests } from "./self-upgrade-handoff.test-support";
+import { registerPrebuildTests } from "./self-upgrade-prebuild.test-support"; import { configureReleaseUpgradeTest, registerCoreSelfUpgradeSuccessTest, registerInstallStateHandoffTests, registerReleaseWorkerTargetRecoveryTests, registerSelfUpgradeFunctionTests } from "./self-upgrade-handoff.test-support";
 
 const TEST_INSTALL_STATE = JSON.stringify({ platform: "linux", arch: "amd64" });
 const TEST_INSTALL_STATE_HASH = createHash("sha256").update(TEST_INSTALL_STATE).digest("hex");
@@ -32,9 +32,7 @@ const mocks = vi.hoisted(() => ({
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
   getRun: vi.fn(),
-  runPromoter: vi.fn(),
-  // BI-F9EE05E5 plan item 0: the build-only promoter pass before the drain.
-  runPrebuild: vi.fn(),
+  runPromoter: vi.fn(), runPrebuild: vi.fn(), // runPrebuild: the build-only pass before the drain (plan item 0)
   isPromoterAvailable: vi.fn().mockResolvedValue(true),
   ensurePromoterImage: vi
     .fn()
@@ -140,9 +138,7 @@ vi.mock("@/lib/self-upgrade/promoter", async (importOriginal) => ({
   // Keep the real pure exports (constants like PROMOTER_ALREADY_RUNNING_EXIT_CODE
   // that the orchestrator imports statically) and mock only the spawn-heavy fns.
   ...(await importOriginal<typeof import("@/lib/self-upgrade/promoter")>()),
-  // The build-only pass before the drain goes to its own fake, so every
-  // assertion on runPromoter still means the swap.
-  runPromoter: (params: { phase?: string }) => (params.phase === "build" ? mocks.runPrebuild(params) : mocks.runPromoter(params)),
+  runPromoter: (p: { phase?: string }) => (p.phase === "build" ? (mocks.runPrebuild(p) ?? Promise.resolve({ exitCode: 0, stdout: "", stderr: "" })) : mocks.runPromoter(p)),
   isPromoterAvailable: mocks.isPromoterAvailable,
   ensurePromoterImage: mocks.ensurePromoterImage,
   buildCandidatePromoterImage: mocks.buildCandidatePromoterImage,
@@ -262,7 +258,6 @@ beforeEach(() => {
   const artifact = { digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } };
   mocks.resolvePromoterArtifact.mockResolvedValue(artifact);
   mocks.runPromoterReadiness.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ stage: "preflight", result: "ready", failures: [], sourceHash: TEST_INSTALL_STATE_HASH, projectionHash: "b".repeat(64), fromSchemaVersion: 1, toSchemaVersion: 2 }), stderr: "" });
-  mocks.runPrebuild.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
   mocks.recordPromoterReadiness.mockResolvedValue({});
   mocks.summarizeRecoveryPointFailure.mockReturnValue(
     "recovery-point-failed: postgres BR-PG",
@@ -308,32 +303,7 @@ describe("success path", () => {
     mocks.isFeatureBuildDeployed.mockResolvedValue(true);
   });
 
-  // BI-F9EE05E5 plan item 0: the image is built while the portal still serves.
-  it("builds the image before the drain starts, with the swap's inputs", async () => {
-    const order: string[] = [];
-    mocks.runPrebuild.mockImplementation(async () => { order.push("prebuild"); return { exitCode: 0, stdout: "", stderr: "" }; });
-    const startQuiescence = mocks.startQuiescence.getMockImplementation();
-    mocks.startQuiescence.mockImplementation(async (...args: unknown[]) => { order.push("drain"); return startQuiescence?.(...(args as [])); });
-    const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ ok: true, status: "succeeded" });
-    expect(order.slice(0, 2)).toEqual(["prebuild", "drain"]);
-    const prebuild = mocks.runPrebuild.mock.calls[0]![0] as { phase: string; containerName: string; targetSha: string };
-    const swap = mocks.runPromoter.mock.calls[0]![0] as { targetSha: string; containerName: string };
-    expect(prebuild.phase).toBe("build");
-    expect(prebuild.targetSha).toBe(swap.targetSha);
-    expect(prebuild.containerName).toBe(`${swap.containerName}-prebuild`);
-  });
-
-  it("fails the run before the drain when the prebuild fails: nothing is closed or swapped", async () => {
-    mocks.runPrebuild.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "next build: out of memory" });
-    const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ ok: false, status: "failed", reason: "prebuild-failed" });
-    expect(mocks.startQuiescence).not.toHaveBeenCalled();
-    expect(mocks.runPromoter).not.toHaveBeenCalled();
-    expect(mocks.failRun).toHaveBeenCalledWith(expect.any(String), expect.stringContaining("prebuild-failed"));
-  });
-
-  registerCoreSelfUpgradeSuccessTest({ mocks, runSelfUpgrade });
+  registerCoreSelfUpgradeSuccessTest({ mocks, runSelfUpgrade }); registerPrebuildTests({ mocks, runSelfUpgrade });
   registerReleaseWorkerTargetRecoveryTests({ mocks, runSelfUpgrade, installState: TEST_INSTALL_STATE });
 
   it("classifies a source-free consumer at the verified release as up to date without Git", async () => {
