@@ -8,6 +8,8 @@ const json = (v: unknown) => JSON.parse(JSON.stringify(v)) as any;
 
 // Archetype-driven marketing skill visibility and relabeling.
 // Only archetypes that need overrides are listed; the rest get {} (all skills, default labels).
+// Every archetype row ships on every install; a coworker reads only its own org's
+// archetype rules, via getMarketingSkillRules (apps/web/lib/actions/agent-coworker.ts).
 const MARKETING_SKILL_RULES: Record<string, Record<string, unknown>> = {
   // BI-3101AED6: a software platform sells to the businesses that run on it,
   // one buyer type at a time — not to a generic "tech buyer". When the
