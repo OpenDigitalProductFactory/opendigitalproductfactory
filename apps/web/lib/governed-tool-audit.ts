@@ -82,8 +82,14 @@ export async function writeGovernedToolAudit(data: {
     success: data.result.success, executionMode: data.source,
     routeContext: data.context?.routeContext ?? null, durationMs: data.durationMs,
     auditClass, capabilityId: deriveCapabilityId(data.toolName),
+    // The elapsed time is the `durationMs` column above. It is deliberately NOT
+    // folded into `summary`: the summary is read as a stable identity for the row
+    // (the pattern observer substring-matches it, the operations map and evidence
+    // search display it), and embedding wall-clock gave two otherwise identical
+    // calls two different summaries — which flaked AC-ENFORCE's deep-equal on
+    // 0ms vs 1ms. One fact, one column.
     summary: isMetricsOnly
-      ? `${data.toolName}: ${data.result.success ? "ok" : "failed"}${data.durationMs ? ` (${data.durationMs}ms)` : ""}`
+      ? `${data.toolName}: ${data.result.success ? "ok" : "failed"}`
       : null,
     apiTokenId: data.context?.apiTokenId ?? null, skillId: data.context?.skillId ?? null,
     delegationChainId: data.context?.delegationChainId ?? null,
