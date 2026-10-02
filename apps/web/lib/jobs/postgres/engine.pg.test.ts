@@ -18,7 +18,7 @@ import * as store from "./store";
 import { createJobWorker, maxAttemptsFor } from "./worker";
 
 const DATABASE_URL = process.env.DPF_JOBS_TEST_DATABASE_URL?.trim() ?? "";
-const MIGRATION = join(__dirname, "../../../../../packages/db/prisma/migrations/20261001180000_durable_job_engine/migration.sql");
+const MIGRATION = join(__dirname, "../../../../../packages/db/prisma/migrations/20261001210000_durable_job_engine/migration.sql");
 const TABLES = ['"JobConcurrencySlot"', '"JobWait"', '"JobStep"', '"JobRun"', '"JobEvent"', '"JobCronState"'];
 
 describe.skipIf(!DATABASE_URL)("Postgres durable-job engine (real database)", () => {

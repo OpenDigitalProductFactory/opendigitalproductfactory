@@ -38,6 +38,7 @@ import { MCP_OAUTH_ASSETS } from "./mcp-oauth-assets";
 import { MCP_ASSETS } from "./mcp-assets";
 import { WORKROOM_PARTICIPANT_ASSETS } from "./workroom-participant-assets";
 import { WORKROOM_RELATION_ASSETS } from "./workroom-relation-assets";
+import { GPP_PERMIT_ASSETS } from "./gpp-permit-assets";
 import { INITIATIVE_GOVERNANCE_ASSETS } from "./initiative-governance-assets";
 import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
 import { MAILROOM_ASSETS } from "./mailroom-assets";
@@ -682,6 +683,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...MCP_ASSETS,
   ...WORKROOM_PARTICIPANT_ASSETS,
   ...WORKROOM_RELATION_ASSETS,
+  ...GPP_PERMIT_ASSETS,
   ...INITIATIVE_GOVERNANCE_ASSETS,
   ...FEDERATION_INTRODUCTION_ASSETS,
   ...MAILROOM_ASSETS,

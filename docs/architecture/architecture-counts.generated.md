@@ -8,8 +8,8 @@ this file; never retype them into prose, where they drift (Simplify & Strengthen
 
 | Count | Value | Source of truth |
 |---|---:|---|
-| Prisma models | 643 | `packages/db/prisma/schema/` |
-| Prisma enums | 109 | `packages/db/prisma/schema/` |
-| Migrations | 607 | `packages/db/prisma/migrations/` |
+| Prisma models | 645 | `packages/db/prisma/schema/` |
+| Prisma enums | 112 | `packages/db/prisma/schema/` |
+| Migrations | 609 | `packages/db/prisma/migrations/` |
 | Kernel principles | 111 | `docs/founder-kernel/wiki/principles/` |
 | App routes | 665 | `apps/web/lib/ea/route-manifest.json` |

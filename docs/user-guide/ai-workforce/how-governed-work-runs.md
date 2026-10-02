@@ -230,6 +230,19 @@ One recorded decision then covers every call inside that envelope, and anything 
 offered. See the
 [pairing diagram](../../architecture/gated-permissions-process.md#73-the-pairing-at-a-glance).
 
+**Permits are being recorded, not yet required.** When a gate admits an outward, authority-changing or
+irreversible call, the platform now records a permit for it: which gate admitted the call, for which
+tool, and until when. The call's receipt notes the permit's verdict. This runs in shadow mode. A
+missing or expired permit is recorded, never refused, and routine reads and ordinary writes are not
+affected. A call made around the governed path is recorded as unmediated. Each permit is also signed
+and tied to the call's exact arguments. A permit that was altered after it was issued, or reused for
+different arguments, is recorded as such. An install that has no permit signing key records its
+permits as unsigned. Enforcement is switched on one binding at a time, and only after its shadow record
+has been reviewed and a recorded decision approves it. No binding is switched on yet. When one is, a
+call under it without a valid permit is held with "permit required", which names the approval to
+obtain; the call is not lost, and it runs once that approval is in place. If the install has no signing
+key, the platform keeps that binding in shadow and records why, rather than holding every call.
+
 Denials come back as named reasons — a missing decision interaction, a missing envelope, a
 tripped stop condition, a missing verification receipt — not as a generic refusal. A denial
 tells you what to fix.

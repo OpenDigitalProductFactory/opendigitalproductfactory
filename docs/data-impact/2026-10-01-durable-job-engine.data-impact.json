@@ -13,7 +13,7 @@
     "reviewDisposition": "Not shown on any surface. Visible to database administrators only, as Inngest's own tables are today."
   },
   "migration": {
-    "name": "20261001180000_durable_job_engine",
+    "name": "20261001210000_durable_job_engine",
     "backfill": "None. One enum and six new tables nothing existing references; every function stays on Inngest until the flag routes it. IF NOT EXISTS and duplicate_object guards make a re-run harmless, so it applies cleanly against any existing data state (verified: fresh database, twice; a copy of the live schema, twice).",
     "rollback": "Forward-only. With the flag unset the tables stay empty and unused; older code ignores them."
   },

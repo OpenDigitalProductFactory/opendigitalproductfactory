@@ -30,7 +30,7 @@ import { createJobWorker } from "@/lib/jobs/postgres/worker";
 import type { JobStepTools } from "@/lib/jobs/types";
 
 const URL = process.env.DPF_JOBS_BENCH_DATABASE_URL?.trim() ?? "";
-const MIGRATION = join(__dirname, "../../../packages/db/prisma/migrations/20261001180000_durable_job_engine/migration.sql");
+const MIGRATION = join(__dirname, "../../../packages/db/prisma/migrations/20261001210000_durable_job_engine/migration.sql");
 const TABLES = ['"JobConcurrencySlot"', '"JobWait"', '"JobStep"', '"JobRun"', '"JobEvent"', '"JobCronState"'];
 
 function arg(name: string, fallback: number): number {

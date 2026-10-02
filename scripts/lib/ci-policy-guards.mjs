@@ -645,6 +645,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/check-no-local-markdown-renderer.test.mjs"),
       node("scripts/check-no-local-markdown-renderer.mjs"),
     ]),
+    // No hidden Unicode in files a model reads as instructions (BI-C0E8A9EC,
+    // EP-E76E81D1): rulebooks, skills, prompts, registries and kernel pages.
+    // Undeclared inputs on purpose — its scope is mostly markdown.
+    guard("hidden-unicode-instruction-files-guard", "Hidden Unicode Instruction Files Guard", [
+      conformanceTest("scripts/check-hidden-unicode-instruction-files.test.mjs"),
+      node("scripts/check-hidden-unicode-instruction-files.mjs"),
+    ]),
     // One canonical-JSON form for hashes and signatures per import boundary
     // (plan 2026-09-08 §10.5 S4). Every remaining copy differs from it and
     // feeds a persisted or signed value, so each stays allowlisted with its
