@@ -286,6 +286,13 @@ deployment you'll want:
    are excluded from the redirect so load balancer probes hitting the
    VM directly still succeed.
 
+   Behind a proxy or tunnel, per-requester rate limits key on the
+   `X-Forwarded-For` entry your nearest proxy appended (the rightmost),
+   never the leftmost, which the client controls. In code,
+   `clientAddressKey` (`apps/web/lib/security/client-address.ts`) is the
+   only way to derive a requester key, and the `xff-single-reader` CI
+   guard refuses any other reader of the header (BI-1FF67B91).
+
 The cloud-deployment spec covers TLS placement options in detail
 ([§ Public URL and TLS](../superpowers/specs/2026-05-09-cloud-deployment-design.md#public-url-and-tls)).
 

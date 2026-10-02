@@ -1,0 +1,26 @@
+{
+  "format": "gpp-layout/0.1",
+  "shape": "drc-w-orphan-layout@1.0.0",
+  "nodes": {
+    "stage:a": {
+      "x": 0,
+      "y": 0
+    },
+    "stage:ghost": {
+      "x": 240,
+      "y": 0
+    },
+    "stop:success:1": {
+      "x": 480,
+      "y": 0
+    }
+  },
+  "edges": {
+    "edge:a->stop:success:1": {}
+  },
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  }
+}

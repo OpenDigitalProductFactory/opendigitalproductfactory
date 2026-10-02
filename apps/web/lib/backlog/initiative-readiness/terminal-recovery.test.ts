@@ -87,9 +87,9 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
         artifactRef: {
           kind: "repo-blob-at-commit" as const,
           repositoryFullName: dispatch.repositoryFullName,
-          commitSha: artifact.commitSha ?? dispatch.headSha,
-          path: artifact.path,
-          providerBlobId: artifact.providerBlobId,
+          commitSha: (artifact.kind !== "feature-build-revision" ? artifact.commitSha : undefined) ?? dispatch.headSha,
+          path: artifact.kind !== "feature-build-revision" ? artifact.path : `build-artifact-revision/${artifact.revisionId}`,
+          providerBlobId: artifact.kind !== "feature-build-revision" ? artifact.providerBlobId : artifact.valueDigest,
         },
       };
       const requiredToolNames = ["record_initiative_evidence", "read_source_at_version"];

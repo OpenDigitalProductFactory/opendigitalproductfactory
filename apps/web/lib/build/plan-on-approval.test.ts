@@ -67,3 +67,30 @@ describe("formatPlanReviewFeedback (BI-99B06AD1 fix-loop)", () => {
     expect(out).not.toContain("issue 20");
   });
 });
+
+describe("known-missing-path revision hints (FB-2684020A)", () => {
+  it("formats nothing when there are no dead paths", async () => {
+    const { formatKnownMissingPaths } = await import("./plan-on-approval");
+    expect(formatKnownMissingPaths([])).toBe("");
+  });
+  it("names the dead path, its nearest live directory, and forbids modify on it", async () => {
+    const { formatKnownMissingPaths } = await import("./plan-on-approval");
+    const text = formatKnownMissingPaths([
+      { path: "apps/web/app/(shell)/admin/platform/page.tsx", nearestExistingDirectory: "apps/web/app/(shell)/admin" },
+      { path: "apps/web/lib/gone.ts", nearestExistingDirectory: null },
+    ]);
+    expect(text).toContain("PATHS THAT DO NOT EXIST");
+    expect(text).toContain("apps/web/app/(shell)/admin/platform/page.tsx (does not exist; nearest existing directory: apps/web/app/(shell)/admin/)");
+    expect(text).toContain("apps/web/lib/gone.ts (does not exist)");
+    expect(text).toContain('Do NOT use action "modify"');
+  });
+  it("lifts the reviewer's missing-modify-target issues back into path hints", async () => {
+    const { missingPathsFromReviewIssues } = await import("./plan-on-approval");
+    const hints = missingPathsFromReviewIssues([
+      { severity: "critical", description: "Plan refers to missing modify target: apps/web/app/(shell)/admin/platform/page.tsx" },
+      { severity: "critical", description: "Plan refers to missing modify target: apps/web/app/(shell)/admin/platform/page.tsx" },
+      { severity: "major", description: "Plan lacks an integration task." },
+    ]);
+    expect(hints.map((h) => h.path)).toEqual(["apps/web/app/(shell)/admin/platform/page.tsx"]);
+  });
+});

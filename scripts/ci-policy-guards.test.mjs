@@ -44,6 +44,7 @@ const EXPECTED_LEGACY_JOBS = [
   "governed-teardown-guard",
   "guard-conformance-marks",
   "guard-diff-honesty",
+  "hidden-unicode-commit-text-guard",
   "hidden-unicode-instruction-files-guard",
   "host-port-range-guard",
   "installer-help-contract",
@@ -84,6 +85,7 @@ const EXPECTED_LEGACY_JOBS = [
   "shell-guard-shim-contract",
   "singleton-safety-guard",
   "skill-capability-key-guard",
+  "skill-pack-category",
   "spec-plan-doc-gate",
   "spec-status-frontmatter",
   "stewardship-scope-guard",
@@ -95,6 +97,7 @@ const EXPECTED_LEGACY_JOBS = [
   "ux-fit-gate",
   "ux-primitive-adoption-guard",
   "work-unit-conformance-guard",
+  "xff-single-reader",
 ];
 
 function workflowJobBlock(workflow, jobId) {

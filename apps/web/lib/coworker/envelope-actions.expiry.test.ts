@@ -30,10 +30,13 @@ beforeEach(() => {
 
 describe("envelope decisions honour the decision window", () => {
   it("approves inside the window", async () => {
-    findUnique.mockResolvedValue(row());
+    findUnique.mockResolvedValue(row({ approvalBindingFingerprint: "binding-1", argsJson: { approvalBinding: { toolName: "create_backlog_item" } } }));
     const result = await approveEnvelope("env-1", "user-1");
     expect(result).toMatchObject({ ok: true, envelope: { status: "approved" } });
-    expect(updateMany).toHaveBeenCalledWith({ where: { id: "env-1", status: "proposed" }, data: { status: "approved" } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: "env-1", status: "proposed" }, data: expect.objectContaining({
+      status: "approved",
+      argsJson: { approvalBinding: { toolName: "create_backlog_item" }, humanApproval: { userId: "user-1", approvedAt: expect.any(String) } },
+    }) });
   });
 
   // BI-F4EB23C1 — a second press after the card reconciled cannot approve twice.
@@ -42,6 +45,15 @@ describe("envelope decisions honour the decision window", () => {
     updateMany.mockResolvedValueOnce({ count: 0 });
     const result = await approveEnvelope("env-1", "user-1");
     expect(result).toMatchObject({ ok: false, httpStatus: 409 });
+  });
+
+  it.each([
+    { target: "customer-1", action: "open" },
+    { approvalBinding: { toolName: "a-tool-argument" } },
+  ])("preserves raw screen-action arguments on approval: %j", async (argsJson) => {
+    findUnique.mockResolvedValue(row({ argsJson, approvalBindingFingerprint: null }));
+    expect(await approveEnvelope("env-1", "user-1")).toMatchObject({ ok: true });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: "env-1", status: "proposed" }, data: { status: "approved" } });
   });
 
   it.each([

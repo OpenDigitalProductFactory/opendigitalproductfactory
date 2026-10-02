@@ -17,7 +17,9 @@
 //
 // BI-0F9C291C / EP-COWORKER-INTERACTIVITY.
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
+import { isRecord } from "@/lib/shared/coerce";
+import { humanApprovalMarker } from "./human-approved-execution";
 
 import {
   describeTransitionError,
@@ -38,6 +40,7 @@ export interface EnvelopeRow {
   chatMessageId: string | null;
   manifestActionId: string;
   argsJson: unknown;
+  approvalBindingFingerprint?: string | null;
   rationale: string;
   status: EnvelopeStatus;
   createdAt: Date;
@@ -131,17 +134,31 @@ export async function approveEnvelope(
     };
   }
 
+  // Bound authority envelopes store metadata, not executable arguments. Screen
+  // action envelopes replay argsJson verbatim, so never add metadata to them.
+  const boundArgs = load.envelope.approvalBindingFingerprint
+    && isRecord(load.envelope.argsJson) && isRecord(load.envelope.argsJson.approvalBinding)
+    ? load.envelope.argsJson : null;
+  const data = {
+    status: "approved",
+    // BI-E6E2E704: distinguish an authenticated person's decision from a
+    // policy-projected envelope. Preserve the existing exact-call binding.
+    ...(boundArgs ? { argsJson: {
+      ...boundArgs,
+      humanApproval: humanApprovalMarker(callerUserId),
+    } as Prisma.InputJsonObject } : {}),
+  };
   // Conditional on still being proposed: two overlapping decisions (a slow
   // first POST and a second press after the card reconciled, BI-F4EB23C1)
   // record one approval; the other is told it is already settled.
   const claimed = await prisma.coworkerActionEnvelope.updateMany({
     where: { id: envelopeId, status: "proposed" },
-    data: { status: "approved" },
+    data,
   });
   if (claimed.count !== 1) {
     return { ok: false, reason: "This request was already decided.", httpStatus: 409 };
   }
-  const updated = { ...load.envelope, status: "approved" };
+  const updated = { ...load.envelope, ...data };
   // Approving does NOT mark the waiting task working here, and must not.
   // Marking it working at approval time makes the resume's CAS on
   // `status: "input-required"` unmatchable and the approval unusable — #4796

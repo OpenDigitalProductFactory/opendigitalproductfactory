@@ -1,0 +1,56 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "soundness-no-budget-stop",
+  "version": "1.0.0",
+  "title": "Soundness fixture soundness-no-budget-stop",
+  "description": "Seeded S-6: no budget stop.",
+  "triggers": [
+    "claim"
+  ],
+  "stages": [
+    {
+      "key": "a",
+      "title": "Stage a",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage a recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ]
+    },
+    {
+      "key": "b",
+      "title": "Stage b",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage b recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ]
+    }
+  ],
+  "stopConditions": [
+    {
+      "kind": "success",
+      "condition": "Every stage recorded its evidence.",
+      "disposition": "proceed"
+    },
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

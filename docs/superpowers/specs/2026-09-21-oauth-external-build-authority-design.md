@@ -371,10 +371,13 @@ The supported control above is the only recovery path. An assistant that is not
 already admitted cannot use `invite_room_participant` to invite itself or
 someone else: human approval of that exact call changes neither its room
 membership nor its clearance. The governed executor must therefore evaluate
-this deterministic room-membership precondition after capability and grant
-checks but before an authority envelope is created. A failed retry returns the
-same actionable owner route without another consent request unless the room or
-caller state has changed.
+this deterministic room-membership precondition before any capability- or
+grant-based authority envelope is created. The same room-access check runs
+again at execution time, including when an approved call resumes, because room
+membership or connection authority may have changed while approval was pending.
+The invitation handler intentionally repeats its exact-room check as defence in
+depth at mutation time. A failed retry returns the same actionable owner route
+without another consent request unless the room or caller state has changed.
 
 Room resolution uses the canonical WorkItem anchor. A `work-capsule:WC-*` key
 resolves through `Workroom.workItemId`, while a `backlog-item:BI-*` key resolves

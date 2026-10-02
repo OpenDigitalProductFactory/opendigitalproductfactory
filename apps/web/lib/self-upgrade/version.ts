@@ -329,7 +329,7 @@ export async function resolveTargetSha(
     remote: config.repositoryRemote ?? process.env.REPO_REMOTE ?? "origin",
     branch: config.repositoryBranch ?? process.env.REPO_BRANCH ?? "main",
   };
-  const key = `${at.hostSourcePath} ${at.remote} ${at.branch}`;
+  const key = `${at.hostSourcePath}\x00${at.remote}\x00${at.branch}`;
   const now = options.now?.() ?? Date.now();
   const cached = targetShaCache.get(key);
   if (cached && cached.sha && now - cached.resolvedAt < TARGET_SHA_CACHE_TTL_MS) {

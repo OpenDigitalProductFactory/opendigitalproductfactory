@@ -1,0 +1,75 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "drc-d3-checkpoint-not-exact",
+  "version": "1.0.0",
+  "title": "DRC fixture drc-d3-checkpoint-not-exact",
+  "description": "Seeded D-3: the next stage holds an irreversible tool and the gate's checkpoint is not bound to the exact action.",
+  "triggers": [
+    "claim"
+  ],
+  "stages": [
+    {
+      "key": "a",
+      "title": "Stage a",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "governed-decision",
+        "condition": "The accountable owner decides stage a.",
+        "decisionScope": "drc-loose-checkpoint-scope",
+        "gate": {
+          "authority": "wwmd",
+          "mode": "enforced",
+          "blocking": true,
+          "resolution": "accountable-human",
+          "checkpoint": {
+            "role": "role:shape-owner",
+            "exactAction": false
+          }
+        }
+      },
+      "evidence": [
+        "decision-record"
+      ]
+    },
+    {
+      "key": "b",
+      "title": "Stage b",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage b recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ],
+      "tools": [
+        "merge_backlog_items"
+      ]
+    }
+  ],
+  "stopConditions": [
+    {
+      "kind": "success",
+      "condition": "Every stage recorded its evidence.",
+      "disposition": "proceed"
+    },
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    },
+    {
+      "kind": "budget",
+      "condition": "The cycle budget is spent.",
+      "disposition": "inconclusive"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

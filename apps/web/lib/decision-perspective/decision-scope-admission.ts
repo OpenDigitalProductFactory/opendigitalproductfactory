@@ -25,8 +25,8 @@
 // REFUSED with a pick list — the same contract `work_shape_required` uses for
 // delivery shape: put the list to the caller and let them name it, never guess.
 
-export const DECISION_SCOPES = ["wwmd", "wwwd", "wsid"] as const;
-export type DecisionScope = (typeof DECISION_SCOPES)[number];
+import { isDecisionScope, type DecisionScope } from "@dpf/validators";
+export { DECISION_SCOPES, isDecisionScope, type DecisionScope } from "@dpf/validators";
 
 export type DecisionScopePick = {
   ref: DecisionScope;
@@ -85,10 +85,6 @@ export type ScopeAdmission =
 
 function pickFor(scope: DecisionScope): DecisionScopePick {
   return DECISION_SCOPE_PICK_LIST.find((entry) => entry.ref === scope)!;
-}
-
-export function isDecisionScope(value: unknown): value is DecisionScope {
-  return typeof value === "string" && (DECISION_SCOPES as readonly string[]).includes(value);
 }
 
 /**

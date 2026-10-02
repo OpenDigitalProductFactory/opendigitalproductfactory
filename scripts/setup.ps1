@@ -20,6 +20,9 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     Write-Fail "Docker is not installed. Install Docker Desktop: https://www.docker.com/products/docker-desktop/"
 }
 Write-Ok "Docker found: $(docker --version)"
+# BI-75ECED42: Docker Desktop restarts the whole engine when it installs an
+# update of its own, killing a running upgrade or build mid-way.
+Write-Warn "Docker Desktop: turn off automatic updates for an operated install (Settings > Software updates). An update restarts every container, including mid-upgrade."
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Fail "Node.js is not installed. Download v20+ from: https://nodejs.org/"
@@ -111,27 +114,30 @@ if (-not (Test-Path $rootEnv)) {
     Write-Ok "Created root .env with generated secrets"
 }
 
-# GitHub update signing secret (BI-C26D5DC5): generated when missing or still the
-# example placeholder, never rotated once set. Distinct per file on purpose: each
-# is the secret of the portal that reads that file.
+# GitHub update signing secret (BI-C26D5DC5) and GPP permit signing key
+# (BI-8541D491): generated when missing or still the example placeholder, never
+# rotated once set, never printed. Distinct per file on purpose: each is the
+# secret of the portal that reads that file.
 foreach ($envFile in @("apps\web\.env.local", $rootEnv)) {
     if (-not (Test-Path $envFile)) { continue }
-    $envText = Get-Content -Path $envFile -Raw
-    if ($null -eq $envText) { $envText = "" }
-    $match = [System.Text.RegularExpressions.Regex]::Match($envText, '(?m)^DPF_GIT_WEBHOOK_SECRET=(.*)$')
-    $current = if ($match.Success) { $match.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
-    if ($current.Length -gt 0 -and -not $current.StartsWith("<")) { continue }
-    $webhookBytes = New-Object byte[] 32
-    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($webhookBytes)
-    $webhookSecret = -join ($webhookBytes | ForEach-Object { $_.ToString("x2") })
-    if ($match.Success) {
-        $envText = [System.Text.RegularExpressions.Regex]::Replace($envText, '(?m)^DPF_GIT_WEBHOOK_SECRET=.*$', "DPF_GIT_WEBHOOK_SECRET=$webhookSecret")
-    } else {
-        if ($envText.Length -gt 0 -and -not $envText.EndsWith("`n")) { $envText += "`n" }
-        $envText += "DPF_GIT_WEBHOOK_SECRET=$webhookSecret`n"
+    foreach ($secretKey in @("DPF_GIT_WEBHOOK_SECRET", "DPF_GPP_PERMIT_SECRET")) {
+        $envText = Get-Content -Path $envFile -Raw
+        if ($null -eq $envText) { $envText = "" }
+        $match = [System.Text.RegularExpressions.Regex]::Match($envText, "(?m)^$secretKey=(.*)$")
+        $current = if ($match.Success) { $match.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+        if ($current.Length -gt 0 -and -not $current.StartsWith("<")) { continue }
+        $secretBytes = New-Object byte[] 32
+        [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($secretBytes)
+        $secretValue = -join ($secretBytes | ForEach-Object { $_.ToString("x2") })
+        if ($match.Success) {
+            $envText = [System.Text.RegularExpressions.Regex]::Replace($envText, "(?m)^$secretKey=.*$", "$secretKey=$secretValue")
+        } else {
+            if ($envText.Length -gt 0 -and -not $envText.EndsWith("`n")) { $envText += "`n" }
+            $envText += "$secretKey=$secretValue`n"
+        }
+        Set-Content -Path $envFile -Value $envText -NoNewline
+        Write-Ok "Generated $secretKey in $envFile"
     }
-    Set-Content -Path $envFile -Value $envText -NoNewline
-    Write-Ok "Generated DPF_GIT_WEBHOOK_SECRET in $envFile"
 }
 
 # Inngest signing and event keys (BI-3267763F): the root .env feeds the compose

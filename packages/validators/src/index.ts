@@ -15,3 +15,9 @@ export * from "./readability";
 export * from "./setup-ux";
 export * from "./storefront";
 export * from "./untrusted-text";
+
+export * from "./decision-scope";
+export * from "./outcome-disposition";
+export * from "./trusted-agent-contracts";
+export * from "./trusted-agent-reference-loop";
+export * from "./trusted-agent-examples";

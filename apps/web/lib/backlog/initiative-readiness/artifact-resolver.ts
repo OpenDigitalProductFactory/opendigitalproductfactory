@@ -83,7 +83,7 @@ function subjectOwnsBuild(subject: InitiativeSubject, build: BuildRevisionRecord
   return false;
 }
 
-function initiativeTextFromBuildValue(value: unknown): string | null {
+export function initiativeTextFromBuildValue(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) return value;
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const markdown = (value as Record<string, unknown>).initiativeScopeMarkdown;

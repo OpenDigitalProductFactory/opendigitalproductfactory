@@ -54,7 +54,7 @@ import {
 } from "./execution-plan";
 import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store";
 import { estimateContextTokens, classifyContextPressure, compactAgenticMessages } from "./context-pressure";
-import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
+import { clampToolResultForModel, resolveToolResultCharCap, resolveToolResultProvenance } from "./tool-result-budget";
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
 import { applyEscalationLadderGuard } from "./escalation-ladder";
 import { buildDowngradedFabricationMessage, buildLocalToolCallFailureMessage } from "./provider-failure-messages";
@@ -2516,7 +2516,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         // left `message` unbounded and gave the model no signal that data was
         // cut. The stored toolResult (audit/receipts) is unaffected.
         content: clampToolResultForModel(toolResult, {
-          maxChars: resolveToolResultCharCap(resolvedMaxContextTokens), toolName: tc.name,
+          maxChars: resolveToolResultCharCap(resolvedMaxContextTokens), toolName: tc.name, provenance: resolveToolResultProvenance(tc.name, (name) => dynamicToolSurface.definition(name)),
         }).text,
         toolCallId: tc.id,
       })),

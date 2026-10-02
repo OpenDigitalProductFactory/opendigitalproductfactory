@@ -10,6 +10,14 @@
 import { useCallback, useEffect, useState } from "react";
 import * as Location from "expo-location";
 
+/**
+ * What a person sees when the device can't produce a fix. expo-location's own
+ * error text (e.g. "FunctionCallException ... kCLErrorDomain error 0.") is
+ * meant for developers, so it goes to the console and never to the screen.
+ */
+export const LOCATION_UNAVAILABLE_MESSAGE =
+  "We couldn't find your location. Check that location is on, then try again.";
+
 export interface GeoLocationState {
   /** Captured WGS84 position, null until we have one. */
   latitude: number | null;
@@ -17,6 +25,7 @@ export interface GeoLocationState {
   /** Reactive permission state — drives a "Grant location" CTA when "denied". */
   permission: "granted" | "denied" | "unknown";
   isFetching: boolean;
+  /** Plain-language failure for display; never the native error text. */
   error: string | null;
   /** Trigger a permission request + a single fix; safe to call repeatedly. */
   refresh: () => Promise<void>;
@@ -48,7 +57,8 @@ export function useGeolocation(): GeoLocationState {
       setLatitude(position.coords.latitude);
       setLongitude(position.coords.longitude);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Location unavailable");
+      console.warn("[useGeolocation] location unavailable", err);
+      setError(LOCATION_UNAVAILABLE_MESSAGE);
     } finally {
       setIsFetching(false);
     }

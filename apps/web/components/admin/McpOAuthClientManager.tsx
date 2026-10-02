@@ -186,7 +186,7 @@ export function McpOAuthClientManager() {
                 type="button"
                 onClick={() => setPeopleFor(peopleFor?.clientId === row.clientId ? null : row)}
                 aria-expanded={peopleFor?.clientId === row.clientId}
-                aria-label={`People connected to ${row.clientName}`}
+                aria-label={`People connected to ${row.clientName} (${row.clientId})`}
               >
                 <Users className="h-3.5 w-3.5" aria-hidden="true" />
                 People
@@ -343,11 +343,17 @@ export function McpOAuthClientManager() {
             loading={loading}
             dense
             ariaLabel="Keys for automated tools"
+            className="overflow-x-auto"
             initialSort={{ key: "lastUsed", dir: "desc" }}
             empty={<span>No keys yet.</span>}
           />
           {peopleFor ? (
-            <OAuthClientPeople clientId={peopleFor.clientId} clientName={peopleFor.clientName} onChanged={refresh} />
+            <OAuthClientPeople
+              clientId={peopleFor.clientId}
+              clientName={peopleFor.clientName}
+              registeredAt={peopleFor.createdAt}
+              onChanged={refresh}
+            />
           ) : null}
         </div>
       </details>

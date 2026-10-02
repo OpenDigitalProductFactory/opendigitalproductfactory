@@ -66,9 +66,11 @@ export function routinePolicyActionEligibility(
   if (!workroom) {
     return { eligible: false, reason: "workroom-binding-required" };
   }
+  // A repository blob must sit at the Workroom head; a Build Studio revision is
+  // bound by its own immutable id and digest, not by a commit (BI-926A7E90).
   if (
     binding.artifactRef.repositoryFullName !== workroom.repositoryFullName
-    || binding.artifactRef.commitSha !== workroom.headSha
+    || (binding.artifactRef.kind === "repo-blob-at-commit" && binding.artifactRef.commitSha !== workroom.headSha)
   ) {
     return { eligible: false, reason: "workroom-binding-mismatch" };
   }

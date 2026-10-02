@@ -180,6 +180,8 @@ const APPROVAL_COMPLETION = "approval-completion";
 
 async function runGovernedToolPreflight(event: ToolLifecycleEvent): Promise<ToolResult | null> {
   if (_toolPreflightOverride) return _toolPreflightOverride(event);
+  // An approved run is room-checked after the gate instead, so a refusal
+  // closes its approval as failed (BI-F4EB23C1).
   if (event.context?.callerClient !== APPROVAL_COMPLETION) {
     const refusal = await oauthRoomRefusal(event.toolName, event.rawParams, event.userId, event.context);
     if (refusal) return refusal;
@@ -228,12 +230,10 @@ async function callExecuteTool(
   userId: string,
   ctx?: ToolExecutionContext,
 ): Promise<ToolResult> {
-  // An approved run is room-checked after the gate, so a refusal closes its
-  // approval as failed (BI-F4EB23C1); other calls were checked in preflight.
-  if (ctx?.callerClient === APPROVAL_COMPLETION) {
-    const refusal = await oauthRoomRefusal(toolName, params, userId, ctx);
-    if (refusal) return refusal;
-  }
+  // Recheck at execution: access may change before an approval resumes (#5925);
+  // an approved run is first checked here (BI-F4EB23C1).
+  const refusal = await oauthRoomRefusal(toolName, params, userId, ctx);
+  if (refusal) return refusal;
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
   return executeTool(toolName, params, userId, ctx);
 }
@@ -245,7 +245,8 @@ async function writeAudit(data: {
   userId: string;
   source: GovernedExecuteSource;
   context?: GovernedExecuteContext;
-  durationMs: number;
+  /** null when the tool never ran — see writeGovernedToolAudit. */
+  durationMs: number | null;
   alignmentDecision?: AlignmentGateDecision | null;
   preconditionDecision?: PreconditionOrderingDecision | null;
   envelopeId?: string | null;
@@ -357,7 +358,7 @@ export async function governedExecuteTool(
         userId: args.userId,
         source: args.source,
         context: args.context,
-        durationMs: 0,
+        durationMs: null,
       });
       if (auditRow?.id && consequence.consequential) {
         await writeToolExecutionReceipt({
@@ -395,48 +396,48 @@ export async function governedExecuteTool(
     }
     const agentGrantAllowed = await isAllowedByGrants(args.toolName, grants);
 
-    // Deterministic target preconditions come after capability/grant checks so
-    // they disclose nothing to an unauthorized caller, but before authority
-    // escalation because approving an impossible call cannot make it valid.
+    // Deterministic target preconditions run before authority escalation,
+    // including when a missing capability/grant would otherwise create an
+    // approval. Approving an impossible call cannot make it valid. The same
+    // access checks run again at execution time because room state can change
+    // while an approval is pending.
     // BI-061D7192: an unadmitted coworker repeatedly produced approval cards
     // for invite/recovery calls that the exact-room gate then refused.
-    if (humanCapabilityAllowed && agentGrantAllowed) {
-      const preflight = await runGovernedToolPreflight({
+    const preflight = await runGovernedToolPreflight({
+      toolName: args.toolName,
+      rawParams: args.rawParams,
+      userId: args.userId,
+      userContext: args.userContext,
+      context: args.context,
+      source: args.source,
+    });
+    if (preflight) {
+      const result: GovernedExecuteResult = {
+        ...preflight,
+        governance: { rejected: "precondition_denied" },
+      };
+      const auditRow = await writeAudit({
         toolName: args.toolName,
         rawParams: args.rawParams,
+        result,
         userId: args.userId,
-        userContext: args.userContext,
-        context: args.context,
         source: args.source,
+        context: args.context,
+        durationMs: null,
       });
-      if (preflight) {
-        const result: GovernedExecuteResult = {
-          ...preflight,
-          governance: { rejected: "precondition_denied" },
-        };
-        const auditRow = await writeAudit({
-          toolName: args.toolName,
+      if (auditRow?.id && consequence.consequential) {
+        await writeToolExecutionReceipt({
+          auditRowId: auditRow.id,
+          buildId: null,
           rawParams: args.rawParams,
           result,
-          userId: args.userId,
-          source: args.source,
+          toolName: args.toolName,
           context: args.context,
-          durationMs: 0,
+          consequential: true,
+          governedArgs: args,
         });
-        if (auditRow?.id && consequence.consequential) {
-          await writeToolExecutionReceipt({
-            auditRowId: auditRow.id,
-            buildId: null,
-            rawParams: args.rawParams,
-            result,
-            toolName: args.toolName,
-            context: args.context,
-            consequential: true,
-            governedArgs: args,
-          });
-        }
-        return result;
       }
+      return result;
     }
 
     const authorityGate = await enforceCoworkerToolAuthority(
@@ -474,7 +475,7 @@ export async function governedExecuteTool(
           userId: args.userId,
           source: args.source,
           context: args.context,
-          durationMs: 0,
+          durationMs: null,
         });
         if (auditRow?.id && consequence.consequential) {
           await writeToolExecutionReceipt({
@@ -511,7 +512,7 @@ export async function governedExecuteTool(
       userId: args.userId,
       source: args.source,
       context: args.context,
-      durationMs: 0,
+      durationMs: null,
     });
     if (auditRow?.id && consequence.consequential) {
       await writeToolExecutionReceipt({
@@ -541,7 +542,7 @@ export async function governedExecuteTool(
     preconditionRequired: consequence.preconditionRequired,
     writeAudit: ({ result, alignmentDecision: alignment, preconditionDecision: precondition }) => writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result, userId: args.userId,
-      source: args.source, context: args.context, durationMs: 0,
+      source: args.source, context: args.context, durationMs: null,
       alignmentDecision: alignment, preconditionDecision: precondition,
     }),
   });
@@ -592,7 +593,7 @@ export async function governedExecuteTool(
     };
     const auditRow = await writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result: refused, userId: args.userId,
-      source: args.source, context: args.context, durationMs: 0,
+      source: args.source, context: args.context, durationMs: null,
       alignmentDecision, preconditionDecision, envelopeId: approvedAuthorityEnvelopeId, gppPermit,
     });
     await observePermit(gppPermit, auditRow?.id ?? null);
@@ -613,7 +614,7 @@ export async function governedExecuteTool(
     };
     const reservedAudit = await writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result: reservationResult,
-      userId: args.userId, source: args.source, context: args.context, durationMs: 0,
+      userId: args.userId, source: args.source, context: args.context, durationMs: null,
       alignmentDecision, preconditionDecision, envelopeId: approvedAuthorityEnvelopeId, gppPermit,
     });
     reservedAuditId = reservedAudit?.id ?? null;
@@ -657,6 +658,7 @@ export async function governedExecuteTool(
       tokenGrantScopes: args.context?.tokenGrantScopes,
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
       authorityDecisionId,
+      approvedAuthorityEnvelopeId,
       ...(gppPermit?.permitId ? { gppPermitId: gppPermit.permitId } : {}),
       governedDispatch: async (nestedToolName, nestedParams, surfaceInvocation) => {
         const nestedTool = findTool(nestedToolName);

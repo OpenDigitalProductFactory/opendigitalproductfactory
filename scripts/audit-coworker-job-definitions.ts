@@ -59,7 +59,13 @@ type MeasuredAgent = {
   planes: Record<string, PlaneState>;
 };
 
-type RegistryAgent = { agent_id: string; escalates_to?: string; value_stream?: string };
+type RegistryAgent = {
+  agent_id: string;
+  /** The purpose axis's declared home (design §3) — why this role exists. */
+  capability_domain?: string;
+  escalates_to?: string;
+  value_stream?: string;
+};
 
 type AxisStatus = "answered" | "open";
 
@@ -110,9 +116,15 @@ export function auditAgent(agent: MeasuredAgent, registry: Map<string, RegistryA
       axes[axis] = state && Number(state.level) >= Number(state.ceiling) ? "answered" : "open";
       continue;
     }
-    // The two axes the measure does not grade, because they describe a
-    // coworker's place rather than its capability.
-    if (axis === "supervision") {
+    // The three axes the measure does not grade, because they describe a
+    // coworker's definition and place rather than its capability.
+    if (axis === "purpose") {
+      // Its declared home (design §3), not the identity plane's status flag
+      // (DI-4560387876E1). A role that has said why it exists has answered this,
+      // whether or not it has been promoted to active yet — and a role promoted
+      // to active that has NOT said so has not.
+      axes[axis] = (reg?.capability_domain ?? "").trim() ? "answered" : "open";
+    } else if (axis === "supervision") {
       axes[axis] = reg?.escalates_to ? "answered" : "open";
     } else {
       // tailoring — a coworker bound to a value stream is placed within the

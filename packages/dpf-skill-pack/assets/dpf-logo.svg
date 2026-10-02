@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" width="120" height="40">
+  <defs>
+    <linearGradient id="dpf-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4f80c7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7c8cf8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect x="2" y="6" width="28" height="28" rx="6" fill="url(#dpf-grad)" opacity="0.9"/>
+  <text x="16" y="25" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="white" text-anchor="middle">DPF</text>
+  <text x="38" y="18" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="#e0e0ff">Open Digital</text>
+  <text x="38" y="30" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="#e0e0ff">Product Factory</text>
+</svg>

@@ -58,6 +58,7 @@ import {
 } from "@/lib/mcp/listing-authority-resolver";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import { resolveToolResultProvenance, untrustedResultLabel } from "@/lib/tak/tool-result-provenance";
 import {
   resolveEffectiveTierForAuthSource,
   selectToolsForListing,
@@ -586,11 +587,12 @@ async function handleToolsCall(
   if (smugglingSuspected) {
     console.warn("[mcp/v1] hidden-unicode payload removed from tool result tool=%s removed=%d", sanitizeForLog(toolName), cleaned.total);
   }
+  // Spotlighting label (BI-1045525F): untrusted provenance is named in the text.
+  const label = untrustedResultLabel(resolveToolResultProvenance(toolName, PLATFORM_TOOLS));
+  const prefix = [label, smugglingSuspected ? invisibleRemovalNotice(cleaned) : ""].filter(Boolean).join("\n");
   const result = {
     ...executed,
-    message: smugglingSuspected
-      ? `${invisibleRemovalNotice(cleaned)}\n${cleaned.value.message ?? ""}`
-      : cleaned.value.message,
+    message: prefix ? `${prefix}\n${cleaned.value.message ?? ""}` : cleaned.value.message,
     error: cleaned.value.error,
     data: cleaned.value.data,
   };

@@ -10,6 +10,7 @@ import type {
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
 import { formatInitiativeReviewObjective, IMMUTABLE_REVIEW_READER_TOOL as IMMUTABLE_READER_TOOL } from "./initiative-review-objective";
+import { BUILD_ARTIFACT_REVISION_READER_TOOL } from "./terminal-tool-policy";
 
 export type InitiativeReadinessLane = {
   capability: NonNullable<ToolDefinition["requiredCapability"]>;
@@ -78,13 +79,20 @@ export type InitiativeReviewBindingPacket = {
     branchName: string;
     headSha: string;
   };
-  artifactRef: {
-    kind: "repo-blob-at-commit";
-    repositoryFullName: string;
-    commitSha: string;
-    path: string;
-    providerBlobId: string;
-  };
+  artifactRef:
+    | {
+      kind: "repo-blob-at-commit";
+      repositoryFullName: string;
+      commitSha: string;
+      path: string;
+      providerBlobId: string;
+    }
+    | {
+      kind: "feature-build-revision";
+      repositoryFullName: string;
+      revisionId: string;
+      valueDigest: string;
+    };
 };
 
 export type InitiativeReviewerRecovery = {
@@ -175,8 +183,16 @@ export type InitiativeRecoveryDispatchContext = {
 export type InitiativeRecoveryCanonicalArtifact =
   // A retained baseline already owns its immutable commit. Newly discovered
   // branch artifacts omit it and inherit the Workroom head below.
-  | { resolved: true; path: string; providerBlobId: string; commitSha?: string }
+  | { resolved: true; kind?: "repo-blob-at-commit"; path: string; providerBlobId: string; commitSha?: string }
+  // BI-926A7E90: a Build Studio design is an accepted `BuildArtifactRevision`,
+  // bound by revision id and value digest and read with
+  // `read_build_artifact_revision`. No repository artifact exists for it.
+  | { resolved: true; kind: "feature-build-revision"; revisionId: string; valueDigest: string; buildId: string }
   | { resolved: false; nextAction: string };
+
+type ResolvedRecoveryArtifact = Extract<InitiativeRecoveryCanonicalArtifact, { resolved: true }>;
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+type RecoveryArtifactInput = DistributiveOmit<ResolvedRecoveryArtifact, "resolved">;
 
 type ReviewerRouteDb = {
   agentToolGrant?: {
@@ -567,11 +583,13 @@ function requestCoworkerPacket(args: {
   dispatch: InitiativeRecoveryDispatchContext;
   independent: boolean;
   /** Null for a lane whose writer the binding contract does not cover. */
-  artifact: { path: string; providerBlobId: string; commitSha?: string } | null;
+  artifact: RecoveryArtifactInput | null;
   expectedCurrentBaselineId: string | null;
   eligibleEvidenceActivityIds: string[] | null;
 }) {
-  const reviewSha = args.artifact?.commitSha ?? args.dispatch.headSha;
+  const repoArtifact = args.artifact && args.artifact.kind !== "feature-build-revision" ? args.artifact : null;
+  const reviewSha = repoArtifact?.commitSha ?? args.dispatch.headSha;
+  const readerTool = args.artifact?.kind === "feature-build-revision" ? BUILD_ARTIFACT_REVISION_READER_TOOL : IMMUTABLE_READER_TOOL;
   const objective = formatInitiativeReviewObjective({ ...args.dispatch,
     itemId: args.decision.subject.id, gate: args.gate, toolName: args.toolName,
     independent: args.independent, artifact: args.artifact,
@@ -605,20 +623,27 @@ function requestCoworkerPacket(args: {
         eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds,
       }
       : {}),
-    artifactRef: {
-      kind: "repo-blob-at-commit" as const,
-      repositoryFullName: args.dispatch.repositoryFullName,
-      commitSha: reviewSha,
-      path: args.artifact.path,
-      providerBlobId: args.artifact.providerBlobId,
-    },
+    artifactRef: args.artifact.kind === "feature-build-revision"
+      ? {
+        kind: "feature-build-revision" as const,
+        repositoryFullName: args.dispatch.repositoryFullName,
+        revisionId: args.artifact.revisionId,
+        valueDigest: args.artifact.valueDigest,
+      }
+      : {
+        kind: "repo-blob-at-commit" as const,
+        repositoryFullName: args.dispatch.repositoryFullName,
+        commitSha: reviewSha,
+        path: args.artifact.path,
+        providerBlobId: args.artifact.providerBlobId,
+      },
   };
   const requestKey = args.gate === "objective-mapping" && args.eligibleEvidenceActivityIds
     ? createObjectiveMappingRequestKey({
       targetAgent: args.targetAgentId,
       objective,
       questionPacketSummary,
-      requiredToolNames: [args.toolName, IMMUTABLE_READER_TOOL],
+      requiredToolNames: [args.toolName, readerTool],
       binding: {
         ...binding,
         gate: "objective-mapping",
@@ -642,7 +667,7 @@ function requestCoworkerPacket(args: {
   return {
     ...base,
     requestKey,
-    requiredToolNames: [args.toolName, IMMUTABLE_READER_TOOL],
+    requiredToolNames: [args.toolName, readerTool],
     initiativeReviewBinding: binding,
   };
 }

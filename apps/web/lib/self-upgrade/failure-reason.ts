@@ -52,6 +52,13 @@ const EXPLANATIONS: Readonly<Record<string, FailureReasonExplanation>> = {
       "Changes made on this install overlap with the update, so it paused rather than overwrite your work. Someone needs to decide how to combine them.",
     retryable: false,
   },
+  // BI-75ECED42: Docker Desktop updating itself, or the host rebooting.
+  "engine-restarted": {
+    title: "The computer restarted Docker during the update",
+    detail:
+      "Docker restarted while the update was being installed, for example because Docker Desktop installed an update of its own. Nothing was installed and the platform came back on the version you already had. Turning off Docker Desktop's automatic updates prevents this.",
+    retryable: true,
+  },
   "promoter-readiness-failed": {
     title: "The updater wasn't ready",
     detail:

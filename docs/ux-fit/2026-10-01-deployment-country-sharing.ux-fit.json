@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "one-switch-with-recipients",
+  "decisionInteractionId": "DI-7947023026A9",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/federation-links/DeploymentCountrySharingPanel.tsx",
+      "apps/web/app/(shell)/platform/federation-links/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "one-switch-with-recipients",
+      "per-link-toggles",
+      "config-only"
+    ]
+  }
+}

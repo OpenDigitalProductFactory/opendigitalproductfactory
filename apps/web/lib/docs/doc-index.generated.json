@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 728,
+  "pageCount": 731,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -784,6 +784,7 @@
         "principle-directed-work-and-mbse-composition",
         "gated-permissions-and-approval-fatigue",
         "adjacent-dpf-concepts",
+        "word-editions",
         "source-of-truth-rule"
       ]
     },
@@ -2441,6 +2442,19 @@
       "publishedPortal": false,
       "anchors": [
         "theme-aware-styling-runbook"
+      ]
+    },
+    "docs/architecture/trusted-agent-reference-contract.md": {
+      "publicHref": "/architecture/trusted-agent-reference-contract/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portable-trusted-agent-reference-contract",
+        "run-the-examples",
+        "import-and-version-negotiation",
+        "host-integration-and-effect-recovery",
+        "privacy-and-dpf-compatibility"
       ]
     },
     "docs/architecture/trusted-ai-kernel.md": {
@@ -6263,7 +6277,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "enumerating-workrooms-through-mcp"
+        "enumerating-workrooms-through-mcp",
+        "executor-and-invocation"
       ]
     },
     "docs/personas/README.md": {
@@ -12045,6 +12060,22 @@
         "related"
       ]
     },
+    "docs/user-guide/customers/customer-map.md": {
+      "publicHref": "/user-guide/customers/customer-map/",
+      "portalHref": "/docs/customers/customer-map",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "open-the-map",
+        "sites-that-are-not-on-the-map",
+        "find-locations-automatically",
+        "service-areas",
+        "draw-an-area",
+        "read-the-coverage",
+        "related"
+      ]
+    },
     "docs/user-guide/customers/index.md": {
       "publicHref": "/user-guide/customers/",
       "portalHref": "/docs/customers/index",
@@ -12504,6 +12535,7 @@
         "choose-a-provider",
         "geography-hint",
         "using-the-free-nominatim-service",
+        "finding-map-locations-for-existing-sites",
         "setup-steps",
         "what-to-watch",
         "related"
@@ -12536,6 +12568,19 @@
         "separate-the-failure-domains",
         "change-and-recovery-rules",
         "what-to-watch"
+      ]
+    },
+    "docs/user-guide/platform/deployment-country-sharing.md": {
+      "publicHref": "/user-guide/platform/deployment-country-sharing/",
+      "portalHref": "/docs/platform/deployment-country-sharing",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "where-to-find-it",
+        "what-it-does",
+        "if-the-switch-is-unavailable",
+        "related"
       ]
     },
     "docs/user-guide/platform/discovery-operations.md": {
