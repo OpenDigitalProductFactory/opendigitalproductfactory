@@ -38,7 +38,7 @@ export function readPath(value: unknown, path: string): unknown {
 function operand(token: string, scope: ExpressionScope, expression: string): unknown {
   const text = token.trim();
   const quoted = STRING.exec(text);
-  if (quoted) return JSON.parse(`"${(quoted[1] ?? quoted[2] ?? "").replace(/\\'/g, "'").replace(/"/g, '\\"')}"`);
+  if (quoted) return (quoted[1] ?? quoted[2] ?? "").replace(/\\(.)/g, "$1");
   if (NUMBER.test(text)) return Number(text);
   if (text === "true" || text === "false") return text === "true";
   if (PATH.test(text)) {

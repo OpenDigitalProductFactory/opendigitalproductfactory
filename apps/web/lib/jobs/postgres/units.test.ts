@@ -24,6 +24,13 @@ describe("expressions (the subset the facade uses)", () => {
     expect(evaluateCondition(`event.data.n == 3`, { event, async })).toBe(true);
   });
 
+  it("decodes escapes in string literals, backslashes included", () => {
+    const quoted = { data: { s: `it's "x" a\\b` } };
+    expect(evaluateCondition(`async.data.s == 'it\\'s "x" a\\\\b'`, { event, async: quoted })).toBe(true);
+    expect(evaluateCondition(`async.data.s == "it's \\"x\\" a\\\\b"`, { event, async: quoted })).toBe(true);
+    expect(evaluateCondition(`async.data.s == "a\\b"`, { event, async: quoted })).toBe(false);
+  });
+
   it("refuses anything outside the subset instead of guessing", () => {
     for (const bad of ["event.data.x != 1", "event.data.x > 1", "size(event.data.list)", "ctx.data.x == 1"]) {
       expect(() => evaluateCondition(bad, { event })).toThrow(UnsupportedExpressionError);
