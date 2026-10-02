@@ -155,6 +155,13 @@ function nextStageKey(
   return definition.stages[index + 1]?.key ?? null;
 }
 
+/** The prior tick finished this same cycle (or already slept on it). */
+function cycleCompleted(prior: PriorWorkroomDrive | null, cycleKey: string): boolean {
+  if (!prior || prior.cycleKey !== cycleKey) return false;
+  return (prior.action === "stop" && prior.reason === "success")
+    || (prior.action === "do_not_wake" && prior.reason === "cycle_complete");
+}
+
 function asShape(
   definition: WorkShapeDefinitionContract,
   collaborationShape: string | null,
@@ -240,6 +247,18 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
     trigger,
     startedAt: input.now ?? new Date(0),
   });
+
+  // BI-D10BB58B: a cycle runs once. Success persists no stage, so without this
+  // the next tick restarted at stage 1 and re-earned the same cycle's governed
+  // decision: WC-A69BCABB looped seven times on 2026-10-02. The room sleeps
+  // until the cycle key changes.
+  if (cycleCompleted(input.priorDrive ?? null, cycle.cycleKey)) {
+    return emptyPlan(input, "do_not_wake", "cycle_complete", {
+      conformance,
+      cycle,
+      ledger: [`Cycle ${cycle.cycleKey} is complete; the room wakes in the next cycle.`],
+    });
+  }
 
   if (conformance.disposition === "stop") {
     return emptyPlan(input, "stop", "conformance_stop", {
