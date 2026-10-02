@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const MANIFEST_GUARD =
-  "node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only digest-pinned";
+  "node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only third-party";
 
 function read(path) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -24,7 +24,9 @@ test("shipped compose pins no third-party image by digest (BI-F7E9A541)", () => 
   assert.deepEqual(pins, []);
 });
 
-test("release gates verify digest-pinned compose images before release install reaches compose up", () => {
+// BI-DB87D925: third-party covers tag pins too. digest-pinned had checked nothing
+// since BI-F7E9A541 removed the last digest pin, and a deleted dpf-tts TAG went unseen.
+test("release gates verify third-party compose images before release install reaches compose up", () => {
   const releaseGates = read(".github/workflows/release-gates.yml");
   const publishImage = read(".github/workflows/publish-image.yml");
 
