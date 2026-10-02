@@ -16,7 +16,10 @@ and receives every approval its assistant asks for. The POST binds only if
 the ticked account is still the session's account. `Use a different
 account` signs in again and returns to the same request. If a connection
 was made under the wrong account, revoke it and reconnect; approvals never
-follow the connection to another person. The default flow is one Connect action;
+follow the connection to another person. An administrator ends one person's
+grants under a shared client registration with People > Revoke this person's
+access on Admin > Platform Development (BI-0A724798); the whole-client revoke
+stays the larger control. The default flow is one Connect action;
 `Change` and `Adjust permissions` are disclosures, and a picker is opened
 only when eligible coworkers differ in authority. Reconnects, refreshes and
 new tasks reuse that consent without another login; each privileged action
