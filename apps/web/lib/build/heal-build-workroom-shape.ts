@@ -57,7 +57,7 @@ export async function healBuildWorkroomShape(input: {
   const room = await prisma.workroom.findFirst({
     where: { executorKind: "build-studio", executorRef: build.buildId },
     orderBy: { createdAt: "desc" },
-    select: { capsuleId: true, scopeClaims: true },
+    select: { id: true, capsuleId: true, scopeClaims: true },
   });
   if (!room) {
     const capsule = await attachBuildStudioWorkCapsule({
@@ -68,9 +68,28 @@ export async function healBuildWorkroomShape(input: {
     });
     return { healed: true, detail: `attached Workroom ${capsule.capsuleId} and bound its delivery shape from ${backlogItem.itemId}` };
   }
-  if (readWorkShapeClaim(room.scopeClaims)) return { healed: false, detail: "delivery shape already bound" };
+  // An existing room may predate coworker admission (BI-00588B51): without it
+  // the room's participant term narrows the build's own coworkers to reads.
+  let coworkerDetail = "";
+  let coworkersAdmitted = false;
+  try {
+    const { admitBuildStudioRoomCoworkers, describeBuildStudioRoomCoworkers } = await import(
+      "@/lib/work-capsules/build-studio-room-coworkers"
+    );
+    const admitted = await admitBuildStudioRoomCoworkers({ db: prisma as never, workroomId: room.id });
+    const described = describeBuildStudioRoomCoworkers(admitted);
+    if (described) coworkerDetail = ` ${described}`;
+    coworkersAdmitted = admitted.admitted.length > 0;
+  } catch (err) {
+    coworkerDetail = ` Coworker admission failed: ${(err as Error)?.message?.slice(0, 160) ?? "unknown error"}`;
+  }
+  if (readWorkShapeClaim(room.scopeClaims)) {
+    return coworkersAdmitted
+      ? { healed: true, detail: `delivery shape already bound on ${room.capsuleId}.${coworkerDetail}` }
+      : { healed: false, detail: `delivery shape already bound${coworkerDetail}` };
+  }
   const bound = await bindBuildStudioDeliveryShape({ db: prisma as unknown as Db, capsuleId: room.capsuleId, backlogItem });
   return bound.bound
-    ? { healed: true, detail: `bound delivery shape ${bound.bound} on ${room.capsuleId} (${bound.reason})` }
-    : { healed: false, detail: `shape not bound: ${bound.reason}` };
+    ? { healed: true, detail: `bound delivery shape ${bound.bound} on ${room.capsuleId} (${bound.reason})${coworkerDetail}` }
+    : { healed: coworkersAdmitted, detail: `shape not bound: ${bound.reason}${coworkerDetail}` };
 }

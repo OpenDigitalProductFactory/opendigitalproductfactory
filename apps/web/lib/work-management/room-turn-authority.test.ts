@@ -181,6 +181,46 @@ describe("deriveRoomTurnAuthority — participant term (W2)", () => {
   });
 });
 
+describe("deriveRoomTurnAuthority — a delivery room and its executing coworker (BI-00588B51)", () => {
+  const deliveryGrants = ["tool:read", "tool:write-internal", "tool:write-source"];
+
+  it("authorizes the lifecycle writes for a coworker the room admits as a contributor", () => {
+    const out = deriveRoomTurnAuthority({
+      room: room({
+        workShapeKey: "delivery-medium",
+        workShapeGrants: deliveryGrants,
+        participants: [
+          { principalId: "PR-OWNER", roles: ["coordinator"] },
+          { principalId: "PR-AGENT", roles: ["contributor"] },
+        ],
+        agentPrincipalId: "PR-AGENT",
+      }),
+      agentGrants: [],
+      platformDefaultActionBoundary: null,
+    });
+    expect(out.memberOfRoom).toBe(true);
+    expect(roomAuthorizesTool("record_initiative_evidence", out.authorizedGrants)).toBe(true);
+    expect(roomAuthorizesTool("saveBuildEvidence", out.authorizedGrants)).toBe(true);
+    expect(roomAuthorizesTool("write_sandbox_file", out.authorizedGrants)).toBe(true);
+    expect(roomAuthorizesTool("update_backlog_item_status", out.authorizedGrants)).toBe(false);
+  });
+
+  it("still narrows the same coworker to the read baseline when the room never admitted it", () => {
+    const out = deriveRoomTurnAuthority({
+      room: room({
+        workShapeKey: "delivery-medium",
+        workShapeGrants: deliveryGrants,
+        participants: [{ principalId: "PR-OWNER", roles: ["coordinator"] }],
+        agentPrincipalId: "PR-AGENT",
+      }),
+      agentGrants: [],
+      platformDefaultActionBoundary: null,
+    });
+    expect(out.memberOfRoom).toBe(false);
+    expect(roomAuthorizesTool("record_initiative_evidence", out.authorizedGrants)).toBe(false);
+  });
+});
+
 describe("workroomIdFromRoute", () => {
   it("names the room from the Build Studio work page and the Workroom case page", () => {
     expect(workroomIdFromRoute("/build/work/WC-ROOM")).toBe("WC-ROOM");
