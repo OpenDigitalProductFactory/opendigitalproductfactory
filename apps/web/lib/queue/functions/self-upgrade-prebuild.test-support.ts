@@ -13,7 +13,8 @@ export function registerPrebuildTests(input: { mocks: any; runSelfUpgrade: (para
     const startQuiescence = mocks.startQuiescence.getMockImplementation();
     mocks.startQuiescence.mockImplementationOnce(async (...args: unknown[]) => { order.push("drain"); return startQuiescence?.(...args); });
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("succeeded");
     expect(order.slice(0, 2)).toEqual(["prebuild", "drain"]);
     const prebuild = mocks.runPrebuild.mock.calls[0][0];
     const swap = mocks.runPromoter.mock.calls[0][0];
