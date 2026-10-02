@@ -4,6 +4,7 @@
   "decisionInteractionId": "DI-9F60D4BC7CEF",
   "scope": {
     "files": [
+      "apps/web/app/(shell)/customer/(crm)/page.tsx",
       "apps/web/components/customer/map/CustomerMapView.tsx"
     ]
   },

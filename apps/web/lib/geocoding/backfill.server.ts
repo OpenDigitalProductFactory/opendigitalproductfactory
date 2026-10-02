@@ -8,6 +8,7 @@ import "server-only";
 import { prisma } from "@dpf/db";
 
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 import { runGeocodingBackfillPass, type BackfillDb } from "./backfill";
 import {
@@ -116,7 +117,7 @@ export async function startGeocodingBackfill(): Promise<{ started: boolean; reas
         if (pass.exhausted || !pass.ran) break;
       }
     } catch (error) {
-      console.warn("[geocoding] backfill failed:", error instanceof Error ? error.message : String(error));
+      console.warn("[geocoding] backfill failed:", getErrorMessage(error));
       await writeStatus({ state: "failed", ...totals, remaining: null, updatedAt: new Date().toISOString() }).catch(() => {});
     }
   })();
