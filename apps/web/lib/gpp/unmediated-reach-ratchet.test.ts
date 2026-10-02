@@ -29,6 +29,17 @@ describe("GPP C-9 unmediated reach — live tree against the shrink-only list", 
     expect(stale, "A direct site was removed: shrink KNOWN_UNMEDIATED_EXECUTE_SITES").toEqual([]);
   });
 
+  // PR-H: binding-enforcement.ts refuses every promotion while any dynamic site
+  // exists, so the dynamic set is pinned exactly. Shrink it as sites move behind
+  // the monitor; it must never grow.
+  it("dynamic sites (which block every binding promotion) are exactly the two proposal-approval paths", () => {
+    const dynamic = findUnmediatedExecuteSites(readWebSourceFiles())
+      .filter((site) => site.toolName === "dynamic")
+      .map((site) => site.path)
+      .sort();
+    expect(dynamic).toEqual(["app/api/admin/ops/execute-proposal/route.ts", "lib/actions/proposals.ts"]);
+  });
+
   it("the mediation boundary files exist and are excluded from the count", () => {
     const paths = new Set(readWebSourceFiles().map((file) => file.path));
     for (const boundary of MEDIATION_BOUNDARY_FILES) {
