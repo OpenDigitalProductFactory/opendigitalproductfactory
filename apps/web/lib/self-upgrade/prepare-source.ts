@@ -266,7 +266,7 @@ async function configureUpstreamRemote(
     console.warn(
       `[self-upgrade] install clone '${input.remote}' remote unreadable after ${HOST_REMOTE_READ_ATTEMPTS} attempts; using the upstream URL the upgrade workspace recorded on its last run (BI-574098A3)`,
     );
-    return { ok: true };
+    upstreamUrl = recordedUrl;
   }
   // Idempotent: set-url succeeds on an existing remote; add when absent.
   const existing = await run([
