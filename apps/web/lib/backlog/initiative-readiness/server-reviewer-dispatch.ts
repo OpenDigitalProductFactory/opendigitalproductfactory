@@ -29,7 +29,9 @@ import "server-only";
 import { prisma } from "@dpf/db";
 
 import type { GovernedExecuteArgs, GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
-import { findStandingConnection, type StandingConnection } from "@/lib/mcp/standing-connection";
+import { findStandingConnection, findStandingConnectionForUser, type StandingConnection } from "@/lib/mcp/standing-connection";
+
+import { BUILD_STUDIO_ASSISTANT_AGENT_ID, buildStudioOwedRoutes } from "./build-studio-owed-routes";
 
 /** A dispatch for the same request is not repeated within this window. */
 export const REVIEW_DISPATCH_COOLDOWN_MS = 30 * 60 * 1000;
@@ -42,21 +44,37 @@ type RoomAuthor = {
   agentId: string | null;
 };
 
+/**
+ * Which readiness decision a candidate owes its reviews on. Delivered items
+ * owe the completion decision; a Build Studio build in plan owes its
+ * implementation decision (BI-926A7E90).
+ */
+type CandidateTarget = "completion" | "implementation";
+
+type Candidate = { itemId: string; room: RoomAuthor; target: CandidateTarget };
+
+/** Connections the platform prefers to carry a Build Studio room's request (spec §4). */
+export const BUILD_STUDIO_PREFERRED_CARRIER_AGENT_IDS = ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX"] as const;
+
 type RouteOutcome = {
   itemId: string;
   capsuleId: string;
   requestKey: string | null;
   outcome: "dispatched" | "refused" | "cooling-down" | "no-author-connection" | "no-author" | "nothing-owed" | "readiness-unavailable";
   detail?: string;
+  /** The assistant whose connection carried the request (a Build Studio room's own assistant holds none). */
+  carriedByAgentId?: string;
 };
 
 type Deps = {
   now?: Date;
   limit?: number;
   findConnection?: (userId: string, agentId: string) => Promise<StandingConnection | null>;
+  /** BI-926A7E90: any live connection of the requesting user, for a Build Studio room. */
+  findUserConnection?: (userId: string) => Promise<StandingConnection | null>;
   execute?: (args: GovernedExecuteArgs) => Promise<GovernedExecuteResult>;
   random?: () => number;
-  owedRoutes?: (itemId: string, authorAgentId: string) => Promise<Array<{ workroomId: string; requestCoworker: Record<string, unknown> }> | null>;
+  owedRoutes?: (itemId: string, authorAgentId: string, candidate?: Candidate) => Promise<Array<{ workroomId: string; requestCoworker: Record<string, unknown> }> | null>;
 };
 
 function aliasValue(principal: { aliases: Array<{ aliasValue: string }> } | null | undefined): string | null {
@@ -104,7 +122,7 @@ async function loadRoomAuthors(where: { capsuleId?: string; backlogItemId?: { no
  * (BI-D35B85BF on 2026-09-24). Shuffled, so a bounded tick does not re-check
  * the same items forever (111 of 502 awaiting items had a live room).
  */
-async function loadCandidates(limit: number, random: () => number): Promise<Array<{ itemId: string; room: RoomAuthor }>> {
+async function loadAwaitingCandidates(): Promise<Candidate[]> {
   const rooms = await loadRoomAuthors({ backlogItemId: { not: null } });
   const itemIds = [...new Set(rooms.flatMap((room) => (room.itemId ? [room.itemId] : [])))];
   if (itemIds.length === 0) return [];
@@ -117,12 +135,56 @@ async function loadCandidates(limit: number, random: () => number): Promise<Arra
     if (!room.itemId || !awaiting.has(room.itemId) || !room.userId || !room.agentId) continue;
     if (!newestByItem.has(room.itemId)) newestByItem.set(room.itemId, room);
   }
-  const candidates = [...newestByItem.entries()].map(([itemId, room]) => ({ itemId, room, order: random() }));
-  return candidates.sort((a, b) => a.order - b.order).slice(0, limit).map(({ itemId, room }) => ({ itemId, room }));
+  return [...newestByItem.entries()].map(([itemId, room]) => ({ itemId, room, target: "completion" as const }));
+}
+
+/**
+ * BI-926A7E90: Build Studio rooms whose build is in plan and whose item is still
+ * open. Their assistant is the admitted Build Studio coworker; the person is the
+ * room's requester. Each room is its own candidate: the build, not the item, is
+ * what the reviews unblock.
+ */
+async function loadBuildStudioCandidates(): Promise<Candidate[]> {
+  const rooms = await prisma.workroom.findMany({
+    where: {
+      executorKind: "build-studio",
+      archivedAt: null,
+      status: { notIn: ["abandoned", "archived"] },
+      backlogItemId: { not: null },
+      featureBuild: { is: { phase: "plan" } },
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, capsuleId: true, backlogItemId: true, requestedByPrincipal: principalAliases("user") },
+  });
+  const itemIds = [...new Set(rooms.flatMap((room) => (room.backlogItemId ? [room.backlogItemId] : [])))];
+  if (itemIds.length === 0) return [];
+  const open = new Set((await prisma.backlogItem.findMany({
+    where: { itemId: { in: itemIds }, status: { in: ["open", "in-progress"] } },
+    select: { itemId: true },
+  })).map((item) => item.itemId));
+  return rooms.flatMap((room) => {
+    const userId = aliasValue(room.requestedByPrincipal);
+    if (!room.backlogItemId || !open.has(room.backlogItemId) || !userId) return [];
+    return [{
+      itemId: room.backlogItemId,
+      room: { roomId: room.id, capsuleId: room.capsuleId, userId, agentId: BUILD_STUDIO_ASSISTANT_AGENT_ID },
+      target: "implementation" as const,
+    }];
+  });
+}
+
+async function loadCandidates(limit: number, random: () => number): Promise<Candidate[]> {
+  const candidates = [...await loadAwaitingCandidates(), ...await loadBuildStudioCandidates()]
+    .map((candidate) => ({ candidate, order: random() }));
+  return candidates.sort((a, b) => a.order - b.order).slice(0, limit).map(({ candidate }) => candidate);
 }
 
 /** The independent reviewer requests readiness issues for this item right now. */
-async function defaultOwedRoutes(itemId: string, authorAgentId: string) {
+async function defaultOwedRoutes(itemId: string, authorAgentId: string, candidate?: Candidate) {
+  if (candidate?.target === "implementation") {
+    const result = await buildStudioOwedRoutes({ itemId, capsuleId: candidate.room.capsuleId, authorAgentId });
+    return result.routed ? result.routes : null;
+  }
   const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
   const item = await getBacklogItem({ itemId }, authorAgentId);
   const decision = (item.data?.readiness as { decisions?: { completion?: unknown } } | undefined)?.decisions?.completion as
@@ -169,11 +231,15 @@ export async function dispatchOwedIndependentReviews(deps: Deps = {}): Promise<R
   const now = deps.now ?? new Date();
   const findConnection = deps.findConnection
     ?? ((userId: string, agentId: string) => findStandingConnection(userId, agentId, "request_coworker", "platform-reviewer-dispatch"));
+  const findUserConnection = deps.findUserConnection
+    ?? ((userId: string) => findStandingConnectionForUser(userId, "request_coworker", "platform-reviewer-dispatch", {
+      preferAgentIds: BUILD_STUDIO_PREFERRED_CARRIER_AGENT_IDS,
+    }));
   const owedRoutes = deps.owedRoutes ?? defaultOwedRoutes;
   const outcomes: RouteOutcome[] = [];
   for (const candidate of await loadCandidates(deps.limit ?? 5, deps.random ?? Math.random)) {
     const base = { itemId: candidate.itemId, capsuleId: candidate.room.capsuleId, requestKey: null };
-    const routes = await owedRoutes(candidate.itemId, candidate.room.agentId!).catch(() => null);
+    const routes = await owedRoutes(candidate.itemId, candidate.room.agentId!, candidate).catch(() => null);
     if (routes === null) { outcomes.push({ ...base, outcome: "readiness-unavailable" }); continue; }
     if (routes.length === 0) { outcomes.push({ ...base, outcome: "nothing-owed" }); continue; }
     for (const route of routes) {
@@ -189,11 +255,16 @@ export async function dispatchOwedIndependentReviews(deps: Deps = {}): Promise<R
         outcomes.push({ ...at, outcome: "cooling-down" });
         continue;
       }
-      const connection = await findConnection(room.userId, room.agentId);
+      // A Build Studio room's assistant holds no connection; the request travels
+      // on a live connection of the person who requested the build (spec §4).
+      const connection = candidate.target === "implementation"
+        ? await findUserConnection(room.userId)
+        : await findConnection(room.userId, room.agentId);
       if (!connection) {
         const outcome: RouteOutcome = { ...at, outcome: "no-author-connection" };
-        await record(room, outcome,
-          "An independent review is owed, but the author's assistant has no live authorized connection. The author can request it, or reconnect the assistant.");
+        await record(room, outcome, candidate.target === "implementation"
+          ? "An independent review of this build's design is owed, but the person who requested the build has no live authorized connection the platform may send on. Reconnect an assistant (Claude Code or Codex) to let the platform request it."
+          : "An independent review is owed, but the author's assistant has no live authorized connection. The author can request it, or reconnect the assistant.");
         outcomes.push(outcome);
         continue;
       }
@@ -210,6 +281,7 @@ export async function dispatchOwedIndependentReviews(deps: Deps = {}): Promise<R
         ...at,
         outcome: result.success ? "dispatched" : "refused",
         ...(result.success ? {} : { detail: result.error ?? result.message }),
+        ...(connection.context.agentId ? { carriedByAgentId: connection.context.agentId } : {}),
       };
       await record(room, outcome, result.success
         ? `The platform asked ${String(route.requestCoworker.targetAgent)} for the independent review this work owes, on the author's connection.`
