@@ -25,7 +25,7 @@ Verified against source on 2026-10-01: `WorkroomInventory.tsx` displays null exe
 ## Ordered implementation plan
 
 1. Extend the shared inventory projection with narrowly selected provenance fields. Add a pure projection for executor label, invocation summary and evidence identifiers. Do not return raw workspace state or arbitrary A2A payloads. Test evidence precedence and missing-history cases (AC1, AC3, AC4, AC5).
-2. Record native executor identity in `concierge-sweep-runner.ts` and `embedding-coverage-workroom.ts`; persist the dispatched agent in `workroom-drive.ts`. Test both initial and repeated writes and dispatch evidence (AC2, AC3, AC5).
+2. Record native executor identity in `concierge-sweep-runner.ts` and `embedding-coverage-workroom.ts`. Resolve drive task IDs against existing ScheduledAgentTask records in one batched read; those records already persist the selected agent. Test both initial and repeated writes and dispatch evidence (AC2, AC3, AC5). The scheduler writer is held by another live workroom and is not edited in this branch.
 3. Render the shared projection in `WorkroomInventory.tsx`, keeping sorting meaningful, using existing theme tokens and report primitives. Update relevant operator documentation (AC1, AC5).
 4. Run affected unit tests, web typecheck and source guards. Push DCO-signed commits, complete cloud build and independent review, then use the canonical runtime for UX evidence. Inspect native, external and scheduled rows; verify A2A with a recorded TaskRun fixture. Do not report a live result from a worktree-only test.
 
@@ -33,10 +33,14 @@ Verified against source on 2026-10-01: `WorkroomInventory.tsx` displays null exe
 
 One atomic deliverable maps to BI-1B5BE5F4: trustworthy roster attribution. Writers, projection and presentation are ordered implementation phases of the same defect; shipping a label without causal evidence would fail the requested outcome. Live coverage receipt must bind this immutable document before source implementation.
 
-## Risk, convergence and rollback
-
 ## Operator-authorized execution exception — 2026-10-01
 
 For this thread's BI-1B5BE5F4 run only, the operator instructed continuation after the explicit request to skip the broken plan-coverage receipt. Scope: `record_plan_backlog_coverage` remains **unrun/not satisfied** following `traceability-incomplete`; no receipt is fabricated. Implementation readiness independently allowed the medium fix (IRD-11F041E61E8F), but coverage requires a persisted scope baseline that its supplied recovery does not produce. The atomic coverage mapping above remains the reviewable plan. This exception does not bypass grant intersection, DCO, PR protection, tests, independent acceptance, runtime verification, or deployment integrity. It expires with this item's delivery and does not change platform policy. Install permission work BI-9FA87F90 is excluded.
 
+## Risk, convergence and rollback
+
 No schema change or new dependency. Limit selected activity history and project only known identifiers; avoid per-row unbounded reads. Preserve a recorded executor instead of overwriting it with guesses. Native writers converge existing rows on their next run, while historical display derives only from stored evidence. Installation permission changes remain in BI-9FA87F90. Rollback is a single PR revert; added JSON evidence is backward-compatible and may remain in history.
+
+## Change impact verification
+
+The Workroom impact contract resolved on 2026-10-01. Graph-linked tests cover the inventory loader and corpus writer; source inspection also found the rendered inventory test. Verify those alongside the new attribution scenarios, full web typecheck, prose-lint and its tests, style/token drift, preflight and PR health. No new controls or schema are introduced. Runtime build and live UX remain required; source-local test results do not substitute for them.

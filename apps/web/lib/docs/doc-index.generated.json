@@ -6263,7 +6263,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "enumerating-workrooms-through-mcp"
+        "enumerating-workrooms-through-mcp",
+        "executor-and-invocation"
       ]
     },
     "docs/personas/README.md": {

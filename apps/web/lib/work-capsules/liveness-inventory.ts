@@ -11,6 +11,7 @@ import { classifyWorkCapsuleLiveness,
   type WorkCapsuleLiveness,
 } from "./liveness";
 import { projectWorkroomRecovery } from "./workroom-recovery-projection";
+import { projectInvocationAttribution, recordedDriveTask } from "./invocation-attribution";
 
 const INVENTORY_SELECT = {
   capsuleId: true,
@@ -40,12 +41,15 @@ const INVENTORY_SELECT = {
   lastSyncedAt: true,
   updatedAt: true,
   featureBuildId: true,
-  taskRun: { select: { taskRunId: true, status: true, updatedAt: true } },
+  workspaceState: true,
+  activities: { orderBy: { recordedAt: "desc" }, take: 1, where: { kind: { in: ["concierge-sweep", "embedding-coverage"] } }, select: { kind: true } },
+  taskRun: { select: { taskRunId: true, status: true, updatedAt: true, source: true, initiatingAgentId: true, currentAgentId: true, parentTaskRunId: true } },
 } as const;
 
 export type InventoryDb = {
   workroom: { findMany(args: unknown): Promise<any[]> };
   featureBuild: { findMany(args: unknown): Promise<any[]> };
+  scheduledAgentTask?: { findMany(args: unknown): Promise<Array<{ taskId: string; agentId: string }>> };
   nonProductionEnvironmentLease?: { findMany(args: unknown): Promise<any[]> };
 };
 
@@ -83,6 +87,11 @@ export async function loadCapsuleLivenessInventory(
     select: args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
   });
 
+  const taskIds = rows.map((row) => recordedDriveTask(row)?.taskId).filter((id): id is string => Boolean(id));
+  const tasks = taskIds.length && db.scheduledAgentTask ? await db.scheduledAgentTask.findMany({
+    where: { taskId: { in: [...new Set(taskIds)] } }, select: { taskId: true, agentId: true },
+  }) : [];
+  const tasksById = new Map(tasks.map((task) => [task.taskId, task]));
   const buildIds = rows.map((r) => r.featureBuildId).filter((id): id is string => Boolean(id));
   const buildsById = new Map<string, { phase: string | null; lastActivityAt: Date | null }>();
   if (buildIds.length > 0) {
@@ -123,9 +132,10 @@ export async function loadCapsuleLivenessInventory(
         signaledAt: lease.heartbeatAt ?? lease.admittedAt ?? lease.queuedAt ?? lease.updatedAt ?? null,
       } : null,
     }, now);
-    const { featureBuildId: _omit, taskRun: _taskRun, ...rest } = row;
+    const { featureBuildId: _omit, taskRun: _taskRun, workspaceState: _workspace, activities: _activities, ...rest } = row;
     return {
       ...rest,
+      attribution: projectInvocationAttribution(row, tasksById.get(recordedDriveTask(row)?.taskId ?? "")),
       recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }),
       liveness: verdict.liveness,
       isLive: verdict.isLive,

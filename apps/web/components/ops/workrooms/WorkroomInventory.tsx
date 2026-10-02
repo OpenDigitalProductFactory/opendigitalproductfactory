@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { DataTable, StatCard, StatusBadge, type Column } from "@/components/ui/report-kit";
 import type { CapsuleLivenessSummary } from "@/lib/work-capsules/liveness-inventory";
+import type { InvocationAttribution } from "@/lib/work-capsules/invocation-attribution";
 import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 
@@ -14,6 +15,7 @@ export type WorkroomInventoryRow = {
   status: string;
   source: string;
   executorKind: string | null;
+  attribution: InvocationAttribution;
   portfolioRole: string | null;
   headBranch: string | null;
   pullRequestUrl: string | null;
@@ -46,7 +48,7 @@ const columns: Column<WorkroomInventoryRow>[] = [
     sortAccessor: (room) => room.liveness,
     width: "24%",
   },
-  { key: "executor", header: "Executor", cell: (room) => room.executorKind ?? "Unassigned", sortAccessor: (room) => room.executorKind ?? "", width: "14%" },
+  { key: "executor", header: "Executor", cell: (room) => <div className="break-words">{room.attribution.executor}<p className="mt-1 text-xs text-[var(--dpf-muted)]">{room.attribution.invocation}</p></div>, sortAccessor: (room) => `${room.attribution.executor} ${room.attribution.invocation}`, width: "14%" },
   { key: "context", header: "Development context", cell: (room) => room.headBranch ?? "Not a code Workroom", mono: true, width: "18%" },
 ];
 
