@@ -300,17 +300,52 @@ export async function listReleasableSandboxFiles(
  * Returns [] if HEAD == baseRef or if the rev-list command errors (e.g. the
  * base ref does not exist yet in the sandbox).
  */
+/**
+ * Subjects of the platform's own housekeeping commits on a build branch. They
+ * are not the build's work (BI-37A1349E): "sandbox baseline" (ensureGitBaseline)
+ * and "chore: untrack sandbox generated artifacts…" (branch-start pruning).
+ * The in-flight WIP commit is kept: it carries the coding agent's output.
+ */
+const HOUSEKEEPING_SUBJECTS = [/^sandbox baseline$/, /^chore: untrack sandbox generated artifacts\b/];
+
+/**
+ * BI-37A1349E: from `git log --format=%H%x09%s` lines, the hashes of the
+ * build's own commits — housekeeping commits removed. Upstream commits are
+ * excluded by the range itself (`^origin/main`).
+ */
+export function ownBuildCommitHashes(logOutput: string): string[] {
+  return logOutput
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const tab = line.indexOf("\t");
+      return tab < 0 ? { hash: line, subject: "" } : { hash: line.slice(0, tab), subject: line.slice(tab + 1) };
+    })
+    .filter(({ hash, subject }) => /^[0-9a-f]{7,64}$/.test(hash) && !HOUSEKEEPING_SUBJECTS.some((re) => re.test(subject)))
+    .map(({ hash }) => hash);
+}
+
+/** The git log behind listSandboxCommitsAheadOfBase; exported for a real-git test. */
+export function buildOwnCommitsLogCommand(workspace: string, baseRef: string): string {
+  return `cd ${workspace} && _dpf_up=""; git rev-parse --verify --quiet origin/main >/dev/null && _dpf_up="^origin/main"; git log --no-merges --format='%H%x09%s' ${quotePosixArg(baseRef)}..HEAD $_dpf_up`;
+}
+
+/**
+ * The build's own commits ahead of its base. BI-37A1349E: `base..HEAD` alone
+ * counted every upstream main commit a build branch merged in (18–50 per build,
+ * live 2026-09-29) as the build's work, so "builds with commits" overstated
+ * Build Studio output. Commits already on upstream main are excluded when that
+ * ref resolves, and the platform's housekeeping commits are filtered out.
+ */
 export async function listSandboxCommitsAheadOfBase(
   containerId: string,
   baseRef: string,
   workspace: string = SANDBOX_WORKSPACE,
 ): Promise<string[]> {
   try {
-    const output = await execInSandbox(
-      containerId,
-      `cd ${workspace} && git rev-list --no-merges ${quotePosixArg(baseRef)}..HEAD`,
-    );
-    return output.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const output = await execInSandbox(containerId, buildOwnCommitsLogCommand(workspace, baseRef));
+    return ownBuildCommitHashes(output);
   } catch {
     return [];
   }

@@ -169,6 +169,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // (plan 2026-09-08 §10.5 S2).
       conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
       node("scripts/check-no-hand-rolled-argv.mjs"),
+      // Raw control bytes make a source file binary to grep (BI-899122C5).
+      node("--test", "scripts/check-no-raw-control-bytes.test.mjs"),
+      node("scripts/check-no-raw-control-bytes.mjs"),
     ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),

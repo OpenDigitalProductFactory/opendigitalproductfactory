@@ -132,3 +132,11 @@ describe("doctools-prepull-failed (BI-698B7F9A)", () => {
     expect(explanation?.retryable).toBe(true);
   });
 });
+
+describe("engine-restarted (BI-75ECED42)", () => {
+  it("explains a Docker restart in plain words and says a retry is fine", () => {
+    const e = describeFailureReason("engine-restarted");
+    expect(e?.title).toMatch(/restarted Docker/);
+    expect(e?.retryable).toBe(true);
+  });
+});

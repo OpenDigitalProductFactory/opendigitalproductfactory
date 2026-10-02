@@ -136,12 +136,11 @@ export async function reconcileSelfUpgradeRunsOnBoot(
         logger.log(`[self-upgrade-reconcile] ${run.runId} -> succeeded (deployed ${deployedSha})`);
         continue;
       }
-      // Swap PENDING, not orphaned. On boot (staleAfterMs===0) we may come up still on the
-      // run's PRE-upgrade SHA — e.g. the old portal restarted mid-swap before the promoter
-      // recreated it on the target. Failing here is a false negative: the promoter may still
-      // complete the swap (it did for SUR-F4209F75 — failed on a mid-swap boot although the
-      // portal then came up healthy on the target). Leave the run "running"; the staleness-
-      // guarded periodic watchdog (staleAfterMs>0) fails it only if the swap never lands.
+      // BI-75ECED42: an engine restart under the run (Docker Desktop updating itself) is named as that.
+      if (await (await import("@/lib/self-upgrade/engine-restart")).failRunIfEngineRestarted(run, deployedSha, failRun, logger)) { failed++; continue; }
+      // Swap PENDING, not orphaned. On boot we may come up still on the run's PRE-upgrade SHA (the old
+      // portal restarted mid-swap); the promoter may still land it (SUR-F4209F75), so leave the run
+      // "running" and let the staleness-guarded watchdog fail it only if the swap never lands.
       if (
         staleAfterMs === 0 &&
         deployedSha &&
