@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 729,
+  "pageCount": 730,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2441,6 +2441,19 @@
       "publishedPortal": false,
       "anchors": [
         "theme-aware-styling-runbook"
+      ]
+    },
+    "docs/architecture/trusted-agent-reference-contract.md": {
+      "publicHref": "/architecture/trusted-agent-reference-contract/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portable-trusted-agent-reference-contract",
+        "run-the-examples",
+        "import-and-version-negotiation",
+        "host-integration-and-effect-recovery",
+        "privacy-and-dpf-compatibility"
       ]
     },
     "docs/architecture/trusted-ai-kernel.md": {
