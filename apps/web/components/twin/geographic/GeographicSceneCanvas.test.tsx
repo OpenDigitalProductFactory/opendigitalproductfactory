@@ -31,7 +31,9 @@ const texas = {
 };
 
 function fakeEngine() {
+  const canvas = { style: { cursor: "" } };
   const instance = {
+    getCanvas: vi.fn(() => canvas),
     on: vi.fn(),
     once: vi.fn(),
     remove: vi.fn(),
@@ -39,10 +41,12 @@ function fakeEngine() {
     getSource: vi.fn(),
     isStyleLoaded: vi.fn(() => false),
   };
-  const Map = vi.fn(function MapCtor(_options: unknown) {
+  const Map = vi.fn(function MapCtor(options: unknown) {
+    // Like MapLibre, mark the container it takes over.
+    (options as { container: HTMLElement }).container.classList.add("maplibregl-map");
     return instance;
   });
-  return { module: { Map } as never, instance, Map };
+  return { module: { Map } as never, instance, Map, canvas };
 }
 
 function renderCanvas(props: Partial<Parameters<typeof GeographicSceneCanvas>[0]>) {
@@ -118,6 +122,25 @@ describe("GeographicSceneCanvas", () => {
     expect(screen.queryByText(/cannot draw|No street map|do not cover/)).toBeNull();
     view.unmount();
     expect(engine.instance.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps MapLibre's container class when placing turns on and off, and sets the cursor on its canvas", async () => {
+    const engine = fakeEngine();
+    const loadEngine = vi.fn(async () => engine.module);
+    const props = { detectWebGL: () => true, loadEngine, loadPacks: async () => [texas] };
+    const view = renderCanvas({ ...props, onPlacePoint: vi.fn() });
+    await waitFor(() => expect(engine.Map).toHaveBeenCalledTimes(1));
+    const container = screen.getByTestId("geographic-scene-canvas");
+    await waitFor(() => expect(engine.canvas.style.cursor).toBe("crosshair"));
+
+    view.rerender(
+      <MessagesProvider locale="en-US" messages={{ geographic: namespaceMessages("en-US", "geographic") }}>
+        <GeographicSceneCanvas model={model} label="Service area map" {...props} onPlacePoint={null} />
+      </MessagesProvider>,
+    );
+    expect(container.classList.contains("maplibregl-map")).toBe(true);
+    expect(engine.canvas.style.cursor).toBe("");
+    expect(engine.Map).toHaveBeenCalledTimes(1);
   });
 
   it("reports a failure to load the engine instead of a blank canvas", async () => {

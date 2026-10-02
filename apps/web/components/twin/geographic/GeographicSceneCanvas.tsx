@@ -204,6 +204,15 @@ export function GeographicSceneCanvas({
     };
   }, [bounds.west, bounds.south, bounds.east, bounds.north, requiresBasemap, loadEngine, loadPacks, detectWebGL]);
 
+  // The crosshair goes on MapLibre's own canvas. The container's className must
+  // never change after mount: React would overwrite the classes MapLibre adds
+  // to it (maplibregl-map), and the canvas would lose its positioning.
+  const placing = Boolean(onPlacePoint);
+  useEffect(() => {
+    const canvas = map.current?.getCanvas();
+    if (canvas) canvas.style.cursor = placing ? "crosshair" : "";
+  }, [placing, phase]);
+
   // New zones, placements or selection: refill the sources without rebuilding the map.
   useEffect(() => {
     const instance = map.current;
@@ -231,7 +240,7 @@ export function GeographicSceneCanvas({
         ref={container}
         data-testid="geographic-scene-canvas"
         hidden={fallback !== null}
-        className={`h-80 w-full overflow-hidden rounded border border-[var(--dpf-border)] ${onPlacePoint ? "cursor-crosshair" : ""}`.trim()}
+        className="h-80 w-full overflow-hidden rounded border border-[var(--dpf-border)]"
       />
     </div>
   );
