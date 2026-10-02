@@ -48,7 +48,7 @@ const columns: Column<WorkroomInventoryRow>[] = [
     sortAccessor: (room) => room.liveness,
     width: "24%",
   },
-  { key: "executor", header: "Executor / invocation", cell: (room) => <div className="break-words">{room.attribution.executor}<p className="mt-1 text-xs text-[var(--dpf-muted)]">{room.attribution.invocation}</p></div>, sortAccessor: (room) => `${room.attribution.executor} ${room.attribution.invocation}`, width: "14%" },
+  { key: "executor", header: "Executor", cell: (room) => <div className="break-words">{room.attribution.executor}<p className="mt-1 text-xs text-[var(--dpf-muted)]">{room.attribution.invocation}</p></div>, sortAccessor: (room) => `${room.attribution.executor} ${room.attribution.invocation}`, width: "14%" },
   { key: "context", header: "Development context", cell: (room) => room.headBranch ?? "Not a code Workroom", mono: true, width: "18%" },
 ];
 
@@ -84,12 +84,14 @@ export function WorkroomInventory({
       <section className="space-y-3" aria-labelledby="live-workrooms-heading">
         <div>
           <h2 id="live-workrooms-heading" className="text-base font-semibold text-[var(--dpf-text)]">Live Workrooms</h2>
+          <p className="text-xs text-[var(--dpf-muted)]">Active.</p>
         </div>
         <WorkroomRows rows={live} label="Live Workrooms" />
       </section>
       <section className="space-y-3" aria-labelledby="history-workrooms-heading">
         <div>
           <h2 id="history-workrooms-heading" className="text-base font-semibold text-[var(--dpf-text)]">History</h2>
+          <p className="text-xs text-[var(--dpf-muted)]">Retained for audit.</p>
         </div>
         <WorkroomRows rows={history} label="Workroom history and cleanup" />
       </section>
