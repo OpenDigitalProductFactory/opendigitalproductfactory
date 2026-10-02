@@ -170,6 +170,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
       node("scripts/check-no-hand-rolled-argv.mjs"),
     ]),
+    // BI-1FF67B91: the leftmost X-Forwarded-For entry is client-supplied. Only
+    // clientAddressKey (apps/web/lib/security/client-address.ts) may read it.
+    guard("xff-single-reader", "X-Forwarded-For Single Reader", [
+      conformanceTest("scripts/check-xff-single-reader.test.mjs"),
+      node("scripts/check-xff-single-reader.mjs"),
+    ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
       // Drives the real POSIX guard under bash: a cached binary path goes stale on
