@@ -149,6 +149,12 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     "external-catalog-scout": 8,
     "external-coding-agent": 18,
     "farm-ranch-steward": 7,
+    // Both had no entry, so the ratchet read them as 0. Each now holds exactly
+    // one skill of its own on top of the 6-skill wildcard tax: the qualifications
+    // axis asked what tools and skills the role needs, and neither had an answer
+    // authored for it (BI-4CE4F52F).
+    "change-reviewer": 7,
+    "security-engineer": 7,
     // These five had no entry, so the ratchet read them as 0. Each now holds
     // exactly one skill of its own on top of the wildcard tax (BI-4CE4F52F).
     bookkeeper: 7,
