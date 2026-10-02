@@ -312,6 +312,24 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
         build.verificationOut,
       );
       if (plan.action === "none") continue;
+      if (plan.reason === "infrastructure-failed") {
+        // Bounded: an infrastructure fault that recurs after two clean
+        // restarts is no longer "the sandbox was broken that day" — leave it
+        // on the failed step for a person, with the breadcrumb intact.
+        const priorInfraRestarts = await prisma.buildActivity.count({
+          where: {
+            buildId: build.buildId,
+            tool: "recoverContradictoryBuildExecStatesOnBoot",
+            summary: { contains: "reason=infrastructure-failed" },
+          },
+        });
+        if (priorInfraRestarts >= 2) {
+          logger.log(
+            `[build-exec-recover] ${build.buildId} -> left failed: infrastructure fault recurred after ${priorInfraRestarts} clean restarts`,
+          );
+          continue;
+        }
+      }
       if (plan.action === "clear") {
         await prisma.featureBuild.update({
           where: { buildId: build.buildId },

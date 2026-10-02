@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
-  classifyContradictoryExecState,
-  isContradictoryExecState,
   planExecStateRecovery,
+  classifyContradictoryExecState,
+  isInfrastructureFailure,
+  isContradictoryExecState,
   type BuildExecutionState,
 } from "./build-exec-types";
 
@@ -131,5 +132,30 @@ describe("planExecStateRecovery", () => {
     if (first.action !== "to-failed") throw new Error("expected to-failed");
     // The coerced `failed` state is no longer contradictory → none.
     expect(planExecStateRecovery(first.state, null)).toEqual({ action: "none" });
+  });
+});
+
+describe("infrastructure-failed checkpoints restart on their own (AGENTS.md §4: fail open on infrastructure)", () => {
+  const infra = {
+    step: "failed" as const,
+    failedAt: "pending",
+    error: "Command failed: docker exec 'dpf-sandbox-1' sh -c 'git config --global --add safe.directory \"/workspace\" ... fatal: detected dubious ownership in repository at '/workspace'",
+  };
+
+  it("classifies a failed step whose error names the sandbox git plumbing as infrastructure-failed and clears it", () => {
+    expect(classifyContradictoryExecState(infra)).toBe("infrastructure-failed");
+    expect(planExecStateRecovery(infra)).toEqual({ action: "clear", reason: "infrastructure-failed" });
+  });
+
+  it("recognises the missing-container and not-a-repository faults too", () => {
+    expect(isInfrastructureFailure("Error response from daemon: No such container: dpf-sandbox-2")).toBe(true);
+    expect(isInfrastructureFailure("fatal: not a git repository: (null)")).toBe(true);
+  });
+
+  it("leaves a failed step whose error is about the build's own work for Retry", () => {
+    const product = { step: "failed" as const, failedAt: "tests_run", error: "2 tests failed: expected 200, received 500" };
+    expect(classifyContradictoryExecState(product)).toBeNull();
+    expect(planExecStateRecovery(product)).toEqual({ action: "none" });
+    expect(isInfrastructureFailure(null)).toBe(false);
   });
 });
