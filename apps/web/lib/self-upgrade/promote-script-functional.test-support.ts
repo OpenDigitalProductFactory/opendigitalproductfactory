@@ -185,6 +185,8 @@ export function runPromote(opts: {
   /** `repo:tag` refs the shim reports as referenced by a container (`docker ps -a`). */
   imagesInUse?: string[];
   imageKeep?: number;
+  /** BI-F9EE05E5 plan item 0: run only prepare + image build. */
+  phase?: "build";
   release?: {
     tag: string; owner: string; channelDigest?: string; platformManifestDigest?: string;
     configDigest?: string; engineImageId?: string; platformOs?: string; frozenStrata?: boolean; repoImageId?: string; registryConfigDigest?: string; duplicatePlatform?: boolean;
@@ -258,6 +260,7 @@ export function runPromote(opts: {
     ...(opts.portalVersionTags ? [`export DPF_TEST_PORTAL_VERSION_TAGS_FILE=${shellQuote(toBashPath(writeTagFixture(opts.backup, opts.portalVersionTags)))}`] : []),
     ...(opts.imagesInUse ? [`export DPF_TEST_IMAGES_IN_USE=${shellQuote(opts.imagesInUse.join("\n"))}`] : []),
     ...(opts.imageKeep !== undefined ? [`export PROMOTE_IMAGE_KEEP=${opts.imageKeep}`] : []),
+    ...(opts.phase ? [`export PROMOTE_PHASE=${opts.phase}`] : []),
     ...(opts.release ? [
       "export DPF_PROMOTION_MODE=release",
       `export DPF_RELEASE_TAG=${shellQuote(opts.release.tag)}`,

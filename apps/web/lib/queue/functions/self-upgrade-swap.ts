@@ -141,35 +141,15 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
     }
   }
 
-  const { hostInstallPath, canonicalInstallPath } = ctx.promoter;
   let result: { exitCode: number; stdout: string; stderr: string };
   try {
     const { runPromoter } = await loadPromoterRuntime();
     const promoterParams: PromoterParams = {
-      // HOST path of the install tree, bind-mounted into the promoter container.
-      // BI-A8A7CCFD — with the isolated workspace, this is the workspace HOST
-      // path; the promoter mounts it at `/host-source:ro` either way.
-      hostInstallPath,
-      canonicalInstallPath,
-      // The honest built identity from source prep; promote.sh re-derives it
-      // from the tree's HEAD and cross-checks against it.
-      targetSha: ctx.builtStamp,
-      backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${runId}`,
-      backupHostPath: resolveReadinessBackupHostPath(process.env.DPF_BACKUPS_HOST_PATH, canonicalInstallPath ?? ""),
-      composeEnvFileHostPath: canonicalInstallPath ? `${canonicalInstallPath.replace(/\/$/, "")}/.env` : undefined,
-      // The install's own platform compose chain, so an overlay is applied only
-      // on the host that recorded it.
-      composeFiles: ctx.promoter.composeFiles,
-      composeProject: ctx.promoter.composeProject,
-      healthUrl: ctx.promoter.healthUrl,
-      promoterImage: resolvedPromoterDigest ?? ctx.promoter.promoterImage,
-      release: ctx.promoter.release,
-      stateDirHostPath: process.env.DPF_STATE_DIR_HOST,
+      ...basePromoterParams({ runId, promoter: ctx.promoter, targetSha: ctx.builtStamp, promoterImage: resolvedPromoterDigest ?? ctx.promoter.promoterImage, dryRun }),
       installStateMigrationEnvelope: migrationHandoff ? Buffer.from(JSON.stringify(migrationHandoff.envelope)).toString("base64url") : undefined,
       installStateMigrationSignature: migrationHandoff?.signature,
       installStateMigrationRunId: migrationHandoff?.envelope.runId,
       installStateMigrationHandoff: migrationHandoff,
-      dryRun,
       // Deterministic name so a stalled build can be force-removed by name on
       // timeout (runPromoter) or by the watchdog backstop.
       containerName: `dpf-promoter-${runId}`,
@@ -235,5 +215,42 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
     exitCode: result.exitCode,
     failureClass: failureClass.class,
     excerpt,
+  };
+}
+
+/**
+ * The promoter parameters both promoter launches share: the prebuild before the
+ * drain (BI-F9EE05E5 plan item 0) and the swap after it. One builder, so the
+ * image built before the drain is built from exactly the inputs the swap uses.
+ */
+export function basePromoterParams(input: {
+  runId: string;
+  promoter: SelfUpgradeSwapContext["promoter"];
+  targetSha: string;
+  promoterImage?: string;
+  dryRun?: boolean;
+}): PromoterParams {
+  const { hostInstallPath, canonicalInstallPath } = input.promoter;
+  return {
+    // HOST path of the install tree, bind-mounted into the promoter container.
+    // BI-A8A7CCFD — with the isolated workspace, this is the workspace HOST
+    // path; the promoter mounts it at `/host-source:ro` either way.
+    hostInstallPath,
+    canonicalInstallPath,
+    // The honest built identity from source prep; promote.sh re-derives it
+    // from the tree's HEAD and cross-checks against it.
+    targetSha: input.targetSha,
+    backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${input.runId}`,
+    backupHostPath: resolveReadinessBackupHostPath(process.env.DPF_BACKUPS_HOST_PATH, canonicalInstallPath ?? ""),
+    composeEnvFileHostPath: canonicalInstallPath ? `${canonicalInstallPath.replace(/\/$/, "")}/.env` : undefined,
+    // The install's own platform compose chain, so an overlay is applied only
+    // on the host that recorded it.
+    composeFiles: input.promoter.composeFiles,
+    composeProject: input.promoter.composeProject,
+    healthUrl: input.promoter.healthUrl,
+    promoterImage: input.promoterImage,
+    release: input.promoter.release,
+    stateDirHostPath: process.env.DPF_STATE_DIR_HOST,
+    dryRun: input.dryRun,
   };
 }
