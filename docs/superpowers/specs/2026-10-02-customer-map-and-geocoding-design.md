@@ -26,7 +26,7 @@ Coordinates exist only partly. Since the address lookup was introduced, a newly 
 2. **"Not on the map".** Sites without coordinates are counted and listed under the map. Each has two fixes:
    - **Check the address**, which opens the existing validated-address field for that site. A pick stores the lookup's coordinates, exactly as site creation does today.
    - **Place on the map**, which lets the owner click the point on the map. It stores `validationSource = "manual-pin"` and `validatedAt`.
-3. **The `geo-map` workspace primitive** renders the same customer map in compact form for the homes that already declare a `customer-map` slot.
+3. **The workspace home links to the map.** On the homes whose archetype declares a `customer-map` slot, the archetype banner's coverage line links that entry to the customer map, with the placed and not-on-the-map counts as plain text. No new panel is added: the home was deliberately decluttered so the operator cockpit stays the single "what needs you now" surface (BI-8C3EB52C). WWMD `DI-2D2929A12ABC` chose this, with high confidence, over a compact map panel on the home or no home entry.
 4. **A geocoding provider boundary**, `apps/web/lib/geocoding/`:
    - It exposes one interface, `geocodeAddresses(addresses)`, returning `{ latitude, longitude, precision, source }` or a typed "not found" result per address.
    - Providers are `none`, the default, which geocodes nothing; `census`, the US Census batch geocoder for US addresses; `opencage`, with a key from the credential store; and `self-hosted`, a Nominatim- or Photon-compatible URL the operator runs.
@@ -48,7 +48,7 @@ Coordinates exist only partly. Since the address lookup was introduced, a newly 
 | Acceptance | Objectives | Statement |
 |---|---|---|
 | AC-CMAP-VIEW-1 | OBJ-CMAP-VIEW | `/customer?view=map` shows one point per customer site with coordinates, and the account list is rendered on the same page. |
-| AC-CMAP-VIEW-2 | OBJ-CMAP-VIEW | The `geo-map` primitive renders the customer map on the workspace homes that declare a `customer-map` slot. |
+| AC-CMAP-VIEW-2 | OBJ-CMAP-VIEW | On workspace homes whose archetype declares a `customer-map` slot, the coverage line links to `/customer?view=map` and states how many sites are placed and how many are not on the map. |
 | AC-CMAP-FIX-1 | OBJ-CMAP-FIX | Sites without coordinates are counted and listed, each with "Check the address" and "Place on the map". |
 | AC-CMAP-FIX-2 | OBJ-CMAP-FIX | A manual pin stores the point with `validationSource = "manual-pin"`, and the site then appears on the map. |
 | AC-CMAP-PROVIDER-1 | OBJ-CMAP-PROVIDER | With the default provider `none`, no geocoding request leaves the install and the backfill is unavailable. |

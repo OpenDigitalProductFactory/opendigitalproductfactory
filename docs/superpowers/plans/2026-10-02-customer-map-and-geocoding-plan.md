@@ -36,9 +36,9 @@ status: draft
 - `/customer?view=map` renders `GeographicSceneCanvas` above the existing account list. A "Not on the map" disclosure lists sites, each with "Check the address" (the existing validated-address field) and "Place on the map".
 - The manual pin is a server action gated on `view_customer`. It writes `latitude`, `longitude`, `validatedAt` and `validationSource = "manual-pin"` on the site's `Address`.
 - `GeographicSceneCanvas` gains an optional `onPlacePoint(latitude, longitude)` for pin placement.
-- The `geo-map` primitive renders the compact customer map for the `customer-map` slot.
+- On homes whose archetype declares a `customer-map` slot, the archetype banner links that coverage entry to `/customer?view=map` with the placed and not-on-the-map counts (no new panel).
 
-**Tests:** the view switch; the not-on-the-map list and both fixes; the manual pin action, including permissions; the primitive rendering.
+**Tests:** the view switch; the not-on-the-map list and both fixes; the manual pin action, including permissions; the home banner link and counts.
 
 ## Phase 3 — Provider boundary and backfill
 
