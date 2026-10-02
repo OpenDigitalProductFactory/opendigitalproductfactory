@@ -96,6 +96,7 @@ const EXPECTED_LEGACY_JOBS = [
   "ux-fit-gate",
   "ux-primitive-adoption-guard",
   "work-unit-conformance-guard",
+  "xff-single-reader",
 ];
 
 function workflowJobBlock(workflow, jobId) {
