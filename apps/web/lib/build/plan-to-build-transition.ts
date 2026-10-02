@@ -281,6 +281,12 @@ export async function performPlanToBuildTransition(params: {
 }): Promise<PlanToBuildTransitionOutcome> {
   const { buildId, userId, context } = params;
 
+  // §11a: the next phase waits while an upgrade drains; resumed after the swap.
+  const { admitPhaseTransition } = await import("@/lib/build/build-phase-run");
+  if (!(await admitPhaseTransition(buildId, "plan", "build"))) {
+    return { kind: "not-ready", reason: "waiting for the platform upgrade to finish" };
+  }
+
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: {
