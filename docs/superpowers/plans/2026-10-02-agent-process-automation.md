@@ -129,3 +129,24 @@ guards did.
 7. **`land` should merge forward BEFORE gating when behind base.** Done by hand
    on PR #5958: 30 commits behind, merged forward (clean), regenerated, gated
    once — instead of gate / drift / re-gate. Pairs with item 4.
+8. **`git push` is not a free read, and re-running it DESTROYS a recorded PASS.**
+   The sharpest trap found. The pre-push hook runs `pregate` when it does not
+   see a PASS for the current SHA — so every `git push` invocation can CLAIM A
+   NEW LEASE and start another gate run, overwriting the record with `running`.
+
+   Observed on PR #5958: `gate:wait` recorded a clean PASS on `2b84d0d091dc`;
+   the push was then refused for an unrelated reason, and running `git push`
+   twice more *just to read the refusal text* left three concurrent processes on
+   the same branch+SHA under three different lease ids
+   (`NPEL-8380DA0854`, `NPEL-DA27AF433D` x2, after `NPEL-428AF9F26D` produced
+   the PASS). The earned PASS was gone, and the branch was back in the queue.
+
+   Mechanical consequences, all cheap:
+   - **read the record, never re-run the action.** `pnpm pregate:status` is
+     read-only and safe to poll; `git push` is not.
+   - the pre-push hook should NOT start a gate run for a SHA that already has a
+     run in flight — it should wait on it, or refuse with "a run is in flight"
+     rather than queueing a rival claim.
+   - `land` must push exactly once, and on refusal surface the hook's text from
+     the first attempt rather than re-invoking it. Its current implementation
+     pushes once and reports — this is why that matters, and it needs a test.
