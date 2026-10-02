@@ -36,8 +36,8 @@ export type BuildStudioOwedRoutesPorts = {
 };
 
 export type BuildStudioOwedRoutesResult =
-  | { ok: true; routes: Array<{ workroomId: string; requestCoworker: Record<string, unknown> }> }
-  | { ok: false; reason: string };
+  | { routed: true; routes: Array<{ workroomId: string; requestCoworker: Record<string, unknown> }> }
+  | { routed: false; reason: string };
 
 async function defaultLoadImplementationDecision(itemId: string, agentId: string): Promise<InitiativeReadinessDecision | null> {
   const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
@@ -86,12 +86,12 @@ export async function buildStudioOwedRoutes(args: {
 }): Promise<BuildStudioOwedRoutesResult> {
   const ports = args.ports ?? DEFAULT_BUILD_STUDIO_OWED_ROUTES_PORTS;
   const decision = await ports.loadImplementationDecision(args.itemId, args.authorAgentId);
-  if (!decision) return { ok: false, reason: "implementation-decision-unavailable" };
-  if (decision.verdict === "allowed") return { ok: true, routes: [] };
+  if (!decision) return { routed: false, reason: "implementation-decision-unavailable" };
+  if (decision.verdict === "allowed") return { routed: true, routes: [] };
   const designPhase = designPhaseReviewDecision(decision);
-  if (!designPhase) return { ok: true, routes: [] };
+  if (!designPhase) return { routed: true, routes: [] };
   const dispatch = await ports.resolveDispatch(args.capsuleId);
-  if (!dispatch.available) return { ok: false, reason: dispatch.reason };
+  if (!dispatch.available) return { routed: false, reason: dispatch.reason };
   const recovery = await ports.resolveRecovery({
     decision: designPhase,
     currentAgentId: args.authorAgentId,
@@ -102,7 +102,7 @@ export async function buildStudioOwedRoutes(args: {
     expectedCurrentBaselineId: await ports.loadCurrentBaselineId(args.itemId),
   });
   return {
-    ok: true,
+    routed: true,
     routes: recovery.reviewerRoutes
       .filter((route) => route.independent)
       .map((route) => ({ workroomId: route.workroomId, requestCoworker: route.requestCoworker as unknown as Record<string, unknown> })),

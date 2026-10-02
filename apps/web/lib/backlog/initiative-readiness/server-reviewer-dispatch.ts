@@ -183,7 +183,7 @@ async function loadCandidates(limit: number, random: () => number): Promise<Cand
 async function defaultOwedRoutes(itemId: string, authorAgentId: string, candidate?: Candidate) {
   if (candidate?.target === "implementation") {
     const result = await buildStudioOwedRoutes({ itemId, capsuleId: candidate.room.capsuleId, authorAgentId });
-    return result.ok ? result.routes : null;
+    return result.routed ? result.routes : null;
   }
   const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
   const item = await getBacklogItem({ itemId }, authorAgentId);
