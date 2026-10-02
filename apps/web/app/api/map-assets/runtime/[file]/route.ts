@@ -1,3 +1,4 @@
+// @exposure authenticated
 // GET /api/map-assets/runtime/:file — the two MapLibre runtime modules its
 // worker needs, served first-party from the pinned package (BI-814F86E1).
 

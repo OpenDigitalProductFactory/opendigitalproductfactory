@@ -1,3 +1,4 @@
+// @exposure authenticated
 // GET /api/map-assets — the valid installed map packs, so a client can pick one
 // covering its scene (BI-814F86E1). Manifests only; never a file path.
 

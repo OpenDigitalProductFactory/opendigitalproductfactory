@@ -1,3 +1,4 @@
+// @exposure authenticated
 // GET/HEAD /api/map-assets/:packId — one byte range of an installed PMTiles
 // pack (BI-814F86E1). Pack ids only; see lib/twin/map-assets.server.ts.
 

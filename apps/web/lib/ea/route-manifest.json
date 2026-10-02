@@ -1113,7 +1113,8 @@
         "map-assets"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/api/map-assets/route.ts"
+      "file": "apps/web/app/api/map-assets/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/map-assets/[packId]",
@@ -1126,7 +1127,8 @@
       "dynamicParams": [
         "packId"
       ],
-      "file": "apps/web/app/api/map-assets/[packId]/route.ts"
+      "file": "apps/web/app/api/map-assets/[packId]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/map-assets/runtime/[file]",
@@ -1140,7 +1142,8 @@
       "dynamicParams": [
         "file"
       ],
-      "file": "apps/web/app/api/map-assets/runtime/[file]/route.ts"
+      "file": "apps/web/app/api/map-assets/runtime/[file]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/mcp/call",
