@@ -13,6 +13,7 @@ import type { ToolResult } from "./mcp-tool-types";
 import type { RoomParticipantInvitationPreflight } from "./work-management/room-participant-invitation-preflight.server";
 import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
 import { registerWorkroomAliasCases } from "./mcp-governed-execute-alias.cases";
+import { registerRefusalDurationCases } from "./mcp-governed-execute-refusal-duration.cases";
 
 const preflightMocks = vi.hoisted(() => {
   const roomItem = {
@@ -457,7 +458,7 @@ describe("governedExecuteTool — happy path", () => {
     );
   });
 });
-
+registerRefusalDurationCases({ auditRows: () => auditRows, applyOverrides: applyAuthorityOverrides, normalUser: NORMAL_USER, executionCalls: () => executeMock.mock.calls });
 describe("governedExecuteTool — rejection paths", () => {
   registerWorkroomAliasCases({
     executionCalls: () => executeMock.mock.calls, auditRows: () => auditRows,
