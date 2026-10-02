@@ -9,6 +9,7 @@ import {
   type QuestionPacket,
 } from "./question-packet";
 import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
+import { UNTRUSTED_CONTENT_RULE } from "./tool-result-provenance";
 import { DECISION_ROUTING_BLOCK } from "./decision-routing-block";
 import { LIMITATION_RESPONSE_BLOCK } from "./limitation-response-block";
 import { ESCALATION_LADDER_BLOCK, COORDINATOR_BLOCK } from "./escalation-ladder";
@@ -352,6 +353,8 @@ export async function assembleSystemPromptWithProvenance(
       ...staticBlocks,
       ...generatedInstruction,
       ...(readingLevelSpan ? [readingLevelSpan] : []),
+      // The contract carries the untrusted-content rule; it is instruction, not data (BI-1045525F).
+      UNTRUSTED_CONTENT_RULE,
       ...(input.instructionSpans ?? []),
     ].filter((span): span is string => Boolean(span && span.trim())),
   };
