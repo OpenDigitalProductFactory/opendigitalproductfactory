@@ -89,8 +89,8 @@ describe("diffWorkShapeBinding", () => {
 
 // Typed gate and binding rows (GPP shape compiler, BI-6DA17863 PR-3b-4; spec
 // docs/superpowers/specs/2026-10-02-gpp-shape-notation-and-compiler-design.md
-// §4.4). A row fires only when both versions carry the field; absent ->
-// present is making-explicit and stays `unchanged`.
+// §4.4). Absent -> present is making-explicit and stays `unchanged`;
+// present -> absent withdraws a control and is a widening row.
 describe("diffWorkShapeBinding: typed gates and bindings", () => {
   const gate = {
     authority: "wwmd",
@@ -134,9 +134,20 @@ describe("diffWorkShapeBinding: typed gates and bindings", () => {
     expect(diff.classification).toBe("unchanged");
   });
 
-  it("a gate or binding present on only one side is not a row in either direction", () => {
-    expect(diffWorkShapeBinding(withStages([scan, bound()]), v1).changes).toEqual([]);
+  it("adding a gate and binding together, even an environment boundary, is not a row", () => {
     expect(diffWorkShapeBinding(v1, withStages([scan, bound({ enforcement: "environment", egress: ["read_a"] })])).changes).toEqual([]);
+  });
+
+  it("removing a gate is a widening row", () => {
+    const diff = diffWorkShapeBinding(withStages([scan, gated()]), withStages([scan, { ...review, advance: { kind: "governed-decision", condition: "accepted", decisionScope: "wwmd" } }], "1.1.0"));
+    expect(diff.changes).toEqual([expect.objectContaining({ kind: "gate-removed", class: "widening", stageKey: "review" })]);
+    expect(diff.classification).toBe("widening");
+  });
+
+  it("removing a binding is a widening row", () => {
+    const diff = diffWorkShapeBinding(withStages([scan, bound()]), withStages([scan, gated()], "1.1.0"));
+    expect(diff.changes).toEqual([expect.objectContaining({ kind: "binding-removed", class: "widening", stageKey: "review" })]);
+    expect(diff.classification).toBe("widening");
   });
 
   it("an identical gate and binding are unchanged, and unrelated gate fields are not rows", () => {

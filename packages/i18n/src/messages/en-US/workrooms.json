@@ -42,7 +42,9 @@
       "gate-authority-changed": "Decided under a different authority: {$detail}",
       "binding-enforcement-raised": "Permission checks are stricter: {$detail}",
       "binding-enforcement-lowered": "Permission checks are looser: {$detail}",
-      "binding-version-changed": "Permissions revised: {$detail}"
+      "binding-version-changed": "Permissions revised: {$detail}",
+      "gate-removed": "No longer needs a decision to move on: {$detail}",
+      "binding-removed": "Permission checks removed: {$detail}"
     },
     "rationale": "Why you approve",
     "rationaleHint": "Required, because this widens what the room can reach.",

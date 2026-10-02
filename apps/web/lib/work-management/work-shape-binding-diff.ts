@@ -14,9 +14,11 @@
 // carry the field. Absent -> present is a making-explicit transition (GPP
 // §2.1.1: it admits nothing the drive did not already do), so it is not a
 // change and the classification stays `unchanged`; the GPP shape compiler's
-// proof migration relies on that. Present -> absent is likewise not a row:
-// no runtime reader consumes either field, so dropping one changes nothing
-// the drive does. Binding enforcement is ordered absent < shadow < enforced <
+// proof migration relies on that. Present -> absent is NOT symmetric: removing
+// a stated gate or binding withdraws a control, which GPP §2.1.1 treats as
+// widening. No runtime reader consumes either field today, but the row is
+// recorded now so the classification is already right when Phase 3c makes
+// gates executable (highest-governance reading; the plan was silent on it). Binding enforcement is ordered absent < shadow < enforced <
 // environment (a containment boundary with declared egress is the strictest).
 
 import type { WorkShapeDefinitionContract, WorkShapeStage } from "./work-shapes";
@@ -41,7 +43,9 @@ export type BindingChangeKind =
   | "gate-authority-changed"
   | "binding-enforcement-raised"
   | "binding-enforcement-lowered"
-  | "binding-version-changed";
+  | "binding-version-changed"
+  | "gate-removed"
+  | "binding-removed";
 
 export type BindingChange = {
   kind: BindingChangeKind;
@@ -77,6 +81,8 @@ const CLASS_OF: Record<BindingChangeKind, Exclude<BindingChangeClass, "unchanged
   "gate-authority-changed": "widening",
   "binding-enforcement-lowered": "widening",
   "binding-version-changed": "widening",
+  "gate-removed": "widening",
+  "binding-removed": "widening",
   "binding-enforcement-raised": "narrowing",
 };
 
@@ -125,10 +131,11 @@ function stageChanges(from: WorkShapeStage, to: WorkShapeStage): BindingChange[]
   return changes;
 }
 
-/** Rows for a typed gate carried by both versions' governed advances. Absent on either side: no row (see header). */
+/** Rows for a typed gate. Added: no row; removed: widening; both present: compared (see header). */
 function gateChanges(from: WorkShapeStage, to: WorkShapeStage): BindingChange[] {
   const before = from.advance.kind === "governed-decision" ? from.advance.gate : undefined;
   const after = to.advance.kind === "governed-decision" ? to.advance.gate : undefined;
+  if (before && !after) return [change("gate-removed", to.key, `${before.authority} gate`)];
   if (!before || !after) return [];
   const changes: BindingChange[] = [];
   if (before.mode === "enforced" && after.mode === "shadow") {
@@ -143,10 +150,11 @@ function gateChanges(from: WorkShapeStage, to: WorkShapeStage): BindingChange[] 
   return changes;
 }
 
-/** Rows for a binding carried by both versions of a stage. Absent on either side: no row (see header). */
+/** Rows for a stage binding. Added: no row; removed: widening; both present: compared (see header). */
 function bindingChanges(from: WorkShapeStage, to: WorkShapeStage): BindingChange[] {
   const before = from.binding;
   const after = to.binding;
+  if (before && !after) return [change("binding-removed", to.key, `${before.id}@${before.version}`)];
   if (!before || !after) return [];
   const changes: BindingChange[] = [];
   const delta = ENFORCEMENT_RANK[after.enforcement] - ENFORCEMENT_RANK[before.enforcement];

@@ -11,7 +11,8 @@
 // 2. AC-NODISRUPT's diff precondition: for every registry definition S,
 //    diffWorkShapeBinding(S, S) and diffWorkShapeBinding(S, compile(S)) are
 //    `unchanged`, with the real ratification table (no gate) and with every
-//    scope test-ratified (a typed gate on every governed advance).
+//    scope test-ratified (a typed gate on every governed advance). The
+//    reverse direction drops gates, so its only rows are gate/binding removals.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -148,7 +149,11 @@ describe("AC-NODISRUPT precondition: the binding diff is unchanged for every reg
       const diff = diffWorkShapeBinding(definition, emitted);
       expect(diff.changes, id).toEqual([]);
       expect(diff.classification, id).toBe("unchanged");
-      expect(diffWorkShapeBinding(emitted, definition).classification, id).toBe("unchanged");
+      // The reverse (compiled -> original) drops any typed gate, which is a
+      // widening row by design; with no gate it must stay unchanged.
+      const reverse = diffWorkShapeBinding(emitted, definition);
+      expect(reverse.changes.every((row) => row.kind === "gate-removed" || row.kind === "binding-removed"), id).toBe(true);
+      if (ratification === GATE_RATIFICATION) expect(reverse.classification, id).toBe("unchanged");
       // And the emitted definition is the registry value under the legacy projection.
       expect(canonicalJson(legacyProjection(emitted)), id).toBe(canonicalJson(definition));
     }
