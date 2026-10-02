@@ -80,13 +80,14 @@ type AuthorityGateOverrides = {
 /** BI-12E5DD91: the recorded outcome of an identical call that already ran on approval. */
 export type AuthorityExecutedOutcome = (
   binding: Extract<CoworkerAuthorityDecision, { outcome: "require-approval" }>["approvalBinding"],
-) => Promise<{ envelopeId: string; result: unknown } | null>;
+) => Promise<{ envelopeId: string; status: "executed" | "failed"; result: unknown } | null>;
 
 export type CoworkerToolAuthorityGateResult =
   | {
       /** The identical call already ran once on a person's approval. */
       outcome: "settled";
       envelopeId: string;
+      status: "executed" | "failed";
       result: unknown;
     }
   | {
@@ -152,7 +153,7 @@ export function setCoworkerToolAuthorityOverridesForTests(
 
 async function executedOutcome(
   binding: Parameters<AuthorityExecutedOutcome>[0],
-): Promise<{ envelopeId: string; result: unknown } | null> {
+): Promise<{ envelopeId: string; status: "executed" | "failed"; result: unknown } | null> {
   if (overrides.authorityExecutedOutcome) return overrides.authorityExecutedOutcome(binding);
   const { findExecutedAuthorityOutcome } = await import("@/lib/coworker/authority-approval-envelope");
   return findExecutedAuthorityOutcome(binding);

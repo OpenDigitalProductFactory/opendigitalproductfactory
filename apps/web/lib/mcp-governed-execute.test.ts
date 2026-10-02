@@ -14,6 +14,8 @@ import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authori
 import type { ToolResult } from "./mcp-tool-types";
 import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
 import { registerWorkroomAliasCases } from "./mcp-governed-execute-alias.cases";
+const room = vi.hoisted(() => ({ refusal: vi.fn() }));
+vi.mock("./work-capsules/oauth-workroom-ownership", () => ({ workroomTargetAccessRefusal: room.refusal }));
 type AuditRow = Record<string, unknown>;
 function captureAudit(rows: AuditRow[]) { return async (data: AuditRow) => { rows.push(data); }; }
 const NORMAL_USER = { platformRole: "ceo", isSuperuser: true };
@@ -113,6 +115,7 @@ function applyAuthorityOverrides(
 }
 
 beforeEach(() => {
+  room.refusal.mockReset().mockResolvedValue(null);
   auditRows = [];
   receiptRows = [];
   authorityRows = [];
@@ -795,5 +798,49 @@ describe("agentHasAnyGrant (autonomous dispatch preflight)", () => {
   it("returns true (nothing to gate) when no tools are attached", async () => {
     _setGovernanceForTests({ resolveAgentGrants: async () => [], isAllowedByGrants: () => false });
     expect(await agentHasAnyGrant("any-agent", [])).toBe(true);
+  });
+});
+
+// BI-F4EB23C1 — nobody is asked to approve a call the room rule will refuse.
+describe("governedExecuteTool — room access before approval", () => {
+  const handover = {
+    toolName: "reassign_workroom_executor",
+    rawParams: { capsuleId: "WC-D72FAD2A", toExecutorKind: "codex-desktop", reason: "take over" },
+    userId: "admin-user",
+    userContext: NORMAL_USER,
+    context: { agentId: "AGT-EXT-CODEX", authSource: "oauth" as const, apiTokenId: "tok-1" },
+    source: "external-jsonrpc" as const,
+  };
+  const requireApproval = () => applyAuthorityOverrides({
+    resolveCoworkerAuthorityInput: async () => authorityInput({
+      action: { ...authorityInput().action, toolName: "reassign_workroom_executor", sideEffect: true, approvalPolicy: "side-effects" },
+      rawParams: handover.rawParams,
+    }),
+  });
+
+  it("returns the room refusal, audits it, and mints no approval", async () => {
+    requireApproval();
+    room.refusal.mockResolvedValue({ success: false, error: "workroom_handover_not_owner", message: "not the owner" });
+    const result = await governedExecuteTool(handover);
+    expect(result).toMatchObject({ success: false, error: "workroom_handover_not_owner" });
+    expect(approvalEnvelopeCreate).not.toHaveBeenCalled();
+    expect(executeMock).not.toHaveBeenCalled();
+    expect(auditRows.at(-1)).toMatchObject({ toolName: "reassign_workroom_executor" });
+    expect(room.refusal).toHaveBeenCalledWith(expect.objectContaining({ toolName: "reassign_workroom_executor", userId: "admin-user", agentId: "AGT-EXT-CODEX", authSource: "oauth", action: true }));
+  });
+
+  it("still asks for approval when the room admits the call", async () => {
+    requireApproval();
+    const result = await governedExecuteTool(handover);
+    expect(result).toMatchObject({ success: false, error: "approval_required" });
+    expect(approvalEnvelopeCreate).toHaveBeenCalledOnce();
+  });
+
+  it("leaves non-OAuth calls to their existing policy", async () => {
+    requireApproval();
+    room.refusal.mockResolvedValue({ success: false, error: "workroom_access_denied", message: "no" });
+    const result = await governedExecuteTool({ ...handover, context: { agentId: "AGT-EXT-CODEX" } });
+    expect(result).toMatchObject({ error: "approval_required" });
+    expect(room.refusal).not.toHaveBeenCalled();
   });
 });

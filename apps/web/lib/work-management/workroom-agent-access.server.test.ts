@@ -134,3 +134,22 @@ it("lets a legacy holder hand over a room nobody oversees, and still checks the 
   m.room.mockResolvedValue({ ...ownedRoom([]), requestedByPrincipalId: "bob", leaseHolderPrincipalId: "bob" });
   expect((await resolveAgentWorkroomAccess({ ...input, handover: true })).decision.level).toBe("none");
 });
+// BI-F4EB23C1 — a refused handover says why, but only to a person admitted to the room.
+it("reports not-owner when the person created the room but another person oversees it (WC-D72FAD2A)", async () => {
+  asReplacement();
+  m.room.mockResolvedValue({ ...room(), createdByPrincipalId: human.id, requestedByPrincipalId: null, leaseHolderPrincipalId: "bob",
+    participants: [{ principalId: "bob", lifecycle: "active", roles: ["coordinator"], principal: { kind: "human" } }] });
+  expect(await resolveAgentWorkroomAccess({ ...input, handover: true })).toMatchObject({ decision: { level: "none" }, handoverRefusal: "not-owner" });
+});
+it("reports assistant-in-room when the owner's assistant was removed or narrowed", async () => {
+  asReplacement();
+  m.room.mockResolvedValue(ownedRoom([{ principalId: human.id, lifecycle: "active", roles: ["coordinator"] }, { principalId: replacement.id, lifecycle: "removed", roles: ["contributor"] }]));
+  expect(await resolveAgentWorkroomAccess({ ...input, handover: true })).toMatchObject({ decision: { level: "none" }, handoverRefusal: "assistant-in-room" });
+});
+it("tells a person outside the room nothing about why", async () => {
+  asReplacement();
+  m.room.mockResolvedValue({ ...ownedRoom([{ principalId: "bob", lifecycle: "active", roles: ["coordinator"] }]), requestedByPrincipalId: "bob", createdByPrincipalId: "bob", leaseHolderPrincipalId: "bob" });
+  const refused = await resolveAgentWorkroomAccess({ ...input, handover: true });
+  expect(refused.decision.level).toBe("none");
+  expect(refused).not.toHaveProperty("handoverRefusal");
+});

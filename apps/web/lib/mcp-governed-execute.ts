@@ -188,17 +188,26 @@ export async function agentHasAnyGrant(agentId: string, toolNames: string[]): Pr
   return false;
 }
 
+/** An OAuth call's exact-room admission; checked before approval and again at execution. */
+async function oauthRoomRefusal(
+  toolName: string,
+  params: Record<string, unknown>,
+  userId: string,
+  ctx?: Pick<ToolExecutionContext, "agentId" | "authSource">,
+): Promise<ToolResult | null> {
+  if (ctx?.authSource !== "oauth") return null;
+  const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
+  return workroomTargetAccessRefusal({ params, userId, ...ctx, toolName, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
+}
+
 async function callExecuteTool(
   toolName: string,
   params: Record<string, unknown>,
   userId: string,
   ctx?: ToolExecutionContext,
 ): Promise<ToolResult> {
-  if (ctx?.authSource === "oauth") {
-    const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
-    const refusal = await workroomTargetAccessRefusal({ params, userId, ...ctx, toolName, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
-    if (refusal) return refusal;
-  }
+  const refusal = await oauthRoomRefusal(toolName, params, userId, ctx);
+  if (refusal) return refusal;
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
   return executeTool(toolName, params, userId, ctx);
 }
@@ -360,6 +369,13 @@ export async function governedExecuteTool(
     }
     const agentGrantAllowed = await isAllowedByGrants(args.toolName, grants);
 
+    // BI-F4EB23C1: never ask a person to approve a call the room rule refuses.
+    const roomRefusal = await oauthRoomRefusal(args.toolName, args.rawParams, args.userId, args.context);
+    if (roomRefusal) {
+      await writeAudit({ toolName: args.toolName, rawParams: args.rawParams, result: roomRefusal,
+        userId: args.userId, source: args.source, context: args.context, durationMs: 0 });
+      return roomRefusal;
+    }
     const authorityGate = await enforceCoworkerToolAuthority(
       args,
       tool,

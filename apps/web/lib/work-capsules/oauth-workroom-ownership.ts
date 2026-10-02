@@ -1,4 +1,5 @@
 import type { WorkCapsuleActor } from "./work-capsule-store-types";
+import type { HandoverRefusal } from "@/lib/work-management/workroom-agent-access.server";
 import type { WorkCapsuleExecutorKind } from "@/lib/work-capsules";
 import { isExternalLeaseExecutor, leaseUntil } from "./work-capsule-branch-identity";
 
@@ -53,6 +54,25 @@ function assistantNotAdmitted(capsuleId: string, toExecutorKind: WorkCapsuleExec
     },
   };
 }
+type HandoverAccess = { decision: { level: string; reason?: string }; handoverRefusal?: HandoverRefusal };
+
+/**
+ * The person is in the room but cannot hand it to this assistant. Say which
+ * rule refused it and the supported way forward, so nobody is asked to approve
+ * a handover that cannot run (BI-F4EB23C1). Neither recovery grants anything
+ * by itself: the owner acts, or the assistant reconnects as the owner.
+ */
+function handoverRefused(refusal: HandoverRefusal) {
+  return refusal === "not-owner"
+    ? { success: false as const, error: "workroom_handover_not_owner",
+        message: "The account your assistant is connected as can see this workroom but does not own it: another person coordinates it. "
+          + "Only the room's owner can hand it to an assistant, so approving a handover from this account cannot work. "
+          + "Either connect your assistant while signed in as the room's owner and ask again, or ask the owner to invite this assistant to the room." }
+    : { success: false as const, error: "workroom_handover_assistant_in_room",
+        message: "This assistant was removed from this workroom or limited to observing it, so it cannot take the room over. "
+          + "Only the room's owner can give it back the access it had, from the room's participants." };
+}
+
 export async function workroomTargetAccessRefusal(input: OAuthCapsuleTarget) {
   if (input.authSource !== "oauth" || typeof input.params.capsuleId !== "string") return null;
   const notAdmitted = { success: false as const, error: "workroom_access_denied",
@@ -63,22 +83,24 @@ export async function workroomTargetAccessRefusal(input: OAuthCapsuleTarget) {
   const { resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
   const requested = input.action ? "action" : "content";
   const handover = input.toolName === WORKROOM_HANDOVER_TOOL;
-  const access = (asHandover: boolean) => resolveAgentWorkroomAccess({
+  const access = (asHandover: boolean): Promise<HandoverAccess> => resolveAgentWorkroomAccess({
     userId: input.userId, agentId: input.agentId!, workroomId: room.id,
     requested: asHandover ? "action" : requested, handover: asHandover,
   });
-  const { decision } = await access(handover);
+  const first = await access(handover);
+  const { decision } = first;
   if (decision.level === requested) return null;
   if (decision.reason === "insufficient-clearance") return {
     success: false as const, error: "workroom_data_access_required",
     message: "You or your assistant cannot use this workroom's information. Ask an administrator to review data access in AI Coworker Identity. Signing in again will not change this permission.",
     data: { recoveryUrl: "/platform/identity/agents" },
   };
-  if (!handover && (await access(true)).decision.level === "action") {
+  const asHandover = handover ? first : await access(true);
+  if (!handover && asHandover.decision.level === "action") {
     const { providerToExecutorKind } = await import("./external-session-capture");
     return assistantNotAdmitted(input.params.capsuleId, providerToExecutorKind(input.agentId));
   }
-  return notAdmitted;
+  return asHandover.handoverRefusal ? handoverRefused(asHandover.handoverRefusal) : notAdmitted;
 }
 
 export async function authorizeOAuthCapsuleTarget(input: OAuthCapsuleTarget): Promise<boolean> {
