@@ -290,7 +290,7 @@ export function findPermissiveParseArgs(body, file = "") {
         ok = importsScriptArgv;
         reason = ok ? "" : "scriptArgv-not-imported";
       } else if (/^[\w$]+$/.test(args)
-        && new RegExp(String.raw`\b(?:const|let)\s+${args.replace(/\$/g, "\\$")}\s*=\s*scriptArgv\s*\(`).test(code)) {
+        && new RegExp(String.raw`\b(?:const|let)\s+${args.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\s*=\s*scriptArgv\s*\(`).test(code)) {
         ok = importsScriptArgv;
         reason = ok ? "" : "scriptArgv-not-imported";
       } else {

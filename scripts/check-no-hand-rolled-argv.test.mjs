@@ -99,6 +99,7 @@ test("accepts scriptArgv args, a scriptArgv binding, array literals and the clos
   assert.deepEqual(verdicts(`${UTIL}${SA}utilParseArgs({ args: scriptArgv(argv), strict: false });`), ["ok"]);
   assert.deepEqual(verdicts(`${UTIL}${SA}utilParseArgs({ args: scriptArgv(), allowPositionals: true });`), ["ok"]);
   assert.deepEqual(verdicts(`${UTIL}${SA}const args = scriptArgv();\nutilParseArgs({ args, strict: false });`), ["ok"]);
+  assert.deepEqual(verdicts(`${UTIL}${SA}const $argv = scriptArgv();\nutilParseArgs({ args: $argv, strict: false });`), ["ok"]);
   assert.deepEqual(verdicts(`${UTIL}utilParseArgs({ args: ["--x"], strict: false });`), ["ok"]);
   assert.deepEqual(
     verdicts(`${UTIL}utilParseArgs({ args: report.args ?? [], strict: false });`, "scripts/sbom/check-typecheck-baseline.mjs"),
