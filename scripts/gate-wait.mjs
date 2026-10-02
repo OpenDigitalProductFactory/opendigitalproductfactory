@@ -28,6 +28,7 @@ import { dirname, resolve } from "node:path";
 
 import { classifyGateExit, GATE_EXIT } from "./lib/gate-exit-classification.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { scriptArgv } from "./lib/script-argv.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -129,7 +130,7 @@ export async function waitForGate({
 
 function parseArgs(argv) {
   const { values } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     options: { help: { type: "boolean", short: "h" }, json: { type: "boolean" }, deadline: { type: "string" } },
   });
   if (values.deadline === "") throw new Error("Unknown or incomplete argument: --deadline");

@@ -13,7 +13,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { buildGateContext } from "./lib/gate-context.mjs";
-import { STEPS, bodyRequiredTrailers, missingBodyAttestations } from "./land-branch.mjs";
+import { STEPS, bodyRequiredTrailers, missingBodyAttestations, parseContext, syncAction } from "./land-branch.mjs";
+import { parseArgs as gateLocalArgs } from "./gate-local.mjs";
 import { obligationLines } from "./pregate-preflight.mjs";
 
 test("a stale derived artifact carries the command that regenerates it", () => {
@@ -77,4 +78,31 @@ test("the landing sequence gates BEFORE it pushes or opens anything", () => {
   assert.ok(i("push") < i("pull-request"), "push precedes the PR");
   assert.ok(i("pull-request") < i("auto-merge"));
   assert.equal(i("preconditions"), 0, "branch and readiness are checked first");
+});
+
+test("drift is merged forward before anything is derived from the tree", () => {
+  assert.ok(STEPS.indexOf("sync") < STEPS.indexOf("context"),
+    "context and regeneration must see the merged tree, or the gate re-runs on a stale one");
+  assert.equal(syncAction({ base: "main", behind: 0 }), "current");
+  assert.equal(syncAction({ base: "main", behind: 7 }), "merge");
+  // Unknowable drift is a refusal, never read as "current".
+  assert.equal(syncAction({ base: "main", behind: null }), "unknown");
+  assert.equal(syncAction({ base: "main", behind: Number.NaN }), "unknown");
+  assert.equal(syncAction({ base: "release", behind: 3 }), "unsupported-base");
+});
+
+test("gate:context output below the floor is unreadable, not empty", () => {
+  const ok = { changedFileCount: 2, trailers: [], derivedArtifacts: [] };
+  assert.deepEqual(parseContext(`> dpf@ gate:context\n${JSON.stringify(ok)}`), ok);
+  // Parses, but lacks the fields: a contract change must not read as "no obligations".
+  assert.equal(parseContext(JSON.stringify({ changedFileCount: 2 })), null);
+  assert.equal(parseContext("ELIFECYCLE  Command failed"), null);
+  assert.equal(parseContext("{ not json"), null);
+});
+
+test("a `--` forwarded by pnpm does not swallow the flag after it", () => {
+  // pnpm 10 passes `pnpm gate:local -- --message-file m` through as
+  // ["--", "--message-file", "m"]; util.parseArgs would read that as positionals.
+  assert.equal(gateLocalArgs(["--", "--message-file", "m"]).messageFile, "m");
+  assert.equal(gateLocalArgs(["--message-file", "m"]).messageFile, "m");
 });

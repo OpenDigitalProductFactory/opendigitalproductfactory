@@ -96,11 +96,14 @@ guards did.
 3. **PR creation is still `gh` from the agent.** `create_portal_pr` exists in the
    MCP surface; `land` should prefer it so the platform records the PR rather
    than the client.
-4. **Drift handling is manual.** `main` moves ~6 commits/hour against a
-   single-slot (`slot-0`) lease queue; four re-gates in one session were caused
-   by movement alone. `land` should detect "behind base", merge forward,
-   regenerate what `gate:context` names, and re-gate — the sequence done by hand
-   three times.
-5. **`pnpm land -- --flag` is a trap.** pnpm swallows the flag after `--` in this
-   position; a present attestation then reports as missing. `land` tolerates it;
-   `gate:local` does not. Either normalise it across the `pnpm` scripts or guard it.
+4. ~~**Drift handling is manual.**~~ `land` now fetches, counts commits behind
+   `origin/main`, and merges forward (merge, not rebase — safe on a shallow
+   clone) **before** context and regeneration, so the gate sees the merged tree.
+   Unknowable drift refuses rather than reading as current.
+5. ~~**`pnpm land -- --flag` is a trap.**~~ Measured, the cause was not pnpm:
+   pnpm 10 forwards the `--` literally, and `node:util parseArgs` then reads
+   every later flag as a positional — silently, under `allowPositionals` or
+   `strict: false`. `scripts/lib/script-argv.mjs` drops one leading `--`; the
+   landing spine (`land`, `gate:local`, `gate:context`, `gate:wait`) uses it.
+   **51** other scripts parse with those options and still drop the flag; they
+   need the helper and a guard that requires it.

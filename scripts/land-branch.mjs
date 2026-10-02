@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // scripts/land-branch.mjs — the repetitive spine, as one command.
 //
-//   pnpm land -- --message-file msg.txt --title "feat(x): ..." --body-file body.md
-//   pnpm land -- --message-file msg.txt --dry-run
-//   pnpm land -- --json
+//   pnpm land --message-file msg.txt --title "feat(x): ..." --body-file body.md
+//   pnpm land --message-file msg.txt --dry-run
+//   (a `--` after `land` is tolerated: scripts/lib/script-argv.mjs)
 //
 // WHY THIS EXISTS, WITH RECEIPTS. Every piece of this already existed —
 // gate:context (what CI will demand of this diff), the derived-artifacts
@@ -42,6 +42,11 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
+import { probeWorktreeReadiness } from "./lib/bootstrap-worktree-deps.mjs";
+import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
+import { gitText } from "./lib/git.mjs";
+import { scriptArgv } from "./lib/script-argv.mjs";
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Run a command, inheriting stdio so gate output stays visible to the operator. */
@@ -62,6 +67,7 @@ const git = (...args) => run("git", args, { capture: true, allowFail: true }).ou
 /** Steps are named so a failure says which one stopped, and what to do next. */
 export const STEPS = [
   "preconditions",
+  "sync",
   "context",
   "regenerate",
   "local-gates",
@@ -93,15 +99,45 @@ export function missingBodyAttestations(context, body) {
     .map((t) => `${t.trailer} (${t.because})`);
 }
 
-function readContext() {
-  const r = run("pnpm", ["gate:context", "--", "--json"], { capture: true, allowFail: true });
-  const start = r.out.search(/[{[]/);
+/**
+ * Parse gate:context's JSON and assert the floor this script relies on. A
+ * shape that parses but lacks these fields is a contract change, not "no
+ * obligations" — reading it as the latter is how a window passes for a whole.
+ */
+export function parseContext(text) {
+  const start = text.indexOf("{");
   if (start < 0) return null;
+  let context;
   try {
-    return JSON.parse(r.out.slice(start));
+    context = JSON.parse(text.slice(start));
   } catch {
     return null;
   }
+  const floor = Number.isInteger(context?.changedFileCount)
+    && Array.isArray(context.trailers)
+    && Array.isArray(context.derivedArtifacts);
+  return floor ? context : null;
+}
+
+function readContext() {
+  return parseContext(run("pnpm", ["-s", "gate:context", "--json"], { capture: true, allowFail: true }).out);
+}
+
+/**
+ * What to do about base drift. `main` moves several commits an hour against a
+ * single-slot gate queue, so a branch that was current when it was written is
+ * usually behind by the time it lands; gating the stale tree only to have
+ * pregate merge forward and find a stale derived artifact is the re-gate this
+ * step removes. Merging (not rebasing) is deliberate: a merge never replays
+ * history, so it is safe on a shallow clone where a bare rebase is not.
+ *
+ * @param {{ base: string, behind: number|null }} state  behind is null when unknowable
+ * @returns {"current"|"merge"|"unknown"|"unsupported-base"}
+ */
+export function syncAction({ base, behind }) {
+  if (base !== "main") return "unsupported-base";
+  if (behind === null || !Number.isInteger(behind) || behind < 0) return "unknown";
+  return behind === 0 ? "current" : "merge";
 }
 
 function fail(step, message, next) {
@@ -111,18 +147,15 @@ function fail(step, message, next) {
 }
 
 function main() {
-  // pnpm forwards the `--` separator through in the documented
-  // `pnpm land -- --flag` form. `allowPositionals` absorbs it instead of a
-  // hand-rolled argv walk — which check-no-hand-rolled-argv rightly refuses,
-  // and which it caught in the first draft of this file.
+  // Strict, no positionals: a mistyped flag refuses instead of being ignored.
+  // scriptArgv drops the literal `--` pnpm forwards in `pnpm land -- --flag`.
   const { values } = parseArgs({
-    allowPositionals: true,
+    args: scriptArgv(),
     options: {
       "message-file": { type: "string" },
       "body-file": { type: "string" },
       title: { type: "string" },
       "dry-run": { type: "boolean", default: false },
-      json: { type: "boolean", default: false },
       base: { type: "string", default: "main" },
     },
   });
@@ -139,18 +172,44 @@ function main() {
     return fail("preconditions", `on ${values.base} — work never lands FROM the base branch.`,
       "./scripts/new-dev-worktree.sh <slug>");
   }
-  const readiness = resolve(ROOT, ".dpf-worktree-readiness.json");
-  if (existsSync(readiness)) {
-    try {
-      const state = JSON.parse(readFileSync(readiness, "utf8"));
-      if (state.status && state.status !== "compile-ready") {
-        return fail("preconditions",
-          `worktree is ${state.status}; local gates cannot run and would env-skip.`,
-          "node scripts/lib/bootstrap-worktree-deps.mjs .");
-      }
-    } catch { /* an unreadable readiness file is not a reason to refuse */ }
+  // Probe, do not read the marker: .dpf-worktree-readiness.json exists only
+  // where seed-worktree-mcp ran, and an absent marker read as "fine" is a
+  // window taken for the whole. An unprovisioned worktree env-skips its gates.
+  const readiness = probeWorktreeReadiness(ROOT);
+  if (readiness.status !== "compile-ready") {
+    return fail("preconditions",
+      `worktree is ${readiness.status} (${readiness.reason}); local gates would env-skip, not pass.`,
+      "node scripts/lib/bootstrap-worktree-deps.mjs .");
   }
   log(`branch ${branch}, base ${values.base}`);
+
+  // ── 1b. sync: merge the base forward before anything is derived from it ──
+  let behind = null;
+  if (values.base === "main") {
+    try {
+      fetchOriginMainSharedSafe((args) => gitText(args, { cwd: ROOT, trim: false }));
+      const count = Number(git("rev-list", "--count", "HEAD..origin/main"));
+      behind = Number.isInteger(count) ? count : null;
+    } catch { behind = null; }
+  }
+  const action = syncAction({ base: values.base, behind });
+  if (action === "unknown") {
+    return fail("sync", "could not establish how far behind origin/main this branch is.",
+      "git fetch origin main, then re-run");
+  }
+  if (action === "unsupported-base") log(`! base ${values.base}: drift is not checked for non-main bases`);
+  if (action === "current") log("current with origin/main");
+  if (action === "merge") {
+    log(`${behind} commit(s) behind origin/main — merging forward`);
+    if (!dry) {
+      const r = run("git", ["merge", "--no-edit", "--signoff", "origin/main"], { capture: true, allowFail: true });
+      if (!r.ok) {
+        run("git", ["merge", "--abort"], { capture: true, allowFail: true });
+        return fail("sync", `merging origin/main did not apply cleanly (aborted, tree unchanged).\n${r.out.slice(-800)}`,
+          "commit or resolve, then re-run pnpm land");
+      }
+    }
+  }
 
   // ── 2. context: what will CI demand of this diff ──────────────────────────
   const context = readContext();
@@ -161,6 +220,19 @@ function main() {
   const derived = context.derivedArtifacts ?? [];
   log(`${context.changedFileCount} changed file(s); ${(context.trailers ?? []).length} attestation(s); `
     + `${derived.length} derived artifact group(s)`);
+
+  // Body attestations are knowable now, so refuse now — not after a gate run
+  // and a push have been spent on a branch whose PR would be refused.
+  const body = values["body-file"] && existsSync(values["body-file"])
+    ? readFileSync(values["body-file"], "utf8")
+    : "";
+  const missing = missingBodyAttestations(context, body);
+  if (missing.length > 0) {
+    return fail("context",
+      "the PR BODY must carry these attestations, and this will not invent them:\n    - "
+        + missing.join("\n    - "),
+      "add them to your --body-file, then re-run pnpm land");
+  }
 
   // ── 3. regenerate derived artifacts, from the commands the registry carries ─
   for (const d of derived) {
@@ -178,14 +250,17 @@ function main() {
   }
 
   // ── 4. local gates, against the working tree and the PLANNED message ───────
-  // NO `--` SEPARATOR HERE. pnpm swallows the flag that follows it in this
-  // position, so `pnpm gate:local -- --message-file x` leaves gate:local with no
-  // message and its trailer-reading gates then report the attestation as
-  // missing. That cost a full debug cycle while writing this file: the trailer
-  // was present, the extractor parsed it correctly standalone, and the gate
-  // still refused — because the message never arrived.
+  // The message is the one input this cannot derive, so a dirty tree without
+  // one refuses here — before the gates are spent — not at the commit.
+  const dirty = git("status", "--porcelain").length > 0;
+  if (dirty && !values["message-file"]) {
+    return fail("commit", "--message-file is required to commit: a generated message would be "
+      + "the least useful part of the change.",
+      'write the message, then: pnpm land --message-file msg.txt --title "..."');
+  }
   const localArgs = ["gate:local"];
   if (values["message-file"]) localArgs.push("--message-file", values["message-file"]);
+  else localArgs.push("--committed");
   log("running gate:local (every deterministic gate CI will run, pre-commit)");
   if (!dry) {
     const r = run("pnpm", localArgs, { allowFail: true });
@@ -198,13 +273,7 @@ function main() {
   }
 
   // ── 5. commit ─────────────────────────────────────────────────────────────
-  if (!values["message-file"]) {
-    return fail("commit", "--message-file is required: the commit message is the one thing this "
-      + "cannot derive, and a generated message would be the least useful part of the change.",
-      'write the message, then: pnpm land -- --message-file msg.txt --title "..."');
-  }
-  const staged = git("status", "--porcelain");
-  if (staged) {
+  if (git("status", "--porcelain")) {
     log("committing (DCO-signed)");
     if (!dry) {
       run("git", ["add", "-A"], { capture: true, allowFail: true });
@@ -240,16 +309,6 @@ function main() {
   const existing = run("gh", ["pr", "view", "--json", "number", "-q", ".number"],
     { capture: true, allowFail: true });
   const prNumber = existing.ok ? existing.out.trim() : "";
-  let body = values["body-file"] && existsSync(values["body-file"])
-    ? readFileSync(values["body-file"], "utf8")
-    : "";
-  const missing = missingBodyAttestations(context, body);
-  if (missing.length > 0) {
-    return fail("pull-request",
-      "the PR BODY must carry these attestations, and this will not invent them:\n    - "
-        + missing.join("\n    - "),
-      "add them to your --body-file, then re-run pnpm land");
-  }
   if (prNumber) {
     log(`PR #${prNumber} already open for this branch`);
   } else if (!values.title) {
