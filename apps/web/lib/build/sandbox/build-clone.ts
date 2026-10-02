@@ -17,14 +17,14 @@
 // reads it: promotion, teardown, and every re-ensure. Without that, teardown
 // would delete the only copy of an abandoned build's commits.
 //
-// Behind DPF_BUILD_WORKSPACE_MODE=clone until verified on the live install;
-// the default stays "worktree".
+// Default since the M1 rollout (BI-3955FF02): verified inside dpf-sandbox-1
+// against the real repo. DPF_BUILD_WORKSPACE_MODE=worktree is the rollback.
 
 /** How a build's workspace is materialized. */
 export type BuildWorkspaceMode = "worktree" | "clone";
 
 export function buildWorkspaceMode(): BuildWorkspaceMode {
-  return process.env.DPF_BUILD_WORKSPACE_MODE?.trim().toLowerCase() === "clone" ? "clone" : "worktree";
+  return process.env.DPF_BUILD_WORKSPACE_MODE?.trim().toLowerCase() === "worktree" ? "worktree" : "clone";
 }
 
 /** The clone's remote for the shared /workspace repo. `origin` stays the upstream (GitHub) URL. */

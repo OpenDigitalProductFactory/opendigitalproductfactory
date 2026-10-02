@@ -1,0 +1,64 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "drc-pass-environment-binding",
+  "version": "1.0.0",
+  "title": "DRC fixture drc-pass-environment-binding",
+  "description": "Passing: a ratified gate owning an environment binding whose egress is a registered tool.",
+  "triggers": [
+    "claim"
+  ],
+  "stages": [
+    {
+      "key": "a",
+      "title": "Stage a",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "governed-decision",
+        "condition": "The accountable owner decides stage a.",
+        "decisionScope": "drc-enforced-scope",
+        "gate": {
+          "authority": "wwmd",
+          "mode": "enforced",
+          "blocking": true,
+          "resolution": "accountable-human"
+        }
+      },
+      "evidence": [
+        "decision-record"
+      ],
+      "binding": {
+        "id": "drc-environment-binding",
+        "version": 1,
+        "enforcement": "environment",
+        "egress": [
+          "list_backlog_items"
+        ]
+      }
+    }
+  ],
+  "stopConditions": [
+    {
+      "kind": "success",
+      "condition": "Every stage recorded its evidence.",
+      "disposition": "proceed"
+    },
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    },
+    {
+      "kind": "budget",
+      "condition": "The cycle budget is spent.",
+      "disposition": "inconclusive"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

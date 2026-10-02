@@ -21,6 +21,9 @@ const db = vi.hoisted(() => ({
     productVersion: {
       findMany: vi.fn(),
     },
+    buildArtifactRevision: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 vi.mock("@dpf/db", () => db);
@@ -32,6 +35,7 @@ import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 const EXPECTED_TOOLS = [
   "query_version_history",
   "read_source_at_version",
+  "read_build_artifact_revision",
   "search_source_at_version",
   "list_source_directory",
   "compare_versions",
@@ -49,7 +53,7 @@ beforeEach(() => {
 });
 
 describe("version-history pack — registration", () => {
-  it("exposes exactly the five version-history tools", () => {
+  it("exposes exactly the six version-history tools", () => {
     expect(versionHistoryPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(versionHistoryPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
@@ -72,7 +76,7 @@ describe("version-history pack — registration", () => {
       .filter((definition) => definition.retainAuditParameters)
       .map((definition) => definition.name);
 
-    expect(retained).toEqual(["read_source_at_version"]);
+    expect(retained).toEqual(["read_source_at_version", "read_build_artifact_revision"]);
   });
 });
 
@@ -466,5 +470,41 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     expect((res.data as { filesChanged: number }).filesChanged).toBe(2);
     expect(gitUtils.gitDiffStat).toHaveBeenCalledWith({ from: "v1", to: "v2" });
     expect(gitUtils.gitLog).toHaveBeenCalledWith({ from: "v1", to: "v2", maxCount: 20 });
+  });
+});
+
+
+describe("read_build_artifact_revision (BI-926A7E90)", () => {
+  const revision = {
+    id: "rev_1", buildId: "FB-1", field: "designDoc", revisionNumber: 3, status: "accepted",
+    valueDigest: "sha256:abc",
+    value: { problemStatement: "Route the owed reviews.", acceptanceCriteria: ["AC-1 routed"] },
+  };
+  it("serves the accepted revision as a page with the bound identity", async () => {
+    db.prisma.buildArtifactRevision.findUnique.mockResolvedValue(revision);
+    const result = await versionHistoryPack.handlers.read_build_artifact_revision({
+      repositoryFullName: "o/r", path: "build-artifact-revision/rev_1", version: "rev_1", expectedBlobId: "sha256:abc",
+    }, "u1");
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      repositoryFullName: "o/r", path: "build-artifact-revision/rev_1", version: "rev_1", blobId: "sha256:abc",
+      startLine: 1, hasMore: false, nextCursor: null, buildId: "FB-1", field: "designDoc",
+    });
+    expect(String((result.data as { content: string }).content)).toContain("Route the owed reviews.");
+  });
+  it("fails closed on a digest mismatch and on an identity mismatch", async () => {
+    db.prisma.buildArtifactRevision.findUnique.mockResolvedValue(revision);
+    expect(await versionHistoryPack.handlers.read_build_artifact_revision({
+      path: "build-artifact-revision/rev_1", version: "rev_1", expectedBlobId: "sha256:other",
+    }, "u1")).toMatchObject({ success: false, error: "immutable_blob_mismatch" });
+    expect(await versionHistoryPack.handlers.read_build_artifact_revision({
+      path: "build-artifact-revision/rev_1", version: "rev_2", expectedBlobId: "sha256:abc",
+    }, "u1")).toMatchObject({ success: false, error: "invalid_revision_identity" });
+  });
+  it("reports an unknown revision as unavailable", async () => {
+    db.prisma.buildArtifactRevision.findUnique.mockResolvedValue(null);
+    expect(await versionHistoryPack.handlers.read_build_artifact_revision({
+      path: "build-artifact-revision/nope", version: "nope", expectedBlobId: "sha256:abc",
+    }, "u1")).toMatchObject({ success: false, error: "IMMUTABLE_SOURCE_UNAVAILABLE" });
   });
 });

@@ -169,6 +169,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // (plan 2026-09-08 §10.5 S2).
       conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
       node("scripts/check-no-hand-rolled-argv.mjs"),
+      // Raw control bytes make a source file binary to grep (BI-899122C5).
+      node("--test", "scripts/check-no-raw-control-bytes.test.mjs"),
+      node("scripts/check-no-raw-control-bytes.mjs"),
+    ]),
+    // BI-1FF67B91: the leftmost X-Forwarded-For entry is client-supplied. Only
+    // clientAddressKey (apps/web/lib/security/client-address.ts) may read it.
+    guard("xff-single-reader", "X-Forwarded-For Single Reader", [
+      conformanceTest("scripts/check-xff-single-reader.test.mjs"),
+      node("scripts/check-xff-single-reader.mjs"),
     ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
@@ -263,6 +272,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-3267763F: no compose default, installer output or self-upgrade
       // leaves Inngest on the signing/event keys once published in this repo.
       conformanceTest("scripts/installer/inngest-keys-contract.test.mjs"),
+      // BI-8541D491: every install path provisions the GPP permit signing key
+      // and a self-upgrade never rotates it.
+      conformanceTest("scripts/installer/gpp-permit-secret-contract.test.mjs"),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
@@ -882,6 +894,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // than silently passing every UI PR.
       node("--test", "scripts/check-ux-fit-decision.test.mjs"),
       node("scripts/check-ux-fit-decision.mjs"),
+    ]),
+    // No hidden Unicode in commit messages or PR title/body (BI-5D412E3C): the
+    // repo squash-merges with commit messages, so they land in main's history.
+    guard("hidden-unicode-commit-text-guard", "Hidden Unicode Commit Text Guard", [
+      conformanceTest("scripts/check-hidden-unicode-commit-text.test.mjs"),
+      node("scripts/check-hidden-unicode-commit-text.mjs"),
     ]),
     guard("docs-impact-gate", "Docs Impact Gate", [
       node(

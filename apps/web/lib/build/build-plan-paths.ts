@@ -9,10 +9,18 @@ export type BuildPlanPathRewrite = {
   to: string;
 };
 
+export type UnresolvedModifyPathHint = {
+  path: string;
+  nearestExistingDirectory: string | null;
+};
+
 export type NormalizedBuildPlan = {
   plan: BuildPlanDoc;
   rewrites: BuildPlanPathRewrite[];
   unresolvedModifyPaths: string[];
+  /** Nearest existing directory for each unresolved modify path (same order),
+   *  so a revision can be pointed at what IS there instead of just told "no". */
+  unresolvedModifyPathHints: UnresolvedModifyPathHint[];
 };
 
 const LEGACY_BUILD_STUDIO_PATH_ALIASES: Record<string, string> = {
@@ -73,6 +81,24 @@ function repoPathExists(relativePath: string, exists: ExistsFn = lazyFs().exists
   });
 }
 
+/**
+ * Walk up from a repo-relative path until a directory that exists in the repo is
+ * found. A plan that names a removed or renamed file is told where the nearest
+ * live directory is, so the revision can look there instead of re-targeting the
+ * same dead path round after round (live repro FB-2684020A, abandoned after both
+ * self-repair rounds re-targeted `apps/web/app/(shell)/admin/platform/page.tsx`).
+ */
+export function nearestExistingDirectory(relativePath: string, exists: ExistsFn = lazyFs().existsSync): string | null {
+  let current = normalizeRelativePath(relativePath);
+  for (let guard = 0; guard < 32; guard++) {
+    const slash = current.lastIndexOf("/");
+    if (slash <= 0) return null;
+    current = current.slice(0, slash);
+    if (repoPathExists(current, exists)) return current;
+  }
+  return null;
+}
+
 function resolveLegacyAlias(relativePath: string, exists: ExistsFn): string {
   const normalized = normalizeRelativePath(relativePath);
   const exactAlias = LEGACY_BUILD_STUDIO_PATH_ALIASES[normalized];
@@ -111,7 +137,7 @@ export function normalizeBuildPlanPaths(
   // the DB row predates a schema change). Return the plan unchanged rather
   // than crashing with "Cannot read properties of undefined (reading 'map')".
   if (!plan?.fileStructure || !plan?.tasks) {
-    return { plan, rewrites: [], unresolvedModifyPaths: [] };
+    return { plan, rewrites: [], unresolvedModifyPaths: [], unresolvedModifyPathHints: [] };
   }
 
   const exists = options?.exists ?? lazyFs().existsSync;
@@ -152,5 +178,9 @@ export function normalizeBuildPlanPaths(
     },
     rewrites,
     unresolvedModifyPaths: Array.from(new Set(unresolvedModifyPaths)),
+    unresolvedModifyPathHints: Array.from(new Set(unresolvedModifyPaths)).map((path) => ({
+      path,
+      nearestExistingDirectory: nearestExistingDirectory(path, exists),
+    })),
   };
 }

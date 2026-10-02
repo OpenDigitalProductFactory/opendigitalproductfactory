@@ -16,6 +16,8 @@
     "demo:performance-acceptance": "tsx scripts/seed-performance-acceptance-fixture.ts",
     "build:route-manifest": "tsx scripts/build-route-manifest.ts",
     "check:route-manifest": "tsx scripts/build-route-manifest.ts --check",
+    "build:gpp-shapes": "tsx scripts/build-gpp-shapes.ts",
+    "check:gpp-shapes": "tsx scripts/build-gpp-shapes.ts --check",
     "build:route-audience": "tsx scripts/build-route-audience.ts",
     "check:route-audience": "tsx scripts/build-route-audience.ts --check",
     "ux:sweep": "tsx scripts/ux-route-sweep.ts",
