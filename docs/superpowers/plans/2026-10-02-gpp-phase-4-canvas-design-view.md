@@ -15,7 +15,7 @@ status: draft
 | Backlog | BI-F8D4C529 (triaging at the time of writing; live query 2026-10-02) |
 | Decision relied on | DI-035897A0F1D6 (WWMD): the source of truth is the JSON-Schema superset of `WorkShapeDefinition`; iconography derives from BPMN and lives on the existing `@xyflow/react` EA canvas; BPMN subset and SysML v2 textual notation are export formats only. DI-36D36FEBF4BA (file-authoritative-pr): an approved change to a source-authoritative file lands as a branch and pull request over the GitHub API, never as a write to the deployment clone. |
 | Standard | [GPP](../../architecture/gated-permissions-process.md) §12.2 (SysML v2 mapping), §12.4.2 (V-1 to V-4), §12.4.3 and Annex A (DPF status) |
-| Verified against | `origin/main` at `879b344fa1` |
+| Verified against | `origin/main` at `879b344fa1`; re-verified after review at `6ce2f7e445` (PR-3b-4/5 merged, #5977) |
 
 ## Outcome
 
@@ -60,14 +60,19 @@ When Phase 4 is done:
 5. **The compiler and the drive are not changed in behaviour.** Phase 4 is a view, a projection, an
    editor and a proposal path. One change is made to the DRC: a fact it cannot establish at runtime
    becomes `not-evaluated` (PR-4b). No construct's executable flag flips. That is Phase 3c
-   (BI-8875C9DF).
+   (BI-8875C9DF). No PR changes a type or value that the drive persists: the drive snapshot
+   (`kind: "workroom-drive"`, including `stageKey`, `receipts` and the whole `conformance` object,
+   `lib/queue/functions/workroom-drive.ts:260-283`) stays byte-identical for sequential shapes, so
+   Phase 3c's AC-3C-SEQ-IDENTICAL
+   (`docs/superpowers/plans/2026-10-02-gpp-phase-3c-drive-graph-execution.md:294`) is not disturbed.
 6. **The parent spec and the child spec are not edited.** Refinements are recorded in "Spec
    refinements" below. The documentation surfaces that change are listed under "Documentation
    impact".
 
-## Facts this plan is built on (origin/main `879b344fa1`)
+## Facts this plan is built on (origin/main `879b344fa1`, re-verified at `6ce2f7e445`)
 
-Every path and symbol below was read on `origin/main`.
+Every path and symbol below was read on `origin/main`. Facts added after review were read at
+`6ce2f7e445`.
 
 **What Phase 3 has already delivered** (`apps/web/lib/gpp/shape-language/`)
 
@@ -108,12 +113,24 @@ Every path and symbol below was read on `origin/main`.
     production that import always fails and returns `false`.
   - `liveDirectExecuteSites()` reads the source tree (`resolve-sources.ts:120`).
 
-**What Phase 3 has not delivered yet**
+**Delivered by PR-3b-4/5 (merged as #5977, `6ce2f7e445`)**
 
-- `compile.ts`, `emitShapeModule`, the generated directories, `generated/index.generated.ts`, the
-  `audit-gpp-shapes.yml` workflow and the first migration (PR-3b-4, PR-3b-5, PR-3b-6). Today
-  `build-gpp-shapes.ts` writes only the JSON Schema (`apps/web/scripts/build-gpp-shapes.ts:1-40`).
-- No shape is document-backed yet.
+- `compileShapeDocument(text, sources, { sourcePath, ...DesignRuleOptions })` runs parse → resolve
+  → `runDesignRules` → lower → emit, and refuses on any error
+  (`apps/web/lib/gpp/shape-language/compile.ts:41-57,64-82`). It imports `node:crypto`, so it is
+  server-only.
+- `shapeDocumentDigest(document)` returns `sha256:<hex>` over `canonicalJson(document)`
+  (`compile.ts:58-62`).
+- The generator `apps/web/scripts/build-gpp-shapes.ts` writes per-document modules,
+  `generated/index.generated.ts` and `gpp/generated/gate-ratification-report.json`
+  (`build-gpp-shapes.ts:9-24`). Its `--check` orphan scan covers only files ending
+  `.shape.generated.ts` (`build-gpp-shapes.ts:77,124-132,228-239`), so another
+  `*.generated.ts` file in that directory is not flagged as an orphan.
+- `index.generated.ts` is not imported by `work-shapes.ts` in Phase 3b (`build-gpp-shapes.ts:19-21`).
+- The CI workflow `.github/workflows/audit-gpp-shapes.yml` and the vitest twin
+  `lib/gpp/shape-language/generated-integrity.test.ts` exist.
+- `shape-documents/` and `shape-documents/prior/` exist and hold only `.gitkeep`. No shape is
+  document-backed yet (PR-3b-6 has not merged).
 
 **EA canvas**
 
@@ -191,8 +208,25 @@ Every path and symbol below was read on `origin/main`.
     `Signed-off-by` trailer for the approver
   - touches no working tree
   - returns `pr-opened | no-change | no-token | no-repo | pr-failed` without throwing
-- `createBacklogItem` (`lib/actions/backlog.ts:102`) is the governed create path behind
-  `create_backlog_item` (`lib/mcp/packs/backlog-pack.ts:662`).
+- Backlog creation:
+  - `ingestBacklogItem(input)` (`lib/operate/backlog-ingest.ts:344`) is the shared front door
+    (EP-INTAKE-UNIFY). It returns `{ itemId, id, created }` (`:87-92`).
+    - It deduplicates by an `origin` marker against non-terminal items (`:391-413`).
+    - It resolves `epicId` given either the semantic code or the row id
+      (`where: { OR: [{ epicId: raw }, { id: raw }] }`, `:417-421`).
+    - It performs no authorization; callers check capability.
+  - The MCP tool `create_backlog_item` uses a pack-local `createBacklogItem` handler
+    (`lib/mcp/packs/backlog-pack.ts:44`) that calls `ingestBacklogItem`. It is gated by the
+    `backlog_write` grant (`:707`).
+  - The ops-UI server action `createBacklogItem` (`lib/actions/backlog.ts:102`) is a different
+    function. It returns `Promise<void>`, calls `requireManageBacklog()` →
+    `requireCapability("manage_backlog")` (`:28-30`), and writes `epicId` as given, so it needs the
+    epic row id. Phase 4 does not use it.
+- Install host profile: `classifyInstallHost(evidence)` (`lib/install/host-profile.ts:35-54`)
+  returns `sourceCapable: true` only when a git checkout is present and no consumer marker
+  contradicts it. `readInstallHostProfile()` (`:58-88`) reads `.install-mode`, the host `.git` and
+  `DPF_IMAGE_TAG` and returns that classification. This is not `isDevInstance()`
+  (`codebase-tools.ts:12-17`), which reads `INSTANCE_TYPE` and `NODE_ENV`.
 
 **Room shape view (V-2 today)**
 
@@ -211,8 +245,10 @@ Every path and symbol below was read on `origin/main`.
 
 **Divergence sources**
 
-- `ToolExecution` has no stage or shape column (`packages/db/prisma/schema/ai-coworker.prisma:1031-1080`).
-  `TaskRun` has none either (`build-delivery.prisma`, TaskRun block).
+- `ToolExecution` has no stage or shape column (`packages/db/prisma/schema/ai-coworker.prisma:1031-1106`).
+  Its GPP columns are `gppPermitRef`, `gppPermitVerdict` and `gppPermitObservations` (`:1089-1091`),
+  which cite a permit, not a stage. `TaskRun` has no stage column either (`build-delivery.prisma`,
+  TaskRun block).
 - The drive writes the dispatched stage to `ScheduledAgentTask.taskConfig.workroomStage`
   (`queue/functions/workroom-drive.ts:343-353,732-754`). The scheduled-run path reads it to pin
   stage tools (`lib/tak/scheduled-task-runs.ts:175`). The value is overwritten on each dispatch.
@@ -223,6 +259,16 @@ Every path and symbol below was read on `origin/main`.
   `missing_prerequisite_receipt` and `work_shape_version_mismatch`
   (`workroom-shape-conformance.ts:19-39`). A deviation carries only `code` and `summary`
   (`:52-55`).
+  - The conformance input has `currentStageKey` and `proposedStageKey` (`:116-117`). The two
+    stage-ordering codes are computed from them (`:311-372`).
+  - The persisted result keeps `currentStageKey` and `nextPermittedStageKey` but not
+    `proposedStageKey` (`:56-70`).
+  - The drive derives `proposedStageKey` as `nextStageKey(definition, currentStageKey, receipts)`
+    unless the caller overrides it (`drive-resolution.ts:215-221`). `nextStageKey` is exported
+    (`:142`).
+  - The drive snapshot persists `stageKey: plan.stageKey`, the `receipts` and the whole
+    `conformance` object (`workroom-drive.ts:260-283`). `plan.stageKey` is `null` on stop and
+    escalate plans (`emptyPlan`, `drive-resolution.ts:117-139`).
 - `gpp-c8-transition-gate-skipped` is a Build Studio plan → build record
   (`lib/mcp/packs/build-evidence-extra-pack.ts:287`). Work shapes have no equivalent.
 
@@ -232,7 +278,14 @@ Every path and symbol below was read on `origin/main`.
   `--dpf-border`, `--dpf-border-strong`, `--dpf-accent`, `--dpf-accent-soft`, `--dpf-on-accent`,
   `--dpf-success|warning|error|info`, `--dpf-state-*` (`app/globals.css`)
 - Form primitives: `components/ui/form/*` (`TextField`, `TextareaField`, `SelectField`,
-  `CheckboxField`, `SearchableSelect`, `FormField`)
+  `CheckboxField`, `SearchableSelect`, `FormField`, and `ConsequenceNotice`, which takes `summary`,
+  `what`, `who`, `reversibility`, `recovery` and `tone`: `components/ui/form/ConsequenceNotice.tsx:15-34`)
+- Free-form closed sets already in the EA schema: `EaView.status` is a `String @default("draft")`
+  (`ea-architecture.prisma:484`), written as `"draft"` by `applySysmlModel`
+  (`sysml-model-seed.ts:385`) and compared with `"approved"` in `EaCanvas.tsx:822`.
+  `EaConformanceIssue.issueType` is a `String` (`ea-architecture.prisma:541`). Each steward declares
+  its own issue types as a module constant (for example `MANAGED_ISSUE_TYPES`,
+  `architecture-parity-steward.ts:18`).
 - Report kit: `components/ui/report-kit/*` (`StatusBadge`, `Notice`, `EmptyState`, `CollapsibleList`)
 - Other primitives: `ui/Button`, `ui/Surface`, `ui/Dialog`, `ui/SaveStateIndicator`
 
@@ -248,7 +301,7 @@ Every path and symbol below was read on `origin/main`.
 | Skill seed PR path (DI-36D36FEBF4BA) | Reused | Layout-only publishes use its PR primitive. The diff/PR core is extracted once and the skill path is unchanged (PR-4b). |
 | `EaView` approval fields and `EaSnapshot` | Reused | A proposal is an `EaSnapshot`. `EaView.status`, `submittedAt` and `submittedById` record it. No migration. |
 | BI-ACCDC3A7 (migration waves) | Precondition for semantic publish | A semantic proposal for a shape that is still code-declared names the migration as its first step. Phase 4 never migrates a shape. |
-| Phase 3b PR-3b-4 / PR-3b-5 | Soft dependency | Phase 4 needs none of them to render, project, check or propose. It needs PR-3b-5's generator to be extended with a sidecar index (PR-4a). If PR-3b-5 has not merged, PR-4a adds the index step to today's `build-gpp-shapes.ts`, which says "Later phases extend this script; they do not add a second one". |
+| Phase 3b PR-3b-4 / PR-3b-5 (merged, #5977) | Reused | PR-4b's draft check calls `compileShapeDocument` rather than recomposing its steps. PR-4a extends the merged generator with one sidecar-index step, as its header asks ("Later phases extend this script; they do not add a second one", `build-gpp-shapes.ts:6-8`). |
 
 ## Scope and staging
 
@@ -259,11 +312,11 @@ Each split below follows a change in blast radius or authority, not a change in 
 |---|---|---|---|
 | **PR-4a** Design view, projection, exports | GPP notation seed; glyph kit and node renderers; document → canvas graph; read-only `GppShapeCanvas` on `/ea/views/[id]` for `gpp` views; sidecar ↔ `canvasState`; `gppShapes` projection writing `infraCiKey` for every registered shape; BPMN-subset and SysML v2 exports | EA rows only, through the existing reconcile. No source, no runtime file. | Read-only and EA-only. Rollback is a revert plus the next reconcile soft-removing `gpp:` rows. It is the base the other two build on, and it is the largest UI change. Shipping it alone gives a reviewable visual baseline before any write path exists. |
 | **PR-4b** Editing, DRC on save, governed propose | Typed property editor; draft save with DRC; findings on elements; runtime resolve sources (`not-evaluated` for facts production cannot see); proposal (`EaSnapshot` + backlog item); layout-only PR over the GitHub API; guards on generic EA write actions for `gpp` views | `canvasState`, `EaSnapshot`, `EaView.status`, `BacklogItem`. Opens a PR on GitHub for layout-only proposals (an outward act). | The only PR with an outward act and a user-triggered write. It touches the shared skill PR core, which needs its own security and DCO review. It can be reverted without losing the design view. |
-| **PR-4c** Runtime overlay and divergence | V-2 governance overlay in `projectRoomShape` / `WorkroomShape`; prior-version resolution; design links (V-3); C-6, C-8 and mode divergence detection into `EaConformanceIssue`; markers in both views; stage attribution for tool calls (see open question Q1); AC-SHARED-ID end-to-end test | `EaConformanceIssue`. Possibly one additive migration (Q1). | It changes the room view that every workroom renders, which is the widest-audience surface in the phase. It is the only PR that may carry a migration (build-gate item 4). Merging it with PR-4b would put a schema change and an outward-act change behind one revert. |
+| **PR-4c** Runtime overlay and divergence | V-2 governance overlay in `projectRoomShape` / `WorkroomShape`; prior-version resolution; design links (V-3); C-6, C-8 and mode divergence detection into `EaConformanceIssue`; markers in both views; stage attribution for tool calls (`ToolExecution.workroomStageRef`, Q1 decided); AC-SHARED-ID end-to-end test | `EaConformanceIssue`, `ToolExecution.workroomStageRef`. One additive migration. | It changes the room view that every workroom renders, which is the widest-audience surface in the phase. It is the only PR that carries a migration (build-gate item 4). Merging it with PR-4b would put a schema change and an outward-act change behind one revert. |
 
 What was considered and rejected:
 
-- **One PR.** Rejected. It would put an outward act (PR emission), a possible migration and the
+- **One PR.** Rejected. It would put an outward act (PR emission), a migration and the
   surface every room renders behind one revert, and the review would span three authorities.
 - **Five or more PRs (exports alone, seed alone, editor apart from propose).** Rejected.
   - The exports are pure serializers with no surface risk and ride with PR-4a.
@@ -364,7 +417,8 @@ Branches (one per PR, from `main`): `feat/gpp-canvas-design-view`, `feat/gpp-can
   - Properties: `{ elementId, kind, shapeVersion, provenance: "deterministic", source: "work-shape-registry" }`,
     plus gate and binding facts. A gate also carries `typed` and `decisionScope`.
   - Relationships carry `properties.elementId` for `edge:` ids. Implied edges are included.
-  - View `{ name: "GPP shape · <key>", viewpointName: "GPP shape design", scopeRef: "gpp-shape:<key>" }`.
+  - View `{ name: "GPP shape · <key>", description: "<shape title> — projected from the work-shape registry (<key>@<version>)", viewpointName: "GPP shape design", scopeRef: "gpp-shape:<key>" }`.
+    `description` is required by `SysmlDesiredModel.view` (`sysml-model-seed.ts:71`).
   - `softRemovePrefix: "gpp:<key>:"`.
 
 *Projection domain*
@@ -375,6 +429,19 @@ Branches (one per PR, from `main`): `feat/gpp-canvas-design-view`, `feat/gpp-can
   - It projects current versions only (see "Spec refinements" item 2).
   - It then seeds `canvasState` from the committed sidecar only when the view has no `gpp.layout`,
     so a reconcile never overwrites a modeller's layout.
+  - **Retiring a shape removed from the registry.** The per-shape `softRemovePrefix` only sees keys
+    that are still projected, so a deleted shape's rows would stay active. After the per-shape
+    passes, the reconciler lists the distinct shape keys under `infraCiKey` prefix `gpp:` that have
+    an active element (`lifecycleStatus: "active"`). For each key that `listWorkShapes()` no longer
+    returns, it calls `applySysmlModel` with an empty `elements` and `relationships` set,
+    `softRemovePrefix: "gpp:<key>:"` and the same view name. The view description becomes
+    "Shape removed from the registry".
+    - `applySysmlModel` then soft-removes every element (`mirrorRemoved: true`,
+      `lifecycleStatus: "inactive"`, `sysml-model-seed.ts:231-240`) and deletes their view rows
+      (`:414-421`).
+    - Nothing is hard-deleted.
+    - Open `gpp-*` conformance issues on those elements are resolved by the next divergence
+      reconcile (PR-4c), because no finding names them.
   - It returns a `SysmlSeedResult` summed across shapes.
 - `apps/web/lib/ea/reconcile-sysml-projections.ts`: add `gppShapes` to `SysmlProjectionsResult`
   and one `runDomain("gppShapes", …)` line. Failures stay isolated per domain.
@@ -483,6 +550,8 @@ Branches (one per PR, from `main`): `feat/gpp-canvas-design-view`, `feat/gpp-can
 - `reconcile-gpp-shapes.test.ts` (injected db, the pattern of `sysml-model-seed` tests):
   - The second run creates nothing.
   - A removed stage soft-removes its element.
+  - A shape key that no longer exists in the registry has every one of its elements soft-removed,
+    and its view loses their view rows.
   - An existing `canvasState.gpp.layout` is not overwritten.
 - `layout-sidecar.test.ts`:
   - Round trip: `toCanvasState` followed by reading back yields the same sidecar.
@@ -576,9 +645,11 @@ and 4.
   `importResolver` when the source tree is absent (`!isDevInstance()`). It never calls
   `liveDirectExecuteSites()`, so C-9 is `not-evaluated` on the canvas.
 - `apps/web/lib/gpp/shape-language/check-draft.ts` (new): `checkShapeDraft(text, layout, sources)`
-  → `{ document | null, diagnostics }`. It composes `parseShapeDocument` → `resolveShapeDocument`
-  → `runDesignRules({ layout })`, which is the compiler's steps 1–4 (spec §7.1). It needs no
-  `compile.ts`, so there is no dependency on PR-3b-4.
+  → `{ document | null, diagnostics, documentDigest | null }`. It is a thin wrapper over
+  `compileShapeDocument(text, sources, { sourcePath: "<canvas draft>", layout })`
+  (`compile.ts:64`), so the canvas runs the compiler's own pipeline, not a recomposition of it. It
+  discards the emitted `module` and keeps `diagnostics`. On a refused document it re-parses with
+  `parseShapeDocument` only to return the parsed document for the editor.
 
 *Server actions* (`apps/web/lib/actions/gpp-shape-draft.ts`, new, `"use server"`)
 
@@ -588,23 +659,39 @@ and 4.
   - Validates `layout` with `gppLayoutSchema`.
   - Runs `checkShapeDraft` with `runtimeResolveSources()`.
   - Writes `canvasState = toCanvasState(layout, …) + gpp.draft = { documentText, digest, savedAt, diagnostics }`
-    in one update. `digest` is sha256 of `canonicalJson`.
+    in one update.
+    - `digest` is `sha256:<hex>` of `canonicalJson({ document, layout })`, where `layout` is the
+      sidecar with `viewport` removed. Viewport is per-viewer and never committed.
+    - `documentDigest` (`shapeDocumentDigest`, `compile.ts:58-62`) is stored beside it, so a
+      layout-only change is recognisable as an unchanged `documentDigest` with a changed `digest`.
   - Returns sorted diagnostics.
   - A draft with errors is saved, because work in progress must not be lost, and is marked
     not-proposable.
 - `discardGppShapeDraft({ viewId })`: clears `gpp.draft`.
 - `proposeGppShapeChange({ viewId, summary })`:
+  0. **Authority (Q4, DI-6991AE3D5346).** It refuses unless both hold:
+     - the caller holds `manage_ea_model` (`requireManageEaModel`)
+     - `(await readInstallHostProfile()).sourceCapable === true` (`lib/install/host-profile.ts:58-88`,
+       which returns `classifyInstallHost`'s result, `:35-54`)
+
+     `isDevInstance()` is deliberately not used: it reads `INSTANCE_TYPE` and `NODE_ENV`, not
+     whether this install holds a source checkout. A refused call returns the reason ("Proposing
+     platform-shape changes is limited to the maintainer source install"), and records nothing.
+     A **semantic** proposal additionally requires `manage_backlog` (`requireCapability`,
+     `lib/actions/shared/guards.ts:68`), the same capability the ops UI requires to file an item
+     (`lib/actions/backlog.ts:28-30`).
   1. Re-runs `checkShapeDraft` on the stored draft. It refuses if any diagnostic is an `error`,
      returning them.
-  2. Classifies the change. `canonicalJson(document)` equal to the current document means
+  2. Classifies the change. A draft `documentDigest` equal to the current document's means
      **layout-only**. Otherwise it is **semantic**, classified with
      `diffWorkShapeBinding(lowerToDefinition(current), lowerToDefinition(draft))`.
      - A widening change with an unchanged `version` is refused: "bump the version; widening needs
        a new version and a governed rebind" (GPP §2.1.1).
   3. Creates an `EaSnapshot`:
-     `graphJson = { format: "gpp-proposal/0.1", shapeRef, documentText, layout, digest, diagnostics, classification }`,
+     `graphJson = { format: "gpp-proposal/0.1", shapeRef, documentText, layout, digest, documentDigest, diagnostics, classification }`,
      with `submittedById`, `changeSummary`, and element and relationship counts from the canvas
-     graph. It sets `EaView.status = "submitted"`, `submittedAt` and `submittedById`.
+     graph. It sets `EaView.status = EA_VIEW_STATUS.submitted`, `submittedAt` and `submittedById`
+     (see "Closed sets" below).
   4. **Layout-only, document-backed shape:** opens a PR with only the `.layout.json` file, via
      `emitSourceFilePullRequest` (below).
      - Branch `chore/gpp-layout-<key>-<snapshotId>`; title
@@ -615,22 +702,43 @@ and 4.
        proposal stays recorded, and nothing claims success.
   5. **Layout-only, shape not yet document-backed:** nothing to commit beside. The layout stays in
      `canvasState` and the result says so.
-  6. **Semantic:** creates a backlog item through `createBacklogItem`
-     (`lib/actions/backlog.ts:102`). It has work type `feature`, epic EP-B932453F, the title
-     `GPP shape change: <key>@<version> — <summary>`, and a body containing:
+  6. **Semantic:** creates a backlog item through `ingestBacklogItem`
+     (`lib/operate/backlog-ingest.ts:344`), the helper that returns the `itemId`. The input is:
+     - `workType: "feature"`, `source: "user-request"`, `type: "product"`, `status: "triaging"`
+     - `epicId: "EP-B932453F"`, the semantic code, which `ingestBacklogItem` resolves to the row id
+       (`:417-421`)
+     - `origin: { kind: "gpp-shape-proposal", id: <snapshotId> }`, so a re-submitted proposal bumps
+       the existing item instead of filing a duplicate (`:391-413`)
+     - `submittedById: <user>`
+     - the title `GPP shape change: <key>@<version> — <summary>`
+     - a body containing:
      - the snapshot id
      - the classification
      - the full diagnostics, with `not-evaluated` items listed as "checked in CI"
      - the document and sidecar in fenced blocks (shape documents are a few KB)
      - when the shape is still code-declared, the step "migrate first (BI-ACCDC3A7), then apply"
 
-     The item is landed by a delivery workroom (Build Studio or an external CLI). That workroom
-     runs `build:gpp-shapes` on a worktree from `main` and opens the PR. So the compiler that emits
-     the generated files is always `main`'s, never the running image's (see "Spec refinements"
-     item 3).
-- The proposal's acceptance is the PR merge. `reconcileGppShapes` (PR-4a) sets
-  `EaSnapshot.approvedAt` and `EaView.status = "approved"` when the deployed definition's digest
-  equals the snapshot's `digest`. This is a read of deployed state, not a claim.
+     The returned `itemId` is written into `graphJson.backlogItemId`. The item is landed by a
+     delivery workroom (Build Studio or an external CLI). That workroom runs `build:gpp-shapes` on a
+     worktree from `main` and opens the PR. So the compiler that emits the generated files is
+     always `main`'s, never the running image's (see "Spec refinements" item 3).
+- **Approval is a read of deployed state, never of the draft.** The proposal's acceptance is the PR
+  merging and the install upgrading to it. PR-4b edits `reconcileGppShapes`
+  (`lib/ea/reconcile-gpp-shapes.ts`, created in PR-4a) to set `EaSnapshot.approvedAt` and
+  `EaView.status = EA_VIEW_STATUS.approved` only when the **deployed** pair matches the snapshot.
+  The deployed pair is:
+  - **document**: `decompile(getWorkShapeVersion(key, version))`, which is the definition in the
+    running bundle
+  - **layout**: the committed sidecar from `layout-index.generated.ts` for `<key>@<version>`, which
+    is never `canvasState`
+
+  Both are hashed the same way: `canonicalJson({ document, layout })` with `viewport` removed.
+  - A layout-only proposal is therefore approved only after its sidecar PR merges and the install
+    upgrades. Its unchanged document cannot approve it on the next reconcile, because the sidecar
+    in the bundle still differs.
+  - A proposal for a shape with no committed sidecar compares against `layout: null`. Such a
+    proposal is semantic or stays unpublished (step 5), so it never auto-approves on the document
+    alone.
 
 *PR core extraction*
 
@@ -642,6 +750,26 @@ and 4.
   `emitSeedPullRequest`'s signature, messages and statuses are unchanged, and
   `seed-pull-request` tests pass unedited. This keeps one PR primitive (AGENTS.md §8, no parallel
   utilities).
+
+*Closed sets (AGENTS.md §8)*
+
+- `apps/web/lib/ea/ea-view-status.ts` (new): `EA_VIEW_STATUSES = ["draft", "submitted", "approved"] as const`,
+  the `EaViewStatus` union and an `EA_VIEW_STATUS` lookup.
+  - `"draft"` is today's default (`ea-architecture.prisma:484`) and `"approved"` is what
+    `EaCanvas.tsx:822` already compares with. Phase 4 writes `"submitted"` and `"approved"` only
+    through this module.
+  - `EaView.status` stays a free-form `String` column. Converting it to a Prisma enum is a
+    migration over every existing view, outside this phase. That is **recorded as pre-existing
+    debt** under "Pre-existing findings".
+- `apps/web/lib/gpp/shape-language/divergence.ts` (PR-4c) declares
+  `GPP_DIVERGENCE_ISSUE_TYPES = ["gpp-c6-reach", "gpp-c8-transition", "gpp-c7-mode"] as const`. It
+  is the only home of those strings. `reconcile-gpp-divergence.ts` passes it as `issueTypes`, the
+  same pattern as `MANAGED_ISSUE_TYPES` (`architecture-parity-steward.ts:18`).
+  `EaConformanceIssue.issueType` is likewise a free-form column, recorded as pre-existing debt.
+- The proposal format string `"gpp-proposal/0.1"` and the origin kind `"gpp-shape-proposal"` are
+  exported constants in `lib/actions/gpp-shape-draft.ts`'s non-server sibling
+  `lib/gpp/shape-language/proposal-format.ts`, because a `"use server"` module exports only
+  functions (AGENTS.md §6).
 
 *Guards*
 
@@ -687,10 +815,22 @@ and 4.
   - `not-evaluated` renders as "Checked in CI".
   - Selecting a finding focuses its element.
   - Elements with findings show a count badge with a text label ("2 errors"), never colour alone.
-- `GppProposeDialog.tsx`: built on `ui/Dialog`.
-  - Shows the classification, the summary field and the consequence notice: "Layout changes open a
-    pull request on GitHub" / "Changes to the shape become a backlog item for review".
+- `GppProposeDialog.tsx`: built on `ui/Dialog` and the existing
+  `components/ui/form/ConsequenceNotice.tsx`. It adds no new notice component.
+  - Shows the classification and the summary field.
+  - `ConsequenceNotice` answers the four questions:
+    - `summary`: "Opens a pull request on GitHub" (layout) or "Files a backlog item for review"
+      (semantic)
+    - `what`: the files or the item
+    - `who`: the platform repository's reviewers
+    - `reversibility`: "the PR or item can be closed"
+    - `recovery`: "the draft stays on this view"
+    - `tone`: `"warning"` for the outward PR
   - Submitting is a deliberate click. The outward act is never automatic.
+- **Propose is hidden, not merely disabled, unless the install is source-capable and the user holds
+  `manage_ea_model`** (Q4). The page passes `canPropose` computed server-side from
+  `readInstallHostProfile()` and the capability. The server action re-checks both, so hiding the
+  button is never the only control.
 
 **Tests**
 
@@ -708,7 +848,15 @@ and 4.
   - A draft with errors saves but `proposeGppShapeChange` refuses.
   - Layout-only plus document-backed calls `emitSourceFilePullRequest` once with only the sidecar
     path.
-  - Semantic calls `createBacklogItem` once and opens no PR.
+  - Semantic calls `ingestBacklogItem` once, with `epicId: "EP-B932453F"` and the
+    `gpp-shape-proposal` origin, and opens no PR.
+  - **A consumer host profile is refused.** `classifyInstallHost({ installMode: "consumer", hasGitSource: false, imageTag: "x" })`
+    gives `sourceCapable: false`. The action refuses before writing a snapshot, an item or a PR.
+    An `unknown` profile (contradictory evidence) is refused too.
+  - A source-capable profile without `manage_backlog` can propose layout-only but not semantic.
+  - Approval: a layout-only snapshot is **not** approved by a reconcile whose bundled sidecar
+    differs. It is approved once the layout-index fixture carries the proposed sidecar. A semantic
+    snapshot is approved only when both the bundled document and the sidecar match.
   - Widening without a version bump is refused.
   - `no-token` is surfaced, not reported as success.
 - `seed-pull-request.test.ts`: unedited, and passes. That is the extraction-parity proof.
@@ -740,9 +888,14 @@ and 4.
 6. Propose a semantic change. A backlog item appears with the snapshot id, the classification and
    the document block. No PR opens.
 7. Persona with `view_ea_modeler` only: no editor controls render, and the server actions refuse.
-8. Dark mode and greyscale passes on the editor, panel and dialog, as in PR-4a steps 3 and 4.
+8. **Consumer profile.** Run the preview with a consumer host profile (`.install-mode` = `consumer`
+   and no `.git` under the host install path, the inputs `readInstallHostProfile` reads). A persona
+   with `manage_ea_model` can edit and check a draft but sees **no Propose button**, and calling the
+   action directly is refused.
+9. Dark mode and greyscale passes on the editor, panel and dialog, as in PR-4a steps 3 and 4.
 
-**Rollout.** Editing is available to `manage_ea_model` holders on the next deploy.
+**Rollout.** Editing is available to `manage_ea_model` holders on the next deploy. Proposing is
+available only on the maintainer source install (Q4).
 
 **Rollback.** Revert. Drafts in `canvasState.gpp.draft` become inert. Recorded proposals and backlog
 items remain as history.
@@ -762,21 +915,35 @@ OBJ-DRC carried to the canvas without re-deriving a rule.
 
 **Files**
 
-*Stage attribution for tool calls* (resolves Q1; the plan's recommendation is Option A)
+*Stage attribution for tool calls* (Q1, decided by the founder: the additive column)
 
-- **Option A (recommended).** One additive migration:
-  `packages/db/prisma/migrations/<timestamp>_tool_execution_workroom_stage_ref/migration.sql` adds a
-  nullable `ToolExecution.workroomStageRef TEXT` (format `<shapeKey>@<version>#<stageKey>`) and an
-  index on `(workroomStageRef, createdAt)`.
-  - No backfill. Historic rows stay null, and null is "unattributed", never "in stage".
-  - The scheduled-run path that already reads `taskConfig.workroomStage`
-    (`scheduled-task-runs.ts:175`) puts the ref on the run context. `governedExecuteTool` writes it.
-  - Step 1 of the PR traces the exact context hand-off and names the files before any edit.
-  - Applies cleanly to any data state: one nullable column, no default rewrite.
-- **Option B.** No migration. C-6 is computed only for calls with a `GppPermitObservation` whose
-  permit carries `stageKey`. That is bound O/A/I tools only, and none is bound today, so C-6 would
-  have no data until bindings exist. AC-SHARED-ID's seeded C-6 would then be seeded through a permit
-  row.
+- One additive migration,
+  `packages/db/prisma/migrations/<timestamp>_tool_execution_workroom_stage_ref/migration.sql`:
+
+  ```sql
+  ALTER TABLE "ToolExecution" ADD COLUMN IF NOT EXISTS "workroomStageRef" TEXT;
+  CREATE INDEX IF NOT EXISTS "ToolExecution_workroomStageRef_createdAt_idx"
+    ON "ToolExecution" ("workroomStageRef", "createdAt")
+    WHERE "workroomStageRef" IS NOT NULL;
+  ```
+
+  - The format is `<shapeKey>@<version>#<stageKey>`.
+  - Adding a nullable column with no default is a catalogue-only change and rewrites no rows.
+  - `ToolExecution` is a large audit table. A plain `CREATE INDEX` builds over every row while
+    holding a lock that blocks writes, during upgrade init. The index is therefore **partial**,
+    `WHERE "workroomStageRef" IS NOT NULL`: at migration time every existing row is null, so the
+    build reads the table but indexes nothing, and later inserts maintain only attributed rows.
+  - `IF NOT EXISTS` on both statements makes a re-run after a partial apply safe, so the migration
+    applies cleanly to any data state: an empty schema, a populated schema, or one where an earlier
+    attempt stopped between the two statements.
+  - The Prisma schema adds `workroomStageRef String?` and the matching
+    `@@index([workroomStageRef, createdAt])`. The partial `WHERE` clause lives only in SQL. PR step
+    1 checks how this repository already reconciles partial indexes with `prisma migrate diff`, and
+    follows that precedent rather than inventing one.
+  - No backfill. Historic rows stay null, and null means "unattributed", never "in stage".
+- Write path: the scheduled-run path that already reads `taskConfig.workroomStage`
+  (`scheduled-task-runs.ts:175`) puts the ref on the run context, and `governedExecuteTool` writes
+  it. Step 1 of the PR traces the exact context hand-off and names the files before any edit.
 
 *Pure detectors* (`apps/web/lib/gpp/shape-language/divergence.ts`, new)
 
@@ -785,12 +952,25 @@ OBJ-DRC carried to the canvas without re-deriving a rule.
     `tool:<stageKey>:<tool>` if the stage declares that tool under another stage, and on
     `stage:<stageKey>` otherwise.
   - A stage with `tools` absent (undeclared) yields `not-evaluated`, never a divergence.
-- `transitionDivergences(conformance)`: C-8 for work shapes.
-  - Maps `out_of_order_stage` and `missing_prerequisite_receipt` to `gate:<prior stage>` when the
-    prior stage is governed, and to `stage:<stageKey>` otherwise.
-  - Needs the stage on the deviation: `WorkroomShapeConformanceDeviation` gains an optional
-    `stageKey` (additive), set where those two codes are produced in
-    `workroom-shape-conformance.ts`. Summaries are unchanged.
+- `transitionDivergences(definition, snapshot)`: C-8 for work shapes. It reads a persisted drive
+  snapshot and changes nothing in it.
+  - **The deviation type is unchanged.** `WorkroomShapeConformanceDeviation` stays
+    `{ code, summary }`. Adding a field would change the persisted `conformance` object
+    (`workroom-drive.ts:281`) and break Phase 3c's AC-3C-SEQ-IDENTICAL (constraint 5).
+  - The detector derives the proposed stage the same way the drive did:
+    - `snapshot.stageKey` when it is non-null
+    - otherwise `nextStageKey(definition, snapshot.conformance.currentStageKey, snapshot.receipts)`
+      (`drive-resolution.ts:142,215-221`), because stop and escalate plans persist
+      `stageKey: null` (`:117-139`)
+  - With the proposed stage known, `out_of_order_stage` and `missing_prerequisite_receipt` map to:
+    - `gate:<prior stage>` when the stage before the proposed one is governed, the gate the
+      transition skipped
+    - `stage:<proposed stage>` otherwise
+  - When the proposed stage is not on the declared shape (the first `out_of_order_stage` branch,
+    `workroom-shape-conformance.ts:313-317`), the finding lands on the shape element.
+  - A drive caller that overrode `proposedStageKey` (`drive-resolution.ts:215`) without recording it
+    cannot be reconstructed exactly. The detector then uses `snapshot.stageKey`, and when that is
+    null it places the finding on the shape element rather than guess.
   - The Build Studio record `gpp-c8-transition-gate-skipped` is not mapped. Build Studio has no
     shape document until Phase 5 (BI-D37B2C13).
 - `modeDivergences(definition, observations)`: a gate shown as `enforced` whose recorded verdicts
@@ -868,8 +1048,14 @@ OBJ-DRC carried to the canvas without re-deriving a rule.
   - The gate label renders as text.
   - The design link renders only when `hrefFor` returns a value.
   - The divergence marker has text, not only colour.
-- `workroom-shape-conformance` tests: the existing cases are unedited. New cases assert `stageKey`
-  on the two codes.
+- `workroom-shape-conformance` and drive tests are unedited, and no conformance or drive file is
+  changed by this PR.
+- `divergence.test.ts` also asserts that the C-8 detector, fed a captured stop-plan snapshot
+  (`stageKey: null`), recomputes the same proposed stage the drive used, and lands on `gate:<prior>`
+  for a governed prior stage.
+- `drive-snapshot-unchanged.test.ts` (new): for a sequential fixture room, the persisted snapshot
+  object built by `workroom-drive.ts` is deep-equal before and after this PR's code is loaded, which
+  is the Phase 4 side of AC-3C-SEQ-IDENTICAL.
 - `ac-shared-id.test.ts` (new). **This is the AC-SHARED-ID test.**
   1. Compile-side: `elementIdsOf(decompile(def))` for the worked-example shape.
   2. Projection-side: after `reconcileGppShapes` on an injected db, each id has an `EaElement` with
@@ -880,9 +1066,10 @@ OBJ-DRC carried to the canvas without re-deriving a rule.
      `reconcileGppDivergence`, exactly one open `gpp-c6-reach` issue exists on the
      `gpp:<key>:stage:draft` element, and `projectRoomShape` with the loaded issues puts a marker on
      the `draft` stage. The design-view loader returns the same issue for `stage:draft`.
-- Migration (Option A): applies on an empty schema and on a copy of a populated schema (the
-  build-gate item 4 procedure in `docs/architecture/build-gate-runbook.md`). Down-state not needed
-  (forward-only).
+- Migration: applies on an empty schema, on a copy of a populated schema, and as a re-run after
+  only the `ALTER TABLE` applied (the build-gate item 4 procedure in
+  `docs/architecture/build-gate-runbook.md`). The index is confirmed partial with `\d "ToolExecution"`.
+  No down-migration: migrations are forward-only.
 
 **UX verification** (same environment)
 
@@ -902,7 +1089,8 @@ OBJ-DRC carried to the canvas without re-deriving a rule.
 
 **Rollout.**
 
-- The migration applies on upgrade init (Option A).
+- The migration applies on upgrade init. It rewrites no rows, and the partial index indexes no
+  existing rows.
 - Divergence issues appear after the next reconcile.
 - The room view change is visible on the next deploy.
 
@@ -943,7 +1131,8 @@ consistent with "A view MUST NOT infer a verdict the records do not contain" (GP
   - Generic readers (`view-drawing.ts`) keep working because `nodes` stays keyed by
     `EaViewElement.id`.
   - The new action refusals apply only to `gpp` views.
-- **Runtime.** No drive, dispatcher, compiler emission, binding or enforcement change. The DRC
+- **Runtime.** No drive, dispatcher, compiler emission, binding or enforcement change. No persisted
+  drive snapshot changes shape: C-8 is derived from what the snapshot already holds. The DRC
   change only adds `not-evaluated` where production cannot see a fact. CI's verdicts are unchanged
   (unedited corpus tests).
 - **Rooms.** The only visible change is PR-4c's prior-version resolution, which replaces a fallback
@@ -992,12 +1181,13 @@ Refinements are recorded here and resolved in PR review. None edits a spec.
    - Install-local layout persists in `canvasState`.
    - The committed sidecar is the shared copy, reached by proposing.
 5. **§9.3 "tool-execution records with stageKey" do not exist.** `ToolExecution` has no stage column
-   (`ai-coworker.prisma:1031-1080`). This is **open question Q1**: Option A adds one, Option B does
-   without.
+   (`ai-coworker.prisma:1031-1106`; its GPP columns at `:1089-1091` cite a permit). Q1 is decided:
+   PR-4c adds `workroomStageRef`.
 6. **C-8 for work shapes has no skipped-gate record.** The spec's example is Build Studio's
    `gpp-c8-transition-gate-skipped`. For work shapes the plan maps the drive conformance deviations
-   `out_of_order_stage` and `missing_prerequisite_receipt`. That needs an additive `stageKey` on the
-   deviation type.
+   `out_of_order_stage` and `missing_prerequisite_receipt`. It derives their stage from the persisted
+   snapshot (`stageKey`, or `nextStageKey` over `currentStageKey` and `receipts`), so the deviation
+   type and the persisted snapshot are unchanged.
 7. **D-7 and C-9 on the canvas.** A production host cannot import resolver modules or read the source
    tree. The canvas reports both as `not-evaluated` ("checked in CI"), the severity §7.2 already
    defines for checks that cannot run. CI stays authoritative.
@@ -1022,9 +1212,9 @@ Refinements are recorded here and resolved in PR review. None edits a spec.
 The original questions follow, for traceability.
 
 - **Q1. Tool-call stage attribution (V-4 C-6).**
-  - Option A (recommended): one additive nullable column `ToolExecution.workroomStageRef`, written by
+  - Option A (chosen): one additive nullable column `ToolExecution.workroomStageRef`, written by
     the scheduled-run path. C-6 works for every attributed call from the merge onward.
-  - Option B: no migration. C-6 is computed only from permit observations, so it has no data until
+  - Option B (not chosen): no migration. C-6 is computed only from permit observations, so it has no data until
     bindings exist.
   - Prepare a `principle_decide` comparison in PR-4c step 0. The founder decides.
 - **Q2. EA key versioning.**
@@ -1055,7 +1245,7 @@ The original questions follow, for traceability.
 | R5 | Colour carries meaning somewhere | Glyph distinctness test, colour-literal grep and greyscale UX pass on every PR. |
 | R6 | Reconcile cost | It runs only in the reconcile pass, about 500 updates per run. `infraCiKey` has no index, but `softRemovePrefix` loads existing rows in bulk, so per-element lookups happen only on create. |
 | R7 | The two V-2 overlays (governance here, measurement in the flow map) diverge | One glyph kit (`gpp-glyphs.tsx`). The flow map consumes the renderers. The overlap section assigns each half one owner. |
-| R8 | The layout PR targets the wrong repository on a customer install | Q4. Until it is decided, PR-4b ships with `emitSourceFilePullRequest` returning `no-repo` unless the resolved remote equals the configured upstream. The guard is written in the PR. |
+| R8 | The layout PR targets the wrong repository on a customer install | Resolved by Q4 (DI-6991AE3D5346): `proposeGppShapeChange` refuses unless `readInstallHostProfile().sourceCapable`, and the UI hides Propose. |
 | R9 | The prior-version fix changes what some rooms show | It shows their real definition instead of a fallback. Called out in the PR body, with a UX check (PR-4c step 3). |
 | R10 | Stage attribution is null for historic calls, and a reviewer reads "no gap" as "conformant" | Unattributed calls are counted and shown as "N calls without stage attribution", never as conformance. |
 | R11 | `decompile` stops copying fields once bindings exist (it emits no `binding` today, `decompile.ts`) | `shapeDocumentFor` relies on L2. The registry round-trip test must cover `binding` in the slice that first emits one (Phase 3b follow-up). Noted in that follow-up's scope. |
@@ -1085,8 +1275,8 @@ coverage, SysML v2 / SysON. The comparisons below are new for the canvas.
 | Measurement half of V-2 (data boxes, heat, lanes, `WorkroomFlowMap`) | not this plan | — | flow-map OBJ-SEE / OBJ-MEASURE | Flow-map F1–F4 (epic not yet filed) |
 | Binding-in-force and permit-reference rows of V-2 | Phase 3b binding follow-up | OBJ-COMPILE | — | BI-6DA17863 with BI-69415B68 |
 
-Before `record_plan_backlog_coverage`, BI-F8D4C529 must leave triage, and Q1 to Q4 must be answered
-or explicitly deferred in the item.
+Before `record_plan_backlog_coverage`, BI-F8D4C529 must leave triage, and the Q1 to Q4 decisions
+above must be recorded on the item.
 
 ## Tasks
 
@@ -1105,7 +1295,8 @@ or explicitly deferred in the item.
 ### PR-4b
 
 - [ ] Branch `feat/gpp-canvas-propose`. Tri-state resolver fact in `resolve.ts` / `drc.ts`; corpus tests unedited.
-- [ ] `check-draft.ts`, `gpp-shape-draft.ts` actions, with tests.
+- [ ] `check-draft.ts` (over `compileShapeDocument`), `ea-view-status.ts`, `proposal-format.ts`, and `gpp-shape-draft.ts` actions (step 0 authority: `manage_ea_model` + source-capable host; `manage_backlog` for semantic), with tests.
+- [ ] Deployed-pair approval in `reconcile-gpp-shapes.ts`, with tests.
 - [ ] Extract `source-file-pull-request.ts`; skill wrapper on it; skill tests unedited.
 - [ ] Guards in `lib/actions/ea.ts` and `ea-ontology-pack.ts` (list confirmed in step 1).
 - [ ] Editor components, palette, property editor, diagnostics panel, propose dialog, with tests.
@@ -1113,10 +1304,10 @@ or explicitly deferred in the item.
 
 ### PR-4c
 
-- [ ] Branch `feat/gpp-runtime-overlay`. Q1 decided. If Option A: migration, plus the attribution write (files named in step 1).
-- [ ] `divergence.ts`, `reconcile-gpp-divergence.ts`; `stageKey` on the two conformance deviations.
+- [ ] Branch `feat/gpp-runtime-overlay`. Migration for `ToolExecution.workroomStageRef` (partial index), plus the attribution write (files named in step 1).
+- [ ] `divergence.ts` (with `GPP_DIVERGENCE_ISSUE_TYPES`; C-8 derived from the snapshot, no change to the deviation type), `reconcile-gpp-divergence.ts`, `drive-snapshot-unchanged.test.ts`.
 - [ ] `shape-projection.ts` (prior-version resolution, element ids, gate and binding facts, injected design inputs); room loader; `WorkroomShape.tsx`; design-view markers.
-- [ ] `ac-shared-id.test.ts`. Migration applies cleanly (if Option A). Fast local gate. UX steps 1–5. ux-fit review. PR.
+- [ ] `ac-shared-id.test.ts`. The migration applies cleanly to every data state. Fast local gate. UX steps 1–5. ux-fit review. PR.
 - [ ] GPP §12.4.3 and Annex A rows V-1 to V-4 updated (see "Documentation impact"). Record execution evidence and mark BI-F8D4C529 done after acceptance.
 
 ## Verification
@@ -1132,7 +1323,7 @@ or explicitly deferred in the item.
   - `packages/db` `seed-ea-gpp`
 - `pnpm --filter web typecheck` and `pnpm --filter web check:gpp-shapes`.
 - `pnpm --filter web build` runs once, in the cloud merge queue (tiered gate, AGENTS.md §4).
-- Migration: PR-4c only, Option A only.
+- Migration: PR-4c only (`ToolExecution.workroomStageRef`, partial index).
 - UX verification on the contributor preview runtime through the shared non-prod lease, never by
   rebuilding the live portal. Each PR covers light, dark, greyscale, keyboard and 375 px.
 - Build Studio check: no PR touches `apps/web/lib/build/` or `apps/web/lib/explore/`. Exception:
@@ -1146,6 +1337,13 @@ or explicitly deferred in the item.
   - It is out of scope because constraint 1 keeps `EaCanvas` users' rendering unchanged.
   - Recommend a separate backlog item to move EA layer colours to tokens (the same move the
     flow-map spec plans for `PORTFOLIO_COLOURS` in its F5).
+- `EaView.status` (`ea-architecture.prisma:484`) and `EaConformanceIssue.issueType` (`:541`) are
+  free-form `String` columns carrying closed sets. This breaks AGENTS.md §8. Phase 4 declares its
+  values as const tuples (`EA_VIEW_STATUSES`, `GPP_DIVERGENCE_ISSUE_TYPES`) and does not convert the
+  columns, because a Prisma enum would be a migration over every existing row. Recommend a separate
+  backlog item.
+- `EaCanvas.tsx:822` styles the status badge with hex backgrounds (`#1e3a2f`, `#1a1a2e`), part of
+  the same §9 debt as above.
 - `sysml-model-seed.ts`'s header says "a no-delta run makes no writes". The code updates every
   existing element on each run (`:190-201`), so a re-run reports `applied`, never `noop`. This does
   not block Phase 4 (see R6). It is worth a small fix in its own PR.
