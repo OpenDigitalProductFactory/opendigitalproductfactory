@@ -10,8 +10,8 @@
 //    a parse or schema failure is refused before resolve.
 // 2. AC-NODISRUPT's diff precondition: for every registry definition S,
 //    diffWorkShapeBinding(S, S) and diffWorkShapeBinding(S, compile(S)) are
-//    `unchanged`, with the real ratification table (no gate) and with every
-//    scope test-ratified (a typed gate on every governed advance). The
+//    `unchanged`, with nothing ratified (no gate), with the real ratification
+//    table (a gate on each ratified scope) and with every scope test-ratified (a typed gate on every governed advance). The
 //    reverse direction drops gates, so its only rows are gate/binding removals.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -46,6 +46,11 @@ const ALL_RATIFIED: Readonly<Record<string, GateRatificationEntry>> = Object.fro
     scope,
     { status: "ratified", proposed: entry.proposed, basis: entry.basis, decisionId: "DI-000000000000", ratifiedAt: "2026-10-02" },
   ]),
+);
+
+/** The production table with every ratification withdrawn: no typed gate anywhere. */
+const NOTHING_RATIFIED: Readonly<Record<string, GateRatificationEntry>> = Object.fromEntries(
+  Object.entries(GATE_RATIFICATION).map(([scope, entry]) => [scope, { status: "proposed", proposed: entry.proposed, basis: entry.basis }]),
 );
 
 let sources: GppResolveSources;
@@ -131,7 +136,8 @@ describe("AC-NODISRUPT precondition: the binding diff is unchanged for every reg
   });
 
   it.each([
-    ["the real ratification table (no typed gate)", GATE_RATIFICATION],
+    ["nothing ratified (no typed gate)", NOTHING_RATIFIED],
+    ["the real ratification table (typed gates on ratified scopes only)", GATE_RATIFICATION],
     ["every scope test-ratified (a typed gate on each governed advance)", ALL_RATIFIED],
   ] as const)("every registry definition against its compiled form, with %s", async (_label, ratification) => {
     let compiled = 0;
@@ -153,7 +159,9 @@ describe("AC-NODISRUPT precondition: the binding diff is unchanged for every reg
       // widening row by design; with no gate it must stay unchanged.
       const reverse = diffWorkShapeBinding(emitted, definition);
       expect(reverse.changes.every((row) => row.kind === "gate-removed" || row.kind === "binding-removed"), id).toBe(true);
-      if (ratification === GATE_RATIFICATION) expect(reverse.classification, id).toBe("unchanged");
+      if (!emitted.stages.some((stage) => stage.advance.kind === "governed-decision" && stage.advance.gate)) {
+        expect(reverse.classification, id).toBe("unchanged");
+      }
       // And the emitted definition is the registry value under the legacy projection.
       expect(canonicalJson(legacyProjection(emitted)), id).toBe(canonicalJson(definition));
     }

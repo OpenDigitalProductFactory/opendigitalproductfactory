@@ -98,6 +98,11 @@ function firstOwnKeyDifference(left: unknown, right: unknown, path = "$"): strin
   return null;
 }
 
+/** The production table with every ratification withdrawn: the state before PR-3b-R. */
+const NOTHING_RATIFIED: Readonly<Record<string, GateRatificationEntry>> = Object.fromEntries(
+  Object.entries(GATE_RATIFICATION).map(([scope, entry]) => [scope, { status: "proposed", proposed: entry.proposed, basis: entry.basis }]),
+);
+
 function ratifiedTable(scope: string, gate: GppGate): Readonly<Record<string, GateRatificationEntry>> {
   return {
     ...GATE_RATIFICATION,
@@ -112,8 +117,8 @@ function ratifiedTable(scope: string, gate: GppGate): Readonly<Record<string, Ga
 }
 
 describe("decompile: the §4.5 worked example", () => {
-  it("inquiry-response-watch@1.0.0 decompiles to the §4.5 document minus the gate block, since no entry is ratified", () => {
-    const { document, awaitingRatification } = decompile(shape("inquiry-response-watch"));
+  it("inquiry-response-watch@1.0.0 decompiles to the §4.5 document minus the gate block when no entry is ratified", () => {
+    const { document, awaitingRatification } = decompile(shape("inquiry-response-watch"), { ratification: NOTHING_RATIFIED });
 
     expect(document).toEqual(workedExampleWithoutGate());
     expect(canonicalJson(document)).toBe(canonicalJson(workedExampleWithoutGate()));
@@ -127,8 +132,16 @@ describe("decompile: the §4.5 worked example", () => {
     expect(document).toEqual(workedExample());
     expect(JSON.stringify(document)).toBe(JSON.stringify(workedExample()));
     expect(awaitingRatification).toEqual([]);
-    // The production table is untouched.
-    expect(GATE_RATIFICATION["outbound-customer-communication"]?.status).toBe("proposed");
+  });
+
+  it("with the production table (PR-3b-R ratified outbound-customer-communication), the gate block is §4.5's minus the escalation left for later ratification", () => {
+    const { document, awaitingRatification } = decompile(shape("inquiry-response-watch"));
+    const { escalation: _escalation, ...ratifiedGate } = workedExampleGate();
+
+    expect(GATE_RATIFICATION["outbound-customer-communication"]).toMatchObject({ status: "ratified", decisionId: "DI-BEEAF36D0244" });
+    const advanceWithoutGate = (workedExampleWithoutGate().stages as Array<{ advance: JsonObject }>)[1].advance;
+    expect(document.stages[1].advance).toEqual({ ...advanceWithoutGate, gate: ratifiedGate });
+    expect(awaitingRatification).toEqual([]);
   });
 
   it("emits fields in schema order and never emits flow, binding, deadline or subShape", () => {
@@ -157,7 +170,7 @@ describe("decompile: the §4.5 worked example", () => {
       "evidence",
       "tools",
     ]);
-    expect(Object.keys(document.stages[1].advance)).toEqual(["kind", "condition", "decisionScope"]);
+    expect(Object.keys(document.stages[1].advance)).toEqual(["kind", "condition", "decisionScope", "gate"]);
   });
 });
 
@@ -183,7 +196,7 @@ describe.each(REPRESENTATIVES)("decompile and lower: %s family", (_family, load)
   it("lists every governed stage as awaiting ratification while nothing is ratified", () => {
     const definition = load();
     const governed = definition.stages.filter((s) => s.advance.kind === "governed-decision").map((s) => s.key);
-    expect(decompile(definition).awaitingRatification).toEqual(governed);
+    expect(decompile(definition, { ratification: NOTHING_RATIFIED }).awaitingRatification).toEqual(governed);
   });
 });
 
