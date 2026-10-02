@@ -4,7 +4,6 @@
   "decisionInteractionId": "DI-17FBE7351E32",
   "scope": {
     "files": [
-      "apps/web/components/customer/map/CustomerMapView.tsx",
       "apps/web/components/customer/map/ServiceAreasPanel.tsx"
     ]
   },
