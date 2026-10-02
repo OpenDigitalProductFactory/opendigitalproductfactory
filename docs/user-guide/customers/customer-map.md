@@ -1,6 +1,6 @@
 ---
 title: "Customer Map"
-description: "See your customer sites on a map, find the sites that are not on it, and place them by hand or with a geocoding service you choose."
+description: "See your customer sites on a map, find the sites that are not on it, draw the areas you serve, and see which sites fall outside them."
 area: customers
 order: 10
 ---
@@ -11,6 +11,7 @@ order: 10
 - Finding the sites that are not on the map, and why
 - Placing a site on the map by hand
 - Choosing a service that finds locations from addresses
+- Drawing the areas you serve and seeing which sites fall outside them
 
 ## Open The Map
 
@@ -55,6 +56,45 @@ missing.
 The free public Nominatim service is not offered here. Its usage policy does not
 allow bulk lookups. See
 [Address Validation Providers](../platform/address-validation-providers.md).
+
+## Service Areas
+
+A service area is a part of the map your business covers, such as a city or a
+crew's patch. Once you have drawn one, the map shows which customer sites fall
+outside every area you serve.
+
+### Draw an area
+
+You need permission to edit customers to do this.
+
+1. Select **Add a service area**.
+2. Click the map at each corner of the area. To remove the last corner you
+   placed, select **Undo last point**.
+3. When the area has at least three corners, select **Finish**.
+4. Give the area a name. Optionally choose the crew or person who covers it
+   under **Covered by**.
+5. Select **Save area**.
+
+To change an area's name or who covers it, select **Rename or reassign**. To
+change its shape, delete it and draw it again. Deleting asks you to confirm.
+
+### Read the coverage
+
+When at least one area exists, a **Coverage** section appears under the map:
+
+- **Outside every service area** lists the placed sites that no area covers.
+  Each one links to its account.
+- **In more than one area** lists sites covered by two or more areas, and which
+  areas they are, so you can see where two crews might both claim a job.
+- **Service areas** lists each area, who covers it and how many sites it holds.
+
+Select a site on the map to see which area covers it and who covers that area.
+
+Sites that are not on the map yet cannot be checked against your areas. Place
+them first (see above).
+
+Areas are drawn and checked inside this installation. Nothing is sent to an
+outside service.
 
 ## Related
 

@@ -56,3 +56,56 @@ describe("buildCustomerMap", () => {
     expect(map.unplaced[0]?.reason).toBe("no-coordinates");
   });
 });
+
+describe("buildCustomerMap with service areas (BI-6CC10E4C)", () => {
+  const square = (id: string, label: string, west: number, coveredBy?: { kind: "staffing-crew"; id: string }) => ({
+    id,
+    label,
+    ...(coveredBy ? { coveredBy } : {}),
+    geometry: {
+      kind: "polygon" as const,
+      rings: [[
+        { longitude: west, latitude: 0 },
+        { longitude: west + 6, latitude: 0 },
+        { longitude: west + 6, latitude: 10 },
+        { longitude: west, latitude: 10 },
+        { longitude: west, latitude: 0 },
+      ]],
+    },
+  });
+  const areas = {
+    version: 2,
+    zones: [square("west", "West", 0, { kind: "staffing-crew", id: "CREW-1" }), square("east", "East", 4)],
+    assignees: [{ kind: "staffing-crew" as const, id: "CREW-1", label: "North crew" }],
+  };
+
+  it("names sites outside every area, overlaps, and who covers each area (AC-COV-ANSWER-1/2)", () => {
+    const map = buildCustomerMap(
+      [
+        site({ siteId: "a", latitude: 5, longitude: 1 }),
+        site({ siteId: "b", latitude: 5, longitude: 5 }),
+        site({ siteId: "c", latitude: 5, longitude: 20 }),
+      ],
+      areas,
+    );
+    expect(map.layout?.zones).toHaveLength(2);
+    expect(map.coverage.outside.map((s) => s.siteId)).toEqual(["c"]);
+    expect(map.coverage.overlaps).toEqual([expect.objectContaining({ zoneIds: ["west", "east"] })]);
+    expect(map.coverage.bySite.a).toEqual(["west"]);
+    expect(map.coverage.areas[0]).toEqual({
+      zoneId: "west", label: "West", coveredBy: { kind: "staffing-crew", id: "CREW-1" }, coveredByLabel: "North crew", siteCount: 2,
+    });
+    expect(map.coverage.areas[1]).toMatchObject({ coveredBy: null, coveredByLabel: null, siteCount: 1 });
+  });
+
+  it("shows areas even before any site is placed", () => {
+    const map = buildCustomerMap([], areas);
+    expect(map.layout?.zones).toHaveLength(2);
+    expect(map.coverage.outside).toEqual([]);
+  });
+
+  it("reports nothing as outside when no area exists (AC-COV-SAFE-1)", () => {
+    const map = buildCustomerMap([site({ siteId: "a", latitude: 5, longitude: 1 })]);
+    expect(map.coverage).toMatchObject({ version: 0, zones: [], areas: [], outside: [], overlaps: [] });
+  });
+});
