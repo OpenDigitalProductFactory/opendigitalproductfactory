@@ -9,8 +9,9 @@
 
 import { prisma } from "@dpf/db";
 import {
+  OWN_OFFER_ITEMS_QUERY,
   assessArchetypeFit,
-  buildOwnOfferText,
+  ownOfferFromRecords,
   type ArchetypeFitAssessment,
 } from "./archetype-fit";
 
@@ -37,23 +38,14 @@ export async function resolveOrgMarketingFitContext(
           tagline: true,
           description: true,
           archetype: { select: { category: true } },
-          items: {
-            where: { isActive: true },
-            select: { name: true, description: true },
-            orderBy: { sortOrder: "asc" },
-          },
+          items: OWN_OFFER_ITEMS_QUERY,
         },
       },
     },
   });
   return {
     category: organization?.storefrontConfig?.archetype?.category ?? null,
-    ownOffer: buildOwnOfferText({
-      items: organization?.storefrontConfig?.items ?? [],
-      tagline: organization?.storefrontConfig?.tagline,
-      description: organization?.storefrontConfig?.description,
-      valueProposition: organization?.businessContext?.valueProposition,
-    }),
+    ownOffer: ownOfferFromRecords(organization?.storefrontConfig, organization?.businessContext),
   };
 }
 

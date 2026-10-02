@@ -274,6 +274,30 @@ export function buildOwnOfferText(input: {
   return parts.length > 0 ? parts.join("\n") : null;
 }
 
+/** The storefront-item query the own-offer text reads: what is actually on sale. */
+export const OWN_OFFER_ITEMS_QUERY = {
+  where: { isActive: true },
+  select: { name: true, description: true },
+  orderBy: { sortOrder: "asc" as const },
+};
+
+/** buildOwnOfferText over the records as loaded (storefront config + business context). */
+export function ownOfferFromRecords(
+  storefront: {
+    items?: Array<{ name: string; description?: string | null }> | null;
+    tagline?: string | null;
+    description?: string | null;
+  } | null | undefined,
+  business: { valueProposition?: string | null } | null | undefined,
+): string | null {
+  return buildOwnOfferText({
+    items: storefront?.items ?? [],
+    tagline: storefront?.tagline,
+    description: storefront?.description,
+    valueProposition: business?.valueProposition,
+  });
+}
+
 function summarize(severity: ArchetypeFitSeverity, findings: ArchetypeFitFinding[]): string {
   if (severity === "block") {
     const terms = findings.filter((f) => f.kind === "platform-leak").map((f) => `“${f.term}”`);
