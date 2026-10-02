@@ -82,7 +82,11 @@ describe("declareBreakFix (BI-F2FEC1EB)", () => {
 
   it("needs a live Workroom and refuses a double declaration", async () => {
     expect(await declareBreakFix({ db: db({ room: null }), itemId: "BI-ONE", reason: "x", actor: human, now })).toMatchObject({ ok: false, error: "workroom_required" });
-    const already = db({ room: { id: "r1", capsuleId: "WC-ONE", scopeClaims: [{ workShape: BREAK_FIX_SHAPE_REF, recordedAt: "x" }] } });
+    const already = db({
+      room: { id: "r1", capsuleId: "WC-ONE", scopeClaims: [{ workShape: BREAK_FIX_SHAPE_REF, recordedAt: "x" }] },
+      history: [{ id: "declared", backlogItemId: "row-1", kind: "break_fix_declared", recordedAt: now,
+        payload: { schemaVersion: 1, capsuleId: "WC-ONE", declaredAt: now.toISOString(), pirDueAt: "2026-09-08T23:00:00.000Z" } }],
+    });
     expect(await declareBreakFix({ db: already, itemId: "BI-ONE", reason: "x", actor: human, now })).toMatchObject({ ok: false, error: "already_declared" });
   });
 });

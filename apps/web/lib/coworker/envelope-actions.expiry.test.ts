@@ -30,10 +30,13 @@ beforeEach(() => {
 
 describe("envelope decisions honour the decision window", () => {
   it("approves inside the window", async () => {
-    findUnique.mockResolvedValue(row());
+    findUnique.mockResolvedValue(row({ argsJson: { approvalBinding: { toolName: "create_backlog_item" } } }));
     const result = await approveEnvelope("env-1", "user-1");
     expect(result.ok).toBe(true);
     expect(update).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      argsJson: { approvalBinding: { toolName: "create_backlog_item" }, humanApproval: { userId: "user-1", approvedAt: expect.any(String) } },
+    }) }));
   });
 
   it.each([

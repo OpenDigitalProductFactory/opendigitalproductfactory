@@ -17,7 +17,8 @@
 //
 // BI-0F9C291C / EP-COWORKER-INTERACTIVITY.
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
+import { isRecord } from "@/lib/shared/coerce";
 
 import {
   describeTransitionError,
@@ -133,7 +134,15 @@ export async function approveEnvelope(
 
   const updated = await prisma.coworkerActionEnvelope.update({
     where: { id: envelopeId },
-    data: { status: "approved" },
+    data: {
+      status: "approved",
+      // BI-E6E2E704: distinguish an authenticated person's decision from a
+      // policy-projected envelope. Preserve the existing exact-call binding.
+      argsJson: {
+        ...(isRecord(load.envelope.argsJson) ? load.envelope.argsJson : {}),
+        humanApproval: { userId: callerUserId, approvedAt: new Date().toISOString() },
+      } as Prisma.InputJsonObject,
+    },
   });
   // Approving does NOT mark the waiting task working here, and must not.
   // Marking it working at approval time makes the resume's CAS on
