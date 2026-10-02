@@ -14,7 +14,7 @@
 
 import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
-import { can, type CapabilityKey } from "@/lib/permissions";
+import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 
 /** The authenticated session user, exactly as `auth()` resolves it. */
 export type SessionUser = Session["user"];
@@ -68,15 +68,26 @@ export async function requireUserId(): Promise<string> {
 export async function requireCapability(
   capability: CapabilityKey,
 ): Promise<{ userId: string }> {
+  const { userId } = await requireCapabilityContext(capability);
+  return { userId };
+}
+
+/**
+ * {@link requireCapability}, also returning the exact `UserContext` the
+ * capability was checked against — what `governedExecuteTool` needs to run a
+ * tool as this human under the same capability decision.
+ *
+ * @throws Error("Unauthorized") when unauthenticated or lacking the capability.
+ */
+export async function requireCapabilityContext(
+  capability: CapabilityKey,
+): Promise<{ userId: string; userContext: UserContext }> {
   const session = await auth();
   const user = session?.user;
-  if (
-    !user?.id ||
-    !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, capability)
-  ) {
-    throw new Error("Unauthorized");
-  }
-  return { userId: user.id };
+  if (!user?.id) throw new Error("Unauthorized");
+  const userContext: UserContext = { platformRole: user.platformRole, isSuperuser: user.isSuperuser };
+  if (!can(userContext, capability)) throw new Error("Unauthorized");
+  return { userId: user.id, userContext };
 }
 
 /**

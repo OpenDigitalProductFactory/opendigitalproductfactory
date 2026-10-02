@@ -37,6 +37,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { executeTool } from "@/lib/mcp-tools";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { ALL_MANIFESTS } from "@/lib/coworker/manifests";
 import type { ScreenManifest } from "@/lib/coworker/screen-manifest-types";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -362,6 +363,16 @@ describe("screen_dispatch_action — end-to-end envelope execution (BI-0F9C291C 
     };
   }
 
+  /** As the reference monitor reaches the handler: nested dispatch runs under the outer user and context. */
+  function governedCall(callerUserId: string, nested?: (toolName: string, params: Record<string, unknown>) => Promise<ToolResult>) {
+    const context: ToolExecutionContext = {
+      routeContext: "/test",
+      governedSource: "agentic-loop",
+      governedDispatch: nested ?? (async (toolName, params) => executeTool(toolName, params, callerUserId, context)),
+    };
+    return executeTool("screen_dispatch_action", { envelopeId: "env-1" }, callerUserId, context);
+  }
+
   it("rejects empty envelopeId without touching the DB", async () => {
     const r = await call("screen_dispatch_action", { envelopeId: "" }, { routeContext: "/test" });
     expect(r.success).toBe(false);
@@ -422,9 +433,7 @@ describe("screen_dispatch_action — end-to-end envelope execution (BI-0F9C291C 
     envelopeUpdateMock.mockResolvedValue({ ...approvedEnvelope(), status: "executed", resolvedAt: new Date() });
 
     // describe-here → screen_describe (known to return success: true).
-    const r = await withManifest(makeManifest("describe-here", "screen_describe"), () =>
-      call("screen_dispatch_action", { envelopeId: "env-1" }, { routeContext: "/test" }),
-    );
+    const r = await withManifest(makeManifest("describe-here", "screen_describe"), () => governedCall("u-owner"));
 
     expect(r.success).toBe(true);
     expect(r.entityId).toBe("env-1");
@@ -452,9 +461,7 @@ describe("screen_dispatch_action — end-to-end envelope execution (BI-0F9C291C 
 
     // Point at screen_select_entity called with NO args → returns success: false
     // (missing_args). Tests the failure-finalisation path end-to-end.
-    const r = await withManifest(makeManifest("bad", "screen_select_entity"), () =>
-      call("screen_dispatch_action", { envelopeId: "env-1" }, { routeContext: "/test" }),
-    );
+    const r = await withManifest(makeManifest("bad", "screen_select_entity"), () => governedCall("u-owner"));
 
     expect(r.success).toBe(false);
     expect(r.data?.event).toMatchObject({
@@ -469,22 +476,41 @@ describe("screen_dispatch_action — end-to-end envelope execution (BI-0F9C291C 
     );
   });
 
-  it("executes under the envelope's delegating user, not the caller", async () => {
-    // The envelope was proposed by AGT-X on behalf of u-owner. screen_dispatch_action
-    // is being called by some other user (here: the userId constant). The recursive
-    // executeTool call MUST run under u-owner. The simplest cross-check: use a tool
-    // whose payload echoes routeContext (screen_describe does), and run via a
-    // manifest pointing there — the actual user-id check would need a tool that
-    // reflects the user. For now we assert via envelopeUpdate being called (proves
-    // dispatch ran end-to-end) and rely on code review for the userId argument
-    // (envelope.delegatingUserId → 4th positional arg of executeTool).
+  it("refuses a caller who is not the envelope's delegating user, before anything runs (GPP PR-H)", async () => {
+    // The monitor runs nested calls as the OUTER user, so a caller other than
+    // the delegating human would act under the wrong authority.
     envelopeFindUniqueMock.mockResolvedValue(approvedEnvelope({ delegatingUserId: "u-owner" }));
-    envelopeUpdateMock.mockResolvedValue({ ...approvedEnvelope(), status: "executed", resolvedAt: new Date() });
+    const r = await withManifest(makeManifest("describe-here", "screen_describe"), () => governedCall(userId));
+    expect(r.success).toBe(false);
+    expect(r.error).toBe("delegating_user_mismatch");
+    expect(envelopeUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses when not reached through the monitor: no governedDispatch, nothing runs (GPP PR-H)", async () => {
+    envelopeFindUniqueMock.mockResolvedValue(approvedEnvelope({ delegatingUserId: userId }));
     const r = await withManifest(makeManifest("describe-here", "screen_describe"), () =>
       call("screen_dispatch_action", { envelopeId: "env-1" }, { routeContext: "/test" }),
     );
-    expect(r.success).toBe(true);
-    expect(envelopeUpdateMock).toHaveBeenCalled();
+    expect(r.success).toBe(false);
+    expect(r.error).toBe("ungoverned_dispatch");
+    expect(envelopeUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("a nested handler throw reported by the monitor keeps the tool_execution_threw response and fails the envelope", async () => {
+    envelopeFindUniqueMock.mockResolvedValue(approvedEnvelope());
+    envelopeUpdateMock.mockResolvedValue({ ...approvedEnvelope(), status: "failed", resolvedAt: new Date() });
+    const r = await withManifest(makeManifest("describe-here", "screen_describe"), () =>
+      governedCall("u-owner", async () => ({ success: false, error: "tool_threw", message: "screen_describe threw: boom" })),
+    );
+    expect(r).toMatchObject({
+      success: false,
+      error: "tool_execution_threw",
+      message: "Underlying tool 'screen_describe' threw: boom",
+      data: { event: { type: "screen:action_dispatch_failed", payload: { envelopeId: "env-1", tool: "screen_describe", error: "boom" } } },
+    });
+    expect(envelopeUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "env-1" }, data: expect.objectContaining({ status: "failed" }) }),
+    );
   });
 
   it("requires coworker_screen_drive", () => {

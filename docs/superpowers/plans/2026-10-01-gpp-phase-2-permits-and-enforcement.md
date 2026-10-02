@@ -43,6 +43,7 @@ and the merge queue on its own.
 | **PR-D** | MAC handle (`gpp1.<permitId>.<keyId>.<mac>`), `paramHash` binding, sealed-lineage check; forgery and mismatch recorded | Never | No |
 | **PR-E** | Per-binding enforcement mode; promotion only by a recorded decision; shrink-only shadow list; default stays shadow | Only for a binding promoted by a recorded decision. **None is promoted in this PR.** | No |
 | **PR-F** | One Build Studio plan→build transition function used by all five paths; each path keeps its current gate behaviour; C-8 enforcement on `save_phase_handoff` behind the recorded decision | No, until the separate C-8 decision | Yes, as a defect fix (C-8, BI-45F9CB7A) |
+| **PR-H** | Route the dynamic direct `executeTool` sites outside Build Studio through the monitor, where no gate can refuse a call that succeeds today (added after PR-E; see PR-H as built) | Never for a call that succeeds today | No |
 
 Order: PR-C → PR-D → PR-E. PR-F depends on PR-A and on PR-B's live shadow evidence, but not on PR-C,
 PR-D or PR-E. It can be built in parallel and merged in any order relative to them.
@@ -694,6 +695,67 @@ AC-FORGERY.
 **Satisfies:** OBJ-TRANSITION, OBJ-NODISRUPT; AC-SINGLE-TRANSITION. It also keeps AC-C8-SHADOW
 satisfied.
 
+## PR-H: route the dynamic direct `executeTool` sites through the monitor (as built)
+
+**Why.** PR-E's promotion ratchet refuses every promotion while any dynamic direct site exists, because a
+dynamic site can reach any tool. On origin/main `9c7ebc88e` `findUnmediatedExecuteSites` finds four, all
+outside Build Studio. The founder's non-disruption constraint governs: a site moves behind the monitor
+only if none of the monitor's gates can refuse, or change the result of, a call that succeeds today
+given the site's real authority context.
+
+**Method.** Characterization tests were written on the base first, pinning each site at the
+`executeTool` boundary: tool, arguments, acting user, handler-visible route and agent context, returned
+value, and side effects. After routing, the same tests pass unchanged (23 of 23 before and after). What the
+monitor adds (audit rows, receipts) is asserted in separate `*.governed.test.ts` files that drive the real
+`governedExecuteTool`.
+
+| Site | Actor | Prior authorization | Routed |
+|---|---|---|---|
+| `lib/actions/demand-activation.ts` | Signed-in human on `/ops/demand`; no agent | `requireCapability("manage_backlog")` | **Yes**: `governedExecuteTool`, `source: "rest"`, `userContext` from the new `requireCapabilityContext` guard, `routeContext: "/ops/demand"`, no agent |
+| `lib/mcp/packs/screen-pack.ts` (`screen_dispatch_action`) | Coworker acting for the envelope's delegating human | An approved `CoworkerActionEnvelope` | **Yes**: the monitor's own nested `governedDispatch`, the same seam Authorized Surfaces use |
+| `lib/actions/proposals.ts` (`approveProposal`) | Admin approving an `AgentActionProposal`; the handler gets the proposing coworker's `agentId` | The admin's approval click plus a human capability check | **No** |
+| `app/api/admin/ops/execute-proposal/route.ts` | Superuser session, or the `HIVE_OPS_TOKEN` shared secret acting as a resolved user with a synthetic `HR-000` role | Superuser or shared secret plus a capability check | **No** |
+
+**Why no gate can refuse a routed call today.**
+- *Demand.* The four tools need `manage_backlog`, the same `can()` decision on the same `UserContext` as
+  the guard, so the human capability gate cannot differ. With no agent, neither the grants intersection
+  nor the escalation gate runs. The pre-tool hooks allow: decision routing governs only `agentic-loop`,
+  completion evidence only `update_backlog_item_status`, and the Workroom-shape gate allows a room-less
+  call. None of the four needs alignment or a precondition (the supersede is `irreversible`, and the
+  alignment gate does not run for it outside a Workroom). The permit table is empty, so the permit path
+  only observes. No schema field is an array or object, so argument coercion is a no-op. Three tools are
+  ordinary writes, so audit writes are fail-open. *Residual:* `supersede_demand_evidence` is
+  consequential, so the monitor reserves a receipt before running it and fails closed when the
+  reservation fails. That happens on an audit or receipt write failure, or when the human has no
+  `user` principal alias. Sign-in materialises that alias (`authorizePrincipalForSession` refuses a
+  login without one), so a session that reached this action has one. A database write failure remains,
+  and it is a fail-closed safety control, not a policy refusal.
+- *Screen dispatch.* `ALL_MANIFESTS` is empty on main, so every production call returns `no_manifest`
+  before the dispatch point. No call reaches the routed line today, so routing it cannot change a
+  production outcome. The characterization pins this. Two refusals were added at the dispatch point.
+  `ungoverned_dispatch` covers a call that did not come through the monitor, and every production path
+  does. `delegating_user_mismatch` covers a caller who is not the envelope's delegating user. The
+  monitor runs nested calls as the outer user, and the old code ran them as the delegating user. For a
+  matching caller the two are identical. For a mismatch, the old behaviour let one user's session act
+  under another human's authority. It was unreachable, and the old unit test that asserted it was
+  replaced. A nested `tool_threw` is mapped back to the existing `tool_execution_threw` response.
+
+**Why the proposal sites stay direct.** Both forward the proposing coworker's `agentId` to the handler.
+Under the monitor, a call with an `agentId` runs the coworker authority gate. That gate can deny on the
+agent's grants, on a missing GAID identity (a consequential tool's receipt needs it), or with
+`approval_required`. The escalation gate would park an already-approved proposal, because the admin's
+approval is an `AgentActionProposal` row, not an `AuthorityApprovalEnvelope`. Dropping the `agentId` would
+change what the handler records (for example `approve_demand_for_funding` attributes the actor from it).
+The shared-secret path has no real principal to stand behind its synthetic role. Routing either site
+safely needs three things. First, approving a proposal must mint an approved `AuthorityApprovalEnvelope`
+bound to the exact call (approval binding, `paramHash`), so the escalation gate finds the approval and the
+`human-checkpoint-admit` binding mints a permit. Second, someone must decide what the grants-denied and
+no-GAID cases should do. Third, the ops-token path needs a service principal instead of a synthetic role.
+
+**Result.** Live dynamic sites: 4 → 2. `KNOWN_UNMEDIATED_EXECUTE_SITES` drops `demand-activation.ts` and
+`screen-pack.ts` (28 → 26 sites, 15 → 13 files). A new ratchet test pins the dynamic set to exactly the two
+proposal paths. The promotion guard still refuses every promotion until those two move.
+
 ## Tasks
 
 ### PR-C
@@ -731,6 +793,12 @@ satisfied.
 - [ ] UX check on the canonical runtime via the non-prod lease; local-CI gate; PR
 - [ ] File the C-8 enforcement decision item, citing live `gpp-c8-transition-gate-skipped` counts
 
+### PR-H
+- [x] Characterization tests on the base for all four dynamic sites
+- [x] `demand-activation.ts` and `screen_dispatch_action` routed through the monitor; characterization unchanged
+- [x] Ratchet shrunk; the dynamic set is pinned to the two proposal paths
+- [ ] Proposal approval carried into the monitor as an approved authority envelope (follow-up)
+
 ## Risks
 
 | # | Risk | Mitigation |
@@ -765,10 +833,12 @@ included so that every acceptance criterion has an owner.
 | PR-D | 2 | OBJ-PERMIT | AC-FORGERY | contract:permit-handle-mac | flow:monitor-mac-verification |
 | PR-E | 2 | OBJ-CRITICAL, OBJ-NODISRUPT | AC-ENFORCE | contract:binding-enforcement-mode | flow:binding-promotion-to-enforced |
 | PR-F | 2 | OBJ-TRANSITION | AC-SINGLE-TRANSITION | contract:shared-transition-function | flow:all-phase-paths-through-transition-function |
+| PR-H | 2 | OBJ-MEDIATION, OBJ-NODISRUPT | AC-RATCHET-REACH | contract:known-unmediated-execute-sites | flow:source-tree-to-ratchet |
 
 Contract and flow ids are the ones registered with the Phase 1 plan's coverage. PR-C lists
 `contract:permit-handle-mac` because it creates the nullable `keyId` / `mac` columns that PR-D populates.
-OBJ-MEDIATION remains owned by PR-A. PR-E's promotion ratchet consumes it but does not change it.
+OBJ-MEDIATION remains owned by PR-A. PR-E's promotion ratchet consumes it but does not change it. PR-H shrinks the
+unmediated set that PR-A ratchets.
 
 ## Verification
 
