@@ -11,6 +11,7 @@ import errors from "./messages/en-US/errors.json";
 import footprint from "./messages/en-US/footprint.json";
 import approvals from "./messages/en-US/approvals.json";
 import portfolio from "./messages/en-US/portfolio.json";
+import upgrade from "./messages/en-US/upgrade.json";
 import setup from "./messages/en-US/setup.json";
 import shell from "./messages/en-US/shell.json";
 import workrooms from "./messages/en-US/workrooms.json";
@@ -20,7 +21,7 @@ import { isPseudoLocale } from "./pseudo";
 import { formatSource } from "./runtime";
 
 /** The en-US source catalog, one entry per namespace. Add a namespace here and in messages/en-US/. */
-export const SOURCE_CATALOG = { admin, approvals, errors, footprint, portfolio, setup, shell, workrooms } as const;
+export const SOURCE_CATALOG = { admin, approvals, errors, footprint, portfolio, setup, shell, upgrade, workrooms } as const;
 
 export type Namespace = keyof typeof SOURCE_CATALOG;
 

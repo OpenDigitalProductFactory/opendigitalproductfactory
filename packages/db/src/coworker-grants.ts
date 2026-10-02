@@ -16,11 +16,15 @@
 
 // Approved external development role; human scopes and room admission remain independent.
 // No iac_execute or admin_write: deployment and administration are not implied.
+// decision_record_create (BI-3BF3CBDF): the shipped dpf-record-decision-outcome
+// and dpf-route-learning-to-commons skills direct external agents to
+// record_decision_outcome and propose_improvement; without it both dead-end.
 const EXTERNAL_DEVELOPMENT_GRANTS = [
   "work_room_read", "work_room_write", "registry_read",
   "work_capsule_read", "work_capsule_write", "work_capsule_adopt",
   "backlog_read", "backlog_write", "file_read", "code_graph_read",
   "build_lifecycle", "sandbox_execute", "initiative_evidence_write",
+  "decision_record_create",
 ];
 
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {

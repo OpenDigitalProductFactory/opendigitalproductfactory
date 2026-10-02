@@ -131,7 +131,16 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     // DEFAULT_SKILL_SUMMARY_CAP (12), so the whole set is presentable in one turn
     // and no skill becomes unreachable. Peers run 14-32.
     "compliance-officer": 10,
-    coo: 8,
+    // ── BI-4CE4F52F: nine coworkers gained their own recurring standing-work
+    //    skill, so nine sets grow by exactly one. Each of these coworkers
+    //    ALREADY ran this work on this cadence from the self-task registry; the
+    //    skill is its own statement of a rhythm it was already keeping, and the
+    //    cadence is held equal to the registry's by check-self-task-cadence-parity.
+    //    Additive capability, not drift: one skill each, with a narrow
+    //    triggerPattern, and the five roles that had no entry here land at 7 —
+    //    the 6-skill wildcard tax plus one of their own, well under
+    //    DEFAULT_SKILL_SUMMARY_CAP (12), so nothing becomes unreachable.
+    coo: 9,
     "customer-advisor": 10,
     "data-architect": 9,
     "doc-specialist": 11,
@@ -139,9 +148,16 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     "ea-architect": 13,
     "external-catalog-scout": 8,
     "external-coding-agent": 18,
-    "farm-ranch-steward": 6,
-    // No entry before: the ratchet read it as 0 (BI-4CE4F52F).
-    "finance-controller": 7,
+    "farm-ranch-steward": 7,
+    // These five had no entry, so the ratchet read them as 0. Each now holds
+    // exactly one skill of its own on top of the wildcard tax (BI-4CE4F52F).
+    bookkeeper: 7,
+    // 7 -> 8: likewise two — burn-revenue-runway-read (standing work) and
+    //    provider-cost-intake (backs svc-finance-provider-cost-intake).
+    "finance-controller": 8,
+    "integration-engineer": 7,
+    "time-off-advisor": 7,
+    "ux-design-critic": 7,
     "hr-specialist": 9,
     "inventory-specialist": 14,
     "market-research-analyst": 7,
@@ -150,10 +166,14 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     // Additive capability, not drift. At 13 the set is one over
     // DEFAULT_SKILL_SUMMARY_CAP, so relevance ranking picks per turn; its narrow
     // triggerPattern (deck, slides, presentation, pptx) ranks it only when asked.
-    "marketing-specialist": 14,
+    // 14 -> 15: gained a skill from EACH change — acquisition-brief-refresh
+    //    (standing work) and marketing-collaboration-intake (backs
+    //    svc-marketing-partner-intake). A max-merge of the two branches read 14
+    //    and the ratchet caught it.
+    "marketing-specialist": 15,
     "onboarding-coo": 6,
     "ops-coordinator": 13,
-    "platform-engineer": 32,
+    "platform-engineer": 33,
     "portfolio-advisor": 14,
     "software-engineer": 14,
 

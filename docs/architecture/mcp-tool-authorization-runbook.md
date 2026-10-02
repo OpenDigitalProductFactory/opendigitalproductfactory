@@ -16,7 +16,10 @@ and receives every approval its assistant asks for. The POST binds only if
 the ticked account is still the session's account. `Use a different
 account` signs in again and returns to the same request. If a connection
 was made under the wrong account, revoke it and reconnect; approvals never
-follow the connection to another person. The default flow is one Connect action;
+follow the connection to another person. An administrator ends one person's
+grants under a shared client registration with People > Revoke this person's
+access on Admin > Platform Development (BI-0A724798); the whole-client revoke
+stays the larger control. The default flow is one Connect action;
 `Change` and `Adjust permissions` are disclosures, and a picker is opened
 only when eligible coworkers differ in authority. Reconnects, refreshes and
 new tasks reuse that consent without another login; each privileged action
@@ -180,6 +183,56 @@ itself — including retiring the grandfathered revisions — is operator-ratifi
 decision brief is
 [`docs/superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md`](../superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md).
 No revision has been retired under this section yet.
+
+## GPP permit handles (Phase 2)
+
+An external client may send a GPP permit handle with a `tools/call`, as
+`params._meta["com.opendigitalproductfactory/authorization-handle"]` (a string). The route reads it in
+`apps/web/lib/gpp/permit-carriage.ts` and passes it to the reference monitor as `context.permitHandle`.
+Clients that send nothing are unaffected.
+
+For an outward, authority or irreversible call, the monitor records a verdict for the presented handle,
+or for the permit minted when a gate admits the call: `valid`, `absent`, `expired`, `revoked`,
+`exhausted`, `tool_not_in_capabilities`, `ungoverned` or `unmediated`. The handle is **required only
+under a binding promoted to enforced**, and none is promoted today
+(`GPP_BINDING_ENFORCEMENT` in `apps/web/lib/gpp/binding-enforcement.ts` is empty), so today the verdict
+never changes the call's outcome.
+
+A signed handle has the form `gpp1.<permitId>.<keyId>.<mac>`. The MAC is an HMAC-SHA256 over the
+permit's claims, and the claims bind the exact call's arguments. Replay the handle with the arguments
+it was minted for. The monitor also records `mac_invalid` (the permit row does not match its MAC),
+`param_mismatch` (the handle was replayed with other arguments), `lineage_missing` or
+`lineage_unsealed` (the decision that admitted the call is absent or not sealed), and `unsigned`
+(the install has no permit key, so it cannot verify). A bare permit id is still accepted as a handle
+and is checked against the row's stored MAC. A permit is single-use: when two calls present the same
+handle at the same moment, exactly one takes the use (`valid`) and the other is recorded `exhausted`.
+
+When a gate admits an outward, authority or irreversible call, the `tools/call` result carries the
+handle minted for it, with its expiry, on the result's `_meta`:
+`_meta["com.opendigitalproductfactory/authorization-handle"] = { "handle": "...", "expiresAt": "<ISO-8601>" }`.
+To replay it, send the `handle` string (not the object) under the same key in the request's
+`params._meta`. Results of other calls carry no `_meta`. The handle authorizes exactly one call: keep it
+out of logs and transcripts. Today it is single-use and the admitted call itself spends that use, so
+replaying it records `exhausted`.
+
+Once a binding is promoted, a call under it that carries no valid permit from that binding returns
+`error: "permit_required"` with disposition `awaiting-input`. `data.authorization` follows the MCP
+extension draft's denial envelope: `reason: "insufficient_authorization"` and one
+`transaction_authorization` remediation hint per enforced gate, with `condition` (`handle_required`,
+`handle_invalid` or `handle_mismatch`) and a `gate` descriptor (`gateRef` such as
+`tak-alignment-admit@1`, `title`, `obtain: "out_of_band"`, `gateKey`, `authority`). `data.permit`
+carries the verdict and the carriage key. The same denial envelope is also on the tool result's
+`_meta["io.modelcontextprotocol/authorization"]` (`reason`, `remediation: "available"`,
+`remediationHints`), where a client implementing the extension looks for it; `structuredContent` is
+unchanged. Do not retry the same call unchanged, and do not change the
+arguments to fit an old handle: pass the named gate and call again. A missing permit key on the
+install, unsealed lineage the binding did not accept, or an infrastructure fault never produces this
+refusal; the call runs and the observation records `enforcement_downgraded`. Promotion happens only
+through a reviewed change to that file, under the criteria in GPP Annex A
+(`docs/architecture/gated-permissions-process.md`).
+The carriage key follows the MCP extension draft
+(`docs/superpowers/specs/2026-10-01-mcp-transaction-authorization-sep-draft.md`), which has not been
+submitted. A permit handle is not an OAuth token and never replaces the bearer credential.
 
 ## Terminal-readiness recovery packets
 

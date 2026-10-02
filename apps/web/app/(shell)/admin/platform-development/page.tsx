@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { namespaceMessages } from "@dpf/i18n";
 
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
@@ -10,6 +11,8 @@ import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentF
 import { getAutonomousPlaybookMode } from "@/lib/build/build-studio-config";
 import { PrivatePathsEditor } from "@/components/admin/PrivatePathsEditor";
 import TokenExpiryBanner from "@/components/admin/TokenExpiryBanner";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import {
   getGitHubConnectedState,
   getPlatformDevConfig,
@@ -46,6 +49,7 @@ export default async function AdminPlatformDevelopmentPage() {
   const proto = hdrs.get("x-forwarded-proto") ?? "http";
   const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "localhost:3000";
   const baseUrl = `${proto}://${host}`;
+  const { language } = await getLocaleContext();
 
   return (
     <div>
@@ -97,7 +101,10 @@ export default async function AdminPlatformDevelopmentPage() {
       {/* BI-EDB67A2B: headless (client_credentials) clients live beside the
           PAT manager — the design's "operator-issued from Admin > Platform
           Development, listed and revocable beside browser-authorized clients". */}
-      <McpOAuthClientManager />
+      {/* The People panel (BI-0A724798) reads its copy from the admin catalog. */}
+      <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+        <McpOAuthClientManager />
+      </MessagesProvider>
     </div>
   );
 }

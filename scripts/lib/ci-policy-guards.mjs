@@ -596,9 +596,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-tool-surface.test.mjs"),
       node("scripts/check-tool-surface.mjs"),
     ], { inputs: ["code"] }),
-    // `capability` and `category` in skill frontmatter are closed sets stored as
-    // free-form strings. Invented values were written three times while authoring
-    // 14 skills; one reached a runtime UX ratchet before anything caught it.
+    // A coworker's standing rhythm is declared twice on purpose — the registry
+    // the scheduler reads, and the coworker's own recurring skill. Nothing kept
+    // them equal, so the skill could describe a rhythm nobody runs (BI-4CE4F52F).
+    guard("self-task-cadence-parity", "Self-Task Cadence Parity", [
+      node("--test", "scripts/check-self-task-cadence-parity.test.mjs"),
+      node("scripts/check-self-task-cadence-parity.mjs"),
+    ]),
     // A pack skill's `category` groups the default-visible catalog on
     // /platform/ai/skills, so an invented value permanently adds a group header to
     // a page under a shrink-only words-on-arrival ratchet. The sibling `capability`
@@ -655,6 +659,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("local-markdown-renderer-guard", "Local Markdown Renderer Guard", [
       conformanceTest("scripts/check-no-local-markdown-renderer.test.mjs"),
       node("scripts/check-no-local-markdown-renderer.mjs"),
+    ]),
+    // No hidden Unicode in files a model reads as instructions (BI-C0E8A9EC,
+    // EP-E76E81D1): rulebooks, skills, prompts, registries and kernel pages.
+    // Undeclared inputs on purpose — its scope is mostly markdown.
+    guard("hidden-unicode-instruction-files-guard", "Hidden Unicode Instruction Files Guard", [
+      conformanceTest("scripts/check-hidden-unicode-instruction-files.test.mjs"),
+      node("scripts/check-hidden-unicode-instruction-files.mjs"),
     ]),
     // One canonical-JSON form for hashes and signatures per import boundary
     // (plan 2026-09-08 §10.5 S4). Every remaining copy differs from it and

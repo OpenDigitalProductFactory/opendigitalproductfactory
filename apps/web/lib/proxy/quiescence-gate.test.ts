@@ -77,6 +77,14 @@ describe("isAllowListed", () => {
     expect(isAllowListed("/api/mcp/v1")).toBe(true);
   });
 
+  // BI-F9EE05E5 slice C: the operator's drain controls must work mid-drain;
+  // nothing else under /api/ops does.
+  it("allow-lists only the self-upgrade drain control route under /api/ops", () => {
+    expect(isAllowListed("/api/ops/self-upgrade/control")).toBe(true);
+    expect(isAllowListed("/api/ops/self-upgrade/status")).toBe(false);
+    expect(isAllowListed("/api/ops/self-upgrade")).toBe(false);
+  });
+
   it("does NOT allow-list normal routes", () => {
     expect(isAllowListed("/portal")).toBe(false);
     expect(isAllowListed("/api/portal/coworker")).toBe(false);

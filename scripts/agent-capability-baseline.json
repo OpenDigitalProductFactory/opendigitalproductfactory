@@ -67,12 +67,9 @@
       "AGT-WS-BUILD",
       "AGT-WS-CUSTOMER",
       "AGT-WS-FARM-RANCH",
-      "AGT-WS-FINANCE",
       "AGT-WS-INTEGRATION",
       "AGT-WS-MARKET-RESEARCH",
-      "AGT-WS-MARKETING",
       "AGT-WS-ONBOARD",
-      "AGT-WS-PLATFORM",
       "AGT-WS-PORTFOLIO",
       "AGT-WS-REVIEW",
       "AGT-WS-SECURITY",
@@ -83,8 +80,8 @@
       "corpus": 0,
       "governance": 0,
       "shape": 0,
-      "cadence": 16,
-      "toolsAndSkills": 6,
+      "cadence": 7,
+      "toolsAndSkills": 2,
       "evidence": 1
     }
   }

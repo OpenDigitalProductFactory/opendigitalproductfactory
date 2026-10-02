@@ -529,7 +529,7 @@ Each subsection covers a surface category from §2.1 with its four answers (Dete
 **Stop-accept** — Two helpers in `apps/web/lib/queue/inngest-client.ts`:
 
 - `gateAtEntry(step, inngestId)` — for cron functions. Returns early with `{ skipped: true, reason: "quiescing" }` if level ≥ `draining`. Function will re-fire on next cron tick after `cleared`. Since BI-7E49FA15 the same gate also enforces the per-job kill switch (`ScheduledJob.enabled`, reason `disabled-by-operator`) for catalog entries declaring `honorsEnabledGate: true`; the required `inngestId` is how it resolves the job — see `docs/superpowers/specs/2026-08-28-scheduled-job-kill-switch-design.md`.
-- `gateBetweenSteps(step)` — for long-running event-driven functions. Calls `step.waitForEvent("platform.quiescence-cleared", { timeout: "30m" })` between major steps to suspend cleanly. Resumes when the durable Inngest `platform.quiescence-cleared` event fires for any terminal outcome. The UI `system:quiescence` event is emitted from the same transition but is not the durable wake signal.
+- `gateBetweenSteps(step)` — for long-running event-driven functions. Calls `step.waitForEvent("platform.quiescence-cleared", { timeout: "30m" })` between major steps to suspend cleanly. Resumes when the durable Inngest `platform.quiescence-cleared` event fires for any terminal outcome. Since BI-F9EE05E5 slice B (#5910) it re-checks the level after each timed-out wait and keeps waiting while the drain holds, up to 12 waits (6 hours), because a drain can now wait 60 minutes and then pause for the operator. The UI `system:quiescence` event is emitted from the same transition but is not the durable wake signal.
 
 Every existing Inngest function in `apps/web/lib/queue/functions/` is wrapped with the appropriate gate as a Phase 1 deliverable. Cron functions get `gateAtEntry`; event-driven and long-running functions get `gateBetweenSteps` between their natural steps.
 
@@ -582,7 +582,7 @@ The signal therefore excludes tool names whose canonical `resolveAnnotations().r
 
 **Stop-accept** — extend the existing `apps/web/proxy.ts` (§2.4 gap). Next.js 16 renamed Middleware to Proxy; Proxy runs in the Edge runtime and cannot import Prisma, `@dpf/db`, filesystem APIs, or Node-only helpers. Therefore the gate has two layers:
 
-1. **Proxy path** — injects version headers on all matched responses and rejects mutation POSTs / new SSE handshakes when cached quiescence state is `draining` or `swapping`.
+1. **Proxy path** — injects version headers on all matched responses and rejects mutation POSTs / new SSE handshakes when cached quiescence state is `draining` or `swapping`. The allow-list (`lib/proxy/quiescence-gate.ts`) admits the operator's drain controls at `/api/ops/self-upgrade/control` (Keep waiting / Force now / Abort, BI-F9EE05E5 slice C, #5908), so the levers that end a drain are never refused by it.
 2. **Node state path** — `GET /api/internal/platform/quiescence/state` runs in the Node runtime, reads `PlatformConfig["portal.quiescence"]`, and returns `{ level, runId, retryAfterSeconds, version, bundleHash }`. This route is excluded from Proxy matching to avoid recursion.
 
 Proxy reads the Node state path with a 50ms timeout and 1s module-level cache. On timeout, it fails open for idempotent GETs and fails closed for mutation POSTs only when the last cached state was non-normal; this keeps the platform usable during transient state-route hiccups while preserving the drain once observed.
@@ -978,6 +978,12 @@ The protocol is complete when:
 - The coordinator flips every live TaskRun to `quiescing` at the start of the drain (§5.3). The dead-phase reaper then treats those builds as heartbeat-less and closes their phase rows, so the drain converges by stopping work, contrary to §6.5/§6.8 ("never force-cancel the phase").
 - Admission is not closed at every entry point. `ideate`, `plan→build`, `review→ship` and design-review transitions swallow the `QuiescingError` from `startBuildPhaseRun` and proceed with no phase row. The manual tee-up event has no gate. `build/execute.run` resumes after 30 minutes even while still draining.
 - The operator's own Force now / Abort server actions are refused by the proxy gate while draining (§6.4). `shipForceEscalatedAt` has never been set across 301 runs.
+
+**Status 2026-10-02 — each drift above is closed:**
+- No `activity-in-flight` early skip; the drain budget is `drainWaitBudgetMs` (60 minutes), TaskRuns flip to `quiescing` only after hard blockers clear, and the run pauses at `awaiting-operator` — slice A, #5877. Live: SUR-4C4F1B7B (2026-10-02) drained with no skip, reached ready-to-swap in about a minute and succeeded.
+- Every phase transition, ideate dispatch, deliberation start and the manual tee-up wait while the drain holds; `build/execute.run` no longer resumes after a fixed 30 minutes — slice B, #5910.
+- Keep waiting / Force now / Abort reach the coordinator through an allow-listed route — slice C, #5908.
+- §5.5's 80%-budget operator prompt is superseded by the `awaiting-operator` pause at the bound.
 
 **Amended behavior (supersedes §12 decision 1 for the self-upgrade trigger, and the BI-F36E7510 early skip):**
 1. **Admission closes first; work is not stopped.** A manual or scheduled upgrade enters the drain whatever is in flight. New work is refused at every entry point. In-flight phases run to completion; the next phase of a build is parked at its boundary with a durable reason and resumed after the swap. TaskRuns are flipped to `quiescing` only after hard blockers reach zero, or on operator force.
