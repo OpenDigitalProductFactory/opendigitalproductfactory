@@ -12,7 +12,9 @@ status: draft
 
 **Decision records:** DI-56FB126CCFAA (epic), DI-F6D4C0132024 (policy shape)
 
-**Workroom:** to be claimed by the implementation session
+**Workroom:** WC-B883D1D9 (branch `feat/mcp-tool-default-deny`)
+
+**Absorbed scope:** BI-49969E39 (description/schema pinning) folds into this plan as the `approvedContentDigest` part of Phase 2 and AC-MCP-AUTH-007.
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
@@ -22,21 +24,35 @@ status: draft
 
 The chosen **hybrid explicit-policy** approach keeps bundled mappings in `TOOL_TO_GRANTS`, projects dynamic approval onto the existing `McpServerTool` row, and sends both through the same evaluator. The MCP specification's tool annotations remain untrusted hints; transport authorization remains separate from DPF application authorization.
 
+**Second defect, same boundary (absorbed from BI-49969E39).** `discoverMcpServerTools` overwrites `description` and `inputSchema` verbatim on every rediscovery (activate, refresh, health check), and `getMcpServerTools` hands that text to the model. A server can change what the model reads after a tool was reviewed — the MCP tool-poisoning / "rug pull" pattern (Invariant Labs, 2025). Approval therefore binds to a digest of the exact model-visible text, not to the tool name.
+
+### Reproduction on main (research evidence)
+
+Named ref: `origin/main` `9b28dbf635bf76b2405e632304d2bbda2b8bd99d`.
+
+- `apps/web/lib/mcp-tools.ts:326` — `grantMap[tool.name] ? isToolAllowedByGrants(tool.name, agentGrants) : true`: an unmapped discovered tool is appended to the coworker surface whenever External Access is on.
+- `apps/web/lib/tak/mcp-server-tools.ts:77` — the rediscovery `update` rewrites `description` / `inputSchema`; nothing records what was approved.
+- `apps/web/lib/mcp-tools.ts:583` — `executeTool`'s default branch calls `executeMcpServerTool` for any namespaced name with no acting-context or policy check.
+- Ruled out by running: `governedExecuteTool` already refuses namespaced names as `unknown_tool` (its `findTool` searches `PLATFORM_TOOLS` only), so the coworker loop could not *call* a listed discovered tool — but the tool's text still reached the model, and direct `executeTool` callers still reached the remote call. The existing EP-BROWSER-DRIVE test passes on main while asserting the unmapped tool *is* listed: the gap is the deliberate legacy fallback, not a regression.
+- Red proof before implementation: `apps/web/lib/mcp-tools-discovered-policy.test.ts` 13/17 fail; the content-pinning block in `apps/web/lib/tak/mcp-server-tools.test.ts` 4/6 fail.
+
 This plan is **atomic**. Schema/backfill, shared resolution, listing, invocation recheck, inventory, and operator explanation constitute one fail-closed boundary. Shipping only listing filtration leaves stale-call execution open; shipping only the execution check strands tools without a classifiable policy lifecycle.
 
 ## Phase 1 — red policy and bypass tests
 
-**Deliverable:** failing tests cover unknown tool, no grant, quarantined tool, approved read tool, approved side-effecting tool, advise mode, disabled External Access, stale model-visible list, revocation, remote annotation lies, and server/tool rename.
+**Deliverable:** failing tests cover unknown tool, no grant, quarantined tool, approved read tool, approved side-effecting tool, advise mode, disabled External Access, stale model-visible list, revocation, remote annotation lies, server/tool rename, and **description or inputSchema change after approval** (rediscovery quarantines; the model never sees the changed text; hidden Unicode is stripped from what the model reads).
 
-**Files:** `apps/web/lib/mcp-tools-mcp-server.test.ts`, `apps/web/lib/tak/mcp-server-tools.test.ts`, `apps/web/lib/tak/agent-grants.test.ts`, execution-route tests.
+**Files:** `apps/web/lib/mcp-tools-discovered-policy.test.ts`, `apps/web/lib/mcp-tools-mcp-server.test.ts`, `apps/web/lib/tak/mcp-server-tools.test.ts`, `apps/web/lib/tak/mcp-tool-policy.test.ts`, governed-execution tests.
 
 **Requirements:** OBJ-MCP-AUTH-001 through OBJ-MCP-AUTH-003.
 
-**Verification:** AC-MCP-AUTH-001 through AC-MCP-AUTH-006 demonstrate the current fail-open and missing invocation recheck before implementation.
+**Verification:** AC-MCP-AUTH-001 through AC-MCP-AUTH-007 demonstrate the current fail-open and missing invocation recheck before implementation.
 
 ## Phase 2 — explicit policy projection on the existing discovery record
 
 **Deliverable:** extend `McpServerTool` with typed policy state and provenance: closed status (`quarantined`, `approved`, `denied`), closed effect posture and execution modes, grant key, policy version, `approvedByPrincipalId`, approval timestamp, and separately stored untrusted discovery hints.
+
+**Content pinning (`approvedContentDigest`, absorbed from BI-49969E39):** approval also stores the approved identity (`<serverSlug>__<toolName>`), a snapshot of the approved `description` and `inputSchema`, and `approvedContentDigest` — sha256 over the canonical JSON of that text *after* hidden-Unicode sanitizing with `sanitizeUntrustedValue` (`packages/validators/src/untrusted-text.ts`), i.e. exactly what a model would read. Key order is not a change. Discovery records `discoveredContentDigest` for the latest text. A rediscovery whose digest differs from the approved digest returns the tool to `quarantined` and leaves the approved snapshot untouched, so the model sees nothing new until an operator re-approves, and the operator sees the approved and newly reported text side by side. The model-visible text is always the sanitized approved snapshot; the resolver re-hashes both the current row and the snapshot on every listing and call, so a row edited outside discovery also fails closed. Bundled tools (whose text ships with the release) are re-covered by the bundled mapping on rediscovery rather than quarantined; they are code-owned, not operator-approved.
 
 **Files:** `packages/db/prisma/schema/integrations.prisma`, generated enum/type surface, forward-only migration, discovery code, focused tests.
 
@@ -44,7 +60,7 @@ This plan is **atomic**. Schema/backfill, shared resolution, listing, invocation
 
 **Migration:** mapped bundled tools become approved only by deterministic lookup of the canonical namespaced mapping; all other existing and newly discovered tools become quarantined. `isEnabled` and server health never imply approval. Migration applies cleanly to populated registries and preserves disabled tools.
 
-**Verification:** migration smoke across mapped, unmapped, disabled, renamed, and annotation-bearing tools; unknown enum/state is refused.
+**Verification:** migration smoke across mapped, unmapped, disabled, renamed, and annotation-bearing tools; unknown enum/state is refused; rediscovery with changed description or schema quarantines and keeps the approved snapshot; unchanged text (including reordered schema keys) keeps approval.
 
 ## Phase 3 — one effective discovered-tool policy resolver
 
@@ -56,7 +72,7 @@ This plan is **atomic**. Schema/backfill, shared resolution, listing, invocation
 
 **Constraints:** no second grant vocabulary; persisted `grantKey` must resolve in the closed catalog; remote annotations never lower effect posture or widen modes.
 
-**Verification:** same inputs produce the same verdict at listing and execution; policy-version and identity mismatch deny.
+**Verification:** same inputs produce the same verdict at listing and execution; policy-version, identity and content-digest mismatch deny.
 
 ## Phase 4 — listing and invocation enforcement
 
@@ -65,6 +81,8 @@ This plan is **atomic**. Schema/backfill, shared resolution, listing, invocation
 **Files:** `apps/web/lib/mcp-tools.ts`, namespaced execution bridge, authorization logging helper, tests.
 
 **Dependencies:** Phase 3.
+
+**Execution path detail:** the governed executor resolves a namespaced discovered tool (coworker `agentic-loop` source only) through the resolver, intersects the policy grant with the coworker's grants, the room's authorized surface and server-resolved External Access, and hands the resolved definition to the existing authority gate, which writes the `AuthorizationDecisionLog` row. The approved content digest travels in the execution context; `executeMcpServerTool` re-resolves the row immediately before `tools/call` and refuses on any mismatch. A namespaced call that did not come through the governed executor is refused. The bundled browser orchestrator (`drive_browser_task`, already grant-gated) reaches only bundled tools.
 
 **Verification:** stale-list and revoked-after-list tests prove listing cannot be replayed as authority; advise mode exposes no side effects; human capability and agent grant remain intersected.
 
@@ -101,8 +119,9 @@ Run focused tests, enum/schema generation checks, migration smoke against popula
 | Remote server lies about read-only/destructive behavior. | Treat annotations as untrusted evidence; DPF effect policy is authoritative. | Quarantine/deny the server tool and revoke its policy. |
 | Listing and execution policies drift. | One resolver and stable reason codes used at both boundaries. | Disable external tool execution until resolver parity is restored. |
 | Rename strands a legitimate integration or bypasses old policy. | Namespaced identity plus bounded alias carrying identical explicit policy. | Deny both names, repair policy, then re-enable deliberately. |
+| Server rewrites an approved tool's description or schema (rug pull). | Digest of the sanitized model-visible text bound at approval; rediscovery mismatch quarantines; resolver re-hashes at listing and call. | Deny the tool; re-approve only after reviewing the side-by-side text. |
 | Migration authorizes an unknown tool. | Only exact canonical mapping can backfill approved; everything else quarantines. | Roll back migration transaction and correct classification logic before retry. |
 
 ## Success evidence
 
-Success means every active discovered tool has an explicit policy state, no omission grants authority, listing and execution return the same effective decision, remote annotations cannot widen authority, and canonical-runtime evidence proves both refusal and deliberately authorized success.
+Success means every active discovered tool has an explicit policy state, no omission grants authority, no rediscovery changes approved model-visible text, listing and execution return the same effective decision, remote annotations cannot widen authority, and canonical-runtime evidence proves both refusal and deliberately authorized success.
