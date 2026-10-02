@@ -118,7 +118,7 @@ Run focused tests, enum/schema generation checks, migration smoke against popula
 - **Requirements:** OBJ-MCP-AUTH-001, OBJ-MCP-AUTH-002, OBJ-MCP-AUTH-003.
 - **Contracts:** CONTRACT-MCP-POLICY-PROJECTION (`McpServerTool` policy columns + `approvedContentDigest`), CONTRACT-MCP-POLICY-RESOLVER (`resolveDiscoveredToolPolicy` / `evaluateDiscoveredToolAccess`), CONTRACT-MCP-POLICY-ENFORCEMENT (`getAvailableTools`, `governedExecuteTool`, `executeMcpServerTool`).
 - **Flows:** FLOW-MCP-DISCOVER-QUARANTINE-APPROVE (discovery → quarantine → operator approval → listing → governed call → remote call), FLOW-MCP-REDISCOVER-CHANGED (rediscovery with changed text → quarantine → side-by-side review → re-approval).
-- **Verification:** AC-MCP-AUTH-001 through AC-MCP-AUTH-007 (spec §11 acceptance contract).
+- **Verification:** AC-MCP-AUTH-001, AC-MCP-AUTH-002, AC-MCP-AUTH-003, AC-MCP-AUTH-004, AC-MCP-AUTH-005, AC-MCP-AUTH-006, AC-MCP-AUTH-007 (spec §11 acceptance contract).
 
 ## Backlog coverage
 
