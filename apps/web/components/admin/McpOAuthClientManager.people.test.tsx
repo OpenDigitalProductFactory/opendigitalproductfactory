@@ -73,8 +73,8 @@ describe("McpOAuthClientManager People panel identity (BI-287D3EFD)", () => {
     fireEvent.click(screen.getByRole("button", { name: /dpfoc_second22/ }));
 
     const panel = await screen.findByRole("region", { name: /dpfoc_second22/ });
-    expect(within(panel).getByText("dpfoc_second22")).toBeTruthy();
-    expect(within(panel).queryByText("dpfoc_first111")).toBeNull();
+    expect(within(panel).getByText(/Client id dpfoc_second22, registered/)).toBeTruthy();
+    expect(within(panel).queryByText(/dpfoc_first111/)).toBeNull();
     expect(peopleMock).toHaveBeenCalledWith({ clientId: "dpfoc_second22" });
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
