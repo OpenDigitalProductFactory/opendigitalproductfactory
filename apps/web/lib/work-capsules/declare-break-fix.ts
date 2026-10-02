@@ -24,6 +24,7 @@ const TERMINAL_ROOM_STATUSES = ["complete", "abandoned", "archived", "superseded
 export type BreakFixDeclaration = {
   schemaVersion: 1;
   reason: string;
+  /** Human principal when directly resolved; never the acting coworker's principal. */
   declaredByPrincipalId: string | null;
   declaredByUserId: string;
   actingAgentId?: string | null;
@@ -36,6 +37,7 @@ export type BreakFixDeclaration = {
 export type DeclareBreakFixDb = {
   backlogItem: { findFirst(args: unknown): Promise<{ id: string; itemId: string; status: string } | null> };
   backlogItemActivity: {
+    findFirst(args: unknown): Promise<{ id: string } | null>;
     findMany(args: unknown): Promise<Array<{ id: string; backlogItemId: string; kind: string; gateKey?: string | null; recordedAt: Date; payload: unknown }>>;
     create(args: unknown): Promise<{ id: string }>;
   };
@@ -118,6 +120,16 @@ export async function declareBreakFix(args: {
     select: { id: true, capsuleId: true, scopeClaims: true },
   });
   if (!room) return { ok: false, error: "workroom_required", message: `Claim ${item.itemId} into a Workroom first (claim_backlog_item_for_work), then declare the break-fix on it.` };
+  // A shape claim is not a declaration. Check the exact receipt separately:
+  // installation-wide PIR history must never crowd it out of a capped scan.
+  const existingDeclaration = await args.db.backlogItemActivity.findFirst({
+    where: { backlogItemId: item.id, kind: BREAK_FIX_DECLARED_KIND,
+      payload: { path: ["capsuleId"], equals: room.capsuleId } },
+    select: { id: true },
+  });
+  if (existingDeclaration) {
+    return { ok: false, error: "already_declared", message: `${item.itemId} is already declared break-fix on ${room.capsuleId}.`, data: { capsuleId: room.capsuleId } };
+  }
   // WIP 1 per installation.
   const openRooms = await args.db.workroom.findMany({
     where: { archivedAt: null, status: { notIn: TERMINAL_ROOM_STATUSES }, capsuleId: { not: room.capsuleId } },
@@ -136,19 +148,12 @@ export async function declareBreakFix(args: {
   // A missed PIR blocks the declarer's next declaration.
   const history = await args.db.backlogItemActivity.findMany({
     where: { OR: [
-      { backlogItemId: item.id, kind: BREAK_FIX_DECLARED_KIND },
       { kind: BREAK_FIX_DECLARED_KIND, payload: { path: ["declaredByUserId"], equals: args.actor.userId } },
       { kind: "initiative_gate_receipt", gateKey: PIR_GATE_PRISMA_KEY },
     ] },
     select: { id: true, backlogItemId: true, kind: true, gateKey: true, recordedAt: true, payload: true },
     take: 500,
   });
-  // A claim can name the shape before the person declares it. Only the audit
-  // receipt proves a declaration; a shape marker alone must not swallow it.
-  if (history.some((row) => row.backlogItemId === item.id
-    && row.kind === BREAK_FIX_DECLARED_KIND && declaration(row.payload)?.capsuleId === room.capsuleId)) {
-    return { ok: false, error: "already_declared", message: `${item.itemId} is already declared break-fix on ${room.capsuleId}.`, data: { capsuleId: room.capsuleId } };
-  }
   const missed = findMissedPir(history.filter((row) => row.kind !== BREAK_FIX_DECLARED_KIND
     || declaration(row.payload)?.declaredByUserId === args.actor.userId), now);
   if (missed) {

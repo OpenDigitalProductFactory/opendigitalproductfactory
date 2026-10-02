@@ -6,11 +6,12 @@ const now = new Date("2026-09-06T23:00:00Z");
 const human = { userId: "user-1", agentId: null, principalId: "PRN-1" };
 
 function db(overrides: {
-  item?: unknown; room?: unknown; openRooms?: unknown[]; history?: unknown[];
+  item?: unknown; room?: unknown; openRooms?: unknown[]; history?: unknown[]; existingReceipt?: unknown;
 } = {}) {
   return {
     backlogItem: { findFirst: vi.fn().mockResolvedValue("item" in overrides ? overrides.item : { id: "row-1", itemId: "BI-ONE", status: "open" }) },
     backlogItemActivity: {
+      findFirst: vi.fn().mockResolvedValue(overrides.existingReceipt ?? null),
       findMany: vi.fn().mockResolvedValue(overrides.history ?? []),
       create: vi.fn().mockResolvedValue({ id: "act-1" }),
     },
@@ -84,9 +85,22 @@ describe("declareBreakFix (BI-F2FEC1EB)", () => {
     expect(await declareBreakFix({ db: db({ room: null }), itemId: "BI-ONE", reason: "x", actor: human, now })).toMatchObject({ ok: false, error: "workroom_required" });
     const already = db({
       room: { id: "r1", capsuleId: "WC-ONE", scopeClaims: [{ workShape: BREAK_FIX_SHAPE_REF, recordedAt: "x" }] },
+      existingReceipt: { id: "declared" },
       history: [{ id: "declared", backlogItemId: "row-1", kind: "break_fix_declared", recordedAt: now,
         payload: { schemaVersion: 1, capsuleId: "WC-ONE", declaredAt: now.toISOString(), pirDueAt: "2026-09-08T23:00:00.000Z" } }],
     });
     expect(await declareBreakFix({ db: already, itemId: "BI-ONE", reason: "x", actor: human, now })).toMatchObject({ ok: false, error: "already_declared" });
+  });
+
+  it("refuses a duplicate even when unrelated PIR receipts fill the history limit", async () => {
+    const store = db({ existingReceipt: { id: "declared" }, history: Array.from({ length: 500 }, (_, i) => ({
+      id: `pir-${i}`, backlogItemId: `other-${i}`, kind: "initiative_gate_receipt", gateKey: "post_implementation_review", recordedAt: now, payload: {},
+    })) });
+    expect(await declareBreakFix({ db: store, itemId: "BI-ONE", reason: "retry", actor: human, now })).toMatchObject({ ok: false, error: "already_declared" });
+    expect(store.backlogItemActivity.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { backlogItemId: "row-1", kind: "break_fix_declared", payload: { path: ["capsuleId"], equals: "WC-ONE" } },
+    }));
+    expect(store.workroom.update).not.toHaveBeenCalled();
+    expect(store.backlogItemActivity.create).not.toHaveBeenCalled();
   });
 });

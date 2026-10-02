@@ -19,6 +19,7 @@
 
 import { prisma, type Prisma } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
+import { humanApprovalMarker } from "./human-approved-execution";
 
 import {
   describeTransitionError,
@@ -140,7 +141,7 @@ export async function approveEnvelope(
       // policy-projected envelope. Preserve the existing exact-call binding.
       argsJson: {
         ...(isRecord(load.envelope.argsJson) ? load.envelope.argsJson : {}),
-        humanApproval: { userId: callerUserId, approvedAt: new Date().toISOString() },
+        humanApproval: humanApprovalMarker(callerUserId),
       } as Prisma.InputJsonObject,
     },
   });

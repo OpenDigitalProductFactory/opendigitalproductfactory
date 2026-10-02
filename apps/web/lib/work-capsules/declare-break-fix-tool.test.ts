@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 
 const mocks = vi.hoisted(() => ({
-  envelope: vi.fn(), history: vi.fn(), create: vi.fn(), update: vi.fn(), rooms: vi.fn(), room: vi.fn(),
+  envelope: vi.fn(), receipt: vi.fn(), history: vi.fn(), create: vi.fn(), update: vi.fn(), rooms: vi.fn(), room: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: {
   coworkerActionEnvelope: { findUnique: mocks.envelope },
   backlogItem: { findFirst: vi.fn(async () => ({ id: "row-1", itemId: "BI-ONE" })) },
-  backlogItemActivity: { findMany: mocks.history, create: mocks.create },
+  backlogItemActivity: { findFirst: mocks.receipt, findMany: mocks.history, create: mocks.create },
   workroom: { findFirst: mocks.room, findMany: mocks.rooms, update: mocks.update },
 } }));
 vi.mock("./handler-actor", () => ({ workCapsuleActor: vi.fn(async () => ({ userId: "u1", agentId: "AGT-CODEX", principalId: "p1" })) }));
@@ -27,6 +27,7 @@ function envelope(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.envelope.mockResolvedValue(envelope());
+  mocks.receipt.mockResolvedValue(null);
   mocks.history.mockResolvedValue([]);
   mocks.create.mockResolvedValue({ id: "activity-1" });
   mocks.rooms.mockResolvedValue([]);
