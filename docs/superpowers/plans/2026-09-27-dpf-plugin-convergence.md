@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # DPF plugin installation convergence
 
 Backlog: BI-024A5CDE. Workroom: WC-54BD4138.
@@ -14,6 +18,26 @@ Extend the existing agent-toolchain bootstrap design and standalone Python
 updater; do not add another installer. Claude uses its existing qualified
 marketplace identity, Grok its named plugin store, and Antigravity its skill
 directory. They must retain their native contracts.
+
+## Refreshed evidence (2026-10-01)
+
+Codex's native inventory still reports both qualified DPF registrations enabled,
+now on version 0.2.8. The one-plugin-owned-connector change in PR #5845 removes
+duplicate MCP connector writers; it does not reconcile plugin marketplace
+registrations. Preserve that change when updating the installer. The reported
+Windows installation has one plugin and needs no duplicate cleanup.
+
+[OpenAI's packaging contract](https://developers.openai.com/plugins/build/plugins)
+supports `interface.logo` and `interface.composerIcon` in the existing Codex
+compatibility manifest, with `./assets/` paths relative to the plugin root.
+No new manifest format is needed for this repair. Native `codex plugin remove`
+explicitly removes its cache, so this migration uses disable-not-delete.
+One active plugin is the verifiable runtime contract; removal of the redundant
+row from the desktop installed list needs separate visual evidence.
+
+Baseline on the refreshed branch: 85 updater tests pass using the bundled
+modern Python runtime, with no skips. macOS system Python passes with four
+TOML-parser tests skipped because its standard library predates `tomllib`.
 
 ## Ordered repair
 
