@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 ---
 
 # Workroom flow map and measurement: one picture, one measure, per portfolio
@@ -7,6 +7,7 @@ status: draft
 | | |
 |---|---|
 | Date | 2026-10-02 |
+| Founder decision | Direction approved by the founder on 2026-10-02 (notation hybrid, stage = queue, four disclosure levels on existing routes, version-keyed improvement loop, new composing epic) |
 | Epic | Proposed: EP "Workroom flow — measured, visual and improved per portfolio" (see §11; not yet filed) |
 | Backlog | Proposed items F1–F7 (§11). Filing is pending: the `dpf` MCP connector was not authorized in the authoring session, so live backlog was read directly from PostgreSQL (read-only) and nothing was written |
 | Composes | GPP shape notation ([2026-10-02](2026-10-02-gpp-shape-notation-and-compiler-design.md)) · shared queue flow telemetry (EP-3516E23D, [plan](../plans/2026-07-06-queue-flow-telemetry-spine-plan.md)) · Living Business twin ([2026-07-11](2026-07-11-living-business-workforce-visualization-design.md)) · portfolio-shaped areas ([2026-08-14 §9](2026-08-14-portfolio-shaped-information-architecture-design.md)) · portfolio budget and WIP ([2026-09-24](2026-09-24-portfolio-budget-and-investment-wip-design.md)) |
