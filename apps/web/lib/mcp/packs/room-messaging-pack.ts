@@ -23,9 +23,13 @@ import { postWorkItemComment, type PostCommentDb } from "@/lib/work-management/p
 import { persistExplicitWorkroomAssignmentsForWorkItem } from "@/lib/work-management/room-participant-assignment.server";
 import { appendRoomPolicyParticipant } from "@/lib/work-management/room-policy";
 import { loadRoomMembersForWorkItem } from "@/lib/work-management/room-policy-members.server";
-import type { WorkroomParticipantRole } from "@/lib/work-management/room-types";
+import {
+  preflightRoomParticipantInvitation,
+  resolveRoomMessagingWorkItem,
+  ROOM_MESSAGING_WORK_ITEM_SELECT,
+} from "@/lib/work-management/room-participant-invitation-preflight.server";
 import { resolveAgentRoomAccess } from "@/lib/work-management/room-agent-access.server";
-import { decodeWorkCaseKey } from "@/lib/work-management/workspace-case-loader";
+import type { WorkroomParticipantRole } from "@/lib/work-management/room-types";
 
 type PackContext = { agentId?: string };
 
@@ -34,29 +38,8 @@ function str(params: Record<string, unknown>, key: string): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-const ROOM_WORK_ITEM_SELECT = {
-  id: true,
-  itemId: true,
-  sourceType: true,
-  sourceId: true,
-  title: true,
-  evidence: true,
-  assignedToAgentId: true,
-  assignedToUserId: true,
-} as const;
-
 async function resolveRoomWorkItem(caseKey: string) {
-  const decoded = decodeWorkCaseKey(caseKey);
-  if (!decoded) return null;
-  return prisma.workItem.findFirst({
-    where: {
-      OR: [
-        { sourceType: decoded.sourceType, sourceId: decoded.sourceId },
-        { sourceType: decoded.sourceType, itemId: decoded.sourceId },
-      ],
-    },
-    select: ROOM_WORK_ITEM_SELECT,
-  });
+  return resolveRoomMessagingWorkItem(caseKey);
 }
 
 async function agentLabel(agentId: string): Promise<string> {
@@ -158,7 +141,7 @@ async function readRoomMessagesHandler(
     };
   }
 
-  const children = await prisma.workItem.findMany({ where: { parentItemId: item.id }, select: ROOM_WORK_ITEM_SELECT });
+  const children = await prisma.workItem.findMany({ where: { parentItemId: item.id }, select: ROOM_MESSAGING_WORK_ITEM_SELECT });
   const admittedChildIds: string[] = [];
   for (const child of children) {
     const childAccess = await resolveAgentRoomAccess({ agentId, userId, requested: "content", workItem: child });
@@ -201,37 +184,11 @@ async function inviteRoomParticipantHandler(
   userId: string,
   context?: PackContext,
 ): Promise<ToolResult> {
-  const agentId = context?.agentId;
-  if (!agentId) {
-    return { success: false, error: "invalid_caller", message: "invite_room_participant requires an acting coworker." };
-  }
-  const caseKey = str(params, "caseKey");
+  const preflight = await preflightRoomParticipantInvitation({ params, userId, agentId: context?.agentId });
+  if (preflight.verdict === "deny") return preflight.result;
+  const { agentId, caseKey, item } = preflight;
   const inviteeAgentId = str(params, "agentId");
   const inviteeUserId = str(params, "userId");
-  if (!caseKey || (!inviteeAgentId && !inviteeUserId)) {
-    return { success: false, error: "invalid_input", message: "caseKey and one of agentId | userId are required." };
-  }
-
-  const item = await resolveRoomWorkItem(caseKey);
-  if (!item) {
-    return { success: false, error: "not_found", message: `No Work Room found for ${caseKey}.` };
-  }
-
-  // Only a room member with action rights (the Coordinator, or an active participant) may invite.
-  const caller = await resolveAgentRoomAccess({
-    agentId,
-    userId,
-    requested: "action",
-    workItem: item,
-  });
-  if (caller.decision.level !== "action") {
-    const reason = caller.decision.reason;
-    return {
-      success: false,
-      error: reason === "not-admitted" ? "room_not_admitted" : "forbidden",
-      message: `Only a room member with action rights (e.g. the Coordinator) can invite participants (${reason}).`,
-    };
-  }
 
   let inviteePrincipalId: string | null = null;
   let inviteeLabel = "A participant";

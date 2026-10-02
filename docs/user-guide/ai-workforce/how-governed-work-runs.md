@@ -10,6 +10,7 @@ relatedCode:
   - apps/web/lib/work-posture/temporal-band.ts
   - apps/web/lib/tak/consequential-tool-policy.ts
   - apps/web/lib/mcp-governed-execute.ts
+  - apps/web/lib/work-management/room-participant-invitation-preflight.server.ts
   - apps/web/lib/work-management/autonomy-envelope.ts
 ---
 
@@ -218,6 +219,15 @@ Two independent checks then apply, and both must pass:
 - **The autonomy envelope.** This decides whether a human turn is required at all:
   *shadow-only* (recorded, never taken), *propose-for-approval*, *supervised-action*, or
   *autonomous-action* — the only mode that permits acting without a human.
+
+Before the platform asks for approval, it also checks deterministic prerequisites that
+approval cannot change. For example, a coworker that has not joined a Workroom cannot ask
+you to approve its attempt to invite itself. The call stops without creating an approval
+request and names the recovery control instead: the room's current human owner opens the
+room and uses **Participants** to add the approved assistant. Retrying the unchanged call
+returns the same guidance rather than filling the inbox with approvals that can only fail.
+An owner change takes effect immediately; a historical creator or lease holder does not
+override a current accountable owner or coordinator.
 
 The posture from step 3 and the envelope are one projection, and **the stricter of the two
 wins**. A proactivity setting cannot buy autonomy the envelope would deny, and an autonomous
