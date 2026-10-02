@@ -18,14 +18,18 @@
 //    TypeScript would show the difference).
 // 3. L2: decompile(lower(D)) equals D for each decompiled document D.
 // 4. R: every field L1 drops appears in buildRatificationReport, and the
-//    report over the whole registry is snapshot-tested against a committed,
-//    sorted JSON file (vitest fails on a stale or, under CI, missing snapshot;
-//    regenerate with `vitest run -u`).
+//    report over the whole registry must equal the committed, sorted
+//    apps/web/lib/gpp/generated/gate-ratification-report.json (written by
+//    `pnpm --filter web build:gpp-shapes` since PR-3b-5; it replaced the
+//    PR-3a-4 snapshot so the report has one committed home).
 // 5. Determinism, in memory: decompile and lowerToDefinition give byte-identical
 //    output across two runs and across copies of the input whose object keys
 //    are reversed or shuffled by a seeded PRNG (no property-testing package is
 //    a dependency; plan §"Constraints"). PR-3b-5 extends this to generated
 //    TypeScript bytes (AC-DETERMINISM proper).
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { describe, expect, it } from "vitest";
@@ -39,6 +43,7 @@ import { lowerToDefinition } from "./emit";
 import { gppShapeDocumentSchema, type GppShapeDocument } from "./gpp-shape-schema";
 import { legacyDroppedFields, legacyProjection } from "./legacy";
 import { buildRatificationReport } from "./ratification-report";
+import { reversedKeys, seedFor, SHUFFLE_SALTS, shuffledKeys } from "./__fixtures__/key-order";
 
 type JsonObject = Record<string, unknown>;
 
@@ -103,53 +108,6 @@ function firstDifference(left: unknown, right: unknown, path = "$"): string | nu
   return Object.is(left, right) ? null : `${path}: ${JSON.stringify(left)} vs ${JSON.stringify(right)}`;
 }
 
-/** mulberry32: a small seeded PRNG, so a shuffle is reproducible from its seed. */
-function seededRandom(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** A deep copy whose object keys are re-inserted in the order `orderKeys` returns. Arrays keep their order. */
-function withKeyOrder<T>(value: T, orderKeys: (keys: string[]) => string[]): T {
-  if (Array.isArray(value)) return value.map((item) => withKeyOrder(item, orderKeys)) as T;
-  if (value && typeof value === "object") {
-    const copy: JsonObject = {};
-    for (const key of orderKeys(Object.keys(value))) copy[key] = withKeyOrder((value as JsonObject)[key], orderKeys);
-    return copy as T;
-  }
-  return value;
-}
-
-function reversedKeys<T>(value: T): T {
-  return withKeyOrder(value, (keys) => [...keys].reverse());
-}
-
-function shuffledKeys<T>(value: T, seed: number): T {
-  const random = seededRandom(seed);
-  return withKeyOrder(value, (keys) => {
-    const shuffled = [...keys];
-    for (let index = shuffled.length - 1; index > 0; index -= 1) {
-      const swap = Math.floor(random() * (index + 1));
-      [shuffled[index], shuffled[swap]] = [shuffled[swap], shuffled[index]];
-    }
-    return shuffled;
-  });
-}
-
-/** A per-definition seed from its id, so each shape gets a different but fixed shuffle. */
-function seedFor(id: string, salt: number): number {
-  let hash = 2166136261 ^ salt;
-  for (let index = 0; index < id.length; index += 1) hash = Math.imul(hash ^ id.charCodeAt(index), 16777619);
-  return hash >>> 0;
-}
-
-const SHUFFLE_SALTS = [1, 2, 3] as const;
 
 /** Bytes that depend on insertion order (JSON.stringify) and bytes that do not (canonicalJson). */
 function bytes(value: unknown): { ordered: string; canonical: string } {
@@ -253,9 +211,11 @@ describe("registry-wide suite: the ratification report", () => {
     expect(report.awaitingRatification).toEqual(report.governedStages.filter((row) => row.status !== "ratified"));
   });
 
-  it("matches the committed snapshot", async () => {
-    await expect(serializeStableJson(buildRatificationReport(ALL_DEFINITIONS))).toMatchFileSnapshot(
-      "__snapshots__/registry-roundtrip.ratification-report.json",
+  it("matches the committed generated report (apps/web/lib/gpp/generated/gate-ratification-report.json)", () => {
+    // PR-3b-5: the generator writes this file and `check:gpp-shapes` guards it;
+    // it replaced the PR-3a-4 snapshot, so the report has one committed home.
+    expect(readFileSync(join(__dirname, "..", "generated", "gate-ratification-report.json"), "utf8")).toBe(
+      serializeStableJson(buildRatificationReport(ALL_DEFINITIONS)),
     );
   });
 });
