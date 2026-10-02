@@ -30,7 +30,7 @@ import { toFailureResult } from "./build-review-handlers";
 
 type HandlerContext = Parameters<ToolPackHandler>[2];
 
-import { attestIdeateResearch } from "@/lib/build/attest-ideate-research";
+import { attestIdeateResearch } from "@/lib/build/record-ideate-research-receipt";
 export { attestIdeateResearch };
 
 async function reviewDesignDocInner(params: Record<string, unknown>, userId: string, context?: HandlerContext): Promise<ToolResult> {

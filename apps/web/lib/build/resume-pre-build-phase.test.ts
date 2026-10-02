@@ -59,7 +59,7 @@ vi.mock("@/lib/build/plan-to-build-transition", () => ({
   performPlanToBuildTransition: (...args: unknown[]) => performPlanToBuildTransitionMock(...args),
 }));
 const attestIdeateResearchMock = vi.fn();
-vi.mock("@/lib/build/attest-ideate-research", () => ({
+vi.mock("@/lib/build/record-ideate-research-receipt", () => ({
   attestIdeateResearch: (...args: unknown[]) => attestIdeateResearchMock(...args),
 }));
 

@@ -737,7 +737,7 @@ export async function resumePreBuildPhase(params: {
             // that. Re-attest from the design the reviewer already passed, then
             // try the transition once more; anything else stays a skip.
             if (isResearchReceiptGateBlock(outcome.reason) && hasDesignDoc(build.designDoc)) {
-              const { attestIdeateResearch } = await import("@/lib/build/attest-ideate-research");
+              const { attestIdeateResearch } = await import("@/lib/build/record-ideate-research-receipt");
               await attestIdeateResearch(buildId, build.designDoc, userId, null);
               const retried = await performPlanToBuildTransition({ buildId, userId });
               if (retried.kind === "advanced") {
