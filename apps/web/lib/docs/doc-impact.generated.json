@@ -1365,6 +1365,9 @@
       "docs/architecture/context-engineering-standards.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/lib/tak/tool-result-provenance.ts": [
+      "docs/architecture/context-engineering-standards.md"
+    ],
     "apps/web/lib/tak/tool-script.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md"
@@ -2954,6 +2957,7 @@
       "apps/web/lib/tak/compaction-digest.ts",
       "apps/web/lib/tak/context-economy-metrics.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
+      "apps/web/lib/tak/tool-result-provenance.ts",
       "apps/web/lib/tak/tool-script.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
       "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs",
