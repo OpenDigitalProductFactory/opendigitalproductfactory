@@ -15,7 +15,7 @@ import {
 } from "@/lib/tak/initiative-readiness-tool-grants";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-context";
-import { createInitiativeReviewTerminalToolPolicy } from "@/lib/tak/terminal-tool-policy";
+import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS } from "@/lib/tak/terminal-tool-policy";
 
 const artifactRefSchema = {
   type: "object",
@@ -271,12 +271,17 @@ async function resolveExternalInitiativeReviewBinding(
     return null;
   }
   const artifact = rawArtifact as Record<string, unknown>;
+  const isRepoBlob = artifact["kind"] === "repo-blob-at-commit"
+    && typeof artifact["repositoryFullName"] === "string"
+    && typeof artifact["commitSha"] === "string"
+    && typeof artifact["path"] === "string"
+    && typeof artifact["providerBlobId"] === "string";
+  // BI-926A7E90: a Build Studio design revision binds by its immutable id; the
+  // receipt schema's artifactRef for this kind carries only the revision id.
+  const isRevision = artifact["kind"] === "feature-build-revision"
+    && typeof artifact["revisionId"] === "string" && artifact["revisionId"].trim().length > 0;
   if (
-    artifact["kind"] !== "repo-blob-at-commit"
-    || typeof artifact["repositoryFullName"] !== "string"
-    || typeof artifact["commitSha"] !== "string"
-    || typeof artifact["path"] !== "string"
-    || typeof artifact["providerBlobId"] !== "string"
+    (!isRepoBlob && !isRevision)
     || (expectedCurrentBaselineId !== undefined
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
@@ -290,13 +295,15 @@ async function resolveExternalInitiativeReviewBinding(
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
       : {}),
     ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
-    artifactRef: {
-      kind: "repo-blob-at-commit",
-      repositoryFullName: artifact["repositoryFullName"],
-      commitSha: artifact["commitSha"],
-      path: artifact["path"],
-      providerBlobId: artifact["providerBlobId"],
-    },
+    artifactRef: isRevision
+      ? { kind: "feature-build-revision", revisionId: (artifact["revisionId"] as string).trim() }
+      : {
+        kind: "repo-blob-at-commit",
+        repositoryFullName: artifact["repositoryFullName"] as string,
+        commitSha: artifact["commitSha"] as string,
+        path: artifact["path"] as string,
+        providerBlobId: artifact["providerBlobId"] as string,
+      },
   };
 }
 
@@ -362,7 +369,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     if (dispositionError) return { success: false, error: "malformed-receipt", message: dispositionError };
     if (binding && findings.length > 0 && binding.artifactRef.kind === "repo-blob-at-commit") {
       const reads = await prisma.toolExecution.findMany({
-        where: { taskRunId: context?.taskRunId, toolName: "read_source_at_version", success: true },
+        where: { taskRunId: context?.taskRunId, toolName: { in: [...IMMUTABLE_PAGE_READER_TOOLS] }, success: true },
         orderBy: { createdAt: "asc" },
         select: { id: true, toolName: true, parameters: true, result: true, success: true, createdAt: true },
       });

@@ -6,7 +6,7 @@
 // without disconnecting anyone else. The whole-client revoke stays on the row.
 
 import { UserX } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { promptDialog } from "@/components/ui/Dialog";
@@ -19,12 +19,24 @@ import type { ClientPerson } from "@/lib/auth/oauth-client-people";
 import { formatTimestamp } from "@/lib/datetime";
 import { useT } from "@/lib/i18n/use-t";
 
-export function OAuthClientPeople({ clientId, clientName, onChanged }: { clientId: string; clientName: string; onChanged: () => void }) {
+export function OAuthClientPeople({
+  clientId,
+  clientName,
+  registeredAt,
+  onChanged,
+}: {
+  clientId: string;
+  clientName: string;
+  /** ISO time the registration was created; with the client id it tells same-named registrations apart (BI-287D3EFD). */
+  registeredAt: string;
+  onChanged: () => void;
+}) {
   const [people, setPeople] = useState<ClientPerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const t = useT("admin");
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
   function load() {
     startTransition(async () => {
@@ -37,6 +49,13 @@ export function OAuthClientPeople({ clientId, clientName, onChanged }: { clientI
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when the client changes
   useEffect(() => { setLoading(true); setNotice(null); load(); }, [clientId]);
+
+  // The panel renders below the whole keys table; bring it to the operator so
+  // the registration it names is the one they see (BI-287D3EFD).
+  useEffect(() => {
+    headingRef.current?.scrollIntoView({ block: "nearest" });
+    headingRef.current?.focus({ preventScroll: true });
+  }, [clientId]);
 
   async function revoke(person: ClientPerson) {
     const reason = await promptDialog({
@@ -105,8 +124,13 @@ export function OAuthClientPeople({ clientId, clientName, onChanged }: { clientI
   ];
 
   return (
-    <Surface as="section" level={2} padding="sm" rounded="md" className="mt-3" aria-label={t("oauthClientPeople.heading", { client: clientName })}>
-      <h3 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">{t("oauthClientPeople.heading", { client: clientName })}</h3>
+    <Surface as="section" level={2} padding="sm" rounded="md" className="mt-3" aria-label={t("oauthClientPeople.regionLabel", { client: clientName, clientId })}>
+      <h3 ref={headingRef} tabIndex={-1} className="text-sm font-semibold text-[var(--dpf-text)] focus:outline-none">
+        {t("oauthClientPeople.heading", { client: clientName })}
+      </h3>
+      <p className="mb-2 font-mono text-xs text-[var(--dpf-muted)]">
+        {t("oauthClientPeople.registration", { clientId, when: formatTimestamp(registeredAt, "") })}
+      </p>
       {notice ? <Notice variant={notice.kind} className="mb-2">{notice.message}</Notice> : null}
       <DataTable
         columns={columns}
@@ -114,7 +138,7 @@ export function OAuthClientPeople({ clientId, clientName, onChanged }: { clientI
         getRowKey={(row) => row.userId}
         loading={loading}
         dense
-        ariaLabel={t("oauthClientPeople.heading", { client: clientName })}
+        ariaLabel={t("oauthClientPeople.regionLabel", { client: clientName, clientId })}
         empty={<span>{t("oauthClientPeople.empty")}</span>}
       />
     </Surface>

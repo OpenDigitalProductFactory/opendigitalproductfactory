@@ -1,3 +1,4 @@
+import { immutableArtifactIdentity, repoBlobArtifactRef } from "@/lib/mcp-task-review-contract";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-source";
@@ -128,8 +129,10 @@ async function loadObjectiveMappingAdmissionSnapshot(args: {
   const baselineRows = parseBaselinePayloads(baselineActivities.map((entry) => entry.payload));
   const baseline = baselineRows ? currentBaseline(baselineRows) : null;
   const expectedBaselineId = packet.binding.expectedCurrentBaselineId ?? null;
+  const packetRepoArtifact = repoBlobArtifactRef(packet.binding.artifactRef);
   if (!baseline || !baseline.artifactRef || baseline.baselineId !== expectedBaselineId
-    || !exactArtifactRefMatches(baseline.artifactRef, packet.binding.artifactRef)) {
+    || !packetRepoArtifact
+    || !exactArtifactRefMatches(baseline.artifactRef, packetRepoArtifact)) {
     return { ...err("baseline-conflict"), reason: "baseline-conflict" };
   }
   const baselineRecordedAt = baselineActivities.find((entry) => {
@@ -258,8 +261,8 @@ export async function prepareObjectiveMappingSubmissionAdmission(args: {
     baselineRows: initial.data.baselineRows,
     currentBaseline: initial.data.baseline,
     currentArtifact: {
-      repositoryFullName: args.packet.binding.artifactRef.repositoryFullName,
-      path: args.packet.binding.artifactRef.path,
+      repositoryFullName: immutableArtifactIdentity(args.packet.binding.artifactRef).repositoryFullName,
+      path: immutableArtifactIdentity(args.packet.binding.artifactRef).path,
     },
     room: initial.data.room,
     verify: verifyHistoricalArtifact,

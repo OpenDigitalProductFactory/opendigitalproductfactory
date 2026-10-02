@@ -1219,6 +1219,7 @@
       "docs/testing/ci-evidence.md"
     ],
     "apps/web/lib/security/client-address.ts": [
+      "docs/install/cloud-single-vm.md",
       "docs/security/tool-evaluations/2026-09-29-cloudflare-tunnel.md"
     ],
     "apps/web/lib/security/safe-log.ts": [
@@ -3401,6 +3402,7 @@
       "scripts/seed-worktree-mcp.sh"
     ],
     "docs/install/cloud-single-vm.md": [
+      "apps/web/lib/security/client-address.ts",
       "docker-compose.edge-standalone.yml"
     ],
     "docs/install/edge-node-air-gapped-verification-report.md": [

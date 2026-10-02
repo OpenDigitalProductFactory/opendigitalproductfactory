@@ -1,3 +1,4 @@
+import { isImmutablePageReader } from "@/lib/tak/terminal-tool-policy";
 import "server-only";
 
 import { coworkerSelfTaskMandatedTools } from "@/lib/operate/scheduled-jobs/coworker-self-task-mandate";
@@ -144,7 +145,7 @@ export function resolveBoundInitiativeReviewBinding(
   }
   if (binding.writerToolName !== executingToolName) {
     if (
-      executingToolName === "read_source_at_version"
+      isImmutablePageReader(executingToolName)
       || executingToolName === "search_source_at_version"
     ) return null;
     throw new Error("The immutable initiative review writer tool does not match the executing tool.");

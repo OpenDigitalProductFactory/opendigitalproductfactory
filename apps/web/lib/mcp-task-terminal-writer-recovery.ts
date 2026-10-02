@@ -4,7 +4,7 @@ import { INITIATIVE_CORRECTABLE_ERRORS } from "./backlog/initiative-readiness/di
 import { remoteTaskRequestMatches } from "./mcp-task-capacity-contract";
 import type { ExistingRemoteTask } from "./mcp-task-submit-types";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
-import type { createInitiativeReviewTerminalToolPolicy } from "./tak/terminal-tool-policy";
+import { IMMUTABLE_PAGE_READER_TOOLS, type createInitiativeReviewTerminalToolPolicy } from "./tak/terminal-tool-policy";
 import type { PersistedTerminalReaderExecution } from "./mcp-task-terminal-writer-context";
 import { recoverTerminalWriterEscalation } from "./mcp-task-terminal-writer-escalation";
 import { parseTerminalWriterWait, type TerminalWriterWait } from "./mcp-task-replay-projection";
@@ -26,7 +26,7 @@ export async function persistedTerminalReaderExecutions(
   return prisma.toolExecution.findMany({
     where: {
       taskRunId,
-      toolName: "read_source_at_version",
+      toolName: { in: [...IMMUTABLE_PAGE_READER_TOOLS] },
     },
     orderBy: { createdAt: "asc" },
     select: {
