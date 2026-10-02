@@ -16,8 +16,8 @@ status: draft
 > Nothing here has been posted, discussed or filed outside DPF. Drafted 2026-10-01 for EP-B932453F /
 > BI-899C3844
 > (design spec `docs/superpowers/specs/2026-10-01-gpp-model-to-execution-design.md`, Part III and
-> Phase 6). The DPF reference implementation described below does not exist yet; Phase 2 (shadow
-> permits) is still unbuilt.
+> Phase 6). A DPF server-side reference implementation now exists in shadow mode (GPP Phase 2,
+> PRs #5899, #5900, #5901, #5913); no official-SDK prototype exists.
 
 ## Corrections to the design spec, Part III
 
@@ -389,13 +389,22 @@ observe-only mode, so no existing call starts failing until the operator chooses
 
 ### Reference Implementation
 
-Not yet available. Planned for the Open Digital Product Factory (DPF) MCP server, in DPF's Gated
-Permissions Process Phases 2 and 6. Handles take the form `gpp1.<permitId>.<keyId>.<mac>`, where
-the MAC is HMAC-SHA256 over the permit's claims. Claims include the admitted tools, an optional
-argument digest, validity, use limits, and a reference to a sealed decision record in a
-hash-chained ledger. Shadow (observe-only) verification comes first. Enforcement is promoted per
-tool, only for outward, authority and irreversible tools. Extensions Track also requires a
-prototype in an official MCP SDK, which is not yet planned.
+Server side, in shadow mode, in the Open Digital Product Factory (DPF) MCP server (GPP Phase 2,
+merged 2026-10-01/02):
+
+- Gate-minted permits for outward, authority and irreversible calls (#5899).
+- Handles of the form `gpp1.<permitId>.<keyId>.<mac>`, where the MAC is HMAC-SHA256 over the
+  permit's claims and the claims bind a server-computed digest of the call's canonical arguments
+  (#5900).
+- Per-binding enforcement with an empty enforced set at merge (#5901).
+- Atomic single-use consumption, the remediation envelope on result
+  `_meta["io.modelcontextprotocol/authorization"]`, and the minted handle on
+  `_meta["com.opendigitalproductfactory/authorization-handle"]` (#5913).
+
+The handle is carried on `tools/call` `_meta` under the key this draft proposes. The live install
+records verdicts without refusing. It records permits as unsigned until the signing key is
+provisioned, and lineage to the sealed decision ledger is checked but often unsealed. Extensions
+Track also requires a prototype in an official MCP SDK, which is not yet planned.
 
 ### Open Questions
 
