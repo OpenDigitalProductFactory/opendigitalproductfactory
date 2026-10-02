@@ -105,6 +105,41 @@ An HOA board or manager needs residents to report problems in the community: a b
 - Location is opt-in, browser-prompted, rounded to about 11 m, and stored only on the request.
 - A supporter's name and email are visible only to staff, as the original reporter's are.
 - The staff queue keeps its existing permission check. Its status actions stay with the current guard.
+- The queue's map link opens the install's own map. It never sends the location to an outside map site.
+
+### 5.1 Personal data: retention, lawful basis and residency (data review, 2026-10-02)
+
+The personal data this slice collects are listed below. All of them are on the request (`StorefrontInquiry`): the reporter in its existing fields, supporters in `formData.supporters`, and the rounded location.
+
+- the reporter's name, email and phone, as today;
+- each supporter's name, email and time;
+- an optional location rounded to four decimals.
+
+**Retention.**
+- **Default rule.** 365 days after a request is closed, a scheduled redaction erases the reporter's and supporters' names, emails and phone numbers and the location.
+- **What stays.** The request remains for maintenance history: reference, type, "Where is it?" text, status, dates and the supporter count.
+- **Open requests** keep their data, because it is in use.
+- **Changing the window.**
+  - The window comes from the platform retention mechanism ([data model stewardship runbook](../../architecture/data-model-stewardship-runbook.md), "Retention floors come from the obligations that bind this install").
+  - It can only grow, when an obligation the install records sets a longer floor.
+  - It is never shortened silently.
+- **Tags.** The rows themselves keep `retention=domain`, and the new fields are declared in the field-level asset registry.
+
+**Lawful basis.**
+- **Who decides.** The association operating the install is the controller and owns the decision (WWWD).
+- **What ships.** The HOA and condo archetypes add a processing-activity record (`DataProcessingActivity`, purpose `customer-support`, status `review`) for "handling maintenance reports about common property". It does not decide the basis on the association's behalf. It proposes:
+  - legitimate interest (GDPR Art. 6(1)(f)) for residents and public guests;
+  - contract (Art. 6(1)(b)) where the governing documents make maintenance an obligation to members.
+- **Before EU personal data is processed,** an administrator confirms or changes the basis there.
+- **Location** is shared only after the browser asks the person, and only on the report it was given for.
+
+**Residency.**
+- **Where it lives.** Reports are stored only in the install's own database, on the hardware or host the association chose. The platform runs one organization per install.
+- **No third party receives report data:**
+  - no map site, because the map link stays on the install;
+  - no geocoder, because the location comes from the device;
+  - no analytics.
+- **Records.** The processing-activity record states that residency (`residencyConstraints: ["install-local"]`, no transfers), so an EU install has the statement it needs.
 
 ## 6. Convergence
 

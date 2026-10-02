@@ -57,6 +57,14 @@ One PR. The tasks are ordered so each one leaves `main` working, but they ship t
 - `ServiceRequestRow` gains `whereText`, `mapHref` (when located) and `supporterCount`. The department filter falls back to `requestType`. The panel copy moves to i18n.
 - Test: row mapping (AC-HMR-QUEUE-1).
 
+### Task 5a: personal data retention and processing record (design §5.1)
+
+- A scheduled redaction erases the reporter and supporter names, emails and phones, and the location, on HOA and condo requests closed more than 365 days ago. The window is read through the platform retention floors, so it can only grow. The request, its type, "Where is it?" text, status, dates and supporter count remain.
+- Declare the new fields in the field-level asset registry.
+- The HOA and condo archetypes seed a `DataProcessingActivity` for maintenance reports: purpose `customer-support`, status `review`, proposed bases as in design §5.1, and `residencyConstraints: ["install-local"]`.
+- The queue's map link points at the install's own map.
+- Tests: redaction leaves open and recent requests alone, erases the listed fields only, and is idempotent; the processing record is seeded once per archetype.
+
 ### Task 6: docs, UX fit, gates
 
 - A user guide for resident reports and the status page; the request-queue doc gains HOA.
