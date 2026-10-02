@@ -10,6 +10,8 @@
 
 import { createHash } from "node:crypto";
 
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+
 import countries from "../data/countries.json" with { type: "json" };
 import type { ProjectionContractSpec } from "./projection-serialization";
 import { isRecord } from "@dpf/validators";
@@ -78,15 +80,6 @@ export const DEPLOYMENT_DECLARATION_PROJECTION_TEMPLATE: ProjectionContractSpec 
   retentionClass: "short",
 };
 
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    const object = value as Record<string, unknown>;
-    return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
 /** Canonical content digest over the allow-listed fields; the digest itself is excluded. */
 export function computeDeploymentDeclarationDigest(
   value: Omit<DeploymentDeclarationV1, "payloadDigest"> | DeploymentDeclarationV1,
@@ -96,7 +89,7 @@ export function computeDeploymentDeclarationDigest(
   for (const field of DEPLOYMENT_DECLARATION_FIELDS) {
     if (field !== "payloadDigest" && field in record) content[field] = record[field];
   }
-  return `sha256:${createHash("sha256").update(stableJson(content)).digest("hex")}`;
+  return `sha256:${createHash("sha256").update(canonicalJson(content)).digest("hex")}`;
 }
 
 export function validateDeploymentDeclarationV1(value: unknown): string[] {

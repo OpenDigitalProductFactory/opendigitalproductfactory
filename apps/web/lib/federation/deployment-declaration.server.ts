@@ -61,12 +61,12 @@ export async function readDeploymentCountrySharing(): Promise<DeploymentCountryS
   };
 }
 
-export type SetSharingResult = { ok: true; queued: number } | { ok: false; reason: "no-country" };
+export type SetSharingResult = { queued: number } | { refused: "no-country" };
 
 /** Turn sharing on or off, and queue the declaration or withdrawal on every upward link. */
 export async function setDeploymentCountrySharing(enabled: boolean, now = new Date()): Promise<SetSharingResult> {
   const countryCode = await organizationCountry();
-  if (enabled && !countryCode) return { ok: false, reason: "no-country" };
+  if (enabled && !countryCode) return { refused: "no-country" };
   const identity = await resolveFederationIdentity(prisma as unknown as FederationIdentityDb);
   const { record, violations } = buildDeploymentDeclaration({
     identity,
@@ -85,7 +85,7 @@ export async function setDeploymentCountrySharing(enabled: boolean, now = new Da
   for (const link of links) {
     await queueDeploymentDeclaration(prisma as unknown as DemandDeliveryDb, { link, record, now });
   }
-  return { ok: true, queued: links.length };
+  return { queued: links.length };
 }
 
 /** Deployment rows for the world view from installs that declare their country here. */

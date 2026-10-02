@@ -307,6 +307,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@dpf/integration-shared':
+        specifier: workspace:*
+        version: link:../integration-shared
       '@dpf/storefront-templates':
         specifier: workspace:*
         version: link:../storefront-templates

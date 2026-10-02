@@ -118,6 +118,7 @@
     "typecheck": "prisma generate && tsc --noEmit && tsc -p tsconfig.scripts.json --noEmit"
   },
   "dependencies": {
+    "@dpf/integration-shared": "workspace:*",
     "@dpf/storefront-templates": "workspace:*",
     "@dpf/validators": "workspace:*",
     "@prisma/adapter-pg": "^7.9.1",
