@@ -1,3 +1,4 @@
+import { immutableArtifactIdentity } from "@/lib/mcp-task-review-contract";
 import { prisma, type Prisma } from "@dpf/db";
 import { projectBacklogItemReadiness } from "./backlog/initiative-readiness/entry-adapter";
 import { loadInheritedInitiativeScope } from "./backlog/initiative-readiness/parent-scope-inheritance";
@@ -59,7 +60,7 @@ export async function loadInitiativeReviewOutcome(binding: InitiativeReviewBindi
   return {
     receiptId, gate: binding.gate, decision: String(receipt.decision),
     artifactRef: binding.artifactRef, readiness,
-    summary: `${binding.gate} receipt ${receiptId} persisted with decision=${String(receipt.decision)} for artifact ${binding.artifactRef.commitSha}. `
+    summary: `${binding.gate} receipt ${receiptId} persisted with decision=${String(receipt.decision)} for artifact ${immutableArtifactIdentity(binding.artifactRef).version}. `
       + `Implementation readiness: ${readiness.verdict}. `
       + (remaining.length ? remaining.join(" ") : "Recheck Workroom identity and authority at the implementation transition."),
   };

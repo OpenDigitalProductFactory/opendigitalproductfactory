@@ -31,7 +31,7 @@ import {
   coworkerEnvelopesAwaitingDecision,
   coworkerEnvelopesExpiredUnactioned,
 } from "@/lib/operate/metrics";
-import { parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { immutableArtifactIdentity, parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 
 import { attentionAuthorForAgent } from "../attribution";
 import {
@@ -81,13 +81,14 @@ function reviewBindingOf(
     (metadata as Record<string, unknown>).initiativeReviewBinding,
   );
   if (!binding) return undefined;
+  const identity = immutableArtifactIdentity(binding.artifactRef);
   return {
     gate: binding.gate,
     itemId: binding.itemId,
-    repositoryFullName: binding.artifactRef.repositoryFullName,
-    commitSha: binding.artifactRef.commitSha,
-    path: binding.artifactRef.path,
-    providerBlobId: binding.artifactRef.providerBlobId,
+    repositoryFullName: identity.repositoryFullName,
+    commitSha: identity.version,
+    path: identity.path,
+    providerBlobId: identity.expectedBlobId,
   };
 }
 
