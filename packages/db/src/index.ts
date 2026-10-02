@@ -31,6 +31,13 @@ export { WorkerClassification } from "../generated/client/client";
 // Document rendition kinds (BI-9D43CBEF): exported as a value so the app
 // composes from the generated enum instead of re-typing its members.
 export { DocumentRenditionKind } from "../generated/client/client";
+// Discovered external MCP tool policy (BI-8B7B2FE9): exported as values so the
+// app composes from the generated enums instead of re-typing their members.
+export {
+  McpToolEffect,
+  McpToolExecutionMode,
+  McpToolPolicyStatus,
+} from "../generated/client/client";
 // GPP Phase 2 permit vocabulary (BI-69415B68). Exported as values so the app
 // composes from the generated enums instead of re-typing their members.
 export {

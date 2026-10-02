@@ -2115,6 +2115,7 @@
       "publishedPortal": false,
       "anchors": [
         "mcp-tool-authorization-runbook",
+        "discovered-external-mcp-tools-are-default-deny-bi-8b7b2fe9",
         "protocol-version-window-mechanics-landed-contract-pending-ratification",
         "gpp-permit-handles-phase-2",
         "terminal-readiness-recovery-packets",
@@ -12669,6 +12670,7 @@
         "start-with-the-object-you-are-managing",
         "read-marketplace-readiness",
         "connect-and-verify",
+        "review-tools-a-service-discovers",
         "native-integration-previews",
         "troubleshooting-and-recovery",
         "what-to-watch"

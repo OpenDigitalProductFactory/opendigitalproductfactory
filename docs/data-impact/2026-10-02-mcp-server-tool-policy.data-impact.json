@@ -1,0 +1,153 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "McpServerTool rows, written by discoverMcpServerTools (apps/web/lib/tak/mcp-server-tools.ts) and reviewMcpServerTool (apps/web/lib/tak/mcp-tool-review.ts)",
+    "Read by resolveDiscoveredToolPolicy at listing (getAvailableTools), governed execution and the remote call; by capability inventory and the AI provider tool inventory",
+    "AuthorizationDecisionLog rows (actionKey mcp-tool-policy-review, and discovered-tool denials) record each decision"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: third-party tool descriptions/schemas and a Principal reference for the approver",
+    "dataSubjectRights": "Holds only a Principal reference already present in identity tables; no new content about a person.",
+    "reviewDisposition": "Policy columns follow the McpServerTool row, which is removed when the server stops reporting the tool or the server is deleted."
+  },
+  "migration": {
+    "name": "20261002190000_mcp_server_tool_policy",
+    "backfill": "Inline and fail-closed: every existing row lands quarantined via the column default; only the six bundled browser-use tools (server slug mcp-browser-use, exact tool names mapped in TOOL_TO_GRANTS) become approved. isEnabled is untouched. Guarded (IF NOT EXISTS / duplicate_object) and re-runnable; a re-run never changes a row an operator already decided. Verified by packages/db/src/mcp-server-tool-policy-migration.test.ts (shape always; empty, populated, disabled, renamed, annotation-bearing and re-run cases against Postgres when DATABASE_URL is set).",
+    "rollback": "Forward-only. Older code ignores the new columns and would list tools permissively again, so rollback means reverting the code, never dropping the columns."
+  },
+  "tests": [
+    "packages/db/src/mcp-server-tool-policy-migration.test.ts",
+    "apps/web/lib/tak/mcp-tool-policy.test.ts",
+    "apps/web/lib/tak/mcp-server-tools.test.ts",
+    "apps/web/lib/tak/mcp-tool-review.test.ts",
+    "apps/web/lib/mcp-tools-discovered-policy.test.ts",
+    "apps/web/lib/mcp-governed-execute-discovered.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:mcp-server-tool",
+      "prismaModel": "McpServerTool",
+      "lifecycleDisposition": "Existing model; new policy columns follow the row's lifecycle and add no retention obligation.",
+      "fields": [
+        {
+          "fieldId": "data:mcp-server-tool#policyStatus",
+          "resolution": "governed",
+          "reason": "Closed review state (McpToolPolicyStatus); default quarantined so omission never authorizes.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": [],
+          "fieldPolicy": "Written only by discovery (new -> quarantined; changed approved text -> quarantined; bundled -> approved) and by reviewMcpServerTool."
+        },
+        {
+          "fieldId": "data:mcp-server-tool#policyEffect",
+          "resolution": "governed",
+          "reason": "DPF-owned effect posture (McpToolEffect); remote annotations never set it.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        },
+        {
+          "fieldId": "data:mcp-server-tool#policyExecutionModes",
+          "resolution": "governed",
+          "reason": "Coworker modes the tool may appear in, derived from the effect at approval.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        },
+        {
+          "fieldId": "data:mcp-server-tool#policyGrantKey",
+          "resolution": "governed",
+          "reason": "Grant from the closed agent-grant vocabulary the acting coworker must hold.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        },
+        {
+          "fieldId": "data:mcp-server-tool#policyVersion",
+          "resolution": "governed",
+          "reason": "MCP_TOOL_POLICY_VERSION at approval; a stale version denies.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        },
+        {
+          "fieldId": "data:mcp-server-tool#approvedToolIdentity",
+          "resolution": "governed",
+          "reason": "Namespaced name the approval was granted for; a server/tool rename denies.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        },
+        {
+          "fieldId": "data:mcp-server-tool#approvedContentDigest",
+          "resolution": "governed",
+          "reason": "sha256 of the sanitized model-visible description + inputSchema the reviewer approved (absorbed from BI-49969E39).",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        },
+        {
+          "fieldId": "data:mcp-server-tool#approvedDescription",
+          "resolution": "governed",
+          "reason": "Snapshot of the approved description; the only text served to the model.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": [],
+          "fieldPolicy": "Third-party tool text; sanitized for hidden Unicode before any model or UI reads it."
+        },
+        {
+          "fieldId": "data:mcp-server-tool#approvedInputSchema",
+          "resolution": "governed",
+          "reason": "Snapshot of the approved inputSchema; the only schema served to the model.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        },
+        {
+          "fieldId": "data:mcp-server-tool#approvedByPrincipalId",
+          "resolution": "governed",
+          "reason": "Approver provenance: canonical Principal (FK, ON DELETE SET NULL).",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        },
+        {
+          "fieldId": "data:mcp-server-tool#approvedAt",
+          "resolution": "governed",
+          "reason": "Approval time.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        },
+        {
+          "fieldId": "data:mcp-server-tool#policyChangedAt",
+          "resolution": "governed",
+          "reason": "Last policy state change time.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        },
+        {
+          "fieldId": "data:mcp-server-tool#discoveredContentDigest",
+          "resolution": "governed",
+          "reason": "sha256 of the text most recently reported by the server, for change detection and review.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        },
+        {
+          "fieldId": "data:mcp-server-tool#discoveryHints",
+          "resolution": "governed",
+          "reason": "Remote MCP annotations stored verbatim as untrusted evidence; never read as policy.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:principal",
+      "prismaModel": "Principal",
+      "lifecycleDisposition": "Back-relation only (mcpServerToolsApproved); no column added to Principal.",
+      "fields": [
+        {
+          "fieldId": "data:principal#mcpServerToolsApproved",
+          "resolution": "not-applicable",
+          "reason": "Prisma back-relation for McpServerTool.approvedByPrincipalId; no storage on Principal.",
+          "provenance": "BI-8B7B2FE9",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}
