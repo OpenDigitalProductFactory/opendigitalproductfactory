@@ -596,6 +596,17 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-tool-surface.test.mjs"),
       node("scripts/check-tool-surface.mjs"),
     ], { inputs: ["code"] }),
+    // `capability` and `category` in skill frontmatter are closed sets stored as
+    // free-form strings. Invented values were written three times while authoring
+    // 14 skills; one reached a runtime UX ratchet before anything caught it.
+    // A pack skill's `category` groups the default-visible catalog on
+    // /platform/ai/skills, so an invented value permanently adds a group header to
+    // a page under a shrink-only words-on-arrival ratchet. The sibling `capability`
+    // field is NOT re-validated here — skill-capability-key-guard owns it.
+    guard("skill-pack-category", "Skill Pack Category", [
+      node("--test", "scripts/check-skill-pack-category.test.mjs"),
+      node("scripts/check-skill-pack-category.mjs"),
+    ]),
     guard("archetype-completeness-guard", "Archetype Completeness Guard", [
       node("--test", "scripts/check-archetype-completeness.test.mjs"),
       node("scripts/check-archetype-completeness.mjs"),
