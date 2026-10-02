@@ -137,6 +137,9 @@ services:
       # them through /api/build/<buildId>/evidence/<fileName> (auth-gated).
       # Read-only from the portal's side — only browser-use should write.
       - browser_evidence:/evidence:ro
+      # Install-managed map region packs (BI-814F86E1, DI-63D94E36B0B0): served
+      # by /api/map-assets from DPF_MAP_DATA_DIR. Never baked into the image.
+      - map_data:/var/lib/dpf/maps
       # Platform-managed backups (daily Postgres).
       # Host bind mount (NOT a Docker volume) so `docker compose down -v`,
       # `docker volume rm`, or worktree-induced compose re-labelling cannot
@@ -1073,6 +1076,7 @@ volumes:
   redis_data:
   dpf-source-code:
   browser_evidence:
+  map_data:
   # Service-account browser profiles (EP-BROWSER-DRIVE, spec §8.9). Holds
   # Chromium user-data-dirs whose cookie jars are impersonation-capable —
   # SECRET material, not ordinary evidence. Sidecar-only: never mounted into

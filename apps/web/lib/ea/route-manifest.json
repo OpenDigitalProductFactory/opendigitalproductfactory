@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 666,
+  "routeCount": 669,
   "routes": [
     {
       "routePath": "/",
@@ -1104,6 +1104,46 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/kernel/gate/route.ts"
+    },
+    {
+      "routePath": "/api/map-assets",
+      "kind": "route",
+      "segments": [
+        "api",
+        "map-assets"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/map-assets/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/map-assets/[packId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "map-assets",
+        "[packId]"
+      ],
+      "dynamicParams": [
+        "packId"
+      ],
+      "file": "apps/web/app/api/map-assets/[packId]/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/map-assets/runtime/[file]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "map-assets",
+        "runtime",
+        "[file]"
+      ],
+      "dynamicParams": [
+        "file"
+      ],
+      "file": "apps/web/app/api/map-assets/runtime/[file]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/mcp/call",

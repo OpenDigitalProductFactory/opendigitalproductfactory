@@ -62,6 +62,12 @@ const config = {
   // in production (the loader also falls back to the apps/web-src copy).
   outputFileTracingIncludes: {
     "**/*": ["./data/design-intelligence/**"],
+    // BI-814F86E1: the MapLibre worker and its shared chunk are read from the
+    // pinned package at runtime and served by /api/map-assets/runtime/[file].
+    "/api/map-assets/runtime/[file]": [
+      "./node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs",
+      "./node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs",
+    ],
   },
   // EP-0AF96937 Phase 5: the decision-governance surface moved from /wiki to
   // /coworker-decisions. Permanently redirect the old paths so existing
