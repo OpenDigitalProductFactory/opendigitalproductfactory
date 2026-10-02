@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 729,
+  "pageCount": 730,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -12059,6 +12059,19 @@
         "related"
       ]
     },
+    "docs/user-guide/customers/customer-map.md": {
+      "publicHref": "/user-guide/customers/customer-map/",
+      "portalHref": "/docs/customers/customer-map",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "open-the-map",
+        "sites-that-are-not-on-the-map",
+        "find-locations-automatically",
+        "related"
+      ]
+    },
     "docs/user-guide/customers/index.md": {
       "publicHref": "/user-guide/customers/",
       "portalHref": "/docs/customers/index",
@@ -12518,6 +12531,7 @@
         "choose-a-provider",
         "geography-hint",
         "using-the-free-nominatim-service",
+        "finding-map-locations-for-existing-sites",
         "setup-steps",
         "what-to-watch",
         "related"

@@ -105,6 +105,7 @@ export function GeographicSceneCanvas({
   model,
   label,
   onSelectEntity,
+  onPlacePoint = null,
   requiresBasemap = false,
   className,
   loadEngine = ensureGeographicEngine,
@@ -115,6 +116,8 @@ export function GeographicSceneCanvas({
   /** Accessible name for the map region. */
   label: string;
   onSelectEntity?: (entityId: string | null) => void;
+  /** While set, a click on the map reports that point instead of selecting (manual pin). */
+  onPlacePoint?: ((latitude: number, longitude: number) => void) | null;
   /** True when the view is meaningless without a street layer. */
   requiresBasemap?: boolean;
   className?: string;
@@ -127,9 +130,11 @@ export function GeographicSceneCanvas({
   const map = useRef<MapLibreMap | null>(null);
   const latestModel = useRef(model);
   const onSelect = useRef(onSelectEntity);
+  const onPlace = useRef(onPlacePoint);
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   latestModel.current = model;
   onSelect.current = onSelectEntity;
+  onPlace.current = onPlacePoint;
 
   const bounds = model.bounds;
   useEffect(() => {
@@ -174,8 +179,12 @@ export function GeographicSceneCanvas({
       map.current = instance;
       instance.on("load", () => pushData(instance));
       instance.on("click", "dpf-placements", (event) => {
+        if (onPlace.current) return;
         const entityId = event.features?.[0]?.properties?.entityId;
         onSelect.current?.(typeof entityId === "string" ? entityId : null);
+      });
+      instance.on("click", (event) => {
+        onPlace.current?.(event.lngLat.lat, event.lngLat.lng);
       });
       // Rebuild the style when the theme changes; sources come back empty, so refill them.
       observer = new MutationObserver(() => {
@@ -222,7 +231,7 @@ export function GeographicSceneCanvas({
         ref={container}
         data-testid="geographic-scene-canvas"
         hidden={fallback !== null}
-        className="h-80 w-full overflow-hidden rounded border border-[var(--dpf-border)]"
+        className={`h-80 w-full overflow-hidden rounded border border-[var(--dpf-border)] ${onPlacePoint ? "cursor-crosshair" : ""}`.trim()}
       />
     </div>
   );
