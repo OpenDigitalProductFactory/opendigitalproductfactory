@@ -34,6 +34,13 @@ import { isRecord } from "@/lib/shared/coerce";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
+import {
+  buildSandboxBuildCloneCommand,
+  buildSandboxBuildCloneRemoveCommand,
+  buildSandboxBuildCloneSyncCommand,
+  buildWorkspaceMode,
+} from "./build-clone";
+
 const WORKSPACE = "/workspace";
 /**
  * A git lock older than this is left over, never live: no sandbox git
@@ -217,6 +224,11 @@ const WORKTREE_SHARED_NODE_MODULES = [
  * `--force` on `worktree add` lets the same branch be (re)attached after a prior
  * crash left the registry pointing at a now-gone path.
  */
+/** Offline-first dependency install for a build tree, skipped once it has one. */
+function buildTreeInstallStep(buildId: string, path: string): string {
+  return `{ [ -d ${path}/node_modules/.pnpm ] || (cd ${path} && { CI=true pnpm install --offline --frozen-lockfile >/tmp/dpf-worktree-install-${buildId}.log 2>&1 || CI=true pnpm install --frozen-lockfile >>/tmp/dpf-worktree-install-${buildId}.log 2>&1; }); }`;
+}
+
 export function buildSandboxWorktreeAddCommand(
   buildId: string,
   branchRef: string,
@@ -421,6 +433,8 @@ function sandboxGitPrelude(): string {
     // repo exists — well before any checkout/worktree-add/commit runs.
     `git -C ${WORKSPACE} config --local core.hooksPath /dev/null >/dev/null 2>&1 || true`,
     buildSandboxStaleGitLockCleanupCommand(`${WORKSPACE}/.git`),
+    // Build clones (M1) have their own git dir under .builds/<id>/.git.
+    `for _dpf_g in ${WORKSPACE}/${BUILD_WORKTREE_ROOT_SEGMENT}/*/.git; do [ -d "$_dpf_g" ] && { ${buildSandboxStaleGitLockCleanupCommand('"$_dpf_g"')}; }; done; true`,
     ensureGlobalSafeDirectoryCommand(`"${WORKSPACE}"`),
     // BI-518B5F69: git's ownership check is per worktree path (and the shared
     // .git/worktrees/<id>), so the single /workspace exception does not cover
@@ -794,7 +808,16 @@ async function provisionBuildWorktree(args: {
   await execSandboxGit(
     `git -C ${WORKSPACE} branch --list "${branchName}" | grep -q . || git -C ${WORKSPACE} branch "${branchName}" "${clientBranch}"`,
   );
-  await execSandboxGit(buildSandboxWorktreeAddCommand(buildId, branchName));
+  const path = buildWorktreePath(buildId);
+  await execSandboxGit(buildWorkspaceMode() === "clone"
+    ? buildSandboxBuildCloneCommand({
+      path,
+      branchRef: branchName,
+      workspace: WORKSPACE,
+      install: buildTreeInstallStep(buildId, path),
+      commitInFlight: buildSandboxCommitInFlightWorkCommand(path),
+    })
+    : buildSandboxWorktreeAddCommand(buildId, branchName));
   console.log(
     `[build-branch] Provisioned isolated worktree for ${JSON.stringify(branchName)} at ${JSON.stringify(buildWorktreePath(buildId))}`,
   );
@@ -830,7 +853,12 @@ export async function ensureBuildWorktree(buildId: string): Promise<{ materializ
  */
 export async function teardownBuildWorktree(buildId: string): Promise<void> {
   if (!isBuildWorktreeIsolationEnabled()) return;
-  await execSandboxGit(buildSandboxWorktreeRemoveCommand(buildId)).catch((err) => {
+  // Clone mode records the branch in the shared repo before deleting the tree,
+  // so "keep the branch for audit/recovery" still holds (W1, M1).
+  const remove = buildWorkspaceMode() === "clone"
+    ? buildSandboxBuildCloneRemoveCommand(buildWorktreePath(buildId), `build/${buildId}`, WORKSPACE)
+    : buildSandboxWorktreeRemoveCommand(buildId);
+  await execSandboxGit(remove).catch((err) => {
     console.warn(
       `[build-branch] worktree teardown skipped (non-fatal): ${(err as Error).message?.slice(0, 200)}`,
     );
@@ -1038,6 +1066,8 @@ export async function promoteBuildBranch(buildId: string): Promise<void> {
 
   await execSandboxGit(
     [
+      // A build clone holds its branch until synced; merge what it committed.
+      buildSandboxBuildCloneSyncCommand(buildWorktreePath(buildId), branchName),
       `cd ${WORKSPACE}`,
       `git checkout "${identity.clientBranch}"`,
       `git merge --no-ff "${branchName}" -m "feat: promote ${branchName}"`,

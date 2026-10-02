@@ -23,6 +23,7 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "DPF Platform",
+    "logo": "./assets/dpf-logo.svg",
     "shortDescription": "DPF-native development and coworker skills",
     "longDescription": "Distributes DPF-native workflow skills and the DPF MCP connector contract that encode backlog governance, kernel decisions, worktree discipline, DCO PR flow, and evidence-first diagnostics.",
     "developerName": "Digital Product Factory",

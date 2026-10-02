@@ -21,6 +21,7 @@
     "./reference-model-projection": "./src/reference-model-projection.ts",
     "./archetype-value-stream-projection": "./src/archetype-value-stream-projection.ts",
     "./archetype-room-definition-projection": "./src/archetype-room-definition-projection.ts",
+    "./archetype-job-definition-projection": "./src/archetype-job-definition-projection.ts",
     "./discovery-attribution": "./src/discovery-attribution.ts",
     "./estate-scope": "./src/estate-scope.ts",
     "./service-ticket-types": "./src/service-ticket-types.ts",
@@ -39,6 +40,7 @@
     "./federated-work-contract": "./src/federated-work-contract.ts",
     "./federation-health": "./src/federation-health.ts",
     "./federated-operational-posture-contract": "./src/federated-operational-posture-contract.ts",
+    "./federated-deployment-declaration-contract": "./src/federated-deployment-declaration-contract.ts",
     "./federated-channel": "./src/federated-channel.ts",
     "./founder-shared-portfolio": "./src/founder-shared-portfolio.ts",
     "./projection-serialization": "./src/projection-serialization.ts",
@@ -117,6 +119,7 @@
     "typecheck": "prisma generate && tsc --noEmit && tsc -p tsconfig.scripts.json --noEmit"
   },
   "dependencies": {
+    "@dpf/integration-shared": "workspace:*",
     "@dpf/storefront-templates": "workspace:*",
     "@dpf/validators": "workspace:*",
     "@prisma/adapter-pg": "^7.9.1",

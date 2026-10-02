@@ -8,6 +8,12 @@ import { resolveIncidentProjectionSpec } from "@dpf/db/projection-egress";
 
 import { auth } from "@/lib/auth";
 import { getT } from "@/lib/i18n/t.server";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { DeploymentCountrySharingPanel } from "@/components/platform/federation-links/DeploymentCountrySharingPanel";
+import { readDeploymentCountrySharing } from "@/lib/federation/deployment-declaration.server";
+import { countryName } from "@/lib/footprint/market-footprint";
 import { can } from "@/lib/permissions";
 import { listNearbyFederationCandidates } from "@/lib/federation/nearby-candidates";
 import { summarizeNearbyPairingProjection } from "@/lib/federation/nearby-pairing";
@@ -46,7 +52,7 @@ export default async function FederationLinksPage() {
     redirect("/403");
   }
 
-  const t = await getT("shell");
+  const [t, locale, sharing] = await Promise.all([getT("shell"), getLocaleContext(), readDeploymentCountrySharing()]);
   const [links, edgeNodes, partnerAccounts, nearbyPairingSessions, introducedCandidates] = await Promise.all([
     prisma.federationLink.findMany({
       include: { principal: { select: { displayName: true } } },
@@ -227,6 +233,17 @@ export default async function FederationLinksPage() {
         </p>
       </div>
       <OrganizationJoinPanel candidates={joinCandidates} />
+      <MessagesProvider
+        locale={locale.language}
+        messages={{ deploymentSharing: namespaceMessages(locale.language, "deploymentSharing") }}
+      >
+        <DeploymentCountrySharingPanel
+          enabled={sharing.enabled}
+          countryCode={sharing.countryCode}
+          countryName={sharing.countryCode ? countryName(sharing.countryCode) : null}
+          recipients={sharing.recipients.map((recipient) => recipient.peerName)}
+        />
+      </MessagesProvider>
       <FederationLinksAdminClient
         rows={rows}
         nearbyCandidates={connectionCandidates}

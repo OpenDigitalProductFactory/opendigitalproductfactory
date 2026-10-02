@@ -16,6 +16,8 @@ import { RescueWorkspaceEntry } from "@/components/animal-welfare/RescueWorkspac
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
 import { resolveWorkspaceHomeContribution } from "@/lib/workspace-home/registry";
 import { loadWorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
+import { loadCustomerMap } from "@/lib/crm/customer-map.server";
+import { getT } from "@/lib/i18n/t.server";
 import { recordWorkspaceHomeResolution } from "@/lib/workspace-home/telemetry";
 import {
   isSimpleNavMode,
@@ -50,6 +52,16 @@ export default async function WorkspacePage() {
     archetypeRef?.name ?? null,
   );
   const restaurantShift = Boolean(twinPresentation?.restaurantFloor);
+
+  // BI-560128FB: homes whose archetype declares a customer-map slot link it to
+  // the customer map with counts, instead of adding a panel (DI-2D2929A12ABC).
+  const customerMapCounts =
+    workspaceHomeResolution.mode === "vertical" &&
+    workspaceHomeResolution.contribution.components.some((component) => component.key === "customer-map")
+      ? await Promise.all([loadCustomerMap(), getT("customerMap")]).then(([map, t]) =>
+          t("homeCounts", { placed: map.placedCount, missing: map.unplaced.length }),
+        )
+      : null;
 
   // BI-575F0046: counting active non-local providers reported a fresh install as
   // HAVING cloud AI the moment one was connected — while its clearance was
@@ -135,6 +147,7 @@ export default async function WorkspacePage() {
             <VerticalWorkspaceHome
               contribution={workspaceHomeResolution.contribution}
               data={platformHomeData}
+              customerMapCounts={customerMapCounts}
             />
           ) : (
             <PlatformWorkspaceHome

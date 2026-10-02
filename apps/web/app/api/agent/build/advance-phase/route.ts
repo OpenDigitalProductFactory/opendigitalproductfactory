@@ -16,6 +16,7 @@ import {
 import { checkBuildPhaseGate } from "@/lib/work-posture/verification-depth-gate";
 import { evaluateBuildStudioPlanAdvancementGate } from "@/lib/decision-perspective/build-studio-gate";
 import { resolvePlannedFilePaths } from "@/lib/decision-perspective/planned-file-paths";
+import { PLAN_TO_BUILD_PASS, refusePlanToBuild, transitionPlanToBuild } from "@/lib/build/plan-to-build-transition";
 
 export const dynamic = "force-dynamic";
 
@@ -107,74 +108,101 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   const advanceBrief = build.brief as { fixContext?: import("@/lib/feature-build-types").FixContext } | null;
   const advancePlan = (build.plan as Record<string, unknown> | null) ?? {};
-  const gate = await checkBuildPhaseGate({
-    buildId,
-    from: currentPhase,
-    to: targetPhase,
-    evidence: {
-      kind: build.kind,
-      processSize: (advancePlan.processSize as string | undefined) ?? "medium",
-      fixContext: advanceBrief?.fixContext,
-      designDoc: build.designDoc,
-      designReview: build.designReview,
-      happyPathState: normalizeHappyPathState(advancePlan.happyPathState ?? null),
-      buildPlan: build.buildPlan,
-      planReview: build.planReview,
-      verificationOut: build.verificationOut,
-      acceptanceMet: build.acceptanceMet,
-      uxTestResults: build.uxTestResults,
-      uxVerificationStatus: build.uxVerificationStatus,
-    },
-  });
-
-  if (!gate.allowed) {
-    return NextResponse.json(
-      { error: gate.reason ?? "Phase gate check failed", gate },
-      { status: 422 },
-    );
-  }
-
-  if (currentPhase === "plan" && targetPhase === "build") {
-    const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
-      db: prisma,
-      build: {
-        buildId: build.buildId,
-        title: build.title,
-        phase: currentPhase,
-        planReview: build.planReview as ReviewResult | null,
-        deliberationSummary: build.deliberationSummary as BuildDeliberationSummary | null,
+  // Structural phase gate. One body, used by plan→build through
+  // transitionPlanToBuild and by every other transition below.
+  const evaluateStructuralGate = async (): Promise<Response | null> => {
+    const gate = await checkBuildPhaseGate({
+      buildId,
+      from: currentPhase,
+      to: targetPhase,
+      evidence: {
+        kind: build.kind,
+        processSize: (advancePlan.processSize as string | undefined) ?? "medium",
+        fixContext: advanceBrief?.fixContext,
+        designDoc: build.designDoc,
+        designReview: build.designReview,
+        happyPathState: normalizeHappyPathState(advancePlan.happyPathState ?? null),
+        buildPlan: build.buildPlan,
+        planReview: build.planReview,
+        verificationOut: build.verificationOut,
+        acceptanceMet: build.acceptanceMet,
+        uxTestResults: build.uxTestResults,
+        uxVerificationStatus: build.uxVerificationStatus,
       },
-      triggeredByUserId: user.id ?? null,
-      // BI-70280889: hand the gate the paths this phase intends to touch so the
-      // impacted acumens are actually consulted. Fails open to [] — the gate
-      // then behaves exactly as it did before.
-      plannedFilePaths: await resolvePlannedFilePaths({
-        db: prisma,
-        buildId: build.buildId,
-        buildRowId: build.id,
-      }),
     });
-    if (!decisionGate.allowed) {
+
+    if (!gate.allowed) {
       return NextResponse.json(
-        {
-          error: decisionGate.operatorMessage,
-          decisionInteraction: {
-            interactionId: decisionGate.interactionId,
-            outcomeType: decisionGate.evaluation.outcomeType,
-            confidenceScore: decisionGate.evaluation.confidenceScore,
-            coverageGap: decisionGate.evaluation.coverageGap,
-            principleConflict: decisionGate.evaluation.principleConflict,
-          },
-        },
+        { error: gate.reason ?? "Phase gate check failed", gate },
         { status: 422 },
       );
     }
-  }
+    return null;
+  };
 
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: { phase: targetPhase },
-  });
+  if (currentPhase === "plan" && targetPhase === "build") {
+    // GPP C-8 (PR-F): the gate order and the phase write live in the shared
+    // transition; this path's gates are declared in
+    // PLAN_TO_BUILD_GATE_PROFILES["advance-phase-route"]. Responses are unchanged.
+    const transition = await transitionPlanToBuild<"advance-phase-route", Response>({
+      buildId,
+      path: "advance-phase-route",
+      steps: {
+        "structural-phase-gate": async () => {
+          const refusal = await evaluateStructuralGate();
+          return refusal ? refusePlanToBuild(refusal) : PLAN_TO_BUILD_PASS;
+        },
+        "wwmd-plan-advancement": async () => {
+          const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
+            db: prisma,
+            build: {
+              buildId: build.buildId,
+              title: build.title,
+              phase: currentPhase,
+              planReview: build.planReview as ReviewResult | null,
+              deliberationSummary: build.deliberationSummary as BuildDeliberationSummary | null,
+            },
+            triggeredByUserId: user.id ?? null,
+            // BI-70280889: hand the gate the paths this phase intends to touch so the
+            // impacted acumens are actually consulted. Fails open to [] — the gate
+            // then behaves exactly as it did before.
+            plannedFilePaths: await resolvePlannedFilePaths({
+              db: prisma,
+              buildId: build.buildId,
+              buildRowId: build.id,
+            }),
+          });
+          if (!decisionGate.allowed) {
+            return refusePlanToBuild(
+              NextResponse.json(
+                {
+                  error: decisionGate.operatorMessage,
+                  decisionInteraction: {
+                    interactionId: decisionGate.interactionId,
+                    outcomeType: decisionGate.evaluation.outcomeType,
+                    confidenceScore: decisionGate.evaluation.confidenceScore,
+                    coverageGap: decisionGate.evaluation.coverageGap,
+                    principleConflict: decisionGate.evaluation.principleConflict,
+                  },
+                },
+                { status: 422 },
+              ),
+            );
+          }
+          return PLAN_TO_BUILD_PASS;
+        },
+      },
+    });
+    if (transition.kind === "refused") return transition.refusal;
+  } else {
+    const structuralRefusal = await evaluateStructuralGate();
+    if (structuralRefusal) return structuralRefusal;
+
+    await prisma.featureBuild.update({
+      where: { buildId },
+      data: { phase: targetPhase },
+    });
+  }
 
   // Best-effort: emit event so the UI updates in real time
   try {

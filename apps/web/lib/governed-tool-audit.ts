@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { prisma, type GppPermitVerdict } from "@dpf/db";
 
 import type { AlignmentGateDecision } from "./tak/alignment-tool-gate";
 import type { PreconditionOrderingDecision } from "./tak/precondition-ordering-types";
@@ -47,6 +47,8 @@ export async function writeGovernedToolAudit(data: {
   preconditionDecision?: PreconditionOrderingDecision | null;
   /** The approval this run spent, or the one it is parked on (BI-12E5DD91). */
   envelopeId?: string | null;
+  /** GPP Phase 2 PR-C: the shadow permit verdict for an O/A/I call. Omitted for R/W calls. */
+  gppPermit?: { permitId: string | null; verdict: GppPermitVerdict } | null;
 }): Promise<{ id: string } | null> {
   const auditClass = deriveAuditClassForTool(data.toolName);
   const isMetricsOnly = auditClass === "metrics_only";
@@ -80,12 +82,22 @@ export async function writeGovernedToolAudit(data: {
     success: data.result.success, executionMode: data.source,
     routeContext: data.context?.routeContext ?? null, durationMs: data.durationMs,
     auditClass, capabilityId: deriveCapabilityId(data.toolName),
+    // The elapsed time is the `durationMs` column above. It is deliberately NOT
+    // folded into `summary`: the summary is read as a stable identity for the row
+    // (the pattern observer substring-matches it, the operations map and evidence
+    // search display it), and embedding wall-clock gave two otherwise identical
+    // calls two different summaries — which flaked AC-ENFORCE's deep-equal on
+    // 0ms vs 1ms. One fact, one column.
     summary: isMetricsOnly
-      ? `${data.toolName}: ${data.result.success ? "ok" : "failed"}${data.durationMs ? ` (${data.durationMs}ms)` : ""}`
+      ? `${data.toolName}: ${data.result.success ? "ok" : "failed"}`
       : null,
     apiTokenId: data.context?.apiTokenId ?? null, skillId: data.context?.skillId ?? null,
     delegationChainId: data.context?.delegationChainId ?? null,
     envelopeId: data.envelopeId ?? pendingEnvelopeId(data.result),
+    ...(data.gppPermit ? {
+      gppPermitVerdict: data.gppPermit.verdict,
+      ...(data.gppPermit.permitId ? { gppPermitRef: data.gppPermit.permitId } : {}),
+    } : {}),
   };
   try {
     const created = createOverride

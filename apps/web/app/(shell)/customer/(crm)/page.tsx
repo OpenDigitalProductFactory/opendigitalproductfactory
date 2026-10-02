@@ -24,6 +24,16 @@ import {
   classifyAccountAttention,
   sortAccountsByAttention,
 } from "@/lib/crm/account-attention";
+import { CustomerMapView } from "@/components/customer/map/CustomerMapView";
+import { GeocodingAdminPanel } from "@/components/customer/map/GeocodingAdminPanel";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { auth } from "@/lib/auth";
+import { loadCustomerMap } from "@/lib/crm/customer-map.server";
+import { readGeocodingSettings } from "@/lib/geocoding/backfill.server";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
+import { getT } from "@/lib/i18n/t.server";
+import { can } from "@/lib/permissions";
+import { namespaceMessages } from "@dpf/i18n";
 import {
   PlatformGridSection,
   parseSurfaceDataScope,
@@ -37,6 +47,8 @@ export default async function CustomerPage({
 }) {
   const sp = await searchParams;
   const view = parseSurfaceView(sp?.view);
+  // BI-560128FB: `?view=map` shows customer sites on a map above the account list.
+  const mapView = sp?.view === "map";
   const dataScope = parseSurfaceDataScope(sp?.dataScope);
   // Kick off the retain rollup in parallel with the main batch (avoids a serial round-trip).
   const retainPromise = getWorkspaceRetainMetrics();
@@ -216,6 +228,13 @@ export default async function CustomerPage({
     vocab,
   );
   const customerSurface = resolveCustomerSurface(archetypeId, []);
+  const [session, mapT, locale] = await Promise.all([auth(), getT("customerMap"), getLocaleContext()]);
+  const user = session?.user;
+  const allowed = (capability: Parameters<typeof can>[1]) =>
+    user ? can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, capability) : false;
+  const [customerMap, geocoding] = mapView
+    ? await Promise.all([loadCustomerMap(), allowed("manage_platform") ? readGeocodingSettings() : null])
+    : [null, null];
 
   return (
     <div>
@@ -240,16 +259,42 @@ export default async function CustomerPage({
       {/* Owner-first: what guest work needs you today, before the CRM. */}
       <OwnerFirstSummaryBand summary={ownerSummary} density={simple ? "simple" : "full"} />
 
+      <p className="mb-3 text-sm">
+        <Link href={mapView ? "/customer" : "/customer?view=map"} className="text-[var(--dpf-accent)] underline">
+          {mapView ? mapT("hideMap") : mapT("showMap")}
+        </Link>
+      </p>
+      {customerMap ? (
+        <MessagesProvider
+          locale={locale.language}
+          messages={{
+            customerMap: namespaceMessages(locale.language, "customerMap"),
+            geographic: namespaceMessages(locale.language, "geographic"),
+          }}
+        >
+          <div className="mb-6 space-y-4">
+            <CustomerMapView map={customerMap} canEdit={allowed("operate_customer")} />
+            {geocoding ? (
+              <GeocodingAdminPanel
+                config={geocoding.config}
+                opencageKeyConfigured={geocoding.opencageKeyConfigured}
+                status={geocoding.status}
+              />
+            ) : null}
+          </div>
+        </MessagesProvider>
+      ) : null}
+
       {/* CRM structure — revenue, duplicates, pipeline grid, and the account list —
           is the professional detail behind the daily work. Full mode keeps it one
           click away; Simple mode drops it to reduce body content (BI-3BCAF95F). A
           grid/surface deep-link (`?view=`) still renders, opened, so the demotion
           never strands that navigation. */}
-      {(!simple || view) && (
+      {(!simple || view || mapView) && (
         <OwnerFirstDisclosure
           summary={customerSurface.detailSummary}
           hint={customerSurface.detailHint}
-          defaultOpen={Boolean(view)}
+          defaultOpen={Boolean(view) || mapView}
         >
           <RevenueCockpit summary={revenueSummary} />
 

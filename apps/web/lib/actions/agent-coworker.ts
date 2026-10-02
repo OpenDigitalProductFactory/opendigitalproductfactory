@@ -1,7 +1,7 @@
 "use server";
 import { randomUUID } from "node:crypto";
+import { buildAttachmentContext } from "@/lib/tak/attachment-context";
 import { prisma } from "@dpf/db";
-import { sanitizeUntrustedText } from "@dpf/validators";
 import { validateMessageInput, type AgentMessageRow } from "@/lib/agent-coworker-types";
 import { generateCannedResponse } from "@/lib/agent-routing";
 import { loadOpeningBriefingPayload } from "@/lib/agent/opening-briefing-loader";
@@ -469,35 +469,10 @@ export async function sendMessage(input: {
     orderBy: { createdAt: "asc" },
     select: { fileName: true, parsedContent: true, mimeType: true },
   });
-  let attachmentContext: string | null = null;
-  // Images ride as vision content blocks (below), not text — excluded here so
-  // they don't surface as "uploaded but content not available".
-  const docAttachments = threadAttachments.filter((att) => !att.mimeType?.startsWith("image/"));
-  if (docAttachments.length > 0) {
-    const summaries = docAttachments.map((att) => {
-      const parsed = att.parsedContent as Record<string, unknown> | null;
-      if (!parsed) return `- ${att.fileName} (uploaded but content not available)`;
-      const summary = parsed.summary ?? "";
-      const columns = Array.isArray(parsed.columns) ? `\n  Columns: ${(parsed.columns as string[]).join(", ")}` : "";
-      // Include sample data rows for spreadsheets
-      let sampleData = "";
-      if (Array.isArray(parsed.sampleRows) && (parsed.sampleRows as string[][]).length > 0) {
-        const rows = parsed.sampleRows as string[][];
-        const header = Array.isArray(parsed.columns) ? (parsed.columns as string[]).join(" | ") : "";
-        const dataLines = rows.map((r) => r.join(" | ")).join("\n    ");
-        sampleData = header ? `\n  Data:\n    ${header}\n    ${dataLines}` : `\n  Data:\n    ${dataLines}`;
-      }
-      const text = typeof parsed.fullText === "string" ? `\n  Content: ${(parsed.fullText as string).slice(0, 2000)}` : "";
-      return `- ${att.fileName}: ${summary}${columns}${sampleData}${text}`;
-    });
-    attachmentContext = sanitizeUntrustedText([ // stored raw; cleaned for the model (BI-7AD0DA3D)
-      "",
-      "FILE UPLOADS — THE USER HAS UPLOADED FILES. THEIR CONTENT IS BELOW.",
-      "You CAN see this data. Do NOT say you cannot read files. Use this data to answer the user's question.",
-      "",
-      ...summaries,
-    ].join("\n")).text;
-  }
+  // Images are injected as vision content blocks (below), not as text. Each
+  // document's content is fenced as data the file cannot forge, with hidden
+  // Unicode removed (BI-18FAC854).
+  const attachmentContext = buildAttachmentContext(threadAttachments);
 
   // If the message's attachment is an image, build a vision content block from
   // it (downscaled base64 data URL). Documents stay on the text path above;

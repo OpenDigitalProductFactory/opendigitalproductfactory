@@ -68,6 +68,7 @@ import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
 import { buildIsDelegated, defaultBuildStrategy } from "./lib/local-integration-ci.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
+  admittedLeaseTtlMs,
   authoritySafetyMarginMs,
   superviseLeaseRun,
 } from "./lib/lease-supervisor.mjs";
@@ -2349,11 +2350,7 @@ async function main() {
   for (const [signal, handler] of Object.entries(runSignalHandlers)) process.once(signal, handler);
   let supervised;
   try {
-    const admittedTtlMs = Math.max(
-      1,
-      (Number.isFinite(Date.parse(expiresAt)) ? Date.parse(expiresAt) : Date.now() + leaseTtlMs)
-        - Date.now(),
-    );
+    const admittedTtlMs = admittedLeaseTtlMs(expiresAt, leaseTtlMs);
     supervised = await superviseLeaseRun({
       ttlMs: admittedTtlMs,
       expiresAt,

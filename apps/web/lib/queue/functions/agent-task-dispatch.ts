@@ -28,7 +28,7 @@ export const agentTaskDispatch = jobs.createFunction(
       const now = new Date();
       if (now.getUTCMinutes() >= 5) return { skipped: true };
       const { reconcileAllCoworkerSelfTasks } = await import(
-        "@/lib/operate/scheduled-jobs/coworker-self-tasks"
+        "@/lib/operate/scheduled-jobs/coworker-self-task-sweep"
       );
       return reconcileAllCoworkerSelfTasks();
     });

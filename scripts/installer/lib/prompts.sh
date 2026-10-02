@@ -7,8 +7,8 @@
 #                             Honors --headless / DPF_HEADLESS=1 (uses default).
 #   dpf_default_value       - prompt with default value; sets DPF_REPLY
 #   dpf_random_secret_hex   - emit a hex secret (openssl, falling back to
-#                             python3.secrets, falling back to a clearly
-#                             marked dev-grade secret)
+#                             python3.secrets, then /dev/urandom, then a
+#                             clearly marked dev-grade secret)
 #   dpf_random_secret_b64   - emit a base64 secret (same fallback chain)
 #   dpf_env_ensure_secret_hex - give an env key a hex secret only when it has
 #                             none (never rotates an existing value)
@@ -67,10 +67,32 @@ dpf_random_secret_hex() {
     openssl rand -hex "$bytes"
   elif command -v python3 >/dev/null 2>&1; then
     python3 -c "import secrets; print(secrets.token_hex($bytes))"
+  elif _dpf_urandom_hex "$bytes"; then
+    :
   else
     # Last resort; clearly marked so a grep over .env catches dev-grade secrets.
     echo "dpf-dev-secret-$(date +%s)-NOT-FOR-PRODUCTION"
   fi
+}
+
+# /dev/urandom fallback for hosts with neither openssl nor python3 (a minimal
+# container, for one: BI-8EE3D5E9). POSIX od/head/base64 only. Prints the
+# secret and returns 0 only when it has exactly the expected length, so a
+# missing tool falls through to the next branch instead of emitting a short key.
+_dpf_urandom_hex() {
+  local bytes="$1" out
+  [ -r /dev/urandom ] && command -v od >/dev/null 2>&1 || return 1
+  out=$(od -An -tx1 -N"$bytes" /dev/urandom 2>/dev/null | tr -d ' \n') || return 1
+  [ "${#out}" -eq $((bytes * 2)) ] || return 1
+  printf '%s\n' "$out"
+}
+
+_dpf_urandom_b64() {
+  local bytes="$1" out
+  [ -r /dev/urandom ] && command -v head >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1 || return 1
+  out=$(head -c "$bytes" /dev/urandom 2>/dev/null | base64 2>/dev/null | tr -d '\n') || return 1
+  [ "${#out}" -eq $(( (bytes + 2) / 3 * 4 )) ] || return 1
+  printf '%s\n' "$out"
 }
 
 # Generate a random base64 secret. 32 bytes = 44 base64 chars by default.
@@ -81,6 +103,8 @@ dpf_random_secret_b64() {
     openssl rand -base64 "$bytes"
   elif command -v python3 >/dev/null 2>&1; then
     python3 -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes($bytes)).decode())"
+  elif _dpf_urandom_b64 "$bytes"; then
+    :
   else
     echo "dpf-dev-secret-$(date +%s)-NOT-FOR-PRODUCTION"
   fi

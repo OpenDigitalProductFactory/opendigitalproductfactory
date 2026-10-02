@@ -1,0 +1,10 @@
+{
+  "drain": {
+    "waiting": "Waiting for running work to finish before installing: {$waited} of {$limit} min. New work is paused.",
+    "waitingNoLimit": "Waiting for running work to finish before installing: {$waited} min. New work is paused.",
+    "awaitingOperator": "Work is still running after {$waited} min. New work stays paused. Keep waiting, force the upgrade now, or abort it.",
+    "keepWaiting": "Keep waiting",
+    "keepWaitingLabel": "Keep waiting for upgrade run {$runId}",
+    "keepWaitingFailed": "Keep waiting failed"
+  }
+}

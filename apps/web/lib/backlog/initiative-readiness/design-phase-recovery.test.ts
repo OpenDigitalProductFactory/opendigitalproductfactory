@@ -72,3 +72,34 @@ describe("designPhaseReviewDecision", () => {
     expect(designPhaseReviewDecision(decision)?.unmet.map((entry) => entry.code)).toEqual(["SPEC_APPROVAL_REQUIRED"]);
   });
 });
+
+// BI-D9DECD1B: the archetype reviews are owed at IMPLEMENTATION and the claim
+// issues their packets from that decision. The OAuth guard used to rebuild every
+// non-design writer from the completion decision, so the claim's own packets
+// were refused as "changed" and no archetype-profile item could reach
+// implementation (BI-246AC135, WC-62AA177F, 2026-10-02).
+describe("archetype review routing", () => {
+  const archetype = (target: "implementation" | "completion") => ({
+    ...completion([
+      readinessRequirement({ code: "ARCHETYPE_PROVISIONING_INCOMPLETE", state: "missing", accountableRole: "archetype-steward" }),
+      readinessRequirement({ code: "ARCHETYPE_COMPLETENESS_FAILED", state: "missing", accountableRole: "archetype-steward" }),
+      readinessRequirement({ code: "REVIEW_REQUIRED", state: "missing", accountableRole: "security-reviewer" }),
+    ]),
+    target,
+  });
+
+  it("validates an archetype review against the implementation decision that owes it", () => {
+    const terminal = completion([readinessRequirement({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" })]);
+    const decision = decisionForIndependentReview("record_initiative_archetype_review", {
+      implementation: archetype("implementation"),
+      completion: terminal,
+    });
+    expect(decision?.target).toBe("implementation");
+    expect(decision?.unmet.map((entry) => entry.code)).toEqual(["ARCHETYPE_PROVISIONING_INCOMPLETE", "ARCHETYPE_COMPLETENESS_FAILED"]);
+  });
+
+  it("falls back to the completion decision once implementation no longer owes them", () => {
+    const terminal = archetype("completion");
+    expect(decisionForIndependentReview("record_initiative_archetype_review", { implementation: completion([]), completion: terminal })).toBe(terminal);
+  });
+});

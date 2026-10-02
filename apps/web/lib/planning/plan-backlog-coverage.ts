@@ -1,3 +1,7 @@
+import { projectCurrentScopeBaselineTraceability, readPlanDeliveryScope, type PlanDeliveryScope } from "./plan-coverage-delivery-scope";
+export { projectCurrentScopeBaselineTraceability } from "./plan-coverage-delivery-scope";
+import type { BoundWorkShapeDb } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+
 import { prisma } from "@dpf/db";
 
 import { resolveRepositoryArtifact, type InitiativeArtifactRef } from "@/lib/backlog/initiative-readiness";
@@ -28,7 +32,8 @@ export type PlanBacklogDeliverableV2 = PlanBacklogDeliverable & {
 };
 
 export type PlanBacklogCoverageReceipt = {
-  schemaVersion?: 1 | 2;
+  schemaVersion?: 1 | 2 | 3;
+  deliveryScope?: PlanDeliveryScope;
   planPath: string;
   planArtifactRef?: {
     kind: "repo-blob-at-commit";
@@ -51,6 +56,8 @@ type CoverageBacklogItem = {
   id: string;
   itemId: string;
   effortSize: string | null;
+  title?: string | null;
+  body?: string | null;
   type?: string | null;
   source?: string | null;
   workType?: string | null;
@@ -194,7 +201,7 @@ export function validatePlanBacklogCoverage(args: {
 }
 
 export type PlanBacklogCoverageReceiptValidation =
-  | { ok: true; schemaVersion: 1 | 2; decision: PlanBacklogCoverageDecision; mappedItemIds: string[] }
+  | { ok: true; schemaVersion: 1 | 2 | 3; decision: PlanBacklogCoverageDecision; mappedItemIds: string[] }
   | {
     ok: false;
     code:
@@ -231,40 +238,6 @@ export type PlanTraceabilityContext = {
 
 type ScopeBaselineRow = { payload: unknown };
 
-export function projectCurrentScopeBaselineTraceability(rows: ScopeBaselineRow[]): {
-  baselineId: string;
-  artifactDigest: string;
-  objectiveIds: string[];
-  acceptanceIds: string[];
-} | null {
-  const parsed = rows.flatMap(({ payload }) => {
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
-    const row = payload as Record<string, unknown>;
-    if (typeof row.baselineId !== "string" || typeof row.artifactDigest !== "string"
-      || (row.supersedesBaselineId !== null && typeof row.supersedesBaselineId !== "string")
-      || !Array.isArray(row.objectiveStatements) || !Array.isArray(row.acceptanceStatements)) return [];
-    const objectiveIds = row.objectiveStatements.flatMap((entry) => entry && typeof entry === "object"
-      && typeof (entry as Record<string, unknown>).objectiveId === "string"
-      ? [(entry as Record<string, string>).objectiveId]
-      : []);
-    const acceptanceIds = row.acceptanceStatements.flatMap((entry) => entry && typeof entry === "object"
-      && typeof (entry as Record<string, unknown>).acceptanceId === "string"
-      ? [(entry as Record<string, string>).acceptanceId]
-      : []);
-    if (objectiveIds.length !== row.objectiveStatements.length || acceptanceIds.length !== row.acceptanceStatements.length) return [];
-    return [{
-      baselineId: row.baselineId,
-      supersedesBaselineId: row.supersedesBaselineId as string | null,
-      artifactDigest: row.artifactDigest,
-      objectiveIds,
-      acceptanceIds,
-    }];
-  });
-  if (parsed.length !== rows.length) return null;
-  const superseded = new Set(parsed.map((entry) => entry.supersedesBaselineId).filter(Boolean));
-  const heads = parsed.filter((entry) => !superseded.has(entry.baselineId));
-  return heads.length === 1 ? heads[0]! : null;
-}
 
 export function validatePlanBacklogCoverageReceipt(args: {
   receipt: PlanBacklogCoverageReceipt;
@@ -273,12 +246,14 @@ export function validatePlanBacklogCoverageReceipt(args: {
   currentPlanDigest: string;
   traceabilityContext?: PlanTraceabilityContext;
   allowFixDesignArtifact?: boolean;
+  deliveryScope?: PlanDeliveryScope | null;
+  planText?: string;
 }): PlanBacklogCoverageReceiptValidation {
   const schemaVersion = args.receipt.schemaVersion ?? 1;
-  if (args.requireGovernedImplementation && schemaVersion !== 2) {
-    return { ok: false, code: "coverage-v2-required", error: "Governed implementation requires plan coverage schema version 2." };
+  if (args.requireGovernedImplementation && schemaVersion !== 2 && schemaVersion !== 3) {
+    return { ok: false, code: "coverage-v2-required", error: "Governed implementation requires plan coverage schema version 2 or 3." };
   }
-  if (schemaVersion === 2) {
+  if (schemaVersion === 2 || schemaVersion === 3) {
     const locator = args.receipt.planArtifactRef;
     if (!locator || locator.kind !== "repo-blob-at-commit"
       || !locator.repositoryFullName || !locator.commitSha || !locator.path || !locator.providerBlobId
@@ -289,59 +264,79 @@ export function validatePlanBacklogCoverageReceipt(args: {
       || args.receipt.planArtifactDigest !== args.currentPlanDigest) {
       return { ok: false, code: "stale-plan-artifact", error: "Plan coverage is not bound to the current immutable plan artifact." };
     }
-    const traceability = args.traceabilityContext;
-    if (!traceability || !traceability.planText.trim()
-      || traceability.objectiveIds.length === 0 || traceability.acceptanceIds.length === 0) {
-      // Name which of the three inputs is absent; "could not be resolved" sent
-      // two prior sessions bisecting by trial (BI-38A353B2).
-      const absent = [
-        !traceability || !traceability.planText.trim() ? "the plan text (the resolved plan artifact is empty)" : null,
-        traceability && traceability.objectiveIds.length === 0 ? "objective ids on the scope baseline" : null,
-        traceability && traceability.acceptanceIds.length === 0 ? "acceptance ids on the scope baseline" : null,
-      ].filter(Boolean);
-      return {
-        ok: false,
-        code: "traceability-incomplete",
-        error: `Plan coverage needs plan text plus objective and acceptance ids from the scope baseline; missing: ${absent.join(", ") || "the scope-baseline traceability context"}. `
-          + "Objective and acceptance ids come from the scope manifest in the canonical design the spec-approval gate baselined; re-approve the design if it does not declare them.",
-      };
-    }
-    if (!args.receipt.scopeBaselineId || !args.receipt.scopeBaselineArtifactDigest
-      || args.receipt.scopeBaselineId !== traceability.baselineId
-      || args.receipt.scopeBaselineArtifactDigest !== traceability.baselineArtifactDigest) {
-      return { ok: false, code: "stale-scope-baseline", error: "Plan coverage is not bound to the exact current scope baseline." };
-    }
-    const objectiveIds = new Set(traceability.objectiveIds);
-    const acceptanceIds = new Set(traceability.acceptanceIds);
-    const coveredAcceptance = new Set<string>();
-    let firstIncompleteKey: string | null = null;
-    const incomplete = args.receipt.deliverables.some((deliverable) => {
-      const failed = (): true => { firstIncompleteKey ??= deliverable.key; return true; };
-      if (!deliverable.independentlyShippable && args.receipt.decision !== "atomic") return false;
-      const v2 = deliverable as Partial<PlanBacklogDeliverableV2>;
-      if (!nonEmptyRefs(v2.requirementRefs)
-        || !nonEmptyRefs(v2.contractRefs)
-        || !nonEmptyRefs(v2.flowRefs)
-        || !nonEmptyRefs(v2.verificationRefs)) return failed();
-      const allRefs = [...v2.requirementRefs, ...v2.contractRefs, ...v2.flowRefs, ...v2.verificationRefs];
-      if (allRefs.some((ref) => !traceability.planText.includes(ref))
-        || v2.requirementRefs.some((ref) => !objectiveIds.has(ref))
-        || v2.verificationRefs.some((ref) => !acceptanceIds.has(ref))) return failed();
-      for (const ref of v2.verificationRefs) coveredAcceptance.add(ref);
-      return v2.disposition && v2.verificationRefs.some((ref) => acceptanceIds.has(ref)) ? failed() : false;
-    });
-    if (incomplete || [...acceptanceIds].some((id) => !coveredAcceptance.has(id))) {
-      // Name the offending deliverable and which leg failed, rather than
-      // restating the rule the caller already read (BI-38A353B2).
-      const uncovered = [...acceptanceIds].filter((id) => !coveredAcceptance.has(id));
-      return {
-        ok: false,
-        code: "traceability-incomplete",
-        error: uncovered.length > 0 && !incomplete
-          ? `Every acceptance id on the scope baseline must be covered by some deliverable's verificationRefs; uncovered: ${uncovered.join(", ")}.`
-          : `Deliverable ${firstIncompleteKey ?? "(unknown)"} is not fully traced: each implementation deliverable needs non-empty requirementRefs, contractRefs, flowRefs, and verificationRefs, every ref must appear verbatim in the plan text, requirementRefs must be baseline objective ids, and verificationRefs must be baseline acceptance ids.`
-          + (uncovered.length > 0 ? ` Uncovered acceptance ids: ${uncovered.join(", ")}.` : ""),
-      };
+    if (schemaVersion === 3) {
+      const scope = args.deliveryScope;
+      if (!scope || args.receipt.deliveryScope?.digest !== scope.digest
+        || args.receipt.deliveryScope?.shape !== scope.shape) {
+        return { ok: false, code: "stale-scope-baseline", error: "Delivery-shape coverage no longer matches the current work scope; record coverage again using the current shape and acceptance criteria." };
+      }
+      if (scope.shape === "medium" && scope.acceptanceCriteria.length === 0) {
+        return { ok: false, code: "traceability-incomplete", error: "Medium work requires acceptance criteria in the backlog item body before recording plan coverage." };
+      }
+      const text = args.planText ?? "";
+      const invalid = args.receipt.deliverables.some(deliverable => {
+        const refs = deliverable as Partial<PlanBacklogDeliverableV2>;
+        return [refs.requirementRefs, refs.contractRefs, refs.flowRefs, refs.verificationRefs]
+          .some(values => !nonEmptyRefs(values) || values.some(ref => !text.includes(ref)));
+      });
+      if (!text.trim() || invalid || scope.acceptanceCriteria.some(criterion => !text.includes(criterion))) {
+        return { ok: false, code: "traceability-incomplete", error: "Delivery-shape coverage requires non-empty references appearing in the immutable plan and every medium acceptance criterion quoted in that plan." };
+      }
+    } else {
+      const traceability = args.traceabilityContext;
+      if (!traceability || !traceability.planText.trim()
+        || traceability.objectiveIds.length === 0 || traceability.acceptanceIds.length === 0) {
+        // Name which of the three inputs is absent; "could not be resolved" sent
+        // two prior sessions bisecting by trial (BI-38A353B2).
+        const absent = [
+          !traceability || !traceability.planText.trim() ? "the plan text (the resolved plan artifact is empty)" : null,
+          traceability && traceability.objectiveIds.length === 0 ? "objective ids on the scope baseline" : null,
+          traceability && traceability.acceptanceIds.length === 0 ? "acceptance ids on the scope baseline" : null,
+        ].filter(Boolean);
+        return {
+          ok: false,
+          code: "traceability-incomplete",
+          error: `Plan coverage needs plan text plus objective and acceptance ids from the scope baseline; missing: ${absent.join(", ") || "the scope-baseline traceability context"}. `
+            + "Objective and acceptance ids come from the scope manifest in the canonical design the spec-approval gate baselined; re-approve the design if it does not declare them.",
+        };
+      }
+      if (!args.receipt.scopeBaselineId || !args.receipt.scopeBaselineArtifactDigest
+        || args.receipt.scopeBaselineId !== traceability.baselineId
+        || args.receipt.scopeBaselineArtifactDigest !== traceability.baselineArtifactDigest) {
+        return { ok: false, code: "stale-scope-baseline", error: "Plan coverage is not bound to the exact current scope baseline." };
+      }
+      const objectiveIds = new Set(traceability.objectiveIds);
+      const acceptanceIds = new Set(traceability.acceptanceIds);
+      const coveredAcceptance = new Set<string>();
+      let firstIncompleteKey: string | null = null;
+      const incomplete = args.receipt.deliverables.some((deliverable) => {
+        const failed = (): true => { firstIncompleteKey ??= deliverable.key; return true; };
+        if (!deliverable.independentlyShippable && args.receipt.decision !== "atomic") return false;
+        const v2 = deliverable as Partial<PlanBacklogDeliverableV2>;
+        if (!nonEmptyRefs(v2.requirementRefs)
+          || !nonEmptyRefs(v2.contractRefs)
+          || !nonEmptyRefs(v2.flowRefs)
+          || !nonEmptyRefs(v2.verificationRefs)) return failed();
+        const allRefs = [...v2.requirementRefs, ...v2.contractRefs, ...v2.flowRefs, ...v2.verificationRefs];
+        if (allRefs.some((ref) => !traceability.planText.includes(ref))
+          || v2.requirementRefs.some((ref) => !objectiveIds.has(ref))
+          || v2.verificationRefs.some((ref) => !acceptanceIds.has(ref))) return failed();
+        for (const ref of v2.verificationRefs) coveredAcceptance.add(ref);
+        return v2.disposition && v2.verificationRefs.some((ref) => acceptanceIds.has(ref)) ? failed() : false;
+      });
+      if (incomplete || [...acceptanceIds].some((id) => !coveredAcceptance.has(id))) {
+        // Name the offending deliverable and which leg failed, rather than
+        // restating the rule the caller already read (BI-38A353B2).
+        const uncovered = [...acceptanceIds].filter((id) => !coveredAcceptance.has(id));
+        return {
+          ok: false,
+          code: "traceability-incomplete",
+          error: uncovered.length > 0 && !incomplete
+            ? `Every acceptance id on the scope baseline must be covered by some deliverable's verificationRefs; uncovered: ${uncovered.join(", ")}.`
+            : `Deliverable ${firstIncompleteKey ?? "(unknown)"} is not fully traced: each implementation deliverable needs non-empty requirementRefs, contractRefs, flowRefs, and verificationRefs, every ref must appear verbatim in the plan text, requirementRefs must be baseline objective ids, and verificationRefs must be baseline acceptance ids.`
+            + (uncovered.length > 0 ? ` Uncovered acceptance ids: ${uncovered.join(", ")}.` : ""),
+        };
+      }
     }
   }
 
@@ -357,6 +352,7 @@ export function validatePlanBacklogCoverageReceipt(args: {
 }
 
 export type PlanBacklogCoverageDb = {
+  workroom?: BoundWorkShapeDb["workroom"];
   $queryRaw?: <T>(strings: TemplateStringsArray, ...values: unknown[]) => Promise<T>;
   $transaction?: <T>(
     work: (tx: PlanBacklogCoverageDb) => Promise<T>,
@@ -365,7 +361,7 @@ export type PlanBacklogCoverageDb = {
   backlogItem: {
     findUnique: (args: {
       where: { itemId: string };
-      select: { id: true; itemId: true; effortSize: true; type?: true; source?: true; workType?: true; scopeKind?: true };
+      select: { id: true; itemId: true; effortSize: true; title?: true; body?: true; type?: true; source?: true; workType?: true; scopeKind?: true };
     }) => Promise<CoverageBacklogItem | null>;
     findMany: (args: {
       where: { itemId: { in: string[] } };
@@ -465,7 +461,7 @@ export async function checkBranchPlanBacklogGate(args: {
     || !Array.isArray(payload.deliverables)
     || !payload.planArtifactRef
   ) {
-    return { ok: false, required: true, code: "receipt-invalid", error: "Latest coverage receipt is invalid; governed implementation requires schema version 2.", itemId: parent.itemId };
+    return { ok: false, required: true, code: "receipt-invalid", error: "Latest coverage receipt is invalid; this xlarge branch requires baseline-bound schema version 2.", itemId: parent.itemId };
   }
   const deliverables = payload.deliverables as PlanBacklogDeliverable[];
   const requestedIds = Array.from(new Set(deliverables.map((d) => d.backlogItemId).filter((id): id is string => Boolean(id))));
@@ -511,6 +507,7 @@ export async function checkPlanBacklogCoverage(args: {
   resolveArtifact?: typeof resolveRepositoryArtifact;
 }): Promise<CheckPlanBacklogCoverageResult> {
   const db: PlanBacklogCoverageDb = args.db ?? {
+    workroom: prisma.workroom,
     backlogItem: {
       findUnique: prisma.backlogItem.findUnique.bind(prisma.backlogItem) as unknown as PlanBacklogCoverageDb["backlogItem"]["findUnique"],
       findMany: prisma.backlogItem.findMany.bind(prisma.backlogItem) as unknown as PlanBacklogCoverageDb["backlogItem"]["findMany"],
@@ -523,7 +520,7 @@ export async function checkPlanBacklogCoverage(args: {
   };
   const parent = await db.backlogItem.findUnique({
     where: { itemId: args.itemId },
-    select: { id: true, itemId: true, effortSize: true, workType: true },
+    select: { id: true, itemId: true, effortSize: true, title: true, body: true, type: true, source: true, workType: true, scopeKind: true },
   });
   if (!parent) {
     return { ok: false, valid: false, code: "backlog-item-not-found", error: `BacklogItem ${args.itemId} was not found.` };
@@ -575,9 +572,9 @@ export async function checkPlanBacklogCoverage(args: {
         select: { itemId: true, status: true },
       })
     : [];
-  if (payload.schemaVersion === 2) {
+  if (payload.schemaVersion === 2 || payload.schemaVersion === 3) {
     if (!payload.planArtifactRef) {
-      return { ok: false, valid: false, code: "receipt-invalid", error: "Version 2 coverage has no immutable plan locator." };
+      return { ok: false, valid: false, code: "receipt-invalid", error: "Governed coverage has no immutable plan locator." };
     }
     const resolved = await (args.resolveArtifact ?? resolveRepositoryArtifact)({
       locator: payload.planArtifactRef,
@@ -586,11 +583,12 @@ export async function checkPlanBacklogCoverage(args: {
     if (!resolved.ok) {
       return { ok: false, valid: false, code: "receipt-invalid", error: resolved.error };
     }
-    const baseline = projectCurrentScopeBaselineTraceability(await db.backlogItemActivity.findMany({
+    const baselineRows = await db.backlogItemActivity.findMany({
       where: { backlogItemId: parent.id, kind: "initiative_scope_baseline" },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
       select: { payload: true },
-    }));
+    });
+    const baseline = projectCurrentScopeBaselineTraceability(baselineRows);
     const governed = validatePlanBacklogCoverageReceipt({
       receipt: payload,
       mappedBacklogItems,
@@ -604,6 +602,8 @@ export async function checkPlanBacklogCoverage(args: {
         acceptanceIds: baseline.acceptanceIds,
       } : undefined,
       allowFixDesignArtifact: deriveAuthoritativeReadinessProfile(parent) === "fix",
+      deliveryScope: baselineRows.length ? null : await readPlanDeliveryScope(db, parent),
+      planText: Buffer.from(resolved.artifact.bytes).toString("utf8"),
     });
     if (!governed.ok) return { ok: false, valid: false, code: "receipt-invalid", error: governed.error };
     return { ok: true, valid: true, decision: governed.decision, mappedItemIds: governed.mappedItemIds };
@@ -612,7 +612,7 @@ export async function checkPlanBacklogCoverage(args: {
     ok: false,
     valid: false,
     code: "receipt-invalid",
-    error: "Legacy plan coverage remains visible but cannot satisfy governed implementation; schema version 2 is required.",
+    error: "Legacy or unknown coverage cannot satisfy governed implementation; schema version 2 or 3 is required.",
   };
 }
 
@@ -643,7 +643,7 @@ export async function recordPlanBacklogCoverage(args: {
   const db = args.db ?? (prisma as unknown as PlanBacklogCoverageDb);
   const parent = await db.backlogItem.findUnique({
     where: { itemId: args.itemId },
-    select: { id: true, itemId: true, effortSize: true, type: true, source: true, workType: true, scopeKind: true },
+    select: { id: true, itemId: true, effortSize: true, title: true, body: true, type: true, source: true, workType: true, scopeKind: true },
   });
   if (!parent) {
     return {
@@ -684,7 +684,7 @@ export async function recordPlanBacklogCoverage(args: {
     }
     const currentParent = await tx.backlogItem.findUnique({
       where: { itemId: args.itemId },
-      select: { id: true, itemId: true, effortSize: true, type: true, source: true, workType: true, scopeKind: true },
+      select: { id: true, itemId: true, effortSize: true, title: true, body: true, type: true, source: true, workType: true, scopeKind: true },
     });
     if (!currentParent || currentParent.id !== parent.id) {
       return { ok: false as const, code: "backlog-item-not-found" as const, error: `BacklogItem ${args.itemId} was not found.` };
@@ -717,23 +717,19 @@ export async function recordPlanBacklogCoverage(args: {
           select: { itemId: true, status: true, workType: true },
         })
       : [];
-    const baseline = projectCurrentScopeBaselineTraceability(await tx.backlogItemActivity.findMany({
+    const baselineRows = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: currentParent.id, kind: "initiative_scope_baseline" },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
       select: { payload: true },
-    }));
-    if (!baseline) {
+    });
+    const baseline = projectCurrentScopeBaselineTraceability(baselineRows);
+    const deliveryScope = baselineRows.length ? null : await readPlanDeliveryScope(tx, currentParent);
+    if (!baseline && !deliveryScope) {
       const { recovery, instruction } = projectMissingBaselineRecovery({
         item: currentParent,
         mappedItems: mappedBacklogItems,
       });
-      // The remediation text names the CONDITION, never a blocker id. It used
-      // to instruct callers to "cite BI-B9403248 for the blocked receipt";
-      // that BI closed on 2026-08-21 (PR #4422) while the block stayed live,
-      // so every contributor who followed the message literally blamed a
-      // fixed defect for a live gate, and every auditor who checked the id
-      // found it closed and concluded the block was stale (BI-38A353B2). An
-      // id written as a literal goes stale silently; a condition does not.
+      // Name the missing condition, not a blocker ID that can outlive its relevance.
       return {
         ok: false as const,
         code: "traceability-incomplete" as const,
@@ -744,12 +740,12 @@ export async function recordPlanBacklogCoverage(args: {
       };
     }
     const receipt: PlanBacklogCoverageReceipt = {
-      schemaVersion: 2,
+      schemaVersion: deliveryScope ? 3 : 2,
+      ...(deliveryScope ? { deliveryScope } : {}),
       planPath: args.planPath,
       planArtifactRef: args.planArtifactRef,
       planArtifactDigest: resolvedPlan.artifact.digest,
-      scopeBaselineId: baseline.baselineId,
-      scopeBaselineArtifactDigest: baseline.artifactDigest,
+      ...(baseline && !deliveryScope ? { scopeBaselineId: baseline.baselineId, scopeBaselineArtifactDigest: baseline.artifactDigest } : {}),
       decision: args.decision,
       rationale: args.rationale,
       deliverables: args.deliverables,
@@ -759,13 +755,15 @@ export async function recordPlanBacklogCoverage(args: {
       mappedBacklogItems,
       requireGovernedImplementation: true,
       currentPlanDigest: resolvedPlan.artifact.digest,
-      traceabilityContext: {
+      traceabilityContext: baseline ? {
         planText: Buffer.from(resolvedPlan.artifact.bytes).toString("utf8"),
         baselineId: baseline.baselineId,
         baselineArtifactDigest: baseline.artifactDigest,
         objectiveIds: baseline.objectiveIds,
         acceptanceIds: baseline.acceptanceIds,
-      },
+      } : undefined,
+      deliveryScope,
+      planText: Buffer.from(resolvedPlan.artifact.bytes).toString("utf8"),
       allowFixDesignArtifact: parentProfile === "fix",
     });
     if (!validation.ok) return validation;

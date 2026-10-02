@@ -477,3 +477,45 @@ describe("scheduledToolsNeedingPin with a stage's declared tools", () => {
     })).toEqual(["record_workroom_evidence"]);
   });
 });
+
+// ─── BI-D48B3B0F: the verdict judges what the run persisted ──────────────────
+//
+// Live, 2026-10-01: four Workroom stages recorded their evidence (ToolExecution
+// success=true) and the run was still failed for "record_workroom_evidence
+// executed zero times", because a later turn's provider failure returned only
+// the apology and none of the earlier attempt's calls.
+describe("withPersistedExecutions (BI-D48B3B0F)", () => {
+  const prompt = "Record the stage with record_workroom_evidence.";
+  const authorizedTools = [{ name: "record_workroom_evidence", sideEffect: true }];
+  const apology = "I couldn't verify this against live data just now — I don't want to guess.";
+
+  it("fails a run whose loop result carries no executions (the old verdict, reproduced)", async () => {
+    const { detectScheduledRunFailure } = await import("./scheduled-task-runs");
+    expect(detectScheduledRunFailure({ prompt, authorizedTools, executedTools: [], content: apology }))
+      .toMatch(/record_workroom_evidence executed zero times/);
+  });
+
+  it("passes the same run when the governed write was persisted under its taskRunId", async () => {
+    const { detectScheduledRunFailure, withPersistedExecutions } = await import("./scheduled-task-runs");
+    const executedTools = withPersistedExecutions([], [{ toolName: "record_workroom_evidence", result: { success: true, message: "Recorded evidence" } }]);
+    expect(detectScheduledRunFailure({ prompt, authorizedTools, executedTools, content: apology })).toBeNull();
+  });
+
+  it("still fails when nothing was persisted", async () => {
+    const { detectScheduledRunFailure, withPersistedExecutions } = await import("./scheduled-task-runs");
+    expect(detectScheduledRunFailure({ prompt, authorizedTools, executedTools: withPersistedExecutions([], []), content: apology }))
+      .toMatch(/executed zero times/);
+  });
+
+  it("counts a persisted tool once and never overrides the loop's own record of it", async () => {
+    const { withPersistedExecutions } = await import("./scheduled-task-runs");
+    const own = { name: "record_workroom_evidence", result: { success: false, error: "approval_required" } };
+    const merged = withPersistedExecutions([own], [
+      { toolName: "record_workroom_evidence", result: {} },
+      { toolName: "list_bills", result: {} },
+      { toolName: "list_bills", result: {} },
+    ]);
+    expect(merged.map((tool) => tool.name)).toEqual(["record_workroom_evidence", "list_bills"]);
+    expect(merged[0]).toBe(own);
+  });
+});

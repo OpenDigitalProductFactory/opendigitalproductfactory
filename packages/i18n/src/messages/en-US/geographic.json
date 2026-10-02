@@ -1,0 +1,9 @@
+{
+  "map": {
+    "loading": "Loading the map…",
+    "webglUnavailable": "This browser cannot draw maps. The list shows the same places.",
+    "packMissing": "No street map is installed for this installation. The list shows the same places.",
+    "outOfCoverage": "The installed street maps do not cover this area. The list shows the same places.",
+    "failed": "The map could not be drawn. The list shows the same places."
+  }
+}

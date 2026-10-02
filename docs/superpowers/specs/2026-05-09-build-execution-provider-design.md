@@ -570,7 +570,7 @@ From 2026-08-01 to 2026-09-29 the Build Studio sandbox produced ~41 defects: bac
 | D | The singleton container lifecycle is not reconciled | 7 | BI-547B788D, BI-4D08C53C, BI-3370373F, BI-0B95D268 |
 | E | Pool configuration drift (three sources of truth) | 2 | #5574; phantom `dpf-sandbox-2/3` slot rows re-seeded 2026-09-29 |
 
-Per-build worktrees (BI-98B723C0, 2026-06-19) separated only the working files. The git common dir (refs, the `shallow` file, config, the worktree registry), the root checkout, the generated client, `.next`, the preview process and the container itself stayed shared and mutable in place. Every fix since has patched one symptom. The benchmarking below shows that no surveyed CI or workspace system runs concurrent jobs as worktrees of one shared repository.
+Per-build worktrees ([2026-06-19 isolation design](2026-06-19-build-studio-sandbox-isolation-design.md)) separated only the working files. The git common dir (refs, the `shallow` file, config, the worktree registry), the root checkout, the generated client, `.next`, the preview process and the container itself stayed shared and mutable in place. Every fix since has patched one symptom. The benchmarking below shows that no surveyed CI or workspace system runs concurrent jobs as worktrees of one shared repository.
 
 ### The guarantee every provider owes (binding once this spec is ratified)
 
@@ -594,12 +594,12 @@ Each step ships behind a flag (`DPF_BUILD_WORKSPACE_MODE=worktree|clone`, then p
 | M4 | Desired-state reconciler: one pool definition, boot-order readiness before resume, a reaper keyed on FeatureBuild liveness. | D, E | "Cleanup mechanism" labels and sweeps; `sandbox-pool.ts` |
 | M5 | A baseline image or snapshot keyed on (main SHA, lockfile digest), refreshed on merge, so a new workspace hydrates fast. | C | Codespaces/Ona/Coder prebuild pattern; BI-357792B1 source baseline |
 
-M1 alone removes every shared-git-state defect class without touching container topology. It is the proposed first delivery.
+M1 alone removes every shared-git-state defect class without touching container topology. It is the proposed first delivery. Implementation plan: [2026-10-01 M1 plan](../plans/2026-10-01-sandbox-build-clone-m1-plan.md).
 
 ### Decisions this addendum needs from the operator
 
-1. Ratify W1–W5 as the provider contract.
-2. Approve M1 as the first delivery, with the M2–M5 order as proposed.
+1. Ratify W1–W5 as the provider contract. **Ratified by the operator 2026-10-01.**
+2. Approve M1 as the first delivery, with the M2–M5 order as proposed. **M1 approved by the operator 2026-10-01; M2–M5 each return to the operator before they start.**
 3. Isolation default: plain containers (proposed). gVisor, Kata and Firecracker are opt-in providers for Linux/KVM hosts; they are not the baseline, because Docker Desktop installs lack KVM.
 
 ## Cleanup mechanism (every provider)

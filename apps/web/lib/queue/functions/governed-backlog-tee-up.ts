@@ -1,6 +1,6 @@
 import { cron } from "@/lib/jobs/triggers";
 import { jobs } from "@/lib/jobs";
-import { gateAtEntry } from "../quiescence-gates";
+import { gateAtEntry, gateBetweenSteps, type GateBetweenStepsRunner } from "../quiescence-gates";
 
 export const governedBacklogTeeUpScheduled = jobs.createFunction(
   {
@@ -46,6 +46,10 @@ export const governedBacklogTeeUpRequested = jobs.createFunction(
     triggers: [{ event: "build/backlog-tee-up.requested" }],
   },
   async ({ event, step }) => {
+    // The operator's request waits out an upgrade drain instead of starting
+    // new builds mid-drain (BI-F9EE05E5 slice B).
+    const gate = await gateBetweenSteps(step as unknown as GateBetweenStepsRunner, "tee-up-manual-entry");
+    if (gate.reason) return { skipped: true, reason: gate.reason };
     return step.run("tee-up-governed-backlog-manual", async () => {
       const { prisma } = await import("@dpf/db");
       const { runGovernedBacklogTeeUp } = await import("@/lib/governed-backlog-tee-up");

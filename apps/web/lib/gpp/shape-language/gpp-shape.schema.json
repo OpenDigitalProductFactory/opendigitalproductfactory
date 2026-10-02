@@ -1,0 +1,698 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "gpp-shape/0.1"
+    },
+    "key": {
+      "$ref": "#/$defs/slug"
+    },
+    "version": {
+      "$ref": "#/$defs/semver"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "triggers": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "claim",
+          "cadence",
+          "deadline-horizon",
+          "authority-change",
+          "estate-drift",
+          "evidence-decay",
+          "escalation"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "stages": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/stage"
+      }
+    },
+    "flow": {
+      "$ref": "#/$defs/flow"
+    },
+    "stopConditions": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/stop"
+      }
+    },
+    "grants": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "measures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/$defs/slug"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "budgets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "findings-per-run",
+              "cycles-per-window",
+              "spend"
+            ]
+          },
+          "limit": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "limit",
+          "unit"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "reviewPoint": {
+      "type": "object",
+      "properties": {
+        "everyDays": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "everyDays",
+        "description"
+      ],
+      "additionalProperties": false
+    },
+    "collaborationShape": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "specialist-alignment",
+            "approval-sign-off",
+            "outward-review",
+            "change-consequential",
+            "escalation",
+            "craft-stewardship"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "format",
+    "key",
+    "version",
+    "title",
+    "description",
+    "triggers",
+    "stages",
+    "stopConditions",
+    "grants",
+    "measures",
+    "budgets",
+    "reviewPoint",
+    "collaborationShape"
+  ],
+  "additionalProperties": false,
+  "title": "GPP shape document",
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "stage": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/slug"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accountablePrincipalRef": {
+          "$ref": "#/$defs/principalRef"
+        },
+        "advance": {
+          "$ref": "#/$defs/advance"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceKind"
+          },
+          "uniqueItems": true
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/toolName"
+          },
+          "description": "Capability set. Absent means undeclared, exactly as today.",
+          "uniqueItems": true
+        },
+        "binding": {
+          "$ref": "#/$defs/binding"
+        },
+        "deadline": {
+          "$ref": "#/$defs/timer"
+        },
+        "subShape": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*@\\d+\\.\\d+\\.\\d+$"
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "accountablePrincipalRef",
+        "advance",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "principalRef": {
+      "type": "string",
+      "pattern": "^(agent|role|person):.+$"
+    },
+    "advance": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "status-change"
+            },
+            "condition": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "condition"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "governed-decision"
+            },
+            "condition": {
+              "type": "string",
+              "minLength": 1
+            },
+            "decisionScope": {
+              "type": "string",
+              "minLength": 1
+            },
+            "gate": {
+              "$ref": "#/$defs/gate"
+            }
+          },
+          "required": [
+            "kind",
+            "condition",
+            "decisionScope"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "gate": {
+      "type": "object",
+      "properties": {
+        "authority": {
+          "$ref": "#/$defs/authority"
+        },
+        "gateKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "shadow",
+            "enforced"
+          ]
+        },
+        "blocking": {
+          "type": "boolean"
+        },
+        "resolution": {
+          "type": "string",
+          "enum": [
+            "doctrine",
+            "accountable-human",
+            "doctrine-then-human"
+          ]
+        },
+        "resolver": {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string"
+            },
+            "exportName": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "module",
+            "exportName"
+          ],
+          "additionalProperties": false
+        },
+        "advisory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "authority": {
+                "$ref": "#/$defs/authority"
+              },
+              "gateKey": {
+                "type": "string"
+              },
+              "blocking": {
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "required": [
+              "authority"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "checkpoint": {
+          "$ref": "#/$defs/checkpoint"
+        },
+        "escalation": {
+          "$ref": "#/$defs/escalation"
+        },
+        "onRefuse": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where a refuse verdict sends the token: a stop id or an earlier stage key."
+        }
+      },
+      "required": [
+        "authority",
+        "mode",
+        "blocking",
+        "resolution"
+      ],
+      "additionalProperties": false,
+      "description": "(new) Typed gate fields. GPP §7 elements 3, 4, 9, 11."
+    },
+    "authority": {
+      "type": "string",
+      "enum": [
+        "wwmd",
+        "wwwd",
+        "wsid"
+      ]
+    },
+    "checkpoint": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/principalRef"
+        },
+        "exactAction": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "role",
+        "exactAction"
+      ],
+      "additionalProperties": false,
+      "description": "(new) Human checkpoint. exactAction binds approval to the call's paramHash."
+    },
+    "escalation": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/principalRef"
+        },
+        "whileWaiting": {
+          "type": "string",
+          "const": "hold"
+        }
+      },
+      "required": [
+        "role",
+        "whileWaiting"
+      ],
+      "additionalProperties": false,
+      "description": "(new) GPP §7 element 9."
+    },
+    "evidenceKind": {
+      "type": "string",
+      "enum": [
+        "acceptance-receipt",
+        "architecture-review-receipt",
+        "assurance-finding",
+        "assurance-run",
+        "backlog-items",
+        "child-completion",
+        "cited-brief",
+        "cited-finding-list",
+        "conversation-turn",
+        "decision-record",
+        "decomposition-receipt",
+        "deployment-record",
+        "design-doc",
+        "draft-artifact",
+        "drift-report",
+        "epic-hypothesis",
+        "exception-list",
+        "failing-test",
+        "import-run",
+        "item-body-design",
+        "manual-check",
+        "merged-sha",
+        "objective-baseline",
+        "org-business-answer",
+        "outcome-packet",
+        "outcome-reconciliation",
+        "passing-test",
+        "pir-receipt",
+        "plan-coverage-receipt",
+        "plan-doc",
+        "plan-review-receipt",
+        "policy-divergence-list",
+        "policy-draft",
+        "pr-gate",
+        "reconciliation",
+        "reproduction",
+        "research-question",
+        "research-receipt",
+        "runtime-check",
+        "screen-capture-set",
+        "security-case-timeline",
+        "security-case-verdict",
+        "source-document-set",
+        "source-verified",
+        "spec-approval-receipt",
+        "surface-inventory",
+        "tool-evaluation",
+        "ux-verified"
+      ],
+      "description": "Generated from WORK_SHAPE_EVIDENCE_KINDS (work-shape-evidence-kinds.ts)."
+    },
+    "toolName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "binding": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/slug"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "enforcement": {
+              "type": "string",
+              "enum": [
+                "absent",
+                "shadow",
+                "enforced"
+              ]
+            },
+            "subjectScope": {
+              "type": "string"
+            },
+            "validity": {
+              "type": "object",
+              "properties": {
+                "until": {
+                  "type": "string",
+                  "const": "stage-exit"
+                },
+                "maxDuration": {
+                  "type": "string",
+                  "pattern": "^P(\\d+D)?(T(\\d+H)?(\\d+M)?)?$"
+                }
+              },
+              "required": [
+                "until"
+              ],
+              "additionalProperties": false
+            },
+            "egress": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/toolName"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "version",
+            "enforcement"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/slug"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "enforcement": {
+              "type": "string",
+              "const": "environment"
+            },
+            "subjectScope": {
+              "type": "string"
+            },
+            "validity": {
+              "type": "object",
+              "properties": {
+                "until": {
+                  "type": "string",
+                  "const": "stage-exit"
+                },
+                "maxDuration": {
+                  "type": "string",
+                  "pattern": "^P(\\d+D)?(T(\\d+H)?(\\d+M)?)?$"
+                }
+              },
+              "required": [
+                "until"
+              ],
+              "additionalProperties": false
+            },
+            "egress": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/toolName"
+              },
+              "description": "Declared ports out of an environment boundary."
+            }
+          },
+          "required": [
+            "id",
+            "version",
+            "enforcement",
+            "egress"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "(new) The stage's Gated Permission binding. Version is separate from the shape version (GPP §2.1.1)."
+    },
+    "timer": {
+      "type": "object",
+      "properties": {
+        "afterDays": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "afterDays",
+        "description"
+      ],
+      "additionalProperties": false,
+      "description": "(new) Stage deadline. Raises a deadline event; never moves the token."
+    },
+    "flow": {
+      "type": "object",
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/slug"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "parallel-split",
+                  "parallel-join"
+                ]
+              },
+              "pairs": {
+                "$ref": "#/$defs/slug"
+              }
+            },
+            "required": [
+              "id",
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1
+              },
+              "to": {
+                "type": "string",
+                "minLength": 1
+              },
+              "rework": {
+                "type": "object",
+                "properties": {
+                  "maxIterations": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "maxIterations"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "nodes",
+        "edges"
+      ],
+      "additionalProperties": false,
+      "description": "(new) Explicit graph. Absent means the sequential flow every current shape has."
+    },
+    "stop": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "success",
+            "failure",
+            "budget"
+          ]
+        },
+        "condition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "disposition": {
+          "type": "string",
+          "enum": [
+            "proceed",
+            "awaiting-person",
+            "awaiting-input",
+            "inconclusive",
+            "refused"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "condition",
+        "disposition"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$id": "urn:dpf:gpp-shape:0.1"
+}

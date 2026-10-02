@@ -213,7 +213,7 @@ const GENERIC_REMEDIES: Record<ReadinessCode, string | null> = {
 const SHAPE_REMEDIES: Partial<Record<ReadinessShape, Partial<Record<ReadinessCode, string>>>> = {
   small: {
     RESEARCH_REQUIRED:
-      "For a small item, research is the reproduction: the defect or gap confirmed on a named ref and a failing-to-passing proof. Record it with record_initiative_evidence(gate: \"research\").",
+      "For a small item, research is the reproduction: the defect or gap confirmed on a named ref and a failing-to-passing proof. For a small fix, record both with record_execution_evidence (kind \"source_verified\" with the source URL, and kind \"test_pass\"); that satisfies research at claim. Otherwise record it with record_initiative_evidence(gate: \"research\").",
     ACCEPTANCE_EVIDENCE_REQUIRED:
       "A small item is accepted by a runtime check on the live install or by the failing-to-passing test. Record it with record_execution_evidence and cite it as acceptance.",
   },

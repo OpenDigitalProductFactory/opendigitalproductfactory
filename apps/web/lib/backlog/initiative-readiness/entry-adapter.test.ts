@@ -614,6 +614,59 @@ describe("v3: the bound delivery shape keys the gates", () => {
     expect(completed.decision.unmet.map((entry) => entry.code)).toContain("RESEARCH_REQUIRED");
   });
 
+  // BI-6EB2DBBB: an external session cannot hold initiative_evidence_write, so a
+  // small fix stalled at claim. For a SMALL FIX the operator directed (2026-09-23)
+  // that research is the reproduction the author already produced: the defect on
+  // a named ref plus a failing-to-passing test, recorded as execution evidence.
+  describe("a small fix's recorded reproduction at claim (BI-6EB2DBBB)", () => {
+    const evidence = (id: string, evidenceKind: string, at: string) => ({
+      id,
+      kind: "evidence",
+      gateKey: null,
+      recordedAt: new Date(at),
+      payload: { evidenceKind },
+    });
+    const reproduction = [
+      evidence("ev-src", "source_verified", "2026-10-01T10:00:00.000Z"),
+      evidence("ev-test", "test_pass", "2026-10-01T10:05:00.000Z"),
+    ];
+    const claim = (overrides: { workType?: string; workShape?: string; activities?: ReturnType<typeof evidence>[] }) =>
+      projectBacklogItemReadiness({
+        item: {
+          ...item,
+          workType: overrides.workType ?? "bug",
+          workShape: overrides.workShape ?? "delivery-small@1.0.0",
+          deliverySensitivity: "low",
+        },
+        activities: overrides.activities ?? reproduction,
+        target: "implementation",
+        transitionObject,
+        authorization: "pass",
+        capsuleIdentity: "pass",
+        evaluatedAt: "2026-10-01T11:00:00.000Z",
+      });
+    const unmet = (result: ReturnType<typeof claim>) => result.decision.unmet.map((entry) => entry.code);
+
+    it("satisfies research at claim from source_verified plus test_pass on a small fix", () => {
+      expect(unmet(claim({}))).not.toContain("RESEARCH_REQUIRED");
+    });
+
+    it("still demands research when either half of the reproduction is missing", () => {
+      expect(unmet(claim({ activities: [reproduction[0]] }))).toContain("RESEARCH_REQUIRED");
+      expect(unmet(claim({ activities: [reproduction[1]] }))).toContain("RESEARCH_REQUIRED");
+    });
+
+    it("does not count a test_pass that a later test_fail superseded", () => {
+      const failedAfter = [...reproduction, evidence("ev-fail", "test_fail", "2026-10-01T10:10:00.000Z")];
+      expect(unmet(claim({ activities: failedAfter }))).toContain("RESEARCH_REQUIRED");
+    });
+
+    it("keeps the robust research gate for net-new work and for medium fixes", () => {
+      expect(unmet(claim({ workType: "feature" }))).toContain("RESEARCH_REQUIRED");
+      expect(unmet(claim({ workShape: "delivery-medium@1.0.0" }))).toContain("RESEARCH_REQUIRED");
+    });
+  });
+
   // BI-0E2E3BC5: a Build Studio build writes no initiative receipts — its research
   // and acceptance criteria live in the design document its own reviewers passed.
   // For the proportional shapes that document IS the recorded research and, when

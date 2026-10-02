@@ -266,6 +266,7 @@ pitch (how many tools the platform consolidates) before a sales conversation.
 ## Related Guides
 
 - [Market footprint](market-footprint.md)
+- [Customer map](customer-map.md)
 - [Marketing](marketing.md)
 - [Storefront setup and launch](../storefront/setup-and-launch.md)
 - [Storefront inbox and enquiries](../storefront/inbox-and-enquiries.md)

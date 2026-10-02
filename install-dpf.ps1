@@ -1682,6 +1682,18 @@ if ($gitWebhookValue.Length -eq 0 -or $gitWebhookValue.StartsWith("<")) {
     Write-Host "  Generated DPF_GIT_WEBHOOK_SECRET in .env (read it there to configure the GitHub webhook)"
 }
 
+# Signing key for GPP permits (BI-8541D491). Same rules as the webhook secret:
+# added when missing or still an example placeholder, never rotated once set,
+# never printed. Nothing outside the portal needs it.
+$gppPermitEnv = Get-Content -Path "$DPF_DIR\.env" -Raw -ErrorAction SilentlyContinue
+if ($null -eq $gppPermitEnv) { $gppPermitEnv = "" }
+$gppPermitMatch = [System.Text.RegularExpressions.Regex]::Match($gppPermitEnv, '(?m)^DPF_GPP_PERMIT_SECRET=(.*)$')
+$gppPermitValue = if ($gppPermitMatch.Success) { $gppPermitMatch.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+if ($gppPermitValue.Length -eq 0 -or $gppPermitValue.StartsWith("<")) {
+    Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key "DPF_GPP_PERMIT_SECRET" -Value (New-RandomPassword 32)
+    Write-Host "  Generated DPF_GPP_PERMIT_SECRET in .env"
+}
+
 # Inngest signing and event keys (BI-3267763F). The portal and the inngest
 # service verify each other with them; compose no longer supplies a default,
 # because the old one was published in the repository and let anyone who could

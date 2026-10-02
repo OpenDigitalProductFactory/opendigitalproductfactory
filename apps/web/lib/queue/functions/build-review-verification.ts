@@ -197,6 +197,31 @@ export const buildReviewVerification = jobs.createFunction(
         });
         return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
       }
+      // BI-AF072BE5: nothing was committed, so there is nothing to repair or
+      // review. Tell the owner once; escalation ends the build's sweep.
+      if (finalize.status === "no-change") {
+        const escalated = await step.run("escalate-empty-change", async () => {
+          const { prisma } = await import("@dpf/db");
+          const row = await prisma.featureBuild.findUnique({
+            where: { buildId },
+            select: { id: true, phase: true, title: true, originatingBacklogItemId: true },
+          });
+          if (!row || row.phase !== "review") return "not-in-review";
+          const { escalateBuildToHuman } = await import("@/lib/build/escalate-build-to-human");
+          await escalateBuildToHuman({
+            buildPk: row.id,
+            buildId,
+            featureTitle: row.title,
+            originatingBacklogItemId: row.originatingBacklogItemId,
+            phase: "review",
+            rounds: 0,
+            issues: [{ severity: "important", description: "The build reached review without any committed change, so there is nothing to verify or ship. Restart it with a clearer brief, or retire it." }],
+            log: (summary: string) => prisma.buildActivity.create({ data: { buildId, tool: "review-verification", summary: summary.slice(0, 1000) } }).then(() => undefined).catch(() => undefined),
+          });
+          return "escalated";
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, escalation: escalated };
+      }
       return { status: "finalize-incomplete", finalize: finalize.status };
     }
 

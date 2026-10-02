@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "decidedOption": "people-disclosure-on-client-row",
+  "decisionInteractionId": "DI-48D40418A3B5",
+  "scope": {
+    "files": [
+      "apps/web/components/admin/McpOAuthClientManager.tsx",
+      "apps/web/components/admin/OAuthClientPeople.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-48D40418A3B5",
+    "consideredOptions": [
+      "people-disclosure-on-client-row",
+      "per-user-connected-apps-on-user-admin",
+      "new-admin-oauth-grants-route"
+    ]
+  },
+  "notes": {
+    "decision": "Fits with guardrails. The per-person revoke sits beside the whole-client revoke on the existing 'Keys for automated tools' table (the surface decided in DI-03DA64D1850B; placement scored in DI-48D40418A3B5), as a 'People' disclosure on each active browser-registered client row. No new route, tab or navigation entry. A per-user 'connected apps' view on the user admin (Google Workspace's shape) was considered and left for later: the operator's question starts from the client, not the person.",
+    "persona": "An administrator who sees that a shared AI-client registration still holds grants for an account nobody uses ends that one account's access, with a reason, without disconnecting themselves or anyone else.",
+    "reuse": "Composes Surface, Button, DataTable, StatusBadge, Notice and promptDialog with --dpf-* theme tokens; the operator gate is the existing requireOperator().",
+    "sourceTruth": "McpApiToken and OAuthRefreshToken rows for (client, person) via listOAuthClientPeople / revokeOAuthClientPersonGrants; revokedAt and revokedReason record the time, operator and reason.",
+    "states": "Loading shows the table skeleton; nobody connected says so; each person shows live grants, last use and a status (Connected, Expired, or 'Revoked <time>: <reason>'). The caller's row reads 'You' and has no revoke button. Revoke asks for a required reason in a danger dialog that names the person and says everyone else stays connected; the outcome or the server's refusal shows in a Notice. Status is text plus badge, never colour alone. Headless (credentials) clients have no People control because they belong to no person.",
+    "aiBoundary": "No control sends a coworker prompt. Revoking a person's grants is an operator action under the operator's own role.",
+    "verification": "Unit tests for the domain function (isolation, attribution, self-protection, refusals, listing) with web typecheck; live verification on the canonical runtime after self-upgrade, revoking admin@dpf.local under the shared Claude Code registration and confirming the operator's grants stay live."
+  }
+}

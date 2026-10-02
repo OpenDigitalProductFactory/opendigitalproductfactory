@@ -10,6 +10,7 @@
 // action queue.
 
 import { LayoutDashboard } from "lucide-react";
+import Link from "next/link";
 
 import { PlatformWorkspaceHome } from "./PlatformWorkspaceHome";
 import type { PlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
@@ -18,9 +19,12 @@ import type { WorkspaceHomeContribution } from "@/lib/workspace-home/types";
 type VerticalWorkspaceHomeProps = {
   contribution: WorkspaceHomeContribution;
   data: Omit<PlatformWorkspaceHomeData, "storefrontConfig">;
+  /** BI-560128FB: the customer-map coverage entry links to the map, with counts. */
+  customerMapCounts?: string | null;
 };
 
-export function VerticalWorkspaceHome({ contribution, data }: VerticalWorkspaceHomeProps) {
+export function VerticalWorkspaceHome({ contribution, data, customerMapCounts = null }: VerticalWorkspaceHomeProps) {
+  const customerMapTitle = contribution.components.find((component) => component.key === "customer-map")?.title ?? null;
   // What this archetype workspace covers — the configured component titles, deduped,
   // rendered as muted identity context (NOT a live action queue).
   const coverage = [...new Set(contribution.components.map((component) => component.title))];
@@ -50,7 +54,18 @@ export function VerticalWorkspaceHome({ contribution, data }: VerticalWorkspaceH
             {coverage.length > 0 && (
               <p className="mt-3 text-xs text-[var(--dpf-muted)]">
                 <span className="font-semibold uppercase tracking-widest">Covers</span>{" "}
-                {coverage.join(" · ")}
+                {coverage.map((title, index) => (
+                  <span key={title}>
+                    {index > 0 ? " · " : null}
+                    {title === customerMapTitle && customerMapCounts ? (
+                      <Link href="/customer?view=map" className="text-[var(--dpf-accent)] underline">
+                        {title} ({customerMapCounts})
+                      </Link>
+                    ) : (
+                      title
+                    )}
+                  </span>
+                ))}
               </p>
             )}
             {contribution.topConcerns.length > 0 && (

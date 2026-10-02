@@ -241,40 +241,73 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
       const plan = (latestBuild.plan as Record<string, unknown> | null) ?? {};
       const happyPathState = normalizeHappyPathState(plan.happyPathState);
       const handoffBrief = latestBuild.brief as { acceptanceCriteria?: string[]; fixContext?: import("@/lib/feature-build-types").FixContext } | null;
-      const gate = await checkBuildPhaseGate({
-        buildId,
-        from: latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
-        to: toPhase as import("@/lib/feature-build-types").BuildPhase,
-        evidence: {
-          kind: latestBuild.kind,
-          // Right-sizing matrix: persisted on plan.processSize at promote time.
-          processSize: (plan.processSize as string | undefined) ?? "medium",
-          fixContext: handoffBrief?.fixContext,
-          designDoc: latestBuild.designDoc, designReview: latestBuild.designReview,
-          buildPlan: latestBuild.buildPlan, planReview: latestBuild.planReview,
-          verificationOut: latestBuild.verificationOut, acceptanceMet: latestBuild.acceptanceMet,
-          uxTestResults: latestBuild.uxTestResults,
-          uxVerificationStatus: latestBuild.uxVerificationStatus,
-          acceptanceCriteria: handoffBrief?.acceptanceCriteria ?? [],
-          happyPathState,
-        },
-      });
-      // Record the gate outcome on the handoff (the gate that allowed —
-      // or blocked — advancement). Best-effort; never fail the handoff.
-      await prisma.phaseHandoff
-        .update({
-          where: { id: createdHandoff.id },
-          data: {
-            gateResult: {
-              allowed: gate.allowed,
-              reason: gate.reason ?? null,
-              fromPhase: latestBuild.phase,
-              toPhase,
-            } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+      // Structural phase gate, then record its outcome on the handoff (the gate
+      // that allowed — or blocked — advancement). Best-effort; never fail the
+      // handoff. One body, used by plan→build through transitionPlanToBuild and
+      // by every other transition below.
+      const evaluateStructuralGate = async () => {
+        const gate = await checkBuildPhaseGate({
+          buildId,
+          from: latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
+          to: toPhase as import("@/lib/feature-build-types").BuildPhase,
+          evidence: {
+            kind: latestBuild.kind,
+            // Right-sizing matrix: persisted on plan.processSize at promote time.
+            processSize: (plan.processSize as string | undefined) ?? "medium",
+            fixContext: handoffBrief?.fixContext,
+            designDoc: latestBuild.designDoc, designReview: latestBuild.designReview,
+            buildPlan: latestBuild.buildPlan, planReview: latestBuild.planReview,
+            verificationOut: latestBuild.verificationOut, acceptanceMet: latestBuild.acceptanceMet,
+            uxTestResults: latestBuild.uxTestResults,
+            uxVerificationStatus: latestBuild.uxVerificationStatus,
+            acceptanceCriteria: handoffBrief?.acceptanceCriteria ?? [],
+            happyPathState,
           },
-        })
-        .catch(() => {});
-      if (gate.allowed) {
+        });
+        await prisma.phaseHandoff
+          .update({
+            where: { id: createdHandoff.id },
+            data: {
+              gateResult: {
+                allowed: gate.allowed,
+                reason: gate.reason ?? null,
+                fromPhase: latestBuild.phase,
+                toPhase,
+              } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+            },
+          })
+          .catch(() => {});
+        return gate;
+      };
+      const gateBlocked = (reason: string | undefined) =>
+        ({ success: true, message: `Phase handoff saved but gate blocked advance: ${reason}. Evidence may be incomplete.` });
+
+      if (latestBuild.phase === "plan" && toPhase === "build") {
+        // GPP C-8 (PR-F, BI-45F9CB7A). The gate order, the phase write and the
+        // PR-B shadow record ("gpp-c8-transition-gate-skipped") live in the
+        // shared transition; this path's gates are declared in
+        // PLAN_TO_BUILD_GATE_PROFILES["save-phase-handoff"]. It still evaluates
+        // the structural gate only: enforcing the WWMD plan-advancement gate
+        // here awaits the recorded C-8 decision on the shadow evidence. Imported
+        // from the leaf core so this pack stays out of the web import cycle.
+        const { PLAN_TO_BUILD_PASS, refusePlanToBuild, transitionPlanToBuild } = await import(
+          "@/lib/build/plan-to-build-transition-core"
+        );
+        const transition = await transitionPlanToBuild<"save-phase-handoff", string | undefined>({
+          buildId: latestBuild.buildId,
+          path: "save-phase-handoff",
+          logActivity: logBuildActivity,
+          steps: {
+            "structural-phase-gate": async () => {
+              const gate = await evaluateStructuralGate();
+              return gate.allowed ? PLAN_TO_BUILD_PASS : refusePlanToBuild(gate.reason);
+            },
+          },
+        });
+        if (transition.kind === "refused") return gateBlocked(transition.refusal);
+      } else {
+        const gate = await evaluateStructuralGate();
+        if (!gate.allowed) return gateBlocked(gate.reason);
         if (toPhase === "complete") {
           const { completeFeatureBuildTransition } = await import(
             "@/lib/backlog/initiative-readiness/build-terminal-transition"
@@ -293,28 +326,16 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
           }
         } else {
           await prisma.featureBuild.update({ where: { buildId: latestBuild.buildId }, data: { phase: toPhase } });
-          // GPP C-8 shadow (BI-45F9CB7A). advanceBuildPhase also enforces the
-          // blocking WWMD plan-advancement gate on plan→build. This path predates
-          // that gate and skips it. Record the skip so live evidence can decide
-          // enforcement; the outcome here is deliberately unchanged.
-          if (latestBuild.phase === "plan" && toPhase === "build") {
-            logBuildActivity(
-              latestBuild.buildId,
-              "gpp-c8-transition-gate-skipped",
-              "plan → build advanced by save_phase_handoff without the WWMD plan-advancement gate (shadow; not enforced)",
-            );
-          }
         }
-        if (toPhase === "review") {
-          const { queueBuildReviewVerification } = await import("@/lib/build-review-verification-trigger");
-          await queueBuildReviewVerification(latestBuild.buildId);
-        }
-        const { agentEventBus } = await import("@/lib/agent-event-bus");
-        if (latestBuild.threadId) agentEventBus.emit(latestBuild.threadId, { type: "phase:change", buildId: latestBuild.buildId, phase: toPhase } as import("@/lib/agent-event-bus").AgentEvent);
-        logBuildActivity(latestBuild.buildId, "phase:advance", `Phase advanced: ${latestBuild.phase} → ${toPhase}`);
-        return { success: true, message: `Phase advanced: ${latestBuild.phase} → ${toPhase}` };
       }
-      return { success: true, message: `Phase handoff saved but gate blocked advance: ${gate.reason}. Evidence may be incomplete.` };
+      if (toPhase === "review") {
+        const { queueBuildReviewVerification } = await import("@/lib/build-review-verification-trigger");
+        await queueBuildReviewVerification(latestBuild.buildId);
+      }
+      const { agentEventBus } = await import("@/lib/agent-event-bus");
+      if (latestBuild.threadId) agentEventBus.emit(latestBuild.threadId, { type: "phase:change", buildId: latestBuild.buildId, phase: toPhase } as import("@/lib/agent-event-bus").AgentEvent);
+      logBuildActivity(latestBuild.buildId, "phase:advance", `Phase advanced: ${latestBuild.phase} → ${toPhase}`);
+      return { success: true, message: `Phase advanced: ${latestBuild.phase} → ${toPhase}` };
     }
   } catch (err) {
     console.error("[save_phase_handoff] auto-advance failed:", err);

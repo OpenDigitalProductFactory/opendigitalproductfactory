@@ -43,6 +43,10 @@ hidden characters from the copy the coworker sees. Emoji, flags, the joining
 marks Persian and Hindi need, and the direction marks Arabic and Hebrew text
 needs are kept. The file and its text are stored exactly as you uploaded them.
 
+A coworker treats the content of a file as information to work with, never as
+instructions. If a file asks the coworker to do something, the coworker tells
+you what the file says instead of doing it.
+
 ## When the converter is off
 
 The document converter is part of the platform, but not every installation has

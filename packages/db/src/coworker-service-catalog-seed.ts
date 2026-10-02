@@ -194,7 +194,10 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     valueStreams: ["explore", "integrate"],
     requiredInputs: [{ key: "capability-gap" }, { key: "provider-candidates" }],
     producedOutputs: [{ key: "tool-evaluation-candidate" }, { key: "adoption-risks" }],
-    backingSkillIds: ["external-catalog-scout"],
+    // This cited the AGENT id, not a skill — so an advertised service resolved to
+    // nothing. external-catalog-candidate-sweep is this agent's own skill and is
+    // exactly the service's work, so the fix is the reference, not a new skill.
+    backingSkillIds: ["external-catalog-candidate-sweep"],
     backingToolNames: ["create_backlog_item", "wiki_query"],
     backingGrantKeys: ["backlog_read", "backlog_write", "registry_read"],
     costModel: { pricing: "internal", externalCost: "provider-dependent" },

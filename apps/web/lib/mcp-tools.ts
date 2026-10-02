@@ -374,6 +374,21 @@ export async function executeTool(
   // Strip empty optional object params that models send as schema artifacts
   const params = sanitizeToolParams(toolName, rawParams);
 
+  // GPP Phase 2 PR-C (BI-69415B68): the reference monitor always passes
+  // `governedSource`, so its absence marks a direct call that bypassed it. For
+  // an outward/authority/irreversible tool, record one `unmediated` permit
+  // observation, fire-and-forget: it never awaits on this path, never throws
+  // here, and never changes the call. Routine reads skip it without loading
+  // the module (only a side-effecting tool can be O/A/I).
+  if (!context?.governedSource) {
+    const gppTool = PLATFORM_TOOLS.find((t) => t.name === toolName);
+    if (gppTool?.sideEffect) {
+      void import("@/lib/gpp/unmediated-observation")
+        .then(({ observeUnmediatedToolCall }) => observeUnmediatedToolCall({ toolName, tool: gppTool, context }))
+        .catch(() => undefined);
+    }
+  }
+
   // ─── Build-context hint (BI-2DAB02B4 / BI-F4A30FCB) ────────────────────────
   // When the coworker is messaging from a specific build, that build is plumbed
   // here as context.featureBuildId (a cuid). Resolve it to the FB- buildId and

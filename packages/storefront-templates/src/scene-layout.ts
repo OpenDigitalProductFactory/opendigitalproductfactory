@@ -105,7 +105,17 @@ export interface ScenePlacementBase<Geometry> {
 }
 
 export type CartesianSceneZone = SceneZoneBase<CartesianRegionGeometry>;
-export type GeographicSceneZone = SceneZoneBase<GeographicPolygonGeometry>;
+/** Who serves a geographic zone used as a service area (BI-6CC10E4C). */
+export interface GeographicZoneCoverage {
+  readonly kind: "staffing-crew" | "employee";
+  /** `StaffingCrew.crewId` or `EmployeeProfile.employeeId`. */
+  readonly id: string;
+}
+
+export interface GeographicSceneZone
+  extends SceneZoneBase<GeographicPolygonGeometry> {
+  readonly coveredBy?: GeographicZoneCoverage;
+}
 export type NodeGraphSceneZone = SceneZoneBase<CartesianRegionGeometry>;
 
 export type CartesianScenePlacement =

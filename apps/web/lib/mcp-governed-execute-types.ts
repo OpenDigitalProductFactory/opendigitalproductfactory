@@ -121,6 +121,14 @@ export type GovernedExecuteContext = {
    * gate treats it as the human's recorded delegation to `agentId`.
    */
   connectionDelegation?: { authorityBindingId: string; agentId: string };
+  /**
+   * GPP Phase 2 PR-C (BI-69415B68): a permit handle the caller presented —
+   * an external client replaying the opaque permit id it was given, carried on
+   * the MCP route as `params._meta["com.opendigitalproductfactory/authorization-handle"]`.
+   * The monitor records the handle's verdict; it refuses on it only for a
+   * binding promoted to enforced (PR-E, lib/gpp/binding-enforcement.ts).
+   */
+  permitHandle?: string;
 };
 
 export type GovernedExecuteArgs = {
@@ -145,7 +153,12 @@ export type GovernedExecuteRejection =
   | "alignment_bypass_forbidden"
   | "receipt_reservation_failed"
   | "precondition_denied"
-  | "precondition_escalation_required";
+  | "precondition_escalation_required"
+  /**
+   * GPP Phase 2 PR-E: an enforced binding covers the call and it carries no
+   * valid permit. A hold, not a settled no: pass the named gate and call again.
+   */
+  | "permit_required";
 
 export type GovernedExecuteResult = ToolResult & {
   governance?: {
@@ -156,6 +169,20 @@ export type GovernedExecuteResult = ToolResult & {
     alignmentInteractionId?: string;
     precondition?: PreconditionOrderingDecision;
     approvalReplayOf?: string;
+    /**
+     * GPP Phase 2 PR-D (BI-69415B68): the permit the reference monitor minted
+     * for this call — `gpp1.<permitId>.<keyId>.<mac>`, or the bare permit id
+     * when the install has no permit key — and its shadow verdict. Additive;
+     * present only when a gate admitted an outward, authority or irreversible
+     * call. The verdict never changes the outcome.
+     */
+    permit?: { handle: string; verdict: string };
+    /**
+     * GPP Phase 2 PR-G: when `permit.handle` expires (ISO-8601). Present
+     * exactly when `permit` is. The MCP route returns the two together on
+     * the tool result's `_meta` (lib/gpp/permit-carriage.ts).
+     */
+    permitHandleExpiresAt?: string;
   };
 };
 

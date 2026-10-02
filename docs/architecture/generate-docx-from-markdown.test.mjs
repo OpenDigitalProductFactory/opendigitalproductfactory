@@ -9,8 +9,10 @@ import { publicationConfig, publicationKeys } from "./agent-standard-publication
 import {
   doctoolsCommand,
   embeddableImagePath,
+  extractMermaidFences,
   inlineLocalImages,
   publicationHtml,
+  replaceMermaidFences,
   withPublicationFrontMatter,
 } from "./generate-docx-from-markdown.mjs";
 
@@ -46,6 +48,22 @@ describe("inlineLocalImages", () => {
     const lines = inlineLocalImages(md, dir).split("\n");
     assert.equal(lines[1], "![Alt](d/png/a.png)");
     assert.match(lines[3], /data:image\/png/);
+  });
+});
+
+describe("inline Mermaid blocks", () => {
+  const md = ["# T", "```mermaid", "flowchart TB", "  a --> b", "```", "text", "```mermaid", "flowchart LR", "  c --> d", "```"].join("\n");
+
+  it("extracts each block's source in document order", () => {
+    assert.deepEqual(extractMermaidFences(md), ["flowchart TB\n  a --> b\n", "flowchart LR\n  c --> d\n"]);
+  });
+
+  it("replaces a block with its rendered PNG and leaves an unrendered one as written", () => {
+    writeFileSync(join(dir, "d", "png", "doc-fence-01.png"), PNG);
+    const out = replaceMermaidFences(md, join(dir, "d"), "doc-fence");
+    assert.ok(out.includes(`![Diagram 1](${join(dir, "d", "png", "doc-fence-01.png")})`), out);
+    assert.doesNotMatch(out, /flowchart TB/);
+    assert.match(out, /```mermaid\nflowchart LR/);
   });
 });
 

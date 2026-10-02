@@ -173,7 +173,7 @@ describe("POST — mutating tool safety", () => {
       runId: "QR-MCP-DRAIN",
       retryAfterSeconds: 30,
       writesRefused: true,
-      cleanupOperationsAllowed: ["release_nonprod_environment_lease", "renew_nonprod_environment_lease"],
+      cleanupOperationsAllowed: ["release_nonprod_environment_lease", "renew_nonprod_environment_lease", "heartbeat_workroom", "heartbeat_runtime_target"],
     });
     expect(body.result.content[0].text).toContain("Mutating MCP write refused");
     expect(govMock).not.toHaveBeenCalled();
@@ -181,7 +181,7 @@ describe("POST — mutating tool safety", () => {
 
   // Renewal joined release on 2026-09-24: refusing it during a drain lapsed the
   // lease of a gate that was already running, and its verdict was lost.
-  it.each(["release_nonprod_environment_lease", "renew_nonprod_environment_lease"])("allows %s during quiescence", async (toolName) => {
+  it.each(["release_nonprod_environment_lease", "renew_nonprod_environment_lease", "heartbeat_workroom", "heartbeat_runtime_target"])("allows %s during quiescence", async (toolName) => {
     getQuiescenceConfigMock.mockResolvedValue({
       level: "draining",
       runId: "QR-MCP-DRAIN",

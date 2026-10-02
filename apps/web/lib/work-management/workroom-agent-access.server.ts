@@ -26,7 +26,7 @@ const owns = (row: Membership) => row.lifecycle === "active" && row.roles.some((
  * appointed to coordinate acts for people and never displaces them
  * (BI-A27B903D).
  */
-function ownsRoom(principal: Principal, participants: Membership[], holders: (string | null)[]) {
+export function ownsRoom(principal: Principal, participants: Membership[], holders: (string | null)[]) {
   const row = participants.find((entry) => entry.principalId === principal.id);
   if (row) return owns(row);
   return !participants.some((entry) => owns(entry) && entry.principal?.kind !== "agent") && holders.includes(principal.id);

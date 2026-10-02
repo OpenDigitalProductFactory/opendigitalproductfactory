@@ -5,6 +5,19 @@ export function heartbeatIntervalMs(ttlMs) {
   return Math.max(1, Math.floor(ttlMs / 3));
 }
 
+/**
+ * The TTL to pace heartbeats by: the authority the server actually granted
+ * (`expiresAt` minus now), falling back to the requested TTL only when the
+ * grant carries no readable expiry. Pacing by the requested TTL when the
+ * server granted less fences the run at its own deadline before the first
+ * heartbeat fires (BI-E226C954).
+ */
+export function admittedLeaseTtlMs(expiresAt, fallbackTtlMs, nowMs = Date.now()) {
+  const expiryMs = parsedExpiryMs(expiresAt);
+  if (expiryMs === null) return fallbackTtlMs;
+  return Math.max(1, expiryMs - nowMs);
+}
+
 export function authoritySafetyMarginMs(ttlMs) {
   if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
     throw new Error("lease TTL must be a positive number");

@@ -757,6 +757,14 @@ if [ "$_git_webhook_secret" != "kept" ]; then
   info "Generated DPF_GIT_WEBHOOK_SECRET in .env (read it there to configure the GitHub webhook)"
 fi
 
+# Signing key for GPP permits (BI-8541D491). Same rules as the webhook secret:
+# filled when missing or a placeholder, never rotated, never printed. Nothing
+# outside the portal needs it.
+if [ "$(dpf_env_ensure_secret_hex DPF_GPP_PERMIT_SECRET .env 32 \
+  '# Signing key for GPP permits (BI-8541D491). Distinct from every other secret; never rotated by the installer.')" != "kept" ]; then
+  info "Generated DPF_GPP_PERMIT_SECRET in .env"
+fi
+
 # Inngest signing and event keys (BI-3267763F). The portal and the inngest
 # service verify each other with them, so a value published in the repository
 # lets anyone who can reach /api/inngest forge signed invocations. Filled when

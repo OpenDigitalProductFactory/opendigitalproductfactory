@@ -571,11 +571,9 @@ export async function callWithFallbackChain(
             await markModelDegraded(entry.providerId, entry.modelId, `local_${e.code}_misclassification`);
             scheduleRecovery(entry.providerId, entry.modelId);
           } else {
-          await prisma.modelProvider
-            .update({
-              where: { providerId: entry.providerId },
-              data: { status: "disabled" },
-            })
+          // BI-D28A4F55: recorded as automatic and recovered on its own.
+          const { autoDisableProvider } = await import("./provider-auto-disable");
+          await autoDisableProvider({ providerId: entry.providerId, cause: "billing", source: "fallback-chain", detail: e.message?.slice(0, 160) })
             .catch((err) =>
               console.error(`[callWithFallbackChain] failed to disable ${entry.providerId} after billing error:`, err),
             );
@@ -660,12 +658,10 @@ export async function callWithFallbackChain(
             );
           }
           // Non-OAuth provider, refresh failed, or refresh-retry already
-          // attempted: the credentials are genuinely bad — disable the provider.
-          await prisma.modelProvider
-            .update({
-              where: { providerId: entry.providerId },
-              data: { status: "disabled" },
-            })
+          // attempted: disable the provider — as an automatic disable that
+          // schedules its own recovery (BI-D28A4F55), not a permanent one.
+          const { autoDisableProvider } = await import("./provider-auto-disable");
+          await autoDisableProvider({ providerId: entry.providerId, cause: "auth", source: "fallback-chain", detail: e.message?.slice(0, 160) })
             .catch((err) =>
               console.error(
                 `[callWithFallbackChain] failed to mark ${entry.providerId} disabled:`,

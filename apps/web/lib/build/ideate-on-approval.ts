@@ -325,6 +325,15 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         /* phase attribution remains best-effort */
       }
     };
+    // §11a: no new ideate research while an upgrade drains (it was swallowed
+    // and dispatched anyway). The stranded-build resume re-dispatches it after.
+    {
+      const { getQuiescenceLevel } = await import("@/lib/self-upgrade/quiescence");
+      if ((await getQuiescenceLevel()) !== "normal") {
+        await logActivity("Waiting for the platform upgrade to finish before starting research.");
+        return { kind: "deferred-capacity", reason: "waiting for the platform upgrade to finish", durationMs: 0 };
+      }
+    }
     try {
       const { startBuildPhaseRun } = await import("./build-phase-run");
       // Await the start. A later release must not race an unawaited insert

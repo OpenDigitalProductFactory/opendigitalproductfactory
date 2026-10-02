@@ -94,6 +94,20 @@ and `TAK` enforces it on every call. The evidence and market context are in the 
 | Golden Triangle | Compiles human cost/quality/time posture into effort, model tier, verification depth, review depth, and retries; it allocates assurance resources but does not prove competence |
 | Data stewardship | Establishes the classification, quality, provenance, use, retention, residency, and accountable ownership constraints that both qualification and runtime routing must honor |
 
+## Word editions
+
+Each standard and the white paper are also published as a Word document, generated from the Markdown
+above by `pnpm docs:agent-standards`. The Markdown is the source of truth; the Word file is a
+publication snapshot and carries its generation date.
+
+| Document | Word edition |
+|---|---|
+| Trusted AI agent governance white paper | [Trusted-AI-Agent-Governance-White-Paper.docx](/architecture/Trusted-AI-Agent-Governance-White-Paper.docx) |
+| `TAK` — Trusted AI Kernel | [Trusted-AI-Kernel-Architecture.docx](/architecture/Trusted-AI-Kernel-Architecture.docx) |
+| `GAID` — Global AI Agent Identification | [GAID.docx](/architecture/GAID.docx) |
+| `TAK-JSI` — Job-Specific Intelligence | [Job-Specific-Intelligence.docx](/architecture/Job-Specific-Intelligence.docx) |
+| `GPP` — Gated Permissions Process | [Gated-Permissions-Process.docx](/architecture/Gated-Permissions-Process.docx) |
+
 ## Source-of-truth rule
 
 Normative requirements belong in exactly one standard:

@@ -169,3 +169,122 @@ test("non-test commands are never candidates", () => {
   });
   assert.deepEqual(findings, []);
 });
+
+// ---------------------------------------------------------------------------
+// BI-30E3E229 — two surfaces the original detector could not see. Both are
+// regressions from PR #5905, where the preflight reported "77 guards clean"
+// while CI failed deterministically on scripts/ci-policy-guards.test.mjs.
+//
+// `exists` is injected throughout: this file must never touch the repository.
+// ---------------------------------------------------------------------------
+
+/** A read of a real repo file by cwd-relative literal — and NO root binding. */
+const LITERAL_PATH_SOURCE = `
+import { readFileSync } from "node:fs";
+test("the workflow still pins the shard count", () => {
+  const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
+  assert.match(workflow, /shard/);
+});
+`;
+
+/** The registry-inventory shape: imported collection vs a literal inventory. */
+const IMPORTED_REGISTRY_SOURCE = `
+import { POLICY_GUARD_PROFILES } from "./lib/ci-policy-guards.mjs";
+
+const EXPECTED_LEGACY_JOBS = [
+  "alpha-guard",
+  "beta-guard",
+];
+
+test("accounts for every registered guard exactly once", () => {
+  const entries = Object.values(POLICY_GUARD_PROFILES).flat();
+  assert.deepEqual(entries.map((e) => e.legacyJobId).sort(), EXPECTED_LEGACY_JOBS);
+});
+`;
+
+const yes = () => true;
+const no = () => false;
+
+test("surface 2: a repo-relative literal read counts even with no root binding", () => {
+  // The original detector returned [] here: with no fileURLToPath binding it
+  // abandoned the file before examining a single read.
+  assert.equal(isConformanceAssertionSource(LITERAL_PATH_SOURCE, { exists: yes }), true);
+  const reads = liveRepoReads(LITERAL_PATH_SOURCE, { exists: yes });
+  assert.equal(reads.length, 1);
+  assert.match(reads[0].text, /\.github\/workflows\/ci\.yml/);
+});
+
+test("surface 2: a literal that names no repository file is not a conformance read", () => {
+  assert.equal(isConformanceAssertionSource(LITERAL_PATH_SOURCE, { exists: no }), false);
+});
+
+test("surface 2: a read of a sandbox path built at runtime is still not a conformance read", () => {
+  const sandbox = `
+import { readFileSync, mkdtempSync } from "node:fs";
+test("writes into a sandbox", () => {
+  const dir = mkdtempSync(join(tmpdir(), "x-"));
+  const text = readFileSync(join(dir, "out.json"), "utf8");
+  assert.ok(text);
+});
+`;
+  // The path is an expression, not a string literal, so no literal is recovered.
+  assert.equal(isConformanceAssertionSource(sandbox, { exists: yes }), false);
+});
+
+test("surface 2: a read written inside a fixture string is not counted", () => {
+  const embedded = [
+    "const FIXTURE = `",
+    '  const text = readFileSync(".github/workflows/ci.yml", "utf8");',
+    "`;",
+    "test(\"parses\", () => { assert.ok(parse(FIXTURE)); });",
+  ].join("\n");
+  assert.equal(isConformanceAssertionSource(embedded, { exists: yes }), false);
+});
+
+test("surface 3: an imported registry deep-compared to a literal inventory is detected", () => {
+  assert.equal(isConformanceAssertionSource(IMPORTED_REGISTRY_SOURCE, { exists: no }), true);
+  const reads = liveRepoReads(IMPORTED_REGISTRY_SOURCE, { exists: no });
+  assert.equal(reads.length, 1);
+  assert.match(reads[0].text, /POLICY_GUARD_PROFILES imported from \.\/lib\/ci-policy-guards\.mjs/);
+});
+
+test("surface 3: an INVOKED import is the unit under test, not a registry", () => {
+  const unit = `
+import { evaluate } from "./check-thing.mjs";
+
+const EXPECTED_CODES = ["a", "b"];
+
+test("maps codes", () => {
+  assert.deepEqual(evaluate({}).map((r) => r.code), EXPECTED_CODES);
+});
+`;
+  assert.equal(isConformanceAssertionSource(unit, { exists: no }), false);
+});
+
+test("surface 3: an imported constant with no inventory to compare against is not detected", () => {
+  const plain = `
+import { MIN_KEYS } from "./check-thing.mjs";
+test("floor is positive", () => {
+  assert.ok(MIN_KEYS > 0);
+});
+`;
+  assert.equal(isConformanceAssertionSource(plain, { exists: no }), false);
+});
+
+test("surface 3: a bare package import is never a repository read", () => {
+  const external = `
+import { describe } from "node:test";
+
+const EXPECTED = ["x"];
+
+test("uses a collection", () => {
+  assert.deepEqual(Object.values(describe).flat(), EXPECTED);
+});
+`;
+  assert.equal(isConformanceAssertionSource(external, { exists: no }), false);
+});
+
+test("the original root-binding surface still works and is not double-counted", () => {
+  assert.equal(isConformanceAssertionSource(CONFORMANCE_SOURCE, { exists: no }), true);
+  assert.equal(isConformanceAssertionSource(UNIT_SOURCE, { exists: no }), false);
+});

@@ -1,0 +1,310 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "No copies. GppPermit and GppPermitObservation are read only by the GPP verdict code; no projection, graph mirror or AI context reads them.",
+    "ToolExecution.gppPermitId / gppPermitVerdict duplicate the observation's verdict onto the existing audit row by design, so the authority trail shows it without a join.",
+    "Identifiers that are deliberately not foreign keys use *Ref/*Key column names (FK Index Coverage guard): a lineage reference must be able to go missing and be recorded as lineage_missing (PR-D), and audit evidence must outlive its referent."
+  ],
+  "privacyAssessment": {
+    "personalData": true,
+    "sensitivity": "internal: security-audit evidence keyed by internal user and agent ids already present on ToolExecution",
+    "dataSubjectRights": "Holds no names, contact data, tool parameters or results. Follows ToolExecution's 365-day telemetry-bounded security-audit retention (the @dpf lifecycle tag enrolls both tables in the retention sweep).",
+    "reviewDisposition": "Audit-only in PR-C: no verdict changes a call's outcome. Read by operators and the later promotion review (PR-E)."
+  },
+  "migration": {
+    "name": "20261001180000_gpp_shadow_permits",
+    "backfill": "None. Creates three enums and two empty tables, and adds two nullable columns to ToolExecution. No existing row is read or rewritten; an older ToolExecution row reads NULL, meaning 'recorded before permits existed'. IF NOT EXISTS and duplicate_object guards make a re-run harmless, so it applies on any data state.",
+    "rollback": "Forward-only. Reverting the code leaves the tables and columns unused and harmless."
+  },
+  "tests": [
+    "packages/db/src/gpp-shadow-permits-migration.test.ts",
+    "apps/web/lib/gpp/permit-verdict.test.ts",
+    "apps/web/lib/gpp/bindings.test.ts",
+    "apps/web/lib/mcp-governed-execute-permit-shadow.test.ts",
+    "apps/web/lib/mcp-tools.unmediated-observation.test.ts",
+    "apps/web/app/api/mcp/v1/route.permit-meta.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:gpp-permit",
+      "prismaModel": "GppPermit",
+      "lifecycleDisposition": "New model; @dpf lifecycle=telemetry-bounded retention=365d sensitivity=internal categories=security-audit timeAxis=createdAt, matching ToolExecution.",
+      "fields": [
+        {
+          "fieldId": "data:gpp-permit#id",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#gppPermitId",
+          "resolution": "governed",
+          "reason": "Opaque permit handle (GPM-<uuid>) a caller may cite or replay; random, carries no business data.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#bindingKey",
+          "resolution": "governed",
+          "reason": "Which declared binding (lib/gpp/bindings.ts) minted the permit.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#bindingVersion",
+          "resolution": "governed",
+          "reason": "Version of that binding.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#shapeRef",
+          "resolution": "not-applicable",
+          "reason": "Reserved for Phase 3 compiled bindings; null in Phase 2.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#stageKey",
+          "resolution": "not-applicable",
+          "reason": "Reserved for Phase 3 compiled bindings; null in Phase 2.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#gateKey",
+          "resolution": "governed",
+          "reason": "The gate whose admit minted the permit.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#authority",
+          "resolution": "governed",
+          "reason": "Owning decision scope (DecisionScope enum).",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#gateDecisionRef",
+          "resolution": "governed",
+          "reason": "Lineage to DecisionInteraction.interactionId of the admitting gate decision.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#authorityDecisionRef",
+          "resolution": "governed",
+          "reason": "Lineage to AuthorizationDecisionLog.decisionId.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#envelopeId",
+          "resolution": "governed",
+          "reason": "Lineage to the approved CoworkerActionEnvelope (FK, ON DELETE SET NULL).",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#actorGaid",
+          "resolution": "not-applicable",
+          "reason": "Reserved; null in PR-C.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#actorUserRef",
+          "resolution": "governed",
+          "reason": "The human the call ran for, as already recorded on ToolExecution.userId.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context.",
+          "flags": [
+            "personal"
+          ],
+          "fieldPolicy": "Internal user id only (no name or contact data). Read only by audit and verdict code; follows the 365-day security-audit retention of ToolExecution."
+        },
+        {
+          "fieldId": "data:gpp-permit#actorAgentRef",
+          "resolution": "governed",
+          "reason": "Coworker agent id, as already recorded on ToolExecution.agentId.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#workroomRef",
+          "resolution": "governed",
+          "reason": "Workroom the call ran in, when roomed.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#subjectScope",
+          "resolution": "not-applicable",
+          "reason": "Reserved; null in PR-C.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#capabilities",
+          "resolution": "governed",
+          "reason": "Tool names the permit grants ([{tool}]); never parameters.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#paramHash",
+          "resolution": "not-applicable",
+          "reason": "Populated by PR-D (SHA-256 over canonicalJson); null in PR-C.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#enforcement",
+          "resolution": "governed",
+          "reason": "Enforcement mode; PR-C mints shadow only.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#notBefore",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#expiresAt",
+          "resolution": "governed",
+          "reason": "Validity end (mint time + 15 minutes).",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#maxUses",
+          "resolution": "governed",
+          "reason": "Use budget (1).",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#useCount",
+          "resolution": "governed",
+          "reason": "Uses counted by compare-and-set on a valid verdict.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#nonce",
+          "resolution": "not-applicable",
+          "reason": "Random per-permit nonce; no business meaning.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#parentPermitId",
+          "resolution": "governed",
+          "reason": "Self-relation to the attenuation parent (FK, ON DELETE SET NULL); null in PR-C.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#revokedAt",
+          "resolution": "governed",
+          "reason": "Revocation time; no writer in PR-C.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#keyRef",
+          "resolution": "not-applicable",
+          "reason": "Populated by PR-D; null in PR-C.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#mac",
+          "resolution": "not-applicable",
+          "reason": "Populated by PR-D; null in PR-C.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        },
+        {
+          "fieldId": "data:gpp-permit#createdAt",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from the reference monitor's own gate decisions and the authenticated caller context."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:gpp-permit-observation",
+      "prismaModel": "GppPermitObservation",
+      "lifecycleDisposition": "New model; @dpf lifecycle=telemetry-bounded retention=365d sensitivity=internal categories=security-audit timeAxis=createdAt, matching ToolExecution.",
+      "fields": [
+        {
+          "fieldId": "data:gpp-permit-observation#id",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts and lib/gpp/unmediated-observation.ts (via lib/gpp/permit-store.ts)."
+        },
+        {
+          "fieldId": "data:gpp-permit-observation#permitRowId",
+          "resolution": "governed",
+          "reason": "FK to the verified GppPermit (ON DELETE SET NULL).",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts and lib/gpp/unmediated-observation.ts (via lib/gpp/permit-store.ts)."
+        },
+        {
+          "fieldId": "data:gpp-permit-observation#bindingKey",
+          "resolution": "governed",
+          "reason": "Binding that covered the call, when any.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts and lib/gpp/unmediated-observation.ts (via lib/gpp/permit-store.ts)."
+        },
+        {
+          "fieldId": "data:gpp-permit-observation#toolName",
+          "resolution": "governed",
+          "reason": "The outward/authority/irreversible tool called.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts and lib/gpp/unmediated-observation.ts (via lib/gpp/permit-store.ts)."
+        },
+        {
+          "fieldId": "data:gpp-permit-observation#verdict",
+          "resolution": "governed",
+          "reason": "Shadow verdict (GppPermitVerdict enum).",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts and lib/gpp/unmediated-observation.ts (via lib/gpp/permit-store.ts)."
+        },
+        {
+          "fieldId": "data:gpp-permit-observation#enforcement",
+          "resolution": "governed",
+          "reason": "Enforcement mode at the time (shadow in PR-C).",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts and lib/gpp/unmediated-observation.ts (via lib/gpp/permit-store.ts)."
+        },
+        {
+          "fieldId": "data:gpp-permit-observation#path",
+          "resolution": "governed",
+          "reason": "monitor or direct (GppObservationPath enum).",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts and lib/gpp/unmediated-observation.ts (via lib/gpp/permit-store.ts)."
+        },
+        {
+          "fieldId": "data:gpp-permit-observation#toolExecutionId",
+          "resolution": "governed",
+          "reason": "FK to the monitor's ToolExecution audit row (ON DELETE SET NULL; monitor path only).",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts and lib/gpp/unmediated-observation.ts (via lib/gpp/permit-store.ts)."
+        },
+        {
+          "fieldId": "data:gpp-permit-observation#callerSite",
+          "resolution": "governed",
+          "reason": "Route, agent or task hint for a direct call; never parameters.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts and lib/gpp/unmediated-observation.ts (via lib/gpp/permit-store.ts)."
+        },
+        {
+          "fieldId": "data:gpp-permit-observation#detail",
+          "resolution": "governed",
+          "reason": "Small structured detail (admitting binding, whether a handle was presented, mint failure); never parameters or results.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts and lib/gpp/unmediated-observation.ts (via lib/gpp/permit-store.ts)."
+        },
+        {
+          "fieldId": "data:gpp-permit-observation#createdAt",
+          "resolution": "not-applicable",
+          "reason": "Technical key or timestamp; no business meaning beyond row identity and audit time.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts and lib/gpp/unmediated-observation.ts (via lib/gpp/permit-store.ts)."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:tool-execution",
+      "prismaModel": "ToolExecution",
+      "lifecycleDisposition": "Existing model; the two nullable columns follow the row's existing 365-day lifecycle and add no retention obligation.",
+      "fields": [
+        {
+          "fieldId": "data:tool-execution#gppPermitRef",
+          "resolution": "governed",
+          "reason": "Opaque id of the permit the monitor verified for this O/A/I call, so the effect can cite it.",
+          "provenance": "Written only by apps/web/lib/governed-tool-audit.ts from the monitor's permit outcome."
+        },
+        {
+          "fieldId": "data:tool-execution#gppPermitVerdict",
+          "resolution": "governed",
+          "reason": "Shadow permit verdict for this O/A/I call; null for R/W calls and rows written before PR-C.",
+          "provenance": "Written only by apps/web/lib/governed-tool-audit.ts from the monitor's permit outcome."
+        }
+      ]
+    }
+  ]
+}

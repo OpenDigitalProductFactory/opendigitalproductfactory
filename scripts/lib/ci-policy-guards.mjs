@@ -263,6 +263,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-3267763F: no compose default, installer output or self-upgrade
       // leaves Inngest on the signing/event keys once published in this repo.
       conformanceTest("scripts/installer/inngest-keys-contract.test.mjs"),
+      // BI-8541D491: every install path provisions the GPP permit signing key
+      // and a self-upgrade never rotates it.
+      conformanceTest("scripts/installer/gpp-permit-secret-contract.test.mjs"),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
@@ -282,8 +285,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/lib/published-image-freshness.test.mjs",
-        "scripts/publish-image-release-identity.test.mjs", "scripts/doctools-image-contract.test.mjs",
+        "scripts/doctools-image-contract.test.mjs",
       ),
+      // BI-30E3E229: reads repo files by repo-relative literal path, so it
+      // asserts live repository state rather than this guard's logic.
+      conformanceTest("scripts/publish-image-release-identity.test.mjs"),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
@@ -304,26 +310,34 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/derived-artifacts-gate.mjs", "check-all"),
     ]),
     guard("pr-health-test", "PR Health Logic", [
+      // BI-30E3E229: these five assert LIVE REPOSITORY STATE — they read
+      // .github/workflows/*.yml and package/vitest configs by repo-relative
+      // literal path, and ci-policy-guards.test.mjs additionally deep-compares
+      // the imported POLICY_GUARD_PROFILES registry against its own inventory.
+      // Stripping them host-side is what let an unregistered guard reach CI
+      // behind a clean preflight (PR #5905). Marked, so the preflight keeps them.
+      conformanceTest(
+        "scripts/check-ci-build-cache.test.mjs",
+        "scripts/ci-coverage-config.test.mjs",
+        "scripts/ci-evidence-workflow.test.mjs",
+        "scripts/ci-build-artifact-workflow.test.mjs",
+        "scripts/ci-policy-guards.test.mjs",
+      ),
       node(
         "--test",
         "scripts/pr-health.test.mjs",
         "scripts/check-stuck-auto-merge.test.mjs",
         "scripts/check-failure-readiness.test.mjs",
-        "scripts/check-ci-build-cache.test.mjs",
         "scripts/dev-postgres-pgvector-contract.test.mjs",
         "scripts/lib/ci-observation.test.mjs",
         "scripts/ci-observation.test.mjs",
         "scripts/ci-shadow-selection.test.mjs",
-        "scripts/ci-coverage-config.test.mjs",
         "scripts/ci-change-scope.test.mjs",
         "scripts/ci-evidence-plan.test.mjs",
-        "scripts/ci-evidence-workflow.test.mjs",
-        "scripts/ci-build-artifact-workflow.test.mjs",
         "scripts/ci-build-artifact-discovery.test.mjs",
         "scripts/lib/ci-build-artifact.test.mjs",
         "scripts/lib/ci-evidence-plan.test.mjs",
         "scripts/lib/documentation-evidence-lane.test.mjs",
-        "scripts/ci-policy-guards.test.mjs",
         "scripts/lib/host-command-invocation.test.mjs",
         "scripts/lib/host-available-memory.test.mjs",
         "scripts/lib/host-available-memory-win32.test.mjs",
@@ -596,6 +610,21 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-tool-surface.test.mjs"),
       node("scripts/check-tool-surface.mjs"),
     ], { inputs: ["code"] }),
+    // A coworker's standing rhythm is declared twice on purpose — the registry
+    // the scheduler reads, and the coworker's own recurring skill. Nothing kept
+    // them equal, so the skill could describe a rhythm nobody runs (BI-4CE4F52F).
+    guard("self-task-cadence-parity", "Self-Task Cadence Parity", [
+      node("--test", "scripts/check-self-task-cadence-parity.test.mjs"),
+      node("scripts/check-self-task-cadence-parity.mjs"),
+    ]),
+    // A pack skill's `category` groups the default-visible catalog on
+    // /platform/ai/skills, so an invented value permanently adds a group header to
+    // a page under a shrink-only words-on-arrival ratchet. The sibling `capability`
+    // field is NOT re-validated here — skill-capability-key-guard owns it.
+    guard("skill-pack-category", "Skill Pack Category", [
+      node("--test", "scripts/check-skill-pack-category.test.mjs"),
+      node("scripts/check-skill-pack-category.mjs"),
+    ]),
     guard("archetype-completeness-guard", "Archetype Completeness Guard", [
       node("--test", "scripts/check-archetype-completeness.test.mjs"),
       node("scripts/check-archetype-completeness.mjs"),
@@ -607,6 +636,18 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("capability-consumer-guard", "Capability Consumer Guard", [
       node("--test", "scripts/check-capability-consumers.test.mjs"),
       node("scripts/check-capability-consumers.mjs"),
+    ]),
+    // Skill frontmatter `capability:` is the permission gate the in-portal seed
+    // loader copies verbatim into a free-form Prisma String?. Nothing validated it,
+    // so five invented keys (view_build_studio, view_workspace, ...) passed all 76
+    // guards on 2026-10-01 and were caught only by a manual grep. An invented key
+    // gates the skill on a permission nobody can hold. Source of truth: the
+    // CapabilityKey union / PERMISSIONS record in apps/web/lib/govern/permissions.ts.
+    // Deliberately undeclared inputs: this guard reads BOTH source (permissions.ts)
+    // and markdown (skills/**), so a docs-only diff CAN violate it.
+    guard("skill-capability-key-guard", "Skill Capability Key Guard", [
+      node("--test", "scripts/check-skill-capability-keys.test.mjs"),
+      node("scripts/check-skill-capability-keys.mjs"),
     ]),
     // W17 (BI-810BEC9C): every route handler under apps/web/app/api declares its
     // exposure class at birth (@exposure pragma collected into route-manifest.json);
@@ -644,6 +685,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("local-markdown-renderer-guard", "Local Markdown Renderer Guard", [
       conformanceTest("scripts/check-no-local-markdown-renderer.test.mjs"),
       node("scripts/check-no-local-markdown-renderer.mjs"),
+    ]),
+    // No hidden Unicode in files a model reads as instructions (BI-C0E8A9EC,
+    // EP-E76E81D1): rulebooks, skills, prompts, registries and kernel pages.
+    // Undeclared inputs on purpose — its scope is mostly markdown.
+    guard("hidden-unicode-instruction-files-guard", "Hidden Unicode Instruction Files Guard", [
+      conformanceTest("scripts/check-hidden-unicode-instruction-files.test.mjs"),
+      node("scripts/check-hidden-unicode-instruction-files.mjs"),
     ]),
     // One canonical-JSON form for hashes and signatures per import boundary
     // (plan 2026-09-08 §10.5 S4). Every remaining copy differs from it and

@@ -26,6 +26,7 @@ from urllib.parse import urlparse
 PLUGIN_NAME = "dpf-platform"
 CODEX_PLUGIN_ID = f"{PLUGIN_NAME}@personal"
 MARKETPLACE_NAME = "dpf-platform-local"
+CODEX_LEGACY_PLUGIN_IDS = (f"{PLUGIN_NAME}@{MARKETPLACE_NAME}",)
 TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
 # The install's canonical origin when nothing names another (design 12.4.1):
 # setup persists DPF_MCP_URL = <PUBLIC_URL>/api/mcp/v1?tier=full (12.4.3), and
@@ -619,6 +620,23 @@ def toml_table_enabled(text: str, canonical_key: str) -> Optional[bool]:
     return None
 
 
+def set_codex_plugin_enabled(text: str, plugin_id: str, enabled: bool) -> str:
+    """Change only the managed toggle; plugin options and hook trust stay intact."""
+    retained: list[str] = []
+    active = False
+    seen = False
+    for line in text.splitlines():
+        if _is_table_boundary(line):
+            active = not seen and canonical_toml_table_header(line) == f"plugins.{plugin_id}"
+            seen = seen or active
+        elif active and line.partition("=")[0].strip() != "enabled":
+            retained.append(line)
+    while retained and not retained[-1].strip():
+        retained.pop()
+    return upsert_toml_table(text, f'[plugins."{plugin_id}"]',
+                             [f"enabled = {'true' if enabled else 'false'}", *retained])
+
+
 def disable_competitive_codex_plugins(text: str, plugin_ids: list[str]) -> str:
     for plugin_id in dict.fromkeys(plugin_ids):
         if not plugin_id or plugin_id == PLUGIN_NAME:
@@ -660,6 +678,14 @@ def codex_mcp_body(text: str, endpoint: str) -> list[str]:
     return body
 
 
+def desired_codex_plugin_enabled(text: str) -> bool:
+    for plugin_id in (CODEX_PLUGIN_ID, PLUGIN_NAME, *CODEX_LEGACY_PLUGIN_IDS):
+        choice = toml_table_enabled(text, f"plugins.{plugin_id}")
+        if choice is not None:
+            return choice
+    return True
+
+
 def ensure_codex_config(
     home: Path,
     mcp_url: str,
@@ -683,17 +709,11 @@ def ensure_codex_config(
     # ships an equivalent command.
     path = codex_config_path(home)
     text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
-    current_enabled = toml_table_enabled(text, f"plugins.{CODEX_PLUGIN_ID}")
-    legacy_enabled = toml_table_enabled(text, f"plugins.{PLUGIN_NAME}")
-    desired_enabled = current_enabled if current_enabled is not None else legacy_enabled
+    desired_enabled = desired_codex_plugin_enabled(text)
     # Pre-plugin-registry DPF installers wrote the bare key. Current Codex
     # requires <plugin>@<marketplace> and logs the bare key as invalid.
     text = remove_toml_table(text, f"plugins.{PLUGIN_NAME}")
-    text = upsert_toml_table(
-        text,
-        f'[plugins."{CODEX_PLUGIN_ID}"]',
-        [f"enabled = {'false' if desired_enabled is False else 'true'}"],
-    )
+    text = set_codex_plugin_enabled(text, CODEX_PLUGIN_ID, desired_enabled is not False)
     text = disable_competitive_codex_plugins(text, codex_competitive_plugin_ids(skill_pack))
     lazy_host_mcp_url = with_mcp_catalog_tier(mcp_url, "full")
     text = upsert_toml_table(
@@ -985,6 +1005,30 @@ def resolve_codex_binary() -> str | None:
     return None
 
 
+def is_dpf_registration(row: dict) -> bool:
+    return row.get("name") == PLUGIN_NAME or str(row.get("pluginId", "")).startswith(PLUGIN_NAME + "@")
+
+
+def read_codex_plugin_inventory(codex: str, home: Path) -> tuple[list[dict], str | None]:
+    """Read all marketplaces: a personal-only query hides the migrated install."""
+    try:
+        listed = subprocess.run([codex, "plugin", "list", "--json"], cwd=str(home),
+                                capture_output=True, text=True)
+        if listed.returncode != 0:
+            return [], f"codex plugin list exited {listed.returncode}"
+        inventory = json.loads(listed.stdout or "{}")
+        rows = inventory.get("installed") if isinstance(inventory, dict) else None
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            return [], "Codex plugin list returned an invalid inventory"
+        for row in rows:
+            if is_dpf_registration(row):
+                if not isinstance(row.get("pluginId"), str) or type(row.get("installed")) is not bool or type(row.get("enabled")) is not bool:
+                    return [], "Codex plugin list returned an invalid DPF registration"
+        return rows, None
+    except (OSError, ValueError) as exc:
+        return [], f"Codex inventory unavailable ({exc.__class__.__name__})"
+
+
 def install_codex_plugin(home: Path, dry_run: bool) -> str:
     """Install and verify the DPF plugin through Codex's own registry."""
     codex = resolve_codex_binary()
@@ -992,7 +1036,10 @@ def install_codex_plugin(home: Path, dry_run: bool) -> str:
         return "skipped: Codex CLI not found"
     selector = f"{PLUGIN_NAME}@personal"
     if dry_run:
-        return f"dry-run: would install and verify {selector}"
+        return f"dry-run: would install and verify {selector}, then disable verified legacy DPF registrations"
+    config = codex_config_path(home)
+    before = config.read_text(encoding="utf-8-sig") if config.exists() else ""
+    desired_enabled = desired_codex_plugin_enabled(before)
     try:
         installed = subprocess.run(
             [codex, "plugin", "add", selector, "--json"],
@@ -1002,6 +1049,12 @@ def install_codex_plugin(home: Path, dry_run: bool) -> str:
         )
     except OSError as exc:
         return f"failed: Codex CLI could not start ({exc.__class__.__name__})"
+    # Even a failed native add can have changed configuration. Restore an
+    # explicit disabled choice before any failure return or cache validation.
+    if not desired_enabled and config.exists():
+        current = config.read_text(encoding="utf-8-sig")
+        if toml_table_enabled(current, f"plugins.{CODEX_PLUGIN_ID}") is not False:
+            write_text_if_changed(config, set_codex_plugin_enabled(current, CODEX_PLUGIN_ID, False))
     if installed.returncode != 0:
         return f"failed: codex plugin add exited {installed.returncode}"
     try:
@@ -1011,25 +1064,44 @@ def install_codex_plugin(home: Path, dry_run: bool) -> str:
     managed = codex_managed_plugin_path(home)
     if not installed_path.is_dir() or codex_content_version(installed_path) != codex_content_version(managed):
         return "failed: Codex plugin cache does not match the delivered skill pack"
-    listed = subprocess.run(
-        [codex, "plugin", "list", "--marketplace", "personal", "--json"],
-        cwd=str(home),
-        capture_output=True,
-        text=True,
-    )
-    if listed.returncode != 0:
-        return f"failed: codex plugin list exited {listed.returncode}"
-    try:
-        inventory = json.loads(listed.stdout or "{}")
-    except json.JSONDecodeError:
-        return "failed: codex plugin list returned invalid JSON"
+    # Native add may write the obsolete bare alias. Restore the operator's
+    # qualified choice before reading back, without touching hook trust.
+    if config.exists():
+        text = remove_toml_table(config.read_text(encoding="utf-8-sig"), f"plugins.{PLUGIN_NAME}")
+        write_text_if_changed(config, set_codex_plugin_enabled(text, CODEX_PLUGIN_ID, desired_enabled))
+    inventory, error = read_codex_plugin_inventory(codex, home)
+    if error:
+        return f"failed: {error}"
     matches = [
         plugin
-        for plugin in inventory.get("installed", [])
+        for plugin in inventory
         if isinstance(plugin, dict) and plugin.get("pluginId") == selector
     ]
-    if not matches or not matches[0].get("installed") or not matches[0].get("enabled"):
-        return "failed: Codex did not report dpf-platform installed and enabled"
+    if len(matches) != 1 or matches[0].get("installed") is not True or matches[0].get("enabled") is not desired_enabled:
+        return "failed: Codex did not report dpf-platform installed with the requested enabled state"
+    if not desired_enabled:
+        return "installed, disabled by operator, and verified; legacy registrations unchanged"
+    active = [p for p in inventory if p.get("installed") and p.get("enabled")
+              and is_dpf_registration(p)]
+    if any(p["pluginId"] not in (CODEX_PLUGIN_ID, *CODEX_LEGACY_PLUGIN_IDS) for p in active):
+        return "failed: unknown active DPF registration; legacy registrations unchanged"
+    aliases = [p["pluginId"] for p in active if p["pluginId"] in CODEX_LEGACY_PLUGIN_IDS]
+    if aliases:
+        text = config.read_text(encoding="utf-8-sig") if config.exists() else ""
+        for alias in aliases:
+            text = set_codex_plugin_enabled(text, alias, False)
+        write_text_if_changed(config, text)
+        final, error = read_codex_plugin_inventory(codex, home)
+        enabled_dpf = [p["pluginId"] for p in final if p.get("installed") and p.get("enabled")
+                       and is_dpf_registration(p)]
+        if error or enabled_dpf != [CODEX_PLUGIN_ID]:
+            # A failed readback cannot prove convergence. Restore only the
+            # toggles this migration changed, retaining all caches and options.
+            text = config.read_text(encoding="utf-8-sig")
+            for alias in aliases:
+                text = set_codex_plugin_enabled(text, alias, True)
+            write_text_if_changed(config, text)
+            return f"failed: {error or 'Codex registration convergence was not verified'}; legacy registrations restored"
     return "installed, enabled, and verified"
 
 
@@ -1863,6 +1935,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL", DEFAULT_MCP_URL))
     parser.add_argument("--auth-mode", choices=("oauth", "legacy"), default=os.environ.get("DPF_MCP_AUTH_MODE", "oauth"))
     parser.add_argument("--codex-only", action="store_true")
+    parser.add_argument("--codex-plugin-only", action="store_true",
+                        help="Refresh only Codex plugin files and registration; the repository planner owns connector configuration.")
     parser.add_argument("--claude-only", action="store_true")
     parser.add_argument("--skip-codex-cli-install", action="store_true")
     parser.add_argument("--skip-claude-cli-install", action="store_true")
@@ -1905,6 +1979,21 @@ def main(argv: list[str]) -> int:
     home = home_dir()
     codex_managed = codex_managed_plugin_path(home)
     shared_managed = shared_managed_plugin_path(home)
+
+    if args.codex_plugin_only:
+        if args.claude_only or args.codex_only or args.skip_codex_cli_install:
+            parser.error("--codex-plugin-only cannot be combined with client selection or skip-install flags")
+        if resolve_codex_binary() is None:
+            print("Codex plugin refresh skipped: Codex CLI not found")
+            return 0
+        copy_skill_pack(skill_pack, codex_managed, args.dry_run)
+        codex_version = codex_content_version(skill_pack)
+        if not args.dry_run:
+            write_json(codex_managed / ".codex-plugin" / "plugin.json", {**manifest, "version": codex_version})
+        ensure_codex_marketplace(home, codex_version, args.dry_run)
+        status = install_codex_plugin(home, args.dry_run)
+        print(f"Codex plugin refresh: {status}")
+        return 1 if status.startswith("failed:") else 0
 
     print(f"DPF agent toolchain updater")
     print(f"  skill pack : {skill_pack}")

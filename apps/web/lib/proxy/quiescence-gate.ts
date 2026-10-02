@@ -20,6 +20,7 @@
  *   /api/v1/edge/*          (edge-node heartbeats)
  *   /api/internal/quiescence-state   (we'd recurse otherwise)
  *   /api/mcp/v1             (route enforces read/write tool policy)
+ *   /api/ops/self-upgrade/control  (operator Keep waiting / Force / Abort)
  *
  * Fail-open / fail-closed (§12 Q6 decision):
  *
@@ -62,6 +63,10 @@ const ALLOW_LISTED_PREFIXES = [
   // and flips the level back to normal, wedging the portal in "quiescing"
   // forever. It has its own request-signature auth, so it's safe to bypass.
   "/api/inngest",
+  // BI-F9EE05E5 slice C: Keep waiting / Force now / Abort while an upgrade
+  // waits. The operator's only lever must not be refused by the drain it
+  // controls. The route checks view_operations itself.
+  "/api/ops/self-upgrade/control",
 ];
 
 export function isAllowListed(pathname: string): boolean {

@@ -21,10 +21,11 @@ import { prisma } from "@dpf/db";
 import { prepareClientSecret } from "@/lib/auth/oauth-tokens";
 import { isRegisterableRedirectUri } from "@/lib/auth/oauth-clients";
 import { isPublicScope, PUBLIC_SCOPES, type PublicScope } from "@/lib/auth/oauth-scope-map";
+import { listClientPeople, revokeClientPersonGrants, type ClientPerson } from "@/lib/auth/oauth-client-people";
 
 const ADMIN_PATH = "/admin/platform-development";
 
-type Actor = { userId: string };
+type Actor = { userId: string; email: string };
 /** Deliberately NOT the ActionFailure shape: keeping the denial distinct means
  *  a caller cannot forget to convert it and accidentally return a bare object
  *  where an ActionResult is expected. */
@@ -45,7 +46,7 @@ async function requireOperator(): Promise<Actor | Denial> {
   ) {
     return { denied: "You do not have permission to manage MCP clients." };
   }
-  return { userId: session.user.id };
+  return { userId: session.user.id, email: session.user.email ?? session.user.id };
 }
 
 export type OAuthClientSummary = {
@@ -226,6 +227,29 @@ export async function revokeOAuthClient(input: {
 
   revalidatePath(ADMIN_PATH);
   return ok({ revokedTokens: tokens.count });
+}
+
+/** Who holds grants under one client, for the per-person control (BI-0A724798). */
+export async function listOAuthClientPeople(input: { clientId: string }): Promise<ActionResult<ClientPerson[]>> {
+  const actor = await requireOperator();
+  if (isDenied(actor)) return err(actor.denied);
+  return listClientPeople(prisma, { clientId: input.clientId, actor });
+}
+
+/**
+ * End one person's access under a shared client, leaving everyone else's.
+ * The whole-client revoke above stays the larger control.
+ */
+export async function revokeOAuthClientPersonGrants(input: {
+  clientId: string;
+  userId: string;
+  reason: string;
+}): Promise<ActionResult<{ revokedAccessTokens: number; revokedRefreshTokens: number }>> {
+  const actor = await requireOperator();
+  if (isDenied(actor)) return err(actor.denied);
+  const result = await revokeClientPersonGrants(prisma, { ...input, actor });
+  if (result.ok) revalidatePath(ADMIN_PATH);
+  return result;
 }
 
 /**

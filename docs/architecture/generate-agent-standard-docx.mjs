@@ -1,5 +1,5 @@
 /**
- * Generate one or all publication artifacts in the TAK/GAID/TAK-JSI standards family.
+ * Generate one or all publication artifacts in the TAK/GAID/TAK-JSI/GPP standards family.
  *
  * Usage:
  *   pnpm exec tsx docs/architecture/generate-agent-standard-docx.mjs tak

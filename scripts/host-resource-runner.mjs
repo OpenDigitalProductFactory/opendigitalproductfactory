@@ -10,7 +10,7 @@ import { gitTextOrNull } from "./lib/git.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { mcpCall } from "./lib/mcp-client.mjs";
 import { MCP_CREDENTIAL_HELP, resolveMcpCredential } from "./lib/mcp-credential.mjs";
-import { superviseLeaseRun } from "./lib/lease-supervisor.mjs";
+import { admittedLeaseTtlMs, superviseLeaseRun } from "./lib/lease-supervisor.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
 
@@ -276,9 +276,10 @@ async function main() {
   }
 
   const child = createOwnedChild(parsed);
+  const expiresAt = claim?.data?.lease?.expiresAt;
   const result = await superviseLeaseRun({
-    ttlMs: 10 * 60_000,
-    expiresAt: claim?.data?.lease?.expiresAt,
+    ttlMs: admittedLeaseTtlMs(expiresAt, 10 * 60_000),
+    expiresAt,
     run: child.run,
     terminate: child.terminate,
     renew: () => mcpCall("renew_nonprod_environment_lease", {
@@ -288,6 +289,9 @@ async function main() {
     }, connection),
     release: () => mcpCall("release_nonprod_environment_lease", { leaseId }, connection),
   });
+  if (result.status !== "completed") {
+    process.stderr.write(`host-resource-runner: lease ${leaseId} ${result.status} (${result.reason}); the command was stopped.\n`);
+  }
   process.exitCode = result.status === "completed" ? result.result : 1;
 }
 

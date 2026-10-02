@@ -47,6 +47,26 @@ it("does not let a non-owner or disabled human manage the room", async () => {
   await expect(inviteWorkroomAssistant("alice", input)).rejects.toThrow("room owner");
   expect(m.save).not.toHaveBeenCalled();
 });
+it.each(["coordinator", "accountable"])("recognizes a current %s after ownership moved from historical holders", async (role) => {
+  m.room.mockResolvedValue({ ...room(), requestedByPrincipalId: "legacy", createdByPrincipalId: "legacy", leaseHolderPrincipalId: "legacy",
+    participants: [{ principalId: human.id, lifecycle: "active", roles: [role], principal: { kind: "human" } }] });
+  await expect(inviteWorkroomAssistant("alice", input)).resolves.toEqual({ agentId: "codex", role: "contributor" });
+});
+it.each(["observer", "contributor"])("does not treat a current %s as owner despite historical ownership", async (role) => {
+  m.room.mockResolvedValue({ ...room(), participants: [{ principalId: human.id, lifecycle: "active", roles: [role], principal: { kind: "human" } }] });
+  await expect(inviteWorkroomAssistant("alice", input)).rejects.toThrow("room owner");
+  expect(m.save).not.toHaveBeenCalled();
+});
+it("does not let a former holder override another human owner", async () => {
+  m.room.mockResolvedValue({ ...room(), participants: [{ principalId: "new-owner", lifecycle: "active", roles: ["coordinator"], principal: { kind: "human" } }] });
+  await expect(inviteWorkroomAssistant("alice", input)).rejects.toThrow("room owner");
+  expect(m.save).not.toHaveBeenCalled();
+});
+it("preserves explicit removal of the historical human owner", async () => {
+  m.room.mockResolvedValue({ ...room(), participants: [{ principalId: human.id, lifecycle: "archived", roles: ["accountable"], principal: { kind: "human" } }] });
+  await expect(inviteWorkroomAssistant("alice", input)).rejects.toThrow("room owner");
+  expect(m.save).not.toHaveBeenCalled();
+});
 it("a case content denial also prevents its owner granting room access", async () => {
   m.room.mockResolvedValue({ ...room(), workItem: { evidence: [{ workroomPolicy: { admittedPrincipalRefs: [] } }] } });
   await expect(inviteWorkroomAssistant("alice", input)).rejects.toThrow("room owner");
@@ -61,7 +81,7 @@ it("requires current human clearance and active assistant identity", async () =>
   expect(m.save).not.toHaveBeenCalled();
 });
 it("does not overwrite governance roles through the recovery control", async () => {
-  m.room.mockResolvedValue({ ...room(), participants: [{ principalId: assistant.id, lifecycle: "active", roles: ["coordinator"] }] });
+  m.room.mockResolvedValue({ ...room(), participants: [{ principalId: assistant.id, lifecycle: "active", roles: ["coordinator"], principal: { kind: "agent" } }] });
   await expect(inviteWorkroomAssistant("alice", input)).rejects.toThrow("assigned role");
   expect(m.save).not.toHaveBeenCalled();
 });

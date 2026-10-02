@@ -1,0 +1,89 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "No new copies. GppPermit and GppPermitObservation are still read only by the GPP verdict code (apps/web/lib/gpp); no projection, graph mirror or AI context reads them.",
+    "ToolExecution.gppPermitVerdict duplicates the observation's verdict onto the existing audit row by design (PR-C); it now can hold the five added verdicts.",
+    "The signed handle (gpp1.<permitId>.<keyId>.<mac>) is returned to the in-process caller on GovernedExecuteResult.governance.permit and is not persisted anywhere else. The handler and the audit row keep only the opaque permit id."
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: security-audit evidence. paramHash is a one-way SHA-256 of the call's canonical arguments; the arguments themselves are never stored. mac is an HMAC over the permit's own claims; the signing key is never stored in the database.",
+    "dataSubjectRights": "not-applicable: this change adds no personal data. The rows keep PR-C's 365-day telemetry-bounded security-audit retention.",
+    "reviewDisposition": "Audit-only, still shadow: no verdict changes a call's outcome. Read by operators and the later per-binding promotion review (PR-E)."
+  },
+  "migration": {
+    "name": "20261001200000_gpp_permit_mac_verdicts",
+    "backfill": "None. The migration only adds the GppPermitVerdict members mac_invalid, param_mismatch, lineage_unsealed, lineage_missing and unsigned (ALTER TYPE ... ADD VALUE IF NOT EXISTS) and touches no row, so it applies identically to an empty table and one full of PR-C verdicts. Permits minted before this change keep null paramHash, keyRef and mac; their verdicts record the parameter check as not_bound.",
+    "rollback": "Forward-only. Postgres cannot drop an enum member; reverting the code leaves the members unused, and PR-C's verdicts continue."
+  },
+  "tests": [
+    "packages/db/src/gpp-permit-mac-verdicts-migration.test.ts",
+    "apps/web/lib/gpp/permit-handle.test.ts",
+    "apps/web/lib/gpp/param-hash.test.ts",
+    "apps/web/lib/gpp/permit-verdict.test.ts",
+    "apps/web/lib/mcp-governed-execute-permit-shadow.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:gpp-permit",
+      "prismaModel": "GppPermit",
+      "lifecycleDisposition": "Existing model (PR-C); unchanged @dpf lifecycle=telemetry-bounded retention=365d. PR-D populates three columns PR-C created as nullable.",
+      "fields": [
+        {
+          "fieldId": "data:gpp-permit#paramHash",
+          "resolution": "governed",
+          "reason": "SHA-256 (hex) over canonicalJson({ tool, params }) of the admitted call, bound at mint; a replay with other arguments is recorded as param_mismatch. One-way; the arguments are not stored.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) using lib/gpp/param-hash.ts; BI-69415B68 PR-D."
+        },
+        {
+          "fieldId": "data:gpp-permit#keyRef",
+          "resolution": "governed",
+          "reason": "Id of the DPF_GPP_PERMIT_SECRET key that signed the claims; null when the install has no key (verdict unsigned). Never the key itself.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from lib/gpp/permit-handle.ts signPermit."
+        },
+        {
+          "fieldId": "data:gpp-permit#mac",
+          "resolution": "governed",
+          "reason": "base64url HMAC-SHA256 over the canonical claims, so an edited or invented row is detected (mac_invalid); null when unsigned.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-mint.ts (via lib/gpp/permit-store.ts) from lib/gpp/permit-handle.ts signPermit."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:gpp-permit-observation",
+      "prismaModel": "GppPermitObservation",
+      "lifecycleDisposition": "Existing model (PR-C); unchanged @dpf lifecycle=telemetry-bounded retention=365d.",
+      "fields": [
+        {
+          "fieldId": "data:gpp-permit-observation#verdict",
+          "resolution": "governed",
+          "reason": "The GppPermitVerdict enum gains mac_invalid, param_mismatch, lineage_unsealed, lineage_missing and unsigned. Additive only.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts and lib/gpp/unmediated-observation.ts (via lib/gpp/permit-store.ts)."
+        },
+        {
+          "fieldId": "data:gpp-permit-observation#detail",
+          "resolution": "governed",
+          "reason": "Now also carries checks: the outcome of the MAC, parameter-hash, lineage and state checks, plus the handle format. Never parameters, results, the handle's MAC or the key.",
+          "provenance": "Written only by apps/web/lib/gpp/permit-verdict.ts (via lib/gpp/permit-store.ts)."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:tool-execution",
+      "prismaModel": "ToolExecution",
+      "lifecycleDisposition": "Existing model; the column follows the row's existing 365-day lifecycle and adds no retention obligation.",
+      "fields": [
+        {
+          "fieldId": "data:tool-execution#gppPermitVerdict",
+          "resolution": "governed",
+          "reason": "Shadow permit verdict for this O/A/I call; the enum gains the five PR-D verdicts. Null for R/W calls and rows written before PR-C.",
+          "provenance": "Written only by apps/web/lib/governed-tool-audit.ts from the monitor's permit outcome."
+        }
+      ]
+    }
+  ]
+}

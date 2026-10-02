@@ -226,6 +226,32 @@ export function classifyScheduledRequiredTools(input: {
   return proposed ?? { kind: "executed" };
 }
 
+/**
+ * The executions a run's verdict judges: the final loop result's, plus every
+ * successful call the run already persisted under its taskRunId (BI-D48B3B0F).
+ *
+ * When a later turn ends in a provider failure, the loop returns only the
+ * apology and none of the earlier attempt's calls. Live on 2026-10-01, four
+ * Workroom stages recorded their evidence (ToolExecution success=true, twice
+ * each) and were still failed for "record_workroom_evidence executed zero
+ * times". A persisted call is counted once, and only when the loop result does
+ * not already carry that tool.
+ */
+export function withPersistedExecutions<T extends ScheduledRunToolExecution>(
+  executed: T[],
+  persisted: Array<{ toolName: string; result: unknown }> | null | undefined,
+): Array<T | ScheduledRunToolExecution> {
+  const seen = new Set(executed.map((tool) => tool.name));
+  const extra: ScheduledRunToolExecution[] = [];
+  for (const row of persisted ?? []) {
+    if (seen.has(row.toolName)) continue;
+    seen.add(row.toolName);
+    const result = row.result && typeof row.result === "object" ? row.result as ScheduledRunToolExecution["result"] : undefined;
+    extra.push({ name: row.toolName, result: { ...result, success: true } });
+  }
+  return [...executed, ...extra];
+}
+
 /** Baseline reproduction: explicit governed mutations are not yet terminal requirements. */
 export function detectScheduledRequiredToolFailure(input: {
   prompt: string;

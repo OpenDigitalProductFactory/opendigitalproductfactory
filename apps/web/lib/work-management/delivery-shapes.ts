@@ -18,6 +18,24 @@
 import type { WorkShapeEvidenceKind } from "./work-shape-evidence-kinds";
 import type { WorkShapeDefinition, WorkShapeStage } from "./work-shapes";
 
+/**
+ * The room-authorized capability set of every delivery shape (BI-00588B51,
+ * WWMD DI-120A20542EBB), in the GPP §7.1 vocabulary. Each token resolves to
+ * enforceable grants in `roomGrantsFromWorkShape` (room-turn-authority.ts), so
+ * the room definition stays the single source of what a delivery coworker may
+ * do inside the room (BI-F114354D):
+ *   read           → the coworker read baseline
+ *   write-internal → the lifecycle receipts and evidence a delivery writes
+ *   write-source   → edit, run and commit source in the governed sandbox
+ * Deliberately absent: `authority`, `outward` and `irreversible` classes —
+ * promotion, publication and backlog status moves stay governed decisions.
+ */
+export const DELIVERY_ACTIVITY_GRANTS: readonly string[] = [
+  "tool:read",
+  "tool:write-internal",
+  "tool:write-source",
+];
+
 export const DELIVERY_BREAK_FIX_SHAPE_KEY = "delivery-break-fix";
 export const DELIVERY_SMALL_SHAPE_KEY = "delivery-small";
 export const DELIVERY_MEDIUM_SHAPE_KEY = "delivery-medium";
@@ -108,7 +126,7 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
       { kind: "failure", condition: "PIR missed: the item flips to input-required and the declarer's next break-fix declaration is refused.", disposition: "awaiting-person" },
       { kind: "budget", condition: "A second break-fix is declared while one is open on this installation — refused; the lane is WIP 1.", disposition: "refused" },
     ],
-    grants: ["tool:read", "tool:write-source"],
+    grants: DELIVERY_ACTIVITY_GRANTS,
     measures: [
       { key: "break-fix-share", description: "Share of merged work declared break-fix in a rolling week; above 20% is a finding." },
       { key: "pir-latency-hours", description: "Hours from merge to PIR receipt." },
@@ -155,7 +173,7 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
       { kind: "failure", condition: "The change needs new substrate or a second PR — reshape to medium rather than stretch the small lane.", disposition: "awaiting-input" },
       { kind: "budget", condition: "Appetite exceeded: more than two days or more than one PR — the room stops and the item is reshaped.", disposition: "awaiting-input" },
     ],
-    grants: ["tool:read", "tool:write-source"],
+    grants: DELIVERY_ACTIVITY_GRANTS,
     measures: [{ key: "lead-time-hours", description: "Hours from claim to merged SHA on main." }],
     budgets: [{ kind: "cycles-per-window", limit: 1, unit: "PR per item" }],
     reviewPoint,
@@ -193,7 +211,7 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
       { kind: "failure", condition: "The work adds a new domain concept or crosses a domain contract — reshape to large.", disposition: "awaiting-input" },
       { kind: "budget", condition: "Workroom cap or appetite exceeded: more than one week or more than three PRs — the room stops for reshaping.", disposition: "awaiting-input" },
     ],
-    grants: ["tool:read", "tool:write-source"],
+    grants: DELIVERY_ACTIVITY_GRANTS,
     measures: [{ key: "lead-time-days", description: "Days from claim to acceptance receipt." }],
     budgets: [{ kind: "cycles-per-window", limit: 3, unit: "PRs per item" }],
     reviewPoint,
@@ -253,7 +271,7 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
       { kind: "failure", condition: "Spec approval or architecture review fails and is not resolved — the room stops and the item returns to design.", disposition: "awaiting-person" },
       { kind: "budget", condition: "Workroom cap or appetite exceeded: more than three weeks — the room stops for decomposition into an xlarge epic.", disposition: "awaiting-input" },
     ],
-    grants: ["tool:read", "tool:write-source"],
+    grants: DELIVERY_ACTIVITY_GRANTS,
     measures: [{ key: "lead-time-days", description: "Days from claim to acceptance receipt." }],
     budgets: [{ kind: "cycles-per-window", limit: 21, unit: "days per item" }],
     reviewPoint,

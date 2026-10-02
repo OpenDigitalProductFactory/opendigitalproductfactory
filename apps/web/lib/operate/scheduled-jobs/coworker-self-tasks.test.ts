@@ -21,7 +21,10 @@ vi.mock("@dpf/db", () => ({
     marketingCampaignBrief: { findFirst: vi.fn().mockResolvedValue(null) },
     // Room-owned cadence (DI-81E47BDA59F1): agentId -> principal alias ->
     // workroom participation -> that room's declared posture.
-    principalAlias: { findFirst: vi.fn().mockResolvedValue(null) },
+    principalAlias: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     workroomParticipant: { findMany: vi.fn().mockResolvedValue([]) },
     knowledgeArticle: { findFirst: vi.fn().mockResolvedValue(null) },
     document: { findFirst: vi.fn().mockResolvedValue(null) },
@@ -32,13 +35,15 @@ vi.mock("@dpf/db", () => ({
 // allocator helpers it imports are pure (no DB), so they run for real.
 import {
   reconcileCoworkerSelfTask,
-  reconcileAllCoworkerSelfTasks,
   coworkerSelfTaskId,
   coworkerSelfTaskRequiredTool,
-  inferLevelFromSelfTaskSchedule,
   COWORKER_SELF_TASKS,
   DOCS_HEALTH_DOCUMENT_ID,
 } from "./coworker-self-tasks";
+import {
+  reconcileAllCoworkerSelfTasks,
+  inferLevelFromSelfTaskSchedule,
+} from "./coworker-self-task-sweep";
 
 const MKT = "marketing-specialist";
 const INV = "inventory-specialist";
@@ -506,5 +511,168 @@ describe("reconcileAllCoworkerSelfTasks (toggle ⇆ task convergence)", () => {
     // does not drag the others down.
     expect(r.created).toBe(1);
     expect(r.unroomedFallback).toBe(0);
+  });
+});
+
+// BI-4CE4F52F slice 2 — the READ-side retirement of the agent-scoped facts.
+//
+// `roomOwnedLevelFor` let a room override the pace of a coworker that ALREADY
+// held a legacy fact. The sweep still enumerated from those facts, so holding
+// one — a row no operator can create, since BI-87C9C91C deleted the save path —
+// was the hidden precondition for being schedulable at all. These tests pin the
+// stage that removes that precondition.
+describe("reconcileAllCoworkerSelfTasks — rooms drive coworkers with NO legacy fact", () => {
+  const roomRow = (
+    agentId: string,
+    level: string,
+    opts: { status?: string; requestedBy?: string | null; createdBy?: string | null; createdAt?: string } = {},
+  ) => ({
+    principal: { aliases: [{ aliasValue: agentId }] },
+    workroom: {
+      status: opts.status ?? "working",
+      scopeClaims: [{ workroomPosture: { proactivityLevel: level } }],
+      createdAt: new Date(opts.createdAt ?? "2026-09-01T00:00:00.000Z"),
+      requestedByPrincipalId: opts.requestedBy === undefined ? "pr-1" : opts.requestedBy,
+      createdByPrincipalId: opts.createdBy === undefined ? "pc-1" : opts.createdBy,
+    },
+  });
+
+  beforeEach(async () => {
+    const { prisma } = await import("@dpf/db");
+    vi.clearAllMocks();
+    // No legacy facts anywhere: before this slice the sweep would see nobody.
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (prisma.scheduledAgentTask.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (prisma.principalAlias.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { principalId: "pr-1", aliasValue: "u-owner" },
+    ]);
+  });
+
+  it("schedules a coworker a live room carries, with no fact in existence", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.workroomParticipant.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      roomRow(MKT, "assertive"),
+    ]);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    // THE POINT OF THE SLICE: no fact existed, and the coworker still runs.
+    expect(r.roomOnly).toBe(1);
+    expect(r.created).toBe(1);
+    expect(r.unroomedFallback).toBe(0);
+  });
+
+  it("keys the task to the room's REQUESTER — who commissioned the work", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.workroomParticipant.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      roomRow(MKT, "assertive"),
+    ]);
+
+    await reconcileAllCoworkerSelfTasks();
+
+    const lookedUp = (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(lookedUp?.where?.taskId).toBe(coworkerSelfTaskId(MKT, "u-owner"));
+  });
+
+  it("does NOT mint a second task for a coworker a fact already covers", async () => {
+    const { prisma } = await import("@dpf/db");
+    // Same coworker reachable BOTH ways. The owner differs between them, and the
+    // owner is part of the task id — so re-deriving it from the room would
+    // schedule a duplicate under a new id and orphan the running one.
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([factRow("u-legacy", MKT, "balanced")]);
+    (prisma.principalAlias.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({ principalId: "p1" });
+    (prisma.workroomParticipant.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      roomRow(MKT, "assertive"),
+    ]);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    expect(r.roomOnly).toBe(0);
+    expect(r.created).toBe(1);
+    const ids = (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mock.calls
+      .map((c) => c[0]?.where?.taskId);
+    expect(ids).toContain(coworkerSelfTaskId(MKT, "u-legacy"));
+    expect(ids).not.toContain(coworkerSelfTaskId(MKT, "u-owner"));
+  });
+
+  it("reports a coworker whose owning user cannot be resolved instead of dropping it", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.workroomParticipant.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      roomRow(MKT, "assertive"),
+    ]);
+    // The room's principals exist but neither carries a `user` alias.
+    (prisma.principalAlias.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    // A self-task is keyed to a user, so this is a seeding defect to surface —
+    // not a coworker that should quietly stay unscheduled.
+    expect(r.ownerless).toBe(1);
+    expect(r.created).toBe(0);
+    expect(r.roomOnly).toBe(0);
+  });
+
+  it("falls back to the room CREATOR when nobody is recorded as requester", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.workroomParticipant.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      roomRow(MKT, "assertive", { requestedBy: null }),
+    ]);
+    (prisma.principalAlias.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { principalId: "pc-1", aliasValue: "u-creator" },
+    ]);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    expect(r.created).toBe(1);
+    const lookedUp = (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(lookedUp?.where?.taskId).toBe(coworkerSelfTaskId(MKT, "u-creator"));
+  });
+
+  it("picks the OLDEST room's owner so the task id is stable as rooms churn", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.workroomParticipant.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      roomRow(MKT, "balanced", { requestedBy: "pr-new", createdAt: "2026-09-20T00:00:00.000Z" }),
+      roomRow(MKT, "balanced", { requestedBy: "pr-old", createdAt: "2026-09-02T00:00:00.000Z" }),
+    ]);
+    (prisma.principalAlias.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { principalId: "pr-new", aliasValue: "u-new" },
+      { principalId: "pr-old", aliasValue: "u-old" },
+    ]);
+
+    await reconcileAllCoworkerSelfTasks();
+
+    // Newest-first would move the task id — and therefore orphan the running
+    // task — every time a fresh room opened.
+    const lookedUp = (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(lookedUp?.where?.taskId).toBe(coworkerSelfTaskId(MKT, "u-old"));
+  });
+
+  it("ignores a finished room, and an unregistered agent, when enumerating", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.workroomParticipant.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      roomRow(MKT, "assertive", { status: "complete" }),
+      roomRow("not-a-registered-coworker", "assertive"),
+    ]);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    expect(r.created).toBe(0);
+    expect(r.roomOnly).toBe(0);
+  });
+
+  it("takes the most assertive room when several carry the same coworker", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.workroomParticipant.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      roomRow(MKT, "quiet"),
+      roomRow(MKT, "assertive"),
+    ]);
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    // One coworker, one task, fastest room wins — the same rule
+    // roomOwnedLevelFor applies, which is why both read one rank table.
+    expect(r.created).toBe(1);
+    expect(r.deactivated).toBe(0);
   });
 });

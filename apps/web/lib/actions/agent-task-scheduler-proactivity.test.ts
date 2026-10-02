@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => ({
     },
     toolExecution: {
       findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
     },
     marketingCampaignBrief: {
       findFirst: vi.fn(),

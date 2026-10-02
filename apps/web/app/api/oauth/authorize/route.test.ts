@@ -73,6 +73,18 @@ describe("one-click consent (BI-05E0EA33)", () => {
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toContain("code=dpfoac_code");
     expect(mock.binding).toHaveBeenCalledWith(expect.objectContaining({ agentId: "AGT-EXT-CODEX" }), expect.anything());
+    // The audit row says this was one click: the server's default, unchanged.
+    expect(mock.log).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      rationale: expect.objectContaining({ resolution: { kind: "resolved", reason: "alias", defaultAgentId: "AGT-EXT-CODEX", changedByHuman: false } }),
+    }) }));
+  });
+
+  it("POST records a human override of the default in the audit row", async () => {
+    const res = await POST(form({ ...baseForm, acting_coworker: "AGT-EXT-CLAUDE" }));
+    expect(res.status).toBe(302);
+    expect(mock.log).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      rationale: expect.objectContaining({ resolution: expect.objectContaining({ defaultAgentId: "AGT-EXT-CODEX", changedByHuman: true }) }),
+    }) }));
   });
 
   it("POST re-renders instead of binding when the server's default drifted since the GET", async () => {

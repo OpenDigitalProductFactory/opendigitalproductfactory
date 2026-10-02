@@ -24,8 +24,11 @@ const TERMINAL_ROOM_STATUSES = ["complete", "abandoned", "archived", "superseded
 export type BreakFixDeclaration = {
   schemaVersion: 1;
   reason: string;
+  /** Human principal when directly resolved; never the acting coworker's principal. */
   declaredByPrincipalId: string | null;
   declaredByUserId: string;
+  actingAgentId?: string | null;
+  approvalEnvelopeId?: string | null;
   capsuleId: string;
   declaredAt: string;
   pirDueAt: string;
@@ -34,6 +37,7 @@ export type BreakFixDeclaration = {
 export type DeclareBreakFixDb = {
   backlogItem: { findFirst(args: unknown): Promise<{ id: string; itemId: string; status: string } | null> };
   backlogItemActivity: {
+    findFirst(args: unknown): Promise<{ id: string } | null>;
     findMany(args: unknown): Promise<Array<{ id: string; backlogItemId: string; kind: string; gateKey?: string | null; recordedAt: Date; payload: unknown }>>;
     create(args: unknown): Promise<{ id: string }>;
   };
@@ -96,10 +100,12 @@ export async function declareBreakFix(args: {
   itemId: string;
   reason: string;
   actor: { userId: string; agentId: string | null; principalId: string | null };
+  /** Server-verified exact human approval; not a tool argument. */
+  humanApproval?: { envelopeId: string; userId: string } | null;
   now?: Date;
 }): Promise<DeclareBreakFixResult> {
   const now = args.now ?? new Date();
-  if (args.actor.agentId) {
+  if (args.actor.agentId && args.humanApproval?.userId !== args.actor.userId) {
     return { ok: false, error: "break_fix_declaration_human_only", message: "Only a person declares the expedite lane (design decision 2, default human-only). Ask the item's owner to declare it." };
   }
   const item = await args.db.backlogItem.findFirst({
@@ -114,10 +120,16 @@ export async function declareBreakFix(args: {
     select: { id: true, capsuleId: true, scopeClaims: true },
   });
   if (!room) return { ok: false, error: "workroom_required", message: `Claim ${item.itemId} into a Workroom first (claim_backlog_item_for_work), then declare the break-fix on it.` };
-  if (isBreakFixRoom(room.scopeClaims)) {
+  // A shape claim is not a declaration. Check the exact receipt separately:
+  // installation-wide PIR history must never crowd it out of a capped scan.
+  const existingDeclaration = await args.db.backlogItemActivity.findFirst({
+    where: { backlogItemId: item.id, kind: BREAK_FIX_DECLARED_KIND,
+      payload: { path: ["capsuleId"], equals: room.capsuleId } },
+    select: { id: true },
+  });
+  if (existingDeclaration) {
     return { ok: false, error: "already_declared", message: `${item.itemId} is already declared break-fix on ${room.capsuleId}.`, data: { capsuleId: room.capsuleId } };
   }
-
   // WIP 1 per installation.
   const openRooms = await args.db.workroom.findMany({
     where: { archivedAt: null, status: { notIn: TERMINAL_ROOM_STATUSES }, capsuleId: { not: room.capsuleId } },
@@ -142,7 +154,8 @@ export async function declareBreakFix(args: {
     select: { id: true, backlogItemId: true, kind: true, gateKey: true, recordedAt: true, payload: true },
     take: 500,
   });
-  const missed = findMissedPir(history, now);
+  const missed = findMissedPir(history.filter((row) => row.kind !== BREAK_FIX_DECLARED_KIND
+    || declaration(row.payload)?.declaredByUserId === args.actor.userId), now);
   if (missed) {
     return {
       ok: false,
@@ -155,8 +168,10 @@ export async function declareBreakFix(args: {
   const payload: BreakFixDeclaration = {
     schemaVersion: 1,
     reason: args.reason,
-    declaredByPrincipalId: args.actor.principalId,
+    declaredByPrincipalId: args.actor.agentId ? null : args.actor.principalId,
     declaredByUserId: args.actor.userId,
+    actingAgentId: args.actor.agentId,
+    approvalEnvelopeId: args.humanApproval?.envelopeId ?? null,
     capsuleId: room.capsuleId,
     declaredAt: now.toISOString(),
     pirDueAt: new Date(now.getTime() + BREAK_FIX_PIR_WINDOW_MS).toISOString(),

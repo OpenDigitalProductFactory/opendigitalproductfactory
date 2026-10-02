@@ -130,13 +130,25 @@ export async function gateBetweenSteps(
     return { resumedAfterWait: false };
   }
   // Wait for terminal transition event. The coordinator guarantees this
-  // fires on every terminal state (spec §5.2 invariant).
-  const cleared = await step.waitForEvent(`await-quiescence-cleared-${stepLabel}`, {
-    event: "platform.quiescence-cleared",
-    timeout: "30m",
-  });
-  if (!cleared) {
-    return { resumedAfterWait: false, reason: "timed-out-waiting-for-cleared" };
+  // fires on every terminal state (spec §5.2 invariant). BI-F9EE05E5 slice B:
+  // a drain now waits up to its budget (60 min by default) and can then pause
+  // for the operator, so one 30-minute wait let work start mid-drain. Re-check
+  // after each wait and keep waiting while the drain holds, bounded so a stuck
+  // coordinator cannot hold a function forever.
+  for (let round = 0; round < GATE_BETWEEN_STEPS_MAX_WAITS; round++) {
+    const cleared = await step.waitForEvent(
+      round === 0 ? `await-quiescence-cleared-${stepLabel}` : `await-quiescence-cleared-${stepLabel}-${round}`,
+      { event: "platform.quiescence-cleared", timeout: "30m" },
+    );
+    if (cleared) return { resumedAfterWait: true };
+    const still = (await step.run(`quiescence-gate-${stepLabel}-recheck-${round}`, async () => {
+      const { getQuiescenceLevel } = await import("@/lib/self-upgrade/quiescence");
+      return getQuiescenceLevel();
+    })) as string;
+    if (still === "normal") return { resumedAfterWait: true };
   }
-  return { resumedAfterWait: true };
+  return { resumedAfterWait: false, reason: "timed-out-waiting-for-cleared" };
 }
+
+/** 30-minute waits before gateBetweenSteps gives up: 6 hours. */
+export const GATE_BETWEEN_STEPS_MAX_WAITS = 12;

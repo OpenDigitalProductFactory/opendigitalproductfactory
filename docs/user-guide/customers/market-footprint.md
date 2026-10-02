@@ -36,6 +36,6 @@ A customer counts as **not placed** when it has no site, or its site's address h
 
 - **Target markets:** the countries you sell to and operate in, recorded in your business context.
 - **Customers:** customer sites and their addresses.
-- **Deployments:** customer sites that host an installed node with an active fulfilment. Self-installed users you have no record of do not appear.
+- **Deployments:** customer sites that host an installed node with an active fulfilment, plus installations you manage or supply that chose to share their country with you (see [Sharing this installation's country](../platform/deployment-country-sharing.md)). Other self-installed users do not appear. An installation that is both a customer site and a sharing installation is counted twice.
 
 Nothing on this page leaves your installation. The country outlines are Natural Earth data (public domain) drawn by the page itself, with no map service.

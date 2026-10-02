@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureGitWebhookSecret, ensureInngestKeys, installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
+import { ensureGitWebhookSecret, ensureGppPermitSecret, ensureInngestKeys, installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
 
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 
@@ -147,6 +147,37 @@ test("updateEnv carries the webhook secret into the committed install env", () =
     assert.match(text, new RegExp(`^DPF_GIT_WEBHOOK_SECRET=${"c".repeat(64)}$`, "m"));
   } finally {
     if (previous === undefined) delete process.env.DPF_GIT_WEBHOOK_SECRET; else process.env.DPF_GIT_WEBHOOK_SECRET = previous;
+  }
+});
+
+// BI-8541D491: the GPP permit signing key reaches every install the same way.
+test("an upgrade persists the permit key promote.sh started the portal with, and never replaces a real one", () => {
+  const exported = "f".repeat(64);
+  const added = ensureGppPermitSecret("DPF_IMAGE_TAG=v1\n", "\n", exported);
+  assert.match(added, new RegExp(`^DPF_GPP_PERMIT_SECRET=${exported}$`, "m"));
+  const placeholder = ensureGppPermitSecret('DPF_GPP_PERMIT_SECRET="<generate a distinct value>"\n', "\n", exported);
+  assert.match(placeholder, new RegExp(`^DPF_GPP_PERMIT_SECRET=${exported}$`, "m"));
+  const kept = ensureGppPermitSecret(`DPF_GPP_PERMIT_SECRET="${"1".repeat(64)}"\n`, "\n", exported);
+  assert.equal(kept, `DPF_GPP_PERMIT_SECRET="${"1".repeat(64)}"\n`);
+  const generated = ensureGppPermitSecret("", "\n", "");
+  assert.match(generated, /^DPF_GPP_PERMIT_SECRET=[0-9a-f]{64}$/m);
+  const crlf = ensureGppPermitSecret("DPF_IMAGE_TAG=v1\r\n", "\r\n", exported);
+  assert.ok(crlf.endsWith(`DPF_GPP_PERMIT_SECRET=${exported}\r\n`));
+});
+
+test("updateEnv carries the permit key into the committed install env without touching the webhook secret", () => {
+  const previous = { permit: process.env.DPF_GPP_PERMIT_SECRET, webhook: process.env.DPF_GIT_WEBHOOK_SECRET };
+  process.env.DPF_GPP_PERMIT_SECRET = "2".repeat(64);
+  process.env.DPF_GIT_WEBHOOK_SECRET = "3".repeat(64);
+  try {
+    const text = updateEnv(Buffer.from("DPF_IMAGE_TAG=v1.0.0\n"), "v2.0.0", "opendigitalproductfactory").toString("utf8");
+    assert.match(text, new RegExp(`^DPF_GPP_PERMIT_SECRET=${"2".repeat(64)}$`, "m"));
+    assert.match(text, new RegExp(`^DPF_GIT_WEBHOOK_SECRET=${"3".repeat(64)}$`, "m"));
+    const kept = updateEnv(Buffer.from(`DPF_GPP_PERMIT_SECRET=${"4".repeat(64)}\n`), "v2.0.0", "o").toString("utf8");
+    assert.match(kept, new RegExp(`^DPF_GPP_PERMIT_SECRET=${"4".repeat(64)}$`, "m"));
+  } finally {
+    if (previous.permit === undefined) delete process.env.DPF_GPP_PERMIT_SECRET; else process.env.DPF_GPP_PERMIT_SECRET = previous.permit;
+    if (previous.webhook === undefined) delete process.env.DPF_GIT_WEBHOOK_SECRET; else process.env.DPF_GIT_WEBHOOK_SECRET = previous.webhook;
   }
 });
 

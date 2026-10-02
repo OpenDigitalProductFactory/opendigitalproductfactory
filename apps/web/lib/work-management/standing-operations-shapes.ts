@@ -299,7 +299,9 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
     title: "Issue triage watch",
     description:
       "The portfolio advisor classifies inbound issues, checks each against the existing "
-      + "backlog for duplication, and proposes a backlog item. Admission to the backlog is a "
+      + "backlog for duplication, and proposes a backlog item. Inbound issues are backlog "
+      + "items in status triaging, read with query_backlog; there is no separate issue queue. "
+      + "Admission to the backlog is a "
       + "human decision — an agent that could admit its own proposals would grow the backlog "
       + "without anyone choosing to.",
     triggers: ["cadence"],
@@ -310,7 +312,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         accountablePrincipalRef: "agent:portfolio-advisor",
         advance: {
           kind: "status-change",
-          condition: "Every untriaged issue in scope is classified by kind and severity.",
+          condition: "Every backlog item in status triaging is classified by kind and severity.",
         },
         evidence: ["assurance-run"],
         effort: "low",
@@ -322,7 +324,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         accountablePrincipalRef: "agent:portfolio-advisor",
         advance: {
           kind: "status-change",
-          condition: "Each issue is matched to an existing backlog item or carries a proposed new one.",
+          condition: "Each triaging backlog item is matched to an existing backlog item (query_backlog, find_duplicate_candidates) or carries a proposed new one.",
         },
         evidence: ["assurance-finding"],
         effort: "medium",

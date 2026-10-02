@@ -263,3 +263,17 @@ describe("the runner refuses the human stages of every standing shape", () => {
     }
   });
 });
+
+// GPP C-6, 2026-10-02: the dedupe stage blocked "cannot read issue source" and
+// reached for an undeclared reader, because nothing said where issues live.
+// Naming the source is make-explicit (GPP §2.1.1): text only, same tools.
+describe("issue-triage-watch names its issue source", () => {
+  it("says inbound issues are triaging backlog items read with a declared tool", async () => {
+    const { STANDING_SHAPES, ISSUE_TRIAGE_WATCH_SHAPE_KEY } = await import("./standing-operations-shapes");
+    const shape = STANDING_SHAPES[ISSUE_TRIAGE_WATCH_SHAPE_KEY]!;
+    expect(shape.description).toMatch(/backlog items in status triaging/);
+    const dedupe = shape.stages.find((stage) => stage.key === "dedupe")!;
+    expect(dedupe.advance.condition).toMatch(/triaging backlog item/);
+    expect(dedupe.tools).toEqual(["query_backlog", "find_duplicate_candidates"]);
+  });
+});

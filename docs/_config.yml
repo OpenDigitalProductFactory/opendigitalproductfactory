@@ -19,8 +19,14 @@ exclude:
   - Reference
   - dark-theme-development-guidelines.md
   - architecture/ea-diagrams
-  - architecture/gaid-diagrams
-  - architecture/tak-diagrams
+  # The diagram directories publish their rendered png/ and svg/ images (the
+  # papers embed them); only the Mermaid sources and renderer config stay out.
+  - architecture/gaid-diagrams/*.mmd
+  - architecture/gaid-diagrams/mermaid-config.json
+  - architecture/tak-diagrams/*.mmd
+  - architecture/tak-diagrams/mermaid-config.json
+  - architecture/gpp-diagrams/*.mmd
+  - architecture/gpp-diagrams/mermaid-config.json
   - architecture/generate-tak-docx.mjs
   - architecture/generate-gaid-docx.mjs
   - architecture/generate-docx-from-markdown.mjs

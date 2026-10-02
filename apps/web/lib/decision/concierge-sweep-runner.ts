@@ -147,7 +147,7 @@ async function retireStaleProposals(): Promise<number> {
 async function recordPass(summary: SweepSummary): Promise<void> {
   const room = await prisma.workroom.upsert({
     where: { idempotencyKey: GOVERNANCE_ROOM_KEY },
-    update: { lastSyncedAt: new Date() },
+    update: { lastSyncedAt: new Date(), executorKind: "dpf-native", executorRef: "concierge-sweep" },
     create: {
       capsuleId: `WC-${GOVERNANCE_ROOM_KEY.slice(0, 8).toUpperCase()}`,
       idempotencyKey: GOVERNANCE_ROOM_KEY,
@@ -156,6 +156,8 @@ async function recordPass(summary: SweepSummary): Promise<void> {
         "Keep decisions that need a person moving: draft what the owner should do, and say what could not be drafted.",
       status: "working",
       source: "scheduled-steward",
+      executorKind: "dpf-native",
+      executorRef: "concierge-sweep",
       activityKind: "governance",
       decisionScope: "wwmd",
       portfolioRole: "foundational",
