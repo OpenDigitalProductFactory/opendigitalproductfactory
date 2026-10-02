@@ -11,6 +11,7 @@ import { cron } from "@/lib/jobs/triggers";
 import {
   driveOutcomeNeedsOwner,
   resolveDriveConclusion,
+  type DriveReasonFor,
 } from "@/lib/work-management/drive-conclusion";
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 import type { Prisma, PrismaClient } from "@dpf/db";
@@ -322,10 +323,10 @@ export async function applyDrivePlan(input: {
     if (lease === "held") {
       await persist({
         roomId: room.id,
-        snapshot: { ...snapshot, reason: "lease_held" },
+        snapshot: { ...snapshot, reason: "lease_held" satisfies DriveReasonFor<"dispatch_agent"> },
         activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
         summary: "Drive lease held by another worker; stage remains eligible when it expires.",
-        payload: { ...snapshot, reason: "lease_held" },
+        payload: { ...snapshot, reason: "lease_held" satisfies DriveReasonFor<"dispatch_agent"> },
         observationOnly: true,
       });
       return "skipped";
@@ -333,10 +334,10 @@ export async function applyDrivePlan(input: {
     if (!room.ownerUserId) {
       await persist({
         roomId: room.id,
-        snapshot: { ...snapshot, reason: "missing_task_owner" },
+        snapshot: { ...snapshot, reason: "missing_task_owner" satisfies DriveReasonFor<"dispatch_agent"> },
         activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
         summary: "Agent stage is eligible but no owner user is bound for ScheduledAgentTask.",
-        payload: { ...snapshot, reason: "missing_task_owner" },
+        payload: { ...snapshot, reason: "missing_task_owner" satisfies DriveReasonFor<"dispatch_agent"> },
       });
       return "skipped";
     }

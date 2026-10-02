@@ -206,3 +206,37 @@ describe("conformance — every work shape can actually conclude (AC-CS-03)", ()
     expect(evidenceless).toEqual([]);
   });
 });
+
+describe("the reason vocabulary matches what the drive emits (BI-3ACFD254)", () => {
+  // Each of these pairs reached production while missing from the list, so the
+  // no-silence walk above never saw them. Live, 11,435 writeback-blocked ticks
+  // concluded `unconcluded`.
+  const emittedButOnceUnlisted = [
+    { action: "do_not_wake", reason: "cycle_complete", expected: "in-motion" },
+    { action: "pause", reason: "executor_writeback_unavailable", expected: "blocked" },
+    { action: "pause", reason: "unknown_principal", expected: "blocked" },
+    { action: "dispatch_agent", reason: "lease_held", expected: "in-motion" },
+    { action: "dispatch_agent", reason: "missing_task_owner", expected: "blocked" },
+  ] as const;
+
+  it("lists every pair under the action that actually carries it", () => {
+    const listed = everyDriveOutcome();
+    for (const { action, reason } of emittedButOnceUnlisted) {
+      expect(listed, `${action}/${reason}`).toContainEqual({ action, reason });
+    }
+    expect(listed).not.toContainEqual({ action: "attention", reason: "unknown_principal" });
+  });
+
+  it("concludes each of them", () => {
+    for (const { action, reason, expected } of emittedButOnceUnlisted) {
+      const decision = resolveDriveConclusion(input({ action, reason, attentionPrincipalRef: null }));
+      expect(decision.kind, `${action}/${reason}`).toBe(expected);
+    }
+  });
+
+  it("names a finished cycle as waiting for its next trigger, not as generic motion", () => {
+    const decision = resolveDriveConclusion(input({ action: "do_not_wake", reason: "cycle_complete" }));
+    expect(decision.summary).toContain("next trigger");
+  });
+});
+
