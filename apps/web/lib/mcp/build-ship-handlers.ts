@@ -530,7 +530,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
 
   const prTitle = `feat(${buildId}): ${build.title}`;
   const labels = ["build-studio", "automated"];
-  const { publishBranchCommit, openPullRequest } = await import("@/lib/build/github-api-commit");
+  const { publishBranchCommit, openPullRequest, buildTreeFileReader } = await import("@/lib/build/github-api-commit");
 
   const {
     buildPublishedReadinessCommand,
@@ -583,6 +583,10 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     };
   }
 
+  // BI-6B57D85F: publish each file's committed content from the build's own
+  // tree, not the shared sandbox mount (which sits on the client branch).
+  const { resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
+  const { execInSandbox } = await import("@/lib/build/sandbox/sandbox");
   const published = await publishBranchCommit({
     headOwner: repoOwner,
     headRepo: repoName,
@@ -590,6 +594,9 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     commitMessage,
     diff: shareableDiff,
     token,
+    ...(build.sandboxId
+      ? { readFile: buildTreeFileReader({ containerId: build.sandboxId, workdir: resolveBuildWorkdir(buildId), exec: execInSandbox }) }
+      : {}),
   });
   let canonicalReadiness = {
     ready: false,
