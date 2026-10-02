@@ -18,12 +18,18 @@ import { Surface } from "@/components/ui/Surface";
 import { placeCustomerSiteOnMapAction } from "@/lib/actions/customer-map";
 import type { CustomerMap } from "@/lib/crm/customer-map";
 import { useT } from "@/lib/i18n/use-t";
-import { buildGeographicSceneModel } from "@/lib/twin/geographic-scene";
+import { buildGeographicSceneModel, type GeographicSceneModel } from "@/lib/twin/geographic-scene";
 
 import { closedRing, drawingReducer, IDLE } from "./service-area-drawing";
 import { ServiceAreasPanel } from "./ServiceAreasPanel";
 
 const NO_CORNERS: readonly { latitude: number; longitude: number }[] = [];
+const EMPTY_MODEL: GeographicSceneModel = {
+  viewport: { latitude: 20, longitude: 0, zoom: 1 },
+  bounds: { west: -170, south: -60, east: 170, north: 75, crossesAntimeridian: false },
+  zones: { type: "FeatureCollection", features: [] },
+  placements: { type: "FeatureCollection", features: [] },
+};
 const EMPTY_LAYOUT: GeographicSceneLayout = {
   schemaVersion: 1,
   spaceKind: "geographic",
@@ -45,31 +51,41 @@ export function CustomerMapView({ map, canEdit }: { map: CustomerMap; canEdit: b
   const layout = map.layout ?? EMPTY_LAYOUT;
   const draftLabel = t("areas.add");
   const corners = drawing.mode === "idle" ? NO_CORNERS : drawing.points;
+  // The saved scene fixes the map's bounds. The in-progress area is layered on
+  // top as extra features, so adding a corner never moves or rebuilds the map.
+  const baseModel = useMemo(
+    () =>
+      layout.placements.length > 0 || layout.zones.length > 0
+        ? buildGeographicSceneModel({
+            layout,
+            presentations: map.presentations,
+            selectedEntityIds: selectedSiteId ? [selectedSiteId] : [],
+          })
+        : null,
+    [layout, map.presentations, selectedSiteId],
+  );
   const model = useMemo(() => {
-    const draftRing = closedRing(corners);
-    const scene = {
-      ...layout,
-      zones: draftRing
-        ? [...layout.zones, { id: "draft-area", label: draftLabel, geometry: { kind: "polygon" as const, rings: [draftRing] } }]
-        : layout.zones,
-      placements: [
-        ...layout.placements,
-        ...corners.map((point, index) => ({
+    const base = baseModel ?? EMPTY_MODEL;
+    if (corners.length === 0) return baseModel;
+    const ring = closedRing(corners);
+    const draft = buildGeographicSceneModel({
+      layout: {
+        ...EMPTY_LAYOUT,
+        zones: ring ? [{ id: "draft-area", label: draftLabel, geometry: { kind: "polygon", rings: [ring] } }] : [],
+        placements: corners.map((point, index) => ({
           id: `draft-corner:${index}`,
           entityRef: { kind: "draft-corner", id: `draft-corner:${index}` },
           label: String(index + 1),
-          geometry: { kind: "point" as const, latitude: point.latitude, longitude: point.longitude },
+          geometry: { kind: "point", latitude: point.latitude, longitude: point.longitude },
         })),
-      ],
+      },
+    });
+    return {
+      ...base,
+      zones: { ...base.zones, features: [...base.zones.features, ...draft.zones.features] },
+      placements: { ...base.placements, features: [...base.placements.features, ...draft.placements.features] },
     };
-    return scene.placements.length > 0 || scene.zones.length > 0
-      ? buildGeographicSceneModel({
-          layout: scene,
-          presentations: map.presentations,
-          selectedEntityIds: selectedSiteId ? [selectedSiteId] : [],
-        })
-      : null;
-  }, [layout, map.presentations, corners, selectedSiteId, draftLabel]);
+  }, [baseModel, corners, draftLabel]);
 
   const drawingActive = drawing.mode === "drawing";
   const onMapPoint = placing && !pending ? place : drawingActive ? (latitude: number, longitude: number) => dispatch({ type: "add", point: { latitude, longitude } }) : null;
@@ -91,14 +107,7 @@ export function CustomerMapView({ map, canEdit }: { map: CustomerMap; canEdit: b
       <p className="text-sm text-[var(--dpf-muted)]">{t("summary", { placed: map.placedCount, missing })}</p>
       {model || placing || drawing.mode !== "idle" ? (
         <GeographicSceneCanvas
-          model={
-            model ?? {
-              viewport: layout.viewport,
-              bounds: { west: -170, south: -60, east: 170, north: 75, crossesAntimeridian: false },
-              zones: { type: "FeatureCollection", features: [] },
-              placements: { type: "FeatureCollection", features: [] },
-            }
-          }
+          model={model ?? EMPTY_MODEL}
           label={t("mapLabel")}
           onPlacePoint={onMapPoint}
           onSelectEntity={(entityId) => setSelectedSiteId(entityId && map.presentations[entityId] ? entityId : null)}
