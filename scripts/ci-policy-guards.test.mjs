@@ -83,6 +83,8 @@ const EXPECTED_LEGACY_JOBS = [
   "self-task-cadence-parity",
   "shell-guard-shim-contract",
   "singleton-safety-guard",
+  "skill-capability-key-guard",
+  "skill-pack-category",
   "spec-plan-doc-gate",
   "spec-status-frontmatter",
   "stewardship-scope-guard",

@@ -603,6 +603,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-self-task-cadence-parity.test.mjs"),
       node("scripts/check-self-task-cadence-parity.mjs"),
     ]),
+    // A pack skill's `category` groups the default-visible catalog on
+    // /platform/ai/skills, so an invented value permanently adds a group header to
+    // a page under a shrink-only words-on-arrival ratchet. The sibling `capability`
+    // field is NOT re-validated here — skill-capability-key-guard owns it.
+    guard("skill-pack-category", "Skill Pack Category", [
+      node("--test", "scripts/check-skill-pack-category.test.mjs"),
+      node("scripts/check-skill-pack-category.mjs"),
+    ]),
     guard("archetype-completeness-guard", "Archetype Completeness Guard", [
       node("--test", "scripts/check-archetype-completeness.test.mjs"),
       node("scripts/check-archetype-completeness.mjs"),
@@ -614,6 +622,18 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("capability-consumer-guard", "Capability Consumer Guard", [
       node("--test", "scripts/check-capability-consumers.test.mjs"),
       node("scripts/check-capability-consumers.mjs"),
+    ]),
+    // Skill frontmatter `capability:` is the permission gate the in-portal seed
+    // loader copies verbatim into a free-form Prisma String?. Nothing validated it,
+    // so five invented keys (view_build_studio, view_workspace, ...) passed all 76
+    // guards on 2026-10-01 and were caught only by a manual grep. An invented key
+    // gates the skill on a permission nobody can hold. Source of truth: the
+    // CapabilityKey union / PERMISSIONS record in apps/web/lib/govern/permissions.ts.
+    // Deliberately undeclared inputs: this guard reads BOTH source (permissions.ts)
+    // and markdown (skills/**), so a docs-only diff CAN violate it.
+    guard("skill-capability-key-guard", "Skill Capability Key Guard", [
+      node("--test", "scripts/check-skill-capability-keys.test.mjs"),
+      node("scripts/check-skill-capability-keys.mjs"),
     ]),
     // W17 (BI-810BEC9C): every route handler under apps/web/app/api declares its
     // exposure class at birth (@exposure pragma collected into route-manifest.json);

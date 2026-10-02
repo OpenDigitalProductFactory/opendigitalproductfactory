@@ -60,6 +60,7 @@ vi.mock("@/lib/build/sandbox/build-branch", () => ({
   startBuildBranch: (...a: unknown[]) => { trace.push("start-build-branch"); return m.branch(...a); },
 }));
 vi.mock("@/lib/build/build-phase-run", () => ({
+  admitPhaseTransition: () => Promise.resolve(true),
   completeBuildPhaseRun: () => { trace.push("phase-run:complete-plan"); return Promise.resolve(); },
   startBuildPhaseRun: () => { trace.push("phase-run:start-build"); return Promise.resolve(); },
 }));

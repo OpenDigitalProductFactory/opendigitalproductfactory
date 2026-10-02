@@ -47,6 +47,7 @@ import { buildStepUpChallenge, type StepUpContext } from "@/lib/auth/oauth-step-
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations } from "@/lib/mcp-tools";
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import { isToolAllowedDuringQuiescence, QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS } from "@/lib/mcp/quiescence-safe-tools";
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -86,7 +87,7 @@ import { prisma } from "@dpf/db";
 import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 // GPP Phase 2 PR-C: a replayed permit handle rides in tools/call params._meta.
-import { presentedPermitHandle } from "@/lib/gpp/permit-carriage";
+import { permitResultMeta, presentedPermitHandle } from "@/lib/gpp/permit-carriage";
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
 // ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
@@ -185,20 +186,6 @@ function tokenScopesAllowTool(tool: ToolDefinition, token: ResolvedMcpToken, gra
   return tokenAdmitsTool(tool, grantMap[tool.name], token);
 }
 
-const QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS = new Set([
-  // Releasing a lease is cleanup, and is what prevents quiescence-blocked
-  // local-CI evidence writes from leaking scarce nonprod environments.
-  "release_nonprod_environment_lease",
-  // Renewing keeps a gate that is already running alive through a drain, so
-  // its verdict is not lost to the lease lapsing mid-build (2026-09-24).
-  "renew_nonprod_environment_lease",
-]);
-
-function isToolAllowedDuringQuiescence(toolName: string, tool: ToolDefinition | undefined): boolean {
-  if (toolName === "get_quiescence_status") return true;
-  if (tool?.sideEffect === false) return true;
-  return QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS.has(toolName);
-}
 
 async function quiescenceRefusalResult(
   toolName: string,
@@ -662,6 +649,8 @@ async function handleToolsCall(
   if (structured !== undefined) {
     responseBody["structuredContent"] = structured;
   }
+  const meta = permitResultMeta({ data: result.data, governance: executed.governance }); // GPP PR-G, additive
+  if (meta) responseBody["_meta"] = meta;
   return jsonRpcOk(id, responseBody);
 }
 

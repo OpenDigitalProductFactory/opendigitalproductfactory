@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "pause-and-ask",
+  "decisionInteractionId": "DI-0034FA013B67",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/SelfUpgradeTriggerControl.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "pause-and-ask",
+      "auto-force",
+      "auto-abort"
+    ]
+  }
+}

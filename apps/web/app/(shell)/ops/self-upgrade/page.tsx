@@ -15,6 +15,9 @@ import { getLocalChangesLedger } from "@/lib/self-upgrade/local-changes-ledger";
 import { hasGovernedRecoveryPoint } from "@/lib/self-upgrade/rollback";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
 import { SelfUpgradeLiveProvider } from "@/components/ops/SelfUpgradeLiveProvider";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import type { SelfUpgradeStatusSnapshot } from "@/lib/self-upgrade/status-snapshot";
 import { UNKNOWN_SELF_UPGRADE_SUPPORT } from "@/lib/self-upgrade/support";
 import { createSelfUpgradeTargetBinding } from "@/lib/self-upgrade/target-binding";
@@ -220,7 +223,9 @@ export default async function SelfUpgradePage() {
     }
   }
 
+  const { language } = await getLocaleContext();
   return (
+    <MessagesProvider locale={language} messages={{ upgrade: namespaceMessages(language, "upgrade") }}>
     <SelfUpgradeLiveProvider initialSnapshot={initialLiveSnapshot}>
     <div>
       <div className="mb-6">
@@ -287,5 +292,6 @@ export default async function SelfUpgradePage() {
       </details>
     </div>
     </SelfUpgradeLiveProvider>
+    </MessagesProvider>
   );
 }

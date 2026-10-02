@@ -300,6 +300,7 @@ authorization or a request for more permissions may require approval again.
 - **Needing more mid-task is a prompt, not a dead end.** When a client hits a tool it lacks permission for, it asks you to approve exactly that additional permission and retries. You are never asked to go and mint something by hand.
 - **Self-registered clients are labelled.** On a local installation a client may register itself, which means it chose its own display name. The approval screen says so. Approve it only if you started the connection.
 - **Revoke any time** in Improve & deliver › Setup › Contributing & GitHub (MCP tokens). Revoking a client immediately revokes everything it holds.
+- **End one person's access without disconnecting everyone.** A client such as Claude Code is shared by everyone who connects it to this install. An administrator can open **People** on that client's row, see who holds access and when they last used it, and choose **Revoke this person's access** with a reason. Everyone else stays connected; the person can reconnect by signing in again. You cannot revoke your own access there — disconnect from your own client instead.
 
 #### Headless callers (CI, cron, containers)
 

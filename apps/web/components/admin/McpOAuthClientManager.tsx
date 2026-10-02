@@ -14,7 +14,7 @@
 // Sits beside the PAT manager on Admin > Platform Development (decision
 // DI-03DA64D1850B) and composes the shared primitives only.
 
-import { Copy, KeyRound, Plus, RefreshCw, X } from "lucide-react";
+import { Copy, KeyRound, Plus, RefreshCw, Users, X } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -31,6 +31,7 @@ import {
   type CreatedCredentialsClient,
   type OAuthClientSummary,
 } from "@/lib/actions/oauth-clients";
+import { OAuthClientPeople } from "@/components/admin/OAuthClientPeople";
 import { buildCredentialsClientSnippets } from "@/lib/auth/mcp-setup-snippets";
 import { PUBLIC_SCOPES, PUBLIC_SCOPE_COPY, type PublicScope } from "@/lib/auth/oauth-public-scopes";
 import { formatTimestamp } from "@/lib/datetime";
@@ -83,6 +84,7 @@ export function McpOAuthClientManager() {
   const [formScopes, setFormScopes] = useState<Set<PublicScope>>(() => new Set<PublicScope>(["dpf.read"]));
   const [formError, setFormError] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  const [peopleFor, setPeopleFor] = useState<OAuthClientSummary | null>(null);
 
   function refresh() {
     startTransition(async () => {
@@ -176,10 +178,25 @@ export function McpOAuthClientManager() {
       align: "right",
       cell: (row) => (
         row.revokedAt ? null : (
-          <Button variant="danger" size="sm" type="button" onClick={() => revoke(row)} aria-label={`Revoke ${row.clientName}`}>
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-            Revoke
-          </Button>
+          <span className="inline-flex gap-2">
+            {row.registrationKind === "credentials" ? null : (
+              <Button
+                variant="secondary"
+                size="sm"
+                type="button"
+                onClick={() => setPeopleFor(peopleFor?.clientId === row.clientId ? null : row)}
+                aria-expanded={peopleFor?.clientId === row.clientId}
+                aria-label={`People connected to ${row.clientName}`}
+              >
+                <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                People
+              </Button>
+            )}
+            <Button variant="danger" size="sm" type="button" onClick={() => revoke(row)} aria-label={`Revoke ${row.clientName}`}>
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              Revoke
+            </Button>
+          </span>
         )
       ),
     },
@@ -329,6 +346,9 @@ export function McpOAuthClientManager() {
             initialSort={{ key: "lastUsed", dir: "desc" }}
             empty={<span>No keys yet.</span>}
           />
+          {peopleFor ? (
+            <OAuthClientPeople clientId={peopleFor.clientId} clientName={peopleFor.clientName} onChanged={refresh} />
+          ) : null}
         </div>
       </details>
     </Surface>

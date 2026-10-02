@@ -30,10 +30,22 @@ beforeEach(() => {
 
 describe("envelope decisions honour the decision window", () => {
   it("approves inside the window", async () => {
-    findUnique.mockResolvedValue(row());
+    findUnique.mockResolvedValue(row({ approvalBindingFingerprint: "binding-1", argsJson: { approvalBinding: { toolName: "create_backlog_item" } } }));
     const result = await approveEnvelope("env-1", "user-1");
     expect(result.ok).toBe(true);
     expect(update).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      argsJson: { approvalBinding: { toolName: "create_backlog_item" }, humanApproval: { userId: "user-1", approvedAt: expect.any(String) } },
+    }) }));
+  });
+
+  it.each([
+    { target: "customer-1", action: "open" },
+    { approvalBinding: { toolName: "a-tool-argument" } },
+  ])("preserves raw screen-action arguments on approval: %j", async (argsJson) => {
+    findUnique.mockResolvedValue(row({ argsJson, approvalBindingFingerprint: null }));
+    expect(await approveEnvelope("env-1", "user-1")).toMatchObject({ ok: true });
+    expect(update).toHaveBeenCalledWith({ where: { id: "env-1" }, data: { status: "approved" } });
   });
 
   it.each([

@@ -103,3 +103,101 @@ describe("POST tools/call — permit handle carriage", () => {
     expect(govMock.mock.calls[0]![0].context).not.toHaveProperty("permitHandle");
   });
 });
+
+// GPP Phase 2, PR-G: the result side. A permit_required refusal's denial
+// envelope is lifted onto the tool result's `_meta` under the MCP
+// authorization extension's key, and the handle a gate minted for the call is
+// returned with its expiry. Additive: every other result has no `_meta`.
+describe("POST tools/call — permit result _meta", () => {
+  const AUTHZ_KEY = "io.modelcontextprotocol/authorization";
+  const authorization = {
+    reason: "insufficient_authorization",
+    remediation: "available",
+    remediationHints: [{
+      type: "transaction_authorization",
+      condition: "handle_required",
+      gate: {
+        gateRef: "human-checkpoint-admit@1", title: "An approved human checkpoint for this call", obtain: "out_of_band",
+        bindingId: "human-checkpoint-admit", gateKey: "coworker-authority-escalation", authority: "wwwd", admission: "approved-envelope",
+      },
+    }],
+  };
+
+  async function resultOf(params: Record<string, unknown>) {
+    const res = await POST(toolRequest(params));
+    return ((await res.json()) as { result: Record<string, unknown> }).result;
+  }
+
+  it("lifts a permit_required refusal's denial envelope onto result._meta", async () => {
+    govMock.mockResolvedValue({
+      success: false,
+      error: "permit_required",
+      message: "create_workroom is waiting on an input: a valid permit is required (handle_required).",
+      disposition: "awaiting-input",
+      data: { authorization, permit: { condition: "handle_required", verdict: "absent", reason: "no-permit", carriage: META_KEY } },
+      governance: { rejected: "permit_required" },
+    } as never);
+
+    const result = await resultOf({ name: "create_workroom", arguments: ARGS });
+
+    expect(result.isError).toBe(true);
+    expect(result._meta).toEqual({ [AUTHZ_KEY]: authorization });
+    // The structured data is unchanged: clients that ignore _meta see what they saw before.
+    expect(result.structuredContent).toMatchObject({ authorization });
+  });
+
+  it("returns the minted handle and its expiry when a gate admitted the call", async () => {
+    const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
+    govMock.mockResolvedValue({
+      success: true,
+      message: "ok",
+      data: { capsuleId: "WC-1" },
+      governance: {
+        durationMs: 3,
+        permit: { handle: "gpp1.GPM-1.k1.mac", verdict: "valid" },
+        permitHandleExpiresAt: expiresAt,
+      },
+    });
+
+    const result = await resultOf({ name: "create_workroom", arguments: ARGS });
+
+    expect(result._meta).toEqual({ [META_KEY]: { handle: "gpp1.GPM-1.k1.mac", expiresAt } });
+    // The handle is not echoed into the model-facing text block or structuredContent.
+    expect(JSON.stringify(result.content)).not.toContain("gpp1.GPM-1");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("gpp1.GPM-1");
+  });
+
+  it("a result with no permit facts carries no _meta, exactly as before", async () => {
+    govMock.mockResolvedValue({ success: true, message: "ok", data: { capsuleId: "WC-1" }, governance: { durationMs: 3 } });
+
+    const result = await resultOf({ name: "create_workroom", arguments: ARGS });
+
+    expect(result).not.toHaveProperty("_meta");
+    expect(Object.keys(result).sort()).toEqual(["content", "isError", "structuredContent"]);
+  });
+
+  it("another refusal carrying authorization-shaped data is not lifted", async () => {
+    govMock.mockResolvedValue({
+      success: false, error: "approval_required", message: "held", data: { authorization }, governance: { rejected: "approval_required" },
+    } as never);
+
+    const result = await resultOf({ name: "create_workroom", arguments: ARGS });
+
+    expect(result).not.toHaveProperty("_meta");
+  });
+
+  it("does not log the handle", async () => {
+    const spies = (["log", "info", "warn", "error", "debug"] as const).map((level) => vi.spyOn(console, level).mockImplementation(() => undefined));
+    govMock.mockResolvedValue({
+      success: true, message: "ok", data: { capsuleId: "WC-1" },
+      governance: { permit: { handle: "gpp1.GPM-SECRET.k1.mac", verdict: "valid" }, permitHandleExpiresAt: new Date(Date.now() + 60_000).toISOString() },
+    });
+
+    await resultOf({ name: "create_workroom", arguments: ARGS });
+
+    for (const spy of spies) {
+      expect(JSON.stringify(spy.mock.calls)).not.toContain("GPM-SECRET");
+      spy.mockRestore();
+    }
+  });
+});

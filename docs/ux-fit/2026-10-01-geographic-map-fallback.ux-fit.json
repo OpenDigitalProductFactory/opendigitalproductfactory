@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "plain-status-line",
+  "decisionInteractionId": "DI-021F169178FC",
+  "scope": {
+    "files": [
+      "apps/web/components/twin/geographic/GeographicSceneCanvas.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "plain-status-line",
+      "blank-canvas",
+      "hide-map-silently"
+    ]
+  }
+}

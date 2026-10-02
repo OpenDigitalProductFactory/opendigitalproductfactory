@@ -47,6 +47,7 @@ The DR-hardening epic (BIs shipped 2026-05-24) put recovery artifacts in **speci
 | Branches + commits after install-dir rm | GitHub `origin` IS the source of truth; clone fresh | `git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory $DPF_DIR` |
 | Docker images | Pull-on-demand from registries | `docker compose pull` or `install-dpf.{ps1,sh}` |
 | Docker volumes (any) | NOT recoverable from Docker layer — the daily backup IS the durable copy | See dump-restore rows above |
+| Map region packs (`map_data` volume, `/var/lib/dpf/maps`) | Not backed up: packs are public OpenStreetMap-derived files, re-obtainable from their source | Re-copy each `<pack-id>.pmtiles` and `<pack-id>.manifest.json` into the volume; maps draw without a street layer until then |
 | Tool config / installer state | `install-state.json` in install dir | If lost: re-run `install-dpf.{ps1,sh}`; it's idempotent |
 | Failed platform upgrade / bad seed apply / migration damage | Governed upgrade recovery point: linked `BackupRun` rows under `$DPF_BACKUPS_HOST_PATH/postgres/<ts>/` plus previous runtime identity under `$DPF_BACKUPS_HOST_PATH/self-upgrade/<runId>/` | Upgrade Center rollback/restore flow; if unavailable, restore the Postgres member directly |
 

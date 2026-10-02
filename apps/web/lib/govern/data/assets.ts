@@ -47,6 +47,7 @@ import { BUSINESS_PERFORMANCE_ASSETS } from "./business-performance-assets";
 import { EXTERNAL_CHANNEL_ASSETS } from "./external-channel-assets";
 import { ANIMAL_WELFARE_ASSETS } from "./animal-welfare-assets";
 import { CONTROLLED_SUBSTANCE_ASSETS } from "./controlled-substance-assets";
+import { JOB_ENGINE_ASSETS } from "./job-engine-assets";
 import type {
   DataAssetDefinition,
   DataAssetRegistry,
@@ -690,6 +691,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...EXTERNAL_CHANNEL_ASSETS,
   ...ANIMAL_WELFARE_ASSETS,
   ...CONTROLLED_SUBSTANCE_ASSETS,
+  ...JOB_ENGINE_ASSETS,
    {
     id: "data:agent-conversation",
     physical: { prismaModel: "AgentMessage" },
