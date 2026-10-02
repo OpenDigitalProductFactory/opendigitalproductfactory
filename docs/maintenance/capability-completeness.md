@@ -34,7 +34,7 @@ the platform is not".
 - Distinct agent identities measured: **87**
   - canonical agent registry: 87 · workforce roster: 48 · profession roles: 99
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
-- At 100% of attainable: **35**
+- At 100% of attainable: **36**
 - Median attainable: **88%** · median absolute: **81%**
 - Skills: **154** total, **0** stranded, **41** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`, `software-engineer`
@@ -55,10 +55,10 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 
 | Class | Count | Median attainable | Meaning |
 |---|---|---|---|
-| `active-roster` | 40 | 100% | Active in the canonical registry and seeded onto the workforce roster. |
+| `active-roster` | 41 | 100% | Active in the canonical registry and seeded onto the workforce roster. |
 | `active-registry-only` | 0 | — | Active in the canonical registry but absent from the workforce roster. |
 | `roster-only` | 0 | — | On the workforce roster but absent from the canonical agent registry. |
-| `defined-roster` | 8 | 96% | Declared in the canonical registry (not active) and seeded onto the roster. |
+| `defined-roster` | 7 | 96% | Declared in the canonical registry (not active) and seeded onto the roster. |
 | `declared-only` | 0 | — | Declared in the canonical registry and never seeded anywhere. |
 | `superseded` | 2 | 64% | Declared, but the work is done by another ACTIVE identity named in its posture. |
 | `deliberately-unstaffed` | 37 | 48% | Declared and consciously not staffed, with a recorded reason and review date. |
@@ -67,7 +67,7 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 
 | Plane | Weight | Ceiling | L0 | L1 | L2 | L3 | At ceiling |
 |---|---|---|---|---|---|---|---|
-| Identity | 1 | 3 | 0 | 39 | 8 | 40 | 40/87 |
+| Identity | 1 | 3 | 0 | 39 | 7 | 41 | 41/87 |
 | Corpus / WSID | 1 | 3 | 0 | 0 | 0 | 87 | 87/87 |
 | Governance / WWWD | 2 | 3 | 0 | 0 | 0 | 87 | 87/87 |
 | Shape | 1 | 2 | 39 | 0 | 48 | 0 | 48/87 |
@@ -200,7 +200,6 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-ORCH-000` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-FARM-RANCH` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-INTEGRATION` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
-| `AGT-WS-TIME-OFF` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-900` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-903` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-905` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
@@ -236,6 +235,7 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-WS-PLATFORM` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-SCOUT` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-STOREFRONT` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-WS-TIME-OFF` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 
 ## Widest gaps — detail
 
