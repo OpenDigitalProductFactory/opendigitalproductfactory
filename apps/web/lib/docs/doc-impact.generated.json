@@ -1456,6 +1456,9 @@
     "apps/web/lib/work-management/stage-tool-parity.test.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
+    "apps/web/lib/work-management/standing-operations-shapes.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/work-management/work-shapes.ts": [
       "docs/architecture/gated-permissions-process.md",
       "docs/architecture/work-shapes-and-the-decision-gate.md"
@@ -3109,6 +3112,7 @@
       "apps/web/lib/gpp/bindings.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
+      "apps/web/lib/work-management/standing-operations-shapes.ts",
       "apps/web/lib/work-management/work-shapes.ts",
       "apps/web/scripts/gpp-critical-interaction-map.ts",
       "packages/db/prisma/schema/ai-coworker.prisma"
