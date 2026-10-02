@@ -86,3 +86,70 @@ describe("diffWorkShapeBinding", () => {
     expect(() => diffWorkShapeBinding(v1, { ...v1, key: "other" })).toThrow(/versions of one shape/);
   });
 });
+
+// Typed gate and binding rows (GPP shape compiler, BI-6DA17863 PR-3b-4; spec
+// docs/superpowers/specs/2026-10-02-gpp-shape-notation-and-compiler-design.md
+// §4.4). A row fires only when both versions carry the field; absent ->
+// present is making-explicit and stays `unchanged`.
+describe("diffWorkShapeBinding: typed gates and bindings", () => {
+  const gate = {
+    authority: "wwmd",
+    mode: "enforced",
+    blocking: true,
+    resolution: "accountable-human",
+  } as const;
+  const binding = { id: "review-binding", version: 1, enforcement: "shadow" } as const;
+  const gated = (patch: Partial<typeof gate> | Record<string, unknown> = {}): WorkShapeStage => ({
+    ...review,
+    advance: { kind: "governed-decision", condition: "accepted", decisionScope: "wwmd", gate: { ...gate, ...patch } as never },
+  });
+  const bound = (patch: Record<string, unknown> = {}): WorkShapeStage => ({ ...gated(), binding: { ...binding, ...patch } as never });
+  const withStages = (stages: WorkShapeStage[], version = "1.0.0"): WorkShapeDefinitionContract => ({ ...v1, version, stages });
+
+  const GATE_ROWS: Array<[string, WorkShapeStage, WorkShapeStage, BindingChangeKind, "widening" | "narrowing"]> = [
+    ["gate mode enforced -> shadow", gated(), gated({ mode: "shadow" }), "gate-mode-relaxed", "widening"],
+    ["gate blocking -> non-blocking", gated(), gated({ blocking: false }), "gate-blocking-relaxed", "widening"],
+    ["gate authority changed", gated(), gated({ authority: "wwwd" }), "gate-authority-changed", "widening"],
+    ["binding enforcement raised", bound(), bound({ enforcement: "enforced" }), "binding-enforcement-raised", "narrowing"],
+    ["binding enforcement raised to an environment boundary", bound({ enforcement: "enforced" }), bound({ enforcement: "environment", egress: [] }), "binding-enforcement-raised", "narrowing"],
+    ["binding enforcement lowered", bound({ enforcement: "enforced" }), bound(), "binding-enforcement-lowered", "widening"],
+    ["binding version changed", bound(), bound({ version: 2 }), "binding-version-changed", "widening"],
+  ];
+
+  it.each(GATE_ROWS)("%s", (_label, fromStage, toStage, kind, expected) => {
+    const diff = diffWorkShapeBinding(withStages([scan, fromStage]), withStages([scan, toStage], "1.1.0"));
+    expect(diff.changes).toEqual([expect.objectContaining({ kind, class: expected, stageKey: "review" })]);
+    expect(diff.classification).toBe(expected);
+  });
+
+  it("adding a gate equal to today's behaviour to a governed stage classifies unchanged", () => {
+    const diff = diffWorkShapeBinding(v1, withStages([scan, gated()], "1.0.0"));
+    expect(diff.changes).toEqual([]);
+    expect(diff.classification).toBe("unchanged");
+  });
+
+  it("adding a binding to a stage classifies unchanged", () => {
+    const diff = diffWorkShapeBinding(withStages([scan, gated()]), withStages([scan, bound()]));
+    expect(diff.changes).toEqual([]);
+    expect(diff.classification).toBe("unchanged");
+  });
+
+  it("a gate or binding present on only one side is not a row in either direction", () => {
+    expect(diffWorkShapeBinding(withStages([scan, bound()]), v1).changes).toEqual([]);
+    expect(diffWorkShapeBinding(v1, withStages([scan, bound({ enforcement: "environment", egress: ["read_a"] })])).changes).toEqual([]);
+  });
+
+  it("an identical gate and binding are unchanged, and unrelated gate fields are not rows", () => {
+    const tighter = bound();
+    const diff = diffWorkShapeBinding(
+      withStages([scan, tighter]),
+      withStages([scan, { ...tighter, advance: { ...gated({ mode: "enforced", gateKey: "explicit-key", escalation: { role: "role:owner", whileWaiting: "hold" } }).advance } }]),
+    );
+    expect(diff.classification).toBe("unchanged");
+  });
+
+  it("tightening a gate (shadow -> enforced, non-blocking -> blocking) is not a widening", () => {
+    const diff = diffWorkShapeBinding(withStages([scan, gated({ mode: "shadow", blocking: false })]), withStages([scan, gated()]));
+    expect(diff.changes.filter((row) => row.class === "widening")).toEqual([]);
+  });
+});

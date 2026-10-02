@@ -36,7 +36,13 @@
       "advance-tightened": "Now needs a decision to move on",
       "text-changed": "Wording changed",
       "grant-added": "New permission: {$detail}",
-      "grant-removed": "Permission removed: {$detail}"
+      "grant-removed": "Permission removed: {$detail}",
+      "gate-mode-relaxed": "The decision to move on is now only recorded, not enforced",
+      "gate-blocking-relaxed": "Can move on before the decision is made",
+      "gate-authority-changed": "Decided under a different authority: {$detail}",
+      "binding-enforcement-raised": "Permission checks are stricter: {$detail}",
+      "binding-enforcement-lowered": "Permission checks are looser: {$detail}",
+      "binding-version-changed": "Permissions revised: {$detail}"
     },
     "rationale": "Why you approve",
     "rationaleHint": "Required, because this widens what the room can reach.",
