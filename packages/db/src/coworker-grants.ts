@@ -321,7 +321,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // LicenseRequirementReference corpus — the platform's existing precedent for an
   // acquired external corpus carrying citations — so the same hand that maintains
   // licence references maintains statutory rate references.
-  "licensing-specialist": ["registry_read", "backlog_read", "backlog_write", "consumer_read", "policy_write", "policy_read", "initiative_compliance_review", "spec_plan_read", "web_search", "statutory_reference_propose"],
+  "licensing-specialist": ["registry_read", "backlog_read", "backlog_write", "consumer_read", "policy_write", "policy_read", "initiative_compliance_review", "file_read", "spec_plan_read", "web_search", "statutory_reference_propose"],
   "ux-accessibility-agent": ["file_read", "sandbox_execute", "work_capsule_read", "work_capsule_write", "work_capsule_adopt", "registry_read", "backlog_write", "decision_record_create", "initiative_ux_review", "web_search"],
   "soc-triage-analyst": ["siem_read", "siem_investigate", "registry_read"],
   "soc-investigator": ["siem_read", "siem_investigate", "siem_tune", "registry_read"],

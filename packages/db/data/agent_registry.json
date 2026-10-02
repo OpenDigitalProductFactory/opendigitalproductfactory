@@ -931,6 +931,7 @@
           "supply_chain_verify",
           "finding_create",
           "initiative_security_review",
+          "file_read",
           "spec_plan_read",
           "web_search"
         ],
@@ -2207,6 +2208,7 @@
           "policy_write",
           "policy_read",
           "initiative_compliance_review",
+          "file_read",
           "spec_plan_read",
           "web_search",
           "statutory_reference_propose"
@@ -2313,6 +2315,7 @@
           "license_check",
           "regulatory_compliance_check",
           "initiative_data_review",
+          "file_read",
           "tool_evaluation_read",
           "spec_plan_read"
         ],
