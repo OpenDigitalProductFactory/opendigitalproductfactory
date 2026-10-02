@@ -73,7 +73,9 @@ The order is fixed: **BI first, then plan.** [`dpf-file-backlog-item`](../dpf-fi
    Medium work must have acceptance criteria in the BI body and quote every
    criterion verbatim in the immutable plan. For v3, all four reference lists
    must be non-empty and each reference must appear verbatim in the plan.
-   Larger and unshaped work retain schema v2 scope-baseline traceability.
+   Existing baseline history always retains schema v2 traceability, including
+   smaller work; malformed baseline history must be repaired, never bypassed.
+   Larger and unshaped work also retain schema v2 scope-baseline traceability.
    Never choose or downgrade the receipt schema in the client. A changed scope,
    classification or acceptance criterion requires new coverage.
 

@@ -3,11 +3,12 @@ import { readBoundEditPaths, readBoundWorkShapeRef, type BoundWorkShapeDb } from
 import { readinessShapeFromWorkShape } from "@/lib/backlog/initiative-readiness/entry-adapter";
 import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { deriveAuthoritativeReadinessProfile } from "@/lib/backlog/initiative-readiness/profiles";
+import type { ReadinessShape } from "@/lib/backlog/initiative-readiness/types";
 import { effectiveShape } from "@/lib/backlog/initiative-readiness/shape-requirements";
 import { parseItemBodyAcceptance } from "@/lib/backlog/initiative-readiness/item-body-baseline";
 
 export type PlanDeliveryScope = {
-  shape: "break-fix" | "small" | "medium";
+  shape: Extract<ReadinessShape, "break-fix" | "small" | "medium">;
   digest: string;
   acceptanceCriteria: string[];
 };
@@ -25,6 +26,7 @@ export async function readPlanDeliveryScope(
   db: { workroom?: BoundWorkShapeDb["workroom"] }, item: ScopeItem,
 ): Promise<PlanDeliveryScope | null> {
   if (!db.workroom) return null;
+  // The caller has already resolved this exact item; the shared lookup accepts either id format.
   const boundDb: BoundWorkShapeDb = {
     workroom: db.workroom,
     backlogItem: { findFirst: async () => ({ id: item.id }) },

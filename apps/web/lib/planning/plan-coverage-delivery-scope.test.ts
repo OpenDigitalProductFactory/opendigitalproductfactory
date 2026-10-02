@@ -88,6 +88,38 @@ describe("proportional coverage round trip", () => {
     f.setBody("The repair now includes another subsystem");
     expect(await f.check()).toMatchObject({ ok: false, code: "receipt-invalid" });
   });
+  it("preserves approved baseline criteria even for proportional work", async () => {
+    const f = fixture();
+    f.db.backlogItemActivity.findMany = vi.fn(async () => [{ payload: {
+      baselineId: "approved", artifactDigest: "sha256:approved", supersedesBaselineId: null,
+      objectiveStatements: [{ objectiveId: "requirement" }],
+      acceptanceStatements: [{ acceptanceId: "AC-TEST-001" }, { acceptanceId: "AC-APPROVED-002" }],
+    } }]);
+    expect(await f.record()).toMatchObject({ ok: false, code: "traceability-incomplete" });
+    expect(f.activityCreate).not.toHaveBeenCalled();
+  });
+  it("invalidates proportional coverage when a baseline is subsequently approved", async () => {
+    const f = fixture();
+    expect(await f.record()).toMatchObject({ ok: true });
+    f.db.backlogItemActivity.findMany = vi.fn(async () => [{ payload: {
+      baselineId: "approved", artifactDigest: "sha256:approved", supersedesBaselineId: null,
+      objectiveStatements: [{ objectiveId: "requirement" }], acceptanceStatements: [{ acceptanceId: "AC-TEST-001" }],
+    } }]);
+    expect(await f.check()).toMatchObject({ ok: false, code: "receipt-invalid" });
+    expect(await f.record()).toMatchObject({ ok: true });
+    expect(f.activityCreate.mock.calls[1]?.[0]?.data.payload).toMatchObject({ schemaVersion: 2, scopeBaselineId: "approved" });
+  });
+  it("does not replace malformed baseline history with proportional coverage", async () => {
+    const f = fixture();
+    f.db.backlogItemActivity.findMany = vi.fn(async () => [{ payload: { baselineId: "incomplete" } }]);
+    expect(await f.record()).toMatchObject({ ok: false, code: "traceability-incomplete" });
+  });
+  it("rejects unknown receipt versions instead of treating them as legacy", async () => {
+    const f = fixture();
+    expect(await f.record()).toMatchObject({ ok: true });
+    (f.activityCreate.mock.calls[0][0].data.payload as Record<string, unknown>).schemaVersion = 4;
+    expect(await f.check()).toMatchObject({ ok: false, code: "receipt-invalid" });
+  });
   it("requires medium acceptance criteria and their presence in the plan", async () => {
     const f = fixture(); f.setShape("medium");
     expect(await f.record()).toMatchObject({ ok: false, code: "traceability-incomplete" });

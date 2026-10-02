@@ -251,7 +251,7 @@ export function validatePlanBacklogCoverageReceipt(args: {
 }): PlanBacklogCoverageReceiptValidation {
   const schemaVersion = args.receipt.schemaVersion ?? 1;
   if (args.requireGovernedImplementation && schemaVersion !== 2 && schemaVersion !== 3) {
-    return { ok: false, code: "coverage-v2-required", error: "Governed implementation requires plan coverage schema version 2." };
+    return { ok: false, code: "coverage-v2-required", error: "Governed implementation requires plan coverage schema version 2 or 3." };
   }
   if (schemaVersion === 2 || schemaVersion === 3) {
     const locator = args.receipt.planArtifactRef;
@@ -461,7 +461,7 @@ export async function checkBranchPlanBacklogGate(args: {
     || !Array.isArray(payload.deliverables)
     || !payload.planArtifactRef
   ) {
-    return { ok: false, required: true, code: "receipt-invalid", error: "Latest coverage receipt is invalid; governed implementation requires schema version 2.", itemId: parent.itemId };
+    return { ok: false, required: true, code: "receipt-invalid", error: "Latest coverage receipt is invalid; this xlarge branch requires baseline-bound schema version 2.", itemId: parent.itemId };
   }
   const deliverables = payload.deliverables as PlanBacklogDeliverable[];
   const requestedIds = Array.from(new Set(deliverables.map((d) => d.backlogItemId).filter((id): id is string => Boolean(id))));
@@ -574,7 +574,7 @@ export async function checkPlanBacklogCoverage(args: {
     : [];
   if (payload.schemaVersion === 2 || payload.schemaVersion === 3) {
     if (!payload.planArtifactRef) {
-      return { ok: false, valid: false, code: "receipt-invalid", error: "Version 2 coverage has no immutable plan locator." };
+      return { ok: false, valid: false, code: "receipt-invalid", error: "Governed coverage has no immutable plan locator." };
     }
     const resolved = await (args.resolveArtifact ?? resolveRepositoryArtifact)({
       locator: payload.planArtifactRef,
@@ -583,11 +583,12 @@ export async function checkPlanBacklogCoverage(args: {
     if (!resolved.ok) {
       return { ok: false, valid: false, code: "receipt-invalid", error: resolved.error };
     }
-    const baseline = projectCurrentScopeBaselineTraceability(await db.backlogItemActivity.findMany({
+    const baselineRows = await db.backlogItemActivity.findMany({
       where: { backlogItemId: parent.id, kind: "initiative_scope_baseline" },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
       select: { payload: true },
-    }));
+    });
+    const baseline = projectCurrentScopeBaselineTraceability(baselineRows);
     const governed = validatePlanBacklogCoverageReceipt({
       receipt: payload,
       mappedBacklogItems,
@@ -601,7 +602,7 @@ export async function checkPlanBacklogCoverage(args: {
         acceptanceIds: baseline.acceptanceIds,
       } : undefined,
       allowFixDesignArtifact: deriveAuthoritativeReadinessProfile(parent) === "fix",
-      deliveryScope: await readPlanDeliveryScope(db, parent),
+      deliveryScope: baselineRows.length ? null : await readPlanDeliveryScope(db, parent),
       planText: Buffer.from(resolved.artifact.bytes).toString("utf8"),
     });
     if (!governed.ok) return { ok: false, valid: false, code: "receipt-invalid", error: governed.error };
@@ -611,7 +612,7 @@ export async function checkPlanBacklogCoverage(args: {
     ok: false,
     valid: false,
     code: "receipt-invalid",
-    error: "Legacy plan coverage remains visible but cannot satisfy governed implementation; schema version 2 is required.",
+    error: "Legacy or unknown coverage cannot satisfy governed implementation; schema version 2 or 3 is required.",
   };
 }
 
@@ -716,12 +717,13 @@ export async function recordPlanBacklogCoverage(args: {
           select: { itemId: true, status: true, workType: true },
         })
       : [];
-    const baseline = projectCurrentScopeBaselineTraceability(await tx.backlogItemActivity.findMany({
+    const baselineRows = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: currentParent.id, kind: "initiative_scope_baseline" },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
       select: { payload: true },
-    }));
-    const deliveryScope = await readPlanDeliveryScope(tx, currentParent);
+    });
+    const baseline = projectCurrentScopeBaselineTraceability(baselineRows);
+    const deliveryScope = baselineRows.length ? null : await readPlanDeliveryScope(tx, currentParent);
     if (!baseline && !deliveryScope) {
       const { recovery, instruction } = projectMissingBaselineRecovery({
         item: currentParent,

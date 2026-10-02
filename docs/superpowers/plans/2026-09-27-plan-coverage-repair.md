@@ -68,13 +68,29 @@ The main risk is admitting work with insufficient or stale scope evidence.
 Negative tests must retain baseline enforcement for large, xlarge and legacy
 work, sensitivity escalation, immutable artifact validation and changed scope.
 Rollback is a normal revert through the merge queue; retain recorded evidence
-and do not downgrade historical receipts. Until deployment and functional
+and do not downgrade historical receipts. The previous reader rejects schema v3
+as invalid, so those receipts cannot satisfy coverage after rollback. Recover
+through a forward repair or supported schema-v2 recording with a valid approved
+baseline; never relabel or delete recorded v3 evidence. Until deployment and functional
 verification, neither this repair nor the duplicate-plugin fix is complete.
 
 ## Source verification
 
-Focused planning and shared shape tests passed (74 tests). Production typecheck
-passed after extracting the scope projection into its owning helper. Module-size
-and style-drift guards passed. Repository preflight is being rerun after fixing
-module-size and plan-frontmatter findings. Runtime deployment and live MCP
-verification are unrun. No completion or merge-readiness claim is made here.
+At commit 9c6ab90456e30c33c254b9538c46f2f565df245e, all 77 repository
+preflight guards passed. Canonical integration evidence cmuqdhd000e2i01p7rjebyq5e
+records 3,215 passing tests, both typechecks and clean migration application.
+The production build remains delegated to the cloud merge queue.
+
+Independent review cmuqdiivy0e6j01p733ptamq8 passed with no blocking findings.
+Its follow-up exposed three failing regression tests: preserve existing approved
+baseline requirements, invalidate proportional coverage when a baseline arrives,
+and fail closed on malformed baseline history. All 52 focused tests now pass,
+including unknown-version rejection. These follow-up edits require fresh exact
+commit integration and semantic-review evidence before publication.
+
+Consumer audit: the MCP decomposition pack calls the shared checker with the
+default Prisma adapter, which includes Workroom shape lookup. External coverage
+guards use that checker. The xlarge branch gate and parent inheritance remain
+baseline-bound schema v2; proportional v3 does not confer parent approval.
+The previous reader explicitly rejects non-v2 receipts, so rollback fails closed.
+Runtime deployment and live MCP verification remain unrun.
