@@ -595,8 +595,6 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 "/fake/codex",
                 "plugin",
                 "list",
-                "--marketplace",
-                "personal",
                 "--json",
             ],
         )
@@ -1502,6 +1500,153 @@ class OAuthDefaultTest(unittest.TestCase):
             self.assertIn("https://other.example/mcp", first)
             updater.ensure_codex_config(home, "http://127.0.0.1:3000/api/mcp/v1", False)
             self.assertEqual(first, path.read_text())
+
+class CodexRegistrationConvergenceTest(unittest.TestCase):
+    def fixture(self, home, canonical=True, legacy=True):
+        config = updater.codex_config_path(home)
+        config.parent.mkdir(parents=True)
+        config.write_text(
+            f'[plugins."dpf-platform@personal"]\nenabled = {str(canonical).lower()}\ncustom = "keep"\n'
+            f'[plugins."dpf-platform@dpf-platform-local"]\nenabled = {str(legacy).lower()}\n'
+            '[plugins."other@personal"]\nenabled = true\n'
+            '[hooks.state."dpf-platform@personal:hooks/hooks.json:hash"]\ntrusted = true\n',
+            encoding="utf-8",
+        )
+        cache = home / ".codex/plugins/cache/dpf-platform-local/dpf-platform/version"
+        cache.mkdir(parents=True)
+        (cache / "preserved.txt").write_text("operator cache", encoding="utf-8")
+        managed = updater.codex_managed_plugin_path(home)
+        managed.mkdir(parents=True)
+        calls = []
+
+        def run(command, **kwargs):
+            calls.append(command)
+            if command[1:3] == ["plugin", "add"]:
+                return unittest.mock.Mock(returncode=0, stdout=json.dumps({"installedPath": str(managed)}))
+            text = config.read_text(encoding="utf-8")
+            return unittest.mock.Mock(returncode=0, stdout=json.dumps({"installed": [
+                {"pluginId": plugin_id, "name": "dpf-platform", "installed": True,
+                 "enabled": updater.toml_table_enabled(text, f"plugins.{plugin_id}") is not False}
+                for plugin_id in ["dpf-platform@personal", "dpf-platform@dpf-platform-local"]
+                if "--marketplace" not in command or plugin_id.endswith("@personal")
+            ]}))
+        return config, cache, run, calls
+
+    def install(self, home, run, dry_run=False):
+        with patch.object(updater, "resolve_codex_binary", return_value="/fake/codex"), \
+                patch.object(updater, "codex_content_version", return_value="verified"), \
+                patch("subprocess.run", side_effect=run):
+            return updater.install_codex_plugin(home, dry_run)
+
+    def test_verified_replacement_disables_only_known_duplicate_and_converges(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, cache, run, calls = self.fixture(home)
+            self.assertNotIn("failed", self.install(home, run))
+            once = config.read_text(encoding="utf-8")
+            self.assertIs(updater.toml_table_enabled(once, "plugins.dpf-platform@dpf-platform-local"), False)
+            self.assertIn('custom = "keep"', once)
+            self.assertIn('trusted = true', once)
+            self.assertIs(updater.toml_table_enabled(once, "plugins.other@personal"), True)
+            self.assertTrue((cache / "preserved.txt").is_file())
+            self.assertNotIn("failed", self.install(home, run))
+            self.assertEqual(config.read_text(encoding="utf-8"), once)
+            self.assertFalse(any("remove" in command for command in calls))
+
+    def test_failed_install_leaves_legacy_usable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, _, _ = self.fixture(home)
+            before = config.read_text(encoding="utf-8")
+            status = self.install(home, lambda *a, **k: unittest.mock.Mock(returncode=1, stdout=""))
+            self.assertIn("failed", status)
+            self.assertEqual(config.read_text(encoding="utf-8"), before)
+
+    def test_failed_cleanup_readback_restores_legacy_registration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, native, _ = self.fixture(home)
+            lists = 0
+            def run(command, **kwargs):
+                nonlocal lists
+                if command[1:3] == ["plugin", "list"]:
+                    lists += 1
+                    if lists == 2:
+                        return unittest.mock.Mock(returncode=1, stdout="")
+                return native(command, **kwargs)
+            self.assertIn("failed", self.install(home, run))
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), True)
+
+    def test_explicitly_disabled_canonical_keeps_operator_choice_and_legacy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, native, _ = self.fixture(home, canonical=False)
+            status = self.install(home, native)
+            self.assertIn("disabled", status)
+            self.assertNotIn("failed", status)
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@personal"), False)
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), True)
+
+    def test_dry_run_changes_nothing_and_invokes_no_cli(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, native, calls = self.fixture(home)
+            before = config.read_text()
+            self.assertIn("dry-run", self.install(home, native, dry_run=True))
+            self.assertEqual(config.read_text(), before)
+            self.assertEqual(calls, [])
+
+    def test_failed_native_add_cannot_enable_an_operator_disabled_plugin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, _, _ = self.fixture(home, canonical=False)
+            def run(command, **kwargs):
+                config.write_text(updater.set_codex_plugin_enabled(
+                    config.read_text(), updater.CODEX_PLUGIN_ID, True))
+                return unittest.mock.Mock(returncode=1, stdout="")
+            self.assertIn("failed", self.install(home, run))
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@personal"), False)
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), True)
+
+    def test_unknown_enabled_dpf_source_is_reported_without_retiring_known_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, native, _ = self.fixture(home)
+            def run(command, **kwargs):
+                result = native(command, **kwargs)
+                if command[1:3] == ["plugin", "list"]:
+                    data = json.loads(result.stdout)
+                    data["installed"].append({"pluginId": "dpf-platform@custom", "name": "dpf-platform", "installed": True, "enabled": True})
+                    result.stdout = json.dumps(data)
+                return result
+            self.assertIn("failed", self.install(home, run))
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), True)
+
+    def test_config_migration_preserves_disabled_legacy_choice_and_plugin_options(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, _, _ = self.fixture(home)
+            config.write_text('[plugins."dpf-platform@dpf-platform-local"]\nenabled = false\n')
+            updater.ensure_codex_config(home, updater.DEFAULT_MCP_URL, False)
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@personal"), False)
+            config.write_text('[plugins."dpf-platform@personal"]\nenabled = false\ncustom = "keep"\n')
+            updater.ensure_codex_config(home, updater.DEFAULT_MCP_URL, False)
+            self.assertIn('custom = "keep"', config.read_text())
+
+    def test_brand_asset_is_packaged_and_survives_standalone_copy(self):
+        source = Path(__file__).resolve().parents[1]
+        manifest = updater.read_json(source / ".codex-plugin/plugin.json", {})
+        logo = manifest["interface"]["logo"]
+        self.assertTrue(logo.startswith("./assets/"))
+        self.assertTrue((source / logo).is_file())
+        with tempfile.TemporaryDirectory() as tmp:
+            copied = Path(tmp) / "standalone"
+            updater.copy_skill_pack(source, copied, False)
+            self.assertEqual((copied / logo).read_bytes(), (source / logo).read_bytes())
+            version = updater.codex_content_version(copied)
+            (copied / logo).write_text("changed brand asset", encoding="utf-8")
+            self.assertNotEqual(updater.codex_content_version(copied), version)
+
 
 if __name__ == "__main__":
     unittest.main()

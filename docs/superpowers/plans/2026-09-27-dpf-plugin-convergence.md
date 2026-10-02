@@ -75,8 +75,10 @@ does not imply other installations have received it.
 One atomic installer repair maps to BI-024A5CDE. Regression checks, migration,
 packaging, documentation and local verification jointly establish the same
 one-active-plugin contract; they are internal sequencing, not independently
-shippable features. The immutable plan coverage receipt is pending and must be
-recorded before source implementation.
+shippable features. Pre-implementation coverage receipt
+`cmuqg3is401di01t36za1hg1d` binds this plan at commit
+`907e1819df7616df3944cecd29df5c8e953f02c3` to the claimed scope, including the
+packaged brand asset. The receipt was recorded before source implementation.
 
 ## Separate access review
 

@@ -146,9 +146,9 @@ What the updater does:
    `~/.agents/plugins/marketplace.json` with `dpf-platform` marked
    `INSTALLED_BY_DEFAULT`.
 4. Installs `dpf-platform@personal` through the Codex plugin registry, verifies
-   that Codex reports it installed and enabled, and writes or updates
+   its installed content and the inventory across all marketplaces, and writes or updates
    `~/.codex/config.toml` with:
-   - `[plugins."dpf-platform@personal"] enabled = true`
+   - `[plugins."dpf-platform@personal"] enabled = true` unless explicitly disabled
    - `[mcp_servers.dpf]` pointing to the DPF MCP URL and
      `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`
 5. Writes a Claude local marketplace at
@@ -160,6 +160,32 @@ What the updater does:
 The updater does not require Docker, pnpm, Node dependencies, Prisma, Postgres,
 or the DPF portal runtime. It does not mint tokens. The operator must provide
 `DPF_MCP_BEARER_TOKEN` and, when the MCP endpoint is not local, `DPF_MCP_URL`.
+
+### Codex registration migration and branding
+
+Older installations can contain both `dpf-platform@personal` and
+`dpf-platform@dpf-platform-local`. The updater verifies the personal replacement
+before disabling the known old registration. It preserves the old cache, custom
+plugin settings, unrelated registrations, and hook trust records. Failed
+replacement verification leaves the old registration enabled; failed cleanup
+verification restores it. An unfamiliar active DPF registration is reported for
+review rather than silently disabled.
+
+An explicit personal-plugin disabled choice is preserved and leaves the old
+registration unchanged. If no personal choice exists, the updater carries over
+the old disabled preference. Repeating the update converges to the same settings.
+Rollback can re-enable the retained old registration through Codex settings.
+The verified contract is one active DPF plugin; Codex may continue displaying a
+disabled registration in its installed list. Restart the client to load the new
+configuration. The updater never grants hook trust on the operator's behalf.
+
+The Codex manifest declares `interface.logo` using the packaged
+`assets/dpf-logo.svg`, copied from the platform's
+`apps/web/public/logos/open-digital-product-factory-logo.svg`. The asset travels
+with standalone copies and participates in the content-version digest.
+Claude, Grok, and Antigravity retain their existing native installation identities;
+this Codex migration does not alter a Windows installation that already has only
+the canonical registration.
 
 ### Codex procedure
 
