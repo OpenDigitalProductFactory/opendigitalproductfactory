@@ -6,6 +6,7 @@ import { authorizeWorkroomAccess } from "./room-participation";
 import { persistWorkroomParticipantAssignment } from "./room-participant-assignment.server";
 import { resolveRoomSensitivityCeiling } from "./room-sensitivity-ceiling.server";
 import { readWorkspaceRoomPolicy } from "./workspace-room-access";
+import { ownsRoom } from "./workroom-agent-access.server";
 
 export class WorkroomAssistantInvitationError extends Error {}
 export type WorkroomAssistantInvitation = { workroomId: string; agentId: string; role: "observer" | "contributor" };
@@ -19,14 +20,12 @@ async function ownerRoom(userId: string, workroomId: string, db: Prisma.Transact
     db.principalAlias.findFirst({ where: { aliasType: "user", aliasValue: userId, issuer: "" }, select: { principal: { select: principalSelect } } }),
     db.workroom.findUnique({ where: { id: workroomId }, select: {
       id: true, capsuleId: true, requestedByPrincipalId: true, createdByPrincipalId: true, leaseHolderPrincipalId: true, scopeClaims: true, backlogItemId: true,
-      participants: { select: { principalId: true, lifecycle: true, roles: true } }, workItem: { select: { evidence: true } },
+      participants: { select: { principalId: true, lifecycle: true, roles: true, principal: { select: { kind: true } } } }, workItem: { select: { evidence: true } },
     } }),
   ]);
   const human = alias?.principal;
   if (!room || !human || human.kind !== "human" || human.status !== "active"
-    || ![room.requestedByPrincipalId, room.createdByPrincipalId, room.leaseHolderPrincipalId].includes(human.id)) throw denied();
-  const membership = room.participants.find((row) => row.principalId === human.id);
-  if (membership && (membership.lifecycle !== "active" || !membership.roles.some((role) => role !== "observer"))) throw denied();
+    || !ownsRoom(human, room.participants, [room.requestedByPrincipalId, room.createdByPrincipalId, room.leaseHolderPrincipalId])) throw denied();
   const policy = readWorkspaceRoomPolicy(room.workItem?.evidence);
   const policyRefs = policy.actionPrincipalRefs ?? policy.admittedPrincipalRefs;
   if (policyRefs && !policyRefs.includes(human.principalId)) throw denied();

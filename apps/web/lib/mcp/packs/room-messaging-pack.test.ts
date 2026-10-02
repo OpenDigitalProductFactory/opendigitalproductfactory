@@ -8,7 +8,7 @@ vi.mock("@/lib/work-management/post-work-item-comment", () => ({ postWorkItemCom
 vi.mock("@/lib/work-management/room-participant-assignment.server", () => ({ persistExplicitWorkroomAssignmentsForWorkItem: vi.fn() }));
 vi.mock("@/lib/work-management/room-policy", () => ({ appendRoomPolicyParticipant: vi.fn() }));
 vi.mock("@/lib/work-management/room-agent-access.server", () => ({ resolveAgentRoomAccess: mocks.access }));
-vi.mock("@/lib/work-management/workspace-case-loader", () => ({ decodeWorkCaseKey: (key: string) => ({ sourceType: "backlog-item", sourceId: key }) }));
+vi.mock("@/lib/work-management/case-key", () => ({ decodeWorkCaseKey: (key: string) => ({ sourceType: "backlog-item", sourceId: key }) }));
 import { roomMessagingPack } from "./room-messaging-pack";
 
 beforeEach(() => {
