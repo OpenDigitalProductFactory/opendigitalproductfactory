@@ -12,6 +12,7 @@ order: 10
 - Placing a site on the map by hand
 - Choosing a service that finds locations from addresses
 - Drawing the areas you serve and seeing which sites fall outside them
+- Using the map on your phone, with **Follow me**
 
 ## Open The Map
 
@@ -95,6 +96,30 @@ them first (see above).
 
 Areas are drawn and checked inside this installation. Nothing is sent to an
 outside service.
+
+## On Your Phone
+
+In the DPF phone app, open **Customers** and select **Map**. The map shows the
+same sites and service areas as the web page, drawn from your own
+installation's street map.
+
+- Each site is a circle with a letter: the first letter of the customer's
+  name. Tap a site to open the customer's account.
+- **Follow me** keeps the map centred on where you are as you move. The app
+  asks for location permission the first time. Your position stays on the
+  phone; it is not sent to your installation.
+- **Recenter** goes back to all your sites. Moving the map yourself turns
+  **Follow me** off.
+- **Legend** explains the symbols on the map.
+
+The list under the map has every site, including the ones that are not on the
+map yet. Tap a row to open the account.
+
+If no street map is installed for the area, or the installed one does not
+cover your sites, the sites and areas are drawn on a plain background and the
+screen says why. An administrator can add a street map; see
+[Map Packs](../platform/map-packs.md). If the map cannot load or start on the
+phone, the screen says why and shows the list alone.
 
 ## Related
 
