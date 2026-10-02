@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 726,
+  "pageCount": 730,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2115,6 +2115,7 @@
       "anchors": [
         "mcp-tool-authorization-runbook",
         "protocol-version-window-mechanics-landed-contract-pending-ratification",
+        "gpp-permit-handles-phase-2",
         "terminal-readiness-recovery-packets",
         "when-a-workroom-scope-claim-needs-a-person",
         "acting-coworker-binding-what-lets-a-token-join-a-work-room",
@@ -2440,6 +2441,19 @@
       "publishedPortal": false,
       "anchors": [
         "theme-aware-styling-runbook"
+      ]
+    },
+    "docs/architecture/trusted-agent-reference-contract.md": {
+      "publicHref": "/architecture/trusted-agent-reference-contract/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portable-trusted-agent-reference-contract",
+        "run-the-examples",
+        "import-and-version-negotiation",
+        "host-integration-and-effect-recovery",
+        "privacy-and-dpf-compatibility"
       ]
     },
     "docs/architecture/trusted-ai-kernel.md": {
@@ -6262,7 +6276,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "enumerating-workrooms-through-mcp"
+        "enumerating-workrooms-through-mcp",
+        "executor-and-invocation"
       ]
     },
     "docs/personas/README.md": {
@@ -9515,6 +9530,19 @@
         "sources"
       ]
     },
+    "docs/security/tool-evaluations/2026-09-25-maplibre-pmtiles.md": {
+      "publicHref": "/security/tool-evaluations/2026-09-25-maplibre-pmtiles/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-maplibre-gl-js-and-pmtiles",
+        "what-is-evaluated",
+        "cosai-security-findings",
+        "compliance-and-architecture-fit",
+        "conditions"
+      ]
+    },
     "docs/security/tool-evaluations/2026-09-29-cloudflare-tunnel.md": {
       "publicHref": "/security/tool-evaluations/2026-09-29-cloudflare-tunnel/",
       "portalHref": null,
@@ -12031,6 +12059,19 @@
         "related"
       ]
     },
+    "docs/user-guide/customers/customer-map.md": {
+      "publicHref": "/user-guide/customers/customer-map/",
+      "portalHref": "/docs/customers/customer-map",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "open-the-map",
+        "sites-that-are-not-on-the-map",
+        "find-locations-automatically",
+        "related"
+      ]
+    },
     "docs/user-guide/customers/index.md": {
       "publicHref": "/user-guide/customers/",
       "portalHref": "/docs/customers/index",
@@ -12489,6 +12530,8 @@
         "why-it-matters",
         "choose-a-provider",
         "geography-hint",
+        "using-the-free-nominatim-service",
+        "finding-map-locations-for-existing-sites",
         "setup-steps",
         "what-to-watch",
         "related"
@@ -12583,6 +12626,20 @@
         "use-the-specific-guides-when",
         "specific-guides",
         "connections"
+      ]
+    },
+    "docs/user-guide/platform/map-packs.md": {
+      "publicHref": "/user-guide/platform/map-packs/",
+      "portalHref": "/docs/platform/map-packs",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "why-it-matters",
+        "what-works-without-a-map-pack",
+        "what-a-map-pack-adds",
+        "attribution",
+        "privacy"
       ]
     },
     "docs/user-guide/platform/tools-and-integrations.md": {

@@ -30,6 +30,8 @@ The core behavior. After A, "Upgrade now" with a build in flight waits for it an
 
 ## Slice B — the door is actually shut
 
+**Status (2026-10-01):** implemented. `admitPhaseTransition` (lib/build/build-phase-run.ts) refuses ideate→plan (both design-review paths), plan→build and review→ship before the phase write, and records the wait on the build's trail. Ideate dispatch defers. `gateBetweenSteps` re-checks after each 30-minute wait (up to 6 h) instead of proceeding mid-drain. Deliberation runs and the manual tee-up suspend instead of dropping. `actions/build.ts` (creating a build) needs no change: the proxy quiescence gate already refuses portal mutations during a drain.
+
 12. Stop swallowing the phase-start refusal in `ideate-on-approval.ts:332`, `plan-to-build-transition.ts:490`, `ship-on-review-approval.ts:359`, `mcp/build-design-review-handler.ts:140,688` and `actions/build.ts:120`. Park the transition at the boundary with a durable reason; `resumeStrandedBuildsOnBoot` resumes it after the swap. The rule: the current phase finishes, the next phase waits.
 13. `queue/functions/build-execute.ts:77` — keep waiting while the drain holds; never proceed after a fixed 30 minutes.
 14. `queue/functions/deliberation-run.ts:468` — suspend instead of dropping the event.
@@ -38,11 +40,15 @@ The core behavior. After A, "Upgrade now" with a build in flight waits for it an
 
 ## Slice C — the operator can act while it waits
 
+**Status (2026-10-01):** implemented. `POST /api/ops/self-upgrade/control` (view_operations; lib/self-upgrade/drain-control.ts) carries keep-waiting / force / abort. It is the only `/api/ops` path allow-listed in lib/proxy/quiescence-gate.ts. The upgrade page shows time waited against the limit and offers Keep waiting at `awaiting-operator`; Force now and Abort now post to the route. MCP safe list (item 19): `heartbeat_workroom` and `heartbeat_runtime_target` are allowed during a drain (liveness only); evidence writes stay refused and are retried after. The `activity-in-flight` skip copy is kept, because historical runs still carry it.
+
 17. Move Force now / Keep waiting / Abort to one authenticated route (`/api/ops/self-upgrade/control`, `requireOpsAccess`). Allow-list only that route in `lib/proxy/quiescence-gate.ts`; every other mutation stays refused. Test both.
 18. The upgrade page shows a waiting panel (builds and phases still running, time waited, the limit). On `awaiting-operator` it shows Keep waiting / Force now / Abort. Remove the skip/defer copy for this path; retire `activity-in-flight` in `skip-reason.ts`. A 503 during a drain is not shown as "restarting".
 19. Decide which MCP evidence and heartbeat tools join the drain's safe list, so external agents are not locked out for an hour.
 
 ## Slice D — documentation
+
+**Status (2026-10-02):** implemented. Item 20 landed with slice C. Item 21: §6.1, §6.4 and §11a of the spec now describe what slices A–C shipped.
 
 20. The user guide's self-upgrade page: what "Upgrade now" does while work is running.
 21. Fix §6.4's stale scheduled-path note (spec line ~581).

@@ -289,6 +289,7 @@
             "/var/run/docker.sock:/var/run/docker.sock",
             "browser_evidence:/evidence:ro",
             "dpf-source-code:/workspace",
+            "map_data:/var/lib/dpf/maps",
             "sandbox_workspace:/sandbox-workspace"
           ]
         },
@@ -1135,7 +1136,7 @@
       ]
     }
   ],
-  "catalogHash": "ba364cb279c151dc9e27ffe4793b8b621d9f469735f6b554087fdb740768c546",
+  "catalogHash": "5d02492cdd7aca8bca37dd5291129bb30816c94ce35922d5fdd0ed2041cb502a",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

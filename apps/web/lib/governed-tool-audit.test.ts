@@ -108,3 +108,40 @@ describe("writeGovernedToolAudit — payload ceiling (BI-39AAE9B8)", () => {
     expect(JSON.stringify(row.parameters).length).toBeLessThan(8 * 1024);
   });
 });
+
+describe("writeGovernedToolAudit — the summary is an identity, not a timing trace", () => {
+  async function summaryFor(durationMs: number): Promise<string | null> {
+    const create = vi.fn(async () => ({ id: "tool-execution-3" }));
+    setGovernedToolAuditOverridesForTests({ create });
+
+    await writeGovernedToolAudit({
+      toolName: "query_backlog",
+      rawParams: { title: "x" },
+      result: { success: true, message: "ok" },
+      userId: "user-1",
+      source: "rest",
+      durationMs,
+    });
+
+    const row = (create.mock.calls as unknown as Array<[{ summary: string | null; durationMs: number }]>)[0]![0];
+    expect(row.durationMs).toBe(durationMs);
+    return row.summary;
+  }
+
+  // AC-ENFORCE deep-equals two consecutive runs of the same call. Any wall-clock
+  // in `summary` makes that assertion a coin flip under a loaded host — 0ms
+  // rendered nothing, 1ms rendered " (1ms)". The duration belongs to its own
+  // numeric column, so identical calls must produce byte-identical summaries.
+  it("renders the same summary regardless of how long the call took", async () => {
+    // Sequential: each case installs its own create override on shared state.
+    const summaries: Array<string | null> = [];
+    for (const ms of [0, 1, 7, 1234]) summaries.push(await summaryFor(ms));
+
+    expect(new Set(summaries).size).toBe(1);
+    expect(summaries[0]).toBe("query_backlog: ok");
+  });
+
+  it("never renders a duration fragment into the summary", async () => {
+    expect(await summaryFor(42)).not.toMatch(/\d+\s*ms/);
+  });
+});

@@ -58,6 +58,10 @@ vi.mock("@/lib/build/build-entry-gate", () => ({
 vi.mock("@/lib/build/plan-to-build-transition", () => ({
   performPlanToBuildTransition: (...args: unknown[]) => performPlanToBuildTransitionMock(...args),
 }));
+const attestIdeateResearchMock = vi.fn();
+vi.mock("@/lib/build/record-ideate-research-receipt", () => ({
+  attestIdeateResearch: (...args: unknown[]) => attestIdeateResearchMock(...args),
+}));
 
 import {
   resumePreBuildPhase,
@@ -85,7 +89,54 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     platformDevConfigFindUniqueMock.mockReset().mockResolvedValue({ governedBacklogEnabled: false });
     autoResolveDecomposeMock.mockReset().mockResolvedValue({ action: "park" });
     performPlanToBuildTransitionMock.mockReset().mockResolvedValue({ kind: "advanced" });
+    attestIdeateResearchMock.mockReset().mockResolvedValue(undefined);
     buildActivityFindManyMock.mockReset().mockResolvedValue([]);
+  });
+
+  // BI-00588B51: builds reviewed while the room refused the research receipt
+  // carry a reviewed design and no receipt. The resume re-attests from that
+  // design and retries once; any other gate block is still a skip.
+  it("re-attests the research receipt from the reviewed design when that is the only plan→build block, then advances", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p", reusabilityAnalysis: "r" },
+      buildPlan: { tasks: [{ title: "t" }] },
+      planReview: { decision: "pass" },
+    });
+    performPlanToBuildTransitionMock
+      .mockResolvedValueOnce({ kind: "gate-blocked", reason: "This cannot move into build yet because the research behind this design has not been recorded (the design author)." })
+      .mockResolvedValueOnce({ kind: "advanced" });
+    const out = await resumePreBuildPhase({ buildId: "FB-RR", phase: "plan", userId: "uRR" });
+    expect(attestIdeateResearchMock).toHaveBeenCalledWith("FB-RR", { problemStatement: "p", reusabilityAnalysis: "r" }, "uRR", null);
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledTimes(2);
+    expect(out).toMatchObject({ kind: "resumed", via: "performPlanToBuildTransition" });
+    expect((out as { detail: string }).detail).toContain("re-attested");
+  });
+
+  it("does not re-attest for a gate block that is not about the research receipt", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 },
+      buildPlan: { tasks: [{ title: "t" }] },
+      planReview: { decision: "pass" },
+    });
+    performPlanToBuildTransitionMock.mockResolvedValue({ kind: "gate-blocked", reason: "Waiting on: Thread Backbone Truck." });
+    const out = await resumePreBuildPhase({ buildId: "FB-DEP", phase: "plan", userId: "uDEP" });
+    expect(attestIdeateResearchMock).not.toHaveBeenCalled();
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledOnce();
+    expect(out.kind).toBe("skipped");
+  });
+
+  it("skips honestly when the receipt still does not satisfy the gate after re-attesting", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 },
+      buildPlan: { tasks: [{ title: "t" }] },
+      planReview: { decision: "pass" },
+    });
+    performPlanToBuildTransitionMock.mockResolvedValue({ kind: "gate-blocked", reason: "RESEARCH_REQUIRED (design-author)" });
+    const out = await resumePreBuildPhase({ buildId: "FB-RR2", phase: "plan", userId: "uRR2" });
+    expect(attestIdeateResearchMock).toHaveBeenCalledOnce();
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledTimes(2);
+    expect(out.kind).toBe("skipped");
+    expect((out as { reason: string }).reason).toContain("after re-attesting");
   });
 
   it("re-queues review verification for a stranded review-phase build", async () => {

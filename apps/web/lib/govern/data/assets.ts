@@ -38,6 +38,7 @@ import { MCP_OAUTH_ASSETS } from "./mcp-oauth-assets";
 import { MCP_ASSETS } from "./mcp-assets";
 import { WORKROOM_PARTICIPANT_ASSETS } from "./workroom-participant-assets";
 import { WORKROOM_RELATION_ASSETS } from "./workroom-relation-assets";
+import { GPP_PERMIT_ASSETS } from "./gpp-permit-assets";
 import { INITIATIVE_GOVERNANCE_ASSETS } from "./initiative-governance-assets";
 import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
 import { MAILROOM_ASSETS } from "./mailroom-assets";
@@ -46,6 +47,7 @@ import { BUSINESS_PERFORMANCE_ASSETS } from "./business-performance-assets";
 import { EXTERNAL_CHANNEL_ASSETS } from "./external-channel-assets";
 import { ANIMAL_WELFARE_ASSETS } from "./animal-welfare-assets";
 import { CONTROLLED_SUBSTANCE_ASSETS } from "./controlled-substance-assets";
+import { JOB_ENGINE_ASSETS } from "./job-engine-assets";
 import type {
   DataAssetDefinition,
   DataAssetRegistry,
@@ -681,6 +683,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...MCP_ASSETS,
   ...WORKROOM_PARTICIPANT_ASSETS,
   ...WORKROOM_RELATION_ASSETS,
+  ...GPP_PERMIT_ASSETS,
   ...INITIATIVE_GOVERNANCE_ASSETS,
   ...FEDERATION_INTRODUCTION_ASSETS,
   ...MAILROOM_ASSETS,
@@ -688,6 +691,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...EXTERNAL_CHANNEL_ASSETS,
   ...ANIMAL_WELFARE_ASSETS,
   ...CONTROLLED_SUBSTANCE_ASSETS,
+  ...JOB_ENGINE_ASSETS,
    {
     id: "data:agent-conversation",
     physical: { prismaModel: "AgentMessage" },

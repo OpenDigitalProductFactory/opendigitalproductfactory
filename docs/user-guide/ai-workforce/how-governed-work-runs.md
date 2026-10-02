@@ -10,6 +10,7 @@ relatedCode:
   - apps/web/lib/work-posture/temporal-band.ts
   - apps/web/lib/tak/consequential-tool-policy.ts
   - apps/web/lib/mcp-governed-execute.ts
+  - apps/web/lib/work-management/room-participant-invitation-preflight.server.ts
   - apps/web/lib/work-management/autonomy-envelope.ts
 ---
 
@@ -219,6 +220,15 @@ Two independent checks then apply, and both must pass:
   *shadow-only* (recorded, never taken), *propose-for-approval*, *supervised-action*, or
   *autonomous-action* — the only mode that permits acting without a human.
 
+Before the platform asks for approval, it also checks deterministic prerequisites that
+approval cannot change. For example, a coworker that has not joined a Workroom cannot ask
+you to approve its attempt to invite itself. The call stops without creating an approval
+request and names the recovery control instead: the room's current human owner opens the
+room and uses **Participants** to add the approved assistant. Retrying the unchanged call
+returns the same guidance rather than filling the inbox with approvals that can only fail.
+An owner change takes effect immediately; a historical creator or lease holder does not
+override a current accountable owner or coordinator.
+
 The posture from step 3 and the envelope are one projection, and **the stricter of the two
 wins**. A proactivity setting cannot buy autonomy the envelope would deny, and an autonomous
 envelope cannot act on work whose shape declared that it must be proposed.
@@ -229,6 +239,20 @@ pairs them. For each stage of the work, it records which authority's decision ad
 One recorded decision then covers every call inside that envelope, and anything outside it is never
 offered. See the
 [pairing diagram](../../architecture/gated-permissions-process.md#73-the-pairing-at-a-glance).
+
+**Permits are being recorded, not yet required.** When a gate admits an outward, authority-changing or
+irreversible call, the platform now records a permit for it: which gate admitted the call, for which
+tool, and until when. The call's receipt notes the permit's verdict. This runs in shadow mode. A
+missing or expired permit is recorded, never refused, and routine reads and ordinary writes are not
+affected. A call made around the governed path is recorded as unmediated. Each permit is also signed
+and tied to the call's exact arguments. A permit that was altered after it was issued, or reused for
+different arguments, is recorded as such. An install that has no permit signing key records its
+permits as unsigned. A permit is good for one use: if the same permit is presented twice at the same
+moment, only one of the two calls uses it, and the other is recorded as used up. Enforcement is
+switched on one binding at a time, and only after its shadow record has been reviewed and a recorded decision approves it. No binding is switched on yet. When one is, a
+call under it without a valid permit is held with "permit required", which names the approval to
+obtain; the call is not lost, and it runs once that approval is in place. If the install has no signing
+key, the platform keeps that binding in shadow and records why, rather than holding every call.
 
 Denials come back as named reasons — a missing decision interaction, a missing envelope, a
 tripped stop condition, a missing verification receipt — not as a generic refusal. A denial

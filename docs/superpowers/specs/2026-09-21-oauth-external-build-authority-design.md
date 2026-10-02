@@ -365,6 +365,46 @@ Acceptance includes siblings sharing one WorkItem, foreign users sharing an
 assistant, removed participants, observer versus contributor, unanchored-room
 clearance, atomic audited invitation, and existing-token use without new consent.
 
+### Legacy room recovery routing (BI-061D7192, amendment 2026-10-01)
+
+The supported control above is the only recovery path. An assistant that is not
+already admitted cannot use `invite_room_participant` to invite itself or
+someone else: human approval of that exact call changes neither its room
+membership nor its clearance. The governed executor must therefore evaluate
+this deterministic room-membership precondition before any capability- or
+grant-based authority envelope is created. The same room-access check runs
+again at execution time, including when an approved call resumes, because room
+membership or connection authority may have changed while approval was pending.
+The invitation handler intentionally repeats its exact-room check as defence in
+depth at mutation time. A failed retry returns the same actionable owner route
+without another consent request unless the room or caller state has changed.
+
+Room resolution uses the canonical WorkItem anchor. A `work-capsule:WC-*` key
+resolves through `Workroom.workItemId`, while a `backlog-item:BI-*` key resolves
+by the WorkItem's source identity. Both addresses must reach the same access
+decision. The refusal names the selected room and tells the caller to use the
+owner's Participants control with an approved OAuth assistant. It never treats
+generic approval, a platform-manager role, a historical holder, or a shared
+assistant as room admission.
+
+Implementation reuses `resolveAgentRoomAccess` and the existing human-owner
+invitation transaction. It adds no identity lineage, migration, grant, policy,
+or second invitation writer. Regression proof covers capsule and backlog
+addresses, an admitted caller, a nonmember, and the governed consequence path
+creating no approval envelope for the deterministic refusal. Live acceptance
+uses the exact owner control, then retries the existing OAuth connection on the
+same room without a direct database mutation.
+
+The owner-facing invitation uses the same exact-room ownership predicate as
+assistant handover. Active human accountable/coordinator assignments supersede
+historical holder fields; an explicit observer, contributor, or inactive
+assignment cannot be upgraded through this control. A historical holder may
+act only while no other human owns the room. Keep case policy, active identity,
+OAuth consent and clearance checks independent. Inherited organizational
+accountability displayed on the page is not an admission grant. Legacy rooms
+without an eligible recorded owner still require governed owner assignment;
+this repair must not fabricate ownership from the display fallback.
+
 ### Consent steers routine writes (BI-12E5DD91)
 
 WWMD DI-178749D7F5BD extends C3. External assistants seed at HITL tier 1, and
@@ -500,9 +540,14 @@ is a lookup over existing rows:
 
 1. The coworker on this human's most recent active `consent` binding for
    this resource whose client has the same self-asserted name and the same
-   redirect family (scheme, host and path with the loopback port ignored,
-   the same comparison `isRedirectUriAllowed` already makes). This is what
-   makes a reconnect land on the same assistant without a question.
+   redirect family. For a loopback redirect the family is scheme, host and
+   first path segment: the port is ephemeral and some clients add a
+   per-session path nonce (Codex's `/callback/<nonce>` changed between
+   2026-09-23 and 2026-10-01 and defeated reuse on the live install). A
+   non-loopback redirect keeps port and full path. This is what makes a
+   reconnect land on the same assistant without a question. Each consent's
+   audit row records the resolution kind, the default offered and whether
+   the human changed it, so AC-OC-7 is measurable from the database.
 2. A coworker whose registry aliases (`agent_registry.json`, for example
    `codex` for `AGT-EXT-CODEX`) match the client's self-asserted name,
    case-insensitively, as a whole word.

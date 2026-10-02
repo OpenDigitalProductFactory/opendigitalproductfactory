@@ -1,5 +1,10 @@
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
+  admitBuildStudioRoomCoworkers,
+  describeBuildStudioRoomCoworkers,
+  hasBuildStudioRoomCoworkerDb,
+} from "./build-studio-room-coworkers";
+import {
   createWorkCapsule,
   type CapsuleDb,
   type WorkCapsuleActor,
@@ -127,6 +132,20 @@ export async function attachBuildStudioWorkCapsule(args: {
     actor: args.actor,
   });
 
+  // The build's coworkers must be members of the room they act in, or the
+  // room's participant term narrows them to reads (BI-00588B51). Best-effort:
+  // a failure here is a trail note, never a failed attach.
+  let coworkerNote = "";
+  if (hasBuildStudioRoomCoworkerDb(args.db)) {
+    try {
+      const admitted = await admitBuildStudioRoomCoworkers({ db: args.db, workroomId: capsule.id });
+      const described = describeBuildStudioRoomCoworkers(admitted);
+      coworkerNote = described ? ` ${described}` : "";
+    } catch (err) {
+      coworkerNote = ` Build Studio coworkers were not admitted to the room (${getErrorMessage(err)}).`;
+    }
+  }
+
   if (args.backlogItem) {
     let shapeNote = "";
     try {
@@ -139,7 +158,7 @@ export async function attachBuildStudioWorkCapsule(args: {
       data: {
         backlogItemId: args.backlogItem.id,
         kind: "build-studio-capsule-attached",
-        summary: `Build Studio draft ${args.build.buildId} attached to Work Capsule ${capsule.capsuleId}.${shapeNote}`,
+        summary: `Build Studio draft ${args.build.buildId} attached to Work Capsule ${capsule.capsuleId}.${shapeNote}${coworkerNote}`,
         payload: {
           buildId: args.build.buildId,
           capsuleId: capsule.capsuleId,
