@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react-native";
+import { act, renderHook, waitFor } from "@testing-library/react-native";
 import * as Location from "expo-location";
 import { LOCATION_UNAVAILABLE_MESSAGE, useGeolocation } from "./useGeolocation";
 
@@ -57,7 +57,7 @@ describe("useGeolocation", () => {
     await waitFor(() => expect(result.current.error).toBe(LOCATION_UNAVAILABLE_MESSAGE));
 
     getPosition.mockResolvedValue({ coords: { latitude: 1, longitude: 2 } });
-    await result.current.refresh();
+    await act(() => result.current.refresh());
     await waitFor(() => expect(result.current.latitude).toBe(1));
     expect(result.current.error).toBeNull();
   });
