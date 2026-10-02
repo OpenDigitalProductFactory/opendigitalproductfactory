@@ -40,6 +40,7 @@
     "./federated-work-contract": "./src/federated-work-contract.ts",
     "./federation-health": "./src/federation-health.ts",
     "./federated-operational-posture-contract": "./src/federated-operational-posture-contract.ts",
+    "./federated-deployment-declaration-contract": "./src/federated-deployment-declaration-contract.ts",
     "./federated-channel": "./src/federated-channel.ts",
     "./founder-shared-portfolio": "./src/founder-shared-portfolio.ts",
     "./projection-serialization": "./src/projection-serialization.ts",
@@ -118,6 +119,7 @@
     "typecheck": "prisma generate && tsc --noEmit && tsc -p tsconfig.scripts.json --noEmit"
   },
   "dependencies": {
+    "@dpf/integration-shared": "workspace:*",
     "@dpf/storefront-templates": "workspace:*",
     "@dpf/validators": "workspace:*",
     "@prisma/adapter-pg": "^7.9.1",

@@ -240,3 +240,32 @@ esac
     assert.match(stale, /^drift=yes$/m);
   } finally { await rm(f.dir, { recursive: true, force: true }); }
 });
+
+// BI-8EE3D5E9: a host with neither openssl nor python3 (dpf-sandbox-1 is one)
+// got `dpf-dev-secret-<timestamp>` — guessable — and this contract failed for
+// every Build Studio build. The helpers now read /dev/urandom first.
+test("with openssl and python3 absent, secrets still come from /dev/urandom at full length", { skip: process.platform === "win32" }, async () => {
+  const bin = await mkdtemp(join(tmpdir(), "dpf-minimal-path-"));
+  try {
+    for (const tool of ["od", "tr", "head", "base64"]) {
+      const found = spawnSync("sh", ["-c", `command -v ${tool}`], { encoding: "utf8" }).stdout.trim();
+      assert.ok(found, `${tool} is needed for this test`);
+      await writeFile(join(bin, tool), `#!/bin/sh\nexec ${found} "$@"\n`);
+      await chmod(join(bin, tool), 0o755);
+    }
+    const bashBin = spawnSync("sh", ["-c", "command -v bash"], { encoding: "utf8" }).stdout.trim();
+    const result = spawnSync(bashBin, ["-c", `source scripts/installer/lib/prompts.sh
+command -v openssl >/dev/null && echo has-openssl
+command -v python3 >/dev/null && echo has-python3
+dpf_random_secret_hex 32; dpf_random_secret_hex 32; dpf_random_secret_b64 32`], {
+      cwd: root, env: { PATH: bin }, encoding: "utf8",
+    });
+    assert.equal(result.status, 0, String(result.stderr ?? result.error));
+    const [hexA, hexB, b64, ...rest] = result.stdout.trim().split("\n");
+    assert.deepEqual(rest, [], `unexpected output: ${result.stdout}`);
+    assert.match(hexA, HEX64);
+    assert.match(hexB, HEX64);
+    assert.notEqual(hexA, hexB);
+    assert.match(b64, /^[A-Za-z0-9+/]{43}=$/);
+  } finally { await rm(bin, { recursive: true, force: true }); }
+});

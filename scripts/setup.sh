@@ -144,6 +144,14 @@ for _env_file in apps/web/.env.local .env; do
   fi
 done
 
+# GPP permit signing key (BI-8541D491): same rules and same two files as the
+# webhook secret; each portal signs its own permits. Never printed.
+for _env_file in apps/web/.env.local .env; do
+  if [ "$(dpf_env_ensure_secret_hex DPF_GPP_PERMIT_SECRET "$_env_file" 32)" != "kept" ]; then
+    ok "Generated DPF_GPP_PERMIT_SECRET in $_env_file"
+  fi
+done
+
 # Inngest signing and event keys (BI-3267763F): the root .env feeds the compose
 # stack, which refuses to render without them. Generated when missing, a
 # placeholder, or the old public default; never rotated once set.

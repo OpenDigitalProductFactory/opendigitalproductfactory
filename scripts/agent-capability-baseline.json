@@ -72,16 +72,15 @@
       "AGT-WS-ONBOARD",
       "AGT-WS-PORTFOLIO",
       "AGT-WS-REVIEW",
-      "AGT-WS-SECURITY",
-      "AGT-WS-TIME-OFF"
+      "AGT-WS-SECURITY"
     ],
     "maxOpenGapsByPlane": {
-      "identity": 8,
+      "identity": 7,
       "corpus": 0,
       "governance": 0,
       "shape": 0,
       "cadence": 7,
-      "toolsAndSkills": 2,
+      "toolsAndSkills": 0,
       "evidence": 1
     }
   }

@@ -310,8 +310,12 @@ export type SandboxTestResult = {
   typeCheckPassed: boolean;
   testOutput: string;
   typeCheckOutput: string;
-  /** "scoped" when we ran only the build's own feature tests, "full" otherwise. */
-  scope?: "scoped" | "full";
+  /**
+   * "scoped" when only the build's own feature tests ran; "none" when the build
+   * named its changed files and no test file covers them, so no suite ran;
+   * "full" for the legacy whole-suite run (no changed-file hint).
+   */
+  scope?: "scoped" | "full" | "none";
   /** Number of feature test files run when scope === "scoped". */
   scopedTestsRun?: number;
 };
@@ -401,7 +405,7 @@ export async function runSandboxTests(
   // hint we fall back to the legacy full-suite run, recorded but typecheck-gated.
   let testOutput = "";
   let testPassed = true;
-  let scope: "scoped" | "full" = "full";
+  let scope: "scoped" | "full" | "none" = "full";
   let scopedTestsRun = 0;
 
   const candidates = deriveScopedTestFiles(opts?.changedFiles ?? []);
@@ -439,6 +443,14 @@ export async function runSandboxTests(
     }
     testOutput = sections.join("\n\n");
     testPassed = !anyFailed;
+  } else if (opts?.changedFiles && opts.changedFiles.length > 0) {
+    // BI-CEE688D6: no test file covers the changed files. The whole-suite
+    // fallback cannot run in the sandbox (scripts/host-resource-runner.mjs needs
+    // DPF MCP admission it does not have, and the suite exhausts the heap), and
+    // its result was ignored anyway, so it only produced a crash log that the
+    // evidence then labelled as passing tests. Say plainly that none ran.
+    scope = "none";
+    testOutput = "No test file covers the changed files; no tests ran.";
   } else {
     try {
       testOutput = await execInSandbox(containerId, `cd ${workdir} && pnpm test 2>&1 || true`);

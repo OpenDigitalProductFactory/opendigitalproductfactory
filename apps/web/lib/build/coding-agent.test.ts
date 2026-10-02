@@ -129,3 +129,20 @@ describe("outputIndicatesTestFailure", () => {
     expect(outputIndicatesTestFailure("Tests  5 passed (5)")).toBe(false);
   });
 });
+
+// BI-CEE688D6: with changed files and no covering test, no suite runs and the
+// result says so; the whole-suite fallback crashed in the sandbox and was
+// recorded as passing tests.
+describe("runSandboxTests without a covering test file", () => {
+  it("runs no suite and reports scope none", async () => {
+    const { execInSandbox } = await import("@/lib/sandbox");
+    const exec = vi.mocked(execInSandbox);
+    exec.mockReset();
+    exec.mockImplementation(async (_id: string, cmd: string) => cmd.startsWith("test -f") ? "__no__" : "");
+    const { runSandboxTests } = await import("./coding-agent");
+    const out = await runSandboxTests("c1", { changedFiles: ["apps/mobile/src/capture.ts"], workdir: "/workspace/.builds/FB-1" });
+    expect(out.scope).toBe("none");
+    expect(out.testOutput).toMatch(/no tests ran/);
+    expect(exec.mock.calls.map(([, cmd]) => cmd).some((cmd) => /pnpm test/.test(cmd))).toBe(false);
+  });
+});

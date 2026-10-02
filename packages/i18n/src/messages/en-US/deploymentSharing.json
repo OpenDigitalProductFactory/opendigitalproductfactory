@@ -1,0 +1,11 @@
+{
+  "heading": "Share this installation's country",
+  "explain": "Lets the organizations you federate under count this installation on their market map. Only the country is shared, never an address or location, and you can stop at any time.",
+  "toggle": "Share the country ({$country})",
+  "toggleNoCountry": "Share the country",
+  "noCountry": "Add a country to your organization's address first.",
+  "recipients": "Shared with: {$names}",
+  "noRecipients": "No connection receives it yet. It is shared only with organizations this installation is managed by or supplied through.",
+  "saved": "Saved.",
+  "failed": "That did not save. Try again."
+}

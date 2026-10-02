@@ -32,5 +32,31 @@
   },
   "showMap": "Show customers on the map",
   "hideMap": "Hide the map",
-  "homeCounts": "{$placed} on the map · {$missing} not on the map"
+  "homeCounts": "{$placed} on the map · {$missing} not on the map",
+  "areas": {
+    "add": "Add a service area",
+    "drawing": "Click the map to add corners. {$count} so far.",
+    "undo": "Undo last point",
+    "finish": "Finish",
+    "name": "Area name",
+    "coveredBy": "Covered by",
+    "nobody": "Nobody assigned",
+    "coveredByName": "Covered by {$name}",
+    "save": "Save area",
+    "saved": "Service area saved.",
+    "deleted": "Service area deleted.",
+    "stale": "Someone else changed the service areas. Reload the page and try again.",
+    "saveFailed": "That did not save. Try again.",
+    "heading": "Coverage",
+    "outside": "Outside every service area ({$count})",
+    "allCovered": "Every placed site is inside a service area.",
+    "overlaps": "In more than one area ({$count})",
+    "list": "Service areas",
+    "siteCount": "Sites: {$count}",
+    "edit": "Rename or reassign",
+    "delete": "Delete",
+    "confirmDelete": "Confirm delete",
+    "selectedIn": "{$site} is in {$areas}.",
+    "selectedOutside": "{$site} is outside every service area."
+  }
 }

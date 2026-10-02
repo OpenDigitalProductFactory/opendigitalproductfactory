@@ -130,6 +130,17 @@ describe("an unmitigated risk ends finalize as a verdict", () => {
   });
 });
 
+// BI-AF072BE5 (2026-10-01): FB-C36BC1AD reached review with 0 commits and
+// finalize ran the full gauntlet every 30 minutes, ending "unbound".
+describe("a build with nothing committed", () => {
+  it("ends no-change without running the gauntlet", async () => {
+    const d = deps({ capture: vi.fn().mockResolvedValue({ diffPatch: "  \n", changedFiles: [] }) });
+    const out = await runBuildStudioFinalize("FB-C36BC1AD", d);
+    expect(out).toEqual({ status: "no-change" });
+    expect(d.runGauntlet).not.toHaveBeenCalled();
+  });
+});
+
 describe("finalizeAllowsSemanticReview", () => {
   it("allows the semantic review only after a finished finalize", () => {
     expect(finalizeAllowsSemanticReview({ status: "ready", evidenceIds: ["g", "t"] })).toBe(true);

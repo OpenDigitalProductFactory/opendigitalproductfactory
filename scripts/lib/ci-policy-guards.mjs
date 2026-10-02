@@ -263,6 +263,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-3267763F: no compose default, installer output or self-upgrade
       // leaves Inngest on the signing/event keys once published in this repo.
       conformanceTest("scripts/installer/inngest-keys-contract.test.mjs"),
+      // BI-8541D491: every install path provisions the GPP permit signing key
+      // and a self-upgrade never rotates it.
+      conformanceTest("scripts/installer/gpp-permit-secret-contract.test.mjs"),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
@@ -282,8 +285,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/lib/published-image-freshness.test.mjs",
-        "scripts/publish-image-release-identity.test.mjs", "scripts/doctools-image-contract.test.mjs",
+        "scripts/doctools-image-contract.test.mjs",
       ),
+      // BI-30E3E229: reads repo files by repo-relative literal path, so it
+      // asserts live repository state rather than this guard's logic.
+      conformanceTest("scripts/publish-image-release-identity.test.mjs"),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
@@ -304,26 +310,34 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/derived-artifacts-gate.mjs", "check-all"),
     ]),
     guard("pr-health-test", "PR Health Logic", [
+      // BI-30E3E229: these five assert LIVE REPOSITORY STATE — they read
+      // .github/workflows/*.yml and package/vitest configs by repo-relative
+      // literal path, and ci-policy-guards.test.mjs additionally deep-compares
+      // the imported POLICY_GUARD_PROFILES registry against its own inventory.
+      // Stripping them host-side is what let an unregistered guard reach CI
+      // behind a clean preflight (PR #5905). Marked, so the preflight keeps them.
+      conformanceTest(
+        "scripts/check-ci-build-cache.test.mjs",
+        "scripts/ci-coverage-config.test.mjs",
+        "scripts/ci-evidence-workflow.test.mjs",
+        "scripts/ci-build-artifact-workflow.test.mjs",
+        "scripts/ci-policy-guards.test.mjs",
+      ),
       node(
         "--test",
         "scripts/pr-health.test.mjs",
         "scripts/check-stuck-auto-merge.test.mjs",
         "scripts/check-failure-readiness.test.mjs",
-        "scripts/check-ci-build-cache.test.mjs",
         "scripts/dev-postgres-pgvector-contract.test.mjs",
         "scripts/lib/ci-observation.test.mjs",
         "scripts/ci-observation.test.mjs",
         "scripts/ci-shadow-selection.test.mjs",
-        "scripts/ci-coverage-config.test.mjs",
         "scripts/ci-change-scope.test.mjs",
         "scripts/ci-evidence-plan.test.mjs",
-        "scripts/ci-evidence-workflow.test.mjs",
-        "scripts/ci-build-artifact-workflow.test.mjs",
         "scripts/ci-build-artifact-discovery.test.mjs",
         "scripts/lib/ci-build-artifact.test.mjs",
         "scripts/lib/ci-evidence-plan.test.mjs",
         "scripts/lib/documentation-evidence-lane.test.mjs",
-        "scripts/ci-policy-guards.test.mjs",
         "scripts/lib/host-command-invocation.test.mjs",
         "scripts/lib/host-available-memory.test.mjs",
         "scripts/lib/host-available-memory-win32.test.mjs",

@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 730,
+  "pageCount": 731,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -784,6 +784,7 @@
         "principle-directed-work-and-mbse-composition",
         "gated-permissions-and-approval-fatigue",
         "adjacent-dpf-concepts",
+        "word-editions",
         "source-of-truth-rule"
       ]
     },
@@ -12069,6 +12070,9 @@
         "open-the-map",
         "sites-that-are-not-on-the-map",
         "find-locations-automatically",
+        "service-areas",
+        "draw-an-area",
+        "read-the-coverage",
         "related"
       ]
     },
@@ -12564,6 +12568,19 @@
         "separate-the-failure-domains",
         "change-and-recovery-rules",
         "what-to-watch"
+      ]
+    },
+    "docs/user-guide/platform/deployment-country-sharing.md": {
+      "publicHref": "/user-guide/platform/deployment-country-sharing/",
+      "portalHref": "/docs/platform/deployment-country-sharing",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "where-to-find-it",
+        "what-it-does",
+        "if-the-switch-is-unavailable",
+        "related"
       ]
     },
     "docs/user-guide/platform/discovery-operations.md": {

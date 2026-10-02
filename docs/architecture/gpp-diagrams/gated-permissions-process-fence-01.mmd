@@ -1,0 +1,39 @@
+flowchart TB
+    req["An agent reaches for a tool<br/>coworker or external agent, identified by GAID"]
+
+    subgraph decision["Decision side: who may decide"]
+        scope{"Owning scope of<br/>this stage's gate"}
+        wwmd["WWMD<br/>platform doctrine<br/>principle_decide"]
+        wwwd["WWWD<br/>organization stance<br/>evaluate_org_business_decision"]
+        wsid["WSID<br/>profession craft<br/>evaluate_profession_decision"]
+        score["Hard constraints filter options,<br/>then preferences score what remains"]
+        verdict{"Gate resolution"}
+    end
+
+    subgraph permission["Permission side: what may run"]
+        stage["Work-shape stage<br/>declares its capability set"]
+        intersect["Agent grants<br/>∩ acting user's capability<br/>∩ room and stage capability set<br/>∩ token scope"]
+        envelope["Envelope:<br/>tools reachable now"]
+    end
+
+    req --> scope
+    scope --> wwmd
+    scope --> wwwd
+    scope --> wsid
+    wwmd --> score
+    wwwd --> score
+    wsid --> score
+    score --> verdict
+    req --> stage --> intersect --> envelope
+
+    verdict -->|admit| bound["Gated Permission satisfied<br/>versioned decision, validity window"]
+    verdict -->|hold: evidence missing| hold["Collect the missing evidence"]
+    verdict -->|escalate: authority missing| esc["Accountable human rules"]
+    verdict -->|refuse| refused["Recorded refusal"]
+    esc -->|rules admit| bound
+
+    bound --> tak{"TAK mediates the call"}
+    envelope --> tak
+    tak -->|admitted and in envelope| run["Execute"]
+    tak -->|outside the envelope| unreachable["Unreachable:<br/>never offered, never prompted"]
+    run --> receipt["GAID receipt cites the<br/>binding version and gate decision"]

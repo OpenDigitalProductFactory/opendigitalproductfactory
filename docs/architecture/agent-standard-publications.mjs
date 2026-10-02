@@ -24,6 +24,13 @@ export const AGENT_STANDARD_PUBLICATIONS = Object.freeze({
     subtitle: "TAK Profile for Job Qualification, Autonomy, and Revalidation",
     diagramsDir: join(ARCH_DIR, "jsi-diagrams"),
   },
+  gpp: {
+    markdownPath: join(ARCH_DIR, "gated-permissions-process.md"),
+    outputPath: join(ARCH_DIR, "Gated-Permissions-Process.docx"),
+    title: "Gated Permissions Process",
+    subtitle: "Binding Decision Gates to the Tools an Agent May Use, per Work-Shape Stage",
+    diagramsDir: join(ARCH_DIR, "gpp-diagrams"),
+  },
   "white-paper": {
     markdownPath: join(ARCH_DIR, "2026-04-18-trusted-ai-agent-governance-white-paper.md"),
     outputPath: join(ARCH_DIR, "Trusted-AI-Agent-Governance-White-Paper.docx"),
