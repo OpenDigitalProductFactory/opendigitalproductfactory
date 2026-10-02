@@ -177,7 +177,7 @@ async function isAllowedByGrants(toolName: string, grants: string[]): Promise<bo
 
 async function runGovernedToolPreflight(event: ToolLifecycleEvent): Promise<ToolResult | null> {
   if (_toolPreflightOverride) return _toolPreflightOverride(event);
-  if (event.context?.authSource === "oauth" && typeof event.rawParams.capsuleId === "string") {
+  if (event.context?.authSource === "oauth") {
     const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
     const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === event.toolName);
     const refusal = await workroomTargetAccessRefusal({
@@ -226,6 +226,20 @@ async function callExecuteTool(
   userId: string,
   ctx?: ToolExecutionContext,
 ): Promise<ToolResult> {
+  // Keep this check at the execution boundary even though governed dispatch
+  // also runs it early. An approval may resume later, after room membership or
+  // connection authority changed; execution must re-evaluate current access.
+  if (ctx?.authSource === "oauth") {
+    const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
+    const refusal = await workroomTargetAccessRefusal({
+      params,
+      userId,
+      ...ctx,
+      toolName,
+      action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false,
+    });
+    if (refusal) return refusal;
+  }
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
   return executeTool(toolName, params, userId, ctx);
 }
@@ -387,48 +401,48 @@ export async function governedExecuteTool(
     }
     const agentGrantAllowed = await isAllowedByGrants(args.toolName, grants);
 
-    // Deterministic target preconditions come after capability/grant checks so
-    // they disclose nothing to an unauthorized caller, but before authority
-    // escalation because approving an impossible call cannot make it valid.
+    // Deterministic target preconditions run before authority escalation,
+    // including when a missing capability/grant would otherwise create an
+    // approval. Approving an impossible call cannot make it valid. The same
+    // access checks run again at execution time because room state can change
+    // while an approval is pending.
     // BI-061D7192: an unadmitted coworker repeatedly produced approval cards
     // for invite/recovery calls that the exact-room gate then refused.
-    if (humanCapabilityAllowed && agentGrantAllowed) {
-      const preflight = await runGovernedToolPreflight({
+    const preflight = await runGovernedToolPreflight({
+      toolName: args.toolName,
+      rawParams: args.rawParams,
+      userId: args.userId,
+      userContext: args.userContext,
+      context: args.context,
+      source: args.source,
+    });
+    if (preflight) {
+      const result: GovernedExecuteResult = {
+        ...preflight,
+        governance: { rejected: "precondition_denied" },
+      };
+      const auditRow = await writeAudit({
         toolName: args.toolName,
         rawParams: args.rawParams,
+        result,
         userId: args.userId,
-        userContext: args.userContext,
-        context: args.context,
         source: args.source,
+        context: args.context,
+        durationMs: 0,
       });
-      if (preflight) {
-        const result: GovernedExecuteResult = {
-          ...preflight,
-          governance: { rejected: "precondition_denied" },
-        };
-        const auditRow = await writeAudit({
-          toolName: args.toolName,
+      if (auditRow?.id && consequence.consequential) {
+        await writeToolExecutionReceipt({
+          auditRowId: auditRow.id,
+          buildId: null,
           rawParams: args.rawParams,
           result,
-          userId: args.userId,
-          source: args.source,
+          toolName: args.toolName,
           context: args.context,
-          durationMs: 0,
+          consequential: true,
+          governedArgs: args,
         });
-        if (auditRow?.id && consequence.consequential) {
-          await writeToolExecutionReceipt({
-            auditRowId: auditRow.id,
-            buildId: null,
-            rawParams: args.rawParams,
-            result,
-            toolName: args.toolName,
-            context: args.context,
-            consequential: true,
-            governedArgs: args,
-          });
-        }
-        return result;
       }
+      return result;
     }
 
     const authorityGate = await enforceCoworkerToolAuthority(

@@ -10,10 +10,40 @@ import type {
   AuthorityApprovalEnvelopeFinalize,
   AuthorityApprovalTaskResume,
 } from "./mcp-governed-execute";
-import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authority-decision";
+import {
+  buildCoworkerApprovalBinding,
+  type CoworkerAuthorityInput,
+} from "./govern/authority/coworker-authority-decision";
 import type { ToolResult } from "./mcp-tool-types";
+import type { RoomParticipantInvitationPreflight } from "./work-management/room-participant-invitation-preflight.server";
 import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
 import { registerWorkroomAliasCases } from "./mcp-governed-execute-alias.cases";
+
+const preflightMocks = vi.hoisted(() => ({
+  workroomTargetAccessRefusal: vi.fn(async () => null as ToolResult | null),
+  preflightRoomParticipantInvitation: vi.fn<() => Promise<RoomParticipantInvitationPreflight>>(async () => ({
+    verdict: "allow" as const,
+    agentId: "AGT-100",
+    caseKey: "backlog-item:BI-1",
+    item: {
+      id: "WI-1",
+      itemId: "BI-1",
+      sourceType: "backlog-item",
+      sourceId: "BI-1",
+      title: "Room",
+      evidence: null,
+      assignedToAgentId: null,
+      assignedToUserId: null,
+    },
+  })),
+}));
+
+vi.mock("./work-capsules/oauth-workroom-ownership", () => ({
+  workroomTargetAccessRefusal: preflightMocks.workroomTargetAccessRefusal,
+}));
+vi.mock("./work-management/room-participant-invitation-preflight.server", () => ({
+  preflightRoomParticipantInvitation: preflightMocks.preflightRoomParticipantInvitation,
+}));
 type AuditRow = Record<string, unknown>;
 function captureAudit(rows: AuditRow[]) { return async (data: AuditRow) => { rows.push(data); }; }
 const NORMAL_USER = { platformRole: "ceo", isSuperuser: true };
@@ -113,6 +143,24 @@ function applyAuthorityOverrides(
 }
 
 beforeEach(() => {
+  preflightMocks.workroomTargetAccessRefusal.mockReset();
+  preflightMocks.workroomTargetAccessRefusal.mockResolvedValue(null);
+  preflightMocks.preflightRoomParticipantInvitation.mockReset();
+  preflightMocks.preflightRoomParticipantInvitation.mockResolvedValue({
+    verdict: "allow",
+    agentId: "AGT-100",
+    caseKey: "backlog-item:BI-1",
+    item: {
+      id: "WI-1",
+      itemId: "BI-1",
+      sourceType: "backlog-item",
+      sourceId: "BI-1",
+      title: "Room",
+      evidence: null,
+      assignedToAgentId: null,
+      assignedToUserId: null,
+    },
+  });
   auditRows = [];
   receiptRows = [];
   authorityRows = [];
@@ -441,6 +489,161 @@ describe("governedExecuteTool — happy path", () => {
 
 describe("governedExecuteTool — rejection paths", () => {
   registerWorkroomAliasCases({ executionCalls: () => executeMock.mock.calls, auditRows: () => auditRows, applyOverrides: applyAuthorityOverrides, authorityInput, normalUser: NORMAL_USER, executeMock: () => executeMock, approvalEnvelopeCreate: () => approvalEnvelopeCreate, authorityRows: () => authorityRows });
+
+  it.each(["external-jsonrpc", "internal-mcp-session"] as const)(
+    "runs the real invitation preflight dispatcher for %s calls",
+    async (source) => {
+      preflightMocks.preflightRoomParticipantInvitation.mockResolvedValue({
+        verdict: "deny",
+        result: {
+          success: false,
+          error: "room_not_admitted",
+          message: "The room owner must admit this coworker.",
+        },
+      });
+      applyAuthorityOverrides({
+        toolPreflight: null,
+        resolveCoworkerAuthorityInput: async () => authorityInput({
+          action: {
+            ...authorityInput().action,
+            toolName: "invite_room_participant",
+            requiredCapability: "view_operations",
+            sideEffect: true,
+            approvalPolicy: "none",
+          },
+        }),
+      });
+
+      const result = await governedExecuteTool({
+        toolName: "invite_room_participant",
+        rawParams: { caseKey: "backlog-item:BI-1", agentId: "AGT-100" },
+        userId: "user-1",
+        userContext: NORMAL_USER,
+        context: {
+          agentId: "AGT-100",
+          ...(source === "external-jsonrpc" ? { authSource: "oauth" } : {}),
+        },
+        source,
+      });
+
+      expect(result).toMatchObject({ success: false, error: "room_not_admitted" });
+      expect(preflightMocks.preflightRoomParticipantInvitation).toHaveBeenCalledTimes(1);
+      expect(executeMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("runs deterministic invitation preconditions before grant-based authority escalation", async () => {
+    preflightMocks.preflightRoomParticipantInvitation.mockResolvedValue({
+      verdict: "deny",
+      result: {
+        success: false,
+        error: "room_not_admitted",
+        message: "The room owner must admit this coworker.",
+      },
+    });
+    applyAuthorityOverrides({
+      toolPreflight: null,
+      isAllowedByGrants: () => false,
+      resolveCoworkerAuthorityInput: async () => authorityInput({
+        action: {
+          ...authorityInput().action,
+          toolName: "invite_room_participant",
+          requiredCapability: "view_operations",
+          sideEffect: true,
+          approvalPolicy: "all",
+          consequence: "authority",
+        },
+      }),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "invite_room_participant",
+      rawParams: { caseKey: "backlog-item:BI-1", agentId: "AGT-100" },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      context: { agentId: "AGT-100", authSource: "oauth" },
+      source: "external-jsonrpc",
+    });
+
+    expect(result).toMatchObject({ success: false, error: "room_not_admitted" });
+    expect(approvalEnvelopeCreate).not.toHaveBeenCalled();
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the execution-time OAuth room check for targets without capsuleId", async () => {
+    preflightMocks.workroomTargetAccessRefusal.mockResolvedValue({
+      success: false,
+      error: "workroom_access_denied",
+      message: "Room access changed before execution.",
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "query_backlog",
+      rawParams: { caseKey: "work-capsule:WC-1" },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      context: { authSource: "oauth" },
+      source: "external-jsonrpc",
+    });
+
+    expect(result).toMatchObject({ success: false, error: "workroom_access_denied" });
+    expect(preflightMocks.workroomTargetAccessRefusal).toHaveBeenCalledWith(expect.objectContaining({
+      params: { caseKey: "work-capsule:WC-1" },
+      authSource: "oauth",
+    }));
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it("rechecks OAuth room access when an approved call resumes", async () => {
+    const pending = authorityInput({
+      action: {
+        ...authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "side-effects",
+      },
+      task: { taskRunId: "TASK-1", parentTaskRunId: "TASK-PARENT" },
+      rawParams: { title: "approved title" },
+    });
+    const binding = buildCoworkerApprovalBinding(pending);
+    preflightMocks.workroomTargetAccessRefusal
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        success: false,
+        error: "workroom_access_denied",
+        message: "Room access changed before execution.",
+      });
+    applyAuthorityOverrides({
+      toolPreflight: null,
+      resolveCoworkerAuthorityInput: async () => ({
+        ...pending,
+        approval: {
+          envelopeId: "ENV-APPROVED",
+          status: "approved",
+          expiresAt: new Date(Date.now() + 60_000),
+          binding,
+        },
+      }),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "approved title" },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      context: {
+        agentId: "AGT-100",
+        authSource: "oauth",
+        taskRunId: "TASK-1",
+      },
+      source: "external-jsonrpc",
+    });
+
+    expect(result).toMatchObject({ success: false, error: "workroom_access_denied" });
+    expect(preflightMocks.workroomTargetAccessRefusal).toHaveBeenCalledTimes(2);
+    expect(executeMock).not.toHaveBeenCalled();
+  });
 
   it("returns unknown_tool without invoking executeTool", async () => {
     const result = await governedExecuteTool({
