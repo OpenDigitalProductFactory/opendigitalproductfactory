@@ -646,6 +646,10 @@ describe("terminal initiative recovery", () => {
     await expectHeadBinding([readinessRequirement({ code: "REVIEW_REQUIRED", state: "missing", accountableRole: "architecture-reviewer" })]);
   });
 
+  it("BI-D9DECD1B: a re-review after a failed specialist review binds the room head, as the claim's packet does", async () => {
+    await expectHeadBinding([readinessRequirement({ code: "REVIEW_FAILED", state: "fail", accountableRole: "data-reviewer" })]);
+  });
+
   it("BI-D9DECD1B: an archetype review owed before implementation binds the room head, as the claim's packet does", async () => {
     await expectHeadBinding([
       readinessRequirement({ code: "ARCHETYPE_PROVISIONING_INCOMPLETE", state: "missing", accountableRole: "archetype-steward" }),

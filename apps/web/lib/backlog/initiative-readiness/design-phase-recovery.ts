@@ -25,6 +25,10 @@ const DESIGN_REVIEW_CODES = new Set<string>([
   // BI-1D8E53D9: the architecture review of the design is owed before plan too.
   "REVIEW_REQUIRED",
   "PLAN_REVIEW_REQUIRED",
+  // BI-D9DECD1B: a failed review is owed again at the same point. Every
+  // REVIEW_FAILED comes from a pre-delivery lane (spec approval, a specialist
+  // review or the plan review), so its re-review reads the head like the first.
+  "REVIEW_FAILED",
 ]);
 
 /**
