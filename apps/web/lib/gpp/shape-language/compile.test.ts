@@ -152,18 +152,21 @@ describe("AC-NODISRUPT precondition: the binding diff is unchanged for every reg
       }
       compiled += 1;
       const emitted = result.definition as WorkShapeDefinition;
-      const diff = diffWorkShapeBinding(definition, emitted);
+      // The registry value before any typed gate: the definition itself for a
+      // hand-declared shape; a compiled one (PR-3b-6) minus its ratified gate.
+      const baseline = legacyProjection(definition);
+      const diff = diffWorkShapeBinding(baseline, emitted);
       expect(diff.changes, id).toEqual([]);
       expect(diff.classification, id).toBe("unchanged");
       // The reverse (compiled -> original) drops any typed gate, which is a
       // widening row by design; with no gate it must stay unchanged.
-      const reverse = diffWorkShapeBinding(emitted, definition);
+      const reverse = diffWorkShapeBinding(emitted, baseline);
       expect(reverse.changes.every((row) => row.kind === "gate-removed" || row.kind === "binding-removed"), id).toBe(true);
       if (!emitted.stages.some((stage) => stage.advance.kind === "governed-decision" && stage.advance.gate)) {
         expect(reverse.classification, id).toBe("unchanged");
       }
       // And the emitted definition is the registry value under the legacy projection.
-      expect(canonicalJson(legacyProjection(emitted)), id).toBe(canonicalJson(definition));
+      expect(canonicalJson(legacyProjection(emitted)), id).toBe(canonicalJson(baseline));
     }
     expect(compiled + refused.length).toBe(ALL_DEFINITIONS.length);
     // drc-registry.test.ts derives the refusals (D-4 on delivery shapes, C-1 on frozen priors); most compile.

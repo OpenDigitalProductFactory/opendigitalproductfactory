@@ -181,7 +181,9 @@ describe.each(REPRESENTATIVES)("decompile and lower: %s family", (_family, load)
   });
 
   it("lower(decompile(S)) equals S under the legacy projection, with equal own-key sets (L1)", () => {
-    const definition = load();
+    // legacy(S) is S for a hand-declared shape; a compiled shape (PR-3b-6)
+    // carries its ratified gate, which the projection drops on both sides.
+    const definition = legacyProjection(load());
     const lowered = lowerToDefinition(decompile(definition).document);
 
     expect(canonicalJson(legacyProjection(lowered))).toBe(canonicalJson(definition));
@@ -201,7 +203,9 @@ describe.each(REPRESENTATIVES)("decompile and lower: %s family", (_family, load)
 });
 
 describe("decompile and lower: field-level contracts", () => {
-  const base = shape("inquiry-response-watch");
+  // The registry value with no additive field (inquiry-response-watch is a
+  // compiled shape since PR-3b-6 and carries its ratified gate).
+  const base = legacyProjection(shape("inquiry-response-watch"));
 
   it("tools absent and tools: [] survive decompile → lower unchanged", () => {
     const withEmpty: WorkShapeDefinition = {
