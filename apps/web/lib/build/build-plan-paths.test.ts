@@ -145,3 +145,24 @@ describe("normalizeBuildPlanPaths", () => {
     expect(normalized.plan.tasks[0]?.implement).not.toContain("components/build-studio");
   });
 });
+
+describe("nearestExistingDirectory + unresolvedModifyPathHints (FB-2684020A)", () => {
+  it("walks up to the first directory that exists and reports it as a hint", async () => {
+    const { nearestExistingDirectory, normalizeBuildPlanPaths } = await import("./build-plan-paths");
+    const exists = (absolutePath: string) =>
+      absolutePath.endsWith("/apps/web/app/(shell)/admin") || absolutePath.endsWith("/apps/web/app/(shell)/admin/");
+    expect(nearestExistingDirectory("apps/web/app/(shell)/admin/platform/page.tsx", exists)).toBe("apps/web/app/(shell)/admin");
+    expect(nearestExistingDirectory("nowhere.ts", exists)).toBeNull();
+    const result = normalizeBuildPlanPaths(
+      {
+        fileStructure: [{ path: "apps/web/app/(shell)/admin/platform/page.tsx", action: "modify", purpose: "x" }],
+        tasks: [{ title: "t", testFirst: "", implement: "", verify: "" }],
+      } as never,
+      { exists },
+    );
+    expect(result.unresolvedModifyPaths).toEqual(["apps/web/app/(shell)/admin/platform/page.tsx"]);
+    expect(result.unresolvedModifyPathHints).toEqual([
+      { path: "apps/web/app/(shell)/admin/platform/page.tsx", nearestExistingDirectory: "apps/web/app/(shell)/admin" },
+    ]);
+  });
+});
