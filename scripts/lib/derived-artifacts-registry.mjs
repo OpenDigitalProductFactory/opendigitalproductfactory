@@ -301,28 +301,6 @@ export const DERIVED_ARTIFACTS = [
     check: ["node", "scripts/compile-capability-service-catalog.mjs", "--check"],
   },
   {
-    // GPP shape-document schema (BI-6DA17863, PR-3a-1): the published JSON
-    // Schema 2020-12 is generated from the Zod definition and committed. The
-    // vocabularies it derives its enums from are sources too, so adding a
-    // trigger class, evidence kind, room shape or disposition regenerates it.
-    // Later phases extend build-gpp-shapes.ts (one generator home) and add
-    // their outputs to artifactPaths here.
-    id: "gpp-shape-schema",
-    description: "GPP shape-document JSON Schema 2020-12 (generated from the Zod schema)",
-    sourceGlobs: [
-      "apps/web/lib/gpp/shape-language/gpp-shape-schema.ts",
-      "apps/web/lib/work-management/work-shapes.ts",
-      "apps/web/lib/work-management/work-shape-evidence-kinds.ts",
-      "apps/web/lib/work-management/room-shapes.ts",
-      "packages/validators/src/outcome-disposition.ts",
-      "apps/web/scripts/build-gpp-shapes.ts",
-      "apps/web/scripts/registry-generator-support.ts",
-    ],
-    artifactPaths: ["apps/web/lib/gpp/shape-language/gpp-shape.schema.json"],
-    generate: ["pnpm", "--filter", "web", "run", "build:gpp-shapes"],
-    check: ["pnpm", "--filter", "web", "run", "check:gpp-shapes"],
-  },
-  {
     id: "sbom-baseline",
     description: "SBOM dependency-shape drift baseline (first-party version splits)",
     sourceGlobs: ["pnpm-lock.yaml", "pnpm-workspace.yaml", "apps/mobile/pnpm-lock.yaml", "apps/mobile/pnpm-workspace.yaml"],
