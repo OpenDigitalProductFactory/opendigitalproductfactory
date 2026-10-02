@@ -52,8 +52,15 @@ export type PermitObservationCreate = {
 export type GppPermitStore = {
   createPermit: (claims: PermitClaims, signature: PermitSignature | null) => Promise<PermitRow>;
   findPermitByPermitId: (permitId: string) => Promise<PermitRow | null>;
-  /** Count one use, compare-and-set on `useCount < maxUses`. */
-  consumePermit: (row: Pick<PermitRow, "id" | "maxUses">) => Promise<void>;
+  /**
+   * Take one use, atomically: a single conditional update guarded by
+   * `useCount < maxUses`. Resolves true only for the presentation that took the
+   * use; false when the permit was already spent, including by a concurrent
+   * presentation that read the same row (PR-G). The verdict treats false as
+   * `exhausted`, so exactly one concurrent presentation of a single-use
+   * handle is `valid`.
+   */
+  consumePermit: (row: Pick<PermitRow, "id" | "maxUses">) => Promise<boolean>;
   createObservation: (data: PermitObservationCreate) => Promise<void>;
   findLineage: (ref: PermitLineageRef) => Promise<PermitLineage>;
 };
@@ -153,10 +160,15 @@ const prismaStore: GppPermitStore = {
     return row ? toPermitRow(row) : null;
   },
   async consumePermit(row) {
-    await prisma.gppPermit.updateMany({
+    // One UPDATE ... WHERE "useCount" < maxUses. Under PostgreSQL's row lock a
+    // second concurrent update re-evaluates the guard against the committed
+    // row, so at most `maxUses` updates ever match; `count` says whether this
+    // one did. `maxUses` is fixed at mint, so the caller's copy is current.
+    const { count } = await prisma.gppPermit.updateMany({
       where: { id: row.id, useCount: { lt: row.maxUses } },
       data: { useCount: { increment: 1 } },
     });
+    return count === 1;
   },
   async createObservation(data) {
     const { bindingId, detail, ...rest } = data;
