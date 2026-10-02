@@ -95,6 +95,16 @@ export default function NearbyScreen(): React.JSX.Element {
               {err}
             </Text>
           ) : null}
+          {geoError ? (
+            <Pressable
+              style={styles.retry}
+              onPress={refresh}
+              accessibilityRole="button"
+              testID="nearby-retry"
+            >
+              <Text style={styles.ctaText}>Try again</Text>
+            </Pressable>
+          ) : null}
         </View>
       }
       renderItem={({ item }: { item: NearbyBusiness }) => (
@@ -126,7 +136,9 @@ export default function NearbyScreen(): React.JSX.Element {
         </Pressable>
       )}
       ListEmptyComponent={
-        !isLoadingNearby ? (
+        // Without a location there is no "near you" to be empty, so the
+        // error above stands alone.
+        !isLoadingNearby && !geoError ? (
           <Text style={styles.muted}>No businesses found near you yet.</Text>
         ) : null
       }
@@ -170,6 +182,7 @@ function makeStyles({ colors, spacing, borderRadius }: ReturnType<typeof useThem
     error: { color: colors.error, fontSize: 13, marginBottom: spacing.sm },
     muted: { color: colors.textMuted, fontSize: 14, textAlign: "center" },
     cta: { backgroundColor: colors.primary, borderRadius: borderRadius.md, paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.lg },
+    retry: { alignSelf: "flex-start", backgroundColor: colors.primary, borderRadius: borderRadius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm },
     ctaText: { color: colors.white, fontSize: 15, fontWeight: "600" },
     footer: { color: colors.textMuted, fontSize: 12, textAlign: "center", marginTop: spacing.md },
   });
