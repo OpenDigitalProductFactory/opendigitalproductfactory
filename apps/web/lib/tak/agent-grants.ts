@@ -567,7 +567,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   query_version_history: ["file_read"],
   generate_codebase_manifest: ["file_read"],
   read_codebase_manifest: ["file_read"],
-  read_source_at_version: ["file_read"],
+  read_source_at_version: ["file_read"], read_build_artifact_revision: ["file_read"], // BI-926A7E90: same immutable-reader grant
   search_source_at_version: ["file_read"],
   list_source_directory: ["file_read"],
   compare_versions: ["file_read"],

@@ -120,7 +120,7 @@ describe("terminal tool policy", () => {
       path: policy.immutableReaderArguments!.path,
       commitSha: policy.immutableReaderArguments!.version,
       providerBlobId: policy.immutableReaderArguments!.expectedBlobId,
-    })).toEqual({ ...policy, readerToolNames: ["read_source_at_version"] });
+    })).toEqual({ ...policy, readerToolNames: ["read_source_at_version"], immutableReaderToolName: "read_source_at_version" });
     expect(createInitiativeReviewTerminalToolPolicy(
       policy.writerToolName,
       [policy.writerToolName],

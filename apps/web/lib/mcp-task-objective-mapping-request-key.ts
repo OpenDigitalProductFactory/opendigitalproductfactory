@@ -178,15 +178,24 @@ export function validateHistoricalObjectiveMappingRequestKey(
   return exactKeyMatches(packet.requestKey, expectedLegacy);
 }
 
+type RepoBlobArtifactRef = Extract<InitiativeReviewBinding["artifactRef"], { kind: "repo-blob-at-commit" }>;
+
+/** Objective mapping binds acceptance to a repository blob; any other artifact kind never matches. */
+function repoBlob(ref: InitiativeReviewBinding["artifactRef"]): RepoBlobArtifactRef | null {
+  return ref.kind === "repo-blob-at-commit" ? ref : null;
+}
+
 function exactArtifactMatches(
   current: ObjectiveMappingBinding["artifactRef"],
   historical: InitiativeReviewBinding["artifactRef"],
 ): boolean {
-  return current.kind === historical.kind
-    && current.repositoryFullName === historical.repositoryFullName
-    && current.commitSha === historical.commitSha
-    && current.path === historical.path
-    && current.providerBlobId === historical.providerBlobId;
+  const left = repoBlob(current);
+  const right = repoBlob(historical);
+  return left !== null && right !== null
+    && left.repositoryFullName === right.repositoryFullName
+    && left.commitSha === right.commitSha
+    && left.path === right.path
+    && left.providerBlobId === right.providerBlobId;
 }
 
 function historicalWorkroomMatches(
@@ -217,8 +226,8 @@ function originalObjectiveTemplateMatches(packet: ObjectiveMappingRequestPacket,
   historical: ObjectiveMappingRequestHistory): boolean {
   if (historical.binding.workroomRef !== undefined || historical.binding.eligibleEvidenceActivityIds !== undefined) return false;
   const ref = packet.binding.workroomRef;
-  const artifact = historical.binding.artifactRef;
-  if (artifact.commitSha !== ref.headSha
+  const artifact = repoBlob(historical.binding.artifactRef);
+  if (!artifact || artifact.commitSha !== ref.headSha
     || historical.idempotencyKey !== `initiative-readiness:${packet.binding.itemId}:objective-mapping:${ref.headSha}`) return false;
   const original = `For ${packet.binding.itemId} in ${ref.workroomId} on ${ref.repositoryFullName}#${ref.branchName} at ${ref.headSha}, address objective-mapping using record_initiative_evidence. Read ${artifact.path} at that commit with read_source_at_version, record a governed receipt only when the gate passes. Map every current OBJ-* and AC-* statement to post-baseline evidence and submit the proposal with record_initiative_evidence(operation='objective-mapping').`;
   return historical.objective === original && packet.objective === formatInitiativeReviewObjective({
@@ -245,9 +254,11 @@ function sameArtifactCorpus(
   current: ObjectiveMappingBinding["artifactRef"],
   historical: InitiativeReviewBinding["artifactRef"],
 ): boolean {
-  return current.kind === historical.kind
-    && current.repositoryFullName === historical.repositoryFullName
-    && current.path === historical.path;
+  const left = repoBlob(current);
+  const right = repoBlob(historical);
+  return left !== null && right !== null
+    && left.repositoryFullName === right.repositoryFullName
+    && left.path === right.path;
 }
 
 export function objectiveMappingHistoricalProviderProofDigest(
@@ -271,7 +282,7 @@ function isProviderProvenImpossibleLegacy(
       === objectiveMappingHistoricalProviderProofDigest(historical)
     && isLegacyInvalidBinding(historical.binding)
     && sameArtifactCorpus(packet.binding.artifactRef, historical.binding.artifactRef)
-    && historical.binding.artifactRef.commitSha === packet.binding.workroomRef.headSha
+    && repoBlob(historical.binding.artifactRef)?.commitSha === packet.binding.workroomRef.headSha
     && historicalBaselineId !== null
     && historicalBaselineId !== currentBaselineId;
 }

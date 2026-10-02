@@ -1,3 +1,4 @@
+import { repoBlobArtifactRef, immutableArtifactIdentity } from "@/lib/mcp-task-review-contract";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 
@@ -432,9 +433,11 @@ function baselineAncestors(
   return ancestors;
 }
 
+type HistoricalRepoBlobArtifact = Extract<ObjectiveMappingRequestHistory["binding"]["artifactRef"], { kind: "repo-blob-at-commit" }>;
+
 function sameRepositoryPath(
   left: NonNullable<BaselinePayload["artifactRef"]>,
-  right: ObjectiveMappingRequestHistory["binding"]["artifactRef"],
+  right: HistoricalRepoBlobArtifact,
 ): boolean {
   return left.repositoryFullName.toLocaleLowerCase("en-US") === right.repositoryFullName.toLocaleLowerCase("en-US")
     && left.path === right.path;
@@ -442,7 +445,7 @@ function sameRepositoryPath(
 
 export function exactArtifactRefMatches(
   left: NonNullable<BaselinePayload["artifactRef"]>,
-  right: ObjectiveMappingRequestHistory["binding"]["artifactRef"],
+  right: HistoricalRepoBlobArtifact,
 ): boolean {
   return left.kind === right.kind
     && left.repositoryFullName.toLocaleLowerCase("en-US") === right.repositoryFullName.toLocaleLowerCase("en-US")
@@ -483,7 +486,13 @@ export async function classifyHistoricalObjectiveMappingArtifacts(args: {
   for (const historical of args.history) {
     const baselineId = historical.binding.expectedCurrentBaselineId;
     const ancestor = typeof baselineId === "string" ? ancestors.get(baselineId) : undefined;
-    const historicalArtifact = historical.binding.artifactRef;
+    // BI-926A7E90: objective mapping binds acceptance to a repository blob; a
+    // historical request bound to any other artifact kind is never eligible.
+    const historicalArtifact = repoBlobArtifactRef(historical.binding.artifactRef);
+    if (!historicalArtifact) {
+      classified.push(historical);
+      continue;
+    }
     const ancestorArtifact = ancestor?.artifactRef;
     const isLegacyInvalid = historical.binding.workroomRef === undefined
       || historical.binding.eligibleEvidenceActivityIds === undefined;
@@ -707,8 +716,8 @@ export async function resolveTerminalInitiativeRecovery(args: {
     baselineRows: baselineRows!,
     currentBaseline: baseline,
     currentArtifact: {
-      repositoryFullName: binding.artifactRef.repositoryFullName,
-      path: binding.artifactRef.path,
+      repositoryFullName: immutableArtifactIdentity(binding.artifactRef).repositoryFullName,
+      path: immutableArtifactIdentity(binding.artifactRef).path,
     },
     room: {
       ...room,

@@ -1,6 +1,7 @@
 import type { UserContext } from "@/lib/permissions";
 import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { immutablePageReaderForArtifact } from "@/lib/tak/terminal-tool-policy";
 import {
   parseInitiativeReviewBinding,
   submitRemoteCoworkerTask,
@@ -62,15 +63,16 @@ function initiativeReviewPacket(input: ExternalCoworkerTaskInput): InitiativeRev
   if (!binding) return "initiativeReviewBinding is not a valid immutable repository binding";
   const names = [...new Set(input.requiredToolNames.flatMap((value) =>
     typeof value === "string" && value.trim() ? [value.trim()] : []))];
-  const allowedReaders = new Set(["read_source_at_version", "search_source_at_version"]);
+  const pageReader = immutablePageReaderForArtifact(binding.artifactRef);
+  const allowedReaders = new Set([pageReader, "search_source_at_version"]);
   if (
     names.length < 2
     || names.length > 4
     || !names.includes(binding.writerToolName)
-    || !names.includes("read_source_at_version")
+    || !names.includes(pageReader)
     || names.some((name) => name !== binding.writerToolName && !allowedReaders.has(name))
   ) {
-    return "requiredToolNames must contain the bound writer and read_source_at_version; search_source_at_version is the only optional extra tool";
+    return `requiredToolNames must contain the bound writer and ${pageReader}; search_source_at_version is the only optional extra tool`;
   }
 
   const authorityScope = [

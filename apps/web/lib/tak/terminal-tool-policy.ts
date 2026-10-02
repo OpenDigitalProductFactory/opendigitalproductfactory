@@ -9,6 +9,8 @@ import {
 export type TerminalToolPolicy = {
   writerToolName: string;
   readerToolNames: readonly string[];
+  /** The page reader bound to this artifact kind; defaults to the repository blob reader. */
+  immutableReaderToolName?: string;
   minimumSuccessfulReaderCalls: number;
   maximumReaderCalls: number;
   immutableReaderArguments?: ImmutableReaderArguments;
@@ -43,12 +45,63 @@ export type ImmutableReaderArguments = {
   expectedBlobId: string;
 };
 
-type ImmutableReaderArtifactRef = {
-  repositoryFullName: string;
-  path: string;
-  commitSha: string;
-  providerBlobId: string;
-};
+/**
+ * The immutable artifact a review binds to. A repository blob is read with
+ * `read_source_at_version`; a Build Studio design revision (BI-926A7E90) is read
+ * with `read_build_artifact_revision`. Both readers serve the same page shape
+ * and the same four identity keys, so the policy below is reader-agnostic: for
+ * a revision, `path` is the virtual `build-artifact-revision/<revisionId>`,
+ * `version` is the revision id and `expectedBlobId` is its value digest.
+ */
+export type ImmutableReaderArtifactRef =
+  | {
+    kind?: "repo-blob-at-commit";
+    repositoryFullName: string;
+    path: string;
+    commitSha: string;
+    providerBlobId: string;
+  }
+  | {
+    kind: "feature-build-revision";
+    repositoryFullName: string;
+    revisionId: string;
+    valueDigest: string;
+  };
+
+export const REPOSITORY_BLOB_READER_TOOL = "read_source_at_version";
+export const BUILD_ARTIFACT_REVISION_READER_TOOL = "read_build_artifact_revision";
+export const BUILD_ARTIFACT_REVISION_PATH_PREFIX = "build-artifact-revision/";
+/** Page readers: each serves one bounded page of the bound artifact. */
+export const IMMUTABLE_PAGE_READER_TOOLS = [REPOSITORY_BLOB_READER_TOOL, BUILD_ARTIFACT_REVISION_READER_TOOL] as const;
+
+export function isImmutablePageReader(toolName: string): boolean {
+  return (IMMUTABLE_PAGE_READER_TOOLS as readonly string[]).includes(toolName);
+}
+
+export function immutablePageReaderForArtifact(artifactRef: ImmutableReaderArtifactRef): string {
+  return artifactRef.kind === "feature-build-revision" ? BUILD_ARTIFACT_REVISION_READER_TOOL : REPOSITORY_BLOB_READER_TOOL;
+}
+
+export function immutableReaderArgumentsFor(artifactRef: ImmutableReaderArtifactRef): ImmutableReaderArguments {
+  if (artifactRef.kind === "feature-build-revision") {
+    return {
+      repositoryFullName: artifactRef.repositoryFullName,
+      path: `${BUILD_ARTIFACT_REVISION_PATH_PREFIX}${artifactRef.revisionId}`,
+      version: artifactRef.revisionId,
+      expectedBlobId: artifactRef.valueDigest,
+    };
+  }
+  return {
+    repositoryFullName: artifactRef.repositoryFullName,
+    path: artifactRef.path,
+    version: artifactRef.commitSha,
+    expectedBlobId: artifactRef.providerBlobId,
+  };
+}
+
+function pageReaderOf(policy: TerminalToolPolicy): string {
+  return policy.immutableReaderToolName ?? REPOSITORY_BLOB_READER_TOOL;
+}
 
 export type TerminalToolRecord = {
   name: string;
@@ -60,6 +113,7 @@ export type TerminalToolRecord = {
 
 const INITIATIVE_REVIEW_READER_NAMES = [
   "read_source_at_version",
+  "read_build_artifact_revision",
   "search_source_at_version",
 ] as const;
 
@@ -74,14 +128,10 @@ export function createInitiativeReviewTerminalToolPolicy(
     ? {
         writerToolName,
         readerToolNames,
+        immutableReaderToolName: immutablePageReaderForArtifact(artifactRef),
         minimumSuccessfulReaderCalls: 1,
         maximumReaderCalls: 6,
-        immutableReaderArguments: {
-          repositoryFullName: artifactRef.repositoryFullName,
-          path: artifactRef.path,
-          version: artifactRef.commitSha,
-          expectedBlobId: artifactRef.providerBlobId,
-        },
+        immutableReaderArguments: immutableReaderArgumentsFor(artifactRef),
       }
     : null;
 }
@@ -152,7 +202,7 @@ export function normalizeTerminalToolArguments(
   providerArguments: Record<string, unknown>,
   modelVisibleChars?: number,
 ): TerminalToolArgumentDisposition {
-  if (toolName !== "read_source_at_version" || !policy.readerToolNames.includes(toolName)) {
+  if (!isImmutablePageReader(toolName) || !policy.readerToolNames.includes(toolName)) {
     return { kind: "allow", arguments: providerArguments };
   }
 
@@ -288,7 +338,7 @@ export function summarizeTerminalToolProgress(
   const seenCursors = new Set<string>();
 
   for (const record of readerRecords) {
-    if (record.name !== "read_source_at_version" || !record.result.success) continue;
+    if (!isImmutablePageReader(record.name) || !record.result.success) continue;
     const data = record.result.data;
     const validIdentity = binding && data
       && data["repositoryFullName"] === binding.repositoryFullName
@@ -525,7 +575,7 @@ export function applyTerminalToolSurface(
   if (records.some((record) => record.modelEvidenceTruncated)) {
     return selectTerminalToolSurface(providerTools, policy.readerToolNames);
   }
-  if (progress.partialEvidence) return selectTerminalToolSurface(providerTools, ["read_source_at_version"]);
+  if (progress.partialEvidence) return selectTerminalToolSurface(providerTools, [pageReaderOf(policy)]);
   return [...providerTools];
 }
 
@@ -546,7 +596,7 @@ export function buildTerminalToolReminder(
   if (records.some((record) => record.modelEvidenceTruncated)) {
     return "Part of the source was withheld by the model context budget. Restart the same immutable traversal with smaller maxChars pages; do not record a disposition until every page is visible.";
   }
-  if (progress.partialEvidence) return `Continue read_source_at_version with cursor ${progress.continuationCursor}; the writer remains unavailable until traversal completes.`;
+  if (progress.partialEvidence) return `Continue ${pageReaderOf(policy)} with cursor ${progress.continuationCursor}; the writer remains unavailable until traversal completes.`;
   const remaining = effectiveReaderBudget(policy, records.filter((record) => policy.readerToolNames.includes(record.name))) - progress.readerAttempts;
   return `Use the immutable evidence readers before ${policy.writerToolName}. ${remaining} bounded evidence calls remain; reserve the terminal step for the governed writer.`;
 }
@@ -589,9 +639,9 @@ export function resolveTerminalTextExit(
     const partial = progress.partialEvidence;
     return {
       kind: "nudge",
-      allowedToolNames: partial ? ["read_source_at_version"] : [...policy.readerToolNames],
+      allowedToolNames: partial ? [pageReaderOf(policy)] : [...policy.readerToolNames],
       message: partial
-        ? `Continue read_source_at_version with cursor ${progress.continuationCursor}. Do not assess the artifact before the terminal page returns hasMore=false.`
+        ? `Continue ${pageReaderOf(policy)} with cursor ${progress.continuationCursor}. Do not assess the artifact before the terminal page returns hasMore=false.`
         : "Read the bound immutable evidence from the beginning now. Do not finish from prompt context alone.",
     };
   }
