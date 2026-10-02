@@ -42,7 +42,11 @@ export async function writeGovernedToolAudit(data: {
   userId: string;
   source: GovernedExecuteSource;
   context?: GovernedExecuteContext;
-  durationMs: number;
+  /** Elapsed execution time, or null when the tool never ran (a pre-execution
+   *  refusal, or a consequential reservation not yet finalized). A literal 0
+   *  used to carry both meanings, which made "refused" and "ran in under a
+   *  millisecond" indistinguishable to every reader of this column. */
+  durationMs: number | null;
   alignmentDecision?: AlignmentGateDecision | null;
   preconditionDecision?: PreconditionOrderingDecision | null;
   /** The approval this run spent, or the one it is parked on (BI-12E5DD91). */

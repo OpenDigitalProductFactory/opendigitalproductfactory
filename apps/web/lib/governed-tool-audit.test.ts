@@ -145,3 +145,25 @@ describe("writeGovernedToolAudit — the summary is an identity, not a timing tr
     expect(await summaryFor(42)).not.toMatch(/\d+\s*ms/);
   });
 });
+
+describe("writeGovernedToolAudit — a tool that never ran has no duration", () => {
+  it("passes a null duration through to the row rather than coercing it to 0", async () => {
+    const create = vi.fn(async () => ({ id: "tool-execution-4" }));
+    setGovernedToolAuditOverridesForTests({ create });
+
+    await writeGovernedToolAudit({
+      toolName: "query_backlog",
+      rawParams: { title: "x" },
+      result: { success: false, error: "forbidden_capability", message: "refused" },
+      userId: "user-1",
+      source: "rest",
+      durationMs: null,
+    });
+
+    const row = (create.mock.calls as unknown as Array<[{ summary: string | null; durationMs: number | null }]>)[0]![0];
+    // Null, not 0: the aggregate in tool-execution-data.ts filters on
+    // `durationMs: { not: null }`, so a refusal must not enter the average.
+    expect(row.durationMs).toBeNull();
+    expect(row.summary).toBe("query_backlog: failed");
+  });
+});
