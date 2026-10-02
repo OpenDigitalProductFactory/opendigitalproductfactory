@@ -470,8 +470,8 @@ jobs:
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@10.33.2 --activate
 
-      - name: Verify digest-pinned release compose image manifests
-        run: node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only digest-pinned
+      - name: Verify third-party release compose image manifests
+        run: node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only third-party
 
       - name: Run install-dpf.sh (release mode, --no-autostart for CI)
         run: bash install-dpf.sh --headless --release --no-autostart

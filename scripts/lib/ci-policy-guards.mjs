@@ -700,6 +700,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // Undeclared inputs on purpose — its scope is mostly markdown.
     guard("hidden-unicode-instruction-files-guard", "Hidden Unicode Instruction Files Guard", [
       conformanceTest("scripts/check-hidden-unicode-instruction-files.test.mjs"),
+      // BI-5BC34E0A: the shared hostile fixtures against this guard.
+      conformanceTest("scripts/hostile-content-guard.test.mjs"),
       node("scripts/check-hidden-unicode-instruction-files.mjs"),
     ]),
     // One canonical-JSON form for hashes and signatures per import boundary

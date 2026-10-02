@@ -37,8 +37,10 @@ import { WORKROOM_SHAPE_KEYS } from "@/lib/work-management/room-shapes";
 import { WORK_SHAPE_EVIDENCE_KINDS } from "@/lib/work-management/work-shape-evidence-kinds";
 import {
   WORK_SHAPE_TRIGGER_CLASSES,
+  type WorkShapeBinding,
   type WorkShapeBudget,
   type WorkShapeDefinition,
+  type WorkShapeGate,
   type WorkShapeStopCondition,
 } from "@/lib/work-management/work-shapes";
 
@@ -266,6 +268,16 @@ export type GppShapeSchemaContracts = [
   AssertTrue<Equivalent<(typeof BUDGET_KINDS)[number], WorkShapeBudget["kind"]>>,
   // A document minus `format` is a WorkShapeDefinition: every field it adds is optional.
   AssertTrue<Omit<GppShapeDocument, "format"> extends WorkShapeDefinition ? true : false>,
+  // WorkShapeGate / WorkShapeBinding (work-shapes.ts, PR-3b-4) mirror the schema's
+  // `gate` / `binding`: same fields, same closed value sets.
+  AssertTrue<GppGate extends WorkShapeGate ? true : false>,
+  AssertTrue<Equivalent<keyof GppGate, keyof WorkShapeGate>>,
+  AssertTrue<Equivalent<GppGate["authority"], WorkShapeGate["authority"]>>,
+  AssertTrue<Equivalent<GppGate["mode"], WorkShapeGate["mode"]>>,
+  AssertTrue<Equivalent<GppGate["resolution"], WorkShapeGate["resolution"]>>,
+  AssertTrue<GppBinding extends WorkShapeBinding ? true : false>,
+  AssertTrue<Equivalent<keyof GppBinding, keyof WorkShapeBinding>>,
+  AssertTrue<Equivalent<GppBinding["enforcement"], WorkShapeBinding["enforcement"]>>,
 ];
 
 /** The published JSON Schema 2020-12 for the shape document. Same shape as `trustedArtifactJsonSchema`. */

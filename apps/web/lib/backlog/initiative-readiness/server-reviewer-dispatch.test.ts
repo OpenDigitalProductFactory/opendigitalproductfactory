@@ -138,7 +138,8 @@ describe("dispatchOwedIndependentReviews", () => {
 });
 
 describe("dispatchOwedIndependentReviews — Build Studio builds in plan (BI-926A7E90)", () => {
-  const buildRoom = { id: "row-bs", capsuleId: "WC-BS", backlogItemId: "BI-BS", requestedByPrincipal: alias("human", "user-1") };
+  // Build Studio rooms record the item's ROW id, not its BI- id.
+  const buildRoom = { id: "row-bs", capsuleId: "WC-BS", backlogItemId: "cuid-item-bs", requestedByPrincipal: alias("human", "user-1") };
   const revisionPacket = {
     targetAgent: "AGT-WS-REVIEW",
     objective: "review the design revision",
@@ -153,7 +154,7 @@ describe("dispatchOwedIndependentReviews — Build Studio builds in plan (BI-926
 
   beforeEach(() => {
     roomsByQuery([], [buildRoom]);
-    prismaMock.backlogItem.findMany.mockResolvedValue([{ itemId: "BI-BS" }]);
+    prismaMock.backlogItem.findMany.mockResolvedValue([{ id: "cuid-item-bs", itemId: "BI-BS" }]);
   });
 
   it("routes the build's owed design reviews on a live connection of the person who requested it, and records the carrier", async () => {
@@ -170,7 +171,7 @@ describe("dispatchOwedIndependentReviews — Build Studio builds in plan (BI-926
     expect(d.findConnection).not.toHaveBeenCalled();
     expect(d.execute).toHaveBeenCalledWith(expect.objectContaining({ toolName: "request_coworker", rawParams: revisionPacket, userId: "user-1" }));
     expect(prismaMock.backlogItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { itemId: { in: ["BI-BS"] }, status: { in: ["open", "in-progress"] } },
+      where: { OR: [{ itemId: { in: ["cuid-item-bs"] } }, { id: { in: ["cuid-item-bs"] } }], status: { in: ["open", "in-progress"] } },
     }));
     expect(prismaMock.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ executorKind: "build-studio", featureBuild: { is: { phase: "plan" } } }),
