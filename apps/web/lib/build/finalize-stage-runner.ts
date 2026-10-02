@@ -40,6 +40,7 @@ export const GUARD_DID_NOT_RUN_MARKER = "the guard did not run";
 export type FinalizeOutcome =
   | { status: "ready"; evidenceIds: string[] }
   | { status: "gauntlet-not-run"; reason: string }
+  | { status: "no-change" }
   | { status: "gauntlet-failed"; failedGuards: string[]; recordId?: string | null; treeSha?: string | null; reused?: true }
   | { status: "decisions-missing"; missing: string[] }
   | { status: "decisions-exhausted"; failedGuards: string[] }
@@ -67,6 +68,12 @@ export async function runBuildStudioFinalize(buildId: string, deps: FinalizeDeps
   }
 
   let captured = await deps.capture();
+  // BI-AF072BE5: a build with nothing committed has nothing to verify. Running
+  // the gauntlet on it bound no evidence ("unbound") or blamed the build for an
+  // environment failure, and the sweep re-ran it every 30 minutes.
+  if (!captured.diffPatch.trim() && captured.changedFiles.length === 0) {
+    return done(deps, buildId, { status: "no-change" });
+  }
   let gauntlet = await deps.runGauntlet(captured.diffPatch);
   let rerunForFlake = false;
   for (let round = 0; ; round++) {
