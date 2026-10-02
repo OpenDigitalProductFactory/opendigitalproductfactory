@@ -11,6 +11,12 @@
 
 The spec's AC-1 to AC-4, proven on the live install: admin@dpf.local's grants under Claude Code registration `dpfoc_ee5e9c49750e4d3f9c5141caca25e1cb` are revoked with a recorded reason, and the operator's grants under the same registration stay live.
 
+## Traceability
+
+| Deliverable | Objectives | Contracts | Flow | Acceptance |
+|---|---|---|---|---|
+| per-person-revoke | OBJ-PERSON-REVOKE, OBJ-ATTRIBUTION, OBJ-GUARDS | `revokeClientPersonGrants`, `listClientPeople`, `revokeOAuthClientPersonGrants`, `listOAuthClientPeople` | Keys for automated tools > People > Revoke this person's access | AC-1, AC-2, AC-3, AC-4 |
+
 ## Phase 1: domain function and tests
 
 - **Deliverable:** `apps/web/lib/auth/oauth-client-people.ts` with `revokeClientPersonGrants` and `listClientPeople`, taking an injected Prisma subset.
