@@ -7,6 +7,7 @@
 // compile error (AC-TYPED-KEYS).
 
 import admin from "./messages/en-US/admin.json";
+import customerMap from "./messages/en-US/customerMap.json";
 import errors from "./messages/en-US/errors.json";
 import footprint from "./messages/en-US/footprint.json";
 import geographic from "./messages/en-US/geographic.json";
@@ -22,7 +23,7 @@ import { isPseudoLocale } from "./pseudo";
 import { formatSource } from "./runtime";
 
 /** The en-US source catalog, one entry per namespace. Add a namespace here and in messages/en-US/. */
-export const SOURCE_CATALOG = { admin, approvals, errors, footprint, geographic, portfolio, setup, shell, upgrade, workrooms } as const;
+export const SOURCE_CATALOG = { admin, approvals, customerMap, errors, footprint, geographic, portfolio, setup, shell, upgrade, workrooms } as const;
 
 export type Namespace = keyof typeof SOURCE_CATALOG;
 

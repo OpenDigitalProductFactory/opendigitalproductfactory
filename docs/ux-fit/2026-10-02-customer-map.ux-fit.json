@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "map-plus-not-on-map-list",
+  "decisionInteractionId": "DI-9F60D4BC7CEF",
+  "scope": {
+    "files": [
+      "apps/web/components/customer/map/CustomerMapView.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "map-plus-not-on-map-list",
+      "map-only-silent-drop",
+      "separate-geocoding-wizard"
+    ]
+  }
+}
