@@ -198,6 +198,32 @@ const definitions: ToolDefinition[] = [
     retainAuditParameters: true,
   },
   {
+    // BI-926A7E90: a Build Studio design is an accepted BuildArtifactRevision,
+    // not a repository blob. This reader serves it with the same page shape and
+    // the same four identity keys as read_source_at_version, so the governed
+    // reviewer's terminal policy binds and verifies it the same way.
+    name: "read_build_artifact_revision",
+    description: "Read a bounded page of an accepted Build Studio artifact revision at its immutable identity. path is build-artifact-revision/<revisionId>, version is the revision id, expectedBlobId is its value digest. Continue with nextCursor or jump with startLine.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repositoryFullName: { type: "string", description: "Canonical repository owner/name the Workroom is bound to" },
+        path: { type: "string", description: "build-artifact-revision/<revisionId>" },
+        version: { type: "string", description: "The BuildArtifactRevision id" },
+        startLine: { type: "number", description: "1-based line to start at (default 1)" },
+        cursor: { type: "string", description: "Opaque nextCursor from the prior page; overrides startLine" },
+        maxLines: { type: "number", description: `Maximum lines in one page (default ${DEFAULT_READ_MAX_LINES}, max ${MAX_READ_LINES})` },
+        maxChars: { type: "number", description: `Maximum source characters in one page (default ${DEFAULT_READ_MAX_CHARS}, max ${MAX_READ_CHARS})` },
+        expectedBlobId: { type: "string", description: "Expected value digest of the revision; mismatch fails closed" },
+      },
+      required: ["path", "version", "expectedBlobId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    retainAuditParameters: true,
+  },
+  {
     name: "search_source_at_version",
     description: "Search source at an immutable version with bounded, offset-based continuation. Uses git grep and works without a source checkout.",
     inputSchema: {
@@ -375,6 +401,71 @@ async function readSourceAtVersionHandler(params: Record<string, unknown>): Prom
   };
 }
 
+const BUILD_ARTIFACT_REVISION_PATH_PREFIX = "build-artifact-revision/";
+
+async function readBuildArtifactRevisionHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const path = String(params.path ?? "");
+  const version = typeof params.version === "string" ? params.version.trim() : "";
+  const expectedBlobId = typeof params.expectedBlobId === "string" ? params.expectedBlobId.trim() : "";
+  const repositoryFullName = typeof params.repositoryFullName === "string" ? params.repositoryFullName : null;
+  const revisionId = path.startsWith(BUILD_ARTIFACT_REVISION_PATH_PREFIX) ? path.slice(BUILD_ARTIFACT_REVISION_PATH_PREFIX.length) : "";
+  if (!revisionId || revisionId !== version) {
+    return {
+      success: false,
+      error: "invalid_revision_identity",
+      message: `path must be ${BUILD_ARTIFACT_REVISION_PATH_PREFIX}<revisionId> and version must be that same revision id.`,
+    };
+  }
+  if (!expectedBlobId) {
+    return { success: false, error: "expected_blob_required", message: "expectedBlobId (the revision's value digest) is required." };
+  }
+  const { prisma } = await import("@dpf/db");
+  const revision = await prisma.buildArtifactRevision.findUnique({
+    where: { id: revisionId },
+    select: { id: true, buildId: true, field: true, revisionNumber: true, status: true, valueDigest: true, value: true },
+  });
+  if (!revision) {
+    return { success: false, error: "IMMUTABLE_SOURCE_UNAVAILABLE", message: `No Build Studio artifact revision ${revisionId} exists.` };
+  }
+  if (revision.valueDigest !== expectedBlobId) {
+    return {
+      success: false,
+      error: "immutable_blob_mismatch",
+      message: `Expected value digest ${expectedBlobId}, but revision ${revisionId} carries ${revision.valueDigest}.`,
+    };
+  }
+  const { initiativeTextFromBuildValue } = await import("@/lib/backlog/initiative-readiness/artifact-resolver");
+  const content = initiativeTextFromBuildValue(revision.value);
+  if (content === null) {
+    return { success: false, error: "IMMUTABLE_SOURCE_NOT_TEXT", message: "The revision value does not render as reviewable text." };
+  }
+  const page = pageSource({
+    content,
+    ref: version,
+    path,
+    blobId: revision.valueDigest,
+    cursor: params.cursor,
+    startLine: params.startLine,
+    maxLines: params.maxLines,
+    maxChars: params.maxChars,
+  });
+  if ("error" in page) return { success: false, error: page.error, message: page.error };
+  const { startLine, endLine, totalLines } = page;
+  const more = page.hasMore ? " (more available)" : "";
+  return {
+    success: true,
+    message: `Read ${revision.field} revision ${revision.revisionNumber} of ${revision.buildId} (${revision.status}) lines ${startLine}-${endLine} of ${totalLines}${more}.`,
+    data: {
+      ...page,
+      ...(repositoryFullName ? { repositoryFullName } : {}),
+      buildId: revision.buildId,
+      field: revision.field,
+      revisionNumber: revision.revisionNumber,
+      status: revision.status,
+    },
+  };
+}
+
 async function searchSourceAtVersionHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const { gitBlobId, gitGrep, isGitAvailable } = await import("@/lib/git-utils");
   if (!await isGitAvailable()) return { success: false, error: "Git history is not available.", message: "Git not available." };
@@ -445,6 +536,7 @@ async function compareVersionsHandler(params: Record<string, unknown>): Promise<
 const handlers: Record<string, ToolPackHandler> = {
   query_version_history: (params) => queryVersionHistoryHandler(params),
   read_source_at_version: (params) => readSourceAtVersionHandler(params),
+  read_build_artifact_revision: (params) => readBuildArtifactRevisionHandler(params),
   search_source_at_version: (params) => searchSourceAtVersionHandler(params),
   list_source_directory: (params) => listSourceDirectoryHandler(params),
   compare_versions: (params) => compareVersionsHandler(params),
@@ -457,6 +549,7 @@ export const versionHistoryPack: ToolPack = {
   grants: {
     query_version_history: ["file_read"],
     read_source_at_version: ["file_read"],
+    read_build_artifact_revision: ["file_read"],
     search_source_at_version: ["file_read"],
     list_source_directory: ["file_read"],
     compare_versions: ["file_read"],

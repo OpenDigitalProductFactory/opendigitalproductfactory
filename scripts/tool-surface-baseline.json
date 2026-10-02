@@ -3,9 +3,9 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 428,
-      "reason": "BI-EBF0F6EE: list_pull_requests, read_contributor_inventory, list_supplier_contracts and list_bills give four standing-room stages (pull-request flow, contributor intake, vendor renewal, payables) a read over data the install already holds; without them those rooms recorded 'no tool can read X' every cycle. Each is read-only, page-capped, granted only to that stage's accountable agent, and declared on the stage so the GPP parity test (C-1/C-2/C-4) proves it real and granted. Claim to check: those rooms' runs call these tools and record completed or inconclusive evidence instead of blocked.",
-      "recordedAt": "2026-10-01"
+      "value": 429,
+      "reason": "BI-926A7E90: read_build_artifact_revision. A Build Studio design is an accepted BuildArtifactRevision, not a repository blob, so the independent reviewer that approves a large-shape build had no immutable reader for the artifact it is asked to judge, and 122 plan-phase builds owed receipts nothing could request. Read-only, page-capped, identity-bound (path/version/expectedBlobId) exactly like read_source_at_version, granted only through file_read, and handed to a reviewer solely by the server-issued binding. Claim to check: revision-bound reviews record receipts whose artifactRef is the revision the reader served.",
+      "recordedAt": "2026-10-02"
     },
     "registry.packFiles": {
       "value": 105,

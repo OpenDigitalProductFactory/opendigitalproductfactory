@@ -2,6 +2,7 @@ import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES, sourcePageEndLine, source
 import { findingEvidenceMatchesRead, type InitiativeFindingEvidence } from "./backlog/initiative-readiness/disposition-contract";
 import {
   normalizeTerminalToolArguments,
+  isImmutablePageReader,
   type TerminalToolPolicy,
 } from "./tak/terminal-tool-policy";
 import {
@@ -204,7 +205,7 @@ function validateReaderExecutions(
   let priorCreatedAt = Number.NEGATIVE_INFINITY;
   for (const execution of executions) {
     if (
-      execution.toolName !== "read_source_at_version"
+      !isImmutablePageReader(execution.toolName)
       || !policy.readerToolNames.includes(execution.toolName)
     ) {
       return hydrationFailure(

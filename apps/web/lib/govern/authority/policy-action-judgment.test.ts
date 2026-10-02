@@ -130,7 +130,7 @@ describe("policy action judgment", () => {
     expect(routinePolicyActionEligibility(missing)).toEqual({ eligible: false, reason: "workroom-binding-required" });
 
     const mismatch = routine();
-    mismatch.task!.initiativeReviewBinding!.artifactRef.commitSha = "different-head";
+    (mismatch.task!.initiativeReviewBinding!.artifactRef as { commitSha: string }).commitSha = "different-head";
     expect(routinePolicyActionEligibility(mismatch)).toEqual({ eligible: false, reason: "workroom-binding-mismatch" });
   });
 
