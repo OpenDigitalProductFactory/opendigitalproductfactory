@@ -1263,6 +1263,31 @@ fi
 # decommission-legacy-stores (7c): the portal swap already succeeded and has been
 # verified, so a docker hiccup here must never mislabel a good upgrade. A service left
 # uncreated is a recoverable degraded state — the next upgrade retries it.
+#
+# BI-5ACBAC50: each missing service is created on its OWN `up`. One batched `up` of
+# every missing service meant a single image tag the registry no longer serves
+# (dpf-tts pinned travisvn/chatterbox-tts-api:v0.1.0) aborted the whole pull, so
+# Prometheus, Grafana, Loki, Alloy, both exporters and browser-use were never created
+# on an install whose every upgrade reported success. Created and failed services are
+# also written to the state mount (service-reconcile-outcome.json): stderr dies with
+# this container, and the portal has already marked the run succeeded at boot, so the
+# file is the only way the run's evidence can learn the reconcile was degraded.
+_write_reconcile_outcome() {
+  local _dir="${DPF_PROMOTER_STATE_DIR:-}"
+  [[ -n "$_dir" && -d "$_dir" && -w "$_dir" ]] || return 0
+  local _out="$_dir/service-reconcile-outcome.json"
+  node -e '
+    const [target, outcome, required, created, failed] = process.argv.slice(1);
+    const list = (s) => s.split("\n").filter(Boolean);
+    process.stdout.write(JSON.stringify({
+      targetSha: target, at: new Date().toISOString(), outcome,
+      required: list(required), created: list(created), failed: list(failed),
+    }) + "\n");
+  ' "$PROMOTE_TARGET_SHA" "$1" "$2" "$3" "$4" > "$_out.tmp" 2>/dev/null \
+    && mv -f "$_out.tmp" "$_out" 2>/dev/null \
+    || rm -f "$_out.tmp" 2>/dev/null || true
+  return 0
+}
 emit_step service-reconcile
 if [[ $_dry_run -eq 0 ]]; then
   _reconcile_required="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).requiredServices.join("\n")))')"
@@ -1275,13 +1300,30 @@ if [[ $_dry_run -eq 0 ]]; then
   done <<< "$_reconcile_required"
   if [[ ${#_reconcile_missing[@]} -gt 0 ]]; then
     printf 'step=service-reconcile-creating target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_missing[*]}")"
-    if ! docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
-      "${_f_args[@]}" up -d --no-recreate "${_reconcile_missing[@]}"; then
-      printf 'step=service-reconcile-failed target=%s\n' "$_built_sha"
-      printf 'warning: could not create newly-required service(s) %s after a successful portal promotion — the portal upgrade stands, but this install is missing capability services the release ships. Retries on the next upgrade, or run `docker compose up -d` on the install (BI-D011EBE2)\n' "$(IFS=,; printf '%s' "${_reconcile_missing[*]}")" >&2
+    _reconcile_created=()
+    _reconcile_failed=()
+    for _reconcile_svc in "${_reconcile_missing[@]}"; do
+      if docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" up -d --no-recreate "$_reconcile_svc"; then
+        _reconcile_created+=("$_reconcile_svc")
+      else
+        _reconcile_failed+=("$_reconcile_svc")
+      fi
+    done
+    if [[ ${#_reconcile_created[@]} -gt 0 ]]; then
+      printf 'step=service-reconcile-created target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_created[*]}")"
+    fi
+    if [[ ${#_reconcile_failed[@]} -gt 0 ]]; then
+      printf 'step=service-reconcile-failed target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_failed[*]}")"
+      printf 'warning: could not create required service(s) %s after a successful portal promotion — the portal upgrade stands and every other missing service was created, but this install is missing capability services the release ships. The run is recorded as degraded; it retries on the next upgrade (BI-D011EBE2, BI-5ACBAC50)\n' "$(IFS=,; printf '%s' "${_reconcile_failed[*]}")" >&2
+      _write_reconcile_outcome degraded "$_reconcile_required" \
+        "$(printf '%s\n' ${_reconcile_created[@]+"${_reconcile_created[@]}"})" "$(printf '%s\n' "${_reconcile_failed[@]}")"
+    else
+      _write_reconcile_outcome complete "$_reconcile_required" "$(printf '%s\n' "${_reconcile_created[@]}")" ""
     fi
   else
     printf 'step=service-reconcile-current target=%s\n' "$_built_sha"
+    _write_reconcile_outcome current "$_reconcile_required" "" ""
   fi
 fi
 

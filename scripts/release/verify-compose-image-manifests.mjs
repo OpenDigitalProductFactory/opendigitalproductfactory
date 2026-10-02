@@ -4,10 +4,59 @@ import { spawnSync } from "node:child_process";
 import { runGit } from "../lib/git.mjs";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const VALID_MODES = new Set(["dev", "release"]);
 const VALID_PLATFORMS = new Set(["linux", "macos"]);
-const VALID_ONLY = new Set(["all", "digest-pinned"]);
+const VALID_ONLY = new Set(["all", "digest-pinned", "third-party"]);
+
+/**
+ * Third-party images known NOT to resolve today, each naming the backlog item that
+ * re-pins it. Shrink-only: an entry that resolves again, or that compose no longer
+ * renders, fails the guard until it is removed, so an exception cannot outlive its pin.
+ */
+export const KNOWN_UNRESOLVABLE = new Map([
+  // Docker Hub deleted the v0.1.0 tag; only 1.0.1/latest remain (BI-E2763038).
+  ["travisvn/chatterbox-tts-api:v0.1.0", "BI-E2763038"],
+]);
+
+/**
+ * An image some other publisher controls, so it can disappear under us: anything
+ * that is not built by this repository. Images this repo builds are either local-only
+ * names (no registry, no tag, e.g. dpf-dev-portal) or the release's own
+ * ghcr.io/<owner>/dpf-* images, which publish-image.yml verifies itself.
+ */
+export function isThirdPartyImage(image) {
+  if (/^ghcr\.io\/[^/]+\/dpf-[^/]+$/.test(image.replace(/[:@].*$/, ""))) return false;
+  return image.includes(":") || image.includes("@");
+}
+
+export function selectImages(renderedImages, only) {
+  if (only === "digest-pinned") return renderedImages.filter((image) => image.includes("@sha256:"));
+  if (only === "third-party") return renderedImages.filter(isThirdPartyImage);
+  return renderedImages;
+}
+
+/** Split manifest results into hard failures, tolerated known exceptions and stale exceptions. */
+export function evaluateManifestResults(results, known = KNOWN_UNRESOLVABLE) {
+  const failures = [];
+  const knownMissing = [];
+  const staleExceptions = [];
+  const checked = new Set();
+  for (const { image, ok } of results) {
+    checked.add(image);
+    if (known.has(image)) {
+      if (ok) staleExceptions.push(image);
+      else knownMissing.push({ image, item: known.get(image) });
+    } else if (!ok) {
+      failures.push(image);
+    }
+  }
+  for (const image of known.keys()) {
+    if (!checked.has(image)) staleExceptions.push(image);
+  }
+  return { failures, knownMissing, staleExceptions };
+}
 
 function parseArgs(argv) {
   const { values } = utilParseArgs({
@@ -120,26 +169,20 @@ function main() {
   const root = repoRoot();
   const files = composeFiles(root, options);
   const renderedImages = listImages(root, files);
-  const images =
-    options.only === "digest-pinned"
-      ? renderedImages.filter((image) => image.includes("@sha256:"))
-      : renderedImages;
+  const images = selectImages(renderedImages, options.only);
 
   // An empty RENDERED set means compose rendering broke — still a failure.
   if (renderedImages.length === 0) {
     throw new Error(`No compose images rendered for ${options.mode}/${options.platform}.`);
   }
 
-  // An empty DIGEST-PINNED set is a legitimate, and now the expected, state
-  // (BI-F7E9A541). This guard exists to catch a pinned third-party digest that
-  // its publisher has pruned; DPF ships no digest-pinned third-party image any
-  // more, so there is nothing to check and nothing to fail. Treating "none
-  // found" as a failure would make removing the last pin impossible, which is
-  // exactly the state this guard was protecting us toward.
+  // An empty selection is legitimate for digest-pinned: DPF ships no digest-pinned
+  // third-party image any more (BI-F7E9A541). That is exactly why CI now runs
+  // third-party, which also covers tag pins (BI-DB87D925).
   if (images.length === 0) {
     console.log(
-      `[compose-image-manifests] No digest-pinned images for ${options.mode}/${options.platform} — nothing to verify. `
-        + `${renderedImages.length} image(s) rendered, none pinned by digest.`,
+      `[compose-image-manifests] No ${options.only} images for ${options.mode}/${options.platform} — nothing to verify. `
+        + `${renderedImages.length} image(s) rendered.`,
     );
     return;
   }
@@ -148,28 +191,41 @@ function main() {
     `[compose-image-manifests] Checking ${images.length} ${options.only} image(s) for ${options.mode}/${options.platform}`,
   );
 
-  const failures = [];
-  for (const image of images) {
+  const results = images.map((image) => {
     const result = verifyManifest(image);
-    if (result.ok) {
-      console.log(`[ok] ${image}`);
-    } else {
+    if (result.ok) console.log(`[ok] ${image}`);
+    else {
       console.error(`[missing] ${image}`);
-      if (result.stderr) {
-        console.error(result.stderr);
-      }
-      failures.push(image);
+      if (result.stderr) console.error(result.stderr);
     }
+    return { image, ok: result.ok };
+  });
+
+  // Exceptions only apply when the whole third-party set was checked; a narrower
+  // selection simply does not render them.
+  const known = options.only === "digest-pinned" ? new Map() : KNOWN_UNRESOLVABLE;
+  const { failures, knownMissing, staleExceptions } = evaluateManifestResults(results, known);
+  for (const { image, item } of knownMissing) {
+    console.warn(`[known-missing] ${image} — tolerated until ${item} re-pins it`);
   }
 
+  const problems = [];
   if (failures.length > 0) {
-    throw new Error(`Missing or unreachable image manifests:\n${failures.join("\n")}`);
+    problems.push(`Missing or unreachable image manifests:\n${failures.join("\n")}`);
   }
+  if (staleExceptions.length > 0) {
+    problems.push(
+      `KNOWN_UNRESOLVABLE entries that now resolve or are no longer rendered — remove them:\n${staleExceptions.join("\n")}`,
+    );
+  }
+  if (problems.length > 0) throw new Error(problems.join("\n\n"));
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }

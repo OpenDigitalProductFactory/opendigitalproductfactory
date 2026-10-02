@@ -99,9 +99,9 @@ jobs:
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@10.33.2 --activate
 
-      - name: Verify digest-pinned release compose image manifests
+      - name: Verify third-party release compose image manifests
         if: ${{ (github.event.inputs.mode || 'dev') == 'release' }}
-        run: node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only digest-pinned
+        run: node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only third-party
 
       - name: Run install-dpf.sh (real install, --no-autostart for CI)
         # Skips the autostart unit step (no user session on a GHA runner).

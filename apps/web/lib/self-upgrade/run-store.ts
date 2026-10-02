@@ -519,6 +519,44 @@ export async function recordInterruptionEvidence(
   });
 }
 
+/**
+ * BI-5ACBAC50 — merge promote.sh step 7d's outcome (which services it created and
+ * which it could not) into the run's evidence. Read/merge/write, like the other
+ * evidence writers here, so recovery-point and readiness evidence survive.
+ */
+export async function recordServiceReconcileOutcome(
+  runId: string,
+  serviceReconcile: unknown,
+): Promise<SelfUpgradeRunRow> {
+  const current = await prisma.selfUpgradeRun.findUnique({
+    where: { runId },
+    select: { completionEvidence: true },
+  });
+  return prisma.selfUpgradeRun.update({
+    where: { runId },
+    data: {
+      completionEvidence: toJson({
+        ...asEvidenceRecord(current?.completionEvidence),
+        serviceReconcile,
+      }),
+    },
+  });
+}
+
+/** Newest succeeded run that promoted this SHA (as its target or deployed identity). */
+export async function findSucceededRunForPromotedSha(sha: string): Promise<SelfUpgradeRunRow | null> {
+  return prisma.selfUpgradeRun.findFirst({
+    where: {
+      status: "succeeded",
+      OR: [
+        { targetSha: { equals: sha, mode: "insensitive" } },
+        { deployedSha: { equals: sha, mode: "insensitive" } },
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 export type PromoterReadinessReport = {
   stage: "preflight";
   owner: "bridge" | "portal" | "unavailable";
