@@ -11,6 +11,12 @@ Admin > Platform Development > Keys for automated tools has one revoke control p
 
 Live case, 2026-10-01: registration `dpfoc_ee5e…` holds 4 live refresh grants for `admin@dpf.local`. They were issued 2026-09-23 to 09-26, before consent required an explicit account choice (BI-07D21B4A), and are valid until 2026-10-23 to 10-26. The same registration holds the operator's own live grants, including the session doing this work. Nobody has used admin's grants since 2026-09-26, but any Claude Code client that still holds one can act as admin. Its approvals would then go to an account nobody reads, which is the failure the BI-F25A5FC7 handover just repaired.
 
+## Objectives
+
+- **OBJ-PERSON-REVOKE:** An operator can end one person's access under a shared AI-client registration while every other person's access under that registration stays live.
+- **OBJ-ATTRIBUTION:** Each per-person revocation records who ended the access, why, and when, and the client's People list shows it afterwards.
+- **OBJ-GUARDS:** The control refuses the caller's own grants, a missing reason, an unknown client and a non-operator caller.
+
 ## Research & Benchmarking
 
 | System | How one person's access to one app ends | What DPF takes |
@@ -52,9 +58,9 @@ The query is bounded to 200 people and reads only existing columns. There is no 
 
 ### Screen
 
-On the "Keys for automated tools" table, each active client row gets a "People (n)" disclosure. It lists the rows above. Each person other than the caller has a "Revoke this person's access" danger button. The button opens the existing `confirmDialog` and asks for a reason before calling the action. The caller's own row reads "You". Recently revoked people show "Revoked <time> — <reason>".
+On the "Keys for automated tools" table, each active browser-registered client row gets a "People" disclosure. Credentials (headless) clients belong to no person and get none. It lists the rows above. Each person other than the caller has a "Revoke this person's access" danger button. The button opens the existing `promptDialog`, the reason-taking sibling of `confirmDialog`, which requires a reason before calling the action. The caller's own row reads "You". Recently revoked people show "Revoked <time> — <reason>".
 
-All of this uses existing primitives: `Button`, `confirmDialog`, `DataTable`, `StatusBadge`, `Notice` and theme tokens.
+All of this uses existing primitives: `Button`, `promptDialog`, `DataTable`, `StatusBadge`, `Notice` and theme tokens.
 
 ### Not in scope
 
@@ -63,7 +69,9 @@ All of this uses existing primitives: `Button`, `confirmDialog`, `DataTable`, `S
 
 ## Acceptance
 
-- **AC-1:** Revoking admin@dpf.local under `dpfoc_ee5e…` revokes admin's access and refresh tokens for that client only. The operator's grants under the same client stay live and keep working.
-- **AC-2:** The revocation records the operator and reason in `revokedReason` and the time in `revokedAt`. The client's People list shows it.
-- **AC-3:** The action refuses the caller's own user id, a missing reason, an unknown client, and a non-operator caller.
-- **AC-4:** Tests cover shared-client isolation, self-protection and attribution.
+| ID | Objectives | Statement |
+|---|---|---|
+| AC-1 | OBJ-PERSON-REVOKE | Revoking admin@dpf.local under `dpfoc_ee5e…` revokes admin's access and refresh tokens for that client only; the operator's grants under the same client stay live and keep working. |
+| AC-2 | OBJ-ATTRIBUTION | The revocation records the operator and reason in `revokedReason` and the time in `revokedAt`, and the client's People list shows it. |
+| AC-3 | OBJ-GUARDS | The action refuses the caller's own user id, a missing reason, an unknown client and a non-operator caller. |
+| AC-4 | OBJ-PERSON-REVOKE, OBJ-ATTRIBUTION, OBJ-GUARDS | Tests cover shared-client isolation, self-protection and attribution. |
