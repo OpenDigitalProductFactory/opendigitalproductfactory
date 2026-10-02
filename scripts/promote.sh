@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# BI-F9EE05E5 plan item 0: PROMOTE_PHASE=build runs only prepare and the image
+# build, then stops. The portal runs it BEFORE the drain, so admission is not
+# closed while `next build` runs (live: 6-14 minutes per upgrade, 2026-10-02).
+# The swap run that follows builds again against the now-warm cache, so every
+# identity check (stamp == built HEAD == target) still runs at swap time. A
+# build-phase run writes no install state, no backup and no .env, and its steps
+# are prefixed so its trail is never read as swap progress.
+_promote_phase="${PROMOTE_PHASE:-all}"
+case "$_promote_phase" in
+  all) _step_prefix="" ;;
+  build) _step_prefix="prebuild-" ;;
+  *) printf 'error: PROMOTE_PHASE must be all or build, got %s\n' "$_promote_phase" >&2; exit 2 ;;
+esac
+
+
 # DPF self-upgrade promoter. Runs inside the dedicated `dpf-promoter` SIBLING
 # container (Dockerfile.promoter) — never inside the portal — so it survives
 # recreating the portal mid-swap. It drives the host docker daemon (mounted
@@ -426,7 +441,9 @@ _restore_capability_snapshot() {
       --state "$_install_state" --recovery-path "$_capability_recovery"
   fi
 }
-if [[ $_dry_run -eq 0 ]]; then
+# A build-phase run changes no install state, so it keeps no recovery copy and
+# sets no restore trap: a failed prebuild has nothing to undo.
+if [[ $_dry_run -eq 0 && $_promote_phase == all ]]; then
   mkdir -p "$PROMOTE_BACKUP_PATH"
   cp "$_install_state" "$_capability_recovery"
   trap '_rc=$?; if [[ $_rc -ne 0 ]]; then _restore_capability_snapshot; fi' EXIT
@@ -609,12 +626,13 @@ _inngest_keys_drifted() {
 # Only the step name and target SHA are printed — never source/backup/health
 # paths — so logs are safe to surface to operators.
 emit_step() {
+  local _step="${_step_prefix}$1"
   if [[ $_dry_run -eq 1 ]]; then
-    printf 'dry-run: step=%s target=%s\n' "$1" "$PROMOTE_TARGET_SHA"
+    printf 'dry-run: step=%s target=%s\n' "$_step" "$PROMOTE_TARGET_SHA"
   else
-    printf 'step=%s target=%s\n' "$1" "$PROMOTE_TARGET_SHA"
+    printf 'step=%s target=%s\n' "$_step" "$PROMOTE_TARGET_SHA"
   fi
-  _persist_step "$1"
+  _persist_step "$_step"
 }
 
 # Durable step trail (BI-41D7A057). stdout dies with the orchestrating portal —
@@ -717,7 +735,7 @@ fi
 # Record the currently-deployed SHA so a rollback target is captured before the
 # swap. Lightweight (no full tree copy); best-effort.
 emit_step backup
-if [[ $_dry_run -eq 0 ]]; then
+if [[ $_dry_run -eq 0 && $_promote_phase == all ]]; then
   _prev_sha=$(curl -fsS "${PROMOTE_HEALTH_URL}/sha" 2>/dev/null | tr -d '[:space:]' || true)
   printf '%s\n' "${_prev_sha:-unknown}" > "$PROMOTE_BACKUP_PATH/previous-sha.txt" 2>/dev/null || true
 fi
@@ -730,7 +748,7 @@ fi
 # handled by the existing EXIT trap, which restores these exact legacy bytes
 # before the baseline is resumed.
 emit_step install-state-migrate
-if [[ $_dry_run -eq 0 ]]; then
+if [[ $_dry_run -eq 0 && $_promote_phase == all ]]; then
   _migration_envelope="$(node "$_promoter_dir/promoter-migration-envelope.mjs")" || exit $?
   _migration_field() {
     printf '%s' "$_migration_envelope" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);const p=process.argv[1].split(".");let x=v;for(const k of p)x=x?.[k];if(typeof x!=="string"&&typeof x!=="number")process.exit(2);process.stdout.write(String(x))})' "$1"
@@ -849,6 +867,12 @@ if [[ $_dry_run -eq 0 ]]; then
     exit 1
   }
   fi
+fi
+
+if [[ $_promote_phase == build ]]; then
+  emit_step done
+  trap - EXIT
+  exit 0
 fi
 
 # --- Step 3a: ensure Postgres provides pgvector ---
