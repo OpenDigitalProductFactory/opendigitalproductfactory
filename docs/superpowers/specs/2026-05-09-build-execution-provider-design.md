@@ -570,7 +570,7 @@ From 2026-08-01 to 2026-09-29 the Build Studio sandbox produced ~41 defects: bac
 | D | The singleton container lifecycle is not reconciled | 7 | BI-547B788D, BI-4D08C53C, BI-3370373F, BI-0B95D268 |
 | E | Pool configuration drift (three sources of truth) | 2 | #5574; phantom `dpf-sandbox-2/3` slot rows re-seeded 2026-09-29 |
 
-Per-build worktrees (BI-98B723C0, 2026-06-19) separated only the working files. The git common dir (refs, the `shallow` file, config, the worktree registry), the root checkout, the generated client, `.next`, the preview process and the container itself stayed shared and mutable in place. Every fix since has patched one symptom. The benchmarking below shows that no surveyed CI or workspace system runs concurrent jobs as worktrees of one shared repository.
+Per-build worktrees ([2026-06-19 isolation design](2026-06-19-build-studio-sandbox-isolation-design.md)) separated only the working files. The git common dir (refs, the `shallow` file, config, the worktree registry), the root checkout, the generated client, `.next`, the preview process and the container itself stayed shared and mutable in place. Every fix since has patched one symptom. The benchmarking below shows that no surveyed CI or workspace system runs concurrent jobs as worktrees of one shared repository.
 
 ### The guarantee every provider owes (binding once this spec is ratified)
 
