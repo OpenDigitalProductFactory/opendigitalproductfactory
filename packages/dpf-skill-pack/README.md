@@ -170,6 +170,8 @@ plugin settings, unrelated registrations, and hook trust records. Failed
 replacement verification leaves the old registration enabled; failed cleanup
 verification restores it. An unfamiliar active DPF registration is reported for
 review rather than silently disabled.
+An unsuccessful run can therefore leave both registrations active, preserving
+the previous usable state instead of claiming convergence.
 
 An explicit personal-plugin disabled choice is preserved and leaves the old
 registration unchanged. If no personal choice exists, the updater carries over
@@ -183,9 +185,11 @@ The Codex manifest declares `interface.logo` using the packaged
 `assets/dpf-logo.svg`, copied from the platform's
 `apps/web/public/logos/open-digital-product-factory-logo.svg`. The asset travels
 with standalone copies and participates in the content-version digest.
-Claude, Grok, and Antigravity retain their existing native installation identities;
-this Codex migration does not alter a Windows installation that already has only
-the canonical registration.
+The repository's shell and PowerShell bootstraps invoke this same updater before
+computing their configuration plan, so the plan reads the migrated preferences.
+They stop on refresh failure and honor dry-run mode. Claude, Grok, and Antigravity
+retain their existing native installation identities. This migration does not
+add another Codex registration when only the canonical registration exists.
 
 ### Codex procedure
 

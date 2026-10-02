@@ -80,6 +80,13 @@ shippable features. Pre-implementation coverage receipt
 `907e1819df7616df3944cecd29df5c8e953f02c3` to the claimed scope, including the
 packaged brand asset. The receipt was recorded before source implementation.
 
+The entry-point audit found that repository bootstrap delegated to the shared
+updater only on fallback. Coverage was refreshed as
+`cmuqgtqqq0e5s01t33hg9hdse` at published commit
+`d42541e60885e5eedbe008d34b9da2a0aeca12b3` before editing the shell and PowerShell
+adapters. Both normal paths now refresh plugins before their configuration plan
+reads preferences; they share the updater rather than duplicate its migration.
+
 ## Separate access review
 
 The workroom initially had no declared sensitivity and inherited an Internal

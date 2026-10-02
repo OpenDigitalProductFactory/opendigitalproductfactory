@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -1608,6 +1609,59 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
             self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@personal"), False)
             self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), True)
 
+    def test_direct_install_inherits_disabled_legacy_preference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, native, _ = self.fixture(home)
+            config.write_text('[plugins."dpf-platform@dpf-platform-local"]\nenabled = false\n')
+            self.assertIn("disabled", self.install(home, native))
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@personal"), False)
+
+    def test_cache_mismatch_preserves_active_legacy_and_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, cache, native, _ = self.fixture(home)
+            with patch.object(updater, "resolve_codex_binary", return_value="/fake/codex"), \
+                    patch.object(updater, "codex_content_version", side_effect=["stale", "current"]), \
+                    patch("subprocess.run", side_effect=native):
+                status = updater.install_codex_plugin(home, False)
+            self.assertIn("cache does not match", status)
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), True)
+            self.assertTrue((cache / "preserved.txt").is_file())
+
+    def test_repository_bootstraps_refresh_plugins_before_computing_config_plan(self):
+        repo = Path(__file__).resolve().parents[3]
+        if not (repo / "scripts/dpf-bootstrap-agent-toolchain.sh").exists():
+            self.skipTest("Repository adapters are not shipped in standalone packs")
+        # Ordering is the invariant: the plan must observe migrated preferences,
+        # not overwrite a legacy disabled choice before the updater reads it.
+        sh = (repo / "scripts/dpf-bootstrap-agent-toolchain.sh").read_text()
+        ps = (repo / "scripts/dpf-bootstrap-agent-toolchain.ps1").read_text()
+        self.assertLess(sh.index('bash "$PLUGIN_UPDATER"'), sh.index('if ! pnpm "${bridge_args[@]}"'))
+        self.assertLess(ps.index('& $PluginUpdater'), ps.index('$planJson = & pnpm'))
+
+    def test_shell_bootstrap_refresh_propagates_failure_and_dry_run(self):
+        source = Path(__file__).resolve().parents[3] / "scripts/dpf-bootstrap-agent-toolchain.sh"
+        if not source.exists():
+            self.skipTest("Repository adapter is not shipped in standalone packs")
+        text = source.read_text()
+        block = text[text.index('# Refresh native plugin registrations'):text.index('# --- Compute plan via Node bridge')]
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = Path(tmp) / "packages/dpf-skill-pack/scripts/update-agent-toolchain.sh"
+            stub.parent.mkdir(parents=True)
+            stub.write_text('printf "%s\\n" "$@"\nexit "$DPF_TEST_EXIT"\n')
+            for exit_code in (0, 7):
+                result = subprocess.run(
+                    ["bash", "-c", 'fail() { printf "%s\\n" "$1"; }\n' + block + '\nprintf "PLAN_REACHED\\n"'],
+                    env={**os.environ, "REPO_ROOT": tmp, "MCP_ENDPOINT": "https://example.invalid/api/mcp/v1",
+                         "DRY_RUN": "1", "DPF_TEST_EXIT": str(exit_code)},
+                    capture_output=True, text=True,
+                )
+                self.assertIn("--dry-run", result.stdout)
+                self.assertIn("https://example.invalid/api/mcp/v1", result.stdout)
+                self.assertEqual(result.returncode, 0 if exit_code == 0 else 1)
+                self.assertEqual("PLAN_REACHED" in result.stdout, exit_code == 0)
+
     def test_unknown_enabled_dpf_source_is_reported_without_retiring_known_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -1639,6 +1693,9 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
         logo = manifest["interface"]["logo"]
         self.assertTrue(logo.startswith("./assets/"))
         self.assertTrue((source / logo).is_file())
+        platform_logo = source.parents[1] / "apps/web/public/logos/open-digital-product-factory-logo.svg"
+        if platform_logo.is_file():
+            self.assertEqual((source / logo).read_bytes(), platform_logo.read_bytes())
         with tempfile.TemporaryDirectory() as tmp:
             copied = Path(tmp) / "standalone"
             updater.copy_skill_pack(source, copied, False)

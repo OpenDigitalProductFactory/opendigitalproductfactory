@@ -269,6 +269,15 @@ if (-not $DryRun) {
     }
 }
 
+# Refresh native plugin registrations before the config plan reads preferences.
+# The standalone updater owns this migration on every bootstrap path.
+$PluginUpdater = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1"
+& $PluginUpdater -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpoint -DryRun:$DryRun
+if ($LASTEXITCODE -ne 0) {
+    Write-Fail2 "Plugin refresh failed; configuration planning stopped."
+    exit $LASTEXITCODE
+}
+
 # --- Compute plan via Node bridge --------------------------------------------
 $BootstrapCli = Join-Path $RepoRoot "packages\dpf-bootstrap\src\agent-toolchain\cli\compute-plan.ts"
 if (-not (Test-Path -LiteralPath $BootstrapCli)) {
@@ -300,14 +309,8 @@ if ($ReconcileStaleEntries.IsPresent) { $nodeArgs += "--reconcile-stale-entries"
 
 $planJson = & pnpm @nodeArgs 2>$null
 if ($LASTEXITCODE -ne 0 -or -not $planJson) {
-    Write-Warn2 "compute-plan failed; using standalone skill-pack updater fallback."
-    $fallback = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1"
-    if (Test-Path -LiteralPath $fallback) {
-        & $fallback -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpoint -DryRun:$DryRun
-        exit $LASTEXITCODE
-    }
-    Write-Fail2 "Standalone updater missing at $fallback; cannot proceed."
-    exit 1
+    Write-Warn2 "compute-plan failed; standalone plugin refresh completed, repository readiness is unverified."
+    exit 0
 }
 
 $plan = $planJson | ConvertFrom-Json

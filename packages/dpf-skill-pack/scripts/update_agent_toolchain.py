@@ -678,6 +678,14 @@ def codex_mcp_body(text: str, endpoint: str) -> list[str]:
     return body
 
 
+def desired_codex_plugin_enabled(text: str) -> bool:
+    for plugin_id in (CODEX_PLUGIN_ID, PLUGIN_NAME, *CODEX_LEGACY_PLUGIN_IDS):
+        choice = toml_table_enabled(text, f"plugins.{plugin_id}")
+        if choice is not None:
+            return choice
+    return True
+
+
 def ensure_codex_config(
     home: Path,
     mcp_url: str,
@@ -701,11 +709,7 @@ def ensure_codex_config(
     # ships an equivalent command.
     path = codex_config_path(home)
     text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
-    current_enabled = toml_table_enabled(text, f"plugins.{CODEX_PLUGIN_ID}")
-    legacy_enabled = toml_table_enabled(text, f"plugins.{PLUGIN_NAME}")
-    if legacy_enabled is None:
-        legacy_enabled = toml_table_enabled(text, f"plugins.{CODEX_LEGACY_PLUGIN_IDS[0]}")
-    desired_enabled = current_enabled if current_enabled is not None else legacy_enabled
+    desired_enabled = desired_codex_plugin_enabled(text)
     # Pre-plugin-registry DPF installers wrote the bare key. Current Codex
     # requires <plugin>@<marketplace> and logs the bare key as invalid.
     text = remove_toml_table(text, f"plugins.{PLUGIN_NAME}")
@@ -1031,7 +1035,7 @@ def install_codex_plugin(home: Path, dry_run: bool) -> str:
         return f"dry-run: would install and verify {selector}, then disable verified legacy DPF registrations"
     config = codex_config_path(home)
     before = config.read_text(encoding="utf-8-sig") if config.exists() else ""
-    desired_enabled = toml_table_enabled(before, f"plugins.{CODEX_PLUGIN_ID}") is not False
+    desired_enabled = desired_codex_plugin_enabled(before)
     try:
         installed = subprocess.run(
             [codex, "plugin", "add", selector, "--json"],
