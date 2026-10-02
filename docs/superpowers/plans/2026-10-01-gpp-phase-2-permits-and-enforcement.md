@@ -593,6 +593,50 @@ AC-FORGERY.
   `gate` descriptor whose `obtain` is `out_of_band`. `permit_required` has disposition `awaiting-input`.
 - **Test seams for fixture bindings and enforcement entries refuse outside the test runner.**
 
+**As built (PR-G, pre-promotion hardening).** PR-E listed three defects to fix before any binding
+is promoted. None changed behaviour while the enforced set is empty, and PR-G keeps it empty.
+
+- **The use count is part of the verdict.** `GppPermitStore.consumePermit` now resolves `true` only
+  for the presentation whose single conditional update (`updateMany` guarded by `useCount < maxUses`)
+  matched the row. `resolveMonitorPermit` sets a losing presentation's state to `exhausted`
+  (`detail.useTakenConcurrently`), so exactly one concurrent presentation of a single-use handle is
+  `valid`. PR-D's rule holds: a forged or mismatched presentation still never attempts the update. A
+  thrown update is recorded (`detail.consumeFailed`) and leaves the verdict as checked; under an
+  enforced binding it downgrades with the new reason `permit-consume-failed`, following PR-E's rule
+  that infrastructure faults downgrade. Shipped-config call outcomes are unchanged; a shadow
+  observation differs only in the race (the loser now reads `exhausted`) and in the consume-fault case
+  (one added detail key). Tests: `lib/gpp/permit-concurrent-replay.test.ts` (forced interleaving
+  against the store seam), `lib/mcp-governed-execute-permit-hardening.test.ts` (shipped and enforced),
+  and `lib/gpp/permit-store.pg.test.ts` (12 concurrent updates against PostgreSQL; runs where
+  `DATABASE_URL` reaches a migrated database, as in CI's web shards, and skips otherwise).
+- **The refusal envelope and the minted handle are on the MCP result's `_meta`.** `permitResultMeta`
+  (`lib/gpp/permit-carriage.ts`) is called by `/api/mcp/v1` `tools/call`. A `permit_required`
+  result's `data.authorization` is copied to `_meta["io.modelcontextprotocol/authorization"]`. The
+  handle minted when a gate admits the call goes to
+  `_meta["com.opendigitalproductfactory/authorization-handle"]` as `{ handle, expiresAt }`, with
+  `expiresAt` from the new `governance.permitHandleExpiresAt`. Only an outward, authority or
+  irreversible call a gate admitted mints, so only those results carry it. Every other result has no
+  `_meta`, and `content` and `structuredContent` are unchanged. The SEP draft
+  (`docs/superpowers/specs/2026-10-01-mcp-transaction-authorization-sep-draft.md`) is not on main, so
+  the envelope shape is PR-E's (already built by `permitRequiredData`). The REST route
+  `/api/mcp/call` already returns the whole `GovernedExecuteResult`, including `governance`, and is
+  unchanged.
+- **Human checkpoint and direct calls: fixed in the guard, not the runtime.** The coworker escalation
+  gate, which admits `human-checkpoint-admit`, runs only when the call carries `context.agentId`. A
+  direct call has none, so under an enforced checkpoint binding it would be refused `handle_required`
+  with no way to obtain the permit. The runtime alternative, treating a direct call as its own
+  checkpoint, would widen authority. "No agentId" does not mean a person: external coding agents call
+  `/api/mcp/v1` with agent-unbound tokens and no `agentId`, `/api/mcp/call` takes `agentId` from the
+  request body, and anything holding a person's session can omit it. So the monitor cannot tell a
+  person from an agent acting with that person's credential, and an agent could satisfy a human
+  checkpoint just by not naming itself. Instead, `promotionRefusals` refuses an `approved-envelope`
+  binding over any tool with `directCallReachable` (an omitted value counts as reachable). The live
+  ratchet marks every registered tool reachable, because `/api/mcp/call` accepts any `PLATFORM_TOOLS`
+  name. `human-checkpoint-admit` is therefore not promotable over any tool. The runtime is unchanged:
+  an enforced checkpoint binding still refuses a direct call (fail closed). Lifting this refusal needs
+  a design that makes the checkpoint run on direct paths, such as a step-up approval for the direct
+  caller, or that makes the tool coworker-only. It is not a flag flip.
+
 ## PR-F: one Build Studio plan→build transition function (C-8)
 
 **Goal.**
@@ -721,6 +765,12 @@ satisfied.
 - [x] Ratchet: enforcement entries need a DI id, O/A/I-only tools and no direct sites
 - [ ] AC-ENFORCE tests; Annex A note; local-CI gate; PR (tests and Annex A note done; local-CI gate and PR pending)
 - [x] Promotion procedure documented; no binding promoted
+
+### PR-G (pre-promotion hardening)
+- [x] Atomic use count as part of the verdict; concurrent-replay tests (store seam, monitor, PG-gated)
+- [x] `permit_required` envelope and minted handle (with expiry) on the `/api/mcp/v1` result `_meta`
+- [x] Human-checkpoint promotion refused for directly reachable tools (promotion criterion 6)
+- [ ] Local-CI gate; PR
 
 ### PR-F
 - [ ] Git-history note in the PR body: when each of the five plan→build paths gained or lacked the WWMD gate

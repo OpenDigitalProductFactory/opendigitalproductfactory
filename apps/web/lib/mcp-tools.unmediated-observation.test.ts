@@ -35,7 +35,7 @@ beforeEach(() => {
   setGppPermitStoreOverrideForTests({
     createPermit: async () => { throw new Error("not used"); },
     findPermitByPermitId: async () => null,
-    consumePermit: async () => undefined,
+    consumePermit: async () => true,
     createObservation: async (data) => { observations.push(data); },
     findLineage: async () => ({ found: false }),
   });

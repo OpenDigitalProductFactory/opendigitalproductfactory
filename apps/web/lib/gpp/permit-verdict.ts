@@ -184,6 +184,8 @@ export type MonitorPermitOutcome = {
    * cite or replay; null when nothing was minted. Never the presented handle.
    */
   handle: string | null;
+  /** PR-G: when the minted permit (`handle`) expires, ISO-8601. Present only when a permit was minted. */
+  handleExpiresAt?: string;
   detail: Record<string, unknown>;
 };
 
@@ -212,15 +214,23 @@ async function findPresented(
   }
 }
 
-async function consume(row: PermitRow): Promise<void> {
+/**
+ * PR-G: take the use as part of the verdict. `won` means this presentation
+ * took the use; `lost` means the permit was spent between the read and the
+ * conditional update (a concurrent presentation won), so this presentation is
+ * `exhausted`; `failed` is an infrastructure fault, recorded and never judged
+ * against the caller.
+ */
+async function consume(row: PermitRow): Promise<"won" | "lost" | "failed"> {
   try {
-    await gppPermitStore().consumePermit(row);
+    return (await gppPermitStore().consumePermit(row)) ? "won" : "lost";
   } catch (err) {
     console.error(
       "[gpp-permit] permit use count failed permit=%s: %s",
       JSON.stringify(row.permitId),
       err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
     );
+    return "failed";
   }
 }
 
@@ -240,6 +250,13 @@ async function consume(row: PermitRow): Promise<void> {
  * lineage verdicts are properties of the install and the ledger, not of the
  * presenter, so they still count the use; a forged or replayed-with-other-
  * arguments presentation never spends the legitimate permit's use.
+ *
+ * PR-G: counting the use is part of the verdict. The use is taken by one
+ * conditional update; a presentation whose update matched no row (another
+ * presentation of the same handle took the last use after both read it) has
+ * its state set to `exhausted`, so exactly one concurrent presentation of a
+ * single-use handle is `valid`. A failed update is recorded
+ * (`detail.consumeFailed`) and leaves the verdict as checked.
  */
 export async function resolveMonitorPermit(input: MonitorPermitInput): Promise<MonitorPermitOutcome> {
   const binding = bindingForAdmittedCall({
@@ -270,17 +287,19 @@ export async function resolveMonitorPermit(input: MonitorPermitInput): Promise<M
     const presented = handle ? await findPresented(handle, parsed) : null;
     const evaluated = presented ? presented.row : minted?.row ?? null;
     const call = { toolName: input.toolName, params: input.params, now: input.now };
-    const checks = evaluated ? await checkPermit(evaluated, parsed, call) : null;
+    let checks = evaluated ? await checkPermit(evaluated, parsed, call) : null;
+    const consumed = evaluated && checks && checks.state === "valid" && checks.mac !== "invalid" && checks.paramHash !== "mismatch"
+      ? await consume(evaluated)
+      : null;
+    if (checks && consumed === "lost") checks = { ...checks, state: "exhausted" };
     const verdict: GppPermitVerdict = checks ? verdictFromChecks(checks) : "absent";
-    if (evaluated && checks && checks.state === "valid" && checks.mac !== "invalid" && checks.paramHash !== "mismatch") {
-      await consume(evaluated);
-    }
     return {
       verdict,
       permitId: evaluated?.permitId ?? null,
       permitRowId: evaluated?.id ?? null,
       bindingId: evaluated?.bindingId ?? binding?.bindingId ?? null,
       handle: minted?.handle ?? null,
+      ...(minted ? { handleExpiresAt: minted.row.expiresAt.toISOString() } : {}),
       detail: {
         handlePresented: Boolean(handle),
         ...(handle ? { handleFormat: parsed ? "signed" : "bare" } : {}),
@@ -289,6 +308,8 @@ export async function resolveMonitorPermit(input: MonitorPermitInput): Promise<M
         ...(minted && minted.row.id !== evaluated?.id ? { mintedPermitId: minted.row.permitId } : {}),
         ...(binding && !minted ? { mintFailed: true } : {}),
         ...(presented?.failed ? { presentedLookupFailed: true } : {}),
+        ...(consumed === "lost" ? { useTakenConcurrently: true } : {}),
+        ...(consumed === "failed" ? { consumeFailed: true } : {}),
       },
     };
   } catch (err) {

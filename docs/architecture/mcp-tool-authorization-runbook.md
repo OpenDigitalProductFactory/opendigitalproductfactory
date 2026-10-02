@@ -201,8 +201,16 @@ it was minted for. The monitor also records `mac_invalid` (the permit row does n
 `param_mismatch` (the handle was replayed with other arguments), `lineage_missing` or
 `lineage_unsealed` (the decision that admitted the call is absent or not sealed), and `unsigned`
 (the install has no permit key, so it cannot verify). A bare permit id is still accepted as a handle
-and is checked against the row's stored MAC. The handle is not yet returned in the `tools/call`
-response; today the monitor returns it to in-process callers only (`governance.permit`).
+and is checked against the row's stored MAC. A permit is single-use: when two calls present the same
+handle at the same moment, exactly one takes the use (`valid`) and the other is recorded `exhausted`.
+
+When a gate admits an outward, authority or irreversible call, the `tools/call` result carries the
+handle minted for it, with its expiry, on the result's `_meta`:
+`_meta["com.opendigitalproductfactory/authorization-handle"] = { "handle": "...", "expiresAt": "<ISO-8601>" }`.
+To replay it, send the `handle` string (not the object) under the same key in the request's
+`params._meta`. Results of other calls carry no `_meta`. The handle authorizes exactly one call: keep it
+out of logs and transcripts. Today it is single-use and the admitted call itself spends that use, so
+replaying it records `exhausted`.
 
 Once a binding is promoted, a call under it that carries no valid permit from that binding returns
 `error: "permit_required"` with disposition `awaiting-input`. `data.authorization` follows the MCP
@@ -210,7 +218,10 @@ extension draft's denial envelope: `reason: "insufficient_authorization"` and on
 `transaction_authorization` remediation hint per enforced gate, with `condition` (`handle_required`,
 `handle_invalid` or `handle_mismatch`) and a `gate` descriptor (`gateRef` such as
 `tak-alignment-admit@1`, `title`, `obtain: "out_of_band"`, `gateKey`, `authority`). `data.permit`
-carries the verdict and the carriage key. Do not retry the same call unchanged, and do not change the
+carries the verdict and the carriage key. The same denial envelope is also on the tool result's
+`_meta["io.modelcontextprotocol/authorization"]` (`reason`, `remediation: "available"`,
+`remediationHints`), where a client implementing the extension looks for it; `structuredContent` is
+unchanged. Do not retry the same call unchanged, and do not change the
 arguments to fit an old handle: pass the named gate and call again. A missing permit key on the
 install, unsealed lineage the binding did not accept, or an infrastructure fault never produces this
 refusal; the call runs and the observation records `enforcement_downgraded`. Promotion happens only

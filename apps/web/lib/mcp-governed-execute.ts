@@ -713,6 +713,7 @@ export async function governedExecuteTool(
     governance: {
       durationMs,
       ...(gppPermit?.handle ? { permit: { handle: gppPermit.handle, verdict: gppPermit.verdict } } : {}),
+      ...(gppPermit?.handle && gppPermit.handleExpiresAt ? { permitHandleExpiresAt: gppPermit.handleExpiresAt } : {}),
     },
   };
 }
