@@ -1,0 +1,283 @@
+#!/usr/bin/env node
+// scripts/land-branch.mjs — the repetitive spine, as one command.
+//
+//   pnpm land -- --message-file msg.txt --title "feat(x): ..." --body-file body.md
+//   pnpm land -- --message-file msg.txt --dry-run
+//   pnpm land -- --json
+//
+// WHY THIS EXISTS, WITH RECEIPTS. Every piece of this already existed —
+// gate:context (what CI will demand of this diff), the derived-artifacts
+// registry (what to regenerate and the command to do it), gate:local (every
+// deterministic gate against the working tree, reading the planned commit
+// message), gate:wait (the queue/retry/classification policy as code),
+// pr:health, merge-policy. Nothing chained them, so every agent rebuilt the
+// chain by hand, in prose, once per branch.
+//
+// Measured on one session of nine PRs, by the agent that drove it:
+//   - gate:context was run ZERO times, so required attestations and the
+//     artifacts needing regeneration were discovered by hitting the refusal;
+//   - gate:local was run zero times, so six commit -> refusal -> fix -> amend
+//     cycles happened that it exists to collapse into one;
+//   - gate:wait was run zero times, and roughly fifteen bash polling loops were
+//     hand-written instead. Several were wrong in ways that matter: one treated
+//     an INCONCLUSIVE queue state as a terminal verdict, one treated STALE as
+//     non-terminal and spun for 39 minutes saying nothing, one grepped for a
+//     failure pattern the test runner does not emit and reported a red suite as
+//     green.
+//
+// gate-wait.mjs's own header already named this failure: "Callers used to write
+// that policy in bash, once per session, and get it wrong... ceremony belongs in
+// code, not in whoever is driving the gate." This applies the same reasoning one
+// level up: the whole landing sequence is ceremony, and an agent re-deriving it
+// each time spends context on it and gets it subtly wrong.
+//
+// WHAT IT WILL NOT DO. It never overrides a gate, never writes an attestation
+// it was not given, and never converts an infrastructure outcome into a verdict
+// about the diff — gate:wait owns that classification and this trusts it. A
+// refusal here stops the sequence and prints the one next action.
+
+import { parseArgs } from "node:util";
+import { spawnSync } from "node:child_process";
+import { readFileSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/** Run a command, inheriting stdio so gate output stays visible to the operator. */
+function run(cmd, args, { capture = false, allowFail = false } = {}) {
+  const r = spawnSync(cmd, args, {
+    cwd: ROOT,
+    encoding: "utf8",
+    stdio: capture ? "pipe" : "inherit",
+  });
+  if (!allowFail && r.status !== 0) {
+    return { ok: false, status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+  }
+  return { ok: r.status === 0, status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+}
+
+const git = (...args) => run("git", args, { capture: true, allowFail: true }).out.trim();
+
+/** Steps are named so a failure says which one stopped, and what to do next. */
+export const STEPS = [
+  "preconditions",
+  "context",
+  "regenerate",
+  "local-gates",
+  "commit",
+  "gate",
+  "push",
+  "pull-request",
+  "auto-merge",
+];
+
+/**
+ * Attestations that belong in the PR BODY rather than a commit trailer.
+ *
+ * The distinction is not cosmetic and it is easy to get wrong: the Seed
+ * Contribution Fit gate reads the push-event body, so the same text in a commit
+ * message does not satisfy it. gate:context knows which ones these are; this
+ * reads that rather than hard-coding a list that would drift.
+ */
+export function bodyRequiredTrailers(context) {
+  return (context.trailers ?? []).filter(
+    (t) => t.level === "required" && /PR BODY/i.test(t.note ?? ""),
+  );
+}
+
+/** @returns {string[]} trailers that gate:context requires but the body omits. */
+export function missingBodyAttestations(context, body) {
+  return bodyRequiredTrailers(context)
+    .filter((t) => !body.includes(t.trailer))
+    .map((t) => `${t.trailer} (${t.because})`);
+}
+
+function readContext() {
+  const r = run("pnpm", ["gate:context", "--", "--json"], { capture: true, allowFail: true });
+  const start = r.out.search(/[{[]/);
+  if (start < 0) return null;
+  try {
+    return JSON.parse(r.out.slice(start));
+  } catch {
+    return null;
+  }
+}
+
+function fail(step, message, next) {
+  process.stderr.write(`\n[land] STOPPED at ${step}\n\n  ${message}\n`);
+  if (next) process.stderr.write(`\n  next: ${next}\n`);
+  process.exitCode = 1;
+}
+
+function main() {
+  // pnpm forwards the `--` separator through in the documented
+  // `pnpm land -- --flag` form. `allowPositionals` absorbs it instead of a
+  // hand-rolled argv walk — which check-no-hand-rolled-argv rightly refuses,
+  // and which it caught in the first draft of this file.
+  const { values } = parseArgs({
+    allowPositionals: true,
+    options: {
+      "message-file": { type: "string" },
+      "body-file": { type: "string" },
+      title: { type: "string" },
+      "dry-run": { type: "boolean", default: false },
+      json: { type: "boolean", default: false },
+      base: { type: "string", default: "main" },
+    },
+  });
+  const dry = values["dry-run"];
+  const log = (s) => process.stdout.write(`[land] ${s}\n`);
+
+  // ── 1. preconditions ──────────────────────────────────────────────────────
+  const branch = git("rev-parse", "--abbrev-ref", "HEAD");
+  if (!branch || branch === "HEAD") {
+    return fail("preconditions", "detached HEAD — a landing needs a topic branch.",
+      "git switch -c feat/<slug>");
+  }
+  if (branch === values.base) {
+    return fail("preconditions", `on ${values.base} — work never lands FROM the base branch.`,
+      "./scripts/new-dev-worktree.sh <slug>");
+  }
+  const readiness = resolve(ROOT, ".dpf-worktree-readiness.json");
+  if (existsSync(readiness)) {
+    try {
+      const state = JSON.parse(readFileSync(readiness, "utf8"));
+      if (state.status && state.status !== "compile-ready") {
+        return fail("preconditions",
+          `worktree is ${state.status}; local gates cannot run and would env-skip.`,
+          "node scripts/lib/bootstrap-worktree-deps.mjs .");
+      }
+    } catch { /* an unreadable readiness file is not a reason to refuse */ }
+  }
+  log(`branch ${branch}, base ${values.base}`);
+
+  // ── 2. context: what will CI demand of this diff ──────────────────────────
+  const context = readContext();
+  if (!context) {
+    return fail("context", "could not read `pnpm gate:context --json`.",
+      "run it directly and fix the failure it reports");
+  }
+  const derived = context.derivedArtifacts ?? [];
+  log(`${context.changedFileCount} changed file(s); ${(context.trailers ?? []).length} attestation(s); `
+    + `${derived.length} derived artifact group(s)`);
+
+  // ── 3. regenerate derived artifacts, from the commands the registry carries ─
+  for (const d of derived) {
+    if (!d.generate) {
+      log(`! ${d.id}: no generate command recorded — regenerate it yourself`);
+      continue;
+    }
+    log(`regenerating ${d.id}: ${d.generate.join(" ")}`);
+    if (dry) continue;
+    const r = run(d.generate[0], d.generate.slice(1), { capture: true, allowFail: true });
+    if (!r.ok) {
+      return fail("regenerate", `${d.id} failed to regenerate.\n${r.out.slice(-1200)}`,
+        d.generate.join(" "));
+    }
+  }
+
+  // ── 4. local gates, against the working tree and the PLANNED message ───────
+  // NO `--` SEPARATOR HERE. pnpm swallows the flag that follows it in this
+  // position, so `pnpm gate:local -- --message-file x` leaves gate:local with no
+  // message and its trailer-reading gates then report the attestation as
+  // missing. That cost a full debug cycle while writing this file: the trailer
+  // was present, the extractor parsed it correctly standalone, and the gate
+  // still refused — because the message never arrived.
+  const localArgs = ["gate:local"];
+  if (values["message-file"]) localArgs.push("--message-file", values["message-file"]);
+  log("running gate:local (every deterministic gate CI will run, pre-commit)");
+  if (!dry) {
+    const r = run("pnpm", localArgs, { allowFail: true });
+    if (!r.ok) {
+      return fail("local-gates",
+        "a deterministic gate refused. These are the same gates CI runs — fixing them here is "
+          + "what this step exists for, and overriding one is not an option.",
+        "fix the findings above, then re-run pnpm land");
+    }
+  }
+
+  // ── 5. commit ─────────────────────────────────────────────────────────────
+  if (!values["message-file"]) {
+    return fail("commit", "--message-file is required: the commit message is the one thing this "
+      + "cannot derive, and a generated message would be the least useful part of the change.",
+      'write the message, then: pnpm land -- --message-file msg.txt --title "..."');
+  }
+  const staged = git("status", "--porcelain");
+  if (staged) {
+    log("committing (DCO-signed)");
+    if (!dry) {
+      run("git", ["add", "-A"], { capture: true, allowFail: true });
+      const r = run("git", ["commit", "-s", "-F", values["message-file"]], { allowFail: true });
+      if (!r.ok) return fail("commit", "git commit refused (see hook output above).", "fix, then re-run");
+    }
+  } else {
+    log("nothing to commit — landing the existing HEAD");
+  }
+
+  // ── 6. the gate, with the retry/classification policy already written ─────
+  log("running gate:wait (queue, retry and infra classification live in that script)");
+  if (!dry) {
+    const r = run("pnpm", ["gate:wait"], { allowFail: true });
+    if (r.status === 7) {
+      return fail("gate", "deadline elapsed without a verdict — NOTHING was established about the "
+        + "diff. This is not a failure of the code.", "re-run pnpm land when the queue drains");
+    }
+    if (!r.ok) {
+      return fail("gate", "the gate failed for this SHA.",
+        "read `pnpm pregate:status` and the full log it names");
+    }
+  }
+
+  // ── 7. push ───────────────────────────────────────────────────────────────
+  log(`pushing ${branch}`);
+  if (!dry) {
+    const r = run("git", ["push", "-u", "origin", branch], { allowFail: true });
+    if (!r.ok) return fail("push", "push refused (pre-push gate or remote).", "read the output above");
+  }
+
+  // ── 8. pull request ───────────────────────────────────────────────────────
+  const existing = run("gh", ["pr", "view", "--json", "number", "-q", ".number"],
+    { capture: true, allowFail: true });
+  const prNumber = existing.ok ? existing.out.trim() : "";
+  let body = values["body-file"] && existsSync(values["body-file"])
+    ? readFileSync(values["body-file"], "utf8")
+    : "";
+  const missing = missingBodyAttestations(context, body);
+  if (missing.length > 0) {
+    return fail("pull-request",
+      "the PR BODY must carry these attestations, and this will not invent them:\n    - "
+        + missing.join("\n    - "),
+      "add them to your --body-file, then re-run pnpm land");
+  }
+  if (prNumber) {
+    log(`PR #${prNumber} already open for this branch`);
+  } else if (!values.title) {
+    return fail("pull-request", "--title is required to open a PR.", 'pass --title "type(scope): ..."');
+  } else {
+    log("opening the PR");
+    if (!dry) {
+      const args = ["pr", "create", "--base", values.base, "--head", branch, "--title", values.title];
+      if (body) args.push("--body", body); else args.push("--body", "");
+      const r = run("gh", args, { capture: true, allowFail: true });
+      if (!r.ok) return fail("pull-request", `gh pr create failed.\n${r.out.slice(-800)}`, "read the output");
+      log(r.out.trim());
+    }
+  }
+
+  // ── 9. auto-merge, and VERIFY it took ─────────────────────────────────────
+  if (!dry) {
+    run("gh", ["pr", "merge", "--squash", "--auto"], { capture: true, allowFail: true });
+    const check = run("gh", ["pr", "view", "--json", "autoMergeRequest", "-q",
+      ".autoMergeRequest.mergeMethod"], { capture: true, allowFail: true });
+    const method = check.out.trim();
+    // Verified rather than assumed: `gh pr merge --auto` has reported success
+    // while the PR never entered the queue. An unverified enable is a PR that
+    // sits open looking finished.
+    log(method ? `auto-merge enabled (${method})` : "! auto-merge did NOT take — enable it by hand");
+  }
+
+  log("done. The queue owns it from here; `pnpm pr:health` reports readiness.");
+}
+
+if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) main();

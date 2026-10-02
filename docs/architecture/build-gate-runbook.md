@@ -130,3 +130,21 @@ That delegation is deliberate rather than tidy. `classifyWorktree` places its li
 - `DPF_WORKTREE_JANITOR_AUTO_REAP` — remove rather than report. Default off, so the event can be soaked before it deletes.
 
 A scan that cannot reach its subject logs UNHEALTHY and returns `ran: false`. It never reports success, because the fleet backstop already proved how expensive that mistake is: its script was never copied into the image, every run died with `MODULE_NOT_FOUND`, and the caught error read exactly like a clean sweep (BI-B3370CB2).
+
+## A refusal carries its own remedy
+
+`pregate:preflight` used to end a failure with a pointer — "see every constraint
+that applies to this diff: `pnpm gate:context`". A pointer costs the reader a
+decision it usually declines: over one session of nine PRs that line appeared on
+every run and `gate:context` was invoked zero times, so every required
+attestation and every stale derived artifact was found by colliding with its
+refusal instead.
+
+The refusal now EMITS the obligations: which attestations this diff requires,
+which of them belong in the PR body rather than a commit trailer (the Seed
+Contribution Fit gate reads the push-event body, so the same text in a trailer
+does not satisfy it), and each stale derived artifact with the command that
+regenerates it. `pnpm land` consumes the same data.
+
+The rule behind it: an obligation an agent has to remember does not survive
+context compaction. Put it in the gate's output, or in code, and it survives.
