@@ -67,7 +67,7 @@ function handoverRefused(refusal: HandoverRefusal) {
     ? { success: false as const, error: "workroom_handover_not_owner",
         message: "The account your assistant is connected as can see this workroom but does not own it. "
           + "Only the room's owner can hand it to an assistant, so approving a handover from this account cannot work. "
-          + "Either connect your assistant while signed in as the room's owner and ask again, or ask the owner to invite this assistant to the room." }
+          + "Either connect your assistant while signed in as the room's owner and ask again, or ask the owner to add this assistant under Participants in the room." }
     : { success: false as const, error: "workroom_handover_assistant_in_room",
         message: "This assistant was removed from this workroom or limited to observing it, so it cannot take the room over. "
           + "Only the room's owner can give it back the access it had, from the room's participants." };

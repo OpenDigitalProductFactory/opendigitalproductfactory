@@ -37,7 +37,7 @@ function store(): GppPermitStore {
       return row;
     },
     findPermitByPermitId: async (permitId) => rows.find((row) => row.permitId === permitId) ?? null,
-    consumePermit: async () => undefined,
+    consumePermit: async () => true,
     createObservation: async () => undefined,
     findLineage: async () => ({ found: true, sealed: true }),
   };

@@ -37,7 +37,16 @@ afterEach(() => {
 
 const liveTools: PromotionContext["tools"] = PLATFORM_TOOLS.map((tool) => {
   const classification = classifyConsequentialTool({ toolName: tool.name, tool });
-  return { name: tool.name, consequential: classification.consequential, alignmentRequired: classification.alignmentRequired };
+  return {
+    name: tool.name,
+    consequential: classification.consequential,
+    alignmentRequired: classification.alignmentRequired,
+    // PR-G: every registered tool can be called with no coworker agentId —
+    // /api/mcp/call accepts any PLATFORM_TOOLS name with agentId optional, and
+    // /api/mcp/v1 passes an agent-unbound token's call with none — so the
+    // coworker escalation gate does not run for every call to it.
+    directCallReachable: true,
+  };
 });
 const liveSites: CallSite[] = findUnmediatedExecuteSites(readWebSourceFiles());
 
@@ -219,5 +228,76 @@ describe("promotion ratchet on fixtures", () => {
   it("refuses an unknown lineage policy", () => {
     const bad = { ...entry, lineage: "whatever" } as unknown as BindingEnforcementEntry;
     expect(promotionRefusals("fixture-admit", bad, ctx()).join("\n")).toMatch(/lineage/);
+  });
+});
+
+// PR-G: a human-checkpoint binding is admitted by the coworker escalation
+// gate, which runs only for a call carrying a coworker agentId. A direct call
+// (a person over REST, an agent-unbound token) never passes it, so under an
+// enforced checkpoint binding it could never carry a permit. The runtime does
+// not treat a direct call as its own checkpoint, because it cannot tell a
+// person from an agent using that person's session or token; the guard
+// refuses the promotion instead.
+describe("promotion ratchet: a human-checkpoint binding and direct calls (PR-G)", () => {
+  const checkpoint: GppBinding = {
+    bindingId: "fixture-checkpoint-admit",
+    version: 1,
+    gateKey: "coworker-authority-escalation",
+    authority: "wwwd",
+    resolver: { module: "lib/govern/authority/coworker-tool-authority-gate", exportName: "enforceCoworkerToolAuthority" },
+    admission: "approved-envelope",
+    tools: ["outward_tool"],
+    toolPredicate: (tool) => tool.consequential,
+    reason: "oai",
+  };
+  const entry: BindingEnforcementEntry = {
+    mode: "enforced", decisionId: "DI-0123456789AB", ratifiedAt: "2026-10-01", evidenceRef: "obs:14d", lineage: "unsealed-accepted",
+  };
+  const ctx = (tool: PromotionContext["tools"][number]): PromotionContext => ({
+    bindings: [checkpoint], shadowList: [], tools: [tool], directSites: [],
+  });
+
+  it("refuses a checkpoint binding over a tool a direct call can reach", () => {
+    const refusals = promotionRefusals("fixture-checkpoint-admit", entry, ctx({
+      name: "outward_tool", consequential: true, alignmentRequired: true, directCallReachable: true,
+    }));
+    expect(refusals.join("\n")).toMatch(/outward_tool is reachable by a direct call.*human-checkpoint gate never runs/);
+  });
+
+  it("fails closed: a tool whose reach is not stated is treated as reachable", () => {
+    const refusals = promotionRefusals("fixture-checkpoint-admit", entry, ctx({
+      name: "outward_tool", consequential: true, alignmentRequired: true,
+    }));
+    expect(refusals.join("\n")).toMatch(/reachable by a direct call/);
+  });
+
+  it("accepts a checkpoint binding only over tools no direct call can reach", () => {
+    expect(promotionRefusals("fixture-checkpoint-admit", entry, ctx({
+      name: "outward_tool", consequential: true, alignmentRequired: false, directCallReachable: false,
+    }))).toEqual([]);
+  });
+
+  it("does not apply to an alignment binding, whose gate runs for direct calls too", () => {
+    const alignment: GppBinding = {
+      ...checkpoint, bindingId: "fixture-alignment-admit", gateKey: "tak-alignment", admission: "alignment-approve",
+      resolver: { module: "lib/tak/alignment-tool-gate", exportName: "runTakAlignmentGate" },
+    };
+    expect(promotionRefusals("fixture-alignment-admit", entry, {
+      bindings: [alignment], shadowList: [], directSites: [],
+      tools: [{ name: "outward_tool", consequential: true, alignmentRequired: true, directCallReachable: true }],
+    })).toEqual([]);
+  });
+
+  it("on the live tree, human-checkpoint-admit narrowed to any consequential tool is refused for direct reach", () => {
+    const seed = GPP_BINDINGS.find((binding) => binding.bindingId === "human-checkpoint-admit")!;
+    const consequential = liveTools.filter((tool) => tool.consequential).map((tool) => tool.name);
+    expect(consequential.length).toBeGreaterThan(0);
+    for (const name of consequential) {
+      const narrowed: GppBinding = { ...seed, tools: [name] };
+      const refusals = promotionRefusals("human-checkpoint-admit", entry, {
+        ...liveContext(), bindings: [narrowed], shadowList: [], directSites: [],
+      });
+      expect(refusals.join("\n"), name).toMatch(new RegExp(`${name} is reachable by a direct call`));
+    }
   });
 });

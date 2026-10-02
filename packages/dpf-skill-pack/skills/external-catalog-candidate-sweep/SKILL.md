@@ -9,7 +9,7 @@ allowed-tools: Read Grep Glob
 # DPF fields (Surface B — in-portal seed loader)
 category: platform
 assignTo: ["external-catalog-scout"]
-capability: "scout_external_catalogs"
+capability: "view_platform"
 taskType: "recurring"
 cadence: "39 2 * * 1"
 triggerPattern: "external tool|catalog scan|adoption candidate|dependency"

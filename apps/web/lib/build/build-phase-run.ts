@@ -27,6 +27,32 @@ import type { AutonomousBuildExecutionProfileRefV1 } from "@/lib/build/autonomou
 export type BuildPhaseName = "ideate" | "plan" | "build" | "review" | "ship";
 
 /**
+ * BI-F9EE05E5 slice B (quiescence spec §11a): while an upgrade drains, the
+ * current phase finishes and the NEXT one waits. Callers check this before
+ * flipping a build's phase. Previously they flipped it anyway and only the
+ * BuildPhaseRun start was refused (and swallowed), so the drain saw no open
+ * phase while the build kept working. A refused transition leaves the build
+ * in its current phase; the stranded-build resume re-attempts it after the
+ * swap. Records why on the build's trail.
+ */
+export async function admitPhaseTransition(
+  buildId: string,
+  from: BuildPhaseName,
+  to: BuildPhaseName,
+): Promise<boolean> {
+  const level = await getQuiescenceLevel();
+  if (level === "normal") return true;
+  await prisma.buildActivity.create({
+    data: {
+      buildId,
+      tool: "phase:upgrade-wait",
+      summary: `Waiting for the platform upgrade to finish: ${from} → ${to} continues after it.`,
+    },
+  }).catch(() => {});
+  return false;
+}
+
+/**
  * Mark the start of a phase. Creates a BuildPhaseRun row with startedAt = now.
  * Safe to call multiple times while the phase is in flight: the original
  * startedAt is kept. A finished row is reopened as a new attempt.
