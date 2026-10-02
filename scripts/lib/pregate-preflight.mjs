@@ -73,6 +73,9 @@ export const LOCAL_SAFE_PR_GUARD_IDS = Object.freeze([
   "convergence-impact-gate",
   "spec-plan-doc-gate",
   "seed-fit-gate",
+  // Reads the commit range host-side; PR title/body are CI-only extras
+  // (BI-5D412E3C), so a local run still answers for the commit messages.
+  "hidden-unicode-commit-text-guard",
 ]);
 
 // Exit-output signatures that mean "this host cannot run the guard", not
