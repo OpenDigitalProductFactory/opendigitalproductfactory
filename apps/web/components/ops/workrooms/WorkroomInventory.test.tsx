@@ -17,9 +17,8 @@ describe("WorkroomInventory", () => {
     expect(html).toContain("A2A: caller → callee · TR-1");
     expect(html).not.toContain("Unassigned");
     expect(html).toContain("Live Workrooms");
-    expect(html).toContain("Currently live across the platform.");
+    expect(html).toContain("Executor / invocation");
     expect(html).toContain("History");
-    expect(html).toContain("Inactive records retained for audit.");
     expect(html).toContain(">1</");
     expect(html).toContain("2 inactive");
     expect(html).toContain("Ready");

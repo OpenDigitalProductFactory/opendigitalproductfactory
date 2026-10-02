@@ -6,6 +6,7 @@
 // and annotates every row with its true-liveness verdict plus a summary. Shared
 // by the `list_work_capsules` MCP tool so the handler stays thin.
 
+import type { Prisma } from "@dpf/db";
 import { classifyWorkCapsuleLiveness,
   isDemonstrablyWorking,
   type WorkCapsuleLiveness,
@@ -44,7 +45,7 @@ const INVENTORY_SELECT = {
   workspaceState: true,
   activities: { orderBy: { recordedAt: "desc" }, take: 1, where: { kind: { in: ["concierge-sweep", "embedding-coverage"] } }, select: { kind: true } },
   taskRun: { select: { taskRunId: true, status: true, updatedAt: true, source: true, initiatingAgentId: true, currentAgentId: true, parentTaskRunId: true } },
-} as const;
+} as const satisfies Prisma.WorkroomSelect;
 
 export type InventoryDb = {
   workroom: { findMany(args: unknown): Promise<any[]> };
