@@ -1,6 +1,7 @@
 ---
 title: Build Studio large-lane independent reviews — routing the owed receipts to reviewer coworkers
 status: draft
+review-history: design-spec and architecture-review passed at 85cc9b34 (2026-10-02); spec-approval re-requested on this revision
 date: 2026-10-02
 backlog: BI-926A7E90
 epic: EP-984E4124
