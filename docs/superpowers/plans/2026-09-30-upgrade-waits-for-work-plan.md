@@ -48,6 +48,8 @@ The core behavior. After A, "Upgrade now" with a build in flight waits for it an
 
 ## Slice D — documentation
 
+**Status (2026-10-02):** implemented. Item 20 landed with slice C. Item 21: §6.1, §6.4 and §11a of the spec now describe what slices A–C shipped.
+
 20. The user guide's self-upgrade page: what "Upgrade now" does while work is running.
 21. Fix §6.4's stale scheduled-path note (spec line ~581).
 
