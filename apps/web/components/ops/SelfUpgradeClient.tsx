@@ -12,6 +12,7 @@ import { StatusBadge } from "@/components/ui/report-kit";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
+import { serviceReconcileFromEvidence } from "@/lib/self-upgrade/service-reconcile-outcome";
 import { SelfUpgradeReadiness } from "@/components/ops/SelfUpgradeReadiness";
 import { BuildStamps } from "@/components/ops/BuildStamps";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
@@ -290,6 +291,7 @@ export default function SelfUpgradeClient({
     message: string;
   }>({ status: "idle", message: "" });
   const latestRecoveryPoint = recoveryPointSummary(latestRun);
+  const latestServiceReconcile = serviceReconcileFromEvidence(latestRun?.completionEvidence);
   const canRollbackLatest =
     latestRun &&
     latestRun.status !== "running" &&
@@ -832,6 +834,27 @@ export default function SelfUpgradeClient({
             />
             <span className="text-xs font-mono text-[var(--dpf-muted)]">{latestRun.runId}</span>
           </div>
+
+          {/* BI-5ACBAC50: the portal swap landed, but a service this install
+              requires could not be created (for example, its image tag is no
+              longer published). Say so instead of a plain green run. */}
+          {latestServiceReconcile?.outcome === "degraded" && (
+            <div
+              className="p-2.5 rounded-lg bg-[var(--dpf-warning)]/15 border border-[var(--dpf-warning)]/40 text-xs space-y-0.5"
+              data-service-reconcile="degraded"
+            >
+              <div className="font-medium text-[var(--dpf-warning)]">
+                Degraded — {latestServiceReconcile.failed.length} required service
+                {latestServiceReconcile.failed.length === 1 ? "" : "s"} could not be started
+              </div>
+              <div className="text-[var(--dpf-muted)]">
+                The upgrade itself completed. Not running: {latestServiceReconcile.failed.join(", ")}.
+                {latestServiceReconcile.created.length > 0 &&
+                  ` Started this time: ${latestServiceReconcile.created.join(", ")}.`}{" "}
+                The next upgrade tries again.
+              </div>
+            </div>
+          )}
 
           {queuedRun && (
             <div className="text-xs text-[var(--dpf-muted)]" data-upgrade-queued="true">

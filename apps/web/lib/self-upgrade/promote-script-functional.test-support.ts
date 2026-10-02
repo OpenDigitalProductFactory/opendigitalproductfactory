@@ -144,6 +144,12 @@ case "$*" in
   *"up -d --no-recreate"*)
     printf 'reconcile-create services=%s\n' "\$*" >> "$DOCKER_LOG"
     [ "\${DPF_TEST_RECONCILE_FAILS:-0}" = "1" ] && exit 1
+    # One named service whose image cannot be pulled (a pruned upstream tag).
+    if [ -n "\${DPF_TEST_RECONCILE_FAIL_SERVICE:-}" ]; then
+      for reconcile_arg in "$@"; do
+        [ "$reconcile_arg" = "$DPF_TEST_RECONCILE_FAIL_SERVICE" ] && exit 1
+      done
+    fi
     ;;
   *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;
   "ps -a --format "*) [ -n "\${DPF_TEST_IMAGES_IN_USE:-}" ] && printf '%s\n' "$DPF_TEST_IMAGES_IN_USE" ;;
@@ -178,6 +184,8 @@ export function runPromote(opts: {
   existingServices?: string[];
   /** Make the reconcile `up -d --no-recreate` fail, to prove it never aborts the upgrade. */
   reconcileFails?: boolean;
+  /** Make only `up` of this one service fail (its image tag no longer resolves). */
+  reconcileFailService?: string;
   principalResolveFails?: boolean;
   principalVerifyFails?: boolean;
   /** Newest-first `repo:tag` list the shim returns for the dpf-portal version-tag query. */
@@ -245,6 +253,9 @@ export function runPromote(opts: {
       ? [`export DPF_TEST_EXISTING_SERVICES=${shellQuote(opts.existingServices.join("\n"))}`]
       : []),
     ...(opts.reconcileFails ? ["export DPF_TEST_RECONCILE_FAILS=1"] : []),
+    ...(opts.reconcileFailService
+      ? [`export DPF_TEST_RECONCILE_FAIL_SERVICE=${shellQuote(opts.reconcileFailService)}`]
+      : []),
     ...(opts.principalResolveFails ? ["export DPF_TEST_PRINCIPAL_RESOLVE_FAIL=yes"] : []),
     ...(opts.principalVerifyFails ? ["export DPF_TEST_PRINCIPAL_VERIFY_FAIL=yes"] : []),
     ...(opts.composeEnvFile
