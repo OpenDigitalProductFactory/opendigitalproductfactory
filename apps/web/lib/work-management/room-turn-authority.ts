@@ -100,6 +100,28 @@ const WORK_SHAPE_GRANT_PREFIX = "tool:";
  * Unknown tokens pass through — an unknown key matches no tool, which is a
  * deny, never a widen.
  */
+/**
+ * GPP §7.1 capability classes a work shape may declare, resolved to the
+ * enforceable grants of this install's catalog (BI-00588B51). A class is a
+ * consequence-labelled name for a set of tool grants, so a shape reads as
+ * "what may happen in here" without listing tools. `read` is the coworker
+ * baseline; every other class resolves here. A token that is neither a class
+ * nor a grant some tool requires is dangling — the C-2 guard
+ * (work-shape-grants-resolve.test.ts) fails on it.
+ */
+export const WORK_SHAPE_CAPABILITY_GRANTS: Readonly<Record<string, readonly string[]>> = {
+  // Internal state: the receipts and evidence a delivery writes about itself.
+  "write-internal": [
+    "build_evidence",
+    "build_phase_advance",
+    "work_capsule_write",
+    "workroom_evidence_write",
+    "initiative_evidence_write",
+  ],
+  // Reversible source work inside the governed sandbox worktree.
+  "write-source": ["sandbox_execute"],
+};
+
 export function roomGrantsFromWorkShape(grants: readonly string[]): string[] {
   const out = new Set<string>();
   for (const raw of grants) {
@@ -108,6 +130,11 @@ export function roomGrantsFromWorkShape(grants: readonly string[]): string[] {
       : raw;
     if (token === "read") {
       for (const g of COWORKER_READ_BASELINE_GRANTS) out.add(g);
+      continue;
+    }
+    const capability = WORK_SHAPE_CAPABILITY_GRANTS[token];
+    if (capability) {
+      for (const g of capability) out.add(g);
       continue;
     }
     if (token.trim()) out.add(token.trim());

@@ -342,6 +342,12 @@ export async function advanceReviewedBuildToShip(
     return { kind: "skipped", reason: gate.reason ?? "review→ship gate blocked" };
   }
 
+  // §11a: the next phase waits while an upgrade drains; resumed after the swap.
+  const { admitPhaseTransition } = await import("@/lib/build/build-phase-run");
+  if (!(await admitPhaseTransition(buildId, "review", "ship"))) {
+    return { kind: "skipped", reason: "waiting for the platform upgrade to finish" };
+  }
+
   // Phase-guarded flip: only advance if STILL at review, so two concurrent
   // reconcilers (or a live advance racing this) never double-advance.
   const flipped = await prisma.featureBuild.updateMany({

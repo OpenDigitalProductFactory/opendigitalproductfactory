@@ -39,6 +39,14 @@ export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
    * are in the same phase (BI-F4A30FCB, Dale dogfood 2026-05-24).
    */
   featureBuildId?: string;
+  /**
+   * GPP Phase 2 PR-C (BI-69415B68): the permit the reference monitor verified
+   * for this outward/authority/irreversible call ("GPM-..."), so a handler can
+   * cite it downstream. Set only by the monitor; absent when no permit applies.
+   */
+  gppPermitId?: string;
+  /** Reserved by the governing executor for this exact call; never copied from client context. */
+  approvedAuthorityEnvelopeId?: string | null;
 };
 /** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
  *  These let the agent router and governance layer make safety decisions

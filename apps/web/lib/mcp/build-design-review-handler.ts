@@ -135,7 +135,10 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
             ? await enforceBuildInitiativeReadiness({ buildId, target: "plan", targetPhase: "plan", expectedPhase: "ideate" })
             : null;
           if (gate.allowed && readiness?.allowed) {
-            const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
+            const { admitPhaseTransition, completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
+            if (!(await admitPhaseTransition(buildId, "ideate", "plan"))) {
+              return { success: true, message: "Fix design approved. Planning starts after the platform upgrade finishes.", data: { review, deferred: "platform-upgrade" } };
+            }
             void completeBuildPhaseRun(buildId, "ideate");
             void startBuildPhaseRun(buildId, "plan").catch(() => {}); // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
             if (context?.threadId) {
@@ -683,7 +686,10 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
             : null;
           if (gate.allowed && readiness?.allowed) {
             // EP-COST Phase 3: record ideate-phase cost rollup, start plan tracking, and compact thread
-            const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
+            const { admitPhaseTransition, completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
+            if (!(await admitPhaseTransition(buildId, "ideate", "plan"))) {
+              return { success: true, message: "Design approved. Planning starts after the platform upgrade finishes.", data: { review, deferred: "platform-upgrade" } };
+            }
             void completeBuildPhaseRun(buildId, "ideate");
             void startBuildPhaseRun(buildId, "plan").catch(() => {}); // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
             if (context?.threadId) {

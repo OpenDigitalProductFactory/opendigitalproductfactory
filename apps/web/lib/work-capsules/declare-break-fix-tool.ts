@@ -2,12 +2,14 @@ import { prisma } from "@dpf/db";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import { declareBreakFix, type DeclareBreakFixDb } from "./declare-break-fix";
 import { workCapsuleActor } from "./handler-actor";
+import { humanApprovalForExecution } from "@/lib/coworker/human-approved-execution";
 
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
   threadId?: string;
   taskRunId?: string;
+  approvedAuthorityEnvelopeId?: string | null;
 } | undefined;
 
 function stringParam(params: Record<string, unknown>, key: string): string | null {
@@ -32,6 +34,10 @@ export async function declareBreakFixTool(
     itemId,
     reason,
     actor: await workCapsuleActor(userId, context),
+    humanApproval: await humanApprovalForExecution({
+      envelopeId: context?.approvedAuthorityEnvelopeId,
+      toolName: "declare_break_fix", userId, agentId: context?.agentId, params,
+    }),
   });
   if (!result.ok) return { success: false, error: result.error, message: result.message, data: result.data };
   return {

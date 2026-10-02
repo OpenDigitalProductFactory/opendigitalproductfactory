@@ -10,10 +10,11 @@
 // a CoworkerActionEnvelope and closes the approve → execute loop.
 //
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; each
-// handler reproduces the former switch case verbatim, resolving `prisma`,
-// `getErrorMessage`, and the recursive `executeTool` dispatch through shared
-// module imports so the pack owns its inputs without depending on
-// mcp-tools.ts internals. Grants mirror agent-grants.ts TOOL_TO_GRANTS, which
+// handler reproduces the former switch case verbatim, resolving `prisma` and
+// `getErrorMessage` through shared module imports so the pack owns its inputs
+// without depending on mcp-tools.ts internals. The envelope's underlying tool
+// runs through the reference monitor's nested dispatch (GPP PR-H), never a
+// direct executeTool call. Grants mirror agent-grants.ts TOOL_TO_GRANTS, which
 // stays the gating source.
 
 import { prisma } from "@dpf/db";
@@ -496,10 +497,17 @@ async function screenProposeAction(
   };
 }
 
+/** The monitor reports a throwing handler as `tool_threw`; recover the thrown message. */
+function nestedThrowMessage(result: ToolResult, toolName: string): string | null {
+  if (result.success || result.error !== "tool_threw") return null;
+  const prefix = `${toolName} threw: `;
+  return result.message.startsWith(prefix) ? result.message.slice(prefix.length) : result.message;
+}
+
 async function screenDispatchAction(
   params: Record<string, unknown>,
-  _userId: string,
-  context?: { routeContext?: string; threadId?: string; agentId?: string },
+  userId: string,
+  context?: ToolExecutionContext,
 ): Promise<ToolResult> {
   // BI-0F9C291C part 4 — end-to-end envelope execution. Closes the
   // propose → approve → dispatch loop:
@@ -512,10 +520,14 @@ async function screenDispatchAction(
   //      client window registry — ALL_MANIFESTS is empty until
   //      BI-6C9CC0EC registers Build Studio, so this path returns
   //      a clear `no_manifest` error in the meantime).
-  //   4. Execute the underlying tool recursively under the
-  //      envelope's delegatingUserId (the human the coworker is
-  //      acting for — not whoever called dispatch, though they
-  //      should normally match).
+  //   4. Execute the underlying tool through the reference monitor's
+  //      nested dispatch (GPP PR-H, BI-69415B68): the call is admitted
+  //      on its own under the outer call's authority context — the
+  //      delegating human, the acting coworker's grants, the original
+  //      MCP token's scope — with its own audit row. The caller must
+  //      BE the envelope's delegating user: the monitor runs nested
+  //      calls as the outer user, so a different caller would act
+  //      under the wrong human's authority.
   //   5. Mark the envelope executed | failed via
   //      markEnvelopeExecuted / markEnvelopeFailed from
   //      envelope-actions.ts. Marking is best-effort; the side
@@ -595,22 +607,43 @@ async function screenDispatchAction(
     };
   }
 
-  // Recurse: execute the underlying tool under the envelope's
-  // delegating user (not necessarily the caller — see the doc
-  // block above). executeTool is dynamically imported so the pack
-  // carries no static dependency on the mcp-tools.ts module graph.
+  // Run the underlying tool through the monitor (see the doc block
+  // above). Every production path into this handler passes the
+  // monitor, which supplies governedDispatch; without it the tool
+  // does not run. Nothing has run in either refusal, so the
+  // envelope stays approved.
   const underlyingToolName = domainAction.tool;
   const toolArgs =
     envelope.argsJson && typeof envelope.argsJson === "object" && !Array.isArray(envelope.argsJson)
       ? (envelope.argsJson as Record<string, unknown>)
       : {};
+  const governedDispatch = context?.governedDispatch;
+  if (!governedDispatch) {
+    return {
+      success: false,
+      error: "ungoverned_dispatch",
+      message: `Envelope ${envelopeId} was not dispatched: screen_dispatch_action runs the envelope's tool only through the governed executor.`,
+    };
+  }
+  if (userId !== envelope.delegatingUserId) {
+    return {
+      success: false,
+      error: "delegating_user_mismatch",
+      message: `Envelope ${envelopeId} was approved for another user; only the delegating user's session can dispatch it.`,
+    };
+  }
 
   const { markEnvelopeExecuted, markEnvelopeFailed } = await import("@/lib/coworker/envelope-actions");
-  const { executeTool } = await import("@/lib/mcp-tools");
 
   let toolResult: ToolResult;
   try {
-    toolResult = await executeTool(underlyingToolName, toolArgs, envelope.delegatingUserId, context);
+    // The monitor adds a `governance` block; the envelope response carries the tool's own result.
+    const { governance: _governance, ...nested } = (await governedDispatch(underlyingToolName, toolArgs)) as ToolResult & {
+      governance?: unknown;
+    };
+    const thrown = nestedThrowMessage(nested, underlyingToolName);
+    if (thrown !== null) throw new Error(thrown);
+    toolResult = nested;
   } catch (err) {
     const msg = getErrorMessage(err);
     // The underlying tool threw — mark the envelope failed, then
