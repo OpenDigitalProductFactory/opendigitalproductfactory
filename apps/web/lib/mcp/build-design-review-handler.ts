@@ -50,7 +50,7 @@ type HandlerContext = Parameters<ToolPackHandler>[2];
  * subject — so this only ever records what the design actually evidences, and
  * re-running a review is idempotent. Failure never breaks the review.
  */
-async function attestIdeateResearch(
+export async function attestIdeateResearch(
   buildId: string,
   designDoc: unknown,
   userId: string,

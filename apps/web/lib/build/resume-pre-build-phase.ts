@@ -184,6 +184,11 @@ function hasPlanTasks(buildPlan: unknown): boolean {
   return Array.isArray(plan?.tasks) && plan!.tasks!.length > 0;
 }
 
+/** The plan→build gate's wording for a missing research receipt (RESEARCH_REQUIRED). */
+export function isResearchReceiptGateBlock(reason: string): boolean {
+  return /research behind this design has not been recorded|RESEARCH_REQUIRED/i.test(reason);
+}
+
 function hasDesignDoc(designDoc: unknown): boolean {
   return designDoc != null && typeof designDoc === "object" && Object.keys(designDoc as object).length > 0;
 }
@@ -724,7 +729,33 @@ export async function resumePreBuildPhase(params: {
               via: "performPlanToBuildTransition",
               detail: `abandoned — dead upstream dependency (${outcome.deadDependencyBuildIds.join(", ") || "unknown"}): ${outcome.reason}`,
             };
-          case "gate-blocked":
+          case "gate-blocked": {
+            // The research receipt is written when the design review passes.
+            // Every build reviewed while the room refused that write
+            // (BI-00588B51: the coworker was not a room member) carries a
+            // reviewed design and no receipt, and the gate reports exactly
+            // that. Re-attest from the design the reviewer already passed, then
+            // try the transition once more; anything else stays a skip.
+            if (isResearchReceiptGateBlock(outcome.reason) && hasDesignDoc(build.designDoc)) {
+              const { attestIdeateResearch } = await import("@/lib/mcp/build-design-review-handler");
+              await attestIdeateResearch(buildId, build.designDoc, userId, null);
+              const retried = await performPlanToBuildTransition({ buildId, userId });
+              if (retried.kind === "advanced") {
+                return {
+                  kind: "resumed",
+                  phase,
+                  via: "performPlanToBuildTransition",
+                  detail: "re-attested the research receipt from the reviewed design, then advanced plan → build",
+                };
+              }
+              return {
+                kind: "skipped",
+                phase,
+                reason: `plan → build ${retried.kind} after re-attesting research: ${(retried as { reason?: string }).reason ?? retried.kind}`,
+              };
+            }
+            return { kind: "skipped", phase, reason: `plan → build ${outcome.kind}: ${outcome.reason}` };
+          }
           case "wwmd-withheld":
             return { kind: "skipped", phase, reason: `plan → build ${outcome.kind}: ${outcome.reason}` };
           case "not-ready":
