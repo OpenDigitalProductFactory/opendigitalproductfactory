@@ -156,17 +156,25 @@ async function loadBuildStudioCandidates(): Promise<Candidate[]> {
     orderBy: { updatedAt: "desc" },
     select: { id: true, capsuleId: true, backlogItemId: true, requestedByPrincipal: principalAliases("user") },
   });
-  const itemIds = [...new Set(rooms.flatMap((room) => (room.backlogItemId ? [room.backlogItemId] : [])))];
-  if (itemIds.length === 0) return [];
-  const open = new Set((await prisma.backlogItem.findMany({
-    where: { itemId: { in: itemIds }, status: { in: ["open", "in-progress"] } },
-    select: { itemId: true },
-  })).map((item) => item.itemId));
+  // A Build Studio room records the item's ROW id in backlogItemId (the
+  // attachment writes `backlogItem.id`), where an adopted room records the
+  // BI- id. Resolve either to the BI- id the readiness and recovery lanes use.
+  const itemRefs = [...new Set(rooms.flatMap((room) => (room.backlogItemId ? [room.backlogItemId] : [])))];
+  if (itemRefs.length === 0) return [];
+  const openItemIdByRef = new Map<string, string>();
+  for (const item of await prisma.backlogItem.findMany({
+    where: { OR: [{ itemId: { in: itemRefs } }, { id: { in: itemRefs } }], status: { in: ["open", "in-progress"] } },
+    select: { id: true, itemId: true },
+  })) {
+    openItemIdByRef.set(item.id, item.itemId);
+    openItemIdByRef.set(item.itemId, item.itemId);
+  }
   return rooms.flatMap((room) => {
     const userId = aliasValue(room.requestedByPrincipal);
-    if (!room.backlogItemId || !open.has(room.backlogItemId) || !userId) return [];
+    const itemId = room.backlogItemId ? openItemIdByRef.get(room.backlogItemId) : undefined;
+    if (!itemId || !userId) return [];
     return [{
-      itemId: room.backlogItemId,
+      itemId,
       room: { roomId: room.id, capsuleId: room.capsuleId, userId, agentId: BUILD_STUDIO_ASSISTANT_AGENT_ID },
       target: "implementation" as const,
     }];
