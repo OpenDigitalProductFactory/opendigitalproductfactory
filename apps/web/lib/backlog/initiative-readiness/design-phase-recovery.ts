@@ -77,6 +77,12 @@ export function archetypePhaseReviewDecision(
   };
 }
 
+/** True for a decision that owes only the pre-implementation archetype reviews. */
+export function isArchetypePhaseReview(decision: InitiativeReadinessDecision): boolean {
+  const entries = [...decision.blockers, ...decision.unmet];
+  return entries.length > 0 && entries.every((entry) => ARCHETYPE_REVIEW_CODES.has(entry.code));
+}
+
 export function decisionForIndependentReview(
   writerToolName: string,
   decisions: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>>,
