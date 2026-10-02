@@ -80,6 +80,16 @@ One atomic PR, because no task is useful on its own: a saved area nobody can see
 - The UX route baseline for `/customer` re-frozen if the sweep measures a change.
 - Build gate: typecheck, affected tests, pregate. UX check on the contributor preview: drawing, Coverage section, light and dark themes, phone width.
 
+## Acceptance (quoted from the backlog item)
+
+- AC-COV-DRAW-1: A person with operate_customer can draw an area of at least three corners, name it, and optionally assign a crew or employee; after reload it is shown on the customer map.
+- AC-COV-DRAW-2: An area can be renamed, reassigned and deleted; a save made against an outdated version is refused with a message to reload, and nothing is overwritten.
+- AC-COV-DRAW-3: A person without operate_customer sees areas but no drawing or editing controls, and the save action refuses them.
+- AC-COV-PIP-1: pointInGeographicPolygon is correct for points inside, outside, inside a hole, and on concave shapes, with unit tests for each.
+- AC-COV-ANSWER-1: The Coverage section lists every placed site that is outside every area, each linking to its account.
+- AC-COV-ANSWER-2: Selecting a site names each area covering it and who covers that area; a site in more than one area is listed under overlaps with the areas it shares.
+- AC-COV-SAFE-1: With no areas saved, the customer map is unchanged except for an "Add a service area" control for people who can edit; the change adds no package, no migration and no outbound request.
+
 ## Acceptance traceability
 
 | Acceptance | Task | Evidence |
