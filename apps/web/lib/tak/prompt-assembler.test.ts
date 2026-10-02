@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { assembleSystemPrompt, assembleSystemPromptWithProvenance } from "./prompt-assembler";
 import type { PromptInput } from "./prompt-assembler";
+import { UNTRUSTED_CONTENT_RULE } from "./tool-result-provenance";
 
 vi.mock("./prompt-loader", () => ({
   loadPrompts: vi.fn(async (refs: Array<{ category: string; slug: string; fallback?: string }>) => {
@@ -612,6 +613,13 @@ describe("assembleSystemPromptWithProvenance declares instruction, never data", 
     const assembled = await assembleSystemPromptWithProvenance(base);
 
     expect(assembled.instructionSpans.join("\n")).not.toContain("You approve payroll runs");
+  });
+
+  it("states the untrusted-content rule once and declares it as instruction (BI-1045525F)", async () => {
+    const assembled = await assembleSystemPromptWithProvenance(base);
+
+    expect(assembled.text.split(UNTRUSTED_CONTENT_RULE).length - 1).toBe(1);
+    expect(assembled.instructionSpans).toContain(UNTRUSTED_CONTENT_RULE);
   });
 
   it("passes through spans the caller declares", async () => {
