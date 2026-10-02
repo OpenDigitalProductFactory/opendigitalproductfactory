@@ -45,7 +45,17 @@ const INVENTORY_SELECT = {
   updatedAt: true,
   featureBuildId: true,
   workspaceState: true,
-  activities: { orderBy: { recordedAt: "desc" }, take: 1, where: { kind: { in: ["concierge-sweep", "embedding-coverage"] } }, select: { kind: true } },
+  activities: {
+    orderBy: { recordedAt: "desc" }, take: 1,
+    where: { OR: [
+      { kind: { in: ["concierge-sweep", "embedding-coverage"] } },
+      { kind: "workroom-drive", AND: [
+        { payload: { path: ["action"], equals: "dispatch_agent" } },
+        { payload: { path: ["reason"], equals: "agent_stage" } },
+      ] },
+    ] },
+    select: { kind: true, payload: true },
+  },
   taskRun: { select: { taskRunId: true, status: true, updatedAt: true, source: true, initiatingAgentId: true, currentAgentId: true, parentTaskRunId: true } },
 } as const satisfies Prisma.WorkroomSelect;
 

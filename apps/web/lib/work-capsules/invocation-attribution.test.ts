@@ -20,6 +20,21 @@ describe("workroom invocation attribution", () => {
     expect(result.invocation).toContain("read");
     expect(result.invocation).not.toMatch(/A2A|manual/);
   });
+  it("retains successful dispatch after a pause without borrowing a reassigned agent", () => {
+    const room = { status: "draft", workspaceState: { workroomDrive: { action: "pause" } }, activities: [{ kind: "workroom-drive", payload: { action: "dispatch_agent", reason: "agent_stage", taskId: "task-1", stageKey: "read", ledger: ["Dispatch agent:original-agent for stage read."] } }] };
+    expect(projectInvocationAttribution(room, { agentId: "later-agent" })).toEqual({ executor: "original-agent", invocation: "Scheduled · original-agent · task-1 · stage read" });
+    expect(projectInvocationAttribution({ ...room, executorKind: "codex-desktop", executorRef: "new-session" })).toEqual({ executor: "codex-desktop", invocation: "new-session" });
+  });
+  it("does not use refused dispatches or attribute old history to a new scheduled target", () => {
+    for (const reason of ["lease_held", "missing_task_owner"]) {
+      expect(projectInvocationAttribution({ workspaceState: { workroomDrive: { action: "dispatch_agent", reason, agentId: "not-invoked" } } }).invocation).not.toContain("Scheduled");
+    }
+    expect(projectInvocationAttribution({ activities: [{ kind: "workroom-drive", payload: { action: "dispatch_agent", reason: "agent_stage", taskId: "old-task", stageKey: "read" } }] }, { agentId: "new-agent" }).invocation).toBe("Scheduled · agent not recorded · old-task · stage read");
+  });
+  it("uses structured dispatch identity and ignores malformed private history", () => {
+    expect(projectInvocationAttribution({ activities: [{ kind: "workroom-drive", payload: { action: "dispatch_agent", reason: "agent_stage", agentId: "target", taskId: "task", secret: "private" } }] }).executor).toBe("target");
+    expect(JSON.stringify(projectInvocationAttribution({ activities: [{ kind: "workroom-drive", payload: ["private"] }] }))).not.toContain("private");
+  });
   it("shows recorded caller, callee and parent for A2A", () => {
     expect(projectInvocationAttribution({ taskRun: { taskRunId: "TR-child", initiatingAgentId: "caller", currentAgentId: "callee", parentTaskRunId: "parent" } }).invocation).toBe("A2A: caller → callee · TR-child · parent parent");
   });
