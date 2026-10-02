@@ -344,7 +344,7 @@ export async function applyDrivePlan(input: {
     // task carry the stage's declared tools; the scheduler pins them (BI-43C3E914).
     const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null,
       shapeKey: plan.shapeKey ?? "", shapeVersion: plan.shapeVersion ?? "", definition: plan.definition ?? null, stageKey: plan.stageKey ?? "" });
-    const effort = resolveStageEffort(plan.definition?.stages.find((candidate) => candidate.key === plan.stageKey));
+    const effort = resolveStageEffort(plan.definition?.stages.find((candidate) => candidate.key === plan.stageKey)); // Phase G: governed stages resolve high
     const scheduled = await effects.upsertAgentTask({
       taskId: plan.taskId,
       agentId: plan.agentId,
@@ -355,7 +355,6 @@ export async function applyDrivePlan(input: {
       // already carries the objective, the definition of done and the evidence
       // to leave; send it.
       prompt: buildStageBrief(brief),
-      // Phase G: the stage's declared effort rides the same record; governed stages resolve high.
       stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...(brief.stageTools ?? [])], ...(effort ? { effort } : {}) },
       now,
       lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
@@ -756,7 +755,6 @@ export function createWorkroomDriveEffects(
             taskConfig,
             nextRunAt: input.now,
             isActive: true,
-            ...(taskConfig ? { taskConfig: taskConfig as Prisma.InputJsonValue } : {}),
           },
         });
         return true;
