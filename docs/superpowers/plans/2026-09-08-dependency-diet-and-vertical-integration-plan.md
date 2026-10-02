@@ -385,7 +385,7 @@ Measured with `node scripts/sbom/check-sbom-drift.mjs` on `main` at `fab98a17b`,
 
 Every S-move and M1, M2, M4, M5, M6, M7, M8 and M9 are done. Open:
 
-- **M3 phase 3.** Phase 2 (the engine behind a flag, BI-85E6EF14) merged in #5898 and is benchmarked. Inngest retires only after the flag has been on per domain for a soak.
+- **M3 phase 3.** Phase 2 (the engine behind a flag, BI-85E6EF14) merged in #5898 and is benchmarked. The soak (BI-66D2BB3F, spec §7.2) runs in four batches; Inngest retires (BI-742D569C, scoped in spec §6.2) after every function has run on Postgres for 7 days with the soak report passing.
 - **M5 markdown.** Done in #5803 (BI-0AB1FD47).
 - **M11 step 2.** Delivered through PR-4 of the 2026-09-30 spec (§10.1). PR-5, `lib` and `ui` as project references, proceeds only if a re-measurement on the PR-4 tree shows a UI-only cold check saving 40% or more. No guard yet holds `lib` declaration emit at 0: the cheapest is `"declaration": true` under `noEmit` in `apps/web/tsconfig.json` (about 60 s on one cold run), after the 14 declaration errors in `app/` and `proxy.ts` are fixed. Step 4 is done (#5793). Step 3 (CI shape) is unchanged.
 - **edge-node image installs without `--frozen-lockfile`.** Done: every Dockerfile installs `--frozen-lockfile`, enforced by `check-docker-patch-context.mjs` (#5829). Because `pnpm deploy --legacy` ignores the lockfile under the hoisted linker, the edge-node, adp and integration-test-harness images now assert their deployed tree against the lockfile (`scripts/sbom/assert-deploy-matches-lockfile.mjs`, #5829, #5837).
