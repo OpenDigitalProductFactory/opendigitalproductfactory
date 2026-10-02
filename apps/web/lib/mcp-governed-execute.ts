@@ -649,6 +649,7 @@ export async function governedExecuteTool(
       tokenGrantScopes: args.context?.tokenGrantScopes,
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
       authorityDecisionId,
+      approvedAuthorityEnvelopeId,
       ...(gppPermit?.permitId ? { gppPermitId: gppPermit.permitId } : {}),
       governedDispatch: async (nestedToolName, nestedParams, surfaceInvocation) => {
         const nestedTool = findTool(nestedToolName);

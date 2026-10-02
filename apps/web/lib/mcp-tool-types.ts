@@ -45,6 +45,8 @@ export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
    * cite it downstream. Set only by the monitor; absent when no permit applies.
    */
   gppPermitId?: string;
+  /** Reserved by the governing executor for this exact call; never copied from client context. */
+  approvedAuthorityEnvelopeId?: string | null;
 };
 /** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
  *  These let the agent router and governance layer make safety decisions
