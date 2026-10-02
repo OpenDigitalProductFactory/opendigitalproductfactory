@@ -12,6 +12,7 @@ import {
   DISABLED_BY_OPERATOR_REASON,
   gateAtEntry,
   gateBetweenSteps,
+  GATE_BETWEEN_STEPS_MAX_WAITS,
   type GateBetweenStepsRunner,
 } from "./quiescence-gates";
 import { allFunctions, scheduledFunctions } from "./functions/index";
@@ -311,13 +312,29 @@ describe("gateBetweenSteps", () => {
     expect(step.waitForEvent).toHaveBeenCalledTimes(1);
   });
 
-  it("returns timed-out reason when waitForEvent returns null", async () => {
+  it("keeps waiting while the drain still holds after a 30-minute wait, then gives up at the bound", async () => {
     vi.mocked(getQuiescenceLevel).mockResolvedValue("draining");
     const step = makeFakeStep();
     step.waitForEvent.mockResolvedValue(null);
     const result = await gateBetweenSteps(step, "after-step");
+    expect(step.waitForEvent).toHaveBeenCalledTimes(GATE_BETWEEN_STEPS_MAX_WAITS);
+    expect(new Set(step.waitForEvent.mock.calls.map((c) => c[0])).size).toBe(GATE_BETWEEN_STEPS_MAX_WAITS);
     expect(result.resumedAfterWait).toBe(false);
     expect(result.reason).toBe("timed-out-waiting-for-cleared");
+  });
+
+  // BI-F9EE05E5 slice B: a drain waits up to 60 minutes and can pause for the
+  // operator, so a single 30-minute wait let a build start mid-drain.
+  it("continues once a re-check after a timed-out wait finds the drain over", async () => {
+    vi.mocked(getQuiescenceLevel)
+      .mockResolvedValueOnce("draining")
+      .mockResolvedValueOnce("draining")
+      .mockResolvedValueOnce("normal");
+    const step = makeFakeStep();
+    step.waitForEvent.mockResolvedValue(null);
+    const result = await gateBetweenSteps(step, "after-step");
+    expect(step.waitForEvent).toHaveBeenCalledTimes(2);
+    expect(result.resumedAfterWait).toBe(true);
   });
 
   it("uses unique step labels per call site (avoids Inngest step-id collision)", async () => {

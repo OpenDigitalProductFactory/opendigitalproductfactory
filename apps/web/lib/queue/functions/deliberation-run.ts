@@ -17,7 +17,7 @@
 //      degradation, and finish.
 
 import { jobs } from "@/lib/jobs";
-import { gateAtEntry } from "../quiescence-gates";
+import { gateBetweenSteps, type GateBetweenStepsRunner } from "../quiescence-gates";
 import { sealDeliberationOnRoom } from "@/lib/deliberation/deliberation-room-bridge.server";
 
 /* -------------------------------------------------------------------------- */
@@ -460,13 +460,12 @@ export const deliberationRun = jobs.createFunction(
     triggers: [{ event: "deliberation/run.start" }, { event: "deliberation/run.resume" }],
   },
   async ({ event, step }) => {
-    // Gate at entry — refuses new deliberation starts during drain. In-flight
-    // deliberations complete naturally (runDeliberation is a single step.run
-    // so there's no natural mid-flow boundary to suspend; refactoring it to
-    // expose per-branch step.run boundaries for gateBetweenSteps is tracked
-    // as a follow-up under BI-QUIESCE-004b).
-    const gate = await gateAtEntry(step, "deliberation/run");
-    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+    // A deliberation that arrives during a drain waits for it to clear
+    // (BI-F9EE05E5 slice B); it used to return "skipped" and the start event
+    // was lost. In-flight deliberations complete naturally (runDeliberation is
+    // a single step.run, so there is no mid-flow boundary to suspend at).
+    const gate = await gateBetweenSteps(step as unknown as GateBetweenStepsRunner, "deliberation-entry");
+    if (gate.reason) return { skipped: true, reason: gate.reason };
 
     const data = event.data as unknown as RunDeliberationInput;
     const resume = event.name === "deliberation/run.resume";
