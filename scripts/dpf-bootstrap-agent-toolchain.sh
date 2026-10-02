@@ -493,6 +493,20 @@ if [ "$DRY_RUN" -eq 0 ] && [ "$_https_endpoint" -eq 1 ]; then
   ok "MCP client transport persisted: https endpoint${MCP_TRUST_BUNDLE:+ + organization root bundle (NODE_EXTRA_CA_CERTS)}."
 fi
 
+# Refresh native plugin registrations before the config plan reads preferences.
+# The standalone updater owns this migration on every bootstrap path.
+PLUGIN_UPDATER="$REPO_ROOT/packages/dpf-skill-pack/scripts/update-agent-toolchain.sh"
+if [ ! -f "$PLUGIN_UPDATER" ]; then
+  fail "Standalone updater missing at $PLUGIN_UPDATER; cannot proceed."
+  exit 1
+fi
+plugin_update_args=(--codex-plugin-only --mcp-url "$MCP_ENDPOINT")
+[ "$DRY_RUN" -eq 1 ] && plugin_update_args+=(--dry-run)
+if ! bash "$PLUGIN_UPDATER" "${plugin_update_args[@]}"; then
+  fail "Plugin refresh failed; configuration planning stopped."
+  exit 1
+fi
+
 # --- Compute plan via Node bridge --------------------------------------------
 
 BOOTSTRAP_CLI="$REPO_ROOT/packages/dpf-bootstrap/src/agent-toolchain/cli/compute-plan.ts"
@@ -530,19 +544,14 @@ trap 'rm -f "$PLAN_TMP"' EXIT
 if ! pnpm "${bridge_args[@]}" > "$PLAN_TMP" 2>&1; then
   warn "compute-plan failed; using standalone skill-pack updater fallback."
   cat "$PLAN_TMP" >&2
-  FALLBACK="$REPO_ROOT/packages/dpf-skill-pack/scripts/update-agent-toolchain.sh"
-  if [ -f "$FALLBACK" ]; then
-    fallback_args=(--mcp-url "$MCP_ENDPOINT")
-    [ "$DRY_RUN" -eq 1 ] && fallback_args+=(--dry-run)
-    if bash "$FALLBACK" "${fallback_args[@]}"; then
-      seed_worktree_core "post-fallback"
-      exit 0
-    fi
+  fallback_args=(--mcp-url "$MCP_ENDPOINT")
+  [ "$DRY_RUN" -eq 1 ] && fallback_args+=(--dry-run)
+  if ! bash "$PLUGIN_UPDATER" "${fallback_args[@]}"; then
     fail "Standalone updater failed."
     exit 1
   fi
-  fail "Standalone updater missing at $FALLBACK; cannot proceed."
-  exit 1
+  seed_worktree_core "post-fallback"
+  exit 0
 fi
 if [ ! -s "$PLAN_TMP" ]; then
   fail "compute-plan produced empty output; cannot proceed."

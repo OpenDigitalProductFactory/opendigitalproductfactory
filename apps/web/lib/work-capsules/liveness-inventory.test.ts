@@ -3,6 +3,26 @@ import { describe, expect, it, vi } from "vitest";
 import { loadCapsuleLivenessInventory } from "./liveness-inventory";
 
 describe("loadCapsuleLivenessInventory", () => {
+  it("batches scheduled targets and strips private workspace state in compact results", async () => {
+    const now = new Date("2026-10-01T00:00:00Z");
+    const db = {
+      workroom: { findMany: vi.fn().mockResolvedValue([{
+        capsuleId: "WC-SCHEDULED", status: "working", source: "manual", updatedAt: now,
+        executorKind: null, featureBuildId: null, taskRun: null,
+        workspaceState: { privateNote: "secret", workroomDrive: { action: "dispatch_agent", taskId: "scheduled-1", stageKey: "read" } },
+        activities: [],
+      }]) },
+      featureBuild: { findMany: vi.fn().mockResolvedValue([]) },
+      scheduledAgentTask: { findMany: vi.fn().mockResolvedValue([{ taskId: "scheduled-1", agentId: "customer-advisor" }]) },
+    };
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 10, compact: true }, now);
+    expect(db.scheduledAgentTask.findMany).toHaveBeenCalledTimes(1);
+    expect(db.scheduledAgentTask.findMany).toHaveBeenCalledWith({ where: { taskId: { in: ["scheduled-1"] } }, select: { taskId: true, agentId: true } });
+    expect(result.capsulesAll[0]!.attribution).toMatchObject({ invocation: "Scheduled · customer-advisor · scheduled-1 · stage read" });
+    expect(result.capsulesAll[0]).not.toHaveProperty("workspaceState");
+    expect(result.capsulesAll[0]).not.toHaveProperty("activities");
+    expect(JSON.stringify(result)).not.toContain("secret");
+  });
   it("loads the linked TaskRun independently and projects a terminal turn over a stale session", async () => {
     const now = new Date("2026-08-24T18:00:00.000Z");
     const db = {
@@ -40,7 +60,7 @@ describe("loadCapsuleLivenessInventory", () => {
       },
     });
     expect(db.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      select: expect.objectContaining({ taskRun: { select: { taskRunId: true, status: true, updatedAt: true } } }),
+      select: expect.objectContaining({ taskRun: { select: expect.objectContaining({ taskRunId: true, status: true, updatedAt: true, initiatingAgentId: true, currentAgentId: true, parentTaskRunId: true }) } }),
     }));
   });
 

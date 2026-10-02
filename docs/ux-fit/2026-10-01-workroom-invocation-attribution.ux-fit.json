@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "retain-layout-concise-copy",
+  "decisionInteractionId": "DI-C376137388DA",
+  "scope": {
+    "files": ["apps/web/components/ops/workrooms/WorkroomInventory.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "retain-layout-concise-copy",
+      "refreeze-layout-without-descriptions"
+    ]
+  },
+  "rationale": "Keep the existing report-kit table, section descriptions and accessibility structure. Shorten descriptions to accommodate recorded invocation detail within the unchanged word budget. The platform decision chose this over removing description nodes and refreezing the accessibility baseline. No new navigation, controls or coworker action is introduced.",
+  "verification": "Cloud run 36966655557 established that the preceding revision met the word budget but removed two paragraph nodes. This revision restores those nodes. Its cloud sweep and canonical live verification are still required; the decision is not a test-pass claim."
+}

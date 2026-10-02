@@ -41,6 +41,14 @@ Nominatim is run by the OpenStreetMap Foundation under a [usage policy](https://
 
 If many people add sites at once, configure a commercial provider instead. Heavy use of the free service can get the install's address blocked.
 
+## Finding Map Locations For Existing Sites
+
+Validation places a site when it is saved. For sites saved without a position,
+the [Customer Map](../customers/customer-map.md) can find locations in bulk with a
+service you choose: US Census, OpenCage, or your own Nominatim or Photon server.
+It is off by default. The free public Nominatim service is never used for this,
+because its usage policy does not allow bulk lookups.
+
 ## Setup Steps
 
 1. Open **Platform → Tools → Built-in Tools** and read the Address validation card.
@@ -59,3 +67,4 @@ If many people add sites at once, configure a commercial provider instead. Heavy
 
 - [Tools and Integrations](tools-and-integrations.md)
 - Customer site create under CRM account detail
+- [Customer Map](../customers/customer-map.md)
