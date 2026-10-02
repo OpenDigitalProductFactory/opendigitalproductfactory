@@ -4,6 +4,7 @@ import { prisma } from "@dpf/db";
 import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
 
 import { buildMarketFootprint, type MarketFootprint } from "./market-footprint";
+import { loadDeclaredDeploymentRows } from "@/lib/federation/deployment-declaration.server";
 
 /** Read `countryCode` entries from MarketingStrategy.serviceTerritories, when present. */
 function territoryCountries(value: unknown): string[] {
@@ -35,7 +36,7 @@ function siteCountry(site: SiteWithCountry): string | null {
  * customer sites that carry an active fulfilment. No schema of its own.
  */
 export async function loadMarketFootprint(): Promise<MarketFootprint> {
-  const [context, strategies, accounts, deploymentSites] = await Promise.all([
+  const [context, strategies, accounts, deploymentSites, declaredDeployments] = await Promise.all([
     prisma.businessContext.findFirst({ select: { sellsTo: true, operatesIn: true } }),
     prisma.marketingStrategy.findMany({ select: { serviceTerritories: true } }),
     prisma.customerAccount.findMany({
@@ -55,6 +56,8 @@ export async function loadMarketFootprint(): Promise<MarketFootprint> {
       },
       select: { id: true, ...SITE_COUNTRY_SELECT },
     }),
+    // Installs that chose to share their country over federation (BI-06EA3167).
+    loadDeclaredDeploymentRows(),
   ]);
 
   return buildMarketFootprint({
@@ -67,6 +70,9 @@ export async function loadMarketFootprint(): Promise<MarketFootprint> {
       accountId: account.id,
       siteCountries: account.customerSites.map(siteCountry),
     })),
-    deploymentSites: deploymentSites.map((site) => ({ siteId: site.id, country: siteCountry(site) })),
+    deploymentSites: [
+      ...deploymentSites.map((site) => ({ siteId: site.id, country: siteCountry(site) })),
+      ...declaredDeployments,
+    ],
   });
 }

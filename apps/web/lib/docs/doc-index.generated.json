@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 730,
+  "pageCount": 731,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -12564,6 +12564,19 @@
         "separate-the-failure-domains",
         "change-and-recovery-rules",
         "what-to-watch"
+      ]
+    },
+    "docs/user-guide/platform/deployment-country-sharing.md": {
+      "publicHref": "/user-guide/platform/deployment-country-sharing/",
+      "portalHref": "/docs/platform/deployment-country-sharing",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "where-to-find-it",
+        "what-it-does",
+        "if-the-switch-is-unavailable",
+        "related"
       ]
     },
     "docs/user-guide/platform/discovery-operations.md": {
