@@ -9,6 +9,7 @@ import {
   View,
   Pressable,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { colors, spacing, borderRadius } from "@/src/lib/theme";
 import { CustomerCard } from "@/src/components/CustomerCard";
 import { useCustomerStore } from "@/src/features/customer/customer.store";
@@ -16,6 +17,7 @@ import { api } from "@/src/lib/apiClient";
 import type { CustomerAccount, DynamicViewSchema } from "@dpf/types";
 
 export default function CustomersScreen() {
+  const router = useRouter();
   const { customers, isLoading, error, fetchCustomers } = useCustomerStore();
   const [search, setSearch] = useState("");
   const [dynamicViews, setDynamicViews] = useState<DynamicViewSchema[]>([]);
@@ -67,7 +69,17 @@ export default function CustomersScreen() {
       }
       ListHeaderComponent={
         <View>
-          <Text style={styles.heading}>Customers</Text>
+          <View style={styles.headingRow}>
+            <Text style={styles.heading}>Customers</Text>
+            <Pressable
+              onPress={() => router.push("/customers/map")}
+              accessibilityRole="button"
+              hitSlop={8}
+              testID="customers-open-map"
+            >
+              <Text style={styles.mapLink}>Map</Text>
+            </Pressable>
+          </View>
           <TextInput
             style={styles.searchInput}
             value={search}
@@ -119,6 +131,17 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingBottom: spacing.xl,
+  },
+  headingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginRight: spacing.md,
+  },
+  mapLink: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: "600",
   },
   heading: {
     color: colors.text,

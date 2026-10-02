@@ -14,7 +14,8 @@
       "expo-location",
       "expo-notifications",
       "expo-sqlite",
-      "expo-status-bar"
+      "expo-status-bar",
+      "@maplibre/maplibre-react-native"
     ],
     "ios": {
       "supportsTablet": false,

@@ -49,6 +49,16 @@ overrides:
   # the workspace major (plan 2026-09-08 M7, BI-5265CAD0). Types-only: no
   # runtime behaviour changes; typecheck across all workspaces is the proof.
   '@types/node@<26': '^26.2.0'
+  # The injected @dpf/* packages declare shared dependencies as "catalog:"
+  # (plan 2026-09-08 S11). A catalog belongs to the root workspace, and pnpm
+  # refuses it in a file: dependency when this tree re-resolves, so every
+  # mobile dependency change failed with ERR_PNPM_SPEC_NOT_SUPPORTED_BY_ANY_RESOLVER.
+  # These map each one to the root catalog's range; keep them equal to
+  # pnpm-workspace.yaml `catalog:` at the repository root.
+  '@dpf/validators>zod': '^4.6.5'
+  '@dpf/validators>typescript': '^6.0.3'
+  '@dpf/types>typescript': '^6.0.3'
+  '@dpf/api-client>typescript': '^6.0.3'
   lodash: '4.18.0'
   postcss: '^8.5.18'
   uuid: '^14.0.0'

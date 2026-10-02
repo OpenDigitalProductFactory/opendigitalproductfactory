@@ -28,6 +28,10 @@ describe("buildCustomerSitesMapPayload (AC-PMR-SCENE-1)", () => {
     expect(payload.notOnMap).toBe(1);
     expect(payload.model?.placements.features).toHaveLength(1);
     expect(payload.model?.placements.features[0]?.properties.entityId).toBe("a");
+    expect(payload.sites.map((entry) => [entry.siteId, entry.accountId, entry.onMap])).toEqual([
+      ["a", "acct-a", true],
+      ["b", "acct-b", false],
+    ]);
   });
 
   it("says why there is no street map", () => {
@@ -37,6 +41,7 @@ describe("buildCustomerSitesMapPayload (AC-PMR-SCENE-1)", () => {
     expect(buildCustomerSitesMapPayload(buildCustomerMap([]), [texas])).toEqual({
       model: null,
       notOnMap: 0,
+      sites: [],
       pack: null,
       basemap: "nothing-to-show",
     });

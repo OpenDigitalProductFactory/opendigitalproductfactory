@@ -58,6 +58,8 @@ export type CustomerMap = {
   layout: GeographicSceneLayout | null;
   presentations: GeographicScenePresentationMap;
   placedCount: number;
+  /** The sites drawn on the map, in placement order. */
+  placed: CustomerMapSite[];
   unplaced: UnplacedCustomerSite[];
   coverage: CustomerMapCoverage;
 };
@@ -131,7 +133,7 @@ export function buildCustomerMap(
   const coverage = buildCoverage(placed, serviceAreas);
   const zones = serviceAreas.zones;
   if (placements.length === 0 && zones.length === 0) {
-    return { layout: null, presentations, placedCount: 0, unplaced, coverage };
+    return { layout: null, presentations, placedCount: 0, placed, unplaced, coverage };
   }
 
   const anchors = placed.length > 0 ? placed : zones.flatMap((zone) => zone.geometry.rings[0] ?? []);
@@ -148,5 +150,5 @@ export function buildCustomerMap(
     zones,
     placements,
   };
-  return { layout, presentations, placedCount: placements.length, unplaced, coverage };
+  return { layout, presentations, placedCount: placements.length, placed, unplaced, coverage };
 }

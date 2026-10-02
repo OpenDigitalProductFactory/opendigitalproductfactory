@@ -189,6 +189,16 @@
       ],
       "note": "Acknowledged 2026-09-25 with the apps/mobile workspace split (plan 2026-09-08 M6). Mobile tests already imported it; it resolved only through the root workspace hoisting jest. Part of the Jest 30 family already in the tree (same major, same maintainers as jest), so no new package or publisher. Declared explicitly so the mobile workspace resolves it on its own."
     },
+    "@maplibre/maplibre-react-native": {
+      "added": "2026-10-02",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "Acknowledged 2026-10-02 for the phone map (BI-3DAE2169), operator-approved tool evaluation docs/security/tool-evaluations/2026-10-02-maplibre-react-native.md. MIT; published by the MapLibre organisation (maplibreorg plus two maintainers) with signed SLSA v1 npm provenance; OSV shows no advisories (2026-10-02). Pinned exactly at 11.4.1 because it ships native SDKs (iOS over SPM, Android over Maven) whose upgrade is a re-evaluation trigger. Nothing already in the tree draws a native map; it reuses the MapLibre style spec family and PMTiles packs the web map already uses."
+    },
     "@opentelemetry/api": {
       "added": "2026-06-21",
       "workspaces": [

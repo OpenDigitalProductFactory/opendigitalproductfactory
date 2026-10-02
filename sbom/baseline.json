@@ -20,7 +20,7 @@
     "multiMajorNames": 25
   },
   "lastBudgetRaise": {
-    "reason": "+23 transitive components from maplibre-gl 6.11.2 and pmtiles 4.5.0 (BI-814F86E1). Nothing can be retired: DPF had no map renderer and no overlapping geo package. Writing our own WebGL renderer and adopting a React binding were both rejected (WWMD, design §3).",
+    "reason": "@maplibre/maplibre-react-native 11.4.1 (BI-3DAE2169, operator-approved tool evaluation docs/security/tool-evaluations/2026-10-02-maplibre-react-native.md): the phone map. Nothing in the mobile tree draws maps, so nothing can retire; the style spec it carries is the same family the web map already uses, and the alternatives (WebView map, vendor SDKs) add more.",
     "budgets": {
       "resolvedComponents": 891,
       "duplicatedNames": 55,
@@ -36,20 +36,20 @@
     "mobile": {
       "lockfile": "apps/mobile/pnpm-lock.yaml",
       "totals": {
-        "resolvedComponents": 951,
-        "uniqueNames": 848,
+        "resolvedComponents": 966,
+        "uniqueNames": 863,
         "duplicatedNames": 87,
         "excessInstances": 103,
         "multiMajorNames": 47,
         "firstPartyDivergentNames": 0,
         "directButTransitiveNames": 0,
         "dedupeCandidateNames": 40,
-        "directProdNames": 24,
+        "directProdNames": 25,
         "directDevNames": 12,
         "workspaces": 1
       },
       "budgets": {
-        "resolvedComponents": 951,
+        "resolvedComponents": 966,
         "duplicatedNames": 87,
         "excessInstances": 103,
         "multiMajorNames": 47
