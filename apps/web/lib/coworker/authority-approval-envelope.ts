@@ -235,12 +235,6 @@ export async function findApprovedAuthorityEnvelope(
 }
 
 /**
- * BI-12E5DD91 — the recorded outcome of an identical call that already ran on
- * a person's approval. A caller that retries after approval gets that outcome
- * instead of a second run or a second card. Only a successful run within the
- * approval window counts; a failed or declined one may be asked again.
- */
-/**
  * The settled outcome of an identical call a person already approved, within
  * the approval window: the result it ran with, or, for a run that failed
  * (BI-F4EB23C1), the failure it recorded. A failed approval is an outcome too;

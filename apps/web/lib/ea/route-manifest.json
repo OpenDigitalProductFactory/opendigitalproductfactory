@@ -569,7 +569,8 @@
       "dynamicParams": [
         "envelopeId"
       ],
-      "file": "apps/web/app/api/agent/envelope/[envelopeId]/route.ts"
+      "file": "apps/web/app/api/agent/envelope/[envelopeId]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/agent/envelope/[envelopeId]/approve",

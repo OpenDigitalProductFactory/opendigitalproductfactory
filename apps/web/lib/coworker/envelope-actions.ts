@@ -131,10 +131,17 @@ export async function approveEnvelope(
     };
   }
 
-  const updated = await prisma.coworkerActionEnvelope.update({
-    where: { id: envelopeId },
+  // Conditional on still being proposed: two overlapping decisions (a slow
+  // first POST and a second press after the card reconciled, BI-F4EB23C1)
+  // record one approval; the other is told it is already settled.
+  const claimed = await prisma.coworkerActionEnvelope.updateMany({
+    where: { id: envelopeId, status: "proposed" },
     data: { status: "approved" },
   });
+  if (claimed.count !== 1) {
+    return { ok: false, reason: "This request was already decided.", httpStatus: 409 };
+  }
+  const updated = { ...load.envelope, status: "approved" };
   // Approving does NOT mark the waiting task working here, and must not.
   // Marking it working at approval time makes the resume's CAS on
   // `status: "input-required"` unmatchable and the approval unusable — #4796

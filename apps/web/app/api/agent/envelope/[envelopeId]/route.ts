@@ -1,3 +1,4 @@
+// @exposure authenticated — session required unconditionally (auth() → 401).
 // GET /api/agent/envelope/:envelopeId — the delegating user's recorded outcome
 // for one approval request (BI-F4EB23C1).
 //
@@ -9,6 +10,7 @@
 
 import { NextResponse } from "next/server";
 
+import { apiErrorResponse } from "@/lib/api/error";
 import { auth } from "@/lib/auth";
 import { loadApprovalOutcomes } from "@/lib/coworker/approval-outcome-store";
 
@@ -18,10 +20,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, context: RouteContext): Promise<Response> {
   const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user?.id) return apiErrorResponse("UNAUTHORIZED", "Sign in to read this approval request.", 401);
   const { envelopeId } = await context.params;
-  if (!envelopeId) return NextResponse.json({ error: "envelopeId required" }, { status: 400 });
+  if (!envelopeId) return apiErrorResponse("BAD_REQUEST", "envelopeId required", 400);
   const [outcome] = await loadApprovalOutcomes(session.user.id, envelopeId);
-  if (!outcome) return NextResponse.json({ error: "Approval request not found." }, { status: 404 });
+  if (!outcome) return apiErrorResponse("NOT_FOUND", "Approval request not found.", 404);
   return NextResponse.json({ outcome }, { headers: { "cache-control": "no-store" } });
 }

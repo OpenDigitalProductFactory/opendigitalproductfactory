@@ -370,7 +370,10 @@ export async function governedExecuteTool(
     const agentGrantAllowed = await isAllowedByGrants(args.toolName, grants);
 
     // BI-F4EB23C1: never ask a person to approve a call the room rule refuses.
-    const roomRefusal = await oauthRoomRefusal(args.toolName, args.rawParams, args.userId, args.context);
+    // An approved run skips this: its refusal must come after the gate, which
+    // then closes the approval as failed (callExecuteTool checks again).
+    const roomRefusal = args.context?.callerClient === "approval-completion"
+      ? null : await oauthRoomRefusal(args.toolName, args.rawParams, args.userId, args.context);
     if (roomRefusal) {
       await writeAudit({ toolName: args.toolName, rawParams: args.rawParams, result: roomRefusal,
         userId: args.userId, source: args.source, context: args.context, durationMs: 0 });

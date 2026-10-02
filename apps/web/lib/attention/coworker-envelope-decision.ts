@@ -287,10 +287,10 @@ function unknownSummary(input: SummaryContext): EnvelopeDecisionSummary {
   };
 }
 
-const ASSISTANT_NAMES: Record<string, string> = {
-  "codex-desktop": "Codex",
-  "claude-desktop": "Claude",
-  "grok-desktop": "Grok",
+const ASSISTANT_NAMES: Record<string, { name: string; match: string }> = {
+  "codex-desktop": { name: "Codex", match: "codex" },
+  "claude-desktop": { name: "Claude", match: "claude" },
+  "grok-desktop": { name: "Grok", match: "grok" },
 };
 
 /**
@@ -299,11 +299,17 @@ const ASSISTANT_NAMES: Record<string, string> = {
  * contributor (reassign-executor-handler.ts). Say exactly that, and nothing
  * the handler does not do.
  */
-function handoverSummary(input: SummaryContext, params: Record<string, unknown>): EnvelopeDecisionSummary | null {
+function handoverSummary(
+  input: SummaryContext, params: Record<string, unknown>, recommenderAgentId: string,
+): EnvelopeDecisionSummary | null {
   const room = stringParam(params, "capsuleId");
-  const executor = stringParam(params, "toExecutorKind");
-  if (!room || !executor) return null;
-  const assistant = ASSISTANT_NAMES[executor] ?? executor;
+  const known = ASSISTANT_NAMES[stringParam(params, "toExecutorKind") ?? ""];
+  // The handler admits the external assistant that asked, so plain words are
+  // only true when the room goes to that same assistant. Anything else keeps
+  // the exact-content card (the same name test as providerToExecutorKind).
+  const agent = recommenderAgentId.trim().toLowerCase();
+  if (!room || !known || !agent.startsWith("agt-ext-") || !agent.includes(known.match)) return null;
+  const assistant = known.name;
   const manifest = objectRecord(params.handoffManifest);
   const nextStep = typeof manifest?.nextAction === "string" && manifest.nextAction.trim() ? manifest.nextAction.trim() : undefined;
   return {
@@ -322,7 +328,7 @@ function handoverSummary(input: SummaryContext, params: Record<string, unknown>)
     handover: {
       changes: [
         `${assistant} can work in this one room as a contributor: read it, record evidence, and continue on its branch and worktree.`,
-        `${assistant} holds the room's lease, so the assistant that worked here before no longer does.`,
+        `${assistant} becomes this room's assistant in place of the one that worked here before, and the room's lease is renewed under your account.`,
       ],
       keeps: [
         "The room's history, branch, worktree and evidence stay as they are.",
@@ -375,7 +381,7 @@ export function summarizeCoworkerEnvelopeDecision(input: {
     : undefined;
 
   if (toolName === "reassign_workroom_executor" && resolvedParams) {
-    const handover = handoverSummary(context, resolvedParams);
+    const handover = handoverSummary(context, resolvedParams, input.recommenderAgentId);
     if (handover) return handover;
   }
   if (toolName !== "record_initiative_evidence" || !decision || !gate) {

@@ -430,6 +430,19 @@ describe("CoworkerEnvelopeApproval — room handover", () => {
     });
     expect(decision.kind).toBe("exact");
   });
+
+  it("keeps the exact-content card when the room would go to a different assistant than the one asking", () => {
+    const decision = (recommenderAgentId: string, toExecutorKind: string) => summarizeCoworkerEnvelopeDecision({
+      toolName: "reassign_workroom_executor",
+      proposedParameters: { capsuleId: "WC-D72FAD2A", toExecutorKind },
+      recommenderAgentId,
+      authorizerUserId: "u",
+    }).kind;
+    expect(decision("AGT-EXT-CLAUDE", "codex-desktop")).toBe("exact");
+    expect(decision("AGT-WS-PORTFOLIO", "codex-desktop")).toBe("exact");
+    expect(decision("AGT-EXT-CODEX", "human")).toBe("exact");
+    expect(decision("AGT-EXT-CODEX", "codex-desktop")).toBe("handover");
+  });
 });
 
 // BI-F4EB23C1 — a decision that never answers is bounded, reconciled, and never resubmitted.

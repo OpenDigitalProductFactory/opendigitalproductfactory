@@ -65,7 +65,7 @@ type HandoverAccess = { decision: { level: string; reason?: string }; handoverRe
 function handoverRefused(refusal: HandoverRefusal) {
   return refusal === "not-owner"
     ? { success: false as const, error: "workroom_handover_not_owner",
-        message: "The account your assistant is connected as can see this workroom but does not own it: another person coordinates it. "
+        message: "The account your assistant is connected as can see this workroom but does not own it. "
           + "Only the room's owner can hand it to an assistant, so approving a handover from this account cannot work. "
           + "Either connect your assistant while signed in as the room's owner and ask again, or ask the owner to invite this assistant to the room." }
     : { success: false as const, error: "workroom_handover_assistant_in_room",

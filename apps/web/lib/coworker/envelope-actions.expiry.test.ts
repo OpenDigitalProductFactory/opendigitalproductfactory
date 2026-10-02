@@ -32,8 +32,16 @@ describe("envelope decisions honour the decision window", () => {
   it("approves inside the window", async () => {
     findUnique.mockResolvedValue(row());
     const result = await approveEnvelope("env-1", "user-1");
-    expect(result.ok).toBe(true);
-    expect(update).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ ok: true, envelope: { status: "approved" } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: "env-1", status: "proposed" }, data: { status: "approved" } });
+  });
+
+  // BI-F4EB23C1 — a second press after the card reconciled cannot approve twice.
+  it("records one approval when two decisions overlap", async () => {
+    findUnique.mockResolvedValue(row());
+    updateMany.mockResolvedValueOnce({ count: 0 });
+    const result = await approveEnvelope("env-1", "user-1");
+    expect(result).toMatchObject({ ok: false, httpStatus: 409 });
   });
 
   it.each([

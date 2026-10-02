@@ -254,6 +254,25 @@ decided, and not left sitting as though it were still live. The difference is wh
 "how many decisions lapsed unanswered" a question the platform can answer at all, and an
 expired request is final: re-asking mints a new one rather than reviving it.
 
+**You are only asked to approve what could actually run.** Before an assistant's call can
+become an approval request, the platform checks that the assistant and the account it is
+connected as are let into the room the call targets. If the room would refuse the call, the
+assistant gets that refusal straight away and nobody is asked. A refused room handover says
+why. Either the connected account does not own the room, and the fix is to connect the
+assistant as the room's owner or have the owner invite it. Or the assistant was removed from
+the room, or limited to observing it, and only the owner can restore it.
+
+**An approved call that failed stays failed.** If a call you approved ran and did not
+complete, an identical retry within the approval window returns that same failure. It does
+not put a new card in front of you. Once the cause is fixed and the window has closed, the
+assistant can ask again.
+
+**A decision that does not go through is checked, not repeated.** If Authorize or Decline
+gets no answer within 30 seconds, the card looks up what the platform recorded. If nothing
+was saved, it says so and offers the buttons again. If something was saved, it shows the
+result. If it cannot tell, it says not to approve again and links to the request's result.
+It never sends your decision a second time on its own.
+
 ### The floors nothing crosses
 
 Two hold at every posture, every autonomy level, and every proactivity setting:

@@ -214,13 +214,15 @@ describe("an approval raised outside a chat still gets an envelope", () => {
 // BI-F4EB23C1 — a failed approved run settles its replay instead of minting another card.
 describe("findExecutedAuthorityOutcome", () => {
   const NOW = new Date("2026-10-02T03:15:00Z");
-  function replayDb(envelope: { id: string; status: string } | null, runs: Array<{ success: boolean; result: unknown }>) {
+  function replayDb(envelope: { id: string; status: string } | null, runs: Array<{ success: boolean; result: unknown; toolName?: string }>) {
     return {
       coworkerActionEnvelope: { findFirst: vi.fn().mockResolvedValue(envelope ? { ...envelope, expiresAt: null } : null), create: vi.fn(), updateMany: vi.fn() },
       taskRun: { updateMany: vi.fn() },
       toolExecution: {
         findFirst: vi.fn().mockImplementation(async () => runs.find((run) => run.success) ?? null),
-        findMany: vi.fn().mockResolvedValue(runs.filter((run) => !run.success)),
+        // Honours the filter, so dropping the approval_outcome exclusion fails the test.
+        findMany: vi.fn().mockImplementation(async ({ where }: { where: { toolName: { not: string } } }) =>
+          runs.filter((run) => !run.success && run.toolName !== where.toolName.not)),
       },
     };
   }
@@ -234,8 +236,9 @@ describe("findExecutedAuthorityOutcome", () => {
   it("returns the failed run's recorded error, not the earlier approval-required row", async () => {
     const denied = { success: false, error: "workroom_access_denied", message: "You or your assistant are not admitted to this workroom." };
     const fake = replayDb({ id: "env-failed", status: "failed" }, [
-      { success: false, result: denied },
-      { success: false, result: { success: false, error: "approval_required", data: { envelopeId: "env-failed" } } },
+      { success: false, toolName: "approval_outcome", result: { status: "failed" } },
+      { success: false, toolName: "reassign_workroom_executor", result: denied },
+      { success: false, toolName: "reassign_workroom_executor", result: { success: false, error: "approval_required", data: { envelopeId: "env-failed" } } },
     ]);
     await expect(findExecutedAuthorityOutcome(BINDING, NOW, fake as never)).resolves.toEqual({ envelopeId: "env-failed", status: "failed", result: denied });
   });

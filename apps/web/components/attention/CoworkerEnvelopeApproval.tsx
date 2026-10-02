@@ -19,6 +19,9 @@ import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
 import { envelopeInboxRoute, envelopeStatusRoute } from "@/lib/coworker/envelope-routes";
+import { SOURCE_CATALOG } from "@dpf/i18n";
+
+const COPY = SOURCE_CATALOG.approvals.card;
 
 type Outcome = "authorized" | "declined" | "settled";
 
@@ -58,7 +61,7 @@ export function CoworkerEnvelopeApproval({
       const saved = body?.outcome;
       if (!saved) throw new Error("status unavailable");
       if (saved.state === "waiting") {
-        setError("Your decision did not reach the platform. Nothing was approved. You can decide again.");
+        setError(COPY.notReached);
         return;
       }
       setRecorded(saved);
@@ -131,7 +134,7 @@ export function CoworkerEnvelopeApproval({
         ) : (
         <section>
         <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
-          Human authorization needed
+          {COPY.authorizationNeeded}
         </p>
         <p className="mt-1 text-xs leading-relaxed text-[var(--dpf-text)]">
           {decision.authorization}.
@@ -188,16 +191,16 @@ export function CoworkerEnvelopeApproval({
         </p>
       ) : unknown ? (
         <div role="alert" className="space-y-1 text-xs text-[var(--dpf-error)]">
-          <p>We could not confirm whether your decision was saved. Do not approve again until you have checked its result.</p>
+          <p>{COPY.unknownResult}</p>
           <a className="font-semibold text-[var(--dpf-accent)] hover:opacity-80" href={envelopeInboxRoute(approval.envelopeId)}>
-            See this request&apos;s result
+            {COPY.unknownLink}
           </a>
         </div>
       ) : approval.actionable ? (
         <>
         {pending ? (
           <p className="text-xs text-[var(--dpf-muted)]" role="status">
-            Saving your decision. This can take a few seconds.
+            {COPY.saving}
           </p>
         ) : null}
         <div className="flex flex-wrap gap-2">
@@ -254,8 +257,8 @@ function statusLabel(approval: AttentionEnvelopeApproval): string {
 function Effects({ decision }: { decision: AttentionEnvelopeApproval["decision"] }) {
   return (
     <dl className="mt-3 grid gap-y-2">
-      <Fact label="If you authorize" value={decision.authorizeDoes} wide />
-      <Fact label="If you decline" value={decision.declineDoes} wide />
+      <Fact label={COPY.ifAuthorize} value={decision.authorizeDoes} wide />
+      <Fact label={COPY.ifDecline} value={decision.declineDoes} wide />
     </dl>
   );
 }
@@ -274,33 +277,33 @@ function HandoverDecision({ approval, decision, handover }: {
     <>
       <section>
         <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
-          Human authorization needed
+          {COPY.authorizationNeeded}
         </p>
         <h3 className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">{decision.headline}</h3>
-        <p className="mt-2 text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">What changes</p>
-        <ul className="mt-1 list-disc space-y-1 pl-4 text-xs leading-relaxed text-[var(--dpf-text)]">
+        <p className="mt-2 text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">{COPY.whatChanges}</p>
+        <ul className="mt-1 list-disc space-y-1 ps-4 text-xs leading-relaxed text-[var(--dpf-text)]">
           {handover.changes.map((line) => <li key={line}>{line}</li>)}
         </ul>
-        <p className="mt-2 text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">What stays the same</p>
-        <ul className="mt-1 list-disc space-y-1 pl-4 text-xs leading-relaxed text-[var(--dpf-text)]">
+        <p className="mt-2 text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">{COPY.whatStays}</p>
+        <ul className="mt-1 list-disc space-y-1 ps-4 text-xs leading-relaxed text-[var(--dpf-text)]">
           {handover.keeps.map((line) => <li key={line}>{line}</li>)}
         </ul>
         {handover.nextStep ? (
-          <p className="mt-2 text-xs text-[var(--dpf-text)]">Next step it was given: {handover.nextStep}</p>
+          <p className="mt-2 text-xs text-[var(--dpf-text)]">{COPY.nextStep}: {handover.nextStep}</p>
         ) : null}
         <Effects decision={decision} />
         <dl className="mt-3 grid gap-y-2">
-          <Fact label="Status" value={statusLabel(approval)} />
+          <Fact label={COPY.status} value={statusLabel(approval)} />
         </dl>
       </section>
       <details className="mt-3">
-        <summary className="cursor-pointer text-xs font-semibold text-[var(--dpf-muted)]">Technical details</summary>
+        <summary className="cursor-pointer text-xs font-semibold text-[var(--dpf-muted)]">{COPY.technical}</summary>
         <dl className="mt-2 grid gap-y-1.5">
-          <Fact label="Tool" value={decision.toolName} wide />
-          <Fact label="Request" value={approval.envelopeId} wide />
-          <Fact label="Assistant" value={approval.coworkerAgentId} wide />
-          <Fact label="Why you are asked" value={decision.whyAPerson} wide />
-          <Fact label="What authorizing covers" value={decision.scope} wide />
+          <Fact label={COPY.tool} value={decision.toolName} wide />
+          <Fact label={COPY.request} value={approval.envelopeId} wide />
+          <Fact label={COPY.assistant} value={approval.coworkerAgentId} wide />
+          <Fact label={COPY.whyAsked} value={decision.whyAPerson} wide />
+          <Fact label={COPY.covers} value={decision.scope} wide />
           {decision.proposed.map((field, index) => (
             <Fact key={`${field.label}-${index}`} label={field.label} value={field.value} wide />
           ))}
