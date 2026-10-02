@@ -11,5 +11,25 @@
     "save": "Save",
     "saving": "Saving…",
     "cancel": "Cancel"
+  },
+  "oauthClientPeople": {
+    "heading": "People connected to {$client}",
+    "empty": "Nobody is connected.",
+    "colPerson": "Person",
+    "colLive": "Live grants",
+    "colLastUsed": "Last used",
+    "colStatus": "Status",
+    "colActions": "Actions",
+    "never": "never",
+    "connected": "Connected",
+    "expired": "Expired",
+    "revoked": "Revoked {$when}: {$reason}",
+    "you": "You",
+    "revoke": "Revoke this person's access",
+    "revokeAria": "Revoke {$email}'s access to {$client}",
+    "dialogTitle": "End this person's access",
+    "dialogMessage": "{$email} will be disconnected from {$client}. Everyone else stays connected. They can reconnect by signing in again. Why is their access ending?",
+    "dialogPlaceholder": "For example: setup account nobody uses",
+    "revokedNotice": ".input {$grants :integer}\n.input {$tokens :integer}\n.match $grants $tokens\none one {{Ended {$email}'s access (1 sign-in grant, 1 access token).}}\none * {{Ended {$email}'s access (1 sign-in grant, {$tokens} access tokens).}}\n* one {{Ended {$email}'s access ({$grants} sign-in grants, 1 access token).}}\n* * {{Ended {$email}'s access ({$grants} sign-in grants, {$tokens} access tokens).}}"
   }
 }

@@ -4021,7 +4021,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 29
+    "textMass": 12
   },
   "apps/web/components/admin/OAuthPortMismatchBanner.tsx": {
     "vocabulary": 0,

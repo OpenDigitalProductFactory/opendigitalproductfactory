@@ -1,8 +1,12 @@
+---
+status: active
+---
+
 # End one person's access under a shared AI-client registration
 
 - Backlog item: BI-0A724798
 - Epic: EP-31815F97
-- Status: proposed
+- Status: approved (spec-approval 2026-10-02)
 - Date: 2026-10-01
 
 ## Problem

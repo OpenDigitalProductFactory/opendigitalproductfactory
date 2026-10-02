@@ -17,12 +17,14 @@ import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { listOAuthClientPeople, revokeOAuthClientPersonGrants } from "@/lib/actions/oauth-clients";
 import type { ClientPerson } from "@/lib/auth/oauth-client-people";
 import { formatTimestamp } from "@/lib/datetime";
+import { useT } from "@/lib/i18n/use-t";
 
 export function OAuthClientPeople({ clientId, clientName, onChanged }: { clientId: string; clientName: string; onChanged: () => void }) {
   const [people, setPeople] = useState<ClientPerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [pending, startTransition] = useTransition();
+  const t = useT("admin");
 
   function load() {
     startTransition(async () => {
@@ -38,11 +40,11 @@ export function OAuthClientPeople({ clientId, clientName, onChanged }: { clientI
 
   async function revoke(person: ClientPerson) {
     const reason = await promptDialog({
-      title: "End this person's access",
-      message: `${person.email} will be disconnected from ${clientName}. Everyone else stays connected. They can reconnect by signing in again. Why is their access ending?`,
+      title: t("oauthClientPeople.dialogTitle"),
+      message: t("oauthClientPeople.dialogMessage", { email: person.email, client: clientName }),
       tone: "danger",
-      confirmLabel: "Revoke this person's access",
-      placeholder: "For example: setup account nobody uses",
+      confirmLabel: t("oauthClientPeople.revoke"),
+      placeholder: t("oauthClientPeople.dialogPlaceholder"),
       required: true,
     });
     if (!reason) return;
@@ -50,7 +52,14 @@ export function OAuthClientPeople({ clientId, clientName, onChanged }: { clientI
       const result = await revokeOAuthClientPersonGrants({ clientId, userId: person.userId, reason });
       setNotice(
         result.ok
-          ? { kind: "success", message: `Ended ${person.email}'s access (${result.data.revokedRefreshTokens} sign-in grant${result.data.revokedRefreshTokens === 1 ? "" : "s"}, ${result.data.revokedAccessTokens} access token${result.data.revokedAccessTokens === 1 ? "" : "s"}).` }
+          ? {
+              kind: "success",
+              message: t("oauthClientPeople.revokedNotice", {
+                email: person.email,
+                grants: result.data.revokedRefreshTokens,
+                tokens: result.data.revokedAccessTokens,
+              }),
+            }
           : { kind: "error", message: result.error },
       );
       load();
@@ -59,42 +68,45 @@ export function OAuthClientPeople({ clientId, clientName, onChanged }: { clientI
   }
 
   const columns: Column<ClientPerson>[] = [
-    { key: "email", header: "Person", cell: (row) => <span className="text-[var(--dpf-text)]">{row.email}</span> },
-    { key: "live", header: "Live grants", align: "right", cell: (row) => row.liveRefreshGrants + row.liveAccessTokens },
-    { key: "lastUsed", header: "Last used", cell: (row) => formatTimestamp(row.lastUsedAt, "never") },
+    { key: "email", header: t("oauthClientPeople.colPerson"), cell: (row) => <span className="text-[var(--dpf-text)]">{row.email}</span> },
+    { key: "live", header: t("oauthClientPeople.colLive"), align: "right", cell: (row) => row.liveRefreshGrants + row.liveAccessTokens },
+    { key: "lastUsed", header: t("oauthClientPeople.colLastUsed"), cell: (row) => formatTimestamp(row.lastUsedAt, t("oauthClientPeople.never")) },
     {
       key: "status",
-      header: "Status",
+      header: t("oauthClientPeople.colStatus"),
       cell: (row) =>
         row.lastRevocation && row.liveRefreshGrants + row.liveAccessTokens === 0 ? (
           <span className="text-[var(--dpf-muted)]">
-            Revoked {formatTimestamp(row.lastRevocation.at, "")}: {row.lastRevocation.reason.replace(/^operator_revoked_person: /, "")}
+            {t("oauthClientPeople.revoked", {
+              when: formatTimestamp(row.lastRevocation.at, ""),
+              reason: row.lastRevocation.reason.replace(/^operator_revoked_person: /, ""),
+            })}
           </span>
         ) : row.liveRefreshGrants + row.liveAccessTokens > 0 ? (
-          <StatusBadge intent="success" label="Connected" size="sm" />
+          <StatusBadge intent="success" label={t("oauthClientPeople.connected")} size="sm" />
         ) : (
-          <StatusBadge intent="neutral" label="Expired" size="sm" />
+          <StatusBadge intent="neutral" label={t("oauthClientPeople.expired")} size="sm" />
         ),
     },
     {
       key: "actions",
-      header: <span className="sr-only">Actions</span>,
+      header: <span className="sr-only">{t("oauthClientPeople.colActions")}</span>,
       align: "right",
       cell: (row) =>
         row.isYou ? (
-          <span className="text-sm text-[var(--dpf-muted)]">You</span>
+          <span className="text-sm text-[var(--dpf-muted)]">{t("oauthClientPeople.you")}</span>
         ) : row.liveRefreshGrants + row.liveAccessTokens > 0 ? (
-          <Button variant="danger" size="sm" type="button" disabled={pending} onClick={() => revoke(row)} aria-label={`Revoke ${row.email}'s access to ${clientName}`}>
+          <Button variant="danger" size="sm" type="button" disabled={pending} onClick={() => revoke(row)} aria-label={t("oauthClientPeople.revokeAria", { email: row.email, client: clientName })}>
             <UserX className="h-3.5 w-3.5" aria-hidden="true" />
-            Revoke this person&apos;s access
+            {t("oauthClientPeople.revoke")}
           </Button>
         ) : null,
     },
   ];
 
   return (
-    <Surface as="section" level={2} padding="sm" rounded="md" className="mt-3" aria-label={`People connected to ${clientName}`}>
-      <h3 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">People connected to {clientName}</h3>
+    <Surface as="section" level={2} padding="sm" rounded="md" className="mt-3" aria-label={t("oauthClientPeople.heading", { client: clientName })}>
+      <h3 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">{t("oauthClientPeople.heading", { client: clientName })}</h3>
       {notice ? <Notice variant={notice.kind} className="mb-2">{notice.message}</Notice> : null}
       <DataTable
         columns={columns}
@@ -102,8 +114,8 @@ export function OAuthClientPeople({ clientId, clientName, onChanged }: { clientI
         getRowKey={(row) => row.userId}
         loading={loading}
         dense
-        ariaLabel={`People connected to ${clientName}`}
-        empty={<span>Nobody is connected.</span>}
+        ariaLabel={t("oauthClientPeople.heading", { client: clientName })}
+        empty={<span>{t("oauthClientPeople.empty")}</span>}
       />
     </Surface>
   );

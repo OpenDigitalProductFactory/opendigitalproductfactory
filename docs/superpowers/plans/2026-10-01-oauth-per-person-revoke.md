@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Plan: end one person's access under a shared AI-client registration
 
 - Backlog item: BI-0A724798 (epic EP-31815F97)
