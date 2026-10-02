@@ -11,7 +11,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { useEffect, useRef, useState } from "react";
-import type { Map as MapLibreMap, GeoJSONSource } from "maplibre-gl";
+import type { Map as MapLibreMap, GeoJSONSource, StyleSpecification } from "maplibre-gl";
 
 import type { GeographicSceneModel } from "@/lib/twin/geographic-scene";
 import { useT } from "@/lib/i18n/use-t";
@@ -24,9 +24,18 @@ import {
 import {
   buildGeographicStyle,
   GEOGRAPHIC_SOURCE_IDS,
-  GEOGRAPHIC_TOKEN_VARIABLES,
   type GeographicStyleTokens,
-} from "./geographic-style";
+} from "@dpf/types";
+
+/** The CSS custom properties each style token is read from on the web. */
+export const GEOGRAPHIC_TOKEN_VARIABLES: Record<keyof GeographicStyleTokens, string> = {
+  background: "--dpf-bg",
+  surface: "--dpf-surface-2",
+  text: "--dpf-text",
+  muted: "--dpf-muted",
+  border: "--dpf-border",
+  accent: "--dpf-accent",
+};
 
 type MapLibreModule = typeof import("maplibre-gl");
 type PMTilesModule = typeof import("pmtiles");
@@ -162,12 +171,14 @@ export function GeographicSceneCanvas({
       const maplibre = await loadEngine();
       if (cancelled) return;
       const pack = capability.pack ? packs.find((entry) => entry.packId === capability.pack?.packId) : undefined;
+      // The shared builder's minimal style types are a subset of MapLibre's spec;
+      // maplibre-gl validates the full style when it loads it.
       const style = () =>
         buildGeographicStyle({
           tokens: readTokens(element),
           origin: window.location.origin,
           pack: pack ? { packId: pack.packId, attribution: pack.attribution } : undefined,
-        });
+        }) as unknown as StyleSpecification;
       const instance = new maplibre.Map({
         container: element,
         style: style(),

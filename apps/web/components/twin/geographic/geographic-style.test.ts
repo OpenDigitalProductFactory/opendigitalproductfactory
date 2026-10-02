@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildGeographicStyle, GEOGRAPHIC_SOURCE_IDS, type GeographicStyleTokens } from "./geographic-style";
+import { buildGeographicStyle, GEOGRAPHIC_SOURCE_IDS, type GeographicStyleTokens } from "@dpf/types";
 
 const light: GeographicStyleTokens = {
   background: "#ffffff",

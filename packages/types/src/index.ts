@@ -10,3 +10,4 @@ export * from "./work-item-evidence";
 export * from "./nearby";
 export * from "./storefront-discovery";
 export * from "./authorized-surface";
+export * from "./geographic-style";
