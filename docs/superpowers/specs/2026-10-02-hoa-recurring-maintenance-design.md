@@ -11,7 +11,8 @@ status: draft
 | **Backlog** | `BI-3DA6E1A0` (P4c) · epic `EP-SPATIAL-OPERATIONAL-VIEWS` |
 | **Parent** | Geographic footprint, coverage and live overlays design, §3.3.4 |
 | **Decision** | WWMD `DI-F16F534632CC`: maintained features as site nodes plus recurring work engagements, high confidence, margin 2.52. It beat a new MaintainedFeature + VendorWorkOrder model and beat extending Resource. |
-| **Out of scope (follow-ups)** | The vendor's no-login link to one work order (needs its own security review, because the existing reach link grants nothing by design); a map image on the work order; per-feature photos; budgets and contracts |
+| **Settled earlier (honoured here)** | Layout default is the site-plan underlay (operator and WWMD, 2026-09-25). Vendor access is a signed, per-work-order, expiring, revocable no-login link for the job and a portal account for money (WWMD `link-for-work-portal-for-money`, 2026-09-25, margin 0.85). |
+| **Out of scope (follow-ups)** | Slice 2: the vendor's per-work-order link, built to that decision and the W3C capability-URL guidance with its own security review, because the platform's existing reach link is a pointer and grants nothing. Later: a map image on the work order, per-feature photos, budgets and contracts |
 
 ## 1. Problem
 
@@ -48,7 +49,8 @@ Missing: a record for a maintained feature, a link from a recurring job to a ven
    - the boundary's corner coordinates, or the point.
 
    Staff send it to the vendor themselves. Nothing is sent automatically.
-6. **On the customer map and the community page.** The customer map draws maintained features as their own layer, with the shape and a letter for the kind, so kind is never shown by colour alone. The community's site page lists features with their plans, next due date and supplier.
+6. **The site plan underneath (the default layout).** An administrator uploads the community's site plan or plat as an image through the existing authenticated upload, then pins it by clicking its four corners on the map. The plan is stored as the territory layout's `underlayRef`, with the four corner coordinates, and MapLibre draws it as an image source under the features. It is served from the install's own origin, so the style still fetches nothing from a third party. A community without a plan uses the street map or the plain background, as the customer map already does. The site-plan underlay is the default the earlier decision set, and pinning it to real coordinates keeps every feature usable on the phone and on a vendor's work order. The cartesian renderer is not used, because its placements are fixed-size shapes and its zones are capped at six.
+7. **On the customer map and the community page.** The customer map draws maintained features as their own layer, with the shape and a letter for the kind, so kind is never shown by colour alone. The community's site page lists features with their plans, next due date and supplier.
 
 ## Objectives and acceptance
 
@@ -59,6 +61,7 @@ Missing: a record for a maintained feature, a link from a recurring job to a ven
 | Acceptance | Objective | Criterion |
 |---|---|---|
 | AC-HRM-FEATURE-1 | OBJ-HRM-WHAT | A customer site node with a `maintainedKind` and `attributes` can be created, edited and retired under a community site, and nodes without a kind are unaffected. |
+| AC-HRM-UNDERLAY-1 | OBJ-HRM-WHAT | An uploaded site plan pinned by four corners is saved as the territory layout's underlay and drawn under the features from the install's own origin. A community without one keeps the street or plain background. |
 | AC-HRM-PLACE-1 | OBJ-HRM-WHAT | A feature's point or boundary is saved as a territory-layout placement with `entityRef.kind` `maintained-feature`, survives a service-area save, and is drawn on the customer map with a kind letter. |
 | AC-HRM-PLAN-1 | OBJ-HRM-WHEN | A plan with a valid RRULE, time zone, start and optional supplier is saved as a recurring WorkEngagement for the feature, and the editor shows the next five dates. An invalid rule is refused with the reason. |
 | AC-HRM-MATERIALIZE-1 | OBJ-HRM-WHEN | The daily job materializes each active plan's occurrences 60 days ahead, idempotently. A cancelled or overridden occurrence stays so, and each occurrence carries the plan's supplier. |
@@ -70,7 +73,8 @@ Missing: a record for a maintained feature, a link from a recurring job to a ven
 - **A typed kind.** The rulebook makes closed-set strings into enums. The kind is a new nullable column rather than a retyping of the existing free-text `nodeType`, so existing nodes need no migration of their values.
 - **Recurrence through the one primitive.** No parallel scheduler. The missing piece was only the job that keeps occurrences materialized.
 - **Supplier on the engagement.** The work belongs to the occurrence. The supplier is the existing vendor record; a separate VendorWorkOrder would duplicate the engagement.
-- **No vendor link yet.** The only stateless link in the platform is explicitly a pointer, not an authorization. Granting a vendor access to one order needs its own design and security review.
+- **Vendor link in slice 2, as already decided.** The 2026-09-25 decision stands: a link for the job, a portal for money. The only stateless link in the platform today is explicitly a pointer, not an authorization, so the per-work-order link is built as its own slice with a security review rather than bolted onto it.
+- **Site plan pinned onto the one map engine.** The site-plan default holds, and pinning by corners gives every feature real coordinates. That beats drawing on a free-floating image, which the phone and a vendor could not locate.
 
 ## 4. Research & Benchmarking
 
@@ -105,7 +109,8 @@ There is no backfill, and it applies to any data state. The daily job is registe
   - plan validation and next-five preview (AC-HRM-PLAN-1);
   - materialization horizon, idempotence, exceptions and supplier inheritance (AC-HRM-MATERIALIZE-1);
   - work order content (AC-HRM-ORDER-1).
-- **UX:** on the contributor preview, draw a lawn zone, add a weekly in-season mowing plan with a supplier, run the job, and open a work order.
+  - site-plan pinning and the style's same-origin rule (AC-HRM-UNDERLAY-1);
+- **UX:** on the contributor preview, pin a site plan, draw a lawn zone, add a weekly in-season mowing plan with a supplier, run the job, and open a work order.
 - **Migration** applies cleanly.
 
 ## 8. Documentation impact
