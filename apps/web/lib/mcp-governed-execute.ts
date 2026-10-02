@@ -226,18 +226,11 @@ async function callExecuteTool(
   userId: string,
   ctx?: ToolExecutionContext,
 ): Promise<ToolResult> {
-  // Keep this check at the execution boundary even though governed dispatch
-  // also runs it early. An approval may resume later, after room membership or
-  // connection authority changed; execution must re-evaluate current access.
+  // Recheck at execution: approval may resume after room or connection access changed.
   if (ctx?.authSource === "oauth") {
     const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
-    const refusal = await workroomTargetAccessRefusal({
-      params,
-      userId,
-      ...ctx,
-      toolName,
-      action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false,
-    });
+    const refusal = await workroomTargetAccessRefusal({ params, userId, ...ctx, toolName,
+      action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
     if (refusal) return refusal;
   }
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
