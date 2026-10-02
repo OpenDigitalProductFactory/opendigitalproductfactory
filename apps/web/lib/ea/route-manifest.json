@@ -1297,7 +1297,8 @@
         "control"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/api/ops/self-upgrade/control/route.ts"
+      "file": "apps/web/app/api/ops/self-upgrade/control/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/ops/self-upgrade/impact-summary",

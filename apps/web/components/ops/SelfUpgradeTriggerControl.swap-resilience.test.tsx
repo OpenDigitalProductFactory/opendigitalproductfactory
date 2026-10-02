@@ -24,6 +24,7 @@ vi.mock("@/lib/actions/promotions", () => ({
 }));
 
 import { triggerSelfUpgrade, forceActiveRun } from "@/lib/actions/promotions";
+import { withMessages } from "@/test-support/with-messages";
 import SelfUpgradeTriggerControl from "./SelfUpgradeTriggerControl";
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 
@@ -187,7 +188,7 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
   // during a drain; a server action to the page is refused exactly then.
   it("sends Force now through the drain control route", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
-    render(<SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} quiescence={drainingQuiescence} />);
+    render(withMessages(<SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} quiescence={drainingQuiescence} />));
     fireEvent.click(screen.getByRole("button", { name: /Force upgrade run QR-DRAIN now/i }));
     fireEvent.click(screen.getByRole("button", { name: /confirm force/i }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -199,12 +200,12 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
 
   it("offers Keep waiting only once the upgrade pauses for the operator, and says why", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
-    const { rerender } = render(<SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} quiescence={drainingQuiescence} />);
+    const { rerender } = render(withMessages(<SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} quiescence={drainingQuiescence} />));
     expect(screen.queryByRole("button", { name: /Keep waiting/i })).toBeNull();
     expect(screen.getByText(/Waiting for running work to finish before installing/i)).toBeInTheDocument();
 
     const paused = { ...drainingQuiescence, run: { ...drainingQuiescence.run, status: "awaiting-operator" } };
-    rerender(<SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} quiescence={paused} />);
+    rerender(withMessages(<SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} quiescence={paused} />));
     expect(screen.getByText(/Work is still running after .* min. New work stays paused/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Keep waiting/i }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());

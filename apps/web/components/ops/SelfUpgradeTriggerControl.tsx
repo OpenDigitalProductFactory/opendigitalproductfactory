@@ -27,7 +27,7 @@ async function postDrainControl(runId: string, action: "keep-waiting" | "force" 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ runId, action }),
   });
-  if (res.ok) return { ok: true };
+  if (res.ok) return ok();
   const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
   return { ok: false, error: body?.error?.message ?? `Request failed (${res.status})` };
 }
@@ -38,6 +38,8 @@ import {
   type SelfUpgradeActionState,
 } from "@/lib/self-upgrade/action-state";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ok } from "@/lib/shared/action-result";
+import { useT } from "@/lib/i18n/use-t";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
 import SelfUpgradeJobEngineHealthAlert, {
   type JobEngineHealth,
@@ -78,6 +80,7 @@ export default function SelfUpgradeTriggerControl({
   const quiescence = live?.snapshot.quiescence ?? initialQuiescence;
   const jobEngine = live?.snapshot.jobEngine ?? initialJobEngine;
   const [isPending, startTransition] = useTransition();
+  const t = useT("upgrade");
   const [override, setOverride] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{
     queued: boolean;
@@ -262,10 +265,10 @@ export default function SelfUpgradeTriggerControl({
     startTransition(async () => {
       try {
         const r = await postDrainControl(runId, "keep-waiting");
-        if (!r.ok) setInFlightError(r.error ?? "Keep waiting failed");
+        if (!r.ok) setInFlightError(r.error ?? t("drain.keepWaitingFailed"));
         refreshStatus();
       } catch (err) {
-        setInFlightError(getErrorMessage(err) || "Keep waiting failed");
+        setInFlightError(getErrorMessage(err) || t("drain.keepWaitingFailed"));
       }
     });
   }
@@ -278,8 +281,10 @@ export default function SelfUpgradeTriggerControl({
   const limitMinutes = drainRun?.budgetMs ? Math.round(drainRun.budgetMs / 60_000) : null;
   const waitingLine = drainRun && waitedMinutes !== null
     ? awaitingOperator
-      ? `Work is still running after ${waitedMinutes} min. New work stays paused. Keep waiting, force the upgrade now, or abort it.`
-      : `Waiting for running work to finish before installing — ${waitedMinutes}${limitMinutes ? ` of ${limitMinutes}` : ""} min. New work is paused.`
+      ? t("drain.awaitingOperator", { waited: String(waitedMinutes) })
+      : limitMinutes
+        ? t("drain.waiting", { waited: String(waitedMinutes), limit: String(limitMinutes) })
+        : t("drain.waitingNoLimit", { waited: String(waitedMinutes) })
     : null;
 
   if (!enabled) {
@@ -396,10 +401,10 @@ export default function SelfUpgradeTriggerControl({
                         type="button"
                         onClick={handleKeepWaiting}
                         disabled={isPending}
-                        aria-label={`Keep waiting for upgrade run ${drainRun?.runId ?? ""}`}
+                        aria-label={t("drain.keepWaitingLabel", { runId: drainRun?.runId ?? "" })}
                         className="px-3 py-1.5 text-xs rounded-lg border border-[var(--dpf-accent)] text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)] transition-colors disabled:opacity-50"
                       >
-                        Keep waiting
+                        {t("drain.keepWaiting")}
                       </button>
                     )}
                     <button
