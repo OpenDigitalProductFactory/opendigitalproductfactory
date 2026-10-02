@@ -139,7 +139,7 @@ function emptyPlan(
   };
 }
 
-function nextStageKey(
+export function nextStageKey(
   definition: WorkShapeDefinitionContract,
   currentStageKey: string | null,
   receipts: readonly { stageKey: string; kind: string }[],
