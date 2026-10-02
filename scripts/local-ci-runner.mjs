@@ -12,6 +12,7 @@
 // here so the lease/resource contract has one implementation source.
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import { runGit } from "./lib/git.mjs";
 import { X_OK } from "node:constants";
@@ -456,7 +457,7 @@ function cleanScratchWorkspace(workspace, manifest) {
 }
 
 async function main() {
-  const argv = process.argv.slice(2);
+  const argv = scriptArgv();
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
   const { values } = utilParseArgs({
     args: argv,

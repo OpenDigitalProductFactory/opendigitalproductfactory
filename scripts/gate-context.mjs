@@ -22,6 +22,7 @@ import { join } from "node:path";
 import { buildGateContext, formatGateContextMarkdown } from "./lib/gate-context.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { gitText } from "./lib/git.mjs";
+import { scriptArgv } from "./lib/script-argv.mjs";
 
 // Same conservative ref/path pinning as the gate checkers
 // (js/indirect-command-line-injection): execFile arg arrays, no shell, and a
@@ -95,7 +96,7 @@ export function parseStdinChanges(text) {
 }
 
 export async function main() {
-  const args = process.argv.slice(2);
+  const args = scriptArgv();
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
   const { values } = utilParseArgs({ args, strict: false, allowPositionals: true, options: { base: { type: "string" } } });
   const base = values.base === undefined ? "origin/main" : typeof values.base === "string" ? values.base : undefined;

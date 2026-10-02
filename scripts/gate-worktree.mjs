@@ -11,6 +11,7 @@
 
 import { randomBytes } from "node:crypto";
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
@@ -445,7 +446,7 @@ function parseArgs(argv) {
   // A bare `--` has always been skipped wherever it appears, so it is dropped before
   // parsing. strict: false plus the token check keeps the old `die` for unknown input.
   const { values, tokens } = utilParseArgs({
-    args: argv.filter((arg) => arg !== "--"),
+    args: scriptArgv(argv).filter((arg) => arg !== "--"),
     options: flags,
     strict: false,
     allowPositionals: true,

@@ -167,7 +167,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-no-hand-rolled-mcp-jsonrpc.mjs"),
       // One argument parser for every script: node:util parseArgs
       // (plan 2026-09-08 §10.5 S2).
-      conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
+      conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs", "scripts/lib/script-argv.test.mjs"),
       node("scripts/check-no-hand-rolled-argv.mjs"),
       // Raw control bytes make a source file binary to grep (BI-899122C5).
       node("--test", "scripts/check-no-raw-control-bytes.test.mjs"),
