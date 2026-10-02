@@ -32,9 +32,55 @@ type FetchLike = (
 /** Process-local cache of search hits, keyed by providerRef. */
 const candidateCache = new Map<string, ValidatedSiteAddress>();
 
+// OSMF Nominatim usage policy (BI-3099EACD,
+// https://operations.osmfoundation.org/policies/nominatim/): at most one request
+// per second for the whole application, results cached, an identifying
+// User-Agent, and no search-as-you-type. Breaching it gets the install's IP
+// blocked, which breaks address validation for every organization on it.
+const NOMINATIM_MIN_INTERVAL_MS = 1000;
+const QUERY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const QUERY_CACHE_MAX_ENTRIES = 500;
+const NOMINATIM_USER_AGENT =
+  "OpenDigitalProductFactory/site-address-validation (+https://github.com/OpenDigitalProductFactory/opendigitalproductfactory)";
+
+/** Process-local cache of whole searches, keyed by the normalized query. */
+const queryCache = new Map<string, { at: number; results: ValidatedSiteAddress[] }>();
+let nextNominatimSlotAt = 0;
+let nominatimQueue: Promise<void> = Promise.resolve();
+
 /** Test seam — clear between cases. */
 export function resetValidatedSiteAddressCacheForTests(): void {
   candidateCache.clear();
+  queryCache.clear();
+  nextNominatimSlotAt = 0;
+  nominatimQueue = Promise.resolve();
+}
+
+type Clock = { now: () => number; sleep: (ms: number) => Promise<void> };
+
+/** Wait for this caller's turn: calls leave in order, one second apart. */
+function takeNominatimSlot({ now, sleep }: Clock): Promise<void> {
+  const turn = nominatimQueue.then(async () => {
+    const wait = nextNominatimSlotAt - now();
+    if (wait > 0) await sleep(wait);
+    nextNominatimSlotAt = now() + NOMINATIM_MIN_INTERVAL_MS;
+  });
+  nominatimQueue = turn.catch(() => {});
+  return turn;
+}
+
+function normalizeQuery(query: string): string {
+  return query.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function rememberQuery(key: string, results: ValidatedSiteAddress[], at: number): void {
+  queryCache.delete(key);
+  queryCache.set(key, { at, results });
+  while (queryCache.size > QUERY_CACHE_MAX_ENTRIES) {
+    const oldest = queryCache.keys().next().value;
+    if (oldest === undefined) break;
+    queryCache.delete(oldest);
+  }
 }
 
 /** Test seam — seed a candidate without calling a provider. */
@@ -159,8 +205,7 @@ async function searchNominatim(
   const response = await fetchImpl(url.toString(), {
     headers: {
       Accept: "application/json",
-      // Nominatim requires a descriptive User-Agent.
-      "User-Agent": "OpenDigitalProductFactory/site-address-validation (ops@local)",
+      "User-Agent": NOMINATIM_USER_AGENT,
     },
   });
 
@@ -184,13 +229,23 @@ async function searchNominatim(
 
 export async function searchValidatedSiteAddresses(
   query: string,
-  options?: { fetchImpl?: FetchLike },
+  options?: { fetchImpl?: FetchLike } & Partial<Clock>,
 ): Promise<ValidatedSiteAddress[]> {
   const trimmed = query.trim();
   if (trimmed.length < 3) return [];
 
+  const clock: Clock = {
+    now: options?.now ?? Date.now,
+    sleep: options?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
+  };
+  const key = normalizeQuery(trimmed);
+  const hit = queryCache.get(key);
+  if (hit && clock.now() - hit.at < QUERY_CACHE_TTL_MS) return hit.results;
+
+  await takeNominatimSlot(clock);
   const fetchImpl = options?.fetchImpl ?? fetch;
   const results = await searchNominatim(trimmed, fetchImpl);
+  rememberQuery(key, results, clock.now());
   for (const result of results) {
     candidateCache.set(result.providerRef, result);
   }

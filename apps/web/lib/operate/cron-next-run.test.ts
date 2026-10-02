@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeNextCronRun, isOneShotCron } from "./cron-next-run";
+import { computeNextCronFire, computeNextCronRun, isOneShotCron, parseCronSchedule } from "./cron-next-run";
 
 // `from` dates are built with the local Date constructor and assertions read
 // local getters; computeNextCronRun uses the same host Date methods, so these
@@ -131,5 +131,63 @@ describe("isOneShotCron", () => {
 
   it("is false for malformed input", () => {
     expect(isOneShotCron("nope")).toBe(false);
+  });
+});
+
+describe("computeNextCronFire (job engine, UTC, full grammar)", () => {
+  const at = (iso: string) => new Date(iso);
+  const next = (expr: string, from: string) => computeNextCronFire(expr, at(from))?.toISOString();
+
+  it("fires every minute on `* * * * *`, strictly after `from`", () => {
+    expect(next("* * * * *", "2026-10-01T10:00:00.000Z")).toBe("2026-10-01T10:01:00.000Z");
+    expect(next("* * * * *", "2026-10-01T10:00:30.000Z")).toBe("2026-10-01T10:01:00.000Z");
+  });
+
+  it("supports steps, lists and ranges", () => {
+    expect(next("*/5 * * * *", "2026-10-01T10:03:00.000Z")).toBe("2026-10-01T10:05:00.000Z");
+    expect(next("*/15 * * * *", "2026-10-01T10:45:00.000Z")).toBe("2026-10-01T11:00:00.000Z");
+    expect(next("3,18,33,48 * * * *", "2026-10-01T10:19:00.000Z")).toBe("2026-10-01T10:33:00.000Z");
+    expect(next("37 */6 * * *", "2026-10-01T07:00:00.000Z")).toBe("2026-10-01T12:37:00.000Z");
+    expect(next("0 9-17 * * *", "2026-10-01T17:00:00.000Z")).toBe("2026-10-02T09:00:00.000Z");
+  });
+
+  it("evaluates in UTC and rolls over hours, days and years", () => {
+    expect(next("0 3 * * *", "2026-10-01T03:00:00.000Z")).toBe("2026-10-02T03:00:00.000Z");
+    expect(next("0 0 1 1 *", "2026-12-31T23:59:00.000Z")).toBe("2027-01-01T00:00:00.000Z");
+  });
+
+  it("uses day-of-week, with 7 as Sunday, and ORs restricted day fields", () => {
+    // 2026-10-01 is a Thursday.
+    expect(next("17 6 * * 1", "2026-10-01T00:00:00.000Z")).toBe("2026-10-05T06:17:00.000Z");
+    expect(next("0 3 * * 0", "2026-10-01T00:00:00.000Z")).toBe("2026-10-04T03:00:00.000Z");
+    expect(next("0 3 * * 7", "2026-10-01T00:00:00.000Z")).toBe("2026-10-04T03:00:00.000Z");
+    expect(next("0 0 15 * 1", "2026-10-01T00:00:00.000Z")).toBe("2026-10-05T00:00:00.000Z");
+  });
+
+  it("finds Feb 29 in the next leap year", () => {
+    expect(next("0 0 29 2 *", "2026-03-01T00:00:00.000Z")).toBe("2028-02-29T00:00:00.000Z");
+  });
+
+  it("returns null for expressions it cannot parse, never a guessed schedule", () => {
+    for (const bad of ["daily", "* * * *", "60 * * * *", "*/0 * * * *", "a b c d e", "0 0 31 2 *"]) {
+      expect(computeNextCronFire(bad, at("2026-10-01T00:00:00.000Z"))).toBeNull();
+    }
+    expect(parseCronSchedule("0 0 31 2 *")).not.toBeNull();
+  });
+
+  it("parses every cron expression the job functions use", async () => {
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const dir = join(__dirname, "../queue/functions");
+    const exprs = new Set<string>();
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith(".ts") || file.endsWith(".test.ts")) continue;
+      for (const m of readFileSync(join(dir, file), "utf8").matchAll(/cron\(\s*["'`]([^"'`]+)["'`]\s*\)|cron:\s*["'`]([^"'`]+)["'`]/g)) {
+        // Source may escape the slash (`"*\\/10 …"`); compare the string JavaScript evaluates.
+        exprs.add((m[1] ?? m[2])!.replace(/\\\//g, "/"));
+      }
+    }
+    expect(exprs.size).toBeGreaterThan(20);
+    for (const expr of exprs) expect([expr, computeNextCronFire(expr, at("2026-10-01T00:00:00.000Z"))]).not.toEqual([expr, null]);
   });
 });

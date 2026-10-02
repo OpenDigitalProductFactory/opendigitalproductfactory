@@ -29,7 +29,7 @@ interface RelationField {
   line: string;
 }
 
-/** Leading column of each @@index / @@unique / @id / @unique on a model. */
+/** Leading column of each @@index / @@unique / @@id / @id / @unique on a model. */
 interface ModelIndexes {
   leading: Set<string>;
 }
@@ -37,7 +37,8 @@ interface ModelIndexes {
 const RELATION_RE = /@relation\(([^)]*)\)/;
 const FIELDS_RE = /fields:\s*\[([^\]]*)\]/;
 const ON_DELETE_RE = /onDelete:\s*(\w+)/;
-const BLOCK_INDEX_RE = /@@(?:index|unique)\(\s*\[([^\]]*)\]/;
+// A composite @@id is backed by a btree index too, so its leading column counts.
+const BLOCK_INDEX_RE = /@@(?:index|unique|id)\(\s*\[([^\]]*)\]/;
 
 function parseModels(source: string): Map<string, { body: string[] }> {
   const models = new Map<string, { body: string[] }>();

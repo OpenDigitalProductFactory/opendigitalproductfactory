@@ -654,6 +654,9 @@
     "apps/web/lib/build/investment-admission.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
+    "apps/web/lib/build/plan-to-build-transition-core.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/build/progress-visibility.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -868,6 +871,17 @@
     ],
     "apps/web/lib/govern/permissions.ts": [
       "docs/architecture/delivery-ia.md"
+    ],
+    "apps/web/lib/gpp/binding-enforcement.ts": [
+      "docs/architecture/ai-agent-meta-model.md",
+      "docs/architecture/gated-permissions-process.md",
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "apps/web/lib/gpp/bindings.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "apps/web/lib/gpp/permit-carriage.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "apps/web/lib/hooks/system-events.ts": [
       "docs/architecture/background-operation-observation-contract.md"
@@ -1442,6 +1456,9 @@
     "apps/web/lib/work-management/stage-tool-parity.test.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
+    "apps/web/lib/work-management/work-shape-grants-resolve.test.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/work-management/work-shapes.ts": [
       "docs/architecture/gated-permissions-process.md",
       "docs/architecture/work-shapes-and-the-decision-gate.md"
@@ -1590,7 +1607,8 @@
     ],
     "packages/db/prisma/schema/ai-coworker.prisma": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
+      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
+      "docs/architecture/gated-permissions-process.md"
     ],
     "packages/db/prisma/schema/build-delivery.prisma": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
@@ -2811,6 +2829,7 @@
       "apps/web/app/api/mcp/v1/route.ts",
       "apps/web/lib/agent-grants.ts",
       "apps/web/lib/ai-inference.ts",
+      "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/identity/aidoc-resolver.ts",
       "apps/web/lib/identity/principal-linking.ts",
       "apps/web/lib/mcp-governed-execute.ts",
@@ -3085,13 +3104,18 @@
     ],
     "docs/architecture/gated-permissions-process.md": [
       "apps/web/lib/actions/build.ts",
+      "apps/web/lib/build/plan-to-build-transition-core.ts",
       "apps/web/lib/ea/reconcile-sysml-projections.ts",
       "apps/web/lib/explore/build-process-matrix.ts",
       "apps/web/lib/explore/feature-build-types.ts",
+      "apps/web/lib/gpp/binding-enforcement.ts",
+      "apps/web/lib/gpp/bindings.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
+      "apps/web/lib/work-management/work-shape-grants-resolve.test.ts",
       "apps/web/lib/work-management/work-shapes.ts",
-      "apps/web/scripts/gpp-critical-interaction-map.ts"
+      "apps/web/scripts/gpp-critical-interaction-map.ts",
+      "packages/db/prisma/schema/ai-coworker.prisma"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
@@ -3124,6 +3148,8 @@
       "apps/web/lib/auth/oauth-scope-map.ts",
       "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts",
       "apps/web/lib/govern/manager-scope.ts",
+      "apps/web/lib/gpp/binding-enforcement.ts",
+      "apps/web/lib/gpp/permit-carriage.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",

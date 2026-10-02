@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  overlappingPaths,
   planRootRefresh,
   gatherRootState,
   refreshRootClone,
@@ -121,5 +122,102 @@ describe("refreshRootClone", () => {
     assert.equal(r.action, "failed");
     assert.equal(r.changed, false);
     assert.match(r.reason, /fast-forward/);
+  });
+});
+
+// ── BI-F676CC23: dirt nothing upstream touches does not freeze the root ─────
+//
+// 2026-09-23..25: one bootstrap-written .mcp.json kept the root clone 90 commits
+// behind, so every hook wired from it ran old code — including a merged fix for
+// the guard that was nagging about that very file.
+
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+describe("overlappingPaths", () => {
+  it("matches exact paths and directory prefixes either way", () => {
+    assert.deepEqual(overlappingPaths([".mcp.json"], ["apps/web/a.ts"]), []);
+    assert.deepEqual(overlappingPaths(["apps/web/a.ts"], ["apps/web/a.ts", "b"]), ["apps/web/a.ts"]);
+    assert.deepEqual(overlappingPaths(["tmp/"], ["tmp/x.ts"]), ["tmp/"]);
+    assert.deepEqual(overlappingPaths(["pkg/new/file.ts"], ["pkg/new"]), ["pkg/new/file.ts"]);
+    assert.deepEqual(overlappingPaths(["apps/web"], ["apps/website.ts"]), []);
+  });
+});
+
+describe("planRootRefresh with uncommitted files", () => {
+  const base = { detached: false, onMain: true, clean: false, behind: 3 };
+  it("fast-forwards when no dirty path is changed upstream", () => {
+    assert.equal(planRootRefresh({ ...base, overlap: [] }).action, "ff");
+  });
+  it("refuses, naming the files, when upstream changes a dirty path", () => {
+    const plan = planRootRefresh({ ...base, overlap: [".mcp.json"] });
+    assert.equal(plan.action, "refuse");
+    assert.match(plan.reason, /\.mcp\.json/);
+  });
+  it("refuses when the overlap could not be determined", () => {
+    assert.equal(planRootRefresh({ ...base, overlap: null }).action, "refuse");
+  });
+  it("skips a dirty root that is already current", () => {
+    assert.equal(planRootRefresh({ ...base, behind: 0, overlap: [] }).action, "skip");
+  });
+});
+
+function git(dir, ...args) {
+  const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+  assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
+  return r.stdout.trim();
+}
+
+/** An upstream repo and a root clone of it, with upstream one commit ahead. */
+function behindRoot() {
+  const tmp = mkdtempSync(join(tmpdir(), "rcr-"));
+  const up = join(tmp, "up");
+  const root = join(tmp, "root");
+  spawnSync("git", ["init", "-q", "-b", "main", up]);
+  for (const d of [up]) {
+    git(d, "config", "user.email", "t@t");
+    git(d, "config", "user.name", "t");
+  }
+  writeFileSync(join(up, "shared.txt"), "v1\n");
+  writeFileSync(join(up, "config.json"), "{}\n");
+  git(up, "add", ".");
+  git(up, "commit", "-q", "-m", "one");
+  spawnSync("git", ["clone", "-q", up, root]);
+  writeFileSync(join(up, "shared.txt"), "v2\n");
+  git(up, "commit", "-q", "-am", "two");
+  return { up, root };
+}
+
+describe("refreshRootClone against real repositories", () => {
+  it("fast-forwards past a dirty file the incoming commits do not touch, and keeps the edit", () => {
+    const { up, root } = behindRoot();
+    writeFileSync(join(root, "config.json"), '{"local": true}\n');
+    writeFileSync(join(root, "scratch.txt"), "untracked\n");
+    const r = refreshRootClone({ rootClonePath: root });
+    assert.equal(r.action, "ff", r.reason);
+    assert.equal(git(root, "rev-parse", "HEAD"), git(up, "rev-parse", "HEAD"));
+    assert.equal(readFileSync(join(root, "config.json"), "utf8"), '{"local": true}\n');
+    assert.equal(readFileSync(join(root, "scratch.txt"), "utf8"), "untracked\n");
+  });
+
+  it("refuses, and moves nothing, when a dirty file is one the incoming commits change", () => {
+    const { root } = behindRoot();
+    const before = git(root, "rev-parse", "HEAD");
+    writeFileSync(join(root, "shared.txt"), "local edit\n");
+    const r = refreshRootClone({ rootClonePath: root });
+    assert.equal(r.action, "refuse");
+    assert.match(r.reason, /shared\.txt/);
+    assert.equal(git(root, "rev-parse", "HEAD"), before);
+    assert.equal(readFileSync(join(root, "shared.txt"), "utf8"), "local edit\n");
+  });
+
+  it("refuses when a staged rename's source is changed upstream", () => {
+    const { root } = behindRoot();
+    git(root, "mv", "shared.txt", "moved.txt");
+    const r = refreshRootClone({ rootClonePath: root });
+    assert.equal(r.action, "refuse");
+    assert.match(r.reason, /shared\.txt/);
   });
 });
