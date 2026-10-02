@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "on-customer-map",
+  "decisionInteractionId": "DI-17FBE7351E32",
+  "scope": {
+    "files": [
+      "apps/web/components/customer/map/ServiceAreasPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "on-customer-map",
+      "dispatch-board-tab",
+      "new-coverage-route"
+    ]
+  }
+}

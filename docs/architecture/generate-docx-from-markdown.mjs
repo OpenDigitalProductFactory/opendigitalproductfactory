@@ -7,6 +7,11 @@
  *
  *   1. Mermaid diagrams render to SVG + high-resolution PNG through
  *      scripts/lib/mermaid-renderer.mjs (a tool image, not a dependency).
+ *      A ```mermaid block written inline in the Markdown (the form the public
+ *      site renders in the browser) is first written to
+ *      `<diagramsDir>/<stem>-fence-NN.mmd`, rendered like any other diagram,
+ *      and replaced by its PNG, so one Markdown source serves both the site
+ *      and the Word edition.
  *   2. Markdown becomes a standalone HTML document through
  *      apps/web/lib/documents/markdown-to-html.ts, the renderer the portal uses
  *      to export a markdown document. Local diagram images are inlined as
@@ -133,6 +138,49 @@ export function inlineLocalImages(markdown, baseDir) {
     .join("\n");
 }
 
+const MERMAID_FENCE = /^```mermaid[^\n]*\n([\s\S]*?)^```[ \t]*$/gm;
+
+/** File stem for the diagrams extracted from a document's inline Mermaid blocks. */
+export function mermaidFenceStem(markdownPath) {
+  return `${basename(markdownPath, extname(markdownPath))}-fence`;
+}
+
+const fenceFile = (stem, index) => `${stem}-${String(index).padStart(2, "0")}`;
+
+/** The source of every inline ```mermaid block, in document order. */
+export function extractMermaidFences(markdown) {
+  return [...markdown.matchAll(MERMAID_FENCE)].map((match) => match[1]);
+}
+
+/** Write each inline Mermaid block to `<diagramsDir>/<stem>-NN.mmd` so it renders with the rest. */
+export function writeMermaidFenceSources(markdown, diagramsDir, stem) {
+  extractMermaidFences(markdown).forEach((source, i) => {
+    const file = join(diagramsDir, `${fenceFile(stem, i + 1)}.mmd`);
+    // Read and compare instead of check-then-read, so there is no window in
+    // which the file can change between an existence check and the read.
+    let current = null;
+    try {
+      current = readFileSync(file, "utf8");
+    } catch {
+      current = null;
+    }
+    if (current !== source) writeFileSync(file, source);
+  });
+}
+
+/**
+ * Replace each inline Mermaid block with an image reference to its rendered
+ * PNG. A block whose PNG does not exist is left as written.
+ */
+export function replaceMermaidFences(markdown, diagramsDir, stem) {
+  let index = 0;
+  return markdown.replace(MERMAID_FENCE, (whole) => {
+    index += 1;
+    const png = join(diagramsDir, "png", `${fenceFile(stem, index)}.png`);
+    return existsSync(png) ? `![Diagram ${index}](${png})` : whole;
+  });
+}
+
 /** The subtitle and generation date go under the document's own H1 title. */
 export function withPublicationFrontMatter(markdown, { subtitle, generatedOn }) {
   const lines = markdown.split("\n");
@@ -143,9 +191,10 @@ export function withPublicationFrontMatter(markdown, { subtitle, generatedOn }) 
 }
 
 /** Markdown file -> the standalone HTML document the converter reads. */
-export async function publicationHtml({ markdownPath, title, subtitle, generatedOn = new Date().toISOString().slice(0, 10) }) {
+export async function publicationHtml({ markdownPath, title, subtitle, diagramsDir, generatedOn = new Date().toISOString().slice(0, 10) }) {
   const { markdownToHtmlDocument } = await importFromRoot("apps/web/lib/documents/markdown-to-html.ts");
-  const markdown = readFileSync(markdownPath, "utf8").replace(/\r\n?/g, "\n");
+  const source = readFileSync(markdownPath, "utf8").replace(/\r\n?/g, "\n");
+  const markdown = diagramsDir ? replaceMermaidFences(source, diagramsDir, mermaidFenceStem(markdownPath)) : source;
   const prepared = withPublicationFrontMatter(inlineLocalImages(markdown, dirname(markdownPath)), { subtitle, generatedOn });
   return markdownToHtmlDocument(prepared, title);
 }
@@ -184,8 +233,11 @@ export async function generateDocxFromMarkdown({ markdownPath, outputPath, title
   const image = process.env.DPF_DOCTOOLS_IMAGE?.trim();
   if (!image) throw new Error(`DPF_DOCTOOLS_IMAGE is not set.${DOCTOOLS_HINT}`);
 
+  const source = readFileSync(markdownPath, "utf8").replace(/\r\n?/g, "\n");
+  mkdirSync(diagramsDir, { recursive: true });
+  writeMermaidFenceSources(source, diagramsDir, mermaidFenceStem(markdownPath));
   await renderMermaidDiagrams(diagramsDir);
-  const html = await publicationHtml({ markdownPath, title, subtitle });
+  const html = await publicationHtml({ markdownPath, title, subtitle, diagramsDir });
   const docx = await convertHtmlToDocx(html, image);
   writeFileSync(outputPath, docx);
   console.log(`Done! Output: ${outputPath}`);
