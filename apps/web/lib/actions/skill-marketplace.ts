@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
@@ -279,7 +279,13 @@ export async function getSkillCatalog(filters?: SkillCatalogFilters) {
   });
 }
 
-export async function getSkillCatalogStats() {
+type SkillCatalogStats = {
+  total: number;
+  byStatus: Awaited<Prisma.GetSkillDefinitionGroupByPayload<{ by: ["status"]; _count: true }>>;
+  bySource: Awaited<Prisma.GetSkillDefinitionGroupByPayload<{ by: ["sourceType"]; _count: true }>>;
+};
+
+export async function getSkillCatalogStats(): Promise<SkillCatalogStats> {
   const [total, byStatus, bySource] = await Promise.all([
     prisma.skillDefinition.count(),
     prisma.skillDefinition.groupBy({ by: ["status"], _count: true }),

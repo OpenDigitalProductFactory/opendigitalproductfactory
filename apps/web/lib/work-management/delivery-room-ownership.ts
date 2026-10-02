@@ -12,6 +12,7 @@
 
 import { isDeliveryShapeKey } from "./delivery-shapes";
 import { resolveWorkShapeClaim } from "./workroom-shape-claim";
+import { resolveActiveHumanPrincipalRecordIdForUser } from "@/lib/identity/principal-linking";
 import {
   describeRoomOwnership,
   establishRoomOwnership,
@@ -89,17 +90,10 @@ export async function repairUnownedDeliveryRooms(db: RepairDb, roomIds: readonly
       leaseHolderPrincipal: row.leaseHolderPrincipal ?? null,
       firstRecordedByUserId: row.activities?.[0]?.recordedById ?? null,
     };
-    const userPrincipal = room.firstRecordedByUserId
-      ? await db.principal.findFirst({
-        where: {
-          kind: "human",
-          status: "active",
-          aliases: { some: { aliasType: "user", issuer: "", aliasValue: room.firstRecordedByUserId } },
-        },
-        select: { id: true },
-      })
+    const userPrincipalId = room.firstRecordedByUserId
+      ? await resolveActiveHumanPrincipalRecordIdForUser(room.firstRecordedByUserId, db)
       : null;
-    const principals = resolveExistingRoomOwnership(room, userPrincipal?.id ?? null);
+    const principals = resolveExistingRoomOwnership(room, userPrincipalId);
     if (!principals.ownerPrincipalId) continue;
     const appointed = await db.$transaction(async (tx) => {
       const outcome = await establishRoomOwnership(tx, { workroomId: room.id, ...principals });

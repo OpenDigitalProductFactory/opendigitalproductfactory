@@ -7,6 +7,7 @@ status: draft
 **Backlog:** BI-F9582C48 · **Epic:** EP-B932453F · **Workroom:** WC-895D0009
 **Author:** Codex, under the operator's continuing implementation directive.
 **Status:** proposed implementation design; independent review and plan coverage pending.
+**Revision:** 2026-10-01 — align with the GPP binding owner and current initiative baseline contract.
 
 ## Outcome and scope
 
@@ -17,8 +18,9 @@ run with the repository's pinned test tooling without a DPF server, database,
 credential, model call or external side effect.
 
 The normative owners remain [TAK](../../architecture/trusted-ai-kernel.md),
-[GAID](../../architecture/GAID.md) and
-[JSI](../../architecture/job-specific-intelligence.md). The principle-directed
+[GAID](../../architecture/GAID.md),
+[JSI](../../architecture/job-specific-intelligence.md) and
+[GPP](../../architecture/gated-permissions-process.md). The principle-directed
 amendment in [PR #5787](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5787)
 provides the requirement identifiers used below. This design depends on that
 amendment; it does not introduce another standards family.
@@ -34,7 +36,8 @@ BI-2AB781FA; this item provides contract and reference-function tests it can reu
 
 ## Existing substrate and findings
 
-Source inspection at base `0d827752665f790d3c4d3eba789ae908c45d78ba`:
+Initial source inspection at `0d827752665f790d3c4d3eba789ae908c45d78ba`,
+refreshed against `699dd85f00d4d8f26f411aee36b8fc77ad1608b3` on 2026-10-01:
 
 | Existing owner | What is reused | Boundary or gap |
 |---|---|---|
@@ -42,6 +45,7 @@ Source inspection at base `0d827752665f790d3c4d3eba789ae908c45d78ba`:
 | `apps/web/lib/shared/outcome-disposition.ts` | The five canonical verdict/non-verdict values and retry posture | Move this pure module to validators and retain a compatibility re-export; do not invent a second disposition vocabulary. |
 | `apps/web/lib/decision-perspective/decision-scope-admission.ts` | The closed WWMD/WWWD/WSID scope set | Move the constants, type and predicate into the portable contract owner; retain current admission behavior and UI routing in web. |
 | `apps/web/lib/work-management/work-shapes.ts` | Versioned activity definitions, stages, stop conditions, budgets and source references | A portable projection refers to this authoritative definition. It does not become another registry or scheduler. |
+| `docs/architecture/gated-permissions-process.md` | GPP owns stage-to-gate capability bindings and their separate revision, validity and enforcement mode | Carry canonical references; no parallel binding registry, grant expansion or permit issuer. |
 | `apps/web/lib/decision/option-input-contract.ts` | Runtime option identity and feature validation | Retains ownership of DPF decision input. Exchange schemas carry decision/profile references and eligible-option identities; no competing score engine. |
 | `apps/web/lib/mcp-governed-execute.ts` | Grant/scope checks, preexecution checks, reservation before consequential dispatch | Remains the DPF execution boundary. A portable recommendation cannot bypass it. |
 | `apps/web/lib/tak/tool-execution-receipt.ts` | GAID-bound reservation, input fingerprint, result finalization | Current exception handling can finalize `tool_threw` as failed; that is not proof that the target performed no effect. The portable projection must preserve uncertainty. |
@@ -89,6 +93,27 @@ These are implementation acceptance identifiers, not new normative clauses.
 | PC-07 | Preserve restricted evidence references and explicit retention/destination constraints without exporting raw secrets | TAK-DG-001..004 | Import/export | CT-07 privacy projection cases |
 | PC-08 | Run examples without DPF; preserve existing runtime identities and behavior | GAID-PD-001; JSI-PD-002 | Standalone example/DPF projection | CT-08 boundary and compatibility tests |
 
+## Initiative scope baseline
+
+These statements make the existing PC requirements machine-readable for review and
+completion. They do not replace the normative sources or claim approval.
+
+1. **OBJ-PC-PORTABLE:** Provide bounded, versioned artifacts and runnable reference examples without a DPF runtime dependency.
+2. **OBJ-PC-AUTHORITY:** Preserve owning-scope decisions and exact effect authority through every reference transition.
+3. **OBJ-PC-RECOVERY:** Prevent duplicate submission after uncertain effects and enforce declared execution bounds.
+4. **OBJ-PC-INTEGRITY:** Preserve restricted references, canonical vocabulary and GPP binding ownership without claiming enforcement from fixtures.
+
+| Acceptance | Objectives | Statement | Evidence |
+|---|---|---|---|
+| AC-PC-01 | OBJ-PC-PORTABLE | PC-01 validates all five artifact kinds and returns structured errors for malformed input. | CT-01 |
+| AC-PC-02 | OBJ-PC-PORTABLE, OBJ-PC-INTEGRITY | PC-02 rejects unsupported required semantics while retaining optional extensions. | CT-02 |
+| AC-PC-03 | OBJ-PC-AUTHORITY | PC-03 preserves the owning scope and refuses ineligible selections. | CT-03 |
+| AC-PC-04 | OBJ-PC-AUTHORITY, OBJ-PC-INTEGRITY | PC-04 binds each attempt to the exact effect and separately versioned GPP binding when applicable; stale or unresolved authority cannot dispatch. | CT-04 |
+| AC-PC-05 | OBJ-PC-RECOVERY | PC-05 requires reservation before dispatch and reconciliation before resubmitting an uncertain effect. | CT-05 |
+| AC-PC-06 | OBJ-PC-RECOVERY | PC-06 enforces declared bounds and distinguishes waiting, refusal and infrastructure uncertainty. | CT-06 |
+| AC-PC-07 | OBJ-PC-INTEGRITY | PC-07 preserves source restrictions and excludes raw secrets and argument bodies. | CT-07 |
+| AC-PC-08 | OBJ-PC-PORTABLE, OBJ-PC-INTEGRITY | PC-08 runs standalone examples, preserves web vocabulary compatibility and labels fixtures simulated without asserting GPP enforcement. | CT-08 |
+
 ## Contract structure
 
 Author the following discriminated artifact schemas in
@@ -105,7 +130,10 @@ Consumers must resolve them through their own authenticated, scope-aware adapter
    accountable principal reference, ordered stages and allowed transitions,
    required evidence references, tool capability references, explicit step and
    attempt limits, review/stop conditions. Source is the existing work shape.
-   Human-language stage conditions are descriptive, not executable policy.
+   Human-language stage conditions are descriptive, not executable policy. Each
+   consequential stage carries references to its applicable canonical GPP bindings
+   and their versions, separately from the shape version, when the composition
+   declares GPP support.
 2. **Operating profile:** GAID subject/principal references, composition revision,
    instruction/skill/model/tool-set revisions, doctrine references by scope,
    data and processing destination constraint references, qualification references.
@@ -120,7 +148,8 @@ Consumers must resolve them through their own authenticated, scope-aware adapter
    selected option being treated as actionable. No numerical scoring is added.
 5. **Effect receipt:** decision and authorization references; a binding of effect
    ID, actor, tool/operation revision, target resource and account, argument digest,
-   purpose, work/profile revisions and policy generation; attempt ID; observation
+   purpose, work/profile revisions and policy generation; applicable GPP binding
+   and gate-decision references; attempt ID; observation
    state; timestamps; evidence references. Observation is one of `not-submitted`,
    `succeeded`, `no-effect`, `unknown`. A timeout/exception cannot establish no-effect.
 
@@ -154,6 +183,43 @@ changes qualification. Core structural schemas remain separate from semantic
 validators so exported JSON Schema does not misleadingly imply that it checks
 cross-record references, policy freshness or signatures.
 
+## GPP projection and authority boundary
+
+[GPP §§2.1, 7 and 9](../../architecture/gated-permissions-process.md) own binding
+revision, gate semantics and current reach. A portable GPP reference identifies the
+canonical binding and exact version, shape key/version, stage, owning scope and
+associated gate-decision reference. The source adapter supplies the binding's
+observed enforcement mode and observation time. These are source assertions,
+never an independently certified conformance result.
+
+A composition explicitly declares whether it carries the supported GPP projection.
+If declared, a consequential stage without a resolvable binding is invalid for
+advancement. If omitted, the contract makes no GPP claim; the adapter still must
+supply current TAK authorization. Unsupported mandatory GPP semantics fail closed
+through version/extension negotiation, not by dropping the binding.
+
+The adapter resolves the current binding at each reach. Shape and binding versions
+are compared independently: a room pinned to one shape version can encounter a
+new restrictive binding revision. The reference loop stops for renewed resolution
+when a supplied binding revision changes; it cannot determine from a version
+string whether a change narrowed or widened reach. No prior decision authorizes a
+newly widened envelope. Existing GPP runtime logic owns that judgment and any
+narrowing optimization; the pure function does not reconstruct it.
+
+A binding in shadow or off mode does not prove GPP enforcement. Examples use
+simulated observations and report no GPP conformance profile. A consumer must not
+infer GPP-Modeled from schema validity, GPP-Enforced from a dispatch command, or
+GPP-Evidenced from fixture receipts. The conformance work in BI-2AB781FA and the
+canonical-runtime demo in BI-F3C2EC7A establish their own evidence.
+
+The [GPP model-to-execution design](2026-10-01-gpp-model-to-execution-design.md)
+owns the future shape document/compiler and deployment-bound permits. BI-6DA17863
+and BI-69415B68 own those changes. This item neither copies their full binding
+schema nor mints, signs, redeems or validates live permits. Its reference loop
+requests mediation through that owning adapter. Exporters must reject unsupported
+flow semantics, including parallel/token graphs outside this sequential reference,
+instead of flattening them into a falsely equivalent ordered list.
+
 ## Reference transition function
 
 Add a pure module `packages/validators/src/trusted-agent-reference-loop.ts`.
@@ -183,7 +249,8 @@ and attempt. A wrong-order or duplicate event cannot dispatch an effect again.
 State contains counters and references, not source payloads or credentials.
 
 The dispatch command names the required atomicity contract: the adapter rechecks
-current grants, revocation, data/destination constraints and the exact binding at
+current grants, revocation, data/destination constraints, applicable GPP revision
+and the exact effect binding at
 its mediated-use boundary. A prior `authorized` event is not a reusable token.
 If the adapter cannot supply the claimed atomicity, it must refuse that claim or
 use the documented containment mode; the function cannot close a network race.
@@ -239,7 +306,9 @@ Proposed paths (new unless described above):
 CT-01..08 include structural JSON Schema generation without permissive conversion,
 unknown required extension with a familiar name but unsupported version, invalid
 qualifications, wrong scope, forbidden high-scoring option, effect mutation,
-expired/revoked authorization, reservation failure, lost acknowledgement,
+expired/revoked authorization, separate shape/binding revisions, missing GPP
+bindings, shadow-mode claim rejection, unsupported parallel flow, reservation
+failure, lost acknowledgement,
 duplicate completion, unknown effect across restart, reconciliation budget
 exhaustion and renewed authorization after proven no-effect. Test authoritative
 event handling as a reference contract, not as proof of an authenticated adapter.

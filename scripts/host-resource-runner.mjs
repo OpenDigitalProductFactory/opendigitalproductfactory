@@ -8,8 +8,9 @@ import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
-import { isAllowedMcpEndpoint, mcpCall } from "./lib/mcp-client.mjs";
-import { superviseLeaseRun } from "./lib/lease-supervisor.mjs";
+import { mcpCall } from "./lib/mcp-client.mjs";
+import { MCP_CREDENTIAL_HELP, resolveMcpCredential } from "./lib/mcp-credential.mjs";
+import { admittedLeaseTtlMs, superviseLeaseRun } from "./lib/lease-supervisor.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
 
@@ -128,48 +129,21 @@ function gitValue(args) {
   return gitTextOrNull(args, { cwd: process.cwd() }) ?? "";
 }
 
-export function readMcpConnection(cwd) {
-  const envToken = process.env.DPF_MCP_BEARER_TOKEN;
-  if (envToken) {
-    // Explicit operator input: the endpoint is whatever the operator named.
-    return {
-      mcpUrl: process.env.DPF_MCP_URL || DEFAULT_LOCAL_MCP_URL,
-      bearerToken: envToken,
-    };
-  }
-  return readMcpConnectionFile(resolve(cwd, ".mcp.json"));
-}
-
-// `.mcp.json` is ambient state, not operator intent -- it is copied between
-// worktrees by scripts/sync-mcp-worktrees.ps1 and is writable by anything with
-// the checkout. The token it carries is a live DPF credential, so the endpoint
-// it names is checked against the loopback contract before the token is put on
-// the wire; a non-loopback endpoint is a stop (AGENTS.md section 1), not a
-// silent fall-through to the default.
-function readMcpConnectionFile(configPath) {
-  const config = parseJsonFile(configPath);
-  const server = config?.mcpServers?.dpf;
-  const authorization = server?.headers?.Authorization ?? server?.headers?.authorization;
-  const bearerToken = typeof authorization === "string"
-    ? authorization.replace(/^Bearer\s+/i, "")
-    : "";
-  const mcpUrl = typeof server?.url === "string" ? server.url : "";
-  if (!mcpUrl || !bearerToken) return null;
-  if (!isAllowedMcpEndpoint(mcpUrl)) {
-    throw new Error(
-      `${configPath} points the dpf MCP server at ${mcpUrl}, which is not a local endpoint; `
-      + "refusing to send the bearer token off-box. Set DPF_MCP_BEARER_TOKEN (and DPF_MCP_URL) "
-      + "to reach a non-loopback endpoint deliberately.",
-    );
-  }
-  return { mcpUrl, bearerToken };
-}
-
-function parseJsonFile(path) {
+/**
+ * The admission connection: DPF_MCP_URL (operator intent, persisted by setup)
+ * or the local default, with the credential every gate script resolves
+ * (scripts/lib/mcp-credential.mjs: client_credentials, then the legacy PAT).
+ * Returns null when no credential is configured.
+ *
+ * It does not read a project .mcp.json (BI-5201141C): on https no writer
+ * produces one -- Claude Code's dpf connector is the plugin's URL-only,
+ * OAuth-authorized descriptor, which carries no token a script could reuse.
+ */
+export function readMcpConnection(env = process.env) {
+  const mcpUrl = env.DPF_MCP_URL || DEFAULT_LOCAL_MCP_URL;
   try {
-    return JSON.parse(readFileSync(path, "utf8"));
+    return { mcpUrl, bearerToken: resolveMcpCredential({ mcpUrl, env }).bearer };
   } catch {
-    // Absent or malformed: the actionable fail-closed error is emitted by the caller.
     return null;
   }
 }
@@ -245,8 +219,8 @@ async function main() {
     return;
   }
   const cwd = process.cwd();
-  const connection = readMcpConnection(cwd);
-  if (!connection) throw new Error("DPF MCP admission is unavailable; seed .mcp.json or set DPF_MCP_BEARER_TOKEN");
+  const connection = readMcpConnection();
+  if (!connection) throw new Error(`DPF MCP admission is unavailable. ${MCP_CREDENTIAL_HELP}`);
 
   const processRows = readProcessRows();
   const findings = findUngovernedHeavyProcesses(processRows, { governedPids: [process.pid] });
@@ -302,9 +276,10 @@ async function main() {
   }
 
   const child = createOwnedChild(parsed);
+  const expiresAt = claim?.data?.lease?.expiresAt;
   const result = await superviseLeaseRun({
-    ttlMs: 10 * 60_000,
-    expiresAt: claim?.data?.lease?.expiresAt,
+    ttlMs: admittedLeaseTtlMs(expiresAt, 10 * 60_000),
+    expiresAt,
     run: child.run,
     terminate: child.terminate,
     renew: () => mcpCall("renew_nonprod_environment_lease", {
@@ -314,6 +289,9 @@ async function main() {
     }, connection),
     release: () => mcpCall("release_nonprod_environment_lease", { leaseId }, connection),
   });
+  if (result.status !== "completed") {
+    process.stderr.write(`host-resource-runner: lease ${leaseId} ${result.status} (${result.reason}); the command was stopped.\n`);
+  }
   process.exitCode = result.status === "completed" ? result.result : 1;
 }
 

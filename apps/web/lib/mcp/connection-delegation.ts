@@ -3,7 +3,7 @@
 // accepted on this request, and which names an assistant, qualifies. A PAT, a
 // session JWT, a client-credentials token or an unbound connection yields
 // nothing, so the escalation gate sees `none` exactly as before.
-import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute-types";
 
 export function connectionDelegationFor(token: {
   source?: string;

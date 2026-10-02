@@ -62,6 +62,7 @@ export async function ensureSelfOptimizationSweepScheduledTask(
     select: { taskId: true, nextRunAt: true },
   });
 
+  // An existing task keeps its owner: an account handover must survive re-seeding (BI-ED055D45).
   if (existing) {
     await prisma.scheduledAgentTask.update({
       where: { taskId: SELF_OPTIMIZATION_SWEEP_TASK_ID },
@@ -72,7 +73,6 @@ export async function ensureSelfOptimizationSweepScheduledTask(
         routeContext: SELF_OPTIMIZATION_SWEEP_ROUTE_CONTEXT,
         schedule: SELF_OPTIMIZATION_SWEEP_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
         isActive: true,
         nextRunAt: existing.nextRunAt ?? nextRunAt,
       },

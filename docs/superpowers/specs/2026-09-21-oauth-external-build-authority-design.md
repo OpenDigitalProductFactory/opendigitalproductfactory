@@ -119,9 +119,38 @@ not require coworker identity; never pass unbound credentials to room actions.
 
 One OAuth approval covers transport reconnections and concurrent tasks. Normal
 refresh is silent. Task idempotency uses the server-issued credential family,
-not an access-token row. Queued execution may survive access-token expiry only
-when a current successor preserves the same human, client, consent, resource,
-coworker and scope envelope. Expired bearer authentication remains refused.
+not an access-token row. Queued execution may survive access-token expiry when
+a current access successor or an unconsumed, unrevoked, unexpired refresh token
+preserves the same family, human, client, consent, resource, coworker and scope
+envelope. Current consent and human eligibility still apply. This server-side
+continuity does not mint credentials or consume the client's refresh token.
+Expired bearer authentication remains refused.
+
+### Expiry-gap recovery amendment (BI-1E56D891, 2026-09-27)
+
+Live evidence `cmukgs2ak1x9f01qsyd0qk12e` reproduced a queued review failing
+17 seconds after bearer expiry despite a valid refresh family; the client
+refreshed normally three minutes later. `cmukgvb5l1xdg01qsl91fezey` showed
+exact replay returning the terminal failure with a misleading resumable flag.
+The lifetime clause above closes that client-timing dependency. It does not
+extend consent, task leases, permissions or room admission.
+
+An explicit identical request under current authority may recover that narrow
+historical failure once, preserving the same TaskRun and immutable digest.
+Require the same human/family, original access expiry before failure, current
+original-family authority, an initiative review with a capacity wait, and no
+recorded reviewer write or approval envelope. Refuse cancellation, completion,
+other failures, prior recovery, or an exhausted/parked terminal-writer attempt.
+Reserve by status and updatedAt compare-and-set before the queue event; retain
+the old failure timestamp and reason and increment the dispatch generation.
+Never reset capacity or inference counters. A failed queue send remains bounded
+by the existing outbox reconciler; it is not a completed review.
+
+Terminal replay must not project a stale capacity/writer wait as resumable.
+This amendment remains subject to source review and live acceptance; the
+WWMD consult DI-9D6C401C15A7 was inconclusive because retrieval was unavailable,
+not a passing architecture receipt. The implementation follows the operator's
+explicit consent-lifetime and retry requirements within the admitted fix scope.
 
 ## Operation authority and attribution (C3)
 
@@ -471,9 +500,14 @@ is a lookup over existing rows:
 
 1. The coworker on this human's most recent active `consent` binding for
    this resource whose client has the same self-asserted name and the same
-   redirect family (scheme, host and path with the loopback port ignored,
-   the same comparison `isRedirectUriAllowed` already makes). This is what
-   makes a reconnect land on the same assistant without a question.
+   redirect family. For a loopback redirect the family is scheme, host and
+   first path segment: the port is ephemeral and some clients add a
+   per-session path nonce (Codex's `/callback/<nonce>` changed between
+   2026-09-23 and 2026-10-01 and defeated reuse on the live install). A
+   non-loopback redirect keeps port and full path. This is what makes a
+   reconnect land on the same assistant without a question. Each consent's
+   audit row records the resolution kind, the default offered and whether
+   the human changed it, so AC-OC-7 is measurable from the database.
 2. A coworker whose registry aliases (`agent_registry.json`, for example
    `codex` for `AGT-EXT-CODEX`) match the client's self-asserted name,
    case-insensitively, as a whole word.
@@ -683,4 +717,3 @@ Room definitions steer as `room-authority`, and cadences as `scheduled-mandate`.
 A person's OAuth consent steers routine writes as `connection-delegation`.
 None of these can authorize a damaging action. Each decision log row records
 which one decided.
-

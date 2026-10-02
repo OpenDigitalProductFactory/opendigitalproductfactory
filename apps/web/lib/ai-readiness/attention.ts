@@ -1,6 +1,6 @@
 import type { AttentionItem } from "@/lib/attention/types";
 
-import type { AiReadinessSummary } from "./readiness-summary";
+import type { AiReadinessSummary } from "./readiness-summary-types";
 
 function attentionId(domainId: string, blockerCode: string): string {
   return `ai-readiness-blocker:${domainId}:${blockerCode}`;

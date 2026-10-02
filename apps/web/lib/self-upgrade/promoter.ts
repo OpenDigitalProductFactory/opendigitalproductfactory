@@ -279,7 +279,10 @@ export function buildPromoterCommand(params: PromoterParams): { command: string;
   }
 
   if (params.composeEnvFileHostPath && params.composeEnvFileHostPath.length > 0) {
-    args.push("-v", `${params.composeEnvFileHostPath}:${PROMOTER_COMPOSE_ENV_FILE}:ro`);
+    // A real self-upgrade may write the Inngest keys it generated back to the
+    // install .env (BI-3267763F); every other launch only reads it.
+    const envWritable = !params.dryRun && !params.runtimeTransitionAuthorityOperation && !params.runtimeCapabilityTransitionId;
+    args.push("-v", `${params.composeEnvFileHostPath}:${PROMOTER_COMPOSE_ENV_FILE}${envWritable ? "" : ":ro"}`);
   }
 
   // promote.sh resolves the install's governed capability projection before
@@ -383,6 +386,8 @@ export function buildPromoterReadinessCommand(
   if (stateIndex >= 0) command.args[stateIndex] = `${command.args[stateIndex]}:ro`;
   const backupsIndex = command.args.findIndex((arg) => arg.endsWith(":/backups"));
   if (backupsIndex >= 0) command.args[backupsIndex] = `${command.args[backupsIndex]}:ro`;
+  const envIndex = command.args.findIndex((arg) => arg.endsWith(`:${PROMOTER_COMPOSE_ENV_FILE}`));
+  if (envIndex >= 0) command.args[envIndex] = `${command.args[envIndex]}:ro`;
   const imageIndex = command.args.indexOf(params.artifact.digest);
   if (imageIndex < 0) throw new Error("promoter_readiness_image_unavailable");
   command.args.splice(imageIndex, 0, "-e", "DPF_PROMOTER_DOCKER_PREFLIGHT=ready");

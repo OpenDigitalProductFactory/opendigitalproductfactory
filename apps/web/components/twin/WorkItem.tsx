@@ -8,7 +8,7 @@
 import { intentStyle } from "@/components/ui/report-kit";
 
 import { ActorMark } from "./ActorMark";
-import type { WorkItemData } from "./types";
+import type { WorkItemData } from "@/lib/twin/kit-types";
 
 export function WorkItem({
   label,

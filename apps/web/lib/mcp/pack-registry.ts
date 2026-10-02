@@ -47,6 +47,8 @@ import { mdmStewardshipPack } from "./packs/mdm-stewardship-pack";
 import { crmContactsPack } from "./packs/crm-contacts-pack";
 import { crmEnrichmentPack } from "./packs/crm-enrichment-pack";
 import { storefrontActivityPack } from "./packs/storefront-activity-pack";
+import { contributorInventoryPack } from "./packs/contributor-inventory-pack";
+import { payablesPack } from "./packs/payables-pack";
 import { stockCoveragePack } from "./packs/stock-coverage-pack";
 import { queueAwarenessPack } from "./packs/queue-awareness-pack";
 import { documentPack } from "./packs/document-pack";
@@ -145,6 +147,8 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   crmContactsPack,
   crmEnrichmentPack,
   storefrontActivityPack,
+  contributorInventoryPack,
+  payablesPack,
   stockCoveragePack,
   queueAwarenessPack,
   documentPack,

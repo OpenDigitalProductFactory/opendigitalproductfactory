@@ -45,7 +45,8 @@ import { oauthSetupRequiredResult } from "@/lib/auth/oauth-setup-required";
 import { resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
 import { buildStepUpChallenge, type StepUpContext } from "@/lib/auth/oauth-step-up";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
-import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
+import { PLATFORM_TOOLS, resolveAnnotations } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -82,6 +83,10 @@ import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
 import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
+import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
+import { sanitizeForLog } from "@/lib/security/safe-log";
+// GPP Phase 2 PR-C: a replayed permit handle rides in tools/call params._meta.
+import { presentedPermitHandle } from "@/lib/gpp/permit-carriage";
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
 // ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
@@ -480,6 +485,7 @@ async function handleToolsCall(
   }
   const toolName = canonicalWorkroomToolName(params["name"]);
   const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {};
+  const permitHandle = presentedPermitHandle(params["_meta"]);
 
   // load_tools is a transport-level meta-tool, not a governed domain tool:
   // handle it inline (it manages per-token discovery state) and never route it
@@ -561,7 +567,7 @@ async function handleToolsCall(
   }
 
   const userContext = await loadUserContext(token.userId);
-  const result = await governedExecuteTool({
+  const executed = await governedExecuteTool({
     toolName,
     rawParams: args,
     userId: token.userId,
@@ -580,9 +586,27 @@ async function handleToolsCall(
       authSource: token.source,
       tokenScope, tokenGrantScopes: expandedScopes,
       ...connectionDelegationFor(token),
+      ...(permitHandle ? { permitHandle } : {}),
     },
     source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });
+
+  // External CLIs feed this result straight into their model, so hidden
+  // Unicode is removed here exactly as the native loop removes it in
+  // clampToolResultForModel (BI-7AD0DA3D). The audited ToolResult stays whole.
+  const cleaned = sanitizeUntrustedValue({ message: executed.message, error: executed.error, data: executed.data });
+  const smugglingSuspected = looksLikeSmuggling(cleaned);
+  if (smugglingSuspected) {
+    console.warn("[mcp/v1] hidden-unicode payload removed from tool result tool=%s removed=%d", sanitizeForLog(toolName), cleaned.total);
+  }
+  const result = {
+    ...executed,
+    message: smugglingSuspected
+      ? `${invisibleRemovalNotice(cleaned)}\n${cleaned.value.message ?? ""}`
+      : cleaned.value.message,
+    error: cleaned.value.error,
+    data: cleaned.value.data,
+  };
 
   // Convert ToolResult into MCP tools/call response shape:
   //   - content[]: a single text block carrying a JSON serialization of the

@@ -7,7 +7,7 @@
 // (and passes the same arguments the switch case did). Definitions are moved
 // verbatim from mcp-tools.ts; grants mirror agent-grants.ts TOOL_TO_GRANTS.
 
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { runtimeCoordinationToolEnums } from "@/lib/runtime-coordination/mcp-handlers";
 import type { ToolPack } from "../tool-pack";
 

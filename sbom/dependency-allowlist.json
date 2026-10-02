@@ -309,6 +309,16 @@
       ],
       "note": "Type definitions for mailparser (DefinitelyTyped, MIT); dev-only."
     },
+    "@types/markdown-it": {
+      "added": "2026-09-29",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "Type definitions for markdown-it 14 (DefinitelyTyped, MIT); dev-only. markdown-it 14 ships no types."
+    },
     "@types/net-snmp": {
       "added": "2026-06-21",
       "workspaces": [
@@ -328,16 +338,6 @@
         "services/adp",
         "services/edge-node",
         "services/integration-test-harness"
-      ],
-      "kinds": [
-        "dev"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
-    "@types/nodemailer": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "apps/web"
       ],
       "kinds": [
         "dev"
@@ -638,7 +638,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "Mailroom IMAP adapter (design 2026-09-09 s3, BI-13919D7E). MIT; Postal Systems (Andris Reinman, the Nodemailer/EmailEngine maintainer); promise API, UID search, UIDVALIDITY handling; actively released; no known OSV advisories at adoption. Rejected node-imap (unmaintained since 2019, callback API) and imap-simple (wraps node-imap)."
+      "note": "Mailroom IMAP adapter (design 2026-09-09 s3, BI-13919D7E). MIT; Postal Systems (Andris Reinman, the Nodemailer/EmailEngine maintainer); promise API, UID search, UIDVALIDITY handling; actively released; no known OSV advisories at adoption. Rejected node-imap (unmaintained since 2019, callback API) and imap-simple (wraps node-imap). Bumped to ^2.1.2 on 2026-09-29 (plan 2026-09-08 M7) so it shares libmime 5.4.6, @zone-eu/mailsplit 5.4.19, libqp 2.1.2 and libbase64 1.3.1 with mailparser 3.9.31; MIT, same maintainer, npm SLSA v1 provenance, released 2026-09-28 past the release-age floor, no breaking changes in 2.1 (additive exports and fixes)."
     },
     "inngest": {
       "added": "2026-06-21",
@@ -728,7 +728,17 @@
       "kinds": [
         "prod"
       ],
-      "note": "Mailroom MIME parsing for polled IMAP messages (design 2026-09-09 s3). MIT; same maintainer as nodemailer; about 1M weekly downloads; actively released; no known OSV advisories at adoption. Attachment bytes are never written to disk (metadata only)."
+      "note": "Mailroom MIME parsing for polled IMAP messages (design 2026-09-09 s3). MIT; same maintainer as nodemailer; about 1M weekly downloads; actively released; no known OSV advisories at adoption. Attachment bytes are never written to disk (metadata only). Bumped to ^3.9.31 on 2026-09-29 (plan 2026-09-08 M7) so its exact nodemailer pin (10.0.12) matches the direct dependency; MIT, npm SLSA v1 provenance, released 2026-09-28 past the release-age floor."
+    },
+    "markdown-it": {
+      "added": "2026-09-29",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "Plan 2026-09-08 M5: the one markdown renderer, lib/shared/markdown.ts renderMarkdown() with raw HTML off (founder decision 2026-09-26, WWMD DI-D9292D812CFF). Replaces react-markdown + remark-gfm (retired below; −87 resolved components). Vetted 2026-09-29: MIT; markdown-it org on GitHub, one npm maintainer; ~32M weekly downloads; 14.3.2 published 2026-09-12 (past the release-age floor); no npm provenance attestation; OSV clean. 14.x rather than 15.x because 14 reuses the linkify-it 5, uc.micro 2, entities 4 and punycode.js already in the tree (15 added two duplicated names). No network, native or runtime-exec surface."
     },
     "msw": {
       "added": "2026-06-21",
@@ -789,7 +799,7 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "Outbound SMTP transport for apps/web/lib/shared/email.ts. Upgraded to ^10.0.12 on 2026-09-29 (plan 2026-09-08 M7): clears GHSA-6vj9-mwq6-2f5v and GHSA-8vvx-rff5-p5rq (fixed in 10.0.2) and collapses the second copy mailparser pinned. Vetting: licence MIT-0 from 10.0.0 (OSI-approved, more permissive than the earlier MIT); single maintainer andris (Andris Reinman, author since 2011); npm SLSA v1 provenance attestation on 10.0.12; released 2026-09-28, past the 24 h release-age floor; about 26M weekly downloads; zero runtime dependencies; ships its own TypeScript declarations, so @types/nodemailer is retired; Node >= 20 required (the portal runs Node 20+); scan-dependencies reports no OSV advisory for 10.0.12."
     },
     "papaparse": {
       "added": "2026-06-21",
@@ -895,16 +905,6 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
-    "react-markdown": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "apps/web"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
     "react-native": {
       "added": "2026-06-21",
       "workspaces": [
@@ -984,16 +984,6 @@
         "prod"
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
-    "remark-gfm": {
-      "added": "2026-07-17",
-      "workspaces": [
-        "apps/web"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "EP-DOCS-SYSTEM Phase 2 — GFM (pipe-table) support for the in-portal user-guide renderer, which otherwise shows tables as raw text. Official remark plugin from the same unifiedjs/remark ecosystem as the already-acknowledged react-markdown; MIT; no network/native/runtime-exec surface."
     },
     "sharp": {
       "added": "2026-06-21",
@@ -1184,6 +1174,18 @@
     "@react-pdf/renderer": {
       "retired": "2026-09-26",
       "reason": "Invoice PDFs are an HTML template (apps/web/lib/finance/invoice-html.ts) printed to PDF by the dpf-doctools engine through convertDocument (dpf-convert --from html --to pdf), the document export pipeline; plan 2026-09-08 M5, BI-0AB1FD47. It also retired its exclusive closure (pdfkit, fontkit, yoga-layout and the @react-pdf/* packages among them)."
+    },
+    "react-markdown": {
+      "retired": "2026-09-29",
+      "reason": "One markdown renderer: renderMarkdown() in apps/web/lib/shared/markdown.ts, on markdown-it with raw HTML off, serves the user guide, wiki, coworker chat, build briefs, workspace documents and the office-document export; plan 2026-09-08 M5, BI-0AB1FD47, WWMD DI-D9292D812CFF. It also retired its unified/remark/rehype/mdast/hast closure."
+    },
+    "remark-gfm": {
+      "retired": "2026-09-29",
+      "reason": "One markdown renderer: renderMarkdown() in apps/web/lib/shared/markdown.ts, on markdown-it with raw HTML off, serves the user guide, wiki, coworker chat, build briefs, workspace documents and the office-document export; plan 2026-09-08 M5, BI-0AB1FD47, WWMD DI-D9292D812CFF. markdown-it covers GFM tables, strikethrough and autolinks; task lists are a core rule in the same file."
+    },
+    "@types/nodemailer": {
+      "retired": "2026-09-29",
+      "reason": "nodemailer 10 is written in TypeScript and ships its own declarations (dist/cjs/nodemailer.d.ts, keeping the @types layout); plan 2026-09-08 M7."
     }
   }
 }

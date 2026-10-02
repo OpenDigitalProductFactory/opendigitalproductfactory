@@ -137,8 +137,12 @@ test("every direct protected FeatureBuild phase writer references the canonical 
     .sort();
   assert.deepEqual(writers, [
     "apps/web/lib/actions/build.ts",
-    "apps/web/lib/build/build-on-plan-approval.ts",
-    "apps/web/lib/build/plan-to-build-transition.ts",
+    "apps/web/lib/build/gauntlet-repair.ts",
+    // GPP C-8 (PR-F, BI-45F9CB7A): the one plan→build write. It replaces the
+    // direct writes in plan-to-build-transition.ts and build-on-plan-approval.ts,
+    // and calls the canonical readiness gate itself where a path's profile makes
+    // readiness blocking.
+    "apps/web/lib/build/plan-to-build-transition-core.ts",
     "apps/web/lib/build/ship-on-review-approval.ts",
     "apps/web/lib/mcp/build-design-review-handler.ts",
   ]);

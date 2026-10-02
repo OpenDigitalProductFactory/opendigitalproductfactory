@@ -5,7 +5,7 @@
 // than a place handlers accumulate. The pack imports the definition and the
 // handler and stays a list.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
 export const contributeFindingToHiveDefinition: ToolDefinition =
 {

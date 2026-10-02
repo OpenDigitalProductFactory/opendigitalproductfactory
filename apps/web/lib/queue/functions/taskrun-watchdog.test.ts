@@ -187,6 +187,17 @@ describe("recoverStuckQuiescenceCoordinators", () => {
     expect(notIn).not.toContain("preparing");
     expect(notIn).not.toContain("pending");
   });
+
+  it("keys an awaiting-operator drain on its heartbeat only — a waiting upgrade that still beats is never reaped (BI-F9EE05E5)", async () => {
+    // The coordinator heartbeats on every check (<= ~60s apart, also while it
+    // awaits the operator), so only a crashed one goes 2 minutes without a beat.
+    quiescenceFindManyMock.mockResolvedValueOnce([]);
+    const now = new Date("2026-09-30T19:00:00.000Z");
+    await recoverStuckQuiescenceCoordinators(now);
+    const where = quiescenceFindManyMock.mock.calls[0][0].where;
+    expect(where.status.notIn).not.toContain("awaiting-operator");
+    expect(where.OR[0]).toEqual({ lastHeartbeatAt: { lt: new Date(now.getTime() - 2 * 60 * 1000) } });
+  });
 });
 
 describe("taskrunWatchdog handler (the early-return fix)", () => {

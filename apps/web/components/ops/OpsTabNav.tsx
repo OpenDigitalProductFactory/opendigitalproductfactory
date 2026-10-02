@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { OPS_NAV_GROUPS } from "./ops-nav";
+import { OPS_NAV_GROUPS } from "@/lib/navigation/ops-nav";
 import { SectionNav } from "@/components/shell/SectionNav";
 
 // EP-NAV-COHERENCE: /ops groups its tabs into "Delivery" (Backlog) vs "Runtime &

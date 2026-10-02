@@ -19,7 +19,7 @@ import {
   checkStatutoryProposal,
   type StatutoryRuleKind,
 } from "@/lib/finance/statutory-rules";
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 
 const RULE_KINDS: readonly StatutoryRuleKind[] = ["rate", "wage_base", "threshold", "amount"];
 

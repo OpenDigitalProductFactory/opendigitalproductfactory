@@ -52,6 +52,7 @@ import {
 } from "@/lib/build/build-actions-core";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { assertBuildPhaseInitiativeReadiness, checkBuildPhaseInitiativeReadiness } from "@/lib/build/build-entry-gate";
+import { PLAN_TO_BUILD_PASS, refusePlanToBuild, transitionPlanToBuild } from "@/lib/build/plan-to-build-transition";
 import { assertFeatureBuildCompletion } from "@/lib/backlog/initiative-readiness/build-terminal-transition";
 import { updateFeatureBrief as updateFeatureBriefAction } from "@/lib/actions/build-feature-brief";
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
@@ -381,7 +382,132 @@ export async function advanceBuildPhase(
     return { ok: false, message: `Cannot transition from ${currentPhase} to ${targetPhase}` };
   }
 
-  if (targetPhase === "complete") await assertFeatureBuildCompletion({ buildId, expectedPhase: currentPhase });
+  const planToBuild = currentPhase === "plan" && targetPhase === "build";
+  const brief = build.brief as { acceptanceCriteria?: string[]; fixContext?: import("@/lib/feature-build-types").FixContext } | null;
+  // Right-sizing matrix: read processSize from plan.processSize (written at
+  // promote time) and pass it to checkPhaseGate so the policy lookup picks
+  // the matching LifecyclePolicy. Default "medium" preserves the byte-
+  // identical default cell. See
+  // docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md.
+  const buildPlanState = (build.plan as Record<string, unknown> | null) ?? null;
+  const processSize = (buildPlanState?.["processSize"] as string | undefined) ?? "medium";
+  // Structural phase gate + UX override: one body for plan→build (below) and every other transition.
+  let gate: Awaited<ReturnType<typeof checkBuildPhaseGate>> | undefined;
+  const evaluateStructuralGate = async (): Promise<AdvanceBuildPhaseResult | null> => {
+    gate = await checkBuildPhaseGate({
+      buildId,
+      from: currentPhase,
+      to: targetPhase,
+      evidence: {
+        kind: build.kind,
+        processSize,
+        fixContext: brief?.fixContext,
+        designDoc: build.designDoc,
+        designReview: build.designReview,
+        happyPathState: normalizeHappyPathState(buildPlanState?.happyPathState ?? null),
+        buildPlan: build.buildPlan,
+        planReview: build.planReview,
+        taskResults: build.taskResults,
+        verificationOut: build.verificationOut,
+        acceptanceMet: build.acceptanceMet,
+        uxTestResults: build.uxTestResults,
+        uxVerificationStatus: build.uxVerificationStatus,
+        acceptanceCriteria: brief?.acceptanceCriteria ?? [],
+      },
+    });
+
+    if (!gate.allowed) {
+      // Operator override: only bypasses UX-verification blockers, never the
+      // acceptance-criteria / design-doc / verification-output prerequisites.
+      // The gate message for UX failures always starts with "UX verification".
+      const override = options?.overrideUxFailure;
+      const isUxBlocker = gate.reason?.startsWith("UX verification") ?? false;
+      if (override && isUxBlocker && override.reason.trim().length >= 10) {
+        await prisma.buildActivity.create({
+          data: {
+            buildId,
+            tool: "ux-override",
+            summary: `UX verification override applied for ${targetPhase}: ${override.reason.trim()}`,
+          },
+        }).catch(() => {});
+      } else {
+        // BI-04B112CA — an expected "not yet" returns; thrown it is stripped to a
+        // digest and the owner sees React #441 instead of the reason (FB-05946F96).
+        return { ok: false, message: gate.reason ?? "Phase gate check failed" };
+      }
+    }
+    return null;
+  };
+
+  if (planToBuild) {
+    // GPP C-8 (PR-F): gate order and phase write live in the shared transition;
+    // this path's gates and refusal forms: PLAN_TO_BUILD_GATE_PROFILES["advance-build-phase"].
+    const transition = await transitionPlanToBuild<"advance-build-phase", AdvanceBuildPhaseResult>({
+      buildId,
+      path: "advance-build-phase",
+      steps: {
+        "structural-phase-gate": async () => { const refusal = await evaluateStructuralGate(); return refusal ? refusePlanToBuild(refusal) : PLAN_TO_BUILD_PASS; },
+        "dependency-gate": () => {
+          assertFeatureBuildDependencyGate({ id: build.id, buildId: build.buildId, title: build.title, parentEpicId: build.parentEpicId, phase: build.phase, dependenciesOut: build.dependenciesOut });
+          return PLAN_TO_BUILD_PASS;
+        },
+        "build-studio-decision-record": async () => {
+          const recommendation = await evaluateBuildStudioDecision({
+            userId,
+            request: {
+              source: "build-studio",
+              routeContext: "/build",
+              buildId,
+              phase: currentPhase,
+              question: `Start implementation for "${build.title ?? buildId}" from the reviewed Build Studio plan?`,
+              options: [
+                { id: "start-implementation", description: "Start implementation from the reviewed Build Studio plan.", operatorLabel: "Start implementation" },
+                { id: "revise-plan", description: "Revise the implementation plan before starting.", operatorLabel: "Revise plan" },
+                { id: "escalate-owner", description: "Escalate to the Build Studio owner before implementation.", operatorLabel: "Escalate to owner" },
+              ],
+            },
+          });
+          prisma.buildActivity.create({
+            data: { buildId, tool: "build-studio-decision", summary: `${recommendation.operatorActionLabel}: ${recommendation.reasonSummary}` },
+          }).catch(() => {});
+          return PLAN_TO_BUILD_PASS;
+        },
+        "wwmd-plan-advancement": async () => {
+          // BI-D996C238 — graduated gate autonomy (opt-in): derive the risk tier from
+          // the deliverable's sensitivity instead of the fixed "medium", so a
+          // low-sensitivity plan advancement can clear on the ladder while a
+          // high-sensitivity one always escalates. Fail-open to undefined (→ the gate's
+          // "medium" default) so a config/derive error never changes the gate.
+          let graduatedRiskTier: "low" | "medium" | "high" | "critical" | undefined;
+          try {
+            const { isGraduatedGateAutonomyEnabled } = await import("@/lib/build/build-studio-config");
+            if (isGraduatedGateAutonomyEnabled()) {
+              const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+              const { deriveTransitionRiskTier } = await import("@/lib/decision-perspective/graduated-autonomy");
+              const text = `${build.title ?? ""}\n${JSON.stringify(build.designDoc ?? build.buildPlan ?? {})}`.slice(0, 4000);
+              const sensitivity = deriveDeliverableSensitivity({ text, workType: build.kind });
+              graduatedRiskTier = deriveTransitionRiskTier({ sensitivity, transition: "plan-advance" });
+            }
+          } catch {
+            graduatedRiskTier = undefined;
+          }
+
+          const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
+            db: prisma,
+            build: { buildId, title: build.title ?? buildId, phase: currentPhase, planReview: build.planReview as ReviewResult | null, deliberationSummary: build.deliberationSummary as BuildDeliberationSummary | null },
+            triggeredByUserId: userId,
+            riskTier: graduatedRiskTier,
+            // BI-70280889: without these the acumen consults never run.
+            plannedFilePaths: await resolvePlannedFilePaths({ db: prisma, buildId, buildRowId: build.id }),
+          });
+          if (!decisionGate.allowed) throw new Error(decisionGate.operatorMessage);
+          return PLAN_TO_BUILD_PASS;
+        },
+      },
+    });
+    if (transition.kind === "readiness-refused") return { ok: false, message: transition.message }; // BI-C5D978E9: refusals return
+    if (transition.kind === "refused") return transition.refusal;
+  } else if (targetPhase === "complete") await assertFeatureBuildCompletion({ buildId, expectedPhase: currentPhase });
   else { const refusal = await checkBuildPhaseInitiativeReadiness({ buildId, currentPhase, targetPhase }); if (refusal) return { ok: false, message: refusal }; } // BI-C5D978E9: refusals return
 
   if (currentPhase === "ideate" && targetPhase === "plan") {
@@ -397,147 +523,15 @@ export async function advanceBuildPhase(
     }
   }
 
-  const brief = build.brief as { acceptanceCriteria?: string[]; fixContext?: import("@/lib/feature-build-types").FixContext } | null;
-  // Right-sizing matrix: read processSize from plan.processSize (written at
-  // promote time) and pass it to checkPhaseGate so the policy lookup picks
-  // the matching LifecyclePolicy. Default "medium" preserves the byte-
-  // identical default cell. See
-  // docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md.
-  const buildPlanState = (build.plan as Record<string, unknown> | null) ?? null;
-  const processSize = (buildPlanState?.["processSize"] as string | undefined) ?? "medium";
-  const gate = await checkBuildPhaseGate({
-    buildId,
-    from: currentPhase,
-    to: targetPhase,
-    evidence: {
-      kind: build.kind,
-      processSize,
-      fixContext: brief?.fixContext,
-      designDoc: build.designDoc,
-      designReview: build.designReview,
-      happyPathState: normalizeHappyPathState(buildPlanState?.happyPathState ?? null),
-      buildPlan: build.buildPlan,
-      planReview: build.planReview,
-      taskResults: build.taskResults,
-      verificationOut: build.verificationOut,
-      acceptanceMet: build.acceptanceMet,
-      uxTestResults: build.uxTestResults,
-      uxVerificationStatus: build.uxVerificationStatus,
-      acceptanceCriteria: brief?.acceptanceCriteria ?? [],
-    },
-  });
-
-  if (!gate.allowed) {
-    // Operator override: only bypasses UX-verification blockers, never the
-    // acceptance-criteria / design-doc / verification-output prerequisites.
-    // The gate message for UX failures always starts with "UX verification".
-    const override = options?.overrideUxFailure;
-    const isUxBlocker = gate.reason?.startsWith("UX verification") ?? false;
-    if (override && isUxBlocker && override.reason.trim().length >= 10) {
-      await prisma.buildActivity.create({
-        data: {
-          buildId,
-          tool: "ux-override",
-          summary: `UX verification override applied for ${targetPhase}: ${override.reason.trim()}`,
-        },
-      }).catch(() => {});
-    } else {
-      // BI-04B112CA — an expected "not yet" returns; thrown it is stripped to a
-      // digest and the owner sees React #441 instead of the reason (FB-05946F96).
-      return { ok: false, message: gate.reason ?? "Phase gate check failed" };
-    }
-  }
-
-  if (currentPhase === "plan" && targetPhase === "build") {
-    assertFeatureBuildDependencyGate({
-      id: build.id,
-      buildId: build.buildId,
-      title: build.title,
-      parentEpicId: build.parentEpicId,
-      phase: build.phase,
-      dependenciesOut: build.dependenciesOut,
-    });
-
-    const recommendation = await evaluateBuildStudioDecision({
-      userId,
-      request: {
-        source: "build-studio",
-        routeContext: "/build",
-        buildId,
-        phase: currentPhase,
-        question: `Start implementation for "${build.title ?? buildId}" from the reviewed Build Studio plan?`,
-        options: [
-          {
-            id: "start-implementation",
-            description: "Start implementation from the reviewed Build Studio plan.",
-            operatorLabel: "Start implementation",
-          },
-          {
-            id: "revise-plan",
-            description: "Revise the implementation plan before starting.",
-            operatorLabel: "Revise plan",
-          },
-          {
-            id: "escalate-owner",
-            description: "Escalate to the Build Studio owner before implementation.",
-            operatorLabel: "Escalate to owner",
-          },
-        ],
-      },
-    });
-    prisma.buildActivity.create({
-      data: {
-        buildId,
-        tool: "build-studio-decision",
-        summary: `${recommendation.operatorActionLabel}: ${recommendation.reasonSummary}`,
-      },
-    }).catch(() => {});
-
-    // BI-D996C238 — graduated gate autonomy (opt-in): derive the risk tier from
-    // the deliverable's sensitivity instead of the fixed "medium", so a
-    // low-sensitivity plan advancement can clear on the ladder while a
-    // high-sensitivity one always escalates. Fail-open to undefined (→ the gate's
-    // "medium" default) so a config/derive error never changes the gate.
-    let graduatedRiskTier: "low" | "medium" | "high" | "critical" | undefined;
-    try {
-      const { isGraduatedGateAutonomyEnabled } = await import("@/lib/build/build-studio-config");
-      if (isGraduatedGateAutonomyEnabled()) {
-        const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
-        const { deriveTransitionRiskTier } = await import("@/lib/decision-perspective/graduated-autonomy");
-        const text = `${build.title ?? ""}\n${JSON.stringify(build.designDoc ?? build.buildPlan ?? {})}`.slice(0, 4000);
-        const sensitivity = deriveDeliverableSensitivity({ text, workType: build.kind });
-        graduatedRiskTier = deriveTransitionRiskTier({ sensitivity, transition: "plan-advance" });
-      }
-    } catch {
-      graduatedRiskTier = undefined;
-    }
-
-    const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
-      db: prisma,
-      build: {
-        buildId,
-        title: build.title ?? buildId,
-        phase: currentPhase,
-        planReview: build.planReview as ReviewResult | null,
-        deliberationSummary: build.deliberationSummary as BuildDeliberationSummary | null,
-      },
-      triggeredByUserId: userId,
-      riskTier: graduatedRiskTier,
-      // BI-70280889: without these the acumen consults never run.
-      plannedFilePaths: await resolvePlannedFilePaths({ db: prisma, buildId, buildRowId: build.id }),
-    });
-    if (!decisionGate.allowed) {
-      throw new Error(decisionGate.operatorMessage);
-    }
-  }
+  if (!planToBuild) { const structuralRefusal = await evaluateStructuralGate(); if (structuralRefusal) return structuralRefusal; }
 
   if (currentPhase === "build" && targetPhase === "review") {
     if (!build.sandboxId) {
       throw new Error("Build Studio cannot advance to review because the sandbox is no longer available.");
     }
-    const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
+    const { getClientIdentity, resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
     const { clientBranch } = await getClientIdentity();
-    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
+    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch, workspace: resolveBuildWorkdir(buildId) }); // BI-5C4933EB: the build's own worktree
     if (releasableFiles.length === 0) {
       return {
         ok: false,
@@ -551,9 +545,9 @@ export async function advanceBuildPhase(
     if (!build.sandboxId) {
       throw new Error("Build Studio cannot continue to release because the sandbox is no longer available.");
     }
-    const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
+    const { getClientIdentity, resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
     const { clientBranch } = await getClientIdentity();
-    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
+    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch, workspace: resolveBuildWorkdir(buildId) }); // BI-5C4933EB: the build's own worktree
     if (releasableFiles.length === 0) {
       return {
         ok: false,
@@ -563,7 +557,7 @@ export async function advanceBuildPhase(
     }
   }
 
-  if (targetPhase !== "complete") {
+  if (targetPhase !== "complete" && !planToBuild) { // plan→build wrote it in transitionPlanToBuild
     await prisma.featureBuild.update({
       where: { buildId },
       data: { phase: targetPhase },
@@ -624,7 +618,7 @@ export async function advanceBuildPhase(
         summary: `Phase ${currentPhase} complete. Advancing to ${targetPhase}.`,
         evidenceFields,
         evidenceDigest,
-        gateResult: { allowed: gate.allowed, reason: gate.reason ?? "ok" },
+        gateResult: { allowed: gate!.allowed, reason: gate!.reason ?? "ok" },
       },
     });
   } catch (err) {
@@ -1022,9 +1016,9 @@ export async function resumeBuildImplementation(buildId: string): Promise<Resume
     if (!build.sandboxId) {
       throw new Error("This release-phase build has no sandbox attached, so implementation cannot be resumed safely.");
     }
-    const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
+    const { getClientIdentity, resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
     const { clientBranch } = await getClientIdentity();
-    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
+    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch, workspace: resolveBuildWorkdir(buildId) }); // BI-5C4933EB: the build's own worktree
     if (releasableFiles.length > 0) {
       throw new Error("This build already has releasable source changes. Continue from the release decisions instead of reopening implementation.");
     }

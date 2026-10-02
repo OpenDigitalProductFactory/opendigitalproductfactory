@@ -5,16 +5,7 @@
  */
 
 import type { RoutedExecutionPlan } from "./recipe-types";
-import type { ChatMessage } from "../ai-inference";
-
-/** Named type for tool call entries (matches InferenceResult.toolCalls shape) */
-export type ToolCallEntry = {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-  /** Opaque native continuation data; never authority to execute a tool. */
-  gemini?: { modelId: string; functionCallId?: string; thoughtSignature?: string };
-};
+import type { ChatMessage, ToolCallEntry } from "./chat-message-types";
 
 /** Pre-resolved provider connection info — callProvider resolves before dispatch */
 export interface ResolvedProvider {

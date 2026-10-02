@@ -299,6 +299,23 @@ Code references:
 - [`graduated-autonomy.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision-perspective/graduated-autonomy.ts) — risk-tier derivation from sensitivity × lifecycle transition
 - [`build-studio-gate.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision-perspective/build-studio-gate.ts) — the Build Studio plan-advancement gate
 
+### From a decision to a permission
+
+An outcome from this ladder settles a *question*. It does not, by itself, make any tool
+reachable. The [Gated Permissions Process (GPP)](gated-permissions-process.md) is the standard that
+pairs the two. Each stage of a piece of work carries a binding that names:
+
+- which scope owns the gate (WWMD, WWWD or WSID)
+- which capability set an `admit` from that gate unlocks
+- for how long, and under what stop conditions
+
+`TAK` then enforces the result on every call. A strong score never widens the tool envelope, and
+holding a grant never answers who decided. The
+[pairing diagram](gated-permissions-process.md#73-the-pairing-at-a-glance) shows both sides
+meeting at runtime, and
+[GPP Annex C](gated-permissions-process.md#annex-c-informative-build-studio-as-a-gpp-model) walks
+through it for Build Studio, whose plan-advancement gate is the one cited above.
+
 ## JSI: weights that learn the job
 
 The scoring above uses declared weights. **Job-Specific Intelligence (JSI)** is the layer that lets those weights *learn* — carefully, on three deliberately different timescales, because a job is not a corpus: two organizations with identical doctrine can still weigh the same trade-off differently, and that revealed difference is data.

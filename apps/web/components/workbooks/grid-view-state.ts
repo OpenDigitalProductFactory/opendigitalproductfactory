@@ -6,8 +6,8 @@
 // migration. Parsing is defensive: malformed/old payloads are ignored field by
 // field, never throwing. Pure + unit-testable; the Grid owns the localStorage IO.
 
-import type { ConditionalRule, CfOperator, CfColor } from "./grid-conditional-format";
-import { CF_OPERATORS, CF_COLORS } from "./grid-conditional-format";
+import type { ConditionalRule, CfOperator, CfColor } from "@/lib/workbooks/conditional-format";
+import { CF_OPERATORS, CF_COLORS } from "@/lib/workbooks/conditional-format";
 import { isRowHeight, type RowHeight } from "./grid-view-options";
 import {
   FILTER_OP_LABELS,

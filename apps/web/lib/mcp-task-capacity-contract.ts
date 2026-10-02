@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { RemoteTaskSubmitParams } from "./mcp-task-submit";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
 export type ResourceWaitFailureKind = "capacity" | "busy";
 

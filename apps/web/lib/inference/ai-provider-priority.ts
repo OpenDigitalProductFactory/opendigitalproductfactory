@@ -3,7 +3,8 @@
 
 import { prisma, type Prisma } from "@dpf/db";
 import { callProvider, logTokenUsage, InferenceError } from "@/lib/ai-inference";
-import type { ChatMessage, InferenceResult } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import type { InferenceResult } from "@/lib/ai-inference";
 import {
   filterProviderPriorityBySensitivity,
   type ProviderPolicyInfo,

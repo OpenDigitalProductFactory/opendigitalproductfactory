@@ -34,9 +34,9 @@ the platform is not".
 - Distinct agent identities measured: **87**
   - canonical agent registry: 87 · workforce roster: 48 · profession roles: 99
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
-- At 100% of attainable: **30**
-- Median attainable: **76%** · median absolute: **70%**
-- Skills: **140** total, **0** stranded, **32** able to declare a cadence
+- At 100% of attainable: **31**
+- Median attainable: **84%** · median absolute: **78%**
+- Skills: **149** total, **0** stranded, **41** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`, `software-engineer`
 - Unbacked `backingSkillIds`: `build-sensitive-domain-requirements`, `customer-intake-triage`, `external-catalog-scout`, `marketing-collaboration-intake`, `prepare-counsel-packet`, `provider-cost-intake`
 
@@ -46,9 +46,9 @@ The rule autonomy depends on: a consequential tool cannot execute unless
 `principle_decide` was consulted first, so every key decision leaves a record.
 The mechanism is built, wired, and enforce-by-default.
 
-- Side-effecting tools: **184**
-- Gate-classified: **59** (`abandon_stalled_build`, `activity_harness_confidence_override`, `add_provider`, `apply_platform_update`, `appoint_room_coordinator`, `cancel_scheduled_agent_task`, `cancel_thread`, `claim_workroom_scope`, `configure_gateway_scan`, `contribute_to_hive`, `create_bank_account`, `create_employee`, `create_policy`, `create_portal_pr`, `create_scheduled_agent_task`, `declare_break_fix`, `deploy_feature`, `discovery_sweep`, `dismiss_entity`, `drive_browser_task`, `enrich_customer_account`, `enrich_digital_product`, `escalate_feedback_upstream`, `execute_promotion`, `extract_brand_design_system`, `grok_signin_start`, `import_bank_statement`, `invite_room_participant`, `issue_organization_join_file`, `manage_coworker_tool_grant`, `merge_backlog_items`, `merge_customer_accounts`, `merge_customer_contacts`, `place_linkedin_ad`, `publish_to_linkedin`, `reassign_workroom_executor`, `record_org_business_answer`, `recover_sandbox`, `release_nonprod_environment_lease`, `release_workroom_scope`, `repair_promoter_image`, `request_re_enrichment`, `request_self_upgrade`, `retire_backlog_item`, `run_capacity_drain`, `run_hive_scout_ingest`, `schedule_promotion`, `schedule_release_bundle`, `send_marketing_email`, `set_backlog_delivery_budget`, `set_demand_policy`, `set_marketing_autopilot_policy`, `setup_email`, `supersede_demand_evidence`, `tick_marketing_scheduler`, `transition_employee_status`, `triage_backlog_item`, `unmerge_customer_accounts`, `update_policy`)
-- **Ungated: 125** — 32% coverage
+- Side-effecting tools: **187**
+- Gate-classified: **60** (`abandon_stalled_build`, `activity_harness_confidence_override`, `add_provider`, `apply_account_handover`, `apply_platform_update`, `appoint_room_coordinator`, `cancel_scheduled_agent_task`, `cancel_thread`, `claim_workroom_scope`, `configure_gateway_scan`, `contribute_to_hive`, `create_bank_account`, `create_employee`, `create_policy`, `create_portal_pr`, `create_scheduled_agent_task`, `declare_break_fix`, `deploy_feature`, `discovery_sweep`, `dismiss_entity`, `drive_browser_task`, `enrich_customer_account`, `enrich_digital_product`, `escalate_feedback_upstream`, `execute_promotion`, `extract_brand_design_system`, `grok_signin_start`, `import_bank_statement`, `invite_room_participant`, `issue_organization_join_file`, `manage_coworker_tool_grant`, `merge_backlog_items`, `merge_customer_accounts`, `merge_customer_contacts`, `place_linkedin_ad`, `publish_to_linkedin`, `reassign_workroom_executor`, `record_org_business_answer`, `recover_sandbox`, `release_nonprod_environment_lease`, `release_workroom_scope`, `repair_promoter_image`, `request_re_enrichment`, `request_self_upgrade`, `retire_backlog_item`, `run_capacity_drain`, `run_hive_scout_ingest`, `schedule_promotion`, `schedule_release_bundle`, `send_marketing_email`, `set_backlog_delivery_budget`, `set_demand_policy`, `set_marketing_autopilot_policy`, `setup_email`, `supersede_demand_evidence`, `tick_marketing_scheduler`, `transition_employee_status`, `triage_backlog_item`, `unmerge_customer_accounts`, `update_policy`)
+- **Ungated: 127** — 32% coverage
 
 The gate is built, enforced, and its reach is derived from each tool's declared consequence. What remains ungated is every side-effecting tool that has declared NOTHING — deliberately still ordinary by default, because flipping that default moves the whole remainder behind the gate at once.
 
@@ -59,7 +59,7 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | `active-roster` | 40 | 100% | Active in the canonical registry and seeded onto the workforce roster. |
 | `active-registry-only` | 0 | — | Active in the canonical registry but absent from the workforce roster. |
 | `roster-only` | 0 | — | On the workforce roster but absent from the canonical agent registry. |
-| `defined-roster` | 8 | 76% | Declared in the canonical registry (not active) and seeded onto the roster. |
+| `defined-roster` | 8 | 96% | Declared in the canonical registry (not active) and seeded onto the roster. |
 | `declared-only` | 0 | — | Declared in the canonical registry and never seeded anywhere. |
 | `superseded` | 2 | 64% | Declared, but the work is done by another ACTIVE identity named in its posture. |
 | `deliberately-unstaffed` | 37 | 48% | Declared and consciously not staffed, with a recorded reason and review date. |
@@ -72,8 +72,8 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | Corpus / WSID | 1 | 3 | 0 | 0 | 0 | 87 | 87/87 |
 | Governance / WWWD | 2 | 3 | 0 | 0 | 0 | 87 | 87/87 |
 | Shape | 1 | 2 | 39 | 0 | 48 | 0 | 48/87 |
-| Cadence | 1 | 3 | 46 | 0 | 9 | 32 | 32/87 |
-| Tools + Skills | 2 | 3 | 0 | 45 | 5 | 37 | 37/87 |
+| Cadence | 1 | 3 | 46 | 0 | 0 | 41 | 41/87 |
+| Tools + Skills | 2 | 3 | 0 | 40 | 6 | 41 | 41/87 |
 | Evidence | 1 | 2 | 39 | 1 | 47 | 0 | 47/87 |
 
 ### Planes the substrate currently caps
@@ -191,22 +191,21 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-904` | superseded | 64% | 59% | 1 | 3 | 3 | 0 | 0 | 3 | 0 |
 | `AGT-WS-SECURITY` | defined-roster | 68% | 63% | 2 | 3 | 3 | 2 | 0 | 1 | 2 |
 | `AGT-WS-REVIEW` | active-roster | 72% | 67% | 3 | 3 | 3 | 2 | 0 | 1 | 2 |
-| `AGT-906` | defined-roster | 76% | 70% | 2 | 3 | 3 | 2 | 2 | 1 | 2 |
-| `AGT-907` | defined-roster | 76% | 70% | 2 | 3 | 3 | 2 | 2 | 1 | 2 |
-| `AGT-WS-INTEGRATION` | defined-roster | 76% | 70% | 2 | 3 | 3 | 2 | 2 | 1 | 2 |
-| `AGT-WS-TIME-OFF` | defined-roster | 76% | 70% | 2 | 3 | 3 | 2 | 2 | 1 | 2 |
 | `AGT-WS-BUILD` | active-roster | 80% | 74% | 3 | 3 | 3 | 2 | 0 | 2 | 2 |
 | `AGT-WS-CUSTOMER` | active-roster | 80% | 74% | 3 | 3 | 3 | 2 | 0 | 2 | 2 |
-| `AGT-WS-FINANCE` | active-roster | 80% | 74% | 3 | 3 | 3 | 2 | 2 | 1 | 2 |
 | `AGT-WS-MARKET-RESEARCH` | defined-roster | 84% | 78% | 2 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-ONBOARD` | active-roster | 84% | 78% | 3 | 3 | 3 | 2 | 0 | 3 | 1 |
-| `AGT-WS-MARKETING` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 2 | 2 | 2 |
 | `AGT-WS-PORTFOLIO` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
-| `AGT-ORCH-000` | defined-roster | 92% | 85% | 2 | 3 | 3 | 2 | 2 | 3 | 2 |
-| `AGT-WS-FARM-RANCH` | defined-roster | 92% | 85% | 2 | 3 | 3 | 2 | 2 | 3 | 2 |
+| `AGT-WS-FINANCE` | active-roster | 92% | 85% | 3 | 3 | 3 | 2 | 3 | 2 | 2 |
 | `AGT-WS-LEGAL` | active-roster | 92% | 85% | 3 | 3 | 3 | 2 | 3 | 2 | 2 |
+| `AGT-WS-MARKETING` | active-roster | 92% | 85% | 3 | 3 | 3 | 2 | 3 | 2 | 2 |
 | `AGT-WS-SCOUT` | active-roster | 92% | 85% | 3 | 3 | 3 | 2 | 3 | 2 | 2 |
-| `AGT-WS-PLATFORM` | active-roster | 96% | 89% | 3 | 3 | 3 | 2 | 2 | 3 | 2 |
+| `AGT-906` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-907` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-ORCH-000` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-WS-FARM-RANCH` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-WS-INTEGRATION` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-WS-TIME-OFF` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-900` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-903` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-905` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
@@ -236,6 +235,7 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-WS-INVENTORY` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-MAILROOM` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-OPS` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-WS-PLATFORM` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-STOREFRONT` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 
 ## Widest gaps — detail
@@ -261,7 +261,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 100 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 101 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-110` — portfolio-rationalization-agent · deliberately-unstaffed · 48% attainable
@@ -301,7 +301,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 100 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 101 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-121` — architecture-definition-agent · deliberately-unstaffed · 48% attainable

@@ -7,11 +7,11 @@
 
 import { prisma } from "@dpf/db";
 import type { TaskRouteDecision, CandidateTrace } from "./task-router-types";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import {
   callProvider,
   logTokenUsage,
   InferenceError,
-  type ChatMessage,
 } from "@/lib/ai-inference";
 import { normalizeRouteDecisionActor } from "./route-decision-attribution";
 import {
@@ -143,11 +143,18 @@ export async function callWithFallbackChain(
               data: { status: "degraded" },
             });
             break;
-          case "auth":
+          case "auth": {
+            // BI-D28A4F55: automatic, recorded, and recovered on its own.
+            const { autoDisableProvider } = await import("./provider-auto-disable");
+            await autoDisableProvider({ providerId: candidate.providerId, cause: "auth", source: "task-dispatcher", detail: error.message.slice(0, 160) });
+            break;
+          }
           case "model_not_found":
-            await prisma.modelProvider.update({
-              where: { providerId: candidate.providerId },
-              data: { status: "disabled" },
+            // One missing model is not a dead provider: retire the model, as
+            // callWithFallbackChain does (EP-INF-004).
+            await prisma.modelProfile.updateMany({
+              where: { providerId: candidate.providerId, modelId: payload.modelId || candidate.modelId },
+              data: { modelStatus: "retired", retiredAt: new Date() },
             });
             break;
         }

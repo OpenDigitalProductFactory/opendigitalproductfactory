@@ -1,4 +1,4 @@
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 
 /** Compact external-channel identity and drift evidence; never content or credentials. */
 export const EXTERNAL_CHANNEL_ASSETS: readonly DataAssetDefinition[] = [

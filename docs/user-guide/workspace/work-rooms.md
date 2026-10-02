@@ -72,6 +72,14 @@ A recorded wait names the stage and the role or person expected to act in the
 attention summary. That wait remains visible until the runner records another
 action; refreshing the page does not mean the work has progressed.
 
+When a standing room is waiting on a decision, its **Attention** card says what
+is waiting and who decides. If that is you — the room's accountable owner — a
+**Decide** button opens the choices (for example Accept, Patch or Defer), a
+date when you defer, an optional one-line reason, and a short summary of what
+the earlier stages found. Your decision is recorded as the stage's evidence and
+the room moves on at its next run. Anyone else sees who decides, not the
+control.
+
 Use **Map** or **List**, search by step or owner, and filter by state. Arrow keys
 move between visible steps; Home and End select the first and last. The selected
 step and filters stay in the URL so returning to the room preserves context.
@@ -137,6 +145,12 @@ their legacy behavior and the panel reports oversight as not applicable.
 ## Access and Other Channels
 
 Room access has separate discovery, content, and action boundaries. Assignment or an explicit room policy admits a principal; a presence heartbeat never does. Sensitivity clearance is checked on the server before messages, participants, or context load. A person without content access receives the same not-found experience as an unknown room.
+
+A room's sensitivity comes from the boundary set on the room. If no boundary is set, it comes from the backlog item the room serves:
+
+- **Platform work is public by default.** This means items scoped to the platform itself (planning scope *platform* or *common*, or the DPF portal product). DPF is open source, so any coworker cleared for public information can help with it.
+- **Other work stays internal**, such as work on your own organization's products and operations.
+- **An item marked *confidential* or *restricted* stays closed**, even when it is platform work. To keep a platform item private, mark it confidential. Every change to an item's sensitivity is recorded on the item.
 
 When an existing communication adapter attaches a Teams, Slack, email, or other external conversation to a Workroom, DPF remains the canonical context:
 
@@ -269,6 +283,14 @@ Two things follow from that, and both are deliberate:
 - **A finished room stops setting anything.** Once a room is complete or abandoned, its pace
   no longer counts — work that is over should not keep driving a coworker.
 
+- **A coworker with no recurring work yet can be started by its room.** This is new. Until
+  now, setting a room's pace could only change the rhythm of a coworker that was *already*
+  running something — and whether it was depended on a leftover setting from before the
+  per-coworker control was removed, which nobody could create any more. So some coworkers
+  could be sped up or slowed down, and others could not be started at all, for reasons that
+  had nothing to do with the work. Now the room carrying the work is enough: set its pace to
+  "follows up" or "pushes" and the coworkers in it pick up their standing work.
+
 If no live room carries a coworker's standing work at all, its recurring tasks keep running
 as they were. Nothing is switched off behind your back.
 
@@ -327,6 +349,26 @@ room behaves for reasons nobody chose.
 Most rooms created before this existed are unshaped. Giving them a shape is worthwhile for
 any room where pace or verification actually matters.
 
+### A shape is a model the platform checks
+
+A shape is more than a label. It is a small engineering model of the work:
+
+- the stages the work moves through
+- who answers for each stage
+- which decision moves it forward, and which authority owns that decision: the platform (WWMD),
+  your business (WWWD) or the profession (WSID)
+- which tools each stage may use
+
+The platform runs the room *from* that model and checks the room *against* it. A tool the current
+stage does not admit is not offered to a coworker at all, rather than offered and then asked about.
+That is why one well-placed decision can replace a stream of approval prompts.
+
+This way of working, where the model *is* the system rather than a diagram beside it, is called
+model-based systems engineering. The standard that defines it for AI coworkers is the
+[Gated Permissions Process](../../architecture/gated-permissions-process.md). Its
+[Build Studio walkthrough](../../architecture/gated-permissions-process.md#annex-c-informative-build-studio-as-a-gpp-model)
+shows the stages, decisions and tool permissions of a delivery room end to end.
+
 ## Incomplete or Unavailable Rooms
 
 If a room boundary is incomplete, the page identifies the missing elements instead of inventing them. If the source is unavailable, the last available projection is marked clearly and the page gives one recovery direction. If an AI coworker's current status is unavailable, the participant panel says so and directs you back to the room's next action instead of implying that the coworker is still working.
@@ -343,6 +385,11 @@ go to change it.
 The header and workforce panel use the same accountability result, including
 its recorded or inherited source.
 
+The organization's recorded owner is set when the install is first set up — the owner account
+is recorded unless an owner already exists — and an administrator can change it under
+**Admin > Settings** (**Accountable owner · Change**). Changing it re-points every room that
+inherits from the organization; rooms with their own recorded owner are unaffected.
+
 If nobody is recorded, the room says setup is required rather than naming whoever happens to be
 handy. The install's first administrator, the person who created the room and whoever holds the
 lease are all available, and all of them would be a guess presented as a decision.
@@ -350,6 +397,20 @@ lease are all available, and all of them would be a guess presented as a decisio
 Accountability is answerability for the work. It is deliberately separate from who coordinates
 the room and from what any AI coworker is permitted to do — a coworker doing the work does not
 become accountable for it.
+
+### When an account stops being used
+
+Rooms, Build Studio builds and scheduled coworker tasks belong to an account. If that account stops
+being used (a person leaves, or work was set up under a setup account by mistake), everything it
+owns keeps sending its approvals to an inbox nobody reads.
+
+An administrator can hand all of it over in one step. Ask your AI coworker to plan a handover for
+that account. It shows every live room the account alone coordinates, every live build it
+created and every scheduled task it owns, and who each will go to: the accountable person of the
+item's portfolio, or Foundational's, or the organization's owner. Anything with nobody chosen is
+listed as refused rather than guessed. Approve the handover in your inbox and exactly that list
+moves; if anything changed in between, nothing moves and the plan has to be run again. Every room,
+build and task records who handed it over and why.
 
 Beneath that, the room lists the workers in it. An AI coworker reached through several tools is
 one worker, not one row per tool, and any subagents it delegated appear grouped beneath it. Where

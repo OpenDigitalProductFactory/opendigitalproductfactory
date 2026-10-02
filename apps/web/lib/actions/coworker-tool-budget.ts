@@ -19,7 +19,7 @@
 //
 // Pure + dependency-light so it unit-tests without next-auth or the action surface.
 
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { CORE_MCP_TOOL_NAMES } from "@/lib/mcp/tool-tier";
 import { resolveLocalToolCeiling, type LocalPresence } from "@/lib/routing/local-tool-ceiling";
@@ -314,6 +314,15 @@ export interface ToolBudgetResult {
  * total attached ≈ cap + a small route-scoped essentials set. Ordering within a
  * tier is preserved (stable). The split is deterministic.
  */
+/**
+ * How many of a run's required tools are pinned into tier -1 (BI-EC82C48B).
+ * autonomous-work-run.ts slices `requiredToolNames` to this; a Workroom stage's
+ * declared tools plus record_workroom_evidence must fit inside it
+ * (stage-tool-parity.test.ts, BI-43C3E914). Mirrors the four-name ceiling of
+ * mcp-task-review-contract.ts `requiredToolNames`.
+ */
+export const REQUIRED_TOOL_PIN_CAPACITY = 4;
+
 export function selectCoworkerToolBudget(params: {
   tools: ToolDefinition[];
   /** Names of route/page action tools — always attached (tier 0). */

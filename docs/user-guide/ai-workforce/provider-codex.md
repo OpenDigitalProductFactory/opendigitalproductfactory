@@ -42,7 +42,7 @@ Note: The OAuth callback uses a dedicated port (1455) on localhost. This is requ
 Codex is categorized as an "agent" provider, which means it behaves differently from standard LLM providers:
 
 - **Model discovery**: Models cannot be discovered via the standard /v1/models API when using OAuth subscription. Models are defined in the platform registry and updated when OpenAI announces changes.
-- **Test connection**: When using OAuth, the test verifies that the credential is valid rather than making an API call (subscription tokens use a different backend than the standard API).
+- **Save & ready provider**: Saves settings, prepares the model catalog, and sends a small inference request using an active model. OAuth checks use the subscription backend. Only a completed response verifies readiness and clears a previously recorded capacity cooldown for this provider. Account and data-use rules still determine which work can route there.
 - **MCP service**: Codex has a linked MCP (Model Context Protocol) service called "OpenAI Codex Agent" that provides two tools: `codex` (start a coding session) and `codex-reply` (continue a thread). This service activates automatically when you connect via OAuth and deactivates when you disconnect.
 
 ## Linked MCP Service
@@ -80,6 +80,8 @@ The ChatGPT/Codex integration has several non-obvious requirements:
 - **Greenfield install**: The `docker-entrypoint.sh` runs `sync-provider-registry.ts` before `seed.ts` to ensure the chatgpt provider row exists before model seeding.
 
 ## Troubleshooting
+
+- A failed readiness check shows the endpoint actually attempted. A network error, rejected request, or incomplete response leaves the existing capacity restriction in place. Retry after resolving the reported problem; signing in alone does not prove inference capacity.
 
 - "HTTP 403 on Test Connection with API Key" -- your OpenAI API account needs funding. The ChatGPT subscription does not fund API access.
 - "HTTP 403 on Sync Models" -- model discovery is not available with OAuth subscription tokens. Models are managed via the platform registry.

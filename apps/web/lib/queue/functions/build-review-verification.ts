@@ -148,7 +148,7 @@ export const buildReviewVerification = jobs.createFunction(
     // build's Workroom and head), records any gate decisions it needs and re-runs
     // it, records the scoped tests, and writes the failure analysis the semantic
     // review requires. Each stop is recorded on the build as a named status.
-    await step.run("finalize", async () => {
+    const finalize = await step.run("finalize", async () => {
       const { finalizeBuildForReview } = await import("@/lib/build/finalize-stage-wiring");
       return finalizeBuildForReview({
         id: build.id,
@@ -159,6 +159,46 @@ export const buildReviewVerification = jobs.createFunction(
         designDoc: (build as { designDoc?: unknown }).designDoc,
       });
     });
+
+    // BI-FBA2FDBE: the semantic review needs the failure analysis only a
+    // finished finalize writes. Running it after any other outcome produced a
+    // "repair" verdict nothing consumed, on the same tree, every few minutes.
+    // The finalize stop is already on the build's trail as a named status.
+    const { finalizeAllowsSemanticReview } = await import("@/lib/build/finalize-stage-runner");
+    if (!finalizeAllowsSemanticReview(finalize)) {
+      // BI-B2EEA6DE: guards that failed on this build's own change go back to
+      // its coding agent, bounded, then to the operator.
+      if (finalize.status === "gauntlet-failed") {
+        const routed = await step.run("route-gauntlet-failure-to-repair", async () => {
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, {
+            treeSha: finalize.treeSha ?? null,
+            recordId: finalize.recordId ?? null,
+            failedGuards: finalize.failedGuards,
+          });
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
+      // BI-83E1ADF8: a failure analysis that names a risk the change does not
+      // mitigate goes back through the same bounded hand-back, then the owner.
+      if (finalize.status === "risk-blocked") {
+        const routed = await step.run("route-unmitigated-risk-to-repair", async () => {
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, {
+            treeSha: finalize.treeSha,
+            recordId: null,
+            failedGuards: ["Failure analysis"],
+            source: "risk",
+            findings: finalize.risks.map((risk) => ({
+              severity: risk.severity,
+              description: `${risk.key}: ${risk.trigger} → ${risk.effect}. Why it is not mitigated: ${risk.rationale}`,
+            })),
+          });
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
+      return { status: "finalize-incomplete", finalize: finalize.status };
+    }
 
     // Phase 3 of the shared Change Reviewer control: task-level reviews remain
     // intact, then one surface-neutral review evaluates the assembled committed
@@ -217,6 +257,26 @@ export const buildReviewVerification = jobs.createFunction(
           },
         }).catch(() => {});
       });
+      // BI-50E8802C: a review that asks for repair goes back to the build's
+      // coding agent with its blocking findings, through the same bounded
+      // hand-back as guard failures (shared attempt bound, then escalation).
+      if (nextAction === "repair") {
+        const blocking = issues.filter((issue) => issue.severity !== "minor");
+        const findings = (blocking.length > 0 ? blocking : issues).map((issue) => ({
+          severity: issue.severity, description: issue.description, location: issue.location, suggestion: issue.suggestion,
+        }));
+        const routed = await step.run("route-review-findings-to-repair", async () => {
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, {
+            treeSha: semanticReview.outcome.receipt.headTreeHash ?? null,
+            recordId: null,
+            failedGuards: ["Semantic change review"],
+            source: "review",
+            findings,
+          });
+        });
+        return { status: "semantic-review-blocked", decision, nextAction, repair: routed };
+      }
       return { status: "semantic-review-blocked", decision, nextAction };
     }
 

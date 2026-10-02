@@ -1,4 +1,4 @@
-import type { TwinSnapshot } from "@/components/twin";
+import type { TwinSnapshot } from "../twin-snapshot";
 
 /** Pressure fixture for a catering event-readiness operation. */
 export function cateringEventFixture(): TwinSnapshot {

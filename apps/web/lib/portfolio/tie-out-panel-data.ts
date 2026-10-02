@@ -4,12 +4,11 @@
 
 import { prisma } from "@dpf/db";
 
-import type { UnconfirmedEpic } from "@/components/ops/PortfolioTieOutPanel";
-
 import { loadEpicPortfolioProposals } from "./epic-portfolio-attribution";
 import { quarterBounds } from "./investment-points";
 import { proposePortfolioBudgets } from "./portfolio-budget";
 import { loadPortfolioTieOut } from "./tie-out";
+import type { UnconfirmedEpic } from "./tie-out-view";
 
 export async function loadPortfolioTieOutPanel(now: Date = new Date()) {
   const db = prisma as never;

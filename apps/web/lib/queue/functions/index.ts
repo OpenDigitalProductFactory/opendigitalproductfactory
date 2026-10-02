@@ -3,6 +3,7 @@ import { modelDiscoveryRefresh } from "./model-discovery-refresh";
 import { routingReachabilityPreflight } from "./routing-reachability-preflight";
 import { infraPrune } from "./infra-prune";
 import { rateRecovery } from "./rate-recovery";
+import { providerRecovery } from "./provider-recovery";
 import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
@@ -26,6 +27,7 @@ import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
 import { buildExecute } from "./build-execute";
 import { preBuildReviewRepair } from "./pre-build-review-repair";
+import { buildGauntletRepair } from "./build-gauntlet-repair";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -244,6 +246,7 @@ export const eventFunctions = [
   localModelInstall,
   providerCatalogRefresh, // BI-7F2FBDA3: on-demand provider re-discovery after a model refusal — event-triggered, NOT a cron
   rateRecovery,
+  providerRecovery,
   mcpCatalogSync,
   codeGraphReconcileEvent,
   routeWorkItem,
@@ -254,6 +257,7 @@ export const eventFunctions = [
   buildReviewVerification,
   buildExecute,
   preBuildReviewRepair,
+  buildGauntletRepair,
   assuranceBomGenerate,
   assuranceScanRun,
   deliberationRun,

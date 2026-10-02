@@ -22,7 +22,7 @@
 // report-kit `employeeOversight` intent registry, so there is one source of
 // truth for both the words and the colour.
 
-import { resolveIntent, intentStyle, type Intent } from "@/components/ui/report-kit/statusColors";
+import { resolveIntent, intentStyle, type Intent } from "@/lib/ui-model/statusColors";
 
 /**
  * The stored oversight tier. 0 = the coworker never acts; 3 = it acts alone.

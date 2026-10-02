@@ -157,3 +157,13 @@ describe("parseFileContent office formats (BI-65D65EC0)", () => {
     expect(result.fullText).toContain("Rescue operations plan");
   });
 });
+
+describe("parseFileContent — stored text stays as written (BI-7AD0DA3D)", () => {
+  // Hidden Unicode is removed where a model reads the text, not here: a
+  // stored document keeps its direction marks and soft hyphens.
+  it("keeps direction marks and soft hyphens in parsed text", async () => {
+    const written = "رقم الطلب\u{200F} #4521 — Donau\u{AD}dampf";
+    const parsed = await parseFileContent(Buffer.from(written, "utf8"), "text/plain", "notes.txt");
+    expect(JSON.stringify(parsed)).toContain(JSON.stringify(written).slice(1, -1));
+  });
+});

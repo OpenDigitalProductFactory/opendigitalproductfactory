@@ -30,6 +30,17 @@ Customer site records need a validated address before save. Without a provider, 
 - Sites in several countries → start with **Mapbox**
 - No commercial key available → Nominatim only, accept weaker precision
 
+### Using the free Nominatim service
+
+Nominatim is run by the OpenStreetMap Foundation under a [usage policy](https://operations.osmfoundation.org/policies/nominatim/). DPF follows it, and the site form behaves accordingly:
+
+- **Search is explicit.** Type at least three characters of the street address, then press **Search** or Enter. Results do not appear as you type, because the policy forbids search-as-you-type.
+- **One request per second.** Searches from everyone on the install are spaced at least one second apart, so a busy moment can add a short wait.
+- **Repeat searches come from a cache** for 24 hours instead of asking the service again.
+- **Attribution.** The form shows "© OpenStreetMap contributors" under the search box.
+
+If many people add sites at once, configure a commercial provider instead. Heavy use of the free service can get the install's address blocked.
+
 ## Setup Steps
 
 1. Open **Platform → Tools → Built-in Tools** and read the Address validation card.

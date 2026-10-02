@@ -4,7 +4,7 @@
 // approval takes against it. Both are business records about investment, with
 // no personal data beyond the setting or approving user and agent references.
 
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 
 function portfolioBudgetAsset(id: `data:${string}`, prismaModel: string): DataAssetDefinition {
   return {

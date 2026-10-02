@@ -96,7 +96,12 @@ published image can be reached (offline or air-gapped) does it build
 3. **Compose chain** — assembles `docker-compose.yml` (+
    `docker-compose.release.yml` in consumer mode) and the Edge Node overlay.
 4. **`.env` generation** — only on first install; an existing `.env` is
-   preserved.
+   preserved. A re-run only adds generated secrets the file is missing:
+   `DPF_GIT_WEBHOOK_SECRET`, and the Inngest `INNGEST_SIGNING_KEY` and
+   `INNGEST_EVENT_KEY`. The installer also replaces an Inngest key that still
+   holds the old public default (`abcdef0123456789` / `deadbeefcafebabe`),
+   because anyone who knows the signing key can start background jobs. A
+   self-upgrade does the same for an install that is never re-installed.
 5. **Images** —
    - *Ready to go:* `docker compose pull` of the CI-stamped GHCR images.
    - *Customizable:* a [Docker-memory preflight](#docker-memory), then
@@ -110,7 +115,10 @@ published image can be reached (offline or air-gapped) does it build
    DNS name when the network resolves it here. It writes `PUBLIC_URL` and
    adds the certificate to your user's trusted roots, so Windows asks you to
    confirm once. AI clients such as Claude Code sign in with OAuth only over
-   https. If this step fails, the portal stays at `http://localhost:3000` and
+   https. It also saves the AI client address (`DPF_MCP_URL`) and the
+   certificate bundle (`NODE_EXTRA_CA_CERTS`) in your user environment on
+   every run, so clients you open afterwards find the install. If this step
+   fails, the portal stays at `http://localhost:3000` and
    the installer says so.
 7. **`docker compose up -d`** — brings up postgres, portal-init
    (migrations + seed), and the portal.

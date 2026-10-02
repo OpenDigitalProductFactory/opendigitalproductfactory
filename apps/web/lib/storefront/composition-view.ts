@@ -1,7 +1,7 @@
 // Pure helper: derive a human-readable composition view from archetype template
 // data. No Prisma imports — callers load data and pass it in.
 
-import type { Intent } from "@/components/ui/report-kit/statusColors";
+import type { Intent } from "@/lib/ui-model/statusColors";
 import type { ActivationProfile, ArchetypeModule } from "@dpf/storefront-templates";
 
 export type CompositionCompatibilityStatus =

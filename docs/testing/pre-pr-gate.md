@@ -68,6 +68,8 @@ and capture that as the evidence. See AGENTS.md §5 "Where each gate runs".
 
 ## What runs in CI
 
+Public-site changes also run the [documentation publication build](../architecture/build-gate-runbook.md), including rendered-example and malformed-Liquid checks. Its result feeds Merge Readiness; publication itself remains a separate Pages deployment.
+
 The root `pnpm test` script is:
 
 ```jsonc
@@ -897,7 +899,7 @@ Allowlisted codes (see `LOCAL_CI_OVERRIDE_REASON_CODES` in
 | `docs-adjacent` | Prose/config that `isDocsOnlyFileSet` missed |
 | `delete-or-tag-only` | Delete/tag publication (also hook-exempt) |
 | `operator-emergency` | Named human consciously waived the gate |
-| `external-contribution-no-install` | No local DPF install / cannot run pregate |
+| `external-contribution-no-install` | No local DPF install / cannot run pregate. Recorded automatically for a cloud agent session (`CLAUDE_CODE_REMOTE=true`) whose push has no passing record and is not docs-only; the PreToolUse guard below allows its publish on the same basis |
 | `install-bootstrap-recovery` | Sandbox/install is the patient under repair |
 | `gate-infrastructure-unavailable` | Push-time only; the hook itself re-attempts the lease claim and records the failure (401, refused connection, 5xx) — refused when the claim succeeds; reads as gate-**unrun** |
 

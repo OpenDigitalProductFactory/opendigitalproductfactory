@@ -27,7 +27,12 @@ PLUGIN_NAME = "dpf-platform"
 CODEX_PLUGIN_ID = f"{PLUGIN_NAME}@personal"
 MARKETPLACE_NAME = "dpf-platform-local"
 TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
-DEFAULT_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1"
+# The install's canonical origin when nothing names another (design 12.4.1):
+# setup persists DPF_MCP_URL = <PUBLIC_URL>/api/mcp/v1?tier=full (12.4.3), and
+# this loopback https default is what an install without a DNS name serves.
+# The shipped plugin descriptors are generated from it, so a client with no
+# DPF_MCP_URL still lands on the one origin OAuth tokens are issued for.
+DEFAULT_MCP_URL = "https://localhost/api/mcp/v1"
 
 
 def with_mcp_catalog_tier(mcp_url: str, tier: str) -> str:
@@ -722,14 +727,19 @@ def mcp_client_bearer_header_required(endpoint: str, client: str = "claude", aut
 
 # Python mirror of MCP_CLIENT_OAUTH_SCOPE_PIN in
 # packages/integration-shared/src/mcp-client-credential-policy.ts (BI-3D2FD68C).
-# Over https the client authorizes by OAuth and asks for only the scope the
-# portal advertises (read); this pin is what lets the consent grant the write
-# scopes platform work needs. Keep the two in lockstep, like the predicate above.
+# Over https Claude Code authorizes by OAuth; the pin names the development
+# scopes explicitly so the consent grants them even if the portal's advertised
+# set (apps/web/lib/auth/oauth-scope-map.ts ADVERTISED_SCOPES) ever narrows.
+# Keep the two in lockstep, like the predicate above.
 MCP_CLIENT_OAUTH_SCOPE_PIN = "dpf.read dpf.work dpf.build"
 
 
 def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: bool) -> bool:
     """Keep the packaged Claude MCP descriptor current for standalone installs.
+
+    The plugin descriptor is the one dpf connector a Claude session loads
+    (BI-5201141C, design 12.4.4); no project .mcp.json is written beside it.
+    The checked-in copy is this function's output for DEFAULT_MCP_URL.
 
     Scheme-aware since BI-FA2C46D7. This generator previously pinned the bearer
     header unconditionally, which is correct for today's http install and would
@@ -752,6 +762,26 @@ def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: 
     if dry_run:
         return True
     return write_text_if_changed(skill_pack_path / "claude.mcp.json", content)
+
+
+def ensure_antigravity_plugin_descriptor(skill_pack_path: Path, mcp_url: str, dry_run: bool) -> bool:
+    """Keep the packaged Antigravity MCP descriptor current (BI-5201141C).
+
+    Same rule as the Claude descriptor: URL-only with the DPF_MCP_URL override,
+    and the bearer header only where the client cannot authorize by OAuth
+    (plain http, or explicit legacy mode). Antigravity has no scope-pin field.
+    The checked-in copy is this function's output for DEFAULT_MCP_URL.
+    """
+    server: dict[str, object] = {
+        "type": "http",
+        "url": "${DPF_MCP_URL:-" + mcp_url + "}",
+    }
+    if mcp_client_bearer_header_required(mcp_url, "antigravity"):
+        server["headers"] = {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"}
+    content = json.dumps({"mcpServers": {"dpf": server}}, indent=2) + "\n"
+    if dry_run:
+        return True
+    return write_text_if_changed(skill_pack_path / "antigravity.mcp.json", content)
 
 
 def resolve_claude_binary() -> str | None:
@@ -1940,6 +1970,11 @@ def main(argv: list[str]) -> int:
         # Antigravity (agy): MCP-config wiring + skill-pack sync.
         antigravity_status = "skipped by flag"
         if not args.skip_antigravity_cli_install:
+            ensure_antigravity_plugin_descriptor(
+                shared_managed if not args.dry_run else skill_pack,
+                args.mcp_url,
+                args.dry_run,
+            )
             mcp_st = ensure_antigravity_mcp_config(home, args.mcp_url, args.dry_run)
             skills_st = ensure_antigravity_skills(skill_pack, home, args.dry_run)
             antigravity_status = f"MCP config {mcp_st}; skills {skills_st}"

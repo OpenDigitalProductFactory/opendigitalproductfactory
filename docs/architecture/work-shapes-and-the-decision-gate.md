@@ -751,6 +751,29 @@ outcome advances nothing (fail closed). The first live advance after the kind
 fix, on 2026-09-24, was a coworker's own "blocked: no tool available" record
 carrying the declared kind (BI-E0D23FD5).
 
+**A human decision completes a governed stage through the same write.** A
+`governed-decision` stage with a `role:` or `person:` principal is never
+dispatched; the drive raises attention and stores `pendingAttention`. The
+room's Attention card now offers that decision to the person who may make it
+(`recordWorkroomStageDecision`, `apps/web/lib/actions/workroom-stage-decision.ts`),
+and the decision is recorded as that stage's evidence — a kind the stage
+declared (`decision-record`), outcome `completed`, a human actor, and a result
+carrying the choice (accept, patch where the stage's condition names it, or
+defer with a future date), the decision scope and the principal the stage
+named. The drive earns the completing receipt from it exactly as it does from a
+coworker's evidence; there is no second receipt path. Because such a stage has
+no dispatch, the drive takes its start time from its own latest attention ask
+for that governed decision, scoped to the room still waiting on it rather than
+to the cycle key (the ask is written only when the hold changes, so a decision
+left waiting across a cycle rollover has no row in the current cycle). Evidence
+recorded before the ask still does not count. Who may decide follows the
+accountable-owner fallback (DI-A76F0C10EF14): the stage's role holder when a
+role binding exists — none does yet, since no substrate binds `role:*` refs —
+otherwise the room's resolved accountable human (explicit room owner, then an
+inherited room, then the organization's top accountable owner). The evidence
+records `decidedBy: "accountable-owner-fallback"` so the substitution is
+visible; anyone else sees who decides and is refused.
+
 ## Failing closed is not the same as locking
 
 `#5166` stopped a real defect: a stage that produced no completing receipt was
@@ -823,9 +846,10 @@ model runs, and pins it through `requiredToolNames`. One rule, two uses, asserte
 equal by test: otherwise a run can be failed for a tool the pin never attached,
 which is precisely the live defect.
 
-Pinning stays narrow. Read-only tools are not pinned (they load on demand
-safely), unnamed side-effecting tools are not pinned (that would defeat the
-budget), and nothing unauthorized is pinned — authorization remains upstream.
+Pinning stays narrow. Unnamed side-effecting tools are not pinned (that would
+defeat the budget), and nothing unauthorized is pinned — authorization remains
+upstream. Read-only tools are pinned only when a stage declares them, as the
+next section describes.
 
 **The richer brief made the failure worse before it made it better.** Given the
 full objective and definition of done but still no reachable tools, the same
@@ -835,6 +859,109 @@ clean."* Specific counts, no tool call, entirely invented. A brief that presses
 for an answer without the means to obtain one converts an honest failure into a
 confident falsehood — which is why the governed-evidence requirement is the load
 -bearing guard here, not the prompt.
+
+## A stage names the tools it needs
+
+Pinning the writer the prompt names was not enough. Live standing rooms kept
+reporting that they had no tool to read what their stage was about: the
+dependency sweep could not see the manifest, the triage stage could not see the
+backlog, the inquiry draft could not see the inquiries. The scheduled run
+attaches the agent's granted tools, caps them, ranks them by prompt relevance,
+and pins only what the prompt names. The shape's `grants` field was never
+consulted on that path, so a stage had no way to say what it needs.
+
+A stage now declares it. `WorkShapeStage.tools` lists the platform tools the
+stage reaches, by exact name. This is the first stage-level realization of the
+Gated Permissions Process (GPP draft 0.1, `docs/architecture/gated-permissions-process.md`,
+in review): binding element 2, *Attachment* (a binding attaches to a stage, not
+only to a shape), and element 5, *Capability set*. The shape's `grants` stays
+the coarse per-shape ceiling a room narrows to; `tools` names what is used
+inside it.
+
+The path from declaration to run:
+
+1. The drive reads the stage's tools (`stageDeclaredTools`) and writes them to
+   the dispatched task's `taskConfig.workroomStage`, next to the shape and
+   stage keys. The record has its own key, so the posture `trigger` reader can
+   never read it, and the reverse holds too.
+2. The brief carries one line naming the tools.
+3. The scheduler adds the declared tools to the run's pinned tools, after any
+   writer the prompt names. Pinning orders inside the attachment budget; the
+   agent and user grant filter still decides whether each tool is reachable.
+
+A stage that declares nothing is dispatched exactly as before.
+
+`stage-tool-parity.test.ts` checks the declarations against the GPP checks:
+
+| Check | What the test asserts |
+|---|---|
+| C-1 Stage coverage (GPP-001) | Every agent stage of a cadence shape declares tools or is on `KNOWN_STAGE_TOOL_GAPS`. The gap list only shrinks. |
+| C-2 Vocabulary resolution (GPP-002) | Every declared name is a registered platform tool with a grant mapping. Scope is stage `tools` only; the shape-level `tool:write-source` token is tracked separately (BI-00588B51). |
+| C-4 Accountable authority, first condition | The stage's accountable agent holds a grant each declared tool requires, resolved by the runtime's own grant resolver. Holding the grant is necessary, not all of C-4. |
+| Pin capacity | Declared tools plus `record_workroom_evidence` fit the four-tool pin (`REQUIRED_TOOL_PIN_CAPACITY`). |
+
+Pinning only prompt-named tools was a C-6 *Reach reconciliation* gap in the
+reverse direction: the shape admitted a tool the run never reached.
+
+Where no existing tool reads what a stage needs, nothing is invented. The stage
+goes on `KNOWN_STAGE_TOOL_GAPS` (`stage-tool-gaps.ts`) with the reason. One gap
+closed as part of this work: `customer-advisor` gained `storefront_read`, so the
+inquiry draft stage can call `list_storefront_activity`.
+
+A second slice (BI-EBF0F6EE) added four read tools where the substrate already
+held the data but no tool read it, and closed eight gaps:
+
+| Shape / stages | Tools | Grant (holder) |
+|---|---|---|
+| `pull-request-flow-watch` read, classify | `list_pull_requests` | `contributor_inventory_read` (`change-reviewer`) |
+| `contributor-intake-watch` sync, flag | `read_contributor_inventory` | `contributor_inventory_read` (`platform-engineer`) |
+| `vendor-renewal-watch` read; report | `list_supplier_contracts`; plus `list_bills` | `payables_read` (`finance-controller`) |
+| `payables-watch` read, report | `list_bills` | `payables_read` (`finance-controller`) |
+
+Each grant is new and held only by the accountable agent, in both
+`coworker-grants.ts` and `agent_registry.json`. Each of the four shapes also
+names its grant in `grants` (for example `tool:payables_read`), because a room
+narrows a coworker turn to the shape's grants and `tool:read` expands only to
+the read baseline. The tools report an empty or unconfigured source as unknown,
+never as clear: `list_bills` on an install with no bills returns
+`{ items: [], note: "No bills are recorded." }`. The contributor inventory
+records branches, worktrees and pull requests, not people, so the intake `flag`
+stage reads sign-off and licence facts as unknown until a source records them.
+
+These four shapes moved to version 1.1.0, because adding a tool widens a
+binding. Their rooms reach 1.1.0 only by rebind, as described in the next
+section.
+
+## A new shape version reaches a live room only by rebind (BI-CB5C0DCE)
+
+A room pins `key@version`. GPP §2.1.1 says narrowing a binding may apply in
+place, but widening one (a new tool, stage, evidence kind or grant, a changed
+accountable principal, or a governed decision relaxed to a status change)
+needs a new version and a fresh gate decision. Kernel decision DI-E4DAF14D9343
+chose bump-and-rebind. Design:
+[spec](../superpowers/specs/2026-10-01-workroom-shape-rebind-design.md).
+
+- **A bump never stops a room.** The superseded definition moves to
+  `WORK_SHAPE_PRIOR_VERSIONS` (`work-shape-prior-versions.ts`) in the same
+  change. `resolveWorkShapeClaim` resolves it, so pinned rooms keep running.
+  `normalizePersistedScope` still admits only the current version for a new
+  room or an adopted claim.
+- **The diff decides what kind of change it is.** `diffWorkShapeBinding`
+  (`work-shape-binding-diff.ts`) matches stages by key and classifies each
+  row; any widening row makes the whole change a widening.
+- **One governed action moves the pin.** `rebindWorkroomShapeForUser`
+  (`workroom-shape-rebind.server.ts`) checks the following, in order:
+  - The caller is the room's accountable owner or a platform manager.
+  - The target is the current version of the room's own shape.
+  - No dispatched stage is still running.
+  - A widening carries a rationale.
+
+  It then writes the claim behind the store's compare-and-set. It records the
+  decision as `decision-record` evidence with no stage key, so a rebind can
+  never complete a stage, and adds a `workshape-rebound` activity. Receipts
+  are keyed by stage, so a stage whose binding did not change does not re-run.
+- **MCP:** `rebind_workroom_shape` previews by default (`dryRun`). A task run
+  may preview but never apply: the decision is a person's.
 
 ## Related references
 
@@ -853,7 +980,8 @@ fallback or grants execution authority.
 
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
-- [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI and the composition rule
+- [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI, GPP and the composition rule
+- [Gated Permissions Process (GPP)](gated-permissions-process.md) — the standard that models each shape stage's gate and the tools it admits; see its [pairing diagram](gated-permissions-process.md#73-the-pairing-at-a-glance) and the [binding as a model](gated-permissions-process.md#123-the-binding-as-a-model)
 - [A Governance Gate on Consequential Tool Use](../superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md) — the target architecture
 - [Work Rooms](../user-guide/workspace/work-rooms.md) — the end-user view
 

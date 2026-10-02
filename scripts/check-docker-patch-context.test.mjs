@@ -9,6 +9,11 @@ import {
   isDockerignored,
   parseStages,
   checkPatchContext,
+  isDockerfileName,
+  findDockerfiles,
+  findUnfrozenInstalls,
+  checkFrozenLockfile,
+  ROOT_CONTEXT_DOCKERFILES,
 } from "./check-docker-patch-context.mjs";
 
 const WORKSPACE_WITH_PATCH = `packages:
@@ -197,6 +202,96 @@ test("passes when the runtime bootstrap copies patches alongside the manifests",
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// --- Frozen lockfile in every image install -----------------------------------
+
+test("recognises Dockerfile names and skips their dockerignore files", () => {
+  assert.equal(isDockerfileName("Dockerfile"), true);
+  assert.equal(isDockerfileName("Dockerfile.promoter"), true);
+  assert.equal(isDockerfileName("Dockerfile.probe"), true);
+  assert.equal(isDockerfileName("tools.Dockerfile"), true);
+  assert.equal(isDockerfileName("Dockerfile.promoter.dockerignore"), false);
+  assert.equal(isDockerfileName(".dockerignore"), false);
+  assert.equal(isDockerfileName("docker-compose.yml"), false);
+});
+
+test("flags --no-frozen-lockfile, including across a line continuation", () => {
+  const problems = findUnfrozenInstalls(
+    "FROM node:24-alpine\nRUN corepack enable && pnpm install --filter dpf-edge-node... \\\n    --no-frozen-lockfile --ignore-scripts\n",
+  );
+  assert.equal(problems.length, 1);
+  assert.match(problems[0].reason, /turns frozen-lockfile off/);
+});
+
+test("flags every spelling that switches frozen-lockfile off", () => {
+  for (const line of [
+    "RUN pnpm install --frozen-lockfile=false",
+    "RUN pnpm install --config.frozen-lockfile=false",
+    "ENV npm_config_frozen_lockfile=false",
+    "ENV PNPM_FROZEN_LOCKFILE false",
+  ]) {
+    assert.equal(findUnfrozenInstalls(`FROM x\n${line}\n`).length, 1, line);
+  }
+});
+
+test("flags a bare pnpm install and a pnpm i without --frozen-lockfile", () => {
+  assert.equal(findUnfrozenInstalls("FROM x\nRUN pnpm install\n").length, 1);
+  assert.equal(findUnfrozenInstalls("FROM x\nRUN corepack enable && pnpm i --prod\n").length, 1);
+});
+
+test("checks each && segment on its own", () => {
+  const problems = findUnfrozenInstalls(
+    "FROM x\nRUN pnpm install --frozen-lockfile && cd tools && pnpm install\n",
+  );
+  assert.equal(problems.length, 1);
+});
+
+test("passes frozen installs and ignores comments and non-install pnpm commands", () => {
+  const text = [
+    "FROM node:24-alpine AS build",
+    "# It used to run `pnpm install --no-frozen-lockfile` here.",
+    "RUN pnpm install --filter dpf-adp-mcp... --frozen-lockfile --ignore-scripts",
+    "RUN pnpm install --frozen-lockfile --offline --filter \"@dpf/db...\" --config.confirmModulesPurge=false",
+    "RUN pnpm --filter dpf-adp-mcp build",
+    "RUN pnpm --config.allowUnusedPatches=true deploy --filter dpf-adp-mcp --prod --legacy /app/deploy",
+    "RUN npm install -g some-cli",
+  ].join("\n");
+  assert.deepEqual(findUnfrozenInstalls(text), []);
+});
+
+test("walks nested Dockerfiles, skipping node_modules", () => {
+  const root = scaffold({
+    Dockerfile: "FROM x\nRUN pnpm install --frozen-lockfile\n",
+    "services/svc/Dockerfile": "FROM x\nRUN pnpm install --no-frozen-lockfile\n",
+    "services/svc/Dockerfile.dockerignore": "node_modules\n",
+    "node_modules/pkg/Dockerfile": "FROM x\nRUN pnpm install\n",
+  });
+  try {
+    assert.deepEqual(findDockerfiles(root), ["Dockerfile", "services/svc/Dockerfile"]);
+    const result = checkFrozenLockfile(root);
+    assert.equal(result.ok, false);
+    assert.equal(result.problems.length, 1);
+    assert.match(result.problems[0], /^services\/svc\/Dockerfile turns frozen-lockfile off/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the patch check covers the service images built from the repo root", () => {
+  for (const dockerfile of [
+    "services/adp/Dockerfile",
+    "services/edge-node/Dockerfile",
+    "services/integration-test-harness/Dockerfile",
+  ]) {
+    assert.ok(ROOT_CONTEXT_DOCKERFILES.includes(dockerfile), dockerfile);
+  }
+});
+
+test("every Dockerfile in the repository installs with a frozen lockfile", () => {
+  const result = checkFrozenLockfile(process.cwd());
+  assert.ok(result.checked.includes("services/edge-node/Dockerfile"));
+  assert.equal(result.ok, true, result.problems.join("\n"));
 });
 
 // --- The live repo must satisfy its own guard ------------------------------

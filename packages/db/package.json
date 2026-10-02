@@ -51,6 +51,7 @@
     "./discovery-triage": "./src/discovery-triage.ts",
     "./discovery-triage-enums": "./src/discovery-triage-enums.ts",
     "./mailroom-enums": "./src/mailroom-enums.ts",
+    "./controlled-substance-enums": "./src/controlled-substance-enums.ts",
     "./discovery-collectors-arp-scan": "./src/discovery-collectors/arp-scan.ts",
     "./discovery-collectors-snmp": "./src/discovery-collectors/snmp.ts",
     "./discovery-collectors-unifi": "./src/discovery-collectors/unifi.ts",
@@ -120,23 +121,23 @@
     "@dpf/validators": "workspace:*",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
-    "bcryptjs": "^3.0.3",
-    "dotenv": "^17.4.2",
+    "bcryptjs": "catalog:",
+    "dotenv": "catalog:",
     "fflate": "^0.8.3",
     "i18n-iso-countries": "^7.14.0",
-    "net-snmp": "^3.26.3",
-    "pg": "^8.23.0",
-    "undici": "^8.10.0"
+    "net-snmp": "catalog:",
+    "pg": "catalog:",
+    "undici": "catalog:"
   },
   "devDependencies": {
-    "@types/pg": "^8.23.1",
+    "@types/pg": "catalog:",
     "@types/picomatch": "^4.0.2",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "catalog:",
     "picomatch": "^4.0.5",
     "prisma": "^7.9.1",
-    "tsx": "^4.23.15",
-    "typescript": "^6.0.3",
-    "vite": "^8.2.0",
-    "vitest": "^4.1.11"
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }

@@ -8,7 +8,7 @@
 
 import { intentStyle } from "@/components/ui/report-kit";
 
-import type { QuestData } from "./types";
+import type { QuestData } from "@/lib/twin/kit-types";
 
 export interface NeedsYouQuestsProps {
   quests: QuestData[];

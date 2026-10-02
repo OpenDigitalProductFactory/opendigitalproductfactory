@@ -2928,7 +2928,8 @@
           "registry_read",
           "initiative_design_review",
           "initiative_domain_review",
-          "workroom_evidence_write"
+          "workroom_evidence_write",
+          "contributor_inventory_read"
         ]
       }
     },
@@ -2973,7 +2974,8 @@
           "crm_read",
           "crm_write",
           "web_search",
-          "workroom_evidence_write"
+          "workroom_evidence_write",
+          "storefront_read"
         ]
       }
     },
@@ -3376,7 +3378,8 @@
           "registry_read",
           "registry_write",
           "web_search",
-          "workroom_evidence_write"
+          "workroom_evidence_write",
+          "contributor_inventory_read"
         ]
       }
     },
@@ -3816,7 +3819,8 @@
           "code_graph_read",
           "build_lifecycle",
           "sandbox_execute",
-          "initiative_evidence_write"
+          "initiative_evidence_write",
+          "decision_record_create"
         ]
       }
     },
@@ -3872,7 +3876,8 @@
           "code_graph_read",
           "build_lifecycle",
           "sandbox_execute",
-          "initiative_evidence_write"
+          "initiative_evidence_write",
+          "decision_record_create"
         ]
       }
     },
@@ -3928,7 +3933,8 @@
           "code_graph_read",
           "build_lifecycle",
           "sandbox_execute",
-          "initiative_evidence_write"
+          "initiative_evidence_write",
+          "decision_record_create"
         ]
       }
     },
@@ -4311,7 +4317,8 @@
           "registry_read",
           "backlog_read",
           "portfolio_read",
-          "workroom_evidence_write"
+          "workroom_evidence_write",
+          "payables_read"
         ]
       }
     },

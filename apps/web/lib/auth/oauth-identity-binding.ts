@@ -3,6 +3,7 @@ import { prisma, type Prisma } from "@dpf/db";
 import { can } from "@/lib/govern/permissions";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import type { PublicScope } from "./oauth-public-scopes";
+import { dualSeedMirrorSlugs } from "@/lib/coworker-record/selectable-coworker";
 
 type Db = Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding">;
 /** The source-approved external development roles: the connection profile any
@@ -38,6 +39,9 @@ export async function eligibleOAuthCoworkers(
       ...(selection.agentId ? { agentId: selection.agentId } : selection.after ? { agentId: { gt: selection.after } } : {}),
       toolGrants: { some: { grantKey: "work_room_write" } },
       ...(!administrator ? { OR: [delegation, ...approvedExternalRole] } : {}),
+      // One choice per assistant: slug mirrors of a canonical AGT-* identity are
+      // never offered or bound, even when requested by id (BI-A771AF73).
+      AND: [{ agentId: { notIn: dualSeedMirrorSlugs() } }],
     },
     select: { id: true, agentId: true, displayName: true },
     orderBy: { agentId: "asc" },
@@ -48,7 +52,7 @@ export async function eligibleOAuthCoworkers(
 export async function createOAuthConsentBinding(input: {
   userId: string; clientId: string; resource: string; agentId: string;
   scopes: PublicScope[];
-}, db: Db) {
+}, db: Db): Promise<Prisma.AuthorityBindingModel> {
   const eligible = await eligibleOAuthCoworkers(input.userId, input.clientId, input.resource, db, { agentId: input.agentId });
   const agent = eligible.find((candidate) => candidate.agentId === input.agentId);
   if (!agent) throw new Error(OAUTH_SETUP_REQUIRED);
@@ -116,7 +120,17 @@ export function sameRedirectFamily(a: readonly string[], b: readonly string[]): 
       const u = new URL(raw);
       const host = u.hostname.toLowerCase();
       const loopback = host === "127.0.0.1" || host === "localhost" || host === "[::1]" || host === "::1";
-      return `${u.protocol}//${host}${loopback ? "" : `:${u.port}`}${u.pathname}`;
+      // A loopback native app picks an ephemeral port AND, for some clients,
+      // a per-session path suffix (Codex: /callback/<nonce>; the nonce changed
+      // between 2026-09-23 and 2026-10-01 and defeated prior-consent reuse on
+      // the live install). Neither is identity. The family of a loopback
+      // redirect is its scheme, host and FIRST path segment; a non-loopback
+      // redirect keeps port and full path, matching the registration rule.
+      if (loopback) {
+        const first = u.pathname.split("/").filter(Boolean)[0] ?? "";
+        return `${u.protocol}//${host}/${first}`;
+      }
+      return `${u.protocol}//${host}:${u.port}${u.pathname}`;
     } catch {
       return null;
     }

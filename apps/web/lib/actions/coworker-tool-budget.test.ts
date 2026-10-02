@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import {
   scoreToolIntentRelevance,
   selectLoadableTools,

@@ -22,6 +22,7 @@ not reopen them.
 | 1 | BI-298A7202 | Points and portfolio resolvers; read model with unallocated and unsized rows | §5.1–5.2 | — (merged #5668) |
 | 2 | BI-A73A7DA3 | Epic-to-portfolio proposal per epic, confirmed by a person | §5.2 | 1 (merged #5674; its operator control moved to slice 5) |
 | 3 | BI-9EC60FE0 | `PortfolioBudgetPeriod`, `set_portfolio_budget`, `propose_portfolio_budgets` | §5.3 | 1 |
+| 3a | BI-67B27832 | `Portfolio.accountablePrincipalId`, `set_portfolio_owner`, portfolio-aligned `resolveWorkOwner`, owner view beside the budget tie-out on `/ops/demand` | §5.8 | — |
 | 4 | BI-EF265C9A | `BudgetReservation` written by `approve_demand_for_funding` | §5.4 | 1, 3 |
 | 5 | BI-CBF5D708 | Throughput capacity range and the tie-out surface with traced share | §5.5, §5.7, §6 | 1, 3, 4 |
 | 6 | BI-3430B3A4 | Admission by points in flight at every start, tee-up included | §5.6 | 1, 3 (5 for the Little's-Law default; 8-point floor until then) |

@@ -4,6 +4,29 @@ status: active
 
 # Execution reliability and process visibility
 
+## September 27 cancellation settlement repair (BI-06AE6833, WC-C9B549CC)
+
+Runtime evidence cmuke4i3b0biz01qs0vq0zpim records a cancelled TaskRun becoming
+input-required after its in-flight reviewer returned. Exact-source evidence
+cmukel8sy0n1i01qs8x38h0vu identifies unconditional post-inference updates in
+mcp-task-execution.ts on deployed 0d827752. Implementation admission
+IRD-98CCDCB589C9 reuses the existing objective, design and plan gates.
+
+1. Reproduce cancellation during inference across missing-writer, capacity,
+   successful completion, failure and exception settlement. Include cancellation
+   between the settlement read and write; a pre-read alone is insufficient.
+2. Consolidate settlement through a conditional database transition. Preserve
+   terminal state and return the persisted outcome when another transition wins.
+   Inspect existing attempt identity before choosing the fence; do not introduce
+   a parallel task ledger or reset retry budgets.
+3. Preserve approval waits and verified writer receipts. Late inference output
+   may remain historical evidence but cannot report a cancelled task as resumable.
+4. Run related tests, typechecks and the exact-tree gate, obtain independent
+   review and protected merge, then repeat cancellation on the canonical release.
+
+At least one fifth of this repair consolidates repeated settlement behavior.
+Source tests do not satisfy runtime acceptance or close the broader objective.
+
 ## September 21 observed pause reconciliation (BI-06AE6833, WC-99AECC86)
 
 Runtime verification RV-EXECUTION-5969966-20260921 found that WC-9CECAF46 displays a missing-coordinator pause in Details while Overview says no immediate attention is needed. Reconcile attention and next action in the existing shared room read model from its conformance result; preserve independent case attention and never convert a pause into completion. Test the real missing-coordinator condition first. Keep intended advance conditions separate from currently permitted transitions even before any stage has started. The observed lane must distinguish activity events from receipts, retaining source identity and no inferred verdict. Reuse shared projections and existing disclosure primitives; no new execution authority or storage. Header accountability must consume the existing effective-human-accountability result rather than selecting a participant independently. Preserve unknown and conflicting states. This extends the same objective and allocates at least one fifth of the change to consolidating these divergent projections. Protected checks and a new canonical release with repeat live acceptance remain required.
@@ -1114,3 +1137,18 @@ not advance the runner, mark a stage passed or close the room.
 After merging current main, 177 focused tests across 17 files pass, including
 cross-repository and unknown-definition-version refusal to bind step evidence.
 These source checks do not replace canonical build or deployed UX verification.
+
+### Terminal execution ownership repair (BI-06AE6833)
+
+A late inference result revived a canceled TaskRun. Bind execution to the admitted
+reservation and dispatch identity, and settle every outcome through one conditional
+status/updatedAt write. Preserve dispatch budget metadata. Review-context hydration
+uses the same fence; cancellation or replacement during loading returns the durable
+state without changing context or starting inference. The existing reservation helper
+already enters working with a heartbeat; hydration only refreshes that heartbeat.
+
+Keep request parsing and attempt-state transitions in focused modules, and share the
+stateful test database adapter across recovery suites. Regression cases cover canceled
+inference, stale admission, canceled hydration and replacement during hydration.
+No operator workflow or configuration changes: this restores the documented cancellation
+and same-task retry contract. Source tests and review do not prove deployed acceptance.

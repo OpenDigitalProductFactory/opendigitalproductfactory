@@ -6,6 +6,7 @@ const identityDb = vi.hoisted(() => ({
   agent: { findMany: vi.fn() },
   authorityBinding: { findUnique: vi.fn() },
   mcpApiToken: { findFirst: vi.fn() },
+  oAuthRefreshToken: { findFirst: vi.fn() },
 }));
 vi.mock("@dpf/db", () => ({ prisma: { oAuthAuthorizationCode: db, ...identityDb } }));
 
@@ -81,6 +82,7 @@ describe("current OAuth execution authority", () => {
     oauthClient: { revokedAt: null, registrationKind: "dcr" as const } };
   beforeEach(() => {
     vi.clearAllMocks();
+    identityDb.oAuthRefreshToken.findFirst.mockResolvedValue(null);
     identityDb.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] });
     identityDb.agent.findMany.mockResolvedValue([{ id: "agent-row", agentId: token.agentId }]);
     identityDb.authorityBinding.findUnique.mockResolvedValue({ oauthPurpose: "consent", status: "active",
@@ -120,6 +122,22 @@ describe("current OAuth execution authority", () => {
     identityDb.mcpApiToken.findFirst.mockResolvedValue(null);
     expect(await isCurrentOAuthExecutionAuthority({ ...token, oauthFamilyKey: "family", expiresAt: new Date(0) })).toBe(false);
   });
+  it("keeps accepted work authorized while the client is quiet and its refresh family remains valid", async () => {
+    identityDb.mcpApiToken.findFirst.mockResolvedValue(null);
+    identityDb.oAuthRefreshToken.findFirst.mockResolvedValue({ id: "refresh" });
+    expect(await isCurrentOAuthExecutionAuthority({ ...token, oauthFamilyKey: "family", expiresAt: new Date(0) })).toBe(true);
+    expect(identityDb.oAuthRefreshToken.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      oauthFamilyKey: "family", userId: token.userId, oauthClientId: "client", authorityBindingId: "binding",
+      agentId: token.agentId, resource: token.resource, scopes: { hasEvery: token.publicScopes },
+      revokedAt: null, consumedAt: null, rotatedToId: null, expiresAt: { gt: expect.any(Date) },
+    }) }));
+  });
+  it("does not let a valid refresh family override revoked consent", async () => {
+    identityDb.mcpApiToken.findFirst.mockResolvedValue(null);
+    identityDb.oAuthRefreshToken.findFirst.mockResolvedValue({ id: "refresh" });
+    identityDb.authorityBinding.findUnique.mockResolvedValue(null);
+    expect(await isCurrentOAuthExecutionAuthority({ ...token, oauthFamilyKey: "family", expiresAt: new Date(0) })).toBe(false);
+  });
   it.each(["revoked-consent", "disabled-human", "missing-binding", "wrong-agent", "removed-delegation"])("rejects %s before queued execution", async state => {
     const current = { ...token };
     if (state === "revoked-consent") identityDb.authorityBinding.findUnique.mockResolvedValue(null);
@@ -130,3 +148,33 @@ describe("current OAuth execution authority", () => {
     expect(await isCurrentOAuthExecutionAuthority(current)).toBe(false);
   });
 });
+
+// BI-A771AF73: the agent registry keeps slug "mirror" rows beside each canonical
+// AGT-* identity. A picker that offers both shows every assistant twice, and a
+// consent bound to a mirror would split one assistant across two records.
+describe("consent offers each assistant once", () => {
+  const resource = "https://dpf.example/api/mcp/v1";
+  beforeEach(() => {
+    vi.clearAllMocks();
+    identityDb.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] });
+    identityDb.agent.findMany.mockResolvedValue([]);
+  });
+
+  it("never lists a dual-seed mirror slug beside its canonical identity", async () => {
+    await eligibleOAuthCoworkers("human", "client", resource);
+    const where = identityDb.agent.findMany.mock.calls[0][0].where;
+    const excluded: string[] = where.AND?.[0]?.agentId?.notIn ?? [];
+    for (const mirror of ["external-claude-code", "external-codex", "external-grok", "mailroom-coordinator", "bookkeeper"]) {
+      expect(excluded).toContain(mirror);
+    }
+    expect(excluded).not.toContain("AGT-EXT-CLAUDE");
+  });
+
+  it("refuses a mirror slug even when asked for it by id", async () => {
+    await eligibleOAuthCoworkers("human", "client", resource, undefined, { agentId: "external-claude-code" });
+    const where = identityDb.agent.findMany.mock.calls[0][0].where;
+    expect(where.agentId).toBe("external-claude-code");
+    expect(where.AND?.[0]?.agentId?.notIn).toContain("external-claude-code");
+  });
+});
+

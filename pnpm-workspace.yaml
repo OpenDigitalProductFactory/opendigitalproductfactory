@@ -7,6 +7,32 @@ packages:
   - "services/adp"
   - "services/edge-node"
   - "services/integration-test-harness"
+# One specifier per shared dependency (plan 2026-09-08 S11). Every registry
+# package that two or more of the workspaces above declare is listed here once
+# and declared as "catalog:" in each package.json, so their ranges cannot drift
+# apart. scripts/sbom/check-sbom-drift.mjs fails a shared dependency declared
+# without "catalog:"; the accepted exceptions live in sbom/baseline.json
+# `acceptedSpecifierDrift` (only packages/repo-guard-runtime's exact typescript
+# pin). A dependency only one workspace uses keeps its range in that
+# package.json. `pnpm deploy` and `pnpm pack` rewrite "catalog:" to the range
+# below, so the deployed service trees carry plain ranges. How to add one:
+# docs/architecture/dependency-reduction-routine.md.
+catalog:
+  "@axe-core/playwright": ^4.12.1
+  "@types/node": ^26.6.2
+  "@types/pg": ^8.23.1
+  "@vitest/coverage-v8": ^4.1.11
+  bcryptjs: ^3.0.3
+  dotenv: ^17.4.2
+  net-snmp: ^3.26.3
+  pg: ^8.23.0
+  prom-client: ^15.1.3
+  tsx: ^4.23.15
+  typescript: ^6.0.3
+  undici: ^8.10.0
+  vite: ^8.2.0
+  vitest: ^4.1.11
+  zod: ^4.6.5
 overrides:
   # One React for the platform tree. apps/web declares ^19.2.8; the Prisma CLI's
   # studio-core would otherwise pull a second copy (19.3.0), a dual-package
@@ -19,8 +45,11 @@ overrides:
   # brace-expansion <= 5.0.8: GHSA-mh99-v99m-4gvg / CVE-2026-14257, then
   # GHSA-rgw5-rvv9-x895 / CVE-2026-69152 (unbounded intermediate arrays,
   # bypassing the 5.0.8 mitigation — found on PR #3893's OSV scan). Floor
-  # every transitive line to the current patched release, 5.0.9.
-  'brace-expansion@<=5.0.8': '5.0.9'
+  # every transitive line to the current patched release. 5.0.9 was then hit by
+  # GHSA-6j4f-fj2g-mc7p / CVE-2026-102276 and GHSA-qhr7-859c-m2p7 /
+  # CVE-2026-102278 (fixed in 5.0.10 and 5.0.11; found on PR #5819's OSV
+  # scan), so the floor is now 5.0.12.
+  'brace-expansion@<=5.0.11': '5.0.12'
   # deepmerge-ts < 8.0.0: GHSA-ggr8-5vv4-36mx / CVE-2026-40345 (Dependabot #155,
   # high) — deepmerge()/deepmergeInto() recurse per property with no visited-pair
   # tracking, so two records that self-reference at the same key path recurse until
@@ -29,9 +58,10 @@ overrides:
   # 8.0.0 is a clean upstream fix with zero runtime dependencies and the same
   # `node >=16` engine, so floor it instead of accepting the finding.
   deepmerge-ts: '^8.0.0'
-  # @types/node: first-party workspaces declare ^26, but @inngest/ai (22) and
-  # @types/net-snmp (24) each pin an older major (docx (25) did too until it
-  # retired), so the tree resolved several copies of a types-only package. Floor every older range to
+  # @types/node: first-party workspaces declare ^26, but @types/net-snmp (24)
+  # pins an older major (docx (25) and @inngest/ai 0.1.7 (22) did too, until
+  # docx retired and @inngest/ai 0.1.8 dropped its dependencies), so the tree
+  # resolved several copies of a types-only package. Floor every older range to
   # the workspace major (plan 2026-09-08 M7, BI-5265CAD0). Types-only: no
   # runtime behaviour changes; typecheck across all workspaces is the proof.
   '@types/node@<26': '^26.2.0'

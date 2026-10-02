@@ -8,7 +8,7 @@
 // Spec: docs/superpowers/specs/2026-07-12-operational-twin-framework-design.md §3
 // Plan: docs/superpowers/plans/2026-07-12-operational-twin-framework-execution.md P2
 
-export * from "./types";
+export * from "@/lib/twin/kit-types";
 export { ActorMark, type ActorMarkProps } from "./ActorMark";
 export { CapacityChip, CapacityChips, type CapacityChipsProps } from "./CapacityChips";
 export { TwinZone, type TwinZoneProps } from "./TwinZone";
@@ -36,8 +36,8 @@ export {
   type TwinCogSnapshot,
   type TwinStageFlow,
   type TwinOutcome,
-} from "./snapshot";
-export { buildDemoTwinSnapshot } from "./demo-snapshot";
+} from "@/lib/twin/twin-snapshot";
+export { buildDemoTwinSnapshot } from "@/lib/twin/demo-twin-snapshot";
 
 // Spatial operational-scene renderer. Archetype adapters supply geometry,
 // live presentation bindings, and authorized domain commands.

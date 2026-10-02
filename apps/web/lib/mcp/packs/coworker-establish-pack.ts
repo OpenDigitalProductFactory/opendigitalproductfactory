@@ -8,7 +8,7 @@
 // the canonical roster AND the coworker holds a passing Phase 2 behavioral
 // certification. Draft coworkers are blocked by the lifecycle gate until then.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

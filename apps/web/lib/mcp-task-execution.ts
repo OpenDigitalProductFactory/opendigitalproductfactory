@@ -1,3 +1,6 @@
+import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
+import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
+import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
 import { remoteTaskConversation } from "./mcp-task-conversation";
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { loadPirEvidenceContext } from "./pir-evidence-context";
@@ -29,11 +32,8 @@ import {
   requiredToolNames,
   requiresInitiativeReviewEffort,
 } from "./mcp-task-review-contract";
-import type {
-  RemoteTaskSubmitAuth,
-  RemoteTaskSubmitOutcome,
-  RemoteTaskSubmitParams,
-} from "./mcp-task-submit";
+import type { RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
 import {
   TERMINAL_WRITER_REJECTED_WAIT_REASON,
@@ -75,8 +75,37 @@ export async function executeRemoteTaskAttempt(input: {
   terminalWriterContext?: string;
   capacityAttempt: number;
   terminalWriterAttempt?: number;
+  /** Identity acquired by the caller's reservation CAS; null denotes initial execution. */
+  expectedReservation?: string | null;
+  expectedDispatchClaim?: string | null;
 }): Promise<RemoteTaskSubmitOutcome> {
   const { run, token, userContext, parsed } = input;
+  const admittedRun = await prisma.taskRun.findUnique({
+    where: { taskRunId: run.taskRunId }, select: { status: true, progressPayload: true, a2aMetadata: true },
+  });
+  if (!admittedRun || !(TASK_IN_FLIGHT_STATES as readonly string[]).includes(admittedRun.status)) {
+    return {
+      kind: "result",
+      result: {
+        taskRunId: run.taskRunId,
+        status: admittedRun?.status ?? "unknown",
+        progressPayload: admittedRun?.progressPayload ?? null,
+        requiresApproval: false,
+        resumable: false,
+        isError: !admittedRun,
+      },
+    };
+  }
+  const reservation = input.expectedReservation !== undefined
+    ? input.expectedReservation : reservationIdentity(admittedRun?.progressPayload);
+  const dispatchClaim = input.expectedDispatchClaim !== undefined
+    ? input.expectedDispatchClaim : dispatchIdentity(admittedRun?.progressPayload);
+  if (admittedRun && (reservationIdentity(admittedRun.progressPayload) !== reservation
+    || dispatchIdentity(admittedRun.progressPayload) !== dispatchClaim)) {
+    return projectRemoteTaskReplay({ existing: { ...admittedRun, taskRunId: run.taskRunId }, requestMatches: true });
+  }
+  const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
+    settleRemoteTask(args, reservation, dispatchClaim);
   const agent = await resolveAutonomousWorkAgent({
     agentId: parsed.agentId,
     routeContext: parsed.routeContext,
@@ -286,7 +315,7 @@ export async function executeRemoteTaskAttempt(input: {
       delete approvalProgress.terminalWriterEscalation;
       delete approvalProgress.terminalWriterContextFailure;
       delete approvalProgress.resourceWait;
-      await prisma.taskRun.update({
+      const displaced = await settle({
         where: { taskRunId: run.taskRunId },
         data: {
           status: "input-required",
@@ -302,6 +331,7 @@ export async function executeRemoteTaskAttempt(input: {
           },
         },
       });
+      if (displaced) return displaced;
       return {
         kind: "result",
         result: await withTaskRunApprovalLocation({
@@ -335,7 +365,7 @@ export async function executeRemoteTaskAttempt(input: {
         && !Array.isArray(currentRun.progressPayload)
         ? currentRun.progressPayload as Record<string, unknown>
         : {};
-      await prisma.taskRun.update({
+      const displaced = await settle({
         where: { taskRunId: run.taskRunId },
         data: {
           status: "input-required",
@@ -364,6 +394,7 @@ export async function executeRemoteTaskAttempt(input: {
           },
         },
       });
+      if (displaced) return displaced;
       return {
         kind: "result",
         result: {
@@ -416,7 +447,7 @@ export async function executeRemoteTaskAttempt(input: {
             attempt: terminalWriterAttempt,
           })
         : null;
-      await prisma.taskRun.update({
+      const displaced = await settle({
         where: { taskRunId: run.taskRunId },
         data: {
           status: "input-required",
@@ -443,6 +474,7 @@ export async function executeRemoteTaskAttempt(input: {
           },
         },
       });
+      if (displaced) return displaced;
       return {
         kind: "result",
         result: {
@@ -503,7 +535,7 @@ export async function executeRemoteTaskAttempt(input: {
         ?? await prisma.taskRun.findUnique({ where: { taskRunId: run.taskRunId }, select: { progressPayload: true } });
       const priorDispatch = progressRow?.progressPayload && typeof progressRow.progressPayload === "object"
         ? (progressRow.progressPayload as Record<string, unknown>)["dispatch"] : undefined;
-      await prisma.taskRun.update({
+      const displaced = await settle({
         where: { taskRunId: run.taskRunId },
         data: {
           status: "submitted",
@@ -517,6 +549,7 @@ export async function executeRemoteTaskAttempt(input: {
           },
         },
       });
+      if (displaced) return displaced;
 
       return {
         kind: "result",
@@ -536,7 +569,7 @@ export async function executeRemoteTaskAttempt(input: {
     }
 
     if (result.failure) {
-      await prisma.taskRun.update({
+      const displaced = await settle({
         where: { taskRunId: run.taskRunId },
         data: {
           status: "failed",
@@ -550,6 +583,7 @@ export async function executeRemoteTaskAttempt(input: {
           },
         },
       });
+      if (displaced) return displaced;
       return {
         kind: "result",
         result: {
@@ -566,7 +600,7 @@ export async function executeRemoteTaskAttempt(input: {
       };
     }
 
-    await prisma.taskRun.update({
+    const displaced = await settle({
       where: { taskRunId: run.taskRunId },
       data: {
         status: "completed",
@@ -580,6 +614,7 @@ export async function executeRemoteTaskAttempt(input: {
         },
       },
     });
+    if (displaced) return displaced;
 
     return {
       kind: "result",
@@ -597,7 +632,7 @@ export async function executeRemoteTaskAttempt(input: {
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown remote coworker execution error";
-    await prisma.taskRun.update({
+    const displaced = await settle({
       where: { taskRunId: run.taskRunId },
       data: {
         status: "failed",
@@ -609,6 +644,7 @@ export async function executeRemoteTaskAttempt(input: {
         },
       },
     });
+    if (displaced) return displaced;
     return {
       kind: "result",
       result: {

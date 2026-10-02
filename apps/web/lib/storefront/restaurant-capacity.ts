@@ -11,7 +11,7 @@
 //
 // Design: docs/superpowers/specs/2026-07-22-restaurant-capacity-legibility-design.md
 
-import { resolveIntent, type Intent } from "@/components/ui/report-kit/statusColors";
+import { resolveIntent, type Intent } from "@/lib/ui-model/statusColors";
 import {
   isHospitalityResourceAvailableForInterval,
   type HospitalityAvailabilityWindow,

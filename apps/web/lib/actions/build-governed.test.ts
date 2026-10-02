@@ -112,6 +112,7 @@ vi.mock("@/lib/build/sandbox/build-branch", () => ({
   isSandboxAvailable: mockIsSandboxAvailable,
   startBuildBranch: mockStartBuildBranch,
   getClientIdentity: mockGetClientIdentity,
+  resolveBuildWorkdir: (buildId: string) => `/workspace/.builds/${buildId}`, // BI-5C4933EB
 }));
 vi.mock("@/lib/build/sandbox/sandbox-build-gc", () => ({ releaseSandboxForTerminalBuild: vi.fn(async () => {}) }));
 vi.mock("@/lib/build-review-verification-trigger", () => ({
@@ -666,10 +667,7 @@ describe("governed build start approvals", () => {
 
     await resumeBuildImplementation("FB-789");
 
-    expect(mockListReleasableSandboxFiles).toHaveBeenCalledWith(
-      "dpf-sandbox-1",
-      { baseRef: "client/test-client-id" },
-    );
+    expect(mockListReleasableSandboxFiles).toHaveBeenCalledWith("dpf-sandbox-1", { baseRef: "client/test-client-id", workspace: "/workspace/.builds/FB-789" });
     expect(mockStartBuildBranch).toHaveBeenCalledWith("FB-789");
     expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1085,6 +1083,7 @@ describe("governed build start approvals", () => {
       message:
         "No releasable source changes are present in the sandbox. Tasks are marked complete but no code was written. Resume implementation and make real code changes before advancing to review.",
     });
+    expect(mockListReleasableSandboxFiles).toHaveBeenCalledWith("dpf-sandbox-1", { baseRef: "client/test-client-id", workspace: "/workspace/.builds/FB-123" });
 
     expect(mockPrisma.featureBuild.update).not.toHaveBeenCalledWith(
       expect.objectContaining({

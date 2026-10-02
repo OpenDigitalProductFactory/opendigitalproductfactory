@@ -225,6 +225,14 @@ export interface BuildPreBuildReviewRepairEvent {
   };
 }
 
+/** BI-B2EEA6DE: hand a build's guard findings back to its coding agent. */
+export interface BuildGauntletRepairEvent {
+  name: "build/gauntlet.repair";
+  data: {
+    buildId: string;
+  };
+}
+
 export interface AssuranceBomGenerateEvent {
   name: "assurance/bom.generate";
   data: {
@@ -278,7 +286,24 @@ export interface OpsQuiescenceStartEvent {
     budgetMs: number;
     triggerRefId: string | null;
     shipForce: boolean;
+    /** BI-F9EE05E5: wait for work and pause for the operator at the bound
+     *  (self-upgrade) instead of deferring (other triggers). */
+    awaitOperatorAtBudget?: boolean;
   };
+}
+
+/** BI-F9EE05E5: an operator decision for a drain that is waiting for work.
+ *  The coordinator sleeps on this event between checks. */
+export interface OpsQuiescenceControlEvent {
+  name: "ops/quiescence.control";
+  data: { runId: string; action: "abort" | "keep-waiting" | "force"; operatorUserId: string };
+}
+
+/** BI-F9EE05E5: the coordinator reached ready-to-swap; wakes the waiting
+ *  self-upgrade job. */
+export interface OpsQuiescenceReadyToSwapEvent {
+  name: "ops/quiescence.ready-to-swap";
+  data: { runId: string; triggerRefId: string | null };
 }
 
 /** Sent by callers AFTER the swap completes (or fails / is aborted). The

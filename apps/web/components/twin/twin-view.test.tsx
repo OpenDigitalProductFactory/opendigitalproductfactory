@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { ALL_ARCHETYPES, deriveTwinProfile } from "@dpf/storefront-templates";
 
-import { buildDemoTwinSnapshot } from "./demo-snapshot";
+import { buildDemoTwinSnapshot } from "@/lib/twin/demo-twin-snapshot";
 import { TwinView } from "./TwinView";
 
 const byCategory = (category: string) => ALL_ARCHETYPES.find((a) => a.category === category)!;

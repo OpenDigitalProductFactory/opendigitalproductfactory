@@ -44,7 +44,17 @@ export function buildPublishedReadinessCommand(input: {
   prBodyBase64: string;
   repositoryOwner: string;
   repositoryName: string;
+  /**
+   * BI-5C4933EB: the build's own workdir (resolveBuildWorkdir). The shared
+   * /workspace root stays on client/<id>; detaching it and restoring build/<id>
+   * there fails while that branch is checked out in the build's worktree.
+   */
+  workdir?: string;
 }): string {
+  const workdir = input.workdir ?? "/workspace";
+  if (!/^\/workspace(\/\.builds\/[A-Za-z0-9_-]+)?$/.test(workdir)) {
+    throw new Error("Readiness workdir must be the sandbox workspace or a build worktree.");
+  }
   assertSafeBranch(input.branchName, "Published branch");
   assertSafeBranch(input.restoreBranch, "Restore branch");
   if (!FULL_SHA.test(input.commitSha)) throw new Error("Published commit is not a full Git SHA.");
@@ -59,7 +69,7 @@ export function buildPublishedReadinessCommand(input: {
   const remoteUrl = `https://github.com/${input.repositoryOwner}/${input.repositoryName}.git`;
   const bodyFile = `.dpf-pr-body-${input.commitSha}.md`;
   return [
-    "cd /workspace",
+    `cd '${workdir}'`,
     "IFS= read -r DPF_GITHUB_TOKEN",
     "export DPF_GITHUB_TOKEN",
     "askpass=$(mktemp)",

@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { ARTIFACT_AUTHOR_RECOVERY, readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
+import type { InitiativeGateKey } from "@/lib/backlog/initiative-readiness/receipt-schema";
 import type {
-  InitiativeGateKey,
   InitiativeReadinessDecision,
   ReadinessCode,
   ReadinessRequirementResult,
-} from "@/lib/backlog/initiative-readiness";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+} from "@/lib/backlog/initiative-readiness/types";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
 import { formatInitiativeReviewObjective, IMMUTABLE_REVIEW_READER_TOOL as IMMUTABLE_READER_TOOL } from "./initiative-review-objective";
 
@@ -217,6 +217,18 @@ function isAuthorResearchLane(decision: InitiativeReadinessDecision, entry: Read
 const AUTHOR_RESEARCH_NEXT_ACTION =
   "Research for this delivery shape is the reproduction, and its author records it: call record_initiative_evidence with gate \"research\", citing the defect or gap on a named ref (commit or branch + file + line) and the failing-to-passing proof. No canonical design is required — the shape does not owe one — so do not commit a spec to obtain a reviewer route.";
 
+// BI-6EB2DBBB: a small fix needs no separately granted writer. Its reproduction,
+// recorded as execution evidence, satisfies research at claim — the path an
+// external session can actually reach.
+const SMALL_FIX_RESEARCH_NEXT_ACTION =
+  "Research for a small fix is its reproduction, recorded as execution evidence: call record_execution_evidence on this item with kind \"source_verified\" (the defect on a named ref, with its URL) and kind \"test_pass\" (the failing-to-passing test), then claim again. record_initiative_evidence(gate: \"research\") also satisfies it where that grant is held. No canonical design is required, so do not commit a spec to obtain a reviewer route.";
+
+function authorResearchNextAction(decision: InitiativeReadinessDecision): string {
+  return decision.shapeDecision?.effective === "small" && decision.profile === "fix"
+    ? SMALL_FIX_RESEARCH_NEXT_ACTION
+    : AUTHOR_RESEARCH_NEXT_ACTION;
+}
+
 /** Resolve actionable, exact-grant reviewer routes without changing readiness. */
 export async function resolveInitiativeReviewerRecovery(input: {
   decision: InitiativeReadinessDecision;
@@ -302,7 +314,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
         toolName: entry.route.toolName,
         grant: entry.route.lane.grant,
         reason: "research-evidence-required",
-        nextAction: AUTHOR_RESEARCH_NEXT_ACTION,
+        nextAction: authorResearchNextAction(input.decision),
       });
       continue;
     }

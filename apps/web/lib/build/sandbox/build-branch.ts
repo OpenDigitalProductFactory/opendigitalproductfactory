@@ -35,7 +35,22 @@ import { isRecord } from "@/lib/shared/coerce";
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
 const WORKSPACE = "/workspace";
-const GIT_INDEX_LOCK = `${WORKSPACE}/.git/index.lock`;
+/**
+ * A git lock older than this is left over, never live: no sandbox git
+ * operation holds one for 15 minutes (an unshallow of the full history takes
+ * under a minute). BI-E4AD091E: a shallow.lock left at 2026-09-25 13:53 failed
+ * every history fetch for four days; the old guard only knew index.lock, and
+ * only cleared it when no git process ran anywhere — never, under load.
+ */
+const STALE_GIT_LOCK_MINUTES = 15;
+
+/** Remove stale lock files in a git dir and its per-worktree admin dirs. */
+export function buildSandboxStaleGitLockCleanupCommand(gitDir: string): string {
+  return [
+    `find ${gitDir} -maxdepth 1 -name '*.lock' -mmin +${STALE_GIT_LOCK_MINUTES} -exec rm -f {} + 2>/dev/null || true`,
+    `find ${gitDir}/worktrees -mindepth 2 -maxdepth 2 -name '*.lock' -mmin +${STALE_GIT_LOCK_MINUTES} -exec rm -f {} + 2>/dev/null || true`,
+  ].join("; ");
+}
 // `**/node_modules` (the entry itself) as well as its contents: a build
 // worktree shares each package's node_modules by SYMLINK, and git sees a
 // symlink as a file, so `**/node_modules/**` never matched it and the WIP
@@ -405,7 +420,7 @@ function sandboxGitPrelude(): string {
     // harmless no-op, and gets applied on the very next prelude call once the
     // repo exists — well before any checkout/worktree-add/commit runs.
     `git -C ${WORKSPACE} config --local core.hooksPath /dev/null >/dev/null 2>&1 || true`,
-    `if [ -f "${GIT_INDEX_LOCK}" ]; then for _dpf_git_wait in 1 2 3 4 5; do if ! pgrep -x git >/dev/null 2>&1; then break; fi; sleep 1; done; if [ -f "${GIT_INDEX_LOCK}" ] && ! pgrep -x git >/dev/null 2>&1; then rm -f "${GIT_INDEX_LOCK}"; fi; fi`,
+    buildSandboxStaleGitLockCleanupCommand(`${WORKSPACE}/.git`),
     ensureGlobalSafeDirectoryCommand(`"${WORKSPACE}"`),
     // BI-518B5F69: git's ownership check is per worktree path (and the shared
     // .git/worktrees/<id>), so the single /workspace exception does not cover
@@ -417,11 +432,38 @@ function sandboxGitPrelude(): string {
   ].join(" && ");
 }
 
+/**
+ * Held by every sandbox git command (BI-3D7569C7). Every build runs git
+ * against the one shared /workspace index, and after a portal swap the resume
+ * sweep starts about ten builds at once. On the sandbox image 9/10 concurrent
+ * root commits failed on index.lock; 0/10 under this lock. Kernel-held, so a
+ * dead holder releases it: nothing is ever stale. In /tmp because every exec
+ * runs in the one sandbox container, and /workspace is scrubbed by git clean.
+ */
+export const SANDBOX_GIT_LOCK_FILE = "/tmp/dpf-sandbox-git.lock";
+const SANDBOX_GIT_LOCK_WAIT_SECONDS = 300;
+
+function withSandboxGitLock(command: string): string {
+  // BusyBox flock has no -w, so the wait is a bounded -n retry. An image
+  // without flock keeps the old unserialized behaviour rather than failing.
+  const acquire = [
+    `if command -v flock >/dev/null 2>&1; then`,
+    `_dpf_lock_wait=0;`,
+    `until flock -n 9; do`,
+    `_dpf_lock_wait=$((_dpf_lock_wait + 1));`,
+    `if [ "$_dpf_lock_wait" -ge ${SANDBOX_GIT_LOCK_WAIT_SECONDS} ]; then echo "sandbox git lock busy for ${SANDBOX_GIT_LOCK_WAIT_SECONDS}s" >&2; exit 75; fi;`,
+    `sleep 1;`,
+    `done;`,
+    `fi`,
+  ].join(" ");
+  return `{ ${acquire}; ${command}; } 9>${SANDBOX_GIT_LOCK_FILE}`;
+}
+
 export function wrapSandboxGitCommand(command: string): string {
-  return [
+  return withSandboxGitLock([
     sandboxGitPrelude(),
     command,
-  ].join(" && ");
+  ].join(" && "));
 }
 
 async function execSandboxGit(command: string): Promise<string> {
@@ -627,6 +669,28 @@ export async function isSandboxAvailable(): Promise<boolean> {
  *
  * Safe to call multiple times — skips if a baseline already exists.
  */
+export type SandboxRepoState = "has-commits" | "empty-repo" | "no-repo";
+
+/**
+ * One probe, one unambiguous word on its last line (BI-3D7569C7). The old
+ * probe echoed "yes" after `rev-parse --is-inside-work-tree`, which itself
+ * prints "true", so the output was never "yes" and every build start rebuilt
+ * the shared baseline.
+ */
+export function buildSandboxRepoStateProbeCommand(workspace: string = WORKSPACE): string {
+  return [
+    `if git -C ${workspace} rev-parse --is-inside-work-tree >/dev/null 2>&1; then`,
+    `if git -C ${workspace} rev-parse --verify --quiet HEAD >/dev/null 2>&1; then echo has-commits; else echo empty-repo; fi;`,
+    `else echo no-repo; fi`,
+  ].join(" ");
+}
+
+export function parseSandboxRepoState(output: string): SandboxRepoState {
+  const last = output.trim().split("\n").pop()?.trim();
+  if (last === "has-commits" || last === "empty-repo" || last === "no-repo") return last;
+  throw new Error(`Unrecognised sandbox repo probe output: ${JSON.stringify(output.slice(-200))}`);
+}
+
 async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
   // Configure identity first (idempotent)
   await execSandboxGit(
@@ -636,23 +700,18 @@ async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
     ].join(" && "),
   ).catch(() => {});
 
-  const isRepo = await execSandboxGit(
-    `git -C ${WORKSPACE} rev-parse --is-inside-work-tree 2>/dev/null && echo yes || echo no`,
-  ).catch(() => "no");
-
-  if (isRepo.trim() === "yes") {
-    // Repo already exists — ensure at least one commit, then return.
-    const commitCount = await execSandboxGit(
-      `git -C ${WORKSPACE} rev-list --count HEAD 2>/dev/null || echo 0`,
-    ).catch(() => "0");
-
-    if (commitCount.trim() !== "0") return; // Already has a baseline commit.
-  }
+  // BI-3D7569C7: no .catch fallback. A probe that cannot answer must stop the
+  // build start, never be read as "fresh" — the fresh path hard-resets the
+  // shared /workspace under every concurrent build.
+  const repoState = parseSandboxRepoState(
+    await execSandboxGit(buildSandboxRepoStateProbeCommand()),
+  );
+  if (repoState === "has-commits") return;
 
   // --- Fresh baseline ---
 
   // Step 1: git init if not already a repo
-  if (isRepo.trim() !== "yes") {
+  if (repoState === "no-repo") {
     await execSandboxGit(
       [
         `cd ${WORKSPACE}`,

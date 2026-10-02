@@ -21,7 +21,7 @@ import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import {
   classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
   createTaskRunForScheduledTask,
-  detectScheduledRunFailure,
+  detectScheduledRunFailure, withPersistedExecutions,
   type ScheduledTaskRunRef,
 } from "@/lib/tak/scheduled-task-runs";
 import { createTaskMessage } from "@/lib/tak/task-records";
@@ -535,7 +535,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     };
     let { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools(toolArgs);
     const pinned = scheduledToolsNeedingPin({
-      prompt: task.prompt, attached: tools, deferred: deferredTools,
+      prompt: task.prompt, attached: tools, deferred: deferredTools, taskConfig: task.taskConfig,
     });
     if (pinned.length > 0) {
       ({ tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
@@ -634,13 +634,12 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     // friendly provider-failure apology with zero executed tools (live repro:
     // TR-SCHED-B7151A4C). That run did no work — throw so the catch below
     // records status=failed and the BI-754C9E82 retry cadence takes over,
-    // instead of completing quietly with a healthy lastStatus.
-    const runFailure = detectScheduledRunFailure({
-      prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools, content: result.content,
-    });
+    // instead of completing quietly with a healthy lastStatus. BI-D48B3B0F: judge what the run PERSISTED too.
+    const verdictTools = withPersistedExecutions(executedTools, await prisma.toolExecution.findMany({ where: { taskRunId: taskRunRef.taskRunId, success: true }, select: { toolName: true, result: true } }));
+    const runFailure = detectScheduledRunFailure({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, content: result.content });
     if (runFailure) throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
 
-    const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools });
+    const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools });
     const scheduledSummary = extractScheduledTaskSummary(executedTools);
     const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
     const playbookRunStatus =

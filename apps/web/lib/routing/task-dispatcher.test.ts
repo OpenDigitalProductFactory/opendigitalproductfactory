@@ -6,10 +6,14 @@ import { screenInferencePayload } from "@/lib/inference/data-screening/screen-in
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
+const { mockAutoDisableProvider } = vi.hoisted(() => ({ mockAutoDisableProvider: vi.fn().mockResolvedValue({ attempt: 0, nextRunAt: new Date() }) }));
+vi.mock("./provider-auto-disable", () => ({ autoDisableProvider: mockAutoDisableProvider }));
+
 // Must match the actual import path in task-dispatcher.ts
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
     modelProvider: { update: vi.fn() },
+    modelProfile: { updateMany: vi.fn() },
     routeDecisionLog: { create: vi.fn().mockResolvedValue({ id: "log-1" }) },
   },
 }));
@@ -316,10 +320,26 @@ describe("callWithFallbackChain", () => {
 
     await callWithFallbackChain(mockDecision, mockPayload, mockContext);
 
-    expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-      where: { providerId: "provider-1" },
-      data: { status: "disabled" },
-    });
+    expect(mockAutoDisableProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "provider-1", cause: "auth", source: "task-dispatcher" }),
+    );
+  });
+
+  it("retires the missing model instead of disabling the provider on model_not_found (BI-D28A4F55)", async () => {
+    const { InferenceError } = await import("@/lib/ai-inference");
+    mockCallProvider
+      .mockRejectedValueOnce(new InferenceError("No such model", "model_not_found", "provider-1"))
+      .mockResolvedValueOnce({ content: "ok", inputTokens: 1, outputTokens: 1, inferenceMs: 100 });
+
+    await callWithFallbackChain(mockDecision, mockPayload, mockContext);
+
+    expect(mockAutoDisableProvider).not.toHaveBeenCalled();
+    expect(mockPrisma.modelProvider.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "disabled" } }),
+    );
+    expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ modelStatus: "retired" }) }),
+    );
   });
 
   it("throws NoEndpointAvailableError when entire chain fails", async () => {
