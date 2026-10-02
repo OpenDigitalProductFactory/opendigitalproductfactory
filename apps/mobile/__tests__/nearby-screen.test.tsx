@@ -12,7 +12,12 @@ jest.mock("@/src/hooks/useGeolocation", () => ({
   useGeolocation: () => mockGeo,
 }));
 
-jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn() }) }));
+// The hook module is loaded for its message constant; stub the native module
+// so expo's runtime globals are never installed. They resolve lazily and
+// throw "require ... outside of the scope of the test code" after teardown.
+jest.mock("expo-location", () => ({}));
+
+jest.mock("expo-router",() => ({ useRouter: () => ({ push: jest.fn() }) }));
 
 jest.mock("@/src/features/auth/auth.store", () => ({
   useAuthStore: (select: (s: { isAuthenticated: boolean }) => unknown) =>
