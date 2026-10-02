@@ -47,6 +47,7 @@ import { buildStepUpChallenge, type StepUpContext } from "@/lib/auth/oauth-step-
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations } from "@/lib/mcp-tools";
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import { isToolAllowedDuringQuiescence, QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS } from "@/lib/mcp/quiescence-safe-tools";
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -185,20 +186,6 @@ function tokenScopesAllowTool(tool: ToolDefinition, token: ResolvedMcpToken, gra
   return tokenAdmitsTool(tool, grantMap[tool.name], token);
 }
 
-const QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS = new Set([
-  // Releasing a lease is cleanup, and is what prevents quiescence-blocked
-  // local-CI evidence writes from leaking scarce nonprod environments.
-  "release_nonprod_environment_lease",
-  // Renewing keeps a gate that is already running alive through a drain, so
-  // its verdict is not lost to the lease lapsing mid-build (2026-09-24).
-  "renew_nonprod_environment_lease",
-]);
-
-function isToolAllowedDuringQuiescence(toolName: string, tool: ToolDefinition | undefined): boolean {
-  if (toolName === "get_quiescence_status") return true;
-  if (tool?.sideEffect === false) return true;
-  return QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS.has(toolName);
-}
 
 async function quiescenceRefusalResult(
   toolName: string,
