@@ -11,6 +11,8 @@ There is one phase, and the change ships as one PR on `feat/stage-effort-tier`. 
 
 ## Phase 1: Declare, carry and route the tier
 
+Objectives covered: OBJ-DECLARE, OBJ-NEVER-DEMOTE, OBJ-UNCHANGED, OBJ-ROUTE (spec §5).
+
 | Deliverable | Files | Covers | Backlog |
 |---|---|---|---|
 | Stage effort and its resolver | `work-shapes.ts` (`effort`, `resolveStageEffort`), standing, coworker and orchestration shape files | AC-G2, AC-G5 | BI-B3BBF9AD |
