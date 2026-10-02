@@ -10,6 +10,7 @@ import type {
 
 import type { Intent } from "@/lib/ui-model/statusColors";
 import { isRecord } from "@/lib/shared/coerce";
+import { pointInRing } from "./ring-ray-cast";
 
 export const MAX_CARTESIAN_SCENE_ZONES = 6;
 export const MAX_CARTESIAN_SCENE_PLACEMENTS = 1_000;
@@ -407,30 +408,12 @@ export function cartesianZoneBounds(
   };
 }
 
-function pointInPolygon(
-  point: CartesianCoordinate,
-  polygon: readonly CartesianCoordinate[],
-): boolean {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[i]!;
-    const b = polygon[j]!;
-    const crosses =
-      a.y > point.y !== b.y > point.y &&
-      point.x <
-        ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y || Number.EPSILON) +
-          a.x;
-    if (crosses) inside = !inside;
-  }
-  return inside;
-}
-
 function zoneContainsPoint(
   zone: CartesianSceneZone,
   point: CartesianCoordinate,
 ): boolean {
   if (zone.geometry.kind === "polygon") {
-    return pointInPolygon(point, zone.geometry.points);
+    return pointInRing(point, zone.geometry.points);
   }
   const { x, y, width, height, rotation = 0 } = zone.geometry;
   const centerX = x + width / 2;
