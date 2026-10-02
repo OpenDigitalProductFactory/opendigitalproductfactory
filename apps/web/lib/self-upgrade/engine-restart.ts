@@ -30,3 +30,26 @@ export const ENGINE_RESTARTED_REASON = "engine-restarted";
 export function engineRestartFailureLog(input: { runStartedAt: Date; databaseStartedAt: Date; deployedSha: string | null; targetSha: string | null }): string {
   return `Reconciled on boot: the container engine restarted during this upgrade (the database server started at ${input.databaseStartedAt.toISOString()}, after the run began at ${input.runStartedAt.toISOString()}), for example Docker Desktop installing an update of its own. Nothing was installed; the platform is on ${input.deployedSha ?? "its previous version"}. Run the upgrade again. target=${input.targetSha ?? "unknown"}`;
 }
+
+/**
+ * Fail the run as `engine-restarted` when the database server started after it
+ * began: the promoter died with the engine, so the swap can never land.
+ * Returns whether it did. Called by the boot/watchdog reconciler.
+ */
+export async function failRunIfEngineRestarted(
+  run: { runId: string; startedAt: Date | null; targetSha?: string | null },
+  deployedSha: string | null,
+  failRun: (runId: string, error: string, reason?: string) => Promise<unknown>,
+  logger: { log: (message: string) => void },
+): Promise<boolean> {
+  if (!run.startedAt) return false;
+  const databaseStartedAt = await readDatabaseStartedAt();
+  if (!databaseStartedAt || !engineRestartedDuringRun(run.startedAt, databaseStartedAt)) return false;
+  await failRun(
+    run.runId,
+    engineRestartFailureLog({ runStartedAt: run.startedAt, databaseStartedAt, deployedSha, targetSha: run.targetSha ?? null }),
+    ENGINE_RESTARTED_REASON,
+  );
+  logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (container engine restarted during the run)`);
+  return true;
+}
