@@ -86,7 +86,7 @@ beforeEach(() => {
   room.refusal.mockReset().mockResolvedValue(null);
   auditRows = [];
   executeMock = vi.fn(async (): Promise<ToolResult> => ({ success: true, message: "ok" }));
-  approvalEnvelopeCreate = vi.fn(async () => ({ id: "ENV-1", status: "proposed", expiresAt: new Date("2026-10-02T03:30:00Z") }));
+  approvalEnvelopeCreate = vi.fn(async () => ({ id: "ENV-1", status: "proposed", expiresAt: new Date(Date.now() + 15 * 60_000) }));
   _setGovernanceForTests({
     resolveAgentGrants: async () => ["backlog_read", "backlog_write"],
     isAllowedByGrants: () => true,
