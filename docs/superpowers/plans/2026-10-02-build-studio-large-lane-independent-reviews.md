@@ -148,6 +148,36 @@ nothing dispatches without it; PR-5 is proof.
    review lane (who requests, on whose connection, what it binds to, what still escalates).
 3. Record the proof as execution evidence on BI-926A7E90 and move the item.
 
+## Traceability
+
+Contracts are the stable surfaces each PR changes or relies on; flows are the runtime paths a
+reviewer can follow end to end. Every id below appears in the plan-coverage receipt.
+
+| Contract | Meaning |
+|---|---|
+| CT-REVIEW-BINDING | `initiativeReviewBinding` + `artifactRef` as the receipt writer and `request_coworker` adapter accept them |
+| CT-IMMUTABLE-READER | the read-only reader a reviewer is handed alongside the writer (`read_source_at_version`, `read_build_artifact_revision`) |
+| CT-DISPATCH-CONTEXT | `InitiativeRecoveryDispatchContext` (workroomId, repositoryFullName, branchName, headSha) |
+| CT-DISPATCHER | `dispatchOwedIndependentReviews` candidates, cooldown, request keys, recorded outcomes |
+| CT-STANDING-CONNECTION | `findStandingConnection` and its per-user variant |
+| CT-ANNEX | the failure-analysis Annex row and the execution evidence on the item |
+
+| Flow | Meaning |
+|---|---|
+| FL-REVIEW-READS-REVISION | reviewer receives the packet, reads the revision by digest, records the receipt bound to the same revision id |
+| FL-ROOM-TO-CONTEXT | a Build Studio room in plan resolves to a dispatch context and canonical artifact, or a typed unavailable reason |
+| FL-DISPATCH-TICK | reconciliation tick → candidates → owed routes → cooldown → request on a connection → room-recorded outcome |
+| FL-CONNECTION-SELECT | Build Studio room → requesting user → preferred live connection that admits `request_coworker` |
+| FL-LIVE-PROOF | one blocked large build receives its reviews and crosses plan→build with no click |
+
+| PR | Requirements | Contracts | Flows | Verification |
+|---|---|---|---|---|
+| PR-1 | OBJ-BIND | CT-REVIEW-BINDING, CT-IMMUTABLE-READER | FL-REVIEW-READS-REVISION | AC-2 |
+| PR-2 | OBJ-BIND | CT-DISPATCH-CONTEXT | FL-ROOM-TO-CONTEXT | AC-2, AC-4 |
+| PR-3 | OBJ-ROUTE, OBJ-PRESERVE | CT-DISPATCHER | FL-DISPATCH-TICK | AC-1, AC-3, AC-4 |
+| PR-4 | OBJ-ROUTE | CT-STANDING-CONNECTION | FL-CONNECTION-SELECT | AC-1 |
+| PR-5 | OBJ-ROUTE, OBJ-PRESERVE | CT-ANNEX | FL-LIVE-PROOF | AC-5, AC-6 |
+
 ## What stays a human decision
 
 A reviewer that fails the design, an accepted or deferred residual risk, and any `xlarge` build
