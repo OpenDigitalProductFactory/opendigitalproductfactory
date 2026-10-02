@@ -199,37 +199,6 @@ export async function reconcileSelfUpgradeRunsOnBoot(
 }
 
 /**
- * BI-5ACBAC50 — attach promote.sh step 7d's service-reconcile outcome to the run.
- * The run is marked succeeded by the boot reconcile above, before the promoter
- * reaches 7d, so the outcome can only be picked up afterwards: once a few minutes
- * after boot and on every periodic tick. Idempotent and non-fatal.
- */
-export async function attachServiceReconcileOutcomeToRun(
-  logger: Pick<Console, "log" | "error"> = console,
-): Promise<void> {
-  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return;
-  try {
-    const { readFile } = await import("node:fs/promises");
-    const { attachServiceReconcileOutcome, SERVICE_RECONCILE_OUTCOME_PATH } = await import(
-      "@/lib/self-upgrade/service-reconcile-outcome"
-    );
-    const { findSucceededRunForPromotedSha, recordServiceReconcileOutcome } = await import(
-      "@/lib/self-upgrade/run-store"
-    );
-    const attached = await attachServiceReconcileOutcome({
-      readOutcome: () => readFile(SERVICE_RECONCILE_OUTCOME_PATH, "utf8").catch(() => null),
-      findRun: findSucceededRunForPromotedSha,
-      record: recordServiceReconcileOutcome,
-    });
-    if (attached) {
-      logger.log(`[self-upgrade-reconcile] ${attached.runId} service-reconcile outcome: ${attached.outcome}`);
-    }
-  } catch (err) {
-    logger.error("[self-upgrade-reconcile] service-reconcile outcome attach failed (non-fatal):", err);
-  }
-}
-
-/**
  * Boot/periodic reconcile for QuiescenceRun rows orphaned by a self-swap — the
  * quiescence-coordinator counterpart to reconcileSelfUpgradeRunsOnBoot. A real
  * upgrade recreates this very portal, killing the orchestrator before it can
@@ -1063,10 +1032,7 @@ export async function register() {
       void resetStuckQuiescenceLevelOnBoot();
 
       void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error)); void import("@/lib/jobs/postgres/start").then((m) => m.startPostgresJobWorker()).catch((error) => console.error("[jobs/postgres] worker failed to start", error)); // BI-85E6EF14: a no-op unless DPF_JOBS_ENGINE routes functions to the owned engine
-      void reconcileSelfUpgradeRunsOnBoot();
-      // The promoter reaches step 7d a minute or two after this portal boots.
-      setTimeout(() => void attachServiceReconcileOutcomeToRun(), 5 * 60 * 1000);
-      void import("@/lib/federation/boot-reconcile").then((m) => m.reconcileFederationDurableStateOnBoot()).catch((error) => console.error("[federation] durable-state reconcile failed", error));
+      void reconcileSelfUpgradeRunsOnBoot(); void import("@/lib/federation/boot-reconcile").then((m) => m.reconcileFederationDurableStateOnBoot()).catch((error) => console.error("[federation] durable-state reconcile failed", error)); void import("@/lib/self-upgrade/service-reconcile-attach").then((m) => m.scheduleServiceReconcileAttach()).catch((error) => console.error("[self-upgrade] service-reconcile attach scheduling failed", error)); // BI-DB87D925
 
       // Periodic safety net — cron-independent (the boot reconcile above and the
       // Inngest cron can BOTH miss this). If a swap's orchestrator dies while the
@@ -1079,7 +1045,6 @@ export async function register() {
         () => {
           void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error));
           void reconcileSelfUpgradeRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
-          void attachServiceReconcileOutcomeToRun();
           // Backstop: force-remove any promoter container orphaned by a portal
           // restart that killed runPromoter's own timeout timer (BI-3EC7FDB0).
           void sweepOrphanedPromoterContainers({ maxAgeMs: 30 * 60 * 1000 });

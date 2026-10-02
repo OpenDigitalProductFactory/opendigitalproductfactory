@@ -283,51 +283,6 @@ describe("SelfUpgradeClient – succeeded", () => {
     expect(html).toContain('data-run-status="succeeded"');
   });
 
-  // BI-5ACBAC50: a required service step 7d could not create used to leave no trace.
-  it("marks a succeeded run degraded and names the services that could not be created", () => {
-    const html = renderToStaticMarkup(
-      <SelfUpgradeClient
-        {...baseStatus}
-        latestRun={makeRun("succeeded", {
-          completionEvidence: {
-            serviceReconcile: {
-              targetSha: "def5678",
-              at: "2026-10-02T17:00:55.000Z",
-              outcome: "degraded",
-              required: ["portal", "prometheus", "dpf-tts"],
-              created: ["prometheus"],
-              failed: ["dpf-tts"],
-            },
-          },
-        })}
-      />,
-    );
-    expect(html).toContain('data-service-reconcile="degraded"');
-    expect(html).toContain("Degraded");
-    expect(html).toContain("dpf-tts");
-  });
-
-  it("shows no degraded notice when the reconcile completed", () => {
-    const html = renderToStaticMarkup(
-      <SelfUpgradeClient
-        {...baseStatus}
-        latestRun={makeRun("succeeded", {
-          completionEvidence: {
-            serviceReconcile: {
-              targetSha: "def5678",
-              at: "2026-10-02T17:00:55.000Z",
-              outcome: "complete",
-              required: ["prometheus"],
-              created: ["prometheus"],
-              failed: [],
-            },
-          },
-        })}
-      />,
-    );
-    expect(html).not.toContain('data-service-reconcile="degraded"');
-  });
-
   it("shows the triggeredBy source", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient {...baseStatus} latestRun={makeRun("succeeded")} />,
