@@ -61,6 +61,8 @@ export type PrepareSourceInput = {
    * single-purpose install boxes where the install clone is never dirty).
    */
   workspacePath?: string;
+  /** Delay between retries of the host-clone remote read (tests pass 0). */
+  remoteReadRetryDelayMs?: number;
 };
 
 export type PrepareSourceResult =
@@ -124,7 +126,7 @@ export async function prepareUpgradeSource(
   // BI-A8A7CCFD — workspace-isolated upstream merge.
   if (workspacePath) {
     return prepareUpgradeSourceInWorkspace(
-      { hostSourcePath, remote, branch, installBranch, workspacePath },
+      { hostSourcePath, remote, branch, installBranch, workspacePath, remoteReadRetryDelayMs: input.remoteReadRetryDelayMs },
       run,
     );
   }
@@ -169,7 +171,12 @@ type WorkspaceMergeInput = {
   branch: string;
   installBranch: string;
   workspacePath: string;
+  remoteReadRetryDelayMs?: number;
 };
+
+/** Attempts at reading the host clone's upstream URL before falling back. */
+const HOST_REMOTE_READ_ATTEMPTS = 3;
+const DEFAULT_REMOTE_READ_RETRY_DELAY_MS = 250;
 
 /** Internal-remote name the workspace uses for the upstream URL it pulls from.
  *  Kept distinct from `origin` (which points at the install clone) so the two
@@ -221,19 +228,45 @@ async function configureUpstreamRemote(
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   // Read the install clone's upstream URL — that's the canonical source of
   // truth for "where the upgrade target lives" (typically github).
-  const urlResult = await run([
-    "-C",
-    input.hostSourcePath,
-    "config",
-    "--get",
-    `remote.${input.remote}.url`,
-  ]);
-  const upstreamUrl = trim(urlResult.stdout);
-  if (urlResult.code !== 0 || !upstreamUrl) {
-    return {
-      ok: false,
-      message: `install clone has no '${input.remote}' remote configured; cannot resolve upgrade target URL`,
-    };
+  //
+  // BI-574098A3: on a contributor host that clone is the shared root clone,
+  // whose .git/config every session rewrites; one unreadable read failed a run
+  // in 4 s and started a 30-minute cooldown. Retry briefly, then fall back to
+  // the URL this workspace recorded on its previous run — the workspace is
+  // never written by contributor sessions. Only a first-ever run still depends
+  // on the root clone alone.
+  const delayMs = input.remoteReadRetryDelayMs ?? DEFAULT_REMOTE_READ_RETRY_DELAY_MS;
+  let upstreamUrl = "";
+  for (let attempt = 1; attempt <= HOST_REMOTE_READ_ATTEMPTS && !upstreamUrl; attempt++) {
+    if (attempt > 1 && delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    const urlResult = await run([
+      "-C",
+      input.hostSourcePath,
+      "config",
+      "--get",
+      `remote.${input.remote}.url`,
+    ]);
+    if (urlResult.code === 0) upstreamUrl = trim(urlResult.stdout);
+  }
+  if (!upstreamUrl) {
+    const recorded = await run([
+      "-C",
+      input.workspacePath,
+      "config",
+      "--get",
+      `remote.${UPSTREAM_REMOTE_IN_WORKSPACE}.url`,
+    ]);
+    const recordedUrl = recorded.code === 0 ? trim(recorded.stdout) : "";
+    if (!recordedUrl) {
+      return {
+        ok: false,
+        message: `install clone has no '${input.remote}' remote configured (read ${HOST_REMOTE_READ_ATTEMPTS} times) and the upgrade workspace has no recorded upstream; cannot resolve upgrade target URL`,
+      };
+    }
+    console.warn(
+      `[self-upgrade] install clone '${input.remote}' remote unreadable after ${HOST_REMOTE_READ_ATTEMPTS} attempts; using the upstream URL the upgrade workspace recorded on its last run (BI-574098A3)`,
+    );
+    return { ok: true };
   }
   // Idempotent: set-url succeeds on an existing remote; add when absent.
   const existing = await run([
