@@ -26,8 +26,9 @@ One PR. The shared style and the bearer-accepting pack route are useful only tog
 ### Task 3: customer-sites scene endpoint
 
 - `apps/web/app/api/v1/map/customer-sites/route.ts` (`// @exposure authenticated`, route sync) requires `view_customer`. It returns:
-  - `{ model, notOnMap, packs }`, where `model` comes from `loadCustomerMap` and `buildGeographicSceneModel`;
-  - `packs` lists the installed packs covering the model's bounds.
+  - `{ model, notOnMap, pack, basemap }`, where `model` comes from `loadCustomerMap` and `buildGeographicSceneModel`;
+  - `pack` is the installed pack covering the model's bounds, and `basemap` says why there is none (`no-pack-installed`, `out-of-coverage`, `nothing-to-show`).
+  - The response type `CustomerSitesMapResponse` lives in `@dpf/types`; the web payload is checked assignable to it.
 - `packages/api-client`: `api.map.customerSites()`.
 - Tests: capability refusal, and the response shape (AC-PMR-SCENE-1).
 

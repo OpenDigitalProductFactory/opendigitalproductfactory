@@ -17,6 +17,7 @@ import { financeEndpoints } from "./endpoints/finance";
 import { directoryEndpoints } from "./endpoints/directory";
 import { storefrontEndpoints } from "./endpoints/storefront";
 import { surfaceEndpoints } from "./endpoints/surfaces";
+import { mapEndpoints } from "./endpoints/map";
 
 export function createApiClient(config: ApiClientConfig) {
   const client = new DpfClient(config);
@@ -38,6 +39,7 @@ export function createApiClient(config: ApiClientConfig) {
     directory: directoryEndpoints(client),
     storefront: storefrontEndpoints(client),
     surfaces: surfaceEndpoints(client),
+    map: mapEndpoints(client),
   };
 }
 

@@ -11,3 +11,4 @@ export * from "./nearby";
 export * from "./storefront-discovery";
 export * from "./authorized-surface";
 export * from "./geographic-style";
+export * from "./map-scene";
