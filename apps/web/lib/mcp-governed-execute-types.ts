@@ -177,6 +177,12 @@ export type GovernedExecuteResult = ToolResult & {
      * call. The verdict never changes the outcome.
      */
     permit?: { handle: string; verdict: string };
+    /**
+     * GPP Phase 2 PR-G: when `permit.handle` expires (ISO-8601). Present
+     * exactly when `permit` is. The MCP route returns the two together on
+     * the tool result's `_meta` (lib/gpp/permit-carriage.ts).
+     */
+    permitHandleExpiresAt?: string;
   };
 };
 

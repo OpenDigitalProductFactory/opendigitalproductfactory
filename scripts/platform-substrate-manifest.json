@@ -64,6 +64,7 @@
         "dpf-source-code:/workspace",
         "sandbox_workspace:/sandbox-workspace",
         "browser_evidence:/evidence:ro",
+        "map_data:/var/lib/dpf/maps",
         "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
         "${DPF_HOST_INSTALL_PATH:-.}:/host-dpf",
         "${DPF_WORKTREE_BASE:-${DPF_HOST_INSTALL_PATH:-.}-worktrees}:/host-worktrees",

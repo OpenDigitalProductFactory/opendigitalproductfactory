@@ -5,7 +5,7 @@ status: active
 # Durable jobs on Postgres: replace the Inngest server with an owned `@dpf/jobs` engine
 
 **Plan:** [dependency diet, move M3](../plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md) · **Epic:** `EP-8DC217EB` · **Backlog:** `BI-068BBA33` · **Sequenced behind:** BET-11 scheduling substrate (`BI-B72328D5`) · **Doctrine:** `absorb-dont-adopt` (commandment)
-**Decision:** `own_postgres_jobs`, founder, 2026-09-26 (plan §10.6.1). §8 keeps the inputs, which the `principle_decide` record still owes. The DPF MCP server was unreachable from the deciding session. The §7 benchmarks gate turning the Postgres engine on (§6 step 2), not the facade (§6 step 1).
+**Decision:** `own_postgres_jobs`, founder, 2026-09-26 (plan §10.6.1), filed in the WWMD ledger as DI-E52E32AEA1E4 on 2026-09-29. §8 keeps the inputs. **Phase 2:** `BI-85E6EF14`, [plan](../plans/2026-09-29-m3-phase-2-postgres-job-engine-plan.md); §5.2–§5.5 were amended for it on 2026-09-29 (concurrency limit N, cron, engine selection). The §7 benchmarks gate turning the Postgres engine on (§6 step 2), not the facade (§6 step 1).
 
 ## 1. Problem
 
@@ -112,17 +112,24 @@ A type-level test pins the facade to the options in use. Anything outside §2 is
 | Table | Purpose | Key columns |
 |---|---|---|
 | `JobEvent` | the event log (replaces Inngest's event store) | `id` (sender-supplied or generated; unique, which gives today's send-side dedupe), `name`, `data jsonb`, `receivedAt` |
-| `JobRun` | one run of one function | `functionId`, `eventId`, `status` (`queued`, `running`, `sleeping`, `waiting`, `completed`, `failed`, `cancelled`), `attempt`, `runAfter`, `concurrencyKey`, `leaseOwner`, `leaseExpiresAt`, `error` |
-| `JobStep` | memoised step results | `(runId, stepId)` unique; `output jsonb`; `completedAt` |
-| `JobWait` | a run parked on `waitForEvent` | `runId`, `eventName`, `matchExpr`, `expiresAt` |
+| `JobRun` | one run of one function | `functionKey`, `eventId` (FK to `JobEvent`, restrict), `status` (`queued`, `running`, `sleeping`, `waiting`, `completed`, `failed`, `cancelled`), `attempt`, `runAfter`, `concurrencyKey`, `leaseOwner`, `leaseExpiresAt`, `error` |
+| `JobStep` | memoised step results | `(runId, stepKey)` unique; `output jsonb`; `completedAt` |
+| `JobWait` | a run parked on `waitForEvent` | `runId`, `stepKey`, `eventName`, `matchExpr`, `expiresAt` |
+| `JobConcurrencySlot` | one held concurrency slot (§5.3) | `(laneKey, slot)` unique; `runId`; `acquiredAt` |
+| `JobCronState` | next fire time per cron function (§5.4) | `functionKey` unique; `cron`; `nextFireAt` |
 
 Status is a Prisma enum (AGENTS.md §8). Run history reuses the existing `TaskRun` linkage for `/ops`; `JobRun` is the engine's state, not a second reporting model.
 
 ### 5.3 Execution
 
 - **Claim.** `UPDATE "JobRun" SET status='running', leaseOwner=$1, leaseExpiresAt=now()+$2 WHERE id IN (SELECT id FROM "JobRun" WHERE status='queued' AND runAfter<=now() AND <concurrency admissible> ORDER BY runAfter FOR UPDATE SKIP LOCKED LIMIT $n) RETURNING *`.
-- **Concurrency.** Limit 1 per function or per key is enforced by a partial unique index on `(functionId, concurrencyKey) WHERE status='running'`. A second claimer fails the insert-or-update and skips the row. This covers all 84 configs, which are all limit 1. A limit above 1 is out of scope until something needs it; the facade type rejects it. The shared account-scope lane in `admission.ts` becomes a second key column with the same index.
-- **Replay.** Each attempt re-invokes the handler from the top. `step.run` looks up `JobStep(runId, stepId)`: on a hit it returns the stored output without running `fn`; on a miss it runs `fn`, stores the result and continues. Repeated step ids inside one run get Inngest's counter suffix, so replay order matches.
+- **Concurrency (amended 2026-09-29, phase 2).** §2 counted every config as limit 1; phase 1 found otherwise. Five functions run at limit 2 (`assurance-bom`, `assurance-scan`, `build-review-verification`, `document-renditions`, `eval-background`), `mcp-task-run-execute` at limit 4, and the shared build-pipeline lane (`admission.ts`, `scope: "account"`) takes an operator-set limit. A partial unique index can only express limit 1, so the engine uses **slots**:
+  - A *lane* is one concurrency constraint evaluated for one run: `fn:<functionId>:<keyValue>` for a function-scoped constraint (`keyValue` is the evaluated `key` expression, or empty), `account:<keyValue>` for the shared lane. A run belongs to one lane per constraint it declares (at most two).
+  - `JobConcurrencySlot(laneKey, slot, runId)` is unique on `(laneKey, slot)`. A run holds one slot row per lane while it is `running`.
+  - The claim transaction takes `pg_advisory_xact_lock` on each of the run's lanes in sorted order (no deadlock between two claimers), counts the lane's held slots, and inserts the lowest free slot number below the lane's limit. If any lane is full, the run is skipped this round and stays `queued`. The unique index is the backstop: two claimers can never hold the same slot.
+  - Slots are deleted whenever a run leaves `running` (completed, failed, cancelled, sleeping, waiting) and by lease recovery, so a sleeping or waiting run does not hold capacity, as in Inngest.
+  - Limit 1 is the same mechanism with one slot, so the 78 limit-1 configs need no special case.
+- **Replay.** Each attempt re-invokes the handler from the top. `step.run` looks up `JobStep(runId, stepKey)`: on a hit it returns the stored output without running `fn`; on a miss it runs `fn`, stores the result and continues. Repeated step ids inside one run get Inngest's counter suffix, so replay order matches.
 - **Sleep.** `step.sleep` records the step, sets `runAfter=wakeAt`, sets status `sleeping` and ends the invocation. The claimer picks the run up again after `wakeAt`, and replay skips the steps already done.
 - **`waitForEvent`.** It inserts a `JobWait`, sets status `waiting` and ends the invocation. `jobs.send` inserts the `JobEvent` and, in the same transaction, matches open `JobWait` rows by name and match expression. Each match gets the event stored as that step's output, and its run is set back to `queued`. `pg_notify('dpf_jobs', …)` wakes a worker. On timeout, the wait's step output is `null`, as in Inngest.
 - **`cancelOn`.** A matching event moves the run to `cancelled`. A running handler sees this at its next step boundary.
@@ -133,6 +140,16 @@ Status is a Prisma enum (AGENTS.md §8). Run history reuses the existing `TaskRu
 ### 5.4 Cron
 
 The 74 cron functions register in the BET-11 `ScheduledJob` substrate: one `nextRunAt(schedule)` and one tick. The tick inserts a `JobEvent` per due schedule, so cron runs use the same execution path. This is why M3 is sequenced behind BET-11: the scheduler lands once.
+
+**Amended 2026-09-29, phase 2.** `ScheduledJob.schedule` holds named cadences (`"weekly"`), not cron expressions, and the owned evaluator `computeNextCronRun` (`lib/operate/cron-next-run.ts`) treats a `*` minute or hour as 0 and ignores steps. The cron functions use every-minute, `*/5`, `*/15`, `37 */6 * * *` and long minute lists. So:
+
+- `lib/operate/cron-next-run.ts` gains a full five-field evaluator (`*`, lists, ranges, steps, day-of-month/day-of-week OR as in Vixie cron), exported beside `computeNextCronRun`, whose behaviour for the agent-task scheduler does not change. One module, no second parser, no dependency.
+- A Postgres-routed cron function keeps its `nextFireAt` in `JobCronState`. The worker's tick claims due rows with `FOR UPDATE SKIP LOCKED`, inserts the `inngest/scheduled.timer` event and run in the same transaction, and advances `nextFireAt`. A tick that finds several missed fire times fires once (Inngest does not backfill either).
+- `DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED` and the per-job `ScheduledJob.enabled` switch gate the Postgres tick exactly as they gate Inngest crons today.
+
+### 5.5 Engine selection (phase 2)
+
+`DPF_JOBS_ENGINE` selects the engine: `inngest` (default) or `postgres`. `DPF_JOBS_POSTGRES_FUNCTIONS` optionally narrows `postgres` to a comma-separated list of function ids, for the per-domain soak in §6 step 2. Unset, every function stays on Inngest and nothing about today's behaviour changes: the Postgres worker does not start and `jobs.send` goes only to Inngest. With a function routed to Postgres, `jobs.send` writes the `JobEvent` (which starts Postgres-routed runs and resolves waits) and also forwards to Inngest while any function remains there, so an event reaches every function that listens to it regardless of engine.
 
 ## 6. Migration
 
@@ -147,6 +164,32 @@ The 74 cron functions register in the BET-11 `ScheduledJob` substrate: one `next
 
 **Existing installs.** Runs in flight in Inngest at upgrade time must finish before its container goes. One release carries both engines, with every function on Postgres and Inngest draining. `/ops/self-upgrade` quiescence already waits for in-flight work. The following release removes the containers, and the `inngest` database is dropped a release after that, once a guard confirms it has no unfinished runs. Existing installs converge on the next `/ops/self-upgrade` with no operator step.
 
+### 6.1 Governed scope manifest (phase 2, `BI-85E6EF14`)
+
+**OBJ-M3-PARITY:** With the engine flag unset, job execution is unchanged: every function runs on Inngest exactly as it does today.
+
+**OBJ-M3-SEMANTICS:** A function routed to Postgres gets the facade's durable semantics: memoised steps across replays, sleep, waitForEvent with match and timeout, cancelOn, retries then onFailure, and send-side dedupe.
+
+**OBJ-M3-CONCURRENCY:** Postgres-routed runs never exceed any declared concurrency limit, limit 1 or N, per function key or on the shared account lane.
+
+**OBJ-M3-RECOVERY:** A run interrupted by a process death resumes exactly once, without re-executing a memoised step.
+
+**OBJ-M3-SCHEMA:** The engine's tables arrive in one forward-only migration that applies against any existing data state.
+
+**OBJ-M3-EVIDENCE:** The §7 benchmarks run on real Postgres and their results are recorded in this spec before the flag is turned on anywhere.
+
+| Acceptance ID | Objective IDs | Acceptance statement |
+| --- | --- | --- |
+| AC-M3-FLAG-OFF | OBJ-M3-PARITY | With `DPF_JOBS_ENGINE` unset, the existing job test suites pass unchanged, the Postgres worker does not start, and `jobs.send` reaches only Inngest. |
+| AC-M3-REPLAY | OBJ-M3-SEMANTICS | A step completed in an earlier attempt returns its stored output on replay without calling its function again, including repeated step ids in one run. |
+| AC-M3-PARK | OBJ-M3-SEMANTICS | `sleep`/`sleepUntil` and `waitForEvent` park the run without holding a worker or a concurrency slot; a matching event resumes the wait with that event, and a timeout resumes it with `null`. |
+| AC-M3-FAIL | OBJ-M3-SEMANTICS | A throwing handler retries up to its `retries` count, then runs `onFailure` with the failure event and ends `failed`; a `cancelOn` event ends a queued or running run `cancelled`. |
+| AC-M3-DEDUPE | OBJ-M3-SEMANTICS | Two sends with the same event id start one run per triggered function. |
+| AC-M3-LIMIT | OBJ-M3-CONCURRENCY | Under concurrent claimers, runs holding a slot on a lane never exceed that lane's limit, for limit 1, limit 2, limit 4 and an account lane shared across functions. |
+| AC-M3-LEASE | OBJ-M3-RECOVERY | Killing the worker mid-step, mid-sleep and mid-wait leaves each run to resume once after lease expiry, with its completed steps not re-executed. |
+| AC-M3-MIGRATION | OBJ-M3-SCHEMA | The migration applies cleanly on a fresh schema and on a copy of the live schema, and creates no object that depends on existing rows. |
+| AC-M3-BENCH | OBJ-M3-EVIDENCE | §7 records p50/p99 event-to-first-step latency, claim throughput under an overlapping cron minute, extra WAL and connections, and the kill-drill results, with the verdict for the flag. |
+
 ## 7. Benchmarks required before implementation
 
 None of these can be run in a sandbox without Postgres; they are acceptance criteria, not results.
@@ -157,6 +200,26 @@ None of these can be run in a sandbox without Postgres; they are acceptance crit
 - **Failure drills:** kill the portal mid-step, mid-sleep and mid-wait, and prove each run resumes exactly once with memoised steps not re-executed.
 
 If Postgres cannot sustain the load with headroom, that is the evidence for `keep_inngest`, and this spec says so rather than bending the design.
+
+### 7.1 Results, 2026-10-01 (BI-85E6EF14, AC-M3-BENCH)
+
+Measured with `apps/web/scripts/job-engine-bench.ts` against PostgreSQL 16.14 in a disposable database on the install's host (macOS, Docker, host load average about 12 at the time). The script recreates the engine tables from the committed migration. Raw output is in the PR.
+
+**Load target.** The busiest hour in Inngest's own `function_runs` (2026-09-24 to 2026-10-01) was 2026-09-29 19:00 UTC with 7,285 runs, almost all cron. Ten times that is 72,850 runs an hour, about 20.2 a second; the benchmark sends 21 a second.
+
+| Measure | Owned Postgres engine | Inngest today (same host) |
+|---|---|---|
+| Sustained throughput at 10x the busiest hour (120 s, 2,520 events) | 2,520 of 2,520 completed, 21.0 runs/s | not re-measured; it carried 7,285 runs in that hour |
+| Event to first step, p50 / p90 / p99 / max | 10.8 / 17.0 / 99.2 / 210.6 ms | 1.7 / 8.2 / 61.1 ms, from `events.received_at` to `function_runs.run_started_at`, 3,630 event-triggered runs |
+| Claim throughput, 125 functions and 84 concurrency configurations, all 74 crons in one minute plus 500 events, two workers | 574 of 574 runs in 1.2 s (470 runs/s); no slot left held | n/a |
+| WAL per run (one event, one step) | about 4.8 KB | n/a |
+| Connections | 6 at peak (pool plus LISTEN) | Inngest server plus Redis |
+| Kill drills: SIGKILL a worker process mid-step, mid-sleep, mid-wait | each run completed exactly once; the completed step before the kill ran once; only the interrupted step ran again | n/a |
+
+**Reading the latency row.** Inngest's figure stops at its own scheduler marking the run started. It excludes the HTTP round trip to the portal's `/api/inngest` that executes the step, so it understates Inngest's event-to-first-step time. The owned engine's figure ends inside the step. Even so, Inngest's p50 is lower; the owned engine's tail (p99 99 ms) is within the same order. Neither is near the scale of the work these functions do, which is measured in seconds.
+
+**Verdict.** The engine sustains the 10x load with headroom: throughput under contention is about 22 times the target, and every drill passes. That meets the bar in §7 for turning the flag on **per domain for a soak** (§6 step 2, `DPF_JOBS_POSTGRES_FUNCTIONS`), watched through `TaskRun` outcomes and the `taskrun-watchdog`. It does not by itself justify a fleet-wide flip: that needs the soak, and the latency gap above should be re-measured on a production-shaped install before Inngest retires (phase 3).
+
 
 ## 8. Decision inputs (`principle_decide`)
 

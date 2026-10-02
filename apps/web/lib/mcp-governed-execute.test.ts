@@ -107,7 +107,7 @@ function applyAuthorityOverrides(
     authorityApprovalTaskResume: approvalTaskResume,
     authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
-    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null,
+    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null, toolPreflight: async () => null,
     ...overrides,
   });
 }
@@ -142,7 +142,7 @@ beforeEach(() => {
     authorityApprovalTaskResume: approvalTaskResume,
     authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
-    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null,
+    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null, toolPreflight: async () => null,
   });
 });
 
@@ -159,7 +159,7 @@ afterEach(() => {
     authorityApprovalTaskResume: null,
     authorityApprovalEnvelopeFinalize: null,
     policyAuthorityProjectionAttempt: null,
-    policyAuthorityEnvelopeReserve: null, authorityExecutedOutcome: null,
+    policyAuthorityEnvelopeReserve: null, authorityExecutedOutcome: null, toolPreflight: null,
   });
 });
 
@@ -440,7 +440,7 @@ describe("governedExecuteTool — happy path", () => {
 });
 
 describe("governedExecuteTool — rejection paths", () => {
-  registerWorkroomAliasCases({ executionCalls: () => executeMock.mock.calls, auditRows: () => auditRows });
+  registerWorkroomAliasCases({ executionCalls: () => executeMock.mock.calls, auditRows: () => auditRows, applyOverrides: applyAuthorityOverrides, authorityInput, normalUser: NORMAL_USER, executeMock: () => executeMock, approvalEnvelopeCreate: () => approvalEnvelopeCreate, authorityRows: () => authorityRows });
 
   it("returns unknown_tool without invoking executeTool", async () => {
     const result = await governedExecuteTool({

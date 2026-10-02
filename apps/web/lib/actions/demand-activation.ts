@@ -2,16 +2,26 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireCapability } from "@/lib/actions/shared/guards";
-import { executeTool } from "@/lib/mcp-tools";
+import { requireCapabilityContext } from "@/lib/actions/shared/guards";
+import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 
+// The /ops/demand board's actions run their tools through the reference
+// monitor as the signed-in human (GPP PR-H, BI-69415B68): the same capability
+// decision requireCapability makes, now with the monitor's audit row and, for
+// the irreversible supersede, its receipt. No agent acts here, so no coworker
+// authority gate runs; none of these tools needs alignment or a precondition.
 async function runDemandTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
-  const { userId } = await requireCapability("manage_backlog");
-  const result = await executeTool(name, args, userId, {
-    routeContext: "/ops/demand",
+  const { userId, userContext } = await requireCapabilityContext("manage_backlog");
+  const result = await governedExecuteTool({
+    toolName: name,
+    rawParams: args,
+    userId,
+    userContext,
+    context: { routeContext: "/ops/demand" },
+    source: "rest",
   });
   if (!result.success) {
     return {

@@ -730,6 +730,16 @@
       ],
       "note": "Mailroom MIME parsing for polled IMAP messages (design 2026-09-09 s3). MIT; same maintainer as nodemailer; about 1M weekly downloads; actively released; no known OSV advisories at adoption. Attachment bytes are never written to disk (metadata only). Bumped to ^3.9.31 on 2026-09-29 (plan 2026-09-08 M7) so its exact nodemailer pin (10.0.12) matches the direct dependency; MIT, npm SLSA v1 provenance, released 2026-09-28 past the release-age floor."
     },
+    "maplibre-gl": {
+      "added": "2026-10-02",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "BI-814F86E1 map renderer. Vetted 2026-10-01: BSD-3-Clause; MapLibre org (4 maintainers, board@maplibre.org); on npm since 2020-12; npm SLSA v1 provenance attestation; pnpm scan:deps (OSV) clean. No existing dependency renders maps. Evaluation: docs/security/tool-evaluations/2026-09-25-maplibre-pmtiles.md; WWMD maplibre-pmtiles-inhouse-wrapper (high confidence). Pinned exactly; loaded only by dynamic import in GeographicSceneCanvas."
+    },
     "markdown-it": {
       "added": "2026-09-29",
       "workspaces": [
@@ -832,6 +842,16 @@
         "dev"
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "pmtiles": {
+      "added": "2026-10-02",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "BI-814F86E1 single-file vector tile archives served by byte range from the install. Vetted 2026-10-01: BSD-3-Clause; Protomaps (1 npm maintainer, bdon) — a bus-factor risk accepted because the format is an open spec (PMTiles v3) and the client is small enough to absorb if abandoned; no npm provenance attestation; on npm since 2021-02; pnpm scan:deps (OSV) clean. No existing dependency covers it. Pinned exactly."
     },
     "postcss": {
       "added": "2026-06-21",
