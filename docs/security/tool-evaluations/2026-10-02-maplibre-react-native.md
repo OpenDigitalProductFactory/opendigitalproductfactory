@@ -1,7 +1,7 @@
 # Tool Evaluation: MapLibre React Native
 
 **Backlog item:** `BI-3DAE2169` (epic `EP-SPATIAL-OPERATIONAL-VIEWS`)
-**Decision:** conditional approval, pending operator approval
+**Decision:** conditional approval, approved by the operator on 2026-10-02
 **Risk:** low
 **Confidence:** 0.8
 **Re-evaluate after:** 2027-04-02, on any major version, on an upgrade of the bundled MapLibre Native SDKs, or immediately after a security advisory
@@ -86,4 +86,4 @@ Run on 2026-10-02 in an isolated scratch directory, with install scripts disable
 
 ## Approval
 
-This evaluation recommends conditional approval. Adoption needs the operator's approval as the human gate in the evaluation pipeline. It is recorded in the backlog item before the dependency is added.
+The operator (Mark Bodman) approved adoption on 2026-10-02 under the conditions above, as the human gate of the evaluation pipeline. The approval is recorded in `BI-3DAE2169`.
