@@ -87,7 +87,7 @@ import { prisma } from "@dpf/db";
 import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 // GPP Phase 2 PR-C: a replayed permit handle rides in tools/call params._meta.
-import { presentedPermitHandle } from "@/lib/gpp/permit-carriage";
+import { permitResultMeta, presentedPermitHandle } from "@/lib/gpp/permit-carriage";
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
 // ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
@@ -649,6 +649,8 @@ async function handleToolsCall(
   if (structured !== undefined) {
     responseBody["structuredContent"] = structured;
   }
+  const meta = permitResultMeta({ data: result.data, governance: executed.governance }); // GPP PR-G, additive
+  if (meta) responseBody["_meta"] = meta;
   return jsonRpcOk(id, responseBody);
 }
 

@@ -110,7 +110,19 @@ export type PromotionContext = {
   bindings: readonly GppBinding[];
   shadowList: readonly string[];
   /** Every registered tool, classified by the runtime's classifyConsequentialTool. */
-  tools: ReadonlyArray<{ name: string; consequential: boolean; alignmentRequired: boolean }>;
+  tools: ReadonlyArray<{
+    name: string;
+    consequential: boolean;
+    alignmentRequired: boolean;
+    /**
+     * PR-G: a call to the tool can reach the reference monitor with no
+     * coworker `agentId` (a person over /api/mcp/call or a server action, or
+     * an agent-unbound token over /api/mcp/v1). The coworker escalation gate
+     * runs only for calls that carry one, so such a call can never carry a
+     * human-checkpoint permit. Omitted means reachable: the guard fails closed.
+     */
+    directCallReachable?: boolean;
+  }>;
   /** Every direct executeTool site outside the monitor (findUnmediatedExecuteSites). */
   directSites: readonly CallSite[];
 };
@@ -163,6 +175,16 @@ export function promotionRefusals(bindingId: string, entry: BindingEnforcementEn
     // the alignment gate runs only for tools whose classification requires it.
     if (binding.admission === "alignment-approve" && !tool.alignmentRequired) {
       refusals.push(`${ref}: the alignment gate does not run for ${name} outside a Workroom, so no call could carry its permit`);
+    }
+    // PR-G, the same rule for the human checkpoint. Its gate (the coworker
+    // escalation gate) runs only for a call that carries a coworker agentId,
+    // so a direct call could never carry its permit and would be refused
+    // outright. Treating a direct call as its own checkpoint is not an
+    // option: the monitor cannot tell a person at the keyboard from an
+    // agent holding that person's session or an agent-unbound token, so it
+    // would let any such agent satisfy a human checkpoint.
+    if (binding.admission === "approved-envelope" && tool.directCallReachable !== false) {
+      refusals.push(`${ref}: ${name} is reachable by a direct call, where the human-checkpoint gate never runs, so a direct call could never carry its permit`);
     }
   }
 

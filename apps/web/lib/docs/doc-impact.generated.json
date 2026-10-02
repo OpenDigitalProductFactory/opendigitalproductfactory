@@ -1438,6 +1438,9 @@
     "apps/web/lib/work-management/room-cycle-adapter.ts": [
       "docs/architecture/2026-08-20-governed-autonomy-architecture.md"
     ],
+    "apps/web/lib/work-management/room-participant-invitation-preflight.server.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
     "apps/web/lib/work-management/room-participation.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -3800,6 +3803,7 @@
       "apps/web/lib/mcp-governed-execute.ts",
       "apps/web/lib/tak/consequential-tool-policy.ts",
       "apps/web/lib/work-management/autonomy-envelope.ts",
+      "apps/web/lib/work-management/room-participant-invitation-preflight.server.ts",
       "apps/web/lib/work-management/room-posture.ts",
       "apps/web/lib/work-management/room-shapes.ts",
       "apps/web/lib/work-posture/derive.ts",

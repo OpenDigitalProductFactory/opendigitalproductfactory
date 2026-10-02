@@ -74,6 +74,12 @@ export function countByFile(sites: readonly CallSite[]): Record<string, number> 
  * in Phase 2; the rest are internal writes that stay allowlisted, because read
  * and internal-write tools never need a permit.
  *
+ * PR-H (Phase 2) routed two of the four dynamic sites through the monitor:
+ * lib/actions/demand-activation.ts and lib/mcp/packs/screen-pack.ts. The two
+ * proposal-approval sites stay until an admin's approval of an
+ * AgentActionProposal is carried into the monitor as an approved authority
+ * envelope (plan, PR-H as built).
+ *
  * unmediated-reach-ratchet.test.ts fails when a file appears here that has no
  * sites, when a count here exceeds the live count (shrink it), and when a live
  * file or count exceeds this list (a new path around the monitor).
@@ -82,7 +88,6 @@ export const KNOWN_UNMEDIATED_EXECUTE_SITES: Readonly<Record<string, number>> = 
   "app/api/admin/ops/execute-proposal/route.ts": 1,
   "lib/actions/agent-coworker.ts": 5,
   "lib/actions/build.ts": 1,
-  "lib/actions/demand-activation.ts": 1,
   "lib/actions/demand-estimate.ts": 1,
   "lib/actions/proposals.ts": 1,
   "lib/actions/request-brand-extraction.ts": 1,
@@ -93,5 +98,4 @@ export const KNOWN_UNMEDIATED_EXECUTE_SITES: Readonly<Record<string, number>> = 
   "lib/build/plan-on-approval.ts": 1,
   "lib/build/resume-pre-build-phase.ts": 3,
   "lib/build/ship-on-review-approval.ts": 3,
-  "lib/mcp/packs/screen-pack.ts": 1,
 };

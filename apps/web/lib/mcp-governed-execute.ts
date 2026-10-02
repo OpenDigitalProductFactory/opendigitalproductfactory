@@ -96,14 +96,17 @@ export function registerToolLifecycleHook(hook: ToolLifecycleHook): () => void {
 // override these without mocking the import system.
 export type GrantResolver = (agentId: string) => Promise<string[]>;
 export type GrantPredicate = (toolName: string, grants: string[]) => boolean;
+export type GovernedToolPreflight = (event: ToolLifecycleEvent) => Promise<ToolResult | null>;
 
 let _resolveAgentGrants: GrantResolver | null = null;
 let _isAllowedByGrants: GrantPredicate | null = null;
+let _toolPreflightOverride: GovernedToolPreflight | null = null;
 let _lifecycleHooks: ToolLifecycleHook[] = [];
 
 export function _setGovernanceForTests(overrides: {
   resolveAgentGrants?: GrantResolver | null;
   isAllowedByGrants?: GrantPredicate | null;
+  toolPreflight?: GovernedToolPreflight | null;
   executeTool?: ((
     toolName: string,
     params: Record<string, unknown>,
@@ -130,6 +133,7 @@ export function _setGovernanceForTests(overrides: {
 }): void {
   _resolveAgentGrants = overrides.resolveAgentGrants ?? null;
   _isAllowedByGrants = overrides.isAllowedByGrants ?? null;
+  _toolPreflightOverride = overrides.toolPreflight ?? null;
   _executeToolOverride = overrides.executeTool ?? null;
   setGovernedToolAuditOverridesForTests({
     create: overrides.toolExecutionCreate ?? null,
@@ -171,6 +175,34 @@ async function isAllowedByGrants(toolName: string, grants: string[]): Promise<bo
   return isToolAllowedByGrants(toolName, grants);
 }
 
+async function runGovernedToolPreflight(event: ToolLifecycleEvent): Promise<ToolResult | null> {
+  if (_toolPreflightOverride) return _toolPreflightOverride(event);
+  if (event.context?.authSource === "oauth" && typeof event.rawParams.capsuleId === "string") {
+    const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
+    const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === event.toolName);
+    const refusal = await workroomTargetAccessRefusal({
+      params: event.rawParams,
+      userId: event.userId,
+      ...event.context,
+      toolName: event.toolName,
+      action: tool?.sideEffect !== false,
+    });
+    if (refusal) return refusal;
+  }
+  if (event.toolName === "invite_room_participant") {
+    const { preflightRoomParticipantInvitation } = await import(
+      "./work-management/room-participant-invitation-preflight.server"
+    );
+    const outcome = await preflightRoomParticipantInvitation({
+      params: event.rawParams,
+      userId: event.userId,
+      agentId: event.context?.agentId,
+    });
+    return outcome.verdict === "allow" ? null : outcome.result;
+  }
+  return null;
+}
+
 /**
  * Preflight for autonomous dispatch: does this agent hold a grant for at least
  * one of the given tools? An agent that can call NOTHING it was handed will
@@ -194,11 +226,6 @@ async function callExecuteTool(
   userId: string,
   ctx?: ToolExecutionContext,
 ): Promise<ToolResult> {
-  if (ctx?.authSource === "oauth") {
-    const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
-    const refusal = await workroomTargetAccessRefusal({ params, userId, ...ctx, toolName, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
-    if (refusal) return refusal;
-  }
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
   return executeTool(toolName, params, userId, ctx);
 }
@@ -359,6 +386,50 @@ export async function governedExecuteTool(
       grants = Array.from(new Set([...grants, ...COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS]));
     }
     const agentGrantAllowed = await isAllowedByGrants(args.toolName, grants);
+
+    // Deterministic target preconditions come after capability/grant checks so
+    // they disclose nothing to an unauthorized caller, but before authority
+    // escalation because approving an impossible call cannot make it valid.
+    // BI-061D7192: an unadmitted coworker repeatedly produced approval cards
+    // for invite/recovery calls that the exact-room gate then refused.
+    if (humanCapabilityAllowed && agentGrantAllowed) {
+      const preflight = await runGovernedToolPreflight({
+        toolName: args.toolName,
+        rawParams: args.rawParams,
+        userId: args.userId,
+        userContext: args.userContext,
+        context: args.context,
+        source: args.source,
+      });
+      if (preflight) {
+        const result: GovernedExecuteResult = {
+          ...preflight,
+          governance: { rejected: "precondition_denied" },
+        };
+        const auditRow = await writeAudit({
+          toolName: args.toolName,
+          rawParams: args.rawParams,
+          result,
+          userId: args.userId,
+          source: args.source,
+          context: args.context,
+          durationMs: 0,
+        });
+        if (auditRow?.id && consequence.consequential) {
+          await writeToolExecutionReceipt({
+            auditRowId: auditRow.id,
+            buildId: null,
+            rawParams: args.rawParams,
+            result,
+            toolName: args.toolName,
+            context: args.context,
+            consequential: true,
+            governedArgs: args,
+          });
+        }
+        return result;
+      }
+    }
 
     const authorityGate = await enforceCoworkerToolAuthority(
       args,
@@ -578,6 +649,7 @@ export async function governedExecuteTool(
       tokenGrantScopes: args.context?.tokenGrantScopes,
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
       authorityDecisionId,
+      approvedAuthorityEnvelopeId,
       ...(gppPermit?.permitId ? { gppPermitId: gppPermit.permitId } : {}),
       governedDispatch: async (nestedToolName, nestedParams, surfaceInvocation) => {
         const nestedTool = findTool(nestedToolName);
@@ -713,6 +785,7 @@ export async function governedExecuteTool(
     governance: {
       durationMs,
       ...(gppPermit?.handle ? { permit: { handle: gppPermit.handle, verdict: gppPermit.verdict } } : {}),
+      ...(gppPermit?.handle && gppPermit.handleExpiresAt ? { permitHandleExpiresAt: gppPermit.handleExpiresAt } : {}),
     },
   };
 }

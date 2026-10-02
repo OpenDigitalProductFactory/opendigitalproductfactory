@@ -56,7 +56,9 @@ export type EnforcementDowngradeReason =
   /** Infrastructure: the presented handle could not be looked up. */
   | "presented-lookup-failed"
   /** Infrastructure: permit resolution failed as a whole. */
-  | "permit-resolution-failed";
+  | "permit-resolution-failed"
+  /** Infrastructure (PR-G): the permit's use could not be counted, so whether this call took it is unknown. */
+  | "permit-consume-failed";
 
 /** The draft's `gate` descriptor, plus the DPF binding facts behind it. */
 export type PermitGateDescriptor = {
@@ -163,6 +165,7 @@ export function decidePermitEnforcement(input: DecidePermitEnforcementInput): Pe
   if (checks.state !== "valid") return refuse("handle_invalid", checks.state);
   if (checks.lineage === "missing") return refuse("handle_invalid", "lineage-missing");
   if (checks.lineage === "lookup_failed") return downgrade("lineage-lookup-failed");
+  if (detail.consumeFailed === true) return downgrade("permit-consume-failed");
   if (checks.lineage === "unsealed" && match.entry.lineage !== "unsealed-accepted") {
     return downgrade("lineage-unsealed-not-accepted");
   }

@@ -112,7 +112,7 @@ function makeStore(h: Pick<Harness, "permits" | "observations" | "consumed" | "l
       return row;
     },
     findPermitByPermitId: async (permitId) => h.permits.find((row) => row.permitId === permitId) ?? null,
-    consumePermit: async (row) => { h.consumed.push(row.id); },
+    consumePermit: async (row) => { h.consumed.push(row.id); return true; },
     createObservation: async (data) => { h.observations.push(data); },
     findLineage: async () => h.lineage.value,
   };

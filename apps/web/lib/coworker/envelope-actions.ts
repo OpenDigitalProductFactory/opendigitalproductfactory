@@ -17,7 +17,9 @@
 //
 // BI-0F9C291C / EP-COWORKER-INTERACTIVITY.
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
+import { isRecord } from "@/lib/shared/coerce";
+import { humanApprovalMarker } from "./human-approved-execution";
 
 import {
   describeTransitionError,
@@ -38,6 +40,7 @@ export interface EnvelopeRow {
   chatMessageId: string | null;
   manifestActionId: string;
   argsJson: unknown;
+  approvalBindingFingerprint?: string | null;
   rationale: string;
   status: EnvelopeStatus;
   createdAt: Date;
@@ -131,9 +134,22 @@ export async function approveEnvelope(
     };
   }
 
+  // Bound authority envelopes store metadata, not executable arguments. Screen
+  // action envelopes replay argsJson verbatim, so never add metadata to them.
+  const boundArgs = load.envelope.approvalBindingFingerprint
+    && isRecord(load.envelope.argsJson) && isRecord(load.envelope.argsJson.approvalBinding)
+    ? load.envelope.argsJson : null;
   const updated = await prisma.coworkerActionEnvelope.update({
     where: { id: envelopeId },
-    data: { status: "approved" },
+    data: {
+      status: "approved",
+      // BI-E6E2E704: distinguish an authenticated person's decision from a
+      // policy-projected envelope. Preserve the existing exact-call binding.
+      ...(boundArgs ? { argsJson: {
+        ...boundArgs,
+        humanApproval: humanApprovalMarker(callerUserId),
+      } as Prisma.InputJsonObject } : {}),
+    },
   });
   // Approving does NOT mark the waiting task working here, and must not.
   // Marking it working at approval time makes the resume's CAS on

@@ -615,6 +615,18 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-capability-consumers.test.mjs"),
       node("scripts/check-capability-consumers.mjs"),
     ]),
+    // Skill frontmatter `capability:` is the permission gate the in-portal seed
+    // loader copies verbatim into a free-form Prisma String?. Nothing validated it,
+    // so five invented keys (view_build_studio, view_workspace, ...) passed all 76
+    // guards on 2026-10-01 and were caught only by a manual grep. An invented key
+    // gates the skill on a permission nobody can hold. Source of truth: the
+    // CapabilityKey union / PERMISSIONS record in apps/web/lib/govern/permissions.ts.
+    // Deliberately undeclared inputs: this guard reads BOTH source (permissions.ts)
+    // and markdown (skills/**), so a docs-only diff CAN violate it.
+    guard("skill-capability-key-guard", "Skill Capability Key Guard", [
+      node("--test", "scripts/check-skill-capability-keys.test.mjs"),
+      node("scripts/check-skill-capability-keys.mjs"),
+    ]),
     // W17 (BI-810BEC9C): every route handler under apps/web/app/api declares its
     // exposure class at birth (@exposure pragma collected into route-manifest.json);
     // the A2A cohort may never be grandfathered; "public" claims must agree with
