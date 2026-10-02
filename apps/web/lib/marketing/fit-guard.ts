@@ -8,21 +8,53 @@
 // release.
 
 import { prisma } from "@dpf/db";
-import { assessArchetypeFit, type ArchetypeFitAssessment } from "./archetype-fit";
+import {
+  assessArchetypeFit,
+  buildOwnOfferText,
+  type ArchetypeFitAssessment,
+} from "./archetype-fit";
 
-/** Resolve the active storefront archetype category for an organization. */
-export async function resolveOrgArchetypeCategory(
+export type OrgMarketingFitContext = {
+  category: string | null;
+  /** What the organization itself sells (buildOwnOfferText); null when unstated. */
+  ownOffer: string | null;
+};
+
+/**
+ * Everything the fit check needs for an organization: its archetype category
+ * and its own offer text. The server guard and publish read the same records
+ * the marketing snapshot does, so a badge and a block never disagree.
+ */
+export async function resolveOrgMarketingFitContext(
   organizationId: string,
-): Promise<string | null> {
+): Promise<OrgMarketingFitContext> {
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: {
+      businessContext: { select: { valueProposition: true } },
       storefrontConfig: {
-        select: { archetype: { select: { category: true } } },
+        select: {
+          tagline: true,
+          description: true,
+          archetype: { select: { category: true } },
+          items: {
+            where: { isActive: true },
+            select: { name: true, description: true },
+            orderBy: { sortOrder: "asc" },
+          },
+        },
       },
     },
   });
-  return organization?.storefrontConfig?.archetype?.category ?? null;
+  return {
+    category: organization?.storefrontConfig?.archetype?.category ?? null,
+    ownOffer: buildOwnOfferText({
+      items: organization?.storefrontConfig?.items ?? [],
+      tagline: organization?.storefrontConfig?.tagline,
+      description: organization?.storefrontConfig?.description,
+      valueProposition: organization?.businessContext?.valueProposition,
+    }),
+  };
 }
 
 export type DraftFitGuardResult =
@@ -44,12 +76,12 @@ export async function guardDraftArchetypeFit(input: {
   });
   if (!draft) return null;
 
-  const category = await resolveOrgArchetypeCategory(draft.organizationId);
+  const { category, ownOffer } = await resolveOrgMarketingFitContext(draft.organizationId);
   const text =
     input.contentOverride && input.contentOverride.trim().length > 0
       ? input.contentOverride
       : draft.body;
-  const assessment = assessArchetypeFit({ text, category });
+  const assessment = assessArchetypeFit({ text, category, ownOffer });
 
   if (assessment.blocked) {
     return { ok: false, error: assessment.summary, assessment };

@@ -944,6 +944,10 @@
     "apps/web/lib/marketing/archetype-fit.ts": [
       "docs/platform-usability-standards.md"
     ],
+    "apps/web/lib/marketing/buyer-archetype-value.ts": [
+      "docs/marketing/archetype-owner-quick-guide.md",
+      "docs/platform-usability-standards.md"
+    ],
     "apps/web/lib/marketing/channels/contracts.ts": [
       "docs/architecture/unified-connector-kernel.md"
     ],
@@ -3513,6 +3517,9 @@
       "scripts/pr-health.mjs",
       "scripts/pr-health.test.mjs"
     ],
+    "docs/marketing/archetype-owner-quick-guide.md": [
+      "apps/web/lib/marketing/buyer-archetype-value.ts"
+    ],
     "docs/operations/ai-provider-compliance-source-renewal-runbook.md": [
       "apps/web/lib/routing/provider-suitability/provider-compliance-advisory.ts",
       "apps/web/lib/routing/provider-suitability/source-freshness.ts",
@@ -3591,6 +3598,7 @@
       "apps/web/components/ui/form/SelectField.tsx",
       "apps/web/design/tokens-utilities.test.ts",
       "apps/web/lib/marketing/archetype-fit.ts",
+      "apps/web/lib/marketing/buyer-archetype-value.ts",
       "apps/web/lib/readability/policy.ts",
       "apps/web/lib/shared/use-save-state.test.ts",
       "apps/web/lib/shared/use-save-state.ts",

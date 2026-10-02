@@ -5,6 +5,7 @@ import {
   readActivationProfile,
 } from "@/lib/storefront/archetype-activation";
 import { upsertMarketingStrategyTolerant } from "@/lib/marketing/strategy-bootstrap";
+import { buildOwnOfferText } from "@/lib/marketing/archetype-fit";
 import {
   cleanText,
   dedupeStrings,
@@ -196,6 +197,12 @@ export type MarketingWorkspaceSnapshot = {
     tagline: string | null;
     description: string | null;
     ctaType: string | null;
+    /**
+     * What this business itself sells, as one text (buildOwnOfferText): active
+     * storefront offers, tagline, description and value proposition. The fit
+     * check exempts terms that name the business's own offer (BI-E92B6BC9).
+     */
+    ownOffer: string | null;
   };
   strategy: {
     strategyId: string;
@@ -874,6 +881,11 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
               activationProfile: true,
             },
           },
+          items: {
+            where: { isActive: true },
+            select: { name: true, description: true },
+            orderBy: { sortOrder: "asc" },
+          },
         },
       },
     },
@@ -1086,6 +1098,12 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
       tagline: cleanText(organization.storefrontConfig?.tagline),
       description: cleanText(organization.storefrontConfig?.description),
       ctaType: cleanText(organization.storefrontConfig?.archetype?.ctaType),
+      ownOffer: buildOwnOfferText({
+        items: organization.storefrontConfig?.items ?? [],
+        tagline: organization.storefrontConfig?.tagline,
+        description: organization.storefrontConfig?.description,
+        valueProposition: organization.businessContext?.valueProposition,
+      }),
     },
     strategy: {
       strategyId: strategy.strategyId,

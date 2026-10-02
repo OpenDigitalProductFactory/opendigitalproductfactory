@@ -149,9 +149,21 @@ If saved material uses language from a different business type—for example,
 software-platform copy in a restaurant workspace—the platform flags it as
 imported/test content and blocks it from publishing.
 
+Your own product is never treated as a leak. If your storefront offers or value
+proposition name what you sell — including the platform itself, if you sell or
+resell it — copy about it can be approved and published.
+
 Do not edit only the headline to clear the symptom. Replace or reset the
 off-archetype campaign, its asset tasks, and any dependent draft so audience,
 offer, proof, and measurement all describe the actual business.
+
+## Marketing to Other Business Types
+
+If you sell the platform — as its vendor or as a partner reselling it — your
+buyers are other businesses, and each kind buys for a different reason. The
+Marketing Strategist plans one campaign per buyer type (for example HVAC
+contractors, dental practices, or IT partners), and drafts speak to that
+owner's own day and benefit, while staying inside what is available today.
 
 ## Understand the Two Funnels
 
