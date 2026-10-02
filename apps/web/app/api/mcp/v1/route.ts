@@ -85,6 +85,8 @@ import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
 import { sanitizeForLog } from "@/lib/security/safe-log";
+// GPP Phase 2 PR-C: a replayed permit handle rides in tools/call params._meta.
+import { presentedPermitHandle } from "@/lib/gpp/permit-carriage";
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
 // ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
@@ -483,6 +485,7 @@ async function handleToolsCall(
   }
   const toolName = canonicalWorkroomToolName(params["name"]);
   const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {};
+  const permitHandle = presentedPermitHandle(params["_meta"]);
 
   // load_tools is a transport-level meta-tool, not a governed domain tool:
   // handle it inline (it manages per-token discovery state) and never route it
@@ -583,6 +586,7 @@ async function handleToolsCall(
       authSource: token.source,
       tokenScope, tokenGrantScopes: expandedScopes,
       ...connectionDelegationFor(token),
+      ...(permitHandle ? { permitHandle } : {}),
     },
     source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });

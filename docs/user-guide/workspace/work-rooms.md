@@ -283,6 +283,14 @@ Two things follow from that, and both are deliberate:
 - **A finished room stops setting anything.** Once a room is complete or abandoned, its pace
   no longer counts — work that is over should not keep driving a coworker.
 
+- **A coworker with no recurring work yet can be started by its room.** This is new. Until
+  now, setting a room's pace could only change the rhythm of a coworker that was *already*
+  running something — and whether it was depended on a leftover setting from before the
+  per-coworker control was removed, which nobody could create any more. So some coworkers
+  could be sped up or slowed down, and others could not be started at all, for reasons that
+  had nothing to do with the work. Now the room carrying the work is enough: set its pace to
+  "follows up" or "pushes" and the coworkers in it pick up their standing work.
+
 If no live room carries a coworker's standing work at all, its recurring tasks keep running
 as they were. Nothing is switched off behind your back.
 

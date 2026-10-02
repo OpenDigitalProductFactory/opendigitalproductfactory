@@ -42,7 +42,38 @@ import { logBuildActivity } from "@/lib/mcp/build-tool-helpers";
 import { resolvePlannedFilePaths } from "@/lib/decision-perspective/planned-file-paths";
 import type { DecisionOutcomeType } from "@/lib/decision-perspective/types";
 import type { AutonomousBuildExecutionProfileRefV1 } from "@/lib/build/autonomous-build-eligibility-reader";
-import { enforceBuildInitiativeReadiness } from "@/lib/build/build-entry-gate";
+import type { AutonomousPlaybookMode } from "@/lib/build/build-studio-config";
+import {
+  PLAN_TO_BUILD_PASS,
+  refusePlanToBuild,
+  transitionPlanToBuild,
+} from "@/lib/build/plan-to-build-transition-core";
+
+// GPP C-8 (PR-F): the plan→build gate profiles and the one transition function
+// live in the dependency-leaf plan-to-build-transition-core.ts and are
+// re-exported here, so this module stays the public home of the transition.
+export {
+  PLAN_TO_BUILD_GATE_PROFILES,
+  PLAN_TO_BUILD_GATE_SET,
+  PLAN_TO_BUILD_GATE_SKIPPED_EVENT,
+  PLAN_TO_BUILD_PASS,
+  refusePlanToBuild,
+  transitionPlanToBuild,
+} from "@/lib/build/plan-to-build-transition-core";
+export type {
+  PlanToBuildActivityLogger,
+  PlanToBuildDeclaredStepsOf,
+  PlanToBuildGate,
+  PlanToBuildGateMode,
+  PlanToBuildGateProfile,
+  PlanToBuildPath,
+  PlanToBuildPathCheck,
+  PlanToBuildStep,
+  PlanToBuildStepResult,
+  PlanToBuildStepsOf,
+  PlanToBuildTransitionResult,
+  PlanToBuildWwmdMode,
+} from "@/lib/build/plan-to-build-transition-core";
 
 /**
  * How many consecutive failed plan→build transition attempts before a build
@@ -271,232 +302,265 @@ export async function performPlanToBuildTransition(params: {
   if (build.phase !== "plan" || !canTransitionPhase("plan", "build")) {
     return { kind: "not-ready", reason: `build is in phase ${build.phase}, not plan` };
   }
-  const initiativeReadiness = await enforceBuildInitiativeReadiness({
-    buildId,
-    target: "implementation",
-    targetPhase: "build",
-    expectedPhase: "plan",
-  });
-  if (!initiativeReadiness.allowed) {
-    logBuildActivity(buildId, "phase:gate-blocked", initiativeReadiness.message);
-    return { kind: "gate-blocked", reason: initiativeReadiness.message };
-  }
-
-  // Already escalated → do not re-attempt the failing transition; keep the
-  // resume loop cheap (a single DB read). Operator recovery: re-promote, or
-  // restart the sandbox and manually advance.
   const tracker = readPlanAdvanceTracker(build.buildExecState);
-  if (tracker?.escalatedAt) {
-    return {
-      kind: "escalated",
-      reason: tracker.lastError ?? "prior plan→build transition failures",
-      failures: tracker.failures,
-    };
-  }
-
-  // Structural phase gate.
   const planRec = (build.plan as Record<string, unknown> | null) ?? {};
-  const gate = await checkBuildPhaseGate({
-    buildId,
-    from: "plan",
-    to: "build",
-    evidence: {
-      kind: build.kind,
-      processSize: (planRec.processSize as string | undefined) ?? "medium",
-      deliverableSensitivity: planRec.deliverableSensitivity,
-      qualityFirst: planRec.qualityFirst === true,
-      buildPlan: build.buildPlan,
-      planReview: build.planReview,
-      happyPathState: normalizeHappyPathState(planRec.happyPathState),
-    },
-  });
-  if (!gate.allowed) {
-    logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "plan→build gate not satisfied");
-    return { kind: "gate-blocked", reason: gate.reason ?? "plan→build gate not satisfied" };
-  }
-
-  // Dependency gate (blocking upstream builds).
-  const dependencyGate = deriveFeatureBuildDependencyGate(build);
-  if (!dependencyGate.allowed) {
-    // A dead (abandoned/failed) upstream can NEVER complete, so this dependent
-    // is deadlocked — and decomposition children are exempt from the 7-day
-    // age-out, so nothing else would ever reap it. Terminally abandon it here
-    // with a reason that names the dead sibling(s), instead of re-queuing the
-    // "Waiting on: …" skip forever (BI-7B6D7661).
-    if (dependencyGate.blocked === "unsatisfiable") {
-      return abandonDeadlockedDependent({
-        buildId,
-        parentEpicId: build.parentEpicId,
-        gate: dependencyGate,
-      });
-    }
-    logBuildActivity(buildId, "phase:gate-blocked", dependencyGate.message);
-    return { kind: "gate-blocked", reason: dependencyGate.message };
-  }
-
-  // WWMD kernel gate. Structural gates above are necessary but not sufficient:
-  // principle_decide is the authority on whether plan→build honors platform
-  // principles. The legacy/off path retains its fail-open behavior; an
-  // enforce-mode autonomous lane fails closed because it has no operator at
-  // the seam to interpret a missing decision oracle.
   let decisionOutcome: DecisionOutcomeType = "recommend";
   let executionProfileRef: AutonomousBuildExecutionProfileRefV1 | null = null;
-  const { getAutonomousPlaybookMode } = await import(
-    "@/lib/build/build-studio-config"
-  );
-  const autonomousMode = getAutonomousPlaybookMode();
-  try {
-    const { evaluateBuildStudioPlanAdvancementGate } = await import(
-      "@/lib/decision-perspective/build-studio-gate"
-    );
-    const sensitivity =
-      planRec.deliverableSensitivity === "elevated"
-      || planRec.deliverableSensitivity === "high"
-        ? planRec.deliverableSensitivity
-        : "low";
-    const { deriveTransitionRiskTier } = await import(
-      "@/lib/decision-perspective/graduated-autonomy"
-    );
-    const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
-      db: prisma,
-      build: {
-        buildId: build.buildId,
-        title: build.title ?? build.buildId,
-        phase: "plan",
-        planReview: build.planReview as Parameters<
-          typeof evaluateBuildStudioPlanAdvancementGate
-        >[0]["build"]["planReview"],
-        deliberationSummary: build.deliberationSummary as Parameters<
-          typeof evaluateBuildStudioPlanAdvancementGate
-        >[0]["build"]["deliberationSummary"],
+  let autonomousMode: AutonomousPlaybookMode = "off";
+
+  // Gate order and the phase write live in transitionPlanToBuild; this path's
+  // steps are declared in PLAN_TO_BUILD_GATE_PROFILES["perform-plan-to-build-transition"].
+  const transition = await transitionPlanToBuild<"perform-plan-to-build-transition", PlanToBuildTransitionOutcome>({
+    buildId,
+    path: "perform-plan-to-build-transition",
+    steps: {
+      // Initiative readiness: evaluated inside transitionPlanToBuild with the
+      // canonical gate (enforceBuildInitiativeReadiness, implementation target);
+      // its refusal is mapped below.
+
+      // Already escalated → do not re-attempt the failing transition; keep the
+      // resume loop cheap (a single DB read). Operator recovery: re-promote, or
+      // restart the sandbox and manually advance.
+      "escalation-tracker": () => {
+        if (tracker?.escalatedAt) {
+          return refusePlanToBuild({
+            kind: "escalated",
+            reason: tracker.lastError ?? "prior plan→build transition failures",
+            failures: tracker.failures,
+          });
+        }
+        return PLAN_TO_BUILD_PASS;
       },
-      triggeredByUserId: userId,
-      // BI-70280889: the acumen consults are keyed off these paths; without
-      // them deriveImpactedAcumens sees an empty set and the layer stays inert.
-      plannedFilePaths: await resolvePlannedFilePaths({
-        db: prisma,
-        buildId: build.buildId,
-        buildRowId: build.id,
-      }),
-      ...(autonomousMode !== "off"
-        ? {
-            riskTier: deriveTransitionRiskTier({
-              sensitivity,
-              transition: "plan-advance",
-            }),
-          }
-        : {}),
-    });
-    if (!decisionGate.allowed && autonomousMode !== "shadow") {
-      logBuildActivity(
-        buildId,
-        "wwmd:gate-blocked",
-        decisionGate.operatorMessage ?? "Decision kernel withheld plan→build advancement.",
-      );
-      return {
-        kind: "wwmd-withheld",
-        reason: decisionGate.operatorMessage ?? "decision kernel withheld advancement",
-      };
-    }
-    decisionOutcome =
-      decisionGate.evaluation?.outcomeType
-      ?? (decisionGate.allowed ? "recommend" : "defer");
-    if (!decisionGate.allowed) {
-      logBuildActivity(
-        buildId,
-        "autonomous_playbook_shadow",
-        `Shadow plan gate would withhold advancement: ${decisionGate.operatorMessage}.`,
-      );
-    }
-  } catch (wwmdErr) {
-    console.error("[plan-to-build-transition] WWMD gate errored (failing open):", wwmdErr);
-    if (autonomousMode === "enforce") {
-      logBuildActivity(
-        buildId,
-        "autonomous:needs-decision",
-        "Autonomous plan advancement parked because the decision oracle was unavailable.",
-      );
-      return {
-        kind: "wwmd-withheld",
-        reason: "autonomous decision oracle unavailable",
-      };
-    }
-  }
 
-  if (autonomousMode !== "off") {
-    try {
-      const { resolveAutonomousBuildPhaseEligibility } = await import(
-        "@/lib/build/autonomous-build-phase-runtime"
-      );
-      const autonomy = await resolveAutonomousBuildPhaseEligibility({
-        buildId,
-        checkpoint: "plan",
-        gateOutcome: decisionOutcome,
-      });
-      executionProfileRef = autonomy.executionProfileRef;
-      if (autonomousMode === "enforce" && !autonomy.mayAct) {
-        const reason =
-          autonomy.eligibility.blockers.join(", ")
-          || "autonomous plan advancement is not evidence-cleared";
-        logBuildActivity(
+      // Structural phase gate.
+      "structural-phase-gate": async () => {
+        const gate = await checkBuildPhaseGate({
           buildId,
-          "autonomous:needs-decision",
-          `Plan advancement parked: ${reason}.`,
+          from: "plan",
+          to: "build",
+          evidence: {
+            kind: build.kind,
+            processSize: (planRec.processSize as string | undefined) ?? "medium",
+            deliverableSensitivity: planRec.deliverableSensitivity,
+            qualityFirst: planRec.qualityFirst === true,
+            buildPlan: build.buildPlan,
+            planReview: build.planReview,
+            happyPathState: normalizeHappyPathState(planRec.happyPathState),
+          },
+        });
+        if (!gate.allowed) {
+          logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "plan→build gate not satisfied");
+          return refusePlanToBuild({ kind: "gate-blocked", reason: gate.reason ?? "plan→build gate not satisfied" });
+        }
+        return PLAN_TO_BUILD_PASS;
+      },
+
+      // Dependency gate (blocking upstream builds).
+      "dependency-gate": async () => {
+        const dependencyGate = deriveFeatureBuildDependencyGate(build);
+        if (!dependencyGate.allowed) {
+          // A dead (abandoned/failed) upstream can NEVER complete, so this dependent
+          // is deadlocked — and decomposition children are exempt from the 7-day
+          // age-out, so nothing else would ever reap it. Terminally abandon it here
+          // with a reason that names the dead sibling(s), instead of re-queuing the
+          // "Waiting on: …" skip forever (BI-7B6D7661).
+          if (dependencyGate.blocked === "unsatisfiable") {
+            return refusePlanToBuild(
+              await abandonDeadlockedDependent({
+                buildId,
+                parentEpicId: build.parentEpicId,
+                gate: dependencyGate,
+              }),
+            );
+          }
+          logBuildActivity(buildId, "phase:gate-blocked", dependencyGate.message);
+          return refusePlanToBuild({ kind: "gate-blocked", reason: dependencyGate.message });
+        }
+        return PLAN_TO_BUILD_PASS;
+      },
+
+      // WWMD kernel gate. Structural gates above are necessary but not sufficient:
+      // principle_decide is the authority on whether plan→build honors platform
+      // principles. The legacy/off path retains its fail-open behavior; an
+      // enforce-mode autonomous lane fails closed because it has no operator at
+      // the seam to interpret a missing decision oracle.
+      "wwmd-plan-advancement": async () => {
+        const { getAutonomousPlaybookMode } = await import(
+          "@/lib/build/build-studio-config"
         );
-        return { kind: "wwmd-withheld", reason };
-      }
-    } catch (error) {
-      if (autonomousMode === "enforce") {
-        const reason = `autonomous eligibility unavailable: ${String(
-          error instanceof Error ? error.message : error,
-        ).slice(0, 180)}`;
-        logBuildActivity(buildId, "autonomous:needs-decision", reason);
-        return { kind: "wwmd-withheld", reason };
-      }
-    }
-  }
+        autonomousMode = getAutonomousPlaybookMode();
+        try {
+          const { evaluateBuildStudioPlanAdvancementGate } = await import(
+            "@/lib/decision-perspective/build-studio-gate"
+          );
+          const sensitivity =
+            planRec.deliverableSensitivity === "elevated"
+            || planRec.deliverableSensitivity === "high"
+              ? planRec.deliverableSensitivity
+              : "low";
+          const { deriveTransitionRiskTier } = await import(
+            "@/lib/decision-perspective/graduated-autonomy"
+          );
+          const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
+            db: prisma,
+            build: {
+              buildId: build.buildId,
+              title: build.title ?? build.buildId,
+              phase: "plan",
+              planReview: build.planReview as Parameters<
+                typeof evaluateBuildStudioPlanAdvancementGate
+              >[0]["build"]["planReview"],
+              deliberationSummary: build.deliberationSummary as Parameters<
+                typeof evaluateBuildStudioPlanAdvancementGate
+              >[0]["build"]["deliberationSummary"],
+            },
+            triggeredByUserId: userId,
+            // BI-70280889: the acumen consults are keyed off these paths; without
+            // them deriveImpactedAcumens sees an empty set and the layer stays inert.
+            plannedFilePaths: await resolvePlannedFilePaths({
+              db: prisma,
+              buildId: build.buildId,
+              buildRowId: build.id,
+            }),
+            ...(autonomousMode !== "off"
+              ? {
+                  riskTier: deriveTransitionRiskTier({
+                    sensitivity,
+                    transition: "plan-advance",
+                  }),
+                }
+              : {}),
+          });
+          if (!decisionGate.allowed && autonomousMode !== "shadow") {
+            logBuildActivity(
+              buildId,
+              "wwmd:gate-blocked",
+              decisionGate.operatorMessage ?? "Decision kernel withheld plan→build advancement.",
+            );
+            return refusePlanToBuild({
+              kind: "wwmd-withheld",
+              reason: decisionGate.operatorMessage ?? "decision kernel withheld advancement",
+            });
+          }
+          decisionOutcome =
+            decisionGate.evaluation?.outcomeType
+            ?? (decisionGate.allowed ? "recommend" : "defer");
+          if (!decisionGate.allowed) {
+            logBuildActivity(
+              buildId,
+              "autonomous_playbook_shadow",
+              `Shadow plan gate would withhold advancement: ${decisionGate.operatorMessage}.`,
+            );
+          }
+        } catch (wwmdErr) {
+          console.error("[plan-to-build-transition] WWMD gate errored (failing open):", wwmdErr);
+          if (autonomousMode === "enforce") {
+            logBuildActivity(
+              buildId,
+              "autonomous:needs-decision",
+              "Autonomous plan advancement parked because the decision oracle was unavailable.",
+            );
+            return refusePlanToBuild({
+              kind: "wwmd-withheld",
+              reason: "autonomous decision oracle unavailable",
+            });
+          }
+        }
+        return PLAN_TO_BUILD_PASS;
+      },
 
-  // Initialize the build branch BEFORE flipping the phase so `buildBranch` is
-  // always paired with `phase=build`. This is the step that was failing (sandbox
-  // down / churning) and looping the whole fleet — count + escalate instead.
-  try {
-    const { isSandboxAvailable, startBuildBranch } = await import(
-      "@/lib/build/sandbox/build-branch"
-    );
-    if (!(await isSandboxAvailable())) {
-      return await failTransition({
-        buildId,
-        parentEpicId: build.parentEpicId ?? null,
-        reason: "sandbox not running",
-        prevTracker: tracker,
-      });
-    }
-    await startBuildBranch(buildId);
-  } catch (branchErr) {
-    return await failTransition({
-      buildId,
-      parentEpicId: build.parentEpicId ?? null,
-      // BI-518B5F69: git states its fault at the END of stderr (after the
-      // prelude echo); a head-only clip hid "dubious ownership" for a day.
-      reason: `startBuildBranch failed: ${excerptHeadAndTail((branchErr as Error).message ?? "", 700)}`,
-      prevTracker: tracker,
-    });
-  }
+      "autonomous-eligibility": async () => {
+        if (autonomousMode === "off") return PLAN_TO_BUILD_PASS;
+        try {
+          const { resolveAutonomousBuildPhaseEligibility } = await import(
+            "@/lib/build/autonomous-build-phase-runtime"
+          );
+          const autonomy = await resolveAutonomousBuildPhaseEligibility({
+            buildId,
+            checkpoint: "plan",
+            gateOutcome: decisionOutcome,
+          });
+          executionProfileRef = autonomy.executionProfileRef;
+          if (autonomousMode === "enforce" && !autonomy.mayAct) {
+            const reason =
+              autonomy.eligibility.blockers.join(", ")
+              || "autonomous plan advancement is not evidence-cleared";
+            logBuildActivity(
+              buildId,
+              "autonomous:needs-decision",
+              `Plan advancement parked: ${reason}.`,
+            );
+            return refusePlanToBuild({ kind: "wwmd-withheld", reason });
+          }
+        } catch (error) {
+          if (autonomousMode === "enforce") {
+            const reason = `autonomous eligibility unavailable: ${String(
+              error instanceof Error ? error.message : error,
+            ).slice(0, 180)}`;
+            logBuildActivity(buildId, "autonomous:needs-decision", reason);
+            return refusePlanToBuild({ kind: "wwmd-withheld", reason });
+          }
+        }
+        return PLAN_TO_BUILD_PASS;
+      },
 
-  // Branch ready → phase-run bookkeeping, flip, dispatch.
-  const { completeBuildPhaseRun, startBuildPhaseRun } = await import(
-    "@/lib/build/build-phase-run"
-  );
-  void completeBuildPhaseRun(buildId, "plan");
-  // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
-  void startBuildPhaseRun(buildId, "build", {
-    ...(executionProfileRef ? { executionProfileRef } : {}),
-  }).catch(() => {});
-  if (context?.threadId) {
-    const { persistPhaseHandoffSummary } = await import("@/lib/build/phase-compaction-wire");
-    void persistPhaseHandoffSummary(context.threadId, "plan");
+      // Initialize the build branch BEFORE flipping the phase so `buildBranch` is
+      // always paired with `phase=build`. This is the step that was failing (sandbox
+      // down / churning) and looping the whole fleet — count + escalate instead.
+      "build-branch-init": async () => {
+        try {
+          const { isSandboxAvailable, startBuildBranch } = await import(
+            "@/lib/build/sandbox/build-branch"
+          );
+          if (!(await isSandboxAvailable())) {
+            return refusePlanToBuild(
+              await failTransition({
+                buildId,
+                parentEpicId: build.parentEpicId ?? null,
+                reason: "sandbox not running",
+                prevTracker: tracker,
+              }),
+            );
+          }
+          await startBuildBranch(buildId);
+        } catch (branchErr) {
+          return refusePlanToBuild(
+            await failTransition({
+              buildId,
+              parentEpicId: build.parentEpicId ?? null,
+              // BI-518B5F69: git states its fault at the END of stderr (after the
+              // prelude echo); a head-only clip hid "dubious ownership" for a day.
+              reason: `startBuildBranch failed: ${excerptHeadAndTail((branchErr as Error).message ?? "", 700)}`,
+              prevTracker: tracker,
+            }),
+          );
+        }
+        return PLAN_TO_BUILD_PASS;
+      },
+    },
+
+    // Branch ready → phase-run bookkeeping, then the shared function flips the phase.
+    beforeWrite: async () => {
+      const { completeBuildPhaseRun, startBuildPhaseRun } = await import(
+        "@/lib/build/build-phase-run"
+      );
+      void completeBuildPhaseRun(buildId, "plan");
+      // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
+      void startBuildPhaseRun(buildId, "build", {
+        ...(executionProfileRef ? { executionProfileRef } : {}),
+      }).catch(() => {});
+      if (context?.threadId) {
+        const { persistPhaseHandoffSummary } = await import("@/lib/build/phase-compaction-wire");
+        void persistPhaseHandoffSummary(context.threadId, "plan");
+      }
+    },
+  });
+  if (transition.kind === "readiness-refused") {
+    logBuildActivity(buildId, "phase:gate-blocked", transition.message);
+    return { kind: "gate-blocked", reason: transition.message };
   }
-  await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
+  if (transition.kind === "refused") return transition.refusal;
+
   if (context?.threadId) {
     const { agentEventBus } = await import("@/lib/agent-event-bus");
     agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
