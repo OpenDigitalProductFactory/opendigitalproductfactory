@@ -1366,7 +1366,8 @@
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "apps/web/lib/tak/tool-result-provenance.ts": [
-      "docs/architecture/context-engineering-standards.md"
+      "docs/architecture/context-engineering-standards.md",
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "apps/web/lib/tak/tool-script.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
@@ -3171,6 +3172,7 @@
       "apps/web/lib/gpp/permit-carriage.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
+      "apps/web/lib/tak/tool-result-provenance.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
       "apps/web/lib/work-capsules/scope-claim-lease.ts",
       "packages/integration-shared/src/mcp-client-credential-policy.ts",
