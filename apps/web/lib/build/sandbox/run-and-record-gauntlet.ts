@@ -159,6 +159,7 @@ export async function recordScopedTestsEvidence(input: {
   const { IN_PLATFORM_EVIDENCE_VALIDITY_MS } = await import("./guard-gauntlet-evidence");
   const passed = input.result.passed && input.result.typeCheckPassed;
   const completedAt = new Date();
+  const ran = scopedTestsRunDescription(input.changedFiles, input.result);
   const record = await recordLocalIntegrationResult({
     actorUserId: input.build.createdById,
     provider: "build-studio",
@@ -171,12 +172,9 @@ export async function recordScopedTestsEvidence(input: {
     summary: `Scoped tests ${passed ? "passed" : "failed"} (${input.result.scope ?? "full"}) for tree ${input.binding.headTreeHash.slice(0, 12)}`,
     evidence: {
       tier: "in-platform-scoped-tests",
-      coverage: { guards: false, typecheck: true, unitTests: true, productionBuild: false, image: false },
+      coverage: ran.coverage,
       ...input.binding,
-      commands: [
-        "npx tsc --noEmit (apps/web, scoped to changed files)",
-        `vitest run ${input.changedFiles.filter((f) => /\.test\.(ts|tsx|mjs)$/.test(f)).join(" ") || "(scoped feature tests)"}`,
-      ],
+      commands: ran.commands,
       output: `${input.result.testOutput.slice(-3000)}\n${input.result.typeCheckOutput.slice(-1000)}`.trim() || "no output",
       completedAt: completedAt.toISOString(),
       evidenceValidity: { expiresAt: new Date(completedAt.getTime() + IN_PLATFORM_EVIDENCE_VALIDITY_MS).toISOString() },
@@ -185,4 +183,33 @@ export async function recordScopedTestsEvidence(input: {
     },
   });
   return (record as { id?: string } | null)?.id ?? null;
+}
+
+/**
+ * BI-CEE688D6: what the scoped-test run actually covered, never more. The
+ * record used to claim unit tests and a vitest command whether or not any test
+ * ran, and a typecheck of apps/web for a change outside it.
+ */
+export function scopedTestsRunDescription(
+  changedFiles: readonly string[],
+  result: Pick<SandboxTestResult, "scope" | "scopedTestsRun">,
+): {
+  coverage: { guards: false; typecheck: boolean; unitTests: boolean; productionBuild: false; image: false };
+  commands: string[];
+} {
+  const typecheck = changedFiles.some((f) => f.startsWith("apps/web/"));
+  const unitTests = result.scope === "scoped" && (result.scopedTestsRun ?? 0) > 0;
+  return {
+    coverage: { guards: false, typecheck, unitTests, productionBuild: false, image: false },
+    commands: [
+      typecheck
+        ? "tsc --noEmit (apps/web, gated on errors in the changed files)"
+        : "tsc --noEmit (apps/web) — none of the changed files are in apps/web, so it does not cover this change",
+      unitTests
+        ? `vitest run (${result.scopedTestsRun} test file(s) covering the changed files)`
+        : result.scope === "none"
+          ? "no tests ran: no test file covers the changed files"
+          : "full test suite (informational; not gated)",
+    ],
+  };
 }

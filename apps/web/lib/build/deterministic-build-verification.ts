@@ -16,7 +16,8 @@ export type DeterministicVerification = {
   testsFailed: number;
   parseConfidence: "high";
   source: "deterministic-scoped";
-  scope: "scoped" | "full";
+  /** "none": no test file covers the changed files, so only the typecheck ran (BI-CEE688D6). */
+  scope: "scoped" | "full" | "none";
 };
 
 export type DeterministicVerificationDeps = {

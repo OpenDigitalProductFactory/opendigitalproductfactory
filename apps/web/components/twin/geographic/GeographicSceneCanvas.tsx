@@ -105,6 +105,7 @@ export function GeographicSceneCanvas({
   model,
   label,
   onSelectEntity,
+  onPlacePoint = null,
   requiresBasemap = false,
   className,
   loadEngine = ensureGeographicEngine,
@@ -115,6 +116,8 @@ export function GeographicSceneCanvas({
   /** Accessible name for the map region. */
   label: string;
   onSelectEntity?: (entityId: string | null) => void;
+  /** While set, a click on the map reports that point instead of selecting (manual pin). */
+  onPlacePoint?: ((latitude: number, longitude: number) => void) | null;
   /** True when the view is meaningless without a street layer. */
   requiresBasemap?: boolean;
   className?: string;
@@ -127,14 +130,18 @@ export function GeographicSceneCanvas({
   const map = useRef<MapLibreMap | null>(null);
   const latestModel = useRef(model);
   const onSelect = useRef(onSelectEntity);
+  const onPlace = useRef(onPlacePoint);
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   latestModel.current = model;
   onSelect.current = onSelectEntity;
+  onPlace.current = onPlacePoint;
 
   const bounds = model.bounds;
   useEffect(() => {
     let cancelled = false;
     let observer: MutationObserver | null = null;
+    let colorScheme: MediaQueryList | null = null;
+    let removeColorScheme: () => void = () => {};
     const element = container.current;
     if (!element) return;
 
@@ -174,15 +181,25 @@ export function GeographicSceneCanvas({
       map.current = instance;
       instance.on("load", () => pushData(instance));
       instance.on("click", "dpf-placements", (event) => {
+        if (onPlace.current) return;
         const entityId = event.features?.[0]?.properties?.entityId;
         onSelect.current?.(typeof entityId === "string" ? entityId : null);
       });
-      // Rebuild the style when the theme changes; sources come back empty, so refill them.
-      observer = new MutationObserver(() => {
+      instance.on("click", (event) => {
+        onPlace.current?.(event.lngLat.lat, event.lngLat.lng);
+      });
+      // Rebuild the style when the theme changes, whether the app switches its
+      // theme class or the device switches colour scheme; sources come back
+      // empty, so refill them.
+      const restyle = () => {
         instance.setStyle(style());
         instance.once("style.load", () => pushData(instance));
-      });
+      };
+      observer = new MutationObserver(restyle);
       observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "style"] });
+      colorScheme = window.matchMedia?.("(prefers-color-scheme: dark)") ?? null;
+      colorScheme?.addEventListener("change", restyle);
+      removeColorScheme = () => colorScheme?.removeEventListener("change", restyle);
     })().catch(() => {
       if (!cancelled) setPhase({ kind: "failed" });
     });
@@ -190,10 +207,20 @@ export function GeographicSceneCanvas({
     return () => {
       cancelled = true;
       observer?.disconnect();
+      removeColorScheme();
       map.current?.remove();
       map.current = null;
     };
   }, [bounds.west, bounds.south, bounds.east, bounds.north, requiresBasemap, loadEngine, loadPacks, detectWebGL]);
+
+  // The crosshair goes on MapLibre's own canvas. The container's className must
+  // never change after mount: React would overwrite the classes MapLibre adds
+  // to it (maplibregl-map), and the canvas would lose its positioning.
+  const placing = Boolean(onPlacePoint);
+  useEffect(() => {
+    const canvas = map.current?.getCanvas();
+    if (canvas) canvas.style.cursor = placing ? "crosshair" : "";
+  }, [placing, phase]);
 
   // New zones, placements or selection: refill the sources without rebuilding the map.
   useEffect(() => {
