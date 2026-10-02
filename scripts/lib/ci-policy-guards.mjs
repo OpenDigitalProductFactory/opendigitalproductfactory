@@ -886,6 +886,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-ux-fit-decision.test.mjs"),
       node("scripts/check-ux-fit-decision.mjs"),
     ]),
+    // No hidden Unicode in commit messages or PR title/body (BI-5D412E3C): the
+    // repo squash-merges with commit messages, so they land in main's history.
+    guard("hidden-unicode-commit-text-guard", "Hidden Unicode Commit Text Guard", [
+      conformanceTest("scripts/check-hidden-unicode-commit-text.test.mjs"),
+      node("scripts/check-hidden-unicode-commit-text.mjs"),
+    ]),
     guard("docs-impact-gate", "Docs Impact Gate", [
       node(
         "--test",

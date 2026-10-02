@@ -44,6 +44,7 @@ const EXPECTED_LEGACY_JOBS = [
   "governed-teardown-guard",
   "guard-conformance-marks",
   "guard-diff-honesty",
+  "hidden-unicode-commit-text-guard",
   "hidden-unicode-instruction-files-guard",
   "host-port-range-guard",
   "installer-help-contract",
