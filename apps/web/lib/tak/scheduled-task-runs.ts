@@ -123,7 +123,7 @@ export function scheduledRequiredToolNames(input: {
  * the false green BI-4F64C5D3 removed.
  *
  * A tool name is a token, so it must match on token boundaries. Underscores
- * are part of the name, which is why  is not enough on its own.
+ * are part of the name, which is why \b is not enough on its own.
  */
 function promptNamesTool(lowerPrompt: string, toolName: string): boolean {
   const name = toolName.toLowerCase();
