@@ -5,6 +5,8 @@
 
 import type { GeographicSceneLayout, GeographicSceneZone } from "@dpf/storefront-templates";
 
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+
 import { geographicBounds, validateGeographicSceneLayout } from "./geographic-scene";
 
 export const SERVICE_AREA_TWIN_TEMPLATE = "TERRITORY";
@@ -61,9 +63,8 @@ export async function loadServiceAreas(database: ServiceAreaDatabase, orgId: str
   return { version: row?.version ?? 0, zones: existingLayout(row)?.zones ?? [] };
 }
 
-export type SaveServiceAreasResult =
-  | { ok: true; version: number }
-  | { ok: false; code: "invalid" | "stale"; error: string };
+/** On failure, `error` is "invalid" or "stale". */
+export type SaveServiceAreasResult = ActionResult<{ version: number }>;
 
 function viewportFor(zones: readonly GeographicSceneZone[]): GeographicSceneLayout["viewport"] {
   const points = zones.flatMap((zone) => zone.geometry.rings.flat());
@@ -77,14 +78,14 @@ export async function saveServiceAreas(
   input: { orgId: string; expectedVersion: number; zones: unknown },
 ): Promise<SaveServiceAreasResult> {
   if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 0 || !Array.isArray(input.zones)) {
-    return { ok: false, code: "invalid", error: "invalid-request" };
+    return err("invalid");
   }
   const row = await database.operationalSceneLayout.findFirst({
     where: { orgId: input.orgId, twinTemplate: SERVICE_AREA_TWIN_TEMPLATE, locationId: null, spaceKind: "geographic" },
     orderBy: { createdAt: "asc" },
     select: { id: true, version: true, layoutState: true },
   });
-  if ((row?.version ?? 0) !== input.expectedVersion) return { ok: false, code: "stale", error: "stale" };
+  if ((row?.version ?? 0) !== input.expectedVersion) return err("stale");
 
   const previous = existingLayout(row);
   const candidate = {
@@ -96,7 +97,7 @@ export async function saveServiceAreas(
     ...(previous?.underlayRef ? { underlayRef: previous.underlayRef } : {}),
   };
   const validated = validateGeographicSceneLayout(candidate);
-  if (!validated.ok) return { ok: false, code: "invalid", error: validated.error };
+  if (!validated.ok) return err("invalid");
   const layout: GeographicSceneLayout = previous
     ? validated.value
     : { ...validated.value, viewport: viewportFor(validated.value.zones) };
@@ -112,13 +113,11 @@ export async function saveServiceAreas(
         layoutState: layout,
       },
     });
-    return { ok: true, version: created.version };
+    return ok({ version: created.version });
   }
   const update = await database.operationalSceneLayout.updateMany({
     where: { id: row.id, orgId: input.orgId, version: input.expectedVersion },
     data: { layoutState: layout, version: { increment: 1 } },
   });
-  return update.count === 1
-    ? { ok: true, version: input.expectedVersion + 1 }
-    : { ok: false, code: "stale", error: "stale" };
+  return update.count === 1 ? ok({ version: input.expectedVersion + 1 }) : err("stale");
 }

@@ -9,7 +9,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@dpf/db";
 
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import { err, type ActionResult } from "@/lib/shared/action-result";
 import { isRecord } from "@/lib/shared/coerce";
 import { saveServiceAreas, type ServiceAreaDatabase } from "@/lib/twin/service-area-layout";
 
@@ -60,7 +60,6 @@ export async function saveServiceAreasAction(
     expectedVersion,
     zones,
   });
-  if (!result.ok) return err(result.code);
-  revalidatePath("/customer");
-  return ok({ version: result.version });
+  if (result.ok) revalidatePath("/customer");
+  return result;
 }

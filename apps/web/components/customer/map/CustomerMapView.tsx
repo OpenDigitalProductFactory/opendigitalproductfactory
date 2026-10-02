@@ -2,10 +2,13 @@
 
 // The customer map view (BI-560128FB): customer sites on the map, and the
 // sites that are not on it, each with a way to fix it. The account list on the
-// same page stays the accessible equivalent.
+// same page stays the accessible equivalent. Service areas (BI-6CC10E4C) are
+// drawn on the same map and their coverage is listed under it.
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useReducer, useState, useTransition } from "react";
+
+import type { GeographicSceneLayout } from "@dpf/storefront-templates";
 import { useRouter } from "next/navigation";
 
 import { GeographicSceneCanvas } from "@/components/twin/geographic/GeographicSceneCanvas";
@@ -17,28 +20,59 @@ import type { CustomerMap } from "@/lib/crm/customer-map";
 import { useT } from "@/lib/i18n/use-t";
 import { buildGeographicSceneModel } from "@/lib/twin/geographic-scene";
 
+import { closedRing, drawingReducer, IDLE } from "./service-area-drawing";
+import { ServiceAreasPanel } from "./ServiceAreasPanel";
+
+const NO_CORNERS: readonly { latitude: number; longitude: number }[] = [];
+const EMPTY_LAYOUT: GeographicSceneLayout = {
+  schemaVersion: 1,
+  spaceKind: "geographic",
+  viewport: { latitude: 20, longitude: 0, zoom: 1 },
+  zones: [],
+  placements: [],
+};
+
 export function CustomerMapView({ map, canEdit }: { map: CustomerMap; canEdit: boolean }) {
   const t = useT("customerMap");
   const router = useRouter();
   const [placing, setPlacing] = useState<{ siteId: string; label: string } | null>(null);
   const [status, setStatus] = useState<"idle" | "placed" | "failed">("idle");
   const [pending, startTransition] = useTransition();
+  const [drawing, dispatch] = useReducer(drawingReducer, IDLE);
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
 
   // With nothing placed yet, a pin still needs a map to click on: centre on 0,0.
-  const layout = map.layout ?? {
-    schemaVersion: 1 as const,
-    spaceKind: "geographic" as const,
-    viewport: { latitude: 20, longitude: 0, zoom: 1 },
-    zones: [],
-    placements: [],
-  };
-  const model = useMemo(
-    () =>
-      layout.placements.length > 0
-        ? buildGeographicSceneModel({ layout, presentations: map.presentations })
-        : null,
-    [layout, map.presentations],
-  );
+  const layout = map.layout ?? EMPTY_LAYOUT;
+  const draftLabel = t("areas.add");
+  const corners = drawing.mode === "idle" ? NO_CORNERS : drawing.points;
+  const model = useMemo(() => {
+    const draftRing = closedRing(corners);
+    const scene = {
+      ...layout,
+      zones: draftRing
+        ? [...layout.zones, { id: "draft-area", label: draftLabel, geometry: { kind: "polygon" as const, rings: [draftRing] } }]
+        : layout.zones,
+      placements: [
+        ...layout.placements,
+        ...corners.map((point, index) => ({
+          id: `draft-corner:${index}`,
+          entityRef: { kind: "draft-corner", id: `draft-corner:${index}` },
+          label: String(index + 1),
+          geometry: { kind: "point" as const, latitude: point.latitude, longitude: point.longitude },
+        })),
+      ],
+    };
+    return scene.placements.length > 0 || scene.zones.length > 0
+      ? buildGeographicSceneModel({
+          layout: scene,
+          presentations: map.presentations,
+          selectedEntityIds: selectedSiteId ? [selectedSiteId] : [],
+        })
+      : null;
+  }, [layout, map.presentations, corners, selectedSiteId, draftLabel]);
+
+  const drawingActive = drawing.mode === "drawing";
+  const onMapPoint = placing && !pending ? place : drawingActive ? (latitude: number, longitude: number) => dispatch({ type: "add", point: { latitude, longitude } }) : null;
 
   function place(latitude: number, longitude: number) {
     if (!placing) return;
@@ -55,7 +89,7 @@ export function CustomerMapView({ map, canEdit }: { map: CustomerMap; canEdit: b
   return (
     <div className="space-y-3">
       <p className="text-sm text-[var(--dpf-muted)]">{t("summary", { placed: map.placedCount, missing })}</p>
-      {model || placing ? (
+      {model || placing || drawing.mode !== "idle" ? (
         <GeographicSceneCanvas
           model={
             model ?? {
@@ -66,7 +100,8 @@ export function CustomerMapView({ map, canEdit }: { map: CustomerMap; canEdit: b
             }
           }
           label={t("mapLabel")}
-          onPlacePoint={placing && !pending ? place : null}
+          onPlacePoint={onMapPoint}
+          onSelectEntity={(entityId) => setSelectedSiteId(entityId && map.presentations[entityId] ? entityId : null)}
         />
       ) : (
         <p className="text-sm text-[var(--dpf-text)]">{t("empty")}</p>
@@ -80,6 +115,15 @@ export function CustomerMapView({ map, canEdit }: { map: CustomerMap; canEdit: b
         </div>
       ) : null}
       <FormStatus success={status === "placed" ? t("placed") : undefined} error={status === "failed" ? t("placeFailed") : undefined} />
+
+      <ServiceAreasPanel
+        coverage={map.coverage}
+        presentations={map.presentations}
+        canEdit={canEdit && !placing}
+        drawing={drawing}
+        dispatch={dispatch}
+        selectedSiteId={selectedSiteId}
+      />
 
       {missing > 0 ? (
         <Surface as="section" className="space-y-2 text-sm">

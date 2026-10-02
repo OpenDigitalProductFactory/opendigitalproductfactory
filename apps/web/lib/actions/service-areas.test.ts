@@ -29,7 +29,7 @@ beforeEach(() => {
   m.findOrg.mockResolvedValue({ id: "org-row", orgId: "ORG-1" });
   m.crewCount.mockResolvedValue(1);
   m.employeeCount.mockResolvedValue(0);
-  m.save.mockResolvedValue({ ok: true, version: 2 });
+  m.save.mockResolvedValue({ ok: true, data: { version: 2 } });
 });
 
 describe("saveServiceAreasAction", () => {
@@ -53,7 +53,7 @@ describe("saveServiceAreasAction", () => {
   });
 
   it("passes a stale save through as stale (AC-COV-DRAW-2)", async () => {
-    m.save.mockResolvedValue({ ok: false, code: "stale", error: "stale" });
+    m.save.mockResolvedValue({ ok: false, error: "stale" });
     expect(await saveServiceAreasAction(1, [])).toEqual({ ok: false, error: "stale" });
   });
 });

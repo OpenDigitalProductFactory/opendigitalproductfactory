@@ -6,7 +6,15 @@ import "server-only";
 import { prisma } from "@dpf/db";
 import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
 
-import { buildCustomerMap, type CustomerMap, type CustomerMapSite } from "./customer-map";
+import { loadServiceAreas, type ServiceAreaDatabase } from "@/lib/twin/service-area-layout";
+
+import {
+  buildCustomerMap,
+  type CustomerMap,
+  type CustomerMapSite,
+  type ServiceAreaAssignee,
+  type ServiceAreaInput,
+} from "./customer-map";
 
 export async function loadCustomerMapSites(): Promise<CustomerMapSite[]> {
   const sites = await prisma.customerSite.findMany({
@@ -42,6 +50,31 @@ export async function loadCustomerMapSites(): Promise<CustomerMapSite[]> {
   });
 }
 
+/** The organization's service areas and who they can be assigned to (BI-6CC10E4C). */
+export async function loadServiceAreaInput(): Promise<ServiceAreaInput> {
+  const organization = await prisma.organization.findFirst({ select: { id: true, orgId: true } });
+  if (!organization) return { version: 0, zones: [], assignees: [] };
+  const [areas, crews, employees] = await Promise.all([
+    loadServiceAreas(prisma as unknown as ServiceAreaDatabase, organization.orgId),
+    prisma.staffingCrew.findMany({
+      where: { organizationId: organization.id },
+      select: { crewId: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.employeeProfile.findMany({
+      where: { status: { in: ["active", "onboarding"] } },
+      select: { employeeId: true, displayName: true },
+      orderBy: { displayName: "asc" },
+    }),
+  ]);
+  const assignees: ServiceAreaAssignee[] = [
+    ...crews.map((crew) => ({ kind: "staffing-crew" as const, id: crew.crewId, label: crew.name ?? crew.crewId })),
+    ...employees.map((person) => ({ kind: "employee" as const, id: person.employeeId, label: person.displayName })),
+  ];
+  return { version: areas.version, zones: areas.zones, assignees };
+}
+
 export async function loadCustomerMap(): Promise<CustomerMap> {
-  return buildCustomerMap(await loadCustomerMapSites());
+  const [sites, serviceAreas] = await Promise.all([loadCustomerMapSites(), loadServiceAreaInput()]);
+  return buildCustomerMap(sites, serviceAreas);
 }

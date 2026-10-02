@@ -40,7 +40,7 @@ describe("service area layout (AC-COV-DRAW-1, AC-COV-DRAW-2)", () => {
   });
 
   it("creates the TERRITORY layout on first save, centred on the areas", async () => {
-    expect(await saveServiceAreas(database, { orgId: "ORG-1", expectedVersion: 0, zones: [zone] })).toEqual({ ok: true, version: 1 });
+    expect(await saveServiceAreas(database, { orgId: "ORG-1", expectedVersion: 0, zones: [zone] })).toEqual({ ok: true, data: { version: 1 } });
     const data = db.operationalSceneLayout.create.mock.calls[0]![0]!.data;
     expect(data).toMatchObject({ orgId: "ORG-1", twinTemplate: "TERRITORY", spaceKind: "geographic", locationId: null });
     expect(data.layoutState.zones).toEqual([zone]);
@@ -54,7 +54,7 @@ describe("service area layout (AC-COV-DRAW-1, AC-COV-DRAW-2)", () => {
       version: 3,
       layoutState: { schemaVersion: 1, spaceKind: "geographic", viewport: { latitude: 0, longitude: 0, zoom: 4 }, zones: [], placements: [placement] },
     };
-    expect(await saveServiceAreas(database, { orgId: "ORG-1", expectedVersion: 3, zones: [zone] })).toEqual({ ok: true, version: 4 });
+    expect(await saveServiceAreas(database, { orgId: "ORG-1", expectedVersion: 3, zones: [zone] })).toEqual({ ok: true, data: { version: 4 } });
     const call = db.operationalSceneLayout.updateMany.mock.calls[0]![0]!;
     expect(call.where).toEqual({ id: "scene-1", orgId: "ORG-1", version: 3 });
     expect(call.data.layoutState.placements).toEqual([placement]);
@@ -63,19 +63,19 @@ describe("service area layout (AC-COV-DRAW-1, AC-COV-DRAW-2)", () => {
 
   it("refuses a stale version without writing", async () => {
     row = { id: "scene-1", version: 4, layoutState: { schemaVersion: 1, spaceKind: "geographic", viewport: { latitude: 0, longitude: 0, zoom: 1 }, zones: [], placements: [] } };
-    expect(await saveServiceAreas(database, { orgId: "ORG-1", expectedVersion: 3, zones: [] })).toMatchObject({ ok: false, code: "stale" });
+    expect(await saveServiceAreas(database, { orgId: "ORG-1", expectedVersion: 3, zones: [] })).toEqual({ ok: false, error: "stale" });
     expect(db.operationalSceneLayout.updateMany).not.toHaveBeenCalled();
   });
 
   it("reports a lost race as stale", async () => {
     row = { id: "scene-1", version: 3, layoutState: { schemaVersion: 1, spaceKind: "geographic", viewport: { latitude: 0, longitude: 0, zoom: 1 }, zones: [], placements: [] } };
     db.operationalSceneLayout.updateMany.mockResolvedValueOnce({ count: 0 });
-    expect(await saveServiceAreas(database, { orgId: "ORG-1", expectedVersion: 3, zones: [] })).toMatchObject({ ok: false, code: "stale" });
+    expect(await saveServiceAreas(database, { orgId: "ORG-1", expectedVersion: 3, zones: [] })).toEqual({ ok: false, error: "stale" });
   });
 
   it("refuses an invalid area without writing", async () => {
     const open = { ...zone, geometry: { kind: "polygon", rings: [[{ longitude: 0, latitude: 0 }, { longitude: 1, latitude: 0 }]] } };
-    expect(await saveServiceAreas(database, { orgId: "ORG-1", expectedVersion: 0, zones: [open] })).toMatchObject({ ok: false, code: "invalid" });
+    expect(await saveServiceAreas(database, { orgId: "ORG-1", expectedVersion: 0, zones: [open] })).toEqual({ ok: false, error: "invalid" });
     expect(db.operationalSceneLayout.create).not.toHaveBeenCalled();
   });
 });
