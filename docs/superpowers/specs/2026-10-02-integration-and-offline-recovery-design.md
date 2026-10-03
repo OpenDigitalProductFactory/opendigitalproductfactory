@@ -53,35 +53,33 @@ identity. These are the recovery substrates to extend.
 
 ## Objectives and acceptance
 
-- OBJ-IT-1 / AC-IT-1: DNS/network failures produce infrastructure evidence,
-  never a failed-code verdict or reusable failed test result.
-- OBJ-IT-2 / AC-IT-2: bounded exponential backoff with jitter releases scarce
-  capacity before waiting; unrelated queued work executes and the affected
-  immutable request fairly resumes when infrastructure recovers.
-- OBJ-IT-3 / AC-IT-3: failure, cancellation, timeout and executor death clean
-  owned processes and reservations idempotently, with no successor termination.
-- OBJ-IT-4 / AC-IT-4: one supervisor and one executing runner per immutable
-  request; concurrent repeated requests join that work without another queue row.
-- OBJ-IT-5 / AC-IT-5: heartbeat proves life only. Stage/output/child completion
-  proves progress. Bounded stage deadlines detect stalls while declared
-  long-running tests remain protected inside their execution budget.
-- OBJ-IT-6 / AC-IT-6: process classification uses executable, argument role and
-  ancestry. Incidental runner names in shell bodies are not executing runners.
-- OBJ-IT-7 / AC-IT-7: source SHA, queue identity, attempt diagnostics and completed
-  results survive retry and recovery. Cancellation stays cancelled.
-- OBJ-IT-8 / AC-IT-8: status distinguishes running, retrying infrastructure,
-  waiting for capacity and requiring intervention, including reason and next wake.
-- OBJ-OR-1 / AC-OR-1: a locally available recovery entry point authorizes and
-  executes restoration without portal, MCP, queue, approval DB or self-upgrade.
-- OBJ-OR-2 / AC-OR-2: authorization binds install identity, exact input hashes,
-  allowed operations, expiry and operator identity; an independent verification
-  receipt binds the same plan. Replay cannot expand authority or repeat a swap.
-- OBJ-OR-3 / AC-OR-3: preserve data and prior runtime/state before mutation;
-  health/identity failure rolls back to the preserved runtime. Never delete
-  volumes or silently restore an older database over newer business data.
-- OBJ-OR-4 / AC-OR-4: append local audit evidence outside the failed platform;
-  unavailable gates are unrun. After restoration reconcile through the existing
-  governed evidence API with stable idempotency identity.
+- **OBJ-IT-1:** Classify DNS/network outages as infrastructure failures without producing a code-test verdict.
+- **OBJ-IT-2:** Bound retries, release scarce capacity during backoff and fairly resume the immutable request after infrastructure recovers.
+- **OBJ-IT-3:** Clean owned processes and reservations idempotently after failure, cancellation, timeout or executor death.
+- **OBJ-IT-4:** Maintain one supervisor and one executing runner per immutable request while repeated requests join existing work.
+- **OBJ-IT-5:** Distinguish liveness from progress and recover stalled execution without interrupting legitimate long-running tests.
+- **OBJ-IT-6:** Classify actual runner processes by executable, argument role and ancestry.
+- **OBJ-IT-7:** Preserve source, queue identity, diagnostics, completed results and terminal cancellation across recovery.
+- **OBJ-IT-8:** Report running, infrastructure retry, capacity wait and intervention with clear reasons and next wake.
+- **OBJ-OR-1:** Authorize and execute restoration without the portal, MCP, queue, approval store or self-upgrade.
+- **OBJ-OR-2:** Enforce scoped operator authorization and independent verification of the same immutable recovery plan.
+- **OBJ-OR-3:** Protect business data and restore preserved runtime/state when recovery verification fails.
+- **OBJ-OR-4:** Retain independent audit evidence, report unavailable gates as unrun and reconcile once after recovery.
+
+| ID | Objectives | Observable proof |
+| --- | --- | --- |
+| AC-IT-1 | OBJ-IT-1 | VER-IT-2 injects DNS/network failure and observes infrastructure evidence, with no failed-code verdict or reusable failed result. |
+| AC-IT-2 | OBJ-IT-2 | VER-IT-2 observes bounded exponential backoff with jitter after release, unrelated job completion during the outage, and fair automatic resumption of the original request after restoration. |
+| AC-IT-3 | OBJ-IT-3 | VER-IT-1 injects failure, cancellation, timeout and executor death; repeated cleanup releases only owned processes and reservations and never terminates a successor. |
+| AC-IT-4 | OBJ-IT-4 | VER-IT-1 launches duplicate supervisors and repeated requests; they join one queue identity with at most one supervisor and executing runner. |
+| AC-IT-5 | OBJ-IT-5 | VER-IT-1 preserves a quiet legitimate test within its declared stage budget, then expires a stalled stage despite continuing heartbeats and verifies cleanup. |
+| AC-IT-6 | OBJ-IT-6 | VER-IT-1 ignores incidental runner names in sleeping shell command bodies while identifying executable Node runners and their actual descendants. |
+| AC-IT-7 | OBJ-IT-7 | VER-IT-1 and VER-IT-2 compare pinned SHA, queue identity, attempt logs and completed results before/after recovery; cancellation remains terminal. |
+| AC-IT-8 | OBJ-IT-8 | VER-IT-2 reads each running, retrying infrastructure, waiting for capacity and requiring intervention transition with reason and next wake. |
+| AC-OR-1 | OBJ-OR-1 | VER-OR-2 blocks portal, MCP, queue and approval store and breaks self-upgrade; the locally available bootstrap restores the isolated target without calling any failed dependency. |
+| AC-OR-2 | OBJ-OR-2 | VER-OR-1 rejects forged, expired, replayed or cross-install receipts and changed input/action hashes before mutation; distinct authorized operator and verifier signatures bind the same plan. |
+| AC-OR-3 | OBJ-OR-3 | VER-OR-2 fails health/identity after swap, restores exact prior runtime/state, and proves unchanged business-data and mount identities without volume deletion or automatic database downgrade. |
+| AC-OR-4 | OBJ-OR-4 | VER-OR-1 and VER-OR-2 retain local hash-linked evidence through crashes, preserve unavailable gates as unrun and import the report idempotently after restoration. |
 
 ## Integration recovery contracts
 
@@ -336,4 +334,6 @@ is not implicitly authorized by this service-restoration plan.
 
 Decomposed: integration recovery maps to BI-02E5CE5A; offline restoration maps to
 BI-7A4E70E9. Independent review and provider-verified coverage are pending.
+No initiative scope baseline exists for BI-02E5CE5A. The independent baseline
+request currently depends on the routing repair recorded against BI-EE99767C.
 This draft is not implementation authorization or evidence of delivered recovery.
