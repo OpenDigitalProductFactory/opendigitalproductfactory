@@ -925,6 +925,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // broken gate cannot manufacture its own all-clear.
         "scripts/measure-capability-completeness.test.mjs",
         "scripts/check-agent-capability-integrity.test.mjs",
+        // The job-definition axis-waiver store. Listed here so CI actually runs
+        // its EXPIRY assertion: a waiver store whose guard is unrun is the
+        // gap-hiding mechanism it was built not to be.
+        "scripts/audit-coworker-job-definitions.test.mjs",
         // Archetype obligation coverage: same rule again, plus a lockstep check
         // that this measure classifies a frequency exactly as the runtime sweep
         // does — a report that disagrees with the ledger it reports on is worse
