@@ -125,6 +125,15 @@ describe("MCP_TOKEN_TEMPLATES", () => {
     }
   });
 
+  it("gives a development connection the author research note and no review grants", () => {
+    const development = getMcpTokenTemplate("development");
+    expect(development).toBeDefined();
+    expect(development!.grants.filter((grant) => grant.startsWith("initiative_"))).toEqual([
+      "initiative_evidence_write",
+    ]);
+    expect(CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS).toContain("initiative_evidence_write");
+  });
+
   it("includes coworker service catalog grants in development and admin templates", () => {
     const development = getMcpTokenTemplate("development");
     const admin = getMcpTokenTemplate("admin");

@@ -170,6 +170,9 @@ export const CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS = [
   "work_capsule_adopt",
   "sandbox_execute",
   "iac_execute",
+  // Author research note (BI-B9B196FD). Readiness stays a subset of the
+  // development template, which is the one-click coding connection.
+  "initiative_evidence_write",
 ] as const;
 
 const DEVELOPMENT_TEMPLATE_GRANTS = [
@@ -216,6 +219,10 @@ const DEVELOPMENT_TEMPLATE_GRANTS = [
   "tool_evaluation_create",
   "document_write",
   "coworker_engagement_write",
+  // Author research note (BI-B9B196FD). Desktop coding coworkers already hold
+  // this one grant. The one-click development connection did not, so a medium
+  // fix could not record its research note. Independent review grants stay off.
+  "initiative_evidence_write",
 ] as const;
 
 const EMPLOYEE_FINANCE_TEMPLATE_GRANTS = [
@@ -321,7 +328,7 @@ export const MCP_TOKEN_TEMPLATES: readonly McpTokenTemplate[] = [
     category: "development",
     tier: "write",
     description:
-      "Coding agent: read code/specs/backlog, write backlog and workrooms, run sandbox, ship via Build Studio (sandbox_execute + iac_execute).",
+      "Coding agent: read code/specs/backlog, write backlog and workrooms, record the author's research note, run sandbox, ship via Build Studio (sandbox_execute + iac_execute).",
     grants: DEVELOPMENT_TEMPLATE_GRANTS,
   },
   {
