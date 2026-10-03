@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
@@ -40,7 +41,7 @@ export function classifyChangedFiles(files) {
 function parseArgs(args) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
-    args,
+    args: scriptArgv(args),
     strict: false,
     allowPositionals: true,
     options: { "github-output": { type: "string" } },

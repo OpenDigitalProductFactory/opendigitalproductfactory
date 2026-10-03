@@ -29,6 +29,7 @@
 //       # move budgets to the current totals and record why in sbom/baseline.json
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "../lib/script-argv.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -99,7 +100,7 @@ function loadBaseline() {
 /** Value after a flag: null when the flag is absent, "" when it has no value. */
 function flagValue(argv, flag) {
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
-  const { values } = utilParseArgs({ args: argv, strict: false, allowPositionals: true, options: { "raise-budget": { type: "string" } } });
+  const { values } = utilParseArgs({ args: scriptArgv(argv), strict: false, allowPositionals: true, options: { "raise-budget": { type: "string" } } });
   const v = values[flag.replace(/^--/, "")];
   if (v === undefined) return null;
   return typeof v === "string" && v && !v.startsWith("--") ? v.trim() : "";

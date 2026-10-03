@@ -29,6 +29,7 @@ COPY patches/ ./patches/
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/lib/hooks-dir.mjs ./scripts/lib/
 COPY scripts/sbom/generate-platform-sbom.mjs ./scripts/sbom/
+COPY scripts/lib/script-argv.mjs ./scripts/lib/
 COPY scripts/lib/pnpm-lock.mjs ./scripts/lib/
 COPY .github/workflows/publish-image.yml ./.github/workflows/
 COPY apps/web/package.json ./apps/web/
@@ -155,6 +156,8 @@ COPY scripts/salvage-sweep.mjs ./scripts/
 # at runtime. Package its exact transitive source closure into the image so a
 # mutable /host-dpf checkout can never substitute different rule bytes.
 COPY scripts/gate-context.mjs ./scripts/
+# gate-context and worktree-janitor read their flags through scriptArgv.
+COPY scripts/lib/script-argv.mjs ./scripts/lib/
 COPY scripts/check-design-grounding-decision.mjs ./scripts/
 COPY scripts/check-data-impact.mjs ./scripts/
 # gate-context advertises the Convergence-Impact trailer (BI-B19BE117); the
