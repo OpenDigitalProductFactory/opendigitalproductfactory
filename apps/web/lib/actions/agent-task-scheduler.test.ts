@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   prisma: {
     $transaction: vi.fn(),
+    agent: { findFirst: vi.fn() },
     scheduledAgentTask: {
       create: vi.fn(),
       findMany: vi.fn(),
@@ -58,10 +59,7 @@ vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWor
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@dpf/db", () => ({
   prisma: mocks.prisma,
-  // executeScheduledAgentTask short-circuits to the deterministic data-model
-  // mirror when task.taskId === DATA_MODEL_MIRROR_TASK_ID (EP-DATA-ARCH, #1618).
-  // The const must be exported from the mock or vitest throws on access; none of
-  // these tests use the mirror task id, so any non-matching value is fine.
+  // Scheduler special-task constants must exist; these fixtures do not use them.
   DATA_MODEL_MIRROR_TASK_ID: "data-model-mirror-nightly",
   SYSML_PROJECTION_TASK_ID: "sysml-projection-nightly",
   SELF_OPTIMIZATION_SWEEP_TASK_ID: "self-optimization-sweep-weekly",
@@ -99,6 +97,7 @@ import {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.prisma.agent.findFirst.mockResolvedValue({ toolGrants: [] });
   mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
   // BI-D1CD3A11: the idempotent claim (updateMany) runs before execution;
   // default to a WON claim so existing tests exercise the work. Per-test
@@ -268,6 +267,7 @@ describe("extractHiveScoutSummary", () => {
 });
 
 function arrangeScheduledTask() {
+  mocks.prisma.agent.findFirst.mockResolvedValue({ toolGrants: [{ grantKey: "web_search" }] });
   mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
     taskId: "discovery-taxonomy-gap-triage-daily",
     agentId: "inventory-specialist",
