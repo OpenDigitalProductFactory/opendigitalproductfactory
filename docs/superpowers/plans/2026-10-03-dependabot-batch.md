@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # October 3 dependency batch
 
 Backlog: BI-0AE77798. Workroom: WC-A6BECCB3.
@@ -37,3 +41,11 @@ Library behavior or peer resolution may change even on a minor version. Do not m
 ## Backlog coverage
 
 Atomic deliverable `dependency-batch` maps to BI-0AE77798, with no external deliverable dependency. Requirement reference: `Objective and acceptance`. Contract reference: `docs/architecture/dependency-reduction-routine.md`. Flow reference: `Ordered work`. Verification reference: `Verification contract`. The operator requested one compatible batch; all repair steps produce and validate that graph. Record governed coverage against this immutable plan before source implementation.
+
+Coverage receipt: `cmusy0yp67xhs01jzptp8nec2`, bound to plan commit `a06a9e2c8b36f7e07ed8cd3371296e08ee361394`, blob `ea32e9978995859dda284ce02edbc0c685726744`; atomic BI-0AE77798, no deliverable dependencies.
+
+## Migration follow-ups
+
+FullCalendar 7 is tracked as BI-89604587; Vitest 5 runner/coverage is tracked as BI-BB992B4D. Both remain triage/planning work with their original PRs open until migration evidence exists. The compatible batch resolves smol-toml 1.9.0, lucide-react 1.50.0 within the proposed ^1.48.0 range, axe-core and its Playwright adapter 4.13.0, and hyperframes 0.8.96.
+
+No operator or contributor workflow changes are introduced; existing public/user documentation stays accurate. The braces exception is limited to mobile build tooling and expires 2026-11-02.
