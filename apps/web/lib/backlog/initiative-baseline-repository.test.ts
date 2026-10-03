@@ -36,6 +36,9 @@ vi.mock("@dpf/db", () => ({
 import { recordInitiativeSpecApproval } from "./initiative-readiness/baseline-repository";
 
 const canonical = `**OBJ-TEST-001:** Preserve the approved objective.
+
+| ID | Objectives | Criterion | Evidence |
+| --- | --- | --- | --- |
 | AC-TEST-001 | OBJ-TEST-001 | Completion proves the objective. | test |
 `;
 const locator = {

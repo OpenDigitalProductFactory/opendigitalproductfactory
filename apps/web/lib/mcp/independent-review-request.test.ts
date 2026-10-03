@@ -19,6 +19,9 @@ vi.mock("@/lib/auth/oauth-tokens", () => ({ OAUTH_EXECUTION_AUTHORITY_SELECT: {}
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveAgentWorkroomAccess: mocks.access }));
 vi.mock("./packs/backlog-pack-read-tools", () => ({ getBacklogItem: mocks.item }));
 vi.mock("@/lib/backlog/initiative-readiness/terminal-recovery", () => ({ resolveTerminalInitiativeRecovery: mocks.recovery }));
+// This suite isolates authorization and exact issuance. The companion document
+// suite exercises the real parser and preflight after these checks succeed.
+vi.mock("@/lib/mcp-task-review-document", () => ({ validateReviewDocument: async () => null }));
 
 import { authorizeCoworkerRequest } from "./independent-review-request";
 import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
