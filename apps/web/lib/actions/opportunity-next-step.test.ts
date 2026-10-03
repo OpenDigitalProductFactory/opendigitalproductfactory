@@ -10,7 +10,7 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 import { formatOpportunityNextStepDay } from "../../components/customer/NextStepControl";
-import { parseOpportunityScheduledAt, setOpportunityNextStep } from "./opportunity-next-step";
+import { setOpportunityNextStep } from "./opportunity-next-step";
 
 const p = prisma as unknown as {
   opportunity: { update: ReturnType<typeof vi.fn> };
@@ -50,14 +50,16 @@ describe("setOpportunityNextStep", () => {
     expect(formatOpportunityNextStepDay(legacy, "America/Chicago", "en-US")).toBe("8/31/2026");
   });
 
-  it("formats a full timestamp in the viewer zone (BI-954B4FA7)", () => {
-    const when = parseOpportunityScheduledAt("2026-08-31T01:00:00.000Z");
+  it("formats a full timestamp in the viewer zone (BI-954B4FA7)", async () => {
+    await setOpportunityNextStep({ opportunityId: "o1", scheduledAt: "2026-08-31T01:00:00.000Z" });
+    const when = p.opportunity.update.mock.calls[0][0].data.nextActivityAt as Date;
     expect(when.toISOString()).toBe("2026-08-31T01:00:00.000Z");
     expect(formatOpportunityNextStepDay(when, "America/Chicago", "en-US")).toBe("8/30/2026");
   });
 
-  it("rejects a calendar day that does not exist", () => {
-    expect(() => parseOpportunityScheduledAt("2026-02-31")).toThrow(/valid date/i);
+  it("rejects a calendar day that does not exist", async () => {
+    await expect(setOpportunityNextStep({ opportunityId: "o1", scheduledAt: "2026-02-31" })).rejects.toThrow(/valid date/i);
+    expect(p.opportunity.update).not.toHaveBeenCalled();
   });
 
   it("rejects an unparseable date", async () => {

@@ -14,8 +14,9 @@ import { revalidatePath } from "next/cache";
  * renders as the previous day in every negative UTC offset (BI-954B4FA7).
  * Store that calendar day at 12:00 UTC so the same civil date survives
  * offsets from UTC-12 through UTC+12. A full timestamp is left absolute.
+ * This stays unexported: a "use server" module may export only async functions.
  */
-export function parseOpportunityScheduledAt(value: string): Date {
+function parseOpportunityScheduledAt(value: string): Date {
   const trimmed = value.trim();
   const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
   if (dateOnly) {
