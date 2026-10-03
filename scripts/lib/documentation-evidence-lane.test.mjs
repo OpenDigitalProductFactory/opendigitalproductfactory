@@ -43,7 +43,7 @@ async function documentationFixture(t, command = "console.log('checked');") {
   const git = (...args) => execFileSync("git", args, { cwd: worktreePath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   git("init", "-b", "main");
   git("config", "user.name", "Document contract test");
-  git("config", "user.email", "document-test@example.invalid");
+  git("config", "user.email", "document-test@localhost");
   for (const name of ["gen-doc-index.mjs", "check-doc-links.mjs", "check-guards.mjs"]) {
     writeFileSync(join(worktreePath, "scripts", name), name === "check-doc-links.mjs" ? command : "console.log('checked');");
   }
