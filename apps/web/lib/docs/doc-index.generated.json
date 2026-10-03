@@ -5619,7 +5619,8 @@
         "4-git-repo-hygiene",
         "room-route-guard-on-windows",
         "recurring-meta-pattern",
-        "persisted-mcp-endpoint-recovery-bi-9f258707"
+        "persisted-mcp-endpoint-recovery-bi-9f258707",
+        "required-services-after-container-driven-upgrades-bi-fffea4ed"
       ]
     },
     "docs/install/scratch-install-rehearsal.md": {
@@ -12534,7 +12535,8 @@
         "what-happens-if-you-do-nothing",
         "what-is-reversible",
         "recovery-and-help",
-        "what-to-watch"
+        "what-to-watch",
+        "when-required-services-are-degraded"
       ]
     },
     "docs/user-guide/platform/address-validation-providers.md": {

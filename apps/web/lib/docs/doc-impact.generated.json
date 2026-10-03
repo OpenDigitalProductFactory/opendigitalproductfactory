@@ -2469,7 +2469,8 @@
       "docs/architecture/ui-token-styling.md"
     ],
     "scripts/tts/setup-chatterbox-tts-macos.sh": [
-      "docs/install/macos.md"
+      "docs/install/macos.md",
+      "docs/user-guide/operations/self-upgrade.md"
     ],
     "scripts/verify-edge-node-air-gap.sh": [
       "docs/edge-node/security-and-sovereignty.md",
@@ -3876,6 +3877,9 @@
     "docs/user-guide/contributing/developer-setup.md": [
       "scripts/seed-worktree-mcp.ps1",
       "scripts/seed-worktree-mcp.sh"
+    ],
+    "docs/user-guide/operations/self-upgrade.md": [
+      "scripts/tts/setup-chatterbox-tts-macos.sh"
     ],
     "docs/user-guide/platform/edge-nodes.md": [
       "docker-compose.edge.macvlan.yml"
