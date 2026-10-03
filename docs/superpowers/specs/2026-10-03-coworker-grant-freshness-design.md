@@ -50,15 +50,12 @@ the existing database lookup suffices. Keep static registry lookup behavior sepa
 
 ## Acceptance contract
 
-- AC-1: A warm resolver observes a saved grant and its later revocation on the
-  next lookup without reconnecting or restarting any process.
+- AC-1: A warm resolver observes a saved grant and its later revocation on the next lookup without reconnecting or restarting any process.
 - AC-2: A stored coworker with zero grants receives no registry grants.
 - AC-3: A synchronous registry lookup does not override stored grants.
-- AC-4: A failed authoritative read returns no grants, including after a previous
-  successful grant; the next successful read recovers normally.
+- AC-4: A failed authoritative read returns no grants, including after a previous successful grant; the next successful read recovers normally.
 - AC-5: Only a successful missing-agent lookup uses the legacy registry fallback.
-- AC-6: After canonical deployment, the authorized temporary grant/check/revoke
-  sequence succeeds through supported UI and MCP, and original grants are restored.
+- AC-6: After canonical deployment, the authorized temporary grant/check/revoke sequence succeeds through supported UI and MCP, and original grants are restored.
 
 ## Ordered fix plan
 
