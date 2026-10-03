@@ -87,3 +87,11 @@ Findings reconcile into `EaConformanceIssue` beside the structural ones (visible
 - **The tool-execution ledger** (`lib/governed-tool-audit.ts`) applies `boundLargeStrings` to every parameter tree: an oversized leaf becomes `{__dpfBounded, sha256, byteLength, head}`. Two ledgers carrying the same log converge on one file and one row.
 - **Why it matters.** Before the ceiling, one 16-day-old install held ~560 MB (32% of the database) of local-CI console text twice, inside `ExternalEvidenceRecord.details` and `ToolExecution.parameters`, growing ~6.5 GB/year per copy. Backfill for rows written before the ceiling: `apps/web/scripts/offload-evidence-output.ts` (dry-run by default, `--apply` to rewrite).
 - **Adding a new evidence-bearing writer?** Route the body through `offloadEvidenceOutput` (or `boundLargeStrings` if the row is a pure ledger) before the insert. A JSON column is a place for structure and references, never for a log.
+
+## Task-specific operating rules
+
+Read these when this domain is touched. These statements are relocated from AGENTS.md; its invariant core still applies.
+
+- **Closed-set string fields are typed enums, never free-form strings.** A new closed axis gets a Prisma enum + generated TypeScript union; widening one is a migration, not a string literal. → [kernel principle](../professions/data-architect/wiki/strongly-typed-string-enums.md)
+- **`Organization` is the canonical platform identity model.** Any feature needing org name, slug, logo, address or contact reads from it — never a parallel store. → [kernel principle](../professions/data-architect/wiki/organization-canonical-identity.md)
+- **Compose from the shared micro-primitives** — action results, JSON coercion, route constants. A page-local helper under a route segment must not become a second home for a shared concern. Schema audit before a large feature is the §1 check at data-model altitude. → [kernel principle](../founder-kernel/wiki/principles/single-source-of-truth.md)

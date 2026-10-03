@@ -192,9 +192,11 @@ export function buildSemanticChangeReviewPrompt(input: {
   }, null, 2);
   const responseGuidance = buildStudio ? "" : `Choose decision \"pass\", \"fail\" or \"cannot-verify\" from the evidence. For findings, issues contains objects with severity (\"critical\", \"important\" or \"minor\") and description. The example values are placeholders, not a verdict.${input.requireFailureAnalysis ? " Include failureAnalysisReview in the same object. Set adequate to your assessment; explain the omission challenge and why final-change evidence supports recovery readiness. A bare assurance is insufficient." : ""}\n\n`;
 
+  const artifactAuthority = buildStudio ? "" : "The supplied immutable artifact is the review target. Review its changed code and attached evidence. An unrelated ambient checkout is not evidence that this artifact is missing; do not substitute local HEAD for the supplied change. If the artifact itself is absent, truncated, or lacks context needed for a verdict, use cannot-verify and name the missing evidence.\n\n";
+
   return `${introduction}
 
-${titleLabel}: ${input.title}
+${artifactAuthority}${titleLabel}: ${input.title}
 
 CODE CHANGES:
 ${input.artifact}
@@ -211,7 +213,7 @@ REVIEW CHECKLIST — evaluate EVERY item before responding:
 6. Does the code use CSS variables (var(--dpf-*)) for all colors — no text-white, bg-white, text-black, bg-black, or inline hex values? (Exception: text-white on accent-background buttons, semantic status colors from ThemeTokens.states)
 7. Are interactive elements keyboard-accessible with visible focus indicators? Do form inputs have associated labels? Do buttons have descriptive accessible names?
 
-CANNOT VERIFY: if the change described above is not actually present in what you can read — the tree you can see does not contain it, the artifact is empty, or you are looking at different code — respond with decision "cannot-verify" and say so in the summary. That is NOT a code issue and must NOT be reported as one: a finding about the code presumes you read the code. Answering "pass" or "fail" asserts that you reviewed THIS change.
+CANNOT VERIFY: if the change described above is not actually present in what you can read — ${buildStudio ? "the tree you can see does not contain it, the artifact is empty, or you are looking at different code" : "the supplied artifact is empty, incomplete, or does not contain the described change"} — respond with decision "cannot-verify" and say so in the summary. That is NOT a code issue and must NOT be reported as one: a finding about the code presumes you read the code. Answering "pass" or "fail" asserts that you reviewed THIS change.
 
 DECISION DISCIPLINE: report the genuine BLOCKING issues in a single response — be comprehensive about real blockers so there are no surprises on re-review, but do NOT pad the list with nice-to-haves. Reserve "critical" for issues that would cause data loss, security holes, or broken functionality; "important"/"minor" do not block. If the change is correct and tested at a level appropriate to its scope, return "pass". A short, converging review beats an exhaustive one.
 

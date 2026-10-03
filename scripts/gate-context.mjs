@@ -19,7 +19,7 @@ import { parseArgs as utilParseArgs } from "node:util";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { buildGateContext, formatGateContextMarkdown } from "./lib/gate-context.mjs";
+import { buildGateContext, buildTaskBrief, formatGateContextMarkdown } from "./lib/gate-context.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { gitText } from "./lib/git.mjs";
 
@@ -97,8 +97,17 @@ export function parseStdinChanges(text) {
 export async function main() {
   const args = process.argv.slice(2);
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
-  const { values } = utilParseArgs({ args, strict: false, allowPositionals: true, options: { base: { type: "string" } } });
+  const { values } = utilParseArgs({ args, strict: false, allowPositionals: true, options: { base: { type: "string" }, situation: { type: "string" } } });
   const base = values.base === undefined ? "origin/main" : typeof values.base === "string" ? values.base : undefined;
+
+  // Route before Git, registries or live coordination: recovery may need none of them.
+  if (values.situation !== undefined) {
+    const brief = buildTaskBrief(values.situation);
+    process.stdout.write(args.includes("--json")
+      ? `${JSON.stringify(brief, null, 2)}\n`
+      : `${brief.route}: ${brief.nextAction}\nRead: ${brief.reference}\nEvidence: ${brief.evidence}\nStop: ${brief.stopCondition}\n`);
+    return;
+  }
 
   let changedFiles;
   let addedLinesByFile = new Map();
