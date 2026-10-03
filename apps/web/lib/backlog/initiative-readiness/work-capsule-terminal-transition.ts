@@ -86,8 +86,14 @@ function factsDigest(value: unknown) {
 
 function passedEvidenceIds(activities: CapsuleEvidenceActivity[]): string[] {
   return activities.flatMap((activity) => {
-    if (activity.kind !== "evidence-recorded") return [];
     const payload = object(activity.payload);
+    // recordRuntimeVerification mirrors its own canonical activity contract.
+    if (activity.kind === "runtime-verification-passed") {
+      return payload.status === "passed"
+        && typeof payload.verificationId === "string"
+        && payload.verificationId.trim().length > 0 ? [activity.id] : [];
+    }
+    if (activity.kind !== "evidence-recorded") return [];
     const result = object(payload.result);
     const kind = typeof payload.kind === "string" ? payload.kind : "";
     const verdict = typeof result.verdict === "string" ? result.verdict : "";
@@ -240,7 +246,7 @@ export async function completeWorkCapsuleTransition(args: {
       authority.organizationId = subject.organizationId;
       authority.authoritySnapshot.organizationId = subject.organizationId ?? "platform";
       const evidence = await tx.workroomActivity.findMany({
-        where: { workCapsuleId: capsule.id, kind: "evidence-recorded" },
+        where: { workCapsuleId: capsule.id, kind: { in: ["evidence-recorded", "runtime-verification-passed"] } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         take: 200,
         select: { id: true, kind: true, recordedAt: true, payload: true },

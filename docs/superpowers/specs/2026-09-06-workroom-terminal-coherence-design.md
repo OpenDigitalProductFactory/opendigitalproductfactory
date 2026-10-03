@@ -4,7 +4,7 @@ status: active
 
 # Workroom terminal coherence design
 
-**Backlog item:** `BI-AAA13210`  
+**Backlog items:** `BI-AAA13210`, regression `BI-9C018CEB`
 **Observed predecessor:** `BI-199F71B6` / `WC-0C842917`  
 **Parent contract:** `2026-09-01-completion-readiness-recovery-design.md`
 
@@ -23,6 +23,14 @@ immediately following `WC-0C842917` transition returned
 `RESEARCH_REQUIRED`, `ACCEPTANCE_EVIDENCE_REQUIRED`, and
 `OBJECTIVE_RECONCILIATION_REQUIRED`. Adding Workroom-local test, build, and
 verification evidence cleared only `DELIVERY_EVIDENCE_REQUIRED`.
+
+On canonical image `37da678752014212c7713ec7079716454b57284b`,
+`BI-78EDA4E7` completed under `IRD-0C12818E74E4`, but `WC-1D9DA55C`
+was refused by `IRD-5F649FBC8BEC`. The Workroom already contained successful
+canonical verification `RV-BI-78EDA4E7-LIVE-20261002`. Its writer emits
+`runtime-verification-passed` with `payload.status = passed`; the terminal
+reader selected only `evidence-recorded` and read `payload.result.verdict`.
+That incompatible reader silently discarded the Workroom's delivery proof.
 
 ## Objectives
 
@@ -49,6 +57,22 @@ transition and replace its capsule-identity and delivery requirement entries
 with the current Workroom evidence. If any prerequisite is absent, retain the
 existing full readiness projection and refusal behavior.
 
+Canonical `runtime-verification-passed` activities also satisfy the local
+verification requirement when their payload has status `passed` and a
+nonempty verification ID. Include that activity kind in the repository query
+and cite its activity ID in the rebound decision. Failed, waived, incomplete,
+or malformed verification records do not qualify. Generic evidence retains
+its existing contract; no duplicate manual evidence entry is required.
+
+Implementation order for BI-9C018CEB:
+1. Reproduce the canonical writer payload through a query-aware test double
+   and the real readiness projection; confirm completion currently fails.
+2. Extend the existing local delivery reader and its query together.
+3. Test malformed and unsuccessful verification, existing generic evidence,
+   non-done items and identity refusal; run the affected and adjacent suites.
+4. Deliver through the protected queue, verify on the canonical install,
+   then retry WC-1D9DA55C completion through the governed tool.
+
 No status, receipt, table, migration, bypass, or alternate policy engine is
 added. Backlog-item completion remains unchanged.
 
@@ -63,6 +87,9 @@ added. Backlog-item completion remains unchanged.
   through the current projection and remains fail-closed.
 - **AC-WC-COHERENCE-004:** Missing Workroom-local delivery evidence or failed
   lease identity cannot reuse the item decision.
+- **AC-WC-COHERENCE-005:** The canonical runtime writer's passing activity
+  survives repository selection and permits reuse; failed, waived and
+  malformed payloads remain refused.
 
 ## Verification and compatibility
 

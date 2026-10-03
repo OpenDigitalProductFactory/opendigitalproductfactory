@@ -49,6 +49,7 @@ function fakeDb(options: {
   itemStatus?: string;
   activities?: Array<Record<string, unknown>>;
   evidence?: boolean;
+  evidenceActivities?: Array<{ id: string; kind: string; recordedAt: Date; payload: Record<string, unknown> }>;
   identity?: boolean;
 } = {}) {
   const updateMany = vi.fn(async () => ({ count: 1 }));
@@ -65,7 +66,11 @@ function fakeDb(options: {
     $queryRawUnsafe: vi.fn(async () => []),
     workroom: { findUnique: vi.fn(async () => capsule), updateMany },
     workroomActivity: {
-      findMany: vi.fn(async () => options.evidence === false ? [] : [{ id: "WE-1", kind: "evidence-recorded", recordedAt: new Date(), payload: { kind: "verification", result: { verdict: "passed" } } }]),
+      findMany: vi.fn(async (query: { where: { kind: string | { in: string[] } } }) => {
+        const activities = options.evidenceActivities ?? (options.evidence === false ? [] : [{ id: "WE-1", kind: "evidence-recorded", recordedAt: new Date(), payload: { kind: "verification", result: { verdict: "passed" } } }]);
+        const kinds = typeof query.where.kind === "string" ? [query.where.kind] : query.where.kind.in;
+        return activities.filter((activity) => kinds.includes(activity.kind));
+      }),
       create: vi.fn(async (args: unknown) => args),
     },
     backlogItem: { findFirst: vi.fn(async (query: { select: { activities: { where: { kind: { in: string[] } } } } }) => ({
@@ -81,6 +86,41 @@ function fakeDb(options: {
 const actor = { userId: "user-1", agentId: "AGT-1", principalId: "PRN-1" };
 
 describe("completeWorkCapsuleTransition", () => {
+  it("reuses the done-item decision with the canonical runtime verification activity", async () => {
+    const fake = fakeDb({
+      itemStatus: "done", activities: [terminalDecisionActivity()],
+      evidenceActivities: [{
+        id: "RVA-1", kind: "runtime-verification-passed", recordedAt: new Date(),
+        payload: { verificationId: "RV-1", kind: "final-acceptance", status: "passed", runtimeTargetId: "target-1", buildActivityId: null, evidenceUrl: null, screenshotUrl: null },
+      }],
+    });
+    const result = await completeWorkCapsuleTransition({
+      db: fake.db, capsuleId: "WC-1", expectedStatus: "working", reason: "Live verification passed", actor,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.decision.satisfied).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "DELIVERY_EVIDENCE_REQUIRED", evidenceRefs: ["RVA-1"] }),
+    ]));
+    expect(fake.updateMany).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["failed", "runtime-verification-failed", { verificationId: "RV-1", status: "failed" }],
+    ["waived", "runtime-verification-passed", { verificationId: "RV-1", status: "waived" }],
+    ["missing identifier", "runtime-verification-passed", { status: "passed" }],
+    ["empty identifier", "runtime-verification-passed", { verificationId: " ", status: "passed" }],
+    ["missing status", "runtime-verification-passed", { verificationId: "RV-1" }],
+  ])("refuses %s runtime verification evidence", async (_label, kind, payload) => {
+    const fake = fakeDb({ itemStatus: "done", activities: [terminalDecisionActivity()],
+      evidenceActivities: [{ id: "RVA-1", kind, payload, recordedAt: new Date() }],
+    });
+    const result = await completeWorkCapsuleTransition({
+      db: fake.db, capsuleId: "WC-1", expectedStatus: "working", reason: "Attempt closeout", actor,
+    });
+    expect(result.ok).toBe(false);
+    expect(fake.updateMany).not.toHaveBeenCalled();
+  });
+
   it("reuses an enforced allowed completion decision for the linked done item", async () => {
     const fake = fakeDb({ itemStatus: "done", activities: [terminalDecisionActivity()] });
     const result = await completeWorkCapsuleTransition({
