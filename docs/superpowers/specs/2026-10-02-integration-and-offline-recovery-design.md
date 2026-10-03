@@ -138,6 +138,82 @@ Platform-hosted gates are never on the path before restoration.
 
 ## Ordered delivery and verification
 
+### Canonical ownership and persistence
+
+The following are proposed extensions, not claims that these fields or commands
+already exist. No new queue, approval database or recovery service is introduced.
+
+| Contract | Canonical owner and writer | Persistence and compatibility |
+|---|---|---|
+| Immutable test request and retry admission | `NonProductionEnvironmentLease`; `apps/web/lib/nonprod/environment-lease.ts` owns admission and cancellation | Add nullable pinned source/base/host binding and recovery fields to this existing model. Existing `claimKey` remains unique. Existing terminal evidence is never rewritten. |
+| Recovery phase and budgets | The same lease, updated by its current fenced executor through existing lease tools | A Prisma enum defines running, infrastructure retry, capacity wait and intervention. Add attempt count, next eligible time, total deadline, generation and last progress time. Missing fields mean legacy execution, never inferred authority to take over. |
+| Host execution | BI-A6DC9847's host worker extends the existing installer-managed host lifecycle | Bind the canonical install-state path, Docker endpoint and project to a host identity; validate queued source/worktree identity before dispatch. A managed worker holds the existing process-start/token fence and does not borrow an unrelated caller's credentials. Admission must explicitly authorize this executor before cutover. |
+| Attempt diagnostics and final verdict | Existing local gate records and `ExternalEvidenceRecord` | Archive each attempt before the next opens its log. Keep exact source, gate identity and ownership generation. Infrastructure records cannot replace passed or failed-code verdicts. |
+| Install identity and recovery lock | `scripts/installer/install-state.schema.json`, `resolve-host-identity.mjs`, `install-state-transaction.mjs` | Reuse canonical state-path resolution, platform identity, Docker endpoint, Compose project, locking, flushed recovery bytes and restore. Bind their hashes in the recovery plan; do not invent a second organization identity. |
+| Offline recovery inputs | A versioned JSON contract under `scripts/installer/`, consumed by the bootstrap recovery command | Plan, operator authorization, independent verification and journal live in a restricted recovery directory below the canonical install state directory. They are transport/checkpoint artifacts for the existing recovery operation, not another approval store. |
+| Reconciled recovery operation | `SelfUpgradeRun` and its existing `completionEvidence`, `recoveryOfRunId` and change-record integration | After the portal recovers, an authenticated importer validates the local report and uses its stable `runId` to create/reconcile exactly one recovery run. It preserves predecessor history and rejects an existing run with different hashes. It cannot turn unrun gates into passes. |
+
+The offline JSON contract must close its action and phase sets and reject unknown
+fields. The plan contains schema version, run ID, canonical install-state hash,
+Docker endpoint/project, exact service/container identities, image content IDs,
+configuration and mount hashes, allowed actions and expiry. Authorization and
+independent-verification receipts each bind that plan digest and identify their
+separate signer. Local trusted operator and verifier public keys must already
+exist, or be provisioned explicitly by the operator through the bootstrap path;
+the executor cannot enroll its own signer or manufacture a receipt. Organization
+CA identity alone is not proof that a person may authorize recovery.
+
+The journal is append-only, sequence-numbered and hash-linked, written and flushed
+before each consequential step. Restrictive permissions and symlink rejection
+protect its directory. It contains hashes and action results, not credentials or
+environment values. Reconciliation keeps the original signed envelope and log;
+the platform receipt references their digest. A corrupt journal, unknown phase,
+unverifiable signer, changed mount, changed source or ambiguous prior effect stops
+at requiring intervention with no further mutation.
+
+### Additive rollout and implementation boundaries
+
+1. Expand the existing lease model with nullable fields, a typed recovery enum
+   and an eligibility index. The forward-only migration must apply with active,
+   queued, cancelled and terminal legacy rows present. Do not reset or backfill
+   ownership, completed evidence, timestamps or retry budgets by guesswork.
+2. Server readers and writers accept both versions. Legacy executors keep their
+   existing lease path; upgraded executors explicitly advertise the recovery
+   protocol. Generation checks fence writes, renewals and cleanup. Backfill only
+   identities proven from their canonical source; otherwise retain legacy mode.
+3. Deploy and verify the host worker and its authorized dispatch contract before
+   any host stops spawning resumers. Host cutover is atomic under the host fence;
+   existing executing runners drain. The original session may then die without
+   losing dispatch. Retain old fields/readers during rollback; removal is later
+   work after mixed-version proof, not part of the first migration.
+4. Offline recovery uses versioned local files because the database may be down.
+   Extend the existing `SelfUpgradeRun.completionEvidence` JSON reader additively
+   for the signed report; no separate authorization/journal database table is
+   required. Old readers may ignore the additive report. The importer rejects
+   unknown versions and never overwrites a terminal predecessor. If implementation
+   discovers a required schema change, revise and review this design first.
+
+### Failure analysis and falsifiable exercises
+
+All observations below are acceptance tests to implement and run, not passed
+evidence. Documentation checks establish only the integrity of this draft.
+
+| Trigger and effect | Prevention/containment and detection | Recovery proof |
+|---|---|---|
+| DNS disappears while job A owns capacity; job B starves | Structured dependency failure ends A's attempt without a code verdict; cleanup/release precedes backoff | VER-IT-2 blocks only A's dependency, observes B complete, restores DNS and observes A resume under the original identity without operator cleanup |
+| Supervisor or runner is killed; stale owner renews or duplicate delivery runs twice | Persisted budget, start identity and generation fence; host reconciler distinguishes owner death from an unavailable probe | VER-IT-1 kills each execution boundary, injects duplicate supervisors and PID reuse, and asserts one executing runner and no successor termination |
+| A quiet valid test is mistaken for a stall | Stage authority carries an explicit execution deadline; heartbeat is never progress | VER-IT-1 keeps a legitimate quiet test alive within budget, then separately freezes a stage beyond budget and verifies bounded cleanup and fair requeue |
+| Shell text mentions the runner without executing it | Executable and argument-role classification plus actual ancestry | VER-IT-1 asserts sleeping wrappers and their sleep children are ignored while a real Node runner and descendants remain protected |
+| A recovery receipt is forged, replayed or used for another install | Distinct trusted signers, exact plan/host/action/expiry binding and replay reconciliation | VER-OR-1 changes each binding independently and asserts zero mutations; repeated valid delivery reconciles the already completed operation |
+| Crash, corrupt journal or partial swap leads to repeated side effects | Flushed intent, observed-state reconciliation, token ownership and exact recovery bytes | VER-OR-1 injects death before and after every write/swap boundary, then resumes or safely stops without erasing evidence |
+| Rollback uses an incompatible image or replaces business data | Preposition known rollback image and matching configuration; preserve mounts; no schema downgrade or automatic DB restore | VER-OR-2 fails target health, restores the original image/state and compares business-data and mount identities before/after |
+| Portal, MCP, approval store, queue or self-upgrade is down | Bootstrap runs from locally available verified assets and receipts; no control-plane call on the restoration path | VER-OR-2 denies each dependency and breaks the upgrade entry point, restores the isolated target, then reconciles original evidence once; unavailable gates stay unrun |
+
+The implementation owner remains accountable for these risks in BI-02E5CE5A
+and BI-7A4E70E9. No residual operational risk is accepted by this draft. Failed or
+unrun exercises block recovery acceptance; independent design review evaluates
+the proposed protections and testability, not nonexistent runtime results.
+
 1. BI-02E5CE5A: reproduce process fixtures; extend classifier, existing lease
    supervision, durable resumer and evidence/status projections. Integrate
    BI-AE87D2BE's delivered DNS classification. Test CON-IT-1 through CON-IT-3
