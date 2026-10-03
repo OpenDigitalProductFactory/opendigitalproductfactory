@@ -150,7 +150,7 @@ already exist. No new queue, approval database or recovery service is introduced
 | Host execution | BI-A6DC9847's host worker extends the existing installer-managed host lifecycle | Bind the canonical install-state path, Docker endpoint and project to a host identity; validate queued source/worktree identity before dispatch. A managed worker holds the existing process-start/token fence and does not borrow an unrelated caller's credentials. Admission must explicitly authorize this executor before cutover. |
 | Attempt diagnostics and final verdict | Existing local gate records and `ExternalEvidenceRecord` | Archive each attempt before the next opens its log. Keep exact source, gate identity and ownership generation. Infrastructure records cannot replace passed or failed-code verdicts. |
 | Install identity and recovery lock | `scripts/installer/install-state.schema.json`, `resolve-host-identity.mjs`, `install-state-transaction.mjs` | Reuse canonical state-path resolution, platform identity, Docker endpoint, Compose project, locking, flushed recovery bytes and restore. Bind their hashes in the recovery plan; do not invent a second organization identity. |
-| Offline recovery inputs | A versioned JSON contract under `scripts/installer/`, consumed by the bootstrap recovery command | Plan, operator authorization, independent verification and journal live in a restricted recovery directory below the canonical install state directory. They are transport/checkpoint artifacts for the existing recovery operation, not another approval store. |
+| Offline recovery inputs | Installer/bootstrap recovery owns a versioned `OfflineSelfUpgradeRecoveryEnvelope` contract under `scripts/installer/`; the bootstrap recovery command is its only execution writer | The operator selects a restricted recovery-kit directory outside the installation and its state directory, on independently retained storage. It contains the immutable plan, signed receipts, execution journal and rollback metadata. These are transport/checkpoint artifacts for the existing self-upgrade recovery lifecycle, not another approval store. |
 | Reconciled recovery operation | `SelfUpgradeRun` and its existing `completionEvidence`, `recoveryOfRunId` and change-record integration | After the portal recovers, an authenticated importer validates the local report and uses its stable `runId` to create/reconcile exactly one recovery run. It preserves predecessor history and rejects an existing run with different hashes. It cannot turn unrun gates into passes. |
 
 The offline JSON contract must close its action and phase sets and reject unknown
@@ -162,6 +162,55 @@ separate signer. Local trusted operator and verifier public keys must already
 exist, or be provisioned explicitly by the operator through the bootstrap path;
 the executor cannot enroll its own signer or manufacture a receipt. Organization
 CA identity alone is not proof that a person may authorize recovery.
+
+`SelfUpgradeRun` is the canonical recovery-operation model, identified by the
+same `runId` online and offline. Its bootstrap adapter, not the portal, is the
+sole writer of offline execution facts. The planner writes the immutable plan;
+the operator signer writes authorization; a different verifier signer writes
+the verification receipt. None can rewrite another actor's artifact. A single
+bootstrap executor holds the existing install-state lock plus a token-owned
+lock in the recovery-kit directory and appends execution journal entries. Its
+state machine is `prepared -> authorized -> preserved -> executing -> verifying
+-> restored | rolling-back -> rolled-back | intervention`. Resume reconciles
+the last flushed boundary with actual containers before advancing; it cannot
+skip authorization or preservation. `intervention` permits observation and
+evidence export only until a new scoped plan is independently authorized.
+
+After restoration, the authenticated importer is the only writer of the imported
+`SelfUpgradeRun` projection and corresponding change record. It records the
+original signed envelope and journal digest in `completionEvidence`; it never
+becomes an alternate execution writer or invokes the offline actions. Identical
+run ID and digest are idempotent; a different digest is a conflict. The offline
+journal remains the authoritative record of actions performed offline, while
+the database row is its indexed projection. It cannot authorize a future run.
+
+The recovery kit must be prepared and verified while healthy and copied to a
+second independently retained location. It includes trusted signer public keys,
+the signed trust manifest, executable recovery assets, exact rollback image
+archive, Compose/configuration recovery metadata and installation identity
+fingerprint. Private configuration is encrypted at rest using the operator's
+existing offline key custody; credentials and business data are excluded from
+the portable audit log. Verification checks kit hashes and performs a read-only
+restore inspection before reporting the kit usable. The live install-state
+directory is a restoration target, not the sole home of recovery inputs. If it
+is missing, the adapter verifies the kit's installation binding against Docker
+daemon/project/container labels and preserved mount identities; disagreement
+stops intervention. It never silently selects another installation or daemon.
+
+Trust enrollment is a separate, explicit operator/bootstrap ceremony, usable
+without the portal: an OS-authenticated installation administrator pins an
+operator public-key fingerprint and a distinct independent-verifier fingerprint,
+then both sign the install-bound trust manifest. Keys supplied only by the
+executor are not accepted. Existing organization/operator key custody is reused;
+the recovery tool does not generate or retain signing private keys. The signed
+manifest declares roles, install binding, validity, monotonically increasing
+epoch and revoked fingerprints. Rotation requires the current operator and
+independent verifier to sign the successor manifest; an older epoch cannot
+replace a locally recorded newer epoch. Emergency replacement of lost trust is
+a new independently witnessed enrollment, never an executor fallback. Offline
+verification uses this pre-positioned manifest and its expiry, not an unavailable
+approval-store query. Missing, expired or contradictory trust stops safely and
+names the required out-of-band repair rather than inventing authorization.
 
 The journal is append-only, sequence-numbered and hash-linked, written and flushed
 before each consequential step. Restrictive permissions and symlink rejection
@@ -192,6 +241,29 @@ at requiring intervention with no further mutation.
    required. Old readers may ignore the additive report. The importer rejects
    unknown versions and never overwrites a terminal predecessor. If implementation
    discovers a required schema change, revise and review this design first.
+
+The server lease writer has exclusive precedence over test-execution authority.
+For upgraded requests it atomically admits `waiting -> running` with a new
+generation and assigned executor; only that executor/generation may renew,
+report progress, settle or release. An infrastructure settlement cleans owned
+processes, records the attempt, releases the active slot and moves to retry wait;
+when eligible it rejoins the FIFO tail. Cancellation is terminal. Budget
+exhaustion moves to intervention. Duplicate deliveries subscribe to the same
+immutable request. A local host fence prevents duplicate host workers but cannot
+grant or extend a server lease. With the control plane down, a currently admitted
+runner keeps only its already granted bounded authority, then cleans up and
+waits unrun; no host worker grants itself admission. Offline platform restoration
+is a separate scoped bootstrap action and never grants test capacity.
+
+Protocol-null rows remain legacy-owned. A running legacy row is never upgraded
+or taken over. Conversion requires a queued/inactive row, positive proof that
+the old executor and its descendants are gone, unchanged immutable source and
+an atomic server-side version/generation check. Unknown liveness refuses
+conversion. The server records the previous executor and new authorized host
+assignment, while the host atomically switches dispatch mode under its fence.
+Terminal completed rows remain terminal and reusable under existing evidence
+rules. These invariants, including control-plane loss during cutover, are
+mandatory mixed-version tests before disabling the legacy resumer on any host.
 
 ### Failure analysis and falsifiable exercises
 
