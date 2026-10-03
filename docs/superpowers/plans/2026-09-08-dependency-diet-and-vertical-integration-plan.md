@@ -269,7 +269,7 @@ _Founder direction, 2026-09-25: too many dependencies, too much complexity, too 
 |---|---|---|
 | M1 production dependency set in the image | done | #5267 |
 | M2 diagram toolchain out of the workspace | done: mermaid out (#5253); `docx` retired, the architecture `.docx` builds through dpf-doctools (#5724) | #5253, #5724 |
-| M3 durable jobs onto Postgres | decided `own_postgres_jobs` (§10.6.1). Phase 1 done: every durable job goes through the `@/lib/jobs` facade (#5760). Phase 2 built 2026-10-01 on `claude/m3-postgres-jobs` (BI-85E6EF14): the owned engine behind `DPF_JOBS_ENGINE`, default off (unset = the facade *is* the Inngest client), per-function and shared concurrency limits, cron, sleep/waitForEvent, cancelOn, onFailure, lease recovery, and one additive forward-only migration. The spec §7 benchmarks ran on real Postgres (spec §7.1): every correctness drill passes and throughput holds at 21 runs/s, but event-to-first-step latency (p50 10.8 ms) is above Inngest's, so the flag flips per domain for a soak, not fleet-wide. Phase 3 (retire Inngest, then rebaseline the SBOM) waits for that soak | #5760, [design](../specs/2026-09-25-postgres-durable-job-engine-design.md), [phase-2 plan](2026-09-29-m3-phase-2-postgres-job-engine-plan.md), BI-85E6EF14 |
+| M3 durable jobs onto Postgres | decided `own_postgres_jobs` (§10.6.1). Phase 1 done: every durable job goes through the `@/lib/jobs` facade (#5760). Phase 2 merged 2026-10-02 in #5898 (BI-85E6EF14): the owned engine behind `DPF_JOBS_ENGINE`, default off (unset = the facade *is* the Inngest client), per-function and shared concurrency limits, cron, sleep/waitForEvent, cancelOn, onFailure, lease recovery, and one additive forward-only migration. The spec §7 benchmarks ran on real Postgres (spec §7.1): every correctness drill passes and throughput holds at 21 runs/s, but event-to-first-step latency (p50 10.8 ms) is above Inngest's, so the flag flips per domain for a soak, not fleet-wide. The soak runs in four batches judged by `scripts/job-engine-soak-report.ts` (spec §7.2, BI-66D2BB3F); phase 3 (retire Inngest, then rebaseline the SBOM, BI-742D569C, scoped in spec §6.2) waits for it | #5760, #5898, [design](../specs/2026-09-25-postgres-durable-job-engine-design.md), [phase-2 plan](2026-09-29-m3-phase-2-postgres-job-engine-plan.md), BI-85E6EF14 |
 | M4 Prism replaced in the harness | done: an owned OpenAPI contract runtime; Prism retired on the dependency allowlist | [design](../specs/2026-09-25-harness-owned-contract-validator-design.md) |
 | M5 document cluster | partly absorbed by the office-document engine; its S9 (BI-D1B40D43, 2026-09-26) retired mammoth, read-excel-file and pdf-parse (with pdfjs-dist and @napi-rs/canvas): 39 resolved components, now on the sbom deny list. M5b done: invoice PDFs render through the dpf-doctools export path and `@react-pdf/renderer` is retired (#5770). The markdown half is done (2026-09-29, BI-0AB1FD47): one `renderMarkdown()` on `markdown-it` 14 with raw HTML off (§10.6.1, DI-D9292D812CFF) serves the user guide, wiki, coworker chat, build brief, workspace documents and the office export; `react-markdown` and `remark-gfm` are retired on the sbom allowlist, and `check-no-local-markdown-renderer.mjs` holds it at one renderer. Platform lockfile 959 → 872 resolved components | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md), #5770, #5803 |
 | M6 mobile workspace split | done (follow-ups: the Jest 30.5.2 patch landed deduped, #5727; the React pin is declared, guarded by `check-mobile-react-pin.mjs` and excluded from Dependabot, #5759): founder-approved 2026-09-25; `apps/mobile` resolves in its own workspace and lockfile; platform tree 1759 → 1062 packages, duplicated names 165 → 68 | `apps/mobile/pnpm-workspace.yaml`, `scripts/sbom/lockfile-roots.mjs` |
@@ -362,7 +362,7 @@ The founder decided the four open calls in the dependency-architecture thread on
 | One branch and one PR per move | DI-8578ECC7DA6C |
 | M11 step 2 `rescope_to_measured_levers` (filed 2026-10-01, after the re-scope had shipped; spec §7) | DI-F2DCF2FEDBE7 |
 
-The `record_decision_outcome` step could not be filed: the connection's coworker lacks the `decision_record_create` grant (`agent-grant-missing`). The outcomes stay unrecorded in that column until an administrator grants it. A retry on 2026-10-01 for DI-F2DCF2FEDBE7 was refused the same way; the decision is pointed at from Workroom WC-6E73264F instead.
+Outcomes recorded 2026-10-02 (`record_decision_outcome`, resolved by the founder, each `followed`): DI-E52E32AEA1E4 `own_postgres_jobs`, DI-459D332D727F `elkjs_only`, DI-D9292D812CFF `markdown_it_raw_html_off`, DI-8578ECC7DA6C one PR per move. Before 2026-10-01 they were refused for a missing `decision_record_create` grant; DI-F2DCF2FEDBE7 is pointed at from Workroom WC-6E73264F.
 
 | Call | Decision | Consequence |
 |---|---|---|
@@ -385,11 +385,11 @@ Measured with `node scripts/sbom/check-sbom-drift.mjs` on `main` at `fab98a17b`,
 
 Every S-move and M1, M2, M4, M5, M6, M7, M8 and M9 are done. Open:
 
-- **M3 phase 3.** Phase 2 (the engine behind a flag, BI-85E6EF14) is built and benchmarked. Inngest retires only after the flag has been on per domain for a soak.
+- **M3 phase 3.** Phase 2 (the engine behind a flag, BI-85E6EF14) merged in #5898 and is benchmarked. The soak (BI-66D2BB3F, spec §7.2) runs in four batches; Inngest retires (BI-742D569C, scoped in spec §6.2) after every function has run on Postgres for 7 days with the soak report passing.
 - **M5 markdown.** Done in #5803 (BI-0AB1FD47).
 - **M11 step 2.** Delivered through PR-4 of the 2026-09-30 spec (§10.1). PR-5, `lib` and `ui` as project references, proceeds only if a re-measurement on the PR-4 tree shows a UI-only cold check saving 40% or more. No guard yet holds `lib` declaration emit at 0: the cheapest is `"declaration": true` under `noEmit` in `apps/web/tsconfig.json` (about 60 s on one cold run), after the 14 declaration errors in `app/` and `proxy.ts` are fixed. Step 4 is done (#5793). Step 3 (CI shape) is unchanged.
 - **edge-node image installs without `--frozen-lockfile`.** Done: every Dockerfile installs `--frozen-lockfile`, enforced by `check-docker-patch-context.mjs` (#5829). Because `pnpm deploy --legacy` ignores the lockfile under the hoisted linker, the edge-node, adp and integration-test-harness images now assert their deployed tree against the lockfile (`scripts/sbom/assert-deploy-matches-lockfile.mjs`, #5829, #5837).
-- **Owed records.** Filed 2026-09-29; see §10.6.1 and §10.7. Only the decision-outcome column remains, blocked on a grant.
+- **Owed records.** Filed 2026-09-29; decision outcomes recorded 2026-10-02 (§10.6.1).
 
 ### 10.7 Backlog coverage
 
@@ -410,7 +410,7 @@ M8 and the §7 ratchet ran against BI-5265CAD0 (M7 + M8). The S-moves were deliv
 | S11 | BI-3D37F899 | done (#5693) |
 | S12 | BI-82052153 | done (#5702; images frozen and asserted against the lockfile, #5829, #5837) |
 | M2 | BI-DBDB8C6D | awaiting acceptance (#5253, #5724) |
-| M3 | BI-068BBA33 | open: phase 1 done (#5760); phase 2 built behind a flag (BI-85E6EF14); phase 3 waits for a soak |
+| M3 | BI-068BBA33 | open: phase 1 done (#5760); phase 2 merged behind a flag (#5898, BI-85E6EF14, awaiting acceptance); phase 3 waits for a soak |
 | M5 | BI-0AB1FD47 | awaiting acceptance (#5770, #5803) |
 | M7 + M8 | BI-5265CAD0 | awaiting acceptance (#5289, #5670) |
 | M9 | BI-B1977CEE | awaiting acceptance (#5285, #5774) |

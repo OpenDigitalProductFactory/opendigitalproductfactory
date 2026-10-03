@@ -38,9 +38,15 @@ const connection = {
   context: { agentId: "AGT-EXT-CODEX", apiTokenId: "TOK-1", authSource: "oauth" },
 };
 
+/** Rooms per query: the author query (any room) and the Build Studio candidate query (executorKind filter). */
+function roomsByQuery(authorRooms: unknown[], buildStudioRooms: unknown[] = []) {
+  prismaMock.workroom.findMany.mockImplementation(async (args: { where?: { executorKind?: string } }) =>
+    args?.where?.executorKind === "build-studio" ? buildStudioRooms : authorRooms);
+}
+
 beforeEach(() => {
   for (const model of Object.values(prismaMock)) for (const fn of Object.values(model)) fn.mockReset();
-  prismaMock.workroom.findMany.mockResolvedValue([room()]);
+  roomsByQuery([room()]);
   prismaMock.backlogItem.findMany.mockResolvedValue([{ itemId: "BI-1" }]);
   prismaMock.workroomActivity.findFirst.mockResolvedValue(null);
   prismaMock.workroomActivity.create.mockResolvedValue({ id: "act" });
@@ -52,6 +58,7 @@ function deps(overrides: Record<string, unknown> = {}) {
     random: () => 0.5,
     owedRoutes: vi.fn(async () => [{ workroomId: "WC-1", requestCoworker: packet }]),
     findConnection: vi.fn(async () => connection as never),
+    findUserConnection: vi.fn(async () => null),
     execute: vi.fn(async () => ({ success: true, message: "Requested." })),
     ...overrides,
   };
@@ -62,7 +69,7 @@ describe("dispatchOwedIndependentReviews", () => {
     const d = deps();
     const outcomes = await dispatchOwedIndependentReviews(d);
     expect(outcomes).toEqual([expect.objectContaining({ itemId: "BI-1", outcome: "dispatched", requestKey: packet.requestKey })]);
-    expect(d.owedRoutes).toHaveBeenCalledWith("BI-1", "AGT-EXT-CODEX");
+    expect(d.owedRoutes).toHaveBeenCalledWith("BI-1", "AGT-EXT-CODEX", expect.objectContaining({ target: "completion" }));
     expect(d.findConnection).toHaveBeenCalledWith("user-1", "AGT-EXT-CODEX");
     expect(d.execute).toHaveBeenCalledWith(expect.objectContaining({
       toolName: "request_coworker", rawParams: packet, userId: "user-1", source: "external-jsonrpc",
@@ -104,20 +111,20 @@ describe("dispatchOwedIndependentReviews", () => {
   });
 
   it("never dispatches for a room whose author cannot be identified", async () => {
-    prismaMock.workroom.findMany.mockResolvedValue([room({ requestedByPrincipal: null })]);
+    roomsByQuery([room({ requestedByPrincipal: null })]);
     const d = deps();
     await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([]);
     expect(d.owedRoutes).not.toHaveBeenCalled();
   });
 
   it("uses the item's newest assistant-authored room when a newer room names no assistant", async () => {
-    prismaMock.workroom.findMany.mockResolvedValue([
+    roomsByQuery([
       room({ id: "row-new", capsuleId: "WC-NEW", requestedByPrincipal: null, createdByPrincipal: alias("human", "user-1") }),
       room(),
     ]);
     const d = deps();
     await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([expect.objectContaining({ capsuleId: "WC-1", outcome: "dispatched" })]);
-    expect(d.owedRoutes).toHaveBeenCalledWith("BI-1", "AGT-EXT-CODEX");
+    expect(d.owedRoutes).toHaveBeenCalledWith("BI-1", "AGT-EXT-CODEX", expect.objectContaining({ target: "completion" }));
   });
 
   it("only considers items still awaiting acceptance", async () => {
@@ -127,5 +134,72 @@ describe("dispatchOwedIndependentReviews", () => {
     expect(prismaMock.backlogItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { itemId: { in: ["BI-1"] }, status: "awaiting-acceptance" },
     }));
+  });
+});
+
+describe("dispatchOwedIndependentReviews — Build Studio builds in plan (BI-926A7E90)", () => {
+  // Build Studio rooms record the item's ROW id, not its BI- id.
+  const buildRoom = { id: "row-bs", capsuleId: "WC-BS", backlogItemId: "cuid-item-bs", requestedByPrincipal: alias("human", "user-1") };
+  const revisionPacket = {
+    targetAgent: "AGT-WS-REVIEW",
+    objective: "review the design revision",
+    requestKey: "initiative-readiness:BI-BS:spec-approval:sha256:design",
+    initiativeReviewBinding: { itemId: "BI-BS", artifactRef: { kind: "feature-build-revision", revisionId: "rev_1" } },
+  };
+  const userConnection = {
+    ...connection,
+    token: { ...connection.token, agentId: "AGT-EXT-CLAUDE" },
+    context: { agentId: "AGT-EXT-CLAUDE", apiTokenId: "TOK-CLAUDE", authSource: "oauth" },
+  };
+
+  beforeEach(() => {
+    roomsByQuery([], [buildRoom]);
+    prismaMock.backlogItem.findMany.mockResolvedValue([{ id: "cuid-item-bs", itemId: "BI-BS" }]);
+  });
+
+  it("routes the build's owed design reviews on a live connection of the person who requested it, and records the carrier", async () => {
+    const d = deps({
+      owedRoutes: vi.fn(async () => [{ workroomId: "WC-BS", requestCoworker: revisionPacket }]),
+      findUserConnection: vi.fn(async () => userConnection as never),
+    });
+    const outcomes = await dispatchOwedIndependentReviews(d);
+    expect(outcomes).toEqual([expect.objectContaining({
+      itemId: "BI-BS", capsuleId: "WC-BS", outcome: "dispatched", requestKey: revisionPacket.requestKey, carriedByAgentId: "AGT-EXT-CLAUDE",
+    })]);
+    expect(d.owedRoutes).toHaveBeenCalledWith("BI-BS", "AGT-WS-BUILD", expect.objectContaining({ target: "implementation" }));
+    expect(d.findUserConnection).toHaveBeenCalledWith("user-1");
+    expect(d.findConnection).not.toHaveBeenCalled();
+    expect(d.execute).toHaveBeenCalledWith(expect.objectContaining({ toolName: "request_coworker", rawParams: revisionPacket, userId: "user-1" }));
+    expect(prismaMock.backlogItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { OR: [{ itemId: { in: ["cuid-item-bs"] } }, { id: { in: ["cuid-item-bs"] } }], status: { in: ["open", "in-progress"] } },
+    }));
+    expect(prismaMock.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ executorKind: "build-studio", featureBuild: { is: { phase: "plan" } } }),
+    }));
+  });
+
+  it("says who must reconnect when the requesting person has no live connection", async () => {
+    const d = deps({
+      owedRoutes: vi.fn(async () => [{ workroomId: "WC-BS", requestCoworker: revisionPacket }]),
+      findUserConnection: vi.fn(async () => null),
+    });
+    await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([expect.objectContaining({ outcome: "no-author-connection" })]);
+    expect(prismaMock.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      workCapsuleId: "row-bs", summary: expect.stringContaining("person who requested the build"),
+    }) });
+  });
+
+  it("keeps the cooldown: the same design yields the same key and is not re-requested inside the window (AC-4)", async () => {
+    prismaMock.workroomActivity.findFirst.mockResolvedValue({ id: "recent" });
+    const d = deps({ owedRoutes: vi.fn(async () => [{ workroomId: "WC-BS", requestCoworker: revisionPacket }]), findUserConnection: vi.fn(async () => userConnection as never) });
+    await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([expect.objectContaining({ outcome: "cooling-down" })]);
+    expect(d.execute).not.toHaveBeenCalled();
+  });
+
+  it("skips a Build Studio room whose item is no longer open", async () => {
+    prismaMock.backlogItem.findMany.mockResolvedValue([]);
+    const d = deps();
+    await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([]);
+    expect(d.owedRoutes).not.toHaveBeenCalled();
   });
 });

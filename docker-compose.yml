@@ -302,6 +302,12 @@ services:
       # override: override-only values are lost when the promoter recreates
       # the portal.
       DPF_GIT_WEBHOOK_SECRET: ${DPF_GIT_WEBHOOK_SECRET:-}
+      # HMAC key GPP permits are signed with (apps/web/lib/gpp/permit-handle.ts,
+      # BI-8541D491). Provisioned exactly like the webhook secret above. Optional:
+      # without it permits are minted unsigned and no binding can be enforced.
+      # The key id defaults to "local-install" when unset.
+      DPF_GPP_PERMIT_SECRET: ${DPF_GPP_PERMIT_SECRET:-}
+      DPF_GPP_PERMIT_KEY_ID: ${DPF_GPP_PERMIT_KEY_ID:-}
       HIVE_CONTRIBUTION_TOKEN: ${HIVE_CONTRIBUTION_TOKEN:-}
       HIVE_OPS_TOKEN: ${HIVE_OPS_TOKEN:-}
       INNGEST_BASE_URL: http://inngest:8288

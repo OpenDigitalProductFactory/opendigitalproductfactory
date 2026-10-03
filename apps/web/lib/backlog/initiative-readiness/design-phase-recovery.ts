@@ -25,6 +25,10 @@ const DESIGN_REVIEW_CODES = new Set<string>([
   // BI-1D8E53D9: the architecture review of the design is owed before plan too.
   "REVIEW_REQUIRED",
   "PLAN_REVIEW_REQUIRED",
+  // BI-D9DECD1B: a failed review is owed again at the same point. Every
+  // REVIEW_FAILED comes from a pre-delivery lane (spec approval, a specialist
+  // review or the plan review), so its re-review reads the head like the first.
+  "REVIEW_FAILED",
 ]);
 
 /**
@@ -54,6 +58,35 @@ export function designPhaseReviewDecision(
  * Terminal acceptance/research prerequisites cannot suppress an owed design
  * review. Keep filtering in the shared design-phase policy, not the OAuth guard.
  * Exact packet equality still decides whether the requested gate was issued. */
+/**
+ * BI-D9DECD1B: the archetype reviews (provisioning and completeness) are owed at
+ * IMPLEMENTATION, and the claim issues their packets from that decision. Validate
+ * them against the same obligations, or the claim's own packets are refused as
+ * "changed" and no archetype-profile item can reach implementation.
+ */
+const ARCHETYPE_REVIEW_CODES = new Set<string>([
+  "ARCHETYPE_PROVISIONING_INCOMPLETE",
+  "ARCHETYPE_COMPLETENESS_FAILED",
+]);
+
+export function archetypePhaseReviewDecision(
+  decision: InitiativeReadinessDecision,
+): InitiativeReadinessDecision | null {
+  const isArchetypeReview = (entry: { code: string }) => ARCHETYPE_REVIEW_CODES.has(entry.code);
+  if (![...decision.blockers, ...decision.unmet].some(isArchetypeReview)) return null;
+  return {
+    ...decision,
+    blockers: decision.blockers.filter(isArchetypeReview),
+    unmet: decision.unmet.filter(isArchetypeReview),
+  };
+}
+
+/** True for a decision that owes only the pre-implementation archetype reviews. */
+export function isArchetypePhaseReview(decision: InitiativeReadinessDecision): boolean {
+  const entries = [...decision.blockers, ...decision.unmet];
+  return entries.length > 0 && entries.every((entry) => ARCHETYPE_REVIEW_CODES.has(entry.code));
+}
+
 export function decisionForIndependentReview(
   writerToolName: string,
   decisions: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>>,
@@ -62,6 +95,11 @@ export function decisionForIndependentReview(
     || writerToolName === "record_initiative_architecture_review") {
     const decision = decisions.implementation ?? decisions.plan;
     return decision ? designPhaseReviewDecision(decision) : null;
+  }
+  if (writerToolName === "record_initiative_archetype_review") {
+    const preDelivery = decisions.implementation ?? decisions.plan;
+    const owed = preDelivery ? archetypePhaseReviewDecision(preDelivery) : null;
+    if (owed) return owed;
   }
   return decisions.completion ?? null;
 }

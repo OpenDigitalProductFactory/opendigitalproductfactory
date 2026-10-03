@@ -100,7 +100,7 @@ describe("initiative readiness recovery routing", () => {
     // A native-MCP reviewer never sees the bound schema, so the objective must carry the blob id itself.
     expect(plan.objective).toContain(planArtifact.providerBlobId);
     expect(plan.requestKey).toMatch(/:plan:[a-f0-9]{64}$/);
-    expect(recovery.reviewerRoutes.find((route) => route.gate === "spec-approval")?.requestCoworker.initiativeReviewBinding?.artifactRef.path).toBe(canonicalArtifact.path);
+    expect(recovery.reviewerRoutes.find((route) => route.gate === "spec-approval")?.requestCoworker.initiativeReviewBinding?.artifactRef).toMatchObject({ path: canonicalArtifact.path });
   });
 
   it("never substitutes the design when the plan artifact is unavailable", async () => {

@@ -22,6 +22,15 @@ import {
 import { handleIncomingDemandDisposition } from "@/lib/federation/demand-disposition";
 import { ok } from "@/lib/shared/action-result";
 import {
+  DEPLOYMENT_DECLARATION_ACTIVITIES,
+  type DeploymentDeclarationV1,
+} from "@dpf/db/federated-deployment-declaration-contract";
+import {
+  handleIncomingDeploymentDeclaration,
+  RECEIVING_LINK_ROLES,
+  type DeploymentDeclarationExchangeDb,
+} from "@/lib/federation/deployment-declaration-exchange";
+import {
   handleIncomingOperationalPosture,
   type OperationalPostureExchangeDb,
 } from "@/lib/federation/operational-posture-exchange";
@@ -45,6 +54,7 @@ const RESPONSE_ACTIVITIES = new Set([
 ]);
 const DISPOSITION_ACTIVITIES = new Set(["dpf.demand.dispositioned", "dpf.release.applicability-published"]);
 const POSTURE_ACTIVITIES = new Set<string>(OPERATIONAL_POSTURE_ACTIVITIES);
+const DECLARATION_ACTIVITIES = new Set<string>(DEPLOYMENT_DECLARATION_ACTIVITIES);
 
 /** An accepted exchange outcome: 200 for an idempotent replay, 202 once persisted. */
 function accepted(outcome: { action: string }): NextResponse {
@@ -110,6 +120,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ ok: false, error: "invalid_demand_disposition", violations: disposition.violations }, { status: 422 });
     }
     return accepted(disposition);
+  }
+
+  if (typeof event.type === "string" && DECLARATION_ACTIVITIES.has(event.type)) {
+    // A deployment country declaration (BI-06EA3167) only flows upward: accept it
+    // only where this install manages, or supplies, the declaring one.
+    if (!(RECEIVING_LINK_ROLES as readonly string[]).includes(authz.role)) {
+      return NextResponse.json({ ok: false, error: "link_not_upstream" }, { status: 403 });
+    }
+    const declaration = await handleIncomingDeploymentDeclaration(
+      prisma as unknown as DeploymentDeclarationExchangeDb,
+      authz.linkId,
+      event.data as DeploymentDeclarationV1,
+    );
+    if (declaration.action === "rejected") {
+      return NextResponse.json({ ok: false, error: "invalid_deployment_declaration", violations: declaration.violations }, { status: 422 });
+    }
+    if (declaration.action === "conflict") {
+      return NextResponse.json({ ok: false, ...declaration }, { status: 409 });
+    }
+    return accepted(declaration);
   }
 
   if (typeof event.type === "string" && POSTURE_ACTIVITIES.has(event.type)) {

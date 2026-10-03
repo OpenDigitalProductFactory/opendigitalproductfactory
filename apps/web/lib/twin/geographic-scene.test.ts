@@ -115,6 +115,45 @@ describe("geographic scene adapter", () => {
     })).toMatchObject({ ok: false });
   });
 
+  it("accepts a zone that names who covers it and exposes that on the zone feature (BI-6CC10E4C)", () => {
+    const covered: GeographicSceneLayout = {
+      ...layout,
+      zones: [{ ...layout.zones[0], coveredBy: { kind: "staffing-crew", id: "CREW-1" } }],
+    };
+    expect(validateGeographicSceneLayout(covered)).toMatchObject({ ok: true });
+    const model = buildGeographicSceneModel({
+      layout: covered,
+      presentations: { "CREW-1": { label: "North crew" } },
+    });
+    expect(model.zones.features[0].properties).toMatchObject({
+      entityKind: "staffing-crew",
+      entityId: "CREW-1",
+      sublabel: "North crew",
+    });
+  });
+
+  it("refuses an unknown coverage kind and a zone that crosses the antimeridian", () => {
+    expect(validateGeographicSceneLayout({
+      ...layout,
+      zones: [{ ...layout.zones[0], coveredBy: { kind: "vendor", id: "V-1" } }],
+    })).toMatchObject({ ok: false });
+    expect(validateGeographicSceneLayout({
+      ...layout,
+      zones: [{
+        ...layout.zones[0],
+        geometry: {
+          kind: "polygon",
+          rings: [[
+            { longitude: 179, latitude: 10 },
+            { longitude: -179, latitude: 10 },
+            { longitude: -179, latitude: 12 },
+            { longitude: 179, latitude: 10 },
+          ]],
+        },
+      }],
+    })).toMatchObject({ ok: false, error: expect.stringContaining("antimeridian") });
+  });
+
   it("derives the smallest bounds across the antimeridian", () => {
     expect(geographicBounds([
       { longitude: 179, latitude: 10 },

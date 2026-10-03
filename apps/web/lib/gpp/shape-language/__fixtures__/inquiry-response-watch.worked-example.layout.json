@@ -1,0 +1,16 @@
+{
+  "format": "gpp-layout/0.1",
+  "shape": "inquiry-response-watch@1.0.0",
+  "nodes": {
+    "trigger:escalation": { "x": 0, "y": 40 },
+    "trigger:cadence": { "x": 0, "y": 120 },
+    "stage:draft": { "x": 120, "y": 60, "w": 220, "h": 96 },
+    "stage:send": { "x": 420, "y": 60, "w": 220, "h": 96 },
+    "gate:send": { "x": 680, "y": 92 },
+    "stop:success:1": { "x": 780, "y": 20 },
+    "stop:failure:1": { "x": 780, "y": 100 },
+    "stop:budget:1": { "x": 780, "y": 180 }
+  },
+  "edges": {},
+  "viewport": { "x": 0, "y": 0, "zoom": 1 }
+}

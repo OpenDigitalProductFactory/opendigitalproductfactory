@@ -1,3 +1,4 @@
+import { immutableArtifactIdentity } from "@/lib/mcp-task-review-contract";
 import { randomUUID } from "node:crypto";
 
 import { Prisma, prisma } from "@dpf/db";
@@ -134,11 +135,13 @@ function exactArtifactRef(
   left: ObjectiveMappingBinding["artifactRef"],
   right: ObjectiveMappingBinding["artifactRef"],
 ): boolean {
+  const leftIdentity = immutableArtifactIdentity(left);
+  const rightIdentity = immutableArtifactIdentity(right);
   return left.kind === right.kind
-    && left.repositoryFullName.toLocaleLowerCase("en-US") === right.repositoryFullName.toLocaleLowerCase("en-US")
-    && left.commitSha.toLocaleLowerCase("en-US") === right.commitSha.toLocaleLowerCase("en-US")
-    && left.path === right.path
-    && left.providerBlobId.toLocaleLowerCase("en-US") === right.providerBlobId.toLocaleLowerCase("en-US");
+    && leftIdentity.repositoryFullName.toLocaleLowerCase("en-US") === rightIdentity.repositoryFullName.toLocaleLowerCase("en-US")
+    && leftIdentity.version.toLocaleLowerCase("en-US") === rightIdentity.version.toLocaleLowerCase("en-US")
+    && leftIdentity.path === rightIdentity.path
+    && leftIdentity.expectedBlobId.toLocaleLowerCase("en-US") === rightIdentity.expectedBlobId.toLocaleLowerCase("en-US");
 }
 
 async function validateExecutingObjectiveMappingTask(args: {

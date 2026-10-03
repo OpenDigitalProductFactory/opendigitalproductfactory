@@ -29,6 +29,7 @@ import {
 import {
   accessTokenTtlSeconds,
   authorizationCodeTtlSeconds,
+  refreshTokenReuseGraceSeconds,
   refreshTokenTtlSeconds,
 } from "@/lib/auth/oauth-policy";
 
@@ -464,18 +465,76 @@ export async function exchangeOAuthCode(input: {
   });
 }
 
+type RefreshRow = Prisma.OAuthRefreshTokenGetPayload<object>;
+
+/**
+ * Whether a re-presented, already-rotated refresh token is a benign race
+ * rather than a replay (BI-25C6219E).
+ *
+ * Several sessions of one client (Claude Code) share one stored refresh token
+ * per MCP server. When two of them refresh within a second of each other, the
+ * loser presents the token the winner just consumed. Strict single use reads
+ * that as theft and revokes the family, which disconnects every session.
+ *
+ * The reuse is accepted only when all of these hold; anything else is still a
+ * replay and revokes the family:
+ *  - it was consumed less than the grace window ago (default 60s);
+ *  - the token itself is unrevoked and unexpired;
+ *  - its successor exists, is in the same family, issued to the same client
+ *    and user, and is unconsumed, unrevoked and unexpired, so the chain has
+ *    not moved on and nothing has revoked it since.
+ * The caller has already checked that the presenting client is the token's
+ * client. The caller then issues a SIBLING pair in the same family. Only hashes
+ * are stored, so the successor's plaintext cannot be returned. Family-wide
+ * revocation still covers the sibling.
+ *
+ * Residual risk, accepted per RFC 9700 §4.14.2: a public client's client_id
+ * is not a secret, so a thief who presents a stolen token within the window of
+ * the legitimate rotation gets a sibling. The window bounds that exposure. Any
+ * later replay of either branch still revokes the whole family, and so does
+ * the theft-detection case RFC 6819 §5.2.2.3 targets (the attacker rotates
+ * first and the victim presents later).
+ */
+async function isRefreshReuseWithinGrace(db: Prisma.TransactionClient, row: RefreshRow): Promise<boolean> {
+  const graceMs = refreshTokenReuseGraceSeconds() * 1000;
+  const now = Date.now();
+  if (graceMs <= 0 || !row.oauthFamilyKey || !row.consumedAt || !row.rotatedToId) return false;
+  if (now - row.consumedAt.getTime() > graceMs) return false;
+  if (row.revokedAt || row.expiresAt.getTime() <= now) return false;
+  const successor = await db.oAuthRefreshToken.findUnique({ where: { id: row.rotatedToId } });
+  return Boolean(successor && successor.oauthFamilyKey === row.oauthFamilyKey
+    && successor.oauthClientId === row.oauthClientId && successor.userId === row.userId
+    && !successor.consumedAt && !successor.revokedAt && successor.expiresAt.getTime() > now);
+}
+
 export async function rotateOAuthRefreshToken(input: {
   token: string; clientId: string; clientLabel: string; origin: string;
   requestedScopes?: PublicScope[];
 }): Promise<ExchangeResult> {
   return prisma.$transaction(async (db) => {
     const denied = (detail: string) => ({ accepted: false as const, error: "invalid_grant" as const, detail });
-    const row = await db.oAuthRefreshToken.findUnique({ where: { tokenHash: sha256(input.token) } });
-    if (!row || row.oauthClientId !== input.clientId || !resourceMatches(row.resource, input.origin))
-      return denied("Refresh token does not match this connection.");
-    if (row.oauthFamilyKey && (row.consumedAt || row.rotatedToId)) {
-      await revokeOAuthFamily(db, row.oauthFamilyKey, "refresh_token_replayed");
+    const replayed = async (familyKey: string) => {
+      await revokeOAuthFamily(db, familyKey, "refresh_token_replayed");
       return denied("This connection was reused. Reconnect to continue.");
+    };
+    const row = await db.oAuthRefreshToken.findUnique({ where: { tokenHash: sha256(input.token) } });
+    if (!row) return denied("Refresh token does not match this connection.");
+    const reused = Boolean(row.oauthFamilyKey && (row.consumedAt || row.rotatedToId));
+    // A spent token from another client is never a race between one client's
+    // sessions. It is a leaked credential, so it gets no grace. A live token
+    // from another client is only refused: revoking on it would let anyone
+    // holding a stray token disconnect its owner.
+    if (row.oauthClientId !== input.clientId) {
+      if (reused) return replayed(row.oauthFamilyKey!);
+      return denied("Refresh token does not match this connection.");
+    }
+    if (!resourceMatches(row.resource, input.origin)) return denied("Refresh token does not match this connection.");
+    // `sibling` means a concurrent-refresh race was accepted: issue a pair in
+    // the same family without consuming anything (see isRefreshReuseWithinGrace).
+    let sibling = false;
+    if (reused) {
+      if (!await isRefreshReuseWithinGrace(db, row)) return replayed(row.oauthFamilyKey!);
+      sibling = true;
     }
     if (row.revokedAt || row.expiresAt.getTime() <= Date.now()) return denied("Reconnect to continue.");
     if (!row.authorityBindingId || !row.oauthFamilyKey) return denied(OAUTH_SETUP_REQUIRED);
@@ -485,17 +544,24 @@ export async function rotateOAuthRefreshToken(input: {
     const requested = input.requestedScopes;
     if (requested && (!requested.length || requested.some((scope) => !row.scopes.includes(scope))))
       return { accepted: false as const, error: "invalid_scope" as const, detail: "Request only previously approved permissions." };
-    const claimed = await db.oAuthRefreshToken.updateMany({ where: {
-      id: row.id, consumedAt: null, rotatedToId: null, revokedAt: null,
-    }, data: { consumedAt: new Date() } });
-    if (claimed.count !== 1) {
-      await revokeOAuthFamily(db, row.oauthFamilyKey, "refresh_token_replayed");
-      return denied("This connection was reused. Reconnect to continue.");
+    if (!sibling) {
+      const claimed = await db.oAuthRefreshToken.updateMany({ where: {
+        id: row.id, consumedAt: null, rotatedToId: null, revokedAt: null,
+      }, data: { consumedAt: new Date() } });
+      if (claimed.count !== 1) {
+        // Lost an in-flight race: the winner committed between our read and
+        // our claim. Judge the committed state by the same grace rule.
+        const current = await db.oAuthRefreshToken.findUnique({ where: { id: row.id } });
+        if (!current || !await isRefreshReuseWithinGrace(db, current)) return replayed(row.oauthFamilyKey);
+        sibling = true;
+      }
     }
     const pair = await issuePair({ userId: row.userId, agentId: consent.agentId, agentRecordId: consent.agentRecordId,
       authorityBindingId: row.authorityBindingId, oauthFamilyKey: row.oauthFamilyKey,
       oauthClientRowId: input.clientId, clientLabel: input.clientLabel,
       origin: input.origin, publicScopes: requested ?? row.scopes.filter(isPublicScope) }, db);
+    // A sibling leaves the presented token's single successor link alone.
+    if (sibling) return pair;
     const successor = await db.oAuthRefreshToken.findUnique({ where: { tokenHash: sha256(pair.refresh) }, select: { id: true } });
     if (!successor) throw new Error("Refresh successor was not persisted.");
     await db.oAuthRefreshToken.update({ where: { id: row.id }, data: { rotatedToId: successor.id } });

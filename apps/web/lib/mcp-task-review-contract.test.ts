@@ -224,3 +224,43 @@ describe("narrowInitiativeReviewTools", () => {
     });
   });
 });
+
+
+describe("parseInitiativeReviewBinding — feature-build-revision (BI-926A7E90)", () => {
+  const base = {
+    writerToolName: "record_initiative_design_review",
+    itemId: "BI-926A7E90",
+    gate: "spec-approval",
+    expectedCurrentBaselineId: null,
+    workroomRef: {
+      kind: "workroom-head",
+      workroomId: "WC-1",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      branchName: "build/FB-1",
+      headSha: "sha256:design-digest",
+    },
+  };
+  it("accepts a revision bound by id and value digest", () => {
+    const parsed = parseInitiativeReviewBinding({
+      ...base,
+      artifactRef: {
+        kind: "feature-build-revision",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        revisionId: "rev_1",
+        valueDigest: "sha256:design-digest",
+      },
+    });
+    expect(parsed?.artifactRef).toEqual({
+      kind: "feature-build-revision",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      revisionId: "rev_1",
+      valueDigest: "sha256:design-digest",
+    });
+  });
+  it("refuses a revision binding without its digest", () => {
+    expect(parseInitiativeReviewBinding({
+      ...base,
+      artifactRef: { kind: "feature-build-revision", repositoryFullName: "o/r", revisionId: "rev_1" },
+    })).toBeNull();
+  });
+});

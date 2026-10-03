@@ -149,6 +149,14 @@ closes that (BI-6868891B). It runs the same `pull-request` profile on
 a separate, advisory check. Add your trailer, wait for the recheck, and you know
 whether the fix is accepted before spending a push.
 
+The `pull-request` profile also reads the PR **title** (`PR_TITLE`, beside
+`PR_BODY`). The Hidden Unicode Commit Text Guard (BI-5D412E3C) refuses a commit
+message, PR title or PR body that carries a character a reviewer cannot see:
+zero-width, bidi override, Tags-block. This repo squash-merges with the
+branch's commit messages, so a hidden character in any commit lands in `main`.
+Fix the commit message itself (reword and re-push); editing the PR body only
+clears the body and title findings.
+
 It is deliberately **not** the binding check, and `ci.yml` is deliberately
 unchanged. Check runs are keyed per commit SHA and the latest result for a name
 wins, so re-running the pipeline on an edit while skipping the heavy jobs would

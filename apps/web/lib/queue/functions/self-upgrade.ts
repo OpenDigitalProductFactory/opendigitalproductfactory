@@ -487,6 +487,29 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
   // dryRun bypasses the drain entirely (no level flip, no caller
   // events). force surfaces as shipForce so the coordinator records
   // the override on forcedSurfaces.
+  const promoterContext: SelfUpgradeSwapContext["promoter"] = {
+    hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
+    canonicalInstallPath: hostInstallPathResolved,
+    composeFiles: promotionComposeFiles, composeProject,
+    healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
+    promoterImage: config.promoterImage, release,
+  };
+  // BI-F9EE05E5 plan item 0: build the image while the portal still serves,
+  // so admission closes only for the swap (self-upgrade-prebuild.ts).
+  if (!params.dryRun) {
+    const { basePromoterParams } = await import("./self-upgrade-swap");
+    const { prebuildPromoterParams, runPrebuild } = await import("./self-upgrade-prebuild");
+    const { runPromoter } = await loadPromoterRuntime();
+    const base = basePromoterParams({ runId: run.runId, promoter: promoterContext, targetSha: builtStamp, promoterImage: resolvedPromoterDigest ?? config.promoterImage });
+    const prebuilt = await runPrebuild({ params: prebuildPromoterParams(base, run.runId), runPromoter });
+    if (!prebuilt.ok) {
+      await failRun(run.runId, `prebuild-failed: ${prebuilt.error}`);
+      await emitFailure(run.runId);
+      await recordCooldown(now, cooldownMinutes);
+      return done({ ok: false, status: "failed", runId: run.runId, reason: "prebuild-failed" });
+    }
+  }
+
   let quiescenceRunId: string | null = null;
   let awaitReady: (() => Promise<QuiescenceOutcome>) | undefined;
   if (!params.dryRun) {
@@ -509,13 +532,7 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
   // re-supplied there (self-upgrade-swap.ts).
   const ctx: SelfUpgradeSwapContext = {
     runId: run.runId, quiescenceRunId, dryRun: params.dryRun, force: params.force, buildId: params.buildId, cooldownMinutes, builtStamp,
-    promoter: {
-      hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
-      canonicalInstallPath: hostInstallPathResolved,
-      composeFiles: promotionComposeFiles, composeProject,
-      healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
-      promoterImage: config.promoterImage, release,
-    },
+    promoter: promoterContext,
     preflight: preflightPlan, migrationHandoff, resolvedPromoterDigest,
   };
   return { draining: ctx, awaitReady };

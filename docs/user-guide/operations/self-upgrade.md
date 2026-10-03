@@ -97,7 +97,9 @@ upgrade. Nothing is lost by waiting.
   and the same bounded wall-clock budget (default **25 minutes**). If either
   build stalls, it is killed and the deployment is marked failed with a
   retryable `promoter-timeout` diagnosis instead of hanging. Candidate
-  preparation finishes before the platform begins quiescing.
+  preparation finishes before the platform begins quiescing, and so does the
+  application build itself: the portal keeps accepting work while the new
+  version builds, and pauses new work only for the swap.
 - A periodic watchdog force-removes any promoter container orphaned by a
   mid-deployment restart, so a stalled build can never linger and cause an
   unexpected later swap.

@@ -1,0 +1,59 @@
+classDiagram
+    class WorkShape {
+        +key and version
+        +triggers
+        +stop conditions
+        +review point
+    }
+    class Stage {
+        +key
+        +accountable principal
+        +advance condition
+    }
+    class GatedPermission {
+        +id and version
+        +subject scope
+        +validity
+        +preconditions
+        +stop conditions
+        +enforcement mode
+    }
+    class Gate {
+        +key
+        +resolution mode
+    }
+    class AuthorityScope {
+        +WWMD platform
+        +WWWD organization
+        +WSID profession
+    }
+    class CapabilitySet {
+        +capability classes
+    }
+    class Tool {
+        +name
+        +consequence class
+        +honouring grants
+    }
+    class Agent {
+        +GAID identity
+        +operating profile
+    }
+    class Qualification {
+        +TAK-JSI status
+    }
+    class Receipt {
+        +binding version
+        +gate decision
+        +effect
+    }
+    WorkShape "1" *-- "1..*" Stage : stages
+    Stage "1" o-- "0..*" GatedPermission : attaches
+    GatedPermission --> "1" Gate : resolved by
+    Gate --> "1" AuthorityScope : owned by
+    GatedPermission --> "1" CapabilitySet : admits
+    CapabilitySet --> "1..*" Tool : resolves to, C-2
+    Agent --> Stage : performs
+    GatedPermission ..> Qualification : may require
+    Tool ..> Receipt : each call leaves
+    Receipt --> GatedPermission : cites

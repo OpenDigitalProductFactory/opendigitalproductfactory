@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Status | Discussion draft, revision 2 |
+| Status | Discussion draft, revision 2.1 |
 | Date | 2026-10-01; first edition 2026-04-18 |
 | Owner | EP-B932453F / BI-6CC40F77 |
 
@@ -241,6 +241,10 @@ GPP defines one modelled unit, the **Gated Permission**. It binds a decision gat
 
 > **scope gate × capability set × work-shape stage × subject × validity**
 
+![The Gated Permission pair: the decision side (the owning WWMD, WWWD or WSID gate) and the permission side (the stage's capability set intersected with grants and scope) meet at TAK mediation, and the GAID receipt cites both](gpp-diagrams/png/gated-permissions-process-fence-01.png)
+
+*Figure: the Gated Permission pair. The decision side runs once per class of work; the permission side narrows every call. TAK executes only what both admit. Source: the GPP standard, §7.3.*
+
 Three rules follow:
 
 1. **Approve the decision, not the keystroke.** The owning authority decides whether a *class* of tool use is admissible for a piece of work. That authority can be a person, recorded doctrine, or doctrine that escalates to a person. TAK then enforces the decision on every call without a further prompt.
@@ -455,6 +459,10 @@ A standard gains credibility when it is exercised in a real system rather than o
 | Mandatory receipt reservation for consequential calls, tied to the agent's GAID | GAID §10 | **Enforced** on the governed path |
 | Workroom collaboration-shape gate on consequential calls | GPP | **Shadow** by kernel decision; records what it would refuse, pending operator ratification against that evidence |
 | Turning a sealed scope decision into a single-use, time-bound authorization for one exact action | GPP §9.1 | **Enforced for 11 tools**; widening it is the GPP implementation path |
+| Gate-minted permit for each outward, authority-changing or irreversible call, signed (MAC) and bound to the exact call's parameters | GPP §9.1; TAK | **Shadow.** A verdict is recorded on every such call and none is refused. Forged, replayed and mismatched permits are recorded as such. Installs record `unsigned` until the signing key is provisioned |
+| Enforcement promoted one binding at a time, by recorded decision | GPP C-7 | **Mechanism built, nothing enforced.** The enforced set is empty. Promotion needs a cited decision and no unmediated reach to the binding's tools; four dynamic direct call sites currently block every promotion. A missing key or unsealed lineage downgrades to shadow, never to mass refusal |
+| One transition path per guarded stage change (Build Studio plan → build) | GPP C-8 | **Single path, declared and unequal gate sets.** All five paths go through one function with per-path gate profiles. The `save_phase_handoff` path records the WWMD gate it skips; enforcing it awaits the shadow evidence |
+| Unmediated reach: direct tool calls that bypass the mediation point | GPP C-9 | **Ratcheted.** 28 known sites sit on a shrink-only list and a new one fails CI. Each direct call to a consequential tool is recorded |
 | Per-stage capability sets on work shapes | GPP §7 | **Declared and CI-tested** for standing, coworker and orchestration stages, and pinned into scheduled stage runs; a shrink-only list tracks stages still missing a read tool. Delivery shapes still bind per shape |
 | Capability vocabulary resolves to enforceable grants | GPP C-2 | **Not yet checked**; one dangling capability found ([§8.3](#83-what-building-it-taught-us)) |
 | Job qualification lifecycle: assessment, credential, surveillance, revalidation | JSI | **Not built**; no qualification table exists |
@@ -468,7 +476,7 @@ Two findings from writing the GPP standard against DPF's own code illustrate why
 
 **A dangling capability.** DPF's delivery work shapes grant a capability named `write-source`. No tool grant honours that name. Inside a delivery Workroom, an in-portal coworker's tool surface therefore quietly collapses to read-only. The system fails safe, and nobody could see it, because the model said *write* while the runtime said *read*. GPP's vocabulary-resolution check is designed to catch exactly this. It is now tracked for repair. The first stage-level binding slice has since merged with a parity test asserting GPP's stage-coverage and vocabulary-resolution checks for the stages it covers.
 
-**Reach in the other direction.** Live operation of standing Workrooms showed rooms stalling because a stage's work needed a read tool the model had not admitted. When stage-level bindings were introduced, 21 stages were recorded on a shrink-only gap list, each pointing to the backlog item that will supply the missing tool. Reach reconciliation is a two-way check: a model that admits too little produces stalls, and one that admits too much produces incidents.
+**Reach in the other direction.** Live operation of standing Workrooms showed rooms stalling because a stage's work needed a read tool the model had not admitted. When stage-level bindings were introduced, 21 stages were recorded on a shrink-only gap list, each pointing to the backlog item that will supply the missing tool. Eight have since gained the read tool they lacked; 13 remain (2026-10-01). The first live reconciliation of called against declared tools (2026-10-02, 12 stage runs across 11 standing rooms) found both directions at once. Eight rooms called their declared read tool. One stage reached an undeclared tool and then stalled. The two rooms still on the gap list searched for a reader that the model does not admit. Reach reconciliation is a two-way check: a model that admits too little produces stalls, and one that admits too much produces incidents.
 
 Neither finding was visible from the documentation alone. Both became visible the moment the model and the runtime were compared.
 
@@ -729,3 +737,4 @@ We invite implementers, assessors, standards bodies and systems engineers to tes
 |---|---|---|
 | 1 | 2026-04-18 | First edition: TAK, GAID, TAK-JSI |
 | 2 | 2026-10-01 | Added §7.4 (model to machine: notation, compiler, design-rule checks, critical-call gating, permits, the honest forgery boundary), the Build Studio findings in §8.3, and the transaction-scoped MCP recommendation in §13. Reframed around approval fatigue and the incident record. Added GPP as the fourth cornerstone, decision scopes (§6), MBSE with AI as a first-class participant (§7), the DPF claim-to-evidence ledger (§8) and efficacy measures (§9). Narrowed the first edition's "one missing control plane" claim (§4.4). Refreshed market references (BI-6CC40F77). |
+| 2.1 | 2026-10-01 | Added the Gated Permission pair figure to §4.3 and updated the stage-tool gap count in §8 (21 recorded, 13 remaining). Added four §8.2 ledger rows for GPP Phase 1–2 as built: shadow permits, per-binding enforcement with an empty enforced set, the single plan → build transition path, and the unmediated-reach ratchet. Published GPP as a Word edition alongside the other standards (BI-56C4EFCF). |

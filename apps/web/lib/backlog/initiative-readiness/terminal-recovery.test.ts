@@ -87,9 +87,9 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
         artifactRef: {
           kind: "repo-blob-at-commit" as const,
           repositoryFullName: dispatch.repositoryFullName,
-          commitSha: artifact.commitSha ?? dispatch.headSha,
-          path: artifact.path,
-          providerBlobId: artifact.providerBlobId,
+          commitSha: (artifact.kind !== "feature-build-revision" ? artifact.commitSha : undefined) ?? dispatch.headSha,
+          path: artifact.kind !== "feature-build-revision" ? artifact.path : `build-artifact-revision/${artifact.revisionId}`,
+          providerBlobId: artifact.kind !== "feature-build-revision" ? artifact.providerBlobId : artifact.valueDigest,
         },
       };
       const requiredToolNames = ["record_initiative_evidence", "read_source_at_version"];
@@ -626,38 +626,35 @@ describe("terminal initiative recovery", () => {
     expect(ports.resolveRecovery).not.toHaveBeenCalled();
   });
 
-  it("BI-D3E1F6D9: after the baseline exists, a design review binds the room head, as the refused claim's packet does", async () => {
-    const pinnedBaseline = [{
-      baselineId: "baseline-current",
-      supersedesBaselineId: null,
-      artifactRef: {
-        kind: "repo-blob-at-commit",
-        repositoryFullName: room.repositoryFullName,
-        commitSha: baselineCommitSha,
-        path: "docs/superpowers/specs/design.md",
-        providerBlobId: "3".repeat(40),
-      },
-    }];
-    const ports = deps([room], pinnedBaseline);
+  // The room moved past the commit that minted the baseline (a rebase or a docs
+  // commit); a pre-delivery reviewer reads, and the guard must accept, the head.
+  async function expectHeadBinding(unmet: InitiativeReadinessDecision["unmet"]) {
+    const ports = deps([room], [{ baselineId: "baseline-current", supersedesBaselineId: null, artifactRef: {
+      kind: "repo-blob-at-commit", repositoryFullName: room.repositoryFullName, commitSha: baselineCommitSha,
+      path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) } }]);
     ports.resolveRecovery.mockResolvedValue({ reviewerRoutes: [], escalations: [], unroutable: [] });
-    const architectureDecision: InitiativeReadinessDecision = {
-      ...decision,
-      unmet: [readinessRequirement({ code: "REVIEW_REQUIRED", state: "missing", accountableRole: "architecture-reviewer" })],
-    };
-    await resolveTerminalInitiativeRecovery({ decision: architectureDecision, currentAgentId: null, refusedWorkroomId: room.capsuleId, ports });
-
-    // The room moved past the commit that minted the baseline (a rebase or a
-    // docs commit); the reviewer reads, and the guard must accept, the head.
+    await resolveTerminalInitiativeRecovery({ decision: { ...decision, unmet }, currentAgentId: null, refusedWorkroomId: room.capsuleId, ports });
     expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha });
     expect(ports.resolveRecovery).toHaveBeenCalledWith(expect.objectContaining({
       // No pinned commit: the packet builder binds the room head, like the claim.
-      canonicalArtifact: {
-        resolved: true,
-        path: "docs/superpowers/specs/design.md",
-        providerBlobId: "3".repeat(40),
-      },
+      canonicalArtifact: { resolved: true, path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },
       expectedCurrentBaselineId: "baseline-current",
     }));
+  }
+
+  it("BI-D3E1F6D9: after the baseline exists, a design review binds the room head, as the refused claim's packet does", async () => {
+    await expectHeadBinding([readinessRequirement({ code: "REVIEW_REQUIRED", state: "missing", accountableRole: "architecture-reviewer" })]);
+  });
+
+  it("BI-D9DECD1B: a re-review after a failed specialist review binds the room head, as the claim's packet does", async () => {
+    await expectHeadBinding([readinessRequirement({ code: "REVIEW_FAILED", state: "fail", accountableRole: "data-reviewer" })]);
+  });
+
+  it("BI-D9DECD1B: an archetype review owed before implementation binds the room head, as the claim's packet does", async () => {
+    await expectHeadBinding([
+      readinessRequirement({ code: "ARCHETYPE_PROVISIONING_INCOMPLETE", state: "missing", accountableRole: "archetype-steward" }),
+      readinessRequirement({ code: "ARCHETYPE_COMPLETENESS_FAILED", state: "missing", accountableRole: "archetype-steward" }),
+    ]);
   });
 
   it("uses the provider-verified artifact already pinned by the current baseline", async () => {

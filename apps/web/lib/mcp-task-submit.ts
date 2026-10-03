@@ -333,7 +333,7 @@ export async function submitRemoteCoworkerTask(input: {
           };
         } else {
           const bootstrapRead = await executeAutonomousWorkTool({
-            toolName: "read_source_at_version",
+            toolName: terminalToolPolicy.immutableReaderToolName ?? "read_source_at_version",
             args: {
               ...immutableReaderArguments,
               startLine: 1,
@@ -365,7 +365,7 @@ export async function submitRemoteCoworkerTask(input: {
         policy: terminalToolPolicy,
         executions: readerExecutions,
         readPage: async (args) => executeAutonomousWorkTool({
-          toolName: "read_source_at_version",
+          toolName: terminalToolPolicy.immutableReaderToolName ?? "read_source_at_version",
           args,
           userId: token.userId,
           userContext,

@@ -152,6 +152,54 @@ WWMD consult DI-9D6C401C15A7 was inconclusive because retrieval was unavailable,
 not a passing architecture receipt. The implementation follows the operator's
 explicit consent-lifetime and retry requirements within the admitted fix scope.
 
+### Refresh reuse grace amendment (BI-25C6219E, 2026-10-02)
+
+This amends "Refresh atomically consumes once and issues one successor;
+replay revokes the family" above.
+
+**Evidence.** Several Claude Code sessions on one host share one stored
+refresh token per MCP server, so they routinely refresh within a second of
+each other. Live DB rows for client `dpfoc_a8b6990d…` show the 19:04 token
+consumed at 20:08:54Z and presented again by the same client row at
+20:08:55Z. Strict single use revoked all 25 tokens in the family, including
+the fresh successor, and every session lost its connection. The same pattern
+appeared 2026-09-30 19:13Z (23 tokens) and 2026-10-01 13:31Z (9 tokens).
+
+**Standard.** RFC 9700 §4.14.2 allows a refresh-rotation grace period, and
+Auth0 ("reuse interval") and Okta ("grace period for refresh token
+rotation") ship one. DPF adopts the bounded form.
+
+**Rule.** A re-presented, already-rotated refresh token is accepted as a race,
+not a replay, only when all of these hold:
+- the presenting OAuth client is the token's client;
+- the token was consumed less than `DPF_OAUTH_REFRESH_REUSE_GRACE_SECONDS` ago
+  (default 60, capped at 300, and 0 disables grace);
+- the token is itself unrevoked and unexpired;
+- its successor is in the same family, for the same client and user, and is
+  unconsumed, unrevoked and unexpired.
+
+Consent, human eligibility and scope narrowing are re-checked as on any
+refresh. The server then issues a sibling access and refresh pair in the same
+family. It cannot return the successor itself because only hashes are stored.
+The presented token's successor link is not overwritten. A rotation that loses
+the in-flight claim race is judged by the same rule against the committed
+state.
+
+**Still revoked.** Reuse after the window, reuse whose successor is revoked,
+consumed, expired or missing, and reuse of a spent token by any other client
+all revoke the whole family as `refresh_token_replayed`. Presenting a live
+token from another client is refused without revocation, as before, so that a
+stray token cannot be used to disconnect its owner.
+
+**Accepted residual risk.** A public client's `client_id` is not secret.
+Anyone who presents a stolen token inside the window of the legitimate
+rotation gets a sibling. The window bounds that exposure. Any later replay on
+either branch still revokes the family. The RFC 6819 §5.2.2.3 detection case,
+where the attacker rotates first and the victim presents afterwards, is
+unaffected when the victim presents after the window. Inside the window it
+yields a sibling for the victim, and the next replay revokes the family.
+Implementation: `isRefreshReuseWithinGrace` in `apps/web/lib/auth/oauth-tokens.ts`.
+
 ## Operation authority and attribution (C3)
 
 Effective authority is the intersection of current human permission, token
@@ -371,10 +419,13 @@ The supported control above is the only recovery path. An assistant that is not
 already admitted cannot use `invite_room_participant` to invite itself or
 someone else: human approval of that exact call changes neither its room
 membership nor its clearance. The governed executor must therefore evaluate
-this deterministic room-membership precondition after capability and grant
-checks but before an authority envelope is created. A failed retry returns the
-same actionable owner route without another consent request unless the room or
-caller state has changed.
+this deterministic room-membership precondition before any capability- or
+grant-based authority envelope is created. The same room-access check runs
+again at execution time, including when an approved call resumes, because room
+membership or connection authority may have changed while approval was pending.
+The invitation handler intentionally repeats its exact-room check as defence in
+depth at mutation time. A failed retry returns the same actionable owner route
+without another consent request unless the room or caller state has changed.
 
 Room resolution uses the canonical WorkItem anchor. A `work-capsule:WC-*` key
 resolves through `Workroom.workItemId`, while a `backlog-item:BI-*` key resolves

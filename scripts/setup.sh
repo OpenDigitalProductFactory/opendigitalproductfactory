@@ -66,6 +66,11 @@ if ! command -v docker >/dev/null 2>&1; then
   fail "Docker is not installed. Install Docker Desktop (macOS) or Docker Engine (Linux)."
 fi
 ok "Docker found: $(docker --version | cut -d' ' -f3 | tr -d ',')"
+if [ "$DPF_PLATFORM" = "darwin" ]; then
+  # BI-75ECED42: Docker Desktop restarts the whole engine when it installs an
+  # update of its own, killing a running upgrade or build mid-way.
+  warn "Docker Desktop: turn off automatic updates for an operated install (Settings > Software updates). An update restarts every container, including mid-upgrade."
+fi
 
 if ! command -v node >/dev/null 2>&1; then
   fail "Node.js is not installed. Install Node 20+ from https://nodejs.org/"
@@ -141,6 +146,14 @@ fi
 for _env_file in apps/web/.env.local .env; do
   if [ "$(dpf_env_ensure_secret_hex DPF_GIT_WEBHOOK_SECRET "$_env_file" 32)" != "kept" ]; then
     ok "Generated DPF_GIT_WEBHOOK_SECRET in $_env_file"
+  fi
+done
+
+# GPP permit signing key (BI-8541D491): same rules and same two files as the
+# webhook secret; each portal signs its own permits. Never printed.
+for _env_file in apps/web/.env.local .env; do
+  if [ "$(dpf_env_ensure_secret_hex DPF_GPP_PERMIT_SECRET "$_env_file" 32)" != "kept" ]; then
+    ok "Generated DPF_GPP_PERMIT_SECRET in $_env_file"
   fi
 done
 
