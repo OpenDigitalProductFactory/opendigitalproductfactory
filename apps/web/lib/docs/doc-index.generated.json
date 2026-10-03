@@ -5557,7 +5557,8 @@
       "publishedPortal": false,
       "anchors": [
         "dpf-install-guide-linux-native-docker",
-        "supported-environment",
+        "recommended-first-deployment",
+        "compatibility-and-prerequisites",
         "prerequisites",
         "quick-start",
         "contributor-office-document-conversion",
@@ -5565,6 +5566,7 @@
         "what-the-installer-does",
         "login",
         "network-exposure-after-install",
+        "pilot-acceptance-checks",
         "day-to-day",
         "edge-node-whats-running-and-why",
         "llm-provider",

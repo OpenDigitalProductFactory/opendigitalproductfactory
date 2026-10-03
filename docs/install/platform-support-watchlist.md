@@ -14,6 +14,11 @@ out for Z."
 
 ## Target environments
 
+Linux readiness evidence and remaining acceptance checks are maintained in
+the [Linux guide](linux.md#pilot-acceptance-checks). Publishing both CPU
+architectures does not certify either host's full lifecycle. BI-3BE9A85C owns
+the Linux GA work; BI-E1AA1B3C repairs its Docker prerequisite path.
+
 | Environment | Status | LLM provider | Host telemetry exporter | Autostart |
 |---|---|---|---|---|
 | **Windows 10/11** (Docker Desktop) | GA | Docker Model Runner | `windows_exporter` on host (`windows-host` job, :9182) | Scheduled Task |
@@ -72,6 +77,7 @@ bootstrap runs with the system interpreter.
 
 | # | Trap | Platforms | Status | Watch for |
 |---|---|---|---|---|
+| S9 | Engine-only Docker install reaches deployment without Compose; failed group/service setup looks successful | Linux | ✅ BI-E1AA1B3C: coherent official Docker package family, Compose preflight and explicit errors; behavioral tests in `scripts/installer/lib/docker.test.mjs`. Native clean-host runtime acceptance remains unrun. | A Docker CLI version does not prove Compose exists. Capture status 75 in a conditional and explicitly handle failures inside the helper, because that conditional disables Bash errexit. |
 | S1 | `sed -i` differs (BSD requires a backup-suffix arg) | macOS | ✅ Use `dpf_sed_inplace()` in [`scripts/installer/lib/platform.sh`](../../scripts/installer/lib/platform.sh) — never raw `sed -i`. | New scripts calling `sed -i` directly. |
 | S2 | `netstat -anP tcp` (`-P` is GNU-only) | macOS | 📌 Works today only because `preflight.sh` tries `lsof` → `ss` → `netstat` and macOS always has `lsof`. | Don't reorder the fallback chain or hardcode `netstat -anP`. |
 | S3 | `readlink -f`, `stat -c`, `date -d`, `find -printf`, `grep -P` | macOS | ⚠️ watch | These GNU-isms have no BSD equivalent. Prefer POSIX forms; `shellcheck --shell=bash` runs in CI. |
