@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readSemanticReviewBudget, semanticReviewRecoveryBudget } from "./semantic-review-recovery-policy";
+import { readSemanticReviewBudget, semanticReviewRecoveryBudget, semanticReviewRecoveryObservation } from "./semantic-review-recovery-policy";
 const now = Date.parse("2026-09-13T00:00:00Z");
 const future = "2026-09-13T00:10:00Z";
 describe("recorded reviewer recovery budget", () => {
@@ -28,5 +28,27 @@ describe("recorded reviewer recovery budget", () => {
   });
   it.each([-1, 0.5, "1", null])("reports corrupt counter %s as unknown", (counter) => {
     expect(semanticReviewRecoveryBudget(future, counter, now)).toBe("unknown");
+  });
+});
+
+
+describe("review recovery status", () => {
+  it.each([
+    ["submitted", "active-execution", true], ["working", "active-execution", true],
+    ["auth-required", "authorization-required", false], ["completed", "completed", false],
+    ["canceled", "canceled", false], ["input-required", "execution-uncertain", false],
+  ])("distinguishes %s without treating it as a verdict", (status, classification, pollUseful) => {
+    expect(semanticReviewRecoveryObservation(status as string, { semanticReview: {
+      schemaVersion: 1, deadlineAt: future, reason: "provider-outcome-uncertain", recoveryAttempt: 1,
+    } }, now)).toMatchObject({ classification, pollUseful });
+  });
+  it("does not offer an unlimited chain or expose a corrupt digest", () => {
+    const view = semanticReviewRecoveryObservation("input-required", { semanticReview: {
+      schemaVersion: 1, deadlineAt: new Date(now - 1).toISOString(), successorAttempt: 1,
+      recoveryAttempt: -1, requestDigest: "private data",
+    } }, now);
+    expect(view.nextAction).toContain("cannot renew again");
+    expect(view.requestDigest).toBeNull();
+    expect(view.remainingAttempts).toBeNull();
   });
 });

@@ -241,3 +241,40 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — service reconcile (BI-D011E
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
 });
+
+// BI-FFFEA4ED: Created is not an operator stop; the first startup never succeeded.
+describe.skipIf(!BASH_OK || !GIT_OK)("never-started recovery", () => {
+  for (const fails of [false, true]) {
+    it(`retries a never-started service and records ${fails ? "failure" : "success"}`, () => {
+      const required = discoverRequiredServices();
+      const fixture = makeScratch();
+      const dockerLog = join(fixture.root, "docker.log");
+      try {
+        const service = required[0];
+        const result = runPromote({ ...fixture, targetSha: fixture.head, dockerLog,
+          existingServices: required, createdService: service,
+          ...(fails ? { reconcileFailService: service } : {}),
+        });
+        expect(result.status).toBe(0);
+        expect(readFileSync(dockerLog, "utf8")).toContain(`reconcile-remove rm ${service}`);
+        expect(readOutcome(fixture.backup)).toMatchObject({
+          outcome: fails ? "degraded" : "complete",
+          created: fails ? [] : [service], failed: fails ? [service] : [],
+        });
+      } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+    }, PROMOTE_TEST_TIMEOUT_MS);
+  }
+  it("preserves uninspectable containers and records unknown recovery as degraded", () => {
+    const required = discoverRequiredServices();
+    const fixture = makeScratch();
+    const dockerLog = join(fixture.root, "docker.log");
+    try {
+      const result = runPromote({ ...fixture, targetSha: fixture.head, dockerLog,
+        existingServices: required, inspectFailService: required[0],
+      });
+      expect(result.status).toBe(0);
+      expect(readFileSync(dockerLog, "utf8")).not.toContain("reconcile-remove");
+      expect(readOutcome(fixture.backup)).toMatchObject({ outcome: "degraded", failed: [required[0]] });
+    } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+});

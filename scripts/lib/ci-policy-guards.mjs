@@ -813,6 +813,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/hooks/pin-plugin-mcp-url.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
+        "scripts/lib/promoter-compose-mounts.test.mjs",
+        "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was
         // allowlisted OUT of CI, so nothing enforced its behaviour while it

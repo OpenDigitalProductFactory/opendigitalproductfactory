@@ -392,3 +392,52 @@ runtime applies (BI-378D3659).
 The connection briefing carries bounded identity, mission, locale and owning-scope decision routes. Decision tools resolve detailed business doctrine on demand. `node scripts/mcp-progressive-disclosure-conformance.mjs` reports initialization bytes, catalog bytes, their one-time composition and a hypothetical per-tool repetition cost. Attached, cached and billed tokens stay unknown without host telemetry; a full catalog does not establish that the model received every schema. The source ratchet also counts skill metadata once.
 
 For recovery, begin with the local [routing reference](../../packages/dpf-skill-pack/skills/dpf-systematic-debugging/references/recovery-routing.md). Protocol conformance and deterministic routing tests do not establish fresh-model behavior. After deployment, exercise normal delivery, broken upgrade, unavailable MCP/CI, denied authority and stale expedite occupancy on supported hosts, recording tools attached, route selected, outcome and actual usage where available.
+
+
+## Recovering an interrupted independent review
+
+Read the canonical task with MCP `tasks/get` and `tasks/result`. Native review
+readback reports the immutable deadline, remaining attempts, request digest,
+execution classification and next action. Polling helps only while execution is
+active. A capacity refusal before dispatch is infrastructure-inconclusive;
+transport loss remains uncertain. Neither is a failed code review or permission
+to publish. Workroom history retains the reviewer checkpoints and receipts.
+
+Within the original window, the original requester can confirm
+`retry_semantic_review`. Current saved authority, grants, quiescence and bounded
+attempts are checked again. A confirmed replacement can incur another charge;
+repeated review submissions do not authorize it.
+
+After expiry, the same operation accepts `remediationVerificationId` and
+`expectedRequestDigest` together. It permits one successor per lineage. Before
+calling it, reconcile the provider and executor against authorized runtime
+observations. Establish that every unresolved branch has stopped, repair the
+infrastructure, and run a health check on the affected canonical runtime. Record
+the real check through `record_runtime_verification`, using:
+
+- `kind: health`, `status: passed`, the affected runtime target and Workroom,
+  the executed command, and its actual completion time.
+- `result.semanticReviewRecovery`: the predecessor `taskRunId` and
+  `requestDigest`, `executionSettled: true`, every unresolved `settledNodeIds`,
+  and an `observation` explaining the observed settlement and remediation.
+
+This is execution evidence, never a review receipt. Do not infer settlement from
+an old heartbeat alone or record a passing health check that was not run. The
+server requires evidence newer than the parked task and no older than 30 minutes.
+Missing scope, unresolved nodes, revoked authority, stale failure-analysis
+evidence, quiescence, an actual failing review, or a previous successor refuses
+admission. A changed source or verification identity needs its own review.
+
+Admission atomically fences the predecessor and creates a separate immutable
+request with the same change identity and a bounded 30-minute window. It retains
+the old request, deadline, consumed attempts, completed checkpoints and unknown
+provider outcomes. Successful reviewer checkpoints can be reused only under the
+bound predecessor identity. Concurrent recovery admits at most one successor;
+late responses cannot publish across its fence. Observe the returned task until
+an independent pass or fail receipt exists. An inconclusive result still blocks
+publication.
+
+For the review service's own repair, use the existing recovery routing and build
+gate runbooks. They provide no alternative independent-review receipt and do
+not relax DCO, grants, ownership or production integrity. Record unavailable
+checks as unrun, then reconcile them after canonical recovery.

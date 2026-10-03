@@ -93,6 +93,19 @@ for arg in "$@"; do
 done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
+  *"config --format json"*) printf '{"services":{}}' ;;
+  *"ps -a -q "*) for service in "$@"; do :; done; printf '%s' "$service" ;;
+  *".State.Status"*)
+    for service in "$@"; do :; done
+    if [ "$service" = "$DPF_TEST_CREATED_SERVICE" ]; then
+      printf 'created 0001-01-01T00:00:00Z'
+    elif [ "$service" = "$DPF_TEST_INSPECT_FAIL_SERVICE" ]; then
+      exit 1
+    else
+      printf 'exited 2026-09-01T00:00:00Z'
+    fi
+    ;;
+  "rm "*) printf 'reconcile-remove %s\\n' "$*" >> "$DOCKER_LOG" ;;
   *".Id"*) printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;;
   *".RepoDigests"*) printf "%s@%s\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}" ;;
   *".Os"*) printf "%s" "\${DPF_TEST_RELEASE_OS:-linux}" ;;
@@ -182,6 +195,8 @@ export function runPromote(opts: {
   principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
   /** Services the fake install has ever created (any state), for service-reconcile. */
   existingServices?: string[];
+  createdService?: string;
+  inspectFailService?: string;
   /** Make the reconcile `up -d --no-recreate` fail, to prove it never aborts the upgrade. */
   reconcileFails?: boolean;
   /** Make only `up` of this one service fail (its image tag no longer resolves). */
@@ -254,6 +269,8 @@ export function runPromote(opts: {
     ...(opts.existingServices
       ? [`export DPF_TEST_EXISTING_SERVICES=${shellQuote(opts.existingServices.join("\n"))}`]
       : []),
+    ...(opts.createdService ? [`export DPF_TEST_CREATED_SERVICE=${shellQuote(opts.createdService)}`] : []),
+    ...(opts.inspectFailService ? [`export DPF_TEST_INSPECT_FAIL_SERVICE=${shellQuote(opts.inspectFailService)}`] : []),
     ...(opts.reconcileFails ? ["export DPF_TEST_RECONCILE_FAILS=1"] : []),
     ...(opts.reconcileFailService
       ? [`export DPF_TEST_RECONCILE_FAIL_SERVICE=${shellQuote(opts.reconcileFailService)}`]
