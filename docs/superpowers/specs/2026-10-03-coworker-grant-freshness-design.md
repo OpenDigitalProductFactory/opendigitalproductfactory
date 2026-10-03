@@ -86,3 +86,59 @@ If later measurements justify caching, revocation consistency must be proven
 across processes before introducing it. No runtime restart or direct grant write
 is an acceptable substitute for the source repair. Source-local tests cannot
 establish live grant propagation; AC-6 remains required after installation.
+
+## Live acceptance follow-up: edit the bound external authority
+
+PR #5986 fixed stale reads, but AC-6 failed at canonical SHA
+`c578984092dfe48c7ee94f3ee155636674817bba`. A second live probe showed that
+Capabilities edited the `external-codex` runtime row (15 grants after reload),
+while the OAuth connection's self-profile read `AGT-EXT-CODEX` (14 grants).
+The temporary grant was revoked and the original counts restored. The source
+trace is `loadCoworkerRecord` → `record.runtime.id` → `CapabilitiesEditor`,
+versus OAuth consent's canonical Agent binding and the exact-identity MCP reader.
+
+### Design grounding
+
+Keep the existing consent authority established by
+[OAuth external build authority](2026-09-21-oauth-external-build-authority-design.md).
+`eligibleOAuthCoworkers` excludes dual-seed mirrors; legacy token identities are
+not interchangeable authority bindings. `AgentToolGrant` and its durable
+revocation tombstones remain unchanged. The executable runtime record still owns
+skills and embedded execution. The detail read model must distinguish that
+execution identity from the grant authority being managed.
+
+WWMD decision **DI-612774F1F871** selects the proportional correction with high
+confidence: use the canonical record for the approved external development
+roles' permission editor, and preserve the existing runtime record for ordinary
+embedded coworkers. Reuse the source-approved external role list; do not add a
+second list. No token rebinding, grant union, mirror writes or migration. Broader
+identity consolidation would change existing credential permissions and belongs
+to a separately governed migration. The initial unscored decision
+DI-25A1662E66CE supplied no usable recommendation and is not authorization.
+
+### Additional acceptance
+
+- AC-7: All approved external development roles display and mutate canonical OAuth Agent grants even when legacy runtime grants differ; counts, coverage, and editor use the same authority.
+- AC-8: Skill assignment still targets runtime business identity, and ordinary embedded coworker grant editing still targets its executable runtime record.
+- AC-9: Grant and revoke through the corrected editor target the same row checked by MCP; revocation tombstones, manage_platform guard, token scope and human capability intersection remain intact.
+
+### Ordered follow-up plan
+
+1. Add a read-model grant authority facet, selected from the canonical external
+   role or ordinary runtime record, using the existing approved role contract.
+   Give the editor separate grant-authority and skill-runtime identifiers.
+2. Bind displayed counts, held grants and external service readiness to that
+   same grant authority. Revalidate the canonical route after edits; skill
+   actions retain the runtime business identifier.
+3. Test deliberately divergent canonical/runtime grant fixtures for all approved
+   external roles, zero canonical grants, ordinary embedded coworkers, editor
+   grant/revoke target and skill assignment target. Re-run grant freshness,
+   revocation, OAuth eligibility, component tests and web typecheck.
+4. Update the authorization runbook, obtain independent review, run the governed
+   integration gate, publish and merge through the queue. Coordinate canonical
+   deployment with its current owner, then repeat AC-6 and restore baseline
+   grants. Only a passing live receipt clears the original room-recovery gate.
+
+The follow-up is an atomic correction of BI-F2F09597's failed AC-6. Read-model,
+editor wiring, tests and operational documentation have no independent delivery
+value. Existing authorization and data contracts remain unchanged.
