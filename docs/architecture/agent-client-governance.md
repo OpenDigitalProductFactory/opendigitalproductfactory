@@ -93,9 +93,10 @@ A receipt is fresh only while all of its semantic identity remains unchanged:
 - normalized specialist set.
 
 Changing any one of those inputs requires a new review. Reordering or repeating
-the same specialists does not. A genuinely low-risk change may auto-pass, but
-the auto-pass still emits a receipt with its rationale; review is never skipped
-silently.
+the same specialists does not. Freshness alone is insufficient for reuse: the
+receipt must be independently reviewed and not inconclusive. Historical automatic
+receipts trigger a new review, including for low-risk changes under the current
+mandatory failure-analysis review policy.
 
 The receipt reuses the existing `ExternalEvidenceRecord` and
 `WorkCapsuleActivity(kind="evidence-recorded")` streams. It does not create a
@@ -107,8 +108,8 @@ External delivery surfaces invoke the native `review_semantic_change` operation
 only after the complete concern is committed locally and has its required gate
 evidence, before the first push. Build Studio invokes the same operation contract once over the
 assembled task diff, before UX verification and promotion; its existing
-task-level reviews remain intact. Runtime code activates the Change Reviewer,
-while a docs-only low-risk change can receive an explicit auto-pass receipt.
+task-level reviews remain intact. Runtime code and docs-only changes both receive
+independent review with proportionate failure-analysis evidence.
 Content selects existing specialist branches (accessibility, data governance,
 SBOM, and architecture guardrail), and the normalized specialist set is part of
 freshness. Repair loops stop after two failed rounds and surface operator review

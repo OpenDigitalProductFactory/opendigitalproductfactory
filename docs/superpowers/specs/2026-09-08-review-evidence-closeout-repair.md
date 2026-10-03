@@ -39,7 +39,7 @@ owns persisted writer outcomes; preserve its approval separation and bounded ret
 
 - OBJ-REC-001 / AC-REC-001 (BI-D1298AB0): when current activation requires review,
   an exact-tree auto-pass dispatches independent review instead of authorizing reuse.
-  High/critical escalation, reviewed reuse, low-risk reuse, identity staleness and
+  High/critical escalation, reviewed reuse, low-risk review, identity staleness and
   inconclusive retry have executable regression coverage.
 - OBJ-REC-002 / AC-REC-002 (BI-0C0669B5): source artifact content cannot by itself
   turn a bounded artifact review into a live-status request. Use server-owned
@@ -77,7 +77,9 @@ owns persisted writer outcomes; preserve its approval separation and bounded ret
 
 ## Authority, compatibility, risk and rollback
 
-Research and review receipts must come from the server-issued independent route.
+Independent review receipts must come from the server-issued review route.
+Research follows the current delivery shape's author-evidence lane; it is not
+an independent review verdict.
 The existing `dispatchRoutedSemanticReview` already reviews supplied immutable
 artifacts directly through governed inference. Use that route; do not add a
 generic exemption to the live-state evidence guard. A sensitivity floor raises
@@ -97,4 +99,26 @@ Reviewer behavior and operational recovery change; this design and the existing
 reviewer-facing guidance must explain the new outcome. No UI route, install
 configuration or schema change is intended. The two repairs are independently
 shippable and map to BI-D1298AB0 and BI-0C0669B5 respectively. Canonical coverage
-receipt and independent research approval remain pending; no completion claimed.
+receipt remains historical context; the current small delivery shape requires
+research, delivery and acceptance rather than a separate spec or plan gate.
+Author research receipt `initiative-f0725aa1-fc50-496b-adb6-bf255fc32637` records
+the verified red reproduction without claiming a green test or independent review.
+
+## Reconciliation with current main (2026-10-02)
+
+The existing regression patch was preserved and reapplied after refreshing to
+`36f53132a129803fc1b4666a7e0ca10f9ca76c32`. PR #5231 now requires independently
+challenged failure analysis on all reviews; automatic receipt creation is no
+longer a supported path in the operation. Preserve that stronger policy: reject
+cached automatic receipts for low, medium, high and critical risk. Keep fresh
+reviewed receipt reuse, stale identity re-review and inconclusive retry intact.
+The original high/critical regression remains, using an explicit automatic
+receipt fixture because current main no longer creates one. Its former medium
+automatic-reuse control now asserts mandatory review, not a policy rollback.
+
+The ordered implementation remains test-first: four cache regression cases fail
+with zero reviewer calls on the refreshed tree, then all 23 operation/request
+tests pass with the disposition check. Broader gates, independent review and
+runtime verification are still required; no delivery completion is claimed here.
+Documentation impact: update the existing agent-client-governance guidance so
+it no longer promises automatic approval for docs-only or low-risk changes.
