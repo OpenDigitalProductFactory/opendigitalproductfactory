@@ -49,3 +49,11 @@ Coverage receipt: `cmusy0yp67xhs01jzptp8nec2`, bound to plan commit `a06a9e2c8b3
 FullCalendar 7 is tracked as BI-89604587; Vitest 5 runner/coverage is tracked as BI-BB992B4D. Both remain triage/planning work with their original PRs open until migration evidence exists. The compatible batch resolves smol-toml 1.9.0, lucide-react 1.50.0 within the proposed ^1.48.0 range, axe-core and its Playwright adapter 4.13.0, and hyperframes 0.8.96.
 
 No operator or contributor workflow changes are introduced; existing public/user documentation stays accurate. The braces exception is limited to mobile build tooling and expires 2026-11-02.
+
+## Independent review repair
+
+The first review requested the source behind the mobile exposure assessment, direct HyperFrames rendering, and a production build. The next review must include the unchanged mobile source context at commit `c67de09cfc1742edc01997f9e94b734d412d71d6`: `apps/mobile/tailwind.config.ts` (blob `f82f5432a72d7e2e716880016e5be4a6f3282c2f`), `metro.config.js` (blob `e9d92d3d92a13726e4ae7c1789aa3b417a4ec630`), `package.json` (blob `1f1e045c80b3c36ba7cfe901d278fb9d09b0ecfa`), and `pnpm-lock.yaml` (blob `31fa0a8f85a20c277d483bb8750756f69a3648f8`). These are unchanged source files, not additional implementation changes.
+
+The Tailwind inputs are the three fixed app/src/dynamic TS/TSX patterns. Metro uses Expo defaults and fixed NativeWind `./global.css`. The mobile lock's only direct braces consumers are chokidar 3.6.0 and micromatch 4.0.8; provide those stanzas plus their Metro/Tailwind callers to the reviewer. A scan of every tracked JS/TS file under mobile app/src/dynamic found no braces, micromatch, chokidar or fast-glob token. This is static source evidence, not a runtime bundle trace.
+
+Run `scripts/probes/marketing-media/run-container-probe.mjs` from an immutable copy of the probe under the governed local-CI lease. Its synthetic composition is rendered twice offline; retain the actual version fingerprints and determinism receipt. Run the canonical local-CI runner with its supported local production-build strategy. These additional checks are pending until their executed receipts exist; do not treat the earlier unit-suite pass as rendering or production-build proof.
