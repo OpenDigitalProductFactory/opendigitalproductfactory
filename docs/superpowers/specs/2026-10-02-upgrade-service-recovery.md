@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Required service recovery after upgrade
 
 Backlog: BI-FFFEA4ED. Workroom: WC-C6BBDE4C. Profile: fix.

@@ -147,5 +147,5 @@ remain visible in container logs and health status.
 
 On Apple Silicon Macs, speech runs as the native Chatterbox service. It is checked
 through its speech endpoint, not by requiring a Docker speech container. If voice
-is unavailable, use the existing native speech setup/recovery procedure in the
-[Apple Silicon speech design](../../superpowers/specs/2026-05-28-tts-apple-silicon-local-design.md).
+is unavailable, the platform maintainer can restore it through the existing
+native speech setup procedure, `scripts/tts/setup-chatterbox-tts-macos.sh`.

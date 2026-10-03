@@ -43,6 +43,7 @@ test('literal dollar signs survive a second compose interpolation', () => {
 });
 
 test('Docker Compose merges translated binds without duplicating targets or re-expanding dollars', {
+  // ambient-host-guard: allow read-only Compose integration; explicitly skipped when the CLI is absent.
   skip: spawnSync('docker', ['compose', 'version']).status !== 0,
 }, () => {
   const root = mkdtempSync(join(tmpdir(), 'dpf-compose-mount-'));
@@ -57,6 +58,7 @@ test('Docker Compose merges translated binds without duplicating targets or re-e
     writeFileSync(override, JSON.stringify(mountOverride(config, [
       { Type: 'bind', Source: '/Users/me/$Config Files', Destination: '/host-source' },
     ])));
+    // ambient-host-guard: allow read-only config rendering proves actual Compose merge/interpolation behavior; no containers are created.
     const rendered = spawnSync('docker', ['compose', '-p', 'dpf-mount-test', '-f', base, '-f', override, 'config', '--format', 'json'], { encoding: 'utf8', env: { ...process.env, COMPOSE_PROFILES: '' } });
     assert.equal(rendered.status, 0, rendered.stderr);
     const volumes = JSON.parse(rendered.stdout).services.monitor.volumes;
