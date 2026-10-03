@@ -49,7 +49,8 @@ serving it; never revive the retired image-to-workspace source-advance engine.
 2. F-UPGRADE: Pass host mount identity into the promoter. Render the selected
    compose configuration and append a bind-only override using the existing
    compose chain. Preserve all mount options and container targets. Apply the
-   mapping before any compose mutation and to rollback. Retry only containers
+   mapping before service reconciliation, after release identity commit. The
+   existing portal swap/rollback and baked postgres paths remain unchanged. Retry only containers
    proven never started, once per upgrade, using per-service isolation. Keep
    durable degraded evidence when inspection or recovery fails.
 3. F-HOST: Remove macOS from the container speech requirement in the substrate
@@ -72,7 +73,13 @@ internal sequencing of that outcome, not independent feature deliveries: a retry
 without correct mounts repeats the failure; correct paths without retry strand
 existing installations; an inaccurate host projection makes every repaired run
 degraded. Sandbox dependency verification is part of the required topology check.
-Coverage decision: atomic. Receipt will be recorded against this immutable plan.
+Coverage decision: atomic. Initial receipt: cmurw5rog0b2601qur9hwdt7e
+(bound to commit 120a0359c7a7522d35eb1272a9779b002c3ee474).
+Implementation keeps mount translation in the already-shipped compose argument
+helper so an older portal can stage the candidate promoter without knowing a new
+file. The sandbox uses an image-baked entrypoint that performs a frozen install
+for existing workspace source; it does not alter source or bootstrap sentinels.
+Docker volumes merge by target per the [Compose merge specification](https://docs.docker.com/reference/compose-file/merge/#unique-resources).
 Requirement refs: AC-1, AC-2, AC-3, AC-4, AC-5, AC-6.
 Contract refs: C-MOUNTS, C-RECOVERY, C-HOST, C-SANDBOX.
 Flow refs: F-UPGRADE, F-HOST, F-SANDBOX.

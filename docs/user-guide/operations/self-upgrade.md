@@ -130,3 +130,22 @@ upgrade. Nothing is lost by waiting.
 - treating a failed, rolled-back deployment as if the swap had succeeded
 - re-running an upgrade the card has already said a retry will not fix
 - starting expensive local-CI work while the portal reports active quiescence
+
+
+## When required services are degraded
+
+A completed portal upgrade can still show **Degraded** when required supporting
+services could not start. The banner lists the failed services; it does not mean
+those capabilities are working. A later upgrade retries missing containers and
+containers whose first startup never succeeded. Services that have run before
+and were subsequently stopped are left alone.
+
+Monitoring configuration paths are resolved for the Docker host, including when
+an upgrade runs inside a separate container. The sandbox installs the dependencies
+for its current source before starting its preview server; dependency failures
+remain visible in container logs and health status.
+
+On Apple Silicon Macs, speech runs as the native Chatterbox service. It is checked
+through its speech endpoint, not by requiring a Docker speech container. If voice
+is unavailable, use the existing native speech setup/recovery procedure in the
+[Apple Silicon speech design](../../superpowers/specs/2026-05-28-tts-apple-silicon-local-design.md).
