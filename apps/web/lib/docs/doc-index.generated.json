@@ -1136,7 +1136,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "backlog-planning-runbook"
+        "backlog-planning-runbook",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/backlog-archetype-scope.md": {
@@ -1172,7 +1173,8 @@
         "reaping-safety-a-live-sessions-worktree-is-never-reaped",
         "rebasing-on-a-shallow-clone-never-a-bare-git-rebase-originmain",
         "housekeeping",
-        "when-a-worktree-is-removed"
+        "when-a-worktree-is-removed",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/build-gate-runbook.md": {
@@ -1184,7 +1186,8 @@
         "build-gate-runbook",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
-        "reaping-the-worktree-when-the-pr-merges-bi-848360ef"
+        "reaping-the-worktree-when-the-pr-merges-bi-848360ef",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/build-studio-namespace.md": {
@@ -1336,7 +1339,8 @@
         "7-subagent-dispatch-discipline",
         "14-release-testing",
         "15-communication",
-        "8a-advise-safe-tools-server-action-exports-coworker-coordination-pointers"
+        "8a-advise-safe-tools-server-action-exports-coworker-coordination-pointers",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/customer-zero-and-use-case-zero.md": {
@@ -1381,7 +1385,8 @@
         "model-metadata-lives-in-the-schema-and-the-catalog",
         "the-steward-watches-growth-not-only-structure",
         "retention-floors-come-from-the-obligations-that-bind-this-install",
-        "evidence-payloads-never-live-inline"
+        "evidence-payloads-never-live-inline",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/decision-vectors-by-archetype.md": {
@@ -1485,7 +1490,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "delivery-surfaces-runbook"
+        "delivery-surfaces-runbook",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/dependency-reduction-routine.md": {
@@ -1526,7 +1532,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "design-research-runbook"
+        "design-research-runbook",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/document-generation-facility.md": {
@@ -2121,7 +2128,9 @@
         "when-a-workroom-scope-claim-needs-a-person",
         "acting-coworker-binding-what-lets-a-token-join-a-work-room",
         "diagnosing-requires-an-acting-coworker",
-        "diagnosing-an-empty-loadtools-result"
+        "diagnosing-an-empty-loadtools-result",
+        "task-specific-operating-rules",
+        "disclosure-measurement-and-recovery"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -2201,7 +2210,8 @@
       "anchors": [
         "architecture-orientation",
         "subsystem-map",
-        "channel-adapter-capabilities"
+        "channel-adapter-capabilities",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/package-boundaries.md": {
@@ -2341,7 +2351,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "skill-surfaces-runbook"
+        "skill-surfaces-runbook",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/standards-review-2026-05-12-round-2.md": {
@@ -2441,7 +2452,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "theme-aware-styling-runbook"
+        "theme-aware-styling-runbook",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/trusted-agent-reference-contract.md": {

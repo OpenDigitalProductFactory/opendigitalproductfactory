@@ -1,8 +1,12 @@
+---
+status: active
+---
+
 # Agent task disclosure and recovery routing
 
 Backlog: BI-3CC35D24. Workroom: WC-30A9A3AD.
 Base: 7ff008013f16a82da0352df700c2153a17943a83.
-Status: ordered fix design; implementation admission pending.
+Status: implementation admitted; verification and publication in progress.
 
 ## Existing design
 
@@ -66,5 +70,5 @@ Shortening may hide a rule; preserve anchors and test route scenarios, then meas
 
 ## Backlog coverage
 
-Pending immutable artifact registration. No coverage receipt or implementation permission is claimed yet.
+Atomic coverage recorded as cmurqgh1i2t6a01mrajtk6hg0 against the initial published plan. Research receipt initiative-4a6a2e3c-8c80-4808-83b9-f055cf0bd33d. Readiness admitted implementation after those records and acceptance criteria were present.
 

@@ -366,3 +366,21 @@ implications, and the result intersected with the token's scopes: what the
 runtime actually checks. Capability reports (`get_capability_completeness`)
 count a tool reachable when any one required grant is held, the same rule the
 runtime applies (BI-378D3659).
+
+## Task-specific operating rules
+
+- **Discover before fallback.** Codex/Claude use a full catalog with host-side lazy attachment; other clients default to core. Call `load_tools` by name/query, refresh the list or use the programmatic catalog. Missing grants are permission failures, not missing tools. → [MCP authorization runbook](../architecture/mcp-tool-authorization-runbook.md)
+- **External coding agents use the MCP JSON-RPC transport at `/api/mcp/v1`.** Bearer tokens follow the `dpfmcp_...` pattern, are issued from Admin › Contributing & GitHub, and live only in local credential files — never commit them.
+- **Tokens carry a coarse scope (`read`/`write`/`admin`) plus granular per-tool grants; default tokens are `read` and cannot call side-effecting tools.** Agent `tool_grants` in `agent_registry.json` are enforced at runtime, intersected with the user's role capabilities. `insufficient_token_scope` is a §1 refusal.
+- **A side-effect tool may stay visible in advise mode only if it is advise-safe** — read-shaped, reversible, and non-committing. Anything else is hidden, not merely warned about.
+- **`"use server"` modules export only functions and concrete values.** Type aliases and interfaces stay local or move to a non-server module.
+- **Coworker capability filtering is single-source:** grants live in `agent_registry.json` / `AgentToolGrant` and are intersected at runtime — never re-derived per surface. → [kernel principle](../founder-kernel/wiki/principles/single-source-of-truth.md)
+
+
+## Disclosure measurement and recovery
+
+`load_tools` ranks intent in the token/role-visible catalog before coworker filtering. It loads only authorized matches; a relevant denied match returns its name and authority remedy, not its schema. Generic matches must not replace an unavailable specific capability. Exact-name loading remains supported.
+
+The connection briefing carries bounded identity, mission, locale and owning-scope decision routes. Decision tools resolve detailed business doctrine on demand. `node scripts/mcp-progressive-disclosure-conformance.mjs` reports initialization bytes, catalog bytes, their one-time composition and a hypothetical per-tool repetition cost. Attached, cached and billed tokens stay unknown without host telemetry; a full catalog does not establish that the model received every schema. The source ratchet also counts skill metadata once.
+
+For recovery, begin with the local [routing reference](../../packages/dpf-skill-pack/skills/dpf-systematic-debugging/references/recovery-routing.md). Protocol conformance and deterministic routing tests do not establish fresh-model behavior. After deployment, exercise normal delivery, broken upgrade, unavailable MCP/CI, denied authority and stale expedite occupancy on supported hosts, recording tools attached, route selected, outcome and actual usage where available.
