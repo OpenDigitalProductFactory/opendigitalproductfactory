@@ -153,3 +153,12 @@ never in the shared base.
 ### Persisted MCP endpoint recovery (BI-9F258707)
 
 A bootstrap launched from a worktree may have no install PUBLIC_URL and may inherit a process environment older than setup. The existing client-environment resolver now reads the persisted user endpoint after the canonical install origin and explicit process override. POSIX decodes only managed export values as data; Windows reads the User environment. The saved Node CA bundle is considered before the default PKI file. OAuth credentials, grants, trust stores and unrelated exports are unchanged. Re-run the supported bootstrap to converge native client configuration; verify its effective endpoint, not only the saved environment. Tests cover POSIX recovery and precedence; native Windows execution must be verified on a Windows host.
+
+
+## Required services after container-driven upgrades (BI-FFFEA4ED)
+
+| Host | Failure to watch for | Recovery contract |
+|---|---|---|
+| Docker Desktop and native Docker | A sibling promoter resolves relative monitoring binds beneath its own `/host-source`; the daemon cannot use that container path. A failed start leaves a Created container that an existence-only check misses. | Translate binds using the promoter's inspected host mounts. After release identity commit, release assets use the canonical install root. Retry only missing or proven never-started containers and retain failed recovery in the durable outcome. |
+| Apple Silicon macOS | The capability catalog asks for Docker speech while the macOS overlay points at the native service on port 8771. | The canonical container catalog excludes macOS for `dpf-tts`; verify native synthesis separately. A disabled `local.dpf-chatterbox-tts` LaunchAgent must be restored through the existing native setup procedure when speech is requested. |
+| All sandbox hosts | The persistent source volume contains newer package manifests but older dependency links. Next fails before its health endpoint starts. | The image-baked sandbox entrypoint performs a frozen dependency install and Prisma generation before serving the existing source. A failed install cannot fall through to a falsely ready preview. |
