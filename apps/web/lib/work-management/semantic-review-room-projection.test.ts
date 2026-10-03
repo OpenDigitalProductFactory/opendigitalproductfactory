@@ -10,6 +10,18 @@ const run = (status: string): ReviewerRunSnapshot => ({
 });
 
 describe("reviewer state in its Workroom", () => {
+  it("replaces obsolete retry instructions after expiry and links a successor", async () => {
+    const row = run("input-required");
+    row.progressPayload = { semanticReview: { schemaVersion: 1, deadlineAt: "2026-09-08T19:00:00Z",
+      action: "Keep polling", recoveryAttempt: 1 } };
+    let view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [row] } }, ["WC-1"], now);
+    expect(view.runs[0].nextAction).toContain("bounded successor");
+    row.status = "canceled";
+    (row.progressPayload as any).semanticReview.successorTaskRunId = "TR-2";
+    view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [row] } }, ["WC-1"], now);
+    expect(view.runs[0].nextAction).toContain("TR-2");
+  });
+
   it("keeps an older head's exhausted review out of current attention", async () => {
     const old = { ...run("input-required"), id: "old-row", taskRunId: "TR-OLD" };
     const current = { ...run("completed"), id: "current-row", taskRunId: "TR-CURRENT" };

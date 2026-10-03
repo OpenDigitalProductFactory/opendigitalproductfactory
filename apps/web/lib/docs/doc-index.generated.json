@@ -2130,7 +2130,8 @@
         "diagnosing-requires-an-acting-coworker",
         "diagnosing-an-empty-loadtools-result",
         "task-specific-operating-rules",
-        "disclosure-measurement-and-recovery"
+        "disclosure-measurement-and-recovery",
+        "recovering-an-interrupted-independent-review"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {

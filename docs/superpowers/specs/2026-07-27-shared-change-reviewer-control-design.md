@@ -413,8 +413,6 @@ the existing outcome pipeline. Resource/concurrency work owns higher throughput.
 An incident links escaped failure evidence and a scenario follow-up through the
 same outcome record; no fixed checklist proves exhaustive foresight.
 
-## Non-goals
-
 ## Recovery repair — BI-8ECEC429
 
 Status: implementation plan, 2026-10-02. This extends the existing request,
@@ -498,6 +496,8 @@ fail closed on unsupported recovery metadata and must not reopen a fenced
 predecessor. Deployment uses its canonical recovery point and rollback checks.
 There is no alternate route around independent review if this repair's own
 review cannot execute; use only a checked-in, authorized recovery procedure.
+
+## Non-goals
 
 - Replacing GitHub review.
 - Calling a blocking model from a git hook.
