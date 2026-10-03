@@ -415,6 +415,90 @@ same outcome record; no fixed checklist proves exhaustive foresight.
 
 ## Non-goals
 
+## Recovery repair — BI-8ECEC429
+
+Status: implementation plan, 2026-10-02. This extends the existing request,
+TaskRun, TaskNode, Workroom evidence and single-flight contracts. No new
+scheduler, table, provider, reviewer identity or permission bypass is proposed.
+
+### Reproduction and scope
+
+At source `c578984092dfe48c7ee94f3ee155636674817bba`, a rejected branch leaves
+its TaskNode running. The worker calls every branch exception uncertain,
+including a typed capacity refusal before provider dispatch. After expiry,
+single-flight subscribes that parked task while retry rejects its deadline.
+The standard task result tells a parked caller to keep polling. Canonical
+runtime observations and exact task identities are retained in the owning
+Workroom; the original provider incident and lifecycle defects are distinct.
+Routing, screening, provider clearance and residency remain authoritative.
+
+### Existing item acceptance (verbatim)
+
+1. Preserve prior immutable request, deadline, attempts, receipts and inconclusive outcome.
+2. After verified infrastructure remediation, an explicitly authorized supported recovery can admit a bounded successor for the same immutable change; it cannot silently refresh a consumed budget.
+3. Recheck current requester, authority, grants, verification freshness and quiescence before successor admission.
+4. Concurrent calls admit at most one successor; late prior responses cannot publish into the new generation.
+5. Actual semantic failures, revoked authority, unresolved execution and absent remediation cannot be reclassified as infrastructure success.
+6. UI/API readback explains whether recovery is possible and identifies the canonical next action; fresh independent acceptance is still mandatory.
+
+### Ordered implementation and verification
+
+All steps belong to one atomic repair, BI-8ECEC429. Classification, settlement,
+recovery admission and readback must agree before publication; a status-only
+change would still strand execution, and an admission-only change could repeat
+work without sufficient evidence. These phases are internal sequencing.
+
+1. Reproduce capacity refusal and expired replay in existing worker,
+   single-flight and task-lifecycle tests before changing implementation.
+   Resolve graph-linked tests and retain the failing output.
+2. Settle known pre-dispatch capacity refusals as infrastructure-inconclusive
+   branch checkpoints, preserving successful siblings. Unknown transport or
+   executor loss stays uncertain, with durable stopped/uncertain branch state
+   and bounded diagnostic codes rather than raw provider payloads. Never
+   repeat a provider call to repair a checkpoint transaction.
+3. Extend the existing explicit recovery operation for an expired request.
+   Require confirmation, scoped recorded remediation evidence and current
+   authority/freshness checks. Preserve the predecessor packet, attempts,
+   deadline and evidence. Atomically fence the predecessor and bind at most
+   one successor with a separate bounded window and immutable change identity.
+   Repeated submission must join the latest generation, never reuse an older
+   verdict. Unresolved execution, actual failing verdicts and missing evidence
+   are not successor admission. A successor cannot create an unlimited chain.
+4. Project active execution, infrastructure wait, uncertain execution,
+   authorization required, expiry and completed review through existing task
+   and Workroom views. State whether polling can help, the immutable deadline,
+   remaining attempts and the canonical recovery action. Availability conveys
+   no authority. Keep sensitive request bodies out of status responses.
+5. Inject duplicate recovery, lost executor, late old responses, expired and
+   stale receipt replay, revoked grants, changed evidence, quiescence and
+   persistence faults. Confirm one executing generation, retained completed
+   checkpoints, no silent paid replay and no fabricated verdict.
+6. Run affected suites, package typecheck, style guard, canonical shared gate,
+   independent exact-change review, DCO PR and merge queue. Deploy through
+   canonical self-upgrade, then exercise the original affected workflow and
+   record its genuine independent verdict, including a failing verdict if that
+   is what review finds. Keep unavailable checks unrun and report blockers to
+   the original delivery owner; do not close that owner's broader work.
+
+### Traceability, risks and rollback
+
+Coverage keys: REVIEW-RECOVERY-CONTRACT (immutable authority and budget),
+REVIEW-RECOVERY-FLOW (settle, reconcile, admit, execute, observe),
+REVIEW-RECOVERY-VERIFY (failure injection plus canonical workflow verdict).
+The implementation parent is BI-8ECEC429; the six acceptance statements above
+are its requirement references. Live plan coverage binds this immutable design
+and the claimed edit scope before implementation.
+
+The main risks are duplicate paid work, lost completed evidence, stale verdict
+reuse, unauthorized renewal and secret-bearing diagnostics. Transactional
+fences and deterministic identities contain races; current authority and
+freshness checks contain stale consent; allowlisted diagnostics protect data.
+No request or historical receipt is rewritten or deleted. A code rollback must
+fail closed on unsupported recovery metadata and must not reopen a fenced
+predecessor. Deployment uses its canonical recovery point and rollback checks.
+There is no alternate route around independent review if this repair's own
+review cannot execute; use only a checked-in, authorized recovery procedure.
+
 - Replacing GitHub review.
 - Calling a blocking model from a git hook.
 - Running full multi-agent deliberation for every trivial change.
