@@ -292,7 +292,6 @@
       "docs/testing/pre-pr-gate.md"
     ],
     ".github/workflows/install-verification.yml": [
-      "docs/install/linux.md",
       "docs/maintenance/staleness-report.md"
     ],
     ".github/workflows/migration-safety-guard.yml": [
@@ -2239,6 +2238,9 @@
     "scripts/installer/install-state.schema.json": [
       "docs/operations/install.md"
     ],
+    "scripts/installer/lib/docker.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/installer/lib/platform.sh": [
       "docs/install/platform-support-watchlist.md"
     ],
@@ -3431,7 +3433,6 @@
       "services/edge-node/scripts/verify-lifecycle.ts"
     ],
     "docs/install/linux.md": [
-      ".github/workflows/install-verification.yml",
       "docker-compose.linux.yml",
       "scripts/detect-hardware-host.ts"
     ],
@@ -3460,6 +3461,7 @@
       "scripts/doctools-image-contract.test.mjs",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/doctools-prepull.test.mjs",
+      "scripts/installer/lib/docker.test.mjs",
       "scripts/installer/lib/platform.sh",
       "scripts/lib/dockerfile-portal-build.test.mjs",
       "scripts/lib/entry-module.mjs",

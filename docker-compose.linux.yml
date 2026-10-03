@@ -10,10 +10,9 @@
 #
 # Per the deployment doctrine:
 #
-#   - Docker Model Runner is built into Docker Desktop and is NOT
-#     available on native Linux Docker Engine. Per Doctrine Contract 9
-#     (LLM and agent-provider routing), the default LLM provider on
-#     Linux native Docker is Ollama running in compose. This overlay
+#   - Docker Model Runner is also available for Docker Engine, but DPF's
+#     Linux installer currently provisions Ollama per Doctrine Contract 9
+#     (LLM and agent-provider routing). This overlay
 #     adds the `ollama` service and overrides LLM_BASE_URL on every
 #     LLM consumer (portal, sandbox, browser-use) to point at it.
 #

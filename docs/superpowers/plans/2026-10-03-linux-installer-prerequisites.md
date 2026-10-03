@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Linux installer prerequisite repair
 
 Backlog: BI-E1AA1B3C. Contributes to BI-3BE9A85C under EP-MFG-DELIVER-INSTALL.
@@ -111,7 +115,8 @@ automatically downgrade or remove host packages installed by a completed run.
 ## Backlog coverage
 
 Atomic mapping: `linux-prerequisite-contract` -> BI-E1AA1B3C; dependencies: none.
-Record the immutable plan blob with `record_plan_backlog_coverage` before
-implementation. Its governed receipt is authoritative; this paragraph alone
-is not coverage. Linux GA and the observed HTTPS/runtime-state warnings are
-not delivered by this prerequisite repair.
+Coverage recorded before implementation: `cmusopwv44sye01jz1lu5f0eo`, atomic,
+against commit `be25ffe3c974ffdd8f5c959a3b209acf42e70de5`, plan blob
+`d41fa05fdc533f24438a7d47bc53332a870a4107`. The governed receipt is authoritative.
+Linux GA and the observed HTTPS/runtime-state warnings are not delivered by
+this prerequisite repair.
