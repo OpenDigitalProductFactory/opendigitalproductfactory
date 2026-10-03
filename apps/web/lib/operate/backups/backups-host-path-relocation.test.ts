@@ -104,7 +104,7 @@ describe("DPF_BACKUPS_HOST_PATH relocation (BI-8004BCD8)", () => {
     it("install-dpf.sh appends DPF_BACKUPS_HOST_PATH to a freshly-generated .env", () => {
       const body = read("install-dpf.sh");
       expect(body).toContain("DPF_BACKUPS_HOST_PATH=%s-backups");
-      expect(body).toContain('BACKUPS_HOST_DIR="${REPO_ROOT}-backups"');
+      expect(body).toContain(`BACKUPS_HOST_DIR="\${REPO_ROOT}-backups"`);
     });
 
     it("fresh-install.ps1 writes DPF_BACKUPS_HOST_PATH=$InstallRoot-backups", () => {

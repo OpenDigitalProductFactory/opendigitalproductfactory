@@ -246,7 +246,7 @@ function renderMap(vi){
   // ladder
   const ly=410;el('text',{x:22,y:ly-14,'font-size':11,fill:'var(--muted)','font-weight':600},'Timeline');
   el('text',{x:22,y:ly+2,'font-size':10,fill:'var(--work)'},'process ▲');el('text',{x:22,y:ly+30,'font-size':10,fill:'var(--person)'},'wait ▼');
-  let lx=110;const segW=[[130,X[0]],[130,X[1]],[130,X[2]]];
+  let lx=110;
   v.ladder.forEach(([p,w],i)=>{const x=X[i];
     el('path',{d:`M${lx} ${ly+24} L${x} ${ly+24} L${x} ${ly} L${x+W} ${ly} L${x+W} ${ly+24}`,fill:'none',stroke:'var(--fg)','stroke-width':1.3});
     el('text',{x:x+W/2,y:ly-4,'text-anchor':'middle','font-size':11,class:'m',fill:'var(--work)'},p);

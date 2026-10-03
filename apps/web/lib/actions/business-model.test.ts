@@ -62,7 +62,6 @@ import {
   addRoleToBusinessModel,
   removeRoleFromBusinessModel,
   listBusinessModels,
-  getProductBusinessModels,
 } from "./business-model";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
