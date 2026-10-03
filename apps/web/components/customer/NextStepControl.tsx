@@ -23,6 +23,12 @@ export function NextStepControl({
 
   const planned = nextActivityAt ? new Date(nextActivityAt) : null;
   const overdue = planned !== null && planned.getTime() < Date.now();
+  // Date-only steps are stored as a UTC civil day (midnight for older rows,
+  // noon for rows saved after BI-954B4FA7). Format in UTC so a negative
+  // offset does not show the previous calendar day.
+  const plannedLabel = planned
+    ? new Intl.DateTimeFormat(undefined, { timeZone: "UTC", year: "numeric", month: "numeric", day: "numeric" }).format(planned)
+    : null;
 
   function save() {
     if (!date) {
@@ -48,7 +54,7 @@ export function NextStepControl({
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {planned ? (
           <span className={overdue ? "text-red-400" : "text-[var(--dpf-muted)]"}>
-            Next step {overdue ? "was due" : "planned"} {planned.toLocaleDateString()}
+            Next step {overdue ? "was due" : "planned"} {plannedLabel}
           </span>
         ) : (
           <span className="text-amber-400">No next step planned</span>
