@@ -41,3 +41,9 @@ The 2026-10-03 dry-run inspected 348 worktrees: 336 KEEP, 9 SKIP, 3 PINNED, zero
 ## Backlog coverage
 
 Atomic deliverable DEP-CLOSURE maps to BI-7161625D. Steps are internal sequencing of one delivery/acceptance contract change; the proof resolver without its governed consumer or the consumer without honest acceptance handling is not independently shippable. Requirement references AC-DEP-1, AC-DEP-2, AC-DEP-3, AC-DEP-4, AC-DEP-5; contract reference CONTRACT-DEP-CLOSURE (canonical proof plus governed terminal transaction); flow reference FLOW-DEP-CLOSURE (deployed proof → delivery close → independent acceptance/corrective work); verification references VER-DEP-1 through VER-DEP-5. Live immutable plan coverage must be recorded before source implementation.
+
+## Historical criterion retained by the item parser
+
+The item retains its September operator decision as history. The current parser treats the following numbered historical sentence as a criterion because it begins with “Acceptance”. It is quoted here for exact coverage; the status already exists and this phase adds no enum:
+
+> is an extra `BacklogItem.status`.** Closed enum today: `triaging | open | in-progress | done | deferred | retired` (`apps/web/lib/backlog/transitions.ts`). Add a first-class status (working name `awaiting-acceptance`) so delivered work is not `open` and is not yet `done`. Widening the enum is a Prisma migration plus the generated TypeScript union in the same change — not a free-form string.
