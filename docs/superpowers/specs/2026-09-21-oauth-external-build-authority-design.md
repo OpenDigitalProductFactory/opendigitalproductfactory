@@ -486,6 +486,59 @@ it is the only branch that runs (see "Why the picker always shows" below).
 Everything else in C1, C2, F1 to F3 and V1 to V9 stands unchanged; this
 section removes a decision from the consent screen and adds none.
 
+### Named-account confirmation amendment (2026-10-03)
+
+BI-05E0EA33 and BI-07D21B4A must hold together: one deliberate consent
+action, and an explicit choice of the account receiving the connection and
+its approvals. Live verification on 2026-10-03 confirmed the personal
+account and automatic Codex selection, but the required account checkbox
+still made the normal path two operations. Header role `HR-000` is not an
+account identifier and must not be used as evidence of who is signed in.
+
+Decision DI-50FF7AFF805C recommends `named-account-submit` (high
+confidence, proceed). Replace the separate checkbox with one native
+submit button whose visible text is **Connect {client} as {account}**.
+The full account identifier must remain visible and wrap on narrow
+screens. Keep the account consequence and switch-account link above it.
+The action itself confirms the named account; merely viewing the page
+does not confirm anything.
+
+The submitted account identity remains bound to the identity shown by the
+server. POST still rejects missing or mismatched confirmation and renders
+the current account for a fresh explicit action if the session changes.
+Cancel must never issue a code. No automatic submission, scope expansion,
+role-policy change, or room admission is introduced. Existing CSRF,
+redirect, PKCE, eligibility, and grant-intersection checks remain intact.
+Support old in-flight checkbox forms during rollout; both forms must
+produce the same validated authorization decision.
+
+#### Research & Benchmarking
+
+- [GitLab OAuth provider](https://docs.gitlab.com/integration/oauth_provider/)
+  separates application authorization from authentication. Adopt explicit
+  owner approval; do not adopt administrative preauthorization to avoid
+  the consent action.
+- [Keycloak client registration](https://www.keycloak.org/securing-apps/client-registration)
+  retains permission consent after authentication for registered clients.
+  Adopt that boundary; do not equate a registered client name with a
+  verified identity or additional authority.
+- [RFC 6749](https://www.rfc-editor.org/rfc/rfc6749.html), sections 4.1
+  and 10.12, supplies the authorization and CSRF boundary. The interaction
+  change does not alter the protocol or substitute a display name for
+  server-side authorization.
+- [W3C button pattern](https://www.w3.org/WAI/ARIA/apg/patterns/button/)
+  supports a native action button with its accessible name taken from
+  visible content. Use the same account-bearing name for sighted,
+  keyboard, and screen-reader users; no icon-only confirmation.
+
+Acceptance extends AC-OC-1/3/7: the resolved default path requires one
+account-bearing Connect activation, zero role selections, and no account
+checkbox. A missing or stale account value issues no authorization code;
+cancel works without confirming an account. Verify hostile client/account
+labels are escaped, long account names wrap, and keyboard activation
+submits the same explicit choice. Measure first-connect and reconnect
+separately; a rendered page alone does not prove token issuance.
+
 ### Operator request
 
 On 2026-09-23 the founder connected Codex. The consent page already said
