@@ -104,22 +104,36 @@ The authorization contract is:
 
 ## Acceptance and verification
 
-- **AC-1:** A caller already admitted for action can appoint without
-  `manage_platform`; all existing grant/capability/consequence gates remain.
-- **AC-2:** A caller excluded from the room can appoint only when the acting
-  human has `manage_platform`; the handler repeats this check before writing.
-- **AC-3:** An excluded non-manager is refused and no appointment writer runs.
-- **AC-4:** Replacing a coordinator updates an existing explicit WorkItem policy
-  so the new human coordinator is both admitted and action-capable, while
-  preserving all active room members.
-- **AC-5:** An invitation that writes membership but still fails exact paired
-  admission reports a partial outcome, names every blocked `WC-*`, and supplies
-  the supported owner-recovery action. It never says the assistant can continue.
-- **AC-6:** Normal effective invitations still return success, and exact-room
-  sensitivity, policy, clearance, grant, and independence rules are unchanged.
-- **AC-7:** On the canonical live install, recover WC-2552ADE3 without replaying
-  its completed invitation; verify `get_workroom` succeeds for the acting OAuth
-  pair, then return BI-9F258707 to its original chat for completion.
+- AC-1: A caller already admitted for action can appoint without manage_platform; all existing grant, capability and authority-consequence gates remain.
+- AC-2: A caller excluded from the room can appoint only when the acting human has manage_platform, and the handler repeats the check immediately before writing.
+- AC-3: An excluded non-manager is refused and no appointment writer runs.
+- AC-4: Replacing a coordinator updates an existing explicit WorkItem policy so the new human coordinator is admitted and action-capable while all active room members remain admitted.
+- AC-5: An invitation that records membership but still fails exact paired admission returns a truthful partial result with every blocked WC-* and the supported owner-recovery action; it never says the assistant can continue.
+- AC-6: Normal effective invitations still return success, and exact-room sensitivity, policy, clearance, grant and independence rules are unchanged.
+- AC-7: On the canonical live install, recover WC-2552ADE3 without replaying its completed invitation, verify get_workroom succeeds for the acting OAuth pair, and return BI-9F258707 to its original chat for completion.
+
+## Atomic coverage references
+
+**Requirement refs:** AC-1; AC-2; AC-3; AC-4; AC-5; AC-6; AC-7.
+
+**Contract refs:**
+
+- `apps/web/lib/work-capsules/oauth-workroom-ownership.ts`
+- `apps/web/lib/mcp/packs/room-messaging-pack.ts`
+- `apps/web/lib/work-management/execute-coordinator-appointment.server.ts`
+- `apps/web/lib/work-management/workroom-agent-access.server.ts`
+
+**Flow refs:**
+
+- OAuth governed preflight -> authority consequence gate -> execution-time authorization -> coordinator write -> exact-room admission readback
+- Room participant invitation -> policy/assignment persistence -> exact Workroom paired-access readback -> truthful result
+
+**Verification refs:**
+
+- `apps/web/lib/work-capsules/oauth-workroom-ownership.test.ts`
+- `apps/web/lib/mcp/packs/room-messaging-pack.test.ts`
+- `apps/web/lib/work-management/execute-coordinator-appointment.server.test.ts`
+- live WC-2552ADE3 OAuth get_workroom verification
 
 ## Documentation impact
 
