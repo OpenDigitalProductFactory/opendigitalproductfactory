@@ -72,6 +72,10 @@ overrides:
   # leaks plaintext credentials (high, BI-6B317EFA). Optional transitive of prisma;
   # this workspace runs PostgreSQL, but the package is in the tree. Floor to 3.24.3.
   mysql2: '>=3.24.3'
+  # fast-uri >= 3.0.0 < 3.1.8: GHSA-hrr3-gc8f-f4qj / Dependabot #211 (medium).
+  # Percent-encoded host octets normalize to a different case than the raw host.
+  # ajv@8.20.0 resolved 3.1.7. Stay on the 3.x line; 4.x is a separate major.
+  'fast-uri@>=3.0.0 <3.1.8': '3.1.8'
   # @floating-ui/* exact pins. Introduced with the diagram-stack pin set
   # (BI-72E0A27B); the mermaid/zenuml members left with the workspace's
   # mermaid-cli dependency (BI-DBDB8C6D — rendering now runs from the pinned

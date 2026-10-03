@@ -2,7 +2,7 @@
  * Quick deploy test — triggers executePromotionAction on an already-approved promotion
  * and waits for the promoter to complete.
  */
-import { test, expect } from "@playwright/test";
+import { test } from "@playwright/test";
 import { loginToDPF } from "./helpers";
 
 test("deploy approved promotion and verify", async ({ page }) => {

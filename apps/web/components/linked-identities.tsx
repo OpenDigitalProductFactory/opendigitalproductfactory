@@ -20,8 +20,6 @@ const providers = [
 ];
 
 export function LinkedIdentities({ identities, hasPassword }: Props) {
-  const linkedProviders = new Set(identities.map((i) => i.provider));
-
   return (
     <div>
       <h3 style={{ color: "var(--dpf-text)", fontSize: 16, fontWeight: 600, marginBottom: 4 }}>

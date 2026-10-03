@@ -251,8 +251,6 @@ export async function resolve(
   // Compare against the strongest of {risk, stage} — that is the minimum
   // permitted strength. If explicit is weaker than that minimum, the minimum
   // wins and we report triggerSource=combined.
-  const axisRequired =
-    required && defaulted ? stronger(required, defaulted) : required ?? defaulted;
 
   let chosen: string;
   let triggerSource: DeliberationTriggerSource;

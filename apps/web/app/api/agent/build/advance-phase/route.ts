@@ -74,7 +74,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   const currentPhase = build.phase as BuildPhase;
-  const devConfig = await prisma.platformDevConfig.findUnique({
+  await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
     select: { governedBacklogEnabled: true },
   });

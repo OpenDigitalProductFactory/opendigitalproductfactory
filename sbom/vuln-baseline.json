@@ -22,6 +22,16 @@
       "severity": "high",
       "reason": "Not reachable. node-forge 1.4.0 enters only apps/mobile/pnpm-lock.yaml, as a dependency of @expo/cli and @expo/code-signing-certificates (Expo's command-line build tooling); it is not bundled into the shipped app and never runs on a server. The flaw is RSA PKCS#1 v1.5 signature-verification forgery with low-exponent keys, used by Expo only for expo-updates code signing, which DPF's mobile app does not use (no expo-updates dependency and no codeSigning config in app.json, eas.json or package.json, checked 2026-10-02). No fixed version exists (affected through 1.4.0). Re-evaluate when node-forge publishes a fix, when Expo drops or patches it, or before enabling expo-updates code signing.",
       "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-vfj7-8cjw-p6xm",
+      "aliases": [
+        "CVE-2026-93687"
+      ],
+      "package": "braces@3.0.3",
+      "severity": "high",
+      "reason": "Not reachable from a shipped runtime. braces 3.0.3 is only in apps/mobile/pnpm-lock.yaml. tailwindcss 3.4.19 (a mobile devDependency) pulls it through chokidar and micromatch, and Metro's Node bundler pulls it through metro-file-map and micromatch. The mobile app source does not import braces, micromatch, or chokidar. The flaw is a stack overflow when a caller supplies a deeply nested brace pattern. Those callers expand this repo's own Tailwind and Metro globs, not request input. No patched npm release exists (3.0.3 is the latest; micromatch/braces#72 is unreleased). Re-evaluate when braces publishes a depth guard, or when Expo or Tailwind stop depending on 3.0.3. Checked 2026-10-03.",
+      "expires": "2026-12-31"
     }
   ]
 }

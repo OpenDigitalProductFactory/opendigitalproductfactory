@@ -73,8 +73,10 @@ test("every installer that writes an install .env generates both keys", async ()
   for (const key of KEYS) assert.match(fresh, new RegExp(`^${key}=\\$inngest`, "m"));
 });
 
-function runBash(script, env = {}) {
-  return spawnSync(bash, ["-c", script], { cwd: root, env: { ...process.env, ...env }, encoding: "utf8" });
+function runBash(script, args = [], env = {}) {
+  // The script stays a fixed string. Paths go in argv so a temp directory
+  // cannot change what the shell parses (CodeQL js/shell-command-injection-from-environment).
+  return spawnSync(bash, ["-c", script, "bash", ...args], { cwd: root, env: { ...process.env, ...env }, encoding: "utf8" });
 }
 
 test("installer output replaces a missing, placeholder or public key and keeps a real one", async () => {
@@ -91,7 +93,7 @@ test("installer output replaces a missing, placeholder or public key and keeps a
       const file = join(dir, `${name}.env`);
       await writeFile(file, body);
       const result = runBash(`source scripts/installer/lib/prompts.sh
-for k in INNGEST_SIGNING_KEY INNGEST_EVENT_KEY; do dpf_env_ensure_secret_hex "$k" "$1" 32; done`.replace("$1", bashPath(file)));
+for k in INNGEST_SIGNING_KEY INNGEST_EVENT_KEY; do dpf_env_ensure_secret_hex "$k" "$1" 32; done`, [bashPath(file)]);
       assert.equal(result.status, 0, result.stderr);
       const text = await readFile(file, "utf8");
       for (const literal of PUBLIC_KEYS) assert.ok(!text.includes(literal), `${name}: installer output still carries ${literal}`);
