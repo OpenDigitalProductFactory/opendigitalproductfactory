@@ -72,3 +72,11 @@ Shortening may hide a rule; preserve anchors and test route scenarios, then meas
 
 Atomic coverage recorded as cmurqgh1i2t6a01mrajtk6hg0 against the initial published plan. Research receipt initiative-4a6a2e3c-8c80-4808-83b9-f055cf0bd33d. Readiness admitted implementation after those records and acceptance criteria were present.
 
+
+## Review blocker repair (operator-directed follow-up)
+
+The primary review checkpoints for TR-GATE-16C910D7A7FEA3A7EC292E7F both rejected the unrelated shared checkout at f3517a3, despite receiving the immutable 7d63c18 diff. The architecture specialist passed. A read-only TaskNode query recovered this evidence because the aggregate had replaced it with a generic capacity message.
+
+Extend this disclosure repair to the Codex inference adapter: use the existing Claude adapter's neutral per-call directory pattern, fail closed if directory creation or entry fails, and clean up only the owned empty directory. Clarify that supplied immutable artifacts govern review; unrelated ambient trees cannot replace them. Preserve bounded branch explanations in inconclusive receipts. Keep genuine missing-artifact outcomes inconclusive and preserve all publication controls.
+
+Regression coverage: adapter invocation must leave /workspace and clean its per-call directory; prompt must identify artifact authority; receipt must preserve checkout mismatch and branch identity without mislabeling it capacity. Run the affected review and adapter suites, source preflight, exact-tree integration and native independent review. No live checkpoint edits or hand-patched runtime.
