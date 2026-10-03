@@ -69,7 +69,7 @@ export function extractDeliveredBacklogItemIds(title: string, body: string): str
 
 // A doc PR (conventional type doc/docs) writes a design, plan or reference. It
 // delivers a doc item; it does not deliver the feature or fix it describes.
-function isDocPullRequest(title: string): boolean {
+export function isDocPullRequest(title: string): boolean {
   return /^docs?(?:\(|!|:)/i.test(title.trim());
 }
 

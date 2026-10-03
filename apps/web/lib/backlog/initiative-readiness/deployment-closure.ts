@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { parseVerifiedPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
+import { isDocPullRequest } from "@/lib/backlog/pr-submit-awaiting-acceptance";
 import type { InitiativeReadinessDecision } from "./types";
 
 const sha = /^[a-f0-9]{40}$/i;
@@ -22,6 +23,7 @@ type Run = { runId: string; status: string; dryRun: boolean; targetSha: string |
 
 /** Only immutable provider/deployment facts can authorize delivery closure. */
 export async function resolveDeploymentClosureProof(args: {
+  workType: string | null;
   room: Room | null;
   run: Run | null;
   servedSha: string | null;
@@ -37,6 +39,7 @@ export async function resolveDeploymentClosureProof(args: {
     return { kind: "unavailable", reason: "No successful canonical deployment matches the served image." };
   }
   if (!pr || pr.state !== "merged" || pr.isDraft || !pr.mergeCommitSha
+    || (isDocPullRequest(pr.title) && args.workType !== "doc")
     || room.repositoryFullName !== pr.repositoryFullName || room.pullRequestNumber !== pr.number
     || !room.headSha || room.headSha.toLowerCase() !== pr.headSha.toLowerCase()
     || Date.parse(pr.mergedAt!) > run.completedAt.getTime()) {
@@ -52,7 +55,7 @@ export async function resolveDeploymentClosureProof(args: {
 }
 
 /** Server-owned reads; a caller cannot submit a deployment assertion as proof. */
-export async function resolveBacklogDeploymentClosure(args: { itemId: string; roots: string[] }): Promise<DeploymentClosureResult> {
+export async function resolveBacklogDeploymentClosure(args: { itemId: string; workType: string | null; roots: string[] }): Promise<DeploymentClosureResult> {
   try {
     const { prisma } = await import("@dpf/db");
     const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
@@ -75,7 +78,7 @@ export async function resolveBacklogDeploymentClosure(args: { itemId: string; ro
     });
     const observation = snapshots.map(row => parseVerifiedPullRequestObservation(row.payload))
       .find(pr => pr?.repositoryFullName === room.repositoryFullName);
-    return await resolveDeploymentClosureProof({ room, run, servedSha, observation,
+    return await resolveDeploymentClosureProof({ workType: args.workType, room, run, servedSha, observation,
       contains: async (repository, ancestor, target) => {
         for (const root of args.roots) {
           try {

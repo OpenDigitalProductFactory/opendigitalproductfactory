@@ -371,7 +371,7 @@ export async function completeBacklogItemTransition(args: {
     projectReadiness?: ProjectReadiness;
     resolveMergeDelivery?: ResolveMergeDelivery;
     resolveHasDesignSpec?: ResolveHasDesignSpec;
-    resolveDeploymentClosure?: (args: { itemId: string; roots: string[] }) => Promise<DeploymentClosureResult>;
+    resolveDeploymentClosure?: (args: { itemId: string; workType: string | null; roots: string[] }) => Promise<DeploymentClosureResult>;
   };
 }): Promise<GovernedTerminalTransitionResult> {
   const db = args.db ?? (prisma as unknown as BacklogTerminalDb);
@@ -447,7 +447,7 @@ export async function completeBacklogItemTransition(args: {
       acceptanceState = reconciliation.state;
       const deploymentResult = isDirectMergePlatformWork(lockedItem)
         ? await (args.dependencies?.resolveDeploymentClosure ?? resolveBacklogDeploymentClosure)({
-          itemId: lockedItem.itemId, roots: mergeSignalRoots(),
+          itemId: lockedItem.itemId, workType: lockedItem.workType, roots: mergeSignalRoots(),
         }) : null;
       deployment = deploymentResult?.kind === "deployed"
         && reconciliation.state !== "conflict" && reconciliation.state !== "malformed"
@@ -502,7 +502,7 @@ export async function completeBacklogItemTransition(args: {
       // the explanation of why — the worst of both, and the operator would be
       // told nothing at all.
       const mergeSignalBlindSpot =
-        mergedThroughGates === "signal-unavailable" && isDirectMergePlatformWork(lockedItem);
+        !deployment && mergedThroughGates === "signal-unavailable" && isDirectMergePlatformWork(lockedItem);
       const mergeSignalReasons = mergeSignalBlindSpot
         ? [mergeSignalUnavailableReason(mergeSignalRoots())]
         : [];

@@ -6,7 +6,7 @@ const sha = (c: string) => c.repeat(40);
 const room = { repositoryFullName: "owner/repo", headSha: sha("a"), pullRequestNumber: 42 };
 const run = { runId: "SUR-1", status: "succeeded", dryRun: false, targetSha: sha("c"), deployedSha: sha("d"), completedAt: new Date("2026-10-03T20:00:00Z") };
 const observation = createPullRequestObservation({ repositoryFullName: "owner/repo", number: 42, url: "https://github.com/owner/repo/pull/42", title: "fix", headBranch: "fix", headSha: sha("a"), state: "merged", isDraft: false, mergeStateStatus: null, mergeCommitSha: sha("b"), mergedAt: "2026-10-03T19:00:00Z", providerUpdatedAt: "2026-10-03T19:00:00Z", observedAt: "2026-10-03T19:01:00Z" });
-const inputs = () => ({ room, run, servedSha: sha("d"), observation, contains: vi.fn(async () => true as boolean | null) });
+const inputs = () => ({ workType: "feature", room, run, servedSha: sha("d"), observation, contains: vi.fn(async () => true as boolean | null) });
 
 describe("canonical deployment closure", () => {
   it("binds repository, PR head, merged commit and immutable served deployment", async () => {
@@ -24,6 +24,7 @@ describe("canonical deployment closure", () => {
     { room: { ...room, pullRequestNumber: 43 } },
     { observation: { ...observation, state: "open" } },
     { observation: null },
+    { observation: createPullRequestObservation({ ...observation, title: "docs: implementation plan" }) },
   ])("rejects missing or mismatched identity %j", async (override) => {
     const args = { ...inputs(), ...override };
     expect((await resolveDeploymentClosureProof(args)).kind).not.toBe("deployed");
