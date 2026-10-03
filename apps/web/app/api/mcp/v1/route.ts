@@ -82,7 +82,7 @@ import {
   type ResolvedMcpTransportAuth as ResolvedAuth,
 } from "@/lib/mcp/transport-auth";
 import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
-import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
+import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, resolveLoadToolsRequest, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
@@ -306,9 +306,10 @@ async function handleLoadTools(
   const toolByName = new Map(PLATFORM_TOOLS.map((tool) => [tool.name, tool]));
   const knownNames = new Set(toolByName.keys());
   const authorizedNames = new Set(authorized.map((tool) => tool.name));
-  const selected = resolveLoadToolsSelection(authorized, args);
+  const discovery = resolveLoadToolsRequest(args, granted);
+  const selected = resolveLoadToolsSelection(authorized, { names: discovery.names });
   // Judge against what selection drew from (agent-filtered), not the token-only list.
-  const noMatch = classifyLoadToolsNoMatch(args, knownNames, authorizedNames, new Set(selected.map((t) => t.name)));
+  const noMatch = classifyLoadToolsNoMatch(discovery, knownNames, authorizedNames, new Set(selected.map((t) => t.name)));
   // W12 (BI-EE64547B): internal session-JWT calls are per-call stateless — the
   // result still carries the selected definitions inline, but no per-token
   // session row is written (internal lists are full-tier; nothing to append).
@@ -316,7 +317,7 @@ async function handleLoadTools(
     token.source === "session-jwt"
       ? mergeLoadedToolNames([], selected.map((t) => t.name))
       : await loadToolsForSession(token.tokenId, selected.map((t) => t.name));
-  const status = buildLoadToolsStatus(args, {
+  const status = buildLoadToolsStatus(discovery, {
     knownNames, authorizedNames, loadedToolNames, authority, isAllowedByGrants: isToolAllowedByGrants,
     tokenGrants: (name) => tokenScopesAllowTool(toolByName.get(name)!, token, grantMap),
     roleAllows: (name) => roleAllowsTool(toolByName.get(name)!, userContext),

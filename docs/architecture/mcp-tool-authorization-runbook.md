@@ -86,6 +86,8 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 
 The SessionStart health hook reads the OAuth challenge on https (a `401` naming `resource_metadata` is the healthy answer) and no longer asks for a token there. Headless callers that cannot open a browser use a `client_credentials` client (design Slice 2b) or, until then, a PAT. Liveness: `OAuthRefreshToken` rows become non-zero on the install and a session authenticates with `source=oauth` (BI-CE5F8C0A).
 
+**Concurrent sessions and refresh.** Several sessions of one client can share a stored refresh token. When the same client refreshes the same token again within `DPF_OAUTH_REFRESH_REUSE_GRACE_SECONDS` (default 60s) of rotating it, the server issues a sibling credential and revokes nothing. Reuse after the window, or by another client, still revokes the whole credential family as `refresh_token_replayed`, and the client reports "This connection was reused. Reconnect to continue." In that case, re-authenticate with `/mcp`. The rule and its security reasoning: [credential-lifecycle amendment](../superpowers/specs/2026-09-21-oauth-external-build-authority-design.md#refresh-reuse-grace-amendment-bi-25c6219e-2026-10-02) (BI-25C6219E).
+
 **Token rotation — the PAT fallback only.** Both tools read the token from the `DPF_MCP_BEARER_TOKEN` environment variable. **The commands below are Windows/PowerShell.** On macOS the variable is set with `launchctl setenv DPF_MCP_BEARER_TOKEN <value>` (a shell-profile `export` is not enough — the desktop clients are launched by launchd, not from your shell), and on Linux it follows that host's user-environment mechanism. The portal's token dialog currently offers only the PowerShell form; see BI-B6088EC6. `.mcp.json` references it as `${DPF_MCP_BEARER_TOKEN}`; Codex does the same via `bearer_token_env_var` in `~/.codex/config.toml`. Token rotation from Admin > Platform Development > MCP is:
 ```powershell
 [System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', '<new-token>', 'User')
@@ -333,6 +335,14 @@ empty, no active agent in the registry holds `work_room_write`.
 
 ### Diagnosing an empty `load_tools` result
 
+Coworker grants saved under Capabilities apply on the next runtime authorization
+read (BI-F2F09597). The asynchronous resolver reads `AgentToolGrant` each time;
+it does not retain grants between requests. A stored coworker with no grants
+receives none, and an unavailable database grants nothing until a successful
+read. Registry defaults apply only when a successful lookup finds no stored
+coworker. Reconnecting or restarting is not required for a grant change. Token
+scopes, human capabilities and room admission still intersect with those grants.
+
 Every requested name now gets an entry in `status[]` (BI-949FBBAE), whether or
 not anything else in the call loaded. Before, a request that loaded one name of
 four said nothing about the other three. Each entry reports:
@@ -364,3 +374,21 @@ implications, and the result intersected with the token's scopes: what the
 runtime actually checks. Capability reports (`get_capability_completeness`)
 count a tool reachable when any one required grant is held, the same rule the
 runtime applies (BI-378D3659).
+
+## Task-specific operating rules
+
+- **Discover before fallback.** Codex/Claude use a full catalog with host-side lazy attachment; other clients default to core. Call `load_tools` by name/query, refresh the list or use the programmatic catalog. Missing grants are permission failures, not missing tools. → [MCP authorization runbook](../architecture/mcp-tool-authorization-runbook.md)
+- **External coding agents use the MCP JSON-RPC transport at `/api/mcp/v1`.** Bearer tokens follow the `dpfmcp_...` pattern, are issued from Admin › Contributing & GitHub, and live only in local credential files — never commit them.
+- **Tokens carry a coarse scope (`read`/`write`/`admin`) plus granular per-tool grants; default tokens are `read` and cannot call side-effecting tools.** Agent `tool_grants` in `agent_registry.json` are enforced at runtime, intersected with the user's role capabilities. `insufficient_token_scope` is a §1 refusal.
+- **A side-effect tool may stay visible in advise mode only if it is advise-safe** — read-shaped, reversible, and non-committing. Anything else is hidden, not merely warned about.
+- **`"use server"` modules export only functions and concrete values.** Type aliases and interfaces stay local or move to a non-server module.
+- **Coworker capability filtering is single-source:** grants live in `agent_registry.json` / `AgentToolGrant` and are intersected at runtime — never re-derived per surface. → [kernel principle](../founder-kernel/wiki/principles/single-source-of-truth.md)
+
+
+## Disclosure measurement and recovery
+
+`load_tools` ranks intent in the token/role-visible catalog before coworker filtering. It loads only authorized matches; a relevant denied match returns its name and authority remedy, not its schema. Generic matches must not replace an unavailable specific capability. Exact-name loading remains supported.
+
+The connection briefing carries bounded identity, mission, locale and owning-scope decision routes. Decision tools resolve detailed business doctrine on demand. `node scripts/mcp-progressive-disclosure-conformance.mjs` reports initialization bytes, catalog bytes, their one-time composition and a hypothetical per-tool repetition cost. Attached, cached and billed tokens stay unknown without host telemetry; a full catalog does not establish that the model received every schema. The source ratchet also counts skill metadata once.
+
+For recovery, begin with the local [routing reference](../../packages/dpf-skill-pack/skills/dpf-systematic-debugging/references/recovery-routing.md). Protocol conformance and deterministic routing tests do not establish fresh-model behavior. After deployment, exercise normal delivery, broken upgrade, unavailable MCP/CI, denied authority and stale expedite occupancy on supported hosts, recording tools attached, route selected, outcome and actual usage where available.

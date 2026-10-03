@@ -53,7 +53,9 @@ export function OAuthClientPeople({
   // The panel renders below the whole keys table; bring it to the operator so
   // the registration it names is the one they see (BI-287D3EFD).
   useEffect(() => {
-    headingRef.current?.scrollIntoView({ block: "nearest" });
+    // Scroll the whole panel, not just its heading: scrolling the heading to the
+    // nearest edge left the people and their revoke buttons below the fold.
+    headingRef.current?.closest("section")?.scrollIntoView({ block: "nearest" });
     headingRef.current?.focus({ preventScroll: true });
   }, [clientId]);
 

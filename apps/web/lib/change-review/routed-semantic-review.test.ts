@@ -28,6 +28,21 @@ describe("routed semantic review", () => {
     expect(result).toMatchObject({ decision: "inconclusive", issues: [], inconclusiveReason: "review-response-truncated" });
     expect(JSON.stringify(result)).not.toContain("private");
   });
+  it("preserves a reviewer's evidence mismatch instead of calling it capacity", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce({ content: JSON.stringify({ decision: "cannot-verify", issues: [],
+        summary: "Visible checkout is f3517a3; supplied change is 7d63c18." }) } as never)
+      .mockResolvedValueOnce({ content: JSON.stringify({ decision: "pass", issues: [], summary: "Architecture passes." }) } as never);
+    const result = await dispatchRoutedSemanticReview("immutable diff", {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface: "external",
+    });
+    expect(result.decision).toBe("inconclusive");
+    expect(result.summary).toContain("change-reviewer");
+    expect(result.summary).toContain("Visible checkout is f3517a3");
+    expect(result.summary).not.toContain("capacity");
+    expect(result.issues).toEqual([]);
+  });
+
   it("requests completed non-streaming results for the reviewer and every specialist", async () => {
     vi.mocked(routeAndCall).mockResolvedValue({
       content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),

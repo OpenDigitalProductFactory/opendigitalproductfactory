@@ -115,3 +115,7 @@ Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 pha
 **`"use server"` modules export only functions and concrete values (BI-IMP-21C466DE).** Type aliases and interfaces stay **local** (or live in a non-`"use server"` module). Exporting types from a server-action file breaks Turbopack registration. Prefer `export type` from a sibling `*.types.ts` or `lib/` module.
 
 **Coworker capability filtering is single-source (BI-IMP-60B0893E).** Agent tool grants live in `agent_registry.json` / `AgentToolGrant`; runtime intersection is `getAvailableTools` + `TOOL_TO_GRANTS` + coworker filter helpers under `apps/web/lib/actions/coworker-tool-filter.ts` and `apps/web/lib/tak/agent-grants.ts`. Route-local allowlists that re-express the same policy are defects — extend the shared filter, do not fork it. Peer coordination tools (`request_coworker`, `summon_coworker`) follow the advise-safe pattern above.
+
+## Task-specific operating rules
+
+- **Report outcomes faithfully.** If tests fail, say so with the output; if a step was skipped, say that; when something is done and verified, state it plainly without hedging. Never claim completion for work that is not finished. → [kernel principle](../founder-kernel/wiki/principles/never-fabricate.md)

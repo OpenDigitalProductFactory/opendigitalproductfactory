@@ -136,6 +136,13 @@ export type PromoterParams = {
    */
   containerName?: string;
   /**
+   * BI-F9EE05E5 plan item 0: "build" runs promote.sh's prepare and image build
+   * only (PROMOTE_PHASE=build), before the drain, so admission is not closed
+   * while the image builds. It writes no install state and mounts .env
+   * read-only. Omitted, the promoter runs every step.
+   */
+  phase?: "build";
+  /**
    * Hard wall-clock budget for the promoter subprocess, ms. On expiry runPromoter
    * kills the child, force-removes the container, and resolves nonzero with a
    * `[promoter-timeout]` excerpt instead of awaiting forever. Defaults to
@@ -281,7 +288,7 @@ export function buildPromoterCommand(params: PromoterParams): { command: string;
   if (params.composeEnvFileHostPath && params.composeEnvFileHostPath.length > 0) {
     // A real self-upgrade may write the Inngest keys it generated back to the
     // install .env (BI-3267763F); every other launch only reads it.
-    const envWritable = !params.dryRun && !params.runtimeTransitionAuthorityOperation && !params.runtimeCapabilityTransitionId;
+    const envWritable = !params.dryRun && !params.runtimeTransitionAuthorityOperation && !params.runtimeCapabilityTransitionId && params.phase !== "build";
     args.push("-v", `${params.composeEnvFileHostPath}:${PROMOTER_COMPOSE_ENV_FILE}${envWritable ? "" : ":ro"}`);
   }
 
@@ -298,6 +305,7 @@ export function buildPromoterCommand(params: PromoterParams): { command: string;
     `PROMOTE_SOURCE=${PROMOTER_CONTAINER_SOURCE}`,
     "-e",
     `PROMOTE_TARGET_SHA=${params.targetSha}`,
+    ...(params.phase === "build" ? ["-e", "PROMOTE_PHASE=build"] : []),
     "-e",
     `PROMOTE_BACKUP_PATH=${params.backupPath}`,
     "-e",

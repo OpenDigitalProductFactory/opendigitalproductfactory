@@ -858,7 +858,7 @@ export function knownGrantKeys(): string[] {
   return Array.from(keys).sort();
 }
 
-const grantCache = new Map<string, string[]>();
+const registryGrantCache = new Map<string, string[]>();
 
 type AgentEntry = {
   agent_id: string;
@@ -873,46 +873,43 @@ type AgentEntry = {
 };
 
 /**
- * Load tool_grants for an agent (cached).
- * EP-AI-WORKFORCE-001: First tries DB (AgentToolGrant table), falls back to
- * agent_registry.json for agents not yet migrated.
+ * Load static agent_registry.json grants (cached). Runtime authorization must
+ * use getAgentToolGrantsAsync so stored additions and revocations take effect.
  */
 export function getAgentToolGrants(agentId: string): string[] | null {
-  if (grantCache.has(agentId)) return grantCache.get(agentId)!;
-  // Fallback: JSON registry lookup (synchronous, always available)
+  if (registryGrantCache.has(agentId)) return registryGrantCache.get(agentId)!;
   const agent = (agentRegistry.agents as AgentEntry[]).find(
     (a) => a.agent_id === agentId || a.agent_name === agentId,
   );
   if (!agent) return null;
   const grants = agent.config_profile.tool_grants;
-  grantCache.set(agentId, grants);
+  registryGrantCache.set(agentId, grants);
   return grants;
 }
 
 /**
  * EP-AI-WORKFORCE-001: Async DB-backed grant resolution.
- * Resolves grants from AgentToolGrant table, falling back to JSON registry.
+ * Reads current AgentToolGrant rows on every lookup, including an empty set.
+ * Only a successful missing-agent lookup may fall back to the JSON registry.
+ * Failed authoritative reads grant nothing and recover on the next lookup.
  * Use this in async contexts (API routes, server actions).
  */
 export async function getAgentToolGrantsAsync(agentId: string): Promise<string[]> {
-  if (grantCache.has(agentId)) return grantCache.get(agentId)!;
-
   try {
     const { prisma } = await import("@dpf/db");
     const agent = await prisma.agent.findFirst({
       where: { OR: [{ agentId }, { slugId: agentId }] },
       include: { toolGrants: true },
     });
-    if (agent && agent.toolGrants.length > 0) {
-      const grants = agent.toolGrants.map((g) => g.grantKey);
-      grantCache.set(agentId, grants);
-      return grants;
+    if (agent) {
+      return agent.toolGrants.map((g) => g.grantKey);
     }
   } catch {
-    // DB unavailable — fall through to JSON
+    // An unavailable authority cannot establish permission, even from defaults.
+    return [];
   }
 
-  // Fallback to JSON registry
+  // Legacy fallback only for agents not yet stored in the database.
   return getAgentToolGrants(agentId) ?? [];
 }
 

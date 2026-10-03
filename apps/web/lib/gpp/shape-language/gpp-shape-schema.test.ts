@@ -279,32 +279,32 @@ describe("build-gpp-shapes --check", () => {
     return root;
   }
 
-  it("passes on the committed tree", () => {
+  it("passes on the committed tree", async () => {
     const repoRoot = join(__dirname, "../../../../..");
-    expect(() => runGppShapesGenerator({ root: repoRoot, check: true })).not.toThrow();
-  });
+    await expect(runGppShapesGenerator({ root: repoRoot, check: true })).resolves.toBeDefined();
+  }, 120_000);
 
-  it("fails when the committed file is stale, and passes once regenerated", () => {
+  it("fails when the committed file is stale, and passes once regenerated", async () => {
     const root = tempRoot();
     try {
       const stale = JSON.parse(readFileSync(COMMITTED_SCHEMA_PATH, "utf8")) as JsonObject;
       stale.title = "hand-edited";
       writeFileSync(join(root, GPP_SHAPE_SCHEMA_REL), serializeStableJson(stale), "utf8");
-      expect(() => runGppShapesGenerator({ root, check: true })).toThrow(/STALE/);
+      await expect(runGppShapesGenerator({ root, check: true })).rejects.toThrow(/STALE - apps\/web\/lib\/gpp\/shape-language\/gpp-shape.schema.json/);
 
-      runGppShapesGenerator({ root, check: false });
-      expect(() => runGppShapesGenerator({ root, check: true })).not.toThrow();
+      await runGppShapesGenerator({ root, check: false });
+      await expect(runGppShapesGenerator({ root, check: true })).resolves.toBeDefined();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, 120_000);
 
-  it("fails when the committed file is missing", () => {
+  it("fails when the committed file is missing", async () => {
     const root = tempRoot();
     try {
-      expect(() => runGppShapesGenerator({ root, check: true })).toThrow(/STALE/);
+      await expect(runGppShapesGenerator({ root, check: true })).rejects.toThrow(/STALE/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, 120_000);
 });

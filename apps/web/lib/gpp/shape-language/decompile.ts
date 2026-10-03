@@ -9,8 +9,12 @@
 // - Copies every current field verbatim, in the schema's order, prefixed by
 //   `format: "gpp-shape/0.1"`. Values are copied, never shared, so a document
 //   can be edited without touching the registry.
-// - Never emits `flow` (every current shape is sequential), `binding`,
-//   `deadline` or `subShape` (no current shape has them).
+// - Never emits `flow` (every current shape is sequential), `deadline` or
+//   `subShape` (no current shape has them, and WorkShapeDefinition does not
+//   carry them until the Phase 3c PR that makes each executable).
+// - Copies `stage.binding` when the definition carries one, in schema order
+//   (WorkShapeStage.binding exists since PR-3b-4; no registry shape has one).
+//   This keeps L2, decompile(compile(D)) ≡ D, true for a bound document.
 // - Adds `advance.gate` ONLY from a ratified GATE_RATIFICATION entry for the
 //   stage's `decisionScope`. Otherwise the advance stays untyped and the stage
 //   is returned in `awaitingRatification`; a shape with any such stage is not
@@ -22,7 +26,7 @@
 
 import type { WorkShapeDefinition, WorkShapeStage } from "@/lib/work-management/work-shapes";
 
-import { copyGate } from "./emit";
+import { copyBinding, copyGate } from "./emit";
 import { GATE_RATIFICATION, ratifiedGateFor, type GateRatificationEntry } from "./gate-ratification";
 import { GPP_SHAPE_FORMAT, type GppShapeDocument } from "./gpp-shape-schema";
 
@@ -72,6 +76,7 @@ export function decompile(definition: WorkShapeDefinition, options: DecompileOpt
       evidence: [...stage.evidence],
     };
     if (stage.tools !== undefined) documentStage.tools = [...stage.tools];
+    if (stage.binding !== undefined) documentStage.binding = copyBinding(stage.binding);
     return documentStage;
   });
 

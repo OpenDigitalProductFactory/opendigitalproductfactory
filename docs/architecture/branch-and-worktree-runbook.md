@@ -117,3 +117,15 @@ Three paths remove a worktree, and all three end at the same classifier so they 
 Every one of them calls `classifyWorktree`, so a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR or a dirty tree refuses the reap regardless of which path asked.
 
 Removal always goes through the junction-safe helper. A worktree here carries roughly 28 junctions into the root clone's `node_modules` and `apps/web/node_modules/*`; a recursive delete that follows one destroys the root clone's dependencies, which is what happened on 2026-08-15. Unlink each reparse point first, verify none remain, and only then remove the tree.
+
+## Task-specific operating rules
+
+- **All changes land via PR against `main`, DCO-signed, scoped to one clean revert.** Including the maintainer's. Topic branches named by intent: `feat/`, `fix/`, `chore/`, `doc/`, `clean/<slug>`, from `main`. → [kernel principle](../founder-kernel/wiki/principles/one-concern-per-pr.md)
+- **Always push after committing.** Local-only commits are invisible to CI. → [kernel principle](../founder-kernel/wiki/principles/always-push-after-committing.md)
+- **PR creation means ready to merge.** A pushed branch — not a PR — is the handoff/recovery artifact while work is in flight. No draft PRs, no `--draft`. Open only when the build gate is green and the author believes it is mergeable. → [kernel principle](../founder-kernel/wiki/principles/all-changes-land-via-pr.md)
+- **Merge via the merge queue**, never by hand: `gh pr merge <n> --squash --auto`.
+- **Verify merge-readiness mechanically** — `pnpm pr:health [<n>]`, never a visual scan of some checks.
+- **One thread = one branch + one worktree**, in the dedicated sibling base. Never share a working tree across sessions. Implement and commit from the worktree — it is source-control isolation only (§1), so harness friction inside one is a harness limitation, not a product defect. → [kernel principle](../founder-kernel/wiki/principles/worktree-per-session.md)
+- **Keep the root clone as the merge/release worktree** — read-only for active feature work. → [kernel principle](../founder-kernel/wiki/principles/keep-root-clone-as-merge-worktree.md)
+- **Branch guard before implementation and commit:** never build on `HEAD (no branch)` or `main`. Completion requires a pushed branch or PR. → [kernel principle](../founder-kernel/wiki/principles/branch-guard-before-implementation.md)
+- **Refresh a stale worktree base before serious implementation** (`git fetch origin main`), and **never run a bare `git rebase origin/main`** on this shallow clone — see the runbook for the recovery.

@@ -76,7 +76,10 @@ describe("McpOAuthClientManager People panel identity (BI-287D3EFD)", () => {
     expect(within(panel).getByText(/Client id dpfoc_second22, registered/)).toBeTruthy();
     expect(within(panel).queryByText(/dpfoc_first111/)).toBeNull();
     expect(peopleMock).toHaveBeenCalledWith({ clientId: "dpfoc_second22" });
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    // The whole panel, not just its heading: on the live install scrolling only
+    // the heading left the people and their revoke buttons below the fold.
+    const scroll = Element.prototype.scrollIntoView as unknown as ReturnType<typeof vi.fn>;
+    expect(scroll.mock.contexts).toContain(panel);
   });
 
   it("keeps the row actions reachable on a narrow screen by letting the wide table scroll sideways", async () => {
