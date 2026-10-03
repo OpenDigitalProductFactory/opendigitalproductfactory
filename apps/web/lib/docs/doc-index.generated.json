@@ -5606,7 +5606,8 @@
         "3-docker-compose",
         "4-git-repo-hygiene",
         "room-route-guard-on-windows",
-        "recurring-meta-pattern"
+        "recurring-meta-pattern",
+        "persisted-mcp-endpoint-recovery-bi-9f258707"
       ]
     },
     "docs/install/scratch-install-rehearsal.md": {
