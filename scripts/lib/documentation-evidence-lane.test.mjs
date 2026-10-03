@@ -64,6 +64,7 @@ digest:'${"e".repeat(64)}', plannerVersion:1, policyVersion:1, globalGuards:[] }
   git("commit", "-m", "fixture document");
   const requests = [];
   let reply = { success: true, entityId: "EXT-DOCUMENT-TEST" };
+  let disconnected = false;
   let onRequest = () => {};
   const server = createServer(async (request, response) => {
     let text = "";
@@ -71,6 +72,7 @@ digest:'${"e".repeat(64)}', plannerVersion:1, policyVersion:1, globalGuards:[] }
     const body = JSON.parse(text);
     requests.push(body.params);
     onRequest();
+    if (disconnected) { response.destroy(); return; }
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { structuredContent: reply } }));
   });
@@ -88,7 +90,9 @@ digest:'${"e".repeat(64)}', plannerVersion:1, policyVersion:1, globalGuards:[] }
     state: readLocalCiGateState(args.stateFile), metadata: JSON.parse(readFileSync(metadataFile, "utf8")),
     headSha: git("rev-parse", "HEAD"), headBranch: args.branch,
   });
-  return { args, git, requests, verdict, metadataFile, setReply: (value) => { reply = value; }, onRequest: (fn) => { onRequest = fn; } };
+  return { args, git, requests, verdict, metadataFile,
+    setReply: (value) => { reply = value; }, disconnect: (value) => { disconnected = value; },
+    onRequest: (fn) => { onRequest = fn; } };
 }
 
 describe("documentation producer through the authoritative reader", () => {
@@ -135,6 +139,25 @@ describe("documentation producer through the authoritative reader", () => {
     assert.equal((await runPreAdmissionDocumentationLane(f.args)).status, 1);
     assert.notEqual(f.verdict().verdict, "PASS");
     assert.equal(readLocalCiGateState(f.args.stateFile).evidenceRecordId, "EXT-DOCUMENT-TEST");
+  });
+
+  it("retains diagnostics through a dropped connection and resumes after network restoration", async (t) => {
+    const f = await documentationFixture(t);
+    f.disconnect(true);
+    await assert.rejects(runPreAdmissionDocumentationLane(f.args), /socket hang up|ECONNRESET/);
+    assert.notEqual(f.verdict().verdict, "PASS");
+    assert.match(readLocalCiGateState(f.args.stateFile).failureSummary.output, /checked/);
+    f.disconnect(false);
+    assert.equal((await runPreAdmissionDocumentationLane(f.args)).status, 0);
+    assert.equal(f.verdict().verdict, "PASS");
+  });
+
+  it("rejects source drift during checks before publishing evidence", async (t) => {
+    const f = await documentationFixture(t, "import {writeFileSync} from 'node:fs'; writeFileSync('docs/example.md', '# Changed during checks');");
+    assert.equal((await runPreAdmissionDocumentationLane(f.args)).status, 1);
+    assert.equal(f.requests.length, 0);
+    assert.equal(f.verdict().verdict, "INCONCLUSIVE");
+    assert.match(f.verdict().reason, /source changed/);
   });
 });
 
