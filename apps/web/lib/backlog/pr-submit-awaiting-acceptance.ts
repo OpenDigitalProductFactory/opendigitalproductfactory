@@ -335,7 +335,7 @@ export async function fileAcceptanceMiss(args: {
     select: { id: true, itemId: true, status: true, epicId: true, organizationId: true },
   });
   if (!original) return { action: "skipped", itemId: null, reason: "original-not-found" };
-  if (original.status !== AWAITING_ACCEPTANCE_STATUS) {
+  if (original.status !== AWAITING_ACCEPTANCE_STATUS && original.status !== "done") {
     return { action: "skipped", itemId: original.itemId, reason: "original-not-awaiting-acceptance" };
   }
 
@@ -367,10 +367,10 @@ export async function fileAcceptanceMiss(args: {
     data: {
       backlogItemId: original.id,
       kind: "status_change",
-      summary: `Acceptance miss filed as ${created.itemId}; ${original.itemId} stays awaiting-acceptance`,
+      summary: `Acceptance miss filed as ${created.itemId}; ${original.itemId} stays ${original.status}`,
       payload: {
-        from: AWAITING_ACCEPTANCE_STATUS,
-        to: AWAITING_ACCEPTANCE_STATUS,
+        from: original.status,
+        to: original.status,
         reason: "verification-fail",
         correctiveItemId: created.itemId,
         servedSha: args.servedSha,

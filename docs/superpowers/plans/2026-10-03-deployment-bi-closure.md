@@ -40,7 +40,7 @@ The 2026-10-03 dry-run inspected 348 worktrees: 336 KEEP, 9 SKIP, 3 PINNED, zero
 
 ## Backlog coverage
 
-Atomic deliverable DEP-CLOSURE maps to BI-7161625D. Steps are internal sequencing of one delivery/acceptance contract change; the proof resolver without its governed consumer or the consumer without honest acceptance handling is not independently shippable. Requirement references AC-DEP-1, AC-DEP-2, AC-DEP-3, AC-DEP-4, AC-DEP-5; contract reference CONTRACT-DEP-CLOSURE (canonical proof plus governed terminal transaction); flow reference FLOW-DEP-CLOSURE (deployed proof → delivery close → independent acceptance/corrective work); verification references VER-DEP-1 through VER-DEP-5. Live immutable plan coverage must be recorded before source implementation.
+Atomic deliverable DEP-CLOSURE maps to BI-7161625D. Steps are internal sequencing of one delivery/acceptance contract change; the proof resolver without its governed consumer or the consumer without honest acceptance handling is not independently shippable. Requirement references AC-DEP-1, AC-DEP-2, AC-DEP-3, AC-DEP-4, AC-DEP-5; contract reference CONTRACT-DEP-CLOSURE (canonical proof plus governed terminal transaction); flow reference FLOW-DEP-CLOSURE (deployed proof → delivery close → independent acceptance/corrective work); verification references VER-DEP-1 through VER-DEP-5. Live immutable plan coverage receipt `cmusy7b0680ag01jzbybc7bl8` accepted the atomic plan for BI-7161625D at commit `df5fd46805183c4d13f545353988f25b6c889cff`; implementation admission `IRD-1711D0C4BFD0` was allowed. No independent deliverables or dependencies.
 
 ## Historical criterion retained by the item parser
 
