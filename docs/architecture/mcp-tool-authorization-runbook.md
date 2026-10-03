@@ -335,6 +335,14 @@ empty, no active agent in the registry holds `work_room_write`.
 
 ### Diagnosing an empty `load_tools` result
 
+Coworker grants saved under Capabilities apply on the next runtime authorization
+read (BI-F2F09597). The asynchronous resolver reads `AgentToolGrant` each time;
+it does not retain grants between requests. A stored coworker with no grants
+receives none, and an unavailable database grants nothing until a successful
+read. Registry defaults apply only when a successful lookup finds no stored
+coworker. Reconnecting or restarting is not required for a grant change. Token
+scopes, human capabilities and room admission still intersect with those grants.
+
 Every requested name now gets an entry in `status[]` (BI-949FBBAE), whether or
 not anything else in the call loaded. Before, a request that loaded one name of
 four said nothing about the other three. Each entry reports:
