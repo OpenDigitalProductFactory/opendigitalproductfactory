@@ -9,6 +9,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { prisma } from "@dpf/db";
+import { formatOpportunityNextStepDay } from "../../components/customer/NextStepControl";
 import { parseOpportunityScheduledAt, setOpportunityNextStep } from "./opportunity-next-step";
 
 const p = prisma as unknown as {
@@ -41,13 +42,18 @@ describe("setOpportunityNextStep", () => {
     await setOpportunityNextStep({ opportunityId: "o1", scheduledAt: "2026-08-31" });
     const when = p.opportunity.update.mock.calls[0][0].data.nextActivityAt as Date;
     expect(when.toISOString()).toBe("2026-08-31T12:00:00.000Z");
-    const shown = new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Chicago",
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-    }).format(when);
-    expect(shown).toBe("8/31/2026");
+    expect(formatOpportunityNextStepDay(when, "America/Chicago", "en-US")).toBe("8/31/2026");
+  });
+
+  it("formats a legacy UTC-midnight date-only row as that civil day", () => {
+    const legacy = new Date("2026-08-31T00:00:00.000Z");
+    expect(formatOpportunityNextStepDay(legacy, "America/Chicago", "en-US")).toBe("8/31/2026");
+  });
+
+  it("formats a full timestamp in the viewer zone (BI-954B4FA7)", () => {
+    const when = parseOpportunityScheduledAt("2026-08-31T01:00:00.000Z");
+    expect(when.toISOString()).toBe("2026-08-31T01:00:00.000Z");
+    expect(formatOpportunityNextStepDay(when, "America/Chicago", "en-US")).toBe("8/30/2026");
   });
 
   it("rejects a calendar day that does not exist", () => {
