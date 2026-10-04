@@ -19,13 +19,13 @@ The operator authorized fixing the core triage feature from these findings. Sele
 ## Phases and traceability
 
 1. Refactor core assessment into typed outcomes and add fingerprint/retry helpers. Contract: apps/web/lib/operate/backlog-triage-drain.ts. Flow: scheduled-triage-assess. Verification: backlog-triage-drain.test.ts and assessment regression tests. Requirements: AC-1, AC-3, AC-4, AC-6.
-2. Wire durable BacklogItemActivity assessment selection and conditional updates into apps/web/lib/queue/functions/backlog-triage-drain.ts. Flow: scheduled-triage-select-apply. Verification: wrapper/repository tests exercising unchanged prefix, later eligible items and concurrent edits. Requirements: AC-1, AC-2, AC-3, AC-4, AC-6.
+2. Wire typed BacklogItem assessment projection, additive enum/columns migration and bounded activity audit selection and conditional updates into apps/web/lib/queue/functions/backlog-triage-drain.ts. Flow: scheduled-triage-select-apply. Verification: wrapper/repository tests exercising unchanged prefix, later eligible items and concurrent edits. Requirements: AC-1, AC-2, AC-3, AC-4, AC-6.
 3. Update existing ScheduledJob result projection and Scheduled Jobs reporting using existing theme-aware components. Contract: apps/web/lib/operate/discovery-scheduler.ts and apps/web/lib/operate/scheduled-jobs/work-model.ts. Flow: scheduled-triage-report. Verification: scheduled work model tests plus served-target UX exercise. Requirements: AC-5, AC-6.
 4. Run affected unit tests, web typecheck, scope guards, documentation lint, shared local-CI gate, independent review and functional two-sweep verification. Flow: scheduled-triage-verify. Verification: canonical runtime or governed local-CI, not a worktree server. Consume resolved changeImpactContract; unresolved advice expands verification. Update operator documentation and UX-fit evidence in the same PR.
 
 ## Risk and rollback
 
-Malformed/stale assessments must not suppress changed work. Failed assessment persistence must not masquerade as completion. Conditional mutations preserve manual changes and federation ownership. Revert the scoped PR to restore prior selection while retaining activity history; no schema rollback is needed.
+Malformed/stale assessments must not suppress changed work. Failed assessment persistence must not masquerade as completion. Conditional mutations preserve manual changes and federation ownership. Revert the scoped PR to restore prior selection while retaining activity history; leave additive columns in place during rollback.
 
 ## Backlog coverage
 

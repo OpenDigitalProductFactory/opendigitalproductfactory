@@ -8,12 +8,12 @@ The canonical portal reported 25 considered, zero advanced, 25 left for review a
 
 ## Design grounding
 
-Extend the scheduling-surface-review design (2026-06-21) and existing backlog triage implementation, not the scheduler. BacklogItemActivity is the durable assessment carrier; ScheduledJob metadata is the bounded latest-run projection. No schema migration, new service, provider or dependency. Work status and assessment disposition remain separate: held work stays triaging and visible.
+Extend the scheduling-surface-review design (2026-06-21) and existing backlog triage implementation. Nullable typed fields on BacklogItem own fingerprint, disposition, attempts, retry time, assessment time and claim token; BacklogItemActivity remains bounded audit history. Activity retention (365 days) cannot own durable suppression. ScheduledJob gets a typed lastRunSummary and runCursor; optional metadata carries supplementary diagnostic counts. An additive migration extends these existing carriers, with a generated assessment-outcome enum. No new service, table, provider or dependency. Work status and assessment disposition remain separate: held work stays triaging and visible.
 
 ## Ordered fix
 
 1. Refactor the item core into a typed assessment result distinguishing build, review, low confidence, invalid response, model error, ledger error, apply error and concurrent change. Keep the legacy entry point compatible where needed. Persist assessments independently of the governance ledger; the ledger still precedes every build mutation.
-2. Fingerprint the exact decision inputs plus a versioned policy. Query the latest assessment for that fingerprint. Completed judgments are held until inputs/policy change; transient failures get bounded backoff and a finite retry count. Explicitly re-triaging an item invalidates the assessment through lifecycle activity. Unrelated activity must not cause another inference.
+2. Fingerprint the exact decision inputs plus a versioned policy. Read the typed assessment projection for that fingerprint. Completed judgments are held until inputs/policy change; transient failures get bounded backoff and a finite retry count. Explicitly re-triaging an item invalidates the assessment through lifecycle activity newer than its assessment timestamp. Unrelated activity must not cause another inference. Claim tokens fence expired workers without locking across inference.
 3. Select eligible candidates across the waiting queue rather than stopping at the first 25 held items. Use bounded, paged database reads and deterministic ordering. Use existing job flow controls and durable steps; before inference and before mutation, re-read status and inputs. Conditional update prevents overwriting manual triage.
 4. Bound model starts per run and elapsed model time. Store small structured outcomes and error classifications, never prompt bodies or provider exception text. Infrastructure/recording failure stops unsafe work and is reported.
 5. Project the latest counts and reason in the existing Scheduled Jobs result area. Preserve enablement, cadence and kill switch. Show review needed separately from infrastructure errors; idle is an honest completed run.
@@ -26,7 +26,7 @@ Extend the scheduling-surface-review design (2026-06-21) and existing backlog tr
 
 ## Authority, compatibility and rollback
 
-Automatic build is still the only permitted automatic disposition, with confidence threshold, author size preservation, mirror ownership and fail-closed governance. No discard, defer, scope widening or new approval policy. Existing rows without an assessment are eligible once. Rollback ignores assessment activities but retains audit history. An assessment is evidence of a judgment, never proof that a failed apply changed work.
+Automatic build is still the only permitted automatic disposition, with confidence threshold, author size preservation, mirror ownership and fail-closed governance. No discard, defer, scope widening or new approval policy. Existing rows without an assessment are eligible once. Rollback leaves additive nullable columns and audit history in place; do not drop recorded state. An assessment is evidence of a judgment, never proof that a failed apply changed work.
 
 ## Acceptance
 
