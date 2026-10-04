@@ -1,144 +1,80 @@
 import { cron } from "@/lib/jobs/triggers";
-import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-contract";
 import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
+import { TRIAGE_CALL_BUDGET_MS, TRIAGE_RUN_BUDGET_MS, type AssessmentOutcome } from "@/lib/operate/backlog-triage-assessment";
 
 const MAX_PER_RUN = 25;
 
-/**
- * Scheduled backlog triage drain (BI-5076EA95).
- *
- * Hourly, drains items sitting in status="triaging" by asking an LLM to decide
- * each one and auto-applying only confident BUILD decisions (reversible,
- * non-destructive). Everything else is left for the operator / Scrum Master.
- * Core logic + safety gate live in lib/operate/backlog-triage-drain.ts (unit
- * tested); this wrapper only wires prisma + the LLM caller.
- *
- * Step shape — one Inngest step per item, NOT one step for the whole batch:
- * each step is its own portal HTTP request/response, so a single slow LLM call
- * (up to MAX_PER_RUN of them, sequential) can never hold one request open past
- * Inngest's response-header timeout. The old single "drain-triaging-queue" step
- * ran all 25 LLM calls inline and routinely tripped that timeout, which left
- * orphaned queue items ("run not found in state store") and retry storms
- * (BI-C8164664 context). Per-item steps also make each item's apply idempotent
- * on replay — Inngest memoises a completed step and never re-runs it.
- *
- * Gated by gateAtEntry (skips while the portal is draining for upgrade) and by
- * the master DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED flag (it is registered in
- * scheduledFunctions).
- */
+/** BI-E3FBB0C4: per-item durable steps, with persisted eligibility and bounded inference. */
 export const backlogTriageDrain = jobs.createFunction(
   { id: "ops/backlog-triage-drain", retries: 1, triggers: [cron("23 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ops/backlog-triage-drain");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
-
-    // Step 1 — fetch the bounded batch. DB-only, so it returns response headers
-    // immediately; the slow LLM work is deferred to the per-item steps below.
-    const items = await step.run("fetch-triaging-items", async () => {
-      const { prisma } = await import("@dpf/db");
-      return prisma.backlogItem.findMany({
-        where: {
-          status: "triaging",
-          // A work-sync mirror is triaged by the installation that owns it;
-          // triaging the copy here would fork the record (BI-FF8A57EF). A row
-          // with no body is owned: NOT-contains alone is NULL for a NULL column.
-          OR: [{ body: null }, { NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } } }],
-        },
-        orderBy: { createdAt: "asc" },
-        take: MAX_PER_RUN,
-        select: {
-          itemId: true,
-          title: true,
-          body: true,
-          type: true,
-          workType: true,
-          // Author intent: load the existing size + proposed outcome so the
-          // drain preserves a deliberate effortSize instead of overwriting it
-          // with a blind re-estimate (BI-TRIAGE-SIZE-OVERWRITE).
-          effortSize: true,
-          proposedOutcome: true,
-        },
-      });
+    const batch = await step.run("fetch-eligible-triaging-items", async () => {
+      const { selectTriageBatch } = await import("@/lib/operate/backlog-triage-repository");
+      return { ...await selectTriageBatch(MAX_PER_RUN, new Date()), startedAt: Date.now() };
     });
-
-    // Steps 2..N — one per item. Each does exactly one LLM decide + (maybe) one
-    // apply, so a single request only ever waits on one model call.
-    let autoBuilt = 0;
-    let leftForOperator = 0;
-    for (const item of items) {
-      const outcome = await step.run(`triage-item-${item.itemId}`, async () => {
+    const counts: Partial<Record<AssessmentOutcome, number>> = {};
+    let budgetStopped = false;
+    let attempted = 0;
+    let visited = 0;
+    for (const item of batch.items) {
+      const result = await step.run(`assess-item-${item.itemId}`, async () => {
+        // Budget checks belong inside the checkpoint, so replaying completed
+        // steps cannot turn an earlier completed assessment into a budget skip.
+        if (Date.now() - batch.startedAt >= TRIAGE_RUN_BUDGET_MS) return { outcome: "budget" as const };
         const { prisma } = await import("@dpf/db");
-        const { triageOneItem, buildTriageDrainPrompt, TRIAGE_DRAIN_SYSTEM_PROMPT } =
-          await import("@/lib/operate/backlog-triage-drain");
-
-        // LLM caller — strong-enough model for triage judgment. If no model is
-        // available, decide() throws → the item is left for the operator.
-        let routeAndCall:
-          | typeof import("@/lib/inference/routed-inference").routeAndCall
-          | undefined;
-        try {
-          ({ routeAndCall } = await import("@/lib/inference/routed-inference"));
-        } catch {
-          routeAndCall = undefined;
-        }
-
+        const { beginTriage, applyTriageBuild } = await import("@/lib/operate/backlog-triage-repository");
+        const started = await beginTriage(item.itemId, item.fingerprint, item.updatedAt, new Date());
+        if (!started) return { outcome: "changed" as const, called: false as const };
+        const { assessTriageItem } = await import("@/lib/operate/backlog-triage-assessment");
+        const { buildTriageDrainPrompt, TRIAGE_DRAIN_SYSTEM_PROMPT } = await import("@/lib/operate/backlog-triage-drain");
         const { recordTriageDecision } = await import("@/lib/operate/backlog-triage-ledger");
-
-        return triageOneItem(item, {
-          decide: async (it) => {
-            if (!routeAndCall) throw new Error("no-llm");
-            const resp = await routeAndCall(
-              [{ role: "user" as const, content: buildTriageDrainPrompt(it) }],
-              TRIAGE_DRAIN_SYSTEM_PROMPT,
-              "internal",
-              // NB: `persistDecision: false` suppresses RouteDecisionLog — the
-              // model-ROUTING telemetry. It is not a governance opt-out and
-              // never was; governance is the DecisionInteraction row written by
-              // recordDecision below (BI-BB2E585C).
-              { taskType: "triage", budgetClass: "balanced", effort: "medium", persistDecision: false },
+        const assessment = await assessTriageItem(started.row, {
+          decide: async it => {
+            const { routeAndCall } = await import("@/lib/inference/routed-inference");
+            const response = await routeAndCall(
+              [{ role: "user", content: buildTriageDrainPrompt(it) }], TRIAGE_DRAIN_SYSTEM_PROMPT, "internal",
+              { taskType: "triage", budgetClass: "balanced", effort: "medium", persistDecision: true, maxDurationMs: TRIAGE_CALL_BUDGET_MS, routeContext: "cron:ops/backlog-triage-drain" },
             );
-            return resp.content;
+            return response.content;
           },
-          // Fail-closed governance gate: no ledger row, no mutation.
-          recordDecision: async (it, decision, appliedEffortSize) => {
-            const outcome = await recordTriageDecision({
-              db: prisma,
-              item: it,
-              decision,
-              appliedEffortSize,
-              effortSizeFromAuthor: it.effortSize === appliedEffortSize,
-            });
-            return outcome.recorded;
-          },
-          applyBuild: async (itemId, effortSize, rationale) => {
-            await prisma.backlogItem.update({
-              where: { itemId },
-              data: {
-                status: "open",
-                triageOutcome: "build",
-                effortSize,
-                resolution: rationale,
-              },
-            });
-          },
+          recordDecision: async (it, decision, appliedEffortSize) => (await recordTriageDecision({ db: prisma, item: it, decision, appliedEffortSize, effortSizeFromAuthor: it.effortSize === appliedEffortSize })).recorded,
+          callBudgetMs: Math.min(TRIAGE_CALL_BUDGET_MS, Math.max(1, TRIAGE_RUN_BUDGET_MS - (Date.now() - batch.startedAt))),
+          applyBuild: async (_id, size, rationale) => applyTriageBuild(started.row, started.claim, size, rationale),
         });
+        return { outcome: assessment.outcome, called: true as const, assessment, activityId: started.activityId, fingerprint: started.fingerprint, attempts: started.attempts, backlogItemId: started.row.id, claim: started.claim };
       });
-      if (outcome === "auto-built") autoBuilt++;
-      else leftForOperator++;
+      if (result.outcome === "budget") { budgetStopped = true; break; }
+      if (result.called) {
+        // Checkpoint the judgment/apply before persisting its projection. A DB
+        // reporting retry must never repeat completed inference or mutation.
+        await step.run(`finish-item-${item.itemId}`, async () => {
+          const { finishTriage } = await import("@/lib/operate/backlog-triage-repository");
+          await finishTriage(result.activityId, result.fingerprint, result.attempts, result.outcome, new Date(), result.assessment.rationale, result.backlogItemId, result.claim);
+        });
+      }
+      visited++;
+      if (result.called) attempted++;
+      counts[result.outcome] = (counts[result.outcome] ?? 0) + 1;
+      // An unavailable model/ledger should not spend another 24 calls proving
+      // the same outage. Persisted per-item retries resume after backoff.
+      if (result.outcome === "model-error" || result.outcome === "ledger-error") break;
     }
-
-    const result = { considered: items.length, autoBuilt, leftForOperator };
-
+    const errors = (counts["model-error"] ?? 0) + (counts["invalid-response"] ?? 0) + (counts["ledger-error"] ?? 0) + (counts["apply-error"] ?? 0);
+    const review = (counts["needs-review"] ?? 0) + (counts["low-confidence"] ?? 0);
+    const remaining = batch.items.length - visited;
+    const changed = counts.changed ?? 0;
+    const result = { attempted, autoBuilt: counts["auto-built"] ?? 0, review, errors, held: batch.held, changed, remaining, budgetStopped, counts };
     await step.run("record-job-run", async () => {
       const { recordJobRun } = await import("@/lib/operate/discovery-scheduler");
-      await recordJobRun("backlog-triage-drain", "ok");
+      const errorKinds = ["model-error", "invalid-response", "ledger-error", "apply-error"] as const;
+      const errorSummary = errorKinds.filter(kind => counts[kind]).map(kind => `${counts[kind]} ${kind}`).join(", ");
+      const summary = `${result.attempted} assessed; ${result.autoBuilt} advanced; ${review} need review; ${errors} errors${errorSummary ? ` (${errorSummary})` : ""}; ${batch.held} unchanged or waiting; ${changed} changed; ${remaining} not assessed${budgetStopped ? "; budget reached" : ""}`;
+      await recordJobRun("backlog-triage-drain", errors ? "error" : budgetStopped ? "budget-limited" : review ? "needs-review" : attempted ? "ok" : "idle", errors ? summary : undefined, { summary, details: result, cursor: batch.cursor });
     });
-
-    console.log(
-      `[backlog-triage-drain] considered=${result.considered} ` +
-        `autoBuilt=${result.autoBuilt} leftForOperator=${result.leftForOperator}`,
-    );
+    console.log("[backlog-triage-drain]", JSON.stringify(result));
     return result;
   },
 );

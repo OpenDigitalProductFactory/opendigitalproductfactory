@@ -497,7 +497,7 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                         </div>
                         {job.substrate === "inngest-cron" && job.inCatalog && (
                           <div className="text-dpf-caption mt-0.5" style={{ color: "var(--dpf-muted)" }}>
-                            cron set in code
+                            set in code
                           </div>
                         )}
                       </Td>
@@ -509,8 +509,14 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                           </div>
                         ) : (
                           <div className="text-dpf-caption" style={{ color: "var(--dpf-muted)" }}>
-                            records no run data
+                            no run data
                           </div>
+                        )}
+                        {job.lastRunSummary && (
+                          <details className="text-dpf-caption mt-1 max-w-xs">
+                            <summary className="cursor-pointer" style={{ color: "var(--dpf-accent)" }}>Last result</summary>
+                            <p className="mt-1" style={{ color: "var(--dpf-muted)" }}>{job.lastRunSummary}</p>
+                          </details>
                         )}
                         {job.lastError && (
                           <div className="text-dpf-caption mt-0.5 max-w-xs" style={{ color: "var(--dpf-error)" }}>
