@@ -16,6 +16,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { prisma } from "@dpf/db";
+import { getMcpTokenTemplate } from "@/lib/mcp-token-scopes";
 import {
   acknowledgeMcpTokenRefresh,
   addScopesToMcpApiToken,
@@ -380,6 +381,94 @@ describe("resolveMcpApiToken", () => {
     await new Promise((r) => setImmediate(r));
     expect(tokenUpdate).toHaveBeenCalled();
   });
+
+  it("appends later development-template grants onto a prefix write connection", async () => {
+    const development = getMcpTokenTemplate("development")!;
+    const prefix = development.grants.slice(0, -1);
+    tokenFindUnique.mockResolvedValue({
+      id: "tok_dev",
+      userId: "u1",
+      agentId: null,
+      scopes: prefix,
+      scope: "write",
+      capability: "write",
+      kind: "operator",
+      oauthClientId: null,
+      revokedAt: null,
+      expiresAt: null,
+    });
+
+    const result = await resolveMcpApiToken("dpfmcp_GOOD");
+
+    expect(result?.scopes).toEqual([...development.grants]);
+    expect(tokenUpdate).toHaveBeenCalledWith({
+      where: { id: "tok_dev" },
+      data: { scopes: [...development.grants] },
+    });
+  });
+
+  it("does not widen a read connection, an oauth connection, a ship token, or a hole", async () => {
+    const development = getMcpTokenTemplate("development")!;
+    const prefix = development.grants.slice(0, -1);
+    const cases = [
+      { scope: "read", capability: "read", kind: "operator", oauthClientId: null, scopes: prefix },
+      { scope: "admin", capability: "write", kind: "operator", oauthClientId: null, scopes: prefix },
+      { scope: "write", capability: "write", kind: "operator", oauthClientId: "oauth-client", scopes: prefix },
+      { scope: "write", capability: "write", kind: "ephemeral_ship", oauthClientId: null, scopes: prefix },
+      {
+        scope: "write",
+        capability: "write",
+        kind: "operator",
+        oauthClientId: null,
+        scopes: [development.grants[0], development.grants[2]],
+      },
+    ];
+
+    for (const row of cases) {
+      tokenFindUnique.mockResolvedValue({
+        id: "tok_leave",
+        userId: "u1",
+        agentId: null,
+        revokedAt: null,
+        expiresAt: null,
+        ...row,
+      });
+      tokenUpdate.mockClear();
+      const result = await resolveMcpApiToken("dpfmcp_GOOD");
+      expect(result?.scopes).toEqual(row.scopes);
+      expect(tokenUpdate).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ scopes: expect.anything() }) }),
+      );
+    }
+  });
+
+  it("does not rewrite scopes when the development connection already matches the template", async () => {
+    const development = getMcpTokenTemplate("development")!;
+    tokenFindUnique.mockResolvedValue({
+      id: "tok_current",
+      userId: "u1",
+      agentId: null,
+      scopes: [...development.grants],
+      scope: "write",
+      capability: "write",
+      kind: "operator",
+      oauthClientId: null,
+      revokedAt: null,
+      expiresAt: null,
+    });
+
+    const result = await resolveMcpApiToken("dpfmcp_GOOD");
+
+    expect(result?.scopes).toEqual([...development.grants]);
+    await new Promise((r) => setImmediate(r));
+    expect(tokenUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ scopes: expect.anything() }) }),
+    );
+    expect(tokenUpdate).toHaveBeenCalledWith({
+      where: { id: "tok_current" },
+      data: { lastUsedAt: expect.any(Date) },
+    });
+  });
 });
 
 describe("acknowledgeMcpTokenRefresh", () => {
@@ -412,6 +501,33 @@ describe("acknowledgeMcpTokenRefresh", () => {
     expect(tokenUpdate).toHaveBeenCalledWith({
       where: { id: "tok_new" },
       data: { lastUsedAt: expect.any(Date) },
+    });
+  });
+
+  it("acknowledges a refreshed development prefix with the grants the template gained", async () => {
+    const development = getMcpTokenTemplate("development")!;
+    const prefix = development.grants.slice(0, -1);
+    tokenFindUnique.mockResolvedValue({
+      id: "tok_dev",
+      userId: "u1",
+      agentId: null,
+      scopes: prefix,
+      scope: "write",
+      capability: "write",
+      kind: "operator",
+      oauthClientId: null,
+      prefix: "dpfmcp_ABCDE",
+      tokenSuffix: "9K2M",
+      revokedAt: null,
+      expiresAt: null,
+    });
+
+    const result = await acknowledgeMcpTokenRefresh("dpfmcp_GOODTOKEN");
+
+    expect(result).toMatchObject({
+      ok: true,
+      tokenId: "tok_dev",
+      scopes: [...development.grants],
     });
   });
 

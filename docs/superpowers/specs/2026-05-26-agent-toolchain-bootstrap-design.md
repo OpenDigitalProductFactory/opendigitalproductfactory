@@ -304,10 +304,14 @@ Architectural rule: installer scripts are orchestration adapters, not config par
 | 3 | Windows installer wiring | `install-dpf.ps1`, `fresh-install.ps1`, and `setup.ps1` converge a clean Windows worktree; second run is a no-op |
 | 4 | macOS/Linux installer wiring | `install-dpf.sh --dry-run` shows planned writes; live run on macOS arm64 + Ubuntu 22 LXD seeds and probes |
 | 5 | Smoke test surface | Probe transcript saved to state file; CLI-absent path marks `skipped` cleanly |
-| 6 | Re-run / upgrade reconciliation | Stale `installed_plugins.json` entry removed; `superpowers` version bump triggers re-pin |
+| 6 | Re-run / upgrade reconciliation | Stale `installed_plugins.json` entry removed; `superpowers` version bump triggers re-pin. A development connection already in use follows grants appended to the development template on its next use (BI-E9F1C116); see the addendum below. |
 | 7 | Docs | `README.md` and `docs/operations/install.md` updated with the single quick-start sentence; no contributor-visible plugin references |
 
 The first three phases are the minimum viable contract for Windows contributors (the platform Mark uses today). Phase 4 brings macOS/Linux to parity. Phases 5-7 are not optional; if implementation pressure demands sequencing, ship earlier phases behind a visible `partial` readiness state rather than declaring the bootstrap complete.
+
+### Development-connection grant follow-through (BI-E9F1C116)
+
+Re-run reconciliation for a coding connection is not a second grant store. The development template in `apps/web/lib/mcp-token-scopes.ts` stays the list. On the next use, `resolveMcpApiToken` and `acknowledgeMcpTokenRefresh` append grants that template gained later when an active operator write connection's stored grants are an earlier prefix of that list. The secret stays the same, and the row is rewritten only when a grant is missing. A read connection, an admin connection, an OAuth connection, an ephemeral ship token, and a custom set with a hole or a grant outside the template stay as issued. Independent review grants stay off the template. The running install applies this only after it picks up the release.
 
 ## Acceptance Criteria
 

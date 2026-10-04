@@ -7,6 +7,7 @@ import {
   MCP_TOKEN_TEMPLATES,
   WRITE_MCP_TOKEN_SCOPES,
   defaultMcpTokenScopes,
+  developmentTemplateGrantsToFollow,
   getMcpTokenTemplate,
   isMcpTokenArchived,
   resolveTemplateGrants,
@@ -132,6 +133,24 @@ describe("MCP_TOKEN_TEMPLATES", () => {
       "initiative_evidence_write",
     ]);
     expect(CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS).toContain("initiative_evidence_write");
+  });
+
+  it("follows a development prefix with the grants the template gained later", () => {
+    const development = getMcpTokenTemplate("development")!;
+    const prefix = development.grants.slice(0, -1);
+    expect(developmentTemplateGrantsToFollow(prefix)).toEqual(["initiative_evidence_write"]);
+    expect(developmentTemplateGrantsToFollow([...prefix].reverse())).toEqual([
+      "initiative_evidence_write",
+    ]);
+    expect(developmentTemplateGrantsToFollow(development.grants)).toEqual([]);
+  });
+
+  it("does not follow a hole, an outside grant, or an empty set", () => {
+    const development = getMcpTokenTemplate("development")!;
+    const withHole = [development.grants[0]!, development.grants[2]!];
+    expect(developmentTemplateGrantsToFollow(withHole)).toEqual([]);
+    expect(developmentTemplateGrantsToFollow([...development.grants.slice(0, 4), "admin_write"])).toEqual([]);
+    expect(developmentTemplateGrantsToFollow([])).toEqual([]);
   });
 
   it("includes coworker service catalog grants in development and admin templates", () => {
