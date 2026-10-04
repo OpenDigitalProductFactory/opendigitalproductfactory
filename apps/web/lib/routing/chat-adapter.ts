@@ -24,6 +24,7 @@ import {
   formatMessageForResponses,
 } from "./provider-message-format";
 import { isAnthropic } from "./provider-utils";
+import { isLocalProviderId } from "./provider-locality";
 import { formatMessagesForGemini } from "./gemini-messages";
 import { captureAnthropicWeeklyQuota } from "./cli-pool-status";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
@@ -495,7 +496,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
           signal: execution ? AbortSignal.any([timeout, execution.signal]) : timeout,
         });
       };
-      res = providerId === "local"
+      res = isLocalProviderId(providerId)
         ? await withLocalInferenceLock(doFetch, { modelId, signal: currentGovernedInferenceDeadline()?.signal })
         : await doFetch();
     } catch (e) {

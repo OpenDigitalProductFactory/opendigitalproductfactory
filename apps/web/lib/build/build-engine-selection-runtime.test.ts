@@ -7,6 +7,7 @@ vi.mock("@dpf/db", () => ({ prisma: {
   buildEngine: { findMany: async () => [{ engineId: "opencode", state: { present: true } }] },
   providerCapacityStatus: { findMany: async () => [] },
   cliPoolStatus: { findMany: async () => [] },
+  aiProviderConnection: { findMany: async () => [{ providerId: "local", status: "active" }] },
 } }));
 vi.mock("@/lib/inference/local-only", () => ({ getLocalOnlyInference: async () => false }));
 vi.mock("@/lib/inference/routed-inference", () => ({ previewRoute: mocks.preview }));
