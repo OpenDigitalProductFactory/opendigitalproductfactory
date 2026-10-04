@@ -1,0 +1,9 @@
+{
+  "scope": "BI-6D4CE0DB. apps/web/lib/operate/retention/legal-hold.schema.test.ts matches the lifecycle rule because it lives under lib/operate/retention/. The diff drops unused readFileSync and resolve imports. The legal-hold schema, constants, and stored rows are untouched.",
+  "approver": "platform-architecture (operator-directed cleanup of GitHub code-quality findings, BI-6D4CE0DB)",
+  "rationale": "A DataImpactManifest would have to invent change kinds for a stored surface whose shape did not move. The only edit under the lifecycle path is an unused import removal in a test.",
+  "compensatingControl": "The legal-hold schema test still imports LEGAL_HOLD_MODELS, LEGAL_HOLD_FIELD, and legalHoldExclusion and reads the canonical Prisma schema. This diff has no migration and no retention-row seed.",
+  "expiry": "2026-12-31T00:00:00.000Z",
+  "remediationBI": "BI-6D4CE0DB",
+  "waives": []
+}

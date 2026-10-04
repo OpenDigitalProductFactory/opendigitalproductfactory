@@ -13,7 +13,6 @@ import {
 import { runAgenticLoop, type AgenticResult } from "@/lib/agentic-loop";
 import { agentEventBus, type AgentEvent } from "@/lib/agent-event-bus";
 import { getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
-import { getBuildContextSection } from "@/lib/build/build-agent-prompts";
 import { appendGovernedSpecialistCorpus } from "@/lib/build/build-specialist-corpus";
 import {
   buildDependencyGraph,

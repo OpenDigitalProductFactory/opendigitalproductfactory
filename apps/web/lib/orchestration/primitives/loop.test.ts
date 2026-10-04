@@ -1,6 +1,6 @@
 // apps/web/lib/orchestration/primitives/loop.test.ts
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Loop } from "./loop";
 import type { Outcome, RunContext } from "../types";
 

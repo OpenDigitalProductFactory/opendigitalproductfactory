@@ -22,12 +22,9 @@ vi.mock("@dpf/db", () => ({
 import { prisma } from "@dpf/db";
 import {
   isFirstRun,
-  getSetupProgress,
   createSetupProgress,
   advanceStep,
   skipStep,
-  pauseSetup,
-  completeSetup,
   getSetupContext,
   updateSetupContext,
 } from "./setup-progress";
