@@ -515,6 +515,14 @@ active. A capacity refusal before dispatch is infrastructure-inconclusive;
 transport loss remains uncertain. Neither is a failed code review or permission
 to publish. Workroom history retains the reviewer checkpoints and receipts.
 
+When a local review fails near five minutes, inspect the actual transport as
+well as the model deadline. The process-lived provider transport uses the
+canonical local inference ceiling for headers and body inactivity; caller
+signals still impose shorter deadlines. A responsive short probe does not
+verify a large review prompt or prove why a historical request failed. Preserve
+transport error codes when available and distinguish successful probe cases
+from deferred or unrun cases in remediation evidence.
+
 Within the original window, the original requester can confirm
 `retry_semantic_review`. Current saved authority, grants, quiescence and bounded
 attempts are checked again. A confirmed replacement can incur another charge;
