@@ -43,6 +43,7 @@ const AGENT_ROW = {
   escalatesTo: null,
   delegatesTo: [],
   toolGrants: [{ grantKey: "registry_read" }],
+  toolGrantRevocations: [],
   skills: [{ label: "Draft", description: "d", capability: null, taskType: "conversation", sortOrder: 0 }],
   coworkerAssessments: [],
 };

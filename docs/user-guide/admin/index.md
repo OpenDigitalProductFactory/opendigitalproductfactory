@@ -84,6 +84,20 @@ The register is split into three lanes, because they are different kinds of thin
   claims that were never scheduled work at all. Nothing here runs again;
   **Retire** clears it from the register.
 
+The hourly **Backlog triage drain** assesses new or changed items. Once an item
+needs review, unchanged work is skipped on subsequent sweeps; it stays visible
+in triaging for you or a coworker to decide. Editing its decision inputs or
+returning it to triaging after another status makes it eligible again. Model,
+ledger and apply failures retry with backoff, up to three attempts. Each sweep
+starts at most 25 assessments and waits at most five minutes for model work.
+Provider transports keep their own cancellation limits; a late reply cannot
+advance an item after the assessment has timed out.
+
+Expand **Last result** on the row to see assessed, advanced, review, error,
+unchanged/waiting, changed and unassessed counts. **Idle** means the sweep ran
+with no eligible assessment; **needs-review** means it produced judgments for
+review. Errors name their category, and a budget-limited run says work remains.
+
 **What needs attention** sits at the top and counts only real problems: a job
 that reported an error, and a job that is **overdue** — its next run came and
 went. A job that has stopped firing no longer looks healthy.

@@ -93,6 +93,19 @@ for arg in "$@"; do
 done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
+  *"config --format json"*) printf '{"services":{}}' ;;
+  *"ps -a -q "*) for service in "$@"; do :; done; printf '%s' "$service" ;;
+  *".State.Status"*)
+    for service in "$@"; do :; done
+    if [ "$service" = "$DPF_TEST_CREATED_SERVICE" ]; then
+      printf 'created 0001-01-01T00:00:00Z'
+    elif [ "$service" = "$DPF_TEST_INSPECT_FAIL_SERVICE" ]; then
+      exit 1
+    else
+      printf 'exited 2026-09-01T00:00:00Z'
+    fi
+    ;;
+  "rm "*) printf 'reconcile-remove %s\\n' "$*" >> "$DOCKER_LOG" ;;
   *".Id"*) printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;;
   *".RepoDigests"*) printf "%s@%s\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}" ;;
   *".Os"*) printf "%s" "\${DPF_TEST_RELEASE_OS:-linux}" ;;
@@ -144,6 +157,12 @@ case "$*" in
   *"up -d --no-recreate"*)
     printf 'reconcile-create services=%s\n' "\$*" >> "$DOCKER_LOG"
     [ "\${DPF_TEST_RECONCILE_FAILS:-0}" = "1" ] && exit 1
+    # One named service whose image cannot be pulled (a pruned upstream tag).
+    if [ -n "\${DPF_TEST_RECONCILE_FAIL_SERVICE:-}" ]; then
+      for reconcile_arg in "$@"; do
+        [ "$reconcile_arg" = "$DPF_TEST_RECONCILE_FAIL_SERVICE" ] && exit 1
+      done
+    fi
     ;;
   *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;
   "ps -a --format "*) [ -n "\${DPF_TEST_IMAGES_IN_USE:-}" ] && printf '%s\n' "$DPF_TEST_IMAGES_IN_USE" ;;
@@ -176,8 +195,12 @@ export function runPromote(opts: {
   principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
   /** Services the fake install has ever created (any state), for service-reconcile. */
   existingServices?: string[];
+  createdService?: string;
+  inspectFailService?: string;
   /** Make the reconcile `up -d --no-recreate` fail, to prove it never aborts the upgrade. */
   reconcileFails?: boolean;
+  /** Make only `up` of this one service fail (its image tag no longer resolves). */
+  reconcileFailService?: string;
   principalResolveFails?: boolean;
   principalVerifyFails?: boolean;
   /** Newest-first `repo:tag` list the shim returns for the dpf-portal version-tag query. */
@@ -185,6 +208,8 @@ export function runPromote(opts: {
   /** `repo:tag` refs the shim reports as referenced by a container (`docker ps -a`). */
   imagesInUse?: string[];
   imageKeep?: number;
+  /** BI-F9EE05E5 plan item 0: run only prepare + image build. */
+  phase?: "build";
   release?: {
     tag: string; owner: string; channelDigest?: string; platformManifestDigest?: string;
     configDigest?: string; engineImageId?: string; platformOs?: string; frozenStrata?: boolean; repoImageId?: string; registryConfigDigest?: string; duplicatePlatform?: boolean;
@@ -244,7 +269,12 @@ export function runPromote(opts: {
     ...(opts.existingServices
       ? [`export DPF_TEST_EXISTING_SERVICES=${shellQuote(opts.existingServices.join("\n"))}`]
       : []),
+    ...(opts.createdService ? [`export DPF_TEST_CREATED_SERVICE=${shellQuote(opts.createdService)}`] : []),
+    ...(opts.inspectFailService ? [`export DPF_TEST_INSPECT_FAIL_SERVICE=${shellQuote(opts.inspectFailService)}`] : []),
     ...(opts.reconcileFails ? ["export DPF_TEST_RECONCILE_FAILS=1"] : []),
+    ...(opts.reconcileFailService
+      ? [`export DPF_TEST_RECONCILE_FAIL_SERVICE=${shellQuote(opts.reconcileFailService)}`]
+      : []),
     ...(opts.principalResolveFails ? ["export DPF_TEST_PRINCIPAL_RESOLVE_FAIL=yes"] : []),
     ...(opts.principalVerifyFails ? ["export DPF_TEST_PRINCIPAL_VERIFY_FAIL=yes"] : []),
     ...(opts.composeEnvFile
@@ -258,6 +288,7 @@ export function runPromote(opts: {
     ...(opts.portalVersionTags ? [`export DPF_TEST_PORTAL_VERSION_TAGS_FILE=${shellQuote(toBashPath(writeTagFixture(opts.backup, opts.portalVersionTags)))}`] : []),
     ...(opts.imagesInUse ? [`export DPF_TEST_IMAGES_IN_USE=${shellQuote(opts.imagesInUse.join("\n"))}`] : []),
     ...(opts.imageKeep !== undefined ? [`export PROMOTE_IMAGE_KEEP=${opts.imageKeep}`] : []),
+    ...(opts.phase ? [`export PROMOTE_PHASE=${opts.phase}`] : []),
     ...(opts.release ? [
       "export DPF_PROMOTION_MODE=release",
       `export DPF_RELEASE_TAG=${shellQuote(opts.release.tag)}`,

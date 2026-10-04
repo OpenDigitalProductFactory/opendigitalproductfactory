@@ -6,7 +6,7 @@
  * Rather than mock the entire dependency tree, we test the HTTP interaction
  * and response parsing logic directly using the same implementation pattern.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 
 // Re-implement the core parsing logic for testability (mirrors the implementation)
 interface ChatGptModelEntry {

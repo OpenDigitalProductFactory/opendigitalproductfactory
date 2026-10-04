@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# BI-F9EE05E5 plan item 0: PROMOTE_PHASE=build runs only prepare and the image
+# build, then stops. The portal runs it BEFORE the drain, so admission is not
+# closed while `next build` runs (live: 6-14 minutes per upgrade, 2026-10-02).
+# The swap run that follows builds again against the now-warm cache, so every
+# identity check (stamp == built HEAD == target) still runs at swap time. A
+# build-phase run writes no install state, no backup and no .env, and its steps
+# are prefixed so its trail is never read as swap progress.
+_promote_phase="${PROMOTE_PHASE:-all}"
+case "$_promote_phase" in
+  all) _step_prefix="" ;;
+  build) _step_prefix="prebuild-" ;;
+  *) printf 'error: PROMOTE_PHASE must be all or build, got %s\n' "$_promote_phase" >&2; exit 2 ;;
+esac
+
+
 # DPF self-upgrade promoter. Runs inside the dedicated `dpf-promoter` SIBLING
 # container (Dockerfile.promoter) — never inside the portal — so it survives
 # recreating the portal mid-swap. It drives the host docker daemon (mounted
@@ -426,7 +441,9 @@ _restore_capability_snapshot() {
       --state "$_install_state" --recovery-path "$_capability_recovery"
   fi
 }
-if [[ $_dry_run -eq 0 ]]; then
+# A build-phase run changes no install state, so it keeps no recovery copy and
+# sets no restore trap: a failed prebuild has nothing to undo.
+if [[ $_dry_run -eq 0 && $_promote_phase == all ]]; then
   mkdir -p "$PROMOTE_BACKUP_PATH"
   cp "$_install_state" "$_capability_recovery"
   trap '_rc=$?; if [[ $_rc -ne 0 ]]; then _restore_capability_snapshot; fi' EXIT
@@ -609,12 +626,13 @@ _inngest_keys_drifted() {
 # Only the step name and target SHA are printed — never source/backup/health
 # paths — so logs are safe to surface to operators.
 emit_step() {
+  local _step="${_step_prefix}$1"
   if [[ $_dry_run -eq 1 ]]; then
-    printf 'dry-run: step=%s target=%s\n' "$1" "$PROMOTE_TARGET_SHA"
+    printf 'dry-run: step=%s target=%s\n' "$_step" "$PROMOTE_TARGET_SHA"
   else
-    printf 'step=%s target=%s\n' "$1" "$PROMOTE_TARGET_SHA"
+    printf 'step=%s target=%s\n' "$_step" "$PROMOTE_TARGET_SHA"
   fi
-  _persist_step "$1"
+  _persist_step "$_step"
 }
 
 # Durable step trail (BI-41D7A057). stdout dies with the orchestrating portal —
@@ -717,7 +735,7 @@ fi
 # Record the currently-deployed SHA so a rollback target is captured before the
 # swap. Lightweight (no full tree copy); best-effort.
 emit_step backup
-if [[ $_dry_run -eq 0 ]]; then
+if [[ $_dry_run -eq 0 && $_promote_phase == all ]]; then
   _prev_sha=$(curl -fsS "${PROMOTE_HEALTH_URL}/sha" 2>/dev/null | tr -d '[:space:]' || true)
   printf '%s\n' "${_prev_sha:-unknown}" > "$PROMOTE_BACKUP_PATH/previous-sha.txt" 2>/dev/null || true
 fi
@@ -730,7 +748,7 @@ fi
 # handled by the existing EXIT trap, which restores these exact legacy bytes
 # before the baseline is resumed.
 emit_step install-state-migrate
-if [[ $_dry_run -eq 0 ]]; then
+if [[ $_dry_run -eq 0 && $_promote_phase == all ]]; then
   _migration_envelope="$(node "$_promoter_dir/promoter-migration-envelope.mjs")" || exit $?
   _migration_field() {
     printf '%s' "$_migration_envelope" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);const p=process.argv[1].split(".");let x=v;for(const k of p)x=x?.[k];if(typeof x!=="string"&&typeof x!=="number")process.exit(2);process.stdout.write(String(x))})' "$1"
@@ -849,6 +867,12 @@ if [[ $_dry_run -eq 0 ]]; then
     exit 1
   }
   fi
+fi
+
+if [[ $_promote_phase == build ]]; then
+  emit_step done
+  trap - EXIT
+  exit 0
 fi
 
 # --- Step 3a: ensure Postgres provides pgvector ---
@@ -1229,35 +1253,130 @@ fi
 # install should run, already filtered by host platform and enabled capabilities, and
 # it is the same source step 7b uses to decide whether the sandbox applies here.
 #
-# Only services with NO container at all are created. `docker compose ps -a --services`
-# lists every service that has a container in any state, so a service an operator
-# deliberately stopped stays stopped — this step adds what was never delivered, it does
-# not fight the operator. `--no-recreate` means nothing already running is disturbed,
-# including dependencies pulled in by the services being created.
+# Missing services and containers proven Created/never-started are recoverable.
+# Previously started containers are operator-owned; never restart them here.
+# The retry removes only a stopped Created container (never docker rm -f), then
+# uses --no-recreate --no-deps so other services are not restarted as dependencies.
+# Bind sources are translated from this container's mount namespace to the daemon.
 #
 # Fail-LOUD but NOT fail-ABORT, exactly like sandbox-refresh (7b) and
 # decommission-legacy-stores (7c): the portal swap already succeeded and has been
 # verified, so a docker hiccup here must never mislabel a good upgrade. A service left
 # uncreated is a recoverable degraded state — the next upgrade retries it.
+#
+# BI-5ACBAC50: each missing service is created on its OWN `up`. One batched `up` of
+# every missing service meant a single image tag the registry no longer serves
+# (dpf-tts pinned travisvn/chatterbox-tts-api:v0.1.0) aborted the whole pull, so
+# Prometheus, Grafana, Loki, Alloy, both exporters and browser-use were never created
+# on an install whose every upgrade reported success. Created and failed services are
+# also written to the state mount (service-reconcile-outcome.json): stderr dies with
+# this container, and the portal has already marked the run succeeded at boot, so the
+# file is the only way the run's evidence can learn the reconcile was degraded.
+_write_reconcile_outcome() {
+  local _dir="${DPF_PROMOTER_STATE_DIR:-}"
+  [[ -n "$_dir" && -d "$_dir" && -w "$_dir" ]] || return 0
+  local _out="$_dir/service-reconcile-outcome.json"
+  node -e '
+    const [target, outcome, required, created, failed] = process.argv.slice(1);
+    const list = (s) => s.split("\n").filter(Boolean);
+    process.stdout.write(JSON.stringify({
+      targetSha: target, at: new Date().toISOString(), outcome,
+      required: list(required), created: list(created), failed: list(failed),
+    }) + "\n");
+  ' "$PROMOTE_TARGET_SHA" "$1" "$2" "$3" "$4" > "$_out.tmp" 2>/dev/null \
+    && mv -f "$_out.tmp" "$_out" 2>/dev/null \
+    || rm -f "$_out.tmp" 2>/dev/null || true
+  return 0
+}
 emit_step service-reconcile
 if [[ $_dry_run -eq 0 ]]; then
   _reconcile_required="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).requiredServices.join("\n")))')"
-  _reconcile_existing="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
-    "${_f_args[@]}" ps -a --services 2>/dev/null || true)"
+  _reconcile_created=()
+  _reconcile_failed=()
   _reconcile_missing=()
+  _reconcile_retry_ids=()
+  _reconcile_inventory_ok=1
+  _reconcile_existing="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+    "${_f_args[@]}" ps -a --services)" || _reconcile_inventory_ok=0
   while IFS= read -r _reconcile_svc; do
     [[ -z "$_reconcile_svc" ]] && continue
-    printf '%s\n' "$_reconcile_existing" | grep -qxF "$_reconcile_svc" || _reconcile_missing+=("$_reconcile_svc")
+    if [[ $_reconcile_inventory_ok -eq 0 ]]; then
+      _reconcile_failed+=("$_reconcile_svc")
+    elif ! printf '%s\n' "$_reconcile_existing" | grep -qxF "$_reconcile_svc"; then
+      _reconcile_missing+=("$_reconcile_svc")
+      _reconcile_retry_ids+=("")
+    else
+      _reconcile_id="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" ps -a -q "$_reconcile_svc")" || _reconcile_id=""
+      # Unknown/replicated state is not permission to recreate anything.
+      if [[ -z "$_reconcile_id" || "$_reconcile_id" == *$'\n'* ]]; then
+        _reconcile_failed+=("$_reconcile_svc")
+        continue
+      fi
+      if ! _reconcile_state="$(docker inspect --format '{{.State.Status}} {{.State.StartedAt}}' "$_reconcile_id")"; then
+        _reconcile_failed+=("$_reconcile_svc")
+      elif [[ "$_reconcile_state" == 'created 0001-01-01T00:00:00Z' ]]; then
+        _reconcile_missing+=("$_reconcile_svc")
+        _reconcile_retry_ids+=("$_reconcile_id")
+      elif [[ -z "$_reconcile_state" ]]; then
+        _reconcile_failed+=("$_reconcile_svc")
+      fi
+    fi
   done <<< "$_reconcile_required"
   if [[ ${#_reconcile_missing[@]} -gt 0 ]]; then
     printf 'step=service-reconcile-creating target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_missing[*]}")"
-    if ! docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
-      "${_f_args[@]}" up -d --no-recreate "${_reconcile_missing[@]}"; then
-      printf 'step=service-reconcile-failed target=%s\n' "$_built_sha"
-      printf 'warning: could not create newly-required service(s) %s after a successful portal promotion — the portal upgrade stands, but this install is missing capability services the release ships. Retries on the next upgrade, or run `docker compose up -d` on the install (BI-D011EBE2)\n' "$(IFS=,; printf '%s' "${_reconcile_missing[*]}")" >&2
+    _reconcile_f_args=("${_f_args[@]}")
+    _reconcile_mounts="$(mktemp)"
+    _reconcile_mounts_ok=1
+    _reconcile_install_root=""
+    [[ $_release_mode -eq 0 ]] || _reconcile_install_root="$PROMOTE_INSTALL_ROOT"
+    # Only the bind override is persisted; rendered environment/secrets stay in
+    # the pipe. Release identity was committed above, so use stable install assets.
+    if docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" config --format json \
+      | node "$_promoter_dir/lib/govern-capability-compose-args.mjs" "$_compose_root" "$_reconcile_install_root" > "$_reconcile_mounts"; then
+      _reconcile_f_args+=(-f "$_reconcile_mounts")
+    else
+      _reconcile_mounts_ok=0
     fi
+    for _reconcile_index in "${!_reconcile_missing[@]}"; do
+      _reconcile_svc="${_reconcile_missing[$_reconcile_index]}"
+      _reconcile_id="${_reconcile_retry_ids[$_reconcile_index]}"
+      if [[ $_reconcile_mounts_ok -eq 0 ]]; then
+        _reconcile_failed+=("$_reconcile_svc")
+        continue
+      fi
+      if [[ -n "$_reconcile_id" ]]; then
+        # Recheck immediately before removal. rm without force also refuses if
+        # another actor started it since inspection; never remove running work.
+        _reconcile_state="$(docker inspect --format '{{.State.Status}} {{.State.StartedAt}}' "$_reconcile_id")" || _reconcile_state=""
+        if [[ "$_reconcile_state" != 'created 0001-01-01T00:00:00Z' ]] || ! docker rm "$_reconcile_id"; then
+          _reconcile_failed+=("$_reconcile_svc")
+          continue
+        fi
+      fi
+      if docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_reconcile_f_args[@]}" up -d --no-recreate --no-deps "$_reconcile_svc"; then
+        _reconcile_created+=("$_reconcile_svc")
+      else
+        _reconcile_failed+=("$_reconcile_svc")
+      fi
+    done
+    rm -f "$_reconcile_mounts"
+  fi
+  if [[ ${#_reconcile_created[@]} -gt 0 ]]; then
+    printf 'step=service-reconcile-created target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_created[*]}")"
+  fi
+  if [[ ${#_reconcile_failed[@]} -gt 0 ]]; then
+    printf 'step=service-reconcile-failed target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_failed[*]}")"
+    printf 'warning: required service recovery failed for %s; the portal upgrade stands, the run remains degraded, and recovery retries on the next upgrade (BI-D011EBE2, BI-FFFEA4ED)\n' "$(IFS=,; printf '%s' "${_reconcile_failed[*]}")" >&2
+    _write_reconcile_outcome degraded "$_reconcile_required" \
+      "$(printf '%s\n' ${_reconcile_created[@]+"${_reconcile_created[@]}"})" "$(printf '%s\n' "${_reconcile_failed[@]}")"
+  elif [[ ${#_reconcile_created[@]} -gt 0 ]]; then
+    _write_reconcile_outcome complete "$_reconcile_required" "$(printf '%s\n' "${_reconcile_created[@]}")" ""
   else
     printf 'step=service-reconcile-current target=%s\n' "$_built_sha"
+    _write_reconcile_outcome current "$_reconcile_required" "" ""
   fi
 fi
 

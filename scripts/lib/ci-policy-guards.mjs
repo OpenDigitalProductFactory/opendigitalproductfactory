@@ -258,6 +258,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/installer/lib/state-cleanup-temps.test.mjs",
+        "scripts/installer/lib/docker.test.mjs",
         "scripts/installer/lib/state-lock-timeout.test.mjs",
         "scripts/installer/lib/doctor-redaction.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
@@ -700,6 +701,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // Undeclared inputs on purpose — its scope is mostly markdown.
     guard("hidden-unicode-instruction-files-guard", "Hidden Unicode Instruction Files Guard", [
       conformanceTest("scripts/check-hidden-unicode-instruction-files.test.mjs"),
+      // BI-5BC34E0A: the shared hostile fixtures against this guard.
+      conformanceTest("scripts/hostile-content-guard.test.mjs"),
       node("scripts/check-hidden-unicode-instruction-files.mjs"),
     ]),
     // One canonical-JSON form for hashes and signatures per import boundary
@@ -811,6 +814,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/hooks/pin-plugin-mcp-url.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
+        "scripts/lib/promoter-compose-mounts.test.mjs",
+        "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was
         // allowlisted OUT of CI, so nothing enforced its behaviour while it

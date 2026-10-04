@@ -144,6 +144,8 @@ export interface ScheduledWorkView {
   nextRunAt: string | null;
   lastStatus: string | null;
   lastError: string | null;
+  /** Bounded, plain-language result from the authoritative runner. */
+  lastRunSummary?: string | null;
   health: WorkHealth;
   /** How far past due `nextRunAt` is, in ms. 0 when not overdue. */
   overdueByMs: number;
@@ -454,6 +456,7 @@ export interface JobRow {
   nextRunAt: Date | null;
   lastStatus: string | null;
   lastError: string | null;
+  lastRunSummary?: string | null;
   category: string;
   locked: boolean;
   enabled: boolean;
@@ -484,6 +487,7 @@ export const JOB_SELECT = {
   nextRunAt: true,
   lastStatus: true,
   lastError: true,
+  lastRunSummary: true,
   category: true,
   locked: true,
   enabled: true,
@@ -672,6 +676,7 @@ export function buildWorkView(
     nextRunAt: nextRunAt?.toISOString() ?? null,
     lastStatus,
     lastError,
+    lastRunSummary: !task ? job?.lastRunSummary?.slice(0, 400) ?? null : null,
     health,
     overdueByMs,
     killSwitchEnforced,
@@ -687,4 +692,3 @@ export function buildWorkView(
     inCatalog: entry != null,
   };
 }
-

@@ -1,5 +1,10 @@
 # Durable Long-Running Agentic Processes — architecture assessment
 
+**Current authority implementation:** durable process reconnects read tool grants
+from the canonical coworker Agent row on each request, with revocation tombstones
+taking precedence. Known alias rows are not an alternate authority source.
+Administrator reconciliation of legacy differences requires explicit approval.
+
 **Date:** 2026-06-09
 **Status:** Assessment / direction-setting. Not a build spec. The phased recommendations in §8 become backlog items, each promoted through Build Studio in the normal way.
 **Audience:** Operator (Mark), platform architects, the Build Studio sub-agents, and any coworker that owns a process which runs longer than a single request.

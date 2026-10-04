@@ -21,7 +21,6 @@ export const TaskNode = memo(function TaskNode({ data }: NodeProps) {
   const {
     label,
     status,
-    specialist,
     roleColor,
     roleIcon,
     actorKind,

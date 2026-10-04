@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   CLIENT_PROFILES,
+  measureDisclosure,
   parseMcpMessages,
   sameToolNames,
 } from "./mcp-progressive-disclosure-conformance.mjs";
@@ -34,4 +35,17 @@ test("parses JSON and list_changed SSE response shapes without exposing headers"
 test("compares disclosure tiers by exact tool names, not count alone", () => {
   assert.equal(sameToolNames(new Set(["a", "b"]), new Set(["b", "a"])), true);
   assert.equal(sameToolNames(new Set(["a", "b"]), new Set(["a", "c"])), false);
+});
+
+test("composed boundary reports UTF-8 bytes and leaves host token accounting unknown", () => {
+  const tools = [{ name: "one" }, { name: "two" }];
+  const report = measureDisclosure("é", tools);
+  assert.equal(report.initializeBytes, 2);
+  assert.equal(report.initializeWithinBudget, true);
+  assert.equal(measureDisclosure("é".repeat(2049), []).initializeWithinBudget, false);
+  assert.equal(report.composedOnceBytes, 2 + Buffer.byteLength(JSON.stringify(tools)));
+  assert.equal(report.repeatedInitializationBytesIfPerTool, 4);
+  assert.equal(report.attachedTokens, null);
+  assert.equal(report.cachedTokens, null);
+  assert.equal(report.billedTokens, null);
 });

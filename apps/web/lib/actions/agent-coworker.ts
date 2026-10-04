@@ -72,9 +72,8 @@ import {
 } from "@/lib/wiki/perspective-intent";
 import { getGrantedCapabilities, getDeniedCapabilities } from "@/lib/permissions";
 import { classifyTask } from "@/lib/task-classifier";
-import { getTaskType } from "@/lib/task-types";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
-import { loadPerformanceProfiles, ensurePerformanceProfile } from "@/lib/agent-router-data";
+import { loadPerformanceProfiles } from "@/lib/agent-router-data";
 import type { RoutingMeta } from "@/lib/process-observer-hook";
 import {
   executeAutonomousAgenticLoop,
@@ -1830,7 +1829,6 @@ export async function sendMessage(input: {
 
     if (activeBuild && buildPlan?.tasks?.length && !buildAlreadyComplete) {
       const { runBuildOrchestrator } = await import("@/lib/build/build-orchestrator");
-      const { agentEventBus } = await import("@/lib/agent-event-bus");
 
       const orchestratorResult = await runBuildOrchestrator({
         buildId: activeBuild.buildId,

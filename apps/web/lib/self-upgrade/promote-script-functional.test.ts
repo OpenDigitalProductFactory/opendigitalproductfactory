@@ -114,6 +114,41 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       rmSync(root, { recursive: true, force: true });
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
+  // BI-F9EE05E5 plan item 0: the image is built before the drain, so the
+  // portal refuses new work only for the swap.
+  it("PROMOTE_PHASE=build builds the image and stops: no backup, migration, recreate or state write", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    try {
+      const statePath = join(backup, "state", "install-state.json");
+      const stateBefore = readFileSync(statePath, "utf8");
+      const dockerLog = join(root, "docker.log");
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, dockerLog, phase: "build" });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain(`step=prebuild-docker-build target=${head}`);
+      expect(r.stdout).toContain(`step=prebuild-done target=${head}`);
+      expect(r.stdout).not.toMatch(/step=(?:prebuild-)?(?:migrate|docker-up|health|sha-verify)\b/);
+      const calls = readFileSync(dockerLog, "utf8");
+      expect(calls).toContain("build portal postgres");
+      expect(calls).not.toMatch(/\bup\b.*-d|recreate service=/);
+      expect(readFileSync(statePath, "utf8")).toBe(stateBefore);
+      expect(existsSync(join(backup, "previous-sha.txt"))).toBe(false);
+      expect(existsSync(join(backup, "install-state.json"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("refuses an unknown PROMOTE_PHASE", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    try {
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, phase: "swap" as never });
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain("PROMOTE_PHASE must be all or build");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
   it("stamps the source HEAD and sha-verify passes against a correctly-stamped portal", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
     try {
@@ -143,7 +178,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("FAILS LOUD (does not deploy) when the build tree identity differs from the promote target", () => {
-    const { root, source, backup, fakeBin, head } = makeScratch();
+    const { root, source, backup, fakeBin } = makeScratch();
     try {
       // Orchestrator's intended target ≠ what's on disk → the bytes about to be
       // deployed are not the bytes that were resolved. Spec §4.3 / BI-5B6C1C35:
@@ -176,7 +211,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("FAILS LOUD when the running portal reports an EMPTY /sha (DEPLOYED_SHA unpopulated)", () => {
-    const { root, source, backup, fakeBin, head } = makeScratch();
+    const { root, source, backup, head } = makeScratch();
     try {
       // Model the BI-5B6C1C35 symptom: DEPLOYED_SHA never made it into the
       // running container, so /sha returns blank. The verify step must treat an

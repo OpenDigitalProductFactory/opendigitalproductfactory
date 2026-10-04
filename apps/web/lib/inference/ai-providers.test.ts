@@ -195,7 +195,7 @@ describe("getBillingLabel", () => {
 
 describe("generatePKCE", () => {
   it("generates a code_verifier of correct length", () => {
-    const { codeVerifier, codeChallenge } = generatePKCE();
+    const { codeVerifier } = generatePKCE();
     expect(codeVerifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 

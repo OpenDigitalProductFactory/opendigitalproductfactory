@@ -33,7 +33,7 @@
  * below) so aggregation is mechanical.
  */
 
-import { readFileSync, existsSync, writeFileSync, readdirSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 // ─── Repo root ─────────────────────────────────────────────────────────────

@@ -57,6 +57,42 @@ const input = (gateKey = "a".repeat(64)) => ({
   objective: "Review the exact committed delivery packet once.",
 });
 
+describe("expired review readback", () => {
+  it("does not reuse an older pass when a newer review failed", async () => {
+    const store = memoryStore();
+    const first = await claimSemanticReviewSingleFlight(input(), store, async () => false);
+    await completeSemanticReviewSingleFlight({ taskRunId: first.taskRunId, evidenceRecordId: "old-pass", resultClass: "pass" }, store);
+    const second = await claimSemanticReviewSingleFlight(input(), store, async () => false);
+    await store.update(second.taskRunId, { status: "failed", progressPayload: {} });
+    const fresh = await claimSemanticReviewSingleFlight(input(), store, async () => true);
+    expect(fresh).toMatchObject({ disposition: "admitted", attempt: 3 });
+  });
+
+  it.each(["failed", "canceled"] as const)("does not silently renew a native %s execution budget", async status => {
+    const store = memoryStore();
+    const first = await claimSemanticReviewSingleFlight(input(), store, async () => false);
+    await store.update(first.taskRunId, { status, progressPayload: { semanticReview: {
+      schemaVersion: 1, deadlineAt: "2000-01-01T00:00:00Z", successorAttempt: 1,
+    } } });
+    expect(await claimSemanticReviewSingleFlight(input(), store, async () => false)).toMatchObject({
+      disposition: "subscribed", taskRunId: first.taskRunId,
+    });
+    expect(store.rows).toHaveLength(1);
+  });
+
+  it("joins the parked identity but reports expiration and required recovery", async () => {
+    const store = memoryStore();
+    const first = await claimSemanticReviewSingleFlight(input(), store, async () => false);
+    await store.update(first.taskRunId, { status: "input-required", progressPayload: { semanticReview: {
+      schemaVersion: 1, deadlineAt: "2000-01-01T00:00:00Z", recoveryAttempt: 1,
+    } } });
+    const replay = await claimSemanticReviewSingleFlight(input(), store, async () => false);
+    expect(replay).toMatchObject({ disposition: "subscribed", taskRunId: first.taskRunId,
+      recovery: { budget: "expired", executing: false } });
+    expect(store.rows).toHaveLength(1);
+  });
+});
+
 describe("semantic review TaskRun adapter", () => {
   const durablePacket = () => createSemanticReviewRequest({
     surface: "external", authorSurface: "codex-desktop", artifactType: "code-change",
