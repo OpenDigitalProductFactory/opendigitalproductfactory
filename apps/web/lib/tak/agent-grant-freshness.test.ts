@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
+  $transaction: vi.fn(),
   agent: { findFirst: vi.fn() },
   agentToolGrant: { upsert: vi.fn(), deleteMany: vi.fn() },
   agentToolGrantRevocation: { upsert: vi.fn(), deleteMany: vi.fn() },
@@ -10,6 +11,7 @@ vi.mock("@dpf/db", () => ({ prisma: db }));
 beforeEach(() => {
   vi.resetModules();
   vi.resetAllMocks();
+  db.$transaction.mockImplementation(async (fn: (tx: typeof db) => Promise<unknown>) => fn(db));
 });
 
 describe("runtime grant freshness (BI-F2F09597)", () => {
@@ -17,6 +19,7 @@ describe("runtime grant freshness (BI-F2F09597)", () => {
     const held = new Set(["registry_read"]);
     db.agent.findFirst.mockImplementation(async () => ({
       toolGrants: [...held].map((grantKey) => ({ grantKey })),
+      toolGrantRevocations: [],
     }));
     db.agentToolGrant.upsert.mockImplementation(async ({ create }) => {
       held.add(create.grantKey);
@@ -38,16 +41,16 @@ describe("runtime grant freshness (BI-F2F09597)", () => {
 
   it("treats zero stored grants as authoritative, including after the last revoke", async () => {
     const { getAgentToolGrantsAsync } = await import("./agent-grants");
-    db.agent.findFirst.mockResolvedValueOnce({ toolGrants: [{ grantKey: "admin_read" }] });
+    db.agent.findFirst.mockResolvedValueOnce({ toolGrants: [{ grantKey: "admin_read" }], toolGrantRevocations: [] });
     expect(await getAgentToolGrantsAsync("AGT-EXT-CODEX")).toEqual(["admin_read"]);
-    db.agent.findFirst.mockResolvedValue({ toolGrants: [] });
+    db.agent.findFirst.mockResolvedValue({ toolGrants: [], toolGrantRevocations: [] });
     expect(await getAgentToolGrantsAsync("AGT-EXT-CODEX")).toEqual([]);
   });
 
   it("does not allow a synchronous registry lookup to override current stored grants", async () => {
     const { getAgentToolGrants, getAgentToolGrantsAsync } = await import("./agent-grants");
     expect(getAgentToolGrants("AGT-EXT-CODEX")?.length).toBeGreaterThan(0);
-    db.agent.findFirst.mockResolvedValue({ toolGrants: [] });
+    db.agent.findFirst.mockResolvedValue({ toolGrants: [], toolGrantRevocations: [] });
     expect(await getAgentToolGrantsAsync("AGT-EXT-CODEX")).toEqual([]);
   });
 
@@ -55,23 +58,23 @@ describe("runtime grant freshness (BI-F2F09597)", () => {
     const { getAgentToolGrantsAsync } = await import("./agent-grants");
     db.agent.findFirst.mockRejectedValueOnce(new Error("database unavailable"));
     expect(await getAgentToolGrantsAsync("AGT-EXT-CODEX")).toEqual([]);
-    db.agent.findFirst.mockResolvedValue({ toolGrants: [{ grantKey: "registry_read" }] });
+    db.agent.findFirst.mockResolvedValue({ toolGrants: [{ grantKey: "registry_read" }], toolGrantRevocations: [] });
     expect(await getAgentToolGrantsAsync("AGT-EXT-CODEX")).toEqual(["registry_read"]);
   });
 
   it("does not retain a previous grant when the next authoritative read fails", async () => {
     const { getAgentToolGrantsAsync } = await import("./agent-grants");
-    db.agent.findFirst.mockResolvedValueOnce({ toolGrants: [{ grantKey: "admin_read" }] });
+    db.agent.findFirst.mockResolvedValueOnce({ toolGrants: [{ grantKey: "admin_read" }], toolGrantRevocations: [] });
     expect(await getAgentToolGrantsAsync("AGT-EXT-CODEX")).toEqual(["admin_read"]);
     db.agent.findFirst.mockRejectedValueOnce(new Error("database unavailable"));
     expect(await getAgentToolGrantsAsync("AGT-EXT-CODEX")).toEqual([]);
   });
 
-  it("keeps legacy registry fallback only for a successful lookup with no stored agent", async () => {
-    const { getAgentToolGrants, getAgentToolGrantsAsync } = await import("./agent-grants");
+  it("fails closed when the canonical authority row is missing", async () => {
+    const { getAgentToolGrantsAsync } = await import("./agent-grants");
     db.agent.findFirst.mockResolvedValueOnce(null);
-    expect(await getAgentToolGrantsAsync("AGT-EXT-CODEX")).toEqual(getAgentToolGrants("AGT-EXT-CODEX"));
-    db.agent.findFirst.mockResolvedValue({ toolGrants: [] });
+    expect(await getAgentToolGrantsAsync("AGT-EXT-CODEX")).toEqual([]);
+    db.agent.findFirst.mockResolvedValue({ toolGrants: [], toolGrantRevocations: [] });
     expect(await getAgentToolGrantsAsync("AGT-EXT-CODEX")).toEqual([]);
     db.agent.findFirst.mockResolvedValue(null);
     expect(await getAgentToolGrantsAsync("unknown-coworker")).toEqual([]);

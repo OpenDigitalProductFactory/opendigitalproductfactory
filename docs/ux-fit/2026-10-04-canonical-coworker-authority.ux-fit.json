@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "decidedOption": "inline-review",
+  "decisionInteractionId": "DI-86557E18596E",
+  "scope": { "files": [
+    "apps/web/components/platform/coworker-record/AuthorityReconciliation.tsx"
+  ] },
+  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["inline-review", "always-open-matrix"] }
+}

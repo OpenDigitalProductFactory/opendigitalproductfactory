@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Canonical coworker authority repair
 
 BI-CAP-437F7745; atomic repair. BI-56E9CEC2 depends on this identity correction and retains role/room configuration scope.
