@@ -93,6 +93,7 @@ describe("coworker self-assessment tools", () => {
     vi.clearAllMocks();
     mockPrisma.agent.findFirst.mockResolvedValue({
       agentId: "AGT-WS-MARKETING",
+      toolGrantRevocations: [],
       slugId: "marketing-specialist",
       name: "marketing-specialist",
       tier: 2,
@@ -156,7 +157,7 @@ describe("coworker self-assessment tools", () => {
 
     expect(result.success).toBe(true);
     expect(mockPrisma.agent.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: { OR: [{ agentId: "AGT-WS-MARKETING" }, { slugId: "AGT-WS-MARKETING" }] },
+      where: { agentId: "AGT-WS-MARKETING" },
     }));
     expect(result.data).toMatchObject({
       profile: {

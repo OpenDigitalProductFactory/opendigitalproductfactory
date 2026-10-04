@@ -270,7 +270,7 @@ export async function issueMcpApiToken(
   const row = await prisma.mcpApiToken.create({
     data: {
       userId: input.userId,
-      agentId: input.agentId ? coworkerAuthorityAgentId(input.agentId) : null,
+      agentId: coworkerAuthorityAgentId(input.agentId ?? "") || null,
       name,
       tokenHash: hash,
       prefix,
