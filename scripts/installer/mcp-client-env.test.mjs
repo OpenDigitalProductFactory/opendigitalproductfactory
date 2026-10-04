@@ -59,6 +59,14 @@ function bash(script, { home, env = {} }) {
   });
 }
 
+// Git Bash normalizes the inherited temporary HOME to an MSYS path. Compare
+// default-home bundles in the shell's path spelling, not Node's native one.
+function defaultShellBundle(home) {
+  const out = bash('printf "%s/.dpf/pki/root_ca.crt" "$HOME"', { home });
+  assert.equal(out.status, 0, out.stderr);
+  return out.stdout;
+}
+
 function writeRoot(home) {
   const pki = join(home, ".dpf", "pki");
   mkdirSync(pki, { recursive: true });
@@ -79,12 +87,12 @@ const resolveScript = `. "$ENV_LIB"; dpf_resolve_mcp_client_env "$INSTALL" || ex
 
 test("the endpoint is <PUBLIC_URL>/api/mcp/v1?tier=full from the install .env, not a pre-set DPF_MCP_URL", NEEDS_BASH, () => {
   withHome(({ home, install }) => {
-    const cert = writeRoot(home);
+    writeRoot(home);
     writeFileSync(join(install, ".env"), 'PUBLIC_URL="https://desk.lan/"\n');
     // A stale http endpoint from an earlier setup must not survive the canonical origin.
     const out = bash(resolveScript, { home, env: { INSTALL: posix(install), DPF_MCP_URL: "http://127.0.0.1:3000/api/mcp/v1" } });
     assert.equal(out.status, 0, out.stderr);
-    assert.equal(out.stdout, `https://desk.lan/api/mcp/v1?tier=full|${posix(cert)}`);
+    assert.equal(out.stdout, `https://desk.lan/api/mcp/v1?tier=full|${defaultShellBundle(home)}`);
   });
 });
 
@@ -114,7 +122,7 @@ const persistScript = `. "$ENV_LIB"; dpf_resolve_mcp_client_env "$INSTALL"; dpf_
 
 test("macOS: both variables land in ~/.dpf/agent-toolchain.env and launchd; a rerun changes nothing", NEEDS_BASH, () => {
   withHome(({ home, install }) => {
-    const cert = writeRoot(home);
+    writeRoot(home);
     writeFileSync(join(install, ".env"), "PUBLIC_URL=https://desk.lan\n");
     // An earlier token line is kept: the transport writer owns only its own lines.
     mkdirSync(join(home, ".dpf"), { recursive: true });
@@ -127,7 +135,7 @@ test("macOS: both variables land in ~/.dpf/agent-toolchain.env and launchd; a re
     const file = readFileSync(join(home, ".dpf", "agent-toolchain.env"), "utf8");
     assert.match(file, /^export DPF_MCP_BEARER_TOKEN='dpfmcp_fixture'$/m);
     assert.match(file, /^export DPF_MCP_URL='https:\/\/desk\.lan\/api\/mcp\/v1\?tier=full'$/m);
-    assert.match(file, new RegExp(`^export NODE_EXTRA_CA_CERTS='${posix(cert).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'$`, "m"));
+    assert.match(file, new RegExp(`^export NODE_EXTRA_CA_CERTS='${defaultShellBundle(home).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'$`, "m"));
     assert.equal((file.match(/^export DPF_MCP_URL=/gm) ?? []).length, 1, "the stale endpoint is replaced, not duplicated");
     for (const profile of [".zshenv", ".profile"]) {
       assert.match(readFileSync(join(home, profile), "utf8"), /agent-toolchain\.env.*# dpf-mcp-token/);
@@ -153,7 +161,7 @@ test("Linux: the profile env carries both variables and launchd is never called"
     const out = bash(persistScript, { home, env });
     assert.equal(out.status, 0, out.stderr);
     const sourced = bash(`. "$HOME/.profile"; printf '%s|%s' "$DPF_MCP_URL" "$NODE_EXTRA_CA_CERTS"`, { home });
-    assert.equal(sourced.stdout, `https://localhost/api/mcp/v1?tier=full|${posix(join(home, ".dpf", "pki", "root_ca.crt"))}`);
+    assert.equal(sourced.stdout, `https://localhost/api/mcp/v1?tier=full|${defaultShellBundle(home)}`);
     assert.equal(existsSync(join(home, "launchctl.log")), false);
   });
 });
