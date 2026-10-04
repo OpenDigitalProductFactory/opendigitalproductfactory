@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Local inference completion reliability — BI-B550D9E5
 
 ## Evidence and boundary
