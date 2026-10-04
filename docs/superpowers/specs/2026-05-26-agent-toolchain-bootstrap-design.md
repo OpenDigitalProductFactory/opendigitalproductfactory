@@ -1,6 +1,6 @@
 ---
 title: Agent Toolchain Bootstrap - DPF-kernel-aware contributor sessions on first run
-status: revised-for-implementation
+status: active
 author: Claude (Opus 4.7)
 reviewers:
   - Codex (chief architect + UX review, 2026-05-27)
