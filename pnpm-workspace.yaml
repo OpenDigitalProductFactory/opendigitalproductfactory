@@ -21,7 +21,7 @@ catalog:
   "@axe-core/playwright": ^4.13.0
   "@types/node": ^26.6.2
   "@types/pg": ^8.23.1
-  "@vitest/coverage-v8": ^4.1.11
+  "@vitest/coverage-v8": ^5.0.1
   bcryptjs: ^3.0.3
   dotenv: ^17.4.2
   net-snmp: ^3.26.3
