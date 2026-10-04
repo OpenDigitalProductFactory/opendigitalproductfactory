@@ -10,6 +10,7 @@ import { prisma } from "@dpf/db";
 import { decryptSecret, encryptSecret } from "@/lib/govern/credential-crypto";
 import { isPatIssuanceClosed } from "@/lib/auth/oauth-policy";
 import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
+import { developmentTemplateGrantsToFollow } from "@/lib/mcp-token-scopes";
 
 export type McpTokenScope = "read" | "write" | "admin";
 export type McpTokenCapability = "read" | "write";
@@ -457,6 +458,31 @@ export async function addScopesToMcpApiToken(
   return { ok: true, scopes: merged, addedScopes };
 }
 
+/**
+ * On use, a development connection already in use gains grants the template
+ * gained later (BI-E9F1C116). The secret stays the same. A read connection, an
+ * admin connection, an OAuth connection, an ephemeral token, and a custom set
+ * with a hole or an outside grant are left unchanged. Persist only when
+ * something is missing, so a later request does not rewrite the row.
+ */
+async function scopesAfterDevelopmentFollowThrough(row: {
+  id: string;
+  scopes: string[];
+  scope: unknown;
+  capability: unknown;
+  kind?: string | null;
+  oauthClientId?: string | null;
+}): Promise<string[]> {
+  const stored = Array.isArray(row.scopes) ? row.scopes : [];
+  if (row.oauthClientId) return stored;
+  if (row.kind != null && row.kind !== "operator") return stored;
+  if (normalizePersistedScope(row.scope, row.capability) !== "write") return stored;
+  const missing = developmentTemplateGrantsToFollow(stored);
+  if (missing.length === 0) return stored;
+  const added = await addScopesToMcpApiToken(row.id, [...missing]);
+  return added.ok ? added.scopes : stored;
+}
+
 export async function resolveMcpApiToken(
   plaintext: string,
 ): Promise<ResolvedMcpToken | null> {
@@ -469,6 +495,8 @@ export async function resolveMcpApiToken(
   if (row.revokedAt != null) return null;
   if (row.expiresAt != null && row.expiresAt.getTime() < Date.now()) return null;
 
+  const scopes = await scopesAfterDevelopmentFollowThrough(row);
+
   // Lazy lastUsedAt — fire-and-forget, never block the request.
   prisma.mcpApiToken
     .update({ where: { id: row.id }, data: { lastUsedAt: new Date() } })
@@ -478,7 +506,7 @@ export async function resolveMcpApiToken(
     tokenId: row.id,
     userId: row.userId,
     agentId: row.agentId ? coworkerAuthorityAgentId(row.agentId) : null,
-    scopes: row.scopes,
+    scopes,
     scope: normalizePersistedScope(row.scope, row.capability),
     capability: scopeToCapability(normalizePersistedScope(row.scope, row.capability)),
   };
@@ -500,6 +528,8 @@ export async function acknowledgeMcpTokenRefresh(
       scopes: true,
       capability: true,
       scope: true,
+      kind: true,
+      oauthClientId: true,
       revokedAt: true,
       expiresAt: true,
     },
@@ -509,6 +539,8 @@ export async function acknowledgeMcpTokenRefresh(
   if (row.expiresAt != null && row.expiresAt.getTime() < Date.now()) {
     return { ok: false, error: "invalid_token" };
   }
+
+  const scopes = await scopesAfterDevelopmentFollowThrough(row);
 
   prisma.mcpApiToken
     .update({ where: { id: row.id }, data: { lastUsedAt: new Date() } })
@@ -521,7 +553,7 @@ export async function acknowledgeMcpTokenRefresh(
     tokenSuffix: row.tokenSuffix ?? plaintext.slice(-4),
     scope: normalizePersistedScope(row.scope, row.capability),
     capability: scopeToCapability(normalizePersistedScope(row.scope, row.capability)),
-    scopes: row.scopes,
+    scopes,
   };
 }
 
