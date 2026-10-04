@@ -229,7 +229,6 @@ function ServiceLineRow({
   onRemove?: () => void;
   isPending: boolean;
 }) {
-  const chip = intentStyle(line.statusIntent);
   const isSecondary = line.role === "secondary";
 
   return (

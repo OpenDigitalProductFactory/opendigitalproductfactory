@@ -9,6 +9,7 @@ import { createHash, randomBytes } from "crypto";
 import { prisma } from "@dpf/db";
 import { decryptSecret, encryptSecret } from "@/lib/govern/credential-crypto";
 import { isPatIssuanceClosed } from "@/lib/auth/oauth-policy";
+import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 import { developmentTemplateGrantsToFollow } from "@/lib/mcp-token-scopes";
 
 export type McpTokenScope = "read" | "write" | "admin";
@@ -270,7 +271,7 @@ export async function issueMcpApiToken(
   const row = await prisma.mcpApiToken.create({
     data: {
       userId: input.userId,
-      agentId: input.agentId ?? null,
+      agentId: coworkerAuthorityAgentId(input.agentId ?? "") || null,
       name,
       tokenHash: hash,
       prefix,
@@ -504,7 +505,7 @@ export async function resolveMcpApiToken(
   return {
     tokenId: row.id,
     userId: row.userId,
-    agentId: row.agentId,
+    agentId: row.agentId ? coworkerAuthorityAgentId(row.agentId) : null,
     scopes,
     scope: normalizePersistedScope(row.scope, row.capability),
     capability: scopeToCapability(normalizePersistedScope(row.scope, row.capability)),

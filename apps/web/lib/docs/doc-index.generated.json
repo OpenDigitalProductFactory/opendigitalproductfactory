@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 731,
+  "pageCount": 732,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -12075,6 +12075,15 @@
         "who-this-section-is-for",
         "pages",
         "related"
+      ]
+    },
+    "docs/user-guide/coworker-permission-reconciliation.md": {
+      "publicHref": "/user-guide/coworker-permission-reconciliation/",
+      "portalHref": "/docs/coworker-permission-reconciliation",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "review-coworker-permissions"
       ]
     },
     "docs/user-guide/customers/customer-map.md": {

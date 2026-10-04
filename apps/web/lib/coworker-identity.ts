@@ -10,8 +10,8 @@
  *
  * Task 1.4 of plan: docs/superpowers/plans/2026-04-30-discovery-portfolio-gap-closure-plan.md
  */
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
+import registryData from "../../../packages/db/data/agent_registry.json";
 
 export interface CoworkerIdentity {
   agentId: string;
@@ -41,20 +41,11 @@ interface RawRegistry {
 
 let cachedRegistry: CoworkerRegistry | null = null;
 
-function findRepoRoot(): string {
-  let dir = process.cwd();
-  while (dir !== resolve(dir, "..")) {
-    if (existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
-    dir = resolve(dir, "..");
-  }
-  return process.cwd();
-}
-
 function loadDefaultRegistry(): CoworkerRegistry {
   if (cachedRegistry) return cachedRegistry;
-  const root = findRepoRoot();
-  const path = join(root, "packages/db/data/agent_registry.json");
-  const raw = JSON.parse(readFileSync(path, "utf8")) as RawRegistry;
+  // Bundle the source registry like agent-grants; standalone installs need no
+  // source checkout or working-directory discovery to resolve identity.
+  const raw = registryData as RawRegistry;
   const agents: CoworkerIdentity[] = raw.agents.map((a) => {
     const identity: CoworkerIdentity = {
       agentId: a.agent_id,
@@ -102,4 +93,18 @@ export function getCanonicalAgentId(
   registry?: CoworkerRegistry,
 ): string | null {
   return resolveCoworkerIdentity(alias, registry)?.agentId ?? null;
+}
+
+/** Authority uses the registry identity; execution aliases remain valid FK handles. */
+export function coworkerAuthorityAgentId(ref: string): string {
+  const trimmed = ref.trim();
+  return getCanonicalAgentId(trimmed) ?? resolveCanonicalAgentId(trimmed);
+}
+
+/** Known identities use an exact key, never an OR that can select a mirror. */
+export function coworkerAuthorityWhere(ref: string) {
+  const agentId = coworkerAuthorityAgentId(ref);
+  return getCanonicalAgentId(ref.trim()) || agentId !== ref.trim() || /^AGT[-_]/i.test(agentId)
+    ? { agentId }
+    : { OR: [{ agentId }, { slugId: agentId }] };
 }

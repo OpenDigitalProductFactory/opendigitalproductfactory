@@ -7,8 +7,6 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { decryptSecret, encryptSecret } from "@/lib/credential-crypto";
 import {
-  computeTokenCost,
-  computeComputeCost,
   getTestUrl,
   parseModelsResponse,
 } from "@/lib/ai-provider-types";

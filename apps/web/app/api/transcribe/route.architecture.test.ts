@@ -25,8 +25,6 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 const {
   mockResolveTranscriptionEndpoint,
   mockPrismaModelProviderFindUnique,
-  mockResolveExecutionBaseUrl,
-  mockBuildAuthHeaders,
 } = vi.hoisted(() => ({
   mockResolveTranscriptionEndpoint: vi.fn(async () => ({
     providerId: "speaches",
@@ -41,8 +39,6 @@ const {
     authHeader: null,
     status: "active",
   })),
-  mockResolveExecutionBaseUrl: vi.fn(async () => "http://dpf-stt:9000"),
-  mockBuildAuthHeaders: vi.fn(async () => ({})),
 }));
 
 vi.mock("@/lib/voice/endpoint-resolution", () => ({

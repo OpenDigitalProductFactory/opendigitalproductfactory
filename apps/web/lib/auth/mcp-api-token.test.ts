@@ -58,6 +58,13 @@ afterEach(() => {
 });
 
 describe("issueMcpApiToken — happy path", () => {
+  it("binds an alias to canonical authority without changing requested scopes", async () => {
+    cfgFindUnique.mockResolvedValue(null);
+    const result = await issueMcpApiToken({ userId: "u1", name: "Alias binding",
+      capability: "read", scopes: ["backlog_read"], agentId: "external-codex", expiresInDays: 90 });
+    expect(result.ok).toBe(true);
+    expect(tokenCreate.mock.calls[0]![0].data).toMatchObject({ agentId: "AGT-EXT-CODEX", scopes: ["backlog_read"] });
+  });
   it("issues a read-only token even when contribution-mode is unset", async () => {
     cfgFindUnique.mockResolvedValue(null);
     const result = await issueMcpApiToken({

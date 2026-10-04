@@ -14,6 +14,13 @@
 
 ## New page routes — regenerate companions (BI-206DAB95)
 
+Coworker tool authority resolves through `lib/coworker-identity.ts` to one
+canonical Agent row for administrator actions, tokens, runtime reads and profile
+reports. Runtime alias records still own their skills and service references.
+Do not combine grants across those records or replace revoked database state
+with registry defaults. See the
+[administrator reconciliation procedure](../user-guide/coworker-permission-reconciliation.md).
+
 Adding `apps/web/app/**/page.tsx` requires regenerating **four** derived artifacts. CI fails opaquely if any is stale. One command regenerates all of them against the **current** tree:
 
 ```bash

@@ -5,7 +5,6 @@
 import { randomBytes, createHash } from "crypto";
 import { prisma } from "@dpf/db";
 import { encryptSecret, decryptSecret } from "@/lib/credential-crypto";
-import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 import { activateProvider } from "@/lib/govern/activate-provider";
 import { getStablePortalUrl } from "@/lib/portal-url";
 

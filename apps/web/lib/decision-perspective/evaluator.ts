@@ -1,9 +1,7 @@
 import {
   computeMaterialDecidability,
-  isMaterialApplicable,
   resolveProfileMaterial,
   resolveProfileMaterialForOrg,
-  scorePerspectiveMaterial,
 } from "./material";
 
 /**

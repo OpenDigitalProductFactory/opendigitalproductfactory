@@ -9,7 +9,7 @@ import {
   type SetupStep,
   type StepStatus,
 } from "@/lib/actions/setup-constants";
-import { advanceStep, skipStep, pauseSetup, completeSetup, markStepTriggered } from "@/lib/actions/setup-progress";
+import { advanceStep, skipStep, pauseSetup, markStepTriggered } from "@/lib/actions/setup-progress";
 import { CooNameSetupCard } from "./CooNameSetupCard";
 
 /** Build a context-aware trigger prompt for the current setup step.
@@ -182,10 +182,6 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext, tri
       router.push(route);
     }
   };
-
-  // Determine if current pathname matches the expected step route
-  const expectedRoute = STEP_ROUTES[currentStep];
-  const isOnExpectedPage = expectedRoute && pathname.startsWith(expectedRoute);
 
   // Check if this is the last step
   const currentIdx = SETUP_STEPS.indexOf(currentStep as SetupStep);
