@@ -1,7 +1,13 @@
+---
+status: active
+---
+
 # Backlog triage efficiency implementation
 
 Backlog: BI-E3FBB0C4. Workroom: WC-C9D2BC8A. Shape: delivery-medium@1.0.0.
 Design: docs/superpowers/specs/2026-10-04-backlog-triage-efficiency-design.md.
+
+Delivery preflight also requires the new disclosure label to use the admin message catalog and provider, explicit active status frontmatter, and normalization of Windows glob fixture paths in the instruction-coverage test to match its existing production reader. These bounded verification repairs accompany this delivery; they add no triage behavior or authorization.
 
 ## Acceptance
 

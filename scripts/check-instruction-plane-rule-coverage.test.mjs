@@ -183,7 +183,7 @@ test("the committed baseline remains reachable across the core and task referenc
   const destinations = {};
   for (const pattern of manifest.ruleDestinations) {
     for (const file of globSync(pattern, { cwd: REPO_ROOT })) {
-      destinations[file] = readFileSync(join(REPO_ROOT, file), "utf8");
+      destinations[file.replace(/\\/g, "/")] = readFileSync(join(REPO_ROOT, file), "utf8");
     }
   }
   const reachable = new Set([...live, ...anchorsIn(destinations, manifest.ruleAnchorPattern)]);

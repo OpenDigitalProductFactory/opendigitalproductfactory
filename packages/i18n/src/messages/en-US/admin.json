@@ -1,4 +1,7 @@
 {
+  "scheduledWork": {
+    "lastResult": "Last result"
+  },
   "accountableOwner": {
     "label": "Accountable owner:",
     "unset": "No accountable owner recorded",

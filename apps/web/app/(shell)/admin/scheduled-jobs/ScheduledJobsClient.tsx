@@ -27,6 +27,7 @@ import type {
   WorkHealth,
 } from "@/lib/operate/scheduled-jobs/work-model";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { useT } from "@/lib/i18n/use-t";
 
 import { EditScheduleDialog } from "./EditScheduleDialog";
 import { ScheduleWindowChart } from "./ScheduleWindowChart";
@@ -134,6 +135,7 @@ function Td({ children, className }: { children: React.ReactNode; className?: st
 const ATTENTION: WorkHealth[] = ["error", "overdue", "never"];
 
 export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWorkView[] }) {
+  const t = useT("admin");
   const [jobs, setJobs] = useState<ScheduledWorkView[]>(initialJobs);
   const [banner, setBanner] = useState<Banner>(null);
   const [pendingJob, setPendingJob] = useState<string | null>(null);
@@ -514,7 +516,7 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                         )}
                         {job.lastRunSummary && (
                           <details className="text-dpf-caption mt-1 max-w-xs">
-                            <summary className="cursor-pointer" style={{ color: "var(--dpf-accent)" }}>Last result</summary>
+                            <summary className="cursor-pointer" style={{ color: "var(--dpf-accent)" }}>{t("scheduledWork.lastResult")}</summary>
                             <p className="mt-1" style={{ color: "var(--dpf-muted)" }}>{job.lastRunSummary}</p>
                           </details>
                         )}
