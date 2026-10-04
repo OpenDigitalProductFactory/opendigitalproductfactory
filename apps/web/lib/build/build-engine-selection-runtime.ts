@@ -112,6 +112,10 @@ export async function resolveBuildEngineSelection(
       .filter((entry) => entry[1].length > 0),
   );
   const structuralProviders = providers.filter((provider) => {
+    // Automatic mode ranks all qualified alternatives. A saved preference is
+    // not a hard provider pin: retaining only that provider can discard the
+    // healthy local fallback when the preferred account is unavailable.
+    if (opts.policy.mode === "auto") return true;
     if (provider.cliEngine === "claude" || provider.cliEngine === "codex" || provider.cliEngine === "grok" || provider.cliEngine === "opencode") {
       const preferred = preferredProviderIds.get(provider.cliEngine);
       return !preferred || preferred === provider.providerId;
@@ -183,7 +187,9 @@ export async function resolveBuildEngineSelection(
     return [{
       engine,
       providerId: provider.providerId,
-      modelId: configuredModelForEngine(engine, config),
+      modelId: engine === "agentic" || preferredProviderIds.get(engine) === provider.providerId
+        ? configuredModelForEngine(engine, config)
+        : null,
       local: providerIsLocal(provider),
       registered: engine === "agentic" || engineRow !== undefined,
       present: engine === "agentic" || engineRow?.state?.present === true,

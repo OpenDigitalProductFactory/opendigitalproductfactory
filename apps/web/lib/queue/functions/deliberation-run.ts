@@ -6,7 +6,7 @@
 // ships it through the queue.
 //
 // Responsibilities:
-//   1. Mark TaskRun.status = "active" at start (idempotent; orchestrator
+//   1. Mark TaskRun.status = "working" at start (idempotent; orchestrator
 //      already sets it on bootstrap, but the resume-path may not have).
 //   2. Wrap pipeline-v2 with a BranchDispatcher instance so the
 //      orchestrator can dispatch each branch through the existing routing
@@ -18,8 +18,11 @@
 
 import { resolveLocalServedContextTokens } from "@/lib/inference/local-model-context-reconcile";
 import { jobs } from "@/lib/jobs";
+import type { Prisma } from "@dpf/db";
 import { gateBetweenSteps, type GateBetweenStepsRunner } from "../quiescence-gates";
 import { sealDeliberationOnRoom } from "@/lib/deliberation/deliberation-room-bridge.server";
+import { describeCapacityDeferral } from "@/lib/build/capacity-deferral";
+import { withInferenceOrigin } from "@/lib/inference/inference-admission";
 
 /* -------------------------------------------------------------------------- */
 /* Public input                                                               */
@@ -40,7 +43,7 @@ export type RunDeliberationInput = {
 /* Pure core                                                                  */
 /* -------------------------------------------------------------------------- */
 
-export async function runDeliberation(input: RunDeliberationInput): Promise<void> {
+export async function runDeliberation(input: RunDeliberationInput): Promise<void | { deferredCapacity: true; message: string }> {
   const { prisma } = await import("@dpf/db");
   const { pushThreadProgress } = await import("@/lib/tak/thread-progress");
   const { synthesizeDeliberation } = await import("@/lib/deliberation/synthesizer");
@@ -87,6 +90,7 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
           workerRole: true,
           status: true,
           routeDecision: true,
+          outputSnapshot: true,
         },
       },
     },
@@ -118,7 +122,7 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
   let branchBudgetUsed = 0;
   /** Each branch's parsed position, keyed by node id, for the synthesizer. */
   const branchPositions = new Map<string, import("@/lib/deliberation/branch-execution").BranchPosition>();
-  const runMeta = (run.metadata ?? {}) as { brief?: unknown; subject?: unknown };
+  const runMeta = (run.metadata ?? {}) as Prisma.InputJsonObject;
   const runBrief = typeof runMeta.brief === "string" ? runMeta.brief : null;
   const runSubject = typeof runMeta.subject === "string" ? runMeta.subject : null;
 
@@ -130,11 +134,30 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
     (b) => b.workerRole === "summarizer",
   );
 
+  // Account for every persisted call before dispatching any resumed work,
+  // including incomplete answers which consumed tokens but supplied no position.
+  if (input.resume) {
+    for (const branch of workerBranches) {
+      const saved = branch.outputSnapshot as { inputTokens?: unknown; outputTokens?: unknown } | null;
+      if (saved) branchBudgetUsed += estimateBranchCostUsd(Number(saved.inputTokens), Number(saved.outputTokens));
+    }
+    budgetHalted = typeof run.budgetUsd === "number" && run.budgetUsd > 0 && branchBudgetUsed >= run.budgetUsd;
+  }
+
   for (const branch of workerBranches) {
     // Resume: skip already-completed branches.
     if (input.resume && branch.status === "completed") {
+      const saved = branch.outputSnapshot as { raw?: unknown; providerId?: unknown; modelId?: unknown; inputTokens?: unknown; outputTokens?: unknown } | null;
+      if (saved && typeof saved.raw === "string") {
+        const { parseBranchPosition } = await import("@/lib/deliberation/branch-execution");
+        branchPositions.set(branch.id, parseBranchPosition(saved.raw));
+        if (typeof saved.providerId === "string") priorProviderIds.push(saved.providerId);
+        if (typeof saved.modelId === "string") priorModelIds.push(saved.modelId);
+      }
       continue;
     }
+    if (input.resume && branch.status === "failed" &&
+      (branch.outputSnapshot as { error?: unknown } | null)?.error === "incomplete-answer") continue;
     if (budgetHalted) {
       await prisma.taskNode.update({
         where: { id: branch.id },
@@ -247,11 +270,30 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
         subject: runSubject,
       });
 
-      const called = await routeAndCall(turn.messages, turn.systemPrompt, "internal", {
+      const called = await withInferenceOrigin("autonomous", () => routeAndCall(turn.messages, turn.systemPrompt, "internal", {
         taskType: contract.taskType,
         ...(providerId ? { preferredProviderId: providerId } : {}),
         ...(modelId ? { preferredModelId: modelId } : {}),
-      });
+      }));
+
+      branchBudgetUsed += estimateBranchCostUsd(called.inputTokens, called.outputTokens);
+      budgetHalted = typeof run.budgetUsd === "number" && run.budgetUsd > 0 && branchBudgetUsed >= run.budgetUsd;
+      if (called.truncated || !called.content.trim()) {
+        await prisma.taskNode.update({
+          where: { id: branch.id },
+          data: { status: "failed", completedAt: new Date(),
+            routeDecision: JSON.parse(JSON.stringify(decision)),
+            outputSnapshot: { error: "incomplete-answer", truncated: called.truncated ?? false,
+              raw: called.content, providerId: called.providerId, modelId: called.modelId,
+              inputTokens: called.inputTokens, outputTokens: called.outputTokens },
+          },
+        });
+        await pushThreadProgress(input.threadId, input.taskRunId, {
+          type: "deliberation:branch_completed", deliberationRunId: run.id,
+          branchNodeId: branch.id, role: roleId, success: false,
+        });
+        continue;
+      }
 
       const position = parseBranchPosition(called.content);
 
@@ -275,7 +317,6 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
       branchPositions.set(branch.id, position);
       // Budget is enforced on observed usage rather than a placeholder, so a
       // cap actually halts a panel instead of reading as free.
-      branchBudgetUsed += estimateBranchCostUsd(called.inputTokens, called.outputTokens);
 
       await pushThreadProgress(input.threadId, input.taskRunId, {
         type: "deliberation:branch_completed",
@@ -295,6 +336,17 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
         budgetHalted = true;
       }
     } catch (err) {
+      const deferral = describeCapacityDeferral(err);
+      if (deferral) {
+        await prisma.taskNode.update({ where: { id: branch.id },
+          data: { status: "queued", completedAt: null } });
+        await prisma.deliberationRun.update({ where: { id: run.id },
+          data: { metadata: { ...runMeta, capacityDeferred: true, capacityMessage: deferral.message } } });
+        await pushThreadProgress(input.threadId, input.taskRunId, {
+          type: "deliberation:queued", deliberationRunId: run.id, patternSlug: run.pattern.slug,
+        });
+        return { deferredCapacity: true, message: deferral.message };
+      }
       const message = err instanceof Error ? err.message : String(err);
       console.warn(
         `[deliberation/runner] branch dispatch failed run=${run.id} branch=${branch.id}: ${message}`,
@@ -323,6 +375,9 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
     where: { id: run.id },
     data: {
       metadata: {
+        ...runMeta,
+        capacityDeferred: false,
+        capacityWaitExhausted: false,
         requestedDiversity: run.diversityMode,
         actualDiversity,
         budgetHalted,
@@ -330,11 +385,7 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
     },
   });
 
-  // Collect branch artifacts for the synthesizer. For this release, branch
-  // content is NOT yet generated — endpoint calls happen when the route
-  // decision is invoked by the caller. The synthesizer is given the branch
-  // roster so it can record an honest consensus state (and the build UI
-  // can see which branches contributed).
+  // Completed positions include persisted answers rehydrated on resume.
   const completedWorkers = await prisma.taskNode.findMany({
     where: {
       deliberationRunId: run.id,
@@ -470,10 +521,30 @@ export const deliberationRun = jobs.createFunction(
 
     const data = event.data as unknown as RunDeliberationInput;
     const resume = event.name === "deliberation/run.resume";
-    await step.run("run-deliberation", async () => {
-      await runDeliberation({ ...data, resume });
-    });
-    return { ok: true };
+    for (let attempt = 0; attempt <= 10; attempt++) {
+      const result = await step.run(`run-deliberation-${attempt}`, () =>
+        runDeliberation({ ...data, resume: resume || attempt > 0 }));
+      if (!result?.deferredCapacity) return { ok: true };
+      if (attempt === 10) {
+        await step.run("park-capacity-deferred-deliberation", async () => {
+          const { prisma } = await import("@dpf/db");
+          const parkedRun = await prisma.deliberationRun.findUnique({ where: { id: data.deliberationRunId }, select: { metadata: true } });
+          await prisma.deliberationRun.update({ where: { id: data.deliberationRunId },
+            data: { metadata: { ...((parkedRun?.metadata ?? {}) as Prisma.InputJsonObject), capacityDeferred: true, capacityWaitExhausted: true, capacityMessage: result.message } } });
+          const { isBootstrappedDeliberationTaskRunId } = await import("@/lib/deliberation/bootstrapped-task-run");
+          const tr = await prisma.taskRun.findUnique({ where: { taskRunId: data.taskRunId }, select: { routeContext: true } });
+          if (tr?.routeContext === "deliberation" || isBootstrappedDeliberationTaskRunId(data.taskRunId)) {
+            await prisma.taskRun.updateMany({ where: { taskRunId: data.taskRunId, status: { in: ["working", "queued"] } },
+              data: { status: "input-required", progressPayload: { message: result.message } } });
+          }
+        });
+        return { ok: false, deferredCapacity: true };
+      }
+      await step.sleep(`wait-local-capacity-${attempt}`, "30s");
+      const retryGate = await gateBetweenSteps(step as unknown as GateBetweenStepsRunner, `deliberation-retry-${attempt}`);
+      if (retryGate.reason) return { skipped: true, reason: retryGate.reason };
+    }
+    return { ok: false };
   },
 );
 
