@@ -97,7 +97,7 @@ import {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.prisma.agent.findFirst.mockResolvedValue({ toolGrants: [] });
+  mocks.prisma.agent.findFirst.mockResolvedValue({ toolGrants: [], toolGrantRevocations: [] });
   mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
   // BI-D1CD3A11: the idempotent claim (updateMany) runs before execution;
   // default to a WON claim so existing tests exercise the work. Per-test
@@ -267,7 +267,7 @@ describe("extractHiveScoutSummary", () => {
 });
 
 function arrangeScheduledTask() {
-  mocks.prisma.agent.findFirst.mockResolvedValue({ toolGrants: [{ grantKey: "web_search" }] });
+  mocks.prisma.agent.findFirst.mockResolvedValue({ toolGrants: [{ grantKey: "web_search" }], toolGrantRevocations: [] });
   mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
     taskId: "discovery-taxonomy-gap-triage-daily",
     agentId: "inventory-specialist",

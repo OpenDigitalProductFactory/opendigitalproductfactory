@@ -1,4 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Tool exposure tests model provisioned authoritative rows, not runtime fallback.
+vi.mock("@dpf/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dpf/db")>();
+  return { ...actual, prisma: { ...actual.prisma, agent: { findFirst: async ({ where }: { where: { agentId?: string } }) => {
+    const { getAgentToolGrants } = await import("./tak/agent-grants");
+    const grants = getAgentToolGrants(where.agentId ?? "");
+    return grants ? { toolGrants: grants.map((grantKey) => ({ grantKey })), toolGrantRevocations: [] } : null;
+  } } } };
+});
 import {
   buildEndpointTestRunRequest,
   executeTool,
