@@ -9,6 +9,8 @@ Design: docs/superpowers/specs/2026-10-04-backlog-triage-efficiency-design.md.
 
 Delivery preflight also requires the new disclosure label to use the admin message catalog and provider, explicit active status frontmatter, and normalization of Windows glob fixture paths in the instruction-coverage test to match its existing production reader. These bounded verification repairs accompany this delivery; they add no triage behavior or authorization.
 
+The installer environment fixtures also compare default-home CA bundle paths using the shell's normalized temporary-home spelling; Git Bash converts the supplied Windows HOME while Node retains the native path. Explicit configured bundle paths and all persistence/idempotency assertions remain checked.
+
 ## Acceptance
 
 - AC-1: An unchanged item already assessed as needing review receives no further scheduled model request; relevant input or policy changes make it eligible again.
