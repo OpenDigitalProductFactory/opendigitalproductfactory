@@ -157,13 +157,17 @@ Docker endpoint/project, exact service/container identities, image content IDs,
 configuration and mount hashes, allowed actions and expiry. Authorization and
 independent-verification receipts each bind that plan digest and identify their
 separate signer. Local trusted operator and verifier public keys must already
-exist, or be provisioned explicitly by the operator through the bootstrap path;
+be bound by the governed recovery delegation described below;
 the executor cannot enroll its own signer or manufacture a receipt. Organization
 CA identity alone is not proof that a person may authorize recovery.
 
-`SelfUpgradeRun` is the canonical recovery-operation model, identified by the
-same `runId` online and offline. Its bootstrap adapter, not the portal, is the
-sole writer of offline execution facts. The planner writes the immutable plan;
+For an offline recovery, the signed recovery envelope and append-only journal
+are the canonical execution facts, identified by one `runId`. `SelfUpgradeRun`
+is their derived online projection, never a second authority for those facts.
+Normal online upgrades retain their existing `SelfUpgradeRun` writer; an offline
+recovery is a distinct recovery run linked to its predecessor, not a competing
+writer of that predecessor. The bootstrap adapter is the sole writer of offline
+execution facts. The planner writes the immutable plan;
 the operator signer writes authorization; a different verifier signer writes
 the verification receipt. None can rewrite another actor's artifact. A single
 bootstrap executor holds the existing install-state lock plus a token-owned
@@ -195,20 +199,63 @@ is missing, the adapter verifies the kit's installation binding against Docker
 daemon/project/container labels and preserved mount identities; disagreement
 stops intervention. It never silently selects another installation or daemon.
 
-Trust enrollment is a separate, explicit operator/bootstrap ceremony, usable
-without the portal: an OS-authenticated installation administrator pins an
-operator public-key fingerprint and a distinct independent-verifier fingerprint,
-then both sign the install-bound trust manifest. Keys supplied only by the
-executor are not accepted. Existing organization/operator key custody is reused;
-the recovery tool does not generate or retain signing private keys. The signed
-manifest declares roles, install binding, validity, monotonically increasing
-epoch and revoked fingerprints. Rotation requires the current operator and
-independent verifier to sign the successor manifest; an older epoch cannot
-replace a locally recorded newer epoch. Emergency replacement of lost trust is
-a new independently witnessed enrollment, never an executor fallback. Offline
-verification uses this pre-positioned manifest and its expiry, not an unavailable
-approval-store query. Missing, expired or contradictory trust stops safely and
-names the required out-of-band repair rather than inventing authorization.
+Authority remains owned by DPF's existing Principal, capability/grant and governed
+approval machinery. Extend that machinery to issue a bounded recovery delegation
+while healthy; do not introduce a bootstrap-owned identity enrollment ceremony.
+The delegation binds existing operator and independent-verifier principal IDs to
+their public-key fingerprints, installation identity, allowed recovery operations,
+validity interval, authority decision and approval references, and policy version.
+The existing GPP claim model supplies these authority and exact-argument bindings;
+its current database-backed HMAC handle is not an offline verification protocol.
+Exporting a self-contained, publicly verifiable recovery delegation is an explicit
+implementation obligation, with issuer key custody outside the recovery executor.
+It cannot be represented as an already-supported use of `gpp1` handles.
+
+The installer retains the issuer verification-key fingerprint and latest accepted
+delegation epoch in canonical install state through `install-state-transaction`.
+The recovery kit carries a signed projection of that delegation, never an editable
+grant list. An offline administrator can sign a new exact recovery plan only within
+the pre-authorized delegation, and the distinct verifier signs that same plan.
+Bootstrap verifies both signatures and the issuer chain locally. It cannot enroll
+new principals, widen operations, renew expiry, or replace the issuer key. Key
+rotation, revocation and delegation renewal remain governed online authority
+operations; exporters retain their decision references and monotonic epoch.
+Offline revocation visibility is bounded by the delegation's explicit expiry:
+the design does not promise access to revocations issued during disconnection.
+The issuing gate must explicitly approve the validity interval, permitted operations
+and offline revocation exposure; no implicit lifetime or unlimited delegation is
+accepted. Each exact plan expires no later than its delegation and has one execution
+identity. Missing or expired delegation stops without mutation. Loss of all retained
+trust is an authority-reenrollment incident outside this automated recovery path,
+not permission for the executor to create new trust.
+
+### Shared contract and reconciliation ownership
+
+Implement the closed, versioned transport schema at
+`scripts/installer/offline-self-upgrade-recovery.schema.json`, beside the existing
+install-state schemas. The bootstrap producer, verifier and online importer must
+all consume this same schema; TypeScript declarations are generated from it and
+checked for drift, not separately maintained. This is a proposed extension of the
+installer contract, not an existing file or a new database model. Schema version 1
+defines the plan, delegation projection, two plan-signature receipts, journal entry
+and terminal report. Actions, phases and gate outcomes are closed enums; unknown
+fields, unsupported versions and noncanonical encodings are refused before effects.
+Use the existing shared canonical JSON implementation for signed bytes.
+
+The importer verifies signatures, complete sequence and digest continuity and then
+derives status and completion evidence from the terminal report. It never accepts
+a caller-supplied replacement status. Re-importing the same run and terminal digest
+returns the same projection; a different terminal digest is a conflict requiring
+investigation. An incomplete journal can be retained as diagnostic evidence but
+cannot mark a run restored or authorize another attempt. Reconciliation never
+rewrites the original journal, predecessor run or unavailable gate outcomes.
+
+The authority exporter, independent verifier and recovery executor have distinct
+responsibilities and signing keys. Schema conformance tests must run the actual
+producer and importer against the same accepted/rejected fixtures, including
+unknown phases, changed plan hashes, expired delegation, signer-role collisions,
+changed installation binding and conflicting replay. These tests and the signed
+delegation implementation must pass before an offline execution adapter is enabled.
 
 The journal is append-only, sequence-numbered and hash-linked, written and flushed
 before each consequential step. Restrictive permissions and symlink rejection
