@@ -32,8 +32,14 @@ The live item states:
 
 ## Delivery boundary and backlog coverage
 
-Atomic deliverable `vitest5-toolchain` maps to BI-BB992B4D with no dependencies. Runner, provider, config compatibility and verification are one revert: none is useful independently. Requirement reference: `Acceptance`. Contract reference: `Existing contract and research`. Flow reference: `Ordered implementation`. Verification reference: `Verification and rollback`. Record governed coverage for this immutable design before source implementation. This work excludes FullCalendar 7, which belongs to BI-89604587.
+Atomic deliverable `vitest5-toolchain` maps to BI-BB992B4D with no dependencies. Runner, provider, config compatibility and verification are one revert: none is useful independently. Requirement reference: `Acceptance`. Contract reference: `Existing contract and research`. Flow reference: `Ordered implementation`. Verification reference: `Verification and rollback`. Coverage receipt `cmuu21vb100bj01r7m94va8nk` binds atomic deliverable `vitest5-toolchain` to BI-BB992B4D, with no dependencies, at commit `c0570df7a80a119e798a5f0d5bd6934240bbabe3`, blob `0172773e1d268d1125b85420a1667afcaa479df5`. This work excludes FullCalendar 7, which belongs to BI-89604587.
 
 ## Verification and rollback
 
 Run catalog version coherence, stable lock regeneration, SBOM/singleton and supply-chain guards, actual coverage generation and threshold smoke, affected config/mock tests, both typechecks, exhaustive local CI, production build, PR health and protected merge queue. Existing skips stay explicit. Infrastructure refusal is unrun, never passed. The current application coverage contract is observation-only; this upgrade must not invent lower thresholds or drop owned source files. If a regression cannot be repaired, retain the old runner/provider pair and leave the PR open with evidence. After merge, revert the coordinated manifests, lock and config through a DCO-signed PR if required. No runtime deployment is part of this migration.
+
+## Executed compatibility probes
+
+The requested `^5.0.1` catalog range resolves the coherent runner/provider family to 5.0.3. Reviewed dependency changes are limited to the toolchain and its transitives, with a stable second fresh-store resolve. Total components fall from 891 to 879; an additional `magic-string` major is required by Vitest versus Tailwind's incompatible 0.30.x range, recorded in the inventory baseline.
+
+The actual v8 provider produced 100% statement, branch, function and line coverage for `format-retention-minimum.ts` using the application config. JSON contained the source file and excluded its test. A deliberately partial run produced 45.45% line coverage and exited 1 against a 100% threshold; the complete nine-test run met the same threshold and exited 0. Four representative web/config/component files passed 16 tests; the database discovery-config guard passed two tests. These focused probes do not replace the required exhaustive gate. Existing configuration has not been relaxed.
