@@ -2,6 +2,14 @@
   "note": "Accepted vulnerability advisories for scripts/sbom/scan-dependencies.mjs (the local Dependabot-equivalent). Each entry needs a real `reason`; `expires` (YYYY-MM-DD) forces re-review — past expiry the finding re-surfaces and the gate can fail again. This is the local mirror of Dependabot/CodeQL dismiss-with-justification. See docs/architecture/dependency-reduction-routine.md.",
   "accepted": [
     {
+      "id": "GHSA-vfj7-8cjw-p6xm",
+      "aliases": ["CVE-2026-93687"],
+      "package": "braces@3.0.3",
+      "severity": "high",
+      "reason": "Trusted-pattern-only mobile build tooling (BI-0AE77798). The platform lockfile contains no braces. In apps/mobile/pnpm-lock.yaml the only direct consumers are micromatch@4.0.8 and chokidar@3.6.0, reached through Metro file-map and Tailwind/fast-glob build-time file discovery. apps/mobile/tailwind.config.ts supplies three repository-controlled globs; metro.config.js uses Expo defaults and a fixed ./global.css NativeWind input. No mobile app/src/dynamic source imports braces, micromatch, chokidar or fast-glob. The advisory requires an attacker-controlled deeply nested brace PATTERN; matching a filename against these fixed patterns does not grant pattern control. No patched release is listed by the GitHub advisory as of 2026-10-03. Re-evaluate on a patch release, a Metro/Tailwind upgrade, or before accepting external glob patterns or exposing the development server to untrusted callers.",
+      "expires": "2026-11-02"
+    },
+    {
       "id": "GHSA-h67p-54hq-rp68",
       "aliases": [
         "CVE-2026-53550"

@@ -18,7 +18,7 @@ packages:
 # below, so the deployed service trees carry plain ranges. How to add one:
 # docs/architecture/dependency-reduction-routine.md.
 catalog:
-  "@axe-core/playwright": ^4.12.1
+  "@axe-core/playwright": ^4.13.0
   "@types/node": ^26.6.2
   "@types/pg": ^8.23.1
   "@vitest/coverage-v8": ^4.1.11
