@@ -1,5 +1,16 @@
 # MCP tool authorization runbook
 
+**Review retries after permission vocabulary changes.** A bound independent review
+keeps its original task, request key and saved authority scope. Adding an unrelated
+grant to an OAuth public scope must not make the same immutable review a different
+request. Replay may retain the saved scope only when every saved grant is still
+available, exact tool and backlog boundaries are unchanged, and the original
+request digest matches with that scope. Removed grants, changed artifacts and
+changed intent still refuse replay. Current connection and coworker authorization
+remain mandatory; this reconciliation neither expands task authority nor revives
+canceled work. BI-224E6E82 exposed this when two unrelated read grants were added
+while a design review was waiting for its receipt.
+
 **OAuth identity and continuing authority.** The approval binds the human,
 client, resource and approved assistant role. The server resolves that role
 before the consent screen renders (BI-05E0EA33): it takes the eligible set,
