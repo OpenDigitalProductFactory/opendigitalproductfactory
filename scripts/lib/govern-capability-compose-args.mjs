@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { scriptArgv } from './script-argv.mjs';
 
 const EXPLICIT_OVERLAYS = new Set(["promote", "dev", "integration-test", "linux-monitoring", "linux-host-network"]);
 const COMPATIBILITY_ALIASES = new Map([
@@ -100,7 +101,7 @@ export function mountOverride(config, mounts, { composeRoot, installRoot } = {})
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const { positionals: [composeRoot, installRoot] } = parseArgs({ allowPositionals: true });
+    const { positionals: [composeRoot, installRoot] } = parseArgs({ args: scriptArgv(), allowPositionals: true });
     const config = JSON.parse(readFileSync(0, 'utf8'));
     const hasBinds = Object.values(config.services ?? {}).some((service) => service.volumes?.some((volume) => volume.type === 'bind'));
     const mounts = hasBinds ? JSON.parse(execFileSync('docker', ['inspect', process.env.HOSTNAME, '--format', '{{json .Mounts}}'], { encoding: 'utf8' })) : [];
