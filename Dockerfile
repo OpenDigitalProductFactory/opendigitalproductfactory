@@ -278,7 +278,7 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     mkdir -p /dpf-release-assets/scripts/pki && cp scripts/pki/edge-client.tpl /dpf-release-assets/scripts/pki/ && \
     cp uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat /dpf-release-assets/ && \
     cp scripts/bootstrap-organization-pki.ps1 scripts/publish-host-gpu.ps1 /dpf-release-assets/scripts/ && \
-    cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
+    cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/script-argv.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
     cp scripts/installer/local-model-policy.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/validate-install-state.mjs /dpf-release-assets/scripts/installer/ && \
@@ -497,6 +497,7 @@ COPY scripts/installer/install-state.v1.schema.json /promoter/scripts/installer/
 COPY scripts/installer/install-state.v2.schema.json /promoter/scripts/installer/install-state.v2.schema.json
 COPY scripts/lib/resolve-capability-compose-profiles.mjs /promoter/scripts/lib/resolve-capability-compose-profiles.mjs
 COPY scripts/lib/govern-capability-compose-args.mjs /promoter/scripts/lib/govern-capability-compose-args.mjs
+COPY scripts/lib/script-argv.mjs /promoter/scripts/lib/script-argv.mjs
 COPY scripts/lib/capability-state-hash.mjs /promoter/scripts/lib/capability-state-hash.mjs
 COPY scripts/capability-service-catalog.generated.json /promoter/scripts/capability-service-catalog.generated.json
 
