@@ -19,6 +19,7 @@
 // untouched.
 
 import { prisma } from "@dpf/db";
+import { isCurrentUserActive } from "@/lib/govern/current-user-context";
 
 import {
   PrincipalAliasConflictError,
@@ -197,6 +198,12 @@ export async function authorizePrincipalForSession(
   userId: string,
   db: AuthenticationDb = prisma,
 ): Promise<PrincipalAuthenticationResult> {
+  const user = await db.user.findUnique({ where: { id: userId },
+    select: { isActive: true, automationExpiresAt: true } });
+  if (!isCurrentUserActive(user)) return {
+    authorized: false, reason: "credential-inactive",
+    detail: "This sign-in has ended. Start a new authorized verification run.",
+  };
   // Materialize the principal if the projection has not caught up. The spine is
   // authoritative, so a missing row is a staleness problem to fix, not grounds
   // to fall back to the User row and re-create the two-root split.

@@ -29,4 +29,14 @@ describe("current human authority", () => {
     mocks.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false, groups: [] });
     expect(can((await currentUserContext("human"))!, "manage_agents")).toBe(false);
   });
+  it("denies an expired verification user even while the session remains active", async () => {
+    mocks.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false, groups: [],
+      automationExpiresAt: new Date(0) });
+    expect(await currentUserContext("fixture")).toBeNull();
+  });
+  it("preserves ordinary users and permits a fixture only before its deadline", async () => {
+    mocks.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false, groups: [],
+      automationExpiresAt: new Date(Date.now() + 60_000) });
+    expect((await currentUserContext("fixture"))?.userId).toBe("fixture");
+  });
 });

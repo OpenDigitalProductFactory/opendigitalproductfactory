@@ -261,6 +261,7 @@ model RuntimeTarget {
 }
 
 model RuntimeVerification {
+  automationUsers         User[]
   id                      String                 @id @default(cuid())
   verificationId          String                 @unique
   kind                    String

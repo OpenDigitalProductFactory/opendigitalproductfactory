@@ -26,7 +26,7 @@ function makeDb(principal: { id: string; principalId: string; status: string } |
     db: {
       principalAlias: { findFirst: vi.fn(async () => (current ? { principal: current } : null)) },
       principal: {},
-      user: {},
+      user: { findUnique: vi.fn(async () => ({ isActive: true, automationExpiresAt: null as Date | null })) },
     },
   };
 }
@@ -38,6 +38,13 @@ beforeEach(() => {
 });
 
 describe("authorizePrincipalForSession — the spine gates the session", () => {
+  it("refuses an expired fixture despite an active principal", async () => {
+    const { db } = makeDb(ACTIVE);
+    db.user.findUnique.mockResolvedValue({ isActive: true, automationExpiresAt: new Date(0) });
+    await expect(authorizePrincipalForSession("fixture", db as never)).resolves.toMatchObject({
+      authorized: false, reason: "credential-inactive",
+    });
+  });
   it("authorizes an active principal", async () => {
     const { db } = makeDb(ACTIVE);
     await expect(authorizePrincipalForSession("user-1", db as never)).resolves.toMatchObject({

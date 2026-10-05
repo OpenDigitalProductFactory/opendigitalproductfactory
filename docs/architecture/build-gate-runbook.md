@@ -1,5 +1,28 @@
 # Build gate runbook
 
+## Isolated verification users
+
+For permission-removal and concurrent-user tests, `issue_ux_verification_sign_in`
+accepts an optional `fixture` with the owning `capsuleId`, active `leaseId`,
+role `profile`, and `slot` (0 or 1). Reuse the returned `runId` for that run.
+This creates ordinary users on development or test installations only, through
+the existing signed-link exchange. It requires current user permissions,
+assistant grants, and admission to the exact workroom. A fixture never grants
+access to another room.
+
+Renewing a link preserves role removals, disabled state, and absolute expiry.
+Five profiles and two slots bound a run to ten accounts; one lease owns one run.
+Sessions end no later than the lease and the original two-hour limit. Fixture
+expiry is checked at current-user authorization even if cleanup has not run.
+
+After testing, cancel and settle the run's tasks and close its rooms through
+their normal actions, then call the same tool with `retireRunId`. Pending work
+is returned explicitly. Completed retirement revokes the fixture connections,
+disables only those accounts, and retains provenance and audit. The existing
+retention sweep provides bounded expiry cleanup. Retire fixtures before rolling
+back code that enforces their expiry. The legacy shared persona remains the
+default when `fixture` is omitted.
+
 CI scopes a pull request from its source head and that head's merge-base with `origin/main`. GitHub's checkout may be a synthetic merge; using its base with the source head includes unrelated main changes as reverse diffs and can turn documentation into exhaustive work. Both comparison endpoints must describe the same source history. Merge-group and other non-PR events retain exhaustive verification.
 
 **Public documentation publication.** CI's `Documentation Publication Build` builds `docs/` with the same [GitHub Pages Jekyll action](https://github.com/actions/jekyll-build-pages) used by legacy Pages publication. It runs for changed documentation or CI configuration on PRs, merge candidates and main; missing comparison history runs the build. Unchanged publication inputs produce a terminal no-build result. The job also checks that malformed Liquid is rejected, and feeds the required `Merge Readiness` aggregate. It only builds: the existing Pages channel still owns deployment. A green build is not evidence that the public site has deployed. Jekyll processes Liquid inside code fences; protect literal examples using its [raw tag guidance](https://jekyllrb.com/docs/liquid/tags/#jekyll-processes-all-liquid-filters-in-code-blocks).

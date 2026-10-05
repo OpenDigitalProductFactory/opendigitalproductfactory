@@ -13,6 +13,7 @@ export {
 // Prisma.DbNull) and a type (for input/output type aliases).
 export { Prisma } from "../generated/client/client";
 export type {
+  AutomationPersonaProfile,
   PrismaClient,
   PayRunStatus,
   PayslipDisbursementStatus,
