@@ -19,7 +19,7 @@ export const SELF_UPGRADE_SENSITIVE_PATH_RULES = Object.freeze([
   // capability projection reached main without the gate ever running
   // (BI-AA6FBAD0). The colocated test derives the closure from Dockerfile.promoter
   // and fails if a newly baked file is not owned here.
-  rule("promoter-image-closure", "promoterClosure", /^(?:Dockerfile|scripts\/(?:capability-service-catalog\.generated\.json|promoter-migration-envelope\.mjs|runtime-transition-authority\.mjs|rotate-runtime-transition-secret\.mjs|governed-teardown\.mjs|salvage-sweep\.mjs)|scripts\/lib\/(?:transition-signing|resolve-capability-compose-profiles|govern-capability-compose-args|capability-state-hash)\.mjs)$/),
+  rule("promoter-image-closure", "promoterClosure", /^(?:Dockerfile|scripts\/(?:capability-service-catalog\.generated\.json|promoter-migration-envelope\.mjs|runtime-transition-authority\.mjs|rotate-runtime-transition-secret\.mjs|governed-teardown\.mjs|salvage-sweep\.mjs)|scripts\/lib\/(?:transition-signing|resolve-capability-compose-profiles|govern-capability-compose-args|script-argv|capability-state-hash)\.mjs)$/),
 ]);
 
 export function normalizeRepositoryPath(path) {

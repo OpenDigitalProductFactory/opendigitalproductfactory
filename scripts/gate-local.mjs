@@ -24,6 +24,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { scrubGitRepoLocationEnv } from "./lib/git-hook-env.mjs";
 import { INCLUDE_WORKING_TREE_ENV } from "./lib/git-changed-files.mjs";
+import { scriptArgv } from "./lib/script-argv.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -46,7 +47,7 @@ export const LOCAL_GATES = Object.freeze([
 export function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
     options: { "message-file": { type: "string" }, committed: { type: "boolean" }, only: { type: "string" } },

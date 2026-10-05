@@ -68,6 +68,7 @@ export function gitInit(dir: string): string {
   mkdirSync(join(dir, "scripts", "lib"), { recursive: true });
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(dir, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "govern-capability-compose-args.mjs"), join(dir, "scripts", "lib", "govern-capability-compose-args.mjs"));
+  copyFileSync(join(REPO_ROOT, "scripts", "lib", "script-argv.mjs"), join(dir, "scripts", "lib", "script-argv.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "capability-state-hash.mjs"), join(dir, "scripts", "lib", "capability-state-hash.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), join(dir, "scripts", "capability-service-catalog.generated.json"));
   execFileSync("git", ["-C", dir, "add", "-A"], { env });
