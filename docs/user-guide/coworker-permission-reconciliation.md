@@ -1,16 +1,23 @@
 # Review coworker permissions
 
 Open Platform > AI Workforce, select a coworker, then open Capabilities.
-Saved tool grants apply to the coworker's canonical identity. Legacy execution
-records may still hold different grants, but they do not control access.
+The **Saved permissions** editor is the single home for granting and removing
+this coworker's permissions. Search for a permission to add it, or choose
+**Remove** beside an assigned permission. Successful changes show a saved notice.
 
-An administrator can select **Review legacy permissions** to compare those
-records. Choose Current or Legacy for each difference, then **Approve choices**.
-The confirmation applies only the choices shown. If permissions changed after
-the preview, reload it and review the changes again. Keeping Current preserves
-the current grant or revocation; selecting Legacy applies that saved state to
-the canonical record. A revoked or deliberately removed grant stays removed
-across provisioning. Legacy records remain available as historical evidence.
+Fresh and already reconciled installs need no extra setup. Upgrades retire
+matching duplicate permission records automatically without adding access.
+Execution aliases remain available for existing skills and service references;
+the original permission decisions are preserved in the authority audit trail.
+
+Only unresolved differences show **Review permission differences**. An
+administrator can keep current permissions for all differences or use the
+previous permissions for all, then open **Review individually** to override
+individual choices. **Approve choices** asks for confirmation before applying
+the displayed selection and retiring the previous permission record. Current
+access remains in place until approval. If permissions changed after preview,
+review again: stale choices are cleared and cannot be resubmitted. Removed
+permissions stay removed through reconnects and upgrades.
 
 The next request uses the current saved permissions, including after reconnect.
 A saved grant alone does not guarantee access: token scope, human role, room

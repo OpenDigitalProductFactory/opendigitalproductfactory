@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-9BAAD504 repairs duplicate permission authority without schema changes. Existing Agent execution aliases and FK references remain. Matching grants and non-widening revocations retire only after bounded per-key original provenance is written into the existing ToolExecution authority audit ledger. Conflicts and missing canonical owners remain unchanged. Revocation-only rows move intact to the canonical owner; no grants are unioned. Reruns are no-ops. Boot seeding no longer recreates alias permissions. Administrator conflict approval uses a state-bound serializable transaction, preserving original selected actor/time and approval identity in the audit. Rollback is a code revert plus reviewed recovery from audit, never automatic re-granting. Existing model confidentiality and retention declarations remain unchanged; ToolExecution provenance follows its governed authority-audit retention floors.",
+  "changes": [
+    { "kind": "model", "assetId": "AgentToolGrant", "lifecycleDisposition": "domain-lifecycle-managed", "fields": [] },
+    { "kind": "model", "assetId": "AgentToolGrantRevocation", "lifecycleDisposition": "domain-lifecycle-managed", "fields": [] },
+    { "kind": "model", "assetId": "ToolExecution", "lifecycleDisposition": "time-bounded-retention", "fields": [] }
+  ]
+}

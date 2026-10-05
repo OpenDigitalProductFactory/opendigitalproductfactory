@@ -14,6 +14,12 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { confirmDialog } from "@/components/ui/Dialog";
 import { AuthorityReconciliation } from "./AuthorityReconciliation";
+import type { GrantReconciliationPreview } from "@/lib/tak/coworker-grant-reconciliation";
+import { Button } from "@/components/ui/Button";
+import { Surface } from "@/components/ui/Surface";
+import { Notice } from "@/components/ui/report-kit/Notice";
+import { SearchableSelect } from "@/components/ui/report-kit/SearchableSelect";
+import { CollapsibleList } from "@/components/ui/report-kit/CollapsibleList";
 import { useT } from "@/lib/i18n/use-t";
 import {
   grantCoworkerTool,
@@ -41,20 +47,9 @@ type Props = {
   /** Every active SkillDefinition in the catalog, for the add-select. */
   catalogSkills: CatalogSkill[];
   canWrite: boolean;
+  permissionPreview?: GrantReconciliationPreview | null;
+  permissionPreviewError?: string | null;
 };
-
-const chip = (held: boolean): React.CSSProperties => ({
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  fontSize: 10,
-  padding: "2px 6px 2px 8px",
-  borderRadius: 4,
-  border: "1px solid var(--dpf-warning)",
-  color: "var(--dpf-warning)",
-  fontFamily: "monospace",
-  whiteSpace: "nowrap",
-});
 
 const sel: React.CSSProperties = {
   padding: "5px 8px",
@@ -99,11 +94,14 @@ export function CapabilitiesEditor({
   assignedSkills,
   catalogSkills,
   canWrite,
+  permissionPreview = null,
+  permissionPreviewError = null,
 }: Props) {
   const router = useRouter();
   const t = useT("setup");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [grantToAdd, setGrantToAdd] = useState("");
   const [skillToAdd, setSkillToAdd] = useState("");
   // Track the specific row being mutated so only it shows a busy state.
@@ -116,15 +114,16 @@ export function CapabilitiesEditor({
 
   function run(key: string, fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
+    setSavedMessage(null);
     setBusy(key);
     startTransition(async () => {
-      const res = await fn();
-      setBusy(null);
-      if (!res.ok) {
-        setError(res.error ?? "Action failed");
-        return;
-      }
-      router.refresh();
+      try {
+        const res = await fn();
+        if (!res.ok) { setError(res.error ?? "Action failed"); return; }
+        setSavedMessage(t(key.startsWith("grant:") ? "coworkerPermissions.changeSaved" : "coworkerPermissions.skillSaved"));
+        router.refresh();
+      } catch (err) { setError(err instanceof Error ? err.message : "Action failed"); }
+      finally { setBusy(null); }
     });
   }
 
@@ -167,8 +166,9 @@ export function CapabilitiesEditor({
   return (
     <div>
       {error && (
-        <div style={{ marginBottom: 10, fontSize: 11, color: "var(--dpf-error)" }}>{error}</div>
+        <div role="alert" className="mb-3"><Notice variant="error">{error}</Notice></div>
       )}
+      {savedMessage && <div role="status" className="mb-3"><Notice variant="success">{savedMessage}</Notice></div>}
 
       {/* Catalog skills */}
       <div style={{ marginBottom: 18 }}>
@@ -240,58 +240,46 @@ export function CapabilitiesEditor({
       </div>
 
       {/* Tool grants */}
-      <div>
-        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 8 }}>
+      <Surface padding="sm" className="space-y-3 text-dpf-body">
+        <h3 className="font-dpf-semibold text-dpf-text">
           {t("coworkerPermissions.savedGrants")}
-        </div>
+        </h3>
+        <p className="text-dpf-muted">{t("coworkerPermissions.summary")}</p>
         {heldGrants.length > 0 ? (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: canWrite ? 10 : 0 }}>
+          <CollapsibleList previewCount={3} listClassName="grid gap-2 sm:grid-cols-2">
             {[...heldGrants].sort().map((key) => (
-              <span key={key} style={chip(true)}>
-                {key}
+              <li key={key} className="flex items-center justify-between gap-3 rounded-dpf-md border border-dpf-border p-3 text-dpf-text">
+                <span className="min-w-0 break-words">{key.replaceAll("_", " ")}</span>
                 {canWrite && (
-                  <button
+                  <Button variant="ghost" size="sm"
                     type="button"
                     onClick={() => onRemoveGrant(key)}
-                    disabled={pending && busy === `grant:${key}`}
+                    disabled={pending}
                     aria-label={`Revoke ${key}`}
                     title="Revoke grant"
-                    style={removeBtn}
                   >
-                    {busy === `grant:${key}` ? "…" : "✕"}
-                  </button>
+                    {busy === `grant:${key}` ? t("coworkerPermissions.saving") : t("coworkerPermissions.remove")}
+                  </Button>
                 )}
-              </span>
+              </li>
             ))}
-          </div>
+          </CollapsibleList>
         ) : (
-          <div style={{ fontSize: 11, color: "var(--dpf-muted)", fontStyle: "italic", padding: "8px 0" }}>
-            No tool grants assigned
-          </div>
+          <p className="text-dpf-muted">{t("coworkerPermissions.empty")}</p>
         )}
 
         {canWrite && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <select
-              value={grantToAdd}
-              onChange={(e) => setGrantToAdd(e.target.value)}
-              disabled={pending || grantOptions.length === 0}
-              style={sel}
-            >
-              <option value="">
-                {grantOptions.length === 0 ? "All grants held" : "Add a tool grant…"}
-              </option>
-              {grantOptions.map((k) => (
-                <option key={k} value={k}>{k}</option>
-              ))}
-            </select>
-            <button type="button" onClick={onAddGrant} disabled={pending || !grantToAdd} style={addBtn(pending || !grantToAdd)}>
-              {busy?.startsWith("grant:") && pending ? "Adding…" : "Add grant"}
-            </button>
-          </div>
+          <fieldset disabled={pending} className="flex flex-wrap items-end gap-3">
+            <SearchableSelect label={t("coworkerPermissions.addLabel")} value={grantToAdd} onChange={setGrantToAdd}
+              options={grantOptions.map((key) => ({ value: key, label: key.replaceAll("_", " ") }))}
+              placeholder={t("coworkerPermissions.search")} emptyLabel={t("coworkerPermissions.allAssigned")} className="min-w-0 flex-1" />
+            <Button onClick={onAddGrant} disabled={pending || !grantToAdd}>
+              {busy?.startsWith("grant:") && pending ? t("coworkerPermissions.saving") : t("coworkerPermissions.add")}
+            </Button>
+          </fieldset>
         )}
-        {canWrite && <AuthorityReconciliation agentId={agentBusinessId} />}
-      </div>
+        {canWrite && <AuthorityReconciliation agentId={agentBusinessId} initialPreview={permissionPreview} loadError={permissionPreviewError} />}
+      </Surface>
     </div>
   );
 }

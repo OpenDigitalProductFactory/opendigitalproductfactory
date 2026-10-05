@@ -13,6 +13,7 @@ import {
   type HostMemory,
 } from "./local-model-policy";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 
 /** Check if first-run bootstrap is needed. */
 export async function checkBootstrapNeeded(): Promise<boolean> {
@@ -38,6 +39,19 @@ export async function seedOnboardingAgent(): Promise<void> {
       status: "active",
       delegatesTo: ["AGT-902"],
     },
+  });
+
+  // The slug row is still an execution identity. First-run provisioning must
+  // put permission defaults on its canonical owner, just like the boot seed.
+  const authority = await prisma.agent.upsert({
+    where: { agentId: resolveCanonicalAgentId(agent.agentId) },
+    create: {
+      agentId: resolveCanonicalAgentId(agent.agentId), name: "Onboarding COO",
+      displayName: "Onboarding COO", kind: "orchestrator", tier: 1,
+      type: "onboarding", description: "Guides new platform owners through initial setup.",
+      status: "active", delegatesTo: ["AGT-902"],
+    },
+    update: {},
   });
 
   // Grants for the setup wizard tools the onboarding COO calls:
@@ -66,7 +80,7 @@ export async function seedOnboardingAgent(): Promise<void> {
   // BI-4FA040D5: honor durable revocation tombstones so a re-run of first-run
   // bootstrap does not resurrect a grant the operator revoked.
   const revoked = await prisma.agentToolGrantRevocation.findMany({
-    where: { agentId: agent.id },
+    where: { agentId: authority.id },
     select: { grantKey: true },
   });
   const revokedKeys = new Set(revoked.map((r) => r.grantKey));
@@ -80,7 +94,7 @@ export async function seedOnboardingAgent(): Promise<void> {
   await prisma.agentToolGrant.createMany({
     data: grants
       .filter((grantKey) => !revokedKeys.has(grantKey))
-      .map((grantKey) => ({ agentId: agent.id, grantKey })),
+      .map((grantKey) => ({ agentId: authority.id, grantKey })),
     skipDuplicates: true,
   });
 
@@ -103,6 +117,7 @@ export async function seedOnboardingAgent(): Promise<void> {
   });
 
   await syncAgentPrincipal(agent.agentId);
+  await syncAgentPrincipal(authority.agentId);
 }
 
 /**

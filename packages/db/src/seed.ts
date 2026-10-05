@@ -5,7 +5,7 @@ import { join } from "path";
 import { prisma } from "./client.js";
 import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
-import { resolveAgentIdentity } from "./agent-identity.js";
+import { resolveAgentIdentity, resolveCanonicalAgentId } from "./agent-identity.js";
 import { resolvePrincipalSensitivityClearance } from "./principal-sensitivity.js";
 import { convergeAgentPrincipals, type AgentPrincipalDb } from "./agent-principal-convergence.js";
 import { upsertCoworkerAgentTolerant } from "./coworker-agent-upsert.js";
@@ -327,7 +327,7 @@ async function seedAgents(): Promise<void> {
       });
 
       // Seed AgentToolGrant rows from tool_grants array
-      if (cp.tool_grants) {
+      if (cp.tool_grants && resolveCanonicalAgentId(agent.agentId) === agent.agentId) {
         for (const grantKey of cp.tool_grants) {
           if (revokedGrants.has(`${agent.id}:${grantKey}`)) continue; // BI-4FA040D5: honor durable revocation
           await prisma.agentToolGrant.upsert({
@@ -1206,7 +1206,11 @@ async function seedCoworkerAgents(): Promise<void> {
       );
     }
 
-    const grants = HARDCODED_COWORKER_GRANTS[agentId];
+    // Execution aliases retain their Agent row, skills and FK consumers, but
+    // never receive a second permission authority. Do not union alias defaults
+    // into canonical defaults: that would widen access on existing installs.
+    const grants = resolveCanonicalAgentId(agent.agentId) === agent.agentId
+      ? HARDCODED_COWORKER_GRANTS[agentId] : undefined;
     if (grants) {
       for (const grantKey of grants) {
         if (revokedGrants.has(`${agent.id}:${grantKey}`)) continue; // BI-4FA040D5: honor durable revocation
@@ -1237,6 +1241,7 @@ async function seedCoworkerAgents(): Promise<void> {
   for (const [agentId, grants] of Object.entries(ONBOARDING_AGENT_GRANTS)) {
     const agent = await prisma.agent.findUnique({ where: { agentId } });
     if (!agent) continue; // Not yet bootstrapped — first-run flow will seed it with grants
+    if (resolveCanonicalAgentId(agent.agentId) !== agent.agentId) continue;
     for (const grantKey of grants) {
       if (revokedGrants.has(`${agent.id}:${grantKey}`)) continue; // BI-4FA040D5: honor durable revocation
       await prisma.agentToolGrant.upsert({

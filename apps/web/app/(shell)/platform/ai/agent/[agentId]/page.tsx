@@ -13,6 +13,7 @@ import { auth } from "@/lib/auth";
 import { can, getGrantedCapabilities } from "@/lib/permissions";
 import { AgentModelRoutingCard } from "@/components/platform/AgentModelRoutingCard";
 import { CapabilitiesEditor } from "@/components/platform/coworker-record/CapabilitiesEditor";
+import { previewCoworkerGrantReconciliation } from "@/lib/tak/coworker-grant-reconciliation";
 import { RecordActionsMenu } from "@/components/platform/coworker-record/RecordActionsMenu";
 import { CoworkerPriorityNote } from "@/components/platform/coworker-record/CoworkerPriorityNote";
 import { CoworkerProactivityNote } from "@/components/platform/coworker-record/CoworkerProactivityNote";
@@ -381,6 +382,10 @@ export default async function AgentDetailPage({
       : { state: "not-configured" },
     services: record.services,
   });
+  const permissionReview = canWrite ? await previewCoworkerGrantReconciliation(record.authority.agentId)
+    .then((preview) => ({ preview, error: null }))
+    .catch(() => ({ preview: null, error: "Permission review could not be loaded. Try reviewing again." }))
+    : { preview: null, error: null };
   const capabilitiesEditor = (
     <CapabilitiesEditor
       agentCuid={record.authority.id}
@@ -392,6 +397,8 @@ export default async function AgentDetailPage({
       assignedSkills={assignedSkills}
       catalogSkills={catalogSkillRows}
       canWrite={canWrite}
+      permissionPreview={permissionReview.preview}
+      permissionPreviewError={permissionReview.error}
     />
   );
 
