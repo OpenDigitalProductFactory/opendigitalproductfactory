@@ -1,6 +1,6 @@
 # Provider multi-account delivery plan
 
-Draft: independent design approval and live coverage receipt pending; implementation prohibited until those gates pass.
+Independent design/spec and architecture approval passed. Live coverage and plan review remain pending; implementation prohibited until those gates pass.
 
 Umbrella BI-71ABBD95; Workroom WC-B617B5DD. Canonical [design](../specs/2026-10-04-provider-multi-account-design.md) and [interactive prototype](../specs/2026-10-04-provider-multi-account-prototype.html).
 
@@ -8,13 +8,13 @@ For agentic workers: execute this plan one independently reviewable backlog item
 
 ## Backlog coverage
 
-Decision: decomposed. Live children exist; the governed receipt remains pending independent parent scope-baseline approval. No receipt is claimed by this document.
+Decision: decomposed. Live children and approved parent scope baseline exist; the governed coverage receipt remains pending. No coverage receipt is claimed by this document. Research receipt: initiative-07b8ef54-dd47-408b-8ce4-988eee5dc195. Design receipt: initiative-aa109bd6-77db-401c-8aad-92e1e27650e9. Spec approval: initiative-c2f0c407-8a5e-463a-8561-bebedafbb3a1. Architecture review: initiative-379c6cf3-62fb-4097-8f0c-7da225b31d3d.
 
 | Deliverable | Live BI | Depends on | Requirements | Contracts | Flow | Verification |
 | --- | --- | --- | --- | --- | --- | --- |
-| Account identity/authentication foundation | BI-1914A351 | None | AC-IDENTITY, AC-MIGRATION | AiProviderConnection, CredentialEntry, encrypted secret boundary | Add account → authenticate → discover → reconnect | Two-account auth isolation, migration fixtures, affected unit tests/typechecks |
-| Account capacity/execution routing | BI-385C0357 | BI-1914A351 | AC-QUOTA, AC-SUITABILITY, AC-CONTINUITY | ProviderCapacityStatus, CliPoolStatus, provider-suitability compiler, execution adapter | Filter eligible account/model → reserve capacity → execute → checkpoint retry | Shared-pool quota, concurrent API/CLI identity, suitability negatives, side-effect replay fixtures |
-| Compact provider UX / complete disclosure | BI-7AA4EB6B | BI-1914A351, BI-385C0357 | AC-DISCLOSURE, AC-PRESERVATION, AC-REFACTOR | Shared account projection, authorized surface/governed actions, report-kit density | Setup/catalog → account row → account disclosure → action → rehydrate | Preservation matrix, keyboard/light/dark/narrow served tests, measured UX-fit |
+| Account identity/authentication foundation | BI-1914A351 | None | OBJ-ACCOUNTS, OBJ-CONVERGENCE | AiProviderConnection, CredentialEntry, encrypted secret boundary | Add account → authenticate → discover → reconnect | AC-IDENTITY, AC-MIGRATION: Two-account auth isolation, migration fixtures, affected unit tests/typechecks |
+| Account capacity/execution routing | BI-385C0357 | BI-1914A351 | OBJ-ROUTING | ProviderCapacityStatus, CliPoolStatus, provider-suitability compiler, execution adapter | Filter eligible account/model → reserve capacity → execute → checkpoint retry | AC-QUOTA, AC-SUITABILITY, AC-CONTINUITY: Shared-pool quota, concurrent API/CLI identity, suitability negatives, side-effect replay fixtures |
+| Compact provider UX / complete disclosure | BI-7AA4EB6B | BI-1914A351, BI-385C0357 | OBJ-UX, OBJ-CONVERGENCE | Shared account projection, authorized surface/governed actions, report-kit density | Setup/catalog → account row → account disclosure → action → rehydrate | AC-DISCLOSURE, AC-PRESERVATION, AC-REFACTOR: Preservation matrix, keyboard/light/dark/narrow served tests, measured UX-fit |
 
 Each boundary is separately shippable: foundation retains legacy defaults; routing can activate only for proven channels; UI consumes completed account facts without owning selection policy. Refactoring is concentrated in these contracts, with caller migration and deletion of redundant singleton paths rather than unrelated cleanup.
 
