@@ -1302,7 +1302,9 @@ if [[ $_dry_run -eq 0 ]]; then
     [[ -z "$_reconcile_svc" ]] && continue
     if [[ $_reconcile_inventory_ok -eq 0 ]]; then
       _reconcile_failed+=("$_reconcile_svc")
-    elif ! printf '%s\n' "$_reconcile_existing" | grep -qxF "$_reconcile_svc"; then
+    # grep -q may close a pipe early; under pipefail that turns a present
+    # service into a false miss when printf receives SIGPIPE.
+    elif ! grep -qxF "$_reconcile_svc" <<< "$_reconcile_existing"; then
       _reconcile_missing+=("$_reconcile_svc")
       _reconcile_retry_ids+=("")
     else
