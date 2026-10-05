@@ -5,8 +5,6 @@ import https from "node:https";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
-
 export const GITLEAKS_VERSION = "8.30.1";
 
 const REPO = "gitleaks/gitleaks";

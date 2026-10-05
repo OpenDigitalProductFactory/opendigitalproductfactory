@@ -4,6 +4,9 @@
 
 import { executeBootstrapDiscovery, prisma } from "@dpf/db";
 import { decryptSecret } from "../govern/credential-crypto";
+import { isRecord } from "../shared/coerce";
+
+const JOB_RUN_DETAILS_KEY = "lastRunDetails";
 
 const PROMETHEUS_POLL_INTERVAL_MS = 60 * 60_000;
 const FULL_SWEEP_INTERVAL_MS = 60 * 60_000;
@@ -86,11 +89,14 @@ export async function registerScheduledJobs(): Promise<void> {
  * the logs on every run. Unknown jobIds fall back to a generic name/schedule so
  * the row still appears on the calendar rather than vanishing silently.
  */
-export async function recordJobRun(jobId: string, status: string, error?: string): Promise<void> {
+export async function recordJobRun(jobId: string, status: string, error?: string, run?: { summary: string; cursor: string | null; details: import("@dpf/db").Prisma.InputJsonValue }): Promise<void> {
   const job = MANAGED_JOBS_BY_ID[jobId];
   const intervalMs = job?.intervalMs ?? FULL_SWEEP_INTERVAL_MS;
   const now = new Date();
+  const stored = run ? await prisma.scheduledJob.findUnique({ where: { jobId }, select: { metadata: true } }) : null;
+  const metadata = isRecord(stored?.metadata) ? stored.metadata : {};
   const runData = {
+    ...(run ? { lastRunSummary: run.summary.slice(0, 400), runCursor: run.cursor, metadata: { ...metadata, [JOB_RUN_DETAILS_KEY]: run.details } } : {}),
     lastRunAt:  now,
     lastStatus: status,
     lastError:  error ?? null,
@@ -105,7 +111,10 @@ export async function recordJobRun(jobId: string, status: string, error?: string
       ...runData,
     },
     update: runData,
-  }).catch((err) => console.error(`[discovery-scheduler] Failed to update job ${jobId}:`, err));
+  }).catch((err) => {
+    console.error(`[discovery-scheduler] Failed to update job ${jobId}:`, err);
+    if (run) throw err; // Durable assessment reporting must retry, never claim ok.
+  });
 }
 
 type TargetResponse = {

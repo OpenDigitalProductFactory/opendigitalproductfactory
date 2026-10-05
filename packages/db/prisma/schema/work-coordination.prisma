@@ -109,6 +109,19 @@ enum WorkPortfolioRole {
   productsAndServicesSold
 }
 
+// Scheduled assessment disposition is separate from the work's triageOutcome.
+enum BacklogTriageAssessmentOutcome {
+  autoBuilt
+  needsReview
+  lowConfidence
+  invalidResponse
+  modelError
+  ledgerError
+  applyError
+  changed
+  inFlight
+}
+
 model BacklogItem {
   id                      String                        @id @default(cuid())
   itemId                  String                        @unique
@@ -140,6 +153,13 @@ model BacklogItem {
   triageOutcome           String?
   effortSize              String?
   proposedOutcome         String?
+  // BI-E3FBB0C4: operational eligibility survives pruning of activity audit.
+  triageAssessmentFingerprint String?
+  triageAssessmentOutcome BacklogTriageAssessmentOutcome?
+  triageAssessmentAttempts Int @default(0)
+  triageAssessmentRetryAt DateTime?
+  triageAssessmentClaim String?
+  triageAssessedAt DateTime?
   // Demand-management scoring (EP-DEMAND-MGMT Phase 1). Store the scoring
   // INPUTS as first-class nullable fields; the score is COMPUTED by a pluggable
   // framework (apps/web/lib/demand/scoring.ts). null = not yet scored. reach

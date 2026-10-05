@@ -212,7 +212,7 @@ test.describe("Build Studio Lifecycle Demo", () => {
     // ━━━ Step 4: Plan → Build ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     console.log("\n=== PLAN PHASE ===");
 
-    response = await sendAndRead(page,
+    await sendAndRead(page,
       "Create the implementation plan. This is a single-file feature — no database changes needed:\n" +
       "- One new file: apps/web/app/(shell)/complaints/page.tsx\n" +
       "- Contains: complaint list with status badges, submit form, in-memory state using React useState\n" +
@@ -276,7 +276,7 @@ test.describe("Build Studio Lifecycle Demo", () => {
     // If AI hasn't run typecheck, ask for it
     if (!didComplete(response, ["typecheck", "type check", "no errors", "compiles"])) {
       console.log("[build] Requesting typecheck...");
-      response = await sendAndRead(page,
+      await sendAndRead(page,
         "Run the sandbox typecheck: run_sandbox_command with 'pnpm --filter web exec tsc --noEmit'.",
         "build-typecheck",
         120_000,
@@ -314,7 +314,7 @@ test.describe("Build Studio Lifecycle Demo", () => {
     // ━━━ Step 6: Review → Ship ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     console.log("\n=== REVIEW PHASE ===");
 
-    response = await sendAndRead(page,
+    await sendAndRead(page,
       "Evaluate the build. Save acceptance criteria using saveBuildEvidence with field 'acceptanceMet' " +
       "and value: [{criterion: 'Complaints list page', met: true, evidence: 'Page created'}, " +
       "{criterion: 'Submit form', met: true, evidence: 'Form with all fields'}, " +

@@ -312,6 +312,41 @@ describe("codexCliAdapter — E2BIG spawn error classification", () => {
   });
 });
 
+describe("Codex inference context isolation", () => {
+  it("runs outside the shared checkout and cleans up its own context directory", async () => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "sk-test", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    const writes: string[] = [];
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((data: string, cb?: () => void) => {
+          writes.push(Buffer.from(data, "base64").toString("utf8"));
+          cb?.();
+          return true;
+        });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close", 0)));
+      } else {
+        process.nextTick(() => {
+          proc.stdout.emit("data", Buffer.from('{"decision":"pass"}'));
+          proc.emit("close", 0);
+        });
+      }
+      return proc;
+    });
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    await codexCliAdapter.execute(makeRequest());
+    const runner = writes.find(value => value.startsWith("#!/bin/sh"))!;
+    const directory = runner.match(/cd (\/tmp\/codex-cwd-[\w-]+) \|\| exit 1/)?.[1];
+    expect(directory).toBeDefined();
+    expect(runner).not.toContain("cd /workspace");
+    expect(runner).toContain(`mkdir -p ${directory} || exit 1`);
+    expect(mockExecAsync.mock.calls.some(([command]) => command.includes(`rmdir ${directory}`))).toBe(true);
+  });
+});
+
 // ── Auth-vs-rate classification (routing-resilience spec D2) ─────────────────
 // An expired OAuth token must classify as `auth` (→ provider disable + reconnect
 // surfacing) even when the CLI also emits throttle-looking text, so the fallback

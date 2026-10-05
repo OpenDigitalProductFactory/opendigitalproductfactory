@@ -5,7 +5,6 @@ import type { Prisma } from "@dpf/db";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   authorizeObjectiveMappingRequestKeyEvolution,
-  validateObjectiveMappingRequestKey,
   objectiveMappingHistoricalProviderProofDigest,
   type ObjectiveMappingRequestHistory,
 } from "@/lib/mcp-task-objective-mapping-request-key";

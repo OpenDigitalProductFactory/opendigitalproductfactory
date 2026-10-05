@@ -14,7 +14,6 @@ import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const EVALUATION_TIMEOUT_MS = 10_000;
 const MAX_CONCURRENT_EVALUATIONS = 3;
 let activeEvaluations = 0;
 
@@ -420,7 +419,7 @@ async function updateAgentPerformance(
   if (instructionPhase === "learning" && evaluationCount >= 10 && avgOrchestratorScore >= 3.5) {
     instructionPhase = "practicing";
   } else if (instructionPhase === "practicing" && evaluationCount >= 50 && avgOrchestratorScore >= 4.0) {
-    const successRate = evaluationCount > 0 ? successCount / evaluationCount : 0;
+    const successRate = successCount / evaluationCount;
     if (successRate >= 0.9) instructionPhase = "innate";
   }
 

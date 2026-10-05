@@ -366,7 +366,7 @@ export async function rejectPromotion(promotionId: string, rationale: string) {
 }
 
 export async function markDeployed(promotionId: string, deploymentLog?: string) {
-  const userId = await requireOpsAccess();
+  await requireOpsAccess();
   await prisma.changePromotion.update({
     where: { promotionId },
     data: {

@@ -78,22 +78,6 @@ const authorizedSession = {
   },
 };
 
-const baseInvoiceInput = {
-  accountId: "acc-1",
-  type: "standard" as const,
-  dueDate: "2026-04-30",
-  currency: "USD",
-  lineItems: [
-    {
-      description: "Consulting services",
-      quantity: 10,
-      unitPrice: 100,
-      taxRate: 20,
-      discountPercent: 0,
-    },
-  ],
-};
-
 beforeEach(() => {
   vi.clearAllMocks();
   mockAuth.mockResolvedValue(authorizedSession as never);

@@ -1304,7 +1304,7 @@ async function main() {
     sha,
   });
   let metadataFile = slotManifest.evidence.metadata;
-  let pendingEvidenceFile = slotManifest.evidence.pending;
+  let pendingEvidenceFile;
   let fullLogFile;
   let freshnessReportFile;
   let localFencePath = process.env.DPF_LOCAL_SANDBOX_FENCE_PATH

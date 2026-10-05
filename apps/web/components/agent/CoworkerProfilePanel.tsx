@@ -98,7 +98,6 @@ export function CoworkerProfilePanel({ agent, onClose }: Props) {
   }, [agent.agentId]);
 
   // Separate skills from tools based on enriched data
-  const skills = agent.skills.filter((s) => !s.allowedTools || s.allowedTools.length === 0 || s.taskType !== "tool");
   const toolSkills = agent.skills.filter((s) => s.allowedTools && s.allowedTools.length > 0);
 
   return (

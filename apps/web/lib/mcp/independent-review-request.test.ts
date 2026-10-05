@@ -24,6 +24,9 @@ import { authorizeCoworkerRequest } from "./independent-review-request";
 import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
 import { remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { resolveInitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
+import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
+import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
 
 const binding: InitiativeReviewBinding = { writerToolName: "record_initiative_post_implementation_review", itemId: "BI-TEST", gate: "post-implementation-review",
   expectedCurrentBaselineId: null,
@@ -54,6 +57,42 @@ beforeEach(() => {
 });
 
 describe("consent-bound independent review request", () => {
+  it("accepts the real claim issuer's baseline-before-coverage packet without widening authority", async () => {
+    const implementation: InitiativeReadinessDecision = {
+      decisionId: "IRD-BASELINE-PREREQUISITE", policyVersion: "initiative-readiness.v3",
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      transitionObject: { kind: "work-capsule", id: "WC-TEST", expectedVersion: "claim.v1", targetState: "implementation" },
+      profile: "fix", target: "implementation", verdict: "input-required", satisfied: [], blockers: [],
+      unmet: [readinessRequirement({ code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner" })],
+      evaluatedAt: "2026-10-03T02:07:21.794Z",
+    };
+    const completion: InitiativeReadinessDecision = { ...implementation, target: "completion", unmet: [
+      ...implementation.unmet,
+      readinessRequirement({ code: "OBJECTIVE_BASELINE_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer" }),
+      readinessRequirement({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" }),
+    ] };
+    const issue = (decision: InitiativeReadinessDecision) => resolveInitiativeReviewerRecovery({
+      decision, currentAgentId: "AGT-AUTHOR", expectedCurrentBaselineId: null,
+      dispatchContext: { workroomId: "WC-TEST", repositoryFullName: "org/repo", branchName: "fix/test", headSha: "a".repeat(40) },
+      canonicalArtifact: { resolved: true, path: "docs/superpowers/specs/recovery.md", providerBlobId: "b".repeat(40) },
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(["initiative_design_review", "file_read"].map((grantKey) => ({
+        grantKey, agent: { agentId: "AGT-REVIEWER", displayName: "Independent Reviewer", status: "active", archived: false, lifecycleStage: "production" },
+      }))) } },
+    });
+    const issued = await issue(implementation);
+    expect(issued.reviewerRoutes).toHaveLength(1);
+    const request = issued.reviewerRoutes[0]!.requestCoworker;
+    expect(request.initiativeReviewBinding?.gate).toBe("spec-approval");
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { implementation, completion } } } });
+    mocks.recovery.mockImplementation(({ decision }) => issue(decision));
+    expect(await authorizeCoworkerRequest(request, "human", context)).toEqual({ bounded: true });
+    expect((await authorizeCoworkerRequest({ ...request, objective: "altered" }, "human", context)).refusal).toBeDefined();
+    expect((await authorizeCoworkerRequest({ ...request, targetAgent: "AGT-AUTHOR" }, "human", context)).refusal).toBeDefined();
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: {
+      implementation: { ...implementation, unmet: [] }, completion,
+    } } } });
+    expect((await authorizeCoworkerRequest(request, "human", context)).refusal).toBeDefined();
+  });
   it("source-only proof requires platform scope and exact issuance even with general delegation", async () => {
     const design = { ...packet, initiativeReviewBinding: { ...binding, writerToolName: "record_initiative_design_review", gate: "design-spec" },
       requiredToolNames: ["read_source_at_version", "record_initiative_design_review"] };

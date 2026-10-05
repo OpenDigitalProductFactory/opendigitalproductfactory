@@ -77,6 +77,9 @@ model ScheduledJob {
   nextRunAt  DateTime?
   lastStatus String?
   lastError  String?
+  // Latest operator-visible result and bounded queue scan checkpoint.
+  lastRunSummary String?
+  runCursor String?
   // Per-job durable scratch state owned by the runner. Used today by
   // jobId="contributor-inventory-sync" to store the GitHub etag
   // (`githubPrEtag`) so conditional requests survive the retention

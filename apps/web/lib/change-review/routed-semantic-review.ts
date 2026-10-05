@@ -27,7 +27,7 @@ function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResu
     issues,
     ...(results[0]?.failureAnalysisReview ? { failureAnalysisReview: results[0].failureAnalysisReview } : {}),
     summary: inconclusive.length > 0
-      ? `${inconclusive.length} required semantic review branch${inconclusive.length === 1 ? " was" : "es were"} infrastructure-inconclusive; retry without treating capacity as a semantic finding.`
+      ? `${inconclusive.length} required semantic review branch${inconclusive.length === 1 ? " was" : "es were"} inconclusive: ${inconclusive.map(result => result.summary.slice(0, 1_000)).join("; ")}`
       : results.length === 1
       ? results[0]!.summary
       : `${results.length} independent review branches completed; ${criticals} blocking finding${criticals === 1 ? "" : "s"}.`,
@@ -133,7 +133,10 @@ export async function dispatchRoutedSemanticReview(
     };
   })));
 
-  const completed = settled.flatMap((branch) => branch.status === "fulfilled" ? [branch.value] : []);
+  const completed = settled.flatMap((branch, index) => branch.status === "fulfilled"
+    ? [{ ...branch.value, ...(branch.value.decision === "inconclusive"
+      ? { summary: `${branches[index]!.agentId}: ${branch.value.summary}` } : {}) }]
+    : []);
   const rejected = settled.filter((branch) => branch.status === "rejected").length;
   // A rejected branch used to vanish without a trace: FB-D671B016 reported
   // "capacity" for a day while every branch was refused routing because the

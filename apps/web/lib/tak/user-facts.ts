@@ -6,7 +6,6 @@
 // decisions, and constraints without relying on vector similarity.
 
 import { prisma } from "@dpf/db";
-import { countTokens } from "@/lib/tak/context-arbitrator";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

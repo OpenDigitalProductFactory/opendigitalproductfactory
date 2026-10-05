@@ -86,6 +86,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({
           kind: "evaluated",
           item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "refactor" },
@@ -125,6 +126,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "evaluated", item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature" }, verdict: { allowed: true, noOp: false, normalizedManifest: null, blockers: [], nextAction: null } }),
         reconcileObjectives: () => ({ state: "missing", baselineId: "BASE-1", evidenceRefs: [], requiredStatementIds: ["OBJ-1"] }),
         resolveMergeDelivery: async () => "not-merged" as const,
@@ -148,6 +150,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({
           kind: "evaluated",
           item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "doc" },
@@ -191,6 +194,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({
           kind: "evaluated",
           item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature" },
@@ -232,6 +236,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({
           kind: "evaluated",
           item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "bug" },
@@ -275,6 +280,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({
           kind: "evaluated",
           item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "bug" },
@@ -306,6 +312,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "evaluated", item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature" }, verdict: { allowed: true, noOp: false, normalizedManifest: { workClass: "implementation", evidenceActivityIds: ["E-1"], useActiveBuildEvidence: false }, blockers: [], nextAction: null } }),
         reconcileObjectives: () => ({ state: "pass", baselineId: "BASE-1", evidenceRefs: ["E-1"], requiredStatementIds: ["OBJ-1"] }),
         resolveMergeDelivery: async () => "not-merged" as const,
@@ -335,6 +342,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "evaluated", item: { id: "row-1", itemId: "BI-1", status: "done", workType: "feature" }, verdict: { allowed: true, noOp: false, normalizedManifest: { workClass: "implementation", evidenceActivityIds: ["E-1"], useActiveBuildEvidence: false }, blockers: [], nextAction: null } }),
         reconcileObjectives: () => ({ state: "pass", baselineId: "BASE-1", evidenceRefs: ["E-1"], requiredStatementIds: ["OBJ-1"] }),
         resolveMergeDelivery: async () => "not-merged" as const,
@@ -364,6 +372,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         // No hand-built manifest — delivery would otherwise read `missing`.
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "pass", baselineId: "BASE-1", evidenceRefs: ["E-1"], requiredStatementIds: ["OBJ-1"] }),
@@ -388,6 +397,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "missing", baselineId: "BASE-1", evidenceRefs: [], requiredStatementIds: ["OBJ-1"] }),
         resolveMergeDelivery: async () => "not-merged" as const,
@@ -410,6 +420,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         // No objective baseline to reconcile (the whole point — merged platform work).
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
@@ -436,6 +447,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
         resolveMergeDelivery: async () => "merged" as const,
@@ -468,6 +480,7 @@ describe("merge signal unavailability is reported, never disguised as a negative
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
         resolveMergeDelivery: async () => "signal-unavailable" as const,
@@ -504,6 +517,7 @@ describe("merge signal unavailability is reported, never disguised as a negative
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
         resolveMergeDelivery: async () => "signal-unavailable" as const,
@@ -528,6 +542,7 @@ describe("merge signal unavailability is reported, never disguised as a negative
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
         resolveMergeDelivery: async () => "not-merged" as const,
@@ -572,6 +587,7 @@ describe("a failed completion manifest names itself, and is never disguised as a
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => failedManifest as never,
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
         resolveMergeDelivery: async () => "merged" as const,
@@ -598,6 +614,7 @@ describe("a failed completion manifest names itself, and is never disguised as a
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ ...failedManifest, verdict: { ...failedManifest.verdict, allowed: true, blockers: [], nextAction: null } }) as never,
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
         resolveMergeDelivery: async () => "merged" as const,
@@ -622,5 +639,38 @@ describe("pullRequestNumbersFromActivities (BI-AFE8BB73)", () => {
       { kind: "initiative_gate_receipt", payload: { url: "https://github.com/o/r/pull/7" } },
       { kind: "evidence", payload: null },
     ])).toEqual([5119, 5124]);
+  });
+});
+
+describe("deployment closure without acceptance fabrication", () => {
+  const proof = { kind: "deployed" as const, runId: "SUR-1", repositoryFullName: "owner/repo", pullRequestNumber: 42,
+    headSha: "a".repeat(40), mergeCommitSha: "b".repeat(40), targetSha: "c".repeat(40), servedSha: "d".repeat(40), completedAt: "2026-10-03T20:00:00.000Z" };
+  it("closes delivery while preserving missing acceptance in the durable activity", async () => {
+    const fake = fakeDb(1, "feature", { body: "## Acceptance\n- Shipped behavior" }, [{ workShape: "delivery-medium@1.0.0" }]);
+    const result = await completeBacklogItemTransition({ db: fake.db, itemId: "BI-1", expectedStatus: "in-progress",
+      resolution: "Deployed", completionEvidence: {}, actor, authority,
+      dependencies: {
+        resolveDeploymentClosure: async () => proof,
+        resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => "signal-unavailable",
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.decision.satisfied).toContainEqual(expect.objectContaining({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "not-applicable" }));
+    expect(fake.creates).toContainEqual(expect.objectContaining({ data: expect.objectContaining({ kind: "status_change",
+      payload: expect.objectContaining({ closureBasis: "canonical-deployment", deployment: proof, acceptanceState: "missing" }) }) }));
+  });
+  it.each([{ digitalProductId: "DP-1" }, { scopeKind: "archetype-leaf" }])("retains the acceptance contract for %j", async (overrides) => {
+    const fake = fakeDb(1, "feature", overrides);
+    const result = await completeBacklogItemTransition({ db: fake.db, itemId: "BI-1", expectedStatus: "in-progress",
+      resolution: "Deployed", completionEvidence: {}, actor, authority, dependencies: {
+        resolveDeploymentClosure: async () => proof,
+        resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => "signal-unavailable", projectReadiness: () => projected("input-required"),
+      } });
+    expect(result.ok).toBe(false);
+    expect(fake.updateMany).not.toHaveBeenCalled();
   });
 });

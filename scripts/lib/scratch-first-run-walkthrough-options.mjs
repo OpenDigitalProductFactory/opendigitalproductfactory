@@ -58,14 +58,6 @@ export function parseWalkthroughArgs(argv, options = {}) {
   return config;
 }
 
-function readValue(argv, index, flag) {
-  const value = argv[index];
-  if (!value || value.startsWith("--")) {
-    throw new Error(`${flag} requires a value.`);
-  }
-  return value;
-}
-
 function normalizeUrl(value) {
   return value.replace(/\/+$/, "");
 }
