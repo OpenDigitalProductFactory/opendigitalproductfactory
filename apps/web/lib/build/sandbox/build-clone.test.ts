@@ -71,7 +71,7 @@ describe("build clone (W1, M1)", () => {
     // commit identity and upstream remote carried over
     expect(git(path, "config", "user.name")).toBe("dpf-agent-test");
     expect(git(path, "remote", "get-url", "origin")).toBe(git(shared, "remote", "get-url", "origin"));
-    expect(git(path, "config", "core.hooksPath")).toBe("/dev/null");
+    expect(git(path, "config", "core.hooksPath")).toBe(process.platform === "win32" ? "nul" : "/dev/null");
   });
 
   it("records the build's commits in the shared repo before deleting the clone", () => {
