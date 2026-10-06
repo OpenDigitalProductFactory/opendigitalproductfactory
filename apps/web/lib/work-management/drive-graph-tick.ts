@@ -1,6 +1,6 @@
 /**
  * The runner's graph-room bookkeeping, pure (BI-8875C9DF, GPP Phase 3c
- * PR-3c-1).
+ * PR-3c-1; branch dispatch and deactivation PR-3c-2).
  *
  * Design: docs/superpowers/specs/2026-10-02-gpp-phase-3c-drive-graph-execution-design.md
  * §4.2 ("A graph room's marking survives every tick", "Evidence across
@@ -8,9 +8,10 @@
  * docs/superpowers/plans/2026-10-02-gpp-phase-3c-drive-graph-execution.md
  * (PR-3c-1, workroom-drive.ts).
  *
- * The drive job (lib/queue/functions/workroom-drive.ts) calls these two
- * functions and nothing else of the graph path, so a sequential room's tick is
- * untouched: both return null for a shape that uses no graph construct.
+ * The drive job (lib/queue/functions/workroom-drive.ts) calls these
+ * functions only for a graph room (and workroom-drive-graph.ts applies the
+ * graph plan), so a sequential room's tick is untouched: graphSnapshotFields
+ * and earnGraphReceipts return null for a shape that uses no graph construct.
  *
  * - graphSnapshotFields: what a graph room's snapshot adds. A plan that
  *   carries a marking persists it, with `pendingAttentions` from its attention
@@ -32,12 +33,21 @@ import {
   markedKeysWithIteration,
   markedStageKeys,
   readStoredDriveMarking,
+  stageToken,
   usesGraphConstructs,
   type DriveMarking,
+  type DriveMarkingToken,
+  type DriveTokenPlan,
 } from "./drive-marking";
+import { workroomDriveTaskId } from "./drive-plan-stage";
 import { stageEvidenceKinds } from "./stage-briefing";
 import { earnEvidenceReceipts, type RecordedEvidence, type StageReceipt } from "./stage-evidence-receipts";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
+import {
+  EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
+  WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
+  type WorkroomDriveReceipt,
+} from "./workroom-drive-receipts";
 
 function storedDrive(workspaceState: unknown): Record<string, unknown> | null {
   const state = workspaceState && typeof workspaceState === "object" && !Array.isArray(workspaceState)
@@ -59,6 +69,8 @@ export type GraphSnapshotFields = {
   markedKeys?: string[];
   /** A token's stage or iteration changed since the stored marking. */
   iterationChanged: boolean;
+  /** The plan dispatches at least one agent branch: always news, so the dispatch row is written (PR-3c-2). */
+  dispatching: boolean;
 };
 
 export function graphSnapshotFields(plan: DrivePlan, workspaceState: unknown): GraphSnapshotFields | null {
@@ -79,9 +91,12 @@ export function graphSnapshotFields(plan: DrivePlan, workspaceState: unknown): G
   } else if (plan.marking) {
     persisted = plan.marking;
     fields.marking = plan.marking;
-    fields.pendingAttentions = (plan.tokens ?? [])
+    const pendingAttentions = (plan.tokens ?? [])
       .filter((token) => token.action === "attention")
       .map((token) => ({ principalRef: token.attentionPrincipalRef, stageKey: token.stageKey, reason: token.reason }));
+    fields.pendingAttentions = pendingAttentions;
+    // The legacy single reader sees the first waiting stage (design §4.2).
+    fields.pendingAttention = pendingAttentions[0] ?? null;
   } else {
     carry("marking", fields);
     carry("pendingAttentions", fields);
@@ -92,7 +107,106 @@ export function graphSnapshotFields(plan: DrivePlan, workspaceState: unknown): G
   }
   const markedKeys = persisted ? markedKeysWithIteration(definition, persisted) : undefined;
   const iterationChanged = markedKeys !== undefined && storedKeys !== null && storedKeys.join("\n") !== markedKeys.join("\n");
-  return { fields, ...(markedKeys ? { markedKeys } : {}), iterationChanged };
+  const dispatching = (plan.tokens ?? []).some((token) => token.action === "dispatch_agent" && token.taskId !== null);
+  return { fields, ...(markedKeys ? { markedKeys } : {}), iterationChanged, dispatching };
+}
+
+function storedMarking(workspaceState: unknown, definition: WorkShapeDefinitionContract): DriveMarking | null {
+  if (!hasStoredDriveMarking(workspaceState)) return null;
+  const read = readStoredDriveMarking(workspaceState, definition, null);
+  return read.ok ? read.data.marking : null;
+}
+
+function taskIdsOf(marking: DriveMarking | null): string[] {
+  return marking ? marking.tokens.flatMap((token) => (token.taskId ? [token.taskId] : [])) : [];
+}
+
+export type GraphTaskEffects = {
+  /** Agent branches to dispatch this tick, each through the task id fixed on its token. */
+  dispatch: DriveTokenPlan[];
+  /** Task ids to deactivate this tick. Never one that is dispatched this tick. */
+  deactivate: string[];
+};
+
+/**
+ * Which branch tasks a graph tick dispatches and deactivates (PR-3c-2, design
+ * §6 "Dispatch every tick").
+ *
+ * - Every token whose plan is `dispatch_agent` is dispatched, whatever the
+ *   aggregate action: one branch latched on the writeback latch (a token-level
+ *   pause, which outranks dispatch in the aggregate) never blocks another.
+ * - A token that LEFT its stage (it fired, waits as a join arrival, or was
+ *   cleared) has its task deactivated in the same tick, because the upsert
+ *   reactivates a task and resets nextRunAt, so a task left active keeps
+ *   running for a stage that is no longer marked.
+ * - A token paused at its stage has its task deactivated, as the sequential
+ *   drive deactivates its task on a pause.
+ * - A plan with no token plans (stop, success, do_not_wake, a conformance or
+ *   fail-closed pause) deactivates every task the prior marking names, plus
+ *   the room's primary id, as the sequential drive does.
+ */
+export function graphTaskEffects(plan: DrivePlan, workspaceState: unknown, roomId: string): GraphTaskEffects {
+  const definition = plan.definition;
+  if (!definition) return { dispatch: [], deactivate: [] };
+  const prior = taskIdsOf(storedMarking(workspaceState, definition));
+  const next = plan.marking && !("raw" in plan.marking) ? plan.marking : null;
+  if (!plan.tokens) {
+    if (plan.action === "dispatch_agent" || plan.action === "attention") return { dispatch: [], deactivate: [] };
+    const primary = plan.shapeKey ? [workroomDriveTaskId(roomId, plan.shapeKey)] : [];
+    return { dispatch: [], deactivate: [...new Set([...prior, ...taskIdsOf(next), ...primary])] };
+  }
+  const dispatch = plan.tokens.filter((token) => token.action === "dispatch_agent" && token.taskId !== null && token.agentId !== null);
+  const dispatched = new Set(dispatch.map((token) => token.taskId as string));
+  const live = new Set(taskIdsOf(next));
+  const left = prior.filter((taskId) => !live.has(taskId));
+  const paused = plan.tokens
+    .filter((token) => token.action === "pause" || token.action === "escalate" || token.action === "stop")
+    .flatMap((token) => {
+      const taskId = next ? stageToken(next, token.stageKey)?.taskId : undefined;
+      return taskId ? [taskId] : [];
+    });
+  return { dispatch, deactivate: [...new Set([...left, ...paused])].filter((taskId) => !dispatched.has(taskId)) };
+}
+
+/** The room's receipts with a `blocked` receipt for every branch latched on the writeback latch this tick. */
+export function withLatchedBlockedReceipts<R extends WorkroomDriveReceipt>(plan: DrivePlan, receipts: readonly R[]): Array<R | WorkroomDriveReceipt> {
+  const out: Array<R | WorkroomDriveReceipt> = [...receipts];
+  for (const token of plan.tokens ?? []) {
+    if (token.reason !== EXECUTOR_WRITEBACK_UNAVAILABLE_REASON) continue;
+    if (out.some((receipt) => receipt.stageKey === token.stageKey && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND)) continue;
+    out.push({ stageKey: token.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND });
+  }
+  return out;
+}
+
+/**
+ * The marking to persist when some dispatches failed to schedule: each failed
+ * branch's token gets back its prior last action, reason and cycle, so the
+ * per-token writeback latch does not hold a stage that was never dispatched
+ * (the sequential drive persists nothing when its one dispatch fails).
+ */
+export function withUndispatchedTokensRestored(
+  marking: DriveMarking,
+  workspaceState: unknown,
+  definition: WorkShapeDefinitionContract,
+  failedStageKeys: readonly string[],
+): DriveMarking {
+  if (failedStageKeys.length === 0) return marking;
+  const prior = storedMarking(workspaceState, definition);
+  const failed = new Set(failedStageKeys);
+  return {
+    ...marking,
+    tokens: marking.tokens.map((token) => {
+      const stageKey = definition.stages.find((stage) => stageToken({ tokens: [token] }, stage.key) !== null)?.key;
+      if (!stageKey || !failed.has(stageKey)) return token;
+      const before = prior ? stageToken(prior, stageKey) : null;
+      const restored: DriveMarkingToken = { node: token.node, enteredAt: token.enteredAt, ...(token.taskId ? { taskId: token.taskId } : {}) };
+      for (const key of ["lastAction", "lastReason", "lastCycleKey"] as const) {
+        if (before?.[key] !== undefined) restored[key] = before[key];
+      }
+      return restored;
+    }),
+  };
 }
 
 /** Receipts earned for every marked stage of a graph room, or null when the sequential path applies. */
