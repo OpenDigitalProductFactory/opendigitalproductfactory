@@ -476,12 +476,18 @@ describe("AC-3C-SEQ-IDENTICAL: sequential rooms are byte-identical to the pre-3c
       ...[...traces.values()].flatMap((trace) => trace.reasons),
       ...fixture.direct.map((entry) => entry.reason),
     ]);
+    // The graph path's fail-closed pauses (PR-3c-1) cannot be reached by a
+    // sequential room, by construction: the structural branch sends only graph
+    // shapes to them. drive-resolution.test.ts and drive-marking-durable.test.ts
+    // reach them.
+    const graphOnly = new Set<string>(["construct_not_executable", "marking_unreadable"]);
     const expected = [
       ...Object.values(DRIVE_REASONS_BY_ACTION).flat(),
       "executor_writeback_unavailable",
       "cycle_complete",
-    ];
+    ].filter((reason) => !graphOnly.has(reason));
     expect(expected.filter((reason) => !reached.has(reason))).toEqual([]);
+    expect([...graphOnly].filter((reason) => reached.has(reason))).toEqual([]);
   }, 300_000);
 
   it("no persisted sequential snapshot carries a marking or pendingAttentions key", async () => {

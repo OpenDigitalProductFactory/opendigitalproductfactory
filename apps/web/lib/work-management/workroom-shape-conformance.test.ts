@@ -493,3 +493,73 @@ describe("Workroom lifecycle conformance guard", () => {
     });
   });
 });
+
+// AC-3C-CONFORMANCE, sequential half (GPP Phase 3c PR-3c-1, BI-8875C9DF):
+// with `flowOrder`, stage order is read from the flow graph; without it, every
+// case above is unchanged.
+describe("evaluateWorkroomShapeConformance with flowOrder (Phase 3c)", () => {
+  const graphDefinition: WorkShapeDefinitionContract = {
+    ...definition,
+    stages: [
+      ...definition.stages.slice(0, 1),
+      { key: "check", title: "Check", accountablePrincipalRef: "agent:watcher", advance: { kind: "status-change", condition: "checked" }, evidence: ["assurance-finding"] },
+      ...definition.stages.slice(1),
+    ],
+    flow: { nodes: [], edges: [{ from: "scan", to: "check" }, { from: "check", to: "review" }, { from: "review", to: "success" }] },
+  };
+  const evaluate = (over: Partial<Parameters<typeof evaluateWorkroomShapeConformance>[0]>) => evaluateWorkroomShapeConformance({
+    definition: graphDefinition,
+    collaborationShape: null,
+    participants: executableRoster,
+    currentStageKey: "scan",
+    proposedStageKey: "check",
+    receipts: [{ stageKey: "scan", kind: "stage-evidence-recorded" }],
+    budgetUsage: [],
+    stopConditionHits: [],
+    reviewDue: false,
+    coordinatorHasProcessCoordinationAuthority: true,
+    flowOrder: { enabled: ["check"], delivered: { scan: true, check: false, review: false } },
+    ...over,
+  });
+
+  it("a forward move the flow enables is legal, and the next permitted stage is the first enabled", () => {
+    const result = evaluate({});
+    expect(result.deviations).toEqual([]);
+    expect(result.disposition).toBe("continue");
+    expect(result.nextPermittedStageKey).toBe("check");
+  });
+
+  it("a stage the flow does not enable raises out_of_order_stage", () => {
+    const result = evaluate({ proposedStageKey: "review" });
+    expect(result.deviations.map((row) => row.code)).toContain("out_of_order_stage");
+    expect(result.disposition).toBe("pause");
+  });
+
+  it("a stage off the shape raises out_of_order_stage", () => {
+    expect(evaluate({ proposedStageKey: "elsewhere" }).deviations).toEqual([
+      { code: "out_of_order_stage", summary: "Proposed stage elsewhere is not on the declared shape." },
+    ]);
+  });
+
+  it("a forward predecessor that has not delivered this iteration raises missing_prerequisite_receipt", () => {
+    const result = evaluate({ flowOrder: { enabled: ["check"], delivered: { scan: false } } });
+    expect(result.deviations).toEqual([{ code: "missing_prerequisite_receipt", summary: "Stage check lacks a receipt from scan." }]);
+  });
+
+  it("the declared refuse route is the one legal backward move", () => {
+    const result = evaluate({ currentStageKey: "review", proposedStageKey: "scan", flowOrder: { enabled: [], delivered: {}, reworkRoute: { from: "review", to: "scan" } } });
+    expect(result.deviations).toEqual([]);
+  });
+
+  it("the start stage needs no predecessor", () => {
+    expect(evaluate({ currentStageKey: null, proposedStageKey: "scan", flowOrder: { enabled: ["scan"], delivered: {} } }).deviations).toEqual([]);
+  });
+
+  it("without flowOrder, the same graph definition is checked by index exactly as before", () => {
+    const result = evaluateWorkroomShapeConformance({
+      definition: graphDefinition, collaborationShape: null, participants: executableRoster, currentStageKey: "scan", proposedStageKey: "review",
+      receipts: [], budgetUsage: [], stopConditionHits: [], reviewDue: false, coordinatorHasProcessCoordinationAuthority: true,
+    });
+    expect(result.deviations.map((row) => row.code).sort()).toEqual(["missing_prerequisite_receipt", "out_of_order_stage"]);
+  });
+});
