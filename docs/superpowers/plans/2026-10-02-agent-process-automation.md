@@ -158,3 +158,11 @@ guards did.
     re-reads the record after an exit-1 failure and retries on INCONCLUSIVE.
     The runner side — a network error at base refresh recorded as FAIL with no
     reason (2026-10-02) — is a separate fix.
+11. ~~**The gate could wait on its own parents.**~~ Admission matches live
+    "mutators" by command line. On 2026-10-06 `pnpm land` was launched from a
+    shell whose `-c` string carried a commit message naming the runner script;
+    that shell matched, so land, `gate:wait`, `pregate` and the gate itself all
+    read as live mutators and admission retried until the run was killed.
+    `findConflictingLocalCiMutatorPids` now excludes the gate's own ancestor
+    chain — an ancestor is blocked on the gate, so it cannot be mutating the
+    sandbox. A genuine runner elsewhere under the same shell still blocks.
