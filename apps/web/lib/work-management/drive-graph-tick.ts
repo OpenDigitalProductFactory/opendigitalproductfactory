@@ -66,7 +66,7 @@ export function graphSnapshotFields(plan: DrivePlan, workspaceState: unknown): G
   if (!definition || !usesGraphConstructs(definition)) return null;
   const drive = storedDrive(workspaceState);
   const storedRead = hasStoredDriveMarking(workspaceState) ? readStoredDriveMarking(workspaceState, definition, null) : null;
-  const storedKeys = storedRead?.ok ? markedKeysWithIteration(definition, storedRead.marking) : null;
+  const storedKeys = storedRead?.ok ? markedKeysWithIteration(definition, storedRead.data.marking) : null;
   const carry = (key: string, fields: Record<string, unknown>) => {
     if (drive && Object.hasOwn(drive, key) && drive[key] !== undefined) fields[key] = drive[key];
   };
@@ -86,8 +86,8 @@ export function graphSnapshotFields(plan: DrivePlan, workspaceState: unknown): G
     carry("marking", fields);
     carry("pendingAttentions", fields);
     if (storedRead?.ok) {
-      persisted = storedRead.marking;
-      fields.stageKey = markedStageKeys(definition, storedRead.marking)[0] ?? null;
+      persisted = storedRead.data.marking;
+      fields.stageKey = markedStageKeys(definition, storedRead.data.marking)[0] ?? null;
     }
   }
   const markedKeys = persisted ? markedKeysWithIteration(definition, persisted) : undefined;
@@ -109,14 +109,14 @@ export function earnGraphReceipts(input: {
   // An unreadable marking earns nothing; the planner pauses the room on it.
   if (!read.ok) return input.existing;
   let receipts = input.existing;
-  for (const stageKey of markedStageKeys(definition, read.marking)) {
+  for (const stageKey of markedStageKeys(definition, read.data.marking)) {
     receipts = earnEvidenceReceipts({
       stageKey,
       declaredKinds: stageEvidenceKinds(definition, stageKey),
       evidence: input.evidence,
       dispatchedAt: input.dispatchedAtByStage?.get(stageKey) ?? null,
       existing: receipts,
-      iteration: iterationOf(read.marking, stageKey),
+      iteration: iterationOf(read.data.marking, stageKey),
     });
   }
   return receipts;

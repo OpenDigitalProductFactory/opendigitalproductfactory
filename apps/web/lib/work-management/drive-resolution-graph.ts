@@ -93,7 +93,7 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
       marking: { raw: read.raw },
     };
   }
-  const stored = read.marking;
+  const stored = read.data.marking;
 
   // 3. One firing, then conformance over the flow.
   let stepped: DriveStepResult;

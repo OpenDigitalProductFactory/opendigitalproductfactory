@@ -84,31 +84,31 @@ describe("usesGraphConstructs: the structural branch", () => {
 describe("readStoredDriveMarking", () => {
   it("derives one token from the stored stageKey when no marking is stored", () => {
     const read = readStoredDriveMarking({ workroomDrive: { stageKey: "b", lastRunAt: "2026-03-01T08:30:00.000Z" } }, FLOW_TWIN, CYCLE, NOW);
-    expect(read).toEqual({ ok: true, source: "derived", marking: marking({ tokens: [{ node: "stage:b", enteredAt: "2026-03-01T08:30:00.000Z" }] }) });
+    expect(read).toEqual({ ok: true, data: { source: "derived", marking: marking({ tokens: [{ node: "stage:b", enteredAt: "2026-03-01T08:30:00.000Z" }] }) } });
   });
 
   it("derives the start when no stage is stored, or the stored stage is not on the shape", () => {
     for (const workspaceState of [{}, { workroomDrive: { stageKey: null } }, { workroomDrive: { stageKey: "gone" } }]) {
       const read = readStoredDriveMarking(workspaceState, FLOW_TWIN, CYCLE, NOW);
-      expect(read).toEqual({ ok: true, source: "derived", marking: marking({ tokens: [{ node: "stage:a", enteredAt: NOW.toISOString() }] }) });
+      expect(read).toEqual({ ok: true, data: { source: "derived", marking: marking({ tokens: [{ node: "stage:a", enteredAt: NOW.toISOString() }] }) } });
     }
   });
 
   it("returns a valid stored marking of this cycle as stored", () => {
     const stored = marking({ iterations: { a: 1 }, reworkTaken: { "edge:b->a": 1 } });
     expect(readStoredDriveMarking({ workroomDrive: { stageKey: "a", marking: stored } }, FLOW_TWIN, CYCLE, NOW))
-      .toEqual({ ok: true, source: "stored", marking: stored });
+      .toEqual({ ok: true, data: { source: "stored", marking: stored } });
   });
 
   it("discards a marking from another cycle and starts fresh at the shape's start", () => {
     const stored = marking({ cycleKey: "graph-fixture-flow@1.0.0:2026-02-28", tokens: [{ node: "stage:b", enteredAt: "2026-02-28T08:00:00.000Z" }], iterations: { b: 2 } });
     const read = readStoredDriveMarking({ workroomDrive: { marking: stored } }, FLOW_TWIN, CYCLE, NOW);
-    expect(read).toEqual({ ok: true, source: "new-cycle", marking: marking({ tokens: [{ node: "stage:a", enteredAt: NOW.toISOString() }] }) });
+    expect(read).toEqual({ ok: true, data: { source: "new-cycle", marking: marking({ tokens: [{ node: "stage:a", enteredAt: NOW.toISOString() }] }) } });
   });
 
   it("with no current cycle (the runner's receipt earning) keeps the stored cycle", () => {
     const stored = marking({ cycleKey: "graph-fixture-flow@1.0.0:2026-02-28" });
-    expect(readStoredDriveMarking({ workroomDrive: { marking: stored } }, FLOW_TWIN, null, NOW)).toMatchObject({ ok: true, source: "stored" });
+    expect(readStoredDriveMarking({ workroomDrive: { marking: stored } }, FLOW_TWIN, null, NOW)).toMatchObject({ ok: true, data: { source: "stored" } });
   });
 
   it("refuses a malformed marking with marking_unreadable and returns it verbatim", () => {

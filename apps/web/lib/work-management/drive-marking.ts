@@ -34,6 +34,7 @@
  *   (the #5166 defect, review blocker 2).
  */
 import { stageElementId } from "@/lib/gpp/shape-language/element-ids";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 import type { DriveAction } from "./drive-resolution";
 import type { DriveReason } from "./drive-conclusion";
@@ -86,7 +87,7 @@ export type DriveTokenPlan = {
 };
 
 export type DriveMarkingRead =
-  | { ok: true; marking: DriveMarking; source: "stored" | "derived" | "new-cycle" }
+  | ActionSuccess<{ marking: DriveMarking; source: "stored" | "derived" | "new-cycle" }>
   | { ok: false; reason: "marking_unreadable"; raw: unknown };
 
 type MarkingShape = Pick<WorkShapeDefinitionContract, "stages" | "stopConditions" | "flow">;
@@ -203,16 +204,16 @@ export function readStoredDriveMarking(
     const parsed = parseMarking(drive.marking, graph);
     if (!parsed) return { ok: false, reason: "marking_unreadable", raw: drive.marking };
     if (cycleKey !== null && parsed.cycleKey !== cycleKey) {
-      return { ok: true, marking: startDriveMarking(definition, cycleKey, now), source: "new-cycle" };
+      return ok({ marking: startDriveMarking(definition, cycleKey, now), source: "new-cycle" });
     }
-    return { ok: true, marking: parsed, source: "stored" };
+    return ok({ marking: parsed, source: "stored" });
   }
   const derivedCycle = cycleKey ?? (typeof drive?.lastCycleKey === "string" ? drive.lastCycleKey : "");
   const enteredAt = isIso(drive?.lastRunAt) ? drive.lastRunAt : now.toISOString();
   const stageKey = typeof drive?.stageKey === "string" ? drive.stageKey : null;
   const stageId = stageKey !== null && definition.stages.some((stage) => stage.key === stageKey) ? stageElementId(stageKey) : null;
-  if (stageId) return { ok: true, marking: emptyMarking(derivedCycle, [{ node: stageId, enteredAt }]), source: "derived" };
-  return { ok: true, marking: startDriveMarking(definition, derivedCycle, new Date(enteredAt)), source: "derived" };
+  if (stageId) return ok({ marking: emptyMarking(derivedCycle, [{ node: stageId, enteredAt }]), source: "derived" });
+  return ok({ marking: startDriveMarking(definition, derivedCycle, new Date(enteredAt)), source: "derived" });
 }
 
 /** The writeback latch's prior for one token: its own last tick, on its own stage. Null before its first tick. */

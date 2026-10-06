@@ -96,7 +96,7 @@ export function markingNotMappable(
   if (!hasStoredDriveMarking(workspaceState)) return null;
   const read = readStoredDriveMarking(workspaceState, from ?? to, null);
   if (!read.ok) return "This room's drive marking cannot be read, so it cannot be mapped onto the new version.";
-  const { marking } = read;
+  const { marking } = read.data;
   if (marking.tokens.length > 1) return `This room holds ${marking.tokens.length} tokens. Rebind once its parallel work has joined.`;
   if (Object.values(marking.reworkTaken).some((count) => count > 0)) {
     return "This room has taken a rework route this cycle. Rebind once the cycle completes.";
