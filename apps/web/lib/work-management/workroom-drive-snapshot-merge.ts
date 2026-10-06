@@ -25,10 +25,18 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 /**
  * The snapshot `persist` writes, given the row's current `workspaceState` and
  * the snapshot the drive built. Pure: neither input is mutated.
+ *
+ * `graphShape` (GPP Phase 3c PR-3c-1, BI-8875C9DF): the snapshot is for a
+ * shape on the graph path. Under the same compare-and-set and the same
+ * `lastCycleKey` condition as receipts, a `marking` or `pendingAttentions` the
+ * row holds and the snapshot lacks is kept, so no persist can drop a graph
+ * room's marking. A snapshot that carries its own keeps them (it was built
+ * from what the drive read). A sequential snapshot is merged exactly as before.
  */
 export function mergeWorkroomDriveSnapshot(
   currentWorkspaceState: unknown,
   next: Record<string, unknown>,
+  options: { graphShape?: boolean } = {},
 ): Record<string, unknown> {
   const currentDrive = asRecord(asRecord(currentWorkspaceState)?.workroomDrive);
   let snapshot = next;
@@ -40,6 +48,13 @@ export function mergeWorkroomDriveSnapshot(
       if (merged.ok) receipts = merged.data;
     }
     snapshot = { ...snapshot, receipts };
+    if (options.graphShape) {
+      for (const key of ["marking", "pendingAttentions"] as const) {
+        if (!Object.hasOwn(snapshot, key) && Object.hasOwn(currentDrive, key) && currentDrive[key] !== undefined) {
+          snapshot = { ...snapshot, [key]: currentDrive[key] };
+        }
+      }
+    }
   }
   return snapshot;
 }
