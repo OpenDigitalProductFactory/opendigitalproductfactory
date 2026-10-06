@@ -55,11 +55,6 @@
     "rule": "D-8",
     "elementId": "gate:a"
   },
-  "e-not-executable-parallel-split.gpp.json": {
-    "rule": "E-NOT-EXECUTABLE",
-    "elementId": "node:p",
-    "construct": "parallel-split-join"
-  },
   "e-not-executable-refuse-edge.gpp.json": {
     "rule": "E-NOT-EXECUTABLE",
     "elementId": "gate:a",

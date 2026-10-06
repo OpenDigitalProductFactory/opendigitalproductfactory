@@ -1,6 +1,6 @@
 /**
  * The drive's marking: many tokens, persisted additively (BI-8875C9DF, GPP
- * Phase 3c PR-3c-1).
+ * Phase 3c PR-3c-1; parallel split and join PR-3c-2).
  *
  * Design: docs/superpowers/specs/2026-10-02-gpp-phase-3c-drive-graph-execution-design.md
  * §4 (state model), §6 (common rules); plan:
@@ -22,12 +22,13 @@
  *   game's rules, independent of the reference interpreter (interpreter.ts) so
  *   that the per-construct parity tests compare two statements of the rules.
  *   One firing per tick: the first marked stage, in document order, that has a
- *   completing receipt at its current iteration. PR-3c-1 implements only the
- *   forward move to a stage or to the success stop. Every construct-specific
- *   branch (split, join, rework, refuse route, deadline, sub-shape, a forward
- *   edge into a failure or budget stop) throws DriveConstructNotImplementedError;
- *   the graph planner turns that into a fail-closed pause, and with the flags
- *   off it is never reached, because the planner pauses first.
+ *   completing receipt at its current iteration. It implements the forward
+ *   move to a stage or to the success stop (PR-3c-1) and parallel split and
+ *   join (PR-3c-2). Every other construct-specific branch (rework, refuse
+ *   route, deadline, sub-shape, a forward edge into a failure or budget stop)
+ *   throws DriveConstructNotImplementedError; the graph planner turns that into
+ *   a fail-closed pause, and with those flags off it is never reached, because
+ *   the planner pauses first.
  * - LATCH (`latchPriorFor`). Each token records its own last action, reason and
  *   cycle, so the writeback latch (writeback-latch.ts) is evaluated per token:
  *   a room-level prior names one stage and would never latch a second branch
@@ -51,7 +52,11 @@ export type DriveMarkingToken = {
   /** A join arrival names the predecessor it came from. */
   from?: string;
   enteredAt: string;
-  /** Fixed when the token enters an agent stage (PR-3c-2). */
+  /**
+   * Fixed when the token enters an agent stage (PR-3c-2): the
+   * ScheduledAgentTask it dispatches through. Later ticks reuse it and never
+   * recompute it from the current marking.
+   */
   taskId?: string;
   lastAction?: string;
   lastReason?: string;
@@ -281,25 +286,47 @@ export type DriveStepResult = {
 };
 
 /**
+ * Rule 7's stop event, for the parity harness and the stop routing to come
+ * (PR-3c-3): the first stop of that kind consumes every token. A shape that
+ * declares no stop of the kind ignores the observation.
+ */
+function stopOfKind(graph: GppFlowGraph, kind: "failure" | "budget"): DriveMarkingStopped | null {
+  for (const node of graph.nodes.values()) {
+    if (node.kind === "stop" && node.stopKind === kind) return { stopId: node.id, kind, disposition: node.disposition ?? null };
+  }
+  return null;
+}
+
+/**
  * One drive tick's firing: the first marked stage, in document order, with a
  * completing receipt at its current iteration moves its token along its
- * forward edge. Pure; the input marking is not mutated.
+ * forward edges. Pure; the input marking is not mutated.
+ *
+ * Parallel split and join (PR-3c-2, design §6.1). A token reaching a split is
+ * replaced by one token on the first node of each branch, recursively through
+ * nested splits. A token reaching a join becomes an arrival `{ node: join,
+ * from: predecessor }`; when every forward predecessor of the join has
+ * arrived, the arrivals are removed and one token goes on the join's
+ * successor. There is no partial join. A stop reached on any branch consumes
+ * every token. Every placed stage token takes this tick's `now` as enteredAt.
  */
 export function stepDriveMarking(
   definition: MarkingShape,
   marking: DriveMarking,
-  observations: { receipts: readonly { stageKey: string; kind: string; iteration?: number }[] },
+  observations: { receipts: readonly { stageKey: string; kind: string; iteration?: number }[]; stop?: "failure" | "budget" },
   now: Date,
 ): DriveStepResult {
   const graph = buildShapeFlowGraph(definition);
   const stagesByKey = new Map(definition.stages.map((stage) => [stage.key, stage]));
   for (const token of marking.tokens) {
     const node = graph.nodes.get(token.node);
-    if (node?.kind === "parallel-join") {
-      throw new DriveConstructNotImplementedError("parallel-split-join", token.node, "a join arrival is marked (PR-3c-2).");
-    }
     const stage = node?.stageKey !== undefined ? stagesByKey.get(node.stageKey) : undefined;
     if (stage?.deadline) throw new DriveConstructNotImplementedError("stage-deadline", token.node, "a marked stage declares a deadline (PR-3c-4).");
+  }
+
+  if (observations.stop) {
+    const stopped = stopOfKind(graph, observations.stop);
+    if (stopped) return { marking: { ...marking, tokens: [] }, fired: null, stopped };
   }
 
   for (const stage of definition.stages) {
@@ -315,39 +342,48 @@ export function stepDriveMarking(
       throw new DriveConstructNotImplementedError("rework-edge", stageId, "the stage has a rework edge (PR-3c-3).");
     }
 
-    const remaining = marking.tokens.filter((entry) => entry !== token);
     if (graph.impliedTerminal === stageId) {
       return { marking: { ...marking, tokens: [] }, fired: stage.key, stopped: { stopId: null, kind: "success", disposition: null } };
     }
     const successors = graph.successors.get(stageId) ?? [];
     // A dead end in an explicit flow (S-2): the token cannot move.
     if (successors.length === 0) return { marking, fired: stage.key, stopped: null };
-    const placed: DriveMarkingToken[] = [];
-    for (const target of successors) {
+
+    const tokens = marking.tokens.filter((entry) => entry !== token);
+    const holds = (node: string, from?: string) => tokens.some((entry) => entry.node === node && entry.from === from);
+    const reached: { stopped: DriveMarkingStopped | null } = { stopped: null };
+    const enter = (target: string, from: string): void => {
+      if (reached.stopped) return;
       const node = graph.nodes.get(target);
-      if (!node) continue;
+      if (!node) return;
       if (node.kind === "stop") {
         if (node.stopKind !== "success") {
           throw new DriveConstructNotImplementedError("stop", target, `a forward edge reaches a ${node.stopKind} stop, which the drive does not route yet.`);
         }
-        return {
-          marking: { ...marking, tokens: [] },
-          fired: stage.key,
-          stopped: { stopId: target, kind: "success", disposition: node.disposition ?? null },
-        };
+        reached.stopped = { stopId: target, kind: "success", disposition: node.disposition ?? null };
+        return;
       }
-      if (node.kind !== "stage") {
-        throw new DriveConstructNotImplementedError("parallel-split-join", target, `a forward edge reaches a ${node.kind} (PR-3c-2).`);
+      if (node.kind === "parallel-split") {
+        for (const next of graph.successors.get(target) ?? []) enter(next, target);
+        return;
+      }
+      if (node.kind === "parallel-join") {
+        if (!holds(target, from)) tokens.push({ node: target, from, enteredAt: now.toISOString() });
+        const incoming = graph.predecessors.get(target) ?? [];
+        if (incoming.length === 0 || !incoming.every((previous) => holds(target, previous))) return;
+        for (let index = tokens.length - 1; index >= 0; index -= 1) if (tokens[index]!.node === target) tokens.splice(index, 1);
+        for (const next of graph.successors.get(target) ?? []) enter(next, target);
+        return;
       }
       const next = node.stageKey !== undefined ? stagesByKey.get(node.stageKey) : undefined;
       if (next?.subShape !== undefined) throw new DriveConstructNotImplementedError("sub-shape", target, "the next stage calls a sub-shape (PR-3c-5).");
       if (next?.deadline) throw new DriveConstructNotImplementedError("stage-deadline", target, "the next stage declares a deadline (PR-3c-4).");
       // 1-safe: a stage that already holds a token gains no second one.
-      if (!remaining.some((entry) => entry.node === target) && !placed.some((entry) => entry.node === target)) {
-        placed.push({ node: target, enteredAt: now.toISOString() });
-      }
-    }
-    return { marking: { ...marking, tokens: [...remaining, ...placed].sort(compareTokens) }, fired: stage.key, stopped: null };
+      if (!holds(target)) tokens.push({ node: target, enteredAt: now.toISOString() });
+    };
+    for (const target of successors) enter(target, stageId);
+    if (reached.stopped) return { marking: { ...marking, tokens: [] }, fired: stage.key, stopped: reached.stopped };
+    return { marking: { ...marking, tokens: tokens.sort(compareTokens) }, fired: stage.key, stopped: null };
   }
   return { marking, fired: null, stopped: null };
 }

@@ -122,7 +122,7 @@ export type DrivePlan = {
   marking?: DriveMarking | { raw: unknown };
 };
 
-export { parseAccountablePrincipalRef, workroomDriveTaskId } from "./drive-plan-stage";
+export { parseAccountablePrincipalRef, workroomDriveBranchTaskId, workroomDriveTaskId } from "./drive-plan-stage";
 
 export function nextStageKey(
   definition: WorkShapeDefinitionContract,

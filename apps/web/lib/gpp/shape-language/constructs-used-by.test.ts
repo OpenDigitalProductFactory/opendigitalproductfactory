@@ -4,9 +4,10 @@
 // docs/superpowers/plans/2026-10-02-gpp-phase-3c-drive-graph-execution.md
 // (PR-3c-1).
 //
-// 1. Over each AC-NOT-EXECUTABLE fixture, the walk over the lowered document
-//    names exactly the constructs and elements the DRC refuses, so the two
-//    readers of the walk cannot disagree.
+// 1. Over each AC-NOT-EXECUTABLE fixture (and the parallel one, a passing
+//    document since PR-3c-2), with every graph construct switched off, the
+//    walk over the lowered document names exactly the constructs and elements
+//    the DRC refuses, so the two readers of the walk cannot disagree.
 // 2. A plain flow edge, a lone join and a paired join are walked as the DRC
 //    walked them before the refactor.
 // 3. No registry definition uses a gated construct.
@@ -20,6 +21,7 @@ import { listWorkShapes, readWorkShapeDefinitionContract } from "@/lib/work-mana
 
 import { constructsUsedBy } from "./constructs-used-by";
 import { runDesignRules } from "./drc";
+import { CONSTRUCT_EXECUTABLE } from "./executable-constructs";
 import { lowerToDefinition } from "./emit";
 import type { GateRatificationEntry } from "./gate-ratification";
 import { parseShapeDocument } from "./parse";
@@ -29,12 +31,20 @@ import { defaultResolveSources } from "./resolve-sources";
 const FIXTURE_DIR = join(__dirname, "__fixtures__", "drc");
 const RATIFICATION = JSON.parse(readFileSync(join(FIXTURE_DIR, "ratification.json"), "utf8")) as Record<string, GateRatificationEntry>;
 const FIXTURES = [
-  "e-not-executable-parallel-split.gpp.json",
+  "pass-parallel-split-join.gpp.json",
   "e-not-executable-rework-edge.gpp.json",
   "e-not-executable-stage-deadline.gpp.json",
   "e-not-executable-sub-shape.gpp.json",
   "e-not-executable-refuse-edge.gpp.json",
 ];
+
+const GRAPH_CONSTRUCTS_OFF = {
+  ...CONSTRUCT_EXECUTABLE,
+  "parallel-split-join": false,
+  "rework-edge": false,
+  "stage-deadline": false,
+  "sub-shape": false,
+};
 
 let sources: GppResolveSources;
 beforeAll(() => {
@@ -50,7 +60,9 @@ function load(file: string) {
 describe("constructsUsedBy agrees with the DRC's E-NOT-EXECUTABLE findings", () => {
   it.each(FIXTURES)("%s", async (file) => {
     const document = load(file);
-    const findings = runDesignRules(document, await resolveShapeDocument(document, sources), { ratification: RATIFICATION, directSites: new Map() });
+    // Every graph construct switched off (test-only), so the walk is compared for each fixture whatever the live
+    // flags say: parallel split/join is executable since PR-3c-2, and its fixture is a passing document now.
+    const findings = runDesignRules(document, await resolveShapeDocument(document, sources), { ratification: RATIFICATION, directSites: new Map(), executable: GRAPH_CONSTRUCTS_OFF });
     const refused = findings
       .filter((finding) => finding.rule === "E-NOT-EXECUTABLE")
       .map((finding) => `${finding.code}@${finding.elementId}${finding.path}`)

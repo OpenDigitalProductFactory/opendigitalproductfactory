@@ -10,6 +10,7 @@ import {
   governedDecisionStage,
   priorStageFindings,
   readPendingGovernedDecision,
+  readPendingGovernedDecisions,
   resolveStageDecider,
   stageDeciderRefusal,
   validateStageDecision,
@@ -36,6 +37,33 @@ describe("governed stage decision (pure)", () => {
     expect(readPendingGovernedDecision({ workroomDrive: { pendingAttention: {
       reason: "role_stage", stageKey: "decide" } } })).toBeNull();
     expect(readPendingGovernedDecision({ workroomDrive: { pendingAttention: null } })).toBeNull();
+  });
+
+  // GPP Phase 3c PR-3c-2: parallel branches can wait on several decisions at once.
+  it("lists every pending governed decision of a graph room, and falls back to the single one", () => {
+    const both = { workroomDrive: {
+      pendingAttention: { reason: "governed_decision", stageKey: "legal", principalRef: "role:owner" },
+      pendingAttentions: [
+        { reason: "governed_decision", stageKey: "legal", principalRef: "role:owner" },
+        { reason: "role_stage", stageKey: "notes", principalRef: "role:author" },
+        { reason: "governed_decision", stageKey: "security", principalRef: " " },
+        { reason: "governed_decision", stageKey: "legal", principalRef: "role:owner" },
+      ],
+    } };
+    expect(readPendingGovernedDecisions(both)).toEqual([
+      { stageKey: "legal", principalRef: "role:owner" },
+      { stageKey: "security", principalRef: null },
+    ]);
+    // The single reader still returns the first, unchanged.
+    expect(readPendingGovernedDecision(both)).toEqual({ stageKey: "legal", principalRef: "role:owner" });
+    // Deciding one: the drive's next snapshot lists only the other.
+    expect(readPendingGovernedDecisions({ workroomDrive: { pendingAttentions: [both.workroomDrive.pendingAttentions[2]] } }))
+      .toEqual([{ stageKey: "security", principalRef: null }]);
+    // A sequential room has no list: the single pendingAttention is read exactly as before.
+    expect(readPendingGovernedDecisions({ workroomDrive: { pendingAttention: { reason: "governed_decision", stageKey: "decide", principalRef: "role:security-owner" } } }))
+      .toEqual([{ stageKey: "decide", principalRef: "role:security-owner" }]);
+    expect(readPendingGovernedDecisions({ workroomDrive: { pendingAttention: { reason: "role_stage", stageKey: "decide" } } })).toEqual([]);
+    expect(readPendingGovernedDecisions({ workroomDrive: { pendingAttentions: [] } })).toEqual([]);
   });
 
   it("offers accept/patch/defer for dependency-advisory-watch and only accept/defer otherwise", () => {

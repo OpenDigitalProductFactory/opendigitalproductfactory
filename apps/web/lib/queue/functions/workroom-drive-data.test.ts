@@ -67,6 +67,10 @@ describe("loadStageDispatchTimesByStage", () => {
     expect(sql).toMatch(/'dispatchedStageKeys'/);
     expect(sql).toMatch(/'pendingAttentions'/);
     expect(sql).toMatch(/'governed_decision'/);
+    // PR-3c-2: a mixed tick's row records the aggregate action, so a row naming dispatched stages counts whatever its
+    // action, and a waiting governed decision is read off dispatch rows as well as attention rows.
+    expect(sql).toMatch(/action' = 'dispatch_agent' OR jsonb_typeof\(a\."payload" -> 'dispatchedStageKeys'\) = 'array'/);
+    expect(sql).toMatch(/"kind" IN \('workroom-drive-attention', 'workroom-drive'\)/);
     expect(sql).toMatch(/DISTINCT ON \(started\."capsuleId", started\."stageKey"\)/);
     expect(calls[0]!.values).toEqual([["WC-1", "WC-2"], ["WC-1", "WC-2"]]);
     expect(byRoom.get("WC-1")).toEqual(new Map([["linux", at("2026-10-01T10:00:00.000Z")], ["macos", at("2026-10-01T10:15:00.000Z")]]));

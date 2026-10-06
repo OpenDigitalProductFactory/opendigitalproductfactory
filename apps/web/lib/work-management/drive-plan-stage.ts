@@ -39,6 +39,16 @@ export function workroomDriveTaskId(roomId: string, shapeKey: string): string {
   return `workroom-${roomId}-${shapeKey}`;
 }
 
+/**
+ * The task id of a parallel branch's agent stage while another token holds the
+ * room's primary task (GPP Phase 3c PR-3c-2, design §6 "Dispatch every
+ * tick"). Fixed on the token when it enters the stage; a sequential room never
+ * uses it.
+ */
+export function workroomDriveBranchTaskId(roomId: string, shapeKey: string, stageKey: string): string {
+  return `${workroomDriveTaskId(roomId, shapeKey)}--${stageKey}`;
+}
+
 export function parseAccountablePrincipalRef(
   ref: string,
 ): { kind: AccountablePrincipalKind; value: string } {

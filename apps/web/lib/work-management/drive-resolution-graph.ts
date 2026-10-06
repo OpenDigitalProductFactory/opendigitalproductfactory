@@ -1,6 +1,6 @@
 /**
  * The graph drive: the plan for a room whose shape uses a graph construct
- * (BI-8875C9DF, GPP Phase 3c PR-3c-1).
+ * (BI-8875C9DF, GPP Phase 3c PR-3c-1; parallel dispatch PR-3c-2).
  *
  * Design: docs/superpowers/specs/2026-10-02-gpp-phase-3c-drive-graph-execution-design.md
  * §4 (state model), §5 (kill switch), §7.1 (one switch); plan:
@@ -22,7 +22,9 @@
  *    Process Overseer check with the flow-aware `flowOrder` input, then the
  *    same cycle-complete and disposition rules as the sequential drive.
  * 4. TOKENS. One plan per marked stage through the shared planStage rules,
- *    each with the token's own latch prior and iteration. The aggregate action
+ *    each with the token's own latch prior and iteration. An agent-stage
+ *    token's task id is fixed when it enters the stage (withFixedTaskIds) and
+ *    its dispatch goes through that id. The aggregate action
  *    is the first by precedence stop > escalate > pause > dispatch_agent >
  *    attention > do_not_wake; its reason is the first token's at that
  *    precedence. Each token records its own last action, reason and cycle.
@@ -51,7 +53,16 @@ import {
   type DriveStepResult,
   type DriveTokenPlan,
 } from "./drive-marking";
-import { cycleCompleted, emptyPlan, ledgerFrom, planStage, projectDriveCycle } from "./drive-plan-stage";
+import {
+  cycleCompleted,
+  emptyPlan,
+  ledgerFrom,
+  parseAccountablePrincipalRef,
+  planStage,
+  projectDriveCycle,
+  workroomDriveBranchTaskId,
+  workroomDriveTaskId,
+} from "./drive-plan-stage";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 import { evaluateWorkroomShapeConformance } from "./workroom-shape-conformance";
 import { isCompletingWorkroomDriveReceiptAt } from "./workroom-drive-receipts";
@@ -62,6 +73,37 @@ const ACTION_PRECEDENCE: readonly DriveAction[] = ["stop", "escalate", "pause", 
 /** The first stage key the marking holds, in document order: the legacy `stageKey`. */
 function firstMarked(definition: WorkShapeDefinitionContract, marking: DriveMarking): string | null {
   return markedStageKeys(definition, marking)[0] ?? null;
+}
+
+/**
+ * Fix the task id of every agent-stage token that has none yet (PR-3c-2,
+ * design §6 "Dispatch every tick"). In document order, a token takes the
+ * room's primary task id when no other live token holds it, else its branch
+ * id. A token that already carries one keeps it, so the id never depends on
+ * which stages happen to be marked on a later tick. A sequential twin's single
+ * token therefore always takes the primary id.
+ */
+export function withFixedTaskIds(definition: WorkShapeDefinitionContract, marking: DriveMarking, roomId: string): DriveMarking {
+  const primary = workroomDriveTaskId(roomId, definition.key);
+  const held = new Set(marking.tokens.flatMap((token) => (token.taskId ? [token.taskId] : [])));
+  const fixed = new Map<string, string>();
+  for (const stage of definition.stages) {
+    const token = stageToken(marking, stage.key);
+    if (!token || token.taskId) continue;
+    const principal = parseAccountablePrincipalRef(stage.accountablePrincipalRef);
+    if (principal.kind !== "agent" || !principal.value) continue;
+    const taskId = held.has(primary) ? workroomDriveBranchTaskId(roomId, definition.key, stage.key) : primary;
+    held.add(taskId);
+    fixed.set(token.node, taskId);
+  }
+  if (fixed.size === 0) return marking;
+  return {
+    ...marking,
+    tokens: marking.tokens.map((token) => {
+      const taskId = token.from === undefined ? fixed.get(token.node) : undefined;
+      return taskId ? { ...token, taskId } : token;
+    }),
+  };
 }
 
 export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition: WorkShapeDefinitionContract }): DrivePlan {
@@ -99,6 +141,7 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
   let stepped: DriveStepResult;
   try {
     stepped = stepDriveMarking(definition, stored, { receipts: input.receipts }, now);
+    stepped = { ...stepped, marking: withFixedTaskIds(definition, stepped.marking, input.roomId) };
   } catch (error) {
     if (!(error instanceof DriveConstructNotImplementedError)) throw error;
     return {
@@ -167,7 +210,9 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
     const token = stageToken(stepped.marking, stageKey);
     if (!stage || !token) continue;
     const iteration = iterationOf(stepped.marking, stageKey);
-    const plan = planStage({ input, definition, stage, conformance, cycle, prior: latchPriorFor(token, stageKey), iteration });
+    const planned = planStage({ input, definition, stage, conformance, cycle, prior: latchPriorFor(token, stageKey), iteration });
+    // A dispatch goes through the task id fixed on the token when it entered the stage.
+    const plan = planned.action === "dispatch_agent" && token.taskId ? { ...planned, taskId: token.taskId } : planned;
     tokenPlans.push({
       plan,
       token: {
@@ -204,6 +249,8 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
   };
   return {
     ...chosen.plan,
+    // The legacy stageKey is the first marked stage in document order (design §4.2).
+    stageKey: marked[0] ?? null,
     ledger: tokenPlans.flatMap((entry) => entry.plan.ledger),
     tokens: tokenPlans.map((entry) => entry.token),
     marking,
