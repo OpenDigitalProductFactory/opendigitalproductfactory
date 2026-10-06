@@ -8,7 +8,8 @@
 // 2. The iteration predicate and the per-token latch prior.
 // 3. The forward move on a two-stage flow equals nextStageKey on its
 //    sequential twin, over seeded receipt sequences.
-// 4. Every construct-specific branch throws construct_not_implemented.
+// 4. Parallel split and join (PR-3c-2).
+// 5. Every other construct-specific branch throws construct_not_implemented.
 
 import { describe, expect, it } from "vitest";
 
@@ -199,6 +200,55 @@ describe("stepDriveMarking: the forward move", () => {
   });
 });
 
+// PR-3c-2 (design §6.1): split and join are implemented; parity with the
+// interpreter is drive-parity-parallel.test.ts. These pin the step's own shape.
+describe("stepDriveMarking: parallel split and join (PR-3c-2)", () => {
+  const at = (iso: string) => ({ enteredAt: iso });
+  const LATER = new Date("2026-03-01T10:00:00.000Z");
+
+  it("a split places one token on the first stage of each branch, each with this tick's enteredAt", () => {
+    const result = stepDriveMarking(PARALLEL_FIXTURE, marking(), { receipts: [{ stageKey: "a", kind: "assurance-run" }] }, NOW);
+    expect(result.fired).toBe("a");
+    expect(result.stopped).toBeNull();
+    expect(result.marking.tokens).toEqual([{ node: "stage:b", ...at(NOW.toISOString()) }, { node: "stage:c", ...at(NOW.toISOString()) }]);
+    expect(markedStageKeys(PARALLEL_FIXTURE, result.marking)).toEqual(["b", "c"]);
+  });
+
+  it("a branch reaching the join waits as an arrival; the other branch keeps its token and its own enteredAt", () => {
+    const split = marking({ tokens: [{ node: "stage:b", ...at(NOW.toISOString()), taskId: "t-b" }, { node: "stage:c", ...at(NOW.toISOString()), taskId: "t-c" }] });
+    const result = stepDriveMarking(PARALLEL_FIXTURE, split, { receipts: [{ stageKey: "b", kind: "k" }] }, LATER);
+    expect(result.fired).toBe("b");
+    expect(result.marking.tokens).toEqual([
+      { node: "node:j", from: "stage:b", ...at(LATER.toISOString()) },
+      { node: "stage:c", ...at(NOW.toISOString()), taskId: "t-c" },
+    ]);
+    expect(markedStageKeys(PARALLEL_FIXTURE, result.marking)).toEqual(["c"]);
+  });
+
+  it("the last arrival completes the join: arrivals are removed and one token goes on the successor", () => {
+    const waiting = marking({ tokens: [{ node: "node:j", from: "stage:b", ...at(NOW.toISOString()) }, { node: "stage:c", ...at(NOW.toISOString()) }] });
+    const result = stepDriveMarking(PARALLEL_FIXTURE, waiting, { receipts: [{ stageKey: "b", kind: "k" }, { stageKey: "c", kind: "k" }] }, LATER);
+    expect(result.fired).toBe("c");
+    expect(result.marking.tokens).toEqual([{ node: "stage:d", ...at(LATER.toISOString()) }]);
+  });
+
+  it("fires at most one stage per tick, the first enabled in document order", () => {
+    const split = marking({ tokens: [{ node: "stage:b", ...at(NOW.toISOString()) }, { node: "stage:c", ...at(NOW.toISOString()) }] });
+    const both = { receipts: [{ stageKey: "c", kind: "k" }, { stageKey: "b", kind: "k" }] };
+    const first = stepDriveMarking(PARALLEL_FIXTURE, split, both, LATER);
+    expect(first.fired).toBe("b");
+    const second = stepDriveMarking(PARALLEL_FIXTURE, first.marking, both, LATER);
+    expect(second.fired).toBe("c");
+    expect(markedStageKeys(PARALLEL_FIXTURE, second.marking)).toEqual(["d"]);
+  });
+
+  it("a stop event consumes every token at the first stop of its kind, from any marking", () => {
+    const split = marking({ tokens: [{ node: "node:j", from: "stage:b", ...at(NOW.toISOString()) }, { node: "stage:c", ...at(NOW.toISOString()) }] });
+    expect(stepDriveMarking(PARALLEL_FIXTURE, split, { receipts: [{ stageKey: "c", kind: "k" }], stop: "budget" }, NOW))
+      .toEqual({ fired: null, stopped: { stopId: "stop:budget:1", kind: "budget", disposition: "awaiting-person" }, marking: { ...split, tokens: [] } });
+  });
+});
+
 describe("stepDriveMarking: construct-specific branches throw construct_not_implemented", () => {
   const throwsFor = (run: () => unknown, construct: string) => {
     try {
@@ -213,12 +263,6 @@ describe("stepDriveMarking: construct-specific branches throw construct_not_impl
   };
   const done = (stageKey: string) => ({ receipts: [{ stageKey, kind: "stage-evidence-recorded" }] });
 
-  it("a parallel split", () => {
-    throwsFor(() => stepDriveMarking(PARALLEL_FIXTURE, marking(), done("a"), NOW), "parallel-split-join");
-  });
-  it("a marked join arrival", () => {
-    throwsFor(() => stepDriveMarking(PARALLEL_FIXTURE, marking({ tokens: [{ node: "node:j", from: "stage:b", enteredAt: NOW.toISOString() }] }), done("c"), NOW), "parallel-split-join");
-  });
   it("a rework edge", () => {
     throwsFor(() => stepDriveMarking(REWORK_FIXTURE, marking({ tokens: [{ node: "stage:b", enteredAt: NOW.toISOString() }] }), done("b"), NOW), "rework-edge");
   });
