@@ -311,6 +311,13 @@ export function buildGateContext({
     id: entry.id,
     description: entry.description,
     artifacts: entry.artifactPaths,
+    // The registry has carried `generate` and `check` all along; this context
+    // used to print only the artifact PATHS, so a reader learned WHAT was stale
+    // and still had to know HOW to refresh it. Surfacing the commands is what
+    // makes this consumable by a script rather than only by a person who already
+    // knows the repo (BI-4CE4F52F): `pnpm land` regenerates straight from here.
+    generate: entry.generate ?? null,
+    check: entry.check ?? null,
   }));
 
   // 5. Routes: net-new pages face absolute budgets + four generated
@@ -414,7 +421,10 @@ export function formatGateContextMarkdown(context) {
   ));
   out.push(...formatSection(
     "Derived artifacts to regenerate in this change",
-    context.derivedArtifacts.map((d) => `- **${d.id}**: ${d.artifacts.join(", ")}`),
+    context.derivedArtifacts.map((d) => {
+      const how = d.generate ? ` — regenerate: \`${d.generate.join(" ")}\`` : "";
+      return `- **${d.id}**: ${d.artifacts.join(", ")}${how}`;
+    }),
   ));
   out.push(...formatSection(
     "Route budgets",
