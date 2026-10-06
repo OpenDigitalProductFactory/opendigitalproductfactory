@@ -490,7 +490,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // entrypoint, caddy) leaked tens of thousands of zombies until Docker
     // could not fork. Those services run Docker's init.
     guard("compose-init-reaping-guard", "Compose Init Reaping Guard", [
-      node("--test", "scripts/compose-init-reaping.test.mjs"),
+      conformanceTest("scripts/compose-init-reaping.test.mjs"),
     ], { inputs: ["code"] }),
     guard("n-minus-one-caller-honesty", "N-1 Caller Honesty", [
       node("--test", "scripts/check-n-minus-one-caller-honesty.test.mjs"),
