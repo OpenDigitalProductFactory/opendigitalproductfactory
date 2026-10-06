@@ -233,7 +233,7 @@ describe("Build Studio rooms (BI-926A7E90)", () => {
     unmet: [{ code: "SPEC_APPROVAL_REQUIRED", accountableRole: "design-checklist-reviewer" }] };
 
   beforeEach(() => {
-    mocks.room.mockResolvedValue({ id: "room-bs", backlogItemId: "cuid-item", executorKind: "build-studio", requestedByPrincipalId: "prn-human" });
+    mocks.room.mockResolvedValue({ id: "room-bs", backlogItemId: "cuid-item", executorKind: "build-studio", requestedByPrincipalId: null, featureBuild: { createdById: "human" } });
     mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { implementation } } } });
     mocks.buildStudioRoutes.mockResolvedValue({ routed: true, routes: [{ workroomId: "WC-BS", requestCoworker: revisionPacket }] });
   });
@@ -246,6 +246,7 @@ describe("Build Studio rooms (BI-926A7E90)", () => {
   });
 
   it("refuses a connection that is not the requesting person's, and a packet the resolver did not issue", async () => {
+    mocks.room.mockResolvedValue({ id: "room-bs", backlogItemId: "cuid-item", executorKind: "build-studio", requestedByPrincipalId: "prn-human", featureBuild: { createdById: "someone-else" } });
     mocks.alias.mockResolvedValue({ principalId: "prn-other" });
     expect((await authorizeCoworkerRequest(revisionPacket, "human", context)).refusal?.message).toContain("person who requested this Build Studio build");
     mocks.alias.mockResolvedValue({ principalId: "prn-human" });
