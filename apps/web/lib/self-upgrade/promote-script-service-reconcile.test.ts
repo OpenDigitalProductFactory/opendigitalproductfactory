@@ -241,3 +241,62 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — service reconcile (BI-D011E
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
 });
+
+// BI-FFFEA4ED: Created is not an operator stop; the first startup never succeeded.
+describe.skipIf(!BASH_OK || !GIT_OK)("never-started recovery", () => {
+  it("preserves existing services when the inventory exceeds a pipe buffer", () => {
+    const required = discoverRequiredServices();
+    const fixture = makeScratch();
+    const dockerLog = join(fixture.root, "docker.log");
+    try {
+      const service = required[0];
+      const existingServices = [
+        ...required,
+        ...Array.from({ length: 3000 }, (_, index) => `unrelated-existing-service-${index}`),
+      ];
+      const result = runPromote({ ...fixture, targetSha: fixture.head, dockerLog,
+        existingServices, createdService: service,
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(readOutcome(fixture.backup)).toMatchObject({
+        outcome: "complete", created: [service], failed: [],
+      });
+      const creates = readFileSync(dockerLog, "utf8").split("\n")
+        .filter(line => line.startsWith("reconcile-create "));
+      expect(creates).toHaveLength(1);
+    } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+  for (const fails of [false, true]) {
+    it(`retries a never-started service and records ${fails ? "failure" : "success"}`, () => {
+      const required = discoverRequiredServices();
+      const fixture = makeScratch();
+      const dockerLog = join(fixture.root, "docker.log");
+      try {
+        const service = required[0];
+        const result = runPromote({ ...fixture, targetSha: fixture.head, dockerLog,
+          existingServices: required, createdService: service,
+          ...(fails ? { reconcileFailService: service } : {}),
+        });
+        expect(result.status).toBe(0);
+        expect(readFileSync(dockerLog, "utf8")).toContain(`reconcile-remove rm ${service}`);
+        expect(readOutcome(fixture.backup)).toMatchObject({
+          outcome: fails ? "degraded" : "complete",
+          created: fails ? [] : [service], failed: fails ? [service] : [],
+        });
+      } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+    }, PROMOTE_TEST_TIMEOUT_MS);
+  }
+  it("preserves uninspectable containers and records unknown recovery as degraded", () => {
+    const required = discoverRequiredServices();
+    const fixture = makeScratch();
+    const dockerLog = join(fixture.root, "docker.log");
+    try {
+      const result = runPromote({ ...fixture, targetSha: fixture.head, dockerLog,
+        existingServices: required, inspectFailService: required[0],
+      });
+      expect(result.status).toBe(0);
+      expect(readFileSync(dockerLog, "utf8")).not.toContain("reconcile-remove");
+      expect(readOutcome(fixture.backup)).toMatchObject({ outcome: "degraded", failed: [required[0]] });
+    } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+});

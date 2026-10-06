@@ -283,3 +283,13 @@ test("a retired capability still required by a live one is a catalog authoring e
     /retired_runtime_capability_required:runtime:core/,
   );
 });
+
+
+test("native macOS speech does not require the Docker speech service", async () => {
+  const state = snapshot(["runtime:core", "runtime:local-speech"]);
+  for (const host of ["windows", "linux", "macos"]) {
+    const result = await run(state, "--host", host);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).requiredServices.includes("dpf-tts"), host !== "macos");
+  }
+});

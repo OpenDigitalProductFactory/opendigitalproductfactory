@@ -167,7 +167,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-no-hand-rolled-mcp-jsonrpc.mjs"),
       // One argument parser for every script: node:util parseArgs
       // (plan 2026-09-08 §10.5 S2).
-      conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
+      conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs", "scripts/lib/script-argv.test.mjs"),
       node("scripts/check-no-hand-rolled-argv.mjs"),
       // Raw control bytes make a source file binary to grep (BI-899122C5).
       node("--test", "scripts/check-no-raw-control-bytes.test.mjs"),
@@ -258,6 +258,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/installer/lib/state-cleanup-temps.test.mjs",
+        "scripts/installer/lib/docker.test.mjs",
         "scripts/installer/lib/state-lock-timeout.test.mjs",
         "scripts/installer/lib/doctor-redaction.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
@@ -813,6 +814,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/hooks/pin-plugin-mcp-url.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
+        "scripts/lib/promoter-compose-mounts.test.mjs",
+        "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was
         // allowlisted OUT of CI, so nothing enforced its behaviour while it
@@ -923,6 +926,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // broken gate cannot manufacture its own all-clear.
         "scripts/measure-capability-completeness.test.mjs",
         "scripts/check-agent-capability-integrity.test.mjs",
+        // The job-definition axis-waiver store. Listed here so CI actually runs
+        // its EXPIRY assertion: a waiver store whose guard is unrun is the
+        // gap-hiding mechanism it was built not to be.
+        "scripts/audit-coworker-job-definitions.test.mjs",
         // Archetype obligation coverage: same rule again, plus a lockstep check
         // that this measure classifies a frequency exactly as the runtime sweep
         // does — a report that disagrees with the ledger it reports on is worse

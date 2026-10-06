@@ -29,7 +29,6 @@ import { assertScopeClaimLease } from "./scope-claim-lease";
 import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
 import {
   CapsuleBranchOccupiedError,
-  isExternalLeaseExecutor,
   isReusableLiveCapsule,
   isTerminalCapsuleStatus,
   leaseUntil,

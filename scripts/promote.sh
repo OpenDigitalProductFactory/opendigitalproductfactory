@@ -1253,11 +1253,11 @@ fi
 # install should run, already filtered by host platform and enabled capabilities, and
 # it is the same source step 7b uses to decide whether the sandbox applies here.
 #
-# Only services with NO container at all are created. `docker compose ps -a --services`
-# lists every service that has a container in any state, so a service an operator
-# deliberately stopped stays stopped — this step adds what was never delivered, it does
-# not fight the operator. `--no-recreate` means nothing already running is disturbed,
-# including dependencies pulled in by the services being created.
+# Missing services and containers proven Created/never-started are recoverable.
+# Previously started containers are operator-owned; never restart them here.
+# The retry removes only a stopped Created container (never docker rm -f), then
+# uses --no-recreate --no-deps so other services are not restarted as dependencies.
+# Bind sources are translated from this container's mount namespace to the daemon.
 #
 # Fail-LOUD but NOT fail-ABORT, exactly like sandbox-refresh (7b) and
 # decommission-legacy-stores (7c): the portal swap already succeeded and has been
@@ -1291,36 +1291,91 @@ _write_reconcile_outcome() {
 emit_step service-reconcile
 if [[ $_dry_run -eq 0 ]]; then
   _reconcile_required="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).requiredServices.join("\n")))')"
-  _reconcile_existing="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
-    "${_f_args[@]}" ps -a --services 2>/dev/null || true)"
+  _reconcile_created=()
+  _reconcile_failed=()
   _reconcile_missing=()
+  _reconcile_retry_ids=()
+  _reconcile_inventory_ok=1
+  _reconcile_existing="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+    "${_f_args[@]}" ps -a --services)" || _reconcile_inventory_ok=0
   while IFS= read -r _reconcile_svc; do
     [[ -z "$_reconcile_svc" ]] && continue
-    printf '%s\n' "$_reconcile_existing" | grep -qxF "$_reconcile_svc" || _reconcile_missing+=("$_reconcile_svc")
+    if [[ $_reconcile_inventory_ok -eq 0 ]]; then
+      _reconcile_failed+=("$_reconcile_svc")
+    # grep -q may close a pipe early; under pipefail that turns a present
+    # service into a false miss when printf receives SIGPIPE.
+    elif ! grep -qxF "$_reconcile_svc" <<< "$_reconcile_existing"; then
+      _reconcile_missing+=("$_reconcile_svc")
+      _reconcile_retry_ids+=("")
+    else
+      _reconcile_id="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" ps -a -q "$_reconcile_svc")" || _reconcile_id=""
+      # Unknown/replicated state is not permission to recreate anything.
+      if [[ -z "$_reconcile_id" || "$_reconcile_id" == *$'\n'* ]]; then
+        _reconcile_failed+=("$_reconcile_svc")
+        continue
+      fi
+      if ! _reconcile_state="$(docker inspect --format '{{.State.Status}} {{.State.StartedAt}}' "$_reconcile_id")"; then
+        _reconcile_failed+=("$_reconcile_svc")
+      elif [[ "$_reconcile_state" == 'created 0001-01-01T00:00:00Z' ]]; then
+        _reconcile_missing+=("$_reconcile_svc")
+        _reconcile_retry_ids+=("$_reconcile_id")
+      elif [[ -z "$_reconcile_state" ]]; then
+        _reconcile_failed+=("$_reconcile_svc")
+      fi
+    fi
   done <<< "$_reconcile_required"
   if [[ ${#_reconcile_missing[@]} -gt 0 ]]; then
     printf 'step=service-reconcile-creating target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_missing[*]}")"
-    _reconcile_created=()
-    _reconcile_failed=()
-    for _reconcile_svc in "${_reconcile_missing[@]}"; do
+    _reconcile_f_args=("${_f_args[@]}")
+    _reconcile_mounts="$(mktemp)"
+    _reconcile_mounts_ok=1
+    _reconcile_install_root=""
+    [[ $_release_mode -eq 0 ]] || _reconcile_install_root="$PROMOTE_INSTALL_ROOT"
+    # Only the bind override is persisted; rendered environment/secrets stay in
+    # the pipe. Release identity was committed above, so use stable install assets.
+    if docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" config --format json \
+      | node "$_promoter_dir/lib/govern-capability-compose-args.mjs" "$_compose_root" "$_reconcile_install_root" > "$_reconcile_mounts"; then
+      _reconcile_f_args+=(-f "$_reconcile_mounts")
+    else
+      _reconcile_mounts_ok=0
+    fi
+    for _reconcile_index in "${!_reconcile_missing[@]}"; do
+      _reconcile_svc="${_reconcile_missing[$_reconcile_index]}"
+      _reconcile_id="${_reconcile_retry_ids[$_reconcile_index]}"
+      if [[ $_reconcile_mounts_ok -eq 0 ]]; then
+        _reconcile_failed+=("$_reconcile_svc")
+        continue
+      fi
+      if [[ -n "$_reconcile_id" ]]; then
+        # Recheck immediately before removal. rm without force also refuses if
+        # another actor started it since inspection; never remove running work.
+        _reconcile_state="$(docker inspect --format '{{.State.Status}} {{.State.StartedAt}}' "$_reconcile_id")" || _reconcile_state=""
+        if [[ "$_reconcile_state" != 'created 0001-01-01T00:00:00Z' ]] || ! docker rm "$_reconcile_id"; then
+          _reconcile_failed+=("$_reconcile_svc")
+          continue
+        fi
+      fi
       if docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
-        "${_f_args[@]}" up -d --no-recreate "$_reconcile_svc"; then
+        "${_reconcile_f_args[@]}" up -d --no-recreate --no-deps "$_reconcile_svc"; then
         _reconcile_created+=("$_reconcile_svc")
       else
         _reconcile_failed+=("$_reconcile_svc")
       fi
     done
-    if [[ ${#_reconcile_created[@]} -gt 0 ]]; then
-      printf 'step=service-reconcile-created target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_created[*]}")"
-    fi
-    if [[ ${#_reconcile_failed[@]} -gt 0 ]]; then
-      printf 'step=service-reconcile-failed target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_failed[*]}")"
-      printf 'warning: could not create required service(s) %s after a successful portal promotion — the portal upgrade stands and every other missing service was created, but this install is missing capability services the release ships. The run is recorded as degraded; it retries on the next upgrade (BI-D011EBE2, BI-5ACBAC50)\n' "$(IFS=,; printf '%s' "${_reconcile_failed[*]}")" >&2
-      _write_reconcile_outcome degraded "$_reconcile_required" \
-        "$(printf '%s\n' ${_reconcile_created[@]+"${_reconcile_created[@]}"})" "$(printf '%s\n' "${_reconcile_failed[@]}")"
-    else
-      _write_reconcile_outcome complete "$_reconcile_required" "$(printf '%s\n' "${_reconcile_created[@]}")" ""
-    fi
+    rm -f "$_reconcile_mounts"
+  fi
+  if [[ ${#_reconcile_created[@]} -gt 0 ]]; then
+    printf 'step=service-reconcile-created target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_created[*]}")"
+  fi
+  if [[ ${#_reconcile_failed[@]} -gt 0 ]]; then
+    printf 'step=service-reconcile-failed target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_failed[*]}")"
+    printf 'warning: required service recovery failed for %s; the portal upgrade stands, the run remains degraded, and recovery retries on the next upgrade (BI-D011EBE2, BI-FFFEA4ED)\n' "$(IFS=,; printf '%s' "${_reconcile_failed[*]}")" >&2
+    _write_reconcile_outcome degraded "$_reconcile_required" \
+      "$(printf '%s\n' ${_reconcile_created[@]+"${_reconcile_created[@]}"})" "$(printf '%s\n' "${_reconcile_failed[@]}")"
+  elif [[ ${#_reconcile_created[@]} -gt 0 ]]; then
+    _write_reconcile_outcome complete "$_reconcile_required" "$(printf '%s\n' "${_reconcile_created[@]}")" ""
   else
     printf 'step=service-reconcile-current target=%s\n' "$_built_sha"
     _write_reconcile_outcome current "$_reconcile_required" "" ""

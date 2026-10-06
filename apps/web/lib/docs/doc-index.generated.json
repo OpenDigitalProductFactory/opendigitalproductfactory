@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 731,
+  "pageCount": 732,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2130,7 +2130,8 @@
         "diagnosing-requires-an-acting-coworker",
         "diagnosing-an-empty-loadtools-result",
         "task-specific-operating-rules",
-        "disclosure-measurement-and-recovery"
+        "disclosure-measurement-and-recovery",
+        "recovering-an-interrupted-independent-review"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -5557,7 +5558,8 @@
       "publishedPortal": false,
       "anchors": [
         "dpf-install-guide-linux-native-docker",
-        "supported-environment",
+        "recommended-first-deployment",
+        "compatibility-and-prerequisites",
         "prerequisites",
         "quick-start",
         "contributor-office-document-conversion",
@@ -5565,6 +5567,7 @@
         "what-the-installer-does",
         "login",
         "network-exposure-after-install",
+        "pilot-acceptance-checks",
         "day-to-day",
         "edge-node-whats-running-and-why",
         "llm-provider",
@@ -5620,7 +5623,8 @@
         "4-git-repo-hygiene",
         "room-route-guard-on-windows",
         "recurring-meta-pattern",
-        "persisted-mcp-endpoint-recovery-bi-9f258707"
+        "persisted-mcp-endpoint-recovery-bi-9f258707",
+        "required-services-after-container-driven-upgrades-bi-fffea4ed"
       ]
     },
     "docs/install/scratch-install-rehearsal.md": {
@@ -12074,6 +12078,15 @@
         "related"
       ]
     },
+    "docs/user-guide/coworker-permission-reconciliation.md": {
+      "publicHref": "/user-guide/coworker-permission-reconciliation/",
+      "portalHref": "/docs/coworker-permission-reconciliation",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "review-coworker-permissions"
+      ]
+    },
     "docs/user-guide/customers/customer-map.md": {
       "publicHref": "/user-guide/customers/customer-map/",
       "portalHref": "/docs/customers/customer-map",
@@ -12535,7 +12548,8 @@
         "what-happens-if-you-do-nothing",
         "what-is-reversible",
         "recovery-and-help",
-        "what-to-watch"
+        "what-to-watch",
+        "when-required-services-are-degraded"
       ]
     },
     "docs/user-guide/platform/address-validation-providers.md": {

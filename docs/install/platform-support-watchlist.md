@@ -14,6 +14,11 @@ out for Z."
 
 ## Target environments
 
+Linux readiness evidence and remaining acceptance checks are maintained in
+the [Linux guide](linux.md#pilot-acceptance-checks). Publishing both CPU
+architectures does not certify either host's full lifecycle. BI-3BE9A85C owns
+the Linux GA work; BI-E1AA1B3C repairs its Docker prerequisite path.
+
 | Environment | Status | LLM provider | Host telemetry exporter | Autostart |
 |---|---|---|---|---|
 | **Windows 10/11** (Docker Desktop) | GA | Docker Model Runner | `windows_exporter` on host (`windows-host` job, :9182) | Scheduled Task |
@@ -72,6 +77,7 @@ bootstrap runs with the system interpreter.
 
 | # | Trap | Platforms | Status | Watch for |
 |---|---|---|---|---|
+| S9 | Engine-only Docker install reaches deployment without Compose; failed group/service setup looks successful | Linux | ✅ BI-E1AA1B3C: coherent official Docker package family, Compose preflight and explicit errors; behavioral tests in `scripts/installer/lib/docker.test.mjs`. Native clean-host runtime acceptance remains unrun. | A Docker CLI version does not prove Compose exists. Capture status 75 in a conditional and explicitly handle failures inside the helper, because that conditional disables Bash errexit. |
 | S1 | `sed -i` differs (BSD requires a backup-suffix arg) | macOS | ✅ Use `dpf_sed_inplace()` in [`scripts/installer/lib/platform.sh`](../../scripts/installer/lib/platform.sh) — never raw `sed -i`. | New scripts calling `sed -i` directly. |
 | S2 | `netstat -anP tcp` (`-P` is GNU-only) | macOS | 📌 Works today only because `preflight.sh` tries `lsof` → `ss` → `netstat` and macOS always has `lsof`. | Don't reorder the fallback chain or hardcode `netstat -anP`. |
 | S3 | `readlink -f`, `stat -c`, `date -d`, `find -printf`, `grep -P` | macOS | ⚠️ watch | These GNU-isms have no BSD equivalent. Prefer POSIX forms; `shellcheck --shell=bash` runs in CI. |
@@ -153,3 +159,12 @@ never in the shared base.
 ### Persisted MCP endpoint recovery (BI-9F258707)
 
 A bootstrap launched from a worktree may have no install PUBLIC_URL and may inherit a process environment older than setup. The existing client-environment resolver now reads the persisted user endpoint after the canonical install origin and explicit process override. POSIX decodes only managed export values as data; Windows reads the User environment. The saved Node CA bundle is considered before the default PKI file. OAuth credentials, grants, trust stores and unrelated exports are unchanged. Re-run the supported bootstrap to converge native client configuration; verify its effective endpoint, not only the saved environment. Tests cover POSIX recovery and precedence; native Windows execution must be verified on a Windows host.
+
+
+## Required services after container-driven upgrades (BI-FFFEA4ED)
+
+| Host | Failure to watch for | Recovery contract |
+|---|---|---|
+| Docker Desktop and native Docker | A sibling promoter resolves relative monitoring binds beneath its own `/host-source`; the daemon cannot use that container path. A failed start leaves a Created container that an existence-only check misses. | Translate binds using the promoter's inspected host mounts. After release identity commit, release assets use the canonical install root. Retry only missing or proven never-started containers and retain failed recovery in the durable outcome. |
+| Apple Silicon macOS | The capability catalog asks for Docker speech while the macOS overlay points at the native service on port 8771. | The canonical container catalog excludes macOS for `dpf-tts`; verify native synthesis separately. A disabled `local.dpf-chatterbox-tts` LaunchAgent must be restored through the existing native setup procedure when speech is requested. |
+| All sandbox hosts | The persistent source volume contains newer package manifests but older dependency links. Next fails before its health endpoint starts. | The image-baked sandbox entrypoint performs a frozen dependency install and Prisma generation before serving the existing source. A failed install cannot fall through to a falsely ready preview. |

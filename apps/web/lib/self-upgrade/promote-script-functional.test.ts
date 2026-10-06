@@ -43,6 +43,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
         "docker-compose.release.yml",
         "scripts/lib/resolve-capability-compose-profiles.mjs",
         "scripts/lib/govern-capability-compose-args.mjs",
+        "scripts/lib/script-argv.mjs",
         "scripts/lib/capability-state-hash.mjs",
         "scripts/capability-service-catalog.generated.json",
       ]) {
@@ -178,7 +179,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("FAILS LOUD (does not deploy) when the build tree identity differs from the promote target", () => {
-    const { root, source, backup, fakeBin, head } = makeScratch();
+    const { root, source, backup, fakeBin } = makeScratch();
     try {
       // Orchestrator's intended target ≠ what's on disk → the bytes about to be
       // deployed are not the bytes that were resolved. Spec §4.3 / BI-5B6C1C35:
@@ -211,7 +212,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("FAILS LOUD when the running portal reports an EMPTY /sha (DEPLOYED_SHA unpopulated)", () => {
-    const { root, source, backup, fakeBin, head } = makeScratch();
+    const { root, source, backup, head } = makeScratch();
     try {
       // Model the BI-5B6C1C35 symptom: DEPLOYED_SHA never made it into the
       // running container, so /sha returns blank. The verify step must treat an

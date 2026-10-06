@@ -68,6 +68,7 @@ export function gitInit(dir: string): string {
   mkdirSync(join(dir, "scripts", "lib"), { recursive: true });
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(dir, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "govern-capability-compose-args.mjs"), join(dir, "scripts", "lib", "govern-capability-compose-args.mjs"));
+  copyFileSync(join(REPO_ROOT, "scripts", "lib", "script-argv.mjs"), join(dir, "scripts", "lib", "script-argv.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "capability-state-hash.mjs"), join(dir, "scripts", "lib", "capability-state-hash.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), join(dir, "scripts", "capability-service-catalog.generated.json"));
   execFileSync("git", ["-C", dir, "add", "-A"], { env });
@@ -93,6 +94,19 @@ for arg in "$@"; do
 done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
+  *"config --format json"*) printf '{"services":{}}' ;;
+  *"ps -a -q "*) for service in "$@"; do :; done; printf '%s' "$service" ;;
+  *".State.Status"*)
+    for service in "$@"; do :; done
+    if [ "$service" = "$DPF_TEST_CREATED_SERVICE" ]; then
+      printf 'created 0001-01-01T00:00:00Z'
+    elif [ "$service" = "$DPF_TEST_INSPECT_FAIL_SERVICE" ]; then
+      exit 1
+    else
+      printf 'exited 2026-09-01T00:00:00Z'
+    fi
+    ;;
+  "rm "*) printf 'reconcile-remove %s\\n' "$*" >> "$DOCKER_LOG" ;;
   *".Id"*) printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;;
   *".RepoDigests"*) printf "%s@%s\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}" ;;
   *".Os"*) printf "%s" "\${DPF_TEST_RELEASE_OS:-linux}" ;;
@@ -182,6 +196,8 @@ export function runPromote(opts: {
   principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
   /** Services the fake install has ever created (any state), for service-reconcile. */
   existingServices?: string[];
+  createdService?: string;
+  inspectFailService?: string;
   /** Make the reconcile `up -d --no-recreate` fail, to prove it never aborts the upgrade. */
   reconcileFails?: boolean;
   /** Make only `up` of this one service fail (its image tag no longer resolves). */
@@ -227,6 +243,9 @@ export function runPromote(opts: {
       ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(",")}}`
       : JSON.stringify(value) ?? "null";
   const signature = createHmac("sha256", secret).update(canonical(envelope)).digest("hex");
+  // Keep large inventories out of the Windows shell command-line limit.
+  const inventoryPath = join(opts.backup, "existing-services.txt");
+  if (opts.existingServices) writeFileSync(inventoryPath, opts.existingServices.join("\n"));
   const exports = [
     "unset DPF_STATE_DIR",
     // promote.sh writes `git config --global`; confine it to a scratch file so
@@ -252,8 +271,10 @@ export function runPromote(opts: {
       ? [`export DPF_TEST_PRINCIPAL_RECOVERY_DECISION=${shellQuote(opts.principalRecoveryDecision)}`]
       : []),
     ...(opts.existingServices
-      ? [`export DPF_TEST_EXISTING_SERVICES=${shellQuote(opts.existingServices.join("\n"))}`]
+      ? [`export DPF_TEST_EXISTING_SERVICES="$(cat ${shellQuote(toBashPath(inventoryPath))})"`]
       : []),
+    ...(opts.createdService ? [`export DPF_TEST_CREATED_SERVICE=${shellQuote(opts.createdService)}`] : []),
+    ...(opts.inspectFailService ? [`export DPF_TEST_INSPECT_FAIL_SERVICE=${shellQuote(opts.inspectFailService)}`] : []),
     ...(opts.reconcileFails ? ["export DPF_TEST_RECONCILE_FAILS=1"] : []),
     ...(opts.reconcileFailService
       ? [`export DPF_TEST_RECONCILE_FAIL_SERVICE=${shellQuote(opts.reconcileFailService)}`]

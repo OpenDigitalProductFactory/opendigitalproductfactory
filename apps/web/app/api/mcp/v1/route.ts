@@ -84,7 +84,6 @@ import {
 import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
 import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, resolveLoadToolsRequest, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
-import { prisma } from "@dpf/db";
 import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 // GPP Phase 2 PR-C: a replayed permit handle rides in tools/call params._meta.

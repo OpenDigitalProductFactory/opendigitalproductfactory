@@ -359,10 +359,6 @@ export async function advanceBuildPhase(
   if (build.createdById !== userId) throw new Error("Forbidden");
 
   const currentPhase = build.phase as BuildPhase;
-  const governedConfig = await prisma.platformDevConfig.findUnique({
-    where: { id: "singleton" },
-    select: { governedBacklogEnabled: true },
-  });
 
   const requiresStartApproval =
     build.originatingBacklogItemId != null
@@ -1312,22 +1308,14 @@ export async function shipBuild(input: {
   });
 
   // Git tagging + version tracking (best-effort — failures do not block shipping)
-  let previousTag: string | null = null;
   let gitCommitHash: string | null = null;
-  let changeCount = 0;
   let promotionId: string | null = null;
 
   try {
-    const { createTag, isGitAvailable, getLatestTag, getCommitCount, getCurrentCommitHash } = await import("@/lib/git-utils");
+    const { createTag, isGitAvailable, getCurrentCommitHash } = await import("@/lib/git-utils");
 
     if (await isGitAvailable()) {
-      // Capture previous tag BEFORE creating the new one
-      previousTag = await getLatestTag();
       gitCommitHash = await getCurrentCommitHash();
-
-      if (previousTag) {
-        changeCount = await getCommitCount(previousTag);
-      }
 
       // Create the new tag
       const tagName = `v${result.version}`;

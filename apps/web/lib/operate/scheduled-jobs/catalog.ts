@@ -356,7 +356,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     cron: "23 * * * *",
     cadence: "Hourly at :23",
     category: "editable",
-    tracksRunData: false,
+    tracksRunData: true,
     runNowEvent: null,
   },
   {

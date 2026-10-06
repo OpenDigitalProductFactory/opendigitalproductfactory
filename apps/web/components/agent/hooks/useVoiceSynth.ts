@@ -3,12 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { VoicePlaybackState } from "@/lib/voice-synthesis/service-status"
 
-// Minimal valid silent WAV (44-byte header, zero samples). Used to unlock the
-// AudioContext within the user-gesture call stack so scheduled playback is not
-// blocked by the browser autoplay policy.
-const SILENT_WAV =
-  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
-
 export interface VoiceSynthSettings {
   speed?: number
   exaggeration?: number

@@ -2,7 +2,7 @@
 import type { ProviderAdapter } from "./adapter-interface";
 import { referenceCardPricing } from "./model-pricing-reference";
 import type { ModelCard } from "./model-card-types";
-import { DEFAULT_DIMENSION_SCORES, EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
+import { DEFAULT_DIMENSION_SCORES, EMPTY_CAPABILITIES } from "./model-card-types";
 import { getBaselineForModel } from "./family-baselines";
 import { computeMetadataHash } from "./metadata-hash";
 import { classifyModel } from "./model-classifier";

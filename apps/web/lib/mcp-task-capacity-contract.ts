@@ -103,6 +103,27 @@ export function remoteTaskRequestDigest(parsed: RemoteTaskSubmitParams): string 
     .digest("hex");
 }
 
+/** Keep a review's authority immutable across additive OAuth vocabulary changes.
+ * The caller must still pass current connection and coworker authorization.
+ * Every saved grant must remain available; exact tool/item boundaries cannot grow.
+ * The saved digest authenticates all remaining request fields, including artifact.
+ */
+export function reconcileReviewReplayScope(
+  metadata: unknown,
+  savedScope: unknown,
+  current: RemoteTaskSubmitParams,
+): string[] | null {
+  if (!current.initiativeReviewBinding || !Array.isArray(savedScope)
+    || !savedScope.length || !savedScope.every((scope): scope is string => typeof scope === "string")) return null;
+  const currentScope = new Set(current.authorityScope ?? []);
+  const saved = new Set(savedScope);
+  if (savedScope.some(scope => !currentScope.has(scope))) return null;
+  if ([...currentScope].some(scope => (scope.startsWith("tool:") || scope.startsWith("backlog-item:"))
+    && !saved.has(scope))) return null;
+  return matchingRemoteTaskRequestDigest(metadata, { ...current, authorityScope: savedScope })
+    ? [...savedScope] : null;
+}
+
 function legacyRemoteTaskRequestDigest(parsed: RemoteTaskSubmitParams): string {
   return createHash("sha256")
     .update(JSON.stringify(remoteTaskRequestPacket(parsed, 1)))

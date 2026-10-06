@@ -822,27 +822,6 @@ export function buildPhaseHandoffEvidence(build: PhaseHandoffEvidenceInput): Pha
   return { evidenceFields, evidenceDigest };
 }
 
-const DEFAULT_HAPPY_PATH_STATE: HappyPathState = {
-  intake: {
-    status: "pending",
-    taxonomyNodeId: null,
-    backlogItemId: null,
-    epicId: null,
-    constrainedGoal: null,
-    failureReason: null,
-  },
-  execution: {
-    engine: null,
-    source: null,
-    status: "pending",
-    failureStage: null,
-  },
-  verification: {
-    status: "pending",
-    checks: [],
-  },
-};
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
