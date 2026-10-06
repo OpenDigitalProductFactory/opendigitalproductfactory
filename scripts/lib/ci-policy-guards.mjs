@@ -490,6 +490,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-compose-resource-budgets.test.mjs"),
       node("scripts/check-compose-resource-budgets.mjs"),
     ], { inputs: ["code"] }),
+    // BI-95BB9CB1: a service whose PID 1 does not reap children (a shell
+    // entrypoint, caddy) leaked tens of thousands of zombies until Docker
+    // could not fork. Those services run Docker's init.
+    guard("compose-init-reaping-guard", "Compose Init Reaping Guard", [
+      conformanceTest("scripts/compose-init-reaping.test.mjs"),
+    ], { inputs: ["code"] }),
     guard("n-minus-one-caller-honesty", "N-1 Caller Honesty", [
       node("--test", "scripts/check-n-minus-one-caller-honesty.test.mjs"),
       node("scripts/check-n-minus-one-caller-honesty.mjs"),
