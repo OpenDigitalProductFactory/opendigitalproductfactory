@@ -21,6 +21,8 @@
 // gates executable (highest-governance reading; the plan was silent on it). Binding enforcement is ordered absent < shadow < enforced <
 // environment (a containment boundary with declared egress is the strictest).
 
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+
 import type { WorkShapeDefinitionContract, WorkShapeStage } from "./work-shapes";
 
 export type BindingChangeClass = "widening" | "narrowing" | "unchanged";
@@ -45,12 +47,18 @@ export type BindingChangeKind =
   | "binding-enforcement-lowered"
   | "binding-version-changed"
   | "gate-removed"
-  | "binding-removed";
+  | "binding-removed"
+  // GPP Phase 3c (BI-8875C9DF): each fires only when one side declares the field.
+  | "flow-changed"
+  | "deadline-added"
+  | "deadline-relaxed"
+  | "deadline-removed"
+  | "sub-shape-changed";
 
 export type BindingChange = {
   kind: BindingChangeKind;
   class: Exclude<BindingChangeClass, "unchanged">;
-  /** Null for shape-level changes (grants). */
+  /** Null for shape-level changes (grants, flow). */
   stageKey: string | null;
   detail: string;
 };
@@ -84,6 +92,14 @@ const CLASS_OF: Record<BindingChangeKind, Exclude<BindingChangeClass, "unchanged
   "gate-removed": "widening",
   "binding-removed": "widening",
   "binding-enforcement-raised": "narrowing",
+  // A changed flow can route a token somewhere it could not go before; a
+  // deadline added only adds a notice; relaxing or removing one withdraws a
+  // control; a different sub-shape runs a different child room.
+  "flow-changed": "widening",
+  "deadline-added": "narrowing",
+  "deadline-relaxed": "widening",
+  "deadline-removed": "widening",
+  "sub-shape-changed": "widening",
 };
 
 const ENFORCEMENT_RANK: Record<NonNullable<WorkShapeStage["binding"]>["enforcement"], number> = {
@@ -127,7 +143,21 @@ function stageChanges(from: WorkShapeStage, to: WorkShapeStage): BindingChange[]
   } else if (from.advance.condition !== to.advance.condition || from.title !== to.title) {
     changes.push(change("text-changed", to.key, "title or advance condition"));
   }
-  changes.push(...gateChanges(from, to), ...bindingChanges(from, to));
+  changes.push(...gateChanges(from, to), ...bindingChanges(from, to), ...graphStageChanges(from, to));
+  return changes;
+}
+
+/** Rows for a stage deadline and a sub-shape call (Phase 3c). Neither side declaring the field: no row. */
+function graphStageChanges(from: WorkShapeStage, to: WorkShapeStage): BindingChange[] {
+  const changes: BindingChange[] = [];
+  if (!from.deadline && to.deadline) changes.push(change("deadline-added", to.key, `after ${to.deadline.afterDays} day(s)`));
+  if (from.deadline && !to.deadline) changes.push(change("deadline-removed", to.key, `after ${from.deadline.afterDays} day(s)`));
+  if (from.deadline && to.deadline && to.deadline.afterDays > from.deadline.afterDays) {
+    changes.push(change("deadline-relaxed", to.key, `${from.deadline.afterDays} -> ${to.deadline.afterDays} day(s)`));
+  }
+  if ((from.subShape !== undefined || to.subShape !== undefined) && from.subShape !== to.subShape) {
+    changes.push(change("sub-shape-changed", to.key, `${from.subShape ?? "none"} -> ${to.subShape ?? "none"}`));
+  }
   return changes;
 }
 
@@ -184,6 +214,9 @@ export function diffWorkShapeBinding(
   }
   for (const stage of from.stages) {
     if (!after.has(stage.key)) changes.push(change("stage-removed", stage.key, stage.title));
+  }
+  if ((from.flow !== undefined || to.flow !== undefined) && canonicalJson(from.flow ?? null) !== canonicalJson(to.flow ?? null)) {
+    changes.push(change("flow-changed", null, from.flow === undefined ? "flow declared" : to.flow === undefined ? "flow removed" : "flow edited"));
   }
   const grants = setDiff(from.grants, to.grants);
   for (const grant of grants.added) changes.push(change("grant-added", null, grant));
