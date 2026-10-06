@@ -102,6 +102,7 @@ export const ARGS_EXEMPT = new Map([
   ["scripts/installer/install-state-transaction.mjs", new Map([["argv", PROMOTER]])],
   ["scripts/installer/migrate-install-state.mjs", new Map([["argv", PROMOTER]])],
   ["scripts/lib/resolve-capability-compose-profiles.mjs", new Map([["argv", PROMOTER]])],
+  ["scripts/lib/govern-capability-compose-args.mjs", new Map([["process.argv.slice(2)", PROMOTER]])],
   ["scripts/rotate-runtime-transition-secret.mjs", new Map([["args", PROMOTER]])],
   ["scripts/runtime-transition-authority.mjs", new Map([["process.argv.slice(2)", PROMOTER]])],
   ["scripts/salvage-sweep.mjs", new Map([["argv", PROMOTER]])],
