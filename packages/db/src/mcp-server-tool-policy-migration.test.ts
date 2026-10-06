@@ -11,7 +11,7 @@ const databaseUrl = process.env.DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
 
 const migrationPath = new URL(
-  "../prisma/migrations/20261002190000_mcp_server_tool_policy/migration.sql",
+  "../prisma/migrations/20261006120000_mcp_server_tool_policy/migration.sql",
   import.meta.url,
 );
 

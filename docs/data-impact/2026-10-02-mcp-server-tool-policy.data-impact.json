@@ -13,7 +13,7 @@
     "reviewDisposition": "Policy columns follow the McpServerTool row, which is removed when the server stops reporting the tool or the server is deleted."
   },
   "migration": {
-    "name": "20261002190000_mcp_server_tool_policy",
+    "name": "20261006120000_mcp_server_tool_policy",
     "backfill": "Inline and fail-closed: every existing row lands quarantined via the column default; only the six bundled browser-use tools (server slug mcp-browser-use, exact tool names mapped in TOOL_TO_GRANTS) become approved. isEnabled is untouched. Guarded (IF NOT EXISTS / duplicate_object) and re-runnable; a re-run never changes a row an operator already decided. Verified by packages/db/src/mcp-server-tool-policy-migration.test.ts (shape always; empty, populated, disabled, renamed, annotation-bearing and re-run cases against Postgres when DATABASE_URL is set).",
     "rollback": "Forward-only. Older code ignores the new columns and would list tools permissively again, so rollback means reverting the code, never dropping the columns."
   },
