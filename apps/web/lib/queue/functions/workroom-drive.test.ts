@@ -24,7 +24,7 @@ import { readWorkShapeDefinitionContract, getWorkShape } from "@/lib/work-manage
 // registered (plan constraint 7), so the shape-claim resolver is overridden
 // for its key only; every registry shape resolves exactly as before. The
 // executable-construct table is a mutable copy so a case can switch the
-// parallel flag; it starts as the real table.
+// parallel flag off (the kill switch); it starts as the real table.
 const flags = vi.hoisted(() => ({ table: {} as Record<string, boolean>, original: {} as Record<string, boolean> }));
 vi.mock("@/lib/gpp/shape-language/executable-constructs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/gpp/shape-language/executable-constructs")>();
@@ -558,7 +558,9 @@ describe("parallel branches: one task per branch under one lease (PR-3c-2)", () 
     h.evidence.push({ stageKey, kind: "assurance-run", outcome: "completed", recordedAt: at(minutes) });
 
   beforeEach(() => {
-    Object.assign(flags.table, flags.original, { "parallel-split-join": true });
+    // The real table: parallel split/join is executable since PR-3c-2.
+    Object.assign(flags.table, flags.original);
+    expect(flags.table["parallel-split-join"]).toBe(true);
   });
 
   it("two concurrent agent branches get two upserts with distinct ids fixed on their tokens, under one lease", async () => {

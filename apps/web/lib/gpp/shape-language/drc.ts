@@ -72,7 +72,9 @@
 //
 // E-NOT-EXECUTABLE is checked for every construct whose flag in
 // executable-constructs.ts is off: `stage.deadline`, a flow split or join,
-// `flow.edges[].rework`, `gate.onRefuse` and `stage.subShape`. The walk is
+// `flow.edges[].rework`, `gate.onRefuse` and `stage.subShape`. The
+// parallel-split-join flag is on since Phase 3c PR-3c-2 (BI-8875C9DF), so a
+// split or join compiles; the other four are still refused. The walk is
 // constructsUsedBy (constructs-used-by.ts), run over the lowered definition,
 // the same walk the drive runs over its definition contract (Phase 3c).
 // `options.executable` replaces the table for tests only; production callers

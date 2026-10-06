@@ -12,6 +12,7 @@ import {
   SUB_SHAPE_FIXTURE,
 } from "./__fixtures__/graph-shape-fixtures";
 import { resolveDrivePlan, workroomDriveTaskId } from "./drive-resolution";
+import type { DriveMarking } from "./drive-marking";
 
 function participant(
   principalRef: string,
@@ -465,8 +466,8 @@ describe("resolveDrivePlan: the Phase 3c graph path", () => {
   });
 
   it("AC-3C-FAILCLOSED: a graph shape using a disabled construct pauses with construct_not_executable, naming it, and keeps its stage", () => {
+    // Parallel split/join is executable since PR-3c-2 (its case is below); the other four constructs stay off.
     for (const [shape, construct, elementId] of [
-      [PARALLEL_FIXTURE, "parallel-split-join", "node:p"],
       [DEADLINE_FIXTURE, "stage-deadline", "stage:b"],
       [REWORK_FIXTURE, "rework-edge", "edge:b->a"],
       [SUB_SHAPE_FIXTURE, "sub-shape", "stage:b"],
@@ -481,6 +482,20 @@ describe("resolveDrivePlan: the Phase 3c graph path", () => {
       // Absent: applyDrivePlan carries the stored marking forward unchanged.
       expect(Object.hasOwn(plan, "marking"), shape.key).toBe(false);
     }
+  });
+
+  it("PR-3c-2: with the parallel flag on, the split plans one dispatch per branch, each through the task id fixed on its token", () => {
+    const plan = resolveDrivePlan(graphInput(contract(PARALLEL_FIXTURE), { currentStageKey: "a", receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }] }));
+    expect(plan).toMatchObject({ action: "dispatch_agent", reason: "agent_stage", stageKey: "b", taskId: "workroom-WC-GRAPH-graph-fixture-parallel" });
+    expect(plan.tokens?.map((token) => [token.stageKey, token.action, token.taskId])).toEqual([
+      ["b", "dispatch_agent", "workroom-WC-GRAPH-graph-fixture-parallel"],
+      ["c", "dispatch_agent", "workroom-WC-GRAPH-graph-fixture-parallel--c"],
+    ]);
+    const marking = plan.marking as DriveMarking;
+    expect(marking.tokens.map((token) => [token.node, token.taskId, token.lastAction])).toEqual([
+      ["stage:b", "workroom-WC-GRAPH-graph-fixture-parallel", "dispatch_agent"],
+      ["stage:c", "workroom-WC-GRAPH-graph-fixture-parallel--c", "dispatch_agent"],
+    ]);
   });
 
   it("a malformed stored marking pauses with marking_unreadable and carries it verbatim", () => {

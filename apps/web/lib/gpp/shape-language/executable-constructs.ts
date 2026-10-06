@@ -60,8 +60,15 @@ export type GppConstruct = (typeof GPP_CONSTRUCTS)[number];
 
 /**
  * Whether the runtime executes each construct today (spec §5, Exec column).
- * Off: stage deadline, parallel split/join, rework edge (incl. `gate.onRefuse`),
- * sub-shape — each waits for its Phase 3c PR (BI-8875C9DF).
+ *
+ * | Construct                    | Executable | Since, or the PR that enables it (BI-8875C9DF) |
+ * |------------------------------|------------|------------------------------------------------|
+ * | parallel-split-join          | yes        | PR-3c-2 (drive-parity-parallel.test.ts)        |
+ * | rework-edge (incl. onRefuse) | no         | PR-3c-3                                        |
+ * | stage-deadline               | no         | PR-3c-4                                        |
+ * | sub-shape                    | no         | PR-3c-5                                        |
+ *
+ * Every other construct has been executable since Phase 3b.
  */
 export const CONSTRUCT_EXECUTABLE: Readonly<Record<GppConstruct, boolean>> = Object.freeze({
   trigger: true,
@@ -76,7 +83,7 @@ export const CONSTRUCT_EXECUTABLE: Readonly<Record<GppConstruct, boolean>> = Obj
   "escalation-boundary": true,
   "review-point": true,
   "stage-deadline": false,
-  "parallel-split-join": false,
+  "parallel-split-join": true,
   "rework-edge": false,
   "sub-shape": false,
   "environment-boundary": true,

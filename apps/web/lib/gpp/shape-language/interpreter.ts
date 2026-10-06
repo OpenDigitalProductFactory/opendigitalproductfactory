@@ -55,7 +55,10 @@
 // explicit `flow` (and so Phase 3c can prove the drive against them). No
 // emitted shape reaches them while their Exec flag is off: PR-3b-3 refuses
 // such a document with E-NOT-EXECUTABLE, and nothing here makes the drive run
-// them.
+// them. The parallel-split-join flag is ON since Phase 3c PR-3c-2
+// (BI-8875C9DF): the drive's own step (lib/work-management/drive-marking.ts)
+// runs split and join, and drive-parity-parallel.test.ts proves it equal to
+// these rules after every event. Rework, deadline and sub-shape stay off.
 //
 // Flow references. An edge endpoint (and `gate.onRefuse`) names a stage key, a
 // flow node id, a stop element id (`stop:<kind>:<n>`, element-ids.ts), or a
