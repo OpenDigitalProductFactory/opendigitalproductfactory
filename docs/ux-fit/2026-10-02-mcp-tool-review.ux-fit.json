@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "expandable-two-questions",
+  "decisionInteractionId": "DI-83A6548DD5C4",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/tools/services/[serverId]/page.tsx",
+      "apps/web/components/platform/McpToolReviewList.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "expandable-two-questions",
+      "full-policy-form",
+      "coworker-only-approval"
+    ]
+  }
+}

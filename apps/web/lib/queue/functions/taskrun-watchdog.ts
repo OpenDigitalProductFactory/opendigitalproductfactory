@@ -27,6 +27,7 @@ import {
 import { buildStallSurface, mergeVerificationPatch } from "@/lib/observability/stall-surface";
 import { isStallWatchdogEnabled } from "@/lib/shared/feature-flags";
 import { reapInertStuckBuilds } from "@/lib/build/inert-build-reaper";
+import { reconcileTerminalBuildPhaseRuns } from "@/lib/self-upgrade/quiescence";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 import { newestSignal, isStale } from "@/lib/shared/staleness";
 import { reap } from "@/lib/operate/reap";
@@ -246,6 +247,16 @@ export const taskrunWatchdog = jobs.createFunction(
     // those returns and so almost never ran — the 4-day Inngest outage.)
     const quiescenceRecovered = await recoverStuckQuiescenceCoordinators(new Date());
 
+    // BI-59164941: close phase runs whose build is already terminal, every tick.
+    // Quiescence closes them too, but only when a self-upgrade is captured, so
+    // between upgrades a failed or abandoned build read as work in flight.
+    let terminalPhaseRunsClosed = 0;
+    try {
+      terminalPhaseRunsClosed = await reconcileTerminalBuildPhaseRuns(new Date());
+    } catch (err) {
+      console.warn("[taskrun-watchdog] terminal phase-run reconcile failed:", err);
+    }
+
     // BI-8F45BA74: recover orphaned `quiescing` TaskRuns (dead loops that never
     // cooperatively exited a drain) every tick, before any early-return — they
     // are silently-lost work the stall watchdog deliberately ignores and a
@@ -345,14 +356,14 @@ export const taskrunWatchdog = jobs.createFunction(
     }
 
     if (!(await isStallWatchdogEnabled())) {
-      return { skipped: true, reason: "flag-off", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored, staleBacklogClaimsReaped };
+      return { skipped: true, reason: "flag-off", quiescenceRecovered, terminalPhaseRunsClosed, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored, staleBacklogClaimsReaped };
     }
 
     const { prisma } = await import("@dpf/db");
 
     const thresholds = await prisma.buildStudioStallThreshold.findMany();
     if (thresholds.length === 0) {
-      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored, staleBacklogClaimsReaped };
+      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, terminalPhaseRunsClosed, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored, staleBacklogClaimsReaped };
     }
 
     // Coarse SQL filter using the smallest applicable thresholds across all
@@ -404,7 +415,7 @@ export const taskrunWatchdog = jobs.createFunction(
     }
 
     if (decisions.length === 0) {
-      return { processed: 0, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored };
+      return { processed: 0, quiescenceRecovered, terminalPhaseRunsClosed, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored };
     }
 
     // Batch id-resolution: business taskRunId → cuid id for FK writes.
@@ -564,6 +575,6 @@ export const taskrunWatchdog = jobs.createFunction(
       processed += 1;
     }
 
-    return { processed, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored };
+    return { processed, quiescenceRecovered, terminalPhaseRunsClosed, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored };
   },
 );
