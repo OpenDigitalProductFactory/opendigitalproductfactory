@@ -8,12 +8,12 @@ permissions:
 # fast gates plus one paid macos-14 gate, all path-filtered so they
 # only run when installer-touching files change. Full image-manifest
 # verification still lives in publish-image.yml (Phase 1) and runs on
-# tag push; this workflow checks digest-pinned compose images early so
-# deleted upstream manifests fail before release day.
+# tag push; this workflow checks third-party compose images (tag- or
+# digest-pinned) early so deleted upstream manifests fail before release day.
 #
 # Gates:
 #   - release-contract Static release workflow + artifact contract tests.
-#   - image-manifests  Checks digest-pinned compose images resolve.
+#   - image-manifests  Checks third-party compose images resolve.
 #   - compose-render   Asserts docker-compose.{yml,macos.yml,linux.yml,release.yml}
 #                      render cleanly for every (mode × platform) combo.
 #                      Catches overlay merge regressions before they
@@ -98,8 +98,8 @@ jobs:
         with:
           node-version: 24
 
-      - name: Verify digest-pinned release compose image manifests
-        run: node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only digest-pinned
+      - name: Verify third-party release compose image manifests
+        run: node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only third-party
 
   compose-render:
     name: Compose Render Policy (${{ matrix.mode }} / ${{ matrix.platform }})

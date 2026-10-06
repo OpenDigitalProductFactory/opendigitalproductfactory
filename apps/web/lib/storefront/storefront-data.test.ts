@@ -25,7 +25,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-import { getPublicStorefront, getPublicItem } from "./storefront-data";
+import { getPublicStorefront } from "./storefront-data";
 import { prisma } from "@dpf/db";
 
 const mockStorefront = {

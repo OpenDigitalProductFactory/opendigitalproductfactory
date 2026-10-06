@@ -6,7 +6,7 @@
 // (build the result, then SSE-or-JSON it). Grant filtering and the session-store
 // write stay in the route/store — this module is presentation + payload shaping.
 
-import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
+import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools, type ToolIntentCandidate } from "@/lib/tak/tool-intent";
 import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
 import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
@@ -15,6 +15,17 @@ import type { ListingAuthority } from "./listing-authority";
 type JsonRpcId = string | number | null;
 type NoMatchReason = "unknown-tool-name" | "reviewer-route-required" | "not-granted" | "intent-no-match" | "missing-query";
 type LoadToolsNoMatch = { reason: NoMatchReason; requestedNames?: string[] };
+
+/** Rank within token/role visibility before coworker filtering. Only names and
+ * authority remedies are exposed for denied matches, never their schemas. */
+export function resolveLoadToolsRequest(
+  args: Record<string, unknown>,
+  visible: readonly ToolIntentCandidate[],
+): Record<string, unknown> {
+  const explicit = Array.isArray(args.names) ? args.names : [];
+  const related = selectLoadableTools(visible, { query: args.query });
+  return { ...args, names: [...explicit, ...related.map((tool) => tool.name)] };
+}
 
 /**
  * A writer the author must NOT invoke directly — the registry decides, not the
@@ -264,7 +275,9 @@ export function buildLoadToolsResult(
         : {
           nextStep: noMatch.reason === "unknown-tool-name"
             ? "Use an intent query or search_tool_marketplace; do not retry the nonexistent exact name."
-            : "Use a broader intent query or an authorized workflow entry point; do not retry the same unavailable exact name.",
+            : noMatch.reason === "not-granted"
+              ? "Read status for the missing authority and its recovery route. Broader searches cannot grant access; do not substitute shell or database access."
+              : "Use a more specific capability query or search_tool_marketplace; no relevant authorized capability was found.",
         }),
     }
     : undefined;
@@ -282,7 +295,9 @@ export function buildLoadToolsResult(
     note:
       (selected.length > 0
         ? "Tools loaded for this session. Honor notifications/tools/list_changed or re-fetch tools/list. If the host top-level registry remains unchanged, invoke the loaded tool through its programmatic tool catalog; this remains governed MCP."
-        : "No granted tools matched. Pass exact names or a broader query, or call search_tool_marketplace to find tool names.")
+        : noMatch?.reason === "not-granted"
+          ? "Relevant tools are unavailable to this connection. Follow status recovery; discovery cannot change authority."
+          : "No granted tools matched. Pass exact names or a more specific capability query, or call search_tool_marketplace to find tool names.")
       + (status.some((entry) => entry.reason !== null || !entry.loadedInSession)
         ? " Each requested name has a status entry saying why it was or was not loaded."
         : ""),

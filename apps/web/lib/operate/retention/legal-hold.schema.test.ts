@@ -1,6 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
 import { LEGAL_HOLD_MODELS, LEGAL_HOLD_FIELD, legalHoldExclusion } from "./legal-hold";
 import { readCanonicalPrismaSchema } from "@dpf/db/schema-source";

@@ -7,7 +7,6 @@
 // closes the audit gap on the REST and JSON-RPC paths and gives the future
 // external-MCP transport a stable hook.
 
-import { prisma } from "@dpf/db";
 import { can, type CapabilityKey } from "./permissions";
 import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./govern/authority/governed-rejection-disposition";
 import { approvalPendingResult, settledApprovalResult } from "./govern/authority/approval-pending-result";

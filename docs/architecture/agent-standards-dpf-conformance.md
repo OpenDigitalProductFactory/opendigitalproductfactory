@@ -25,6 +25,11 @@ The companion verification rubrics intended to make future conformance claims re
 
 ## TAK Conformance
 
+Tool grant reads and administrator edits resolve known coworker aliases to one
+canonical Agent row. Revocation tombstones take precedence; missing authority
+fails closed. Conflicting legacy rows are reconciled only through a fresh,
+administrator-approved preview, without merging their grants automatically.
+
 | Control Area | Status | Evidence Path | Notes | Recommended Next Step |
 |--------------|--------|---------------|-------|-----------------------|
 | Runtime authority mediation | Implemented | `apps/web/lib/mcp-tools.ts`, `apps/web/lib/tak/agent-grants.ts`, `apps/web/lib/coworker/authorized-surface-runtime.ts` | Tools declare `requiredCapability`; `getAvailableTools()` filters by user authority, mode, and external access posture; agent grant mapping adds a second control layer. Authorized Surface sessions also bind the principal and intersect role, coworker grants, work context, token scope, approval policy, revision, and TTL before projecting state or actions. | Extend the same explicit permission-intersection receipt beyond Authorized Surfaces to every remaining tool exposure decision. |

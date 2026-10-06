@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@dpf/integration-shared": "workspace:*",
-    "smol-toml": "^1.8.0"
+    "smol-toml": "^1.9.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",

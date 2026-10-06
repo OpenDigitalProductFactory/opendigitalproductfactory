@@ -1,0 +1,14 @@
+# Recovery routing
+
+Read this before a normal delivery gate when the platform or the gate itself is broken. Reading this file requires no MCP, portal, queue or approval store. It selects a procedure; it does not grant authority.
+
+1. Record the symptom, observed failing dependency, target commit/install, available credentials and existing operator authorization. Distinguish connection failure, actual denial, gate failure and ordinary queue contention.
+2. If self-upgrade is broken, inspect its recorded queue/status and logs using already-authorized read tools. Repair source in an isolated worktree and run source-local checks. Never require the broken self-upgrade to validate its own repair. Independent restoration is governed by BI-7A4E70E9; if no checked-in executable procedure covers the failure, report that specific missing recovery capability. Do not invent image tags, swap containers or edit production data.
+3. If MCP/portal is unavailable, continue authorized source inspection, design, edits and local tests with local evidence. Do not manufacture a workroom, approval or passing receipt. Reconcile evidence when the service returns. A privileged operation without an available authorized recovery route stops at that boundary.
+4. If CI infrastructure cannot run, read the repository's **build-gate-runbook.md → Local-CI pre-push gate** and its **How to invoke pregate** section. They define the audited `operator-emergency`, `install-bootstrap-recovery` and `gate-infrastructure-unavailable` routes. Check the current hook contract before invocation; scope/operator/probe requirements still apply. Record skipped/unrun, never passed. Do not copy override commands into general delivery instructions.
+5. If authorization is denied (`insufficient_token_scope`, missing coworker grant or role/clearance), stop that operation and use its returned grant/owner remedy. An outage route cannot widen authority; shell or direct DB access is not a substitute.
+6. If a lease is queued or break-fix WIP is occupied, inspect ownership and liveness through authorized coordination. Use supported reconciliation/release for stale claims; never clear records directly or declare contention an outage. BI-09C52DD3 tracks break-fix occupancy recovery.
+
+PR protection, DCO, grant intersection, destructive-action and production-integrity controls remain mandatory. A recovery brief is not evidence that a gate ran. Preserve command outputs and source identity; report exactly what remains unverified.
+
+With a repository checkout, the canonical detailed procedure is `docs/architecture/build-gate-runbook.md`; run `node scripts/gate-context.mjs --situation <situation>` for a concise route. With only this installed skill pack, read this reference first and obtain the repository's checked-in procedure before attempting an override.

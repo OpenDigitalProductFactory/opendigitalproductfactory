@@ -11,6 +11,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -257,4 +259,27 @@ test("planned-scope stdin keeps P status and refuses paths outside the repositor
     { path: "../../outside.ts", status: "P" },
     { path: "/tmp/outside.ts", status: "P" },
   ] })), [{ path: "apps/web/lib/new.ts", status: "P" }]);
+});
+
+// Routing fixtures prove the local contract, not a model's behavioral compliance.
+test("task briefs separate outages, authority and contention without live dependencies", async () => {
+  const { buildTaskBrief } = await import("./lib/gate-context.mjs");
+  for (const [situation, route] of Object.entries({
+    normal: "delivery", "upgrade-failed": "recovery", "mcp-unavailable": "recovery",
+    "ci-unavailable": "recovery", "permission-denied": "authorization", "break-fix-occupied": "coordination",
+  })) {
+    const brief = buildTaskBrief(situation);
+    assert.equal(brief.route, route);
+    assert.equal(brief.authorizesExecution, false);
+    assert.ok(JSON.stringify(brief).length < 1000);
+    assert.ok(existsSync(join(repoRoot, brief.reference)));
+  }
+  assert.throws(() => buildTaskBrief("guess"), /Unknown situation/);
+  assert.throws(() => buildTaskBrief("toString"), /Unknown situation/);
+});
+
+test("outage brief runs outside a Git checkout without platform access", () => {
+  const result = spawnSync(process.execPath, [join(repoRoot, "scripts/gate-context.mjs"), "--situation", "mcp-unavailable", "--json"], { cwd: tmpdir(), encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).route, "recovery");
 });

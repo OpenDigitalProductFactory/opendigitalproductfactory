@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import storefrontTemplates from "../../packages/storefront-templates/src/index.ts";
-import { groups, pages, pagesByGroup, groupMock, judgement } from "./_content.mjs";
+import { groups, pages, pagesByGroup } from "./_content.mjs";
 import { analyze, band, TIERS } from "./_readability.mjs";
 
 const { ALL_ARCHETYPES, deriveOperationalValueStream } = storefrontTemplates;
@@ -100,182 +100,6 @@ const humanize = (value) =>
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 
-// ---- per-group "operating model" parameters (drive the SVG diagram) --------
-const OP = {
-  field: {
-    customerSub: "needs a job done",
-    channel: "requests a job",
-    opModel: "Dispatch board routes the right tech to the address",
-    deliver: "delivers on-site",
-    valueTitle: "Job done on-site",
-    valueSub: "Field invoice",
-    retain: "Maintenance plans & recalls bring them back",
-    trust: "licensing & safety where the trade requires it",
-  },
-  book: {
-    customerSub: "wants a time slot",
-    channel: "books a time",
-    opModel: "Per-provider calendar with real availability",
-    deliver: "delivers the service",
-    valueTitle: "The appointment",
-    valueSub: "Pay at the visit",
-    retain: "Rebooking & recall nudges bring them back",
-    trust: "the right vocabulary — patients, clients, members",
-  },
-  sell: {
-    customerSub: "browses & buys",
-    channel: "adds to cart",
-    opModel: "Catalogue → cart → checkout that never drops",
-    deliver: "fulfils & delivers",
-    valueTitle: "The order",
-    valueSub: "Order invoice",
-    retain: "Accounts recognise repeat buyers",
-    trust: "images, pricing & delivery details intact",
-  },
-  members: {
-    customerSub: "applies · donates · requests",
-    channel: "applies or gives",
-    opModel: "Eligibility & disclosure gate, then the service",
-    deliver: "delivers",
-    valueTitle: "Service or benefit",
-    valueSub: "Receipt or statutory fee — never a hard sell",
-    retain: "Renewal, patronage & recall",
-    trust: "trust gate first — KYC, disclosures, serve everyone",
-  },
-  build: {
-    customerSub: "inquires or reserves",
-    channel: "inquires / reserves",
-    opModel: "Quote · agreement · project or rental period",
-    deliver: "delivers over time",
-    valueTitle: "The engagement",
-    valueSub: "Milestone or usage billing",
-    retain: "Renew the agreement for the next project",
-    trust: "scope, estate isolation & duty of care",
-  },
-  // Generic set used for the hub's universal-backbone diagram.
-  universal: {
-    customerSub: "a stranger with a need",
-    channel: "is captured",
-    opModel: "Your business, reshaped to how it actually runs",
-    deliver: "delivers value",
-    valueTitle: "Value delivered",
-    valueSub: "Money recognised truthfully",
-    retain: "The relationship persists & compounds",
-    trust: "you approve every step — and it's all logged",
-  },
-};
-
-// ---- text wrapping for SVG -------------------------------------------------
-function wrap(str, max = 24, maxLines = 3) {
-  const words = String(str).split(/\s+/);
-  const lines = [];
-  let cur = "";
-  for (const w of words) {
-    if ((cur + " " + w).trim().length > max && cur) {
-      lines.push(cur.trim());
-      cur = w;
-    } else {
-      cur = (cur + " " + w).trim();
-    }
-  }
-  if (cur) lines.push(cur.trim());
-  if (lines.length > maxLines) {
-    const head = lines.slice(0, maxLines - 1);
-    head.push(lines.slice(maxLines - 1).join(" "));
-    return head;
-  }
-  return lines;
-}
-
-function tspans(cx, cy, lines, { lh = 15, cls = "" } = {}) {
-  const startY = cy - ((lines.length - 1) * lh) / 2;
-  return lines
-    .map(
-      (ln, i) =>
-        `<text x="${cx}" y="${startY + i * lh}" text-anchor="middle" dominant-baseline="middle"${
-          cls ? ` class="${cls}"` : ""
-        }>${esc(ln)}</text>`
-    )
-    .join("");
-}
-
-// ---- the operating-model SVG (compact, scales well on mobile) --------------
-// Customer → [Your business on DPF] → Value+money, coworker feeds the middle,
-// a governance lane sits on top, and a retain loop curves back to the customer.
-function operatingModelSVG(groupId, title) {
-  const o = OP[groupId] || OP.universal;
-  const W = 720,
-    H = 330;
-  const A = { x: 24, y: 92, w: 150, h: 92 }; // customer
-  const B = { x: 250, y: 78, w: 200, h: 120 }; // your business
-  const C = { x: 526, y: 92, w: 170, h: 92 }; // value + money
-  const cw = { x: 250, y: 232, w: 200, h: 56 }; // coworker
-  const cxA = A.x + A.w / 2,
-    cxB = B.x + B.w / 2,
-    cxC = C.x + C.w / 2,
-    cxCw = cw.x + cw.w / 2;
-  const mid = 138; // arrow row y
-
-  // Colours come from a scoped <style> block (CSS), NOT presentation attributes
-  // — var()/color-mix() only resolve in CSS, so attribute fills would break the
-  // dark theme. Every selector is prefixed with `.om` (the svg's class).
-  return `<svg viewBox="0 0 ${W} ${H}" class="om" role="img" aria-labelledby="omt omd">
-  <title id="omt">How a ${esc(title)} business runs on DPF</title>
-  <desc id="omd">The customer engages your business, which runs on DPF; value is delivered and money recognised, an AI coworker assists, the whole flow is governed, and the relationship loops back.</desc>
-  <style>
-    .om{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px}
-    .om text{fill:var(--fg)}
-    .om .muted{fill:var(--fg-muted)}
-    .om .node{fill:var(--surface-2);stroke:var(--border);stroke-width:1}
-    .om .node.acc{fill:color-mix(in srgb,var(--accent) 13%,var(--surface));stroke:var(--accent);stroke-width:2}
-    .om .node.acc2{fill:color-mix(in srgb,var(--accent-2) 13%,var(--surface));stroke:var(--accent-2);stroke-width:1.5}
-    .om .lane{fill:none;stroke:var(--border);stroke-dasharray:4 4}
-    .om .eb{font-size:10px;font-weight:700;letter-spacing:1.2px}
-    .om .eb.a{fill:var(--accent)} .om .eb.g{fill:var(--good)} .om .eb.t{fill:var(--accent-2)}
-    .om .flow{stroke:var(--accent-3);stroke-width:2;fill:none}
-    .om .flow.dash{stroke-dasharray:5 4}
-    .om .cwflow{stroke:var(--accent-2);stroke-width:2;fill:none}
-    .om .ah{fill:var(--accent-3)}
-  </style>
-  <defs>
-    <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" class="ah"/>
-    </marker>
-  </defs>
-
-  <rect x="16" y="14" width="${W - 32}" height="30" rx="8" class="lane"/>
-  <text x="${W / 2}" y="29" text-anchor="middle" font-size="11.5" font-weight="600" class="muted">You approve every step · ${esc(o.trust)}</text>
-
-  <rect x="${A.x}" y="${A.y}" width="${A.w}" height="${A.h}" rx="12" class="node"/>
-  <text x="${cxA}" y="${A.y + 20}" text-anchor="middle" class="eb a">CUSTOMER</text>
-  ${tspans(cxA, A.y + 56, wrap(o.customerSub, 18, 2), { lh: 15 })}
-
-  <rect x="${B.x}" y="${B.y}" width="${B.w}" height="${B.h}" rx="12" class="node acc"/>
-  <text x="${cxB}" y="${B.y + 22}" text-anchor="middle" class="eb a">YOUR BUSINESS · ON DPF</text>
-  ${tspans(cxB, B.y + 64, wrap(o.opModel, 26, 3), { lh: 16 })}
-
-  <rect x="${C.x}" y="${C.y}" width="${C.w}" height="${C.h}" rx="12" class="node"/>
-  <text x="${cxC}" y="${C.y + 20}" text-anchor="middle" class="eb g">VALUE + MONEY</text>
-  ${tspans(cxC, C.y + 48, wrap(o.valueTitle, 18, 2), { lh: 15 })}
-  <text x="${cxC}" y="${C.y + C.h - 14}" text-anchor="middle" font-size="11" class="muted">${esc(o.valueSub)}</text>
-
-  <rect x="${cw.x}" y="${cw.y}" width="${cw.w}" height="${cw.h}" rx="12" class="node acc2"/>
-  <text x="${cxCw}" y="${cw.y + 22}" text-anchor="middle" class="eb t">AI COWORKER</text>
-  <text x="${cxCw}" y="${cw.y + 40}" text-anchor="middle" font-size="12">speaks your language, not jargon</text>
-
-  <line x1="${A.x + A.w}" y1="${mid}" x2="${B.x - 6}" y2="${mid}" class="flow" marker-end="url(#ah)"/>
-  <text x="${(A.x + A.w + B.x) / 2}" y="128" text-anchor="middle" font-size="10.5" class="muted">${esc(o.channel)}</text>
-
-  <line x1="${B.x + B.w}" y1="${mid}" x2="${C.x - 6}" y2="${mid}" class="flow" marker-end="url(#ah)"/>
-  <text x="${(B.x + B.w + C.x) / 2}" y="128" text-anchor="middle" font-size="10.5" class="muted">${esc(o.deliver)}</text>
-
-  <line x1="${cxCw}" y1="${cw.y}" x2="${cxCw}" y2="${B.y + B.h + 6}" class="cwflow" marker-end="url(#ah)"/>
-
-  <path d="M ${cxC} ${C.y + C.h} C ${cxC} 312, ${cxA} 312, ${cxA} ${A.y + A.h + 6}" class="flow dash" marker-end="url(#ah)"/>
-  <text x="${W / 2}" y="322" text-anchor="middle" font-size="10.5" class="muted">${esc(o.retain)}</text>
-</svg>`;
-}
-
 // ---- value-stream strip (CSS, reflows vertical on mobile) ------------------
 function vstreamStrip(stages, lanes = {}) {
   const topLane = lanes.top ?? "Governance, trust, and evidence — across every step";
@@ -304,20 +128,6 @@ function mobileLead(page) {
   return page.mobile
     ? `For ${page.display.toLowerCase()}, the phone is where the work happens. We want a field app that shows the next job, maps the way there, takes photos and a signature, and makes the invoice on the spot — even with no signal.`
     : `Even when the work isn’t in the field, you are. We want a pocket app that pings you when a coworker needs a yes or no on a risky step, and lets your customers book, track, and pay from your own branded app.`;
-}
-function mobileVisionCard(page) {
-  return `<div class="vision">
-        <span class="badge">Vision · not yet shipped</span>
-        <h3>The mobile app — where this gets even better</h3>
-        <p>${esc(mobileLead(page))}</p>
-        <p>One generic native iOS/Android app (published by Arcamanus&nbsp;LLC) that connects to your own install and lets the platform drive its look and features — so field techs, customers, and you each get the right screens without a separate app per business.</p>
-        <p class="status"><strong>Where it stands today:</strong> the foundation is real and in the codebase — a React&nbsp;Native/Expo app shell (native shell + install manifest + offline form/screen renderer), a REST API, and secure sign-in. The end-user experience — persona-aware screens, connecting one app to any install, push notifications, and App&nbsp;Store / Play delivery — is the next phase and <strong>not yet available</strong>. We’re building toward field dispatch and owner approvals first.</p>
-      </div>`;
-}
-function mobileVision(page) {
-  return `<section aria-label="Mobile vision">
-      ${mobileVisionCard(page)}
-    </section>`;
 }
 
 // ---- shared chrome ---------------------------------------------------------
@@ -381,30 +191,6 @@ const USE_LINE = {
   members: "Take applications, donations, and requests through a trust gate — and account for every fee or receipt.",
   build: "Move from inquiry to proposal to milestone billing, with each client’s estate kept clean and isolated.",
 };
-// ---- archetype engine (the architectural invention) ------------------------
-function archetypeEngine(page) {
-  return `<section id="archetype-engine" aria-label="The archetype engine">
-    <p class="section-eyebrow">How it's built</p>
-    <h2>One business type generates the whole setup</h2>
-    <p class="sub">The business type you pick at setup is the single source of truth (<code>StorefrontConfig.archetypeId</code> in the data model). From it, DPF generates the public website wording, scheduling defaults, finance assumptions, licence hints, the words each AI coworker uses, and the direction of the mobile app — which is how one platform covers many business types without a custom app for each. <em>(For builders, the precise internal term is the “archetype”.)</em></p>
-    <div class="pipeline">
-      <div class="pipe-stage src"><span class="pk">SOURCE OF TRUTH</span><span class="pl">Business type</span><code>StorefrontConfig.archetypeId</code></div>
-      <div class="pipe-arrow" aria-hidden="true"></div>
-      <div class="pipe-stage"><span class="pk">DERIVES</span><span class="pl">Generated setup</span><code>activationProfile · axes · vocabulary</code></div>
-      <div class="pipe-arrow" aria-hidden="true"></div>
-      <div class="pipe-out">
-        <div class="o">Storefront<span>intake, CTAs, sections</span></div>
-        <div class="o">AI coworker<span>vocabulary, tools, routing</span></div>
-        <div class="o">Workflows<span>scheduling, finance, compliance</span></div>
-        <div class="o">Mobile manifest<span>capability direction (vision)</span></div>
-      </div>
-    </div>
-    <div class="proof-grid" style="margin-top:18px;">
-      ${wizardMock(page)}
-      ${storefrontMock(page)}
-    </div>
-  </section>`;
-}
 
 // ---- standards / reference implementation (grounded, no overclaim) ---------
 const STD = {
@@ -455,133 +241,6 @@ function standardsSection() {
   </section>`;
 }
 
-// ---- product-evidence mockups (theme-aware HTML, not screenshots) ----------
-function wizardMock(page) {
-  const sibs = pages.filter((p) => p.group === page.group && p.slug !== page.slug).map((p) => p.display);
-  const opts = [page.display, ...sibs].slice(0, 4);
-  let i = 0;
-  while (opts.length < 4) {
-    const cand = pages[i++].display;
-    if (!opts.includes(cand)) opts.push(cand);
-  }
-  const rows = opts
-    .map((o, idx) =>
-      idx === 0
-        ? `<div class="mk-opt sel"><span class="rb"></span>${esc(o)}<span class="chk">✓</span></div>`
-        : `<div class="mk-opt"><span class="rb"></span>${esc(o)}</div>`
-    )
-    .join("");
-  return `<div class="frame mk-wizard">
-    <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span><span class="ftitle">Setup · choose your business</span></div>
-    <div class="frame-body"><p class="step">Step 2 of 5 · What kind of business is this?</p>${rows}</div>
-    <p class="frame-cap">Your choice becomes <code>StorefrontConfig.archetypeId</code> — everything else generates from it.</p>
-  </div>`;
-}
-function storefrontMock(page) {
-  const m = groupMock[page.group];
-  const tiles = m.services.map(([n, p]) => `<div class="mk-tile">${n}<div class="price">${p}</div></div>`).join("");
-  return `<div class="frame mk-store">
-    <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span><span class="ftitle">yourbusiness.example</span><span class="ftag">Generated</span></div>
-    <div class="frame-body">
-      <div class="sf-hero"><b>${m.storeHero.title}</b><span>${m.storeHero.sub}</span></div>
-      <div class="mk-tiles">${tiles}</div>
-      <span class="mk-cta">${m.storeCta}</span>
-    </div>
-    <p class="frame-cap">Public storefront, vocabulary and CTA generated from the archetype — no page-building.</p>
-  </div>`;
-}
-function boardMock(page) {
-  const m = groupMock[page.group];
-  const cols = m.boardCols
-    .map((c, idx) => {
-      const job = m.boardJobs[idx];
-      const chip = job ? `<div class="mk-job">${job[1] ? `<span class="u">${job[1]}</span> ` : ""}${job[0]}</div>` : "";
-      return `<div class="col"><h5>${c}</h5>${chip}</div>`;
-    })
-    .join("");
-  return `<div class="frame">
-    <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span><span class="ftitle">Operations · work board</span></div>
-    <div class="frame-body"><div class="mk-board">${cols}</div></div>
-    <p class="frame-cap">The internal workspace home — demand becomes routed, trackable work.</p>
-  </div>`;
-}
-function chatMock(page) {
-  const m = groupMock[page.group];
-  const acts = m.chat.actions.map((a, idx) => `<span class="a ${idx === 0 ? "approve" : "gate"}">${a}</span>`).join("");
-  return `<div class="frame">
-    <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span><span class="ftitle">AI coworker</span><span class="ftag">Proposal-gated</span></div>
-    <div class="frame-body"><div class="mk-chat">
-      <div class="mk-bubble user">${m.chat.q}</div>
-      <div class="mk-bubble bot"><span class="agent">${m.chat.agent}</span>${m.chat.a}<div class="mk-actions">${acts}</div></div>
-    </div></div>
-    <p class="frame-cap">The coworker proposes; nothing consequential happens until you approve.</p>
-  </div>`;
-}
-function agentCardMock(page) {
-  const c = groupMock[page.group].card;
-  const stateHtml = c.state === "pending" ? `<span class="pend">● awaiting approval</span>` : `<span class="ok">● clean</span>`;
-  const row = (l, v) => `<div class="row"><span class="lab">${l}</span><span class="val">${v}</span></div>`;
-  return `<div class="frame mk-card">
-    <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span><span class="ftitle">Authority &amp; Audit · Agent Card</span><span class="ftag">TAK · GAID-direction</span></div>
-    <div class="frame-body">
-      ${row("Agent", `<code>${c.agent}</code>`)}
-      ${row("Route", c.route)}
-      ${row("Tool grants", c.grants)}
-      ${row("HITL tier", c.hitl)}
-      ${row("Mode", c.mode)}
-      ${row("Last action", c.last)}
-      ${row("Receipt", stateHtml)}
-    </div>
-    <p class="frame-cap">A supervisor-ready snapshot: who the agent is, what it may touch, and the evidence behind its last action.</p>
-  </div>`;
-}
-function phoneMock(page) {
-  const p = groupMock[page.group].phone;
-  const btns = p.btns.map((b, idx) => `<span class="pbtn ${idx === p.btns.length - 1 ? "go" : ""}">${b}</span>`).join("");
-  return `<div class="mk-phone-wrap"><div class="mk-phone">
-    <span class="vribbon">Vision</span>
-    <div class="notch"></div>
-    <p class="scr-title">${p.title}</p>
-    <div class="mk-pcard"><b>${p.cardTitle}</b><span class="meta">${p.meta}</span><div class="pbtns">${btns}</div></div>
-  </div></div>`;
-}
-function proofVisuals(page) {
-  return `<section id="proof" aria-label="A look at the screens">
-    <p class="section-eyebrow">What it looks like</p>
-    <h2>A look at the real screens</h2>
-    <p class="sub">A few of the screens a ${esc(
-      page.display.toLowerCase()
-    )} business actually uses — the work board, and an AI coworker proposing the next move. Nothing happens until you approve it.</p>
-    <div class="proof-grid">
-      ${boardMock(page)}
-      ${chatMock(page)}
-    </div>
-  </section>`;
-}
-
-// ---- partners / reseller band ----------------------------------------------
-function partnersBand(page) {
-  return `<section id="resell" aria-label="For partners and resellers">
-    <p class="section-eyebrow">For partners, MSPs &amp; consultants</p>
-    <h2>A repeatable vertical you can resell</h2>
-    <div class="band">
-      <div>
-        <h3>Package once, deploy per client.</h3>
-        <p>DPF turns a business type into a complete, ready-to-run setup. Instead of building a custom app for every client, you install one platform, pick the business type, brand it, and support it — the same way for the next ${esc(
-          page.display.toLowerCase()
-        )} client and the one after that.</p>
-        <a class="btn primary" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/CONTRIBUTING.md">Partner &amp; contribution path</a>
-      </div>
-      <ul class="ticks">
-        <li>Archetype-based configuration, not custom code per client</li>
-        <li>Local install on the client’s own hardware — you own the support relationship</li>
-        <li>Reusable industry patterns shared through the opt-in Hive Mind</li>
-        <li>Governed coworkers and audit trails regulated-sector clients require</li>
-      </ul>
-    </div>
-  </section>`;
-}
-
 // ---- readability: the business-facing copy a small-business owner reads -----
 // Deliberately excludes the technical sections (standards, archetype-engine
 // internals, Agent Card) — those are allowed to read higher.
@@ -600,37 +259,6 @@ function readabilityNote(page) {
   return `<p class="reading-note"><span class="rn-dot ${ok ? "ok" : "warn"}"></span>Plain-language checked — the everyday copy on this page reads at about a <strong>Grade ${a.gradeLevel.toFixed(
     0
   )}</strong> level (Flesch–Kincaid Reading Ease ${a.readingEase.toFixed(0)}). We hold business copy to a high-school reading level; the architecture and standards sections are intentionally more technical.</p>`;
-}
-
-// ---- how the coworker decides ----------------------------------------------
-// Every business type is judged on the same named set of decision axes; only
-// the emphasis changes. This block says what carries the most weight here and
-// what is never traded away, then links to the full per-business-type detail
-// and the axis definitions behind it.
-function judgementSection(page) {
-  const j = judgement[page.slug];
-  if (!j) return "";
-  return `<section id="decisions" aria-label="How your coworker decides">
-    <p class="section-eyebrow">How your coworker decides</p>
-    <h2>What it weighs, and what it will not trade</h2>
-    <p class="sub">Your AI coworkers judge every call against the same named set of factors, whatever the business. What changes for ${esc(
-      page.display.toLowerCase()
-    )} is which of them carry the most weight.</p>
-    <ul class="tlist caps">
-      <li><span class="ic" aria-hidden="true">✓</span><span class="tx"><span class="lead">Weighs most heavily</span> ${esc(
-        j.weighs
-      )}</span></li>
-      <li><span class="ic" aria-hidden="true">✓</span><span class="tx"><span class="lead">Never traded away</span> ${esc(
-        j.never
-      )}</span></li>
-    </ul>
-    <p class="sub">You are not asked to configure any of this. Five plain-English questions — how far to go when something goes wrong, whether to honour a quote you got wrong, new work vs existing commitments, your quality bar, and what can be bought without asking you — come pre-answered for your line of work, each with a spending limit you can change. Adjust them in your own words at any time.</p>
-    <p class="sub">Every factor is named, and every principle's vote is recorded, so you can always ask why. See <a href="/architecture/decision-vectors-by-archetype#${esc(
-      page.slug
-    )}">the full detail for ${esc(
-    page.display.toLowerCase()
-  )}</a>, or the <a href="/architecture/decision-vectors">complete list of decision factors</a> and where each one's weight comes from.</p>
-  </section>`;
 }
 
 // ---- per-business page -----------------------------------------------------

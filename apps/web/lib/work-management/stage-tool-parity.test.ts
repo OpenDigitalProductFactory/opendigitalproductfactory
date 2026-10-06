@@ -24,9 +24,9 @@
 
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-// The runtime resolves agent grants DB-first (AgentToolGrant, seeded on every
-// boot from HARDCODED_COWORKER_GRANTS by slug) and falls back to
-// agent_registry.json. Stand in for the seeded table only, so the REAL
+// The runtime reads canonical AgentToolGrant rows. Model provisioning from
+// HARDCODED_COWORKER_GRANTS and agent_registry.json in the fixture, not a
+// runtime fallback. Stand in for the seeded table only, so the REAL
 // getAgentToolGrantsAsync runs — this test re-derives no grant rule of its own.
 const seededAgentLookup = vi.hoisted(() => ({ calls: 0 }));
 vi.mock("@dpf/db", async (importOriginal) => {
@@ -36,11 +36,13 @@ vi.mock("@dpf/db", async (importOriginal) => {
     ...actual,
     prisma: {
       agent: {
-        findFirst: async (args: { where: { OR: Array<{ agentId?: string; slugId?: string }> } }) => {
+        findFirst: async (args: { where: { agentId?: string; OR?: Array<{ agentId?: string; slugId?: string }> } }) => {
           seededAgentLookup.calls++;
-          const id = args.where.OR.map((entry) => entry.agentId ?? entry.slugId).find(Boolean) ?? "";
-          const seeded = seed[id];
-          return seeded ? { toolGrants: seeded.map((grantKey) => ({ grantKey })) } : null;
+          const id = args.where.agentId ?? args.where.OR?.map((entry) => entry.agentId ?? entry.slugId).find(Boolean) ?? "";
+          const { CANONICAL_AGENT_ID_TO_COWORKER_SLUG } = await import("@dpf/db/agent-identity");
+          const { getAgentToolGrants } = await import("@/lib/tak/agent-grants");
+          const seeded = seed[CANONICAL_AGENT_ID_TO_COWORKER_SLUG[id] ?? id] ?? getAgentToolGrants(id);
+          return seeded ? { toolGrants: seeded.map((grantKey) => ({ grantKey })), toolGrantRevocations: [] } : null;
         },
       },
     },

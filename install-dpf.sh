@@ -401,7 +401,11 @@ fi
 # 5. Ensure Docker is installed (Linux: distro pkg manager; macOS: see
 #    Phase 7b for the .dmg flow — until then, manual install).
 step "Docker Engine"
-dpf_docker_ensure_installed; rc=$?
+if dpf_docker_ensure_installed; then
+  rc=0
+else
+  rc=$?
+fi
 case "$rc" in
   0) ok "Docker present and reachable"
      dpf_state_write dockerEndpoint "$(dpf_docker_endpoint)" 2>/dev/null || true

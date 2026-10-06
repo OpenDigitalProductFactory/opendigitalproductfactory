@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { resolveAgentForRouteSync, AGENT_NAME_MAP } from "@/lib/agent-routing";
-import { clearConversation, getOrCreateThreadSnapshot, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
+import { clearConversation, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
 import { signOutAction } from "@/lib/actions";
 import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
 import { isTurnStalled } from "@/lib/agent/turn-watchdog";

@@ -1,5 +1,4 @@
 // Quick check — uses the seed-helpers pattern for DB access
-const { execSync } = require("child_process");
 const path = require("path");
 
 // Use prisma db execute to query

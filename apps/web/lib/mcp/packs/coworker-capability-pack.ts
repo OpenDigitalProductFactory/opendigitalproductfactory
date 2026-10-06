@@ -15,6 +15,7 @@
 // the gating source.
 
 import { prisma } from "@dpf/db";
+import { coworkerAuthorityWhere } from "@/lib/coworker-identity";
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { CapabilityKey } from "@/lib/permissions";
@@ -62,7 +63,7 @@ function describeEffectiveGrants(agentGrantRows: string[], tokenGrantScopes: str
     label:
       "Effective grants: what the runtime checks. The coworker's stored grant rows expanded through grant implications"
       + (tokenScopes ? ", intersected with this connection's token grant scopes." : "; no token scopes bound this call.")
-      + " A tool is reachable when any one of its required grants is here.",
+      + " This shows grant eligibility; human capabilities, token scope, room permissions and execution policy still apply.",
     agentGrantRows: [...agentGrantRows].sort(),
     agentGrantsExpanded,
     tokenGrantScopes: tokenScopes,
@@ -112,7 +113,7 @@ async function loadRouteDefinedCoworkerProfile(agentId: string, routeContext?: s
 
 async function loadCoworkerProfile(agentId: string, routeContext?: string | null) {
   const agent = await prisma.agent.findFirst({
-    where: { OR: [{ agentId }, { slugId: agentId }] },
+    where: coworkerAuthorityWhere(agentId),
     include: {
       skills: {
         orderBy: { sortOrder: "asc" },
@@ -128,6 +129,7 @@ async function loadCoworkerProfile(agentId: string, routeContext?: string | null
         select: { grantKey: true },
         orderBy: { grantKey: "asc" },
       },
+      toolGrantRevocations: { select: { grantKey: true } },
       coworkerAssessments: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -167,7 +169,8 @@ async function loadCoworkerProfile(agentId: string, routeContext?: string | null
       escalatesTo: agent.escalatesTo,
       delegatesTo: agent.delegatesTo,
       routeContext: routeContext ?? null,
-      grants: agent.toolGrants.map((grant) => grant.grantKey),
+      grants: agent.toolGrants.map((grant) => grant.grantKey)
+        .filter((key) => !agent.toolGrantRevocations.some((revoked) => revoked.grantKey === key)),
       skills: agent.skills,
     },
     latestAssessment,
