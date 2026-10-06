@@ -63,7 +63,9 @@ import {
   priorDriveFromStored,
   readStoredWorkroomDriveState,
 } from "@/lib/work-management/workroom-drive-state";
-import { appendCompletingWorkroomDriveReceipt, WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
+export { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
 export type WorkroomDriveRoom = {
@@ -656,17 +658,7 @@ export function createWorkroomDriveEffects(
             select: { workspaceState: true, updatedAt: true },
           });
           if (!current) return null;
-          const currentDrive = asRecord(asRecord(current.workspaceState)?.workroomDrive);
-          let snapshot = input.snapshot;
-          if (currentDrive && currentDrive.lastCycleKey === input.snapshot.lastCycleKey) {
-            let receipts = readStoredWorkroomDriveState({ workroomDrive: snapshot }).receipts;
-            for (const receipt of readStoredWorkroomDriveState(current.workspaceState).receipts) {
-              if (receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND) continue;
-              const merged = appendCompletingWorkroomDriveReceipt(receipts, receipt);
-              if (merged.ok) receipts = merged.data;
-            }
-            snapshot = { ...snapshot, receipts };
-          }
+          const snapshot = mergeWorkroomDriveSnapshot(current.workspaceState, input.snapshot);
           const updated = await tx.workroom.updateMany({
             where: {
               id: input.roomId, updatedAt: current.updatedAt, archivedAt: null, status: { notIn: [...TERMINAL] },
