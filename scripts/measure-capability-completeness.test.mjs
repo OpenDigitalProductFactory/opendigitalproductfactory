@@ -14,6 +14,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -29,6 +30,9 @@ import {
   stripLineComments,
   SHAPE_SOURCE_FILES,
   GRANTS_SOURCE_FILES,
+  GENERATED_SHAPE_DIR,
+  scanShapeAgents,
+  shapeSourceFiles,
 } from "./measure-capability-completeness.mjs";
 
 test("canonical registry tool grants participate in capability reachability", () => {
@@ -345,4 +349,52 @@ test("the grants map is actually parsed — no roster coworker reads as ungrante
     .map((a) => a.key);
 
   assert.deepEqual(ungranted, [], "an active-roster coworker resolves to zero grants");
+});
+
+test("generated shape modules are shape sources: an agent declared only in one is still measured", () => {
+  // A migrated shape (GPP notation Phase 3b, BI-6DA17863) moves its stages into
+  // apps/web/lib/work-management/generated/<key>.shape.generated.ts and its
+  // family file keeps only a reference. A scanner reading the family files
+  // alone would drop that shape's agents from the measure without a sound.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "capability-shapes-"));
+  try {
+    const dir = path.join(root, GENERATED_SHAPE_DIR);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "probe-watch.shape.generated.ts"),
+      [
+        "export const PROBE_WATCH_1_0_0 = {",
+        "  stages: [",
+        "    {",
+        '      key: "draft",',
+        '      accountablePrincipalRef: "agent:generated-only-probe",',
+        '      advance: { kind: "status-change", condition: "c" },',
+        "    },",
+        "  ],",
+        "} as const;",
+        "",
+      ].join("\n"),
+    );
+    fs.writeFileSync(path.join(dir, "index.generated.ts"), 'export const X = "agent:not-a-shape-module";\n');
+
+    const files = shapeSourceFiles(root);
+    assert.deepEqual(files.slice(SHAPE_SOURCE_FILES.length), [`${GENERATED_SHAPE_DIR}/probe-watch.shape.generated.ts`]);
+    const generatedSources = files.slice(SHAPE_SOURCE_FILES.length).map((file) => fs.readFileSync(path.join(root, file), "utf8"));
+    assert.ok(scanShapeAgents(generatedSources).has("generated-only-probe"));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+
+  // And on the repository: every agent a committed generated module names is in
+  // the measured shape plane, and every generated module is read.
+  const generatedDir = path.join(REPO_ROOT, GENERATED_SHAPE_DIR);
+  const modules = fs.readdirSync(generatedDir).filter((name) => name.endsWith(".shape.generated.ts"));
+  assert.ok(modules.length > 0, "expected at least one committed generated shape module (inquiry-response-watch)");
+  for (const name of modules) assert.ok(shapeSourceFiles().includes(`${GENERATED_SHAPE_DIR}/${name}`), name);
+  const measured = loadSubstrate().shapeAgents;
+  for (const name of modules) {
+    for (const m of fs.readFileSync(path.join(generatedDir, name), "utf8").matchAll(/accountablePrincipalRef:\s*"agent:([a-z0-9-]+)"/g)) {
+      assert.ok(measured.has(m[1]), `${m[1]} (declared in ${name}) is missing from the measured shape plane`);
+    }
+  }
 });

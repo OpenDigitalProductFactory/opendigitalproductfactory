@@ -43,13 +43,28 @@ function objectEnd(source: string, openIdx: number): number {
   throw new Error("unbalanced work-shape stop condition object");
 }
 
-function everyStopCondition(): Array<{ file: string; kind: string; disposition?: string }> {
-  const out: Array<{ file: string; kind: string; disposition?: string }> = [];
+// A shape compiled from a GPP shape document (PR-3b-6) is declared in its
+// generated module, generated/<key>.shape.generated.ts, not in a family file.
+const GENERATED_DIR = join(DIR, "generated");
+
+function shapeSourceFiles(): Array<{ file: string; path: string }> {
+  const files: Array<{ file: string; path: string }> = [];
   for (const file of readdirSync(DIR)) {
     // NB: the craft/operate shape files end "-craft.ts" / "-operate.ts", not
     // "-shapes.ts" — matching only the latter silently skipped 24 of them.
     if (!/shapes.*\.ts$/.test(file) || file.includes(".test.")) continue;
-    const source = readFileSync(join(DIR, file), "utf8");
+    files.push({ file, path: join(DIR, file) });
+  }
+  for (const file of readdirSync(GENERATED_DIR)) {
+    if (file.endsWith(".shape.generated.ts")) files.push({ file: `generated/${file}`, path: join(GENERATED_DIR, file) });
+  }
+  return files;
+}
+
+function everyStopCondition(): Array<{ file: string; kind: string; disposition?: string }> {
+  const out: Array<{ file: string; kind: string; disposition?: string }> = [];
+  for (const { file, path } of shapeSourceFiles()) {
+    const source = readFileSync(path, "utf8");
     for (const m of source.matchAll(KIND)) {
       const body = source.slice(m.index!, objectEnd(source, m.index!));
       const d = /disposition:\s*"([a-z-]+)"/.exec(body);

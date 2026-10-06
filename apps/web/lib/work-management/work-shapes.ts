@@ -28,6 +28,7 @@ import { COWORKER_STANDING_SHAPES } from "./coworker-standing-shapes";
 import { COWORKER_STANDING_SHAPES_CRAFT } from "./coworker-standing-shapes-craft";
 import { COWORKER_STANDING_SHAPES_OPERATE } from "./coworker-standing-shapes-operate";
 import { DELIVERY_SHAPES } from "./delivery-shapes";
+import { GENERATED_WORK_SHAPES } from "./generated/index.generated";
 import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { STANDING_SHAPES } from "./standing-operations-shapes";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
@@ -330,6 +331,20 @@ const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
   ...DELIVERY_SHAPES,
   ...ORCHESTRATION_SHAPES,
 };
+
+// A compiled shape (GPP Phase 3b, PR-3b-6) is registered by reference, in its
+// original position in its family file, so listWorkShapes() keeps its order.
+// The generated index is read only to prove that: every generated definition
+// is registered here under its key, as the very same object. Nothing generated
+// is spread into ALL_SHAPES.
+for (const generated of GENERATED_WORK_SHAPES) {
+  if (ALL_SHAPES[generated.key] !== generated) {
+    throw new Error(
+      `work-shapes: the generated definition ${generated.key}@${generated.version} is not the registered one; `
+        + "reference its generated constant in place of the hand-written literal.",
+    );
+  }
+}
 
 export function listWorkShapes(): WorkShapeDefinition[] {
   return Object.values(ALL_SHAPES);
