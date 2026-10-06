@@ -1187,7 +1187,8 @@
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
         "reaping-the-worktree-when-the-pr-merges-bi-848360ef",
-        "task-specific-operating-rules"
+        "task-specific-operating-rules",
+        "a-refusal-carries-its-own-remedy"
       ]
     },
     "docs/architecture/build-studio-namespace.md": {
