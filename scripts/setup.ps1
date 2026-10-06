@@ -114,13 +114,14 @@ if (-not (Test-Path $rootEnv)) {
     Write-Ok "Created root .env with generated secrets"
 }
 
-# GitHub update signing secret (BI-C26D5DC5) and GPP permit signing key
-# (BI-8541D491): generated when missing or still the example placeholder, never
+# GitHub update signing secret (BI-C26D5DC5), GPP permit signing key
+# (BI-8541D491) and the reach-link and delegation-receipt signing keys
+# (BI-F6929F50): generated when missing or still the example placeholder, never
 # rotated once set, never printed. Distinct per file on purpose: each is the
 # secret of the portal that reads that file.
 foreach ($envFile in @("apps\web\.env.local", $rootEnv)) {
     if (-not (Test-Path $envFile)) { continue }
-    foreach ($secretKey in @("DPF_GIT_WEBHOOK_SECRET", "DPF_GPP_PERMIT_SECRET")) {
+    foreach ($secretKey in @("DPF_GIT_WEBHOOK_SECRET", "DPF_GPP_PERMIT_SECRET", "DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET")) {
         $envText = Get-Content -Path $envFile -Raw
         if ($null -eq $envText) { $envText = "" }
         $match = [System.Text.RegularExpressions.Regex]::Match($envText, "(?m)^$secretKey=(.*)$")

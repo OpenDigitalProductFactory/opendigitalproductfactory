@@ -276,6 +276,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-8541D491: every install path provisions the GPP permit signing key
       // and a self-upgrade never rotates it.
       conformanceTest("scripts/installer/gpp-permit-secret-contract.test.mjs"),
+      // BI-F6929F50: every install path provisions the reach-link and
+      // delegation-receipt signing keys and a self-upgrade never rotates them.
+      conformanceTest("scripts/installer/dedicated-signing-keys-contract.test.mjs"),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
