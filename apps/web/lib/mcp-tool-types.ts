@@ -47,6 +47,13 @@ export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
   gppPermitId?: string;
   /** Reserved by the governing executor for this exact call; never copied from client context. */
   approvedAuthorityEnvelopeId?: string | null;
+  /**
+   * BI-8B7B2FE9: set only by the governed executor when it authorized a
+   * dynamically discovered external MCP tool for this call — the namespaced
+   * name and the approved content digest the remote call must still match.
+   * Never copied from client context.
+   */
+  discoveredToolAuthorization?: { namespacedName: string; contentDigest: string };
 };
 /** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
  *  These let the agent router and governance layer make safety decisions
@@ -89,6 +96,13 @@ export type ToolDefinition = {
   outputSchema?: Record<string, unknown>;
   requiredCapability: CapabilityKey | null;
   requiresExternalAccess?: boolean;
+  /**
+   * BI-8B7B2FE9: only on a dynamically discovered external MCP tool — the grant
+   * requirement resolved from DPF-owned policy (TOOL_TO_GRANTS for bundled
+   * tools, the approved McpServerTool policy otherwise). Never set from
+   * anything a remote server reports.
+   */
+  discoveredPolicyGrants?: readonly string[];
   executionMode?: "proposal" | "immediate";
   sideEffect?: boolean;
   /**
