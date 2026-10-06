@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 ---
 
 # Plan: self-upgrade converges running services to the shipped compose config
