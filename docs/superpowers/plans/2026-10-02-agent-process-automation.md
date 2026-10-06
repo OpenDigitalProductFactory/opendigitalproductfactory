@@ -117,7 +117,7 @@ guards did.
    refusal came before any lease, and `land` now says so instead of pointing at
    a stale `pregate:status`. Running all of preflight pre-commit costs ~3.5 min
    per landing — not yet worth it.
-6. **`pregate:status` reports STALE from a metadata record that lags the gate
+7. **`pregate:status` reports STALE from a metadata record that lags the gate
    record, and the text is actively misleading.** Hit three times in one
    session. The gate record can say `gated <HEAD> (0m ago)` while the metadata
    still carries the previous `candidateSha`, and the status then prints
@@ -126,10 +126,10 @@ guards did.
    queues a second claim. Either project HEAD onto the metadata when a run is
    claimed (the code already does this for a reused PASS), or distinguish "stale"
    from "a run for this HEAD is in flight".
-7. **`land` should merge forward BEFORE gating when behind base.** Done by hand
-   on PR #5958: 30 commits behind, merged forward (clean), regenerated, gated
-   once — instead of gate / drift / re-gate. Pairs with item 4.
-8. **`git push` is not a free read, and re-running it DESTROYS a recorded PASS.**
+8. ~~**`land` should merge forward BEFORE gating when behind base.**~~ Done:
+   its `sync` step (item 4). By hand on PR #5958 it was 30 commits behind,
+   merged forward cleanly, regenerated, gated once.
+9. **`git push` is not a free read, and re-running it DESTROYS a recorded PASS.**
    The sharpest trap found. The pre-push hook runs `pregate` when it does not
    see a PASS for the current SHA — so every `git push` invocation can CLAIM A
    NEW LEASE and start another gate run, overwriting the record with `running`.
@@ -150,3 +150,11 @@ guards did.
    - `land` must push exactly once, and on refusal surface the hook's text from
      the first attempt rather than re-invoking it. Its current implementation
      pushes once and reports — this is why that matters, and it needs a test.
+10. ~~**`gate:wait` read an infrastructure exit 1 as a failure.**~~ pregate runs
+    with inherited stdio, so `classifyGateExit`'s exit-1 text discriminator never
+    saw output in `gate:wait` — every exit 1 was FAIL. On 2026-10-06 the record
+    pregate had just written said INCONCLUSIVE (`blocked_wrapper_exited`, "not a
+    product verdict") and `land` stopped on "gate failed". `gate:wait` now
+    re-reads the record after an exit-1 failure and retries on INCONCLUSIVE.
+    The runner side — a network error at base refresh recorded as FAIL with no
+    reason (2026-10-02) — is a separate fix.

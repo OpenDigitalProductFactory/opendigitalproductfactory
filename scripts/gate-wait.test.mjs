@@ -155,3 +155,33 @@ test("a cancelled wait and a drifted resume are final and never retried", () => 
     assert.equal(result.verdict, "none");
   }
 });
+
+test("exit 1 whose record says INCONCLUSIVE is infrastructure, and is retried", async () => {
+  // Observed 2026-10-06: pregate exited 1, the record it wrote was
+  // INCONCLUSIVE (blocked_wrapper_exited — "not a product verdict"), and
+  // gate:wait reported "gate failed". pregate runs with inherited stdio, so the
+  // exit-1 text discriminator never sees output; the record is the verdict.
+  let gateCalls = 0;
+  const statuses = ["NO-RECORD", "INCONCLUSIVE", "PASS"];
+  let i = 0;
+  const result = await waitForGate({
+    readStatus: async () => ({ verdict: statuses[Math.min(i++, statuses.length - 1)] }),
+    runGate: async () => { gateCalls++; return { code: 1 }; },
+    sleep: noSleep,
+  });
+  assert.equal(result.outcome, "passed");
+  assert.equal(gateCalls, 1);
+  assert.equal(result.attempts[0].kind, "infrastructure");
+});
+
+test("exit 1 whose record says FAIL is still a failure", async () => {
+  const statuses = ["NO-RECORD", "FAIL"];
+  let i = 0;
+  const result = await waitForGate({
+    readStatus: async () => ({ verdict: statuses[Math.min(i++, statuses.length - 1)] }),
+    runGate: async () => ({ code: 1 }),
+    sleep: noSleep,
+  });
+  assert.equal(result.outcome, "failed");
+  assert.equal(result.exitCode, 1);
+});

@@ -104,7 +104,20 @@ export async function waitForGate({
       log({ cycle, elapsedMs: now() - startedAt, kind: "watching", summary: `no verdict yet; a resumer holds the claim (${watchRemaining} watch cycle(s) left)`, code: null });
     } else {
       const { code } = await runGate();
-      const verdict = classifyGateExit({ code });
+      let verdict = classifyGateExit({ code });
+      // pregate runs with inherited stdio, so the exit-1 text discriminator
+      // never sees output here. The record pregate just wrote is the verdict:
+      // an exit 1 it recorded as INCONCLUSIVE was blocked before grading the
+      // diff (BI-22E11EA2 follow-up, observed 2026-10-06), so it is retried.
+      if (verdict.kind === "failed") {
+        const after = await readStatus();
+        if (after?.verdict === "INCONCLUSIVE") {
+          verdict = {
+            kind: "infrastructure", retry: true, verdict: "none",
+            summary: `exit ${code}, but the record says INCONCLUSIVE — not a verdict about the diff`,
+          };
+        }
+      }
       lastVerdict = verdict;
       attempts.push({ attempt: attempts.length + 1, code, kind: verdict.kind, elapsedMs: now() - startedAt });
       log({ cycle, elapsedMs: now() - startedAt, ...verdict, code });
