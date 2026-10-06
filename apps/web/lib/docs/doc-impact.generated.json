@@ -2159,6 +2159,9 @@
     "scripts/compile-capability-service-catalog.mjs": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
+    "scripts/compose-init-reaping.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/detect-hardware-host.ts": [
       "docs/install/linux.md",
       "docs/install/macos.md"
@@ -3458,6 +3461,7 @@
       "docker-entrypoint.sh",
       "packages/db/src/discovery-collectors/network.ts",
       "scripts/check-no-url-pathname-fs.mjs",
+      "scripts/compose-init-reaping.test.mjs",
       "scripts/doctools-image-contract.test.mjs",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/doctools-prepull.test.mjs",
