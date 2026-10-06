@@ -174,27 +174,108 @@ export async function loadStageDispatchTimes(
 }
 
 /**
+ * Graph rooms only (GPP Phase 3c, BI-8875C9DF): when each marked stage most
+ * recently started, per stage, for rooms whose stored drive snapshot carries a
+ * `marking`. Sequential rooms keep loadStageDispatchTimes, unchanged.
+ *
+ * - A dispatch row counts for every stage it names in
+ *   `payload.dispatchedStageKeys` (or, when absent, its single
+ *   `payload.stageKey`), within the room's current cycle.
+ * - An attention row counts for a stage the room is STILL waiting on as a
+ *   governed decision: an entry of the stored `pendingAttentions` with reason
+ *   `governed_decision`, matched against the row's own `pendingAttentions`. As
+ *   for the sequential loader, the attention branch is not cycle-scoped.
+ *
+ * The latest row per stage wins, so a rework's fresh dispatch bounds the new
+ * iteration's evidence.
+ */
+export async function loadStageDispatchTimesByStage(
+  capsuleIds: readonly string[],
+  db?: Pick<PrismaClient, "$queryRaw">,
+): Promise<Map<string, Map<string, Date>>> {
+  const byRoom = new Map<string, Map<string, Date>>();
+  if (capsuleIds.length === 0) return byRoom;
+  const source = db ?? (await import("@dpf/db")).prisma;
+  const rows = await source.$queryRaw<Array<{ capsuleId: string; stageKey: string; dispatchedAt: Date }>>`
+    SELECT DISTINCT ON (started."capsuleId", started."stageKey")
+           started."capsuleId", started."stageKey", started."dispatchedAt"
+    FROM (
+      SELECT w."capsuleId", s."stageKey", a."recordedAt" AS "dispatchedAt"
+      FROM "WorkCapsuleActivity" a
+      JOIN "WorkCapsule" w ON w."id" = a."workCapsuleId"
+      CROSS JOIN LATERAL jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(a."payload" -> 'dispatchedStageKeys') = 'array' THEN a."payload" -> 'dispatchedStageKeys'
+          WHEN jsonb_typeof(a."payload" -> 'stageKey') = 'string' THEN jsonb_build_array(a."payload" -> 'stageKey')
+          ELSE '[]'::jsonb
+        END
+      ) AS s("stageKey")
+      WHERE w."capsuleId" = ANY(${[...capsuleIds]}::text[])
+        AND jsonb_typeof(w."workspaceState" #> '{workroomDrive,marking}') = 'object'
+        AND a."kind" = 'workroom-drive'
+        AND a."payload" ->> 'action' = 'dispatch_agent'
+        AND a."payload" ->> 'lastCycleKey' = w."workspaceState" #>> '{workroomDrive,lastCycleKey}'
+      UNION ALL
+      SELECT w."capsuleId", p ->> 'stageKey' AS "stageKey", a."recordedAt" AS "dispatchedAt"
+      FROM "WorkCapsuleActivity" a
+      JOIN "WorkCapsule" w ON w."id" = a."workCapsuleId"
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE WHEN jsonb_typeof(a."payload" -> 'pendingAttentions') = 'array' THEN a."payload" -> 'pendingAttentions' ELSE '[]'::jsonb END
+      ) AS p
+      WHERE w."capsuleId" = ANY(${[...capsuleIds]}::text[])
+        AND jsonb_typeof(w."workspaceState" #> '{workroomDrive,marking}') = 'object'
+        AND a."kind" = 'workroom-drive-attention'
+        AND p ->> 'reason' = 'governed_decision'
+        AND jsonb_typeof(w."workspaceState" #> '{workroomDrive,pendingAttentions}') = 'array'
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements(w."workspaceState" #> '{workroomDrive,pendingAttentions}') AS pending
+          WHERE pending ->> 'reason' = 'governed_decision' AND pending ->> 'stageKey' = p ->> 'stageKey'
+        )
+    ) AS started
+    WHERE started."stageKey" IS NOT NULL
+    ORDER BY started."capsuleId", started."stageKey", started."dispatchedAt" DESC
+  `;
+  for (const row of rows) {
+    const stages = byRoom.get(row.capsuleId) ?? new Map<string, Date>();
+    stages.set(row.stageKey, row.dispatchedAt);
+    byRoom.set(row.capsuleId, stages);
+  }
+  return byRoom;
+}
+
+/**
  * Stage-scoped evidence recorded through record_workroom_evidence. Executor
  * completion status is not evidence of a stage outcome.
+ *
+ * `choice` is the stage decision's `payload.result.choice` (the evidence
+ * object is the payload, work-capsule-activity-store.ts). Phase 3c reads it
+ * for gate verdicts from PR-3c-3; nothing reads it before then.
+ *
+ * The LIMIT 500 spans every room in the tick, not each room. That is a
+ * pre-existing defect, recorded in the Phase 3c plan (risk R13) for its own
+ * backlog item, and deliberately not changed here.
  */
 export async function loadRecordedEvidence(
   capsuleIds: readonly string[],
+  db?: Pick<PrismaClient, "$queryRaw">,
 ): Promise<Map<string, RecordedEvidence[]>> {
   const byRoom = new Map<string, RecordedEvidence[]>();
   if (capsuleIds.length === 0) return byRoom;
   try {
-    const { prisma } = await import("@dpf/db");
-    const rows = await prisma.$queryRaw<Array<{
+    const source = db ?? (await import("@dpf/db")).prisma;
+    const rows = await source.$queryRaw<Array<{
       capsuleId: string;
       stageKey: string | null;
       evidenceKind: string | null;
       outcome: string | null;
+      choice: string | null;
       recordedAt: Date;
     }>>`
       SELECT w."capsuleId"                      AS "capsuleId",
              a."payload" ->> 'stageKey'         AS "stageKey",
              a."payload" ->> 'kind'             AS "evidenceKind",
              a."payload" ->> 'outcome'          AS "outcome",
+             a."payload" #>> '{result,choice}'  AS "choice",
              a."recordedAt"                     AS "recordedAt"
       FROM "WorkCapsuleActivity" a
       JOIN "WorkCapsule" w ON w."id" = a."workCapsuleId"
@@ -209,6 +290,7 @@ export async function loadRecordedEvidence(
         kind: row.evidenceKind,
         outcome: row.outcome,
         recordedAt: row.recordedAt,
+        choice: row.choice ?? null,
       };
       const bucket = byRoom.get(row.capsuleId);
       if (bucket) bucket.push(entry);

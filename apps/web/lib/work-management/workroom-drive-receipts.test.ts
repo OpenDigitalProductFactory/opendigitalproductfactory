@@ -5,6 +5,7 @@ import {
   WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
   appendCompletingWorkroomDriveReceipt,
   isCompletingWorkroomDriveReceipt,
+  isCompletingWorkroomDriveReceiptAt,
 } from "./workroom-drive-receipts";
 
 describe("appendCompletingWorkroomDriveReceipt", () => {
@@ -40,5 +41,35 @@ describe("appendCompletingWorkroomDriveReceipt", () => {
       .toEqual(err("invalid_receipt"));
     expect(appendCompletingWorkroomDriveReceipt([], { stageKey: "read", kind: "" }))
       .toEqual(err("invalid_receipt"));
+  });
+});
+
+// GPP Phase 3c PR-3c-1 (BI-8875C9DF): iteration-scoped receipts.
+describe("iteration-scoped receipts (Phase 3c)", () => {
+  it("legacy dedupe is unchanged: a receipt without iteration dedupes on (stageKey, kind)", () => {
+    const existing = [{ stageKey: "a", kind: "k" }];
+    expect(appendCompletingWorkroomDriveReceipt(existing, { stageKey: "a", kind: "k" })).toEqual(ok([{ stageKey: "a", kind: "k" }]));
+    expect(appendCompletingWorkroomDriveReceipt(existing, { stageKey: "a", kind: "k", iteration: 0 })).toEqual(ok([{ stageKey: "a", kind: "k" }]));
+  });
+
+  it("dedupes on (stageKey, kind, iteration ?? 0): a new iteration's receipt is kept beside the old one", () => {
+    const existing = [{ stageKey: "a", kind: "k" }];
+    const result = appendCompletingWorkroomDriveReceipt(existing, { stageKey: "a", kind: "k", iteration: 1 });
+    expect(result).toEqual(ok([{ stageKey: "a", kind: "k" }, { stageKey: "a", kind: "k", iteration: 1 }]));
+    expect(appendCompletingWorkroomDriveReceipt(result.ok ? result.data : [], { stageKey: "a", kind: "k", iteration: 1 }))
+      .toEqual(result);
+  });
+
+  it("a receipt without iteration never gains an iteration key", () => {
+    const result = appendCompletingWorkroomDriveReceipt([], { stageKey: "a", kind: "k" });
+    expect(result.ok && Object.hasOwn(result.data[0]!, "iteration")).toBe(false);
+  });
+
+  it("isCompletingWorkroomDriveReceiptAt completes a stage only at its own iteration", () => {
+    expect(isCompletingWorkroomDriveReceiptAt({ stageKey: "a", kind: "k" }, "a", 0)).toBe(true);
+    expect(isCompletingWorkroomDriveReceiptAt({ stageKey: "a", kind: "k" }, "a", 1)).toBe(false);
+    expect(isCompletingWorkroomDriveReceiptAt({ stageKey: "a", kind: "k", iteration: 1 }, "a", 1)).toBe(true);
+    expect(isCompletingWorkroomDriveReceiptAt({ stageKey: "a", kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND, iteration: 1 }, "a", 1)).toBe(false);
+    expect(isCompletingWorkroomDriveReceiptAt({ stageKey: "b", kind: "k", iteration: 1 }, "a", 1)).toBe(false);
   });
 });

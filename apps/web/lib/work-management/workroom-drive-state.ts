@@ -3,7 +3,8 @@ import type { PriorWorkroomDrive } from "./workroom-drive-receipts";
 
 export type StoredWorkroomDriveState = {
   currentStageKey: string | null;
-  receipts: { stageKey: string; kind: string }[];
+  /** `iteration` is present only on graph-shape receipts that carry a valid one (Phase 3c). */
+  receipts: { stageKey: string; kind: string; iteration?: number }[];
   budgetUsage: { kind: string; used: number }[];
   stopConditionHits: string[];
   reviewDue: boolean;
@@ -23,7 +24,14 @@ export function readStoredWorkroomDriveState(workspaceState: unknown): StoredWor
     ? drive.receipts.flatMap((entry) => isRecord(entry)
       && typeof entry.stageKey === "string"
       && typeof entry.kind === "string"
-      ? [{ stageKey: entry.stageKey, kind: entry.kind }]
+      ? [{
+        stageKey: entry.stageKey,
+        kind: entry.kind,
+        // Copied only when it is a finite non-negative integer, so a legacy
+        // receipt round-trips byte-identically and a malformed one reads as
+        // iteration 0 (BI-8875C9DF, Phase 3c).
+        ...(Number.isInteger(entry.iteration) && (entry.iteration as number) >= 0 ? { iteration: entry.iteration as number } : {}),
+      }]
       : [])
     : [];
   const budgetUsage = Array.isArray(drive?.budgetUsage)

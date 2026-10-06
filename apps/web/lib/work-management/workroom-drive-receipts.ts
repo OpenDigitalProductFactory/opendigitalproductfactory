@@ -5,7 +5,15 @@ export const WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND = "blocked";
 
 export const EXECUTOR_WRITEBACK_UNAVAILABLE_REASON = "executor_writeback_unavailable";
 
-export type WorkroomDriveReceipt = { stageKey: string; kind: string };
+/**
+ * A receipt the drive holds for a stage. `iteration` (GPP Phase 3c,
+ * BI-8875C9DF) scopes a receipt to one pass through a stage on a graph shape:
+ * a rework starts a new iteration, and a receipt completes the stage only at
+ * its own iteration. Absent means 0, so every receipt written before Phase 3c,
+ * and every receipt of a sequential shape, keeps exactly its meaning. Design:
+ * docs/superpowers/specs/2026-10-02-gpp-phase-3c-drive-graph-execution-design.md §4.2.
+ */
+export type WorkroomDriveReceipt = { stageKey: string; kind: string; iteration?: number };
 
 export type PriorWorkroomDrive = {
   action: string;
@@ -23,6 +31,19 @@ export function isCompletingWorkroomDriveReceipt(
   return receipt.stageKey === stageKey && receipt.kind !== WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND;
 }
 
+/**
+ * The iteration-aware form of isCompletingWorkroomDriveReceipt, for the graph
+ * path: the receipt completes `stageKey` only at `iteration` (absent reads 0).
+ * The sequential path keeps using isCompletingWorkroomDriveReceipt unchanged.
+ */
+export function isCompletingWorkroomDriveReceiptAt(
+  receipt: { stageKey: string; kind: string; iteration?: number },
+  stageKey: string,
+  iteration: number,
+): boolean {
+  return isCompletingWorkroomDriveReceipt(receipt, stageKey) && (receipt.iteration ?? 0) === iteration;
+}
+
 export function appendCompletingWorkroomDriveReceipt(
   existing: readonly WorkroomDriveReceipt[],
   receipt: WorkroomDriveReceipt,
@@ -33,13 +54,16 @@ export function appendCompletingWorkroomDriveReceipt(
   if (kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND) {
     return err("blocked_kind_not_completing");
   }
-  if (existing.some((entry) => entry.stageKey === stageKey && entry.kind === kind)) {
+  // Deduplicated on (stageKey, kind, iteration ?? 0): for a receipt without an
+  // iteration that is exactly the pre-Phase-3c key.
+  const iteration = receipt.iteration ?? 0;
+  if (existing.some((entry) => entry.stageKey === stageKey && entry.kind === kind && (entry.iteration ?? 0) === iteration)) {
     return ok([...existing]);
   }
   return ok([
     ...existing.filter((entry) =>
       !(entry.stageKey === stageKey && entry.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND)
     ),
-    { stageKey, kind },
+    receipt.iteration !== undefined ? { stageKey, kind, iteration: receipt.iteration } : { stageKey, kind },
   ]);
 }
