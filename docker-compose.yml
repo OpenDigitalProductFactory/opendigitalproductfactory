@@ -515,6 +515,10 @@ services:
       context: .
       dockerfile: Dockerfile.sandbox
     restart: unless-stopped
+    # PID 1 is a shell entrypoint that never reaps orphans, so every git the
+    # builds run left a zombie: 75,868 on one install, until Docker could not
+    # fork (BI-95BB9CB1). Docker's init reaps them.
+    init: true
     logging: *default-logging
     ports:
       - "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3035:3000"
