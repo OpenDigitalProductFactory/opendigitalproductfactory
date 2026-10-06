@@ -25,6 +25,7 @@ import {
   type WorkroomShapeConformanceDeviation,
 } from "./workroom-shape-conformance";
 import { writebackLatchHolds } from "./writeback-latch";
+import type { DriveReason, DriveReasonFor, DriveReasonsByAction } from "./drive-conclusion";
 import {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
   WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
@@ -46,6 +47,11 @@ export type DriveAction =
   | "escalate"
   | "dispatch_agent"
   | "attention";
+
+// The reason vocabulary is keyed by exactly these actions (BI-3ACFD254).
+type ExactKeys<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const DRIVE_ACTIONS_MATCH_REASON_VOCABULARY: ExactKeys<DriveAction, keyof DriveReasonsByAction> = true;
+void DRIVE_ACTIONS_MATCH_REASON_VOCABULARY;
 
 export type AccountablePrincipalKind = "agent" | "role" | "person" | "unknown";
 
@@ -83,7 +89,7 @@ export type DriveResolutionInput = {
 
 export type DrivePlan = {
   action: DriveAction;
-  reason: string;
+  reason: DriveReason;
   roomId: string;
   shapeKey: string | null;
   shapeVersion: string | null;
@@ -114,10 +120,10 @@ export function parseAccountablePrincipalRef(
   return { kind: "unknown", value: ref };
 }
 
-function emptyPlan(
+function emptyPlan<A extends DriveAction>(
   input: DriveResolutionInput,
-  action: DriveAction,
-  reason: string,
+  action: A,
+  reason: DriveReasonFor<A>,
   extras: Partial<DrivePlan> = {},
 ): DrivePlan {
   return {
@@ -307,7 +313,8 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
   const agentDrivesGovernedReview =
     governed && parsed.kind === "agent" && Boolean(parsed.value) && input.actionBoundary === "preauthorized";
   if ((governed || humanStage) && !agentDrivesGovernedReview) {
-    const reason = governed ? "governed_decision" : parsed.kind === "role" ? "role_stage" : "person_stage";
+    const reason: DriveReasonFor<"attention"> =
+      governed ? "governed_decision" : parsed.kind === "role" ? "role_stage" : "person_stage";
     return {
       action: "attention",
       reason,

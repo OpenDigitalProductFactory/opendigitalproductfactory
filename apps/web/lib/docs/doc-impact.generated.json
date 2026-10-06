@@ -882,6 +882,9 @@
     "apps/web/lib/gpp/permit-carriage.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/lib/gpp/shape-language/gate-ratification.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/hooks/system-events.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
@@ -1511,6 +1514,9 @@
     ],
     "apps/web/lib/workspace-home/profiles.ts": [
       "docs/testing/archetype-job-validation.md"
+    ],
+    "apps/web/scripts/build-gpp-shapes.ts": [
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/scripts/gpp-critical-interaction-map.ts": [
       "docs/architecture/gated-permissions-process.md"
@@ -3132,11 +3138,13 @@
       "apps/web/lib/explore/feature-build-types.ts",
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/bindings.ts",
+      "apps/web/lib/gpp/shape-language/gate-ratification.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
       "apps/web/lib/work-management/standing-operations-shapes.ts",
       "apps/web/lib/work-management/work-shape-grants-resolve.test.ts",
       "apps/web/lib/work-management/work-shapes.ts",
+      "apps/web/scripts/build-gpp-shapes.ts",
       "apps/web/scripts/gpp-critical-interaction-map.ts",
       "packages/db/prisma/schema/ai-coworker.prisma",
       "scripts/installer/gpp-permit-secret-contract.test.mjs",

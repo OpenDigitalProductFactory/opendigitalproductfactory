@@ -154,7 +154,13 @@ async function loadBuildStudioCandidates(): Promise<Candidate[]> {
       featureBuild: { is: { phase: "plan" } },
     },
     orderBy: { updatedAt: "desc" },
-    select: { id: true, capsuleId: true, backlogItemId: true, requestedByPrincipal: principalAliases("user") },
+    select: {
+      id: true, capsuleId: true, backlogItemId: true,
+      requestedByPrincipal: principalAliases("user"),
+      // Build Studio attaches its room with no requesting principal; the build
+      // itself records who asked for it (119 of 119 plan rooms on 2026-10-02).
+      featureBuild: { select: { createdById: true } },
+    },
   });
   // A Build Studio room records the item's ROW id in backlogItemId (the
   // attachment writes `backlogItem.id`), where an adopted room records the
@@ -170,7 +176,7 @@ async function loadBuildStudioCandidates(): Promise<Candidate[]> {
     openItemIdByRef.set(item.itemId, item.itemId);
   }
   return rooms.flatMap((room) => {
-    const userId = aliasValue(room.requestedByPrincipal);
+    const userId = aliasValue(room.requestedByPrincipal) ?? room.featureBuild?.createdById ?? null;
     const itemId = room.backlogItemId ? openItemIdByRef.get(room.backlogItemId) : undefined;
     if (!itemId || !userId) return [];
     return [{
