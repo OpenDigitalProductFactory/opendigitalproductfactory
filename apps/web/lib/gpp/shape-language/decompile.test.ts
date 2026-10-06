@@ -320,3 +320,71 @@ describe("decompile and lower: field-level contracts", () => {
     expect(canonicalJson(legacyProjection(lowered))).toBe(canonicalJson(base));
   });
 });
+
+// ── Phase 3c PR-3c-1 (BI-8875C9DF): the graph constructs and a declared refuse
+// route are carried, so the registry guard sees what a hand-declared shape says
+// (design corrections 5 and 12).
+describe("decompile carries the Phase 3c graph constructs when a definition declares them", () => {
+  const base = shape("obligation-assurance-watch");
+  const governedIndex = base.stages.findIndex((stage) => stage.advance.kind === "governed-decision");
+  const governed = base.stages[governedIndex]!;
+  const refuseGate = { authority: "wwmd" as const, mode: "enforced" as const, blocking: true, resolution: "accountable-human" as const, onRefuse: "failure" };
+  const graph: WorkShapeDefinition = {
+    ...base,
+    stages: base.stages.map((stage, index) => {
+      if (index === 0) return { ...stage, deadline: { afterDays: 3, description: "Three days to sweep." } };
+      if (index === 1) return { ...stage, subShape: "obligation-assurance-watch@1.0.0" };
+      if (index === governedIndex && stage.advance.kind === "governed-decision") return { ...stage, advance: { ...stage.advance, gate: refuseGate } };
+      return stage;
+    }),
+    flow: {
+      nodes: [],
+      edges: base.stages.slice(1).map((stage, index) => ({ from: base.stages[index]!.key, to: stage.key })),
+    },
+  };
+
+  it("emits flow after stages, and each stage's deadline and subShape, in schema order", () => {
+    const { document } = decompile(graph, { ratification: NOTHING_RATIFIED });
+    expect(Object.keys(document).indexOf("flow")).toBe(Object.keys(document).indexOf("stages") + 1);
+    expect(document.flow).toEqual(graph.flow);
+    expect(document.stages[0]!.deadline).toEqual({ afterDays: 3, description: "Three days to sweep." });
+    expect(document.stages[1]!.subShape).toBe("obligation-assurance-watch@1.0.0");
+    expect(gppShapeDocumentSchema.safeParse(document).success).toBe(true);
+  });
+
+  it("a declared gate with a refuse route wins over the table, and the stage is still awaiting ratification", () => {
+    const { document, awaitingRatification } = decompile(graph, { ratification: NOTHING_RATIFIED });
+    const advance = document.stages[governedIndex]!.advance;
+    expect(advance.kind === "governed-decision" ? advance.gate : undefined).toEqual(refuseGate);
+    expect(awaitingRatification).toContain(governed.key);
+  });
+
+  it("a declared gate without a refuse route is not carried: the gate stays the table's", () => {
+    const { onRefuse: _onRefuse, ...plainGate } = refuseGate;
+    const declared: WorkShapeDefinition = {
+      ...base,
+      stages: base.stages.map((stage, index) =>
+        index === governedIndex && stage.advance.kind === "governed-decision" ? { ...stage, advance: { ...stage.advance, gate: plainGate } } : stage),
+    };
+    const advance = decompile(declared, { ratification: NOTHING_RATIFIED }).document.stages[governedIndex]!.advance;
+    expect(advance.kind === "governed-decision" ? advance.gate : undefined).toBeUndefined();
+  });
+
+  it("round-trips: lower(decompile(S)) carries every construct, and decompile(lower(D)) equals D (L2)", () => {
+    const { document } = decompile(graph, { ratification: NOTHING_RATIFIED });
+    const lowered = lowerToDefinition(document);
+    expect(lowered.flow).toEqual(graph.flow);
+    expect(lowered.stages[0]!.deadline).toEqual(graph.stages[0]!.deadline);
+    expect(lowered.stages[1]!.subShape).toBe(graph.stages[1]!.subShape);
+    expect(canonicalJson(decompile(lowered, { ratification: NOTHING_RATIFIED }).document)).toBe(canonicalJson(document));
+  });
+
+  it("a sequential definition's document has no flow, deadline or subShape key", () => {
+    const { document } = decompile(base);
+    expect(Object.hasOwn(document, "flow")).toBe(false);
+    for (const stage of document.stages) {
+      expect(Object.hasOwn(stage, "deadline")).toBe(false);
+      expect(Object.hasOwn(stage, "subShape")).toBe(false);
+    }
+  });
+});
