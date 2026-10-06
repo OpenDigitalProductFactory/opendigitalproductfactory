@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
-import type { WorkShapeDefinitionContract } from "./work-shapes";
+import { readWorkShapeDefinitionContract, type WorkShapeDefinition, type WorkShapeDefinitionContract } from "./work-shapes";
+import {
+  DEADLINE_FIXTURE,
+  FLOW_TWIN,
+  PARALLEL_FIXTURE,
+  REFUSE_FIXTURE,
+  REWORK_FIXTURE,
+  SEQUENTIAL_TWIN,
+  SUB_SHAPE_FIXTURE,
+} from "./__fixtures__/graph-shape-fixtures";
 import { resolveDrivePlan, workroomDriveTaskId } from "./drive-resolution";
 
 function participant(
@@ -439,5 +448,97 @@ describe("resolveDrivePlan after a completed cycle (BI-D10BB58B)", () => {
     }));
     expect(plan.action).toBe("dispatch_agent");
     expect(plan.stageKey).toBe("scan");
+  });
+});
+
+// GPP Phase 3c PR-3c-1 (BI-8875C9DF): the structural branch and the graph
+// path's fail-closed pauses. AC-3C-FAILCLOSED, runtime half.
+describe("resolveDrivePlan: the Phase 3c graph path", () => {
+  const graphInput = (definitionOverride: WorkShapeDefinitionContract, extras: Partial<Parameters<typeof resolveDrivePlan>[0]> = {}) =>
+    baseInput({ definition: definitionOverride, roomId: "WC-GRAPH", collaborationShape: null, ...extras });
+  const contract = (shape: WorkShapeDefinition) => readWorkShapeDefinitionContract(shape);
+
+  it("a sequential plan never carries tokens or a marking", () => {
+    const plan = resolveDrivePlan(baseInput());
+    expect(Object.hasOwn(plan, "tokens")).toBe(false);
+    expect(Object.hasOwn(plan, "marking")).toBe(false);
+  });
+
+  it("AC-3C-FAILCLOSED: a graph shape using a disabled construct pauses with construct_not_executable, naming it, and keeps its stage", () => {
+    for (const [shape, construct, elementId] of [
+      [PARALLEL_FIXTURE, "parallel-split-join", "node:p"],
+      [DEADLINE_FIXTURE, "stage-deadline", "stage:b"],
+      [REWORK_FIXTURE, "rework-edge", "edge:b->a"],
+      [SUB_SHAPE_FIXTURE, "sub-shape", "stage:b"],
+      [REFUSE_FIXTURE, "rework-edge", "gate:decide"],
+    ] as const) {
+      const plan = resolveDrivePlan(graphInput(contract(shape), { currentStageKey: "a", receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }] }));
+      expect(plan.action, shape.key).toBe("pause");
+      expect(plan.reason, shape.key).toBe("construct_not_executable");
+      expect(plan.stageKey, shape.key).toBe("a");
+      expect(plan.taskId).toBeNull();
+      expect(plan.ledger.join("\n"), shape.key).toContain(`construct_not_executable: ${construct} at ${elementId}`);
+      // Absent: applyDrivePlan carries the stored marking forward unchanged.
+      expect(Object.hasOwn(plan, "marking"), shape.key).toBe(false);
+    }
+  });
+
+  it("a malformed stored marking pauses with marking_unreadable and carries it verbatim", () => {
+    const raw = { format: "drive-marking/1", cycleKey: 3, tokens: "broken" };
+    const plan = resolveDrivePlan(graphInput(contract(FLOW_TWIN), { currentStageKey: "b", workspaceState: { workroomDrive: { stageKey: "b", marking: raw } } }));
+    expect(plan).toMatchObject({ action: "pause", reason: "marking_unreadable", stageKey: "b" });
+    expect(plan.marking).toEqual({ raw });
+    expect((plan.marking as { raw: unknown }).raw).toBe(raw);
+  });
+
+  it("a plain flow (no gated construct) runs: it dispatches the first stage and records the token's last tick", () => {
+    const plan = resolveDrivePlan(graphInput(contract(FLOW_TWIN)));
+    expect(plan).toMatchObject({ action: "dispatch_agent", reason: "agent_stage", stageKey: "a", agentId: "graph-worker" });
+    expect(plan.taskId).toBe(workroomDriveTaskId("WC-GRAPH", FLOW_TWIN.key));
+    expect(plan.tokens).toEqual([expect.objectContaining({ stageKey: "a", iteration: 0, action: "dispatch_agent", reason: "agent_stage" })]);
+    expect(plan.marking).toMatchObject({
+      format: "drive-marking/1",
+      tokens: [{ node: "stage:a", lastAction: "dispatch_agent", lastReason: "agent_stage", lastCycleKey: plan.cycle?.cycleKey }],
+    });
+  });
+
+  it("on its sequential twin, the plain flow plans the same stage and action for every receipt prefix", () => {
+    const receipts: Array<{ stageKey: string; kind: string }> = [];
+    let sequentialStage: string | null = null;
+    let workspaceState: unknown = {};
+    for (const next of ["a", "b"]) {
+      const sequential = resolveDrivePlan(baseInput({ definition: contract(SEQUENTIAL_TWIN), currentStageKey: sequentialStage, receipts: [...receipts] }));
+      const graph = resolveDrivePlan(graphInput(contract(FLOW_TWIN), { currentStageKey: sequentialStage, receipts: [...receipts], workspaceState }));
+      expect([graph.action, graph.reason, graph.stageKey]).toEqual([sequential.action, sequential.reason, sequential.stageKey]);
+      sequentialStage = sequential.stageKey;
+      workspaceState = { workroomDrive: { stageKey: graph.stageKey, marking: graph.marking } };
+      receipts.push({ stageKey: next, kind: "stage-evidence-recorded" });
+    }
+    const sequentialEnd = resolveDrivePlan(baseInput({ definition: contract(SEQUENTIAL_TWIN), currentStageKey: sequentialStage, receipts }));
+    const graphEnd = resolveDrivePlan(graphInput(contract(FLOW_TWIN), { currentStageKey: sequentialStage, receipts, workspaceState }));
+    expect([graphEnd.action, graphEnd.reason]).toEqual([sequentialEnd.action, sequentialEnd.reason]);
+    expect(graphEnd).toMatchObject({ action: "stop", reason: "success", stageKey: null });
+    expect((graphEnd.marking as { tokens: unknown[] }).tokens).toEqual([]);
+  });
+
+  it("the per-token latch pauses a token that was dispatched without writeback in this cycle", () => {
+    const first = resolveDrivePlan(graphInput(contract(FLOW_TWIN)));
+    const second = resolveDrivePlan(graphInput(contract(FLOW_TWIN), {
+      currentStageKey: "a",
+      workspaceState: { workroomDrive: { stageKey: "a", marking: first.marking } },
+    }));
+    expect(second).toMatchObject({ action: "pause", reason: "executor_writeback_unavailable", stageKey: "a" });
+  });
+
+  it("a conformance pause keeps the marking it read instead of advancing it", () => {
+    const stored = resolveDrivePlan(graphInput(contract(FLOW_TWIN))).marking;
+    const plan = resolveDrivePlan(graphInput(contract(FLOW_TWIN), {
+      currentStageKey: "a",
+      reviewDue: true,
+      receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }],
+      workspaceState: { workroomDrive: { stageKey: "a", marking: stored } },
+    }));
+    expect(plan).toMatchObject({ action: "pause", reason: "conformance_pause", stageKey: "a" });
+    expect(plan.marking).toEqual(stored);
   });
 });

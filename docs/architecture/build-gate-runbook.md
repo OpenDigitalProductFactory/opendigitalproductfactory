@@ -141,3 +141,21 @@ The [mandatory build gate](../founder-kernel/wiki/principles/build-gate-mandator
 - **Pre-existing failures: note them and fix if feasible. Do not defer silently.**
 - **Never weaken auth to make a test pass.** Use a seeded persona at its real privilege level; if a check blocks you, that is the finding.
 - **A gate that could not run is not a verdict.** Infrastructure failure — a fenced lease, a killed child, a starved host — is recorded as inconclusive and re-runs on the same SHA. Never a FAIL against the diff. Fail closed on safety; fail open on infrastructure. → [kernel principle](../founder-kernel/wiki/principles/report-only-the-verdict-you-reached.md)
+
+## A refusal carries its own remedy
+
+`pregate:preflight` used to end a failure with a pointer — "see every constraint
+that applies to this diff: `pnpm gate:context`". A pointer costs the reader a
+decision it usually declines: over one session of nine PRs that line appeared on
+every run and `gate:context` was invoked zero times, so every required
+attestation and every stale derived artifact was found by colliding with its
+refusal instead.
+
+The refusal now EMITS the obligations: which attestations this diff requires,
+which of them belong in the PR body rather than a commit trailer (the Seed
+Contribution Fit gate reads the push-event body, so the same text in a trailer
+does not satisfy it), and each stale derived artifact with the command that
+regenerates it. `pnpm land` consumes the same data.
+
+The rule behind it: an obligation an agent has to remember does not survive
+context compaction. Put it in the gate's output, or in code, and it survives.

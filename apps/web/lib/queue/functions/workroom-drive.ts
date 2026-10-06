@@ -11,6 +11,7 @@ import { cron } from "@/lib/jobs/triggers";
 import {
   driveOutcomeNeedsOwner,
   resolveDriveConclusion,
+  type DriveReasonFor,
 } from "@/lib/work-management/drive-conclusion";
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 import type { Prisma, PrismaClient } from "@dpf/db";
@@ -28,9 +29,13 @@ import {
   loadCoordinationBindings,
   loadRecordedEvidence,
   loadStageDispatchTimes,
+  loadStageDispatchTimesByStage,
+  loadStandingRoomIds,
   reconcileCoordinationBindings,
   reconcileStandingRoomNesting,
 } from "./workroom-drive-data";
+export { loadStandingRoomIds, STANDING_ROOM_SCAN_LIMIT } from "./workroom-drive-data";
+import { earnGraphReceipts, graphSnapshotFields, hasStoredDriveMarking } from "@/lib/work-management/drive-graph-tick";
 import { earnEvidenceReceipts, type RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
 
 import { gateAtEntry } from "../quiescence-gates";
@@ -62,7 +67,9 @@ import {
   priorDriveFromStored,
   readStoredWorkroomDriveState,
 } from "@/lib/work-management/workroom-drive-state";
-import { appendCompletingWorkroomDriveReceipt, WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
+export { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
 export type WorkroomDriveRoom = {
@@ -75,7 +82,7 @@ export type WorkroomDriveRoom = {
   ownerUserId: string | null;
   participants: ProjectableWorkroomParticipantAssignment[];
   currentStageKey: string | null;
-  receipts: { stageKey: string; kind: string }[];
+  receipts: { stageKey: string; kind: string; iteration?: number }[];
   /** The room's own objective, sent to the coworker in its stage brief. */
   objective?: string | null;
   /** Stage-scoped evidence recorded through record_workroom_evidence — the only
@@ -83,6 +90,8 @@ export type WorkroomDriveRoom = {
   recordedEvidence?: RecordedEvidence[];
   /** When the current stage was most recently dispatched. */
   stageDispatchedAt?: Date | null;
+  /** Graph rooms only (Phase 3c): when each marked stage most recently started. */
+  stageDispatchedAtByStage?: ReadonlyMap<string, Date> | null;
   budgetUsage: { kind: string; used: number }[];
   stopConditionHits: string[];
   reviewDue: boolean;
@@ -112,6 +121,8 @@ export type WorkroomDriveEffects = {
     observationOnly?: boolean;
     /** Update the snapshot but add no trail row: the hold did not change (BI-E8C78E80). */
     quiet?: boolean;
+    /** The snapshot is for a graph-path shape: the merge keeps the row's marking (Phase 3c). */
+    graphShape?: boolean;
     lease?: { expiresAt: Date; holderPrincipalId: string | null };
   }) => Promise<void>;
   /** Tell a stuck room's owner once per stuck spell (BI-E8C78E80). Optional; tests may omit it. */
@@ -154,9 +165,6 @@ export type WorkroomDriveResult = {
 
 // One terminal rule for the drive and the nesting it walks (BI-CFB3FDB7).
 const TERMINAL = TERMINAL_WORKROOM_STATUSES;
-
-/** Max rooms one drive tick will consider. Bounds CANDIDATES, not all rooms. */
-export const STANDING_ROOM_SCAN_LIMIT = 200;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -247,13 +255,17 @@ export async function applyDrivePlan(input: {
   });
 
   const priorHold = readDriveHold(room.workspaceState);
-  const hold = nextDriveHold(priorHold, { action: plan.action, reason: plan.reason, stageKey: plan.stageKey, conformance: plan.conformance }, now);
+  // Graph shapes only (Phase 3c): marking carry-forward and the marked keys. Null for every sequential room.
+  const graph = graphSnapshotFields(plan, room.workspaceState);
+  const hold = nextDriveHold(priorHold, { action: plan.action, reason: plan.reason, stageKey: plan.stageKey, conformance: plan.conformance,
+    ...(graph?.markedKeys ? { markedKeys: graph.markedKeys } : {}) }, now);
   if (stallNoticeDue(hold) && effects.notifyStall) {
     await effects.notifyStall({ room, hold, reason: plan.reason, conformance: plan.conformance })
       .then(() => { hold.notifiedAt = now.toISOString(); }, () => undefined);
   }
-  const quiet = !driveTickIsNews(priorHold, hold, plan.action);
-  const persist: WorkroomDriveEffects["persist"] = (args) => effects.persist({ ...args, quiet: quiet && !args.observationOnly });
+  const quiet = !driveTickIsNews(priorHold, hold, plan.action, graph?.iterationChanged);
+  const persist: WorkroomDriveEffects["persist"] = (args) =>
+    effects.persist({ ...args, quiet: quiet && !args.observationOnly, ...(graph ? { graphShape: true } : {}) });
 
   const snapshot = {
     kind: "workroom-drive",
@@ -279,6 +291,7 @@ export async function applyDrivePlan(input: {
     conformance: plan.conformance,
     ledger: plan.ledger,
     hold,
+    ...graph?.fields,
   };
 
   if (plan.action === "do_not_wake") {
@@ -320,10 +333,10 @@ export async function applyDrivePlan(input: {
     if (lease === "held") {
       await persist({
         roomId: room.id,
-        snapshot: { ...snapshot, reason: "lease_held" },
+        snapshot: { ...snapshot, reason: "lease_held" satisfies DriveReasonFor<"dispatch_agent"> },
         activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
         summary: "Drive lease held by another worker; stage remains eligible when it expires.",
-        payload: { ...snapshot, reason: "lease_held" },
+        payload: { ...snapshot, reason: "lease_held" satisfies DriveReasonFor<"dispatch_agent"> },
         observationOnly: true,
       });
       return "skipped";
@@ -331,10 +344,10 @@ export async function applyDrivePlan(input: {
     if (!room.ownerUserId) {
       await persist({
         roomId: room.id,
-        snapshot: { ...snapshot, reason: "missing_task_owner" },
+        snapshot: { ...snapshot, reason: "missing_task_owner" satisfies DriveReasonFor<"dispatch_agent"> },
         activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
         summary: "Agent stage is eligible but no owner user is bound for ScheduledAgentTask.",
-        payload: { ...snapshot, reason: "missing_task_owner" },
+        payload: { ...snapshot, reason: "missing_task_owner" satisfies DriveReasonFor<"dispatch_agent"> },
       });
       return "skipped";
     }
@@ -417,10 +430,13 @@ export async function runWorkroomDriveJob(
     // from, so a room that arrives without it can never advance.
     const evidenceByRoom = await loadRecordedEvidence(rooms.map((room) => room.capsuleId));
     const dispatchByRoom = await loadStageDispatchTimes(rooms.map((room) => room.capsuleId));
+    const dispatchByStage = await loadStageDispatchTimesByStage(
+      rooms.filter((room) => hasStoredDriveMarking(room.workspaceState)).map((room) => room.capsuleId));
     rooms = rooms.map((room) => ({
       ...room,
       recordedEvidence: evidenceByRoom.get(room.capsuleId) ?? [],
       stageDispatchedAt: dispatchByRoom.get(room.capsuleId) ?? null,
+      ...(dispatchByStage.has(room.capsuleId) ? { stageDispatchedAtByStage: dispatchByStage.get(room.capsuleId) } : {}),
     }));
   }
   const effects = deps?.effects ?? createWorkroomDriveEffects();
@@ -433,13 +449,15 @@ export async function runWorkroomDriveJob(
   for (const room of rooms) {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
     const stored = readStoredWorkroomDriveState(room.workspaceState);
-    const receipts = earnEvidenceReceipts({
+    const receipts = (earnGraphReceipts({ definition: shape ? readWorkShapeDefinitionContract(shape) : null, workspaceState: room.workspaceState,
+      evidence: room.recordedEvidence ?? [], dispatchedAtByStage: room.stageDispatchedAtByStage, existing: room.receipts.length > 0 ? room.receipts : stored.receipts,
+    }) ?? earnEvidenceReceipts({
       stageKey: room.currentStageKey ?? stored.currentStageKey,
       declaredKinds: stageEvidenceKinds(shape ? readWorkShapeDefinitionContract(shape) : null, room.currentStageKey ?? stored.currentStageKey),
       evidence: room.recordedEvidence ?? [],
       dispatchedAt: room.stageDispatchedAt ?? null,
       existing: room.receipts.length > 0 ? room.receipts : stored.receipts,
-    }) as { stageKey: string; kind: string }[];
+    })) as { stageKey: string; kind: string; iteration?: number }[];
     const plan = resolveDrivePlan({
       roomId: room.capsuleId,
       definition: shape ? readWorkShapeDefinitionContract(shape) : null,
@@ -461,6 +479,7 @@ export async function runWorkroomDriveJob(
       coordinatorEligibility: room.coordinatorEligibility,
       now,
       priorDrive: priorDriveFromStored(stored),
+      workspaceState: room.workspaceState,
     });
     plans.push({
       roomId: room.capsuleId,
@@ -498,48 +517,6 @@ export async function runWorkroomDriveJob(
     plans,
   };
 }
-
-/**
- * Ids of the rooms the drive could possibly act on: non-terminal, not archived,
- * and actually carrying a work-shape claim.
- *
- * The claim lives inside the `scopeClaims` JSON, which Prisma cannot filter on
- * for an array of objects — so this is raw SQL rather than a `findMany` where
- * clause. That matters more than it looks: the previous implementation capped
- * `findMany` at 200 rows and only then filtered for the claim in JavaScript, so
- * the cap applied to ALL rooms rather than to candidates. On the reference
- * install that meant 276 non-terminal rooms, exactly one of them shaped, and a
- * drive that reported `scanned: 0` forever because the one shaped room fell
- * outside an unordered 200-row window. Filtering in SQL means the cap now
- * bounds work the drive can actually do, and `ORDER BY` makes which rooms it
- * takes deterministic instead of whatever the planner returned.
- */
-export async function loadStandingRoomIds(db: {
-  $queryRaw: (q: TemplateStringsArray, ...v: unknown[]) => Promise<Array<{ id: string }>>;
-}): Promise<string[]> {
-  const rows = await db.$queryRaw`
-    SELECT "id"
-    FROM "WorkCapsule"
-    WHERE "archivedAt" IS NULL
-      AND "status" NOT IN ('abandoned', 'archived', 'complete')
-      AND EXISTS (
-        SELECT 1 FROM jsonb_array_elements(
-          CASE jsonb_typeof("scopeClaims")
-            WHEN 'array' THEN "scopeClaims"
-            WHEN 'object' THEN jsonb_build_array("scopeClaims")
-            ELSE '[]'::jsonb
-          END
-        ) AS claim
-        WHERE claim ? 'workShape'
-      )
-    ORDER BY "updatedAt" ASC, "id" ASC
-    LIMIT ${STANDING_ROOM_SCAN_LIMIT}
-  `;
-  return rows.map((row) => row.id);
-}
-
-
-
 
 async function loadStandingRooms(
   coordinationBindings?: Map<
@@ -655,17 +632,7 @@ export function createWorkroomDriveEffects(
             select: { workspaceState: true, updatedAt: true },
           });
           if (!current) return null;
-          const currentDrive = asRecord(asRecord(current.workspaceState)?.workroomDrive);
-          let snapshot = input.snapshot;
-          if (currentDrive && currentDrive.lastCycleKey === input.snapshot.lastCycleKey) {
-            let receipts = readStoredWorkroomDriveState({ workroomDrive: snapshot }).receipts;
-            for (const receipt of readStoredWorkroomDriveState(current.workspaceState).receipts) {
-              if (receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND) continue;
-              const merged = appendCompletingWorkroomDriveReceipt(receipts, receipt);
-              if (merged.ok) receipts = merged.data;
-            }
-            snapshot = { ...snapshot, receipts };
-          }
+          const snapshot = mergeWorkroomDriveSnapshot(current.workspaceState, input.snapshot, { graphShape: input.graphShape });
           const updated = await tx.workroom.updateMany({
             where: {
               id: input.roomId, updatedAt: current.updatedAt, archivedAt: null, status: { notIn: [...TERMINAL] },

@@ -98,6 +98,11 @@ function firstOwnKeyDifference(left: unknown, right: unknown, path = "$"): strin
   return null;
 }
 
+/** The production table with every ratification withdrawn: the state before PR-3b-R. */
+const NOTHING_RATIFIED: Readonly<Record<string, GateRatificationEntry>> = Object.fromEntries(
+  Object.entries(GATE_RATIFICATION).map(([scope, entry]) => [scope, { status: "proposed", proposed: entry.proposed, basis: entry.basis }]),
+);
+
 function ratifiedTable(scope: string, gate: GppGate): Readonly<Record<string, GateRatificationEntry>> {
   return {
     ...GATE_RATIFICATION,
@@ -112,8 +117,8 @@ function ratifiedTable(scope: string, gate: GppGate): Readonly<Record<string, Ga
 }
 
 describe("decompile: the §4.5 worked example", () => {
-  it("inquiry-response-watch@1.0.0 decompiles to the §4.5 document minus the gate block, since no entry is ratified", () => {
-    const { document, awaitingRatification } = decompile(shape("inquiry-response-watch"));
+  it("inquiry-response-watch@1.0.0 decompiles to the §4.5 document minus the gate block when no entry is ratified", () => {
+    const { document, awaitingRatification } = decompile(shape("inquiry-response-watch"), { ratification: NOTHING_RATIFIED });
 
     expect(document).toEqual(workedExampleWithoutGate());
     expect(canonicalJson(document)).toBe(canonicalJson(workedExampleWithoutGate()));
@@ -127,8 +132,16 @@ describe("decompile: the §4.5 worked example", () => {
     expect(document).toEqual(workedExample());
     expect(JSON.stringify(document)).toBe(JSON.stringify(workedExample()));
     expect(awaitingRatification).toEqual([]);
-    // The production table is untouched.
-    expect(GATE_RATIFICATION["outbound-customer-communication"]?.status).toBe("proposed");
+  });
+
+  it("with the production table (PR-3b-R ratified outbound-customer-communication), the gate block is §4.5's minus the escalation left for later ratification", () => {
+    const { document, awaitingRatification } = decompile(shape("inquiry-response-watch"));
+    const { escalation: _escalation, ...ratifiedGate } = workedExampleGate();
+
+    expect(GATE_RATIFICATION["outbound-customer-communication"]).toMatchObject({ status: "ratified", decisionId: "DI-BEEAF36D0244" });
+    const advanceWithoutGate = (workedExampleWithoutGate().stages as Array<{ advance: JsonObject }>)[1].advance;
+    expect(document.stages[1].advance).toEqual({ ...advanceWithoutGate, gate: ratifiedGate });
+    expect(awaitingRatification).toEqual([]);
   });
 
   it("emits fields in schema order and never emits flow, binding, deadline or subShape", () => {
@@ -157,7 +170,7 @@ describe("decompile: the §4.5 worked example", () => {
       "evidence",
       "tools",
     ]);
-    expect(Object.keys(document.stages[1].advance)).toEqual(["kind", "condition", "decisionScope"]);
+    expect(Object.keys(document.stages[1].advance)).toEqual(["kind", "condition", "decisionScope", "gate"]);
   });
 });
 
@@ -168,7 +181,9 @@ describe.each(REPRESENTATIVES)("decompile and lower: %s family", (_family, load)
   });
 
   it("lower(decompile(S)) equals S under the legacy projection, with equal own-key sets (L1)", () => {
-    const definition = load();
+    // legacy(S) is S for a hand-declared shape; a compiled shape (PR-3b-6)
+    // carries its ratified gate, which the projection drops on both sides.
+    const definition = legacyProjection(load());
     const lowered = lowerToDefinition(decompile(definition).document);
 
     expect(canonicalJson(legacyProjection(lowered))).toBe(canonicalJson(definition));
@@ -183,12 +198,14 @@ describe.each(REPRESENTATIVES)("decompile and lower: %s family", (_family, load)
   it("lists every governed stage as awaiting ratification while nothing is ratified", () => {
     const definition = load();
     const governed = definition.stages.filter((s) => s.advance.kind === "governed-decision").map((s) => s.key);
-    expect(decompile(definition).awaitingRatification).toEqual(governed);
+    expect(decompile(definition, { ratification: NOTHING_RATIFIED }).awaitingRatification).toEqual(governed);
   });
 });
 
 describe("decompile and lower: field-level contracts", () => {
-  const base = shape("inquiry-response-watch");
+  // The registry value with no additive field (inquiry-response-watch is a
+  // compiled shape since PR-3b-6 and carries its ratified gate).
+  const base = legacyProjection(shape("inquiry-response-watch"));
 
   it("tools absent and tools: [] survive decompile → lower unchanged", () => {
     const withEmpty: WorkShapeDefinition = {
@@ -301,5 +318,73 @@ describe("decompile and lower: field-level contracts", () => {
     expect(Object.keys(lowered.stages[1])).not.toContain("binding");
     expect(lowered.flow).toEqual(extended.flow);
     expect(canonicalJson(legacyProjection(lowered))).toBe(canonicalJson(base));
+  });
+});
+
+// ── Phase 3c PR-3c-1 (BI-8875C9DF): the graph constructs and a declared refuse
+// route are carried, so the registry guard sees what a hand-declared shape says
+// (design corrections 5 and 12).
+describe("decompile carries the Phase 3c graph constructs when a definition declares them", () => {
+  const base = shape("obligation-assurance-watch");
+  const governedIndex = base.stages.findIndex((stage) => stage.advance.kind === "governed-decision");
+  const governed = base.stages[governedIndex]!;
+  const refuseGate = { authority: "wwmd" as const, mode: "enforced" as const, blocking: true, resolution: "accountable-human" as const, onRefuse: "failure" };
+  const graph: WorkShapeDefinition = {
+    ...base,
+    stages: base.stages.map((stage, index) => {
+      if (index === 0) return { ...stage, deadline: { afterDays: 3, description: "Three days to sweep." } };
+      if (index === 1) return { ...stage, subShape: "obligation-assurance-watch@1.0.0" };
+      if (index === governedIndex && stage.advance.kind === "governed-decision") return { ...stage, advance: { ...stage.advance, gate: refuseGate } };
+      return stage;
+    }),
+    flow: {
+      nodes: [],
+      edges: base.stages.slice(1).map((stage, index) => ({ from: base.stages[index]!.key, to: stage.key })),
+    },
+  };
+
+  it("emits flow after stages, and each stage's deadline and subShape, in schema order", () => {
+    const { document } = decompile(graph, { ratification: NOTHING_RATIFIED });
+    expect(Object.keys(document).indexOf("flow")).toBe(Object.keys(document).indexOf("stages") + 1);
+    expect(document.flow).toEqual(graph.flow);
+    expect(document.stages[0]!.deadline).toEqual({ afterDays: 3, description: "Three days to sweep." });
+    expect(document.stages[1]!.subShape).toBe("obligation-assurance-watch@1.0.0");
+    expect(gppShapeDocumentSchema.safeParse(document).success).toBe(true);
+  });
+
+  it("a declared gate with a refuse route wins over the table, and the stage is still awaiting ratification", () => {
+    const { document, awaitingRatification } = decompile(graph, { ratification: NOTHING_RATIFIED });
+    const advance = document.stages[governedIndex]!.advance;
+    expect(advance.kind === "governed-decision" ? advance.gate : undefined).toEqual(refuseGate);
+    expect(awaitingRatification).toContain(governed.key);
+  });
+
+  it("a declared gate without a refuse route is not carried: the gate stays the table's", () => {
+    const { onRefuse: _onRefuse, ...plainGate } = refuseGate;
+    const declared: WorkShapeDefinition = {
+      ...base,
+      stages: base.stages.map((stage, index) =>
+        index === governedIndex && stage.advance.kind === "governed-decision" ? { ...stage, advance: { ...stage.advance, gate: plainGate } } : stage),
+    };
+    const advance = decompile(declared, { ratification: NOTHING_RATIFIED }).document.stages[governedIndex]!.advance;
+    expect(advance.kind === "governed-decision" ? advance.gate : undefined).toBeUndefined();
+  });
+
+  it("round-trips: lower(decompile(S)) carries every construct, and decompile(lower(D)) equals D (L2)", () => {
+    const { document } = decompile(graph, { ratification: NOTHING_RATIFIED });
+    const lowered = lowerToDefinition(document);
+    expect(lowered.flow).toEqual(graph.flow);
+    expect(lowered.stages[0]!.deadline).toEqual(graph.stages[0]!.deadline);
+    expect(lowered.stages[1]!.subShape).toBe(graph.stages[1]!.subShape);
+    expect(canonicalJson(decompile(lowered, { ratification: NOTHING_RATIFIED }).document)).toBe(canonicalJson(document));
+  });
+
+  it("a sequential definition's document has no flow, deadline or subShape key", () => {
+    const { document } = decompile(base);
+    expect(Object.hasOwn(document, "flow")).toBe(false);
+    for (const stage of document.stages) {
+      expect(Object.hasOwn(stage, "deadline")).toBe(false);
+      expect(Object.hasOwn(stage, "subShape")).toBe(false);
+    }
   });
 });

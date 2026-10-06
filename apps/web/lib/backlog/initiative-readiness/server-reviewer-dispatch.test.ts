@@ -139,7 +139,8 @@ describe("dispatchOwedIndependentReviews", () => {
 
 describe("dispatchOwedIndependentReviews — Build Studio builds in plan (BI-926A7E90)", () => {
   // Build Studio rooms record the item's ROW id, not its BI- id.
-  const buildRoom = { id: "row-bs", capsuleId: "WC-BS", backlogItemId: "cuid-item-bs", requestedByPrincipal: alias("human", "user-1") };
+  // Build Studio rooms record the item's ROW id and no requesting principal; the build records its creator.
+  const buildRoom = { id: "row-bs", capsuleId: "WC-BS", backlogItemId: "cuid-item-bs", requestedByPrincipal: null, featureBuild: { createdById: "user-1" } };
   const revisionPacket = {
     targetAgent: "AGT-WS-REVIEW",
     objective: "review the design revision",
