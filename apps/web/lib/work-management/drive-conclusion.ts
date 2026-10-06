@@ -60,7 +60,9 @@ export const DRIVE_REASONS_BY_ACTION = Object.freeze({
   do_not_wake: ["missing_shape", "quiet", "no_posture", "cycle_complete"],
   stop: ["unreachable_substrate", "empty_read", "conformance_stop", "success"],
   escalate: ["conformance_escalate"],
-  pause: ["conformance_pause", "unknown_principal", "executor_writeback_unavailable"],
+  // `construct_not_executable` and `marking_unreadable` are the graph path's
+  // fail-closed pauses (GPP Phase 3c PR-3c-1, BI-8875C9DF; design §5 table).
+  pause: ["conformance_pause", "unknown_principal", "executor_writeback_unavailable", "construct_not_executable", "marking_unreadable"],
   attention: ["governed_decision", "role_stage", "person_stage"],
   // `lease_held` and `missing_task_owner` are set by the drive job
   // (lib/queue/functions/workroom-drive.ts) when it cannot act on a dispatch plan.
@@ -138,6 +140,14 @@ const BLOCKAGES: Record<string, { what: string; unblockedBy: string }> = {
   missing_task_owner: {
     what: "An agent stage is ready but the room has no owner user to run its scheduled task under.",
     unblockedBy: "an owner user is bound to the room",
+  },
+  construct_not_executable: {
+    what: "The room's work shape uses a construct the drive does not execute yet, so the room is paused where it stands rather than run some other way.",
+    unblockedBy: "the construct's executable flag is enabled, or the room is rebound to a shape version that does not use it",
+  },
+  marking_unreadable: {
+    what: "The room's stored drive marking cannot be read, so the drive will not guess where its work stands.",
+    unblockedBy: "the room's drive marking is repaired, or the room is reset",
   },
 };
 

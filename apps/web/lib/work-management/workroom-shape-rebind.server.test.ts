@@ -27,6 +27,8 @@ vi.mock("@/lib/work-capsules/activity-events", () => ({ publishRecordedWorkCapsu
 vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn() }));
 
 import { getWorkShape } from "./work-shapes";
+import { markingNotMappable, REBIND_REFUSAL_CODES } from "./workroom-shape-rebind";
+import { PARALLEL_FIXTURE, SEQUENTIAL_TWIN as SEQUENTIAL_GRAPH_TWIN } from "./__fixtures__/graph-shape-fixtures";
 import { loadWorkroomShapeRebindView, rebindWorkroomShapeForUser, type ShapeRebindDb } from "./workroom-shape-rebind.server";
 
 const current = getWorkShape(KEY)!;
@@ -176,5 +178,49 @@ describe("the room page's rebind view (AC-OWNER-2)", () => {
     const view = await viewFor(makeDb(room(`${KEY}@0.9.0`, { workroomDrive: { action: "dispatch_agent", stageKey, receipts: [] } })).db);
     expect(view).toMatchObject({ canRebind: false });
     expect(view!.refusal).toMatch(/running/);
+  });
+});
+
+// AC-3C-REBIND, part (GPP Phase 3c PR-3c-1, BI-8875C9DF): a graph room's
+// marking that cannot be mapped onto the new version refuses the rebind.
+describe("rebind refuses an unmappable drive marking (AC-3C-REBIND)", () => {
+  const [first, second] = current.stages.map((stage) => `stage:${stage.key}`);
+  const marking = (over: Record<string, unknown> = {}) => ({
+    format: "drive-marking/1", cycleKey: "c", tokens: [{ node: first, enteredAt: "2026-10-01T00:00:00.000Z" }],
+    iterations: {}, reworkTaken: {}, deadlines: {}, children: {}, ...over,
+  });
+  const withMarking = (value: unknown) => room(`${KEY}@0.8.0`, { workroomDrive: { action: "attention", stageKey: current.stages[0]!.key, receipts: [], marking: value } });
+
+  it("refuses more than one token, a rework counter, a child room and an unreadable marking, and writes nothing", async () => {
+    for (const value of [
+      marking({ tokens: [{ node: first, enteredAt: "2026-10-01T00:00:00.000Z" }, { node: second, enteredAt: "2026-10-01T00:00:00.000Z" }] }),
+      marking({ reworkTaken: { "edge:x->y": 1 } }),
+      marking({ children: { "c#x#0": { capsuleId: "WC-CHILD", ref: "child@1.0.0" } } }),
+      { format: "drive-marking/1", tokens: "broken" },
+    ]) {
+      const { db, updates } = makeDb(withMarking(value));
+      expect(await rebindWorkroomShapeForUser(db, base), JSON.stringify(value)).toMatchObject({ ok: false, code: "marking_not_mappable" });
+      expect(updates).toHaveLength(0);
+    }
+  });
+
+  it("a single token outside any parallel block maps, and the rebind proceeds", async () => {
+    const { db } = makeDb(withMarking(marking()));
+    expect(await rebindWorkroomShapeForUser(db, base)).toMatchObject({ ok: true });
+  });
+
+  it("refuses a token inside a parallel block of either version, or a join arrival", () => {
+    const inside = { workroomDrive: { marking: marking({ tokens: [{ node: "stage:b", enteredAt: "2026-10-01T00:00:00.000Z" }] }) } };
+    expect(markingNotMappable(inside, PARALLEL_FIXTURE, PARALLEL_FIXTURE)).toMatch(/parallel block/);
+    expect(markingNotMappable(inside, SEQUENTIAL_GRAPH_TWIN, PARALLEL_FIXTURE)).toMatch(/parallel block/);
+    const arrival = { workroomDrive: { marking: marking({ tokens: [{ node: "node:j", from: "stage:b", enteredAt: "2026-10-01T00:00:00.000Z" }] }) } };
+    expect(markingNotMappable(arrival, PARALLEL_FIXTURE, PARALLEL_FIXTURE)).toMatch(/parallel block/);
+    const before = { workroomDrive: { marking: marking({ tokens: [{ node: "stage:a", enteredAt: "2026-10-01T00:00:00.000Z" }] }) } };
+    expect(markingNotMappable(before, PARALLEL_FIXTURE, PARALLEL_FIXTURE)).toBeNull();
+    expect(markingNotMappable({ workroomDrive: { stageKey: "b" } }, PARALLEL_FIXTURE, PARALLEL_FIXTURE)).toBeNull();
+  });
+
+  it("the refusal code is part of the closed set", () => {
+    expect(REBIND_REFUSAL_CODES).toContain("marking_not_mappable");
   });
 });
