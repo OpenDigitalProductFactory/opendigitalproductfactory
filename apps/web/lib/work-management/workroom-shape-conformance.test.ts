@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { SPLIT_2 } from "./__fixtures__/graph-shapes/parallel";
+
 import { deriveRoomCoordinator } from "./room-coordinator";
 import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
-import type { WorkShapeDefinitionContract } from "./work-shapes";
+import { readWorkShapeDefinitionContract, type WorkShapeDefinitionContract } from "./work-shapes";
 import {
   evaluateWorkroomLifecycleConformance,
   evaluateWorkroomShapeConformance,
@@ -561,5 +563,46 @@ describe("evaluateWorkroomShapeConformance with flowOrder (Phase 3c)", () => {
       receipts: [], budgetUsage: [], stopConditionHits: [], reviewDue: false, coordinatorHasProcessCoordinationAuthority: true,
     });
     expect(result.deviations.map((row) => row.code).sort()).toEqual(["missing_prerequisite_receipt", "out_of_order_stage"]);
+  });
+});
+
+// AC-3C-CONFORMANCE, parallel half (GPP Phase 3c PR-3c-2, BI-8875C9DF): with
+// `flowOrder`, concurrent branches are legal, and a stage beyond a join that
+// has not received every branch lacks its prerequisite receipt.
+describe("evaluateWorkroomShapeConformance with flowOrder on a parallel flow (Phase 3c)", () => {
+  const split = readWorkShapeDefinitionContract(SPLIT_2);
+  const evaluate = (over: Partial<Parameters<typeof evaluateWorkroomShapeConformance>[0]>) => evaluateWorkroomShapeConformance({
+    definition: split,
+    collaborationShape: null,
+    participants: executableRoster,
+    currentStageKey: "b",
+    proposedStageKey: "b",
+    receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }],
+    budgetUsage: [],
+    stopConditionHits: [],
+    reviewDue: false,
+    coordinatorHasProcessCoordinationAuthority: true,
+    flowOrder: { enabled: ["b", "c"], delivered: { a: true, b: false, c: false, d: false } },
+    ...over,
+  });
+
+  it("each concurrent branch is a legal proposal and raises nothing", () => {
+    for (const proposed of ["b", "c"]) {
+      expect(evaluate({ proposedStageKey: proposed }).deviations, proposed).toEqual([]);
+    }
+  });
+
+  it("a stage beyond an incomplete join raises missing_prerequisite_receipt for the branch that has not delivered", () => {
+    const result = evaluate({ proposedStageKey: "d", flowOrder: { enabled: ["c", "d"], delivered: { a: true, b: true, c: false, d: false } } });
+    expect(result.deviations).toEqual([{ code: "missing_prerequisite_receipt", summary: "Stage d lacks a receipt from c." }]);
+  });
+
+  it("past a complete join the stage is legal", () => {
+    expect(evaluate({ proposedStageKey: "d", flowOrder: { enabled: ["d"], delivered: { a: true, b: true, c: true, d: false } } }).deviations).toEqual([]);
+  });
+
+  it("echoes currentStageKeys only when given, so a sequential result keeps its keys", () => {
+    expect(evaluate({ currentStageKeys: ["b", "c"] }).currentStageKeys).toEqual(["b", "c"]);
+    expect(Object.hasOwn(evaluate({}), "currentStageKeys")).toBe(false);
   });
 });

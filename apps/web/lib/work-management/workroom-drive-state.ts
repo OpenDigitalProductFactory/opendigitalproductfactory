@@ -66,6 +66,32 @@ export function priorDriveFromStored(stored: StoredWorkroomDriveState): PriorWor
   };
 }
 
+/**
+ * A graph room's marked stages, read off its stored `marking` (GPP Phase 3c
+ * PR-3c-2, design §4.3 "Room view"): every stage token (`stage:<key>`, no
+ * join `from`), with each stage's current iteration. Null for a room with no
+ * marking (every sequential room) or one whose tokens cannot be read; the
+ * drive itself validates the marking strictly and pauses on a malformed one.
+ */
+function markedStagesOf(drive: Record<string, unknown> | null): { keys: string[]; iterations: Record<string, number> } | null {
+  const marking = isRecord(drive?.marking) ? drive.marking : null;
+  if (!marking || !Array.isArray(marking.tokens)) return null;
+  const keys: string[] = [];
+  for (const token of marking.tokens) {
+    if (!isRecord(token) || typeof token.node !== "string" || token.from !== undefined) continue;
+    if (!token.node.startsWith("stage:")) continue;
+    const key = token.node.slice("stage:".length);
+    if (key && !keys.includes(key)) keys.push(key);
+  }
+  const iterations: Record<string, number> = {};
+  if (isRecord(marking.iterations)) {
+    for (const [key, value] of Object.entries(marking.iterations)) {
+      if (Number.isInteger(value) && (value as number) >= 0) iterations[key] = value as number;
+    }
+  }
+  return { keys, iterations };
+}
+
 /** One observation contract for anchored and standalone room inspectors. */
 export function projectStoredWorkroomDriveObservation(workspaceState: unknown) {
   const stored = readStoredWorkroomDriveState(workspaceState);
@@ -76,9 +102,12 @@ export function projectStoredWorkroomDriveObservation(workspaceState: unknown) {
     && pending?.stageKey === stored.currentStageKey
     && typeof pending.principalRef === "string" && pending.principalRef.trim()
     ? `Stage ${stored.currentStageKey} is waiting on ${pending.principalRef.trim()}.` : null;
+  const marked = markedStagesOf(drive);
   return {
     currentStageKey: stored.currentStageKey, proposedStageKey: stored.currentStageKey,
     receipts: stored.receipts, budgetUsage: stored.budgetUsage,
     stopConditionHits: stored.stopConditionHits, reviewDue: stored.reviewDue, attentionReason,
+    // Graph rooms only: several stages can be current at once. Absent means today's single stage.
+    ...(marked ? { currentStageKeys: marked.keys, stageIterations: marked.iterations } : {}),
   };
 }
