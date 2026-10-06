@@ -26,6 +26,11 @@ services:
   portal-tls:
     image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
     restart: unless-stopped
+    # Caddy is PID 1 and does not reap; the healthcheck's ssl_client children
+    # pile up as zombies (11,726 live on 2026-10-06). Same remedy as the
+    # sandbox (BI-95BB9CB1).
+    init: true
+    pids_limit: 512
 
     # Caddy listens on :80 (for HTTP→HTTPS redirect) and :443 (TLS).
     # Published through DPF_HOST_BIND_ADDRESS like every other host port

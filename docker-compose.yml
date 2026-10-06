@@ -515,6 +515,16 @@ services:
       context: .
       dockerfile: Dockerfile.sandbox
     restart: unless-stopped
+    # PID 1 here is `pnpm --filter web dev`, which never reaps the children
+    # builds leave behind, so every git call a build makes becomes a zombie
+    # that holds a PID slot forever. Live, 2026-10-06: 14,646 zombie `git`
+    # processes 45 minutes after a restart, 75,944 tasks before it, at which
+    # point the container engine could not spawn (docker exec and the
+    # self-upgrade promoter build failed with EAGAIN). `init` gives the
+    # container a reaping PID 1; `pids_limit` makes a future leak fail the
+    # sandbox instead of the engine (BI-95BB9CB1).
+    init: true
+    pids_limit: 4096
     logging: *default-logging
     ports:
       - "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3035:3000"
