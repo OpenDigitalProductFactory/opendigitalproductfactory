@@ -22,7 +22,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { scrubGitRepoLocationEnv } from "./lib/git-hook-env.mjs";
+import { guardGitEnv } from "./lib/git-hook-env.mjs";
 import { INCLUDE_WORKING_TREE_ENV } from "./lib/git-changed-files.mjs";
 import { scriptArgv } from "./lib/script-argv.mjs";
 
@@ -61,7 +61,7 @@ export function parseArgs(argv) {
 }
 
 export function buildGateEnv({ base = process.env, messageFile = null, committed = false, readFile = (p) => readFileSync(p, "utf8") } = {}) {
-  const env = scrubGitRepoLocationEnv(base);
+  const env = guardGitEnv(base);
   if (!committed) env[INCLUDE_WORKING_TREE_ENV] = "1";
   else delete env[INCLUDE_WORKING_TREE_ENV];
   if (messageFile) {
