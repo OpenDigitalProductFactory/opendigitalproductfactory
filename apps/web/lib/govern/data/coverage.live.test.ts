@@ -3,8 +3,6 @@
 // the denominator INDEPENDENTLY via parsePrismaSchema (not from the registry) and
 // asserts every model is registered or named in the immutable legacy baseline. A new or
 // renamed model that is neither registered nor baselined fails this test — and the build.
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { parsePrismaSchema } from "@/lib/build/code-graph/extractors/prisma-schema-adapter";

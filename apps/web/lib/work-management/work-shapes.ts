@@ -1,3 +1,4 @@
+import type { PermitAuthority } from "@/lib/gpp/permit-claims";
 import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 // apps/web/lib/work-management/work-shapes.ts
 //
@@ -52,7 +53,54 @@ export type WorkShapeTriggerClass = (typeof WORK_SHAPE_TRIGGER_CLASSES)[number];
  */
 export type WorkShapeAdvance =
   | { kind: "status-change"; condition: string }
-  | { kind: "governed-decision"; condition: string; decisionScope: string };
+  | { kind: "governed-decision"; condition: string; decisionScope: string; gate?: WorkShapeGate };
+
+/**
+ * The typed gate on a governed advance — GPP
+ * (docs/architecture/gated-permissions-process.md) §7 elements 3, 4, 9 and
+ * 11. It mirrors the shape document's `gate`
+ * (apps/web/lib/gpp/shape-language/gpp-shape-schema.ts asserts the two agree
+ * at compile time). Spec: docs/superpowers/specs/
+ * 2026-10-02-gpp-shape-notation-and-compiler-design.md §4.4; plan PR-3b-4
+ * (BI-6DA17863).
+ *
+ * ADDITIVE AND OPTIONAL. It states, as data, what the drive already does for
+ * a governed advance; no runtime reader consumes it. Absent keeps exactly
+ * today's meaning. A shape carries one only once its `decisionScope` is
+ * ratified (gate-ratification.ts), and adding one is a making-explicit change
+ * that diffWorkShapeBinding classifies `unchanged`.
+ */
+export type WorkShapeGate = {
+  authority: PermitAuthority;
+  gateKey?: string;
+  mode: "shadow" | "enforced";
+  blocking: boolean;
+  resolution: "doctrine" | "accountable-human" | "doctrine-then-human";
+  resolver?: { module: string; exportName: string };
+  advisory?: readonly { authority: PermitAuthority; gateKey?: string; blocking?: false }[];
+  checkpoint?: { role: string; exactAction: boolean };
+  escalation?: { role: string; whileWaiting: "hold" };
+  /** Where a refuse verdict sends the token: a stop id or an earlier stage key. */
+  onRefuse?: string;
+};
+
+type WorkShapeBindingCommon = {
+  id: string;
+  /** The binding's own version, separate from the shape version (GPP §2.1.1). */
+  version: number;
+  subjectScope?: string;
+  validity?: { until: "stage-exit"; maxDuration?: string };
+};
+
+/**
+ * A stage's Gated Permission binding (GPP §7.1, spec §4.4). Mirrors the shape
+ * document's `binding`; `egress` is required for an environment boundary.
+ * ADDITIVE AND OPTIONAL, like WorkShapeGate: no runtime reader consumes it,
+ * and the compiler never writes GPP_BINDING_ENFORCEMENT or GPP_BINDINGS.
+ */
+export type WorkShapeBinding =
+  | (WorkShapeBindingCommon & { enforcement: "absent" | "shadow" | "enforced"; egress?: readonly string[] })
+  | (WorkShapeBindingCommon & { enforcement: "environment"; egress: readonly string[] });
 
 export type WorkShapeStage = {
   key: string;
@@ -83,6 +131,8 @@ export type WorkShapeStage = {
    * Omitted means undeclared: the stage dispatches exactly as before.
    */
   tools?: readonly string[];
+  /** The stage's Gated Permission binding (spec §4.4). Optional and additive; see WorkShapeBinding. */
+  binding?: WorkShapeBinding;
 };
 
 export type WorkShapeStopCondition = {

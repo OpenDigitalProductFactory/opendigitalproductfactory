@@ -30,7 +30,6 @@ import {
   registrationPublicId,
   remittanceRunPublicId,
   roundCurrency,
-  stableTaxEntityId,
   taxExecutionTaskId,
   taxMonitorTaskId,
   type LiabilityDraft,

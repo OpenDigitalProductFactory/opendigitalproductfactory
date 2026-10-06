@@ -86,6 +86,7 @@ jobs:
         env:
           BASE_SHA: ${{ steps.base_sha.outputs.sha }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
           PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels) }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: node scripts/ci-policy-guards.mjs --profile pull-request --results "$RUNNER_TEMP/policy-guards-recheck.json"

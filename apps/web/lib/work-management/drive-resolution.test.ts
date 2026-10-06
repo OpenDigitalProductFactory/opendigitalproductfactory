@@ -404,3 +404,40 @@ describe("resolveDrivePlan (BI-FCD639D9)", () => {
     expect(plan.reason).toBe("agent_stage");
   });
 });
+
+// ─── A cycle runs once (BI-D10BB58B) ─────────────────────────────────────────
+//
+// Live, 2026-10-02: WC-A69BCABB finished its cycle (stop/success) and the next
+// tick restarted at stage 1. It looped seven times in one day, and each
+// decide stage was satisfied again by the same cycle's decision record.
+describe("resolveDrivePlan after a completed cycle (BI-D10BB58B)", () => {
+  const NOW = new Date("2026-09-01T00:00:00.000Z");
+  const cycleKey = `${definition.key}@${definition.version}:2026-09-01`;
+
+  it("sleeps for the rest of a cycle that ended in success", () => {
+    const plan = resolveDrivePlan(baseInput({
+      now: NOW,
+      priorDrive: { action: "stop", reason: "success", stageKey: null, cycleKey },
+    }));
+    expect(plan.action).toBe("do_not_wake");
+    expect(plan.reason).toBe("cycle_complete");
+    expect(plan.cycle?.cycleKey).toBe(cycleKey);
+  });
+
+  it("keeps sleeping on later ticks of the same cycle", () => {
+    const plan = resolveDrivePlan(baseInput({
+      now: NOW,
+      priorDrive: { action: "do_not_wake", reason: "cycle_complete", stageKey: null, cycleKey },
+    }));
+    expect(plan.reason).toBe("cycle_complete");
+  });
+
+  it("starts the shape again in the next cycle", () => {
+    const plan = resolveDrivePlan(baseInput({
+      now: new Date("2026-09-02T00:00:00.000Z"),
+      priorDrive: { action: "do_not_wake", reason: "cycle_complete", stageKey: null, cycleKey },
+    }));
+    expect(plan.action).toBe("dispatch_agent");
+    expect(plan.stageKey).toBe("scan");
+  });
+});

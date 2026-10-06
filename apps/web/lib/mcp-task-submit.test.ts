@@ -514,6 +514,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(execution.terminalToolPolicy).toEqual({
       writerToolName: "record_initiative_evidence",
       readerToolNames: ["read_source_at_version", "search_source_at_version"],
+      immutableReaderToolName: "read_source_at_version",
       minimumSuccessfulReaderCalls: 1,
       maximumReaderCalls: 6,
       immutableReaderArguments: {
@@ -758,6 +759,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(execution.terminalToolPolicy).toEqual({
       writerToolName: "record_initiative_design_review",
       readerToolNames: ["read_source_at_version"],
+      immutableReaderToolName: "read_source_at_version",
       minimumSuccessfulReaderCalls: 1,
       maximumReaderCalls: 6,
       immutableReaderArguments: {

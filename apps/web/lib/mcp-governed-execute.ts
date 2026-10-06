@@ -7,7 +7,6 @@
 // closes the audit gap on the REST and JSON-RPC paths and gives the future
 // external-MCP transport a stable hook.
 
-import { prisma } from "@dpf/db";
 import { can, type CapabilityKey } from "./permissions";
 import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./govern/authority/governed-rejection-disposition";
 import { approvalPendingResult, settledApprovalResult } from "./govern/authority/approval-pending-result";
@@ -245,7 +244,8 @@ async function writeAudit(data: {
   userId: string;
   source: GovernedExecuteSource;
   context?: GovernedExecuteContext;
-  durationMs: number;
+  /** null when the tool never ran — see writeGovernedToolAudit. */
+  durationMs: number | null;
   alignmentDecision?: AlignmentGateDecision | null;
   preconditionDecision?: PreconditionOrderingDecision | null;
   envelopeId?: string | null;
@@ -357,7 +357,7 @@ export async function governedExecuteTool(
         userId: args.userId,
         source: args.source,
         context: args.context,
-        durationMs: 0,
+        durationMs: null,
       });
       if (auditRow?.id && consequence.consequential) {
         await writeToolExecutionReceipt({
@@ -422,7 +422,7 @@ export async function governedExecuteTool(
         userId: args.userId,
         source: args.source,
         context: args.context,
-        durationMs: 0,
+        durationMs: null,
       });
       if (auditRow?.id && consequence.consequential) {
         await writeToolExecutionReceipt({
@@ -474,7 +474,7 @@ export async function governedExecuteTool(
           userId: args.userId,
           source: args.source,
           context: args.context,
-          durationMs: 0,
+          durationMs: null,
         });
         if (auditRow?.id && consequence.consequential) {
           await writeToolExecutionReceipt({
@@ -511,7 +511,7 @@ export async function governedExecuteTool(
       userId: args.userId,
       source: args.source,
       context: args.context,
-      durationMs: 0,
+      durationMs: null,
     });
     if (auditRow?.id && consequence.consequential) {
       await writeToolExecutionReceipt({
@@ -541,7 +541,7 @@ export async function governedExecuteTool(
     preconditionRequired: consequence.preconditionRequired,
     writeAudit: ({ result, alignmentDecision: alignment, preconditionDecision: precondition }) => writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result, userId: args.userId,
-      source: args.source, context: args.context, durationMs: 0,
+      source: args.source, context: args.context, durationMs: null,
       alignmentDecision: alignment, preconditionDecision: precondition,
     }),
   });
@@ -592,7 +592,7 @@ export async function governedExecuteTool(
     };
     const auditRow = await writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result: refused, userId: args.userId,
-      source: args.source, context: args.context, durationMs: 0,
+      source: args.source, context: args.context, durationMs: null,
       alignmentDecision, preconditionDecision, envelopeId: approvedAuthorityEnvelopeId, gppPermit,
     });
     await observePermit(gppPermit, auditRow?.id ?? null);
@@ -613,7 +613,7 @@ export async function governedExecuteTool(
     };
     const reservedAudit = await writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result: reservationResult,
-      userId: args.userId, source: args.source, context: args.context, durationMs: 0,
+      userId: args.userId, source: args.source, context: args.context, durationMs: null,
       alignmentDecision, preconditionDecision, envelopeId: approvedAuthorityEnvelopeId, gppPermit,
     });
     reservedAuditId = reservedAudit?.id ?? null;

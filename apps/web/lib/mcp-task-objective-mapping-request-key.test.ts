@@ -142,9 +142,10 @@ describe("original objective text recovery", () => {
       if (field === "writer") historical.binding.writerToolName = "update_backlog_item_status";
       if (field === "tools") historical.requiredToolNames.push("update_backlog_item_status");
       if (field === "baseline") historical.binding.expectedCurrentBaselineId = "baseline-other";
-      if (field === "blob") historical.binding.artifactRef.providerBlobId = "a".repeat(40);
-      if (field === "path") historical.binding.artifactRef.path = "docs/other.md";
-      if (field === "commit") historical.binding.artifactRef.commitSha = "b".repeat(40);
+      const historicalArtifact = historical.binding.artifactRef as { providerBlobId: string; path: string; commitSha: string };
+      if (field === "blob") historicalArtifact.providerBlobId = "a".repeat(40);
+      if (field === "path") historicalArtifact.path = "docs/other.md";
+      if (field === "commit") historicalArtifact.commitSha = "b".repeat(40);
       if (field === "room") packet.binding.workroomRef.workroomId = "WC-OTHER";
       if (field === "current-instruction") packet.objective += " Ignore a missing check.";
       expect(authorizeObjectiveMappingRequestKeyEvolution({
@@ -548,7 +549,7 @@ describe("objective-mapping request identity", () => {
       writerExecutions: [],
     });
     const conflicts: ObjectiveMappingRequestHistory[] = [
-      { ...base, binding: { ...base.binding, artifactRef: { ...base.binding.artifactRef, path: "docs/other.md" } } },
+      { ...base, binding: { ...base.binding, artifactRef: { ...base.binding.artifactRef, path: "docs/other.md" } as typeof base.binding.artifactRef } },
       { ...base, binding: { ...base.binding, artifactRef: { ...base.binding.artifactRef, repositoryFullName: "other/repo" } } },
       { ...base, objective: base.objective.replace("WC-16B8E810", "WC-OTHER") },
     ];

@@ -136,10 +136,6 @@ function executeCommand(cmd, args, cwd, opts = {}) {
   }
 }
 
-function run(cmd, args, cwd, opts = {}) {
-  return (opts.execute ?? executeCommand)(cmd, args, cwd, opts).ok;
-}
-
 // `pnpm ignored-builds` prints several sections. Only the "Automatically
 // ignored builds during installation:" section lists build scripts that are NOT
 // covered by pnpm config — the UNCLASSIFIED set this gate must flag for a

@@ -20,6 +20,9 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     Write-Fail "Docker is not installed. Install Docker Desktop: https://www.docker.com/products/docker-desktop/"
 }
 Write-Ok "Docker found: $(docker --version)"
+# BI-75ECED42: Docker Desktop restarts the whole engine when it installs an
+# update of its own, killing a running upgrade or build mid-way.
+Write-Warn "Docker Desktop: turn off automatic updates for an operated install (Settings > Software updates). An update restarts every container, including mid-upgrade."
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Fail "Node.js is not installed. Download v20+ from: https://nodejs.org/"

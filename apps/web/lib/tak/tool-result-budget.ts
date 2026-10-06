@@ -8,6 +8,10 @@ import {
   sanitizeUntrustedValue,
 } from "@dpf/validators";
 import { sanitizeForLog } from "@/lib/security/safe-log";
+import { untrustedResultLabel, type ToolResultProvenance } from "./tool-result-provenance";
+
+// The agentic loop resolves provenance where it already imports this module.
+export { resolveToolResultProvenance } from "./tool-result-provenance";
 
 /**
  * Tool-result token-budget guard.
@@ -113,9 +117,22 @@ function buildFullText(result: ModelFacingToolResult): string {
  */
 export function clampToolResultForModel(
   result: ModelFacingToolResult,
-  opts?: { maxChars?: number; contextMask?: ContextMaskAuthority; toolName?: string },
+  opts?: {
+    maxChars?: number; contextMask?: ContextMaskAuthority; toolName?: string;
+    /** Untrusted provenance prefixes a short label inside the same budget (BI-1045525F). */
+    provenance?: ToolResultProvenance | null;
+  },
 ): ClampedToolResult {
   const maxChars = Math.max(0, opts?.maxChars ?? DEFAULT_TOOL_RESULT_CHAR_CAP);
+  const label = untrustedResultLabel(opts?.provenance);
+  if (label) {
+    // Spotlighting by delimiting: the label is the first thing the model reads
+    // and counts against the budget, so labelled text never exceeds maxChars.
+    const prefix = `${label}\n`;
+    const inner = clampToolResultForModel(result, { ...opts, provenance: null, maxChars: Math.max(0, maxChars - prefix.length) });
+    if (prefix.length >= maxChars) return { ...inner, text: label.slice(0, maxChars), truncated: true };
+    return { ...inner, text: prefix + inner.text, originalChars: inner.originalChars + prefix.length };
+  }
   const masked = opts?.contextMask ? maskForContext(result, opts.contextMask) : null;
   // Every tool result is untrusted text on its way into a model: web pages,
   // files, mail, third-party MCP servers, peer-synced work, other agents'

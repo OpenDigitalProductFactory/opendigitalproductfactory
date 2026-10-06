@@ -23,6 +23,29 @@
     "meet-your-coo": "Meet Your COO",
     "workspace": "Workspace"
   },
+  "coworkerPermissions": {
+    "savedGrants": "Saved tool grants",
+    "summary": "Saved grants belong to {$agentId}. Access also depends on the connection, human role and room.",
+    "review": "Review legacy permissions",
+    "section": "Permission reconciliation",
+    "legacy": "Legacy record: {$agentId}. Its grants do not control current access.",
+    "none": "None",
+    "noDifferences": "No differences found.",
+    "chooseEach": "Choose which saved state to use for each difference.",
+    "chooseState": "Choose a saved state",
+    "sourceLabel": "Permission source for {$grantKey}",
+    "currentState": "Current: {$state}",
+    "legacyState": "Legacy: {$state}",
+    "granted": "granted",
+    "revoked": "revoked",
+    "absent": "absent",
+    "approve": "Approve choices",
+    "confirmTitle": "Approve permission choices",
+    "confirmMessage": "Apply these choices to the coworker's current permissions? Connected assistants will use them on their next request.",
+    "previewUnavailable": "Preview unavailable.",
+    "approvalFailed": "Approval failed.",
+    "saved": "Permission choices saved. The next request uses the current grants."
+  },
   "accountBootstrap": {
     "accountableOwnerNote": "You'll be the organization's accountable owner (change it in Admin › Settings)."
   }

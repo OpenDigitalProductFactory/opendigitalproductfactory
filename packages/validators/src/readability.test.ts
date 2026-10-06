@@ -124,9 +124,6 @@ const UI_LABELS = [
   "Commute",
 ];
 
-const JARGON =
-  "Organizational participation in international infrastructure optimization initiatives necessitates comprehensive administrative documentation.";
-
 describe("analyzeReadability — the prose assumption it rests on", () => {
   it("inflates the grade of unpunctuated UI labels, at unchanged word difficulty", () => {
     const flat = analyzeReadability(UI_LABELS.join(" "));

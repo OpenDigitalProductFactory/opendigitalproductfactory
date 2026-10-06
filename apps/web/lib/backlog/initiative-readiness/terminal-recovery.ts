@@ -1,10 +1,10 @@
+import { repoBlobArtifactRef, immutableArtifactIdentity } from "@/lib/mcp-task-review-contract";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   authorizeObjectiveMappingRequestKeyEvolution,
-  validateObjectiveMappingRequestKey,
   objectiveMappingHistoricalProviderProofDigest,
   type ObjectiveMappingRequestHistory,
 } from "@/lib/mcp-task-objective-mapping-request-key";
@@ -17,7 +17,7 @@ import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inven
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
 import { loadBaselineSource, type BaselineSourceDb } from "./baseline-source";
 import { discoverCanonicalReviewArtifact } from "./canonical-artifact-discovery";
-import { designPhaseReviewDecision, loadPlanReviewArtifact, routeDesignReviewsBeforeBaseline } from "./design-phase-recovery";
+import { designPhaseReviewDecision, isArchetypePhaseReview, loadPlanReviewArtifact, routeDesignReviewsBeforeBaseline } from "./design-phase-recovery";
 import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
   selectEligibleObjectiveEvidenceActivityIds,
@@ -432,9 +432,11 @@ function baselineAncestors(
   return ancestors;
 }
 
+type HistoricalRepoBlobArtifact = Extract<ObjectiveMappingRequestHistory["binding"]["artifactRef"], { kind: "repo-blob-at-commit" }>;
+
 function sameRepositoryPath(
   left: NonNullable<BaselinePayload["artifactRef"]>,
-  right: ObjectiveMappingRequestHistory["binding"]["artifactRef"],
+  right: HistoricalRepoBlobArtifact,
 ): boolean {
   return left.repositoryFullName.toLocaleLowerCase("en-US") === right.repositoryFullName.toLocaleLowerCase("en-US")
     && left.path === right.path;
@@ -442,7 +444,7 @@ function sameRepositoryPath(
 
 export function exactArtifactRefMatches(
   left: NonNullable<BaselinePayload["artifactRef"]>,
-  right: ObjectiveMappingRequestHistory["binding"]["artifactRef"],
+  right: HistoricalRepoBlobArtifact,
 ): boolean {
   return left.kind === right.kind
     && left.repositoryFullName.toLocaleLowerCase("en-US") === right.repositoryFullName.toLocaleLowerCase("en-US")
@@ -483,7 +485,13 @@ export async function classifyHistoricalObjectiveMappingArtifacts(args: {
   for (const historical of args.history) {
     const baselineId = historical.binding.expectedCurrentBaselineId;
     const ancestor = typeof baselineId === "string" ? ancestors.get(baselineId) : undefined;
-    const historicalArtifact = historical.binding.artifactRef;
+    // BI-926A7E90: objective mapping binds acceptance to a repository blob; a
+    // historical request bound to any other artifact kind is never eligible.
+    const historicalArtifact = repoBlobArtifactRef(historical.binding.artifactRef);
+    if (!historicalArtifact) {
+      classified.push(historical);
+      continue;
+    }
     const ancestorArtifact = ancestor?.artifactRef;
     const isLegacyInvalid = historical.binding.workroomRef === undefined
       || historical.binding.eligibleEvidenceActivityIds === undefined;
@@ -642,7 +650,10 @@ export async function resolveTerminalInitiativeRecovery(args: {
 
   // BI-D3E1F6D9: a design review reads the room's current design at its head,
   // exactly as the refused claim issues it; only acceptance keeps the pinned commit.
-  const baselineArtifact = !designPhase && baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
+  // BI-D9DECD1B: so do the archetype reviews owed before implementation. The
+  // claim issues them at the head, and the review guard rebuilds them here.
+  const readsHead = designPhase !== null || isArchetypePhaseReview(decision);
+  const baselineArtifact = !readsHead && baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
       === room.repositoryFullName.toLocaleLowerCase("en-US")
     ? {
       commitSha: baseline.artifactRef.commitSha,
@@ -707,8 +718,8 @@ export async function resolveTerminalInitiativeRecovery(args: {
     baselineRows: baselineRows!,
     currentBaseline: baseline,
     currentArtifact: {
-      repositoryFullName: binding.artifactRef.repositoryFullName,
-      path: binding.artifactRef.path,
+      repositoryFullName: immutableArtifactIdentity(binding.artifactRef).repositoryFullName,
+      path: immutableArtifactIdentity(binding.artifactRef).path,
     },
     room: {
       ...room,

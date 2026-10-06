@@ -14,6 +14,13 @@
 
 ## New page routes — regenerate companions (BI-206DAB95)
 
+Coworker tool authority resolves through `lib/coworker-identity.ts` to one
+canonical Agent row for administrator actions, tokens, runtime reads and profile
+reports. Runtime alias records still own their skills and service references.
+Do not combine grants across those records or replace revoked database state
+with registry defaults. See the
+[administrator reconciliation procedure](../user-guide/coworker-permission-reconciliation.md).
+
 Adding `apps/web/app/**/page.tsx` requires regenerating **four** derived artifacts. CI fails opaquely if any is stale. One command regenerates all of them against the **current** tree:
 
 ```bash
@@ -87,6 +94,7 @@ Runbook skill: `dpf-clear-dependabot-alerts`. Posture / prune / vendoring strate
 - **For final-task-in-epic work:** include "run `pnpm --filter web build` and fix any errors" plus the required UX verification path. **Instruct the subagent to route that build through the shared local-CI convergence sandbox (`claim_nonprod_environment_lease(environmentKey="local-integration-ci")`) or the canonical local install — not inside the worktree itself.** (See §5 "Where each gate runs" and [kernel principle](../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).)
 - **For UI work:** include the Theme-Aware Styling rules from §11. Without them, components ignore the platform's branding system.
 - **For any implementation work:** include "perform a documentation impact check; update the relevant docs surface or record a concrete no-docs-needed attestation before claiming done."
+- **For any text an agent writes (code, tests, commit messages, PR bodies):** write invisible or special characters as braced escapes (\u{200B}), never the four-digit form. Agent tooling has decoded the four-digit escape into the literal invisible character in file writes, heredocs and PR bodies; one such character reached `main` in 418eaac44 (BI-5D412E3C). The instruction-file guard and the commit-text guard refuse literal hidden characters; braced escapes pass.
 - **For governed product surfaces:** register or update the Authorized Surface Contract from the same shared read model that renders the human UX. Keep persistent actions behind `governedExecuteTool`, mark secrets write-only, and run the DOM/accessibility conformance plus governed-surface guard. A route name or raw DOM scrape is not sufficient page knowledge.
 
 ## 14. Release Testing
@@ -114,3 +122,7 @@ Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 pha
 **`"use server"` modules export only functions and concrete values (BI-IMP-21C466DE).** Type aliases and interfaces stay **local** (or live in a non-`"use server"` module). Exporting types from a server-action file breaks Turbopack registration. Prefer `export type` from a sibling `*.types.ts` or `lib/` module.
 
 **Coworker capability filtering is single-source (BI-IMP-60B0893E).** Agent tool grants live in `agent_registry.json` / `AgentToolGrant`; runtime intersection is `getAvailableTools` + `TOOL_TO_GRANTS` + coworker filter helpers under `apps/web/lib/actions/coworker-tool-filter.ts` and `apps/web/lib/tak/agent-grants.ts`. Route-local allowlists that re-express the same policy are defects — extend the shared filter, do not fork it. Peer coordination tools (`request_coworker`, `summon_coworker`) follow the advise-safe pattern above.
+
+## Task-specific operating rules
+
+- **Report outcomes faithfully.** If tests fail, say so with the output; if a step was skipped, say that; when something is done and verified, state it plainly without hedging. Never claim completion for work that is not finished. → [kernel principle](../founder-kernel/wiki/principles/never-fabricate.md)

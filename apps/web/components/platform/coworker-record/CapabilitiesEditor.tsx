@@ -13,6 +13,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { confirmDialog } from "@/components/ui/Dialog";
+import { AuthorityReconciliation } from "./AuthorityReconciliation";
+import { useT } from "@/lib/i18n/use-t";
 import {
   grantCoworkerTool,
   revokeCoworkerTool,
@@ -28,6 +30,7 @@ type Props = {
   agentCuid: string;
   /** Business agentId (e.g. "build-specialist") — the value SkillAssignment.agentId stores. */
   agentBusinessId: string;
+  skillAgentBusinessId?: string;
   slugId: string | null;
   /** Currently-held tool-grant keys. */
   heldGrants: string[];
@@ -89,6 +92,7 @@ const removeBtn: React.CSSProperties = {
 export function CapabilitiesEditor({
   agentCuid,
   agentBusinessId,
+  skillAgentBusinessId = agentBusinessId,
   slugId,
   heldGrants,
   allGrantKeys,
@@ -97,6 +101,7 @@ export function CapabilitiesEditor({
   canWrite,
 }: Props) {
   const router = useRouter();
+  const t = useT("setup");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [grantToAdd, setGrantToAdd] = useState("");
@@ -145,7 +150,7 @@ export function CapabilitiesEditor({
     if (!skillToAdd) return;
     const id = skillToAdd;
     setSkillToAdd("");
-    run(`skill:${id}`, () => grantCoworkerSkill(agentBusinessId, id, slugId));
+    run(`skill:${id}`, () => grantCoworkerSkill(skillAgentBusinessId, id, slugId));
   }
 
   async function onRemoveSkill(skill: AssignedSkill) {
@@ -156,7 +161,7 @@ export function CapabilitiesEditor({
       tone: "danger",
     });
     if (!ok) return;
-    run(`skill:${skill.skillId}`, () => revokeCoworkerSkill(agentBusinessId, skill.skillId, slugId));
+    run(`skill:${skill.skillId}`, () => revokeCoworkerSkill(skillAgentBusinessId, skill.skillId, slugId));
   }
 
   return (
@@ -237,7 +242,7 @@ export function CapabilitiesEditor({
       {/* Tool grants */}
       <div>
         <div style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 8 }}>
-          Tool grants (least privilege)
+          {t("coworkerPermissions.savedGrants")}
         </div>
         {heldGrants.length > 0 ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: canWrite ? 10 : 0 }}>
@@ -285,6 +290,7 @@ export function CapabilitiesEditor({
             </button>
           </div>
         )}
+        {canWrite && <AuthorityReconciliation agentId={agentBusinessId} />}
       </div>
     </div>
   );

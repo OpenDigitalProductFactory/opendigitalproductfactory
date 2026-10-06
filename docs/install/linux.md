@@ -3,75 +3,100 @@
 This is the end-user install guide for the Open Digital Product Factory
 on **native Linux Docker Engine** (no Docker Desktop).
 
-> **Status: Early access — please try it!**
+> **Status: Early access — assisted pilot recommended.**
 >
-> The Linux installer is code-complete and passes static CI gates.
-> An on-demand end-to-end install gate runs the full compose stack
-> on `ubuntu-latest`
-> ([`.github/workflows/install-verification.yml`](../../.github/workflows/install-verification.yml)),
-> but we still need real-world reports on **distros beyond Ubuntu**
-> (Debian 12+, Fedora 39+) and on the **autostart-after-reboot** path
-> — neither of which CI can exercise.
->
-> **If you run Debian, Fedora, or a Linux VM you can spare for an
-> hour, please try the install and [tell us how it went](#help-us-graduate-to-ga).**
-> Happy paths and failures are equally useful. A handful of community
-> verification reports is what we need to flip this guide from
-> "early access" to "GA."
->
-> The Windows installer remains the only GA install surface today.
+> The [v2026.10.02 release install test](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/actions/runs/37010716830/job/110855309417)
+> passed on Ubuntu 24.04 x86-64 with Docker 28.0.4 and Compose 2.38.2
+> already installed. It verified HTTP portal health, skipped models and
+> autostart, and logged a CA health timeout plus a missing runtime-transition
+> signing file. It is evidence of basic startup, not production readiness.
+> Complete the [pilot acceptance checks](#pilot-acceptance-checks) before a
+> customer depends on the installation. Linux GA remains tracked by BI-3BE9A85C.
 
 For the architectural background, see the
 [installer-parity roadmap](../superpowers/plans/2026-05-09-macos-linux-native-support.md)
 and the [deployment doctrine](../superpowers/specs/2026-05-09-deployment-contracts.md).
 
-## Supported environment
+## Recommended first deployment
+
+Start with **Ubuntu Server 24.04 LTS, x86-64, systemd, native Docker Engine
+and the Compose plugin**, on a dedicated VM or physical server. This matches
+the recorded release test. Docker stays: it runs DPF's published Linux
+containers directly on the Linux host. Docker Desktop and its additional VM
+are not required. A cloud VM uses the same Linux installer; see the
+[single-VM guide](cloud-single-vm.md).
+
+Use an approved external AI provider for the first pilot if local inference
+is not a requirement. For purchasing and workload sizing, use the canonical
+[hardware guide](hardware.md): provider-assisted operations recommend
+8–12 modern CPU cores, 32 GB RAM and a 1 TB SSD. Local-first operation needs
+separate GPU/model validation; an image published for ARM64 does not prove
+that host's GPU drivers, inference, reboot or restore path.
+
+## Compatibility and prerequisites
 
 | Component | Required |
 |-----------|----------|
-| OS | Ubuntu 22.04+ / Debian 12+ / Fedora 39+ |
-| Architecture | `x86_64` or `arm64` (the multi-arch GHCR images cover both) |
+| OS | Ubuntu 24.04 is the first pilot target. Ubuntu 22.04+, Debian 12+ and Fedora 39+ are the installer's version floors, not certification of every newer release. Use a release still supported by its vendor and Docker. |
+| Architecture | Images publish for `x86_64` and `arm64`; the recorded installation test above is x86-64. |
 | Docker Engine | 20.10 or newer (for `host-gateway` extra-hosts mode) |
-| Disk | ~10 GB free (images + Ollama models + volumes) |
-| RAM | 16 GB recommended for the local-LLM tier; 8 GB works with an external `LLM_BASE_URL` |
+| Docker Compose | The `docker compose` plugin, version 2 or newer; standalone legacy `docker-compose` is insufficient. |
+| Disk and RAM | Size from the [hardware guide](hardware.md), including images, data, models and backup headroom. The old 10-GB disk estimate is not a deployment target. |
 
 The installer refuses to run on:
 
 - WSL2 without Docker Desktop integration (the host-side bind mounts
   the platform relies on don't survive the WSL boundary cleanly).
 - Rootless Docker (volumes / `host-gateway` not validated).
-- Older Ubuntu (< 22.04), older Debian (< 12), older Fedora (< 39),
-  CentOS 7, RHEL 7.
+- Older Ubuntu (< 22.04), older Debian (< 12), older Fedora (< 39).
+
+RHEL/CentOS, derivatives, rootless/Podman and air-gapped deployment are not
+certified by the Ubuntu test. A distro passing the version preflight is not
+evidence of DPF support on that distro.
 
 Force with `--force-unsupported-host` if you know what you're doing.
 
 ## Prerequisites
 
-The installer auto-installs Docker Engine via the distro package manager
-(`apt-get` on Debian/Ubuntu, `dnf` on Fedora). You bring:
+When Docker is absent, the installer configures Docker's official repository
+and installs Engine, CLI, containerd, Buildx and Compose together (`apt-get`
+on Debian/Ubuntu, `dnf` on Fedora). It preserves existing healthy Docker
+installations. Missing Compose, conflicting runtime packages, failed package
+installation or a failed Docker service stop setup with a specific message;
+it never removes an existing runtime or falls back to Engine alone. You bring:
 
 - **`sudo` privileges** — required for the Docker Engine install and for
   adding your user to the `docker` group.
-- **Node.js 20+** and **pnpm** — install via your distro pkg manager,
-  `nvm`, or `npm install -g pnpm`. The installer refuses if Node < 20
-  or pnpm is missing; it does **not** auto-install Node-runtime tooling.
-- **`git`, `curl`, `bash`** — already present on every supported distro.
+- **Node.js and npm** — Node 24 matches release CI; the current installer
+  enforces only major version 20 or newer. It does not install Node for you.
+- **pnpm at the repository's `packageManager` version** — provision that exact
+  version for repeatability. If pnpm is absent, the installer currently tries
+  `npm install -g pnpm`, which can require package-directory permissions.
+- **`git`, `curl`, `bash`, `python3`, CA certificates and systemd** — verify
+  these on minimal server images; do not assume a desktop distribution's tools.
 
 ## Quick start
 
-Clone the repo and run the installer:
+The Bash installer ships in the repository. For a customer pilot, use a
+selected release tag and matching `DPF_IMAGE_TAG` so source and images agree;
+the example below names the release whose evidence is linked above.
 
 ```bash
-git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory ~/dpf
+git clone --branch v2026.10.02 https://github.com/OpenDigitalProductFactory/opendigitalproductfactory ~/dpf
 cd ~/dpf
-bash install-dpf.sh
+DPF_IMAGE_TAG=v2026.10.02 bash install-dpf.sh --customer
 ```
 
 For unattended (CI / scripted) install:
 
 ```bash
-bash install-dpf.sh --headless --release
+DPF_IMAGE_TAG=v2026.10.02 bash install-dpf.sh --headless --customer --release
 ```
+
+These commands describe the published release, which predates the
+BI-E1AA1B3C Docker bootstrap repair. Until a release contains that repair,
+pre-provision Docker Engine and Compose using Docker's official distro guide.
+Do not claim an unmerged or unpublished fix is in the selected release.
 
 #### Contributor: office document conversion
 
@@ -124,7 +149,7 @@ single-tree mode — the current default and fully back-compat.
 5. **`docker` group requires re-login.** If you were just added, the
    installer exits with code `75` and asks you to log out and back in
    (or `newgrp docker`). Re-run `bash install-dpf.sh` afterward.
-6. **Node / pnpm sanity check** — refuses if Node < 20 or pnpm missing.
+6. **Node / pnpm sanity check** — refuses Node < 20; tries `npm install -g pnpm` when pnpm is absent. Pre-provision the repository's pinned version for repeatability. Node 24 is the release-tested version.
 7. **Workspace dependencies** — `pnpm install`.
 8. **Host hardware profile** — runs `scripts/detect-hardware-host.ts`
    (reads `/proc/cpuinfo`, `nproc`, `free -b`, `nvidia-smi` if present).
@@ -143,9 +168,9 @@ single-tree mode — the current default and fully back-compat.
     (`NODE_EXTRA_CA_CERTS`) in `~/.dpf/agent-toolchain.env`, loaded by your
     shell profile, on every run. If this step fails, the
     portal stays at `http://localhost:3000` and the installer says so.
-11. **`docker compose up -d`** on the Linux overlay (which adds the
-    `ollama` service for local LLM hosting, cAdvisor, node-exporter,
-    and the matching Prometheus scrape config).
+11. **`docker compose up -d`** on the Linux overlay. Ollama and host telemetry
+    are defined behind capability profiles; their presence in YAML does not
+    mean every install starts them. Verify the selected AI capability.
 12. **Health check** — polls `http://localhost:3000/api/health` for up
     to 5 minutes (configurable via `DPF_HEALTH_TIMEOUT`).
 13. **Edge Node bootstrap** (only with `--with-edge`) — mints a single-use
@@ -164,8 +189,8 @@ single-tree mode — the current default and fully back-compat.
     `loginctl enable-linger $USER` so the stack auto-starts at boot
     (skip with `--no-autostart`).
 
-Total wall time: ~10 minutes including the initial Ollama model pull
-(varies with model size and connection).
+Installation time depends on image/model downloads and host resources.
+Allow time for prerequisite setup and a new login when Docker was just installed.
 
 ### Login
 
@@ -177,20 +202,47 @@ Login credentials are written to `.env` in the install directory:
 
 ## Network exposure after install
 
-A default install listens on this machine only. Every published port (the
-portal on 3000 and 1455, postgres 5432, redis 6379, inngest 8288, the sandbox
-on 3035) binds to `127.0.0.1`, so nothing on your LAN can reach the portal
-or its admin login. This is set by one value in the install's `.env`:
+Base application ports default to loopback through this value in `.env`:
 
 ```
 DPF_HOST_BIND_ADDRESS=127.0.0.1
 ```
 
-To serve the LAN deliberately, set it to `0.0.0.0` and run `docker compose
-up -d` again. An install created before this key existed keeps the exposure
-it already had: the upgrade writes `0.0.0.0` into its `.env` and says so in a
-comment, so LAN access does not vanish silently. Remote access without LAN
-exposure goes through `PUBLIC_URL` and the edge path.
+This is not a blanket guarantee for every overlay: the Linux Ollama service
+publishes `11434:11434` when enabled. Inspect the effective profile's published
+ports before exposing a host. For remote customer access, configure the HTTPS
+ingress deliberately and keep database, cache, management and model endpoints
+private. Do not change the global bind address simply to expose the portal.
+Docker-published ports can bypass ufw/firewalld expectations; review the
+[Docker firewall guidance](https://docs.docker.com/engine/install/ubuntu/#firewall-limitations).
+
+## Pilot acceptance checks
+
+Record the distro/version, CPU architecture, Docker/Compose versions, exact
+release/image identity and selected capabilities with each result. A check
+not exercised is **unrun**, not passed.
+
+- Install on a clean host without preinstalled Docker; reconnect after the
+  group change and rerun successfully. Verify repeat installation is safe.
+- Verify the canonical HTTPS address, certificate trust, administrator login
+  and the intended MCP/OAuth sign-in. HTTP health alone is insufficient.
+- Complete a real coworker interaction and embedding/search operation with
+  the chosen provider. For local AI, exercise model download and inference
+  with the intended GPU or CPU configuration.
+- Confirm required capabilities start without missing-state errors. The
+  v2026.10.02 job logged `/dpf-state/runtime-transition.secret` missing.
+- Reboot the host without interactive login; verify Docker, DPF and selected
+  capabilities recover through the systemd/linger path.
+- Restore a backup into a separate declared test installation; verify records,
+  uploaded files and required configuration. Never test restore over production.
+- Upgrade through `/ops/self-upgrade` and verify the recovery point and
+  post-upgrade behavior. Do not substitute a hand-built image or database downgrade.
+- Validate remote access and port exposure from a second machine; retain the
+  diagnostic report with secrets redacted.
+
+Use the [verification runbook](verification-runbook.md) for execution. Repeat
+this matrix for Debian, Fedora or ARM64 before extending the support claim.
+The prerequisite regression tests do not replace these runtime checks.
 
 ## Day-to-day
 
@@ -209,8 +261,8 @@ Pass `--help` to any of those scripts to see all flags.
 
 ## Edge Node — what's running and why
 
-A single-host install bundles a **DPF Edge Node** alongside the
-Authority Core. The Edge Node is a small Node.js container that:
+With `--with-edge`, a single-host install bundles a **DPF Edge Node** alongside
+the Authority Core. It is opt-in. The Edge Node is a small Node.js container that:
 
 - Reports its host (hostname + LAN IP addresses) to the Authority
 - Submits discovery observations on a regular sweep cadence (default
@@ -254,11 +306,14 @@ tokens always require explicit approval per spec § Approval policy).
 
 ## LLM provider
 
-On Linux without Docker Desktop, there's no Docker Model Runner. The
-Linux compose overlay (`docker-compose.linux.yml`) brings up an
-**`ollama`** service inside the stack and sets
+DPF's Linux compose overlay (`docker-compose.linux.yml`) defines an
+**`ollama`** service behind its AI capability profile and defaults
 `LLM_BASE_URL=http://ollama:11434/v1` per the
 [provider contract](../superpowers/specs/2026-05-09-deployment-contracts.md).
+
+[Docker Model Runner also supports Docker Engine](https://docs.docker.com/ai/model-runner/get-started/#docker-engine).
+It is not provisioned by DPF's Linux installer. Use the currently configured
+provider until the alternative's model lifecycle and inference are verified.
 
 Models are pulled by `portal-init` on first boot using
 `DPF_MODEL_PULL_MODE=ollama` (translated to
@@ -410,9 +465,9 @@ enabled lingering only for DPF, disable it manually after uninstall.
 
 ## Help us graduate to GA
 
-The CI gate proves the install path works on `ubuntu-latest`. What
-it doesn't prove: that it works on your specific distro, your specific
-kernel, your specific Docker version, with your specific user setup.
+The recorded release test proves basic startup on Ubuntu with preinstalled
+Docker. It does not prove fresh Docker provisioning, HTTPS, inference,
+reboot, restore or upgrade on each supported host configuration.
 **That's where you come in.**
 
 **One-minute report:**
@@ -451,7 +506,7 @@ We especially want reports from:
 
 - **Debian 12+** (similar to Ubuntu but uses different package
   defaults; auto-install via `apt` path)
-- **Fedora 39+** (different package manager — `dnf` — and SELinux
+- **A currently supported Fedora release** (different package manager — `dnf` — and SELinux
   context)
 - **A real reboot** verifying `systemctl --user` + `loginctl
   enable-linger` survives session loss

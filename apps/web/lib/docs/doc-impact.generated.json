@@ -292,7 +292,6 @@
       "docs/testing/pre-pr-gate.md"
     ],
     ".github/workflows/install-verification.yml": [
-      "docs/install/linux.md",
       "docs/maintenance/staleness-report.md"
     ],
     ".github/workflows/migration-safety-guard.yml": [
@@ -1219,6 +1218,7 @@
       "docs/testing/ci-evidence.md"
     ],
     "apps/web/lib/security/client-address.ts": [
+      "docs/install/cloud-single-vm.md",
       "docs/security/tool-evaluations/2026-09-29-cloudflare-tunnel.md"
     ],
     "apps/web/lib/security/safe-log.ts": [
@@ -1365,6 +1365,10 @@
     ],
     "apps/web/lib/tak/tool-result-budget.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
+      "docs/architecture/context-engineering-standards.md",
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "apps/web/lib/tak/tool-result-provenance.ts": [
       "docs/architecture/context-engineering-standards.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
@@ -1900,6 +1904,9 @@
     "packages/validators/src/guards.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "packages/validators/src/hostile-content-fixtures.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "packages/validators/src/readability.ts": [
       "docs/platform-usability-standards.md"
     ],
@@ -2234,6 +2241,9 @@
     "scripts/installer/install-state.schema.json": [
       "docs/operations/install.md"
     ],
+    "scripts/installer/lib/docker.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/installer/lib/platform.sh": [
       "docs/install/platform-support-watchlist.md"
     ],
@@ -2393,11 +2403,6 @@
     "scripts/probes/marketing-media/local-render-receipt.json": [
       "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md"
     ],
-    "scripts/promote.sh": [
-      "docs/architecture/build-gate-runbook.md",
-      "docs/architecture/gated-permissions-process.md",
-      "docs/runbooks/bet5-windows-self-upgrade.md"
-    ],
     "scripts/publish-host-gpu.ps1": [
       "docs/install/platform-support-watchlist.md"
     ],
@@ -2458,14 +2463,19 @@
     "scripts/set-hooks-path.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/setup.ps1": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/setup.sh": [
-      "docs/install/macos.md"
+      "docs/install/macos.md",
+      "docs/install/platform-support-watchlist.md"
     ],
     "scripts/style-drift-baseline.json": [
       "docs/architecture/ui-token-styling.md"
     ],
     "scripts/tts/setup-chatterbox-tts-macos.sh": [
-      "docs/install/macos.md"
+      "docs/install/macos.md",
+      "docs/user-guide/operations/self-upgrade.md"
     ],
     "scripts/verify-edge-node-air-gap.sh": [
       "docs/edge-node/security-and-sovereignty.md",
@@ -2923,8 +2933,7 @@
       "scripts/pre-push-gate-infrastructure-probe.mjs",
       "scripts/pre-push-gate-slot-contract.test.mjs",
       "scripts/pregate-preflight.mjs",
-      "scripts/pregate-status.mjs",
-      "scripts/promote.sh"
+      "scripts/pregate-status.mjs"
     ],
     "docs/architecture/build-studio-namespace.md": [
       "apps/web/lib/build/build-plan-paths.ts",
@@ -2957,6 +2966,7 @@
       "apps/web/lib/tak/compaction-digest.ts",
       "apps/web/lib/tak/context-economy-metrics.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
+      "apps/web/lib/tak/tool-result-provenance.ts",
       "apps/web/lib/tak/tool-script.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
       "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs",
@@ -2999,6 +3009,7 @@
       "packages/db/src/seed-retention-floor-obligations.ts",
       "packages/integration-shared/src/canonical-json.ts",
       "packages/validators/src/guards.ts",
+      "packages/validators/src/hostile-content-fixtures.ts",
       "packages/validators/src/untrusted-text.ts",
       "scripts/check-model-metadata-tags.mjs",
       "scripts/check-no-local-canonical-json.mjs",
@@ -3132,8 +3143,7 @@
       "apps/web/scripts/gpp-critical-interaction-map.ts",
       "packages/db/prisma/schema/ai-coworker.prisma",
       "scripts/installer/gpp-permit-secret-contract.test.mjs",
-      "scripts/installer/install-release-assets.mjs",
-      "scripts/promote.sh"
+      "scripts/installer/install-release-assets.mjs"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
@@ -3171,6 +3181,7 @@
       "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/tak/mcp-tool-policy.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
+      "apps/web/lib/tak/tool-result-provenance.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
       "apps/web/lib/work-capsules/scope-claim-lease.ts",
       "packages/integration-shared/src/mcp-client-credential-policy.ts",
@@ -3401,6 +3412,7 @@
       "scripts/seed-worktree-mcp.sh"
     ],
     "docs/install/cloud-single-vm.md": [
+      "apps/web/lib/security/client-address.ts",
       "docker-compose.edge-standalone.yml"
     ],
     "docs/install/edge-node-air-gapped-verification-report.md": [
@@ -3425,7 +3437,6 @@
       "services/edge-node/scripts/verify-lifecycle.ts"
     ],
     "docs/install/linux.md": [
-      ".github/workflows/install-verification.yml",
       "docker-compose.linux.yml",
       "scripts/detect-hardware-host.ts"
     ],
@@ -3454,11 +3465,14 @@
       "scripts/doctools-image-contract.test.mjs",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/doctools-prepull.test.mjs",
+      "scripts/installer/lib/docker.test.mjs",
       "scripts/installer/lib/platform.sh",
       "scripts/lib/dockerfile-portal-build.test.mjs",
       "scripts/lib/entry-module.mjs",
       "scripts/lib/host-available-memory.mjs",
       "scripts/publish-host-gpu.ps1",
+      "scripts/setup.ps1",
+      "scripts/setup.sh",
       "tests/release/pregate-node-gate-contract.test.mjs"
     ],
     "docs/install/scratch-install-rehearsal.md": [
@@ -3625,8 +3639,7 @@
     ],
     "docs/runbooks/bet5-windows-self-upgrade.md": [
       "apps/web/lib/self-upgrade/host-memory-preflight.ts",
-      "dpf-start.ps1",
-      "scripts/promote.sh"
+      "dpf-start.ps1"
     ],
     "docs/security/2026-05-24-shift-left-rollout.md": [
       ".github/workflows/ci.yml",
@@ -3870,6 +3883,9 @@
     "docs/user-guide/contributing/developer-setup.md": [
       "scripts/seed-worktree-mcp.ps1",
       "scripts/seed-worktree-mcp.sh"
+    ],
+    "docs/user-guide/operations/self-upgrade.md": [
+      "scripts/tts/setup-chatterbox-tts-macos.sh"
     ],
     "docs/user-guide/platform/edge-nodes.md": [
       "docker-compose.edge.macvlan.yml"

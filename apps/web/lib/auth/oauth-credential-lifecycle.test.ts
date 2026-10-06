@@ -107,3 +107,92 @@ describe("OAuth credential custody", () => {
     expect(mocks.db.mcpApiToken.updateMany).not.toHaveBeenCalled();
   });
 });
+
+// BI-25C6219E: sessions of one client sharing a stored refresh token race.
+describe("refresh reuse grace window", () => {
+  const secondsAgo = (s: number) => new Date(Date.now() - s * 1000);
+  const liveSuccessor = () => ({ ...refreshRow(), id: "successor" });
+  /** The presented token was rotated `consumedSecondsAgo` seconds ago to `successor`. */
+  function rotated(consumedSecondsAgo: number, successor: object | null = liveSuccessor()) {
+    const parent = { ...refreshRow(), consumedAt: secondsAgo(consumedSecondsAgo), rotatedToId: "successor" };
+    mocks.db.oAuthRefreshToken.findUnique.mockReset().mockImplementation(({ where }) =>
+      Promise.resolve(where.tokenHash ? (where.tokenHash === createHash("sha256").update(refreshRequest.token).digest("hex")
+        ? parent : { id: "sibling" }) : where.id === "successor" ? successor : parent));
+  }
+  const familyRevoked = () => expect(mocks.db.oAuthRefreshToken.updateMany).toHaveBeenCalledWith({
+    where: { oauthFamilyKey: "family-a", revokedAt: null },
+    data: { revokedAt: expect.any(Date), revokedReason: "refresh_token_replayed" },
+  });
+
+  it("issues a sibling in the same family, without revoking, when the same client reuses inside the window", async () => {
+    rotated(1);
+    const result = await rotateOAuthRefreshToken(refreshRequest);
+    expect(result.accepted).toBe(true);
+    expect(mocks.db.oAuthRefreshToken.updateMany).not.toHaveBeenCalled();
+    expect(mocks.db.mcpApiToken.updateMany).not.toHaveBeenCalled();
+    expect(mocks.db.oAuthRefreshToken.create).toHaveBeenCalledWith({ data: expect.objectContaining({ oauthFamilyKey: "family-a", userId: "human" }) });
+    expect(mocks.db.mcpApiToken.create).toHaveBeenCalledWith({ data: expect.objectContaining({ oauthFamilyKey: "family-a" }) });
+    // The presented token keeps its one successor link; the sibling does not overwrite it.
+    expect(mocks.db.oAuthRefreshToken.update).not.toHaveBeenCalled();
+  });
+
+  it("still re-checks consent inside the window", async () => {
+    rotated(1);
+    mocks.resolve.mockResolvedValue(null);
+    expect((await rotateOAuthRefreshToken(refreshRequest)).accepted).toBe(false);
+    expect(mocks.db.oAuthRefreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it("revokes the family when the same client reuses after the window", async () => {
+    rotated(61);
+    expect((await rotateOAuthRefreshToken(refreshRequest)).accepted).toBe(false);
+    familyRevoked();
+    expect(mocks.db.oAuthRefreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it("honours an operator-set window, and 0 disables grace", async () => {
+    vi.stubEnv("DPF_OAUTH_REFRESH_REUSE_GRACE_SECONDS", "0");
+    try {
+      rotated(1);
+      expect((await rotateOAuthRefreshToken(refreshRequest)).accepted).toBe(false);
+      familyRevoked();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("revokes the family when a different client reuses inside the window", async () => {
+    rotated(1);
+    expect((await rotateOAuthRefreshToken({ ...refreshRequest, clientId: "foreign" })).accepted).toBe(false);
+    familyRevoked();
+    expect(mocks.db.oAuthRefreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["revoked", { revokedAt: secondsAgo(0) }],
+    ["already consumed", { consumedAt: secondsAgo(0) }],
+    ["in another family", { oauthFamilyKey: "family-b" }],
+  ])("revokes the family when the successor is %s", async (_label, change) => {
+    rotated(1, { ...liveSuccessor(), ...change });
+    expect((await rotateOAuthRefreshToken(refreshRequest)).accepted).toBe(false);
+    familyRevoked();
+    expect(mocks.db.oAuthRefreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it("revokes the family when the successor is missing", async () => {
+    rotated(1, null);
+    expect((await rotateOAuthRefreshToken(refreshRequest)).accepted).toBe(false);
+    familyRevoked();
+  });
+
+  it("gives an in-flight race loser a sibling once the winner has committed", async () => {
+    const fresh = refreshRow();
+    const committed = { ...fresh, consumedAt: secondsAgo(0), rotatedToId: "successor" };
+    mocks.db.oAuthRefreshToken.findUnique.mockReset()
+      .mockResolvedValueOnce(fresh) // our read, before the winner committed
+      .mockImplementation(({ where }) => Promise.resolve(where.id === "refresh-parent" ? committed
+        : where.id === "successor" ? liveSuccessor() : { id: "sibling" }));
+    mocks.db.oAuthRefreshToken.updateMany.mockResolvedValueOnce({ count: 0 });
+    expect((await rotateOAuthRefreshToken(refreshRequest)).accepted).toBe(true);
+    expect(mocks.db.mcpApiToken.updateMany).not.toHaveBeenCalled();
+    expect(mocks.db.oAuthRefreshToken.update).not.toHaveBeenCalled();
+  });
+});

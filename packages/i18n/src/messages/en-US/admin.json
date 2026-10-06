@@ -1,4 +1,7 @@
 {
+  "scheduledWork": {
+    "lastResult": "Last result"
+  },
   "accountableOwner": {
     "label": "Accountable owner:",
     "unset": "No accountable owner recorded",
@@ -14,6 +17,8 @@
   },
   "oauthClientPeople": {
     "heading": "People connected to {$client}",
+    "regionLabel": "People connected to {$client} ({$clientId})",
+    "registration": "Client id {$clientId}, registered {$when}",
     "empty": "Nobody is connected.",
     "colPerson": "Person",
     "colLive": "Live grants",

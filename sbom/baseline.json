@@ -1,11 +1,11 @@
 {
   "note": "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `acceptedSpecifierDrift` maps each registry package that two or more workspaces declare other than through one shared `catalog:` specifier (pnpm-workspace.yaml `catalog`) to the reason; unlisted drift fails, and a listed name that no longer drifts fails as stale. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.",
   "totals": {
-    "resolvedComponents": 891,
-    "uniqueNames": 833,
-    "duplicatedNames": 55,
-    "excessInstances": 58,
-    "multiMajorNames": 25,
+    "resolvedComponents": 879,
+    "uniqueNames": 820,
+    "duplicatedNames": 56,
+    "excessInstances": 59,
+    "multiMajorNames": 26,
     "firstPartyDivergentNames": 0,
     "directButTransitiveNames": 2,
     "dedupeCandidateNames": 30,
@@ -14,18 +14,18 @@
     "workspaces": 16
   },
   "budgets": {
-    "resolvedComponents": 891,
-    "duplicatedNames": 55,
-    "excessInstances": 58,
-    "multiMajorNames": 25
+    "resolvedComponents": 879,
+    "duplicatedNames": 56,
+    "excessInstances": 59,
+    "multiMajorNames": 26
   },
   "lastBudgetRaise": {
-    "reason": "+23 transitive components from maplibre-gl 6.11.2 and pmtiles 4.5.0 (BI-814F86E1). Nothing can be retired: DPF had no map renderer and no overlapping geo package. Writing our own WebGL renderer and adopting a React binding were both rejected (WWMD, design §3).",
+    "reason": "Vitest 5 and its mocker require magic-string ^1.2.3, while @tailwindcss/node 4.3.3 requires the incompatible 0.30.x line. The reviewed lock confirms both consumers; deduplication cannot satisfy both major ranges. The migration retires obsolete Vitest and Istanbul packages, leaving 879 total components with one additional development-only version instance.",
     "budgets": {
-      "resolvedComponents": 891,
-      "duplicatedNames": 55,
-      "excessInstances": 58,
-      "multiMajorNames": 25
+      "resolvedComponents": 879,
+      "duplicatedNames": 56,
+      "excessInstances": 59,
+      "multiMajorNames": 26
     }
   },
   "firstPartyDivergent": [],

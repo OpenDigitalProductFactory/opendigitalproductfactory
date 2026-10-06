@@ -58,6 +58,7 @@ import {
 } from "@/lib/mcp/listing-authority-resolver";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import { resolveToolResultProvenance, untrustedResultLabel } from "@/lib/tak/tool-result-provenance";
 import {
   resolveEffectiveTierForAuthSource,
   selectToolsForListing,
@@ -81,9 +82,8 @@ import {
   type ResolvedMcpTransportAuth as ResolvedAuth,
 } from "@/lib/mcp/transport-auth";
 import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
-import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
+import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, resolveLoadToolsRequest, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
-import { prisma } from "@dpf/db";
 import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 // GPP Phase 2 PR-C: a replayed permit handle rides in tools/call params._meta.
@@ -305,9 +305,10 @@ async function handleLoadTools(
   const toolByName = new Map(PLATFORM_TOOLS.map((tool) => [tool.name, tool]));
   const knownNames = new Set(toolByName.keys());
   const authorizedNames = new Set(authorized.map((tool) => tool.name));
-  const selected = resolveLoadToolsSelection(authorized, args);
+  const discovery = resolveLoadToolsRequest(args, granted);
+  const selected = resolveLoadToolsSelection(authorized, { names: discovery.names });
   // Judge against what selection drew from (agent-filtered), not the token-only list.
-  const noMatch = classifyLoadToolsNoMatch(args, knownNames, authorizedNames, new Set(selected.map((t) => t.name)));
+  const noMatch = classifyLoadToolsNoMatch(discovery, knownNames, authorizedNames, new Set(selected.map((t) => t.name)));
   // W12 (BI-EE64547B): internal session-JWT calls are per-call stateless — the
   // result still carries the selected definitions inline, but no per-token
   // session row is written (internal lists are full-tier; nothing to append).
@@ -315,7 +316,7 @@ async function handleLoadTools(
     token.source === "session-jwt"
       ? mergeLoadedToolNames([], selected.map((t) => t.name))
       : await loadToolsForSession(token.tokenId, selected.map((t) => t.name));
-  const status = buildLoadToolsStatus(args, {
+  const status = buildLoadToolsStatus(discovery, {
     knownNames, authorizedNames, loadedToolNames, authority, isAllowedByGrants: isToolAllowedByGrants,
     tokenGrants: (name) => tokenScopesAllowTool(toolByName.get(name)!, token, grantMap),
     roleAllows: (name) => roleAllowsTool(toolByName.get(name)!, userContext),
@@ -586,11 +587,12 @@ async function handleToolsCall(
   if (smugglingSuspected) {
     console.warn("[mcp/v1] hidden-unicode payload removed from tool result tool=%s removed=%d", sanitizeForLog(toolName), cleaned.total);
   }
+  // Spotlighting label (BI-1045525F): untrusted provenance is named in the text.
+  const label = untrustedResultLabel(resolveToolResultProvenance(toolName, PLATFORM_TOOLS));
+  const prefix = [label, smugglingSuspected ? invisibleRemovalNotice(cleaned) : ""].filter(Boolean).join("\n");
   const result = {
     ...executed,
-    message: smugglingSuspected
-      ? `${invisibleRemovalNotice(cleaned)}\n${cleaned.value.message ?? ""}`
-      : cleaned.value.message,
+    message: prefix ? `${prefix}\n${cleaned.value.message ?? ""}` : cleaned.value.message,
     error: cleaned.value.error,
     data: cleaned.value.data,
   };

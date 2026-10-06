@@ -124,6 +124,17 @@ describe("change-review MCP pack", () => {
     expect(out.success).toBe(true);
     expect(mocks.retryPersistedSemanticReview).toHaveBeenCalledWith("TR-1", "requester", true);
   });
+  it("requires both evidence and immutable identity for successor recovery", async () => {
+    expect(await changeReviewPack.handlers.retry_semantic_review!({ taskRunId: "TR-1", confirmed: true,
+      remediationVerificationId: "RV-1" }, "requester")).toMatchObject({ success: false });
+    expect(mocks.retryPersistedSemanticReview).not.toHaveBeenCalled();
+    mocks.retryPersistedSemanticReview.mockResolvedValueOnce({ newTaskRunId: "TR-2", strategy: "bounded-review-successor" });
+    expect(await changeReviewPack.handlers.retry_semantic_review!({ taskRunId: "TR-1", confirmed: true,
+      remediationVerificationId: "RV-1", expectedRequestDigest: "a".repeat(64) }, "requester")).toMatchObject({ success: true, entityId: "TR-2" });
+    expect(mocks.retryPersistedSemanticReview).toHaveBeenCalledWith("TR-1", "requester", true,
+      { remediationVerificationId: "RV-1", expectedRequestDigest: "a".repeat(64) });
+  });
+
   it("requires explicit confirmation before invoking recovery", async () => {
     const out = await changeReviewPack.handlers.retry_semantic_review!({ taskRunId: "TR-1", confirmed: "true" }, "requester");
     expect(out.success).toBe(false);

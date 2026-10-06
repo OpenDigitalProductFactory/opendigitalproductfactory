@@ -190,6 +190,21 @@ The 74 cron functions register in the BET-11 `ScheduledJob` substrate: one `next
 | AC-M3-MIGRATION | OBJ-M3-SCHEMA | The migration applies cleanly on a fresh schema and on a copy of the live schema, and creates no object that depends on existing rows. |
 | AC-M3-BENCH | OBJ-M3-EVIDENCE | §7 records p50/p99 event-to-first-step latency, claim throughput under an overlapping cron minute, extra WAL and connections, and the kill-drill results, with the verdict for the flag. |
 
+### 6.2 Phase 3 inventory, audited 2026-10-02 (`BI-742D569C`)
+
+Read from `main` after #5898. The facade held: only `apps/web/lib/jobs/{inngest-adapter,serve,types}.ts` import the `inngest` package, and every event, including `platform.quiescence-cleared`, is sent through `jobs.send`, which reaches both engines while any function is still on Inngest. Handlers have no `step.sendEvent`; they send inside a step. What phase 3 removes or repoints beyond step 3 above:
+
+| Area | Where | Phase 3 action |
+|---|---|---|
+| Engine adapter and serve route | `lib/jobs/inngest-adapter.ts`, `lib/jobs/serve.ts`, `app/api/inngest` | Delete; the facade keeps only the Postgres client. |
+| Boot self-registration and its watchdog | `instrumentation.ts` self-sync, `lib/queue/inngest-self-registration`, `lib/queue/job-engine-health.ts` (`INNGEST_REGISTRATION_CONFIG_KEY`, `INNGEST_WATCHDOG_CONFIG_KEY`), `lib/tak/self-upgrade-route-context.ts` | Delete the registration path. Repoint "job engine health" at the Postgres engine: runs past their lease, failure rate, missed cron fires (the checks `scripts/job-engine-soak-report.ts` makes). |
+| Retention of Inngest's own store | `lib/operate/inngest-retention/`, `ops/inngest-retention-sweep-scheduled`, `seed-platform-inngest-retention.ts`, `INNGEST_POSTGRES_URI` | Delete; the engine prunes its own tables (`pruneFinished`). |
+| Self-upgrade error classification | `lib/self-upgrade/admission.ts` matches `Inngest API Error` | Replace with the Postgres send path's errors. |
+| Status tile and monitoring | `components/monitoring/{health-summary,ServiceStatusGrid}`, `lib/observability/monitoring-jobs.ts`, `monitoring/prometheus/*.yml`, `monitoring/alloy/config.alloy` | Drop the Inngest job and target; the background-jobs tile reads the Postgres engine's health. |
+| Compose, installer, release | `docker-compose*.yml` (`inngest`, `redis`, `redis-exporter`, `INNGEST_*`, `INNGEST_SERVE_ORIGIN` in `lib/canonical-host.ts`), `scripts/installer/*`, `scripts/release/verify-compose-image-manifests.mjs`, `.github/workflows/{ci,publish-image,release-gates}.yml` | Remove the services, pins, env and image manifests in the same PR. |
+| Measurements and guards | `scripts/lib/platform-substrate-measurements.mjs`, `scripts/platform-substrate-baseline.json`, `scripts/check-no-direct-job-engine-import.mjs`, `sbom/` | Lower `defaultRequiredServiceCount`; retire the direct-import guard's Inngest case; `node scripts/sbom/check-sbom-drift.mjs --update-baseline`. |
+| Names only | `INNGEST_ID` constants (113 reads), `ScheduledJob` classification, the `inngest/scheduled.timer` cron event name | Keep: they are function ids and event names, not coupling. A rename is cosmetic and out of scope. |
+
 ## 7. Benchmarks required before implementation
 
 None of these can be run in a sandbox without Postgres; they are acceptance criteria, not results.
@@ -219,6 +234,29 @@ Measured with `apps/web/scripts/job-engine-bench.ts` against PostgreSQL 16.14 in
 **Reading the latency row.** Inngest's figure stops at its own scheduler marking the run started. It excludes the HTTP round trip to the portal's `/api/inngest` that executes the step, so it understates Inngest's event-to-first-step time. The owned engine's figure ends inside the step. Even so, Inngest's p50 is lower; the owned engine's tail (p99 99 ms) is within the same order. Neither is near the scale of the work these functions do, which is measured in seconds.
 
 **Verdict.** The engine sustains the 10x load with headroom: throughput under contention is about 22 times the target, and every drill passes. That meets the bar in §7 for turning the flag on **per domain for a soak** (§6 step 2, `DPF_JOBS_POSTGRES_FUNCTIONS`), watched through `TaskRun` outcomes and the `taskrun-watchdog`. It does not by itself justify a fleet-wide flip: that needs the soak, and the latency gap above should be re-measured on a production-shaped install before Inngest retires (phase 3).
+
+### 7.2 Soak plan (phase 2 → phase 3 gate, `BI-66D2BB3F`)
+
+The flag moves functions in batches. Each batch runs for **72 hours** (three passes of every daily cron) before the next is added. The live install has carried the engine code and its migration since the 2026-10-02 self-upgrade, so a batch needs only the operator's `.env` change and a portal restart (§5.5).
+
+**How a batch is judged.** `pnpm --filter web exec tsx scripts/job-engine-soak-report.ts --hours 72` reads only the engine tables and exits non-zero on any breach:
+- a run `running` more than 10 minutes past its lease (lease recovery failed);
+- more than 2% of a function's finished runs failed;
+- a cron fire with no event within 5 minutes of its scheduled time;
+- no engine runs at all in the window, which proves nothing.
+
+Alongside it, the `taskrun-watchdog` must raise no stall for a moved function. A breach stops the soak until it is explained.
+
+| Batch | Functions | Why this order |
+|---|---|---|
+| 1 | `queue/metrics-aggregator`, `skills/metrics-aggregator`, `business/metrics-aggregator`, `ops/log-signature-scanner`, `ops/code-graph-reconcile-scheduled`, `wiki/lint-daily`, `ops/mcp-call-efficiency-scan` | Cron only; each re-derives its output on the next pass, so a missed or doubled run costs nothing lasting. Fires every 15 minutes to daily, so 72 hours gives hundreds of runs, and `code-graph-reconcile` exercises a concurrency lane. |
+| 2 | The remaining cron functions without `waitForEvent`, `sleep`, `cancelOn` or `invoke`, except those in batch 4 | Widens cron coverage to the 75-function set the 2026-10-02 catalog found. |
+| 3 | Event-driven functions, including those that park on `waitForEvent` or `sleep` and those with `cancelOn` | Exercises send routing to both engines and parked runs across a portal restart. |
+| 4 | `ops/self-upgrade-scheduled`, `ops/self-upgrade-manual`, `ops/quiescence-run`, `ops/taskrun-watchdog`, `ops/postgres-daily-backup-scheduled`, `ops/all-backups-daily-scheduled`, `ops/postgres-backup-requested` | Last, because they guard upgrades, stalls and backups. |
+
+After batch 4 the engine runs everything (`DPF_JOBS_ENGINE=postgres` with `DPF_JOBS_POSTGRES_FUNCTIONS` empty) for **7 days** with the report passing. That is the phase 3 gate. Re-measure event-to-first-step latency on the live install during that week.
+
+**Rollback.** Remove the ids from `DPF_JOBS_POSTGRES_FUNCTIONS`, or unset `DPF_JOBS_ENGINE`, and restart the portal. Boot self-registration hands the functions back to Inngest. A run still `queued` in `JobRun` for a returned function stays there and does not run; for a cron that is one skipped pass.
 
 
 ## 8. Decision inputs (`principle_decide`)

@@ -27,7 +27,7 @@
 import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import { prisma } from "@dpf/db";
 import { denialForNextAttempt, denyAfterUnparseable } from "@/lib/build/plan-generation-retry";
-import { normalizeBuildPlanPaths } from "./build-plan-paths";
+import { nearestExistingDirectory, normalizeBuildPlanPaths, type UnresolvedModifyPathHint } from "./build-plan-paths";
 import { escalateBuildToHuman, SELF_FIX_CLASS } from "@/lib/build/escalate-build-to-human";
 
 function logBuildActivity(buildId: string, tool: string, summary: string): Promise<void> {
@@ -60,6 +60,33 @@ export function formatPlanReviewFeedback(issues: ReadonlyArray<PlanReviewIssue>)
   return `\nThis is a REVISION. Your previous plan was REJECTED by review for these blocking issues — the revised plan MUST resolve every one of them:\n${lines}\n`;
 }
 
+/**
+ * Paths a previous plan tried to MODIFY that do not exist in the repo. The
+ * design doc may still name them (it was written before a rename), so the
+ * planner is told affirmatively which paths are dead and where the nearest
+ * live directory is. Pure; "" when there is nothing to say.
+ */
+export function formatKnownMissingPaths(hints: ReadonlyArray<UnresolvedModifyPathHint>): string {
+  if (!hints || hints.length === 0) return "";
+  const lines = hints
+    .slice(0, 20)
+    .map((h) => `- ${h.path}${h.nearestExistingDirectory ? ` (does not exist; nearest existing directory: ${h.nearestExistingDirectory}/)` : " (does not exist)"}`)
+    .join("\n");
+  return `\nPATHS THAT DO NOT EXIST — a previous plan tried to modify them. Even if the design names them, they were removed or renamed. Do NOT use action "modify" on any of them: either pick the real file from VERIFIED FILES or the nearest existing directory, or use action "create".\n${lines}\n`;
+}
+
+const MISSING_MODIFY_TARGET_RE = /missing modify target:\s*(\S+)/i;
+
+/** Lift the reviewer's "Plan refers to missing modify target: X" issues back into path hints. */
+export function missingPathsFromReviewIssues(issues: ReadonlyArray<PlanReviewIssue>): UnresolvedModifyPathHint[] {
+  const paths = new Set<string>();
+  for (const issue of issues ?? []) {
+    const match = String(issue.description ?? "").match(MISSING_MODIFY_TARGET_RE);
+    if (match?.[1]) paths.add(match[1]);
+  }
+  return [...paths].map((path) => ({ path, nearestExistingDirectory: nearestExistingDirectory(path) }));
+}
+
 /** Build the plan-generation prompt from the design doc. */
 function buildPlanGenerationPrompt(params: {
   title: string;
@@ -68,8 +95,9 @@ function buildPlanGenerationPrompt(params: {
   biBody: string | null;
   verifiedPaths?: string[];  // actual paths confirmed to exist in the codebase
   priorReviewIssues?: ReadonlyArray<PlanReviewIssue>; // BI-99B06AD1: revision feedback
+  knownMissingPaths?: ReadonlyArray<UnresolvedModifyPathHint>; // paths a prior plan tried to modify that do not exist
 }): string {
-  const { title, designDoc, biTitle, biBody, verifiedPaths, priorReviewIssues } = params;
+  const { title, designDoc, biTitle, biBody, verifiedPaths, priorReviewIssues, knownMissingPaths } = params;
   const dd = designDoc as {
     problemStatement?: string;
     dataModel?: string;
@@ -89,7 +117,7 @@ function buildPlanGenerationPrompt(params: {
 
 FEATURE: ${title}
 ${biTitle ? `BACKLOG ITEM: ${biTitle}` : ""}
-${formatPlanReviewFeedback(priorReviewIssues ?? [])}
+${formatPlanReviewFeedback(priorReviewIssues ?? [])}${formatKnownMissingPaths(knownMissingPaths ?? [])}
 APPROVED DESIGN DOCUMENT:
 Problem: ${dd.problemStatement ?? "See BI body"}
 Data Model: ${dd.dataModel ?? "None"}
@@ -201,6 +229,13 @@ export async function generateNormalizedPlan(args: {
 }): Promise<{ plan: { fileStructure?: unknown[]; tasks?: unknown[] } } | { error: string }> {
   const { routeAndCall } = await import("@/lib/inference/routed-inference");
   const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
+  // Paths the reviewer already refused, plus whatever this call's own
+  // normalization refuses: the second generation round below is prompted with
+  // both so a dead path is never re-targeted blind (FB-2684020A).
+  let knownMissingPaths: UnresolvedModifyPathHint[] = missingPathsFromReviewIssues(args.priorReviewIssues ?? []);
+  const PATH_ROUNDS_MAX = 2;
+  let normalized: ReturnType<typeof normalizeBuildPlanPaths> | null = null;
+  for (let pathRound = 1; pathRound <= PATH_ROUNDS_MAX; pathRound++) {
   const prompt = buildPlanGenerationPrompt({
     title: args.title,
     designDoc: args.designDoc,
@@ -208,6 +243,7 @@ export async function generateNormalizedPlan(args: {
     biBody: args.biBody,
     verifiedPaths: args.verifiedPaths,
     priorReviewIssues: args.priorReviewIssues,
+    knownMissingPaths,
   });
 
   const PLAN_GEN_MAX_ATTEMPTS = 2;
@@ -268,8 +304,15 @@ export async function generateNormalizedPlan(args: {
   if (!Array.isArray(planObj.fileStructure) || !Array.isArray(planObj.tasks)) return { error: "Plan JSON missing fileStructure or tasks arrays" };
   if (planObj.tasks.length === 0) return { error: "Plan generation returned 0 tasks" };
 
-  const normalized = normalizeBuildPlanPaths(planObj as Parameters<typeof normalizeBuildPlanPaths>[0]);
-  return { plan: normalized.plan };
+  normalized = normalizeBuildPlanPaths(planObj as Parameters<typeof normalizeBuildPlanPaths>[0]);
+  if (normalized.unresolvedModifyPaths.length === 0 || pathRound === PATH_ROUNDS_MAX) break;
+  await args.log(
+    `Plan targets ${normalized.unresolvedModifyPaths.length} modify path(s) that do not exist (${normalized.unresolvedModifyPaths.slice(0, 3).join(", ")}) — regenerating with the dead paths named.`,
+  );
+  const seen = new Set(knownMissingPaths.map((h) => h.path));
+  knownMissingPaths = [...knownMissingPaths, ...normalized.unresolvedModifyPathHints.filter((h) => !seen.has(h.path))];
+  }
+  return { plan: normalized!.plan };
 }
 
 /** Read the persisted planReview decision + issues after a reviewBuildPlan run. */

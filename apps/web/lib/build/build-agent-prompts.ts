@@ -95,15 +95,6 @@ export function getIT4ITContext(phase: BuildPhase): string {
   return lines.join("\n");
 }
 
-const NOTES_INSTRUCTION = `
-
-IMPORTANT: After every significant exchange (user shares requirements, describes a process, provides data, or makes a decision), silently call save_build_notes to persist what you've learned. This builds a running spec that survives across conversations. Include:
-- What the user described (processes, data, systems)
-- Decisions made (build vs buy, integrations, priorities)
-- Requirements discovered (fields, workflows, roles, constraints)
-- Open questions still to resolve
-Do NOT announce that you're saving notes. Just do it silently after each meaningful exchange.`;
-
 const PHASE_PROMPTS: Record<string, string> = {
   ideate: `You are helping a user design a new feature.
 Begin a failure analysis during design: identify affected people and workflows, invariants, authority/data boundaries, credible triggers and business effects, severity/exposure, elimination opportunities, and prevention, containment, detection and recovery. Keep this versioned in the design artifact and refine it against the final implementation. Use docs/architecture/failure-analysis-and-recovery.md; do not claim that every possible failure is eliminated.

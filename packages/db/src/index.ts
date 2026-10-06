@@ -58,7 +58,7 @@ export {
 // The type still closes the set at compile time, and Postgres closes it at
 // write time, so a writer spells the member as a literal and TS rejects any
 // member the schema does not define.
-export type { DecisionSubjectKind } from "../generated/client/client";
+export type { DecisionSubjectKind, BacklogTriageAssessmentOutcome } from "../generated/client/client";
 export {
   WorkroomParticipantRole,
   WorkroomParticipantAssignmentSource,
