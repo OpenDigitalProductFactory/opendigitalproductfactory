@@ -11,6 +11,14 @@ status: draft
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
+## Acceptance (BI-C54E691E)
+
+- AC-1 (OBJ-CHAIN): On an install whose TLS overlays came from bootstrap-organization-pki, the promoter's chain includes organization-trust.yml and tls.yml, from the same resolver the start path uses.
+- AC-2 (OBJ-CONVERGE): A self-upgrade that changes portal-tls's compose config recreates it. Live: Init=true, and service-converge-outcome.json lists it as recreated.
+- AC-3 (OBJ-STATEFUL): An unchanged postgres keeps its container id through a self-upgrade. A changed one is recreated before the portal swap. A failed health check aborts before the swap.
+- AC-4 (OBJ-CONVERGE): A stopped service stays stopped, and an inspection failure never recreates a container.
+- AC-5 (OBJ-HONEST-GATE): The convergence gate refuses `auto-converges` for a service no resolved chain contains. Every shipped compose service has a catalog recreateClass.
+
 ## Traceability
 
 | Deliverable | Objectives | Contracts | Flow | Acceptance |
