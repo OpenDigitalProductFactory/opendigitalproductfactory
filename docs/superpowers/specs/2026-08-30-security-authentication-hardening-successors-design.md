@@ -254,7 +254,7 @@ The seven slices strengthen this architecture at distinct seams. None introduces
 
 - Keep `TOOL_TO_GRANTS` as the canonical bundled-tool mapping. Do not create a browser-specific or external-server-specific grant system.
 - Extend the existing `McpServerTool` record with typed closed policy status (`quarantined`, `approved`, `denied`), effect posture, and allowed execution modes, plus the approved grant key, policy version, `approvedByPrincipalId`, and approval timestamp. This is policy projection on the existing discovery record, not a new identity or permission table; approval provenance points to the canonical `Principal`, never a parallel user identity.
-- Discovery writes remote annotations into an explicitly untrusted evidence field, never into effective policy. Newly discovered and materially changed tools enter `quarantined` unless a versioned bundled policy deterministically covers the namespaced tool.
+- Discovery writes remote annotations into an explicitly untrusted evidence field, never into effective policy. Approval also pins `approvedContentDigest` over the sanitized model-visible text (plan Phase 2); a changed tool is a different tool. Newly discovered and materially changed tools enter `quarantined` unless a versioned bundled policy deterministically covers the namespaced tool.
 - A shared resolver combines bundled mappings and approved persisted policy into the existing `isToolAllowedByGrants` path. Unknown status, unknown grant key, incomplete effect metadata, stale policy version, or server/tool identity mismatch denies.
 - `getAvailableTools` uses the resolver for listing. `executeMcpServerTool` re-resolves immediately before the remote call and records allow/deny in `AuthorizationDecisionLog`; a stale model-visible tool list cannot authorize execution.
 - The migration classifies currently mapped bundled tools from their canonical map and quarantines every other discovered tool. It never infers approval from `isEnabled`, server health, descriptions, or remote annotations.
@@ -273,6 +273,7 @@ The chosen hybrid approach was kernel-ratified in `DI-F6D4C0132024`. It beat sta
 | AC-MCP-AUTH-004 | OBJ-MCP-AUTH-003 | Inventory classifies every active discovered tool as bundled-approved, explicitly approved, denied, or quarantined; no active tool is authorized by omission. |
 | AC-MCP-AUTH-005 | OBJ-MCP-AUTH-003 | Remote annotations remain untrusted evidence and cannot widen grants, lower side-effect posture, or authorize an execution mode. |
 | AC-MCP-AUTH-006 | OBJ-MCP-AUTH-002 | Canonical-runtime evidence proves an unknown tool is refused and an explicitly mapped tool succeeds with an authorization decision record. |
+| AC-MCP-AUTH-007 | OBJ-MCP-AUTH-003 | Approval binds to a digest of the hidden-Unicode-sanitized description and inputSchema; a rediscovery that changes either returns the tool to quarantined, the model never sees the changed text before re-approval, and the operator sees the approved and new text side by side (absorbed from BI-49969E39). |
 
 ## 12. Delivery order and dependency rules
 
