@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { err, ok } from "@/lib/shared/action-result";
 import { createHash } from "node:crypto";
-import { configureReleaseUpgradeTest, registerCoreSelfUpgradeSuccessTest, registerInstallStateHandoffTests, registerReleaseWorkerTargetRecoveryTests, registerSelfUpgradeFunctionTests } from "./self-upgrade-handoff.test-support";
+import { registerPrebuildTests } from "./self-upgrade-prebuild.test-support"; import { configureReleaseUpgradeTest, registerCoreSelfUpgradeSuccessTest, registerInstallStateHandoffTests, registerReleaseWorkerTargetRecoveryTests, registerSelfUpgradeFunctionTests } from "./self-upgrade-handoff.test-support";
 
 const TEST_INSTALL_STATE = JSON.stringify({ platform: "linux", arch: "amd64" });
 const TEST_INSTALL_STATE_HASH = createHash("sha256").update(TEST_INSTALL_STATE).digest("hex");
@@ -32,7 +32,7 @@ const mocks = vi.hoisted(() => ({
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
   getRun: vi.fn(),
-  runPromoter: vi.fn(),
+  runPromoter: vi.fn(), runPrebuild: vi.fn(), // runPrebuild: the build-only pass before the drain (plan item 0)
   isPromoterAvailable: vi.fn().mockResolvedValue(true),
   ensurePromoterImage: vi
     .fn()
@@ -138,7 +138,7 @@ vi.mock("@/lib/self-upgrade/promoter", async (importOriginal) => ({
   // Keep the real pure exports (constants like PROMOTER_ALREADY_RUNNING_EXIT_CODE
   // that the orchestrator imports statically) and mock only the spawn-heavy fns.
   ...(await importOriginal<typeof import("@/lib/self-upgrade/promoter")>()),
-  runPromoter: mocks.runPromoter,
+  runPromoter: (p: { phase?: string }) => (p.phase === "build" ? (mocks.runPrebuild(p) ?? Promise.resolve({ exitCode: 0, stdout: "", stderr: "" })) : mocks.runPromoter(p)),
   isPromoterAvailable: mocks.isPromoterAvailable,
   ensurePromoterImage: mocks.ensurePromoterImage,
   buildCandidatePromoterImage: mocks.buildCandidatePromoterImage,
@@ -303,7 +303,7 @@ describe("success path", () => {
     mocks.isFeatureBuildDeployed.mockResolvedValue(true);
   });
 
-  registerCoreSelfUpgradeSuccessTest({ mocks, runSelfUpgrade });
+  registerCoreSelfUpgradeSuccessTest({ mocks, runSelfUpgrade }); registerPrebuildTests({ mocks, runSelfUpgrade });
   registerReleaseWorkerTargetRecoveryTests({ mocks, runSelfUpgrade, installState: TEST_INSTALL_STATE });
 
   it("classifies a source-free consumer at the verified release as up to date without Git", async () => {

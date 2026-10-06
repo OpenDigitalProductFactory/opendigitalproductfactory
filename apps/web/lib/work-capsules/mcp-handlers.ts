@@ -38,7 +38,6 @@ import type { BacklogBindingReader } from "./adopt-backlog-binding";
 import { adoptWorktree, establishNewRoomOwnership } from "./adopt-worktree-handler";
 import { reassignCapsuleExecutor } from "./reassign-executor-handler";
 import {
-  adoptWorktreeCapsule,
   claimWorkCapsuleScope,
   createWorkCapsule,
   heartbeatWorkCapsule,
@@ -87,12 +86,6 @@ function stringParam(params: Record<string, unknown>, key: string): string | nul
   const value = params[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
-
-function numberParam(params: Record<string, unknown>, key: string): number | null {
-  const value = params[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 
 function workCapsuleDb(): CapsuleDb {
   return prisma as unknown as CapsuleDb;

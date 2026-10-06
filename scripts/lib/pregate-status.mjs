@@ -35,7 +35,7 @@
 // INCONCLUSIVE, not FAIL. A metadata candidateSha that is not HEAD is STALE
 // in the headline, not FAIL with a buried metadata line.
 
-import { isTestStubGateRecord } from "./local-ci-gate-state.mjs";
+import { hasBoundDocumentationEvidence, isTestStubGateRecord } from "./local-ci-gate-state.mjs";
 
 /** Terminal verdicts, ordered worst-to-best for slot reconciliation. */
 export const PREGATE_VERDICTS = Object.freeze([
@@ -191,6 +191,7 @@ function describeFailure(state, metadata) {
  * cannot answer.
  */
 function metadataDescribesAnotherRun(state, metadata) {
+  if (state?.executionLane === "documentation") return true;
   const boundLease = String(state?.leaseId || "");
   const metadataLease = String(metadata?.runLeaseId || "");
   if (boundLease && metadataLease) return boundLease !== metadataLease;
@@ -307,7 +308,8 @@ function unpublishedEvidenceNote(state) {
 export function classifySlotRecord({ state, metadata, headSha, headBranch = "", now = Date.now(), queuedWaiter = null }) {
   const boundSha = String(state?.sha || "");
   const boundBranch = String(state?.branch || "");
-  const candidateSha = String(metadata?.candidateSha || "");
+  const documentation = state?.executionLane === "documentation";
+  const candidateSha = String(documentation ? state?.producerEvidence?.candidateSha || "" : metadata?.candidateSha || "");
   const evidenceId = String(state?.evidenceRecordId || "");
   const recordedAt = String(state?.recordedAt || "");
   const expiresAt = String(state?.expiresAt || "");
@@ -369,6 +371,14 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
     };
   }
 
+  // A lane name or an old lease event alone cannot exempt a result from the
+  // sandbox cross-check. Unknown/partial producer records require a fresh run.
+  const declaresProducer = state.executionLane != null || state.producerEvidence != null
+    || (Array.isArray(state.leaseEvents) && state.leaseEvents.some((event) => event?.type === "documentation-lane"));
+  if (declaresProducer && !hasBoundDocumentationEvidence(state)) {
+    return { ...base, verdict: "INCONCLUSIVE", reason: "gate producer evidence is missing, unsupported or inconsistent — re-run pregate" };
+  }
+
   if (expiresAt) {
     const expiry = Date.parse(expiresAt);
     if (Number.isFinite(expiry) && expiry < now) {
@@ -384,7 +394,7 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
   // The gate state says passed; cross-check the independent metadata record.
   // These are written by different processes (the wrapper vs the sandbox run),
   // so a disagreement means one of them is not describing this run.
-  if (candidateSha && headSha && candidateSha !== headSha) {
+  if (!documentation && candidateSha && headSha && candidateSha !== headSha) {
     return {
       ...base,
       verdict: "STALE",
@@ -393,7 +403,7 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
     };
   }
 
-  return { ...base, verdict: "PASS", reason: "gate passed for this HEAD" };
+  return { ...base, verdict: "PASS", reason: documentation ? "documentation gate passed for this HEAD" : "gate passed for this HEAD" };
 }
 
 /**

@@ -279,6 +279,7 @@ function coworkerRecord({
       assignedSkillIds: [],
       heldGrantKeys: grants,
     },
+    authority: { id: `db-${agentId}`, agentId, heldGrantKeys: grants },
     gaid: null,
     profession: { family: null, profile: null, profileId: null, coverage: null },
     voice: null,

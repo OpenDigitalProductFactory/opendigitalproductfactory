@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MERGE_ADAPTERS } from "./merge";
 import { readCanonicalPrismaSchema } from "@dpf/db/schema-source";

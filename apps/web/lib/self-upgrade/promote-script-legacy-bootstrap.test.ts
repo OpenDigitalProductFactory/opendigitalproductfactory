@@ -109,6 +109,7 @@ function makeFixture(): Fixture {
   for (const relativePath of [
     "scripts/lib/resolve-capability-compose-profiles.mjs",
     "scripts/lib/govern-capability-compose-args.mjs",
+    "scripts/lib/script-argv.mjs",
     "scripts/lib/capability-state-hash.mjs",
     "scripts/capability-service-catalog.generated.json",
   ]) {
@@ -121,6 +122,7 @@ function makeFixture(): Fixture {
     "docker-compose.release.yml",
     "scripts/lib/resolve-capability-compose-profiles.mjs",
     "scripts/lib/govern-capability-compose-args.mjs",
+    "scripts/lib/script-argv.mjs",
     "scripts/lib/capability-state-hash.mjs",
     "scripts/capability-service-catalog.generated.json",
   ]) {

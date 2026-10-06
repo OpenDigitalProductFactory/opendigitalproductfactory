@@ -2840,6 +2840,12 @@
         "5.3 Integrate Value Stream",
         "5.3.3"
       ],
+      "job_definition_waivers": {
+        "cadence": {
+          "reason": "Event-triggered by construction, not standing. Its capability_domain is \"user-facing build coworker for the /build route\" guiding a human through five phases; it accompanies a build in flight. With no build in flight there is nothing for it to advance, and standing work would mean driving a build nobody asked for. Re-decide if it acquires a duty that outlives one build, such as sweeping stalled builds.",
+          "reviewBy": "2027-04-02"
+        }
+      },
       "status": "active",
       "config_profile": {
         "model_binding": {
@@ -2902,6 +2908,12 @@
         "5.3.4",
         "5.3.5"
       ],
+      "job_definition_waivers": {
+        "cadence": {
+          "reason": "Event-triggered by construction, not standing. This role's own capability_domain is \"independent semantic review of committed software changes BEFORE PUBLICATION\" \u2014 a review exists because a change arrived at the gate. There is no review to run when nothing changed, so a cron would either idle or invent work to justify itself. Re-decide if review ever acquires a standing duty (a periodic re-review of already-published changes would be one).",
+          "reviewBy": "2027-04-02"
+        }
+      },
       "status": "active",
       "config_profile": {
         "model_binding": {
@@ -3092,6 +3104,16 @@
       "it4it_sections": [
         "6.1.5 Service Operations FC"
       ],
+      "job_definition_waivers": {
+        "cadence": {
+          "reason": "First-run only, so there is no recurring first run. Its capability_domain says it \"runs only for /setup wizard\", it is created by bootstrap-first-run.ts rather than the workforce seed, and its hitl_tier_default is 0. A cadence would schedule onboarding for an organisation that is already onboarded. Re-decide if the wizard gains a resumable or periodic phase.",
+          "reviewBy": "2027-04-02"
+        },
+        "measures": {
+          "reason": "Not closable by the standing certification route, and proven so rather than asserted: adding a curated golden journey for it was refused by golden-journeys.test.ts as a GHOST JOURNEY, because it is absent from COWORKER_AGENT_SEEDS by design. Its verification belongs to the /setup wizard path that invokes it, not to a sweep over standing coworkers. Re-decide if it ever joins the standing roster, or when the wizard gains its own recorded verification.",
+          "reviewBy": "2027-04-02"
+        }
+      },
       "status": "active",
       "config_profile": {
         "model_binding": {

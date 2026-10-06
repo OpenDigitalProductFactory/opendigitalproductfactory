@@ -182,7 +182,7 @@ export type ToolExecutionMetrics = {
 export const getToolExecutionMetrics = cache(async (): Promise<ToolExecutionMetrics> => {
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  const [total, byClass, aggregate, topToolsRaw, recentTotal, recentFailed, capWarning] = await Promise.all([
+  const [total, byClass, aggregate, topToolsRaw, recentTotal, recentFailed, _capWarning] = await Promise.all([
     prisma.toolExecution.count(),
     prisma.toolExecution.groupBy({
       by: ["auditClass"],

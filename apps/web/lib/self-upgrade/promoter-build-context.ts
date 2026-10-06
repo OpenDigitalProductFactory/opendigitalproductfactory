@@ -47,6 +47,7 @@ export const PROMOTER_BUILD_CONTEXT_SOURCES: readonly string[] = [
   "scripts/installer/install-state.v2.schema.json",
   "scripts/lib/resolve-capability-compose-profiles.mjs",
   "scripts/lib/govern-capability-compose-args.mjs",
+  "scripts/lib/script-argv.mjs",
   "scripts/lib/capability-state-hash.mjs",
   "scripts/capability-service-catalog.generated.json",
 ] as const;

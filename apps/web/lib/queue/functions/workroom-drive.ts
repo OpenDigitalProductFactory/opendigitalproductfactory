@@ -17,8 +17,6 @@ import type { EffectiveHumanAccountability } from "@/lib/work-management/human-a
 import type { Prisma, PrismaClient } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
 import {
-  COORDINATION_RESOURCE_TYPE,
-  COORDINATION_SCOPE_TYPE,
   jsiSchemePresent,
   resolveCoordinatorEligibility,
 } from "@/lib/work-management/coordinator-eligibility";

@@ -1,0 +1,93 @@
+{
+  "sensitivity": "Both existing models are internal in packages/db/src/table-classification.ts; no new model or sensitivity class.",
+  "accountableOwner": "platform-architecture",
+  "changes": [
+    {
+      "assetId": "data:backlog-item",
+      "kind": "model",
+      "fields": [
+        {
+          "resolution": "inherited",
+          "fieldId": "data:backlog-item#triageAssessmentFingerprint",
+          "provenance": "BI-E3FBB0C4; docs/superpowers/specs/2026-10-04-backlog-triage-efficiency-design.md; DI-6A6191BF4BF5",
+          "flags": [],
+          "reason": "Internal operational state, inherited from the owning model; no prompt bodies, provider exceptions, personal identifiers or secrets stored in the new fields."
+        },
+        {
+          "resolution": "inherited",
+          "fieldId": "data:backlog-item#triageAssessmentOutcome",
+          "provenance": "BI-E3FBB0C4; docs/superpowers/specs/2026-10-04-backlog-triage-efficiency-design.md; DI-6A6191BF4BF5",
+          "flags": [],
+          "reason": "Internal operational state, inherited from the owning model; no prompt bodies, provider exceptions, personal identifiers or secrets stored in the new fields."
+        },
+        {
+          "resolution": "inherited",
+          "fieldId": "data:backlog-item#triageAssessmentAttempts",
+          "provenance": "BI-E3FBB0C4; docs/superpowers/specs/2026-10-04-backlog-triage-efficiency-design.md; DI-6A6191BF4BF5",
+          "flags": [],
+          "reason": "Internal operational state, inherited from the owning model; no prompt bodies, provider exceptions, personal identifiers or secrets stored in the new fields."
+        },
+        {
+          "resolution": "inherited",
+          "fieldId": "data:backlog-item#triageAssessmentRetryAt",
+          "provenance": "BI-E3FBB0C4; docs/superpowers/specs/2026-10-04-backlog-triage-efficiency-design.md; DI-6A6191BF4BF5",
+          "flags": [],
+          "reason": "Internal operational state, inherited from the owning model; no prompt bodies, provider exceptions, personal identifiers or secrets stored in the new fields."
+        },
+        {
+          "resolution": "inherited",
+          "fieldId": "data:backlog-item#triageAssessmentClaim",
+          "provenance": "BI-E3FBB0C4; docs/superpowers/specs/2026-10-04-backlog-triage-efficiency-design.md; DI-6A6191BF4BF5",
+          "flags": [],
+          "reason": "Internal operational state, inherited from the owning model; no prompt bodies, provider exceptions, personal identifiers or secrets stored in the new fields."
+        },
+        {
+          "resolution": "inherited",
+          "fieldId": "data:backlog-item#triageAssessedAt",
+          "provenance": "BI-E3FBB0C4; docs/superpowers/specs/2026-10-04-backlog-triage-efficiency-design.md; DI-6A6191BF4BF5",
+          "flags": [],
+          "reason": "Internal operational state, inherited from the owning model; no prompt bodies, provider exceptions, personal identifiers or secrets stored in the new fields."
+        }
+      ],
+      "prismaModel": "BacklogItem",
+      "lifecycleDisposition": "Existing BacklogItem operational state follows the item domain lifecycle. Activity audit remains separately bounded to 365 days; audit cleanup never clears the projection."
+    },
+    {
+      "assetId": "data:scheduled-job",
+      "kind": "model",
+      "fields": [
+        {
+          "resolution": "inherited",
+          "fieldId": "data:scheduled-job#lastRunSummary",
+          "provenance": "BI-E3FBB0C4; docs/superpowers/specs/2026-10-04-backlog-triage-efficiency-design.md; DI-6A6191BF4BF5",
+          "flags": [],
+          "reason": "Internal operational state, inherited from the owning model; no prompt bodies, provider exceptions, personal identifiers or secrets stored in the new fields."
+        },
+        {
+          "resolution": "inherited",
+          "fieldId": "data:scheduled-job#runCursor",
+          "provenance": "BI-E3FBB0C4; docs/superpowers/specs/2026-10-04-backlog-triage-efficiency-design.md; DI-6A6191BF4BF5",
+          "flags": [],
+          "reason": "Internal operational state, inherited from the owning model; no prompt bodies, provider exceptions, personal identifiers or secrets stored in the new fields."
+        }
+      ],
+      "prismaModel": "ScheduledJob",
+      "lifecycleDisposition": "Existing ScheduledJob configuration/live heartbeat: one latest summary and cursor per job, overwritten on completion."
+    }
+  ],
+  "tests": [
+    "packages/db/src/backlog-triage-assessment-migration.test.ts",
+    "apps/web/lib/operate/backlog-triage-repository.test.ts",
+    "apps/web/lib/queue/functions/backlog-triage-drain.test.ts"
+  ],
+  "migration": {
+    "backfill": "None: nullable fields and attempt counter default0 make existing work eligible once. Additive and idempotent; no rows deleted or decisions rewritten.",
+    "name": "20261004202500_backlog_triage_assessment",
+    "rollback": "Forward-only: older code ignores additive columns; preserve recorded state."
+  },
+  "generatedFrom": [
+    "packages/db/prisma/schema/work-coordination.prisma",
+    "packages/db/prisma/schema/ops-telemetry.prisma"
+  ],
+  "version": "1"
+}

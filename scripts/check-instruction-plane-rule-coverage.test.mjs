@@ -162,7 +162,7 @@ test("anchorsIn tolerates a missing file (null text) without throwing", () => {
   assert.deepEqual([...anchorsIn({ "gone.md": null })], []);
 });
 
-test("the committed baseline matches the live always-on plane", () => {
+test("the committed baseline remains reachable across the core and task references", () => {
   const manifest = JSON.parse(
     readFileSync(join(REPO_ROOT, "scripts", "instruction-plane-manifest.json"), "utf8"),
   );
@@ -178,7 +178,20 @@ test("the committed baseline matches the live always-on plane", () => {
   for (const anchor of live) {
     assert.ok(baseline.has(anchor), `live rule anchor ${anchor} is missing from the baseline — run --update`);
   }
-  assert.ok(live.size >= 40, `expected the pre-split plane to carry 40+ rule anchors, saw ${live.size}`);
+  // Count the protected corpus, not the pre-split placement. Requiring 40+
+  // anchors in AGENTS.md itself made legitimate progressive disclosure fail.
+  const destinations = {};
+  for (const pattern of manifest.ruleDestinations) {
+    for (const file of globSync(pattern, { cwd: REPO_ROOT })) {
+      destinations[file.replace(/\\/g, "/")] = readFileSync(join(REPO_ROOT, file), "utf8");
+    }
+  }
+  const reachable = new Set([...live, ...anchorsIn(destinations, manifest.ruleAnchorPattern)]);
+  assert.ok(baseline.size >= 40, "the protected rule corpus must not shrink");
+  for (const anchor of baseline.keys()) {
+    assert.ok(reachable.has(anchor), `protected rule ${anchor} was lost during disclosure`);
+    assert.ok(readFileSync(join(REPO_ROOT, anchor), "utf8").length > 0);
+  }
 });
 
 // --- Relative-link resolution (regression: Phase 1 relocation) --------------------
