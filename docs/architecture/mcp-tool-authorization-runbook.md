@@ -186,6 +186,48 @@ The paved-road walkthrough is the `dpf-establish-coworker` skill (`packages/dpf-
 
 **Schema questions: `describe_committed_model`, no build required.** `describe_model` resolves the caller's active Build Studio build first and returns `"No active build."` to every external CLI session, so it cannot answer schema questions from Claude Code, Codex or Grok. Use `describe_committed_model({ model_name })` instead — it reads the committed Prisma schema (`packages/db/prisma/schema/*.prisma`, split across domain files; there is no monolithic `schema.prisma`) with the `file_read` grant a read-scoped token can hold. Every result names the tree it read — root, branch, HEAD sha — and carries a trust vector that scores an off-default branch down, so a stale checkout is visible rather than silent. A miss is reported as not-found **in the named tree**, and an unreadable schema directory is reported as a read failure, never as an absence.
 
+## Discovered external MCP tools are default-deny (BI-8B7B2FE9)
+
+Tools an operator-registered MCP server reports (`<serverSlug>__<toolName>`)
+reach an in-portal coworker only under a DPF-owned policy on their
+`McpServerTool` row. Discovery, `isEnabled`, server health and remote
+annotations (`readOnlyHint`, `destructiveHint`) never authorize; annotations are
+stored as untrusted `discoveryHints` and never read as policy.
+
+- **States** (`McpToolPolicyStatus`): `quarantined` (default for every new
+  tool and every pre-existing row), `approved`, `denied` (sticky across
+  rediscovery). The six browser-use sidecar tools are covered by the release:
+  their grant comes from `TOOL_TO_GRANTS` and their effect from
+  `BUNDLED_MCP_TOOL_EFFECTS` (`apps/web/lib/tak/mcp-tool-policy.ts`).
+- **Approval** happens on `/platform/tools/services/<server>` (capability
+  `manage_provider_connections`): the reviewer picks one grant from the closed
+  grant vocabulary and says whether the tool only reads or changes things
+  (modes follow: read → advise + act; changes → act only). Approval pins the
+  approved identity, policy version, the text snapshot and
+  `approvedContentDigest` — sha256 of the hidden-Unicode-sanitized
+  description + inputSchema, exactly what a model reads. The approver is the
+  canonical `Principal`; the decision is an `AuthorizationDecisionLog` row
+  (`actionKey: mcp-tool-policy-review`).
+- **Content pinning.** A rediscovery whose digest differs from the approved
+  digest returns the tool to `quarantined`; the approved snapshot is kept so
+  the review page shows approved and newly reported text side by side. The
+  model is served only the sanitized approved snapshot, and the resolver
+  re-hashes both on every listing and call.
+- **One resolver, three checkpoints.** `resolveDiscoveredToolPolicy` +
+  `evaluateDiscoveredToolAccess` decide listing (`getAvailableTools`),
+  governed execution (`governedExecuteTool`, `agentic-loop` source with an
+  acting coworker only — external MCP clients still get `unknown_tool`), and
+  the remote call (`executeMcpServerTool`, which requires an explicit
+  authority and refuses if the approved digest moved). A namespaced call that
+  did not come through the governed executor is refused.
+- **Diagnosing an absent tool.** Read the tool's state on the service page;
+  the reason text names the refusal (`quarantined`, `content-changed`,
+  `identity-mismatch` after a rename, `policy-version-stale`, `unknown-grant`,
+  `incomplete-policy`). Then check the coworker holds the approved grant, the
+  room's surface carries it, and External Access is on. Capability inventory
+  reports `policyClass` per tool. Never restore a permissive fallback; approve
+  the specific tool.
+
 ## Protocol version window (mechanics landed; contract pending ratification)
 
 The `/api/mcp/v1` transport's advertised protocol revisions are governed by one

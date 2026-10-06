@@ -27,20 +27,72 @@ model McpServer {
   @@index([integrationId]) // FK-leading (spine): integration-backed server listing, apps/web/lib/actions/connection-catalog.ts:96
 }
 
+/// DPF-owned authorization state for a dynamically discovered external MCP
+/// tool (BI-8B7B2FE9, spec 2026-08-30 §11). Discovery never decides authority:
+/// a new or materially changed tool is `quarantined` until an operator approves
+/// it (or the release's bundled policy covers it). `denied` is a deliberate no.
+enum McpToolPolicyStatus {
+  quarantined
+  approved
+  denied
+}
+
+/// What a discovered tool does to the world, as DPF classifies it. Remote MCP
+/// annotations (readOnlyHint, destructiveHint) are untrusted hints and never
+/// set this.
+enum McpToolEffect {
+  read_only      @map("read-only")
+  side_effecting @map("side-effecting")
+}
+
+/// Coworker execution modes a discovered tool may appear in. `advise` never
+/// admits a side-effecting tool.
+enum McpToolExecutionMode {
+  advise
+  act
+}
+
 model McpServerTool {
   id           String   @id @default(cuid())
   serverId     String
   toolName     String
+  /// Latest text the server reported. Model-visible text is the approved
+  /// snapshot below, never this column directly.
   description  String?
   inputSchema  Json
   isEnabled    Boolean  @default(true)
   discoveredAt DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  server McpServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  /// Policy projection (BI-8B7B2FE9). Fail closed: the default is quarantined.
+  policyStatus            McpToolPolicyStatus    @default(quarantined)
+  policyEffect            McpToolEffect?
+  policyExecutionModes    McpToolExecutionMode[] @default([])
+  /// A key from the closed agent-grant vocabulary (knownGrantKeys()).
+  policyGrantKey          String?
+  /// MCP_TOOL_POLICY_VERSION at approval; a stale version denies.
+  policyVersion           Int?
+  /// `<serverSlug>__<toolName>` the approval was granted for; a rename denies.
+  approvedToolIdentity    String?
+  /// sha256 of the sanitized description + inputSchema the operator approved.
+  approvedContentDigest   String?
+  approvedDescription     String?
+  approvedInputSchema     Json?
+  approvedByPrincipalId   String?
+  approvedAt              DateTime?
+  policyChangedAt         DateTime?
+  /// sha256 of the sanitized text most recently reported by the server.
+  discoveredContentDigest String?
+  /// Remote annotations as reported. Untrusted evidence; never read as policy.
+  discoveryHints          Json?
+
+  server              McpServer  @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  approvedByPrincipal Principal? @relation("McpServerToolApprover", fields: [approvedByPrincipalId], references: [id], onDelete: SetNull)
 
   @@unique([serverId, toolName])
   @@index([serverId])
+  @@index([policyStatus])
+  @@index([approvedByPrincipalId])
 }
 
 model CredentialEntry {
