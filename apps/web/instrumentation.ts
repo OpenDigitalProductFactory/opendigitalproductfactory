@@ -594,8 +594,7 @@ export async function resumeStrandedBuildsOnBoot(
       "@/lib/build/build-exec-types"
     );
     type ExecStateLike = import("@/lib/build/build-exec-types").ExecStateLike;
-    // Age-out cap primitives (BI-A009313E). Lazy-imported to keep the boot module
-    // graph small, matching this file's convention.
+    // Age-out cap primitives (BI-A009313E), lazy-imported like the rest of this file.
     const { isStrandedPreBuildAbandonable, STRANDED_ABANDON_MS } = await import(
       "@/lib/build/resume-pre-build-phase"
     );
@@ -690,13 +689,12 @@ export async function resumeStrandedBuildsOnBoot(
         return abandonStrandedPreBuild(args);
       });
 
-    let resumed = 0;
-    let flagged = 0;
-    let advanced = 0;
-    let abandoned = 0;
+    let resumed = 0, flagged = 0, advanced = 0, abandoned = 0;
     // BI-5BF650CB: updatedAt is not liveness; progress is recorded as BuildActivity.
     const { recentlyActiveBuildIds } = await import("@/lib/build/build-liveness");
     const live = await recentlyActiveBuildIds(prisma, candidates.map((build) => build.buildId), now);
+    const paused = (await (await import("@/lib/self-upgrade/quiescence")).getQuiescenceLevel()) !== "normal";
+    const { isBuildHeldByUpgradePause } = await import("@/lib/build/upgrade-pause-hold");
     for (const build of candidates) {
       if (live.has(build.buildId)) continue;
       // ── Pre-build phases (ideate/plan/review): no step-machine, but each
@@ -708,6 +706,7 @@ export async function resumeStrandedBuildsOnBoot(
       // and each underlying dispatcher carries its own idempotency guard. Fire-
       // and-forget so one slow re-review never blocks the boot reconcile loop.
       if (build.phase !== "build") {
+        if (paused) continue; // resumed on platform.quiescence-cleared (BI-E9DAA23F)
         // ── Age-out cap (BI-A009313E). A build created past the abandon
         // threshold while STILL in a pre-build phase has failed to progress for
         // a week — re-resuming it only re-churns the loop that a self-upgrade
@@ -717,7 +716,7 @@ export async function resumeStrandedBuildsOnBoot(
         // then closes its open BuildPhaseRun. Keyed on createdAt, so this is
         // immune to the resume churn re-heartbeating the row (the exact reason
         // the quiescence dead-phase reaper can't clear these). Re-promote the
-        // backlog item to retry — abandonment is reversible.
+        // backlog item to retry. Not while an upgrade pause holds it (BI-E9DAA23F).
         if (
           isStrandedPreBuildAbandonable({
             phase: build.phase,
@@ -725,7 +724,8 @@ export async function resumeStrandedBuildsOnBoot(
             parentEpicId: build.parentEpicId,
             now,
             thresholdMs: abandonAfterMs,
-          })
+          }) &&
+          !(await isBuildHeldByUpgradePause(prisma, build.buildId))
         ) {
           const ageMs = now.getTime() - build.createdAt.getTime();
           const didAbandon = await abandonStale({
