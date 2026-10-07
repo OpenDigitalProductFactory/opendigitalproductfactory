@@ -4,8 +4,7 @@
   "decisionInteractionId": "DI-2AB8ACE3FA97",
   "scope": {
     "files": [
-      "apps/web/components/admin/OfferPositioningFields.tsx",
-      "apps/web/components/admin/BusinessContextForm.tsx"
+      "apps/web/components/admin/OfferPositioningFields.tsx"
     ]
   },
   "evidence": {
