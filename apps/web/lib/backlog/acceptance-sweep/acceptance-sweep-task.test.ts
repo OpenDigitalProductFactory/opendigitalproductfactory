@@ -5,13 +5,15 @@ vi.mock("@dpf/db", () => ({
   ACCEPTANCE_AGED_DAYS: 14,
   ACCEPTANCE_SWEEP_AGENT_ID: "AGT-WS-PORTFOLIO",
   ACCEPTANCE_SWEEP_PAGE_SIZE: 100,
-  ACCEPTANCE_SWEEP_ROUTING: false,
+  ACCEPTANCE_SWEEP_ROUTE_LIMIT: 10,
+  ACCEPTANCE_SWEEP_ROUTING: true,
   ACCEPTANCE_TREND_DAYS: 30,
 }));
 
 import { computeNextCronRun } from "@/lib/operate/cron-next-run";
 
 import type { AcceptanceSweepSummary } from "./acceptance-sweep-run";
+import { emptyRouting } from "./acceptance-sweep-routing";
 import {
   ACCEPTANCE_ROOM_KEY,
   ACCEPTANCE_SWEEP_RUN_ACTIVITY_KIND,
@@ -43,7 +45,7 @@ function summary(overrides: Partial<AcceptanceSweepSummary> = {}): AcceptanceSwe
     },
     items: { closable: [], aged: ["BI-B"], unroutable: ["BI-B"], readinessUnavailable: [] },
     revisit: { poolSize: 2, pageSize: 100, runsPerRevisit: 1, exceedsTrendWindow: false },
-    routing: { enabled: false, routed: 0 },
+    routing: emptyRouting(false, 0),
     closing: {
       enabled: false, disabledReason: "not-recorded", because: "none recorded", authorisedBy: null, limit: 0,
       attempted: 0, closed: [], refused: [], skipped: [], errored: [], deferredByLimit: [],
@@ -128,7 +130,8 @@ describe("executeAcceptanceSweepTask", () => {
       pageSize: 100,
       agedDays: 14,
       trendDays: 30,
-      routing: false,
+      routing: true,
+      routeLimit: 10,
       recordedByAgentId: "AGT-WS-PORTFOLIO",
     });
     const nextRunAt = NEXT_RUN_AT;

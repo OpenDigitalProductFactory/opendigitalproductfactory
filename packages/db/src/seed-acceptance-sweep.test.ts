@@ -55,8 +55,8 @@ describe("acceptance sweep config", () => {
     expect(ACCEPTANCE_AGED_DAYS).toBe(14);
     expect(ACCEPTANCE_SWEEP_PAGE_SIZE).toBe(100);
     expect(ACCEPTANCE_SWEEP_ROUTE_LIMIT).toBe(10);
-    // Routing is phase 3 (BI-C1781121); it stays off until then.
-    expect(ACCEPTANCE_SWEEP_ROUTING).toBe(false);
+    // Routing is phase 3 (BI-C1781121): on now that it is implemented and tested.
+    expect(ACCEPTANCE_SWEEP_ROUTING).toBe(true);
   });
 });
 

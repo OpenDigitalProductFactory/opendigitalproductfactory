@@ -53,6 +53,8 @@ function readJson<T>(path: string): T {
 
 const PRE_MIGRATION = readJson<WorkShapeDefinition>(join(FIXTURES, "inquiry-response-watch@1.0.0.pre-migration.json"));
 const PRE_MIGRATION_KEYS = readJson<string[]>(join(FIXTURES, "work-shape-keys.pre-migration.json"));
+/** Shapes registered after PR-3b-R/6, in registry order (BI-C1781121: acceptance-verification). */
+const REGISTERED_AFTER_MIGRATION: readonly string[] = ["acceptance-verification"];
 
 function migrated(): WorkShapeDefinition {
   const definition = getWorkShape(INQUIRY_RESPONSE_WATCH_SHAPE_KEY);
@@ -123,7 +125,8 @@ describe("AC-NODISRUPT: inquiry-response-watch@1.0.0 compiled from its shape doc
   });
 
   it("4. listWorkShapes() keeps the pre-migration key order", () => {
-    expect(listWorkShapes().map((shape) => shape.key)).toEqual(PRE_MIGRATION_KEYS);
+    // Shapes registered after the migration are appended, never interleaved.
+    expect(listWorkShapes().map((shape) => shape.key)).toEqual([...PRE_MIGRATION_KEYS, ...REGISTERED_AFTER_MIGRATION]);
   });
 
   it("5. the definition contract runtime consumers read equals the pre-migration one apart from the gate", () => {

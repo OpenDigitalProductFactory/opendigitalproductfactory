@@ -59,6 +59,24 @@ export function parseAccountablePrincipalRef(
   return { kind: "unknown", value: ref };
 }
 
+/**
+ * The stage's principal after the room's role binding, when one applies
+ * (BI-C1781121). Honoured only for a non-governed role stage and only when the
+ * binding names an agent; every other stage keeps its declared principal.
+ */
+export function boundStagePrincipal(
+  declared: string,
+  governed: boolean,
+  roleBindings: Readonly<Record<string, string>> | null | undefined,
+): string {
+  const parsed = parseAccountablePrincipalRef(declared);
+  if (governed || parsed.kind !== "role" || !roleBindings) return declared;
+  const bound = roleBindings[parsed.value];
+  if (typeof bound !== "string") return declared;
+  const target = parseAccountablePrincipalRef(bound);
+  return target.kind === "agent" && target.value ? bound : declared;
+}
+
 export function emptyPlan<A extends DriveAction>(
   input: DriveResolutionInput,
   action: A,
@@ -165,8 +183,9 @@ export function planStage(args: {
 }): DrivePlan {
   const { input, stage, conformance, cycle, prior } = args;
   const definition = args.definition;
-  const parsed = parseAccountablePrincipalRef(stage.accountablePrincipalRef);
   const governed = stage.advance.kind === "governed-decision";
+  const principalRef = boundStagePrincipal(stage.accountablePrincipalRef, governed, input.roleBindings);
+  const parsed = parseAccountablePrincipalRef(principalRef);
   const humanStage = parsed.kind === "role" || parsed.kind === "person";
   // EP-4614F35E: a governed-decision stage normally raises attention (a human
   // decides). The one exception — full proactivity — is when the accountable
@@ -186,9 +205,9 @@ export function planStage(args: {
       definition: input.definition ?? null,
       shapeVersion: definition.version,
       stageKey: stage.key,
-      accountablePrincipalRef: stage.accountablePrincipalRef,
+      accountablePrincipalRef: principalRef,
       agentId: null,
-      attentionPrincipalRef: stage.accountablePrincipalRef,
+      attentionPrincipalRef: principalRef,
       taskId: null,
       conformance,
       cycle,
@@ -240,7 +259,7 @@ export function planStage(args: {
       definition: input.definition ?? null,
       shapeVersion: definition.version,
       stageKey: stage.key,
-      accountablePrincipalRef: stage.accountablePrincipalRef,
+      accountablePrincipalRef: principalRef,
       agentId: null,
       attentionPrincipalRef: null,
       taskId: null,
@@ -261,7 +280,7 @@ export function planStage(args: {
     definition: input.definition ?? null,
     shapeVersion: definition.version,
     stageKey: stage.key,
-    accountablePrincipalRef: stage.accountablePrincipalRef,
+    accountablePrincipalRef: principalRef,
     agentId: parsed.value,
     attentionPrincipalRef: null,
     taskId: workroomDriveTaskId(input.roomId, definition.key),

@@ -94,6 +94,7 @@ export function decompile(definition: WorkShapeDefinition, options: DecompileOpt
       evidence: [...stage.evidence],
     };
     if (stage.tools !== undefined) documentStage.tools = [...stage.tools];
+    if (stage.mandatedTools !== undefined) documentStage.mandatedTools = [...stage.mandatedTools];
     if (stage.binding !== undefined) documentStage.binding = copyBinding(stage.binding);
     if (stage.deadline !== undefined) documentStage.deadline = { afterDays: stage.deadline.afterDays, description: stage.deadline.description };
     if (stage.subShape !== undefined) documentStage.subShape = stage.subShape;

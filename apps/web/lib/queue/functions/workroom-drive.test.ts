@@ -6,7 +6,7 @@ import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-dri
 import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { workroomDriveBranchTaskId } from "@/lib/work-management/drive-resolution";
 
-import { buildWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim } from "@/lib/work-management/workroom-shape-claim";
 import { buildWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
 import {
@@ -681,5 +681,27 @@ describe("parallel branches: one task per branch under one lease (PR-3c-2)", () 
     const paused = await tick(h, at(0));
     expect(paused.plan).toMatchObject({ action: "pause", reason: "construct_not_executable" });
     expect(paused.upserts).toEqual([]);
+  });
+});
+
+describe("runWorkroomDriveJob: an acceptance steward room dispatches its bound coworker (BI-C1781121)", () => {
+  it("dispatches the agent the room bound to the verifier role, briefed with the room objective", async () => {
+    const fx = effects();
+    const steward = room({
+      capsuleId: "WC-ACC-C1781121",
+      objective: "Verify BI-C1781121 on the live install.",
+      scopeClaims: [
+        buildWorkShapeClaim("acceptance-verification@1.0.0"),
+        buildWorkShapeRoleBindingsClaim({ "acceptance-verifier": "agent:AGT-WS-BUILD" }),
+      ],
+      participants: [{ ...coordinatorAssignment("row-1"), kind: "person" as const }],
+    });
+    const result = await runWorkroomDriveJob(new Date("2026-09-25T06:00:00.000Z"), { listRooms: async () => [steward], effects: fx });
+    expect(result.dispatched).toBe(1);
+    expect(fx.upsertAgentTask).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: "AGT-WS-BUILD",
+      taskId: workroomDriveTaskId("WC-ACC-C1781121", "acceptance-verification"),
+      prompt: expect.stringContaining("Verify BI-C1781121 on the live install."),
+    }));
   });
 });
