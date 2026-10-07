@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   getPlaybook,
   getPlaybookForCategory,
+  getPlaybookForCtaType,
   getCompositePlaybook,
   getPlaybookForLeafArchetype,
 } from "./marketing-playbooks";
@@ -257,5 +258,14 @@ describe("seed backfill is additive (EP-5CC9C184)", () => {
         { targetSegments: [], idealCustomerProfiles: [], entryOffers: [], serviceTerritories: [] },
       ),
     ).toEqual({});
+  });
+});
+
+describe("software-platform playbook (BI-3101AED6)", () => {
+  it("has its own category playbook instead of the generic inquiry fallback", () => {
+    const playbook = getPlaybook("software-platform", "inquiry");
+    expect(playbook).not.toBe(getPlaybookForCtaType("inquiry"));
+    expect(playbook.stakeholders).toMatch(/partners/i);
+    expect(playbook.seedSegments?.map((s) => s.name)).toContain("Channel and implementation partners");
   });
 });

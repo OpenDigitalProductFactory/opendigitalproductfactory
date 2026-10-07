@@ -3,6 +3,8 @@
 // a self-upgrade (the swap owns container lifecycle then). Logic and tests live in
 // lib/platform-runtime/substrate-reconciler.ts; this file only wires real I/O.
 
+import { hostname as osHostname } from "node:os";
+
 import { cron } from "@/lib/jobs/triggers";
 import { prisma } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
@@ -31,13 +33,31 @@ const TOP_COLUMNS = "-o pid,stat,etime,wchan,comm";
 // The established db-handle boundary cast (alert-delivery-bridge.ts:92).
 const monitorDb = prisma as unknown as MonitorIssueDb;
 
-async function listContainers(): Promise<SubstrateContainer[]> {
-  const hostname = process.env.HOSTNAME;
-  const self = hostname
-    ? await dockerSocketGet(`/containers/${encodeURIComponent(hostname)}/json`) as DockerInspect
-    : null;
-  const project = self?.Config?.Labels?.["com.docker.compose.project"] ?? null;
-  const summaries = await dockerSocketGet("/containers/json?all=1") as DockerSummary[];
+type DockerGet = (path: string) => Promise<unknown>;
+
+/**
+ * The container finds its compose project by inspecting itself under the
+ * hostname Docker gives it (the container id), read from the OS. Not
+ * process.env.HOSTNAME: the portal image sets that to 0.0.0.0 as the Next.js
+ * bind address, so every run inspected /containers/0.0.0.0/json and 404'd
+ * (BI-3925A700 is the same trap in operational-state.ts). An unreadable
+ * self-inspect leaves every container outside the project, which restarts
+ * nothing but still lets wedge detection run.
+ */
+export async function listSubstrateContainers(
+  get: DockerGet = dockerSocketGet,
+  selfHostname: string = osHostname(),
+): Promise<SubstrateContainer[]> {
+  let project: string | null = null;
+  if (selfHostname) {
+    try {
+      const self = await get(`/containers/${encodeURIComponent(selfHostname)}/json`) as DockerInspect;
+      project = self?.Config?.Labels?.["com.docker.compose.project"] ?? null;
+    } catch {
+      project = null;
+    }
+  }
+  const summaries = await get("/containers/json?all=1") as DockerSummary[];
   const containers: SubstrateContainer[] = [];
   for (const summary of summaries) {
     const inProject = Boolean(project) && summary.Labels?.["com.docker.compose.project"] === project;
@@ -45,7 +65,7 @@ async function listContainers(): Promise<SubstrateContainer[]> {
     // Only an exited project container can be restarted, so only it needs the
     // restart policy and stop time (one inspect per such container, not per container).
     const inspected = inProject && state === "exited"
-      ? await dockerSocketGet(`/containers/${encodeURIComponent(summary.Id)}/json`) as DockerInspect
+      ? await get(`/containers/${encodeURIComponent(summary.Id)}/json`) as DockerInspect
       : null;
     const restartPolicy = String(inspected?.HostConfig?.RestartPolicy?.Name ?? "");
     containers.push({
@@ -92,7 +112,7 @@ export const substrateReconciler = jobs.createFunction(
     const gate = await gateAtEntry(step, "ops/substrate-reconciler");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("reconcile-substrate", () => reconcileSubstrate({
-      listContainers,
+      listContainers: () => listSubstrateContainers(),
       requiredServices,
       startContainer: async (container) => {
         const started = await runProcessWithBudget("docker", ["start", container.id], {

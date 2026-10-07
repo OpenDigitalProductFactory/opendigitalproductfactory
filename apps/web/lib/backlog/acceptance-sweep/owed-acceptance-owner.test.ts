@@ -94,3 +94,15 @@ describe("createOwedAcceptanceOwnerResolver", () => {
     expect(result.unroutable).toEqual([expect.objectContaining({ reason: "dispatch-context-required" })]);
   });
 });
+
+describe("createOwedAcceptanceOwnerResolver: delivery actors (BI-099A0BA3, security review M1)", () => {
+  it("removes every delivery actor from the roster, not only the author", async () => {
+    const resolveOwner = resolverWith([...grantRows("AGT-A-DELIVERED"), ...grantRows("AGT-B-AUTHOR"), ...grantRows("AGT-WS-ACCEPT")]);
+
+    const result = await projectOwedAcceptance({
+      decision, authorAgentId: "AGT-B-AUTHOR", excludedAgentIds: ["AGT-A-DELIVERED"], resolveOwner,
+    });
+
+    expect(result.owner?.agentId).toBe("AGT-WS-ACCEPT");
+  });
+});
