@@ -1,6 +1,4 @@
-// REPRODUCTION (BI-BDB63485) — expected to FAIL on main until the fix lands.
-//
-// AC-COMPLETION-PATH: no path writes FeatureBuild.phase = "complete" without
+// BI-BDB63485 AC-COMPLETION-PATH: no path writes FeatureBuild.phase = "complete" without
 // reconcileBuildCompletion's checks (every applicable ship fork terminal, and
 // the merged SHA deployed unless upstream is skipped) —
 // lib/build-flow-state.ts reconcileBuildCompletion.
@@ -8,9 +6,10 @@
 // The only writer of `complete` is completeFeatureBuildTransition
 // (lib/backlog/initiative-readiness/build-terminal-transition.ts), which checks
 // initiative readiness (delivery/acceptance/objective evidence) but NOT forks or
-// deployment. So the AC holds exactly when reconcileBuildCompletion is the only
-// production caller of that function (directly or via
-// assertFeatureBuildCompletion), and nothing else writes a literal `complete`.
+// deployment. So the AC holds exactly when only lib/build-flow-state.ts calls
+// that function — reconcileBuildCompletion and completeBuildWhenDelivered, both
+// behind evaluateBuildCompletionPreconditions — and nothing else writes a
+// literal `complete`.
 // Same scanner shape as direct-phase-writes-ratchet.test.ts (BI-45F9CB7A).
 import { describe, expect, it } from "vitest";
 
@@ -27,7 +26,7 @@ function stripLineComments(source: string): string {
 
 const files = readWebSourceFiles().filter((f) => !/\.test\.tsx?$/.test(f.path));
 
-describe("REPRO BI-BDB63485 AC-COMPLETION-PATH — `complete` only via reconcileBuildCompletion", () => {
+describe("AC-COMPLETION-PATH — `complete` only behind the delivery preconditions (BI-BDB63485)", () => {
   it("no production code outside the reconciler calls the terminal transition", () => {
     const offenders: string[] = [];
     for (const file of files) {
@@ -39,7 +38,7 @@ describe("REPRO BI-BDB63485 AC-COMPLETION-PATH — `complete` only via reconcile
         offenders.push(`${file.path}:${line} ${match[1]}`);
       }
     }
-    expect(offenders, "Route completion through reconcileBuildCompletion (fork + deploy checks)").toEqual([]);
+    expect(offenders, "Complete a build through lib/build-flow-state.ts (fork + deploy preconditions)").toEqual([]);
   });
 
   it("no literal phase = \"complete\" write outside the terminal transition", () => {

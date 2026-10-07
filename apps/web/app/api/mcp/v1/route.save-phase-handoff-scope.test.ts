@@ -1,7 +1,5 @@
-// REPRODUCTION (BI-BDB63485) — expected to FAIL on main until the fix lands.
-//
-// AC-HANDOFF-PHASE-SCOPE: calling save_phase_handoff for a build in `ship`
-// over /api/mcp/v1 is refused and does not write `complete`.
+// BI-BDB63485 AC-HANDOFF-PHASE-SCOPE: calling save_phase_handoff for a build in
+// `ship` over /api/mcp/v1 is refused and does not write `complete`.
 //
 // This drives the REAL external dispatch chain end to end:
 //   POST /api/mcp/v1 (route.ts handleToolsCall)
@@ -12,8 +10,8 @@
 //   -> checkBuildPhaseGate (real structural gate)
 // Only Prisma, the token resolver, quiescence, the event bus and the terminal
 // transition (so the test can observe whether `complete` would be written) are
-// mocked. If any layer in that chain honoured the tool's
-// `buildPhases: ["ideate","plan","build","review"]` tag, this test would pass.
+// mocked. The refusal comes from the handler's phase scope, which reads the
+// tool's own `buildPhases: ["ideate","plan","build","review"]` tag.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
@@ -122,7 +120,7 @@ afterEach(() => {
   _setGovernanceForTests({});
 });
 
-describe("REPRO BI-BDB63485 AC-HANDOFF-PHASE-SCOPE — save_phase_handoff from `ship` over /api/mcp/v1", () => {
+describe("AC-HANDOFF-PHASE-SCOPE — save_phase_handoff from `ship` over /api/mcp/v1 (BI-BDB63485)", () => {
   it("is refused, and never writes `complete` (tool is tagged ideate..review only)", async () => {
     const res = await POST(toolsCall({ buildId: "FB-SHIP0001", summary: "shipped" }));
     const body = await res.json();
@@ -136,5 +134,8 @@ describe("REPRO BI-BDB63485 AC-HANDOFF-PHASE-SCOPE — save_phase_handoff from `
       expect.objectContaining({ data: expect.objectContaining({ phase: "complete" }) }),
     );
     expect.soft(text).not.toContain("Phase advanced: ship → complete");
+    expect.soft(body.result?.structuredContent?.error ?? text).toContain("phase_out_of_scope");
+    // Refused before anything is written.
+    expect.soft(db.phaseHandoff.create).not.toHaveBeenCalled();
   });
 });
