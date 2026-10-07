@@ -45,7 +45,9 @@ export type OwedAcceptanceUnroutableReason =
   /** The only route the resolver found targets the authoring agent. */
   | "author-excluded"
   /** The resolver reported nothing for this requirement. */
-  | "unresolved";
+  | "unresolved"
+  /** Only coworkers that run outside the platform hold the lane (BI-C1781121, in-platform-owners.ts). */
+  | "no-in-platform-coworker";
 
 export type OwedAcceptanceUnroutable = {
   code: ReadinessCode;
@@ -72,7 +74,25 @@ export type OwedAcceptance = {
 export type OwedAcceptanceOwnerResolver = (args: {
   decision: InitiativeReadinessDecision;
   authorAgentId: string | null;
-}) => Promise<InitiativeReviewerRecovery | TerminalInitiativeRecovery>;
+}) => Promise<OwedAcceptanceOwnerRecovery>;
+
+/**
+ * What an owner resolver returns: the reviewer recovery (or the terminal
+ * chain's), whose escalation reasons may also be `no-in-platform-coworker`.
+ */
+export type OwedAcceptanceOwnerRecovery = {
+  reviewerRoutes: InitiativeReviewerRecovery["reviewerRoutes"];
+  unroutable: InitiativeReviewerRecovery["unroutable"];
+  escalations: Array<{
+    accountableRole: string;
+    toolName: string;
+    grant: string;
+    reason:
+      | TerminalInitiativeRecovery["escalations"][number]["reason"]
+      | "no-in-platform-coworker";
+    nextAction: string;
+  }>;
+};
 
 function isFamily(entry: { accountableRole: string }): boolean {
   return ACCEPTANCE_FAMILY_ROLES.includes(entry.accountableRole);

@@ -15,18 +15,22 @@ import {
   ACCEPTANCE_AGED_DAYS,
   ACCEPTANCE_SWEEP_AGENT_ID,
   ACCEPTANCE_SWEEP_PAGE_SIZE,
+  ACCEPTANCE_SWEEP_ROUTE_LIMIT,
   ACCEPTANCE_SWEEP_ROUTING,
   ACCEPTANCE_TREND_DAYS,
 } from "@dpf/db";
 
 import { computeNextCronRun } from "@/lib/operate/cron-next-run";
+import { resolveWorkOwner, type AccountableOwnerDb } from "@/lib/portfolio/accountable-owner";
 
 import { loadAcceptancePoolAges, type AcceptancePoolAgeDb } from "./acceptance-pool-age";
 import { closeAllowedAcceptanceItem, type AcceptanceSweepCloseDb } from "./acceptance-sweep-close";
 import { evaluateOwedAcceptance, productionSweepEvaluateDeps } from "./acceptance-sweep-evaluate";
 import { selectAcceptanceSweepPage, type AcceptanceSweepPageDb } from "./acceptance-sweep-page";
 import { runAcceptanceSweep, type AcceptanceSweepConfig, type AcceptanceSweepPorts, type AcceptanceSweepSummary } from "./acceptance-sweep-run";
-import type { OwedAcceptanceOwnerDb } from "./owed-acceptance-owner";
+import type { InPlatformOwnerDb } from "./in-platform-owners";
+import type { AgedSweepCandidate } from "./acceptance-sweep-routing";
+import { routeAgedItems, type AcceptanceRouteDb, type RouteOutcome } from "./route-aged-item";
 import {
   COMPLETION_TRANSITION_TOOL,
   resolveCloseAuthorisation,
@@ -135,8 +139,50 @@ type PlatformConfigDb = {
   platformConfig: { findUnique(args: { where: { key: string }; select: { value: true } }): Promise<{ value: unknown } | null> };
 };
 
-type SweepDb = RoomDb & TaskStatusDb & AcceptancePoolAgeDb & AcceptanceSweepPageDb & OwedSnapshotDb & OwedAcceptanceOwnerDb
-  & AcceptanceSweepCloseDb & PlatformConfigDb;
+type RouteTextDb = {
+  backlogItem: {
+    findMany(args: {
+      where: { id: { in: string[] } };
+      select: { id: true; title: true; body: true };
+    }): Promise<Array<{ id: string; title: string; body: string | null }>>;
+  };
+};
+
+type SweepDb = RoomDb & TaskStatusDb & AcceptancePoolAgeDb & AcceptanceSweepPageDb & OwedSnapshotDb & InPlatformOwnerDb
+  & AcceptanceSweepCloseDb & PlatformConfigDb & AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb;
+
+/**
+ * Give this run's aged, non-closable items a steward room each (BI-C1781121).
+ * The room brief quotes the item's title and acceptance criteria, read here
+ * because the page selects ids only. The room's owner is the person
+ * accountable for the platform's automatic work (resolveWorkOwner, Foundational).
+ */
+export async function routeAgedSweepCandidates(
+  db: AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb,
+  now: Date,
+  candidates: readonly AgedSweepCandidate[],
+  limit: number,
+): Promise<RouteOutcome[]> {
+  const rows = await db.backlogItem.findMany({
+    where: { id: { in: candidates.map((candidate) => candidate.item.id) } },
+    select: { id: true, title: true, body: true },
+  });
+  const text = new Map(rows.map((row) => [row.id, row]));
+  return routeAgedItems({
+    db,
+    now,
+    limit,
+    candidates: candidates.map(({ item, ageDays, projection }) => ({
+      rowId: item.id,
+      itemId: item.itemId,
+      title: text.get(item.id)?.title ?? item.itemId,
+      body: text.get(item.id)?.body ?? null,
+      ageDays,
+      projection,
+    })),
+    resolveOwnerUserId: async () => (await resolveWorkOwner(db, {})).userId,
+  });
+}
 
 /**
  * Current authority behind the pre-authorisation (BI-45D3BBF4): the operator's
@@ -171,6 +217,7 @@ function productionPorts(db: SweepDb, now: Date, agentId: string): AcceptanceSwe
     evaluate: (item) => evaluateOwedAcceptance(item, evaluateDeps),
     recordSnapshot: (item, projection) => recordOwedAcceptanceSnapshot({ db, backlogItemId: item.id, projection, recordedByAgentId: agentId }),
     recordRun: (summary) => recordSweepRun(db, summary, agentId),
+    route: (candidates, limit) => routeAgedSweepCandidates(db, now, candidates, limit),
     resolveCloseAuthorisation: (): Promise<CloseAuthorisation> =>
       resolveCloseAuthorisation(agentId, productionCloseAuthorisationPorts(db)),
     close: async (item, decision, authorisation) => {
@@ -204,6 +251,7 @@ export async function executeAcceptanceSweepTask(
       agedDays: ACCEPTANCE_AGED_DAYS,
       trendDays: ACCEPTANCE_TREND_DAYS,
       routing: ACCEPTANCE_SWEEP_ROUTING,
+      routeLimit: ACCEPTANCE_SWEEP_ROUTE_LIMIT,
       recordedByAgentId: agentId,
     });
     console.info("[acceptance-sweep] %s", summary.headline);

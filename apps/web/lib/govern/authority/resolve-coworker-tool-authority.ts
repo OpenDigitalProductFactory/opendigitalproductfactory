@@ -17,6 +17,7 @@ import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute-types";
 import { getGrantedCapabilities } from "@/lib/permissions";
 import type { EscalationSteering } from "./escalation-gate";
 import { roomAuthorizesTool } from "@/lib/work-management/room-turn-authority";
+import { loadScheduledRoomMandate, type RoomMandateDb } from "@/lib/work-management/room-stage-mandate";
 import {
   parseInitiativeReviewBinding,
   type InitiativeReviewBinding,
@@ -267,6 +268,12 @@ export function resolveSteering(input: {
   /** The tool being called, matched against the cadence's declared writes. */
   toolName?: string;
   /**
+   * BI-C1781121: the writes the Workroom stage that started this scheduled run
+   * declares for this agent (room-stage-mandate.ts), server-resolved from the
+   * run's sourceRef, the room's shape and its role binding.
+   */
+  roomMandatedTools?: readonly string[] | null;
+  /**
    * BI-12E5DD91: the OAuth consent the MCP route revalidated on this request.
    * Steers only when it names the coworker actually acting.
    */
@@ -282,6 +289,7 @@ export function resolveSteering(input: {
   if (input.taskRunId?.startsWith(SCHEDULED_RUN_PREFIX) && input.agentId && input.toolName) {
     const mandated = coworkerSelfTaskMandatedTools(input.agentId);
     if (mandated?.includes(input.toolName)) return "scheduled-mandate";
+    if (input.roomMandatedTools?.includes(input.toolName)) return "scheduled-mandate";
   }
   const connection = input.connectionDelegation;
   if (
@@ -465,6 +473,13 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         initiativeReviewBinding,
         roomAuthority: execution.context?.roomAuthority ?? null,
         connectionDelegation: execution.context?.connectionDelegation ?? null,
+        roomMandatedTools: task
+          ? await loadScheduledRoomMandate(db as unknown as RoomMandateDb, {
+              taskRunId: task.taskRunId,
+              a2aMetadata: task.a2aMetadata,
+              agentIds: [agent.agentId, actingAgentId],
+            })
+          : null,
       }),
       subject: initiativeAuthority.subject,
       room: roomAuthority

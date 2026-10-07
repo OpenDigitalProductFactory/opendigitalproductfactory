@@ -201,6 +201,14 @@
           "description": "Capability set. Absent means undeclared, exactly as today.",
           "uniqueItems": true
         },
+        "mandatedTools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/toolName"
+          },
+          "description": "Writes a drive-dispatched run of this non-governed stage may make without a person (scheduled mandate, BI-C1781121). Absent means none.",
+          "uniqueItems": true
+        },
         "binding": {
           "$ref": "#/$defs/binding"
         },

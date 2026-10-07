@@ -24,6 +24,7 @@ import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 // admits a coworker anchor, so coworker-owned standing work fits as-is.
 
 import type { WorkroomShapeKey } from "./room-shapes";
+import { ACCEPTANCE_VERIFICATION_SHAPES } from "./acceptance-verification-shape";
 import { COWORKER_STANDING_SHAPES } from "./coworker-standing-shapes";
 import { COWORKER_STANDING_SHAPES_CRAFT } from "./coworker-standing-shapes-craft";
 import { COWORKER_STANDING_SHAPES_OPERATE } from "./coworker-standing-shapes-operate";
@@ -151,6 +152,15 @@ export type WorkShapeStage = {
    * (gpp-shape-schema.ts).
    */
   subShape?: string;
+  /**
+   * Side-effecting tools a drive-dispatched run of this stage may call without
+   * a person (BI-C1781121). The same recorded decision a coworker self-task's
+   * `mandatedTools` is: declaring the stage, and a room binding who answers
+   * for it, IS the decision, so a declared write on the stage's scheduled run
+   * is steered (escalation-gate `scheduled-mandate`) and not diverted to a
+   * proposal. Only for non-governed stages; resolved by room-stage-mandate.ts.
+   */
+  mandatedTools?: readonly string[];
 };
 
 /** A stage deadline: raises a notice after `afterDays`, never moves the token. */
@@ -357,7 +367,8 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
 
 /**
  * The full registry: the anchor compliance shape, the standing operations, the
- * five delivery shapes, and one orchestration cycle per IT4IT value stream.
+ * five delivery shapes, one orchestration cycle per IT4IT value stream, and the
+ * acceptance-verification steward activity.
  */
 const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
   ...SHAPES,
@@ -367,6 +378,7 @@ const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
   ...COWORKER_STANDING_SHAPES_CRAFT,
   ...DELIVERY_SHAPES,
   ...ORCHESTRATION_SHAPES,
+  ...ACCEPTANCE_VERIFICATION_SHAPES,
 };
 
 // A compiled shape (GPP Phase 3b, PR-3b-6) is registered by reference, in its

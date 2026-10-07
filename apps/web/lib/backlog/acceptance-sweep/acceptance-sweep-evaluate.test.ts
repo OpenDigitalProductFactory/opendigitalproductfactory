@@ -62,6 +62,20 @@ function grantRows(agentId: string) {
   return [{ grantKey: "initiative_evidence_write", agent }, { grantKey: "file_read", agent }];
 }
 
+/** A grant read over `rows`; every agent runs in-platform unless listed in `externalCli`. */
+function grantDb(rows: ReturnType<typeof grantRows>, externalCli: readonly string[] = []) {
+  return {
+    agentToolGrant: { findMany: vi.fn().mockResolvedValue(rows) },
+    agent: {
+      findMany: vi.fn(async (args: { where: { agentId: { in: string[] } } }) =>
+        args.where.agentId.in.map((agentId) => ({
+          agentId,
+          executionConfig: { executionType: externalCli.includes(agentId) ? "external_cli" : "in_process" },
+        }))),
+    },
+  };
+}
+
 function terminalPorts(overrides: Partial<TerminalRecoveryPorts> = {}): Partial<TerminalRecoveryPorts> {
   return {
     loadLiveRooms: vi.fn(async () => [room]),
@@ -78,7 +92,7 @@ describe("createSweepOwnerResolver", () => {
   it("names a granted coworker other than the author through the item's live Workroom", async () => {
     const ports = terminalPorts();
     const resolveOwner = createSweepOwnerResolver({
-      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([...grantRows("AGT-A-AUTHOR"), ...grantRows("AGT-WS-ACCEPT")]) } },
+      db: grantDb([...grantRows("AGT-A-AUTHOR"), ...grantRows("AGT-WS-ACCEPT")]),
       ports,
     });
     const result = await projectOwedAcceptance({ decision, authorAgentId: "AGT-A-AUTHOR", resolveOwner });
@@ -90,7 +104,7 @@ describe("createSweepOwnerResolver", () => {
 
   it("reports the author as excluded rather than routing acceptance back to them", async () => {
     const resolveOwner = createSweepOwnerResolver({
-      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(grantRows("AGT-A-AUTHOR")) } },
+      db: grantDb(grantRows("AGT-A-AUTHOR")),
       ports: terminalPorts(),
     });
     const result = await projectOwedAcceptance({ decision, authorAgentId: "AGT-A-AUTHOR", resolveOwner });
@@ -100,12 +114,53 @@ describe("createSweepOwnerResolver", () => {
 
   it("reads unroutable with the chain's reason when the item has no live Workroom", async () => {
     const resolveOwner = createSweepOwnerResolver({
-      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(grantRows("AGT-WS-ACCEPT")) } },
+      db: grantDb(grantRows("AGT-WS-ACCEPT")),
       ports: terminalPorts({ loadLiveRooms: vi.fn(async () => []) }),
     });
     const result = await projectOwedAcceptance({ decision, authorAgentId: null, resolveOwner });
     expect(result.owner).toBeNull();
     expect(result.unroutable).toEqual([expect.objectContaining({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", reason: "workroom-not-found" })]);
+  });
+});
+
+describe("createSweepOwnerResolver: only in-platform coworkers own acceptance (BI-C1781121)", () => {
+  it("never names an external CLI agent: the first in-platform holder owns it instead", async () => {
+    const resolveOwner = createSweepOwnerResolver({
+      db: grantDb([...grantRows("AGT-EXT-CLAUDE"), ...grantRows("AGT-WS-BUILD")], ["AGT-EXT-CLAUDE"]),
+      ports: terminalPorts(),
+    });
+    const result = await projectOwedAcceptance({ decision, authorAgentId: "AGT-A-AUTHOR", resolveOwner });
+    expect(result.owner).toEqual({ agentId: "AGT-WS-BUILD", displayName: "AGT-WS-BUILD name", codes: ["ACCEPTANCE_EVIDENCE_REQUIRED"] });
+    expect(result.unroutable).toEqual([]);
+  });
+
+  it("reports no-in-platform-coworker, naming the external holders, when only they hold the lane", async () => {
+    const resolveOwner = createSweepOwnerResolver({
+      db: grantDb([...grantRows("AGT-EXT-CLAUDE"), ...grantRows("AGT-EXT-CODEX")], ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX"]),
+      ports: terminalPorts(),
+    });
+    const result = await projectOwedAcceptance({ decision, authorAgentId: "AGT-A-AUTHOR", resolveOwner });
+    expect(result.owner).toBeNull();
+    expect(result.unroutable).toEqual([expect.objectContaining({
+      code: "ACCEPTANCE_EVIDENCE_REQUIRED",
+      reason: "no-in-platform-coworker",
+      nextAction: expect.stringMatching(/^AGT-EXT-CLAUDE, AGT-EXT-CODEX hold initiative_evidence_write .*do not route it to a person/),
+    })]);
+  });
+
+  it("treats an agent with no recorded execution runtime as not runnable in-platform", async () => {
+    const db = grantDb(grantRows("AGT-WS-NORUNTIME"));
+    db.agent.findMany = vi.fn(async () => [{ agentId: "AGT-WS-NORUNTIME", executionConfig: null }]) as never;
+    const resolveOwner = createSweepOwnerResolver({ db, ports: terminalPorts() });
+    const result = await projectOwedAcceptance({ decision, authorAgentId: null, resolveOwner });
+    expect(result.owner).toBeNull();
+    expect(result.unroutable).toEqual([expect.objectContaining({ reason: "no-in-platform-coworker" })]);
+  });
+
+  it("keeps no-eligible-reviewer when the only holder is the author, even if it runs in-platform", async () => {
+    const resolveOwner = createSweepOwnerResolver({ db: grantDb(grantRows("AGT-A-AUTHOR")), ports: terminalPorts() });
+    const result = await projectOwedAcceptance({ decision, authorAgentId: "AGT-A-AUTHOR", resolveOwner });
+    expect(result.unroutable).toEqual([expect.objectContaining({ reason: "no-eligible-reviewer" })]);
   });
 });
 

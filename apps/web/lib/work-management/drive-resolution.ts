@@ -105,6 +105,15 @@ export type DriveResolutionInput = {
    * (GPP Phase 3c PR-3c-5).
    */
   subShapeChildren?: Readonly<Record<string, SubShapeChildObservation>>;
+  /**
+   * The room's own binding of a shape role to a principal (BI-C1781121), read
+   * from its scope claims. A shape names the ROLE that answers for a stage; a
+   * room created for one item can name the agent that holds that role there.
+   * Honoured only for a non-governed stage and only when it names an agent:
+   * a governed decision stays with its human, and a person binding changes
+   * nothing because a person stage is attention either way.
+   */
+  roleBindings?: Readonly<Record<string, string>> | null;
 };
 
 export type DrivePlan = {
@@ -156,7 +165,7 @@ export type DrivePlan = {
   subShapes?: SubShapeEffects;
 };
 
-export { parseAccountablePrincipalRef, workroomDriveBranchTaskId, workroomDriveTaskId } from "./drive-plan-stage";
+export { boundStagePrincipal, parseAccountablePrincipalRef, workroomDriveBranchTaskId, workroomDriveTaskId } from "./drive-plan-stage";
 
 export function nextStageKey(
   definition: WorkShapeDefinitionContract,

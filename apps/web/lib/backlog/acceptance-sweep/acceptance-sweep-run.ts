@@ -5,6 +5,15 @@ import type { CloseOutcome } from "./acceptance-sweep-close";
 import type { CloseAuthorisation, CloseDisabledReason } from "./close-authorisation";
 import { summarizePoolAge, type AcceptancePoolAge, type AcceptancePoolAgeSummary } from "./acceptance-pool-age";
 import type { AcceptanceSweepPage, AcceptanceSweepPageItem } from "./acceptance-sweep-page";
+import {
+  emptyRouting,
+  foldRouteOutcomes,
+  isRoutingCandidate,
+  routingHeadline,
+  type AcceptanceSweepRouting,
+  type AgedSweepCandidate,
+} from "./acceptance-sweep-routing";
+import type { RouteOutcome } from "./route-aged-item";
 
 // One acceptance sweep run (BI-DF255666, AC-S2-2 and AC-S2-3).
 // Design: docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md §3.3.
@@ -19,14 +28,21 @@ import type { AcceptanceSweepPage, AcceptanceSweepPageItem } from "./acceptance-
 // "allowed" is closed through the terminal transition, and only when a
 // recorded operator pre-authorisation is in force, at most `limit` per run.
 // The transition re-checks its own gate, so the sweep relaxes nothing; with no
-// authorisation it closes nothing and the summary says why. Routing is phase 3
-// (BI-C1781121) and stays off until it lands.
+// authorisation it closes nothing and the summary says why.
+//
+// Routing (BI-C1781121, design §3.4): with routing on, the aged page items that
+// are not closable go to `route` after the page is evaluated, which gives each
+// one with a resolved in-platform owner a steward Workroom, oldest first and
+// at most `routeLimit` new rooms per run (acceptance-sweep-routing.ts). A
+// routing failure is recorded in the summary and does not lose the run.
 
 export type AcceptanceSweepConfig = {
   pageSize: number;
   agedDays: number;
   trendDays: number;
-  routing: false;
+  routing: boolean;
+  /** Steward rooms created per run at most (ACCEPTANCE_SWEEP_ROUTE_LIMIT). */
+  routeLimit: number;
   recordedByAgentId: string;
 };
 
@@ -50,6 +66,8 @@ export type AcceptanceSweepPorts = {
     authorisation: Extract<CloseAuthorisation, { state: "enabled" }>,
   ): Promise<CloseOutcome>;
   recordSnapshot(item: AcceptanceSweepPageItem, projection: OwedAcceptance): Promise<{ written: boolean }>;
+  /** Route the run's aged, non-closable items to their coworkers (route-aged-item.ts). */
+  route(candidates: readonly AgedSweepCandidate[], limit: number): Promise<RouteOutcome[]>;
   recordRun(summary: AcceptanceSweepSummary): Promise<{ activityId: string }>;
 };
 
@@ -84,7 +102,8 @@ export type AcceptanceSweepSummary = {
   };
   /** Design §7: the revisit period, stated so a pool past the ceiling stays visible. */
   revisit: { poolSize: number; pageSize: number; runsPerRevisit: number; exceedsTrendWindow: boolean };
-  routing: { enabled: false; routed: 0 };
+  /** BI-C1781121: aged items routed to an in-platform coworker's steward room. */
+  routing: AcceptanceSweepRouting;
   /** BI-45D3BBF4: closures made under the operator pre-authorisation. */
   closing: AcceptanceSweepClosing;
   cursor: string | null;
@@ -121,6 +140,7 @@ function headline(summary: Omit<AcceptanceSweepSummary, "headline">, agedDays: n
     summary.closing.enabled
       ? `${summary.closing.closed.length} closed under operator pre-authorisation`
       : `closing off (${summary.closing.disabledReason})`,
+    routingHeadline(summary.routing),
   ].join("; ").slice(0, 500);
 }
 
@@ -174,6 +194,9 @@ export async function runAcceptanceSweep(
     deferredByLimit: [],
   };
 
+  const routing = emptyRouting(config.routing, config.routeLimit);
+  const agedCandidates: AgedSweepCandidate[] = [];
+
   for (const item of items) {
     const itemAge = ages.get(item.id);
     if (itemAge) {
@@ -198,6 +221,9 @@ export async function runAcceptanceSweep(
       listed.closable.push(item.itemId);
       await closeIfAuthorised(item, projection, authorisation, closing, ports);
     }
+    if (isRoutingCandidate(itemAge?.ageDays, config.agedDays, projection)) {
+      agedCandidates.push({ item, ageDays: itemAge!.ageDays, projection });
+    }
     if (projection.owner) page.owned += 1;
     if (projection.unroutable.length > 0) {
       page.unroutableItems += 1;
@@ -206,6 +232,15 @@ export async function runAcceptanceSweep(
         increment(page.unroutableByCode, entry.code);
         increment(page.unroutableByReason, entry.reason);
       }
+    }
+  }
+
+  if (routing.enabled && agedCandidates.length > 0) {
+    routing.candidates = agedCandidates.length;
+    try {
+      foldRouteOutcomes(routing, await ports.route(agedCandidates, routing.routeLimit));
+    } catch (error) {
+      routing.error = (error instanceof Error ? error.message : "unknown error").slice(0, 300);
     }
   }
 
@@ -223,7 +258,7 @@ export async function runAcceptanceSweep(
       runsPerRevisit,
       exceedsTrendWindow: runsPerRevisit > config.trendDays,
     },
-    routing: { enabled: false, routed: 0 },
+    routing,
     closing,
     cursor: nextCursor,
   };

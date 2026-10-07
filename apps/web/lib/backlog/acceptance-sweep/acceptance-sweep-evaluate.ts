@@ -6,7 +6,8 @@ import {
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
 
 import { projectOwedAcceptance, type OwedAcceptanceOwnerResolver } from "./owed-acceptance";
-import { createOwedAcceptanceOwnerResolver, type OwedAcceptanceOwnerDb } from "./owed-acceptance-owner";
+import { createOwedAcceptanceOwnerResolver } from "./owed-acceptance-owner";
+import { inPlatformGrants, withNoInPlatformCoworker, type InPlatformOwnerDb } from "./in-platform-owners";
 import type { AcceptanceSweepPageItem } from "./acceptance-sweep-page";
 import type { SweepEvaluation } from "./acceptance-sweep-run";
 
@@ -32,12 +33,17 @@ export type SweepEvaluateDeps = {
   resolveOwner: OwedAcceptanceOwnerResolver;
 };
 
-/** The resolver the sweep uses: the terminal chain with the author removed from the candidates. */
+/**
+ * The resolver the sweep uses: the terminal chain with the author removed from
+ * the candidates, and only coworkers the platform can run eligible
+ * (in-platform-owners.ts, BI-C1781121).
+ */
 export function createSweepOwnerResolver(context: {
-  db: OwedAcceptanceOwnerDb;
+  db: InPlatformOwnerDb;
   ports?: Partial<TerminalRecoveryPorts>;
 }): OwedAcceptanceOwnerResolver {
-  return ({ decision, authorAgentId }) => resolveTerminalInitiativeRecovery({
+  const grants = inPlatformGrants(context.db);
+  return async ({ decision, authorAgentId }) => withNoInPlatformCoworker(await resolveTerminalInitiativeRecovery({
     decision,
     currentAgentId: authorAgentId,
     refusedWorkroomId: null,
@@ -45,7 +51,7 @@ export function createSweepOwnerResolver(context: {
       ...DEFAULT_TERMINAL_RECOVERY_PORTS,
       ...context.ports,
       resolveRecovery: (args) => createOwedAcceptanceOwnerResolver({
-        db: context.db,
+        db: grants.db,
         dispatchContext: args.dispatchContext,
         canonicalArtifact: args.canonicalArtifact ?? null,
         ...(args.planArtifact !== undefined ? { planArtifact: args.planArtifact } : {}),
@@ -53,7 +59,7 @@ export function createSweepOwnerResolver(context: {
         ...(args.eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds } : {}),
       })({ decision: args.decision, authorAgentId: args.currentAgentId }),
     },
-  });
+  }), grants, authorAgentId);
 }
 
 /**
@@ -79,7 +85,7 @@ export async function evaluateOwedAcceptance(
 }
 
 /** Production bindings. Lazy imports keep the read tools off the scheduler's import graph. */
-export function productionSweepEvaluateDeps(db: OwedAcceptanceOwnerDb): SweepEvaluateDeps {
+export function productionSweepEvaluateDeps(db: InPlatformOwnerDb): SweepEvaluateDeps {
   return {
     loadAuthorAgentId: async (item) => {
       const { loadRoomAuthors } = await import("@/lib/backlog/initiative-readiness/server-reviewer-dispatch");

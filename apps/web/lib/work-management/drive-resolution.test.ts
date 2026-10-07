@@ -655,3 +655,55 @@ describe("resolveDrivePlan: refuse routes and rework (PR-3c-3)", () => {
     expect(plan).toMatchObject({ action: "attention", reason: "governed_decision", stageKey: "b", attentionPrincipalRef: "agent:reviewer", taskId: null });
   });
 });
+
+describe("resolveDrivePlan: a room binds a role stage to its agent (BI-C1781121)", () => {
+  const verifierShape: WorkShapeDefinitionContract = {
+    ...definition,
+    stages: [{
+      key: "verify",
+      title: "Verify",
+      accountablePrincipalRef: "role:acceptance-verifier",
+      advance: { kind: "status-change", condition: "evidence recorded" },
+      evidence: ["acceptance-receipt"],
+    }],
+  };
+
+  it("dispatches the agent the room bound to a non-governed role stage", () => {
+    const plan = resolveDrivePlan(baseInput({
+      definition: verifierShape,
+      roleBindings: { "acceptance-verifier": "agent:AGT-WS-BUILD" },
+    }));
+    expect(plan.action).toBe("dispatch_agent");
+    expect(plan.agentId).toBe("AGT-WS-BUILD");
+    expect(plan.accountablePrincipalRef).toBe("agent:AGT-WS-BUILD");
+  });
+
+  it("without a binding the role stage still raises attention", () => {
+    const plan = resolveDrivePlan(baseInput({ definition: verifierShape }));
+    expect(plan.action).toBe("attention");
+    expect(plan.reason).toBe("role_stage");
+  });
+
+  it("never binds a governed-decision stage: a role that decides stays with its human", () => {
+    const governed: WorkShapeDefinitionContract = {
+      ...verifierShape,
+      stages: [{ ...verifierShape.stages[0]!, advance: { kind: "governed-decision", condition: "accepted", decisionScope: "wwmd" } }],
+    };
+    const plan = resolveDrivePlan(baseInput({
+      definition: governed,
+      actionBoundary: "preauthorized",
+      roleBindings: { "acceptance-verifier": "agent:AGT-WS-BUILD" },
+    }));
+    expect(plan.action).toBe("attention");
+    expect(plan.agentId).toBeNull();
+  });
+
+  it("ignores a binding that does not name an agent", () => {
+    const plan = resolveDrivePlan(baseInput({
+      definition: verifierShape,
+      roleBindings: { "acceptance-verifier": "person:someone" },
+    }));
+    expect(plan.action).toBe("attention");
+    expect(plan.agentId).toBeNull();
+  });
+});

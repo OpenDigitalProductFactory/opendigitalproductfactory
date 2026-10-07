@@ -202,6 +202,10 @@ const stage = named(
     advance,
     evidence: uniqueArray(evidenceKind),
     tools: described(uniqueArray(toolName), "Capability set. Absent means undeclared, exactly as today.").optional(),
+    mandatedTools: described(
+      uniqueArray(toolName),
+      "Writes a drive-dispatched run of this non-governed stage may make without a person (scheduled mandate, BI-C1781121). Absent means none.",
+    ).optional(),
     binding: binding.optional(),
     deadline: timer.optional(),
     subShape: z.string().regex(GPP_SHAPE_REF_PATTERN).optional(),

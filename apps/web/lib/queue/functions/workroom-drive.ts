@@ -59,7 +59,7 @@ import {
 } from "@/lib/work-management/room-participant-assignment";
 import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
-import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { readWorkShapeRoleBindings, resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
   resolveDrivePlan,
@@ -495,6 +495,7 @@ export async function runWorkroomDriveJob(
       workspaceState: room.workspaceState,
       recordedEvidence: room.recordedEvidence ?? [],
       ...(room.subShapeChildren ? { subShapeChildren: room.subShapeChildren } : {}),
+      roleBindings: readWorkShapeRoleBindings(room.scopeClaims),
     });
     plans.push({
       roomId: room.capsuleId,
