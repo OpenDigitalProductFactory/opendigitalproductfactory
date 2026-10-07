@@ -9,6 +9,9 @@ import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 import { COORDINATOR_ROLES, planCoordinatorAppointment, rolesAfterStandDown } from "./appoint-room-coordinator";
 import { persistWorkroomParticipantAssignment } from "./room-participant-assignment.server";
+import { appendRoomPolicyParticipant } from "./room-policy";
+import { loadRoomMembersForWorkItem } from "./room-policy-members.server";
+import { readWorkspaceRoomPolicy } from "./workspace-room-access";
 
 export type ExecutedAppointment = {
   capsuleId: string;
@@ -65,5 +68,30 @@ export async function executeCoordinatorAppointment(input: {
     currentWorkSummary: null,
   });
   if (!written) return err("assignment_failed: The participant row could not be written.");
+
+  // An explicit WorkItem policy narrows the persisted roster. Keep the one
+  // canonical appointment writer responsible for synchronizing both, or a
+  // newly appointed owner remains excluded by the stale policy that made the
+  // room need recovery in the first place (BI-B8142BB4).
+  if (appointed.workItemId) {
+    const item = await prisma.workItem.findUnique({
+      where: { id: appointed.workItemId },
+      select: { evidence: true },
+    });
+    const policy = readWorkspaceRoomPolicy(item?.evidence);
+    const restrictsAdmission = policy.admittedPrincipalRefs !== undefined || policy.actionPrincipalRefs !== undefined;
+    if (item && restrictsAdmission) {
+      const evidence = appendRoomPolicyParticipant(item.evidence, {
+        principalRef: appointed.principalRef,
+        roles: COORDINATOR_ROLES,
+        canAct: true,
+        enteredReason: input.reason || "Appointed as the room's Process Overseer.",
+      }, await loadRoomMembersForWorkItem(appointed.workItemId));
+      await prisma.workItem.update({
+        where: { id: appointed.workItemId },
+        data: { evidence: evidence as never },
+      });
+    }
+  }
   return ok({ capsuleId: appointed.capsuleId, principalRef: appointed.principalRef, displayName: appointed.displayName });
 }
