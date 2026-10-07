@@ -367,6 +367,38 @@ export function groupTestFilesByPackage(files: string[]): Map<string, string[]> 
  * matches. (Found running scoped tests against the live install — the raw-ANSI
  * path silently passed a build whose feature tests were red.)
  */
+/**
+ * The workspace packages to type-check for a change: apps/web always (the prior
+ * behaviour), plus every other apps/<x> or packages/<x> a changed file lives in.
+ */
+export function typecheckPackagesFor(changedFiles: readonly string[]): string[] {
+  const packages = new Set<string>(["apps/web"]);
+  for (const file of changedFiles) {
+    const match = /^(apps|packages)\/([^/]+)\//.exec(file.replace(/^\.\//, ""));
+    if (match) packages.add(`${match[1]}/${match[2]}`);
+  }
+  return [...packages];
+}
+
+/**
+ * A package with its own lockfile (apps/mobile: its own pnpm workspace, excluded
+ * from the root one) is not installed by the sandbox's root install, so tsc and
+ * jest are "not found" there. Install it from its own lockfile, offline cache
+ * first, before checking it. Best-effort: a failed install surfaces as the
+ * check's own failure, with the install log tail in its output.
+ */
+async function installSeparatelyLockedPackages(containerId: string, workdir: string, packages: readonly string[]): Promise<void> {
+  for (const pkg of packages) {
+    if (pkg === "apps/web") continue;
+    const ownLock = await execInSandbox(containerId, `test -f "${workdir}/${pkg}/pnpm-lock.yaml" && echo __yes__ || echo __no__`).catch(() => "");
+    if (!ownLock.includes("__yes__")) continue;
+    await execInSandbox(
+      containerId,
+      `cd ${workdir}/${pkg} && { CI=true pnpm install --offline --frozen-lockfile >/tmp/dpf-pkg-install.log 2>&1 || CI=true pnpm install --frozen-lockfile >>/tmp/dpf-pkg-install.log 2>&1 || tail -20 /tmp/dpf-pkg-install.log; }`,
+    ).catch(() => "");
+  }
+}
+
 const EXIT_MARKER = "__dpf_exit=";
 
 /** The scoped-test command for a package: Jest when its package.json says so, else Vitest. */
@@ -408,7 +440,16 @@ export async function runSandboxTests(
   let typeCheckOutput = "";
   let typeCheckPassed = false;
   try {
-    typeCheckOutput = await execInSandbox(containerId, `cd ${workdir}/apps/web && npx tsc --noEmit 2>&1 || true`);
+    // FB-0C05A927: tsc ran in apps/web only, so a mobile (or any other package)
+    // change was never type-checked and review could not pass it. Check every
+    // package the change touches, plus apps/web as before, through pnpm exec.
+    await installSeparatelyLockedPackages(containerId, workdir, typecheckPackagesFor(opts?.changedFiles ?? []));
+    const sections: string[] = [];
+    for (const pkg of typecheckPackagesFor(opts?.changedFiles ?? [])) {
+      const out = await execInSandbox(containerId, `cd ${workdir}/${pkg} && pnpm exec tsc --noEmit 2>&1 || true`);
+      sections.push(`# ${pkg}\n${out}`);
+    }
+    typeCheckOutput = sections.join("\n\n");
     // `tsc` typechecks the whole apps/web project graph (no cheap per-file mode),
     // so a pre-existing type error in an UNRELATED file would block a build whose
     // own changed files are clean. When we know the changed surface, gate only on
