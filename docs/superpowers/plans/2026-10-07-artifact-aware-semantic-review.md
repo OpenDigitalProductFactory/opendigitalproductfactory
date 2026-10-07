@@ -45,6 +45,41 @@ identical-hash/different-role single-flight tests, plus existing compatibility t
 
 ## Ordered implementation and verification
 
+### Canonical contract and compatibility
+
+The existing owner is `DeliberationArtifactType` in
+`apps/web/lib/deliberation/external-review-activation.ts`: `spec`, `plan`,
+`code-change`, `architecture-decision`, `policy`, `research-question`. Export its
+values as the shared runtime tuple and derive the type and request validator from
+it; remove the duplicate request tuple. This is an existing TypeScript/JSON
+contract, not a Prisma enum. No relational column or database enum changes.
+
+Persisted representations are the request in `TaskArtifact.parts`, the receipt in
+`ExternalEvidenceRecord.details` and `WorkroomActivity.payload`, and the local
+`dpf-semantic-review-gate.json` sidecar. `GateRunIdentity` hashes the role as part
+of its evidence-plan identity. The CLI reads the same supported role registry;
+it must bind an explicit requested role, never infer one from a filename or copy
+the receipt's role as proof of what was requested. Build Studio supplies
+`code-change` explicitly and retains its existing code prompt fixture.
+
+Expand first: readers distinguish versioned legacy and new envelopes while
+preserving raw historical bytes. Legacy requests may finish under their original
+contract, budget and prompt, but their receipts cannot authorize the new role-bound
+contract. New request writers emit the explicit role in both request and identity;
+their parser requires equality. New receipts require role and a new schema/reviewer
+version. New gate keys include role, so different roles never join one execution.
+Old receipts remain readable for audit and are stale for new publication.
+
+There is no backfill of inferred roles and no reset of in-flight tasks. Migrate
+consumers in this atomic repair: request reader/writer, operation, prompt, gate
+identity and CLI policy/sidecar. Test legacy packet execution separately from
+new receipt freshness. Contract only after the old deadline/budget window drains;
+removing historical read support is outside this repair. Rollback must continue
+reading both envelope versions or leave new tasks explicitly unsupported without
+dispatch; reverting may not reinterpret a new receipt under old semantics.
+
+### Execution sequence
+
 1. Add failing role-aware prompt/freshness tests. Preserve the existing Build
    Studio prompt fixture and immutable artifact primacy tests.
 2. Propagate role through the existing operation, request schema, gate identity
@@ -68,6 +103,20 @@ requests. Negative tests cover the first two; preserve old requests and report
 unsupported versions without rewriting or resetting retry budgets. Revert source
 through a protected PR if required; retain all persisted artifacts and receipts.
 No schema migration, authority expansion or new queue is proposed.
+
+| Failure | User effect | Prevention and detection | Containment and recovery |
+| --- | --- | --- | --- |
+| Role omitted or changed | A document is approved using code criteria or another role's receipt. | Require one enumerated role across request, prompt and freshness; mutation tests hold all hashes constant. | Refuse mismatches; preserve source and old receipt; request an exact fresh review after correction. |
+| Gate-key collision | Unrelated role reviews share execution and return the wrong verdict. | Include role in gate identity; simultaneous same-hash/different-role tests assert distinct tasks. | Preserve both requests; fail closed on mismatch; resume only the correctly bound request. |
+| Stale checkout or missing artifact | Reviewer approves different bytes or invents findings about unavailable material. | Keep embedded-artifact primacy; test stale checkout, empty/truncated input and digest mismatch. | Return inconclusive with missing reference; restore immutable source without changing receipt history. |
+| Mixed-version rollout | Queued reviews strand or old receipts bypass new expectations. | Versioned readers before writers; legacy/new fixtures and deadline-preservation tests. | Drain original tasks under original contracts; old receipts remain stale for new publication; rollback retains read compatibility. |
+
+BI-AEEEFA15 owns these residual risks. The current documentation gate proves only
+document integrity. It does not prove the proposed mitigations work. Before
+implementation publication, each row requires passing final-change regression
+evidence, canonical CI and independent review; live acceptance remains a separate
+obligation. A plan review judges the design and this verification strategy, not
+unwritten implementation. No hypothetical test is recorded as passed.
 
 ## Backlog coverage
 
