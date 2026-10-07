@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Agent-Safe Self-Upgrade Trigger Design
 
 Date: 2026-06-30
