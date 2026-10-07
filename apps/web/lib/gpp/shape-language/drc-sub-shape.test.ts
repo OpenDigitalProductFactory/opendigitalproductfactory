@@ -14,13 +14,13 @@ import type { GppResolution } from "./resolve";
 const ALL_ON = { trigger: true, stage: true, "capability-set": true, gate: true, "advisory-consult": true, "status-transition": true, "human-checkpoint": true, evidence: true, stop: true, "escalation-boundary": true, "review-point": true, "stage-deadline": true, "parallel-split-join": true, "rework-edge": true, "sub-shape": true, "environment-boundary": true } as const;
 
 function documentWith(grants: string[]) {
-  const parsed = parseShapeDocument(readFileSync(join(__dirname, "__fixtures__", "drc", "e-not-executable-sub-shape.gpp.json"), "utf8"));
+  const parsed = parseShapeDocument(readFileSync(join(__dirname, "__fixtures__", "drc", "pass-sub-shape.gpp.json"), "utf8"));
   if (!parsed.accepted) throw new Error("fixture changed");
   return { ...parsed.document, grants };
 }
 
 function resolution(subShape: NonNullable<GppResolution["stages"][number]["subShape"]>): GppResolution {
-  return { shapeElementId: "shape:drc-e-sub-shape@1.0.0", stages: [{ elementId: "stage:a", stageKey: "a", principal: { kind: "role", ref: "role:shape-owner" }, subShape }] };
+  return { shapeElementId: "shape:drc-pass-sub-shape@1.0.0", stages: [{ elementId: "stage:a", stageKey: "a", principal: { kind: "role", ref: "role:shape-owner" }, subShape }] };
 }
 
 const subShapeRules = (grants: string[], subShape: Parameters<typeof resolution>[0]) =>
@@ -65,9 +65,9 @@ describe("D-10 sub-shape resolution", () => {
   });
 
   it("refuses a cycle in the sub-shape call graph, naming the path, before any widening check", () => {
-    const [finding, ...rest] = subShapeRules([], { ...child, grants: ["tool:anything"], tools: [], cycle: ["drc-e-sub-shape@1.0.0", "child@1.0.0", "drc-e-sub-shape@1.0.0"] });
+    const [finding, ...rest] = subShapeRules([], { ...child, grants: ["tool:anything"], tools: [], cycle: ["drc-pass-sub-shape@1.0.0", "child@1.0.0", "drc-pass-sub-shape@1.0.0"] });
     expect(rest).toEqual([]);
     expect(finding?.rule).toBe("D-10");
-    expect(finding?.message).toContain("drc-e-sub-shape@1.0.0 -> child@1.0.0 -> drc-e-sub-shape@1.0.0");
+    expect(finding?.message).toContain("drc-pass-sub-shape@1.0.0 -> child@1.0.0 -> drc-pass-sub-shape@1.0.0");
   });
 });

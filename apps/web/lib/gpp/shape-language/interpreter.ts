@@ -75,7 +75,10 @@
 // after every event. The stage-deadline flag is ON since PR-3c-4: rule 8's
 // `deadline` event changes nothing, and drive-parity-deadline.test.ts proves
 // the drive's deadline pass never changes its marking either and raises one
-// notice per stage pass. Sub-shape stays off.
+// notice per stage pass. The sub-shape flag is ON since PR-3c-5: rule 9's
+// `child-stop` event is matched by the drive reading the child room's own
+// drive snapshot, and drive-parity-sub-shape.test.ts proves it after every
+// event. No construct is off.
 //
 // Flow references. An edge endpoint (and `gate.onRefuse`) names a stage key, a
 // flow node id, a stop element id (`stop:<kind>:<n>`, element-ids.ts), or a

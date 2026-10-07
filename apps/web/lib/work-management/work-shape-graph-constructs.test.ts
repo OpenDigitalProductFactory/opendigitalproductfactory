@@ -29,7 +29,7 @@ import { resolveShapeDocument, type GppResolveSources } from "@/lib/gpp/shape-la
 import { defaultResolveSources } from "@/lib/gpp/shape-language/resolve-sources";
 import { checkSoundness } from "@/lib/gpp/shape-language/soundness";
 
-import { DEADLINE_FIXTURE, PARALLEL_FIXTURE } from "./__fixtures__/graph-shape-fixtures";
+import { DEADLINE_FIXTURE, PARALLEL_FIXTURE, SUB_SHAPE_FIXTURE } from "./__fixtures__/graph-shape-fixtures";
 import { usesGraphConstructs } from "./drive-marking";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 import { listWorkShapes, type WorkShapeDefinition } from "./work-shapes";
@@ -150,5 +150,11 @@ describe("the guard refuses a graph shape injected into the registry", () => {
     expect(problems).not.toContain(`${ref(PARALLEL_FIXTURE)}: E-NOT-EXECUTABLE/parallel-split-join node:p`);
     expect(problems).toContain(`${ref(DEADLINE_FIXTURE)}: not on KNOWN_GRAPH_SHAPES`);
     expect(problems).not.toContain(`${ref(DEADLINE_FIXTURE)}: E-NOT-EXECUTABLE/stage-deadline stage:b`);
+  }, 120_000);
+
+  it("a hand-declared sub-shape is held to D-10 (PR-3c-5): an unregistered child ref is refused even with the flag on", async () => {
+    const problems = await guardProblems([SUB_SHAPE_FIXTURE], { allowList: [{ ref: ref(SUB_SHAPE_FIXTURE), backlogItem: "BI-8875C9DF" }] });
+    expect(problems).toContain(`${ref(SUB_SHAPE_FIXTURE)}: D-10 stage:b`);
+    expect(problems.some((problem) => problem.includes("E-NOT-EXECUTABLE"))).toBe(false);
   }, 120_000);
 });

@@ -467,20 +467,13 @@ describe("resolveDrivePlan: the Phase 3c graph path", () => {
     expect(Object.hasOwn(plan, "marking")).toBe(false);
   });
 
-  it("AC-3C-FAILCLOSED: a graph shape using a disabled construct pauses with construct_not_executable, naming it, and keeps its stage", () => {
-    // Parallel split/join (PR-3c-2), rework edges with refuse routes (PR-3c-3) and stage deadlines (PR-3c-4) are
-    // executable (their cases are below); sub-shape stays off.
-    for (const [shape, construct, elementId] of [
-      [SUB_SHAPE_FIXTURE, "sub-shape", "stage:b"],
-    ] as const) {
+  it("AC-3C-FAILCLOSED: no Phase 3c fixture pauses construct_not_executable now that every flag is on (PR-3c-5)", () => {
+    // The kill switch (a flag set back to false pauses the room, naming the construct, keeping its stage and marking)
+    // is proved with a test-only flag table in drive-marking-durable.test.ts and the runner suites
+    // (workroom-drive-rework, -deadline and -children tests).
+    for (const shape of [DEADLINE_FIXTURE, SUB_SHAPE_FIXTURE, PARALLEL_FIXTURE]) {
       const plan = resolveDrivePlan(graphInput(contract(shape), { currentStageKey: "a", receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }] }));
-      expect(plan.action, shape.key).toBe("pause");
-      expect(plan.reason, shape.key).toBe("construct_not_executable");
-      expect(plan.stageKey, shape.key).toBe("a");
-      expect(plan.taskId).toBeNull();
-      expect(plan.ledger.join("\n"), shape.key).toContain(`construct_not_executable: ${construct} at ${elementId}`);
-      // Absent: applyDrivePlan carries the stored marking forward unchanged.
-      expect(Object.hasOwn(plan, "marking"), shape.key).toBe(false);
+      expect(plan.reason, shape.key).not.toBe("construct_not_executable");
     }
   });
 

@@ -66,9 +66,11 @@ export type GppConstruct = (typeof GPP_CONSTRUCTS)[number];
  * | parallel-split-join          | yes        | PR-3c-2 (drive-parity-parallel.test.ts)        |
  * | rework-edge (incl. onRefuse) | yes        | PR-3c-3 (drive-parity-rework.test.ts)          |
  * | stage-deadline               | yes        | PR-3c-4 (drive-parity-deadline.test.ts)        |
- * | sub-shape                    | no         | PR-3c-5                                        |
+ * | sub-shape                    | yes        | PR-3c-5 (drive-parity-sub-shape.test.ts)       |
  *
- * Every other construct has been executable since Phase 3b.
+ * Every other construct has been executable since Phase 3b. Since PR-3c-5 no
+ * construct is off: setting one back to false is the kill switch (§5 of the
+ * Phase 3c design), never a second runtime flag.
  */
 export const CONSTRUCT_EXECUTABLE: Readonly<Record<GppConstruct, boolean>> = Object.freeze({
   trigger: true,
@@ -85,6 +87,6 @@ export const CONSTRUCT_EXECUTABLE: Readonly<Record<GppConstruct, boolean>> = Obj
   "stage-deadline": true,
   "parallel-split-join": true,
   "rework-edge": true,
-  "sub-shape": false,
+  "sub-shape": true,
   "environment-boundary": true,
 });
