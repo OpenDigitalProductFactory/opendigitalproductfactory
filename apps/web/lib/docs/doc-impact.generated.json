@@ -587,6 +587,9 @@
       "docs/architecture/contributor-procedure-runbook.md",
       "docs/professions/data-architect/wiki/strongly-typed-string-enums.md"
     ],
+    "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -3213,6 +3216,7 @@
       "scripts/installer/install-release-assets.mjs"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
+      "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts",
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
       "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
       "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
