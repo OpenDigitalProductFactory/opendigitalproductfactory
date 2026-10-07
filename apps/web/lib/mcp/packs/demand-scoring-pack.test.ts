@@ -4,6 +4,9 @@ const db = vi.hoisted(() => ({
   platformDevConfigUpsert: vi.fn(),
   platformDevConfigFindUnique: vi.fn(),
   featureBuildCount: vi.fn(),
+  backlogItemFindUnique: vi.fn(),
+  backlogItemUpdate: vi.fn(),
+  activityCreate: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -14,10 +17,21 @@ vi.mock("@dpf/db", () => ({
     featureBuild: {
       count: (...a: unknown[]) => db.featureBuildCount(...a),
     },
+    backlogItem: {
+      findUnique: (...a: unknown[]) => db.backlogItemFindUnique(...a),
+      update: (...a: unknown[]) => db.backlogItemUpdate(...a),
+    },
+    backlogItemActivity: {
+      create: (...a: unknown[]) => db.activityCreate(...a),
+    },
+    $transaction: async (ops: unknown[]) => Promise.all(ops),
   },
 }));
+vi.mock("@/lib/product-management/product-management-playbook-refresh", () => ({
+  queueProductManagementPlaybookRefreshForBacklogItem: async () => undefined,
+}));
 
-import { demandScoringPack } from "./demand-scoring-pack";
+import { demandScoringPack, stampValueInputSource } from "./demand-scoring-pack";
 import { sandboxPoolSize } from "@/lib/build/wip-cap";
 
 const setBudget = demandScoringPack.handlers["set_backlog_delivery_budget"]!;
@@ -162,5 +176,62 @@ describe("evidence-backed demand activation tools", () => {
       (d) => d.name === "score_demand_item",
     );
     expect(score?.inputSchema.properties).not.toHaveProperty("demandStage");
+  });
+});
+
+describe("score_demand_item value-input provenance (BI-00C68162)", () => {
+  const score = demandScoringPack.handlers["score_demand_item"]!;
+  const item = {
+    id: "row-1",
+    itemId: "BI-1",
+    demandStage: null,
+    investmentBucket: null,
+    workType: "feature",
+    reach: null,
+    impact: 1,
+    confidence: 0.5,
+    businessValue: null,
+    timeCriticality: null,
+    riskOpportunity: null,
+    jobSize: null,
+    occurrenceCount: 1,
+    effortSize: "medium",
+    estimateAiJobSize: 3,
+    estimateHumanJobSize: null,
+    estimateAgreed: null,
+    demandInputSource: "ai",
+  };
+
+  beforeEach(() => {
+    db.platformDevConfigFindUnique.mockResolvedValue(null);
+    db.backlogItemFindUnique.mockResolvedValue(item);
+    db.backlogItemUpdate.mockImplementation(async (a: unknown) => a);
+    db.activityCreate.mockImplementation(async (a: unknown) => a);
+  });
+
+  it("a person overriding an agent-proposed score marks the inputs human (the steward then never re-proposes)", async () => {
+    const result = await score({ itemId: "BI-1", impact: 3, confidence: 1 }, "user-owner", undefined);
+    expect(result.success).toBe(true);
+    const data = (db.backlogItemUpdate.mock.calls[0]![0] as { data: Record<string, unknown> }).data;
+    expect(data).toMatchObject({ impact: 3, confidence: 1, demandInputSource: "human", demandInputById: "user-owner" });
+    const payload = (db.activityCreate.mock.calls[0]![0] as { data: { payload: Record<string, unknown> } }).data.payload;
+    expect(payload.inputSource).toBe("human");
+  });
+
+  it("an agent supplying inputs stays attributed to the agent", async () => {
+    await score({ itemId: "BI-1", impact: 2 }, "user-1", { agentId: "AGT-WS-PORTFOLIO" });
+    const data = (db.backlogItemUpdate.mock.calls[0]![0] as { data: Record<string, unknown> }).data;
+    expect(data).toMatchObject({ demandInputSource: "ai", demandInputById: "AGT-WS-PORTFOLIO" });
+  });
+
+  it("a write with no value inputs leaves provenance alone", async () => {
+    await score({ itemId: "BI-1", jobSize: 5 }, "user-owner", undefined);
+    const data = (db.backlogItemUpdate.mock.calls[0]![0] as { data: Record<string, unknown> }).data;
+    expect(data).not.toHaveProperty("demandInputSource");
+  });
+
+  it("stampValueInputSource returns null when no value input is supplied", () => {
+    expect(stampValueInputSource({ jobSize: 3 }, { userId: "u" })).toBeNull();
+    expect(stampValueInputSource({ reach: 3 }, { userId: "u" })?.demandInputSource).toBe("human");
   });
 });

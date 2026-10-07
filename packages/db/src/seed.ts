@@ -81,6 +81,7 @@ import { ensureDataModelMirrorScheduledTask } from "./seed-data-model-mirror.js"
 import { ensureBookkeepingCycleScheduledTask } from "./seed-bookkeeping-cycle.js";
 import { ensureDecisionEngineReviewScheduledTask } from "./seed-decision-engine-review.js";
 import { ensureAcceptanceSweepScheduledTask } from "./seed-acceptance-sweep.js";
+import { ensureDemandScoringStewardScheduledTask } from "./seed-demand-scoring-steward.js";
 import { ensureSysmlProjectionScheduledTask } from "./seed-sysml-projection.js";
 import { ensureSelfOptimizationSweepScheduledTask } from "./seed-self-optimization-sweep.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
@@ -2571,6 +2572,7 @@ async function main(): Promise<void> {
   await step("bookkeepingCycleScheduledTask", () => ensureBookkeepingCycleScheduledTask(prisma));
   await step("decisionEngineReviewScheduledTask", () => ensureDecisionEngineReviewScheduledTask(prisma));
   await step("acceptanceSweepScheduledTask", () => ensureAcceptanceSweepScheduledTask(prisma));
+  await step("demandScoringStewardScheduledTask", () => ensureDemandScoringStewardScheduledTask(prisma));
   await step("sysmlProjectionScheduledTask", () => ensureSysmlProjectionScheduledTask(prisma));
   await step("selfOptimizationSweepScheduledTask", () => ensureSelfOptimizationSweepScheduledTask(prisma));
   await step("hiveScoutScheduledTask", () => ensureHiveScoutScheduledTask(prisma));
