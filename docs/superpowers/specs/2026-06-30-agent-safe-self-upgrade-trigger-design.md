@@ -5,6 +5,16 @@ Status: Approved for implementation
 Backlog: BI-F5F0AC1D
 Work Capsule: WC-793D9EDA
 
+> **Amended 2026-10-06 (BI-2128872C, operator decision "nightly window only").**
+> An agent request outside the window is no longer answered with
+> `human_override_required`; it is deferred to the next window
+> (`status: "deferred_to_window"`, with `runAt`) and the scheduled gate honours
+> it there. `human_override_required` remains only for an install with no
+> computable window. A browser session signed in as the automation persona is
+> treated as an agent. An operator's out-of-window "Upgrade now" records
+> `+outside-window` on the run trigger. The outside-window contract below is
+> superseded by `apps/web/lib/self-upgrade/upgrade-timing.ts`.
+
 ## Problem
 
 Post-merge verification depends on the live portal at `localhost:3000` serving the merged code. The governed path for advancing that portal already exists: `/ops/self-upgrade` creates a `SelfUpgradeRun`, dispatches `ops/self-upgrade.run`, and the runner performs activity precheck, quiescence, recovery point creation, source preparation, promoter swap, health verification, and cooldown handling.
