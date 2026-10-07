@@ -15,6 +15,18 @@ status: active
 - **Source of truth for shapes:** `WorkShapeDefinition` (`work-shapes.ts`) plus `WORK_SHAPE_PRIOR_VERSIONS`. The signature reads them and never declares lanes. Lanes come from `accountablePrincipalRef`.
 - **Decision:** extend the existing modules. Nothing new is created beyond the two pure modules the spec names. There is no schema, route or UI change.
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: BI-2A3C63FA
+- Receipt: blocked-by: the coverage receipt binds this plan's immutable blob at a pushed commit, and this branch cannot be pushed until the local-CI gate passes; it is minted against the pushed blob immediately after
+- Rationale: The classifier and the signature are two pure modules with no consumer until F2/F3; each is too small to ship as its own PR, and neither changes behaviour, so splitting them adds a review cycle and no independent value.
+- Dependencies: BI-3ACFD254 (merged, PR #6013)
+
+| Deliverable | Live BI | Requirements | Contracts | Flows | Verification | Independently shippable |
+|---|---|---|---|---|---|---|
+| Flow-state classifier and shape signature | BI-2A3C63FA | spec §4.1, §4.2, §5.1, §5.3 | `WORKROOM_FLOW_STATES`, `classifyDriveSegment`, `shapeSignature` | drive row → flow state; shape definition → one line | AC-F1-1, AC-F1-2, AC-F1-3 | Yes |
+
 ## Deliverable (atomic)
 
 | File | What |
