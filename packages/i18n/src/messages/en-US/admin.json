@@ -41,6 +41,13 @@
     "heading": "Let the acceptance sweep close finished work",
     "on": "On",
     "off": "Off",
+    "summary": {
+      "off": "The sweep closes nothing.",
+      "on": "Allowed by {$by} on",
+      "stopped": "Stopped by {$by} on",
+      "recordProblem": "The saved setting cannot be used, so the sweep closes nothing.",
+      "lastClosed": "Last sweep closed {$closed}."
+    },
     "intro": "Each morning the sweep checks work waiting for acceptance. When this is on, it closes the items that already pass every completion check, and nothing that needs a decision.",
     "recordProblem": "The saved setting is incomplete or for something else, so the sweep closes nothing. Allow it again to fix it.",
     "allowedBy": "Allowed by",
