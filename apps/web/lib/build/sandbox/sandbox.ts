@@ -227,9 +227,14 @@ export function buildSandboxRootScriptsCopyCommand(
  */
 export function buildSandboxDevServerStopCommand(): string {
   return [
-    "pkill -f 'next dev' 2>/dev/null || true",
-    "pkill -f next-server 2>/dev/null || true",
-    "pkill -f 'filter web dev' 2>/dev/null || true",
+    // Bracket patterns: `pkill -f` matches full command lines, and the `sh -c`
+    // running this command contains each pattern literally. A plain pattern
+    // kills that shell (SIGTERM, exit 143) before the cleanup that follows it
+    // runs (FB-2F24555E, 2026-10-07). `[n]ext dev` still matches `next dev`
+    // but not its own text.
+    "pkill -f '[n]ext dev' 2>/dev/null || true",
+    "pkill -f '[n]ext-server' 2>/dev/null || true",
+    "pkill -f '[f]ilter web dev' 2>/dev/null || true",
     "sleep 1",
     "true",
   ].join("; ");
