@@ -391,6 +391,21 @@ separate deadline terminates the child tree before that window expires if no
 successful renewal advances it. MCP requests have their own bounded transport
 deadline, so a hung heartbeat cannot outlive the lease silently.
 
+**Prerequisite failures remain retryable.** A runner prerequisite failure
+(exit 8, including a required base fetch that cannot reach the network) is
+infrastructure evidence. The durable resumer retries the same pinned request,
+with exponential backoff and equal jitter capped at 90 seconds. It stops starting
+attempts at the wait deadline; an already-running attempt remains governed by its
+own execution and lease-authority bounds. A product failure or cancellation stops
+resumption. This does not establish host-worker single execution or outage fairness.
+
+**Cleanup and legacy process identity.** Concurrent release callers share one
+request. Only confirmed success completes cleanup; a failed call stays retryable.
+Legacy admission checks the invoked Node script or Docker build context and follows
+its descendants. Merely naming a runner in a shell payload or an unrelated command
+argument does not establish a live mutator. POSIX process-list text can lose argument
+boundaries; exact argv, when available, takes precedence.
+
 **The heartbeat is protected from the gate's own work.** A renewal timer only
 helps if the process is free to run it, and for a period it was not: the
 in-run descendant scan used a synchronous `ps` on a fixed interval, so on a
