@@ -391,6 +391,8 @@ export async function executeAutonomousAgenticLoop(input: {
   modelRequirements?: Record<string, unknown>;
   apiTokenId?: string | null;
   tokenScope?: "read" | "write" | "admin";
+  /** Grant scopes of the submitting MCP token (BI-F8C661D0). */
+  tokenGrantScopes?: string[];
   /**
    * Governed Hermes learning Slice 1: when the user message invokes a specific
    * coworker skill (via the canonical `Use the <id> skill.` marker), the
@@ -542,6 +544,7 @@ export async function executeAutonomousAgenticLoop(input: {
         taskRunId: input.taskRunId,
         apiTokenId: input.apiTokenId,
         tokenScope: input.tokenScope,
+        tokenGrantScopes: input.tokenGrantScopes,
         taskType: input.taskType,
         effortWarrant: input.effortWarrant,
         terminalToolPolicy: input.terminalToolPolicy,
