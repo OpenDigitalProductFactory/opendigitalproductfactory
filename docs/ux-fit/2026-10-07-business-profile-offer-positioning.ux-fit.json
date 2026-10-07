@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "decidedOption": "collapsed-section-in-business-profile-form",
+  "decisionInteractionId": "DI-2AB8ACE3FA97",
+  "scope": {
+    "files": [
+      "apps/web/components/admin/OfferPositioningFields.tsx",
+      "apps/web/components/admin/BusinessContextForm.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "collapsed-section-in-business-profile-form",
+      "new-offer-settings-page",
+      "marketing-coworker-writes-it"
+    ],
+    "recordedVia": "principle_decide (callingPopulation: external_coding_agent, decisionDomain: platform-development, consumerContexts: [ui], stakes: routine)",
+    "composite": 5.862,
+    "margin": 2.386,
+    "confidence": "high",
+    "autonomyEligible": true,
+    "topContributors": [
+      "No Hardcoded Colors",
+      "Single Source of Truth"
+    ],
+    "whyNotSweepMeasurement": "The section is collapsed by default behind one link, so a sweep of /storefront/settings/business measures the default view with only that link added. The placement was decided among three options instead.",
+    "notes": "Adds one collapsed link beside the existing market-context link. Opened, it shows two plain text areas (what you offer; who it's for, one group per line) and one Save button."
+  }
+}

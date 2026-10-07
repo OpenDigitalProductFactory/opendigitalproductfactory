@@ -68,6 +68,11 @@ Jurisdiction and payment answers can change which regulatory obligations are
 applicable. The risk-posture choice also affects how much autonomy AI coworkers
 receive for routine work versus when they should request human judgment.
 
+Open **What you offer and who it's for** to state your value proposition and
+the customer groups you serve, one per line. Your marketing coworker plans
+campaigns from these, and anything they name as yours is treated as your own
+product in marketing copy. This section has its own **Save**.
+
 Select **Save** and wait for **Saved successfully**. Reopen the page when the
 change is consequential and confirm the persisted values. Changing business
 context does not replace the Storefront's dedicated tagline, description, or
