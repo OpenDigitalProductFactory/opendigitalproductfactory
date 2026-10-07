@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Demand Management — turn the raw backlog into a governed value-ranked investment funnel
 
 | Field | Value |
