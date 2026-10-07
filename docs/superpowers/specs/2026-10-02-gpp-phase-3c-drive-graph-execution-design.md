@@ -15,7 +15,7 @@ status: draft
 | First consumer | BI-580A970A (EP-MBSE-WORKROOM-SPINE): the R2D reference room, a linear spine that forks at Deploy, one branch per target |
 | Normative owner | [GPP](../../architecture/gated-permissions-process.md) §7, §12.4 |
 | Verified against | `origin/main` at `879b344fa1`. Review revisions re-checked on `origin/main` at `6ce2f7e445`, which adds #5977 (PR-3b-4/5). #5977 touches none of the drive files cited here. Line numbers in `work-shapes.ts`, `decompile.ts`, `emit.ts` and `work-shape-binding-diff.ts` are taken from `6ce2f7e445` wherever that is stated. |
-| Implementation status | PR-3c-1 to PR-3c-3 merged; parallel split/join and rework edges (incl. refuse routes) are executable. Stage deadline (PR-3c-4) and sub-shape (PR-3c-5) are **implemented and parity-proven, but NOT enabled**: their flags stay off until BI-086DC167 is fixed. A graph room's marking resets at every cycle boundary (the tick's UTC date), so a deadline of a day or more never fires and a running child is abandoned at midnight (decision 2026-10-07: a construct whose semantics are known to be wrong for real use is not enabled). |
+| Implementation status | PR-3c-1 to PR-3c-3 merged; parallel split/join and rework edges (incl. refuse routes) are executable. BI-086DC167 made a graph marking one run that crosses calendar boundaries (§4.2), and with it stage deadline (PR-3c-4) is **enabled**. Sub-shape (PR-3c-5) is **implemented and parity-proven, but NOT enabled** until its own change under BI-086DC167 (decision 2026-10-07: a construct whose semantics are known to be wrong for real use is not enabled; the run fix removes that reason). |
 
 ## 1. Problem
 
@@ -606,9 +606,16 @@ For the guard to see what the shape says, the decompiler must carry four things 
   (§6.1 table, "Cancellation region / interrupting boundary event"). A person who sees the notice
   can record a refuse verdict, and that verdict routes. See Q3.
 - **Idempotency.**
-  - The key is `<cycleKey>#<stageKey>#<iteration>`. A rework starts a new iteration with a fresh
-    `enteredAt`, so it can owe a new notice. A new cycle starts a fresh marking (§4.2), so the same
-    stage can be noticed again next cycle. The same cycle and iteration never raise twice.
+  - The key is `<cycleKey>#<stageKey>#<iteration>`, where `cycleKey` is the marking's **run key**
+    (BI-086DC167, §4.2): the calendar key of the day the run started, unchanged while the run is in
+    flight. So a deadline of any length, days included, comes due once, measured from the token's
+    own `enteredAt`, even across UTC midnight. A rework starts a new iteration with a fresh
+    `enteredAt`, so it can owe a new notice. A new run starts only after the previous one concluded
+    (§4.2), so the same stage can be noticed again in the next run. The same run and iteration never
+    raise twice.
+  - Until BI-086DC167 the marking was discarded at every UTC midnight, so a deadline of a day or
+    more never came due, and the flag was held off (decision 2026-10-07). It is on since
+    BI-086DC167, with `drive-parity-deadline.test.ts` and the runner suites on two-day deadlines.
   - Notification is **at least once**. The notice is sent on the tick *after* the snapshot carrying
     the key commits under the existing compare-and-set (`workroom-drive.ts:671-681`).
     `notifiedAt` is then written on the next persist. A failed send leaves `notifiedAt` null and
@@ -716,6 +723,7 @@ A sub-shape stage runs its child as a **separate Workroom**, pinned to the exact
 | AC-3C-PARALLEL-PARITY | OBJ-3C-MARKING, OBJ-3C-PARITY | Over seeded event sequences on the parallel fixtures, including a four-branch fork, the drive's marked stages and stop equal the reference interpreter's after every prefix, and the parallel-split-join flag is enabled only in that change. |
 | AC-3C-REWORK-PARITY | OBJ-3C-MARKING, OBJ-3C-PARITY, OBJ-3C-ACCOUNTABLE | Over seeded sequences of receipts and gate verdicts, the drive matches the interpreter on refuse routes to earlier stages and to stops, on the bounded counter reaching the budget stop, on a refuse whose route is exhausted with no budget stop keeping the token, on shadow gates, and on defer holding a refuse-route stage (DI-0D9DFB0FC0EF); the rework-edge flag is enabled only in that change. |
 | AC-3C-DEADLINE-PARITY | OBJ-3C-MARKING, OBJ-3C-PARITY, OBJ-3C-ACCOUNTABLE | Deadline events never change the drive's or the interpreter's marking, the drive raises exactly one deadline notice per stage iteration and retries an unsent notice, and the stage-deadline flag is enabled only in that change. |
+| AC-DEADLINE-MULTIDAY | OBJ-3C-MARKING, OBJ-3C-ACCOUNTABLE | A 48-hour stage deadline is raised once, at 48 hours, and notified once, across the calendar boundaries it spans (BI-086DC167; `workroom-drive-cross-cycle.test.ts`); the stage-deadline flag is enabled only in that change. |
 | AC-3C-SUBSHAPE-PARITY | OBJ-3C-MARKING, OBJ-3C-PARITY, OBJ-3C-CONTAINMENT | A sub-shape stage creates exactly one contained child room per cycle and iteration pinned to the declared version, removes the containment row when the child completes or is abandoned, a child success advances the parent exactly as a completing receipt does in the interpreter, a child failure or budget stop holds the parent with attention to its owner, and the sub-shape flag is enabled only in that change. |
 | AC-3C-SUBSHAPE-NO-WIDEN | OBJ-3C-CONTAINMENT | The compiler refuses a document whose sub-shape grants or stage tools exceed the parent's grants (D-9), or whose sub-shape reference does not resolve or forms a cycle (D-10). |
 | AC-3C-FAILCLOSED | OBJ-3C-FAILCLOSED | A registry shape that uses a construct whose executable flag is off makes the drive pause with construct_not_executable naming the construct, and the registry guard test fails for any graph shape that is unsound, not executable or not on the allow list. |

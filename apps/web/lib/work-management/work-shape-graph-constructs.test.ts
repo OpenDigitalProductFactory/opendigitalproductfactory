@@ -121,11 +121,12 @@ describe("the guard refuses a graph shape injected into the registry", () => {
       stages: shape.stages.map((stage, index) => (index === 0 ? { ...stage, deadline: { afterDays: 1, description: "One day." } } : stage)),
     };
     const allowList = [{ ref: ref(shape), backlogItem: "BI-8875C9DF" }];
-    // Stage deadlines are implemented but off until BI-086DC167 (graph markings reset at every cycle boundary).
-    expect(CONSTRUCT_EXECUTABLE["stage-deadline"]).toBe(false);
-    expect(await guardProblems([withDeadline], { allowList })).toEqual([`${ref(shape)}: E-NOT-EXECUTABLE/stage-deadline stage:${shape.stages[0]!.key}`]);
-    // The flag is the only switch: with it on (test-only), the same shape passes.
-    expect(await guardProblems([withDeadline], { allowList, executable: { ...CONSTRUCT_EXECUTABLE, "stage-deadline": true } })).toEqual([]);
+    // Stage deadlines are executable since BI-086DC167: the kill switch (test-only) brings the refusal back.
+    expect(CONSTRUCT_EXECUTABLE["stage-deadline"]).toBe(true);
+    const deadlineOff = { ...CONSTRUCT_EXECUTABLE, "stage-deadline": false };
+    expect(await guardProblems([withDeadline], { allowList, executable: deadlineOff })).toEqual([`${ref(shape)}: E-NOT-EXECUTABLE/stage-deadline stage:${shape.stages[0]!.key}`]);
+    // The flag is the only switch: with it on, the same shape passes.
+    expect(await guardProblems([withDeadline], { allowList })).toEqual([]);
   }, 120_000);
 
   it("an unsound shape is refused even with every flag on and allow-listed", async () => {
@@ -144,11 +145,11 @@ describe("the guard refuses a graph shape injected into the registry", () => {
   it("the Phase 3c fixtures (unknown agent, flags off, not listed) are refused", async () => {
     const problems = await guardProblems([PARALLEL_FIXTURE, DEADLINE_FIXTURE]);
     expect(problems).toContain(`${ref(PARALLEL_FIXTURE)}: not on KNOWN_GRAPH_SHAPES`);
-    // Parallel split/join is executable since PR-3c-2: the parallel fixture is refused for the allow list (and its
-    // unknown agent), never for E-NOT-EXECUTABLE. The deadline flag is off (BI-086DC167).
+    // Parallel split/join (PR-3c-2) and stage deadlines (BI-086DC167) are executable: those fixtures are refused for
+    // the allow list (and their unknown agent), never for E-NOT-EXECUTABLE.
     expect(problems).not.toContain(`${ref(PARALLEL_FIXTURE)}: E-NOT-EXECUTABLE/parallel-split-join node:p`);
     expect(problems).toContain(`${ref(DEADLINE_FIXTURE)}: not on KNOWN_GRAPH_SHAPES`);
-    expect(problems).toContain(`${ref(DEADLINE_FIXTURE)}: E-NOT-EXECUTABLE/stage-deadline stage:b`);
+    expect(problems).not.toContain(`${ref(DEADLINE_FIXTURE)}: E-NOT-EXECUTABLE/stage-deadline stage:b`);
   }, 120_000);
 
   it("a hand-declared sub-shape is held to D-10 (PR-3c-5): an unregistered child ref is refused with the flag off and with it on", async () => {

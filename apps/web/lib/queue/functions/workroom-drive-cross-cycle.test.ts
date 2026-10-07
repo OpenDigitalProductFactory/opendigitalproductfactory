@@ -15,9 +15,9 @@
 //
 // Each case drives the real runner (runWorkroomDriveJob) through the same
 // persist merge the transaction uses. The executable-construct table is a
-// mutable copy with stage-deadline and sub-shape switched on (their real flags
-// stay off until this item is fixed); parallel-split-join and rework-edge are
-// already on. The fixtures are not registered (plan constraint 7), so the
+// mutable copy with stage-deadline and sub-shape switched on (the cases do not
+// depend on when each real flag was turned on); parallel-split-join and
+// rework-edge are already on. The fixtures are not registered (plan constraint 7), so the
 // shape-claim resolver is overridden for their keys only.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";

@@ -14,13 +14,14 @@
 // construct whose Exec flag is off (S-3's unpaired split) also carries
 // E-NOT-EXECUTABLE for it. So each fixture is checked twice: with every flag
 // on (test-only override) it yields exactly its finding; with the real flags
-// it yields its finding plus nothing but E-NOT-EXECUTABLE. The two
-// E-NOT-EXECUTABLE fixtures are the converse: their finding exists only under
-// the real flags. Parallel split/join became executable in Phase 3c PR-3c-2
-// and rework edges with refuse routes in PR-3c-3 (pass-parallel-split-join,
-// pass-rework-edge, pass-refuse-edge). Stage deadline (PR-3c-4) and sub-shape
-// (PR-3c-5) are implemented but not enabled until BI-086DC167, so
-// e-not-executable-stage-deadline and e-not-executable-sub-shape remain.
+// it yields its finding plus nothing but E-NOT-EXECUTABLE. The
+// E-NOT-EXECUTABLE fixture is the converse: its finding exists only under the
+// real flags. Parallel split/join became executable in Phase 3c PR-3c-2,
+// rework edges with refuse routes in PR-3c-3, and stage deadlines with
+// BI-086DC167 (pass-parallel-split-join, pass-rework-edge, pass-refuse-edge,
+// pass-stage-deadline). Sub-shape (PR-3c-5) is implemented but not enabled
+// until its own change under BI-086DC167, so e-not-executable-sub-shape
+// remains.
 //
 // C-5 appears on every compile as `not-evaluated`, and never as a pass.
 
@@ -92,14 +93,18 @@ describe("the corpus", () => {
     expect(new Set(rules)).toEqual(new Set(COVERED_RULES));
   });
 
-  // GPP Phase 3c: parallel split/join (PR-3c-2) and rework edges with refuse routes (PR-3c-3) are executable, so their
-  // fixtures are passing documents. Stage deadline (PR-3c-4) and sub-shape (PR-3c-5) are implemented and parity-proven
-  // but not enabled until BI-086DC167 (graph markings reset at every cycle boundary), so they keep their fixture.
-  it("has one E-NOT-EXECUTABLE fixture for each of stage deadline and sub-shape", () => {
+  // GPP Phase 3c: parallel split/join (PR-3c-2), rework edges with refuse routes (PR-3c-3) and stage deadlines
+  // (BI-086DC167) are executable, so their fixtures are passing documents. Sub-shape (PR-3c-5) is implemented and
+  // parity-proven but not enabled until its own change under BI-086DC167, so it keeps its fixture.
+  it("has one E-NOT-EXECUTABLE fixture, for sub-shape", () => {
     const notExecutable = VIOLATIONS.filter((name) => EXPECTED[name]?.rule === "E-NOT-EXECUTABLE");
-    expect(PASSING).toEqual(expect.arrayContaining(["pass-parallel-split-join.gpp.json", "pass-rework-edge.gpp.json", "pass-refuse-edge.gpp.json"]));
+    expect(PASSING).toEqual(expect.arrayContaining([
+      "pass-parallel-split-join.gpp.json",
+      "pass-rework-edge.gpp.json",
+      "pass-refuse-edge.gpp.json",
+      "pass-stage-deadline.gpp.json",
+    ]));
     expect(notExecutable.map((name) => [name, EXPECTED[name]?.construct])).toEqual([
-      ["e-not-executable-stage-deadline.gpp.json", "stage-deadline"],
       ["e-not-executable-sub-shape.gpp.json", "sub-shape"],
     ]);
   });

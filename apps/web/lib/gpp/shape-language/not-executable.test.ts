@@ -4,13 +4,13 @@
 // 2026-10-02-gpp-shape-notation-compiler-phase-3.md (PR-3b-3).
 //
 // 1. The executable subset. Parallel split/join is ON since GPP Phase 3c
-//    PR-3c-2 (BI-8875C9DF) and rework edge (incl. gate.onRefuse) since
-//    PR-3c-3, each flipped with its drive-versus-interpreter parity test.
-//    Stage deadline (PR-3c-4) and sub-shape (PR-3c-5) are implemented and
-//    parity-proven (drive-parity-deadline.test.ts, drive-parity-sub-shape.test.ts)
-//    but OFF until BI-086DC167 (graph markings reset at every cycle boundary).
-// 2. AC-NOT-EXECUTABLE: each of the two schema-valid fixtures for an off
-//    construct is refused with exactly one E-NOT-EXECUTABLE naming its
+//    PR-3c-2 (BI-8875C9DF), rework edge (incl. gate.onRefuse) since PR-3c-3
+//    and stage deadline since BI-086DC167 (implemented in PR-3c-4), each
+//    flipped with its drive-versus-interpreter parity test. Sub-shape
+//    (PR-3c-5) is implemented and parity-proven (drive-parity-sub-shape.test.ts)
+//    but OFF until its own change under BI-086DC167.
+// 2. AC-NOT-EXECUTABLE: the schema-valid fixture for the off construct is
+//    refused with exactly one E-NOT-EXECUTABLE naming its
 //    construct and element id; turning only its flag on (test-only) removes
 //    only that finding and leaves nothing blocking, and turning any other flag
 //    on changes nothing: the flag is the only switch.
@@ -43,11 +43,11 @@ const ON_CASES: ReadonlyArray<{ file: string; construct: GppConstruct; elementId
   { file: "pass-parallel-split-join.gpp.json", construct: "parallel-split-join", elementId: "node:p" },
   { file: "pass-rework-edge.gpp.json", construct: "rework-edge", elementId: "edge:b->a" },
   { file: "pass-refuse-edge.gpp.json", construct: "rework-edge", elementId: "gate:a" },
+  { file: "pass-stage-deadline.gpp.json", construct: "stage-deadline", elementId: "stage:a" },
 ];
 
-/** The fixtures of the constructs that are implemented but OFF (BI-086DC167). */
+/** The fixture of the construct that is implemented but OFF (sub-shape, until its own change under BI-086DC167). */
 const OFF_CASES: ReadonlyArray<{ file: string; construct: GppConstruct; elementId: string }> = [
-  { file: "e-not-executable-stage-deadline.gpp.json", construct: "stage-deadline", elementId: "stage:a" },
   { file: "e-not-executable-sub-shape.gpp.json", construct: "sub-shape", elementId: "stage:a" },
 ];
 
@@ -67,10 +67,9 @@ const withFlag = (construct: GppConstruct, value: boolean) => ({ ...CONSTRUCT_EX
 const key = (finding: GppDiagnostic) => JSON.stringify(finding);
 
 describe("the executable subset", () => {
-  it("is the spec §5 Exec column with parallel split/join (PR-3c-2) and rework edge (PR-3c-3) on; stage deadline and sub-shape are off pending BI-086DC167", () => {
-    expect(GPP_CONSTRUCTS.filter((construct) => !CONSTRUCT_EXECUTABLE[construct])).toEqual(["stage-deadline", "sub-shape"]);
-    expect(CONSTRUCT_EXECUTABLE["parallel-split-join"]).toBe(true);
-    expect(CONSTRUCT_EXECUTABLE["rework-edge"]).toBe(true);
+  it("is the spec §5 Exec column with parallel split/join (PR-3c-2), rework edge (PR-3c-3) and stage deadline (BI-086DC167) on; sub-shape is off", () => {
+    expect(GPP_CONSTRUCTS.filter((construct) => !CONSTRUCT_EXECUTABLE[construct])).toEqual(["sub-shape"]);
+    for (const construct of ["parallel-split-join", "rework-edge", "stage-deadline"] as const) expect(CONSTRUCT_EXECUTABLE[construct], construct).toBe(true);
     expect(Object.keys(CONSTRUCT_EXECUTABLE).sort()).toEqual([...GPP_CONSTRUCTS].sort());
     expect(Object.isFrozen(CONSTRUCT_EXECUTABLE)).toBe(true);
   });
@@ -107,7 +106,7 @@ describe("AC-NOT-EXECUTABLE: a schema-valid document using a construct that is o
   });
 });
 
-// AC-3C-FLAG-FLIP for PR-3c-2 and PR-3c-3, kept as the kill switch.
+// AC-3C-FLAG-FLIP for PR-3c-2, PR-3c-3 and the stage-deadline flip (BI-086DC167), kept as the kill switch.
 describe("the kill switch: an ON construct's flag set back to false refuses its document", () => {
   it.each(ON_CASES)("$file compiles with no error under the real flags", async ({ file }) => {
     const findings = await compile(file);

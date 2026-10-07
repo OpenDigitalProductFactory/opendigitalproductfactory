@@ -14,7 +14,7 @@
 //   document). A receipt or stop event is one drive tick: the token step
 //   (stepDriveMarking) and then the deadline pass (raiseDueDeadlines), as the
 //   planner composes them. A deadline event is a tick at which only time
-//   passed (the clock jumps past the six-hour deadline): the drive runs its
+//   passed (the clock jumps past the two-day deadline): the drive runs its
 //   deadline pass, and the interpreter gets one `deadline` event per notice the
 //   pass raised (rule 8: it records nothing and fires nothing). The step is
 //   not run on it, keeping the one-firing-per-event alignment the other
@@ -45,7 +45,7 @@ import {
 } from "@/lib/gpp/shape-language/interpreter";
 import { checkSoundness } from "@/lib/gpp/shape-language/soundness";
 
-import { DEADLINE_PARITY_FIXTURES, SIX_HOURS } from "./__fixtures__/graph-shapes/deadline";
+import { DEADLINE_PARITY_FIXTURES, TWO_DAYS } from "./__fixtures__/graph-shapes/deadline";
 import { REWORK_1 } from "./__fixtures__/graph-shapes/rework";
 import { DAY_MS, deadlineKey, raiseDueDeadlines, unnotifiedDeadlines, withDeadlinesNotified } from "./drive-deadlines";
 import { markedStageKeys, startDriveMarking, stepDriveMarking, type DriveMarking, type DriveMarkingStopped } from "./drive-marking";
@@ -58,7 +58,7 @@ const BASE_SEED = 0x8875c9df + 9_000_000;
 const T0 = new Date("2026-03-02T00:00:00.000Z");
 const CYCLE = "parity:2026-03-02";
 const TICK_MS = 15 * 60_000;
-const DEADLINE_MS = SIX_HOURS.afterDays * DAY_MS;
+const DEADLINE_MS = TWO_DAYS.afterDays * DAY_MS;
 
 /** mulberry32, as in interpreter-parity.test.ts. */
 function mulberry32(seed: number): () => number {
@@ -238,8 +238,8 @@ describe("AC-3C-DEADLINE-PARITY: deadlines never change the marking; one notice 
   );
 });
 
-describe("deadline keys across a rework and a new cycle", () => {
-  const shape: WorkShapeDefinition = { ...REWORK_1, key: "graph-fixture-rework-1-deadlines", stages: REWORK_1.stages.map((stage) => ({ ...stage, deadline: SIX_HOURS })) };
+describe("deadline keys across a rework and a new run", () => {
+  const shape: WorkShapeDefinition = { ...REWORK_1, key: "graph-fixture-rework-1-deadlines", stages: REWORK_1.stages.map((stage) => ({ ...stage, deadline: TWO_DAYS })) };
   const done = (stageKey: string, iteration?: number) => ({ stageKey, kind: "stage-evidence-recorded", ...(iteration ? { iteration } : {}) });
 
   it("a rework starts a new iteration with a fresh enteredAt, which owes a new notice under a new key", () => {
@@ -260,7 +260,8 @@ describe("deadline keys across a rework and a new cycle", () => {
     expect(Object.keys(later.marking.deadlines).sort()).toEqual([`${CYCLE}#b#0`, `${CYCLE}#b#1`]);
   });
 
-  it("the next cycle's fresh marking can notice the same stage again", () => {
+  // A new run starts only after the previous one concluded (BI-086DC167); its fresh marking carries its own run key.
+  it("the next run's fresh marking can notice the same stage again, under its own run key", () => {
     const next = startDriveMarking(shape, "parity:2026-03-03", new Date(T0.getTime() + DAY_MS));
     const raised = raiseDueDeadlines(shape, next, new Date(T0.getTime() + DAY_MS + DEADLINE_MS)).raised;
     expect(raised.map((due) => due.key)).toEqual(["parity:2026-03-03#a#0"]);

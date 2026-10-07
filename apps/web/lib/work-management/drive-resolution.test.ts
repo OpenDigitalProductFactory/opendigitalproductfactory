@@ -468,12 +468,11 @@ describe("resolveDrivePlan: the Phase 3c graph path", () => {
   });
 
   it("AC-3C-FAILCLOSED: a graph shape using a disabled construct pauses with construct_not_executable, naming it, and keeps its stage", () => {
-    // Parallel split/join (PR-3c-2) and rework edges with refuse routes (PR-3c-3) are executable (their cases are
-    // below). Stage deadline (PR-3c-4) and sub-shape (PR-3c-5) are implemented and parity-proven but off until
-    // BI-086DC167 (graph markings reset at every cycle boundary); their planner cases run under a test-only flag
-    // table in lib/queue/functions/workroom-drive-deadline.test.ts and workroom-drive-children.test.ts.
+    // Parallel split/join (PR-3c-2), rework edges with refuse routes (PR-3c-3) and stage deadlines (BI-086DC167)
+    // are executable. Sub-shape (PR-3c-5) is implemented and parity-proven but off until its own change under
+    // BI-086DC167; its planner cases run under a test-only flag table in
+    // lib/queue/functions/workroom-drive-children.test.ts.
     for (const [shape, construct, elementId] of [
-      [DEADLINE_FIXTURE, "stage-deadline", "stage:b"],
       [SUB_SHAPE_FIXTURE, "sub-shape", "stage:b"],
     ] as const) {
       const plan = resolveDrivePlan(graphInput(contract(shape), { currentStageKey: "a", receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }] }));
@@ -485,6 +484,9 @@ describe("resolveDrivePlan: the Phase 3c graph path", () => {
       // Absent: applyDrivePlan carries the stored marking forward unchanged.
       expect(Object.hasOwn(plan, "marking"), shape.key).toBe(false);
     }
+    // Stage deadlines are executable since BI-086DC167: the deadline fixture plans its stage like its twin.
+    const deadline = resolveDrivePlan(graphInput(contract(DEADLINE_FIXTURE), { currentStageKey: "a", receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }] }));
+    expect(deadline.reason).not.toBe("construct_not_executable");
   });
 
   it("PR-3c-2: with the parallel flag on, the split plans one dispatch per branch, each through the task id fixed on its token", () => {

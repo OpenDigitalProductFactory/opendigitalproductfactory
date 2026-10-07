@@ -8,20 +8,20 @@
 // with zero findings: a deadline is non-interrupting, so it adds no way out
 // of a stage (drive-parity-deadline.test.ts asserts it).
 //
-// Every deadline is six hours (afterDays 0.25). The drive's marking belongs
-// to one cycle, and a shape's cycle is the tick's UTC date
-// (projectWorkShapeCycleBoundary), so only a deadline inside the day can come
-// due before the marking restarts.
+// Every deadline is two days (afterDays 2). Until BI-086DC167 these were six
+// hours, because the drive discarded a graph marking at every UTC midnight so
+// only a deadline inside the day could come due. A marking is now one run that
+// crosses calendar boundaries, so the fixtures use a multi-day deadline.
 
 import type { WorkShapeDefinition, WorkShapeStage } from "../../work-shapes";
 import { SEQUENTIAL_TWIN } from "../graph-shape-fixtures";
 import { PARALLEL_PARITY_FIXTURES } from "./parallel";
 
-export const SIX_HOURS: NonNullable<WorkShapeStage["deadline"]> = { afterDays: 0.25, description: "Six hours." };
+export const TWO_DAYS: NonNullable<WorkShapeStage["deadline"]> = { afterDays: 2, description: "Two days." };
 
 /** The fixture with the same deadline on every stage, under its own key. */
 export function withDeadlines(shape: WorkShapeDefinition): WorkShapeDefinition {
-  return { ...shape, key: `${shape.key}-deadlines`, stages: shape.stages.map((stage) => ({ ...stage, deadline: SIX_HOURS })) };
+  return { ...shape, key: `${shape.key}-deadlines`, stages: shape.stages.map((stage) => ({ ...stage, deadline: TWO_DAYS })) };
 }
 
 function agentStage(key: string): WorkShapeStage {
@@ -38,7 +38,7 @@ function agentStage(key: string): WorkShapeStage {
 export const DEADLINE_SEQ: WorkShapeDefinition = {
   ...SEQUENTIAL_TWIN,
   key: "graph-fixture-deadline-seq",
-  stages: [agentStage("a"), { ...agentStage("b"), deadline: SIX_HOURS }, agentStage("c")],
+  stages: [agentStage("a"), { ...agentStage("b"), deadline: TWO_DAYS }, agentStage("c")],
 };
 
 /** The deadline parity fixtures: the PR-3c-2 parallel fixtures with deadlines on every stage, and deadline-seq. */

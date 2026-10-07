@@ -14,7 +14,7 @@ status: draft
 | Backlog | BI-8875C9DF. First consumer: BI-580A970A (EP-MBSE-WORKROOM-SPINE). |
 | Standard | [GPP](../../architecture/gated-permissions-process.md) §7, §12.4 |
 | Verified against | `origin/main` at `879b344fa1`. Review revisions re-checked at `6ce2f7e445`, which adds #5977 (PR-3b-4/5) and touches none of the drive files cited. |
-| Implementation status | PR-3c-1 to PR-3c-3 merged; parallel split/join and rework edges (incl. refuse routes) are executable. Stage deadline (PR-3c-4) and sub-shape (PR-3c-5) are **implemented and parity-proven, but NOT enabled**: their flags stay off until BI-086DC167 is fixed. A graph room's marking resets at every cycle boundary (the tick's UTC date), so a deadline of a day or more never fires and a running child is abandoned at midnight (decision 2026-10-07: a construct whose semantics are known to be wrong for real use is not enabled). |
+| Implementation status | PR-3c-1 to PR-3c-3 merged; parallel split/join and rework edges (incl. refuse routes) are executable. BI-086DC167 made a graph marking one run that crosses calendar boundaries (design §4.2), and with it stage deadline (PR-3c-4) is **enabled**. Sub-shape (PR-3c-5) is **implemented and parity-proven, but NOT enabled** until its own change under BI-086DC167. |
 
 ## Outcome
 
