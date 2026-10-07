@@ -24,6 +24,7 @@ import {
   appendCompletingWorkroomDriveReceipt,
   isCompletingWorkroomDriveReceipt,
   isCompletingWorkroomDriveReceiptAt,
+  receiptInRun,
 } from "./workroom-drive-receipts";
 
 export type RecordedEvidence = {
@@ -66,10 +67,11 @@ export type StageEvidenceInput = {
    */
   iteration?: number;
   /**
-   * Graph shapes only (BI-086DC167): the run the marking belongs to. When
-   * given, an existing receipt short-circuits only within this run, and the
-   * earned receipt carries it, so the next run never replays it. Omitted, the
-   * function behaves exactly as before.
+   * The run the receipt belongs to: a graph room's marking run (BI-086DC167)
+   * or a sequential room's run (BI-853120EE). When given, an existing receipt
+   * short-circuits only within this run, and the earned receipt carries it,
+   * so the next run never replays it. Omitted, the function behaves exactly
+   * as before.
    */
   runKey?: string;
 };
@@ -122,15 +124,15 @@ export function earnEvidenceReceipts(input: StageEvidenceInput & {
   const iteration = input.iteration;
   const runKey = input.runKey;
   const done = iteration === undefined
-    ? input.existing.some((receipt) => isCompletingWorkroomDriveReceipt(receipt, input.stageKey!))
+    ? input.existing.some((receipt) => isCompletingWorkroomDriveReceipt(receipt, input.stageKey!) && receiptInRun(receipt, runKey))
     : input.existing.some((receipt) => isCompletingWorkroomDriveReceiptAt(receipt, input.stageKey!, iteration, runKey));
   if (done) return input.existing;
   if (!stageHasCompletingEvidence(input)) return input.existing;
-  const result = appendCompletingWorkroomDriveReceipt(
-    input.existing,
-    iteration === undefined
-      ? { stageKey: input.stageKey, kind: STAGE_EVIDENCE_RECEIPT_KIND }
-      : { stageKey: input.stageKey, kind: STAGE_EVIDENCE_RECEIPT_KIND, iteration, ...(runKey !== undefined ? { runKey } : {}) },
-  );
+  const result = appendCompletingWorkroomDriveReceipt(input.existing, {
+    stageKey: input.stageKey,
+    kind: STAGE_EVIDENCE_RECEIPT_KIND,
+    ...(iteration !== undefined ? { iteration } : {}),
+    ...(runKey !== undefined ? { runKey } : {}),
+  });
   return result.ok ? result.data : input.existing;
 }

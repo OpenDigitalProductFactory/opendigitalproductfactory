@@ -239,6 +239,34 @@ export function planPostgresOwnership({
 }
 
 /**
+ * The slot Postgres is gate substrate every worktree on the machine depends on,
+ * so it carries the same restart policy as the primary stack (BI-277ECBDB): a
+ * host or Docker Desktop restart must not silently remove it. `unless-stopped`
+ * still honours a deliberate stop.
+ */
+export const SLOT_POSTGRES_RESTART_POLICY = "unless-stopped";
+
+export function slotPostgresProvisionArgs(postgres) {
+  return [
+    "run", "-d", "--name", postgres.container,
+    "--restart", SLOT_POSTGRES_RESTART_POLICY,
+    "-p", `${postgres.hostPort}:5432`,
+    "-v", `${postgres.volume}:/var/lib/postgresql/data`,
+    "-e", "POSTGRES_USER=dpf", "-e", "POSTGRES_PASSWORD=dpf_dev",
+    "-e", `POSTGRES_DB=${postgres.database}`,
+    "pgvector/pgvector:pg16",
+  ];
+}
+
+/** Reuse brings a container provisioned before the policy existed up to it, then starts it. */
+export function slotPostgresReuseCommands(container) {
+  return [
+    ["update", "--restart", SLOT_POSTGRES_RESTART_POLICY, container],
+    ["start", container],
+  ];
+}
+
+/**
  * Recreate the admitted slot's disposable database before each exact candidate.
  * The container and database identities are derived from the slot manifest; the
  * strict shape check keeps this recovery path away from developer/production DBs.
@@ -302,19 +330,17 @@ async function resolveDatabaseUrl(env, manifest) {
     );
   }
   if (ownershipPlan === "provision") {
-    const run = spawnSync("docker", [
-      "run", "-d", "--name", manifest.postgres.container,
-      "-p", `${manifest.postgres.hostPort}:5432`,
-      "-v", `${manifest.postgres.volume}:/var/lib/postgresql/data`,
-      "-e", "POSTGRES_USER=dpf", "-e", "POSTGRES_PASSWORD=dpf_dev",
-      "-e", `POSTGRES_DB=${manifest.postgres.database}`,
-      "pgvector/pgvector:pg16",
-    ], { encoding: "utf8" });
+    const run = spawnSync("docker", slotPostgresProvisionArgs(manifest.postgres), { encoding: "utf8" });
     if (run.status !== 0) {
       dieUnavailable(`could not provision ${manifest.postgres.container}: ${(run.stderr || run.stdout || "").trim()}`);
     }
   } else {
-    const start = spawnSync("docker", ["start", manifest.postgres.container], { encoding: "utf8" });
+    const [updatePolicy, startContainer] = slotPostgresReuseCommands(manifest.postgres.container);
+    const update = spawnSync("docker", updatePolicy, { encoding: "utf8" });
+    if (update.status !== 0) {
+      dieUnavailable(`could not set the restart policy of ${manifest.postgres.container}: ${(update.stderr || update.stdout || "").trim()}`);
+    }
+    const start = spawnSync("docker", startContainer, { encoding: "utf8" });
     if (start.status !== 0) {
       dieUnavailable(`could not start ${manifest.postgres.container}: ${(start.stderr || start.stdout || "").trim()}`);
     }

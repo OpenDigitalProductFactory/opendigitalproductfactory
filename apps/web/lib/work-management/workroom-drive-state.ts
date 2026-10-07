@@ -58,6 +58,21 @@ export function readStoredWorkroomDriveState(workspaceState: unknown): StoredWor
   };
 }
 
+/**
+ * The run a stored drive snapshot belongs to: a graph room's marking
+ * `cycleKey` (BI-086DC167), else a sequential room's `runKey` (BI-853120EE).
+ * Each is the cycle key of the tick the run started on. Null when the
+ * snapshot carries neither (a room driven before run keys existed, or one
+ * whose shape did not resolve). The one reader for both paths: the persist
+ * merge and the sequential run resolution both read the run through it.
+ */
+export function driveRunKeyOf(drive: unknown): string | null {
+  if (!isRecord(drive)) return null;
+  const marking = isRecord(drive.marking) ? drive.marking : null;
+  if (marking && typeof marking.cycleKey === "string" && marking.cycleKey.length > 0) return marking.cycleKey;
+  return typeof drive.runKey === "string" && drive.runKey.length > 0 ? drive.runKey : null;
+}
+
 export function priorDriveFromStored(stored: StoredWorkroomDriveState): PriorWorkroomDrive | null {
   if (!stored.lastAction) return null;
   return {

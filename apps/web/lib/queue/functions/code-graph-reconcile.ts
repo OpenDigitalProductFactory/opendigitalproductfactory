@@ -108,6 +108,19 @@ export const codeGraphReconcileScheduled = jobs.createFunction(
     });
     if (!enabled) return { skipped: true, reason: "job_disabled_by_operator" };
 
+    // BI-DC2758DE (founder decision on DI-B26D16D64C62): keep the workspace
+    // clone's origin/main current. It is otherwise fetched only when Build
+    // Studio starts a build, so the graph indexed an old main, the merge signal
+    // reported merged work as unmerged, and reviewers could not read recent
+    // artifacts (BI-B61B4FF3). Best-effort: a failed fetch never fails the job.
+    const trunkRefresh = await step.run("refresh-workspace-trunk", async () => {
+      const { getGitRoot } = await import("@/lib/build/code-graph/git-snapshot");
+      const { refreshTrunkRef, trunkRefExists } = await import("@/lib/work-capsules/git-scanner");
+      const root = getGitRoot();
+      if (!(await trunkRefExists(root))) return { status: "skipped" as const, reason: "no-trunk-ref" };
+      return refreshTrunkRef(root);
+    });
+
     try {
       const result = await step.run("reconcile-code-graph-scheduled", async () => {
         const { reconcileCodeGraph } = await import("@/lib/build/code-graph-refresh");
@@ -116,7 +129,7 @@ export const codeGraphReconcileScheduled = jobs.createFunction(
       await step.run("record-job-ok", async () => {
         await recordCodeGraphJob("ok");
       });
-      return result;
+      return { ...result, trunkRefresh };
     } catch (error) {
       await step.run("record-job-error", async () => {
         await recordCodeGraphJob("error", error instanceof Error ? error.message : "Unknown reconcile failure");

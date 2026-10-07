@@ -59,7 +59,7 @@ export async function resolveBacklogDeploymentClosure(args: { itemId: string; wo
   try {
     const { prisma } = await import("@dpf/db");
     const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
-    const { isReachableFromTrunk } = await import("@/lib/work-capsules/git-scanner");
+    const { isReachableFromTrunk, trustedGitArgs } = await import("@/lib/work-capsules/git-scanner");
     // Newest attempt wins: an old merged PR cannot close newly reopened work.
     const room = await prisma.workroom.findFirst({ where: { backlogItemId: args.itemId },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -82,7 +82,8 @@ export async function resolveBacklogDeploymentClosure(args: { itemId: string; wo
       contains: async (repository, ancestor, target) => {
         for (const root of args.roots) {
           try {
-            const { stdout } = await exec("git", ["-C", root, "remote", "get-url", "origin"], { timeout: 5000 });
+            // BI-DC2758DE: the workspace clone is owned by another uid.
+            const { stdout } = await exec("git", trustedGitArgs(root, ["remote", "get-url", "origin"]), { timeout: 5000 });
             const remote = stdout.trim().replace(/\.git$/, "");
             if (remote !== `https://github.com/${repository}` && remote !== `git@github.com:${repository}`) continue;
             const answer = await isReachableFromTrunk(root, ancestor, target);

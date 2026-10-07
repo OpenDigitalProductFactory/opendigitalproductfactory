@@ -208,7 +208,8 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
       reason: "executor_writeback_unavailable",
     });
     expect(secondSnapshot.receipts).toEqual(
-      expect.arrayContaining([{ stageKey: snapshot.stageKey, kind: "blocked" }]),
+      // The blocked receipt belongs to the room's run (BI-853120EE).
+      expect.arrayContaining([{ stageKey: snapshot.stageKey, kind: "blocked", runKey: "obligation-assurance-watch@1.0.0:2026-09-01" }]),
     );
   });
 
@@ -220,10 +221,13 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     });
     await runWorkroomDriveJob(new Date("2026-09-01T00:02:00Z"), { listRooms: async () => [current], effects: fx });
     const snapshot = fx.persist.mock.calls.at(-1)?.[0]?.snapshot as Record<string, unknown>;
-    expect(snapshot.receipts).toEqual([{ stageKey: "sweep", kind: "stage-evidence-recorded" }]);
+    // Earned receipts carry the room's run, and the snapshot names it (BI-853120EE).
+    const run = "obligation-assurance-watch@1.0.0:2026-09-01";
+    expect(snapshot.receipts).toEqual([{ stageKey: "sweep", kind: "stage-evidence-recorded", runKey: run }]);
+    expect(snapshot.runKey).toBe(run);
     expect(snapshot.stageKey).toBe("raise");
     await runWorkroomDriveJob(new Date("2026-09-01T00:03:00Z"), { listRooms: async () => [room({ workspaceState: { workroomDrive: snapshot } })], effects: fx });
-    expect(fx.persist.mock.calls.at(-1)?.[0]?.snapshot.receipts).toEqual(expect.arrayContaining([{ stageKey: "sweep", kind: "stage-evidence-recorded" }]));
+    expect(fx.persist.mock.calls.at(-1)?.[0]?.snapshot.receipts).toEqual(expect.arrayContaining([{ stageKey: "sweep", kind: "stage-evidence-recorded", runKey: run }]));
   });
 
   it("contains delivery notification reconciliation failure after preserving the drive result", async () => {

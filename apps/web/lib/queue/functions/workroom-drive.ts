@@ -41,6 +41,7 @@ import type { DeadlineNoticeInput } from "./workroom-drive-deadlines";
 import { createSubShapeChildEffects, withSubShapeChildren, type SubShapeChildEffects } from "./workroom-drive-children";
 import type { SubShapeChildObservation } from "@/lib/work-management/drive-child-rooms";
 import { earnEvidenceReceipts, type RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
+import { sequentialRunFor } from "@/lib/work-management/drive-sequential-run";
 
 import { gateAtEntry } from "../quiescence-gates";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
@@ -232,8 +233,10 @@ export async function applyDrivePlan(input: {
   plan: DrivePlan;
   now: Date;
   effects: WorkroomDriveEffects;
+  /** Sequential rooms only (BI-853120EE): the run this tick belongs to. Stamped on the snapshot and on a new blocked receipt. */
+  runKey?: string;
 }): Promise<"dispatched" | "attention" | "stopped" | "skipped"> {
-  const { room, plan, now, effects } = input;
+  const { room, plan, now, effects, runKey } = input;
   // Graph shapes only (Phase 3c): marking carry-forward and the marked keys. Null for every sequential room.
   const graph = graphSnapshotFields(plan, room.workspaceState);
   const receipts = graph ? withLatchedBlockedReceipts(plan, room.receipts) : [...room.receipts];
@@ -245,7 +248,7 @@ export async function applyDrivePlan(input: {
       receipt.stageKey === plan.stageKey && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND
     )
   ) {
-    receipts.push({ stageKey: plan.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND });
+    receipts.push({ stageKey: plan.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND, ...(runKey !== undefined ? { runKey } : {}) });
   }
   // BI-12A083B4 — no work stops without a conclusion. Every tick records which
   // of the three legitimate states it reached: the outcome is met, work
@@ -288,6 +291,7 @@ export async function applyDrivePlan(input: {
     taskId: plan.taskId,
     lastRunAt: now.toISOString(),
     lastCycleKey: plan.cycle?.cycleKey ?? null,
+    ...(runKey !== undefined && !graph ? { runKey } : {}),
     receipts,
     budgetUsage: room.budgetUsage,
     stopConditionHits: room.stopConditionHits,
@@ -462,15 +466,19 @@ export async function runWorkroomDriveJob(
   for (const room of rooms) {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
     const stored = readStoredWorkroomDriveState(room.workspaceState);
+    const existing = room.receipts.length > 0 ? room.receipts : stored.receipts;
+    // BI-853120EE: a sequential room's receipts belong to its run; a new run starts with none.
+    const run = sequentialRunFor({ shape, workspaceState: room.workspaceState, now, prior: priorDriveFromStored(stored), receipts: existing });
     const receipts = (earnGraphReceipts({ definition: shape ? readWorkShapeDefinitionContract(shape) : null, workspaceState: room.workspaceState,
-      evidence: room.recordedEvidence ?? [], dispatchedAtByStage: room.stageDispatchedAtByStage, existing: room.receipts.length > 0 ? room.receipts : stored.receipts,
+      evidence: room.recordedEvidence ?? [], dispatchedAtByStage: room.stageDispatchedAtByStage, existing,
     }) ?? earnEvidenceReceipts({
       stageKey: room.currentStageKey ?? stored.currentStageKey,
       declaredKinds: stageEvidenceKinds(shape ? readWorkShapeDefinitionContract(shape) : null, room.currentStageKey ?? stored.currentStageKey),
       evidence: room.recordedEvidence ?? [],
       dispatchedAt: room.stageDispatchedAt ?? null,
-      existing: room.receipts.length > 0 ? room.receipts : stored.receipts,
-    })) as { stageKey: string; kind: string; iteration?: number }[];
+      existing: run?.receipts ?? existing,
+      ...(run ? { runKey: run.runKey } : {}),
+    })) as { stageKey: string; kind: string; iteration?: number; runKey?: string }[];
     const plan = resolveDrivePlan({
       roomId: room.capsuleId,
       definition: shape ? readWorkShapeDefinitionContract(shape) : null,
@@ -503,7 +511,7 @@ export async function runWorkroomDriveJob(
       reason: plan.reason,
       taskId: plan.taskId,
     });
-    const outcome = await applyDrivePlan({ room: { ...room, receipts }, plan, now, effects });
+    const outcome = await applyDrivePlan({ room: { ...room, receipts }, plan, now, effects, ...(run ? { runKey: run.runKey } : {}) });
     if (outcome === "dispatched") dispatched += 1;
     else if (outcome === "attention") attention += 1;
     else if (outcome === "stopped") stopped += 1;

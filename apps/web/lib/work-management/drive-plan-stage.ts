@@ -102,11 +102,21 @@ export function emptyPlan<A extends DriveAction>(
   };
 }
 
-/** The prior tick finished this same cycle (or already slept on it). */
-export function cycleCompleted(prior: PriorWorkroomDrive | null, cycleKey: string): boolean {
-  if (!prior || prior.cycleKey !== cycleKey) return false;
+/**
+ * The prior tick concluded a run: it recorded success, or it already slept on
+ * a concluded run (BI-D10BB58B). Pause, escalate, a conformance stop and a
+ * quiet room do not conclude a run, so a run resumes from them with its
+ * receipts (BI-853120EE).
+ */
+export function runConcluded(prior: PriorWorkroomDrive | null): boolean {
+  if (!prior) return false;
   return (prior.action === "stop" && prior.reason === "success")
     || (prior.action === "do_not_wake" && prior.reason === "cycle_complete");
+}
+
+/** The prior tick finished this same cycle (or already slept on it). */
+export function cycleCompleted(prior: PriorWorkroomDrive | null, cycleKey: string): boolean {
+  return !!prior && prior.cycleKey === cycleKey && runConcluded(prior);
 }
 
 function asShape(
@@ -130,7 +140,10 @@ function asShape(
 }
 
 /** The cycle this tick belongs to: the declared trigger (or the first, or cadence) at `now`. */
-export function projectDriveCycle(input: DriveResolutionInput, definition: WorkShapeDefinitionContract): ProjectedWorkShapeCycle {
+export function projectDriveCycle(
+  input: Pick<DriveResolutionInput, "trigger" | "collaborationShape" | "now">,
+  definition: WorkShapeDefinitionContract,
+): ProjectedWorkShapeCycle {
   const trigger = input.trigger
     ?? (definition.triggers[0] as WorkShapeTriggerClass | undefined)
     ?? "cadence";

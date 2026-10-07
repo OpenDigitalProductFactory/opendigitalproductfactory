@@ -13,14 +13,15 @@ export const EXECUTOR_WRITEBACK_UNAVAILABLE_REASON = "executor_writeback_unavail
  * and every receipt of a sequential shape, keeps exactly its meaning. Design:
  * docs/superpowers/specs/2026-10-02-gpp-phase-3c-drive-graph-execution-design.md §4.2.
  *
- * `runKey` (BI-086DC167) scopes a graph receipt to one run of the shape: the
- * marking's `cycleKey`, which is the calendar cycle key of the day the run
- * started. A receipt that carries one completes a stage only within that run,
- * so a new run never replays the previous run's receipts. A receipt without
- * one keeps exactly its meaning: every sequential receipt and every receipt
- * written before BI-086DC167. (Sequential receipts reused across days are
- * BI-853120EE, deliberately not changed here: the sequential path stays
- * byte-identical.)
+ * `runKey` scopes a receipt to one run of the shape: the cycle key of the
+ * tick the run started on. A graph room's run is its marking's `cycleKey`
+ * (BI-086DC167); a sequential room's is its snapshot's `runKey`
+ * (BI-853120EE, drive-sequential-run.ts). Both are read through
+ * driveRunKeyOf. A receipt that carries one completes a stage only within
+ * that run, so a new run never replays the previous run's receipts. A
+ * receipt without one is a receipt written before run keys existed; a
+ * sequential room stamps it on its next tick, or drops it when that tick
+ * starts a new run.
  */
 export type WorkroomDriveReceipt = { stageKey: string; kind: string; iteration?: number; runKey?: string };
 
