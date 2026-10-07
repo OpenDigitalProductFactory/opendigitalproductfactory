@@ -65,7 +65,10 @@
 // these rules after every event. The rework-edge flag (rework edges and refuse
 // routes) is ON since PR-3c-3: the drive's step routes a refuse verdict, and
 // drive-parity-rework.test.ts proves it equal to rule 6 and the gate rules
-// after every event. Deadline and sub-shape stay off.
+// after every event. The stage-deadline flag is ON since PR-3c-4: rule 8's
+// `deadline` event changes nothing, and drive-parity-deadline.test.ts proves
+// the drive's deadline pass never changes its marking either and raises one
+// notice per stage pass. Sub-shape stays off.
 //
 // Flow references. An edge endpoint (and `gate.onRefuse`) names a stage key, a
 // flow node id, a stop element id (`stop:<kind>:<n>`, element-ids.ts), or a

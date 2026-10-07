@@ -55,11 +55,6 @@
     "rule": "D-8",
     "elementId": "gate:a"
   },
-  "e-not-executable-stage-deadline.gpp.json": {
-    "rule": "E-NOT-EXECUTABLE",
-    "elementId": "stage:a",
-    "construct": "stage-deadline"
-  },
   "e-not-executable-sub-shape.gpp.json": {
     "rule": "E-NOT-EXECUTABLE",
     "elementId": "stage:a",

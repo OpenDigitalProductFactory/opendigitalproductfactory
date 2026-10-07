@@ -19,8 +19,8 @@
 // draft.
 //
 // §5 lists 15 constructs. Construct 11 (Timer) has two compile targets with
-// different answers — the shape's review point (executed) and a stage deadline
-// (not executed) — so it is two keys here, `review-point` and
+// different answers — the shape's review point and a stage deadline (executed
+// since Phase 3c PR-3c-4) — so it is two keys here, `review-point` and
 // `stage-deadline`. Construct 13 (Rework edge) has two notations — a
 // `flow.edges[].rework` edge and a gate's `onRefuse` route — and both are
 // `rework-edge`. "Recorded only" (advisory consult) and "Declared only"
@@ -65,7 +65,7 @@ export type GppConstruct = (typeof GPP_CONSTRUCTS)[number];
  * |------------------------------|------------|------------------------------------------------|
  * | parallel-split-join          | yes        | PR-3c-2 (drive-parity-parallel.test.ts)        |
  * | rework-edge (incl. onRefuse) | yes        | PR-3c-3 (drive-parity-rework.test.ts)          |
- * | stage-deadline               | no         | PR-3c-4                                        |
+ * | stage-deadline               | yes        | PR-3c-4 (drive-parity-deadline.test.ts)        |
  * | sub-shape                    | no         | PR-3c-5                                        |
  *
  * Every other construct has been executable since Phase 3b.
@@ -82,7 +82,7 @@ export const CONSTRUCT_EXECUTABLE: Readonly<Record<GppConstruct, boolean>> = Obj
   stop: true,
   "escalation-boundary": true,
   "review-point": true,
-  "stage-deadline": false,
+  "stage-deadline": true,
   "parallel-split-join": true,
   "rework-edge": true,
   "sub-shape": false,

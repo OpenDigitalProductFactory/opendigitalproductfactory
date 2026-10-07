@@ -34,7 +34,7 @@ const RATIFICATION = JSON.parse(readFileSync(join(FIXTURE_DIR, "ratification.jso
 const FIXTURES = [
   "pass-parallel-split-join.gpp.json",
   "pass-rework-edge.gpp.json",
-  "e-not-executable-stage-deadline.gpp.json",
+  "pass-stage-deadline.gpp.json",
   "e-not-executable-sub-shape.gpp.json",
   "pass-refuse-edge.gpp.json",
 ];
