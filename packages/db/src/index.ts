@@ -471,6 +471,15 @@ export {
 export { DATA_MODEL_MIRROR_TASK_ID } from "./data-model-mirror-config";
 export { SYSML_PROJECTION_TASK_ID } from "./sysml-projection-config";
 export { SELF_OPTIMIZATION_SWEEP_TASK_ID } from "./self-optimization-sweep-config";
+export {
+  ACCEPTANCE_AGED_DAYS,
+  ACCEPTANCE_SWEEP_AGENT_ID,
+  ACCEPTANCE_SWEEP_PAGE_SIZE,
+  ACCEPTANCE_SWEEP_ROUTE_LIMIT,
+  ACCEPTANCE_SWEEP_ROUTING,
+  ACCEPTANCE_SWEEP_TASK_KIND,
+  ACCEPTANCE_TREND_DAYS,
+} from "./acceptance-sweep-config";
 // Canonical SysML projection applier — shared by seed-time views (packages/db
 // seed-ea-sysml-*.ts) and runtime extractors (apps/web/lib/ea, via this barrel).
 export {

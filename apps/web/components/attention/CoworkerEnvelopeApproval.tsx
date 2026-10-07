@@ -18,9 +18,19 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
-import { envelopeInboxRoute } from "@/lib/coworker/envelope-routes";
+import { envelopeInboxRoute, envelopeStatusRoute } from "@/lib/coworker/envelope-routes";
+import { SOURCE_CATALOG } from "@dpf/i18n";
+
+const COPY = SOURCE_CATALOG.approvals.card;
 
 type Outcome = "authorized" | "declined" | "settled";
+
+/** How long a decision may stay unanswered before the card checks what was saved. */
+const DECISION_TIMEOUT_MS = 30_000;
+const STATUS_TIMEOUT_MS = 10_000;
+
+/** The recorded outcome the status route returns (approval-outcome projection). */
+type RecordedOutcome = { state: string; label: string; nextAction: string; inboxHref: string };
 
 /** What the approve endpoint reports about running the approved request. */
 type Execution = { status: "executed" | "failed" | "not-run"; message: string };
@@ -35,19 +45,54 @@ export function CoworkerEnvelopeApproval({
   const [error, setError] = useState<string | null>(null);
   const [execution, setExecution] = useState<Execution | null>(null);
   const [pending, setPending] = useState(false);
+  const [recorded, setRecorded] = useState<RecordedOutcome | null>(null);
+  // The decision may or may not have been saved, and the card cannot tell.
+  const [unknown, setUnknown] = useState(false);
   const decision = approval.decision;
+
+  // BI-F4EB23C1: a decision that never answered is reconciled against what the
+  // server recorded. The card never sends the decision again on its own.
+  async function reconcile() {
+    try {
+      const response = await fetch(envelopeStatusRoute(approval.envelopeId), {
+        method: "GET", signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
+      });
+      const body = response.ok ? (await response.json().catch(() => null)) as { outcome?: RecordedOutcome } | null : null;
+      const saved = body?.outcome;
+      if (!saved) throw new Error("status unavailable");
+      if (saved.state === "waiting") {
+        setError(COPY.notReached);
+        return;
+      }
+      setRecorded(saved);
+      setOutcome("settled");
+      router.refresh();
+    } catch {
+      setUnknown(true);
+    }
+  }
 
   async function decide(choice: "approve" | "decline") {
     // One in-flight decision per card. A second press while the first is open
     // would race the state machine into a 409 it never needed to see.
-    if (pending || outcome) return;
+    if (pending || outcome || unknown) return;
     setPending(true);
     setError(null);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DECISION_TIMEOUT_MS);
     try {
-      const response = await fetch(
-        choice === "approve" ? approval.approveHref : approval.declineHref,
-        { method: "POST", headers: { "content-type": "application/json" } },
-      );
+      let response: Response;
+      try {
+        response = await fetch(
+          choice === "approve" ? approval.approveHref : approval.declineHref,
+          { method: "POST", headers: { "content-type": "application/json" }, signal: controller.signal },
+        );
+      } catch {
+        // No answer, or the connection dropped: the decision may have been
+        // saved. Find out instead of claiming either way.
+        await reconcile();
+        return;
+      }
       if (response.ok) {
         const body = (await response.json().catch(() => null)) as { execution?: Execution; outcomeWarning?: string } | null;
         if (body?.execution) setExecution(body.execution);
@@ -75,9 +120,8 @@ export function CoworkerEnvelopeApproval({
       }
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
       setError(body?.error ?? "That decision could not be saved. Please try again.");
-    } catch {
-      setError("That decision could not be saved. Please try again.");
     } finally {
+      clearTimeout(timer);
       setPending(false);
     }
   }
@@ -85,8 +129,12 @@ export function CoworkerEnvelopeApproval({
   return (
     <div className="space-y-3">
       <Surface padding="sm" rounded="md">
+        {decision.kind === "handover" && decision.handover ? (
+          <HandoverDecision approval={approval} decision={decision} handover={decision.handover} />
+        ) : (
+        <section>
         <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
-          Human authorization needed
+          {COPY.authorizationNeeded}
         </p>
         <p className="mt-1 text-xs leading-relaxed text-[var(--dpf-text)]">
           {decision.authorization}.
@@ -132,16 +180,29 @@ export function CoworkerEnvelopeApproval({
             {decision.recordedIfAuthorized}
           </p>
         )}
-        <p className="mt-3 text-xs leading-relaxed text-[var(--dpf-muted)]">
-          {decision.authorizeDoes} {decision.declineDoes}
-        </p>
+        <Effects decision={decision} />
+        </section>
+        )}
       </Surface>
 
       {outcome ? (
         <p className="text-xs font-semibold text-[var(--dpf-text)]" role="status">
-          {outcomeMessage(outcome, execution)}
+          {recorded ? `${recorded.label}. ${recorded.nextAction}` : outcomeMessage(outcome, execution)}
         </p>
+      ) : unknown ? (
+        <div role="alert" className="space-y-1 text-xs text-[var(--dpf-error)]">
+          <p>{COPY.unknownResult}</p>
+          <a className="font-semibold text-[var(--dpf-accent)] hover:opacity-80" href={envelopeInboxRoute(approval.envelopeId)}>
+            {COPY.unknownLink}
+          </a>
+        </div>
       ) : approval.actionable ? (
+        <>
+        {pending ? (
+          <p className="text-xs text-[var(--dpf-muted)]" role="status">
+            {COPY.saving}
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <Button size="sm" disabled={pending} onClick={() => void decide("approve")}>
             Authorize
@@ -155,6 +216,7 @@ export function CoworkerEnvelopeApproval({
             Decline
           </Button>
         </div>
+        </>
       ) : (
         <p className="text-xs text-[var(--dpf-muted)]">
           This request is closed. Your coworker can ask again.
@@ -190,6 +252,65 @@ function statusLabel(approval: AttentionEnvelopeApproval): string {
   if (approval.status === "declined") return "Declined";
   if (approval.status === "expired") return "Closed: the window expired";
   return approval.status;
+}
+
+function Effects({ decision }: { decision: AttentionEnvelopeApproval["decision"] }) {
+  return (
+    <dl className="mt-3 grid gap-y-2">
+      <Fact label={COPY.ifAuthorize} value={decision.authorizeDoes} wide />
+      <Fact label={COPY.ifDecline} value={decision.declineDoes} wide />
+    </dl>
+  );
+}
+
+/**
+ * A room handover in plain words: who takes over which room, what changes and
+ * what does not. The exact call stays one click away for anyone who needs it,
+ * and it is still the exact call that runs (BI-F4EB23C1).
+ */
+function HandoverDecision({ approval, decision, handover }: {
+  approval: AttentionEnvelopeApproval;
+  decision: AttentionEnvelopeApproval["decision"];
+  handover: NonNullable<AttentionEnvelopeApproval["decision"]["handover"]>;
+}) {
+  return (
+    <>
+      <section>
+        <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
+          {COPY.authorizationNeeded}
+        </p>
+        <h3 className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">{decision.headline}</h3>
+        <p className="mt-2 text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">{COPY.whatChanges}</p>
+        <ul className="mt-1 list-disc space-y-1 ps-4 text-xs leading-relaxed text-[var(--dpf-text)]">
+          {handover.changes.map((line) => <li key={line}>{line}</li>)}
+        </ul>
+        <p className="mt-2 text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">{COPY.whatStays}</p>
+        <ul className="mt-1 list-disc space-y-1 ps-4 text-xs leading-relaxed text-[var(--dpf-text)]">
+          {handover.keeps.map((line) => <li key={line}>{line}</li>)}
+        </ul>
+        {handover.nextStep ? (
+          <p className="mt-2 text-xs text-[var(--dpf-text)]">{COPY.nextStep}: {handover.nextStep}</p>
+        ) : null}
+        <Effects decision={decision} />
+        <dl className="mt-3 grid gap-y-2">
+          <Fact label={COPY.status} value={statusLabel(approval)} />
+        </dl>
+      </section>
+      <details className="mt-3">
+        <summary className="cursor-pointer text-xs font-semibold text-[var(--dpf-muted)]">{COPY.technical}</summary>
+        <dl className="mt-2 grid gap-y-1.5">
+          <Fact label={COPY.tool} value={decision.toolName} wide />
+          <Fact label={COPY.request} value={approval.envelopeId} wide />
+          <Fact label={COPY.assistant} value={approval.coworkerAgentId} wide />
+          <Fact label={COPY.whyAsked} value={decision.whyAPerson} wide />
+          <Fact label={COPY.covers} value={decision.scope} wide />
+          {decision.proposed.map((field, index) => (
+            <Fact key={`${field.label}-${index}`} label={field.label} value={field.value} wide />
+          ))}
+        </dl>
+      </details>
+    </>
+  );
 }
 
 function Fact({ label, value, wide }: { label: string; value: string; wide?: boolean }) {

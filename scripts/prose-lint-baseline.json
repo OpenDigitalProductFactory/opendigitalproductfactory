@@ -6743,6 +6743,14 @@
     "longSentences": 0,
     "textMass": 53
   },
+  "apps/web/components/monitoring/health-summary.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
   "apps/web/components/onboarding/HowYouDecideCards.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

@@ -19,7 +19,7 @@ export type ReadinessSensitivity = (typeof READINESS_SENSITIVITIES)[number];
 /** What raised a delivery shape, and where it was read (BI-243BC956). */
 export type SensitivityTrigger = {
   signal: string;
-  source: "declared-scope" | "item-body-paths" | "item-prose";
+  source: "declared-scope" | "build-plan-paths" | "item-body-paths";
   evidence: string;
 };
 

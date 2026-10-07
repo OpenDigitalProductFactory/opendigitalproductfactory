@@ -175,18 +175,15 @@ async function isAllowedByGrants(toolName: string, grants: string[]): Promise<bo
   return isToolAllowedByGrants(toolName, grants);
 }
 
+/** The callerClient an approved request runs under (approved-request-credential.ts). */
+const APPROVAL_COMPLETION = "approval-completion";
+
 async function runGovernedToolPreflight(event: ToolLifecycleEvent): Promise<ToolResult | null> {
   if (_toolPreflightOverride) return _toolPreflightOverride(event);
-  if (event.context?.authSource === "oauth") {
-    const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
-    const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === event.toolName);
-    const refusal = await workroomTargetAccessRefusal({
-      params: event.rawParams,
-      userId: event.userId,
-      ...event.context,
-      toolName: event.toolName,
-      action: tool?.sideEffect !== false,
-    });
+  // An approved run is room-checked after the gate instead, so a refusal
+  // closes its approval as failed (BI-F4EB23C1).
+  if (event.context?.callerClient !== APPROVAL_COMPLETION) {
+    const refusal = await oauthRoomRefusal(event.toolName, event.rawParams, event.userId, event.context);
     if (refusal) return refusal;
   }
   if (event.toolName === "invite_room_participant") {
@@ -220,19 +217,20 @@ export async function agentHasAnyGrant(agentId: string, toolNames: string[]): Pr
   return false;
 }
 
+/** An OAuth call's exact-room admission. */
+const oauthRoomRefusal = async (toolName: string, params: Record<string, unknown>, userId: string, ctx?: ToolLifecycleEvent["context"]): Promise<ToolResult | null> => ctx?.authSource !== "oauth" ? null
+  : (await import("./work-capsules/oauth-workroom-ownership")).workroomTargetAccessRefusal({ params, userId, ...ctx, toolName, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
+
 async function callExecuteTool(
   toolName: string,
   params: Record<string, unknown>,
   userId: string,
   ctx?: ToolExecutionContext,
 ): Promise<ToolResult> {
-  // Recheck at execution: approval may resume after room or connection access changed.
-  if (ctx?.authSource === "oauth") {
-    const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
-    const refusal = await workroomTargetAccessRefusal({ params, userId, ...ctx, toolName,
-      action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
-    if (refusal) return refusal;
-  }
+  // Recheck at execution: access may change before an approval resumes (#5925);
+  // an approved run is first checked here (BI-F4EB23C1).
+  const refusal = await oauthRoomRefusal(toolName, params, userId, ctx);
+  if (refusal) return refusal;
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
   return executeTool(toolName, params, userId, ctx);
 }

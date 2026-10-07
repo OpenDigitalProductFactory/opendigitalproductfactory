@@ -75,19 +75,21 @@ export async function requireCapability(
 /**
  * {@link requireCapability}, also returning the exact `UserContext` the
  * capability was checked against — what `governedExecuteTool` needs to run a
- * tool as this human under the same capability decision.
+ * tool as this human under the same capability decision — and the session
+ * email, which identifies an agent-driven browser session (the automation
+ * persona) to actions that treat agents differently.
  *
  * @throws Error("Unauthorized") when unauthenticated or lacking the capability.
  */
 export async function requireCapabilityContext(
   capability: CapabilityKey,
-): Promise<{ userId: string; userContext: UserContext }> {
+): Promise<{ userId: string; email: string | null; userContext: UserContext }> {
   const session = await auth();
   const user = session?.user;
   if (!user?.id) throw new Error("Unauthorized");
   const userContext: UserContext = { platformRole: user.platformRole, isSuperuser: user.isSuperuser };
   if (!can(userContext, capability)) throw new Error("Unauthorized");
-  return { userId: user.id, userContext };
+  return { userId: user.id, email: user.email ?? null, userContext };
 }
 
 /**

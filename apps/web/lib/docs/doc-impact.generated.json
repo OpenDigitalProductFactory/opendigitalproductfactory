@@ -1099,6 +1099,9 @@
     "apps/web/lib/platform-runtime/capability-state-divergence.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
+    "apps/web/lib/platform-runtime/inactive-scrape-targets.ts": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "apps/web/lib/platform-runtime/operational-state.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/maintenance/staleness-report.md"
@@ -1645,6 +1648,9 @@
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/architecture/platform-substrate-boundaries.md"
     ],
+    "packages/db/prisma/migrations/20261006200000_retire_voice_training_job_and_exam_voucher/migration.sql": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "packages/db/prisma/schema": [
       "docs/architecture/platform-overview.md"
     ],
@@ -1681,6 +1687,7 @@
       "docs/runbooks/2026-07-20-collation-drift-index-corruption.md"
     ],
     "packages/db/scripts/schema-regression-guard.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md",
       "docs/architecture/tax-period-component-migration.md"
     ],
     "packages/db/scripts/seed-cada-regulation.ts": [
@@ -3040,8 +3047,10 @@
       "apps/web/lib/shared/org-address.ts",
       "apps/web/lib/shared/slugify.ts",
       "apps/web/scripts/offload-evidence-output.ts",
+      "packages/db/prisma/migrations/20261006200000_retire_voice_training_job_and_exam_voucher/migration.sql",
       "packages/db/prisma/schema/resource-scheduling.prisma",
       "packages/db/scripts/apply-model-metadata-comments.ts",
+      "packages/db/scripts/schema-regression-guard.mjs",
       "packages/db/src/model-metadata.ts",
       "packages/db/src/seed-retention-floor-obligations.ts",
       "packages/integration-shared/src/canonical-json.ts",
@@ -3500,6 +3509,7 @@
       "apps/web/lib/documents/document-engine-boot.test.ts",
       "apps/web/lib/govern/auth-redirect.ts",
       "apps/web/lib/nonprod/gate-client-revision.ts",
+      "apps/web/lib/platform-runtime/inactive-scrape-targets.ts",
       "apps/web/lib/self-upgrade/doctools-release-image.boot.test.ts",
       "apps/web/lib/self-upgrade/doctools-release-image.test.ts",
       "apps/web/lib/self-upgrade/doctools-source-lineage.test.ts",

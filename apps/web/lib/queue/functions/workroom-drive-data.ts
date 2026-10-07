@@ -140,6 +140,12 @@ export async function reconcileCoordinationBindings(): Promise<number> {
  * asked on 2026-09-26 and was on cycle 2026-09-29 with no newer row. Cycle
  * scoping would have made its decision unreadable. The latest ask still bounds
  * the evidence, so a decision recorded before the room asked does not count.
+ *
+ * BI-C9912C22: a stage accountable to role:author is never dispatched either;
+ * the drive asks the author. Its ask starts it the same way, so the author's
+ * stage evidence (record_workroom_evidence, outcome completed) earns the
+ * receipt. Other role and person stages stay unstarted: evidence the author
+ * writes must not satisfy an approver's or reviewer's stage.
  */
 export async function loadStageDispatchTimes(
   capsuleIds: readonly string[],
@@ -163,9 +169,18 @@ export async function loadStageDispatchTimes(
         OR (
           a."kind" = 'workroom-drive-attention'
           AND a."payload" ->> 'action' = 'attention'
-          AND a."payload" ->> 'reason' = 'governed_decision'
-          AND w."workspaceState" #>> '{workroomDrive,pendingAttention,reason}' = 'governed_decision'
           AND w."workspaceState" #>> '{workroomDrive,pendingAttention,stageKey}' = a."payload" ->> 'stageKey'
+          AND (
+            (
+              a."payload" ->> 'reason' = 'governed_decision'
+              AND w."workspaceState" #>> '{workroomDrive,pendingAttention,reason}' = 'governed_decision'
+            )
+            OR (
+              a."payload" ->> 'reason' = 'role_stage'
+              AND w."workspaceState" #>> '{workroomDrive,pendingAttention,reason}' = 'role_stage'
+              AND w."workspaceState" #>> '{workroomDrive,pendingAttention,principalRef}' = 'role:author'
+            )
+          )
         )
       )
     ORDER BY w."capsuleId", a."recordedAt" DESC

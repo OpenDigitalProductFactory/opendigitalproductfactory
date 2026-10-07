@@ -547,10 +547,9 @@ describe("getSelfUpgradeStatus", () => {
     expect(result.windowSource).toBe("needs-timezone");
     expect(result.autoWindowSummary).toBeNull();
     expect(result.nextWindowStart).toBeNull();
-    // No window is handed to the gate (24/7 + unknown tz → not auto-runnable).
-    expect(isUpgradeWindowOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ explicitWindows: undefined }),
-    );
+    // 24/7 + unknown tz → no window is evaluated and none is open (BI-2128872C:
+    // effective-window.ts, shared with the scheduled gate).
+    expect(result.inMaintenanceWindow).toBe(false);
   });
 
   // BI-59591B14 — surface an active operator blackout so the panel can explain a
@@ -975,9 +974,8 @@ describe("triggerSelfUpgrade – manual is not window-gated", () => {
     const result = await triggerSelfUpgrade();
 
     expect(result).toMatchObject({ queued: true, admitted: true, runId: "SUR-QUEUED1" });
-    expect(admitSelfUpgrade).toHaveBeenCalled();
-    // It doesn't even consult the window for a manual trigger.
-    expect(vi.mocked(isUpgradeWindowOpen)).not.toHaveBeenCalled();
+    // BI-2128872C AC-2: it runs now, and the run records that it bypassed the window.
+    expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({ triggeredBy: `manual:${mockSession.user.id}+outside-window` }));
   });
 
   it("emergency override dispatches with force (bypasses the quiescence drain)", async () => {
