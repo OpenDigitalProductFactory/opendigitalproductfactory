@@ -615,7 +615,8 @@
       "dynamicParams": [
         "envelopeId"
       ],
-      "file": "apps/web/app/api/agent/envelope/[envelopeId]/reraise/route.ts"
+      "file": "apps/web/app/api/agent/envelope/[envelopeId]/reraise/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/agent/health",

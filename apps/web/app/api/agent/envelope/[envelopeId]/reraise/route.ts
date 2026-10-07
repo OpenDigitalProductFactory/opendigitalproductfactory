@@ -1,3 +1,4 @@
+// @exposure authenticated — session required unconditionally (auth() → 401); delegate-only below.
 // POST /api/agent/envelope/:envelopeId/reraise
 //
 // "Ask again" for an approval request that expired before anyone answered it

@@ -30,6 +30,7 @@ function expiredRow(over: Partial<CoworkerEnvelopeRow> = {}): CoworkerEnvelopeRo
     status: "expired",
     taskRunId: null,
     // Raised at 04:00 while the operator slept; lapsed at 04:15.
+    // clock-bomb-guard: allow every projection here takes the pinned NOW explicitly and never reads the wall clock
     expiresAt: new Date("2026-10-01T04:15:00.000Z"),
     createdAt: new Date("2026-10-01T04:00:00.000Z"),
     taskRun: null,
@@ -94,6 +95,7 @@ describe("expired-unanswered requests stay honest and quiet (BI-0012E6CA)", () =
       status: "proposed",
       approvalBindingFingerprint: "binding-1",
       createdAt: new Date("2026-10-01T08:30:00.000Z"),
+      // clock-bomb-guard: allow compared against the pinned NOW passed to the loader, not the wall clock
       expiresAt: new Date("2026-10-08T08:30:00.000Z"),
     });
     const { db } = stubDb([lapsed, asked]);
