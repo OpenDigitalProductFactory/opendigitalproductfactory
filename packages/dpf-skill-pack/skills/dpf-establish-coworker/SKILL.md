@@ -5,7 +5,7 @@ description: "Use when creating a new AI coworker on the DPF platform, or when a
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: true
 user-invocable: true
-allowed-tools: Read Grep Glob Edit Write Bash mcp__dpf__establish_coworker mcp__dpf__manage_coworker_tool_grant mcp__dpf__query_backlog mcp__dpf__create_backlog_item
+allowed-tools: Read Grep Glob Edit Write Bash mcp__dpf__query_backlog mcp__dpf__create_backlog_item
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: governance
@@ -35,6 +35,14 @@ scheduled, and summon/handoff chokepoint), an incomplete definition fails the
 required Unit Tests job (coworker-definition conformance gate), and promotion is
 refused until the nightly certification sweep has passed the coworker through
 its golden journeys on the real execution path.
+
+**In-portal steps.** `establish_coworker` (Steps 1 and 4) and
+`manage_coworker_tool_grant` change coworker authority, so they run in the
+portal, never from an external CLI: the external Claude Code, Codex and Grok
+coworkers do not hold `agent_control_read`, and this skill's Surface A
+`allowed-tools` omits both tools on purpose (BI-E0F19DBA). From an external
+CLI, land the definition PR (Step 2) and ask the operator to run the door and
+the promotion in the portal.
 
 ## Step 0 — Verify the coworker doesn't already exist
 

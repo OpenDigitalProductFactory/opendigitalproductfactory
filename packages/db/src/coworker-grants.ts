@@ -19,12 +19,30 @@
 // decision_record_create (BI-3BF3CBDF): the shipped dpf-record-decision-outcome
 // and dpf-route-learning-to-commons skills direct external agents to
 // record_decision_outcome and propose_improvement; without it both dead-end.
+// BI-E0F19DBA, the same class for the rest of the shipped skills:
+// - backlog_triage: dpf-file-backlog-item finishes filing with
+//   triage_backlog_item / size_backlog_item. Ordinary backlog writes, still
+//   gated by the user's manage_backlog capability.
+// - document_write: dpf-elicit-tacit-knowledge and dpf-route-learning-to-commons
+//   save WWWD notes with doc_save. An ordinary managed-document write; it also
+//   reaches doc_link and create_presentation, both document writes. Publishing
+//   (document_publish) stays off.
+// - ea_graph_read: dpf-data-architecture-steward and
+//   dpf-sysml-architecture-substrate read the EA graph with
+//   query_ontology_graph. Read-only; ea_graph_write stays off.
+// All three are already in the development token template, so a write-scoped
+// development token reaches them once the agent holds the grant.
+// Deliberately NOT granted: agent_control_read. establish_coworker and
+// manage_coworker_tool_grant change coworker authority, so dpf-establish-coworker
+// and dpf-add-archetype keep those steps in-portal and do not list them on
+// Surface A. marketing_read is not a development grant either; the
+// create-presentation skill's marketing-context reads stay in-portal.
 const EXTERNAL_DEVELOPMENT_GRANTS = [
   "work_room_read", "work_room_write", "registry_read",
   "work_capsule_read", "work_capsule_write", "work_capsule_adopt",
   "backlog_read", "backlog_write", "file_read", "code_graph_read",
   "build_lifecycle", "sandbox_execute", "initiative_evidence_write",
-  "decision_record_create",
+  "decision_record_create", "backlog_triage", "document_write", "ea_graph_read",
 ];
 
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
