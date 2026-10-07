@@ -22,6 +22,7 @@ export function validateInitiativeDisposition(
 export const INITIATIVE_WRITER_CORRECTION_LIMIT = 2;
 export const INITIATIVE_CORRECTABLE_ERRORS = new Set([
   "malformed-receipt", "reason-required", "finding-resolution-invalid",
+  "CLASSIFICATION_REQUIRED",
 ]);
 
 export type InitiativeFindingEvidence = {

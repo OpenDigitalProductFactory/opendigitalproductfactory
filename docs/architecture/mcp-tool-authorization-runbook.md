@@ -1,5 +1,14 @@
 # MCP tool authorization runbook
 
+Bound spec-approval reviewers receive the initiative's current authoritative
+classification in their tool contract. A document titled "repair" does not
+make a feature initiative a fix. Dispatch and the receipt writer share the
+monotonic classification projection; the writer rechecks under its transaction
+lock. A classification mismatch names the expected profile and permits bounded
+correction on the same task, preserving the request key, immutable artifact,
+reviewer identity and authority. Missing classification still requires repair
+of the underlying facts; retrying cannot authorize a downgrade.
+
 **Review retries after permission vocabulary changes.** A bound independent review
 keeps its original task, request key and saved authority scope. Adding an unrelated
 grant to an OAuth public scope must not make the same immutable review a different
