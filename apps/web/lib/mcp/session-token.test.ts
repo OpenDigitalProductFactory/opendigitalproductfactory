@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SignJWT } from "jose";
 
 import {
@@ -305,5 +305,32 @@ describe("lifetime and iat bounds (BI-44D9B67B)", () => {
       const token = await signForged({ exp: nowSeconds() + MCP_SESSION_TTL_SECONDS });
       expect(await verifyMcpSessionToken(token)).toBeNull();
     });
+  });
+
+  it("logs the refusal reason on the server, never the token or its claims", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const now = nowSeconds();
+      const cases: Array<[string, { iat?: number; exp?: number }]> = [
+        ["lifetime_exceeds_cap", { iat: now, exp: now + 365 * 24 * 60 * 60 }],
+        ["lifetime_exceeds_cap", { iat: now - 24 * 60 * 60, exp: now + 60 }],
+        ["iat_in_future", { iat: now + 60 * 60, exp: now + 60 * 60 + MCP_SESSION_TTL_SECONDS }],
+        ["missing_iat", { exp: now + MCP_SESSION_TTL_SECONDS }],
+        ["missing_exp", { iat: now }],
+      ];
+      for (const [reason, claims] of cases) {
+        warn.mockClear();
+        const token = await signForged(claims);
+        expect(await verifyMcpSessionToken(token)).toBeNull();
+        expect(warn).toHaveBeenCalledTimes(1);
+        const line = String(warn.mock.calls[0][0]);
+        expect(line).toContain(`refused: ${reason}`);
+        expect(line).not.toContain(token);
+        expect(line).not.toContain(token.split(".")[1]);
+        expect(line).not.toContain("user-1");
+      }
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
