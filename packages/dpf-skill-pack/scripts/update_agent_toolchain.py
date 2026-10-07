@@ -918,6 +918,9 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
     Claude Code owns the file and drops it on its own uninstall.
     """
     result: dict[str, list[str]] = {"updated": [], "current": [], "pruned": [], "failed": []}
+    # Claude Code records the marketplace version without build metadata; the
+    # pack manifest may carry a `+codex.<stamp>` suffix (codex_content_version).
+    version = version.split("+", 1)[0]
     claude = resolve_claude_binary()
     for entry in claude_plugin_records(home):
         project = entry.get("projectPath")
@@ -991,6 +994,7 @@ def retire_duplicate_project_mcp_json(project: Path, dry_run: bool) -> Optional[
 
 def converge_claude_project_connectors(home: Path, version: str, dry_run: bool) -> list[str]:
     """Converge stale project-scope plugin pins and duplicate project connectors."""
+    version = version.split("+", 1)[0]
     plugins = converge_claude_project_plugins(home, version, dry_run)
     verb = "would update" if dry_run else "updated"
     lines = [f"  Claude project scope: {verb} {len(plugins['updated'])}, "
