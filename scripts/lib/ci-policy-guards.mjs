@@ -282,6 +282,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-F6929F50: every install path provisions the reach-link and
       // delegation-receipt signing keys and a self-upgrade never rotates them.
       conformanceTest("scripts/installer/dedicated-signing-keys-contract.test.mjs"),
+      // BI-231A4BC7: the same for the self-upgrade target-binding and delivery
+      // task cursor keys, which never reach the sandbox.
+      conformanceTest("scripts/installer/self-upgrade-binding-and-cursor-keys-contract.test.mjs"),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),

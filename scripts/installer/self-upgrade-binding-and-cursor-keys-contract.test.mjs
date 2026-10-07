@@ -1,23 +1,23 @@
-// BI-F6929F50: every install path provisions DPF_ATTENTION_REACH_SECRET and
-// DPF_DELEGATION_RECEIPT_SECRET, the HMAC keys attention reach links
-// (apps/web/lib/attention/reach-link.ts) and coworker delegation receipts
-// (apps/web/lib/coworker-service-catalog/delegation-receipt.ts) are signed with.
-// Without them both fall back to AUTH_SECRET, so one secret signs sessions,
-// links and receipts. Provisioned exactly where DPF_GPP_PERMIT_SECRET is
-// (BI-8541D491, gpp-permit-secret-contract.test.mjs): compose passes them to the
-// portal, the installers and setup scripts generate them when missing, and a
-// self-upgrade adds them to an install that lacks them. A value already set is
-// never rotated.
+// BI-231A4BC7: every install path provisions DPF_SELF_UPGRADE_TARGET_BINDING_SECRET
+// and DPF_DELIVERY_TASK_CURSOR_SECRET, the HMAC keys self-upgrade target
+// bindings (apps/web/lib/self-upgrade/target-binding.ts) and delivery task hub
+// cursors (apps/web/lib/work-capsules/delivery-task-hub-store.ts) are signed
+// with. Both readers fall back to AUTH_SECRET, and no install path writes either
+// key, so the session secret signs both on every install. Provisioned exactly
+// where the BI-F6929F50 keys are (dedicated-signing-keys-contract.test.mjs):
+// compose passes them to the portal only, the installers and setup scripts
+// generate them when missing, and a self-upgrade adds them to an install that
+// lacks them. A value already set is never rotated.
 //
-// Conformance over repository state plus behaviour of the real bash that writes
-// installer and self-upgrade output.
+// The sandbox service receives the live AUTH_SECRET (docker-compose.yml) and runs
+// agent-authored code, so these keys must never be passed to it.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash";
@@ -25,7 +25,7 @@ const bashPath = (path) => process.platform === "win32"
   ? resolve(path).replace(/^([A-Za-z]):\\/, (_, drive) => `/${drive.toLowerCase()}/`).replaceAll("\\", "/")
   : resolve(path);
 
-const KEYS = ["DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET"];
+const KEYS = ["DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", "DPF_DELIVERY_TASK_CURSOR_SECRET"];
 const HEX64 = /^[0-9a-f]{64}$/;
 const read = (path) => readFile(join(root, path), "utf8");
 
@@ -34,17 +34,23 @@ function envValue(text, key) {
   return lines.length ? lines.at(-1).slice(key.length + 1).replace(/^["']|["']$/g, "") : undefined;
 }
 
-test("base compose passes both keys and the receipt key id to the portal, optional like the permit key", async () => {
+function serviceBlock(compose, name) {
+  const start = compose.search(new RegExp(`^ {2}${name}:\\s*$`, "m"));
+  assert.ok(start >= 0, `compose has a ${name} service`);
+  const rest = compose.slice(start + 1);
+  const next = rest.search(/^ {2}[A-Za-z][\w-]*:\s*$/m);
+  return next < 0 ? rest : rest.slice(0, next);
+}
+
+test("base compose passes both keys to the portal, optional, and never to the sandbox", async () => {
   const text = await read("docker-compose.yml");
-  for (const key of [...KEYS, "DPF_DELEGATION_RECEIPT_KEY_ID"]) {
+  const portal = serviceBlock(text, "portal");
+  const sandbox = serviceBlock(text, "sandbox");
+  for (const key of KEYS) {
     // Optional, never required: an install without the key keeps signing with AUTH_SECRET.
-    assert.match(text, new RegExp(`^ {6}${key}: \\$\\{${key}:-\\}$`, "m"), `portal must receive ${key}`);
+    assert.ok(new RegExp(`^ {6}${key}: \\$\\{${key}:-\\}$`, "m").test(portal), `portal must receive ${key}`);
+    assert.ok(!sandbox.includes(key), `the sandbox runs agent-authored code and must not receive ${key}`);
   }
-  // Same service as the permit key (the portal): no service header between them.
-  const start = text.indexOf("DPF_GPP_PERMIT_SECRET: ${");
-  const end = text.indexOf("DPF_DELEGATION_RECEIPT_KEY_ID: ${");
-  assert.ok(start >= 0 && end > start, "the signing keys follow the permit key");
-  assert.doesNotMatch(text.slice(start, end), /^ {2}[A-Za-z][\w-]*:\s*$/m, "the signing keys belong to the portal service");
 });
 
 test("the env examples declare both keys without a usable value", async () => {
@@ -56,52 +62,33 @@ test("the env examples declare both keys without a usable value", async () => {
   }
 });
 
-test("every installer and setup script that writes an install .env generates both keys", async () => {
-  const installSh = await read("install-dpf.sh");
-  for (const key of KEYS) assert.match(installSh, new RegExp(`dpf_env_ensure_secret_hex ${key} \\.env 32`), `install-dpf.sh: ${key}`);
-  const setupSh = await read("scripts/setup.sh");
-  assert.match(setupSh, /for _env_file in apps\/web\/\.env\.local \.env; do\s+for _signing_key in DPF_ATTENTION_REACH_SECRET DPF_DELEGATION_RECEIPT_SECRET(?: [A-Z_]+)*; do\s+if \[ "\$\(dpf_env_ensure_secret_hex "\$_signing_key" "\$_env_file" 32\)" != "kept" \]/);
-  const installPs1 = await read("install-dpf.ps1");
-  assert.match(installPs1, /foreach \(\$signingKeyName in @\("DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET"(?:, "[A-Z_]+")*\)\)/);
-  assert.match(installPs1, /-Key \$signingKeyName -Value \(New-RandomPassword 32\)/);
-  const setupPs1 = await read("scripts/setup.ps1");
-  assert.match(setupPs1, /foreach \(\$secretKey in @\("DPF_GIT_WEBHOOK_SECRET", "DPF_GPP_PERMIT_SECRET", "DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET"(?:, "[A-Z_]+")*\)\)/);
-  const promote = await read("scripts/promote.sh");
-  assert.match(promote, /for _signing_key in DPF_ATTENTION_REACH_SECRET DPF_DELEGATION_RECEIPT_SECRET(?: [A-Z_]+)*; do/);
-  assert.match(promote, /_signing_key_value="\$\(node -e 'process\.stdout\.write\(require\("node:crypto"\)\.randomBytes\(32\)\.toString\("hex"\)\)'\)"/);
-  const assets = await read("scripts/installer/install-release-assets.mjs");
-  // BI-231A4BC7 adds keys to the same list; the list must keep these two.
-  assert.match(assets, /export const DEDICATED_SIGNING_KEYS = Object\.freeze\(\[\s*"DPF_ATTENTION_REACH_SECRET",\s*"DPF_DELEGATION_RECEIPT_SECRET"[,\s"A-Z_]*\]\);/);
-  assert.match(assets, /text = ensureDedicatedSigningKeys\(text, newline\);/);
+test("every installer, setup script and the promoter names both keys", async () => {
+  for (const path of [
+    "install-dpf.sh",
+    "install-dpf.ps1",
+    "scripts/setup.sh",
+    "scripts/setup.ps1",
+    "scripts/promote.sh",
+    "scripts/installer/install-release-assets.mjs",
+  ]) {
+    const text = await read(path);
+    for (const key of KEYS) assert.ok(text.includes(key), `${path} must provision ${key}`);
+  }
 });
 
-test("installer output fills missing or placeholder keys, keeps real ones, and never prints them", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "dpf-signing-keys-env-"));
-  try {
-    const real = "9".repeat(64);
-    for (const key of KEYS) {
-      const cases = {
-        missing: "POSTGRES_USER=dpf\n",
-        placeholder: `${key}="<generate a distinct value with: openssl rand -hex 32>"\n`,
-        real: `${key}="${real}"\n`,
-      };
-      for (const [name, body] of Object.entries(cases)) {
-        const file = join(dir, `${key}-${name}.env`);
-        await writeFile(file, body);
-        const result = runBash(`source scripts/installer/lib/prompts.sh
-dpf_env_ensure_secret_hex ${key} "${bashPath(file)}" 32 '# Signing key (BI-F6929F50).'`);
-        assert.equal(result.status, 0, result.stderr);
-        const value = envValue(await readFile(file, "utf8"), key);
-        if (name === "real") {
-          assert.equal(value, real);
-          assert.equal(result.stdout.trim(), "kept");
-        } else {
-          assert.match(value, HEX64, `${key} ${name}`);
-          assert.ok(!result.stdout.includes(value) && !result.stderr.includes(value), `${key} ${name}: the key was printed`);
-        }
-      }
-    }
-  } finally { await rm(dir, { recursive: true, force: true }); }
+test("release-mode asset install fills both keys when missing and never replaces a real one", async () => {
+  const assets = await import(pathToFileURL(join(root, "scripts/installer/install-release-assets.mjs")).href);
+  for (const key of KEYS) {
+    assert.ok(assets.DEDICATED_SIGNING_KEYS.includes(key), `DEDICATED_SIGNING_KEYS must include ${key}`);
+  }
+  const filled = assets.ensureDedicatedSigningKeys("POSTGRES_USER=dpf\n", "\n", {});
+  for (const key of KEYS) assert.match(envValue(filled, key) ?? "", HEX64, `${key} generated`);
+  const exported = assets.ensureDedicatedSigningKeys("POSTGRES_USER=dpf\n", "\n",
+    Object.fromEntries(KEYS.map((key) => [key, "7".repeat(64)])));
+  for (const key of KEYS) assert.equal(envValue(exported, key), "7".repeat(64), `${key}: the value promote.sh exported is persisted`);
+  const real = "9".repeat(64);
+  const kept = assets.ensureDedicatedSigningKeys(KEYS.map((key) => `${key}=${real}`).join("\n") + "\n", "\n", {});
+  for (const key of KEYS) assert.equal(envValue(kept, key), real, `${key} must never be rotated`);
 });
 
 function runBash(script, env = {}) {
@@ -109,7 +96,7 @@ function runBash(script, env = {}) {
 }
 
 async function promoteFixture() {
-  const dir = await mkdtemp(join(tmpdir(), "dpf-promote-signing-keys-"));
+  const dir = await mkdtemp(join(tmpdir(), "dpf-promote-binding-keys-"));
   const source = join(dir, "source");
   const stateDir = join(dir, "state");
   const bin = join(dir, "bin");
@@ -140,7 +127,7 @@ exec '${bashPath(process.execPath)}' "\${converted[@]}"
 }
 
 // Sources promote.sh in dry-run mode (every resolution step, no Docker), then
-// runs `after` in the same shell so it sees the resolved values and helpers.
+// runs `after` in the same shell so it sees the resolved values.
 async function promote(f, { envFile, processEnv = {}, after }) {
   const harness = join(f.dir, "harness.sh");
   await writeFile(harness, `source "$1" --self-upgrade --dry-run\n${after}\n`);
@@ -152,7 +139,7 @@ async function promote(f, { envFile, processEnv = {}, after }) {
     PROMOTE_TARGET_SHA: f.sha,
     PROMOTE_BACKUP_PATH: bashPath(join(f.dir, "backup")),
     PROMOTE_HEALTH_URL: "http://acceptance.invalid/api/health",
-    PROMOTE_COMPOSE_PROJECT: "dpf-signing-keys-acceptance",
+    PROMOTE_COMPOSE_PROJECT: "dpf-binding-keys-acceptance",
     INNGEST_SIGNING_KEY: "1".repeat(64),
     INNGEST_EVENT_KEY: "2".repeat(64),
   };
@@ -178,9 +165,8 @@ test("a self-upgrade generates both keys for an install that lacks them, distinc
     for (const envFile of ["DPF_IMAGE_TAG=v1\n", `${placeholders}\n`]) {
       const result = await promote(f, { envFile, after: PRINT_KEYS });
       const values = KEYS.map((key) => printed(result.stdout, key));
-      for (const value of values) {
-        assert.match(value, HEX64);
-        // Only the harness prints it; promote.sh itself never does.
+      for (const [index, value] of values.entries()) {
+        assert.match(value ?? "", HEX64, `${KEYS[index]} for ${JSON.stringify(envFile)}`);
         assert.equal(result.stdout.split(value).length, 2, "promote.sh printed a generated key");
         assert.ok(!result.stderr.includes(value), "promote.sh printed a generated key to stderr");
       }
@@ -207,16 +193,20 @@ test("a self-upgrade never rotates an existing key, quoted or not", async () => 
   } finally { await rm(f.dir, { recursive: true, force: true }); }
 });
 
-test("the promoter persists a generated key in place and leaves every other line alone", async () => {
-  const f = await promoteFixture();
+test("installer output fills missing or placeholder keys, keeps real ones, and never prints them", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-binding-keys-env-"));
   try {
-    const file = join(f.dir, "persist.env");
-    await writeFile(file, "POSTGRES_USER=dpf\nAUTH_SECRET=keep");
-    await promote(f, {
-      envFile: "DPF_IMAGE_TAG=v1\n",
-      after: KEYS.map((key) => `_inngest_env_write "${bashPath(file)}" ${key} "$${key}" "# Signing key ${key} (BI-F6929F50). Generated by the self-upgrade; never rotated."`).join("\n"),
-    });
-    const text = await readFile(file, "utf8");
-    assert.match(text, new RegExp(`^POSTGRES_USER=dpf\\nAUTH_SECRET=keep\\n# Signing key ${KEYS[0]} [^\\n]*\\n${KEYS[0]}=[0-9a-f]{64}\\n# Signing key ${KEYS[1]} [^\\n]*\\n${KEYS[1]}=[0-9a-f]{64}\\n$`));
-  } finally { await rm(f.dir, { recursive: true, force: true }); }
+    const installSh = await read("install-dpf.sh");
+    for (const key of KEYS) {
+      assert.ok(new RegExp(`dpf_env_ensure_secret_hex ${key} \\.env 32`).test(installSh), `install-dpf.sh must generate ${key} with dpf_env_ensure_secret_hex`);
+      const file = join(dir, `${key}.env`);
+      await writeFile(file, "POSTGRES_USER=dpf\n");
+      const result = runBash(`source scripts/installer/lib/prompts.sh
+dpf_env_ensure_secret_hex ${key} "${bashPath(file)}" 32 '# Signing key (BI-231A4BC7).'`);
+      assert.equal(result.status, 0, result.stderr);
+      const value = envValue(await readFile(file, "utf8"), key);
+      assert.match(value ?? "", HEX64);
+      assert.ok(!result.stdout.includes(value) && !result.stderr.includes(value), `${key}: the key was printed`);
+    }
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
