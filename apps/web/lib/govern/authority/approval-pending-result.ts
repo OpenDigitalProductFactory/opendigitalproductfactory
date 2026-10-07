@@ -8,6 +8,7 @@
 // Type-only, so this does not create a runtime cycle with the execute seam.
 import type { GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
 import { envelopeInboxRoute } from "@/lib/coworker/envelope-routes";
+import { GOVERNED_REJECTION_DISPOSITION } from "./governed-rejection-disposition";
 
 /**
  * A call parked on a human decision, worded so the model can tell it apart from
@@ -83,10 +84,16 @@ export function settledApprovalResult(
   const recordedMessage = typeof recorded["message"] === "string" ? ` ${recorded["message"]}` : "";
   if (settled.status === "failed") {
     const recordedError = typeof recorded["error"] === "string" ? recorded["error"] : null;
+    // BI-5B34D277: a governed refusal settles the approval before the tool
+    // runs, so "already ran" would misreport a call that never ran.
+    const refusedBeforeRun = recordedError !== null && recordedError in GOVERNED_REJECTION_DISPOSITION;
+    const happened = refusedBeforeRun
+      ? `was approved by a person (approval request ${settled.envelopeId}) but refused before it ran`
+      : `already ran once after a person approved it (approval request ${settled.envelopeId}) and did not complete`;
     return {
       success: false,
       error: "approval_outcome_failed",
-      message: `${toolName} already ran once after a person approved it (approval request ${settled.envelopeId}) and did not complete`
+      message: `${toolName} ${happened}`
         + (recordedError ? ` (${recordedError}).` : ".") + recordedMessage
         + " Calling it again returns this same outcome and does not ask the person again."
         + " Fix the cause first; once the approval window has closed, a new request can be made.",

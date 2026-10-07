@@ -343,3 +343,22 @@ export async function finalizeAuthorityApprovalEnvelope(
     },
   });
 }
+
+/**
+ * BI-5B34D277: hand back a reservation this run took but never spent. Called
+ * only when the call was refused before the tool ran for a reason that is not
+ * a settled no (inconclusive, awaiting input, awaiting a person), so the
+ * person's approval still stands and a retry may spend it. The compare-and-set
+ * on this run's own `resolvedAt` means a run can only release its own claim,
+ * and never touches an envelope another run already settled.
+ */
+export async function releaseAuthorityApprovalReservation(
+  envelopeId: string,
+  reservedAt: Date,
+  db: AuthorityApprovalDb = prisma as unknown as AuthorityApprovalDb,
+): Promise<void> {
+  await db.coworkerActionEnvelope.updateMany({
+    where: { id: envelopeId, status: "approved", resolvedAt: reservedAt },
+    data: { resolvedAt: null },
+  });
+}
