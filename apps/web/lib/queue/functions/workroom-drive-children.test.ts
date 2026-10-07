@@ -284,19 +284,32 @@ describe("sub-shape child rooms through the runner (PR-3c-5)", () => {
     }
   });
 
-  it("the next cycle abandons the previous cycle's live child, removing its contains row, and a new cycle gets a new child", async () => {
+  it("a child running across UTC midnight keeps its key and its room; only a concluded run's live child is abandoned, and the next run gets its own child (BI-086DC167)", async () => {
     const h = parentWaitingAtB();
     await tick(h, at(0));
     const [child] = children(h);
-    await tick(h, new Date(T0.getTime() + 86_400_000));
+    // The next UTC day, the same run: the same child, still working and still contained, and no second child.
+    expect(await tick(h, new Date(T0.getTime() + 86_400_000))).toMatchObject({ action: "attention", reason: "awaiting_sub_shape" });
+    expect(h.db.state.workrooms.find((row: Row) => row.id === child!.id)?.status).toBe("working");
+    expect(h.db.state.relations).toEqual([{ fromWorkroomId: "row-parent", toWorkroomId: child!.id, relation: "contains" }]);
+    expect(children(h)).toHaveLength(1);
+    expect(marking(h).cycleKey).toBe(cycleOf(SUB_SEQ));
+    expect(marking(h).children).toEqual({ [`${cycleOf(SUB_SEQ)}#b#0`]: { capsuleId: child!.capsuleId, ref: "graph-fixture@1.0.0" } });
+
+    // A run that concluded with its child still live (a stored concluded run): the next run abandons that child
+    // under its old key, and its own pass through b gets a new child keyed by the new run.
+    h.workspaceState = { workroomDrive: { ...(h.workspaceState.workroomDrive as Record<string, unknown>), action: "stop", reason: "success", stageKey: null,
+      lastCycleKey: cycleOf(SUB_SEQ, "2026-03-03"), receipts: [{ stageKey: "a", kind: "stage-evidence-recorded", iteration: 0, runKey: cycleOf(SUB_SEQ, "2026-03-04") }],
+      marking: { ...marking(h), tokens: [] } } };
+    await tick(h, new Date("2026-03-04T09:00:00.000Z"));
     expect(h.db.state.workrooms.find((row: Row) => row.id === child!.id)?.status).toBe("abandoned");
-    expect(h.db.state.activities.find((row: Row) => row.workCapsuleId === child!.id && row.kind === "status-override")?.summary).toContain("left the stage");
     expect(h.db.state.relations.filter((row: Row) => row.toWorkroomId === child!.id)).toEqual([]);
-    expect(marking(h).cycleKey).toBe(cycleOf(SUB_SEQ, "2026-03-03"));
+    expect(marking(h).cycleKey).toBe(cycleOf(SUB_SEQ, "2026-03-04"));
     expect(marking(h).children[`${cycleOf(SUB_SEQ)}#b#0`]?.state).toBe("abandoned");
-    // The new cycle's pass through b gets its own child under its own key (the cycle key is in it), never the old one.
+    // a's receipt for the new run moves its token to b, which creates the new run's own child.
+    await tick(h, new Date("2026-03-04T09:15:00.000Z"));
     const fresh = children(h).filter((row: Row) => row.id !== child!.id);
-    expect(fresh.map((row: Row) => row.idempotencyKey)).toEqual([`sub-shape:WC-PARENT:${cycleOf(SUB_SEQ, "2026-03-03")}:b:0`]);
+    expect(fresh.map((row: Row) => row.idempotencyKey)).toEqual([`sub-shape:WC-PARENT:${cycleOf(SUB_SEQ, "2026-03-04")}:b:0`]);
     expect(h.db.state.relations).toEqual([{ fromWorkroomId: "row-parent", toWorkroomId: fresh[0]!.id, relation: "contains" }]);
   });
 

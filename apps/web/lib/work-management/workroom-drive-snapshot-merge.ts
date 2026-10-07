@@ -32,7 +32,31 @@ function asRecord(value: unknown): Record<string, unknown> | null {
  * row holds and the snapshot lacks is kept, so no persist can drop a graph
  * room's marking. A snapshot that carries its own keeps them (it was built
  * from what the drive read). A sequential snapshot is merged exactly as before.
+ *
+ * On the graph path the "same cycle" condition compares RUN keys
+ * (BI-086DC167): the row's marking's `cycleKey` against the snapshot's (a
+ * snapshot that carries no marking of its own is on the row's run). A run
+ * crosses UTC midnight, so a receipt recorded during the tick that crosses it
+ * belongs to the same run and is kept, where comparing the calendar
+ * `lastCycleKey` would drop it. Either side without a readable run key falls
+ * back to `lastCycleKey`, exactly as before.
  */
+/** A graph snapshot's run key: its marking's `cycleKey`, when the marking is an object that carries one. */
+function runKeyOf(drive: Record<string, unknown>): string | null {
+  const marking = asRecord(drive.marking);
+  return marking && typeof marking.cycleKey === "string" ? marking.cycleKey : null;
+}
+
+function sameCycle(currentDrive: Record<string, unknown>, next: Record<string, unknown>, graphShape: boolean): boolean {
+  if (graphShape) {
+    const current = runKeyOf(currentDrive);
+    // A snapshot without a marking of its own carries the row's forward, so it is on the row's run.
+    const snapshot = Object.hasOwn(next, "marking") && next.marking !== undefined ? runKeyOf(next) : current;
+    if (current !== null && snapshot !== null) return current === snapshot;
+  }
+  return currentDrive.lastCycleKey === next.lastCycleKey;
+}
+
 export function mergeWorkroomDriveSnapshot(
   currentWorkspaceState: unknown,
   next: Record<string, unknown>,
@@ -40,7 +64,7 @@ export function mergeWorkroomDriveSnapshot(
 ): Record<string, unknown> {
   const currentDrive = asRecord(asRecord(currentWorkspaceState)?.workroomDrive);
   let snapshot = next;
-  if (currentDrive && currentDrive.lastCycleKey === next.lastCycleKey) {
+  if (currentDrive && sameCycle(currentDrive, next, options.graphShape === true)) {
     let receipts = readStoredWorkroomDriveState({ workroomDrive: snapshot }).receipts;
     for (const receipt of readStoredWorkroomDriveState(currentWorkspaceState).receipts) {
       if (receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND) continue;

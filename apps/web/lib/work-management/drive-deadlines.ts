@@ -14,10 +14,15 @@
  * - CLOCK. The drive tick (the 15-minute cron plus run-now) is the clock. A
  *   token on stage `s` is overdue when `now ≥ enteredAt + s.deadline.afterDays`
  *   days. No scheduler or timer service is added.
- * - KEY. `<cycleKey>#<stageKey>#<iteration>`. A rework starts a new iteration
- *   with a fresh `enteredAt`, so it can owe a new notice; a new cycle starts a
- *   fresh marking, so the same stage can be noticed again next cycle; the same
- *   cycle and iteration never raise twice.
+ * - KEY. `<cycleKey>#<stageKey>#<iteration>`, where `cycleKey` is the
+ *   marking's RUN key (BI-086DC167: the calendar key of the day the run
+ *   started, unchanged while the run is in flight). A deadline of any length,
+ *   days included, therefore comes due once, measured from the token's own
+ *   `enteredAt`, even across UTC midnight. A rework starts a new iteration
+ *   with a fresh `enteredAt`, so it can owe a new notice; a new run (only
+ *   after the previous one concluded) starts a fresh marking, so the same
+ *   stage can be noticed again in the next run; the same run and iteration
+ *   never raise twice.
  * - RAISE (raiseDueDeadlines). An overdue token whose key is not yet in
  *   `marking.deadlines` gets `{ raisedAt: now, notifiedAt: null }`. That is the
  *   whole effect on the marking. Expiry never moves work: the token stays, and
@@ -27,7 +32,7 @@
  *   `notifiedAt` only when the send succeeded, so a failed send retries next
  *   tick and a successful one never repeats (at least once).
  * - OPEN (openDeadlines). The entries whose token is still on that stage at
- *   that iteration in that cycle: what the attention inbox lists.
+ *   that iteration in that run: what the attention inbox lists.
  */
 import { stageElementId } from "@/lib/gpp/shape-language/element-ids";
 
@@ -39,7 +44,7 @@ export const DAY_MS = 86_400_000;
 type DeadlineShape = Pick<WorkShapeDefinitionContract, "stages">;
 type DeadlineStage = DeadlineShape["stages"][number];
 
-/** The notice key for one pass through one stage in one cycle. */
+/** The notice key for one pass through one stage in one run (`cycleKey` is the marking's run key). */
 export function deadlineKey(cycleKey: string, stageKey: string, iteration: number): string {
   return `${cycleKey}#${stageKey}#${iteration}`;
 }

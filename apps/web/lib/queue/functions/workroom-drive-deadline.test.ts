@@ -237,14 +237,30 @@ describe("a stage deadline through the runner: notify once, after commit, retrie
     expect(marking(h).deadlines[KEY]?.notifiedAt).toBe(at(6 * HOUR_MS + 30 * MIN).toISOString());
   });
 
-  it("the next cycle starts a fresh marking, so the same stage can be noticed again", async () => {
+  it("a run in flight keeps its notice across UTC midnight, never raising it twice; only a new run, after this one concluded, can notice the stage again (BI-086DC167)", async () => {
     const h = waitingOnB();
     await tick(h, at(6 * HOUR_MS));
-    // The next UTC day is a new cycle: the marking restarts at a, with no notice owed.
-    const nextCycle = await tick(h, at(DAY_MS));
-    expect((drive(h).marking as { cycleKey: string }).cycleKey).toBe(CYCLE("2026-03-03"));
+    await tick(h, at(6 * HOUR_MS + 15 * MIN));
+    const notified = structuredClone(marking(h).deadlines);
+    expect(notified[KEY]?.notifiedAt).toBe(at(6 * HOUR_MS + 15 * MIN).toISOString());
+    // The next UTC day: the same run, the same token, the same notice, nothing raised or sent again.
+    for (const later of [DAY_MS - 9 * HOUR_MS + 15 * MIN, DAY_MS]) {
+      const nextDay = await tick(h, at(later));
+      expect((drive(h).marking as { cycleKey: string }).cycleKey).toBe(CYCLE(DAY));
+      expect(marking(h).tokens.map((token) => token.node)).toEqual(["stage:b"]);
+      expect(marking(h).deadlines).toEqual(notified);
+      expect(nextDay.notices).toEqual([]);
+      expect(nextDay.activities.map((activity) => activity.kind)).not.toContain("workroom-drive-deadline");
+    }
+    // The run concludes; the next run starts on a later day under its own key, owing nothing yet. Its receipts
+    // were earned in this run (run-keyed, as the graph earns them), so the next run does not replay them.
+    h.workspaceState = { workroomDrive: { ...drive(h), action: "stop", reason: "success", stageKey: null, lastCycleKey: CYCLE("2026-03-03"),
+      receipts: [{ stageKey: "a", kind: "stage-evidence-recorded", iteration: 0, runKey: CYCLE(DAY) }],
+      marking: { ...(drive(h).marking as Record<string, unknown>), tokens: [] } } };
+    await tick(h, new Date("2026-03-04T09:00:00.000Z"));
+    expect((drive(h).marking as { cycleKey: string }).cycleKey).toBe(CYCLE("2026-03-04"));
+    expect(marking(h).tokens.map((token) => token.node)).toEqual(["stage:a"]);
     expect(marking(h).deadlines).toEqual({});
-    expect(nextCycle.notices).toEqual([]);
   });
 
   it("under the real flags (stage-deadline off, BI-086DC167) the room pauses construct_not_executable: nothing is raised or sent, the marking is kept", async () => {

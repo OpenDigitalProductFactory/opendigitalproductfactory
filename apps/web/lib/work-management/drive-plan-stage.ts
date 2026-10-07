@@ -32,6 +32,7 @@ import {
   WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
   isCompletingWorkroomDriveReceipt,
   isCompletingWorkroomDriveReceiptAt,
+  receiptInRun,
   type PriorWorkroomDrive,
 } from "./workroom-drive-receipts";
 
@@ -146,6 +147,8 @@ export function planStage(args: {
   cycle: ProjectedWorkShapeCycle;
   prior: PriorDriveForLatch | null;
   iteration?: number;
+  /** Given only by the graph drive (BI-086DC167): the run, so a run-scoped receipt counts only within it. */
+  runKey?: string;
 }): DrivePlan {
   const { input, stage, conformance, cycle, prior } = args;
   const definition = args.definition;
@@ -190,10 +193,11 @@ export function planStage(args: {
   }
 
   const iteration = args.iteration;
+  const runKey = args.runKey;
   const completing = input.receipts.some((receipt) =>
     iteration === undefined
       ? isCompletingWorkroomDriveReceipt(receipt, stage.key)
-      : isCompletingWorkroomDriveReceiptAt(receipt, stage.key, iteration),
+      : isCompletingWorkroomDriveReceiptAt(receipt, stage.key, iteration, runKey),
   );
   // On the graph path a `blocked` receipt is scoped to its iteration (PR-3c-3):
   // a pass the stage was sent back from must not latch the fresh pass. The
@@ -201,7 +205,7 @@ export function planStage(args: {
   const blocked = input.receipts.some(
     (receipt) =>
       receipt.stageKey === stage.key && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND
-      && (iteration === undefined || (receipt.iteration ?? 0) === iteration),
+      && (iteration === undefined || ((receipt.iteration ?? 0) === iteration && receiptInRun(receipt, runKey))),
   );
   // Bounded, not permanent: the latch holds within a cycle and releases on the
   // next, so a deployed fix can reach a room that previously failed closed.

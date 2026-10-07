@@ -1,18 +1,17 @@
-// A graph instance survives a cycle boundary (BI-086DC167). FAILING BY DESIGN
-// until the fix lands: these tests reproduce the defect on the tree they were
-// committed to.
+// A graph run survives a calendar boundary (BI-086DC167). Committed failing
+// first (the reproduction), then made to pass by the run-scoped marking.
 //
 // Design: docs/superpowers/specs/2026-10-02-gpp-phase-3c-drive-graph-execution-design.md
-// §4.2 ("A marking belongs to one cycle"), §8 (stage deadline), §9 (sub-shape).
+// §4.2 ("A marking is one run, and a run crosses calendar boundaries"), §8
+// (stage deadline), §9 (sub-shape).
 //
-// The defect: readStoredDriveMarking (drive-marking.ts:244-245) discards a
-// stored marking whenever its cycleKey differs from the tick's, and the tick's
-// cycle key is `<key>@<version>:<UTC date>` for every shape
-// (projectWorkShapeCycleBoundary, work-shapes.ts:510, reached from
-// projectDriveCycle, drive-plan-stage.ts:113-121, which the runner calls with
-// no override). So at UTC midnight every graph room restarts from the shape's
-// start, whatever was in flight: token clocks, rework counters, deadlines and
-// children are lost.
+// The defect it reproduces: readStoredDriveMarking discarded a stored marking
+// whenever its cycleKey differed from the tick's, and the tick's cycle key is
+// `<key>@<version>:<UTC date>` for every shape (projectWorkShapeCycleBoundary,
+// reached from projectDriveCycle with no override). So at UTC midnight every
+// graph room restarted from the shape's start, whatever was in flight: token
+// clocks, rework counters, deadlines and children were lost. Now the marking's
+// cycleKey is the run key and a run in flight is kept whatever the date.
 //
 // Each case drives the real runner (runWorkroomDriveJob) through the same
 // persist merge the transaction uses. The executable-construct table is a
