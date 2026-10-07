@@ -367,6 +367,8 @@ export async function sendMessage(input: {
   buildId?: string;
   attachmentId?: string;
   questionPacket?: QuestionPacket | null;
+  /** Row already written by /api/agent/send before it acknowledged (BI-DEFA25EE). */
+  acceptedUserMessageId?: string;
 }): Promise<
   | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow; formAssistUpdate?: Record<string, unknown> }
   | { error: string }
@@ -387,6 +389,16 @@ export async function sendMessage(input: {
   if (validationError) return { error: validationError };
 
   const trimmedContent = input.content.trim();
+  const userMsgSelect = { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true } as const;
+  // BI-DEFA25EE: reuse the row the send route already persisted; the match on
+  // thread, role and content keeps a caller from steering a turn with a stray id.
+  const acceptedUserMsg = input.acceptedUserMessageId
+    ? await prisma.agentMessage.findFirst({
+        where: { id: input.acceptedUserMessageId, threadId: input.threadId, role: "user", content: trimmedContent },
+        select: userMsgSelect,
+      })
+    : null;
+  if (input.acceptedUserMessageId && !acceptedUserMsg) return { error: "Message not found" };
 
   // Handle "re-enable" command — last-resort provider recovery
   if (trimmedContent.toLowerCase() === "re-enable") {
@@ -421,39 +433,34 @@ export async function sendMessage(input: {
       );
 
       return {
-        userMessage: serializeMessage(await prisma.agentMessage.create({
+        userMessage: serializeMessage(acceptedUserMsg ?? await prisma.agentMessage.create({
           data: { threadId: input.threadId, role: "user", content: trimmedContent, routeContext: input.routeContext },
-          select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+          select: userMsgSelect,
         })),
         agentMessage: serializeMessage(sysMsg),
       };
     }
   }
 
-  // Persist user message
-  const userMsg = await prisma.agentMessage.create({
+  // Persist user message (unless the send route already did)
+  const userMsg = acceptedUserMsg ?? await prisma.agentMessage.create({
     data: {
       threadId: input.threadId,
       role: "user",
       content: trimmedContent,
       routeContext: input.routeContext,
     },
-    select: {
-      id: true,
-      role: true,
-      content: true,
-      agentId: true,
-      routeContext: true,
-      createdAt: true,
-    },
+    select: userMsgSelect,
   });
 
   // Link attachment to the user message if provided
   if (input.attachmentId) {
-    await prisma.agentAttachment.update({
-      where: { id: input.attachmentId },
-      data: { messageId: userMsg.id },
-    });
+    if (!acceptedUserMsg) {
+      await prisma.agentAttachment.update({
+        where: { id: input.attachmentId },
+        data: { messageId: userMsg.id },
+      });
+    }
     // Re-fetch so the serialized response includes the attachment
     const linked = await prisma.agentAttachment.findMany({
       where: { messageId: userMsg.id },

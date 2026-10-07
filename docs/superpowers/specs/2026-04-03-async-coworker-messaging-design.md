@@ -110,6 +110,8 @@ This route replaces the direct server action call from the client. It:
 1. Validates auth + thread ownership (same as current `sendMessage` preamble)
 2. Persists the user message to the database
 3. Returns `{ userMessageId, status: "processing" }` immediately (< 100ms)
+
+> **Conformance note (2026-10-07, BI-DEFA25EE).** The shipped route had drifted from step 2: it answered `processing` first and wrote the user row inside the background run, so the panel showed "sent" for a message that a refresh could still lose. Steps 2–3 are now enforced by `apps/web/lib/agent/accept-user-message.ts`, and the background `sendMessage` reuses that row via `acceptedUserMessageId` instead of writing a second one.
 4. Kicks off agent execution as a **detached promise** (not awaited)
 5. The detached promise runs `sendMessage`-equivalent logic and emits the enriched `done` event on completion
 
