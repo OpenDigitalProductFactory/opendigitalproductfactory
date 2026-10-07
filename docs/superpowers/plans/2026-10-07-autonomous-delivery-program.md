@@ -46,6 +46,14 @@ Each wave unblocks the next. Items already awaiting acceptance (BI-A835D300, BI-
 | BI-B04A0203 | A change merged through CI and the merge queue counts as delivery and acceptance for direct-merge rooms. |
 | BI-04140C98, BI-5F3D6A37 | Awaiting-acceptance items get an owner and an age. |
 
+Added 2026-10-07 (gate audit against the operator's rule, below):
+
+| Item | What |
+| --- | --- |
+| BI-E0FEB8E9 | Guards run with git's automatic maintenance off; Janitor Tests stop failing builds for an unrelated race (PR #6017, merged). |
+| BI-F521E322 | A word is not evidence: the shape is raised only on the files a change touches, including a build plan's files; frees builds raised to large on a keyword (PR #6045). |
+| BI-C2158DA7 | Builds inherit their item's portfolio; 306 of 306 recent builds carry none, so budgets cannot bound them. Prerequisite for wave 2. |
+
 ### Wave 2: budgets (EP-PORTFOLIO-BUDGET-WIP)
 
 BI-9EC60FE0 (quarterly budgets in points) → BI-EF265C9A (funding reserves points) → BI-911840CB (one budget model). Then set budgets per decision 1, and move admission from shadow to enforcing.
@@ -53,6 +61,8 @@ BI-9EC60FE0 (quarterly budgets in points) → BI-EF265C9A (funding reserves poin
 ### Wave 3: autonomy (EP-4614F35E, EP-AUTONOMOUS-DECIDE)
 
 BI-2C8750FC (review gates become drive stages), BI-88341B5D (the room drives its PR to merge), BI-C1781121 (aged acceptance routed to a coworker), BI-3A462B04 (design reviews independent of the author's client), then BI-8A32EBFF (agents run author-owned stages under decision 2).
+
+Prerequisite added 2026-10-07: BI-E30C0F4F, autonomy policies from their sources (spec `docs/superpowers/specs/2026-10-07-autonomy-policy-sources-design.md`). The policy table had 0 rows and no writer, so every build defaulted to human control and no work-pattern binding could ever activate. Install setup derives WWWD policies from the business context, a WWMD baseline covers platform development at `autopilot`, and a business-policy gap runs `supervised` under an AI reviewer.
 
 ### Wave 4: outcome loop (EP-DECISION-OUTCOME-LOOP)
 
@@ -62,6 +72,10 @@ BI-6082C235, BI-7D1E43DE: decisions and delivered work are measured against thei
 
 - Turn capacity drain on after BI-78540D2C ships.
 - Enforce budget admission after wave 2 ships and budgets are set.
+
+## Gate rule (operator, 2026-10-07)
+
+Every gate has an autonomous way to be satisfied. A gate may route work to a person only when its criterion is traceable to a named regulation or written policy, and the refusal names it. A gate that hands work to a person on a score, a sensitivity label or a default violates this rule and is a defect.
 
 ## Constraint
 
