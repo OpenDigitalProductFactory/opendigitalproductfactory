@@ -59,3 +59,48 @@ export interface WorkItemDetail extends WorkItemSummary {
 export interface WorkItemStatusUpdateRequest {
   status: WorkItemStatus;
 }
+
+/**
+ * A customer site a job may be at (BI-C318C227 §2.2). Resolved from the job's
+ * account; the phone offers to confirm the site's location at check-in.
+ */
+export interface WorkItemSite {
+  /** Internal CustomerSite.id. */
+  id: string;
+  name: string;
+  /** First address line, for the offer's wording; null when the site has no address. */
+  addressLine: string | null;
+  hasAddress: boolean;
+  hasLocation: boolean;
+  /** True when a person already chose this location; the phone does not offer then. */
+  locationConfirmed: boolean;
+}
+
+export interface WorkItemSitesResponse {
+  sites: WorkItemSite[];
+}
+
+/** Body for confirming a site's location from the phone at check-in. */
+export interface SiteLocationConfirmationInput {
+  workItemId: string;
+  latitude: number;
+  longitude: number;
+  /** The fix's horizontal accuracy in metres. */
+  accuracyMeters: number;
+  /** Set after the person answered "yes" to "are you at the site?" for a far fix. */
+  confirmFar?: boolean;
+}
+
+export type SiteLocationConfirmationRefusal =
+  | "invalid-position"
+  | "not-assigned"
+  | "not-checked-in"
+  | "site-not-on-job"
+  | "no-address"
+  | "inaccurate"
+  | "already-confirmed"
+  | "far-from-address";
+
+export type SiteLocationConfirmationResult =
+  | { status: "confirmed"; latitude: number; longitude: number }
+  | { status: "refused"; reason: SiteLocationConfirmationRefusal; distanceMeters?: number };

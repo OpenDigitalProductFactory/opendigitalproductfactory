@@ -11,6 +11,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTheme } from "@/src/lib/theme";
 import { useJobsStore } from "@/src/features/jobs/jobs.store";
 import { useInvoicesStore } from "@/src/features/invoices/invoices.store";
+import { SiteLocationOffer } from "@/src/features/jobs/SiteLocationOffer";
+import { useSiteLocationStore } from "@/src/features/jobs/site-location.store";
 import type { WorkItemStatus } from "@dpf/types";
 
 // Field check-in/out actions available from each status (server enforces too).
@@ -40,6 +42,20 @@ export default function JobDetailScreen() {
   useEffect(() => {
     if (itemId) fetchDetail(itemId);
   }, [itemId, fetchDetail]);
+
+  const prepareSiteOffer = useSiteLocationStore((s) => s.prepareOffer);
+  const resetSiteOffer = useSiteLocationStore((s) => s.reset);
+  useEffect(() => resetSiteOffer, [itemId, resetSiteOffer]);
+
+  // After a successful check-in, offer to set the site's location from the
+  // phone (BI-C318C227 §2.2). Preparing the offer reads no position.
+  const runAction = async (to: WorkItemStatus): Promise<void> => {
+    if (!itemId) return;
+    await updateStatus(itemId, to);
+    if (to === "in-progress" && useJobsStore.getState().detail?.status === "in-progress") {
+      await prepareSiteOffer(itemId);
+    }
+  };
 
   if (isLoading && !detail) {
     return (
@@ -95,6 +111,7 @@ export default function JobDetailScreen() {
         <Text style={styles.desc}>{detail.description}</Text>
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      <SiteLocationOffer />
 
       <View style={styles.actions}>
         {actions.length === 0 && detail.status !== "completed" ? (
@@ -105,7 +122,7 @@ export default function JobDetailScreen() {
             key={a.to}
             style={[styles.button, isUpdating && styles.buttonDisabled]}
             disabled={isUpdating}
-            onPress={() => updateStatus(detail.itemId, a.to)}
+            onPress={() => void runAction(a.to)}
             accessibilityRole="button"
             testID={`action-${a.to}`}
           >

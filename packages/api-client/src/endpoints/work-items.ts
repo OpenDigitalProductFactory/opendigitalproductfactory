@@ -3,6 +3,10 @@ import type {
   AppendJobEvidenceRequest,
   JobEvidenceResponse,
   PaginatedResponse,
+  SiteLocationConfirmationInput,
+  SiteLocationConfirmationRefusal,
+  SiteLocationConfirmationResult,
+  WorkItemSitesResponse,
   WorkItemSummary,
   WorkItemDetail,
   WorkItemStatusUpdateRequest,
@@ -44,5 +48,34 @@ export function workItemsEndpoints(client: DpfClient) {
         `/api/v1/work-items/${encodeURIComponent(itemId)}/evidence`,
         input,
       ),
+
+    /** The customer sites this job can be at (BI-C318C227 §2.2). */
+    sites: (itemId: string) =>
+      client.get<WorkItemSitesResponse>(
+        `/api/v1/work-items/${encodeURIComponent(itemId)}/sites`,
+      ),
+
+    /**
+     * Confirm a site's location from the device's position at check-in. A
+     * refusal (inaccurate fix, far from the address, already confirmed, ...)
+     * comes back as a result, not an error, so the screen can answer it.
+     */
+    confirmSiteLocation: async (
+      siteId: string,
+      input: SiteLocationConfirmationInput,
+    ): Promise<SiteLocationConfirmationResult> => {
+      try {
+        return await client.post<SiteLocationConfirmationResult>(
+          `/api/v1/customer-sites/${encodeURIComponent(siteId)}/location/device-confirmation`,
+          input,
+        );
+      } catch (err) {
+        const refusal = err as { code?: string; reason?: SiteLocationConfirmationRefusal; distanceMeters?: number };
+        if (refusal?.code === "SITE_LOCATION_REFUSED" && refusal.reason) {
+          return { status: "refused", reason: refusal.reason, distanceMeters: refusal.distanceMeters };
+        }
+        throw err;
+      }
+    },
   };
 }
