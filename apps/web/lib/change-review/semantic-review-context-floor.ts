@@ -21,7 +21,7 @@ import { estimatePromptTokens } from "@/lib/build/opencode-task-context-budget";
  * JSON body with an issue list, so the reserve is a fixed allowance rather than
  * a ratio of the input.
  */
-export const SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS = 4_096;
+export const SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS = 16_384;
 
 /**
  * Proportional headroom over the measured prompt. Absorbs the ~chars/4

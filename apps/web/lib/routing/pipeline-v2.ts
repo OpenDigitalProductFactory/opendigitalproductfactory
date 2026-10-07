@@ -47,16 +47,13 @@ import {
   type EndpointPreferences,
 } from "./preference-finalization";
 import {
-  attachHarnessRecipeToPlan,
+  bindActivityExecutionPlan,
+  activityBudgetExclusion,
   buildPlanFromRecipe,
   buildDefaultPlan,
   resolveDefaultExecutionAdapter,
 } from "./execution-plan";
 import { buildRoutingConfidence } from "./route-confidence";
-import {
-  applyHarnessConfidenceOverride,
-  bindHarnessRecipeForActivity,
-} from "./harness-recipe";
 
 // ── Stage 3: Hard filter (V2 — contract-based) ──────────────────────────────
 
@@ -276,6 +273,7 @@ function filterHardV2(
    */
   capacityByProvider: ReadonlyMap<string, CapacitySnapshot> = new Map(),
   nowMs: number = Date.now(),
+  activity?: ActivityContract,
 ): HardFilterResultV2 {
   const eligible: EndpointManifest[] = [];
   const excluded: CandidateTrace[] = [];
@@ -304,7 +302,8 @@ function filterHardV2(
   const belowFloor: Array<{ ep: EndpointManifest; reason: string }> = [];
 
   for (const ep of endpoints) {
-    const reason = getExclusionReasonV2(ep, hardContract);
+    const reason = getExclusionReasonV2(ep, hardContract)
+      ?? activityBudgetExclusion(ep, hardContract, activity);
     if (reason === null) {
       const unmet = firstUnmetDimension(ep, contract.minimumDimensions);
       if (unmet) {
@@ -538,7 +537,7 @@ export async function routeEndpointV2(
       capacityByProvider = new Map();
     }
   }
-  const hardResult = filterHardV2(working, contract, capacityByProvider, nowMs);
+  const hardResult = filterHardV2(working, contract, capacityByProvider, nowMs, opts?.activityContract);
   working = hardResult.eligible;
 
   for (const trace of hardResult.excluded) {
@@ -725,17 +724,10 @@ export async function routeEndpointV2(
       : buildDefaultPlan(winner.endpoint, contract);
   const executionPlan =
     baseExecutionPlan && opts?.activityContract
-      ? attachHarnessRecipeToPlan(baseExecutionPlan, (() => {
-          const hint = {
-            providerId: winner.endpoint.providerId,
-            modelId: winner.endpoint.modelId,
-          };
-          return applyHarnessConfidenceOverride(
-            bindHarnessRecipeForActivity(opts.activityContract, hint),
-            hint,
-            opts.activityHarnessConfidenceOverrides,
-          );
-        })())
+      ? bindActivityExecutionPlan(baseExecutionPlan, opts.activityContract, {
+          providerId: winner.endpoint.providerId,
+          modelId: winner.endpoint.modelId,
+        }, opts.activityHarnessConfidenceOverrides)
       : baseExecutionPlan;
 
   // Build full candidate trace (eligible endpoints, with rankScore as fitnessScore)

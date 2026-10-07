@@ -1,6 +1,10 @@
+---
+status: draft
+---
+
 # Semantic review response budget
 
-Status: proposed; implementation and independent acceptance pending.
+Status: implementation admitted; independent acceptance pending.
 Owner: BI-128AEC8D, WC-9F8B48B9. Parent outcome: BI-06AE6833.
 
 Platform decision DI-77524B019489 selected the existing activity-budget path
@@ -50,8 +54,8 @@ not a promise that every review will finish. The observed 13,848 input tokens pl
 this allowance fit the reported 40,960-token window; admission must still include
 prompt estimation headroom and enforce the actual endpoint's limits.
 Do not change provider configuration, credentials, database records or introduce
-a second routing substrate. Final budget value and binding point require the
-dispatch trace and regression proof before implementation admission.
+a second routing substrate. Implementation admission IRD-48BDAFCA05C7
+binds this approach; provider dispatch and runtime acceptance remain to verify.
 
 ## Acceptance
 

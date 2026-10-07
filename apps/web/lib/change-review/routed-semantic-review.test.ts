@@ -56,6 +56,8 @@ describe("routed semantic review", () => {
     for (const [messages, , sensitivity, options] of vi.mocked(routeAndCall).mock.calls) {
       if (sensitivity === undefined) throw new Error("Reviewer sensitivity must be explicit.");
       expect(options).toMatchObject({ interactionMode: "sync", requiresStreaming: false });
+      expect(options?.activityContract?.tokenEnvelope.maxOutputTokens).toBe(16384);
+      expect(options?.agentMinimumContextTokens).toBeGreaterThan(16384);
       const routeContext = buildInitialRouteContext({ sensitivity, options,
         posture: null, localOnlyInference: false });
       const contract = await buildEffectiveRequestContract({ taskType: "build-review",

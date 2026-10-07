@@ -20,7 +20,8 @@ describe("semanticReviewMinimumContextTokens (BI-47ACE2C7)", () => {
       systemPrompt: "review this",
       userPrompt: "- one line",
     });
-    expect(floor).toBe(SEMANTIC_REVIEW_MIN_CONTEXT_TOKENS);
+    expect(floor).toBeGreaterThanOrEqual(SEMANTIC_REVIEW_MIN_CONTEXT_TOKENS);
+    expect(floor).toBeGreaterThan(SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS);
   });
 
   it("counts BOTH prompts, not just the user prompt", () => {
