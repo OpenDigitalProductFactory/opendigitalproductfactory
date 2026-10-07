@@ -337,11 +337,11 @@ const VALUE_INPUT_KEYS = ["reach", "impact", "confidence", "businessValue", "tim
 export function stampValueInputSource(
   params: Record<string, unknown>,
   who: { userId?: string; agentId?: string },
-): { demandInputSource: "ai" | "human"; demandInputById: string | null; demandInputAt: Date } | null {
+): { demandInputSource: "ai" | "human"; demandInputActorRef: string | null; demandInputAt: Date } | null {
   if (!VALUE_INPUT_KEYS.some((key) => typeof params[key] === "number")) return null;
   return who.agentId
-    ? { demandInputSource: "ai", demandInputById: who.agentId, demandInputAt: new Date() }
-    : { demandInputSource: "human", demandInputById: who.userId ?? null, demandInputAt: new Date() };
+    ? { demandInputSource: "ai", demandInputActorRef: who.agentId, demandInputAt: new Date() }
+    : { demandInputSource: "human", demandInputActorRef: who.userId ?? null, demandInputAt: new Date() };
 }
 
 async function scoreDemandItemHandler(

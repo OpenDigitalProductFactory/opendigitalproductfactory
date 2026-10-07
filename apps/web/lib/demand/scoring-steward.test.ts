@@ -110,7 +110,7 @@ describe("runDemandScoringSteward", () => {
     await runDemandScoringSteward(db, { ...base, batchSize: 5 });
     const written = store.get("id-BI-1")!;
     expect(written.demandInputSource).toBe("ai");
-    expect(written.demandInputById).toBe("AGT-WS-PORTFOLIO");
+    expect(written.demandInputActorRef).toBe("AGT-WS-PORTFOLIO");
     expect(written.demandInputAt).toEqual(NOW);
     expect(written.investmentBucket).toBe("run");
     // The effort estimate is attributed to the agent too, so the "who supplied

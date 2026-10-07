@@ -15,7 +15,7 @@
         },
         {
           "resolution": "inherited",
-          "fieldId": "data:backlog-item#demandInputById",
+          "fieldId": "data:backlog-item#demandInputActorRef",
           "provenance": "BI-00C68162; docs/superpowers/specs/2026-07-10-demand-management-design.md \u00a75.2a",
           "flags": [],
           "reason": "An internal Agent id or User id reference, the same shape as the existing estimateAiById/estimateHumanById; no name, email or other personal data is stored."

@@ -213,7 +213,7 @@ describe("score_demand_item value-input provenance (BI-00C68162)", () => {
     const result = await score({ itemId: "BI-1", impact: 3, confidence: 1 }, "user-owner", undefined);
     expect(result.success).toBe(true);
     const data = (db.backlogItemUpdate.mock.calls[0]![0] as { data: Record<string, unknown> }).data;
-    expect(data).toMatchObject({ impact: 3, confidence: 1, demandInputSource: "human", demandInputById: "user-owner" });
+    expect(data).toMatchObject({ impact: 3, confidence: 1, demandInputSource: "human", demandInputActorRef: "user-owner" });
     const payload = (db.activityCreate.mock.calls[0]![0] as { data: { payload: Record<string, unknown> } }).data.payload;
     expect(payload.inputSource).toBe("human");
   });
@@ -221,7 +221,7 @@ describe("score_demand_item value-input provenance (BI-00C68162)", () => {
   it("an agent supplying inputs stays attributed to the agent", async () => {
     await score({ itemId: "BI-1", impact: 2 }, "user-1", { agentId: "AGT-WS-PORTFOLIO" });
     const data = (db.backlogItemUpdate.mock.calls[0]![0] as { data: Record<string, unknown> }).data;
-    expect(data).toMatchObject({ demandInputSource: "ai", demandInputById: "AGT-WS-PORTFOLIO" });
+    expect(data).toMatchObject({ demandInputSource: "ai", demandInputActorRef: "AGT-WS-PORTFOLIO" });
   });
 
   it("a write with no value inputs leaves provenance alone", async () => {

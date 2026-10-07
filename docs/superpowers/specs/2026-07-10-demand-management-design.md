@@ -162,7 +162,7 @@ away from the owner.
 - **Order.** In-flight epic, then open epic, user request, bugs with live evidence,
   recurrence, evidence; oldest first on ties.
 - **Provenance.** `BacklogItem.demandInputSource` (reusing the `EstimateSource`
-  enum: ai | human | agreed) with `demandInputById` / `demandInputAt`. The steward
+  enum: ai | human | agreed) with `demandInputActorRef` / `demandInputAt`. The steward
   writes `ai` with its agent id; `score_demand_item` stamps `human` when a person
   supplies a value input, `ai` when an agent does. The basis is in the
   `demand_scored` activity payload (`proposedBy: "agent"`). Readiness never reads

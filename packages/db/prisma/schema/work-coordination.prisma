@@ -183,9 +183,9 @@ model BacklogItem {
   // steward or a coworker), human = an owner entered or overrode them, agreed =
   // an owner confirmed. The steward never proposes over human|agreed. null =
   // unattributed (rows scored before this column, or never scored).
-  // demandInputById is the agent id (ai) or user id (human).
+  // demandInputActorRef is the agent id (ai) or user id (human).
   demandInputSource       EstimateSource?
-  demandInputById         String?
+  demandInputActorRef         String?
   demandInputAt           DateTime?
   // Investment bucket (EP-DEMAND-MGMT Phase 3): run | grow | transform. The
   // strategic-balance dimension so demand is prioritized against a target

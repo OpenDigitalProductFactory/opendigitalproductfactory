@@ -133,7 +133,7 @@ async function writeProposal(
     demandScoreFramework: "rice",
     demandScoreComputedAt: opts.now,
     demandInputSource: "ai",
-    demandInputById: opts.agentId,
+    demandInputActorRef: opts.agentId,
     demandInputAt: opts.now,
     ...(proposal.investmentBucket && !item.investmentBucket
       ? { investmentBucket: proposal.investmentBucket }
