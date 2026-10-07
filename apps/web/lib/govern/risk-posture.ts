@@ -150,9 +150,10 @@ export function resolveRiskEnvelope(posture: string | null | undefined): RiskEnv
 // (seed-org-wwwd-corpus DEFAULT_AUTONOMY_POLICY), so existing installs are
 // unchanged. Conservative only tightens (more escalation, never arbitrate);
 // progressive only loosens within bounds (arbitrate low+medium risk at high
-// confidence). High/critical-risk decisions ALWAYS escalate regardless (an
-// unconditional rule in the evaluator), so no posture can make an agent reckless
-// on a high-risk call.
+// confidence). No posture lets a decision proceed above medium risk: none
+// arbitrates above medium, and maxRiskForRecommendation defaults to medium
+// (BI-7FFFBEE3 turned the evaluator's unconditional high/critical rule into
+// that policy limit, so an escalation now names it).
 
 /** Identity policy — MUST equal seed-org-wwwd-corpus DEFAULT_AUTONOMY_POLICY. */
 const BALANCED_AUTONOMY_POLICY: DecisionAutonomyPolicy = {

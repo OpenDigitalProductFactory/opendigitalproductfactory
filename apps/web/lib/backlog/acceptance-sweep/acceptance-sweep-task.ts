@@ -22,10 +22,17 @@ import {
 import { computeNextCronRun } from "@/lib/operate/cron-next-run";
 
 import { loadAcceptancePoolAges, type AcceptancePoolAgeDb } from "./acceptance-pool-age";
+import { closeAllowedAcceptanceItem, type AcceptanceSweepCloseDb } from "./acceptance-sweep-close";
 import { evaluateOwedAcceptance, productionSweepEvaluateDeps } from "./acceptance-sweep-evaluate";
 import { selectAcceptanceSweepPage, type AcceptanceSweepPageDb } from "./acceptance-sweep-page";
 import { runAcceptanceSweep, type AcceptanceSweepConfig, type AcceptanceSweepPorts, type AcceptanceSweepSummary } from "./acceptance-sweep-run";
 import type { OwedAcceptanceOwnerDb } from "./owed-acceptance-owner";
+import {
+  COMPLETION_TRANSITION_TOOL,
+  resolveCloseAuthorisation,
+  type CloseAuthorisation,
+  type CloseAuthorisationPorts,
+} from "./close-authorisation";
 import { recordOwedAcceptanceSnapshot, type OwedSnapshotDb } from "./owed-snapshot";
 
 /** Stable identity of the standing Acceptance steward room. */
@@ -124,7 +131,35 @@ export async function recordSweepRun(db: RoomDb, summary: AcceptanceSweepSummary
   return { activityId: activity.id };
 }
 
-type SweepDb = RoomDb & TaskStatusDb & AcceptancePoolAgeDb & AcceptanceSweepPageDb & OwedSnapshotDb & OwedAcceptanceOwnerDb;
+type PlatformConfigDb = {
+  platformConfig: { findUnique(args: { where: { key: string }; select: { value: true } }): Promise<{ value: unknown } | null> };
+};
+
+type SweepDb = RoomDb & TaskStatusDb & AcceptancePoolAgeDb & AcceptanceSweepPageDb & OwedSnapshotDb & OwedAcceptanceOwnerDb
+  & AcceptanceSweepCloseDb & PlatformConfigDb;
+
+/**
+ * Current authority behind the pre-authorisation (BI-45D3BBF4): the operator's
+ * live membership, and the coworker's stored grants (never the registry
+ * defaults). Lazy imports keep both off the scheduler's import graph.
+ */
+export function productionCloseAuthorisationPorts(db: PlatformConfigDb): CloseAuthorisationPorts {
+  return {
+    readConfig: async (key) => (await db.platformConfig.findUnique({ where: { key }, select: { value: true } }))?.value ?? null,
+    operatorMayCloseBacklog: async (userId) => {
+      const { currentUserContext } = await import("@/lib/govern/current-user-context");
+      const { can } = await import("@/lib/permissions");
+      const context = await currentUserContext(userId);
+      return context !== null && can(context, "manage_backlog");
+    },
+    agentCompletionGrant: async (agentId) => {
+      const { expandGrants, getAgentToolGrantsAsync, getToolGrantMapping } = await import("@/lib/tak/agent-grants");
+      const held = new Set(expandGrants(await getAgentToolGrantsAsync(agentId)));
+      // Required grants are alternatives (grantsSatisfyRequirement); cite the one actually held.
+      return (getToolGrantMapping()[COMPLETION_TRANSITION_TOOL] ?? []).find((grant) => held.has(grant)) ?? null;
+    },
+  };
+}
 
 function productionPorts(db: SweepDb, now: Date, agentId: string): AcceptanceSweepPorts {
   const evaluateDeps = productionSweepEvaluateDeps(db);
@@ -136,6 +171,12 @@ function productionPorts(db: SweepDb, now: Date, agentId: string): AcceptanceSwe
     evaluate: (item) => evaluateOwedAcceptance(item, evaluateDeps),
     recordSnapshot: (item, projection) => recordOwedAcceptanceSnapshot({ db, backlogItemId: item.id, projection, recordedByAgentId: agentId }),
     recordRun: (summary) => recordSweepRun(db, summary, agentId),
+    resolveCloseAuthorisation: (): Promise<CloseAuthorisation> =>
+      resolveCloseAuthorisation(agentId, productionCloseAuthorisationPorts(db)),
+    close: async (item, decision, authorisation) => {
+      const { completeBacklogItemTransition } = await import("@/lib/backlog/initiative-readiness/backlog-terminal-transition");
+      return closeAllowedAcceptanceItem({ item, decision, authorisation, agentId, now, db, complete: completeBacklogItemTransition });
+    },
   };
 }
 

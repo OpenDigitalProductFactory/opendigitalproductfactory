@@ -23,22 +23,22 @@ status: active
 
 | Deliverable | Objectives | Contracts | Flow | Acceptance |
 |---|---|---|---|---|
-| D1 compose-chain resolver | OBJ-CHAIN | `resolveComposeChain`, `scripts/lib/compose-chain.mjs`, `compose.sh`, `release-target.ts`, `bootstrap-organization-pki.sh` | install, start and self-upgrade render one chain | AC-1 |
+| D1 compose-chain resolver | OBJ-CHAIN | `resolveComposeChain`, `scripts/lib/compose-chain.mjs`, `compose.sh`, `release-target.ts`, `bootstrap-organization-pki.sh`, `activation-overlays.txt` | install, start and self-upgrade render one chain | AC-1 |
 | D2 catalog recreate class | OBJ-STATEFUL, OBJ-HONEST-GATE | `recreateClass`, `capability-service-catalog.generated.json`, `dpf.recreate-class` | catalog generation and contract test | AC-5 |
 | D3 sidecar converge (step 7e) | OBJ-CONVERGE | `promote.sh` step 7e, `service-converge-outcome.json` | self-upgrade step 7e sidecar-converge | AC-2, AC-4 |
 | D4 data-owner converge (step 3c) | OBJ-STATEFUL | `promote.sh` step 3c | self-upgrade step 3c data-owner-converge | AC-3 |
 | D5 checkable convergence gate | OBJ-HONEST-GATE | `convergence-surfaces.json`, `check-convergence-impact` | PR convergence gate | AC-5 |
 
-## D1 (BI-B422ED03): one compose-chain resolver (AC-1)
+## D1 (BI-B422ED03): one activation table for the compose chain (AC-1)
 
-- **Change:**
-  - Add `scripts/lib/compose-chain.mjs` with `resolveComposeChain({ installState, env, platform })`, carrying the rule now in `scripts/installer/lib/compose.sh:95-120`: the base file, the platform overlay, the release overlay, `edge.yml`, `organization-trust.yml` plus `tls.yml`, and `edge-actions.yml`.
-  - `compose.sh` calls it.
-  - `release-target.ts` and `promote.sh` (`_f_args`) use the derived chain. `DPF_SELF_UPGRADE_COMPOSE_FILES` becomes an override, logged when it differs.
-  - `bootstrap-organization-pki.{sh,ps1}` uses the resolver instead of its own chain.
-  - `compose-chain.ps1` gets fixture parity with the resolver.
-- **Tests first:** a fixture install with the `DPF_ORGANIZATION_TRUST_ENABLED=1` marker and a frozen `composeFiles` lacking TLS. The resolver returns the TLS overlays, and so do the promoter's `_f_args` (shell harness).
-- **Ships alone:** yes. It makes `portal-tls` visible to step 7d and the gate even before D3.
+- **Change, as built:**
+  - `scripts/installer/lib/activation-overlays.txt` holds the marker-to-overlay rule.
+  - `compose.sh` reads it.
+  - `promote.sh` appends marker-activated overlays from the target tree's table to the recorded chain.
+  - Release assets ship the table.
+  - `compose-chain.ps1` is pinned to the table by a parity test.
+- **Tests first:** `scripts/promote-compose-activation-overlays.test.mjs` covers TLS enabled after install, both markers in table order, no marker or one not set to `1`, an overlay already recorded, a target without the table or the overlay file, and the release-assets copy. It runs in the self-upgrade acceptance workflow.
+- **Ships alone:** yes. `portal-tls` becomes visible to the promoter's chain (and so to step 7d and, later, step 7e).
 
 ## D2 (BI-22A2CA0D): per-service recreate class (AC-5, part)
 

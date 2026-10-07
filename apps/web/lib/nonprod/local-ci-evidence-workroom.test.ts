@@ -21,18 +21,32 @@ describe("canonical CI reuse Workroom reconciliation", () => {
     vi.resetAllMocks();
     tx.externalEvidenceRecord.findUnique.mockResolvedValue({ ...evidence });
     tx.externalEvidenceRecord.updateMany.mockResolvedValue({ count: 1 });
-    tx.workroom.findMany.mockResolvedValue([{ id: "room-1" }]);
+    tx.workroom.findMany.mockResolvedValue([{ id: "room-1", headSha: sha }]);
   });
 
   it("attaches only a null link to the unique canonical branch/SHA/session room", async () => {
     expect(await settle()).toMatchObject({ kind: "settled", projection: { status: "reused", evidenceRecordId: "evidence-1" } });
     expect(tx.workroom.findMany).toHaveBeenCalledWith({ where: {
-      headBranch: "fix/reviewer", headSha: sha, executorRef: "task-1", archivedAt: null,
-    }, select: { id: true }, take: 2 });
+      headBranch: "fix/reviewer", executorRef: "task-1", archivedAt: null,
+    }, select: { id: true, headSha: true }, take: 3 });
     expect(tx.externalEvidenceRecord.updateMany).toHaveBeenCalledWith({
       where: { id: "evidence-1", workCapsuleId: null }, data: { workCapsuleId: "room-1" },
     });
     expect(tx.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+  });
+
+  it("BI-C9912C22: attaches to the session's adopted room that has not recorded its head yet", async () => {
+    tx.workroom.findMany.mockResolvedValue([{ id: "room-adopted", headSha: null }]);
+    await settle();
+    expect(tx.externalEvidenceRecord.updateMany).toHaveBeenCalledWith({
+      where: { id: "evidence-1", workCapsuleId: null }, data: { workCapsuleId: "room-adopted" },
+    });
+  });
+
+  it("BI-C9912C22: leaves the record unlinked when two rooms match only inexactly", async () => {
+    tx.workroom.findMany.mockResolvedValue([{ id: "room-1", headSha: null }, { id: "room-2", headSha: null }]);
+    await settle();
+    expect(tx.externalEvidenceRecord.updateMany).not.toHaveBeenCalled();
   });
 
   it("does not rewrite an existing matching link", async () => {
@@ -42,7 +56,7 @@ describe("canonical CI reuse Workroom reconciliation", () => {
   });
 
   it("refuses ambiguous room ownership", async () => {
-    tx.workroom.findMany.mockResolvedValue([{ id: "room-1" }, { id: "room-2" }]);
+    tx.workroom.findMany.mockResolvedValue([{ id: "room-1", headSha: sha }, { id: "room-2", headSha: sha }]);
     await expect(settle()).rejects.toThrow("local-ci-evidence-workroom-ambiguous");
     expect(tx.externalEvidenceRecord.updateMany).not.toHaveBeenCalled();
   });

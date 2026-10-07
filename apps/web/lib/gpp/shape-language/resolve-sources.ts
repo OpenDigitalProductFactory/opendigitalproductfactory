@@ -107,6 +107,15 @@ export function defaultResolveSources(): GppResolveSources {
       const at = ref.lastIndexOf("@");
       return getWorkShapeVersion(ref.slice(0, at), ref.slice(at + 1)) !== null;
     },
+    // GPP Phase 3c PR-3c-5 (D-9, D-10): the registered version's ceiling and stages.
+    shapeDefinition(ref) {
+      if (!GPP_SHAPE_REF_PATTERN.test(ref)) return null;
+      const at = ref.lastIndexOf("@");
+      const shape = getWorkShapeVersion(ref.slice(0, at), ref.slice(at + 1));
+      return shape
+        ? { grants: [...shape.grants], stages: shape.stages.map((stage) => ({ key: stage.key, ...(stage.tools ? { tools: [...stage.tools] } : {}), ...(stage.subShape ? { subShape: stage.subShape } : {}) })) }
+        : null;
+    },
   };
 }
 

@@ -249,10 +249,10 @@ Voice profiles are managed in the platform's wiki area at the persona admin page
 1. Upload audio or video samples on the profile admin page
 2. The platform extracts audio from video (FFmpeg, server-side)
 3. Optional vocal isolation removes background noise, music, and other speakers
-4. **Consent capture** — for any `persona-real` profile, a structured consent record must be created and confirmed before training runs. This is a non-negotiable gate
-5. The provider training API is called with the processed audio
-6. A `VoiceTrainingJob` row tracks status: `pending` → `processing` → `ready` → `failed`
-7. On `ready`, `VoiceProfile.providerVoiceId` is set and `voiceEnabled` can be turned on
+4. **Consent capture** — for any `persona-real` profile, a structured consent record must be created and confirmed before the voice is registered. This is a non-negotiable gate
+5. The default self-hosted Chatterbox path is zero-shot: the processed audio is registered as the profile's reference audio, with no training step
+6. On the opt-in Cartesia path, the clone API is called with the processed audio and the profile's own `status` and `providerVoiceId` record the result; there is no separate training-job record
+7. Once the profile holds a usable voice, `voiceEnabled` can be turned on
 
 Re-training is allowed when sample quality improves or the existing voice degrades. Each training run creates a new `VoiceProfile` version; the profile points at the current active version.
 

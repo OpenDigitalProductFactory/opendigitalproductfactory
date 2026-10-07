@@ -178,6 +178,15 @@ model BacklogItem {
   demandScore             Float?
   demandScoreFramework    DemandScoreFramework?
   demandScoreComputedAt   DateTime?
+  // Value-input provenance (BI-00C68162): WHO supplied reach/impact/confidence.
+  // Reuses EstimateSource — ai = an agent proposed them (the demand-scoring
+  // steward or a coworker), human = an owner entered or overrode them, agreed =
+  // an owner confirmed. The steward never proposes over human|agreed. null =
+  // unattributed (rows scored before this column, or never scored).
+  // demandInputActorRef is the agent id (ai) or user id (human).
+  demandInputSource       EstimateSource?
+  demandInputActorRef         String?
+  demandInputAt           DateTime?
   // Investment bucket (EP-DEMAND-MGMT Phase 3): run | grow | transform. The
   // strategic-balance dimension so demand is prioritized against a target
   // allocation, not a flat list. Default derived from workType. §8.

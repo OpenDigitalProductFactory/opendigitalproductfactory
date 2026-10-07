@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Demand Management — turn the raw backlog into a governed value-ranked investment funnel
 
 | Field | Value |
@@ -135,6 +139,49 @@ A pure function `computeDemandScore(inputs, framework, weights)` in `apps/web/li
 
 **Default framework (recommended, operator open-question Q2): RICE.** Rationale: RICE's inputs map onto fields we already have or can derive with the least new operator burden (Reach ← `occurrenceCount`, Effort ← `effortSize→jobSize`, only Impact+Confidence are net-new), and RICE is the product-discovery standard. **WSJF is seeded as the alternate preset** for orgs that prefer Cost-of-Delay sequencing (Jira Align/SAFe shops) — it needs the three CoD inputs. The org flips the default via the WWWD stance editor; no code change.
 
+### 5.2a Agent-proposed inputs: the demand-scoring steward (BI-00C68162, 2026-10-07)
+
+The store-inputs architecture assumed someone would supply the inputs. Nobody did:
+83 of 1,941 open items were scored when the value ranking (BI-78540D2C) went live,
+so starts fell back to age. The steward fills the gap without taking the decision
+away from the owner.
+
+- **Where it runs.** A deterministic `ScheduledAgentTask` kind, `demand-scoring-steward`,
+  seeded daily (05:41 UTC, before the 14:00 tee-up) and owned by the Portfolio
+  Advisor (`AGT-WS-PORTFOLIO`), the coworker that owns demand triage. Same
+  mechanism as `decision-engine-review` and `bookkeeping-cycle`: no new cron, no
+  model call. Batch size lives in the task's `taskConfig.batchSize` (default 50,
+  clamped 1-200).
+- **What it proposes.** `apps/web/lib/demand/score-proposal.ts`, pure: RICE reach
+  (occurrences + reviewed evidence links), impact on the 3/2/1/0.5/0.25 ladder
+  (work type, stepped up for a user request, a severe bug report, an in-flight
+  epic), confidence 0.5 (0.8 with reviewed evidence, never 1.0), effort from the
+  recorded job size, then the effort estimate, then the t-shirt size. Bucket keeps
+  an existing one, else `deriveBucket(workType)`, else stays empty for the owner.
+  Every number carries a one-line basis. No effort signal means no proposal.
+- **Order.** In-flight epic, then open epic, user request, bugs with live evidence,
+  recurrence, evidence; oldest first on ties.
+- **Provenance.** `BacklogItem.demandInputSource` (reusing the `EstimateSource`
+  enum: ai | human | agreed) with `demandInputActorRef` / `demandInputAt`. The steward
+  writes `ai` with its agent id; `score_demand_item` stamps `human` when a person
+  supplies a value input, `ai` when an agent does. The basis is in the
+  `demand_scored` activity payload (`proposedBy: "agent"`). Readiness never reads
+  the source: standing follows evidence, not provenance (BI-A5697C5E).
+- **No overwrite.** The read selects only `demandScore IS NULL` rows whose source
+  is null or `ai`; the write is guarded on the row's `updatedAt` plus the same
+  predicate, so an owner edit that lands mid-run wins. Present inputs are kept;
+  the steward only fills gaps.
+
+Research & benchmarking for this slice:
+
+| Comparable | What it does | DPF adopts | DPF rejects |
+|---|---|---|---|
+| Intercom RICE (McBride, 2016) | Reach per period, impact 3/2/1/0.5/0.25, confidence 100/80/50%, effort in person-months | The scales verbatim, and the rule that a low-confidence guess is still worth recording as 50% | Person-months: DPF keeps relative job size from `effortSize` |
+| Jira Product Discovery (AI fields / formula fields) | AI suggests field values on ideas; a formula field computes the score; the PM edits | Suggested inputs that a person can overwrite, with the formula unchanged | A model call per item: here the proposal is deterministic so the same item always gets the same number and a test can pin it |
+| Productboard (AI insights / Customer Importance) | Links evidence to features and lets evidence volume drive importance | Evidence count raises reach and confidence | Inferring importance from free text at scale without a reviewed link |
+
+---
+
 ### 5.3 Value-vs-Effort matrix (the view, not a formula)
 
 The Demand board (§9) renders scored items on a **value (or `demandScore`) × effort 2×2** — Quick Wins / Big Bets / Fill-ins / Time Sinks — the JPD/ProductPlan pattern. Pure presentation over the stored inputs; no extra persistence.
@@ -150,6 +197,8 @@ Extend `ingestBacklogItem` with a **semantic dedup pass** (in addition to today'
 ## 7. Ranking gate between triage and promote
 
 Today `promote_to_build_studio` draws build-eligible items by `priority`-int + recency ([governed-backlog-tee-up.ts:125](../../../apps/web/lib/governed-backlog-tee-up.ts)). Change the **ordering signal** (not the Definition-of-Ready) so the auto-sweep and `get_next_recommended_work` draw **highest `demandScore`-per-portfolio-envelope first**, with the existing dependency cascade ([2026-06-22 plan](../plans/2026-06-22-portfolio-prioritization-cascade.md)) still able to *floor* (not override) the rank of dependencies of sold offerings. `priority Int?` is retained as an explicit **manual override** (operator pin) that trumps the computed rank, logged as a WWWD decision. The readiness scorer `recommend.ts` keeps its spec/plan-presence weighting but its `priority present +2` flat term is replaced by the normalized `demandScore`.
+
+**Implementation status (BI-78540D2C, 2026-10).** The governed tee-up and the capacity drain now share one ordering, `rankForStart` in `apps/web/lib/demand/start-ranking.ts`: scored before unscored, a starved investment bucket first within a tier when `demandBucketTargets` is set, then `demandScore`, with active epic and age only as tie-breaks; each started build's activity records the reason. Not yet implemented from this section: the per-portfolio-envelope normalization, the dependency-cascade floor, and the `priority` operator pin.
 
 **Two governance planes** (ServiceNow pattern): the Screen gate (`triageOutcome=build`) is *demand qualification*; the Ready gate (investment-approved, within budget envelope) is *portfolio investment approval* — a distinct, WWWD-governed step so "worth doing" and "fund it now" are not conflated.
 

@@ -18,20 +18,12 @@ import { TOOL_TO_GRANTS, isToolAllowedByGrants } from "./agent-grants";
 const SKILLS_ROOT = path.resolve(__dirname, "../../../../packages/dpf-skill-pack/skills");
 const EXTERNAL_AGENTS = ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX", "AGT-EXT-GROK"] as const;
 
-// Gaps that predate this guard, each awaiting a grant-or-remove decision in
-// BI-E0F19DBA. This list may only shrink: a tool that becomes reachable must be
-// removed from it, and a new gap fails the test.
-const KNOWN_GAPS: Record<string, string> = {
-  triage_backlog_item: "BI-E0F19DBA",
-  size_backlog_item: "BI-E0F19DBA",
-  doc_save: "BI-E0F19DBA",
-  query_ontology_graph: "BI-E0F19DBA",
-  establish_coworker: "BI-E0F19DBA",
-  manage_coworker_tool_grant: "BI-E0F19DBA",
-  get_marketing_summary: "BI-E0F19DBA",
-  get_campaign_plan: "BI-E0F19DBA",
-  create_presentation: "BI-E0F19DBA",
-};
+// Gaps that predate this guard. BI-E0F19DBA closed every one: each tool was
+// either granted to the external agents (EXTERNAL_DEVELOPMENT_GRANTS in
+// packages/db/src/coworker-grants.ts) or dropped from a skill's Surface A
+// allowed-tools because that step is in-portal only. This list may only
+// shrink; it is empty, so a new gap fails the test.
+const KNOWN_GAPS: Record<string, string> = {};
 
 type RegistryAgent = { agent_id: string; config_profile?: { tool_grants?: string[] } };
 
@@ -84,6 +76,14 @@ describe("shipped DPF skills only direct external agents to tools they can reach
       const held = agentGrants(agentId);
       expect(isToolAllowedByGrants("record_decision_outcome", held)).toBe(true);
       expect(isToolAllowedByGrants("propose_improvement", held)).toBe(true);
+    });
+
+    // BI-E0F19DBA: the gap was closed by dropping these from Surface A, not by
+    // granting them. They change coworker authority and stay in-portal.
+    it(`${agentId} cannot establish coworkers or change their grants`, () => {
+      const held = agentGrants(agentId);
+      expect(isToolAllowedByGrants("establish_coworker", held)).toBe(false);
+      expect(isToolAllowedByGrants("manage_coworker_tool_grant", held)).toBe(false);
     });
   }
 

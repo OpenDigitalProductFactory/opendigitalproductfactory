@@ -137,6 +137,36 @@ Independently shippable. It changes no behaviour until the sweep calls it.
 - UX verification: `dpf-ux-fit-review`, then a check on the running app
   through the shared nonproduction lease (AC-AA-05).
 
+## Phase 2b: close what the gate allows (BI-45D3BBF4), after phase 2 — as built
+
+Design §3.6. No schema; the authorisation is a `PlatformConfig` row.
+
+- `acceptance-sweep/close-authorisation.ts`: the record, its parser, and
+  `resolveCloseAuthorisation`, which disables closing unless the record is in
+  scope and enabled, its operator is still active with `manage_backlog`, and
+  the steward holds a stored grant for `update_backlog_item_status`.
+- `acceptance-sweep/close-authorisation-writer.ts` and
+  `actions/acceptance-sweep-close-authorisation.ts`: grant and revoke, needing
+  `manage_platform` and `manage_backlog` and a reason; revocation keeps the
+  grant's provenance.
+- `acceptance-sweep/acceptance-sweep-close.ts`: one closure through
+  `completeBacklogItemTransition` with the steward actor, the operator's human
+  context, an authority citing the pre-authorisation, and completionEvidence
+  citing the readiness decision.
+- `acceptance-sweep-run.ts`: resolves the authorisation once per run, closes
+  closable items whose decision verdict is `allowed` up to the bound, and
+  reports `closing` in the summary. `acceptance-sweep-evaluate.ts` carries the
+  decision with the projection.
+- Tests: allowed→closed citing the authorisation; input-required, denied,
+  signal-unavailable and readiness-unavailable never closed; absent, revoked,
+  operator-not-authorised, agent-not-granted and unreadable authorisation close
+  nothing and say why; the bound; refusals, skips and errors recorded; the
+  steward's registry grant pinned by a test (no grant added).
+- Live proof, AC-5: after an operator grants the authorisation, read two
+  consecutive run summaries and the awaiting-acceptance count. Not yet run.
+- Rollback: revoke the authorisation (the next run closes nothing) or revert
+  the PR.
+
 ## Risks and rollback
 
 - **Readiness cost per run.** It is bounded by the page size (design §7). If a
@@ -162,6 +192,7 @@ Umbrella: BI-5F3D6A37. Decision: `decomposed`.
 | Acceptance sweep task | BI-DF255666 | BI-04140C98 |
 | Coworker routing | BI-C1781121 | BI-DF255666 |
 | Delivery surfaces | BI-CEC60185 | BI-04140C98 |
+| Close what the gate allows | BI-45D3BBF4 | BI-DF255666 |
 
 Coverage receipt: recorded with `record_plan_backlog_coverage` after spec
 approval mints the objective baseline.

@@ -3,6 +3,10 @@ import type {
   CapabilityServiceHealthProjection,
 } from "@/lib/platform-runtime/service-health";
 import { JOB_PRESENTATION, type MonitoringAlert } from "@/lib/observability/monitoring-jobs";
+import {
+  inactiveCapabilityServices,
+  isInactiveCapabilityTarget,
+} from "@/lib/platform-runtime/inactive-scrape-targets";
 
 export type Tone = CapabilityHealthTone | "critical";
 
@@ -89,7 +93,7 @@ export type ServiceDefinition = {
 };
 
 export type ServiceStatus = ServiceDefinition & {
-  state: "up" | "down" | "unknown" | "loading" | "offline" | "not-monitored";
+  state: "up" | "down" | "unknown" | "loading" | "offline" | "not-monitored" | "inactive";
   label: string;
   tone: Tone;
 };
@@ -154,7 +158,7 @@ export function derivePlatformSummary({
     return { value: "Unavailable", tone: "critical", detail: "Monitoring stack is unreachable" };
   }
 
-  const activeAlerts = getPlatformImpactAlerts(alerts);
+  const activeAlerts = getPlatformImpactAlerts(alerts, inactiveCapabilityServices(capabilityHealth));
   const criticalAlerts = activeAlerts.filter((alert) => alert.labels.severity === "critical");
   if (criticalAlerts.length > 0) {
     return {
@@ -398,10 +402,15 @@ export function deriveServiceStatusesFromTargets({
   targets,
   loading,
   offline,
+  inactiveServices = new Set<string>(),
 }: {
   targets: PrometheusActiveTarget[] | null | undefined;
   loading: boolean;
   offline: boolean;
+  // BI-36DE938C — services whose runtime capability is inactive (from the
+  // capability projection). Their static scrape targets are expected to be
+  // unreachable, so a non-up target renders as inactive, not DOWN.
+  inactiveServices?: ReadonlySet<string>;
 }): ServiceStatus[] {
   if (offline) {
     return [];
@@ -435,6 +444,8 @@ export function deriveServiceStatusesFromTargets({
       const def: ServiceDefinition = { name, job };
       if (t.health === "up") {
         rows.push({ ...def, state: "up", label: "UP", tone: "success" });
+      } else if (isInactiveCapabilityTarget(t.labels, inactiveServices)) {
+        rows.push({ ...def, state: "inactive", label: "Inactive", tone: "neutral" });
       } else if (t.health === "down") {
         rows.push({
           ...def,
@@ -479,8 +490,25 @@ export function getActiveAlerts(alerts: MonitoringAlert[]): MonitoringAlert[] {
   return alerts.filter((alert) => alert.state === "firing" || alert.state === "pending");
 }
 
-export function getPlatformImpactAlerts(alerts: MonitoringAlert[]): MonitoringAlert[] {
-  return getActiveAlerts(alerts).filter((alert) => !isTelemetryTargetAlert(alert));
+export function getPlatformImpactAlerts(
+  alerts: MonitoringAlert[],
+  inactiveServices: ReadonlySet<string> = new Set<string>(),
+): MonitoringAlert[] {
+  return getActiveAlerts(alerts).filter(
+    (alert) => !isTelemetryTargetAlert(alert) && !isInactiveCapabilityTargetAlert(alert, inactiveServices),
+  );
+}
+
+// BI-36DE938C — a ContainerDown alert for a target whose service belongs to an
+// inactive runtime capability reports an intentional absence, not an outage.
+export function isInactiveCapabilityTargetAlert(
+  alert: MonitoringAlert,
+  inactiveServices: ReadonlySet<string>,
+): boolean {
+  return (
+    alert.labels.alertname === "ContainerDown" &&
+    isInactiveCapabilityTarget(alert.labels, inactiveServices)
+  );
 }
 
 export function getTelemetryTargetAlerts(alerts: MonitoringAlert[]): MonitoringAlert[] {

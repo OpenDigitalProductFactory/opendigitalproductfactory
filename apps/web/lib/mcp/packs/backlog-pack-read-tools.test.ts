@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   mapDemandRows: vi.fn(),
   projectReadiness: vi.fn(),
   resolveTerminalRecovery: vi.fn(),
+  readCompletion: vi.fn(),
 }));
 
 const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." };
@@ -42,6 +43,9 @@ vi.mock("@/lib/backlog/initiative-readiness/terminal-recovery", () => ({
 }));
 vi.mock("@/lib/backlog/initiative-readiness/entry-adapter", () => ({
   projectBacklogItemReadinessSummary: mocks.projectReadiness,
+}));
+vi.mock("@/lib/backlog/initiative-readiness/backlog-completion-evaluation", () => ({
+  readBacklogItemCompletion: mocks.readCompletion,
 }));
 
 import { getBacklogItem, listBacklogItems } from "./backlog-pack-read-tools";
@@ -84,6 +88,7 @@ describe("backlog deferral read projection", () => {
     mocks.loadBacklogWorkroomOwnership.mockResolvedValue({ workrooms: [], liveWorkrooms: [] });
     mocks.mapDemandRows.mockReturnValue([{ activation: null, evidenceLinks: [] }]);
     mocks.projectReadiness.mockReturnValue({ verdict: "allowed" });
+    mocks.readCompletion.mockResolvedValue(null);
   });
 
   it("does not report a plan-only epic as having a spec", async () => {
@@ -190,6 +195,67 @@ describe("backlog deferral read projection", () => {
       item: expect.objectContaining({ itemId: "BI-COMPLETE", status: "done" }),
       activities: [terminalActivity],
     }));
+  });
+
+  // BI-094B41AC: the completion decision a read returns for an item awaiting
+  // acceptance is the completion gate's own evaluation, merge signal included.
+  function awaitingItem() {
+    return {
+      ...baseItem, id: "row-aa", itemId: "BI-AWAIT", status: "awaiting-acceptance", body: null,
+      createdAt: new Date("2026-10-01T00:00:00Z"), completedAt: null,
+      deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null,
+      productLine: null, businessProduct: null, demandEvidenceLinks: [], activities: [],
+    };
+  }
+
+  it("reads an awaiting-acceptance item's completion from the completion gate's evaluation", async () => {
+    mocks.findUnique.mockResolvedValue(awaitingItem());
+    const gateDecision = { verdict: "allowed", profile: "fix", blockers: [], unmet: [] };
+    mocks.readCompletion.mockResolvedValue({ decision: gateDecision, mergedThroughGates: "merged" });
+    mocks.projectReadiness.mockImplementation((args: { completionDecision?: unknown }) => ({
+      decisions: { completion: args.completionDecision ?? { verdict: "input-required", blockers: [], unmet: [] } },
+    }));
+
+    const result = await getBacklogItem({ itemId: "BI-AWAIT" });
+
+    expect(mocks.readCompletion).toHaveBeenCalledWith(expect.objectContaining({ itemRowId: "row-aa", status: "awaiting-acceptance" }));
+    expect(mocks.projectReadiness).toHaveBeenCalledWith(expect.objectContaining({ completionDecision: gateDecision }));
+    expect(result).toMatchObject({
+      success: true,
+      data: { readiness: {
+        decisions: { completion: { verdict: "allowed" } },
+        completionEvaluation: { source: "completion-gate", mergeDelivery: "merged" },
+      } },
+    });
+  });
+
+  it("names an unavailable merge signal on the read instead of reporting it as a negative", async () => {
+    mocks.findUnique.mockResolvedValue(awaitingItem());
+    const refusal = { verdict: "input-required", profile: "fix", blockers: [], unmet: [{ code: "DELIVERY_EVIDENCE_REQUIRED" }] };
+    mocks.readCompletion.mockResolvedValue({ decision: refusal, mergedThroughGates: "signal-unavailable" });
+    mocks.projectReadiness.mockImplementation((args: { completionDecision?: unknown }) => ({
+      decisions: { completion: args.completionDecision },
+    }));
+
+    const result = await getBacklogItem({ itemId: "BI-AWAIT" });
+
+    expect(result).toMatchObject({
+      data: { readiness: {
+        decisions: { completion: { verdict: "input-required" } },
+        completionEvaluation: { source: "completion-gate", mergeDelivery: "signal-unavailable" },
+      } },
+    });
+  });
+
+  it("keeps the existing projection when the gate's evaluation is not available", async () => {
+    mocks.findUnique.mockResolvedValue(awaitingItem());
+    mocks.readCompletion.mockResolvedValue(null);
+    mocks.projectReadiness.mockReturnValue({ decisions: { completion: { verdict: "input-required", blockers: [], unmet: [] } } });
+
+    const result = await getBacklogItem({ itemId: "BI-AWAIT" });
+
+    expect(mocks.projectReadiness).toHaveBeenCalledWith(expect.objectContaining({ completionDecision: null }));
+    expect((result.data as { readiness: Record<string, unknown> }).readiness).not.toHaveProperty("completionEvaluation");
   });
 
   // BI-DEDAC950: the read projection names the principle behind each unmet

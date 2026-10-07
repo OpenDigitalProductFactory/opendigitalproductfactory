@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 732,
+  "pageCount": 733,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1185,6 +1185,7 @@
       "anchors": [
         "build-gate-runbook",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
+        "the-room-follows-its-pr-through-ci-bi-88341b5d",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
         "reaping-the-worktree-when-the-pr-merges-bi-848360ef",
         "task-specific-operating-rules",
@@ -1388,6 +1389,7 @@
         "the-steward-watches-growth-not-only-structure",
         "retention-floors-come-from-the-obligations-that-bind-this-install",
         "evidence-payloads-never-live-inline",
+        "retiring-a-model-nothing-reads",
         "task-specific-operating-rules"
       ]
     },
@@ -5915,6 +5917,18 @@
         "8-message-house",
         "9-backlog-anchors",
         "10-sources-and-market-signals"
+      ]
+    },
+    "docs/operations/acceptance-sweep.md": {
+      "publicHref": "/operations/acceptance-sweep/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "acceptance-sweep-operator-runbook",
+        "closing-items-the-gate-already-allows-off-by-default",
+        "what-the-summary-tells-you",
+        "known-limit"
       ]
     },
     "docs/operations/ai-provider-compliance-source-renewal-runbook.md": {
@@ -12488,6 +12502,8 @@
         "reading-epic-progress",
         "shared-demand",
         "activate-local-demand",
+        "what-build-studio-starts-next",
+        "proposed-scores",
         "founder-shared-portfolio",
         "promotions",
         "being-reached-when-you-are-away",

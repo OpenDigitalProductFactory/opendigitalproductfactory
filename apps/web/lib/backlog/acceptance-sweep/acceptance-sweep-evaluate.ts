@@ -5,9 +5,10 @@ import {
 } from "@/lib/backlog/initiative-readiness/terminal-recovery";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
 
-import { projectOwedAcceptance, type OwedAcceptance, type OwedAcceptanceOwnerResolver } from "./owed-acceptance";
+import { projectOwedAcceptance, type OwedAcceptanceOwnerResolver } from "./owed-acceptance";
 import { createOwedAcceptanceOwnerResolver, type OwedAcceptanceOwnerDb } from "./owed-acceptance-owner";
 import type { AcceptanceSweepPageItem } from "./acceptance-sweep-page";
+import type { SweepEvaluation } from "./acceptance-sweep-run";
 
 // One item's owed acceptance, as the sweep computes it (BI-DF255666).
 // Design: docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md §3.1, §3.3 step 2.
@@ -69,11 +70,12 @@ export function authorAgentIdFrom(
 export async function evaluateOwedAcceptance(
   item: AcceptanceSweepPageItem,
   deps: SweepEvaluateDeps,
-): Promise<OwedAcceptance | null> {
+): Promise<SweepEvaluation | null> {
   const authorAgentId = await deps.loadAuthorAgentId(item);
   const decision = await deps.loadCompletionDecision(item.itemId, authorAgentId);
   if (!decision) return null;
-  return projectOwedAcceptance({ decision, authorAgentId, resolveOwner: deps.resolveOwner });
+  // The decision travels with the projection so a closure (BI-45D3BBF4) cites the gate it acted on.
+  return { ...(await projectOwedAcceptance({ decision, authorAgentId, resolveOwner: deps.resolveOwner })), decision };
 }
 
 /** Production bindings. Lazy imports keep the read tools off the scheduler's import graph. */

@@ -223,4 +223,16 @@ describe("rebind refuses an unmappable drive marking (AC-3C-REBIND)", () => {
   it("the refusal code is part of the closed set", () => {
     expect(REBIND_REFUSAL_CODES).toContain("marking_not_mappable");
   });
+
+  // AC-3C-REBIND, completed (PR-3c-5): only a LIVE child refuses; one the drive recorded completed or abandoned does not.
+  it("a live sub-shape child refuses, naming it; a completed or abandoned child does not", async () => {
+    const live = marking({ children: { "c#x#0": { capsuleId: "WC-CHILD", ref: "child@1.0.0" } } });
+    expect(markingNotMappable({ workroomDrive: { marking: live } }, current, current)).toMatch(/live sub-shape child room \(WC-CHILD\)/);
+    for (const state of ["completed", "abandoned"]) {
+      const closed = marking({ children: { "c#x#0": { capsuleId: "WC-CHILD", ref: "child@1.0.0", state } } });
+      expect(markingNotMappable({ workroomDrive: { marking: closed } }, current, current), state).toBeNull();
+      const { db } = makeDb(withMarking(closed));
+      expect(await rebindWorkroomShapeForUser(db, base), state).toMatchObject({ ok: true });
+    }
+  });
 });
