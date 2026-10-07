@@ -402,11 +402,12 @@ export async function performPlanToBuildTransition(params: {
           const { evaluateBuildStudioPlanAdvancementGate } = await import(
             "@/lib/decision-perspective/build-studio-gate"
           );
-          const sensitivity =
-            planRec.deliverableSensitivity === "elevated"
-            || planRec.deliverableSensitivity === "high"
-              ? planRec.deliverableSensitivity
-              : "low";
+          // BI-7FFFBEE3 / BI-F521E322: risk follows the files the plan will
+          // touch, not a keyword in the item's prose.
+          const { assessDeliverySensitivity, buildPlanPaths } = await import(
+            "@/lib/backlog/initiative-readiness/delivery-sensitivity"
+          );
+          const sensitivity = assessDeliverySensitivity({ planPaths: buildPlanPaths(build.buildPlan) }).level;
           const { deriveTransitionRiskTier } = await import(
             "@/lib/decision-perspective/graduated-autonomy"
           );

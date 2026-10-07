@@ -101,7 +101,7 @@ describe("enforceBuildInitiativeReadiness", () => {
   // reviewed design is that research, and sensitivity raises the shape exactly
   // as it does at the claim and at closure.
   describe("reads the build's reviewed design and item sensitivity", () => {
-    function shaped(args: { boundShape: string | null; title?: string; designReview?: unknown }) {
+    function shaped(args: { boundShape: string | null; title?: string; designReview?: unknown; planPaths?: string[] }) {
       const db = database();
       db.featureBuild.findUnique.mockResolvedValueOnce({
         id: "build-row",
@@ -110,6 +110,7 @@ describe("enforceBuildInitiativeReadiness", () => {
         originatingBacklogItemId: "bi-row",
         designDoc: { acceptanceCriteria: ["the page lists adoptable animals", { text: "each card links to a profile" }] },
         designReview: args.designReview === undefined ? { decision: "pass" } : args.designReview,
+        buildPlan: args.planPaths ? { fileStructure: args.planPaths.map((path) => ({ path, action: "modify" })) } : null,
         originator: {
           id: "bi-row",
           itemId: "BI-ENTRY",
@@ -156,13 +157,23 @@ describe("enforceBuildInitiativeReadiness", () => {
     it("keeps large, sensitive and unshaped work on the full table", async () => {
       for (const db of [
         shaped({ boundShape: "delivery-large@1.0.0" }),
-        shaped({ boundShape: medium, title: "Adopter login and password reset" }),
+        shaped({ boundShape: medium, planPaths: ["apps/web/lib/auth/password-reset.ts"] }),
         shaped({ boundShape: null }),
       ]) {
         const result = await enforce(db, "plan");
         expect(result.allowed).toBe(false);
         expect(result.decision.unmet.map((entry) => entry.code)).toContain("SPEC_APPROVAL_REQUIRED");
       }
+    });
+
+    // Operator direction 2026-10-07: a word is not evidence; the plan's files are.
+    it("judges sensitivity by the files the plan touches, not by the words in the item", async () => {
+      const wordy = await enforce(shaped({ boundShape: medium, title: "Adopter login and password reset", planPaths: ["apps/web/app/(shell)/adopt/page.tsx"] }), "implementation");
+      expect(wordy.allowed).toBe(true);
+      expect(wordy.decision.shapeDecision?.raised).toBe(false);
+      const touchesAuth = await enforce(shaped({ boundShape: medium, title: "Adoptable animals page", planPaths: ["apps/web/lib/auth/session.ts"] }), "implementation");
+      expect(touchesAuth.allowed).toBe(false);
+      expect(touchesAuth.decision.shapeDecision?.trigger).toEqual({ signal: "access-control", source: "build-plan-paths", evidence: "apps/web/lib/auth/session.ts" });
     });
   });
 

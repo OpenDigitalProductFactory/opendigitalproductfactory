@@ -65,6 +65,15 @@ export default function NearbyScreen(): React.JSX.Element {
   }
 
   const err = geoError ?? nearbyError;
+  // A location failure needs a new fix; a lookup failure only needs the same
+  // lookup again.
+  const retry = geoError
+    ? refresh
+    : () => {
+        if (latitude !== null && longitude !== null) {
+          void fetchNearby({ latitude, longitude });
+        }
+      };
 
   return (
     <FlatList
@@ -95,10 +104,10 @@ export default function NearbyScreen(): React.JSX.Element {
               {err}
             </Text>
           ) : null}
-          {geoError ? (
+          {err ? (
             <Pressable
               style={styles.retry}
-              onPress={refresh}
+              onPress={retry}
               accessibilityRole="button"
               testID="nearby-retry"
             >
@@ -136,9 +145,9 @@ export default function NearbyScreen(): React.JSX.Element {
         </Pressable>
       )}
       ListEmptyComponent={
-        // Without a location there is no "near you" to be empty, so the
-        // error above stands alone.
-        !isLoadingNearby && !geoError ? (
+        // A failed location or lookup says nothing about what is nearby, so
+        // the error above stands alone.
+        !isLoadingNearby && !err ? (
           <Text style={styles.muted}>No businesses found near you yet.</Text>
         ) : null
       }

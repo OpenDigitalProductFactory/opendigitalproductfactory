@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { quarterBounds } from "./investment-points";
 import { loadInvestmentItems, summarizePortfolioInvestment } from "./investment-read-model";
-import { loadPortfolioBudgets, previousQuarter, proposePortfolioBudgets } from "./portfolio-budget";
+import { loadPortfolioBudgets, previousQuarter, proposePortfolioBudgets, resolveProposalBasis } from "./portfolio-budget";
 
 const MIGRATION = resolve(__dirname, "../../../../packages/db/prisma/migrations/20260925190000_portfolio_budget_period/migration.sql");
 
@@ -42,6 +42,21 @@ databaseSuite("portfolio budgets on PostgreSQL (BI-9EC60FE0)", () => {
       expect(row.proposedPoints, row.slug).toBe(delivered);
     }
     expect(proposal.unallocatedDeliveredPoints).toBe(summary.rows.find((r) => r.portfolioId === null)?.deliveredPoints ?? 0);
+  });
+
+  it("proposes from the last 90 days of delivery in the read model, scaled to the quarter", async () => {
+    const target = quarterBounds(new Date());
+    const asOf = new Date();
+    const basis = resolveProposalBasis(target, { trailingDays: 90, asOf });
+    if (!basis.ok) throw new Error(basis.message);
+    const proposal = await proposePortfolioBudgets(db, target, { trailingDays: 90, asOf });
+    const window = basis.data.period;
+    const summary = summarizePortfolioInvestment(await loadInvestmentItems(db, window), window.start, window);
+    for (const row of proposal.rows) {
+      const delivered = summary.rows.find((r) => r.portfolioId === row.id)?.deliveredPoints ?? 0;
+      expect(row.deliveredPoints, row.slug).toBe(delivered);
+      expect(row.proposedPoints, row.slug).toBe(Math.round(delivered * basis.data.scale));
+    }
   });
 
   it("allows one chain per portfolio and period, and one successor per row (AC-1)", async () => {

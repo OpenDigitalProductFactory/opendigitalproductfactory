@@ -774,6 +774,21 @@ inherited room, then the organization's top accountable owner). The evidence
 records `decidedBy: "accountable-owner-fallback"` so the substitution is
 visible; anyone else sees who decides and is refused.
 
+**The author's own stage starts at the drive's ask too (BI-C9912C22).** A
+`status-change` stage accountable to `role:author` (delivery shapes'
+`reproduce` and `repair`) is also never dispatched: the drive raises
+`role_stage` attention for the author, who does the work in their own worktree
+and records it with `record_workroom_evidence` (stage key, declared kind,
+outcome `completed`). That ask is the stage's start time, so the author's
+evidence earns the receipt; before this, the stage had no start and the
+evidence was never read (WC-BFDF763B held on `reproduce` for 88 ticks). Only
+`role:author` qualifies. A stage accountable to any other role or to a person
+stays unstarted by evidence the author writes, so an approver's or reviewer's
+stage cannot be satisfied by the author (separation of duties). The evidence
+call now answers with `stageReach`: whether the next drive tick can advance the
+stage from it, or why not (a blocker, not the current stage, accountable to
+someone else, or no driven stage yet).
+
 ## Failing closed is not the same as locking
 
 `#5166` stopped a real defect: a stage that produced no completing receipt was
