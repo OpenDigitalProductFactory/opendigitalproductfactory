@@ -46,15 +46,39 @@ export const CONCLUSION_KINDS = [
 ] as const;
 export type ConclusionKind = (typeof CONCLUSION_KINDS)[number];
 
-/** Every reason code the drive can reach, by the action that carries it. */
+/**
+ * Every reason code the drive can reach, by the action that carries it.
+ *
+ * This is the vocabulary of record, not a description of it. `DrivePlan.reason`
+ * and every emitter are typed from it (`DriveReason`, `DriveReasonFor`), so a
+ * reason the drive emits but this list omits is a compile error. It was once a
+ * hand list beside an untyped `reason: string`, and it drifted: five emitted
+ * pairs were missing, and 11,435 writeback-blocked ticks concluded
+ * `unconcluded` while the no-silence walk below stayed green (BI-3ACFD254).
+ */
 export const DRIVE_REASONS_BY_ACTION = Object.freeze({
-  do_not_wake: ["missing_shape", "quiet", "no_posture"],
-  stop: ["unreachable_substrate", "empty_read", "conformance_stop", "success"],
+  do_not_wake: ["missing_shape", "quiet", "no_posture", "cycle_complete"],
+  // `refused_to_stop`: a refuse verdict routed to a declared failure stop, or
+  // past its rework bound to the budget stop (GPP Phase 3c PR-3c-3).
+  stop: ["unreachable_substrate", "empty_read", "conformance_stop", "success", "refused_to_stop"],
   escalate: ["conformance_escalate"],
-  pause: ["conformance_pause"],
-  attention: ["governed_decision", "role_stage", "person_stage", "unknown_principal"],
-  dispatch_agent: ["agent_stage"],
+  // `construct_not_executable` and `marking_unreadable` are the graph path's
+  // fail-closed pauses (GPP Phase 3c PR-3c-1, BI-8875C9DF; design §5 table).
+  pause: ["conformance_pause", "unknown_principal", "executor_writeback_unavailable", "construct_not_executable", "marking_unreadable"],
+  // `gate_refused`: a refuse verdict whose route cannot be taken (its bound is
+  // spent and the shape has no budget stop); the token stays (PR-3c-3).
+  // `awaiting_sub_shape`: a sub-shape stage's child room is being created, runs
+  // or is being completed; `sub_shape_stopped`: the child stopped without
+  // success and the parent waits for its owner (PR-3c-5).
+  attention: ["governed_decision", "role_stage", "person_stage", "gate_refused", "awaiting_sub_shape", "sub_shape_stopped"],
+  // `lease_held` and `missing_task_owner` are set by the drive job
+  // (lib/queue/functions/workroom-drive.ts) when it cannot act on a dispatch plan.
+  dispatch_agent: ["agent_stage", "lease_held", "missing_task_owner"],
 } as const);
+
+export type DriveReasonsByAction = typeof DRIVE_REASONS_BY_ACTION;
+export type DriveReasonFor<A extends keyof DriveReasonsByAction> = DriveReasonsByAction[A][number];
+export type DriveReason = { [A in keyof DriveReasonsByAction]: DriveReasonFor<A> }[keyof DriveReasonsByAction];
 
 export type DriveConclusionBlockage = {
   /** What is blocked, in the words an owner would use. */
@@ -116,6 +140,34 @@ const BLOCKAGES: Record<string, { what: string; unblockedBy: string }> = {
     what: "The room raised attention but names no one who can act on it, so it is waiting on nobody.",
     unblockedBy: "the stage names a principal who can act",
   },
+  executor_writeback_unavailable: {
+    what: "The last dispatched stage produced no writeback from its executor, so the drive will not dispatch it again blind.",
+    unblockedBy: "the executor records evidence or a writeback for the dispatched stage",
+  },
+  missing_task_owner: {
+    what: "An agent stage is ready but the room has no owner user to run its scheduled task under.",
+    unblockedBy: "an owner user is bound to the room",
+  },
+  construct_not_executable: {
+    what: "The room's work shape uses a construct the drive does not execute yet, so the room is paused where it stands rather than run some other way.",
+    unblockedBy: "the construct's executable flag is enabled, or the room is rebound to a shape version that does not use it",
+  },
+  marking_unreadable: {
+    what: "The room's stored drive marking cannot be read, so the drive will not guess where its work stands.",
+    unblockedBy: "the room's drive marking is repaired, or the room is reset",
+  },
+  gate_refused: {
+    what: "A stage was sent back, but its refuse route cannot be taken any more, so the work waits at that stage rather than being passed.",
+    unblockedBy: "a new decision is recorded on the refused stage",
+  },
+  sub_shape_stopped: {
+    what: "A stage runs its work in a child room, and that child stopped without reaching its outcome, so the parent waits at that stage rather than carrying on.",
+    unblockedBy: "a decision is recorded on the parent stage, or the child room is completed",
+  },
+  refused_to_stop: {
+    what: "A stage was sent back to a stop the work shape declares, so this cycle ended without reaching its outcome.",
+    unblockedBy: "the room's next cycle starts, or the room is rebound to a shape version that routes the refusal elsewhere",
+  },
 };
 
 /** Reasons that are legitimately not a stop at all. */
@@ -127,6 +179,12 @@ const IN_MOTION = new Set([
   // The posture asked this room not to interrupt. That is a cadence decision
   // the room made on purpose, not an unmet outcome nobody is carrying.
   "quiet",
+  // A standing room finished its cycle and waits for its next trigger.
+  "cycle_complete",
+  // Another worker holds the stage's lease; the stage stays eligible when it expires.
+  "lease_held",
+  // A sub-shape stage's child room is running its own work (GPP Phase 3c PR-3c-5).
+  "awaiting_sub_shape",
 ]);
 
 const OUTCOME_MET = new Set(["success"]);
@@ -164,7 +222,9 @@ export function resolveDriveConclusion(input: DriveConclusionInput): DriveConclu
       summary:
         reason === "quiet"
           ? "The room's posture asked it not to interrupt; it stays on its cadence."
-          : "Work is in motion.",
+          : reason === "cycle_complete"
+            ? "The room finished its cycle and waits for its next trigger."
+            : "Work is in motion.",
     };
   }
 

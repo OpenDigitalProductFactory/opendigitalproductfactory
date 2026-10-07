@@ -12,6 +12,8 @@ import { classifyWorkCapsuleLiveness,
   type WorkCapsuleLiveness,
 } from "./liveness";
 import { projectWorkroomRecovery } from "./workroom-recovery-projection";
+import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
+import { projectPrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 import { projectInvocationAttribution, recordedDriveTask } from "./invocation-attribution";
 
 const INVENTORY_SELECT = {
@@ -128,6 +130,7 @@ export async function loadCapsuleLivenessInventory(
     const verdict = classifyWorkCapsuleLiveness({
       ...row,
       featureBuild,
+      prFollowThrough: prFollowThroughOf(row.workspaceState),
       durableWait: lease ? {
         state: lease.status,
         signaledAt: lease.heartbeatAt ?? lease.admittedAt ?? lease.queuedAt ?? lease.updatedAt ?? null,
@@ -185,4 +188,13 @@ export function summarizeCapsuleLiveness(capsulesAll: Array<Record<string, unkno
         maxNoTransitionMs: transitionAges.length ? Math.max(...transitionAges) : null,
       },
   };
+}
+
+/** The room's PR follow-through status as last read from the provider (BI-88341B5D §3.7). */
+function prFollowThroughOf(workspaceState: unknown): { status: NonNullable<ReturnType<typeof projectPrFollowThroughStatus>>; observedAt: Date } | null {
+  const delivery = readBuildPrDeliveryState(workspaceState);
+  const status = projectPrFollowThroughStatus(delivery);
+  if (!status || !delivery?.lastObservedAt) return null;
+  const observedAt = new Date(delivery.lastObservedAt);
+  return Number.isNaN(observedAt.getTime()) ? null : { status, observedAt };
 }

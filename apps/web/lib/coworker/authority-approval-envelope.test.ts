@@ -5,6 +5,7 @@ import type { CoworkerApprovalBinding } from "@/lib/govern/authority/coworker-au
 import {
   ensureAuthorityApprovalEnvelope,
   findApprovedAuthorityEnvelope,
+  findExecutedAuthorityOutcome,
   resumeAuthorityApprovalTask,
 } from "./authority-approval-envelope";
 
@@ -207,5 +208,43 @@ describe("an approval raised outside a chat still gets an envelope", () => {
     expect(mockDb.agentThread.upsert).not.toHaveBeenCalled();
     const created = mockDb.coworkerActionEnvelope.create.mock.calls[0]![0] as { data: { threadId: string } };
     expect(created.data.threadId).toBe("THREAD-REAL");
+  });
+});
+
+// BI-F4EB23C1 — a failed approved run settles its replay instead of minting another card.
+describe("findExecutedAuthorityOutcome", () => {
+  const NOW = new Date("2026-10-02T03:15:00Z");
+  function replayDb(envelope: { id: string; status: string } | null, runs: Array<{ success: boolean; result: unknown; toolName?: string }>) {
+    return {
+      coworkerActionEnvelope: { findFirst: vi.fn().mockResolvedValue(envelope ? { ...envelope, expiresAt: null } : null), create: vi.fn(), updateMany: vi.fn() },
+      taskRun: { updateMany: vi.fn() },
+      toolExecution: {
+        findFirst: vi.fn().mockImplementation(async () => runs.find((run) => run.success) ?? null),
+        // Honours the filter, so dropping the approval_outcome exclusion fails the test.
+        findMany: vi.fn().mockImplementation(async ({ where }: { where: { toolName: { not: string } } }) =>
+          runs.filter((run) => !run.success && run.toolName !== where.toolName.not)),
+      },
+    };
+  }
+
+  it("matches executed and failed approvals for the identical binding", async () => {
+    const fake = replayDb({ id: "env-ok", status: "executed" }, [{ success: true, result: { message: "done" } }]);
+    await expect(findExecutedAuthorityOutcome(BINDING, NOW, fake as never)).resolves.toEqual({ envelopeId: "env-ok", status: "executed", result: { message: "done" } });
+    expect(fake.coworkerActionEnvelope.findFirst.mock.calls[0][0].where.status).toEqual({ in: ["executed", "failed"] });
+  });
+
+  it("returns the failed run's recorded error, not the earlier approval-required row", async () => {
+    const denied = { success: false, error: "workroom_access_denied", message: "You or your assistant are not admitted to this workroom." };
+    const fake = replayDb({ id: "env-failed", status: "failed" }, [
+      { success: false, toolName: "approval_outcome", result: { status: "failed" } },
+      { success: false, toolName: "reassign_workroom_executor", result: denied },
+      { success: false, toolName: "reassign_workroom_executor", result: { success: false, error: "approval_required", data: { envelopeId: "env-failed" } } },
+    ]);
+    await expect(findExecutedAuthorityOutcome(BINDING, NOW, fake as never)).resolves.toEqual({ envelopeId: "env-failed", status: "failed", result: denied });
+  });
+
+  it("still settles a failed approval whose run left no readable error", async () => {
+    const fake = replayDb({ id: "env-failed", status: "failed" }, []);
+    await expect(findExecutedAuthorityOutcome(BINDING, NOW, fake as never)).resolves.toEqual({ envelopeId: "env-failed", status: "failed", result: null });
   });
 });

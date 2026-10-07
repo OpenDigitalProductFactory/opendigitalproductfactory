@@ -43,13 +43,12 @@ import {
   type BuildStudioCustomerStatus,
 } from "@/lib/build/customer-status-projection";
 import {
-  ownerStateBadgeLabel,
   reconcileBuildStudioCustomerStatus,
   type BuildStudioOwnerState,
 } from "@/lib/build/owner-status-reconciliation";
 import { deriveBuildAttention } from "@/lib/build/build-attention";
 import { projectAutonomousBuildCustody } from "@/lib/build/autonomous-build-custody";
-import { BuildOperatorHeaderDetails, formatOperatorPhaseLabel } from "./BuildOperatorContext";
+import { BuildOperatorHeaderDetails } from "./BuildOperatorContext";
 import { BuildOperatorOverview } from "./BuildOperatorOverview";
 import { groupOperatorBuilds } from "./build-studio-operator-view";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
@@ -904,7 +903,7 @@ export function BuildStudio({
               )}
 
               <div className="flex min-h-0 flex-1 flex-col">
-                {activeBuild && activeBuild.phase === "ship" && (
+                {activeBuild.phase === "ship" && (
                   <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
                     <ReleaseDecisionPanel
                       build={activeBuild}
@@ -914,7 +913,7 @@ export function BuildStudio({
                     />
                   </div>
                 )}
-                {activeBuild && workflowAction && activeBuild.phase !== "ship" && (
+                {workflowAction && activeBuild.phase !== "ship" && (
                   <div className="border-b border-[var(--dpf-border)]">
                     {/* compact=true renders the 40px ActionBanner via the
                         delegation in BuildStudioWorkflowActionCard (T9). The

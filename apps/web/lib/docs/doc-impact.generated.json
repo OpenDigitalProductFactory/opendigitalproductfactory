@@ -292,7 +292,6 @@
       "docs/testing/pre-pr-gate.md"
     ],
     ".github/workflows/install-verification.yml": [
-      "docs/install/linux.md",
       "docs/maintenance/staleness-report.md"
     ],
     ".github/workflows/migration-safety-guard.yml": [
@@ -657,6 +656,9 @@
     "apps/web/lib/build/plan-to-build-transition-core.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
+    "apps/web/lib/build/pr-follow-through.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/build/progress-visibility.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -883,6 +885,15 @@
     "apps/web/lib/gpp/permit-carriage.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/lib/gpp/shape-language/executable-constructs.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "apps/web/lib/gpp/shape-language/gate-ratification.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "apps/web/lib/gpp/stage-permit-revocation.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/hooks/system-events.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
@@ -1095,6 +1106,9 @@
     "apps/web/lib/platform-runtime/capability-state-divergence.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
+    "apps/web/lib/platform-runtime/inactive-scrape-targets.ts": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "apps/web/lib/platform-runtime/operational-state.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/maintenance/staleness-report.md"
@@ -1126,6 +1140,9 @@
     "apps/web/lib/queue/functions/async-operation-task-hub.ts": [
       "docs/user-guide/build-studio/index.md"
     ],
+    "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/queue/functions/build-review-verification.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -1147,6 +1164,12 @@
     ],
     "apps/web/lib/queue/functions/wiki-lint.ts": [
       "docs/founder-kernel/SCHEMA.md"
+    ],
+    "apps/web/lib/queue/functions/workroom-drive-children.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "apps/web/lib/queue/functions/workroom-drive-deadlines.ts": [
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/queue/functions/workroom-drive.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
@@ -1349,6 +1372,9 @@
     "apps/web/lib/tak/initiative-readiness-tool-grants.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
+    "apps/web/lib/tak/mcp-tool-policy.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/tak/precondition-ordering-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -1432,6 +1458,15 @@
     "apps/web/lib/work-management/delivery-shapes.ts": [
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
+    "apps/web/lib/work-management/drive-child-rooms.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "apps/web/lib/work-management/drive-deadlines.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "apps/web/lib/work-management/drive-marking.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/work-management/human-accountability.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md"
     ],
@@ -1484,6 +1519,9 @@
     "apps/web/lib/work-management/worker-rollup.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md"
     ],
+    "apps/web/lib/work-management/workroom-deadline-notice.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/work-management/workspace-case-loader.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -1516,6 +1554,9 @@
     ],
     "apps/web/lib/workspace-home/profiles.ts": [
       "docs/testing/archetype-job-validation.md"
+    ],
+    "apps/web/scripts/build-gpp-shapes.ts": [
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/scripts/gpp-critical-interaction-map.ts": [
       "docs/architecture/gated-permissions-process.md"
@@ -1617,6 +1658,9 @@
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/architecture/platform-substrate-boundaries.md"
     ],
+    "packages/db/prisma/migrations/20261006200000_retire_voice_training_job_and_exam_voucher/migration.sql": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "packages/db/prisma/schema": [
       "docs/architecture/platform-overview.md"
     ],
@@ -1653,6 +1697,7 @@
       "docs/runbooks/2026-07-20-collation-drift-index-corruption.md"
     ],
     "packages/db/scripts/schema-regression-guard.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md",
       "docs/architecture/tax-period-component-migration.md"
     ],
     "packages/db/scripts/seed-cada-regulation.ts": [
@@ -1906,6 +1951,9 @@
     "packages/validators/src/guards.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "packages/validators/src/hostile-content-fixtures.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "packages/validators/src/readability.ts": [
       "docs/platform-usability-standards.md"
     ],
@@ -2095,6 +2143,9 @@
     "scripts/check-no-unattributable-deferral.mjs": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "scripts/check-no-unclassified-compose-services.mjs": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
     "scripts/check-no-unlocalized-ui.mjs": [
       "docs/architecture/localization-runbook.md"
     ],
@@ -2160,6 +2211,9 @@
     ],
     "scripts/compile-capability-service-catalog.mjs": [
       "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
+    "scripts/compose-init-reaping.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "scripts/detect-hardware-host.ts": [
       "docs/install/linux.md",
@@ -2239,6 +2293,9 @@
     ],
     "scripts/installer/install-state.schema.json": [
       "docs/operations/install.md"
+    ],
+    "scripts/installer/lib/docker.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "scripts/installer/lib/platform.sh": [
       "docs/install/platform-support-watchlist.md"
@@ -2399,11 +2456,6 @@
     "scripts/probes/marketing-media/local-render-receipt.json": [
       "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md"
     ],
-    "scripts/promote.sh": [
-      "docs/architecture/build-gate-runbook.md",
-      "docs/architecture/gated-permissions-process.md",
-      "docs/runbooks/bet5-windows-self-upgrade.md"
-    ],
     "scripts/publish-host-gpu.ps1": [
       "docs/install/platform-support-watchlist.md"
     ],
@@ -2475,7 +2527,8 @@
       "docs/architecture/ui-token-styling.md"
     ],
     "scripts/tts/setup-chatterbox-tts-macos.sh": [
-      "docs/install/macos.md"
+      "docs/install/macos.md",
+      "docs/user-guide/operations/self-upgrade.md"
     ],
     "scripts/verify-edge-node-air-gap.sh": [
       "docs/edge-node/security-and-sovereignty.md",
@@ -2918,7 +2971,9 @@
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/build/finalize-stage-runner.ts",
       "apps/web/lib/build/gauntlet-repair.ts",
+      "apps/web/lib/build/pr-follow-through.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
+      "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs",
       "pnpm-lock.yaml",
@@ -2933,8 +2988,7 @@
       "scripts/pre-push-gate-infrastructure-probe.mjs",
       "scripts/pre-push-gate-slot-contract.test.mjs",
       "scripts/pregate-preflight.mjs",
-      "scripts/pregate-status.mjs",
-      "scripts/promote.sh"
+      "scripts/pregate-status.mjs"
     ],
     "docs/architecture/build-studio-namespace.md": [
       "apps/web/lib/build/build-plan-paths.ts",
@@ -2954,6 +3008,7 @@
       "packages/db/data/platform-runtime-capabilities.json",
       "scripts/capability-service-catalog.generated.json",
       "scripts/check-capability-compose-profiles.mjs",
+      "scripts/check-no-unclassified-compose-services.mjs",
       "scripts/compile-capability-service-catalog.mjs",
       "scripts/dpf-compose.mjs",
       "scripts/lib/resolve-capability-compose-profiles.mjs",
@@ -3004,12 +3059,15 @@
       "apps/web/lib/shared/org-address.ts",
       "apps/web/lib/shared/slugify.ts",
       "apps/web/scripts/offload-evidence-output.ts",
+      "packages/db/prisma/migrations/20261006200000_retire_voice_training_job_and_exam_voucher/migration.sql",
       "packages/db/prisma/schema/resource-scheduling.prisma",
       "packages/db/scripts/apply-model-metadata-comments.ts",
+      "packages/db/scripts/schema-regression-guard.mjs",
       "packages/db/src/model-metadata.ts",
       "packages/db/src/seed-retention-floor-obligations.ts",
       "packages/integration-shared/src/canonical-json.ts",
       "packages/validators/src/guards.ts",
+      "packages/validators/src/hostile-content-fixtures.ts",
       "packages/validators/src/untrusted-text.ts",
       "scripts/check-model-metadata-tags.mjs",
       "scripts/check-no-local-canonical-json.mjs",
@@ -3135,16 +3193,25 @@
       "apps/web/lib/explore/feature-build-types.ts",
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/bindings.ts",
+      "apps/web/lib/gpp/shape-language/executable-constructs.ts",
+      "apps/web/lib/gpp/shape-language/gate-ratification.ts",
+      "apps/web/lib/gpp/stage-permit-revocation.ts",
+      "apps/web/lib/queue/functions/workroom-drive-children.ts",
+      "apps/web/lib/queue/functions/workroom-drive-deadlines.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
+      "apps/web/lib/work-management/drive-child-rooms.ts",
+      "apps/web/lib/work-management/drive-deadlines.ts",
+      "apps/web/lib/work-management/drive-marking.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
       "apps/web/lib/work-management/standing-operations-shapes.ts",
       "apps/web/lib/work-management/work-shape-grants-resolve.test.ts",
       "apps/web/lib/work-management/work-shapes.ts",
+      "apps/web/lib/work-management/workroom-deadline-notice.ts",
+      "apps/web/scripts/build-gpp-shapes.ts",
       "apps/web/scripts/gpp-critical-interaction-map.ts",
       "packages/db/prisma/schema/ai-coworker.prisma",
       "scripts/installer/gpp-permit-secret-contract.test.mjs",
-      "scripts/installer/install-release-assets.mjs",
-      "scripts/promote.sh"
+      "scripts/installer/install-release-assets.mjs"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
@@ -3180,6 +3247,7 @@
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/permit-carriage.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
+      "apps/web/lib/tak/mcp-tool-policy.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tak/tool-result-provenance.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
@@ -3437,7 +3505,6 @@
       "services/edge-node/scripts/verify-lifecycle.ts"
     ],
     "docs/install/linux.md": [
-      ".github/workflows/install-verification.yml",
       "docker-compose.linux.yml",
       "scripts/detect-hardware-host.ts"
     ],
@@ -3454,6 +3521,7 @@
       "apps/web/lib/documents/document-engine-boot.test.ts",
       "apps/web/lib/govern/auth-redirect.ts",
       "apps/web/lib/nonprod/gate-client-revision.ts",
+      "apps/web/lib/platform-runtime/inactive-scrape-targets.ts",
       "apps/web/lib/self-upgrade/doctools-release-image.boot.test.ts",
       "apps/web/lib/self-upgrade/doctools-release-image.test.ts",
       "apps/web/lib/self-upgrade/doctools-source-lineage.test.ts",
@@ -3463,9 +3531,11 @@
       "docker-entrypoint.sh",
       "packages/db/src/discovery-collectors/network.ts",
       "scripts/check-no-url-pathname-fs.mjs",
+      "scripts/compose-init-reaping.test.mjs",
       "scripts/doctools-image-contract.test.mjs",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/doctools-prepull.test.mjs",
+      "scripts/installer/lib/docker.test.mjs",
       "scripts/installer/lib/platform.sh",
       "scripts/lib/dockerfile-portal-build.test.mjs",
       "scripts/lib/entry-module.mjs",
@@ -3643,8 +3713,7 @@
     ],
     "docs/runbooks/bet5-windows-self-upgrade.md": [
       "apps/web/lib/self-upgrade/host-memory-preflight.ts",
-      "dpf-start.ps1",
-      "scripts/promote.sh"
+      "dpf-start.ps1"
     ],
     "docs/security/2026-05-24-shift-left-rollout.md": [
       ".github/workflows/ci.yml",
@@ -3888,6 +3957,9 @@
     "docs/user-guide/contributing/developer-setup.md": [
       "scripts/seed-worktree-mcp.ps1",
       "scripts/seed-worktree-mcp.sh"
+    ],
+    "docs/user-guide/operations/self-upgrade.md": [
+      "scripts/tts/setup-chatterbox-tts-macos.sh"
     ],
     "docs/user-guide/platform/edge-nodes.md": [
       "docker-compose.edge.macvlan.yml"

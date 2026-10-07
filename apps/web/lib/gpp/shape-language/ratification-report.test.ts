@@ -37,6 +37,11 @@ const RATIFIED_OUTBOUND: Readonly<Record<string, GateRatificationEntry>> = {
   },
 };
 
+/** The production table with every ratification withdrawn: the state before PR-3b-R. */
+const NOTHING_RATIFIED: Readonly<Record<string, GateRatificationEntry>> = Object.fromEntries(
+  Object.entries(GATE_RATIFICATION).map(([scope, entry]) => [scope, { status: "proposed", proposed: entry.proposed, basis: entry.basis }]),
+);
+
 function governedStages(definition: WorkShapeDefinition) {
   return definition.stages
     .filter((s) => s.advance.kind === "governed-decision")
@@ -50,7 +55,7 @@ function governedStages(definition: WorkShapeDefinition) {
 describe("buildRatificationReport", () => {
   it("with nothing ratified, drops no field and lists every governed stage as proposed and awaiting", () => {
     const definitions = [shape("inquiry-response-watch"), shape("obligation-assurance-watch"), PRIOR_PR_FLOW];
-    const report = buildRatificationReport(definitions);
+    const report = buildRatificationReport(definitions, NOTHING_RATIFIED);
 
     expect(report.dropped).toEqual([]);
     const expected = definitions

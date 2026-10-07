@@ -259,6 +259,51 @@ describe("classifyWorkCapsuleLiveness", () => {
     expect(v.reason).toContain("#4055");
   });
 
+  it("reads CI: a room whose PR is red with nobody repairing it is stalled, never reaped (BI-88341B5D)", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({
+        executorKind: "codex-desktop",
+        leaseExpiresAt: new Date("2026-08-04T00:00:00.000Z"),
+        pullRequestNumber: 4055,
+        pullRequestObservation: { state: "open", observedAt: new Date("2026-08-05T14:50:00.000Z") },
+        prFollowThrough: { status: "awaiting-person", observedAt: new Date("2026-08-05T14:55:00.000Z") },
+      }),
+      NOW,
+    );
+    expect(v.liveness).toBe("stalled");
+    expect(v.isReapable).toBe(false);
+    expect(v.isLive).toBe(true);
+    expect(isDemonstrablyWorking(v.liveness)).toBe(false);
+    expect(v.reason).toContain("#4055");
+  });
+
+  it("keeps a room live while its follow-through watches, repairs or queues the PR", () => {
+    for (const status of ["watching", "repairing", "queued"] as const) {
+      const v = classifyWorkCapsuleLiveness(
+        row({
+          executorKind: "codex-desktop",
+          leaseExpiresAt: new Date("2026-08-04T00:00:00.000Z"),
+          pullRequestNumber: 4055,
+          prFollowThrough: { status, observedAt: new Date("2026-08-05T14:55:00.000Z") },
+        }),
+        NOW,
+      );
+      expect(v.liveness).toBe("live");
+      expect(v.reason).toContain(status);
+    }
+    // A stale follow-through observation proves nothing.
+    const stale = classifyWorkCapsuleLiveness(
+      row({
+        executorKind: "codex-desktop",
+        leaseExpiresAt: new Date("2026-08-04T00:00:00.000Z"),
+        pullRequestNumber: 4055,
+        prFollowThrough: { status: "awaiting-person", observedAt: new Date("2026-08-05T13:00:00.000Z") },
+      }),
+      NOW,
+    );
+    expect(stale.liveness).toBe("lease-expired");
+  });
+
   it("does not keep a room live from a stale open observation", () => {
     const v = classifyWorkCapsuleLiveness(
       row({

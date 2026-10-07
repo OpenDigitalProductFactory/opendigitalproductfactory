@@ -35,16 +35,41 @@ is unavailable and does not offer or queue an upgrade.
    (**Installing now**) and after one fails (**Update still pending**), so a
    failed or in-progress attempt never reads as being up to date.
 2. Review the pending upgrade and what it will change before triggering anything.
-3. Trigger the upgrade only inside an approved deployment window. The server
-   durably admits the request and assigns its `SUR-*` run identity before queue
-   dispatch begins. Normal changes respect the window; only an emergency change
-   may override it.
+3. Trigger the upgrade inside an approved deployment window when you can. The
+   server durably admits the request and assigns its `SUR-*` run identity before
+   queue dispatch begins. Normal changes respect the window; pressing
+   **Upgrade now** outside it is an operator override, and the run records it
+   (see below).
 4. Watch the deployment status — the page distinguishes a request waiting for
    dispatch, active dispatch, indeterminate dispatch reconciliation, and a
    definite dispatch failure. It updates automatically while the build and swap
    are in progress. A normal upgrade completes in a few minutes.
 5. Confirm the health check passed after the swap, and read the deployment log if
    it did not.
+
+### Who can upgrade outside the maintenance window
+
+Upgrades are meant to run in the nightly maintenance window. Each one pauses
+new work and builds, so the portal does not let AI coworkers or agents start
+one whenever they like:
+
+- **You, pressing Upgrade now**, run immediately, even outside the window.
+  That is a deliberate operator choice. The run history records it: the run's
+  trigger ends in `+outside-window`, and so does the change record.
+- **An agent or coworker asking for an upgrade** does not run outside the
+  window. The request is held for the next window instead, and the answer says
+  when the scheduled upgrade will pick it up. This applies to the
+  `request_self_upgrade` tool and to a browser signed in as the platform
+  automation persona that presses **Upgrade now**. Agent requests also wait
+  for the release batch and respect operator blackouts. A held request shows as
+  `deferredRequest` in `get_self_upgrade_queue_status` until it has run.
+- **An urgent or security release** is deployed by you. Press **Upgrade now**,
+  and tick **Emergency override** if it must not wait for running work. Releases
+  carry no urgency flag that would let an agent skip the window for you.
+
+An agent working in your browser, signed in as you, looks the same to the
+portal as you do. Agents are told to request upgrades through
+`request_self_upgrade` instead of pressing the button for you.
 
 You may navigate away after the upgrade has been accepted. Leaving the page stops
 only that page's live status reads; it does not cancel or pause the durable upgrade.
@@ -97,7 +122,9 @@ upgrade. Nothing is lost by waiting.
   and the same bounded wall-clock budget (default **25 minutes**). If either
   build stalls, it is killed and the deployment is marked failed with a
   retryable `promoter-timeout` diagnosis instead of hanging. Candidate
-  preparation finishes before the platform begins quiescing.
+  preparation finishes before the platform begins quiescing, and so does the
+  application build itself: the portal keeps accepting work while the new
+  version builds, and pauses new work only for the swap.
 - A periodic watchdog force-removes any promoter container orphaned by a
   mid-deployment restart, so a stalled build can never linger and cause an
   unexpected later swap.
@@ -128,3 +155,22 @@ upgrade. Nothing is lost by waiting.
 - treating a failed, rolled-back deployment as if the swap had succeeded
 - re-running an upgrade the card has already said a retry will not fix
 - starting expensive local-CI work while the portal reports active quiescence
+
+
+## When required services are degraded
+
+A completed portal upgrade can still show **Degraded** when required supporting
+services could not start. The banner lists the failed services; it does not mean
+those capabilities are working. A later upgrade retries missing containers and
+containers whose first startup never succeeded. Services that have run before
+and were subsequently stopped are left alone.
+
+Monitoring configuration paths are resolved for the Docker host, including when
+an upgrade runs inside a separate container. The sandbox installs the dependencies
+for its current source before starting its preview server; dependency failures
+remain visible in container logs and health status.
+
+On Apple Silicon Macs, speech runs as the native Chatterbox service. It is checked
+through its speech endpoint, not by requiring a Docker speech container. If voice
+is unavailable, the platform maintainer can restore it through the existing
+native speech setup procedure, `scripts/tts/setup-chatterbox-tts-macos.sh`.

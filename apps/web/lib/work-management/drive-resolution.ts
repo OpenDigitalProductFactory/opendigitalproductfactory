@@ -11,12 +11,10 @@
  */
 import type { ProactivityActionBoundary, ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
-import {
-  projectWorkShapeCycleBoundary,
-  type ProjectedWorkShapeCycle,
-  type WorkShapeDefinition,
-  type WorkShapeDefinitionContract,
-  type WorkShapeTriggerClass,
+import type {
+  ProjectedWorkShapeCycle,
+  WorkShapeDefinitionContract,
+  WorkShapeTriggerClass,
 } from "./work-shapes";
 import {
   evaluateWorkroomShapeConformance,
@@ -24,10 +22,15 @@ import {
   type WorkroomShapeConformance,
   type WorkroomShapeConformanceDeviation,
 } from "./workroom-shape-conformance";
-import { writebackLatchHolds } from "./writeback-latch";
+import type { DriveReason, DriveReasonsByAction } from "./drive-conclusion";
+import type { DriveMarking, DriveRework, DriveTokenPlan } from "./drive-marking";
+import type { DueDeadline } from "./drive-deadlines";
+import type { SubShapeChildObservation, SubShapeEffects } from "./drive-child-rooms";
+import type { RecordedEvidence } from "./stage-evidence-receipts";
+import { usesGraphConstructs } from "./drive-marking";
+import { cycleCompleted, emptyPlan, ledgerFrom, planStage, projectDriveCycle } from "./drive-plan-stage";
+import { resolveGraphDrivePlan } from "./drive-resolution-graph";
 import {
-  EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
-  WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
   isCompletingWorkroomDriveReceipt,
   type PriorWorkroomDrive,
 } from "./workroom-drive-receipts";
@@ -47,6 +50,11 @@ export type DriveAction =
   | "dispatch_agent"
   | "attention";
 
+// The reason vocabulary is keyed by exactly these actions (BI-3ACFD254).
+type ExactKeys<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const DRIVE_ACTIONS_MATCH_REASON_VOCABULARY: ExactKeys<DriveAction, keyof DriveReasonsByAction> = true;
+void DRIVE_ACTIONS_MATCH_REASON_VOCABULARY;
+
 export type AccountablePrincipalKind = "agent" | "role" | "person" | "unknown";
 
 export type DriveResolutionInput = {
@@ -56,7 +64,8 @@ export type DriveResolutionInput = {
   postureLevel: ProactivityLevel | null;
   participants: readonly WorkroomParticipantView[];
   currentStageKey: string | null;
-  receipts: readonly { stageKey: string; kind: string }[];
+  /** `iteration` is set only on graph-shape receipts (GPP Phase 3c); absent reads 0. */
+  receipts: readonly { stageKey: string; kind: string; iteration?: number }[];
   budgetUsage: readonly { kind: string; used: number }[];
   stopConditionHits: readonly string[];
   reviewDue: boolean;
@@ -79,11 +88,28 @@ export type DriveResolutionInput = {
   proposedStageKey?: string | null;
   /** Last persisted drive tick. Used to fail closed when a dispatch produced no writeback. */
   priorDrive?: PriorWorkroomDrive | null;
+  /**
+   * The room's stored `workspaceState`. Read only by the graph path (GPP Phase
+   * 3c), which keeps its marking there; the sequential path never reads it.
+   */
+  workspaceState?: unknown;
+  /**
+   * The room's recorded stage evidence. Read only by the graph path (GPP Phase
+   * 3c PR-3c-3), which derives a gate verdict from a stage's latest recorded
+   * decision (`choice`); the sequential path never reads it.
+   */
+  recordedEvidence?: readonly RecordedEvidence[];
+  /**
+   * The room's sub-shape child rooms, by capsule id: each child's status and
+   * its own drive snapshot's action and reason. Read only by the graph path
+   * (GPP Phase 3c PR-3c-5).
+   */
+  subShapeChildren?: Readonly<Record<string, SubShapeChildObservation>>;
 };
 
 export type DrivePlan = {
   action: DriveAction;
-  reason: string;
+  reason: DriveReason;
   roomId: string;
   shapeKey: string | null;
   shapeVersion: string | null;
@@ -99,45 +125,38 @@ export type DrivePlan = {
   cycle: ProjectedWorkShapeCycle | null;
   deviations: WorkroomShapeConformanceDeviation[];
   ledger: string[];
+  /**
+   * Graph shapes only (GPP Phase 3c, BI-8875C9DF): one plan per marked stage,
+   * in document order. Absent on every sequential plan.
+   */
+  tokens?: DriveTokenPlan[];
+  /**
+   * Graph shapes only: the marking to persist, or `{ raw }` (a stored marking
+   * that could not be read, kept verbatim). Absent means "carry the stored
+   * marking forward unchanged" (applyDrivePlan). Absent on every sequential plan.
+   */
+  marking?: DriveMarking | { raw: unknown };
+  /**
+   * Graph shapes only (PR-3c-3): the rework this tick took, when a refuse was
+   * routed back to an earlier stage. The runner revokes the cleared stages'
+   * permits on it. Absent on every sequential plan.
+   */
+  rework?: DriveRework;
+  /**
+   * Graph shapes only (PR-3c-4): the stage deadlines this tick raised in the
+   * marking. The runner records a `workroom-drive-deadline` activity for them;
+   * the notice itself goes out on the next tick, once they are committed.
+   */
+  deadlinesDue?: DueDeadline[];
+  /**
+   * Graph shapes only (PR-3c-5): the child rooms to create, complete or
+   * abandon this tick. The runner applies them and writes each child entry's
+   * capsule id or state into the marking only once its effect committed.
+   */
+  subShapes?: SubShapeEffects;
 };
 
-export function workroomDriveTaskId(roomId: string, shapeKey: string): string {
-  return `workroom-${roomId}-${shapeKey}`;
-}
-
-export function parseAccountablePrincipalRef(
-  ref: string,
-): { kind: AccountablePrincipalKind; value: string } {
-  if (ref.startsWith("agent:")) return { kind: "agent", value: ref.slice("agent:".length) };
-  if (ref.startsWith("role:")) return { kind: "role", value: ref.slice("role:".length) };
-  if (ref.startsWith("person:")) return { kind: "person", value: ref.slice("person:".length) };
-  return { kind: "unknown", value: ref };
-}
-
-function emptyPlan(
-  input: DriveResolutionInput,
-  action: DriveAction,
-  reason: string,
-  extras: Partial<DrivePlan> = {},
-): DrivePlan {
-  return {
-    action,
-    reason,
-    roomId: input.roomId,
-    shapeKey: input.definition?.key ?? null,
-    definition: input.definition ?? null,
-    shapeVersion: input.definition?.version ?? null,
-    stageKey: null,
-    accountablePrincipalRef: null,
-    agentId: null,
-    attentionPrincipalRef: null,
-    taskId: null,
-    conformance: extras.conformance ?? null,
-    cycle: extras.cycle ?? null,
-    deviations: extras.deviations ?? extras.conformance?.deviations ?? [],
-    ledger: extras.ledger ?? [reason],
-  };
-}
+export { parseAccountablePrincipalRef, workroomDriveBranchTaskId, workroomDriveTaskId } from "./drive-plan-stage";
 
 export function nextStageKey(
   definition: WorkShapeDefinitionContract,
@@ -153,38 +172,6 @@ export function nextStageKey(
   const index = definition.stages.findIndex((stage) => stage.key === currentStageKey);
   if (index < 0 || index + 1 >= definition.stages.length) return null;
   return definition.stages[index + 1]?.key ?? null;
-}
-
-/** The prior tick finished this same cycle (or already slept on it). */
-function cycleCompleted(prior: PriorWorkroomDrive | null, cycleKey: string): boolean {
-  if (!prior || prior.cycleKey !== cycleKey) return false;
-  return (prior.action === "stop" && prior.reason === "success")
-    || (prior.action === "do_not_wake" && prior.reason === "cycle_complete");
-}
-
-function asShape(
-  definition: WorkShapeDefinitionContract,
-  collaborationShape: string | null,
-): WorkShapeDefinition {
-  return {
-    key: definition.key,
-    version: definition.version,
-    title: definition.key,
-    description: definition.key,
-    triggers: definition.triggers,
-    stages: definition.stages,
-    stopConditions: definition.stopConditions,
-    grants: definition.grants,
-    measures: definition.measures,
-    budgets: definition.budgets,
-    reviewPoint: definition.reviewPoint,
-    collaborationShape: (collaborationShape as WorkShapeDefinition["collaborationShape"]) ?? null,
-  };
-}
-
-function ledgerFrom(conformance: WorkroomShapeConformance, extra: string[]): string[] {
-  const fromDeviations = conformance.deviations.map((deviation) => `${deviation.code}: ${deviation.summary}`);
-  return [...fromDeviations, ...extra];
 }
 
 export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
@@ -210,6 +197,13 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
     return emptyPlan(input, "stop", "empty_read", {
       ledger: ["Substrate empty; drive stopped and raised nothing."],
     });
+  }
+
+  // GPP Phase 3c (BI-8875C9DF): a structural branch, not a flag. A shape that
+  // declares a flow, a deadline, a sub-shape or a refuse route runs on the
+  // graph path; every other shape continues below, unchanged.
+  if (usesGraphConstructs(input.definition)) {
+    return resolveGraphDrivePlan({ ...input, definition: input.definition });
   }
 
   const proposedStageKey = input.proposedStageKey !== undefined
@@ -239,14 +233,7 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
     checkedAt: input.now,
   });
 
-  const trigger = input.trigger
-    ?? (input.definition.triggers[0] as WorkShapeTriggerClass | undefined)
-    ?? "cadence";
-  const cycle = projectWorkShapeCycleBoundary({
-    shape: asShape(input.definition, input.collaborationShape),
-    trigger,
-    startedAt: input.now ?? new Date(0),
-  });
+  const cycle = projectDriveCycle(input, input.definition);
 
   // BI-D10BB58B: a cycle runs once. Success persists no stage, so without this
   // the next tick restarted at stage 1 and re-earned the same cycle's governed
@@ -296,101 +283,5 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
     });
   }
 
-  const parsed = parseAccountablePrincipalRef(stage.accountablePrincipalRef);
-  const governed = stage.advance.kind === "governed-decision";
-  const humanStage = parsed.kind === "role" || parsed.kind === "person";
-  // EP-4614F35E: a governed-decision stage normally raises attention (a human
-  // decides). The one exception — full proactivity — is when the accountable
-  // principal is an AGENT and the room is `preauthorized`: the room drives its
-  // own governed review, dispatching the non-author agent reviewer that records
-  // the governed receipt. A role/person governed stage still raises attention.
-  const agentDrivesGovernedReview =
-    governed && parsed.kind === "agent" && Boolean(parsed.value) && input.actionBoundary === "preauthorized";
-  if ((governed || humanStage) && !agentDrivesGovernedReview) {
-    const reason = governed ? "governed_decision" : parsed.kind === "role" ? "role_stage" : "person_stage";
-    return {
-      action: "attention",
-      reason,
-      roomId: input.roomId,
-      shapeKey: input.definition.key,
-      definition: input.definition ?? null,
-      shapeVersion: input.definition.version,
-      stageKey: stage.key,
-      accountablePrincipalRef: stage.accountablePrincipalRef,
-      agentId: null,
-      attentionPrincipalRef: stage.accountablePrincipalRef,
-      taskId: null,
-      conformance,
-      cycle,
-      deviations: [],
-      ledger: [`Stage ${stage.key} becomes attention (${reason}); the runner does not execute it.`],
-    };
-  }
-
-  if (parsed.kind !== "agent" || !parsed.value) {
-    return emptyPlan(input, "pause", "unknown_principal", {
-      conformance,
-      cycle,
-      ledger: [`Stage ${stage.key} has no dispatchable agent principal.`],
-    });
-  }
-
-  const completing = input.receipts.some((receipt) =>
-    isCompletingWorkroomDriveReceipt(receipt, stage.key),
-  );
-  const blocked = input.receipts.some(
-    (receipt) =>
-      receipt.stageKey === stage.key && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
-  );
-  const prior = input.priorDrive;
-  // Bounded, not permanent: the latch holds within a cycle and releases on the
-  // next, so a deployed fix can reach a room that previously failed closed.
-  // Without this the pause reason re-triggers the pause and the room is locked
-  // forever (12 of 24 rooms on this install were).
-  const alreadyTriedWriteback = !completing
-    && writebackLatchHolds({
-      prior: prior ?? null,
-      stageKey: stage.key,
-      currentCycleKey: cycle?.cycleKey ?? null,
-      blocked,
-    });
-  if (alreadyTriedWriteback) {
-    return {
-      action: "pause",
-      reason: EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
-      roomId: input.roomId,
-      shapeKey: input.definition.key,
-      definition: input.definition ?? null,
-      shapeVersion: input.definition.version,
-      stageKey: stage.key,
-      accountablePrincipalRef: stage.accountablePrincipalRef,
-      agentId: null,
-      attentionPrincipalRef: null,
-      taskId: null,
-      conformance,
-      cycle,
-      deviations: [],
-      ledger: [
-        `Stage ${stage.key} already dispatched without a completing receipt; pause until writeback exists.`,
-      ],
-    };
-  }
-
-  return {
-    action: "dispatch_agent",
-    reason: "agent_stage",
-    roomId: input.roomId,
-    shapeKey: input.definition.key,
-    definition: input.definition ?? null,
-    shapeVersion: input.definition.version,
-    stageKey: stage.key,
-    accountablePrincipalRef: stage.accountablePrincipalRef,
-    agentId: parsed.value,
-    attentionPrincipalRef: null,
-    taskId: workroomDriveTaskId(input.roomId, input.definition.key),
-    conformance,
-    cycle,
-    deviations: [],
-    ledger: [`Dispatch agent:${parsed.value} for stage ${stage.key}.`],
-  };
+  return planStage({ input, definition: input.definition, stage, conformance, cycle, prior: input.priorDrive ?? null });
 }

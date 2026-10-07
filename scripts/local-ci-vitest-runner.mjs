@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { resolve } from "node:path";
@@ -22,7 +23,7 @@ const DEFAULT_VITEST_MAX_DURATION_MS = 30 * 60 * 1_000;
 function valueAfter(flag, fallback) {
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
   const { values } = utilParseArgs({
-    args: process.argv.slice(2),
+    args: scriptArgv(),
     strict: false,
     allowPositionals: true,
     options: { "initial-workers": { type: "string" }, "retry-workers": { type: "string" }, "base": { type: "string" } },

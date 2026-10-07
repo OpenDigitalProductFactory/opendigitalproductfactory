@@ -9,7 +9,8 @@
     "choices": {
       "accept": "Accept",
       "patch": "Patch",
-      "defer": "Defer"
+      "defer": "Defer",
+      "refuse": "Send back"
     },
     "deferUntil": "Defer until",
     "rationale": "Rationale",
@@ -36,7 +37,20 @@
       "advance-tightened": "Now needs a decision to move on",
       "text-changed": "Wording changed",
       "grant-added": "New permission: {$detail}",
-      "grant-removed": "Permission removed: {$detail}"
+      "grant-removed": "Permission removed: {$detail}",
+      "gate-mode-relaxed": "The decision to move on is now only recorded, not enforced",
+      "gate-blocking-relaxed": "Can move on before the decision is made",
+      "gate-authority-changed": "Decided under a different authority: {$detail}",
+      "binding-enforcement-raised": "Permission checks are stricter: {$detail}",
+      "binding-enforcement-lowered": "Permission checks are looser: {$detail}",
+      "binding-version-changed": "Permissions revised: {$detail}",
+      "gate-removed": "No longer needs a decision to move on: {$detail}",
+      "binding-removed": "Permission checks removed: {$detail}",
+      "flow-changed": "The order the work moves through changed: {$detail}",
+      "deadline-added": "Now has a deadline: {$detail}",
+      "deadline-relaxed": "The deadline is later: {$detail}",
+      "deadline-removed": "No longer has a deadline: {$detail}",
+      "sub-shape-changed": "Hands part of the work to a different child room: {$detail}"
     },
     "rationale": "Why you approve",
     "rationaleHint": "Required, because this widens what the room can reach.",

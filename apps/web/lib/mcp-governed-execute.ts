@@ -7,7 +7,6 @@
 // closes the audit gap on the REST and JSON-RPC paths and gives the future
 // external-MCP transport a stable hook.
 
-import { prisma } from "@dpf/db";
 import { can, type CapabilityKey } from "./permissions";
 import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./govern/authority/governed-rejection-disposition";
 import { approvalPendingResult, settledApprovalResult } from "./govern/authority/approval-pending-result";
@@ -34,6 +33,7 @@ export type {
 } from "./govern/authority/coworker-tool-authority-gate";
 import { PLATFORM_TOOLS, executeTool } from "./mcp-tools";
 import type { ToolDefinition, ToolResult, ToolExecutionContext } from "./mcp-tool-types";
+import { resolveGovernedTool, discoveredToolExecutionContext, discoveredToolGrantAllowed } from "./tak/discovered-tool-governance";
 import type {
   GovernedExecuteArgs,
   GovernedExecuteContext,
@@ -175,18 +175,15 @@ async function isAllowedByGrants(toolName: string, grants: string[]): Promise<bo
   return isToolAllowedByGrants(toolName, grants);
 }
 
+/** The callerClient an approved request runs under (approved-request-credential.ts). */
+const APPROVAL_COMPLETION = "approval-completion";
+
 async function runGovernedToolPreflight(event: ToolLifecycleEvent): Promise<ToolResult | null> {
   if (_toolPreflightOverride) return _toolPreflightOverride(event);
-  if (event.context?.authSource === "oauth") {
-    const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
-    const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === event.toolName);
-    const refusal = await workroomTargetAccessRefusal({
-      params: event.rawParams,
-      userId: event.userId,
-      ...event.context,
-      toolName: event.toolName,
-      action: tool?.sideEffect !== false,
-    });
+  // An approved run is room-checked after the gate instead, so a refusal
+  // closes its approval as failed (BI-F4EB23C1).
+  if (event.context?.callerClient !== APPROVAL_COMPLETION) {
+    const refusal = await oauthRoomRefusal(event.toolName, event.rawParams, event.userId, event.context);
     if (refusal) return refusal;
   }
   if (event.toolName === "invite_room_participant") {
@@ -220,19 +217,20 @@ export async function agentHasAnyGrant(agentId: string, toolNames: string[]): Pr
   return false;
 }
 
+/** An OAuth call's exact-room admission. */
+const oauthRoomRefusal = async (toolName: string, params: Record<string, unknown>, userId: string, ctx?: ToolLifecycleEvent["context"]): Promise<ToolResult | null> => ctx?.authSource !== "oauth" ? null
+  : (await import("./work-capsules/oauth-workroom-ownership")).workroomTargetAccessRefusal({ params, userId, ...ctx, toolName, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
+
 async function callExecuteTool(
   toolName: string,
   params: Record<string, unknown>,
   userId: string,
   ctx?: ToolExecutionContext,
 ): Promise<ToolResult> {
-  // Recheck at execution: approval may resume after room or connection access changed.
-  if (ctx?.authSource === "oauth") {
-    const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
-    const refusal = await workroomTargetAccessRefusal({ params, userId, ...ctx, toolName,
-      action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
-    if (refusal) return refusal;
-  }
+  // Recheck at execution: access may change before an approval resumes (#5925);
+  // an approved run is first checked here (BI-F4EB23C1).
+  const refusal = await oauthRoomRefusal(toolName, params, userId, ctx);
+  if (refusal) return refusal;
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
   return executeTool(toolName, params, userId, ctx);
 }
@@ -310,7 +308,7 @@ export async function governedExecuteTool(
   let authorityDecisionId: string | undefined;
   let alignmentDecision: AlignmentGateDecision | null = null;
   let preconditionDecision: PreconditionOrderingDecision | null = null;
-  const tool = findTool(args.toolName);
+  const { tool, discovered } = await resolveGovernedTool(args, findTool(args.toolName)); // BI-8B7B2FE9
   if (!tool) {
     return {
       success: false,
@@ -393,7 +391,7 @@ export async function governedExecuteTool(
       const { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } = await import("@/lib/coworker/authorized-surface-coworker-contract");
       grants = Array.from(new Set([...grants, ...COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS]));
     }
-    const agentGrantAllowed = await isAllowedByGrants(args.toolName, grants);
+    const agentGrantAllowed = discovered ? discoveredToolGrantAllowed(discovered.policy, grants, args) : await isAllowedByGrants(args.toolName, grants);
 
     // Deterministic target preconditions run before authority escalation,
     // including when a missing capability/grant would otherwise create an
@@ -658,7 +656,7 @@ export async function governedExecuteTool(
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
       authorityDecisionId,
       approvedAuthorityEnvelopeId,
-      ...(gppPermit?.permitId ? { gppPermitId: gppPermit.permitId } : {}),
+      ...(gppPermit?.permitId ? { gppPermitId: gppPermit.permitId } : {}), ...discoveredToolExecutionContext(discovered),
       governedDispatch: async (nestedToolName, nestedParams, surfaceInvocation) => {
         const nestedTool = findTool(nestedToolName);
         if (!nestedTool) {

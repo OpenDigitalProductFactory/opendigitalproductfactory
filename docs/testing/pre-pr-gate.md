@@ -17,7 +17,32 @@ wins and this doc is the bug — fix it.
 Begin [failure analysis](../architecture/failure-analysis-and-recovery.md) in design, refine it during implementation, and give the independent reviewer executed evidence for the final change. Local integration reports now bind their output to the owning Workroom, source tree and diff. An empty checklist, stale report or skipped run cannot satisfy that requirement. Technical review outages follow internal recovery; they are not business-owner approval requests.
 
 Cross-session drift happens when each session reconstructs the workflow from
-prose. Don't. Before you open a PR, in order:
+prose. Don't — and the mechanical form of the list below is one command:
+
+```bash
+pnpm land --message-file msg.txt --title "type(scope): ..." --body-file body.md
+```
+
+`pnpm land` runs steps 1-5 in order and stops at the first refusal with the one
+next action: branch and readiness preconditions, `gate:context` (so required
+attestations and stale derived artifacts arrive rather than being looked up),
+regeneration using the command the derived-artifacts registry carries,
+`gate:local` against the working tree with the planned commit message,
+DCO-signed commit, `gate:wait` (queue and infrastructure classification already
+written down), push, PR, auto-merge with the enable VERIFIED. `--dry-run` prints
+the plan. Pass the flags directly — a `--` separator before them is swallowed
+by pnpm, which is how a present attestation gets reported as missing.
+
+It overrides nothing and invents nothing: a refusal stops the sequence, and a
+PR-body attestation it was not given is reported by name rather than written for
+you. It gates before it pushes, which is what "PR creation means ready to merge"
+requires.
+
+Read the list below when you need to know WHY a step exists, or when you are
+doing something the orchestrator does not cover. Running the steps by hand is
+how the prose drifts.
+
+Before you open a PR, in order:
 
 1. **Branch guard.** You are on a topic branch in a worktree, not on `main` and
    not in detached HEAD. (AGENTS.md §4.)

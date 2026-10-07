@@ -3,7 +3,7 @@
   "key": "drc-e-stage-deadline",
   "version": "1.0.0",
   "title": "DRC fixture drc-e-stage-deadline",
-  "description": "Seeded E-NOT-EXECUTABLE: a stage deadline.",
+  "description": "Seeded E-NOT-EXECUTABLE: a stage deadline (implemented and parity-proven in GPP Phase 3c PR-3c-4, not enabled pending BI-086DC167).",
   "triggers": [
     "claim"
   ],

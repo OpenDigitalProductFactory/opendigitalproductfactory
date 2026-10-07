@@ -13,8 +13,26 @@ import type { prisma as Db } from "@dpf/db";
  */
 export const BUILD_LIVENESS_WINDOW_MS = 15 * 60 * 1000;
 
+/** Written when a phase transition is refused because an upgrade is draining (admitPhaseTransition). */
+export const UPGRADE_WAIT_ACTIVITY_TOOL = "phase:upgrade-wait";
+
+/** Written by the subscriber that resumes builds when an upgrade pause clears (BI-E9DAA23F). */
+export const UPGRADE_PAUSE_RESUME_TOOL = "resumeBuildsAfterUpgradePause";
+
 /** The reconcilers' own rows must not keep a build looking alive. */
-export const RECONCILER_ACTIVITY_TOOLS = ["resumeStrandedBuildsOnBoot", "recoverContradictoryBuildExecStatesOnBoot"];
+export const RECONCILER_ACTIVITY_TOOLS = [
+  "resumeStrandedBuildsOnBoot",
+  "recoverContradictoryBuildExecStatesOnBoot",
+  UPGRADE_PAUSE_RESUME_TOOL,
+];
+
+/**
+ * BI-E9DAA23F: a refused transition is not progress either. Counting the
+ * upgrade-wait marker as liveness kept a waiting build out of the resumer for
+ * 15 minutes after the pause cleared. Liveness only; the wait still counts as
+ * the build's last activity everywhere else.
+ */
+const NOT_PROGRESS_TOOLS = [...RECONCILER_ACTIVITY_TOOLS, UPGRADE_WAIT_ACTIVITY_TOOL];
 
 // BI-4EB33E54: an orchestration records task results only when its whole run ends, so a
 // long first task looks like silence (FB-D671B016, 2026-09-25: 22 quiet
@@ -37,6 +55,11 @@ export async function withOrchestrationRunning<T>(buildId: string, run: () => Pr
   }
 }
 
+/** True while this process is running an orchestration (or a resume) for the build. */
+export function isOrchestrationRunning(buildId: string): boolean {
+  return runningOrchestrations().has(buildId);
+}
+
 export async function recentlyActiveBuildIds(
   prisma: Pick<typeof Db, "buildActivity">,
   buildIds: string[],
@@ -47,7 +70,7 @@ export async function recentlyActiveBuildIds(
     where: {
       buildId: { in: buildIds },
       createdAt: { gte: new Date(now.getTime() - BUILD_LIVENESS_WINDOW_MS) },
-      tool: { notIn: RECONCILER_ACTIVITY_TOOLS },
+      tool: { notIn: NOT_PROGRESS_TOOLS },
     },
     select: { buildId: true },
     distinct: ["buildId"],

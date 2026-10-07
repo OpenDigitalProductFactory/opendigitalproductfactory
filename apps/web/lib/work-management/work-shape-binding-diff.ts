@@ -6,6 +6,22 @@
 // knows which of the two it is looking at. Stages match by key: a stage keeps
 // its key across versions, or it is a different stage.
 // Spec: docs/superpowers/specs/2026-10-01-workroom-shape-rebind-design.md §4.2
+//
+// Typed gate and binding rows (GPP shape compiler, BI-6DA17863 PR-3b-4; spec
+// docs/superpowers/specs/2026-10-02-gpp-shape-notation-and-compiler-design.md
+// §4.4, §6.4). WorkShapeStage.binding and a governed advance's `gate` are
+// optional, additive fields. A row about them fires ONLY when both versions
+// carry the field. Absent -> present is a making-explicit transition (GPP
+// §2.1.1: it admits nothing the drive did not already do), so it is not a
+// change and the classification stays `unchanged`; the GPP shape compiler's
+// proof migration relies on that. Present -> absent is NOT symmetric: removing
+// a stated gate or binding withdraws a control, which GPP §2.1.1 treats as
+// widening. No runtime reader consumes either field today, but the row is
+// recorded now so the classification is already right when Phase 3c makes
+// gates executable (highest-governance reading; the plan was silent on it). Binding enforcement is ordered absent < shadow < enforced <
+// environment (a containment boundary with declared egress is the strictest).
+
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 import type { WorkShapeDefinitionContract, WorkShapeStage } from "./work-shapes";
 
@@ -23,12 +39,26 @@ export type BindingChangeKind =
   | "advance-tightened"
   | "text-changed"
   | "grant-added"
-  | "grant-removed";
+  | "grant-removed"
+  | "gate-mode-relaxed"
+  | "gate-blocking-relaxed"
+  | "gate-authority-changed"
+  | "binding-enforcement-raised"
+  | "binding-enforcement-lowered"
+  | "binding-version-changed"
+  | "gate-removed"
+  | "binding-removed"
+  // GPP Phase 3c (BI-8875C9DF): each fires only when one side declares the field.
+  | "flow-changed"
+  | "deadline-added"
+  | "deadline-relaxed"
+  | "deadline-removed"
+  | "sub-shape-changed";
 
 export type BindingChange = {
   kind: BindingChangeKind;
   class: Exclude<BindingChangeClass, "unchanged">;
-  /** Null for shape-level changes (grants). */
+  /** Null for shape-level changes (grants, flow). */
   stageKey: string | null;
   detail: string;
 };
@@ -54,6 +84,29 @@ const CLASS_OF: Record<BindingChangeKind, Exclude<BindingChangeClass, "unchanged
   "advance-tightened": "narrowing",
   "text-changed": "narrowing",
   "grant-removed": "narrowing",
+  "gate-mode-relaxed": "widening",
+  "gate-blocking-relaxed": "widening",
+  "gate-authority-changed": "widening",
+  "binding-enforcement-lowered": "widening",
+  "binding-version-changed": "widening",
+  "gate-removed": "widening",
+  "binding-removed": "widening",
+  "binding-enforcement-raised": "narrowing",
+  // A changed flow can route a token somewhere it could not go before; a
+  // deadline added only adds a notice; relaxing or removing one withdraws a
+  // control; a different sub-shape runs a different child room.
+  "flow-changed": "widening",
+  "deadline-added": "narrowing",
+  "deadline-relaxed": "widening",
+  "deadline-removed": "widening",
+  "sub-shape-changed": "widening",
+};
+
+const ENFORCEMENT_RANK: Record<NonNullable<WorkShapeStage["binding"]>["enforcement"], number> = {
+  absent: 0,
+  shadow: 1,
+  enforced: 2,
+  environment: 3,
 };
 
 function change(kind: BindingChangeKind, stageKey: string | null, detail: string): BindingChange {
@@ -90,6 +143,56 @@ function stageChanges(from: WorkShapeStage, to: WorkShapeStage): BindingChange[]
   } else if (from.advance.condition !== to.advance.condition || from.title !== to.title) {
     changes.push(change("text-changed", to.key, "title or advance condition"));
   }
+  changes.push(...gateChanges(from, to), ...bindingChanges(from, to), ...graphStageChanges(from, to));
+  return changes;
+}
+
+/** Rows for a stage deadline and a sub-shape call (Phase 3c). Neither side declaring the field: no row. */
+function graphStageChanges(from: WorkShapeStage, to: WorkShapeStage): BindingChange[] {
+  const changes: BindingChange[] = [];
+  if (!from.deadline && to.deadline) changes.push(change("deadline-added", to.key, `after ${to.deadline.afterDays} day(s)`));
+  if (from.deadline && !to.deadline) changes.push(change("deadline-removed", to.key, `after ${from.deadline.afterDays} day(s)`));
+  if (from.deadline && to.deadline && to.deadline.afterDays > from.deadline.afterDays) {
+    changes.push(change("deadline-relaxed", to.key, `${from.deadline.afterDays} -> ${to.deadline.afterDays} day(s)`));
+  }
+  if ((from.subShape !== undefined || to.subShape !== undefined) && from.subShape !== to.subShape) {
+    changes.push(change("sub-shape-changed", to.key, `${from.subShape ?? "none"} -> ${to.subShape ?? "none"}`));
+  }
+  return changes;
+}
+
+/** Rows for a typed gate. Added: no row; removed: widening; both present: compared (see header). */
+function gateChanges(from: WorkShapeStage, to: WorkShapeStage): BindingChange[] {
+  const before = from.advance.kind === "governed-decision" ? from.advance.gate : undefined;
+  const after = to.advance.kind === "governed-decision" ? to.advance.gate : undefined;
+  if (before && !after) return [change("gate-removed", to.key, `${before.authority} gate`)];
+  if (!before || !after) return [];
+  const changes: BindingChange[] = [];
+  if (before.mode === "enforced" && after.mode === "shadow") {
+    changes.push(change("gate-mode-relaxed", to.key, `${before.mode} -> ${after.mode}`));
+  }
+  if (before.blocking && !after.blocking) {
+    changes.push(change("gate-blocking-relaxed", to.key, "blocking -> non-blocking"));
+  }
+  if (before.authority !== after.authority) {
+    changes.push(change("gate-authority-changed", to.key, `${before.authority} -> ${after.authority}`));
+  }
+  return changes;
+}
+
+/** Rows for a stage binding. Added: no row; removed: widening; both present: compared (see header). */
+function bindingChanges(from: WorkShapeStage, to: WorkShapeStage): BindingChange[] {
+  const before = from.binding;
+  const after = to.binding;
+  if (before && !after) return [change("binding-removed", to.key, `${before.id}@${before.version}`)];
+  if (!before || !after) return [];
+  const changes: BindingChange[] = [];
+  const delta = ENFORCEMENT_RANK[after.enforcement] - ENFORCEMENT_RANK[before.enforcement];
+  if (delta > 0) changes.push(change("binding-enforcement-raised", to.key, `${before.enforcement} -> ${after.enforcement}`));
+  if (delta < 0) changes.push(change("binding-enforcement-lowered", to.key, `${before.enforcement} -> ${after.enforcement}`));
+  if (before.version !== after.version) {
+    changes.push(change("binding-version-changed", to.key, `${before.id}@${before.version} -> ${after.id}@${after.version}`));
+  }
   return changes;
 }
 
@@ -111,6 +214,9 @@ export function diffWorkShapeBinding(
   }
   for (const stage of from.stages) {
     if (!after.has(stage.key)) changes.push(change("stage-removed", stage.key, stage.title));
+  }
+  if ((from.flow !== undefined || to.flow !== undefined) && canonicalJson(from.flow ?? null) !== canonicalJson(to.flow ?? null)) {
+    changes.push(change("flow-changed", null, from.flow === undefined ? "flow declared" : to.flow === undefined ? "flow removed" : "flow edited"));
   }
   const grants = setDiff(from.grants, to.grants);
   for (const grant of grants.added) changes.push(change("grant-added", null, grant));

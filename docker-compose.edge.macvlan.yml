@@ -58,6 +58,8 @@
 
 services:
   edge-node-macvlan:
+    labels:
+      dpf.recreate-class: stateless
     profiles:
       - macvlan
     image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-edge-node:${DPF_IMAGE_TAG:-latest}

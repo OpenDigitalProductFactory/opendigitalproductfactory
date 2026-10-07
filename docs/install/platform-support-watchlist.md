@@ -14,6 +14,11 @@ out for Z."
 
 ## Target environments
 
+Linux readiness evidence and remaining acceptance checks are maintained in
+the [Linux guide](linux.md#pilot-acceptance-checks). Publishing both CPU
+architectures does not certify either host's full lifecycle. BI-3BE9A85C owns
+the Linux GA work; BI-E1AA1B3C repairs its Docker prerequisite path.
+
 | Environment | Status | LLM provider | Host telemetry exporter | Autostart |
 |---|---|---|---|---|
 | **Windows 10/11** (Docker Desktop) | GA | Docker Model Runner | `windows_exporter` on host (`windows-host` job, :9182) | Scheduled Task |
@@ -52,6 +57,7 @@ verification belongs to the canonical build. See the
 | M3 | Grafana "Open dashboard" link goes to a dead URL on non-default / remote Grafana | all (esp. macOS/Linux remote) | `SystemHealthDashboard.tsx:160` hardcodes `href="http://localhost:3002"`. Roadmap Phase 3 claimed this was fixed; it was not. | ⚠️ open | One-line fix: `href={process.env.NEXT_PUBLIC_GRAFANA_URL \|\| "http://localhost:3002"}`. Touches `.tsx` → run `next build`. |
 | M4 | cadvisor / node-exporter crash-loop or refuse to start on macOS | macOS | They bind-mount `/proc`, `/sys`, `/var/lib/docker`, and rootfs `/`, which don't exist / aren't usable in the Docker Desktop Linux VM. | 📌 Gated behind the `linux-monitoring` profile; only `docker-compose.linux.yml` opts in. | Don't add host-path bind mounts to any service started by the macOS or Windows overlay. CI `compose-render` asserts no `/proc`,`/sys`,`/var/lib/docker` mounts in the macOS rendered config. |
 | M5 | Local completion starts while a game or another app owns the GPU; decode collapses and Docker Model Runner stays resident | Windows Docker Desktop | The portal container cannot run `nvidia-smi` (no GPU device) and `windows_exporter` on `:9182` publishes no GPU memory or utilization series. The in-process inference lock cannot see another process. Docker's llama.cpp backend status can also report a missing `nv-gpu-info.exe` while the model still loads — that error is not "GPU busy". | ✅ `scripts/publish-host-gpu.ps1` writes `host-gpu.json` into the state dir (`DPF_HOST_GPU_SNAPSHOT_FILE` overrides the portal path, default `/dpf-state/host-gpu.json`). Admission defers local completion on a fresh busy snapshot or an in-use runner, and unloads an idle runner when the card is busy. A missing snapshot does not defer. | Do not scrape `windows_exporter` for VRAM, do not add a GPU bind mount, and do not treat the llama.cpp install error as a permanent deferral. |
+| M6 | Product health leads with **Critical — Service adp is down** and an **ADP DOWN: … no such host** tile while the same page lists adp as **Optional — inactive** | all (first seen on macOS) | `prometheus.{linux,macos,dev}.yml` scrape `adp:8600` statically, but the `adp` service exists only while `runtime:adp-integration` is active, so every install without ADP carries a permanently down target that fires `ContainerDown`. | ✅ BI-36DE938C: the health page checks target signals against the capability service projection. A target whose instance host is a service of an inactive capability ([`inactive-scrape-targets.ts`](../../apps/web/lib/platform-runtime/inactive-scrape-targets.ts)) does not count toward Platform Status, raises no banner, and its tile reads **Inactive** ([`health-summary.ts`](../../apps/web/components/monitoring/health-summary.ts)). With the capability enabled, the same target still reports DOWN. Locked by `health-summary.test.ts`, `inactive-scrape-targets.test.ts` and `ServiceHealthDashboard.test.tsx`. | A scrape target for a capability-gated service must address that service by its compose service name, so the instance host maps onto the capability catalog. The header health dot and the alert-to-inbox bridge do not load the capability projection yet. |
 
 **Sweep landmine (do not trip):** the discovery network sweep
 ([`packages/db/src/discovery-collectors/network.ts`](../../packages/db/src/discovery-collectors/network.ts))
@@ -72,6 +78,7 @@ bootstrap runs with the system interpreter.
 
 | # | Trap | Platforms | Status | Watch for |
 |---|---|---|---|---|
+| S9 | Engine-only Docker install reaches deployment without Compose; failed group/service setup looks successful | Linux | ✅ BI-E1AA1B3C: coherent official Docker package family, Compose preflight and explicit errors; behavioral tests in `scripts/installer/lib/docker.test.mjs`. Native clean-host runtime acceptance remains unrun. | A Docker CLI version does not prove Compose exists. Capture status 75 in a conditional and explicitly handle failures inside the helper, because that conditional disables Bash errexit. |
 | S1 | `sed -i` differs (BSD requires a backup-suffix arg) | macOS | ✅ Use `dpf_sed_inplace()` in [`scripts/installer/lib/platform.sh`](../../scripts/installer/lib/platform.sh) — never raw `sed -i`. | New scripts calling `sed -i` directly. |
 | S2 | `netstat -anP tcp` (`-P` is GNU-only) | macOS | 📌 Works today only because `preflight.sh` tries `lsof` → `ss` → `netstat` and macOS always has `lsof`. | Don't reorder the fallback chain or hardcode `netstat -anP`. |
 | S3 | `readlink -f`, `stat -c`, `date -d`, `find -printf`, `grep -P` | macOS | ⚠️ watch | These GNU-isms have no BSD equivalent. Prefer POSIX forms; `shellcheck --shell=bash` runs in CI. |
@@ -110,6 +117,7 @@ bootstrap runs with the system interpreter.
 | D21 | An upgrade or build dies mid-way and every container shows the same start time | macOS and Windows (Docker Desktop) | Docker Desktop installs an update of its own and restarts the engine. Live 2026-10-02: `eventInstallingUpdate` at 14:28:41Z in `com.docker.backend.log`, every container (Postgres included) restarted at 14:29:10, and self-upgrade SUR-8782FCBD died mid-promotion. | ✅ BI-75ECED42: the boot reconciler compares the database server start time with the run start and records `engine-restarted` ("The computer restarted Docker during the update", retryable) instead of "orchestrator did not complete the swap"; `scripts/setup.sh` (macOS) and `scripts/setup.ps1` advise turning automatic updates off. | Turn off Docker Desktop automatic updates on an operated install, and update Docker deliberately between upgrades. When diagnosing, compare `pg_postmaster_start_time()` with the failed run's start before blaming the promoter. |
 | D19 | A spatial view shows "region pack missing" even though a pack was copied onto the host | all | 📌 By design (BI-814F86E1, `DI-63D94E36B0B0`). Map packs live in the `map_data` named volume mounted at `/var/lib/dpf/maps` on the portal (override with `DPF_MAP_DATA_DIR`); the image never carries one. A pack copied to a host directory is invisible until it is placed in that volume with its `<packId>.manifest.json`, and a manifest whose `byteLength` disagrees with the file is reported as invalid (`409`). | Never bind-mount a host map directory into the shared base compose file, and never fetch tiles from a remote host as a fallback. |
 | D20 | Maps stop drawing after a Content-Security-Policy is introduced | all | ⚠️ open (watch). DPF has no app-wide CSP today. MapLibre 6 builds its worker from the same-origin module `/api/map-assets/runtime/maplibre-gl-worker.mjs` (BI-814F86E1), so any future CSP must allow `worker-src 'self' blob:`. | When adding a CSP, include the worker directive and exercise a geographic view in light and dark themes. |
+| D23 | Coworker reviews end without a receipt (`spawn docker EAGAIN`, "Sandbox file write failed") and `docker exec` fails with "resource temporarily unavailable"; `docker stats` shows a container with tens of thousands of PIDs | all Docker hosts | ✅ BI-95BB9CB1: the sandbox's PID 1 is a shell entrypoint and portal-tls's is caddy; neither reaps orphaned children, so every git a build ran and every health-check probe left a zombie (75,868 and 11,573 measured on one install) until the Docker VM's process table was nearly full. Both services now set `init: true` with a `pids_limit` (#6020), and `scripts/compose-init-reaping.test.mjs` keeps the init in place. | Any new long-running service whose PID 1 is a shell script or an app that does not reap children (most are not init systems) must set `init: true`. Check `docker exec <c> sh -c 'ps -eo stat'` for Z states when a container's PID count climbs. |
 
 ## 4. Git / repo hygiene
 
@@ -148,3 +156,17 @@ URL/port, a shell builtin), ask: *"does this assume Windows/GNU/Docker-Desktop,
 and which substrate overlay should own it?"* Put substrate-specific deltas in
 the owning overlay (`docker-compose.{macos,linux}.yml`, `prometheus.{macos,linux}.yml`),
 never in the shared base.
+
+
+### Persisted MCP endpoint recovery (BI-9F258707)
+
+A bootstrap launched from a worktree may have no install PUBLIC_URL and may inherit a process environment older than setup. The existing client-environment resolver now reads the persisted user endpoint after the canonical install origin and explicit process override. POSIX decodes only managed export values as data; Windows reads the User environment. The saved Node CA bundle is considered before the default PKI file. OAuth credentials, grants, trust stores and unrelated exports are unchanged. Re-run the supported bootstrap to converge native client configuration; verify its effective endpoint, not only the saved environment. Tests cover POSIX recovery and precedence; native Windows execution must be verified on a Windows host.
+
+
+## Required services after container-driven upgrades (BI-FFFEA4ED)
+
+| Host | Failure to watch for | Recovery contract |
+|---|---|---|
+| Docker Desktop and native Docker | A sibling promoter resolves relative monitoring binds beneath its own `/host-source`; the daemon cannot use that container path. A failed start leaves a Created container that an existence-only check misses. | Translate binds using the promoter's inspected host mounts. After release identity commit, release assets use the canonical install root. Retry only missing or proven never-started containers and retain failed recovery in the durable outcome. |
+| Apple Silicon macOS | The capability catalog asks for Docker speech while the macOS overlay points at the native service on port 8771. | The canonical container catalog excludes macOS for `dpf-tts`; verify native synthesis separately. A disabled `local.dpf-chatterbox-tts` LaunchAgent must be restored through the existing native setup procedure when speech is requested. |
+| All sandbox hosts | The persistent source volume contains newer package manifests but older dependency links. Next fails before its health endpoint starts. | The image-baked sandbox entrypoint performs a frozen dependency install and Prisma generation before serving the existing source. A failed install cannot fall through to a falsely ready preview. |

@@ -80,6 +80,8 @@ import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureDataModelMirrorScheduledTask } from "./seed-data-model-mirror.js";
 import { ensureBookkeepingCycleScheduledTask } from "./seed-bookkeeping-cycle.js";
 import { ensureDecisionEngineReviewScheduledTask } from "./seed-decision-engine-review.js";
+import { ensureAcceptanceSweepScheduledTask } from "./seed-acceptance-sweep.js";
+import { ensureDemandScoringStewardScheduledTask } from "./seed-demand-scoring-steward.js";
 import { ensureSysmlProjectionScheduledTask } from "./seed-sysml-projection.js";
 import { ensureSelfOptimizationSweepScheduledTask } from "./seed-self-optimization-sweep.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
@@ -108,6 +110,7 @@ import {
 } from "./provider-connection.js";
 import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
 import { seedAbsorptionPosture } from "./seed-absorption-posture.js";
+import { seedAutonomyPolicyBaseline } from "./seed-autonomy-policy-baseline.js";
 import {
   loadPlatformSbomFromRepository,
   persistPlatformSbom,
@@ -2516,6 +2519,7 @@ async function main(): Promise<void> {
 
   await step("integrationCoverage", () => seedIntegrationCoverage(prisma, bootstrapOrganizationId));
   await step("absorptionPosture", () => seedAbsorptionPosture(prisma));
+  await step("autonomyPolicyBaseline", () => seedAutonomyPolicyBaseline(prisma));
   await step("stallThresholds", () => seedStallThresholds(prisma));
   await step("geographicData", () => seedGeographicData(prisma));
   await step("taxJurisdictions", () => seedTaxJurisdictions(prisma));
@@ -2569,6 +2573,8 @@ async function main(): Promise<void> {
   await step("dataModelMirrorScheduledTask", () => ensureDataModelMirrorScheduledTask(prisma));
   await step("bookkeepingCycleScheduledTask", () => ensureBookkeepingCycleScheduledTask(prisma));
   await step("decisionEngineReviewScheduledTask", () => ensureDecisionEngineReviewScheduledTask(prisma));
+  await step("acceptanceSweepScheduledTask", () => ensureAcceptanceSweepScheduledTask(prisma));
+  await step("demandScoringStewardScheduledTask", () => ensureDemandScoringStewardScheduledTask(prisma));
   await step("sysmlProjectionScheduledTask", () => ensureSysmlProjectionScheduledTask(prisma));
   await step("selfOptimizationSweepScheduledTask", () => ensureSelfOptimizationSweepScheduledTask(prisma));
   await step("hiveScoutScheduledTask", () => ensureHiveScoutScheduledTask(prisma));

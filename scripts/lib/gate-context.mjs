@@ -59,6 +59,27 @@ import { POLICY_GUARD_PROFILES } from "./ci-policy-guards.mjs";
 
 export const GATE_CONTEXT_SCHEMA_VERSION = 2;
 
+/** Local routing only: never authorizes execution or asserts live health. */
+export function buildTaskBrief(situation = "normal") {
+  const recovery = "packages/dpf-skill-pack/skills/dpf-systematic-debugging/references/recovery-routing.md";
+  const routes = {
+    normal: ["delivery", "Claim the existing backlog/workroom; run gate:context for the diff.", "docs/architecture/backlog-and-planning-runbook.md"],
+    "upgrade-failed": ["recovery", "Inspect upgrade status/logs with existing authority; repair source and run local tests before the independent recovery procedure.", recovery],
+    "mcp-unavailable": ["recovery", "Preserve local evidence and continue authorized source work; reconcile coordination when MCP returns.", recovery],
+    "ci-unavailable": ["recovery", "Classify the infrastructure evidence; inspect the checked-in audited gate override and its prerequisites. Record gate-unrun.", recovery],
+    "permission-denied": ["authorization", "Stop the denied operation; follow the returned token, coworker grant, role or clearance remedy. Never substitute shell/DB access.", recovery],
+    "break-fix-occupied": ["coordination", "Inspect owner and liveness; reconcile a stale claim only through supported coordination. Occupancy is not an outage.", recovery],
+  };
+  const route = Object.hasOwn(routes, situation) ? routes[situation] : null;
+  if (!route) throw new Error(`Unknown situation. Choose: ${Object.keys(routes).join(", ")}`);
+  return {
+    situation, route: route[0], nextAction: route[1], reference: route[2],
+    evidence: "Observed symptom, affected dependency, source identity, existing authorization and actual check results.",
+    stopCondition: "Missing authority or no checked-in recovery for a privileged action; PR, DCO and production-integrity controls still apply.",
+    authorizesExecution: false,
+  };
+}
+
 const MIGRATION_FILE_RE = /^packages\/db\/prisma\/migrations\/[^/]+\/migration\.sql$/;
 // Schema domain-folder files (packages/db/prisma/schema/*.prisma, B5 Seam C
 // layout) plus the legacy schema.prisma monolith for diffs spanning the split.
@@ -290,6 +311,13 @@ export function buildGateContext({
     id: entry.id,
     description: entry.description,
     artifacts: entry.artifactPaths,
+    // The registry has carried `generate` and `check` all along; this context
+    // used to print only the artifact PATHS, so a reader learned WHAT was stale
+    // and still had to know HOW to refresh it. Surfacing the commands is what
+    // makes this consumable by a script rather than only by a person who already
+    // knows the repo (BI-4CE4F52F): `pnpm land` regenerates straight from here.
+    generate: entry.generate ?? null,
+    check: entry.check ?? null,
   }));
 
   // 5. Routes: net-new pages face absolute budgets + four generated
@@ -393,7 +421,10 @@ export function formatGateContextMarkdown(context) {
   ));
   out.push(...formatSection(
     "Derived artifacts to regenerate in this change",
-    context.derivedArtifacts.map((d) => `- **${d.id}**: ${d.artifacts.join(", ")}`),
+    context.derivedArtifacts.map((d) => {
+      const how = d.generate ? ` — regenerate: \`${d.generate.join(" ")}\`` : "";
+      return `- **${d.id}**: ${d.artifacts.join(", ")}${how}`;
+    }),
   ));
   out.push(...formatSection(
     "Route budgets",

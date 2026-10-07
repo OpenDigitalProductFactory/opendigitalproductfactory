@@ -104,23 +104,27 @@ dpf_compose_files() {
     DPF_COMPOSE_FILES+=(-f docker-compose.edge.yml)
   fi
 
-  # Organization members persist this marker only after a fingerprint-pinned
-  # join succeeds. Trust/TLS is a member lifecycle concern; the Step CA
-  # authority overlay is deliberately not added here.
-  organization_trust="${DPF_ORGANIZATION_TRUST_ENABLED:-}"
-  if [ -z "$organization_trust" ] && [ -f .env ]; then
-    organization_trust="$(sed -n 's/^DPF_ORGANIZATION_TRUST_ENABLED=//p' .env | tail -1)"
-  fi
-  if [ "$organization_trust" = "1" ]; then
-    DPF_COMPOSE_FILES+=(-f docker-compose.organization-trust.yml -f docker-compose.tls.yml)
-  fi
-
-  edge_actions="${DPF_EDGE_ACTION_DISPATCH_CONFIGURED:-}"
-  if [ -z "$edge_actions" ] && [ -f .env ]; then
-    edge_actions="$(sed -n 's/^DPF_EDGE_ACTION_DISPATCH_CONFIGURED=//p' .env | tail -1)"
-  fi
-  if [ "$edge_actions" = "1" ]; then
-    DPF_COMPOSE_FILES+=(-f docker-compose.edge-actions.yml)
+  # Overlays switched on after install by an .env marker, from the shared
+  # activation table that the Windows installer and the self-upgrade promoter
+  # read too (BI-B422ED03): DPF_ORGANIZATION_TRUST_ENABLED adds
+  # docker-compose.organization-trust.yml and docker-compose.tls.yml, and
+  # DPF_EDGE_ACTION_DISPATCH_CONFIGURED adds docker-compose.edge-actions.yml.
+  # Organization members persist their marker only after a fingerprint-pinned
+  # join succeeds; the Step CA authority overlay is deliberately not in the table.
+  local activation_table marker overlays overlay value
+  activation_table="$(dirname "${BASH_SOURCE[0]}")/activation-overlays.txt"
+  if [ -f "$activation_table" ]; then
+    while read -r marker overlays || [ -n "${marker:-}" ]; do
+      case "$marker" in ''|\#*) continue ;; esac
+      value="${!marker:-}"
+      if [ -z "$value" ] && [ -f .env ]; then
+        value="$(sed -n "s/^${marker}=//p" .env | tail -1)"
+      fi
+      [ "$value" = "1" ] || continue
+      for overlay in $overlays; do
+        DPF_COMPOSE_FILES+=(-f "$overlay")
+      done
+    done < "$activation_table"
   fi
 
   # Append any caller-provided extras (e.g. docker-compose.dev.yml for

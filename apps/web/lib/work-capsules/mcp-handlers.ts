@@ -38,7 +38,6 @@ import type { BacklogBindingReader } from "./adopt-backlog-binding";
 import { adoptWorktree, establishNewRoomOwnership } from "./adopt-worktree-handler";
 import { reassignCapsuleExecutor } from "./reassign-executor-handler";
 import {
-  adoptWorktreeCapsule,
   claimWorkCapsuleScope,
   createWorkCapsule,
   heartbeatWorkCapsule,
@@ -54,6 +53,7 @@ import {
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
 import { publicationRefusedToolResult } from "./publication-refusal";
+import { describeStageEvidenceReach } from "@/lib/work-management/stage-evidence-reach";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
 import { invalidScopeResult, scopeClaimRefusal } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
@@ -87,12 +87,6 @@ function stringParam(params: Record<string, unknown>, key: string): string | nul
   const value = params[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
-
-function numberParam(params: Record<string, unknown>, key: string): number | null {
-  const value = params[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 
 function workCapsuleDb(): CapsuleDb {
   return prisma as unknown as CapsuleDb;
@@ -656,11 +650,15 @@ export async function recordCapsuleEvidenceTool(
     }),
   });
 
+  // BI-C9912C22: say whether the drive can advance the stage from this, or why not.
+  const stageReach = describeStageEvidenceReach(renewedCapsule.workspaceState, {
+    stageKey: evidence.stageKey ?? null, outcome: evidence.outcome ?? null,
+  });
   return {
     success: true,
     entityId: renewedCapsule.capsuleId,
-    message: `Recorded evidence for ${renewedCapsule.capsuleId}.`,
-    data: { capsule: renewedCapsule },
+    message: [`Recorded evidence for ${renewedCapsule.capsuleId}.`, stageReach?.message].filter(Boolean).join(" "),
+    data: { capsule: renewedCapsule, ...(stageReach ? { stageReach } : {}) },
   };
 }
 

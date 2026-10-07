@@ -22,8 +22,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { scrubGitRepoLocationEnv } from "./lib/git-hook-env.mjs";
+import { guardGitEnv } from "./lib/git-hook-env.mjs";
 import { INCLUDE_WORKING_TREE_ENV } from "./lib/git-changed-files.mjs";
+import { scriptArgv } from "./lib/script-argv.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -41,12 +42,16 @@ export const LOCAL_GATES = Object.freeze([
   { id: "one-action-result", command: ["node", "scripts/check-no-local-action-result.mjs"] },
   { id: "client-server-boundary", command: ["node", "scripts/check-no-server-imports-in-client.mjs"] },
   { id: "prose-lint", command: ["pnpm", "run", "check:prose-lint"] },
+  // Whole-repo and sub-second, so they cost nothing here; both refused a
+  // landing in preflight AFTER the commit, which is what this list prevents.
+  { id: "ci-test-inventory", command: ["node", "scripts/check-ci-policy-test-inventory.mjs"] },
+  { id: "spec-status", command: ["node", "scripts/check-spec-status-frontmatter.mjs"] },
 ]);
 
 export function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
     options: { "message-file": { type: "string" }, committed: { type: "boolean" }, only: { type: "string" } },
@@ -60,7 +65,7 @@ export function parseArgs(argv) {
 }
 
 export function buildGateEnv({ base = process.env, messageFile = null, committed = false, readFile = (p) => readFileSync(p, "utf8") } = {}) {
-  const env = scrubGitRepoLocationEnv(base);
+  const env = guardGitEnv(base);
   if (!committed) env[INCLUDE_WORKING_TREE_ENV] = "1";
   else delete env[INCLUDE_WORKING_TREE_ENV];
   if (messageFile) {

@@ -10,7 +10,6 @@
 
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError, classifyHttpError } from "./inference-error";
-import { isOpenAI } from "./provider-utils";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

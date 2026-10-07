@@ -6,6 +6,11 @@ order: 1
 
 ## Overview
 
+Administrators manage saved tool permissions on the coworker record. Known names
+and aliases share one authority owner. When legacy rows disagree, use
+[permission reconciliation](../coworker-permission-reconciliation.md) to preview
+each difference and explicitly approve the desired state.
+
 AI Workforce is the directory and management home for the people-like AI roles that work in DPF. Start here to find who can help, what work they offer, whether that work is available for the current business type, and how much approval or review it requires.
 
 Coworkers are grouped from customer-facing work inward:
