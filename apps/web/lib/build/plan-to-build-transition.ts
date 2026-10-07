@@ -424,6 +424,9 @@ export async function performPlanToBuildTransition(params: {
               >[0]["build"]["deliberationSummary"],
             },
             triggeredByUserId: userId,
+            // BI-7FFFBEE3 slice B: in shadow the verdict cannot block, so it is
+            // recorded as shadow and never reaches the owner inbox.
+            ...(autonomousMode === "shadow" ? { enforcement: "shadow" as const } : {}),
             // BI-70280889: the acumen consults are keyed off these paths; without
             // them deriveImpactedAcumens sees an empty set and the layer stays inert.
             plannedFilePaths: await resolvePlannedFilePaths({

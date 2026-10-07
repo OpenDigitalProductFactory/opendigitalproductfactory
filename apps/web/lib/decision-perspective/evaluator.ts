@@ -407,6 +407,11 @@ export async function evaluatePerspectiveGate(input: {
   coverageGapRationale?: string;
   onComplete?: (interactionId: string) => Promise<void> | void;
   alignmentCorpora?: AlignmentCorpora;
+  /**
+   * BI-7FFFBEE3 slice B: "shadow" when the caller will not act on this verdict.
+   * Recorded on the row so the owner inbox never lists it as a decision.
+   */
+  enforcement?: "shadow" | "enforce";
 }): Promise<{
   allowed: boolean;
   interactionId: string;
@@ -492,9 +497,10 @@ export async function evaluatePerspectiveGate(input: {
       phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
       gateKey,
       gateFallbackUsed: isWwwd && !orgProfileSelected,
-      outcomePayloadExtra: isWwwd
-        ? { orgProfileSelected, caller: input.caller ?? null }
-        : undefined,
+      outcomePayloadExtra: {
+        ...(isWwwd ? { orgProfileSelected, caller: input.caller ?? null } : {}),
+        ...(input.enforcement === "shadow" ? { enforcement: "shadow" } : {}),
+      },
     });
 
     console.info(
@@ -696,10 +702,13 @@ export async function evaluatePerspectiveGate(input: {
     phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
     gateKey,
     gateFallbackUsed: isWwwd && !orgProfileSelected,
-    outcomePayloadExtra: isWwwd ? {
-      orgProfileSelected, constitutionalAlignment: evaluation.constitutionalAlignment ?? null,
-      caller: input.caller ?? null,
-    } : undefined,
+    outcomePayloadExtra: {
+      ...(isWwwd ? {
+        orgProfileSelected, constitutionalAlignment: evaluation.constitutionalAlignment ?? null,
+        caller: input.caller ?? null,
+      } : {}),
+      ...(input.enforcement === "shadow" ? { enforcement: "shadow" } : {}),
+    },
   });
 
   console.info(
