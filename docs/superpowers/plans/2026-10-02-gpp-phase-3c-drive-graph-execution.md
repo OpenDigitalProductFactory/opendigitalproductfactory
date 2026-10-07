@@ -14,7 +14,7 @@ status: draft
 | Backlog | BI-8875C9DF. First consumer: BI-580A970A (EP-MBSE-WORKROOM-SPINE). |
 | Standard | [GPP](../../architecture/gated-permissions-process.md) §7, §12.4 |
 | Verified against | `origin/main` at `879b344fa1`. Review revisions re-checked at `6ce2f7e445`, which adds #5977 (PR-3b-4/5) and touches none of the drive files cited. |
-| Implementation status | PR-3c-1 to PR-3c-3 merged; parallel split/join and rework edges (incl. refuse routes) are executable. BI-086DC167 made a graph marking one run that crosses calendar boundaries (design §4.2), and with it stage deadline (PR-3c-4) is **enabled**. Sub-shape (PR-3c-5) is **implemented and parity-proven, but NOT enabled** until its own change under BI-086DC167. |
+| Implementation status | PR-3c-1 to PR-3c-5 merged and every graph construct is enabled: parallel split/join and rework edges (incl. refuse routes) since PR-3c-2 and PR-3c-3, stage deadline (PR-3c-4) and sub-shape (PR-3c-5) since BI-086DC167, which made a graph marking one run that crosses calendar boundaries (design §4.2). |
 
 ## Outcome
 

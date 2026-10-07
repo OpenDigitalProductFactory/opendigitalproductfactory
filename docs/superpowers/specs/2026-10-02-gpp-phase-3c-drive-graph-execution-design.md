@@ -15,7 +15,7 @@ status: draft
 | First consumer | BI-580A970A (EP-MBSE-WORKROOM-SPINE): the R2D reference room, a linear spine that forks at Deploy, one branch per target |
 | Normative owner | [GPP](../../architecture/gated-permissions-process.md) §7, §12.4 |
 | Verified against | `origin/main` at `879b344fa1`. Review revisions re-checked on `origin/main` at `6ce2f7e445`, which adds #5977 (PR-3b-4/5). #5977 touches none of the drive files cited here. Line numbers in `work-shapes.ts`, `decompile.ts`, `emit.ts` and `work-shape-binding-diff.ts` are taken from `6ce2f7e445` wherever that is stated. |
-| Implementation status | PR-3c-1 to PR-3c-3 merged; parallel split/join and rework edges (incl. refuse routes) are executable. BI-086DC167 made a graph marking one run that crosses calendar boundaries (§4.2), and with it stage deadline (PR-3c-4) is **enabled**. Sub-shape (PR-3c-5) is **implemented and parity-proven, but NOT enabled** until its own change under BI-086DC167 (decision 2026-10-07: a construct whose semantics are known to be wrong for real use is not enabled; the run fix removes that reason). |
+| Implementation status | PR-3c-1 to PR-3c-5 merged and **every graph construct is enabled**: parallel split/join and rework edges (incl. refuse routes) since PR-3c-2 and PR-3c-3, stage deadline (PR-3c-4) and sub-shape (PR-3c-5) since BI-086DC167. They had been held off on 2026-10-07 because a graph marking was discarded at every UTC midnight; BI-086DC167 made a marking one run that crosses calendar boundaries (§4.2). |
 
 ## 1. Problem
 
@@ -643,8 +643,13 @@ A sub-shape stage runs its child as a **separate Workroom**, pinned to the exact
   through `createWorkCapsule`, as the system actor.
   - `idempotencyKey = "sub-shape:<parentCapsuleId>:<cycleKey>:<stageKey>:<iteration>"`. This is safe
     under retries, because an existing key returns the existing room (`work-capsule-store.ts:130-133`).
-    The cycle key is needed because the same return would otherwise hand a new cycle the previous
-    cycle's completed child.
+    `cycleKey` is the marking's **run key** (BI-086DC167, §4.2): the calendar key of the day the
+    run started, unchanged while the run is in flight. It is needed because the same return would
+    otherwise hand a new run the previous run's completed child. Because the key does not change at
+    UTC midnight, a child still running across midnight is neither abandoned nor created twice.
+    Until BI-086DC167 the parent's marking was discarded at midnight, which abandoned the child and
+    restarted the parent, so the flag was held off (decision 2026-10-07). It is on since
+    BI-086DC167, with `drive-parity-sub-shape.test.ts` and the runner suite.
   - `scopeClaims = withWorkShapeClaim([], stage.subShape)`.
   - Its owner is the parent's owner.
   - The drive writes a `contains` relation from parent to child, through the same path the nesting
@@ -665,6 +670,9 @@ A sub-shape stage runs its child as a **separate Workroom**, pinned to the exact
     `sub_shape_stopped` to its owner, quoting the child's stop disposition. The token waits, as the
     interpreter's `child-stop` rule says. A person may then record a refuse verdict on a gated
     parent stage (rework) or a failure stop. See Q2.
+- **A concluded run with a live child.** Only when the parent's run has concluded (no token
+  left) and the next run starts are the concluded run's live children carried into the fresh
+  marking, so they are abandoned, never orphaned (§4.2).
 - **Rework across a sub-shape stage.** The rework starts a new iteration and so a new child. In
   one transaction, `abandonChild` sets the previous child `abandoned` with a reason and deletes its
   parent→child `contains` row.
@@ -725,6 +733,7 @@ A sub-shape stage runs its child as a **separate Workroom**, pinned to the exact
 | AC-3C-DEADLINE-PARITY | OBJ-3C-MARKING, OBJ-3C-PARITY, OBJ-3C-ACCOUNTABLE | Deadline events never change the drive's or the interpreter's marking, the drive raises exactly one deadline notice per stage iteration and retries an unsent notice, and the stage-deadline flag is enabled only in that change. |
 | AC-DEADLINE-MULTIDAY | OBJ-3C-MARKING, OBJ-3C-ACCOUNTABLE | A 48-hour stage deadline is raised once, at 48 hours, and notified once, across the calendar boundaries it spans (BI-086DC167; `workroom-drive-cross-cycle.test.ts`); the stage-deadline flag is enabled only in that change. |
 | AC-3C-SUBSHAPE-PARITY | OBJ-3C-MARKING, OBJ-3C-PARITY, OBJ-3C-CONTAINMENT | A sub-shape stage creates exactly one contained child room per cycle and iteration pinned to the declared version, removes the containment row when the child completes or is abandoned, a child success advances the parent exactly as a completing receipt does in the interpreter, a child failure or budget stop holds the parent with attention to its owner, and the sub-shape flag is enabled only in that change. |
+| AC-CHILD-SURVIVES-BOUNDARY | OBJ-3C-MARKING, OBJ-3C-CONTAINMENT | A sub-shape child running across UTC midnight keeps its key and its room, is not abandoned, no second child is created, and its success still advances the parent (BI-086DC167; `workroom-drive-cross-cycle.test.ts`); the sub-shape flag is enabled only in that change. |
 | AC-3C-SUBSHAPE-NO-WIDEN | OBJ-3C-CONTAINMENT | The compiler refuses a document whose sub-shape grants or stage tools exceed the parent's grants (D-9), or whose sub-shape reference does not resolve or forms a cycle (D-10). |
 | AC-3C-FAILCLOSED | OBJ-3C-FAILCLOSED | A registry shape that uses a construct whose executable flag is off makes the drive pause with construct_not_executable naming the construct, and the registry guard test fails for any graph shape that is unsound, not executable or not on the allow list. |
 | AC-3C-CONFORMANCE | OBJ-3C-MARKING, OBJ-3C-NODISRUPT | Flow-aware conformance raises no out-of-order deviation for legal split, join and rework moves, still raises one for an illegal move, and returns results identical to today's for sequential shapes. |

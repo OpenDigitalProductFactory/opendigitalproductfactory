@@ -152,13 +152,14 @@ describe("the guard refuses a graph shape injected into the registry", () => {
     expect(problems).not.toContain(`${ref(DEADLINE_FIXTURE)}: E-NOT-EXECUTABLE/stage-deadline stage:b`);
   }, 120_000);
 
-  it("a hand-declared sub-shape is held to D-10 (PR-3c-5): an unregistered child ref is refused with the flag off and with it on", async () => {
+  it("a hand-declared sub-shape is held to D-10 (PR-3c-5): an unregistered child ref is refused with the flag on (BI-086DC167) and with it off", async () => {
     const allowList = [{ ref: ref(SUB_SHAPE_FIXTURE), backlogItem: "BI-8875C9DF" }];
+    expect(CONSTRUCT_EXECUTABLE["sub-shape"]).toBe(true);
     const real = await guardProblems([SUB_SHAPE_FIXTURE], { allowList });
     expect(real).toContain(`${ref(SUB_SHAPE_FIXTURE)}: D-10 stage:b`);
-    expect(real).toContain(`${ref(SUB_SHAPE_FIXTURE)}: E-NOT-EXECUTABLE/sub-shape stage:b`);
-    const on = await guardProblems([SUB_SHAPE_FIXTURE], { allowList, executable: { ...CONSTRUCT_EXECUTABLE, "sub-shape": true } });
-    expect(on).toContain(`${ref(SUB_SHAPE_FIXTURE)}: D-10 stage:b`);
-    expect(on.some((problem) => problem.includes("E-NOT-EXECUTABLE"))).toBe(false);
+    expect(real.some((problem) => problem.includes("E-NOT-EXECUTABLE"))).toBe(false);
+    const off = await guardProblems([SUB_SHAPE_FIXTURE], { allowList, executable: { ...CONSTRUCT_EXECUTABLE, "sub-shape": false } });
+    expect(off).toContain(`${ref(SUB_SHAPE_FIXTURE)}: D-10 stage:b`);
+    expect(off).toContain(`${ref(SUB_SHAPE_FIXTURE)}: E-NOT-EXECUTABLE/sub-shape stage:b`);
   }, 120_000);
 });

@@ -78,8 +78,8 @@
 // its marking either and raises one notice per stage pass. Sub-shapes
 // (PR-3c-5): rule 9's `child-stop` event is matched by the drive reading the
 // child room's own drive snapshot, and drive-parity-sub-shape.test.ts proves
-// it after every event; implemented, but NOT enabled until its own change
-// under BI-086DC167.
+// it after every event; the sub-shape flag is ON since BI-086DC167 too. No
+// construct is off.
 //
 // Flow references. An edge endpoint (and `gate.onRefuse`) names a stage key, a
 // flow node id, a stop element id (`stop:<kind>:<n>`, element-ids.ts), or a

@@ -35,7 +35,7 @@ const FIXTURES = [
   "pass-parallel-split-join.gpp.json",
   "pass-rework-edge.gpp.json",
   "pass-stage-deadline.gpp.json",
-  "e-not-executable-sub-shape.gpp.json",
+  "pass-sub-shape.gpp.json",
   "pass-refuse-edge.gpp.json",
 ];
 

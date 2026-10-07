@@ -7,9 +7,9 @@
 // database whose $transaction restores every table when its callback throws,
 // so "in one transaction" is observable. The fixtures are not registered (plan
 // constraint 7), so the shape-claim resolver is overridden for their keys, and
-// the executable-construct table is a mutable copy with sub-shape switched on
-// for these cases (the real flag stays off until BI-086DC167, graph markings
-// reset at every cycle boundary), and left as it really is for the off case.
+// the executable-construct table is a mutable copy reset to the real flags per
+// case (sub-shape is on since BI-086DC167, once a graph run crossed calendar
+// boundaries); the kill-switch case sets the flag off, test-only.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -195,7 +195,8 @@ const setChildDrive = (h: Harness, drive: Record<string, unknown>) => {
 
 describe("sub-shape child rooms through the runner (PR-3c-5)", () => {
   beforeEach(() => {
-    Object.assign(flags.table, flags.original, { "sub-shape": true });
+    Object.assign(flags.table, flags.original);
+    expect(flags.table["sub-shape"]).toBe(true);
   });
 
   it("entering the stage creates exactly one contained child per cycle, stage and iteration, pinned to the declared version, owned like its parent", async () => {
@@ -333,9 +334,8 @@ describe("sub-shape child rooms through the runner (PR-3c-5)", () => {
     expect(plan.subShapes?.ensure.map((entry) => [entry.key, entry.idempotencyKey])).toEqual([[`${cycle}#b#1`, `sub-shape:WC-PARENT:${cycle}:b:1`]]);
   });
 
-  it("under the real flags (sub-shape off, BI-086DC167) the room pauses construct_not_executable and creates no child", async () => {
-    Object.assign(flags.table, flags.original);
-    expect(flags.table["sub-shape"]).toBe(false);
+  it("kill switch: with the sub-shape flag set back off (test-only) the room pauses construct_not_executable and creates no child", async () => {
+    flags.table["sub-shape"] = false;
     const h = parentWaitingAtB();
     expect(await tick(h, at(0))).toMatchObject({ action: "pause", reason: "construct_not_executable" });
     expect(children(h)).toEqual([]);
