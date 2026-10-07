@@ -5642,123 +5642,123 @@
       "summary": "conformance_escalate@- x8 | conformance_stop@- x92"
     },
     {
-      "id": "acceptance-verification@1.0.0#0",
+      "id": "acceptance-verification@1.1.0#0",
       "seed": 2289467767,
-      "digest": "sha256:9c884f989812abe56c829de4c3355b3bf6d110f46de8d60e519bc9d82ca0a61d",
+      "digest": "sha256:6e302076533ccdd668caab6f7938855403e5038a37f565a89811cb8fc1cff67f",
       "summary": "role_stage@verify x3 | success@- | cycle_complete@- x5"
     },
     {
-      "id": "acceptance-verification@1.0.0#1",
+      "id": "acceptance-verification@1.1.0#1",
       "seed": 2289467768,
-      "digest": "sha256:596c9b519cf0313f4bcd4a1dab3933a5f45d6e6be27ac7f8974a4feb773269af",
+      "digest": "sha256:66c345d52066ac0908189026a836f6613bf1715a8ba7276299bc882ffaab3ab3",
       "summary": "role_stage@verify x9"
     },
     {
-      "id": "acceptance-verification@1.0.0#2",
+      "id": "acceptance-verification@1.1.0#2",
       "seed": 2289467769,
-      "digest": "sha256:72b5f4baeb7390c175a9f7eb0d11c389008195bd6d0ff446506676702275dd47",
+      "digest": "sha256:a0efd8650edfc787ceed3a2078f1295c704d431b66154e2bdf6598b467d1dd76",
       "summary": "role_stage@verify | conformance_pause@- x8"
     },
     {
-      "id": "acceptance-verification@1.0.0#3",
+      "id": "acceptance-verification@1.1.0#3",
       "seed": 2289467770,
-      "digest": "sha256:a8efc0dffa564c83ed8e8ead964e23429e1ad7628c966f2625256ce43b9f1068",
+      "digest": "sha256:fedd0a15c2c26ee9a2b84592f33a2bd1feedc1635a9ff1d399c90e5f07e19817",
       "summary": "quiet@- x9"
     },
     {
-      "id": "acceptance-verification@1.0.0#4",
+      "id": "acceptance-verification@1.1.0#4",
       "seed": 2289467771,
-      "digest": "sha256:5f1ebed21bd7aab28021b000178f06dd88b7dc4445fa2d16f16e221a4c695243",
+      "digest": "sha256:3cce2356ebf0383174c7ab65e6c5a3825667538f65bb4e7a6816ab57bef1a180",
       "summary": "conformance_escalate@- x100"
     },
     {
-      "id": "acceptance-verification@1.0.0#5",
+      "id": "acceptance-verification@1.1.0#5",
       "seed": 2289467772,
-      "digest": "sha256:ea2258c7681cbb126c9f7d07b39dc5877ea500a81b519d1a9d260384ca78df47",
+      "digest": "sha256:a0fdfc9331d281835525308569df6430ae88ac99b716b529e4d7c6c918d338cd",
       "summary": "role_stage@verify x3 | conformance_pause@- x6"
     },
     {
-      "id": "acceptance-verification@1.0.0#6",
+      "id": "acceptance-verification@1.1.0#6",
       "seed": 2289467773,
-      "digest": "sha256:5ac3dd610229d4a1a028e57ea58a0e88d8243acd56bbbc2a26f0b303a87dae28",
+      "digest": "sha256:42daddd3d89bab31df42e72df7c5162badd467f7388a15a6bdf5defba91c95c4",
       "summary": "role_stage@verify x7 | conformance_stop@- x2"
     },
     {
-      "id": "acceptance-verification@1.0.0#7",
+      "id": "acceptance-verification@1.1.0#7",
       "seed": 2289467774,
-      "digest": "sha256:c6c8fad046029adbac2ec2c38611c6c85ea0c200259e8e7fa0cbcca1281efa12",
+      "digest": "sha256:379a982fefe0a656314534ca055d77875f42cce134fb2f1f489b5f7154e158a4",
       "summary": "role_stage@verify x9"
     },
     {
-      "id": "acceptance-verification@1.0.0#8",
+      "id": "acceptance-verification@1.1.0#8",
       "seed": 2289467775,
-      "digest": "sha256:f82afdef76a84d1f7479bb7f1d11b08ada3943b4c9611066b9bfe38dbc60bea3",
+      "digest": "sha256:a1a888fb8598c6f5b82a238b222bff349ff4bec8ab401b3ca1b86e7aa7c69e7b",
       "summary": "role_stage@verify | conformance_stop@- x8"
     },
     {
-      "id": "acceptance-verification@1.0.0#9",
+      "id": "acceptance-verification@1.1.0#9",
       "seed": 2289467776,
-      "digest": "sha256:cab5d96849500c6932ae25213cb7c7f8dc659860875dc152e97f161fca473d97",
+      "digest": "sha256:e10213b770bdddea58621c19437d8f54ee9ac611bcfa4d768f66fbf10bfadfba",
       "summary": "role_stage@verify x13 | success@- | cycle_complete@- x86"
     },
     {
-      "id": "acceptance-verification@1.0.0#10",
+      "id": "acceptance-verification@1.1.0#10",
       "seed": 2289467777,
-      "digest": "sha256:b0fff32ba6101596be008297e3116d0656b46992f5fae07f5546932e3b171a81",
+      "digest": "sha256:2e17336051e36726600b17a43b58d5bd72f1251d15e4e0d33d62f64a198226f6",
       "summary": "conformance_pause@- x9"
     },
     {
-      "id": "acceptance-verification@1.0.0#11",
+      "id": "acceptance-verification@1.1.0#11",
       "seed": 2289467778,
-      "digest": "sha256:e120281b4dccbb0ab6d58327f9638d4d22339f834e09b3542834d788680c8bc1",
+      "digest": "sha256:79ac050413b7ad02f0bd690614f5cef587e421e45daaa99498af1dbab7a20d72",
       "summary": "conformance_stop@- x9"
     },
     {
-      "id": "acceptance-verification@1.0.0#12",
+      "id": "acceptance-verification@1.1.0#12",
       "seed": 2289467779,
-      "digest": "sha256:8eee8c96e0360a7a948218ddadb5b4f17bce82131b9c0b519b3c9ef617333f8e",
+      "digest": "sha256:02fafeddcb1048feab7de23709da89ed61eafdff8788ef64aaa94014dbb0cc8a",
       "summary": "role_stage@verify x9"
     },
     {
-      "id": "acceptance-verification@1.0.0#13",
+      "id": "acceptance-verification@1.1.0#13",
       "seed": 2289467780,
-      "digest": "sha256:6faf02258eb32fc85ddc2182cba9bc0d2c9b3ebdb041cdae198cf60eb6f507d9",
+      "digest": "sha256:fca5124f8c2c50c16d84833c7080e748de4f2115097bef089eaa58901efd574a",
       "summary": "quiet@- x9"
     },
     {
-      "id": "acceptance-verification@1.0.0#14",
+      "id": "acceptance-verification@1.1.0#14",
       "seed": 2289467781,
-      "digest": "sha256:abff8a218166899050700400443f4845f4649abe62a14aad09fb87fab9da9417",
+      "digest": "sha256:996b1e301dd2d6a2fc2b4586700cf2464ac74bc066608d42390b77bf48240ba2",
       "summary": "role_stage@verify x2 | success@- | cycle_complete@- x97"
     },
     {
-      "id": "acceptance-verification@1.0.0#15",
+      "id": "acceptance-verification@1.1.0#15",
       "seed": 2289467782,
-      "digest": "sha256:ce50249017622ad51117b94e23ab4c4b2f38997f2267a3d97e48f7a71d3ebd71",
+      "digest": "sha256:97579ae71f9c09ebfe53d4addcaac9886f9cc6ca0c4663156eeb9c2f1bc434bc",
       "summary": "conformance_escalate@- x8 | conformance_stop@-"
     },
     {
-      "id": "acceptance-verification@1.0.0#16",
+      "id": "acceptance-verification@1.1.0#16",
       "seed": 2289467783,
-      "digest": "sha256:1ea7bb21958e29692e85db060769a1e61a99632288d9a8f549b0751cd3990bfb",
+      "digest": "sha256:4e4569d77032dc17ff7199deb259150b7ed05251f86fbea8b1d92bc5f4c6bf8e",
       "summary": "role_stage@verify x8 | conformance_stop@-"
     },
     {
-      "id": "acceptance-verification@1.0.0#17",
+      "id": "acceptance-verification@1.1.0#17",
       "seed": 2289467784,
-      "digest": "sha256:201f6fe7b70838971cf75c15efc527d99748e5c3a42000fe2c1e5b3a5ecfb4bc",
+      "digest": "sha256:2108a8dc0d9d96219c93115c2d84eab314ab1f2b5c4f08300be5fa51f06bb7ce",
       "summary": "role_stage@verify x3 | conformance_stop@- x6"
     },
     {
-      "id": "acceptance-verification@1.0.0#18",
+      "id": "acceptance-verification@1.1.0#18",
       "seed": 2289467785,
-      "digest": "sha256:756e399eda0d26afcb82006fc074652018300f32acb062bbc47cf922a0c71fc7",
+      "digest": "sha256:9375df7f80299050c5aee945708e9a80fc2a4f9d6688ac0edff73fbeef40d55d",
       "summary": "role_stage@verify x9"
     },
     {
-      "id": "acceptance-verification@1.0.0#19",
+      "id": "acceptance-verification@1.1.0#19",
       "seed": 2289467786,
-      "digest": "sha256:673a7605e390222720966b6445ca0991bb8bdc90e52dcf927097fd790717834b",
+      "digest": "sha256:494bb1b2512f60d727839a3f6d0efa77ca599514415de2f5c4cba83c64e75647",
       "summary": "role_stage@verify x13 | success@- | cycle_complete@- x86"
     },
     {
@@ -6240,6 +6240,126 @@
       "seed": 2289471786,
       "digest": "sha256:6b654a53a4e86327ead35b8c28846562980bcfdf76d8d5c6ab01e63296d473f5",
       "summary": "agent_stage@read x2 | agent_stage@report | governed_decision@pay x15 | success@- | cycle_complete@- x77 | agent_stage@read | executor_writeback_unavailable@read | agent_stage@report | executor_writeback_unavailable@report"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#0",
+      "seed": 2289472767,
+      "digest": "sha256:9117e4aa54c711481867f7bbf1261bfd5fe7ddaed22c19ccace8af352664bea5",
+      "summary": "conformance_escalate@- x9"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#1",
+      "seed": 2289472768,
+      "digest": "sha256:072f234165842032da286ea5b88f251bde22ae40362cb74370946b2d53354938",
+      "summary": "role_stage@verify x3 | success@- | cycle_complete@- x5"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#2",
+      "seed": 2289472769,
+      "digest": "sha256:f5453bcc5085e4aa2eebbcc4e6b9c392b6b6d074aed7830525ee3f8a1879c722",
+      "summary": "role_stage@verify x4 | success@- | cycle_complete@- x4"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#3",
+      "seed": 2289472770,
+      "digest": "sha256:8eaaad9874e4109b34952823d736f4b2236f1aceaea2f088443eaca023cf3fa6",
+      "summary": "conformance_pause@- | conformance_stop@- x8"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#4",
+      "seed": 2289472771,
+      "digest": "sha256:673708963db527841ffe9534a1c55a014e242414ff7aebcfbee88518474c2f44",
+      "summary": "conformance_pause@- x100"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#5",
+      "seed": 2289472772,
+      "digest": "sha256:99af46f886444766c31bec40c0cc9f9491e42e909e22ab842da13f0262368d60",
+      "summary": "conformance_stop@- x9"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#6",
+      "seed": 2289472773,
+      "digest": "sha256:3687a105abd3c40e1e8c266d4cfd0746019668324c4927e63dc103c044bc868c",
+      "summary": "conformance_escalate@- x3 | conformance_stop@- x6"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#7",
+      "seed": 2289472774,
+      "digest": "sha256:08fe4726f3fe22f1da1565e0c22340e7d62674b4fa42acba8c4c28ced96287ac",
+      "summary": "role_stage@verify x9"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#8",
+      "seed": 2289472775,
+      "digest": "sha256:5e314b800f6ecda69dfd1da812d49e2aeac5ca791c0f7508cf01bf6917ea6b81",
+      "summary": "conformance_escalate@- x9"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#9",
+      "seed": 2289472776,
+      "digest": "sha256:c1b250d6ae9e9f2add4c2c54892ce95123b71410f7599d5403141ba3a77d40b4",
+      "summary": "role_stage@verify x4 | success@- | cycle_complete@- x95"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#10",
+      "seed": 2289472777,
+      "digest": "sha256:0f04c61944d5599a97ee8dbca8d9668ea82007288cf9f65924872d60c5272408",
+      "summary": "role_stage@verify x2 | conformance_stop@- x7"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#11",
+      "seed": 2289472778,
+      "digest": "sha256:5a96e55445af86623ecc4d2f1610013a8362a6f1ba079b5f838e95a50aa013a4",
+      "summary": "role_stage@verify x9"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#12",
+      "seed": 2289472779,
+      "digest": "sha256:a74c9e24670cc779b39485e0a8bfdf00a415dec50349316da0ffe7a71e57068b",
+      "summary": "conformance_stop@- x9"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#13",
+      "seed": 2289472780,
+      "digest": "sha256:29553c0c75799af9c78787146653ebfeb994a26899da0ab2b807307cdf8260d8",
+      "summary": "conformance_escalate@- x9"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#14",
+      "seed": 2289472781,
+      "digest": "sha256:52b0b2a2a0d2417a3816093d9c3134236329cc012870c6655ca581151e25a6a8",
+      "summary": "conformance_escalate@- x100"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#15",
+      "seed": 2289472782,
+      "digest": "sha256:9dacde5cc2177341deb99ee241fe8dcf3f5adcda49b39c2b96839cbf116d2672",
+      "summary": "empty_read@- x9"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#16",
+      "seed": 2289472783,
+      "digest": "sha256:7ee91f965007a922d336621e5286040aec08088741baf82fd541377e45990b54",
+      "summary": "conformance_pause@- x7 | conformance_stop@- x2"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#17",
+      "seed": 2289472784,
+      "digest": "sha256:2b211b29d2edcc8db300480417e29c470dd780aaefa1bca747cac90e1f3aeefd",
+      "summary": "role_stage@verify x9"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#18",
+      "seed": 2289472785,
+      "digest": "sha256:91e6a40fd6d9e2455f63148e2ba7a362cde97370ae0ada0509b5e5a2f3f99942",
+      "summary": "quiet@- x9"
+    },
+    {
+      "id": "acceptance-verification@1.0.0#19",
+      "seed": 2289472786,
+      "digest": "sha256:832631aa0b993ba1ab59f719bd6679195f30e1e576e1c2d16ccc803fe0b65a01",
+      "summary": "role_stage@verify x5 | success@- | cycle_complete@- x94"
     }
   ],
   "direct": [

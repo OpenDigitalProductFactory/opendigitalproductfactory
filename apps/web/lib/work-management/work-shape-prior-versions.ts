@@ -382,5 +382,75 @@ export const WORK_SHAPE_PRIOR_VERSIONS: readonly WorkShapeDefinition[] = [
       "description": "Reviewed monthly whether or not it moved: an activity that has reported nothing for a month is as likely to be broken as to be reassuring."
     },
     "collaborationShape": "approval-sign-off"
+  },
+  // acceptance-verification 1.0.0, frozen as shipped (BI-C1781121). 1.1.0
+  // (BI-099A0BA3) adds the objective-mapping writer and its grant; steward rooms
+  // pinned here keep their evidence-only stage until their owner rebinds them.
+  {
+    "key": "acceptance-verification",
+    "version": "1.0.0",
+    "title": "Acceptance verification",
+    "description": "A delivered backlog item has waited in awaiting-acceptance past the aged threshold. The coworker named for this room verifies the item's unmet acceptance criteria against the live install and records the acceptance evidence through the governed evidence tools. It does not change the item's status, close it, or record evidence it did not observe.",
+    "triggers": [
+      "escalation"
+    ],
+    "stages": [
+      {
+        "key": "verify",
+        "title": "Verify the acceptance criteria and record the evidence",
+        "accountablePrincipalRef": "role:acceptance-verifier",
+        "advance": {
+          "kind": "status-change",
+          "condition": "Every owed acceptance requirement named in the room objective has evidence recorded by this coworker, or a blocked record says what could not be verified."
+        },
+        "evidence": [
+          "acceptance-receipt"
+        ],
+        "mandatedTools": [
+          "record_execution_evidence",
+          "record_workroom_evidence"
+        ]
+      }
+    ],
+    "stopConditions": [
+      {
+        "kind": "success",
+        "condition": "The acceptance evidence is recorded; the item's completion gate decides whether it closes.",
+        "disposition": "proceed"
+      },
+      {
+        "kind": "failure",
+        "condition": "The item, the live install or an evidence tool cannot be reached — the run records blocked and stops, and does not report success.",
+        "disposition": "inconclusive"
+      },
+      {
+        "kind": "budget",
+        "condition": "Three verification cycles have run without a completing receipt — the room stops and the sweep reports the item as routed-unresolved.",
+        "disposition": "awaiting-person"
+      }
+    ],
+    "grants": [
+      "tool:read",
+      "build_evidence",
+      "workroom_evidence_write"
+    ],
+    "measures": [
+      {
+        "key": "days-to-evidence",
+        "description": "Days from the room's creation to recorded acceptance evidence."
+      }
+    ],
+    "budgets": [
+      {
+        "kind": "cycles-per-window",
+        "limit": 3,
+        "unit": "verification cycles"
+      }
+    ],
+    "reviewPoint": {
+      "everyDays": 7,
+      "description": "Reviewed weekly whether or not evidence landed, matching the delivery rooms' review point."
+    },
+    "collaborationShape": null
   }
 ];
