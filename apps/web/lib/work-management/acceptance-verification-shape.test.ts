@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACCEPTANCE_VERIFICATION_SHAPE_KEY,
   ACCEPTANCE_VERIFICATION_SHAPE_REF,
+  ACCEPTANCE_VERIFIER_EVIDENCE_WRITES,
   ACCEPTANCE_VERIFIER_ROLE,
   ACCEPTANCE_VERIFIER_WRITE_GRANTS,
   ACCEPTANCE_VERIFIER_WRITES,
@@ -29,11 +30,11 @@ describe("acceptance-verification work shape (BI-C1781121)", () => {
     expect(stage!.evidence).toEqual(["acceptance-receipt"]);
   });
 
-  it("declares exactly the evidence writes the route prompt instructs, and never the packet-bound initiative writer", () => {
+  it("declares the evidence writes and the packet-bound objective-mapping writer the platform issues the room (BI-099A0BA3)", () => {
     const [stage] = getWorkShape(ACCEPTANCE_VERIFICATION_SHAPE_KEY)!.stages;
     expect(stage!.mandatedTools).toEqual(ACCEPTANCE_VERIFIER_WRITES);
-    expect(ACCEPTANCE_VERIFIER_WRITES).toEqual(["record_execution_evidence", "record_workroom_evidence"]);
-    expect(ACCEPTANCE_VERIFIER_WRITES).not.toContain("record_initiative_evidence");
+    expect(ACCEPTANCE_VERIFIER_EVIDENCE_WRITES).toEqual(["record_execution_evidence", "record_workroom_evidence"]);
+    expect(ACCEPTANCE_VERIFIER_WRITES).toEqual(["record_execution_evidence", "record_workroom_evidence", "record_initiative_evidence"]);
   });
 
   it("its room grants admit exactly the declared writes and no other write (GPP C-2)", () => {
@@ -44,6 +45,6 @@ describe("acceptance-verification work shape (BI-C1781121)", () => {
     const roomGrants = roomGrantsFromWorkShape(shape.grants);
     for (const tool of ACCEPTANCE_VERIFIER_WRITES) expect(roomAuthorizesTool(tool, roomGrants)).toBe(true);
     expect(roomAuthorizesTool("update_backlog_item_status", roomGrants)).toBe(false);
-    expect(roomAuthorizesTool("record_initiative_evidence", roomGrants)).toBe(false);
+    expect(roomAuthorizesTool("record_initiative_design_review", roomGrants)).toBe(false);
   });
 });

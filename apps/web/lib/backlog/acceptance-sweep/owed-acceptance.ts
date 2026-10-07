@@ -63,6 +63,12 @@ export type OwedAcceptance = {
   unroutable: OwedAcceptanceUnroutable[];
   /** The completion verdict is already allowed. Closing stays the terminal transition's decision. */
   closable: boolean;
+  /**
+   * BI-099A0BA3: the server-issued objective-mapping packet the resolver routed
+   * to the owner (never the author), when the owner's lane is objective
+   * mapping. The sweep issues it to the item's steward room.
+   */
+  objectiveMappingPacket?: InitiativeReviewerRecovery["reviewerRoutes"][number]["requestCoworker"];
 };
 
 /**
@@ -165,5 +171,8 @@ export async function projectOwedAcceptance(input: {
     unroutable.push({ ...base, reason: "unresolved", nextAction: entry.nextAction });
   }
 
-  return { owed, owner, unroutable, closable };
+  const packetRoute = ownerRoute
+    ? routable.find((route) => route.targetAgentId === ownerRoute.targetAgentId && route.gate === "objective-mapping")
+    : undefined;
+  return { owed, owner, unroutable, closable, ...(packetRoute ? { objectiveMappingPacket: packetRoute.requestCoworker } : {}) };
 }

@@ -16,6 +16,7 @@ import {
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-context";
 import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS } from "@/lib/tak/terminal-tool-policy";
+import { resolveAcceptanceStewardRunBinding } from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
 
 const artifactRefSchema = {
   type: "object",
@@ -307,9 +308,37 @@ async function resolveExternalInitiativeReviewBinding(
   };
 }
 
+/**
+ * BI-099A0BA3: an acceptance steward room's scheduled run may write only the
+ * objective mapping the platform issued to that room, for its item, with the
+ * binding the server holds. Null for every other run, which is untouched.
+ */
+async function resolveStewardRoomBinding(
+  actionKey: string,
+  params: Record<string, unknown>,
+  taskRunId: string | undefined,
+): Promise<{ binding: Awaited<ReturnType<typeof resolveExternalInitiativeReviewBinding>> } | { refusal: ToolResult } | null> {
+  if (actionKey !== "record_initiative_evidence") return null;
+  const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
+  if (!steward) return null;
+  if (params.operation !== "objective-mapping"
+    || (params.itemId !== undefined && params.itemId !== (steward.ok ? steward.itemId : params.itemId))) {
+    return { refusal: { success: false, error: "steward-room-objective-mapping-only", message: "An acceptance steward room records only the objective mapping the platform issued it, for its own item: call record_initiative_evidence with operation \"objective-mapping\"." } };
+  }
+  if (!steward.ok) {
+    return { refusal: { success: false, error: "objective-mapping-packet-unavailable", message: `This room holds no current platform-issued objective-mapping packet (${steward.reason}). Record what you verified with record_workroom_evidence; the next acceptance sweep issues a current packet.` } };
+  }
+  return { binding: { ...steward.binding, artifactRef: steward.binding.artifactRef as InitiativeArtifactRef } };
+}
+
 function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   return async (params, userId, context): Promise<ToolResult> => {
-    const binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId);
+    let binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId);
+    if (!binding) {
+      const steward = await resolveStewardRoomBinding(actionKey, params, context?.taskRunId);
+      if (steward && "refusal" in steward) return steward.refusal;
+      if (steward) binding = steward.binding;
+    }
     if (binding) {
       params = {
         ...params,

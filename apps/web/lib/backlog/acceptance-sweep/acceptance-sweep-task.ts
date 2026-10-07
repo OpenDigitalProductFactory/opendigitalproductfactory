@@ -30,6 +30,7 @@ import { selectAcceptanceSweepPage, type AcceptanceSweepPageDb } from "./accepta
 import { runAcceptanceSweep, type AcceptanceSweepConfig, type AcceptanceSweepPorts, type AcceptanceSweepSummary } from "./acceptance-sweep-run";
 import type { InPlatformOwnerDb } from "./in-platform-owners";
 import type { AgedSweepCandidate } from "./acceptance-sweep-routing";
+import { issueAcceptanceObjectiveMappingPacket, type IssuePacketDb } from "./issue-objective-mapping-packet";
 import { routeAgedItems, type AcceptanceRouteDb, type RouteOutcome } from "./route-aged-item";
 import {
   COMPLETION_TRANSITION_TOOL,
@@ -149,16 +150,18 @@ type RouteTextDb = {
 };
 
 type SweepDb = RoomDb & TaskStatusDb & AcceptancePoolAgeDb & AcceptanceSweepPageDb & OwedSnapshotDb & InPlatformOwnerDb
-  & AcceptanceSweepCloseDb & PlatformConfigDb & AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb;
+  & AcceptanceSweepCloseDb & PlatformConfigDb & AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb & IssuePacketDb;
 
 /**
  * Give this run's aged, non-closable items a steward room each (BI-C1781121).
  * The room brief quotes the item's title and acceptance criteria, read here
  * because the page selects ids only. The room's owner is the person
  * accountable for the platform's automatic work (resolveWorkOwner, Foundational).
+ * A routed medium or large item's live room is issued the owner's
+ * objective-mapping packet (BI-099A0BA3, issue-objective-mapping-packet.ts).
  */
 export async function routeAgedSweepCandidates(
-  db: AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb,
+  db: AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb & IssuePacketDb,
   now: Date,
   candidates: readonly AgedSweepCandidate[],
   limit: number,
@@ -181,6 +184,7 @@ export async function routeAgedSweepCandidates(
       projection,
     })),
     resolveOwnerUserId: async () => (await resolveWorkOwner(db, {})).userId,
+    issuePacket: (args) => issueAcceptanceObjectiveMappingPacket({ db, now, ...args }),
   });
 }
 

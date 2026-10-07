@@ -31,19 +31,31 @@
 // never routed: nothing is owed, so there is nothing for a coworker to verify,
 // and closing it is the operator pre-authorisation's job (acceptance-sweep-close.ts).
 // An existing room is never re-created.
+//
+// BI-099A0BA3: when the owner's lane is objective mapping (a medium or large
+// item's ACCEPTANCE_EVIDENCE_REQUIRED), the projection carries the packet the
+// server minted for that owner. Every routed or existing live room is issued
+// it (issue-objective-mapping-packet.ts) and its brief names the mapping to
+// record, so the room's own run writes the receipt the completion gate reads.
 
 import type { Prisma } from "@dpf/db";
 
 import { parseItemBodyAcceptance } from "@/lib/backlog/initiative-readiness/item-body-baseline";
 import { readinessLaneForRole } from "@/lib/tak/initiative-readiness-tool-grants";
 import {
+  ACCEPTANCE_OBJECTIVE_MAPPING_WRITER,
   ACCEPTANCE_VERIFICATION_SHAPE_REF,
+  ACCEPTANCE_VERIFIER_EVIDENCE_WRITES,
   ACCEPTANCE_VERIFIER_ROLE,
   ACCEPTANCE_VERIFIER_WRITES,
 } from "@/lib/work-management/acceptance-verification-shape";
 import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim } from "@/lib/work-management/workroom-shape-claim";
 
+import type { PacketIssueOutcome } from "./issue-objective-mapping-packet";
 import { ACCEPTANCE_FAMILY_ROLES, type OwedAcceptance, type OwedAcceptanceRequirement } from "./owed-acceptance";
+import { acceptanceRoomCapsuleId, acceptanceRoomKey, parseIssuedObjectiveMappingPacket } from "./steward-objective-mapping-authority";
+
+export { acceptanceRoomCapsuleId, acceptanceRoomKey };
 
 export const ROUTE_OUTCOMES = ["routed", "already-routed", "routed-unresolved", "unroutable", "deferred"] as const;
 export type RouteOutcomeKind = (typeof ROUTE_OUTCOMES)[number];
@@ -66,7 +78,17 @@ export type RouteOutcome = {
   ownerAgentId: string | null;
   /** For `unroutable`: the machine-stable reason code(s), comma-separated. */
   reason: string | null;
+  /** BI-099A0BA3: what issuing the owner's objective-mapping packet to the room did, when one was owed. */
+  objectiveMapping?: PacketIssueOutcome | "failed" | null;
 };
+
+/** Issue the owner's objective-mapping packet to the item's steward room (issue-objective-mapping-packet.ts). */
+export type IssueObjectiveMappingPacket = (input: {
+  itemId: string;
+  ownerAgentId: string;
+  packet: unknown;
+  objective: string;
+}) => Promise<PacketIssueOutcome>;
 
 type RoomRow = { capsuleId: string; archivedAt: Date | null; workspaceState: unknown };
 
@@ -80,15 +102,6 @@ export type AcceptanceRouteDb = {
 };
 
 export const NO_INSTALL_OPERATOR = "no-install-operator";
-
-export function acceptanceRoomKey(itemId: string): string {
-  return `acceptance:${itemId}`;
-}
-
-/** Stable, human-quotable room id: one room per item. */
-export function acceptanceRoomCapsuleId(itemId: string): string {
-  return `WC-ACC-${itemId.replace(/^BI-/i, "").toUpperCase()}`;
-}
 
 const ROOM_OWNER_REASON = "Accountable for the platform's automatic work: owns the acceptance steward room the daily sweep opened for this item.";
 const ROOM_VERIFIER_REASON = "Named by the acceptance sweep as the coworker who verifies this item and records its acceptance evidence.";
@@ -126,16 +139,8 @@ export function buildAcceptanceRoomObjective(candidate: AgedRouteCandidate): str
       return `- ${entry.code} (${entry.accountableRole})${writable ? `, recorded with ${tool}` : ""}: ${entry.nextAction ?? "no next action was stated; read the item's readiness with get_backlog_item."}`;
     }),
   ];
-  const packetBound = [...new Set(yours
-    .map((entry) => acceptanceWriterTool(entry))
-    .filter((tool): tool is string => tool !== null && !ACCEPTANCE_VERIFIER_WRITES.includes(tool)))];
-  if (packetBound.length > 0) {
-    lines.push(
-      ``,
-      `Its lane writer, ${packetBound.join(" and ")} (objective-mapping), accepts only a server-issued review packet: an external-MCP run bound to the item's delivery Workroom. This scheduled room run does not carry one, so the call is refused; do not call it. `
-        + `Record what you verified for these requirements with record_workroom_evidence in this room instead, one line per criterion with what you observed, so the reviewer the packet is issued to can map it.`,
-    );
-  }
+  const mapsObjectives = yours.some((entry) => acceptanceWriterTool(entry) === ACCEPTANCE_OBJECTIVE_MAPPING_WRITER);
+  if (mapsObjectives) lines.push(``, ...objectiveMappingInstructions(candidate));
   if (notYours.length > 0) {
     lines.push(``, `Not yours (the sweep reports these; do not record them):`);
     for (const entry of notYours) {
@@ -152,11 +157,41 @@ export function buildAcceptanceRoomObjective(candidate: AgedRouteCandidate): str
   lines.push(
     ``,
     `How to do it: read the item with get_backlog_item ${candidate.itemId}. Check each criterion against the running install, not against the code or the item's own claims.`,
-    `Record what you observed with the writes this room is authorized to make: ${ACCEPTANCE_VERIFIER_WRITES.join(" and ")}. `
+    `Record what you observed with the evidence writes this room is authorized to make: ${ACCEPTANCE_VERIFIER_EVIDENCE_WRITES.join(" and ")}${mapsObjectives ? `, and the objective mapping above with ${ACCEPTANCE_OBJECTIVE_MAPPING_WRITER}` : ""}. `
       + `Use record_execution_evidence for a requirement marked "recorded with record_execution_evidence" above, following its next action, and record_workroom_evidence (kind "acceptance-receipt") in this room for what you verified. No other write is authorized here.`,
     `Record only what you verified. Where a criterion does not hold or cannot be checked, record that instead. Do not change the item's status or close it: the completion gate decides that.`,
   );
   return lines.join("\n");
+}
+
+/**
+ * BI-099A0BA3: what the room's coworker does for the objective-mapping lane.
+ * With a platform-issued packet it records the mapping itself; without one the
+ * writer refuses, and it records what it verified for the next sweep's packet.
+ */
+function objectiveMappingInstructions(candidate: AgedRouteCandidate): string[] {
+  const packet = parseIssuedObjectiveMappingPacket(candidate.projection.objectiveMappingPacket, candidate.itemId);
+  const writer = ACCEPTANCE_OBJECTIVE_MAPPING_WRITER;
+  if (!packet) {
+    return [
+      `Its lane writer, ${writer} (objective-mapping), needs an objective-mapping packet the platform issues to this room, and this room holds none yet, so the call is refused. `
+        + `Record what you verified for these requirements with record_workroom_evidence in this room instead, one line per criterion with what you observed. `
+        + `The acceptance sweep issues the packet once the item's delivery Workroom, objective baseline and post-baseline evidence can bind one.`,
+    ];
+  }
+  const { binding } = packet;
+  const artifact = binding.artifactRef.kind === "repo-blob-at-commit"
+    ? `${binding.artifactRef.path} at ${binding.artifactRef.commitSha} in ${binding.artifactRef.repositoryFullName}`
+    : "the bound design artifact";
+  return [
+    `The platform issued this room its objective-mapping packet. It binds ${candidate.itemId} to objective baseline ${binding.expectedCurrentBaselineId}, `
+      + `the design ${artifact}, and these evidence records: ${binding.eligibleEvidenceActivityIds.join(", ")}.`,
+    `Read the design with read_source_at_version, check each OBJ-* and AC-* statement against the live install, then call ${writer} with operation "objective-mapping", itemId ${candidate.itemId}, `
+      + `one objectiveMappings entry for every current statement naming the evidence records above that support it, and a reason saying what you verified. `
+      + `The server supplies the baseline and the evidence binding from the packet; it refuses a mapping that misses a statement, names one twice, or cites evidence outside that set. `
+      + `Record nothing for a statement you could not verify; say so with record_workroom_evidence instead.`,
+    `Packet brief: ${packet.objective}`,
+  ];
 }
 
 async function humanPrincipalId(db: AcceptanceRouteDb, userId: string): Promise<string | null> {
@@ -210,6 +245,8 @@ export async function routeAgedItems(input: {
   limit: number;
   /** The User accountable for the platform's automatic work, or null when none can be resolved. */
   resolveOwnerUserId: () => Promise<string | null>;
+  /** BI-099A0BA3: issue the owner's objective-mapping packet to a live room. Without it none is issued. */
+  issuePacket?: IssueObjectiveMappingPacket;
 }): Promise<RouteOutcome[]> {
   const { db, now } = input;
   const ordered = [...input.candidates]
@@ -222,6 +259,16 @@ export async function routeAgedItems(input: {
   };
   let created = 0;
   const outcomes: RouteOutcome[] = [];
+  const issue = async (candidate: AgedRouteCandidate): Promise<RouteOutcome["objectiveMapping"]> => {
+    const owner = candidate.projection.owner;
+    const packet = candidate.projection.objectiveMappingPacket;
+    if (!input.issuePacket || !owner || !packet) return null;
+    try {
+      return await input.issuePacket({ itemId: candidate.itemId, ownerAgentId: owner.agentId, packet, objective: buildAcceptanceRoomObjective(candidate) });
+    } catch {
+      return "failed";
+    }
+  };
 
   for (const candidate of ordered) {
     const base = { itemId: candidate.itemId, ageDays: candidate.ageDays, capsuleId: null, ownerAgentId: candidate.projection.owner?.agentId ?? null, reason: null };
@@ -231,7 +278,12 @@ export async function routeAgedItems(input: {
       select: { capsuleId: true, archivedAt: true, workspaceState: true },
     } satisfies Prisma.WorkroomFindUniqueArgs);
     if (existing) {
-      outcomes.push({ ...base, capsuleId: existing.capsuleId, outcome: existing.archivedAt || roomHasRun(existing) ? "routed-unresolved" : "already-routed" });
+      outcomes.push({
+        ...base,
+        capsuleId: existing.capsuleId,
+        outcome: existing.archivedAt || roomHasRun(existing) ? "routed-unresolved" : "already-routed",
+        objectiveMapping: existing.archivedAt ? null : await issue(candidate),
+      });
       continue;
     }
     const owner = candidate.projection.owner;
@@ -275,7 +327,7 @@ export async function routeAgedItems(input: {
       select: { id: true },
     } satisfies Prisma.WorkroomUpsertArgs);
     created += 1;
-    outcomes.push({ ...base, capsuleId, outcome: "routed" });
+    outcomes.push({ ...base, capsuleId, outcome: "routed", objectiveMapping: await issue(candidate) });
   }
   return outcomes;
 }
