@@ -15,6 +15,7 @@ import {
   shouldSurfaceAdoptableBranch,
   trunkHasMergedPullRequest,
   trunkRefExists,
+  trustedGitArgs,
 } from "./git-scanner";
 
 describe("git scanner parsing", () => {
@@ -124,5 +125,15 @@ describe("trunkHasMergedPullRequest (BI-AFE8BB73)", () => {
     if (!merged) return; // a trunk with no squash-merge subject in reach → nothing to assert
     expect(await trunkHasMergedPullRequest(repoRoot, Number(merged))).toBe(true);
     expect(await trunkHasMergedPullRequest(repoRoot, 99999999)).toBe(false);
+  });
+});
+
+// BI-DC2758DE: the trust exception names exactly the probed root, never `*`.
+describe("trustedGitArgs", () => {
+  it("scopes safe.directory to the one repository it runs in", () => {
+    expect(trustedGitArgs("/sandbox-workspace", ["rev-parse", "HEAD"])).toEqual([
+      "-c", "safe.directory=/sandbox-workspace", "-C", "/sandbox-workspace", "rev-parse", "HEAD",
+    ]);
+    expect(trustedGitArgs("/a", ["log"]).join(" ")).not.toContain("safe.directory=*");
   });
 });

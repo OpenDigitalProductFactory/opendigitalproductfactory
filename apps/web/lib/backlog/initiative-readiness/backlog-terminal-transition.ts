@@ -19,6 +19,7 @@ import {
   type TerminalAuthority,
   type TerminalTransitionDb,
 } from "./terminal-transition-repository";
+import { refreshMergeSignalTrunk } from "./merge-delivery-signal";
 
 type BacklogTerminalClient = BacklogCompletionDb & {
   $queryRawUnsafe(query: string, ...values: unknown[]): Promise<unknown>;
@@ -45,6 +46,7 @@ export {
   mergeSignalRoots,
   mergeSignalUnavailableReason,
   pullRequestNumbersFromActivities,
+  refreshMergeSignalTrunk,
   resolveMergeSignalFromRefs,
   type MergeDeliverySignal,
   type ResolveMergeDelivery,
@@ -71,6 +73,9 @@ export async function completeBacklogItemTransition(args: {
   let lockedItem: BacklogCompletionItem | null = null;
   let deployment: DeploymentClosureProof | null = null;
   let acceptanceState = "missing";
+  // BI-DC2758DE: refresh the trunk the merge signal reads before the
+  // transaction opens; the signal itself never touches the network.
+  if (!args.dependencies?.resolveMergeDelivery) await refreshMergeSignalTrunk();
   return executeGovernedTerminalTransition({
     db,
     actor: args.actor,
