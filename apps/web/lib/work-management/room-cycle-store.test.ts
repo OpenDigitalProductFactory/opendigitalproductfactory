@@ -9,7 +9,7 @@ import {
   type WorkroomCycleStoreDb,
   type WorkroomCycleStoreMessage,
 } from "./room-cycle-store";
-import type { WorkroomCycleWorkItemRecord } from "./room-cycle-adapter";
+import { parseStoredWorkroomOutcome, parseStoredWorkroomCycle, type WorkroomCycleWorkItemRecord } from "./room-cycle-adapter";
 
 const room: WorkroomCycleParentRecord = {
   id: "room-row",
@@ -35,7 +35,9 @@ function harness() {
     withinRoomLock: async (_roomWorkItemId, callback) => callback({
       getRoom: async () => room,
       listCycles: async () => cycles,
+      findCycle: async (_roomId, lookup) => cycles.find(row => "carrierId" in lookup ? row.itemId === lookup.carrierId : "cycleKey" in lookup ? parseStoredWorkroomCycle(row.evidence)?.cycleKey === lookup.cycleKey : !["completed", "cancelled"].includes(row.status) && Boolean(parseStoredWorkroomCycle(row.evidence))) ?? null,
       listMessages: async () => messages,
+      findOutcome: async (_roomId, cycleKey, carrierId) => messages.find(message => { const stored = parseStoredWorkroomOutcome(message.structuredPayload); return stored?.cycleKey === cycleKey && stored.carrierId === carrierId; }) ?? null,
       findWorkItemBySource: async (sourceType, sourceId) => cycles.find(
         (entry) => entry.sourceType === sourceType && entry.sourceId === sourceId,
       ) ?? null,

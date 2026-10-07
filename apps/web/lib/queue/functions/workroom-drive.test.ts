@@ -285,6 +285,28 @@ describe("applyDrivePlan lease expiry", () => {
     expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
   });
 
+  it("retains the enqueue checkpoint even when the later drive snapshot is never written", async () => {
+    const fx = persistedLease();
+    driveDb.workroom.findUnique.mockResolvedValue({ workspaceState: { unrelated: true }, objective: "Review evidence" });
+    driveDb.workroom.update.mockClear();
+    driveDb.workroomActivity.create.mockClear();
+    // Simulate controller loss immediately after the scheduling transaction.
+    fx.persist.mockRejectedValueOnce(new Error("controller lost"));
+    await expect(runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [room()], effects: fx,
+    })).rejects.toThrow("controller lost");
+    expect(driveDb.workroom.update).toHaveBeenCalledWith(expect.objectContaining({ data: {
+      workspaceState: { unrelated: true, workroomDispatchCheckpoint: expect.objectContaining({
+        version: 1, revision: 1, objective: "Review evidence",
+        confirmedEffect: expect.objectContaining({ kind: "scheduled-task-enqueued" }),
+        nextAction: "reconcile-scheduled-task",
+      }) },
+    } }));
+    expect(driveDb.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      kind: "workroom-dispatch-confirmed",
+    }) }));
+  });
+
   it("fences scheduling when ownership changes after acquisition", async () => {
     const fx = persistedLease();
     const acquire = fx.acquireLease;
@@ -297,6 +319,15 @@ describe("applyDrivePlan lease expiry", () => {
       listRooms: async () => [room()], effects: fx,
     });
     expect(result.dispatched).toBe(0);
+    expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
+  });
+
+  it("refuses corrupt checkpoint history before queueing another task", async () => {
+    const fx = persistedLease();
+    driveDb.workroom.findUnique.mockResolvedValue({ workspaceState: { workroomDispatchCheckpoint: { version: 2, revision: 5 } } });
+    await expect(runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [room()], effects: fx,
+    })).rejects.toThrow(/checkpoint/);
     expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
   });
 
