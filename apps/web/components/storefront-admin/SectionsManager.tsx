@@ -3,6 +3,8 @@ import { useState } from "react";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { sectionDisplayName } from "@/lib/storefront/content-fit";
 import type { ResidueGroup } from "@/lib/storefront/content-fit";
+import { editableSectionTextFields, readSectionText } from "@/lib/storefront/section-text";
+import { SectionTextDialog } from "./SectionTextDialog";
 import {
   RowActionSheet,
   MutationStatus,
@@ -12,7 +14,14 @@ import {
   type RowAction,
 } from "./content-editing-ui";
 
-type Section = { id: string; type: string; title: string | null; sortOrder: number; isVisible: boolean };
+type Section = {
+  id: string;
+  type: string;
+  title: string | null;
+  sortOrder: number;
+  isVisible: boolean;
+  content?: unknown;
+};
 
 type Props = {
   storefrontId: string;
@@ -24,6 +33,7 @@ type Props = {
 
 export function SectionsManager({ storefrontId, sections: initial, vocabulary, isPublished, residueGroups }: Props) {
   const [sections, setSections] = useState(initial);
+  const [editing, setEditing] = useState<Section | null>(null);
   const mutations = useRowMutations();
   const publicWhere = "your public page";
 
@@ -80,8 +90,37 @@ export function SectionsManager({ storefrontId, sections: initial, vocabulary, i
     }
   }
 
+  // Returns an error message for the dialog, or null on success.
+  async function saveText(section: Section, text: Record<string, string>): Promise<string | null> {
+    const res = await fetch(`/api/storefront/admin/sections/${section.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      return body?.message ?? "The text could not be saved. Try again.";
+    }
+    const content = { ...((section.content as Record<string, unknown> | null) ?? {}) };
+    for (const [key, value] of Object.entries(text)) {
+      if (value.trim()) content[key] = value.trim();
+      else delete content[key];
+    }
+    setSections((prev) => prev.map((s) => (s.id === section.id ? { ...s, content } : s)));
+    return null;
+  }
+
   return (
     <div>
+      {editing && (
+        <SectionTextDialog
+          sectionName={sectionDisplayName(editing, vocabulary)}
+          sectionType={editing.type}
+          initialText={readSectionText(editing.type, editing.content)}
+          onSave={(text) => saveText(editing, text)}
+          onClose={() => setEditing(null)}
+        />
+      )}
       <GeneratedResidueBanner storefrontId={storefrontId} groups={residueGroups} isPublished={isPublished} />
 
       <h2 className="mb-4 text-base font-semibold text-[var(--dpf-text)]">Your public page sections</h2>
@@ -93,6 +132,9 @@ export function SectionsManager({ storefrontId, sections: initial, vocabulary, i
           const rowState = visibleState.phase !== "idle" ? visibleState : orderState;
 
           const actions: RowAction[] = [
+            ...(editableSectionTextFields(s.type).length > 0
+              ? [{ label: `Edit ${name} text`, onSelect: () => setEditing(s) }]
+              : []),
             {
               label: s.isVisible ? `Hide ${name} section from ${publicWhere}` : `Show ${name} section on ${publicWhere}`,
               onSelect: () => void toggleVisibility(s),

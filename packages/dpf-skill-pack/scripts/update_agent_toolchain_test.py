@@ -888,6 +888,20 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
         )
         self.assertEqual(run.call_args[1]["cwd"], str(stale))
 
+    def test_build_metadata_on_the_pack_version_does_not_mark_current_records_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            current = self._project(root, "current")
+            home = self._home(root, [{"scope": "project", "projectPath": str(current), "version": "0.2.8"}])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run"
+            ) as run:
+                lines = updater.converge_claude_project_connectors(
+                    home, "0.2.8+codex.20260726032301", dry_run=False
+                )
+        run.assert_not_called()
+        self.assertIn("current 1", lines[0])
+
     def test_records_for_missing_projects_are_reported_not_touched(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

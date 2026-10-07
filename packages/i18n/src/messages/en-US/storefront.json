@@ -1,0 +1,14 @@
+{
+  "sectionText": {
+    "title": "Edit {$name} text",
+    "hint": "Visitors see this as soon as you save.",
+    "cancel": "Cancel",
+    "save": "Save text",
+    "saving": "Saving...",
+    "fields": {
+      "headline": { "label": "Headline", "placeholder": "Defaults to your business name" },
+      "subheading": { "label": "Subheading", "placeholder": "Defaults to your tagline" },
+      "body": { "label": "Text", "placeholder": "Who you are and how you work" }
+    }
+  }
+}
