@@ -163,6 +163,11 @@ describe("buildSandboxStageCommand", () => {
     expect(command).toContain(":!packages/db/generated/**");
   });
 
+  it("never stages or lists the sandbox's own auth secret (BI-F1C680C7)", () => {
+    expect(buildSandboxStageCommand()).toContain("':!.dpf-sandbox-auth-secret*'");
+    expect(buildSandboxListReleasableFilesCommand()).toContain("':(exclude).dpf-sandbox-auth-secret*'");
+  });
+
   it("does not use git add -A which exits 1 when gitignored directories are present in the working tree", () => {
     // git add -A errors (exit code 1) on gitignored untracked paths such as
     // .pnpm-store, node_modules, and packages/db/generated even when those paths

@@ -36,6 +36,9 @@ const SANDBOX_STAGE_EXCLUDES = [
   // generated type stubs that conflict with main if the sandbox base is stale.
   ":!**/generated/client/**",
   ":!packages/db/generated/**",
+  // The sandbox's own Auth.js secret (scripts/sandbox-entrypoint.sh,
+  // BI-F1C680C7). Gitignored too; the pathspec keeps it out even if forced.
+  ":!.dpf-sandbox-auth-secret*",
 ] as const;
 const SANDBOX_DIFF_EXCLUDES = [
   ":(exclude)**/node_modules/**",
@@ -49,6 +52,7 @@ const SANDBOX_DIFF_EXCLUDES = [
   // Generated Prisma client — see SANDBOX_STAGE_EXCLUDES comment above.
   ":(exclude)**/generated/client/**",
   ":(exclude)packages/db/generated/**",
+  ":(exclude).dpf-sandbox-auth-secret*",
 ] as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

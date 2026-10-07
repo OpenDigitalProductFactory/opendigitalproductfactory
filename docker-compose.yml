@@ -541,7 +541,12 @@ services:
       - sandbox_workspace:/workspace
     environment:
       DATABASE_URL: postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf
-      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
+      # No AUTH_SECRET here, ever (BI-F1C680C7). Agent CLIs run in this
+      # container unprompted through `docker exec`, which inherits this
+      # environment, and the portal's secret signs its sessions and MCP tokens.
+      # The sandbox's own app gets a sandbox-only secret from
+      # scripts/sandbox-entrypoint.sh, scoped to the dev server process.
+      # Guarded by scripts/installer/sandbox-auth-secret-isolation-contract.test.mjs.
       AUTH_TRUST_HOST: "true"
       APP_URL: http://localhost:3035
       NODE_ENV: development
