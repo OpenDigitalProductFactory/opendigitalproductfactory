@@ -102,6 +102,65 @@ describe("proposal actions", () => {
     expect(mocks.executeTool).not.toHaveBeenCalled();
   });
 
+  // BI-4E192035 — a leave.decide proposal carries the advisor's recommendation.
+  // The generic Approve/Reject verbs on it must never enact the opposite of what
+  // the person clicking was shown.
+  describe("AC-LEAVE-RECOMMENDATION: approving a leave proposal enacts its recommendation", () => {
+    const leaveProposal = (recommendation: "approve" | "deny" | "escalate") => ({
+      proposalId: "AP-LEAVE",
+      status: "proposed",
+      actionType: "leave.decide",
+      parameters: { requestId: "LR-1", recommendation, rationale: "Advisor rationale.", guardReasons: [] },
+      agentId: "time-off-advisor",
+      threadId: "thread-1",
+    });
+
+    it("approving a deny-recommendation proposal does not approve the leave", async () => {
+      mocks.prisma.agentActionProposal.findUnique.mockResolvedValue(leaveProposal("deny"));
+
+      await approveProposal("AP-LEAVE");
+
+      expect(mocks.approveLeaveRequest).not.toHaveBeenCalled();
+    });
+
+    it("approving an approve-recommendation proposal approves the leave", async () => {
+      mocks.prisma.agentActionProposal.findUnique.mockResolvedValue(leaveProposal("approve"));
+
+      expect(await approveProposal("AP-LEAVE")).toMatchObject({ success: true });
+      expect(mocks.approveLeaveRequest).toHaveBeenCalledWith("LR-1");
+      expect(mocks.rejectLeaveRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("AC-LEAVE-EXPLICIT: the leave outcome a click enacts is never the opposite of what it says", () => {
+    const leaveProposal = (recommendation: "approve" | "deny" | "escalate") => ({
+      proposalId: "AP-LEAVE",
+      status: "proposed",
+      actionType: "leave.decide",
+      parameters: { requestId: "LR-1", recommendation, rationale: "Advisor rationale.", guardReasons: [] },
+      agentId: "time-off-advisor",
+      threadId: "thread-1",
+    });
+
+    it("approving an escalate proposal (no recommendation to accept) decides nothing about the leave", async () => {
+      mocks.prisma.agentActionProposal.findUnique.mockResolvedValue(leaveProposal("escalate"));
+
+      const result = await approveProposal("AP-LEAVE");
+
+      expect(mocks.approveLeaveRequest).not.toHaveBeenCalled();
+      expect(mocks.rejectLeaveRequest).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+    });
+
+    it("declining a deny-recommendation proposal does not deny the leave", async () => {
+      mocks.prisma.agentActionProposal.findUnique.mockResolvedValue(leaveProposal("deny"));
+
+      await rejectProposal("AP-LEAVE", "I disagree with denying this");
+
+      expect(mocks.rejectLeaveRequest).not.toHaveBeenCalled();
+    });
+  });
+
   it("approves proactivity changes by persisting a scoped preference override without executing a tool", async () => {
     mocks.prisma.agentActionProposal.findUnique.mockResolvedValue({
       proposalId: "AP-PROACTIVE",
