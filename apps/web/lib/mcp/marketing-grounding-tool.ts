@@ -12,6 +12,7 @@
 // reads all three.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import { MARKETING_ROUTE_TO_MARKET } from "@/lib/marketing/vocabulary";
 
 export const recordMarketingGroundingDefinition: ToolDefinition = {
   name: "record_marketing_grounding",
@@ -60,6 +61,11 @@ export const recordMarketingGroundingDefinition: ToolDefinition = {
           },
           required: ["type", "label"],
         },
+      },
+      routeToMarket: {
+        type: "string",
+        enum: [...MARKETING_ROUTE_TO_MARKET],
+        description: "How the business reaches buyers — e.g. channel-partner when partners sell and support it, direct-sales when its own team does. Set this when the recorded motion is wrong.",
       },
       differentiators: {
         type: "array",
@@ -135,6 +141,7 @@ export async function recordMarketingGroundingHandler(
         params["constraints"] && typeof params["constraints"] === "object"
           ? (params["constraints"] as never)
           : undefined,
+      routeToMarket: typeof params["routeToMarket"] === "string" ? params["routeToMarket"] : undefined,
     },
   });
 
