@@ -154,11 +154,18 @@ Phase 3 goes last, as the design §7 requires, so it can be held without holding
 
 ## Backlog coverage
 
-To be recorded with `record_plan_backlog_coverage` after spec approval mints the scope baseline. Mapping:
+- Decision: decomposed
+- Parent: `BI-C318C227`
+- Receipt: `cmuym8xje4du001qphcc1uwys`
+- Dependencies: `BI-8C76920D` depends on `BI-CAA04C84`; `BI-BA53C1A8` depends on `BI-CAA04C84`; `BI-CAA04C84` depends on none
+- Mappings:
+  - Geocode on save, provenance, shared geofence -> `BI-CAA04C84`
+  - Region recommendation -> `BI-8C76920D`
+  - Confirm a site at check-in -> `BI-BA53C1A8`
 
-| Deliverable | Backlog item |
-|---|---|
-| Geocode on save, provenance, shared geofence | `BI-CAA04C84` |
-| Region recommendation | `BI-8C76920D` |
-| Confirm a site at check-in | `BI-BA53C1A8` |
-| Fetching packs, follow-up outside this plan | `BI-43BBCC26` |
+| Deliverable | Backlog item | Depends on |
+|---|---|---|
+| Geocode on save, provenance, shared geofence | `BI-CAA04C84` | none |
+| Region recommendation | `BI-8C76920D` | `BI-CAA04C84` |
+| Confirm a site at check-in | `BI-BA53C1A8` | `BI-CAA04C84` |
+| Fetching packs, follow-up outside this plan | `BI-43BBCC26` | `BI-8C76920D` |

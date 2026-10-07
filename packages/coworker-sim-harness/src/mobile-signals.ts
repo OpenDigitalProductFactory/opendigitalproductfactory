@@ -13,24 +13,24 @@
 // See 2026-06-14-coworker-simulation-eval-harness-design.html (R11 MobileFieldSignalContract).
 
 import type { Instant } from "./virtual-clock";
-import { type GeoPoint, type TravelOptions, etaAt, geoDistanceKm, travelTimeMinutes } from "./geo-temporal";
+import { type LatLng, type TravelOptions, etaAt, geoDistanceKm, travelTimeMinutes } from "./geo-temporal";
 
 /**
  * The signals a field device emits to the dispatcher. Same schema for the real
  * mobile app and the harness stub.
  */
 export type MobileFieldSignal =
-  | { kind: "location"; at: Instant; technicianId: string; pos: GeoPoint }
-  | { kind: "departed"; at: Instant; technicianId: string; jobId: string; pos: GeoPoint }
+  | { kind: "location"; at: Instant; technicianId: string; pos: LatLng }
+  | { kind: "departed"; at: Instant; technicianId: string; jobId: string; pos: LatLng }
   | { kind: "eta"; at: Instant; technicianId: string; jobId: string; arrivalEta: Instant }
-  | { kind: "arrived"; at: Instant; technicianId: string; jobId: string; pos: GeoPoint }
+  | { kind: "arrived"; at: Instant; technicianId: string; jobId: string; pos: LatLng }
   | { kind: "status"; at: Instant; technicianId: string; jobId: string; status: string };
 
 export interface DriveRequest {
   technicianId: string;
   jobId: string;
-  from: GeoPoint;
-  to: GeoPoint;
+  from: LatLng;
+  to: LatLng;
   departAt: Instant;
   opts?: TravelOptions;
   /** Optional interim location pings; count of evenly-spaced samples between depart and arrive. */

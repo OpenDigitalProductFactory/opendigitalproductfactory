@@ -13,7 +13,7 @@
 //
 // See 2026-06-14-coworker-simulation-eval-harness-design.html (§6, §7).
 
-import { type GeoPoint } from "./geo-temporal";
+import { type LatLng } from "./geo-temporal";
 import { type MobileFieldSignal, isRunningLate, planDrive } from "./mobile-signals";
 import { DAY, HOUR, type Instant, MINUTE, VirtualClock } from "./virtual-clock";
 
@@ -24,13 +24,13 @@ export type DispatchNotificationEvent = "confirm" | "on-my-way" | "running-late"
 
 export interface SimCustomer {
   id: string;
-  site: GeoPoint;
+  site: LatLng;
   /** Whether the customer has any verified reachable channel (else notifications fail). */
   reachable: boolean;
 }
 export interface SimTechnician {
   id: string;
-  home: GeoPoint;
+  home: LatLng;
 }
 export interface SimJob {
   id: string;
