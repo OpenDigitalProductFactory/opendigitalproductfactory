@@ -208,7 +208,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     <PhoneCountryProvider country={phoneCountry}>
       <SystemEventProvider>
       {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
-      <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]">
+      <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]" data-nav-mode={navMode}>
         {/* Common Shell Action-Result Contract (BI-9C0954D0) C6: the first
             focusable element skips the global header/rail chrome straight to the
             route task, so keyboard and assistive-tech owners reach their work
