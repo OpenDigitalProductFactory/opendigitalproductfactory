@@ -424,8 +424,19 @@ export function readDeclaredWorkShapeKey(scopeClaims: unknown): string | null {
   return null;
 }
 
+/**
+ * Whether a shape recurs: it declares the `cadence` trigger class, so it is a
+ * standing activity that runs again every cycle. A shape without it (a
+ * claim-triggered delivery, for example) runs once: when its run succeeds that
+ * run is final (WWMD DI-8DCB9A4B566C, BI-853120EE).
+ */
+export function workShapeRecurs(shape: Pick<WorkShapeDefinition, "triggers">): boolean {
+  return shape.triggers.includes("cadence");
+}
+
 export function isStandingWorkShape(key: string): boolean {
-  return getWorkShape(key)?.triggers.includes("cadence") ?? false;
+  const shape = getWorkShape(key);
+  return shape ? workShapeRecurs(shape) : false;
 }
 
 /** Agent ids that a declared shape names as accountable for at least one stage. */

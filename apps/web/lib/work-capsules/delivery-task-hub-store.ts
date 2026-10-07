@@ -1,6 +1,7 @@
 import { signCursor, equalSignature } from "@/lib/shared/signed-cursor";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { noteSessionSecretGraceUse, signingKey, verificationKeys } from "@/lib/auth/dedicated-signing-key";
 import {
   projectDeliveryTaskHubRow,
   type DeliveryTaskAsyncOperation,
@@ -84,10 +85,21 @@ function iso(value: unknown, field: string): string {
   return new Date(value).toISOString();
 }
 
+const CURSOR_SECRET_ENV = "DPF_DELIVERY_TASK_CURSOR_SECRET";
+
+/**
+ * The dedicated DPF_DELIVERY_TASK_CURSOR_SECRET signs when set; an install
+ * without it keeps signing with AUTH_SECRET / NEXTAUTH_SECRET (BI-231A4BC7,
+ * lib/auth/dedicated-signing-key.ts). A blank value counts as unset.
+ */
 function cursorSecret(override?: string): string {
-  const secret = override ?? process.env.DPF_DELIVERY_TASK_CURSOR_SECRET ?? process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
-  if (!secret?.trim()) throw new Error("Delivery task cursors require a signing secret");
-  return secret;
+  if (override !== undefined) {
+    if (!override.trim()) throw new Error("Delivery task cursors require a signing secret");
+    return override;
+  }
+  const key = signingKey(CURSOR_SECRET_ENV);
+  if (!key) throw new Error("Delivery task cursors require a signing secret");
+  return key.secret;
 }
 
 export function encodeDeliveryTaskCursor(cursor: DeliveryTaskCursor, options: { secret?: string } = {}): string {
@@ -101,14 +113,23 @@ export function decodeDeliveryTaskCursor(value: string, options: { secret?: stri
     if (separator <= 0 || separator === value.length - 1) throw new Error("shape");
     const encoded = value.slice(0, separator);
     const signature = value.slice(separator + 1);
-    if (!equalSignature(signCursor(encoded, cursorSecret(options.secret)), signature)) throw new Error("signature");
+    // Dedicated key first; a cursor the pre-upgrade portal signed with AUTH_SECRET
+    // verifies only before SESSION_SECRET_GRACE_CUTOFF. Its own bound is the
+    // 31-day window check in loadDeliveryTaskHubPage, which every cursor passes.
+    const keys = options.secret !== undefined
+      ? [{ secret: cursorSecret(options.secret), source: "explicit" as const }]
+      : verificationKeys(CURSOR_SECRET_ENV, new Date());
+    const matched = keys.find((key) => equalSignature(signCursor(encoded, key.secret), signature));
+    if (!matched) throw new Error("signature");
     const decoded = Buffer.from(encoded, "base64url").toString("utf8");
     if (Buffer.from(decoded, "utf8").toString("base64url") !== encoded) throw new Error("encoding");
     const parsed = JSON.parse(decoded) as Record<string, unknown>;
     if (typeof parsed.id !== "string" || !parsed.id || Object.keys(parsed).sort().join(",") !== "id,updatedAt,windowStart") {
       throw new Error("shape");
     }
-    return { id: parsed.id, updatedAt: iso(parsed.updatedAt, "updatedAt"), windowStart: iso(parsed.windowStart, "windowStart") };
+    const cursor = { id: parsed.id, updatedAt: iso(parsed.updatedAt, "updatedAt"), windowStart: iso(parsed.windowStart, "windowStart") };
+    if (matched.source === "session-secret-grace") noteSessionSecretGraceUse("delivery-task-cursor");
+    return cursor;
   } catch {
     throw new Error("Invalid delivery task cursor");
   }
