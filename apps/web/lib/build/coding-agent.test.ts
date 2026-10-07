@@ -146,3 +146,46 @@ describe("runSandboxTests without a covering test file", () => {
     expect(exec.mock.calls.map(([, cmd]) => cmd).some((cmd) => /pnpm test/.test(cmd))).toBe(false);
   });
 });
+
+// BI-6F67D5FA: FB-0C05A927's mobile tests were run with `npx vitest`, which
+// cannot resolve apps/mobile's `@/` alias (Jest/jest-expo does), so every build
+// touching the mobile app failed review whatever its code. Each package runs
+// the runner its package.json declares, through pnpm exec.
+describe("runSandboxTests picks each package's own test runner", () => {
+  async function run(packageJsons: Record<string, string>, outputs: { jest?: string; vitest?: string; exit?: number }) {
+    const { execInSandbox } = await import("@/lib/sandbox");
+    const exec = vi.mocked(execInSandbox);
+    exec.mockReset();
+    exec.mockImplementation(async (_id: string, cmd: string) => {
+      if (cmd.startsWith("test -f")) return "__yes__";
+      const cat = /cat "([^"]+)\/package\.json"/.exec(cmd);
+      if (cat) return packageJsons[cat[1]!] ?? "";
+      if (/pnpm exec jest/.test(cmd)) return `${outputs.jest ?? "Tests: 2 passed, 2 total"}\n__dpf_exit=${outputs.exit ?? 0}`;
+      if (/pnpm exec vitest run/.test(cmd)) return `${outputs.vitest ?? "Test Files  1 passed (1)"}\n__dpf_exit=${outputs.exit ?? 0}`;
+      return "";
+    });
+    const { runSandboxTests } = await import("./coding-agent");
+    const result = await runSandboxTests("c1", {
+      changedFiles: ["apps/mobile/src/features/visitor/visitor.store.ts", "apps/web/lib/x.ts"],
+      workdir: "/workspace/.builds/FB-1",
+    });
+    return { result, commands: exec.mock.calls.map(([, cmd]) => cmd) };
+  }
+
+  const mobile = JSON.stringify({ name: "mobile", scripts: { test: "jest" }, devDependencies: { jest: "~30.5.2", "jest-expo": "~57.0.5" } });
+  const web = JSON.stringify({ name: "web", scripts: { test: "vitest run" }, devDependencies: { vitest: "4.1.11" } });
+  const pkgs = { "/workspace/.builds/FB-1/apps/mobile": mobile, "/workspace/.builds/FB-1/apps/web": web };
+
+  it("runs a Jest package under Jest and a Vitest package under Vitest, never through npx", async () => {
+    const { result, commands } = await run(pkgs, {});
+    expect(commands.some((cmd) => /cd \/workspace\/\.builds\/FB-1\/apps\/mobile && .*pnpm exec jest --ci .*visitor\.store\.test\.ts/.test(cmd))).toBe(true);
+    expect(commands.some((cmd) => /cd \/workspace\/\.builds\/FB-1\/apps\/web && .*pnpm exec vitest run /.test(cmd))).toBe(true);
+    expect(commands.filter((cmd) => /vitest|jest/.test(cmd)).some((cmd) => /npx /.test(cmd))).toBe(false);
+    expect(result.passed).toBe(true);
+  });
+
+  it("treats a non-zero runner exit as a failure even when the output names no failure", async () => {
+    const { result } = await run(pkgs, { jest: "Error: Cannot find module 'jest-expo/jest-preset'", exit: 1 });
+    expect(result.passed).toBe(false);
+  });
+});

@@ -367,6 +367,29 @@ export function groupTestFilesByPackage(files: string[]): Map<string, string[]> 
  * matches. (Found running scoped tests against the live install — the raw-ANSI
  * path silently passed a build whose feature tests were red.)
  */
+const EXIT_MARKER = "__dpf_exit=";
+
+/** The scoped-test command for a package: Jest when its package.json says so, else Vitest. */
+export function scopedTestRunnerCommand(packageJson: string, fileArgs: string): string {
+  let usesJest = false;
+  try {
+    const pkg = JSON.parse(packageJson) as { scripts?: Record<string, string>; devDependencies?: Record<string, string>; dependencies?: Record<string, string> };
+    const testScript = pkg.scripts?.test ?? "";
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    usesJest = /\bjest\b/.test(testScript) || (Boolean(deps.jest) && !deps.vitest && !/\bvitest\b/.test(testScript));
+  } catch {
+    usesJest = false;
+  }
+  return usesJest ? `pnpm exec jest --ci ${fileArgs}` : `pnpm exec vitest run ${fileArgs}`;
+}
+
+function splitExitMarker(raw: string): { output: string; exitCode: number | null } {
+  const index = raw.lastIndexOf(EXIT_MARKER);
+  if (index < 0) return { output: raw, exitCode: null };
+  const code = Number.parseInt(raw.slice(index + EXIT_MARKER.length).trim(), 10);
+  return { output: raw.slice(0, index).trimEnd(), exitCode: Number.isFinite(code) ? code : null };
+}
+
 export function outputIndicatesTestFailure(output: string): boolean {
   // eslint-disable-next-line no-control-regex -- ANSI color strip
   const clean = output.replace(/\x1b\[[0-9;]*m/g, "");
@@ -431,13 +454,20 @@ export async function runSandboxTests(
     let anyFailed = false;
     for (const [pkg, rel] of groupTestFilesByPackage(scopedTestFiles)) {
       const fileArgs = rel.map((r) => `"${r}"`).join(" ");
-      const out = await execInSandbox(containerId, `cd ${workdir}/${pkg} && npx vitest run ${fileArgs} 2>&1 || true`);
+      // BI-6F67D5FA: each package runs the runner its package.json declares,
+      // through pnpm exec (pinned versions). apps/mobile is Jest/jest-expo; run
+      // under vitest its `@/` alias never resolved, so every mobile build failed.
+      const packageJson = await execInSandbox(containerId, `cat "${workdir}/${pkg}/package.json" 2>/dev/null || true`).catch(() => "");
+      const runner = scopedTestRunnerCommand(packageJson, fileArgs);
+      const raw = await execInSandbox(containerId, `cd ${workdir}/${pkg} && { ${runner} 2>&1; echo "${EXIT_MARKER}$?"; }`);
+      const { output: out, exitCode } = splitExitMarker(raw);
       sections.push(`# ${pkg}\n${out}`);
       // vitest omits the "failed" segment entirely when zero, so any "N failed"
       // with N>=1 (or a FAIL marker) means the feature's own tests are red.
       // outputIndicatesTestFailure strips ANSI first — a colored digit otherwise
-      // defeats the count regex.
-      if (outputIndicatesTestFailure(out)) {
+      // defeats the count regex. A non-zero exit also fails: a runner crash
+      // (config, resolution) prints neither marker.
+      if (outputIndicatesTestFailure(out) || (exitCode !== null && exitCode !== 0)) {
         anyFailed = true;
       }
     }
