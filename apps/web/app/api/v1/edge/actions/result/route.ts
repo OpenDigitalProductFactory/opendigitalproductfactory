@@ -128,6 +128,7 @@ async function recordDockerVmRestartChange(
     const errorCode = typeof evidence?.errorCode === "string" ? evidence.errorCode : null;
     await driveChangeThrough({ id: action.changeRequestId }, changeStepsForRestartReport(outcome, errorCode));
   } catch (error) {
-    console.error(`[edge-actions/result] could not mirror ${actionKey} into its change record:`, error);
+    // Fixed message only: actionKey is caller-supplied and must not shape the log line.
+    console.error("[edge-actions/result] could not mirror a Docker VM restart into its change record", error);
   }
 }
