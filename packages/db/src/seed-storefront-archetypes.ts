@@ -7,8 +7,28 @@ import { ARCHETYPE_SEED_DATA } from "@dpf/storefront-templates/seed";
 const json = (v: unknown) => JSON.parse(JSON.stringify(v)) as any;
 
 // Archetype-driven marketing skill visibility and relabeling.
-// Only archetypes that need overrides are listed; the remaining 7 get {} (all skills, default labels).
+// Only archetypes that need overrides are listed; the rest get {} (all skills, default labels).
+// Every archetype row ships on every install; a coworker reads only its own org's
+// archetype rules, via getMarketingSkillRules (apps/web/lib/actions/agent-coworker.ts).
 const MARKETING_SKILL_RULES: Record<string, Record<string, unknown>> = {
+  // BI-3101AED6: a software platform sells to the businesses that run on it,
+  // one buyer type at a time — not to a generic "tech buyer". When the
+  // business's own offer is the platform, the buyer-archetype value catalog
+  // supplies each buyer's benefits (apps/web/lib/marketing/buyer-archetype-value.ts).
+  "software-platform": {
+    "campaign-ideas": {
+      label: "Buyer-Specific Campaign Ideas",
+      reframe: "Plan campaigns for one buyer type at a time — an HVAC contractor, a dental practice, an MSP partner — in that buyer's own words about their day. Lead with the owner's outcome, not product internals, and keep available-today claims separate from planned capability.",
+    },
+    "competitive-analysis": {
+      label: "Alternatives the Buyer Already Uses",
+      reframe: "Compare against what this buyer type runs today (spreadsheets, point tools, an existing provider) and the cost of switching — not against other vendors' feature lists.",
+    },
+    "email-campaign-builder": {
+      label: "Evaluation & Adoption Sequences",
+      reframe: "Focus on guided evaluation follow-up, onboarding, adoption milestones, release notes framed as customer change, and partner enablement. Tone is plain and honest about what is available today.",
+    },
+  },
   "hoa-property-management": {
     "seo-content-optimizer": { visible: false },
     "competitive-analysis": { visible: false },

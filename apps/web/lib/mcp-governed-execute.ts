@@ -12,17 +12,18 @@ import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./govern/autho
 import { approvalPendingResult, settledApprovalResult } from "./govern/authority/approval-pending-result";
 import {
   enforceCoworkerToolAuthority,
-  finalizeCoworkerAuthorityApproval,
   setCoworkerToolAuthorityOverridesForTests,
   type AuthorizationDecisionCreate,
   type AuthorityApprovalEnvelopeCreate,
   type AuthorityApprovalEnvelopeFinalize,
+  type AuthorityApprovalReservationRelease,
   type AuthorityApprovalTaskResume,
   type CoworkerAuthorityInputResolver,
   type PolicyAuthorityProjectionAttempt,
   type PolicyAuthorityEnvelopeReserve,
   type AuthorityExecutedOutcome,
 } from "./govern/authority/coworker-tool-authority-gate";
+import { type ApprovalRun, handApprovalToToolRun, newApprovalRun, releaseUnsettledApproval, settleApprovalRefusal, settleApprovalRun } from "./govern/authority/approval-reservation";
 export type {
   AuthorityApprovalEnvelopeCreate,
   AuthorityApprovalEnvelopeFinalize,
@@ -122,6 +123,7 @@ export function _setGovernanceForTests(overrides: {
   authorityApprovalEnvelopeCreate?: AuthorityApprovalEnvelopeCreate | null;
   authorityApprovalTaskResume?: AuthorityApprovalTaskResume | null;
   authorityApprovalEnvelopeFinalize?: AuthorityApprovalEnvelopeFinalize | null;
+  authorityApprovalReservationRelease?: AuthorityApprovalReservationRelease | null;
   policyAuthorityProjectionAttempt?: PolicyAuthorityProjectionAttempt | null;
   policyAuthorityEnvelopeReserve?: PolicyAuthorityEnvelopeReserve | null;
   authorityExecutedOutcome?: AuthorityExecutedOutcome | null;
@@ -300,10 +302,21 @@ async function runPostToolHooks(event: ToolLifecyclePostEvent): Promise<void> {
   }
 }
 
-export async function governedExecuteTool(
-  args: GovernedExecuteArgs,
-): Promise<GovernedExecuteResult> {
+/** BI-5B34D277: an exception before the tool ran gives back the approval it reserved. */
+export async function governedExecuteTool(args: GovernedExecuteArgs): Promise<GovernedExecuteResult> {
+  const run = newApprovalRun();
+  try {
+    return await governedExecuteToolRun(args, run);
+  } catch (err) {
+    await releaseUnsettledApproval(run, args.toolName);
+    throw err;
+  }
+}
+
+async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRun): Promise<GovernedExecuteResult> {
   args = { ...args, toolName: canonicalWorkroomToolName(args.toolName) };
+  // Every return after the reservation goes through this (BI-5B34D277).
+  const refuse = (result: GovernedExecuteResult) => settleApprovalRefusal(run, args.toolName, result);
   let approvedAuthorityEnvelopeId: string | null = null;
   let authorityDecisionId: string | undefined;
   let alignmentDecision: AlignmentGateDecision | null = null;
@@ -491,6 +504,9 @@ export async function governedExecuteTool(
     }
     approvedAuthorityEnvelopeId = authorityGate.approvedEnvelopeId;
     authorityDecisionId = authorityGate.authorityDecisionId;
+    if (authorityGate.approvedEnvelopeId && authorityGate.reservedAt) {
+      run.reservation = { envelopeId: authorityGate.approvedEnvelopeId, reservedAt: authorityGate.reservedAt };
+    }
   }
 
   const hookRejection = await runPreToolHooks({
@@ -510,6 +526,7 @@ export async function governedExecuteTool(
       source: args.source,
       context: args.context,
       durationMs: null,
+      envelopeId: approvedAuthorityEnvelopeId,
     });
     if (auditRow?.id && consequence.consequential) {
       await writeToolExecutionReceipt({
@@ -523,7 +540,7 @@ export async function governedExecuteTool(
         governedArgs: args,
       });
     }
-    return hookRejection;
+    return refuse(hookRejection);
   }
 
   // EP-WORK-POSTURE 8.2 (BI-F114354D item 6): inside a Workroom, EVERY tool the
@@ -540,12 +557,12 @@ export async function governedExecuteTool(
     writeAudit: ({ result, alignmentDecision: alignment, preconditionDecision: precondition }) => writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result, userId: args.userId,
       source: args.source, context: args.context, durationMs: null,
-      alignmentDecision: alignment, preconditionDecision: precondition,
+      alignmentDecision: alignment, preconditionDecision: precondition, envelopeId: approvedAuthorityEnvelopeId,
     }),
   });
   alignmentDecision = preexecution.alignmentDecision;
   preconditionDecision = preexecution.preconditionDecision;
-  if (preexecution.result) return preexecution.result;
+  if (preexecution.result) return refuse(preexecution.result);
 
   // GPP Phase 2 PR-C (BI-69415B68): shadow permit. For an outward, authority or
   // irreversible call only, mint a permit under the binding whose gate just
@@ -600,7 +617,7 @@ export async function governedExecuteTool(
         toolName: args.toolName, context: args.context, consequential: true, governedArgs: args,
       });
     }
-    return refused;
+    return refuse(refused);
   }
 
   let reservedAuditId: string | null = null;
@@ -629,10 +646,11 @@ export async function governedExecuteTool(
         "the mandatory GAID receipt channel could not be reserved before execution",
       );
       if (reservedAuditId) await updateAudit(reservedAuditId, failure, 0);
-      return failure;
+      return refuse(failure);
     }
   }
 
+  handApprovalToToolRun(run);
   const t0 = Date.now();
   let result: ToolResult;
   try {
@@ -705,24 +723,7 @@ export async function governedExecuteTool(
   }
   const durationMs = Date.now() - t0;
 
-  if (approvedAuthorityEnvelopeId) {
-    try {
-      await finalizeCoworkerAuthorityApproval(
-        approvedAuthorityEnvelopeId,
-        result.success,
-      );
-    } catch (err) {
-      // The action has already run, so this cannot fail closed without
-      // misreporting the side effect. Preserve the result and surface the
-      // evidence defect in server logs for reconciliation.
-      console.error(
-        "[governed-execute] approval envelope finalization failed envelope=%s tool=%s: %s",
-        JSON.stringify(approvedAuthorityEnvelopeId),
-        JSON.stringify(args.toolName),
-        err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
-      );
-    }
-  }
+  await settleApprovalRun(run, args.toolName, result.success);
 
   await runPostToolHooks({
     toolName: args.toolName,
