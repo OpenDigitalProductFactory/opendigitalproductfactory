@@ -260,6 +260,8 @@ describe("characterization: performPlanToBuildTransition (autonomous playbook sh
     ]);
     expect(activities()[0]).toEqual(["FB-X", "autonomous_playbook_shadow", "Shadow plan gate would withhold advancement: would withhold."]);
     expect(m.wwmd.mock.calls[0]![0]).toHaveProperty("riskTier");
+    // BI-7FFFBEE3 slice B: a shadow verdict is tagged so it never reaches the owner inbox.
+    expect(m.wwmd.mock.calls[0]![0]).toHaveProperty("enforcement", "shadow");
     expect(m.eligibility).toHaveBeenCalledWith({ buildId: "FB-X", checkpoint: "plan", gateOutcome: "defer" });
   });
 
