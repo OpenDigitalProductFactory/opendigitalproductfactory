@@ -5,6 +5,7 @@ import {
   type LiveCapabilityState,
 } from "./capability-service-projection";
 import { readFile } from "node:fs/promises";
+import { hostname as osHostname } from "node:os";
 import { prisma } from "@dpf/db";
 import { dockerSocketGet } from "./docker-socket.mjs";
 export { boundedDockerSocketGet } from "./docker-socket.mjs";
@@ -146,9 +147,16 @@ export async function loadOperationalCapabilityState(input: {
 }
 
 type DockerGet = (path: string) => Promise<unknown>;
-export async function observeDockerProjectServices(get: DockerGet = dockerSocketGet): Promise<Record<string, ObservedServiceState>> {
+// The container finds itself by the hostname Docker gives it (the container id),
+// read from the OS. Not process.env.HOSTNAME: the image sets that to 0.0.0.0 as
+// the Next.js bind address (Dockerfile ENV HOSTNAME), so it never names the
+// container (BI-3925A700).
+export async function observeDockerProjectServices(
+  get: DockerGet = dockerSocketGet,
+  containerHostname: string = osHostname(),
+): Promise<Record<string, ObservedServiceState>> {
   try {
-    const hostname = process.env.HOSTNAME;
+    const hostname = containerHostname;
     if (!hostname) return {};
     const current = await get(`/containers/${encodeURIComponent(hostname)}/json`) as { Config?: { Labels?: Record<string, string> } };
     const project = current.Config?.Labels?.["com.docker.compose.project"];
