@@ -331,9 +331,7 @@ async function getMarketingSummaryHandler(params: Record<string, unknown>): Prom
 }
 
 async function suggestCampaignIdeasHandler(): Promise<ToolResult> {
-  const { resolveMarketingArchetypeContext, MARKETING_NO_STOREFRONT_MESSAGE } = await import(
-    "@/lib/marketing/archetype-context"
-  );
+  const { resolveMarketingArchetypeContext, MARKETING_NO_STOREFRONT_MESSAGE } = await import("@/lib/marketing/archetype-context");
 
   const context = await resolveMarketingArchetypeContext({ includeItems: true, itemLimit: 10 });
   if (!context) {
@@ -358,9 +356,7 @@ async function suggestCampaignIdeasHandler(): Promise<ToolResult> {
   // the coworker each buyer type's benefits so it plans one campaign per buyer
   // instead of one generic message (BI-B4BE6934).
   const { resolveOrgMarketingFitContext } = await import("@/lib/marketing/fit-guard");
-  const { sellsThePlatform, listBuyerArchetypeValues, PLATFORM_CLAIM_LIMITS } = await import(
-    "@/lib/marketing/buyer-archetype-value"
-  );
+  const { sellsThePlatform, listBuyerArchetypeValues, PLATFORM_CLAIM_LIMITS } = await import("@/lib/marketing/buyer-archetype-value");
   const { ownOffer } = await resolveOrgMarketingFitContext(context.organizationId);
   const buyerTargeting = sellsThePlatform(ownOffer)
     ? {
