@@ -44,6 +44,11 @@
  * principal; a refuse to a stop ends the cycle with `stop` /
  * `refused_to_stop`, which stays the room's answer until the next cycle.
  *
+ * STAGE DEADLINES (PR-3c-4, design §8). After the plan is built, every token
+ * past its stage's deadline whose `<cycleKey>#<stageKey>#<iteration>` key is
+ * not yet in `marking.deadlines` is raised there with `notifiedAt: null`
+ * (drive-deadlines.ts). Nothing else changes: the deadline never moves work.
+ *
  * A construct-specific branch of the step that PR-3c-1 does not implement
  * throws DriveConstructNotImplementedError; this planner turns it into the
  * same fail-closed pause, so the drive never throws for a room.
@@ -79,6 +84,7 @@ import {
   workroomDriveBranchTaskId,
   workroomDriveTaskId,
 } from "./drive-plan-stage";
+import { raiseDueDeadlines } from "./drive-deadlines";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 import { evaluateWorkroomShapeConformance } from "./workroom-shape-conformance";
@@ -190,7 +196,31 @@ function gatePrincipalRef(stage: WorkShapeDefinitionContract["stages"][number]):
   return gate?.escalation?.role ?? stage.accountablePrincipalRef;
 }
 
+/**
+ * The graph drive's plan, with this tick's stage deadlines raised (PR-3c-4,
+ * design §8). A deadline never changes what the plan does: it adds the overdue
+ * notices to the marking the plan already persists (`notifiedAt: null`), one
+ * ledger line each, and lists them as `deadlinesDue` for the runner's
+ * `workroom-drive-deadline` activity. A plan that carries no readable marking
+ * (the kill-switch and unreadable pauses) raises nothing.
+ */
 export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition: WorkShapeDefinitionContract }): DrivePlan {
+  const plan = planGraphDrive(input);
+  if (!plan.marking || "raw" in plan.marking) return plan;
+  const { marking, raised } = raiseDueDeadlines(input.definition, plan.marking, input.now ?? new Date(0));
+  if (raised.length === 0) return plan;
+  return {
+    ...plan,
+    marking,
+    ledger: [
+      ...plan.ledger,
+      ...raised.map((due) => `Stage ${due.stageKey} is past its deadline (${due.description}; due ${due.dueAt}); it stays where it is and ${due.escalationRef} is told.`),
+    ],
+    deadlinesDue: raised,
+  };
+}
+
+function planGraphDrive(input: DriveResolutionInput & { definition: WorkShapeDefinitionContract }): DrivePlan {
   const definition = input.definition;
   const now = input.now ?? new Date(0);
   const cycle = projectDriveCycle(input, definition);

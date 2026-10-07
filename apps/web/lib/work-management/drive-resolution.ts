@@ -24,6 +24,7 @@ import {
 } from "./workroom-shape-conformance";
 import type { DriveReason, DriveReasonsByAction } from "./drive-conclusion";
 import type { DriveMarking, DriveRework, DriveTokenPlan } from "./drive-marking";
+import type { DueDeadline } from "./drive-deadlines";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
 import { usesGraphConstructs } from "./drive-marking";
 import { cycleCompleted, emptyPlan, ledgerFrom, planStage, projectDriveCycle } from "./drive-plan-stage";
@@ -134,6 +135,12 @@ export type DrivePlan = {
    * permits on it. Absent on every sequential plan.
    */
   rework?: DriveRework;
+  /**
+   * Graph shapes only (PR-3c-4): the stage deadlines this tick raised in the
+   * marking. The runner records a `workroom-drive-deadline` activity for them;
+   * the notice itself goes out on the next tick, once they are committed.
+   */
+  deadlinesDue?: DueDeadline[];
 };
 
 export { parseAccountablePrincipalRef, workroomDriveBranchTaskId, workroomDriveTaskId } from "./drive-plan-stage";

@@ -37,6 +37,7 @@ import {
 export { loadStandingRoomIds, STANDING_ROOM_SCAN_LIMIT } from "./workroom-drive-data";
 import { earnGraphReceipts, graphSnapshotFields, hasStoredDriveMarking, withLatchedBlockedReceipts } from "@/lib/work-management/drive-graph-tick";
 import { applyGraphDrivePlan } from "./workroom-drive-graph";
+import type { DeadlineNoticeInput } from "./workroom-drive-deadlines";
 import { earnEvidenceReceipts, type RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
 
 import { gateAtEntry } from "../quiescence-gates";
@@ -150,6 +151,8 @@ export type WorkroomDriveEffects = {
   deactivateAgentTask: (taskId: string) => Promise<void>;
   /** Revoke the permits of the stages a rework left (GPP Phase 3c PR-3c-3). Optional; graph rooms only. */
   revokeStagePermits?: (input: { workroomId: string; stageKeys: readonly string[]; now: Date }) => Promise<number>;
+  /** Tell the escalation target a stage passed its deadline (PR-3c-4). True only when sent; anything else retries next tick. */
+  notifyDeadline?: (input: DeadlineNoticeInput) => Promise<boolean>;
 };
 
 export type WorkroomDriveResult = {
@@ -631,6 +634,7 @@ export function createWorkroomDriveEffects(
     },
     notifyStall: async (input) => (await import("@/lib/work-management/workroom-stall-notice")).notifyWorkroomStall(input),
     revokeStagePermits: async (input) => (await import("@/lib/gpp/stage-permit-revocation")).revokeStagePermits(input),
+    notifyDeadline: async (input) => (await import("@/lib/work-management/workroom-deadline-notice")).notifyWorkroomDeadline(input),
     async persist(input) {
       const prisma = await loadDb();
       const activity = await prisma.$transaction(async (tx) => {

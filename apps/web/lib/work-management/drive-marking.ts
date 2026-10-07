@@ -26,8 +26,10 @@
  *   blocking gate with a refuse route, a verdict that moves it). It implements
  *   the forward move to a stage or to the success stop (PR-3c-1), parallel
  *   split and join (PR-3c-2), and refuse routes with rework edges (PR-3c-3).
- *   Every other construct-specific branch (deadline, sub-shape, a forward edge
- *   into a failure or budget stop) throws DriveConstructNotImplementedError;
+ *   A stage deadline is not a step at all (PR-3c-4): timers never change the
+ *   marking, and drive-deadlines.ts raises its notice beside the step.
+ *   Every other construct-specific branch (sub-shape, a forward edge into a
+ *   failure or budget stop) throws DriveConstructNotImplementedError;
  *   the graph planner turns that into a fail-closed pause, and with those flags
  *   off it is never reached, because the planner pauses first.
  * - REFUSE AND REWORK (PR-3c-3, design §6.2). A verdict is read only for a
@@ -475,11 +477,8 @@ export function stepDriveMarking(
 ): DriveStepResult {
   const graph = buildShapeFlowGraph(definition);
   const stagesByKey = new Map(definition.stages.map((stage) => [stage.key, stage]));
-  for (const token of marking.tokens) {
-    const node = graph.nodes.get(token.node);
-    const stage = node?.stageKey !== undefined ? stagesByKey.get(node.stageKey) : undefined;
-    if (stage?.deadline) throw new DriveConstructNotImplementedError("stage-deadline", token.node, "a marked stage declares a deadline (PR-3c-4).");
-  }
+  // A stage deadline never enters the step (PR-3c-4): timers never change M
+  // (parent §6.1 rule 8). The planner raises notices (drive-deadlines.ts).
 
   if (observations.stop) {
     const stopped = stopOfKind(graph, observations.stop);
@@ -514,7 +513,6 @@ export function stepDriveMarking(
       }
       const nextStage = node.stageKey !== undefined ? stagesByKey.get(node.stageKey) : undefined;
       if (nextStage?.subShape !== undefined) throw new DriveConstructNotImplementedError("sub-shape", next, "the next stage calls a sub-shape (PR-3c-5).");
-      if (nextStage?.deadline) throw new DriveConstructNotImplementedError("stage-deadline", next, "the next stage declares a deadline (PR-3c-4).");
       // 1-safe: a stage that already holds a token gains no second one.
       if (!holds(next)) tokens.push({ node: next, enteredAt: now.toISOString() });
     };

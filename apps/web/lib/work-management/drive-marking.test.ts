@@ -266,9 +266,11 @@ describe("stepDriveMarking: construct-specific branches throw construct_not_impl
   };
   const done = (stageKey: string) => ({ receipts: [{ stageKey, kind: "stage-evidence-recorded" }] });
 
-  it("entering, or holding, a stage with a deadline", () => {
-    throwsFor(() => stepDriveMarking(DEADLINE_FIXTURE, marking(), done("a"), NOW), "stage-deadline");
-    throwsFor(() => stepDriveMarking(DEADLINE_FIXTURE, marking({ tokens: [{ node: "stage:b", enteredAt: NOW.toISOString() }] }), { receipts: [] }, NOW), "stage-deadline");
+  it("never for a stage deadline (PR-3c-4): entering or holding one steps exactly as the twin without it", () => {
+    const atB = marking({ tokens: [{ node: "stage:b", enteredAt: NOW.toISOString() }] });
+    expect(stepDriveMarking(DEADLINE_FIXTURE, marking(), done("a"), NOW)).toEqual(stepDriveMarking(SEQUENTIAL_TWIN, marking(), done("a"), NOW));
+    expect(stepDriveMarking(DEADLINE_FIXTURE, atB, { receipts: [] }, NOW)).toEqual(stepDriveMarking(SEQUENTIAL_TWIN, atB, { receipts: [] }, NOW));
+    expect(stepDriveMarking(DEADLINE_FIXTURE, atB, done("b"), NOW)).toEqual(stepDriveMarking(SEQUENTIAL_TWIN, atB, done("b"), NOW));
   });
   it("entering a sub-shape stage", () => {
     throwsFor(() => stepDriveMarking(SUB_SHAPE_FIXTURE, marking(), done("a"), NOW), "sub-shape");
