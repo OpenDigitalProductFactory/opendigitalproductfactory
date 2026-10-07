@@ -12,6 +12,9 @@
  * vocabulary of record (`DRIVE_REASONS_BY_ACTION`). A reason the drive starts
  * emitting is a compile error here until someone decides which state it is.
  *
+ * `done` is terminal whatever the outcome: a success stop and a refusal routed
+ * to a failure stop both end the room's flow time.
+ *
  * `awaiting-trigger` is not waiting work. A standing room that finished its
  * cycle, or was asked not to interrupt, has no demand in hand; counting that gap
  * as wait would push every standing room's flow efficiency to zero and make the
@@ -48,6 +51,9 @@ const FLOW_STATE_BY_ACTION_AND_REASON: FlowStateTable = {
     empty_read: "awaiting-trigger",
     conformance_stop: "blocked",
     success: "done",
+    // A refusal routed to a declared failure stop ends the cycle. It is terminal,
+    // like success; throughput counts only success stops, so this is not credited.
+    refused_to_stop: "done",
   },
   escalate: {
     conformance_escalate: "blocked",
@@ -64,6 +70,9 @@ const FLOW_STATE_BY_ACTION_AND_REASON: FlowStateTable = {
     governed_decision: "awaiting-person",
     role_stage: "awaiting-person",
     person_stage: "awaiting-person",
+    // Sent back with its rework route spent: the work is stuck at the stage, which
+    // is waste with a cause, not routine waiting on a decision (GPP Phase 3c).
+    gate_refused: "blocked",
   },
   dispatch_agent: {
     agent_stage: "working",

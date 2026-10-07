@@ -52,6 +52,19 @@ describe("classifyDriveSegment — the live drive log (30 days to 2026-10-02)", 
   });
 });
 
+describe("refusals from the graph drive (GPP Phase 3c)", () => {
+  it("treats a refusal with no route left as stuck work with a cause", () => {
+    expect(classifyDriveSegment({ action: "attention", reason: "gate_refused" })).toEqual({
+      state: "blocked",
+      cause: "gate_refused",
+    });
+  });
+
+  it("treats a refusal routed to a failure stop as the end of the room's flow", () => {
+    expect(classifyDriveSegment({ action: "stop", reason: "refused_to_stop" })?.state).toBe("done");
+  });
+});
+
 describe("standing rooms between cycles are not waiting work (spec §5.3)", () => {
   it("does not count a finished cycle or a quiet posture toward flow time", () => {
     for (const reason of ["cycle_complete", "quiet"] as const) {
