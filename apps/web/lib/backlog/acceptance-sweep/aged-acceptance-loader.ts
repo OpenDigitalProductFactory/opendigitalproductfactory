@@ -7,7 +7,8 @@
 
 import type { Prisma } from "@dpf/db";
 
-import { acceptanceEnteredAt, ageDays, type AcceptanceStatusActivity } from "./acceptance-age";
+import { acceptanceEnteredAt, type AcceptanceStateActivity } from "./acceptance-age";
+import { acceptanceAgeDays } from "./acceptance-pool-age";
 import { ACCEPTANCE_AGED_DAYS, type AgedAcceptanceItem } from "./aged-acceptance";
 
 export type AgedAcceptanceDb = Pick<Prisma.TransactionClient, "backlogItemActivity">;
@@ -32,7 +33,7 @@ export async function loadAgedAcceptanceItems(
     select: { backlogItemId: true, kind: true, recordedAt: true, payload: true },
   });
 
-  const activitiesByItem = new Map<string, AcceptanceStatusActivity[]>();
+  const activitiesByItem = new Map<string, AcceptanceStateActivity[]>();
   for (const row of rows) {
     const list = activitiesByItem.get(row.backlogItemId);
     if (list) list.push(row);
@@ -42,7 +43,7 @@ export async function loadAgedAcceptanceItems(
   const aged: AgedAcceptanceItem[] = [];
   for (const item of awaiting) {
     const entry = acceptanceEnteredAt(activitiesByItem.get(item.id) ?? [], item.createdAt);
-    if (ageDays(entry.enteredAt, now) >= ACCEPTANCE_AGED_DAYS) {
+    if (acceptanceAgeDays(entry.enteredAt, now) >= ACCEPTANCE_AGED_DAYS) {
       aged.push({ id: item.id, ageBasis: entry.ageBasis });
     }
   }

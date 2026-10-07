@@ -4,14 +4,16 @@
 // Client-safe: no database access. The loader that measures each item's age is
 // ./aged-acceptance-loader.ts.
 
+import { ACCEPTANCE_AGED_DAYS } from "@dpf/db/acceptance-sweep-config";
+
 import type { AcceptanceEntry } from "./acceptance-age";
 
 /**
- * Days in awaiting-acceptance after which an item is aged. Two 7-day delivery
- * review points without acceptance (design §3.2). The one definition: the
- * acceptance sweep and every surface read this constant.
+ * Days in awaiting-acceptance after which an item is aged. Defined once in the
+ * acceptance-sweep config (the sweep reads the same constant); re-exported here
+ * through the client-safe subpath so client surfaces need not import the db barrel.
  */
-export const ACCEPTANCE_AGED_DAYS = 14;
+export { ACCEPTANCE_AGED_DAYS };
 
 const AWAITING_ACCEPTANCE = "awaiting-acceptance";
 

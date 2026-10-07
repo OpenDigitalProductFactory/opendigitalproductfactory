@@ -7,7 +7,7 @@
 // ceiling.
 
 import type { Prisma } from "@dpf/db";
-import type { TileMetric, TileStatus } from "@/components/shell/WorkspaceTiles";
+import type { TileMetric, TileStatus } from "@/lib/workspace-home/types";
 import {
   ACCEPTANCE_AGED_DAYS,
   agedAcceptanceShare,
