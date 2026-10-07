@@ -4,10 +4,14 @@ import { resolveDrivePlan } from "./drive-resolution";
 import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
 import { earnEvidenceReceipts, stageHasCompletingEvidence } from "./stage-evidence-receipts";
 import { stageEvidenceKinds } from "./stage-briefing";
-import { getWorkShape, readWorkShapeDefinitionContract } from "./work-shapes";
+import { getWorkShape, listWorkShapes, readWorkShapeDefinitionContract } from "./work-shapes";
+import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
+import { DEFER_ON_REFUSE_ROUTE, REFUSE_TO_STOP, REWORK_1, SHADOW_GATE } from "./__fixtures__/graph-shapes/rework";
 import {
   buildStageDecisionEvidence,
   governedDecisionStage,
+  STAGE_DECISION_CHOICE_LABEL,
+  stageDecisionChoices,
   priorStageFindings,
   readPendingGovernedDecision,
   readPendingGovernedDecisions,
@@ -160,5 +164,54 @@ describe("a recorded decision completes the governed stage through the one recei
     expect(waiting).toMatchObject({ action: "attention", reason: "governed_decision", stageKey: "decide" });
     const decided = resolveDrivePlan({ ...base, currentStageKey: "decide", receipts: receipts as never });
     expect(decided).toMatchObject({ action: "stop", reason: "success" });
+  });
+});
+
+// GPP Phase 3c PR-3c-3 (BI-8875C9DF), design §6.2: the `refuse` choice, labelled "Send back".
+describe("Send back (refuse) is offered only where the gate declares a refuse route", () => {
+  it("is labelled Send back and appended only when the stage declares a refuse route", () => {
+    expect(STAGE_DECISION_CHOICE_LABEL.refuse).toBe("Send back");
+    expect(stageDecisionChoices("The owner accepts or defers.")).toEqual(["accept", "defer"]);
+    expect(stageDecisionChoices("accepts, patches, or defers", true)).toEqual(["accept", "patch", "defer", "refuse"]);
+    expect(governedDecisionStage(readWorkShapeDefinitionContract(REWORK_1), "b")!.choices).toEqual(["accept", "defer", "refuse"]);
+    expect(governedDecisionStage(readWorkShapeDefinitionContract(REFUSE_TO_STOP), "decide")!.choices).toEqual(["accept", "defer", "refuse"]);
+    // A shadow gate that declares a route still offers it (the refusal is recorded; the gate does not hold the token).
+    expect(governedDecisionStage(readWorkShapeDefinitionContract(SHADOW_GATE), "b")!.choices).toEqual(["accept", "defer", "refuse"]);
+    // An enforced gate without a refuse route does not.
+    expect(governedDecisionStage(readWorkShapeDefinitionContract(DEFER_ON_REFUSE_ROUTE), "approve")!.choices).toEqual(["accept", "defer"]);
+  });
+
+  it("leaves every existing registry stage's offered choices unchanged: none offers Send back", () => {
+    let governed = 0;
+    for (const registryShape of [...listWorkShapes(), ...WORK_SHAPE_PRIOR_VERSIONS]) {
+      const contract = readWorkShapeDefinitionContract(registryShape);
+      for (const stage of contract.stages) {
+        const decision = governedDecisionStage(contract, stage.key);
+        if (!decision || stage.advance.kind !== "governed-decision") continue;
+        governed += 1;
+        expect(decision.choices, `${registryShape.key}@${registryShape.version}/${stage.key}`).toEqual(stageDecisionChoices(stage.advance.condition));
+        expect(decision.choices).not.toContain("refuse");
+      }
+    }
+    expect(governed).toBeGreaterThan(0);
+  });
+
+  it("validates a send-back without a date and records it with the verb sent back", () => {
+    const stage = governedDecisionStage(readWorkShapeDefinitionContract(REWORK_1), "b")!;
+    const valid = validateStageDecision({ stageKey: "b", choice: "refuse", rationale: "Evidence is missing." }, stage, now);
+    expect(valid).toEqual({ ok: true, data: { choice: "refuse", deferUntil: null, rationale: "Evidence is missing." } });
+    if (!valid.ok) return;
+    const evidence = buildStageDecisionEvidence({ stage, decision: valid.data, decidedBy: "accountable-owner-fallback", deciderName: "Alex Owner" });
+    expect(evidence).toMatchObject({ kind: "decision-record", stageKey: "b", outcome: "completed", result: { choice: "refuse" } });
+    expect(evidence.summary).toBe("Alex Owner sent back: Decide b. Evidence is missing.");
+    // A stage without a refuse route refuses the choice.
+    expect(validateStageDecision({ stageKey: "decide", choice: "refuse" }, governedDecisionStage(definition, "decide")!, now).ok).toBe(false);
+  });
+
+  it("a refused stage whose route is spent (gate_refused) is decided through the same control", () => {
+    const pending = { reason: "gate_refused", stageKey: "b", principalRef: "role:owner" };
+    expect(readPendingGovernedDecision({ workroomDrive: { pendingAttention: pending } })).toEqual({ stageKey: "b", principalRef: "role:owner" });
+    expect(readPendingGovernedDecisions({ workroomDrive: { pendingAttention: pending, pendingAttentions: [pending] } }))
+      .toEqual([{ stageKey: "b", principalRef: "role:owner" }]);
   });
 });
