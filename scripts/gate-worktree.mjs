@@ -575,6 +575,23 @@ function commandUsesWorkspace(commandLine, workspace) {
   return next === "" || /[\/\s"']/.test(next);
 }
 
+/** The parent chain of `pid` in `processRows`, nearest first; cycle-safe. */
+export function collectAncestorPids(pid, processRows) {
+  const parentOf = new Map();
+  for (const row of processRows || []) {
+    const child = Number(row?.pid);
+    const parent = Number(row?.parentPid);
+    if (Number.isInteger(child) && Number.isInteger(parent) && child > 0 && parent > 0) parentOf.set(child, parent);
+  }
+  const ancestors = [];
+  const seen = new Set([Number(pid)]);
+  for (let at = parentOf.get(Number(pid)); at !== undefined && !seen.has(at); at = parentOf.get(at)) {
+    seen.add(at);
+    ancestors.push(at);
+  }
+  return ancestors;
+}
+
 export function findConflictingLocalCiMutatorPids(
   processRows,
   { currentPid, peerOwners = [] } = {},
@@ -589,8 +606,13 @@ export function findConflictingLocalCiMutatorPids(
       peerPids.add(descendant);
     }
   }
+  // An ancestor is blocked on this gate, so it cannot be mutating the sandbox
+  // concurrently. Matching is by command line, and a launching shell's `-c`
+  // string can name the runner without being one (observed 2026-10-06: the gate
+  // waited on its own parents). Excluding an ancestor root also skips its
+  // descendants; a genuine runner beneath it still matches as its own root.
   const liveMutators = findLiveLocalCiMutatorPids(rows, {
-    excludePids: [currentPid, ...peerPids],
+    excludePids: [currentPid, ...collectAncestorPids(currentPid, rows), ...peerPids],
   });
   const rowByPid = new Map(rows.map((row) => [Number(row?.pid), row]));
   return liveMutators.filter((pid) => {
