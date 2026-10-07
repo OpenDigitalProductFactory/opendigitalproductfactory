@@ -124,8 +124,16 @@ type Db = { $queryRaw: <T>(query: TemplateStringsArray, ...values: unknown[]) =>
  * Live items (every status but done and retired) plus items done inside the
  * period, each with the links attribution reads (budget-attribution.ts). The epic's portfolio is the
  * lowest id when an epic names several, so the choice is stable.
+ *
+ * With `itemId`, only that item is loaded, whatever its status: funding
+ * approval (budget-reservation.ts) attributes one item through the same select.
  */
-export async function loadInvestmentItems(db: Db, period: { start: Date; end: Date }): Promise<InvestmentItemRow[]> {
+export async function loadInvestmentItems(
+  db: Db,
+  period: { start: Date; end: Date },
+  options: { itemId?: string } = {},
+): Promise<InvestmentItemRow[]> {
+  const itemId = options.itemId ?? null;
   const rows = await db.$queryRaw<InvestmentItemRow[]>`
     SELECT
       b."itemId"         AS "itemId",
@@ -165,8 +173,10 @@ export async function loadInvestmentItems(db: Db, period: { start: Date; end: Da
     FROM "BacklogItem" b
     LEFT JOIN "DigitalProduct" dp ON dp."id" = b."digitalProductId"
     LEFT JOIN "TaxonomyNode" tn ON tn."id" = b."taxonomyNodeId"
-    WHERE b."status" NOT IN ('done', 'retired')
-       OR (b."status" = 'done' AND b."completedAt" >= ${period.start} AND b."completedAt" < ${period.end})
+    WHERE CASE WHEN ${itemId}::text IS NOT NULL THEN b."itemId" = ${itemId}::text
+          ELSE b."status" NOT IN ('done', 'retired')
+            OR (b."status" = 'done' AND b."completedAt" >= ${period.start} AND b."completedAt" < ${period.end})
+          END
   `;
   return rows.map((r) => ({ ...r, jobSize: r.jobSize === null ? null : Number(r.jobSize) }));
 }
