@@ -294,28 +294,29 @@ The A2 inventory pins this table from `classifyConsequentialTool`, so per-call n
 
 **Objectives:**
 - **OBJ-CONVERGE:** every coworker action that needs a person is a `CoworkerActionEnvelope`, and no code creates an `AgentActionProposal`.
-- **OBJ-MEDIATION** (GPP, parent): zero dynamic direct `executeTool` sites.
-- **OBJ-NODISRUPT** (GPP): no approval that works today stops working, except the waived exceptions in §10, and every pending proposal keeps its outcome.
+- **OBJ-MEDIATION:** zero dynamic direct `executeTool` sites (GPP, parent objective).
+- **OBJ-NODISRUPT:** (GPP) no approval that works today stops working, except the waived exceptions in §10, and every pending proposal keeps its outcome.
 - **OBJ-HISTORY:** all proposal history stays readable, with no destructive data change.
 
-| ID | Acceptance | Phase |
+| ID | Objectives | Acceptance (phase) |
 |---|---|---|
-| AC-CHAR | Characterisation suites for S1 (chat and every autonomous caller), S2, S3, S4, S5, proactivity change, the v1 route, both direct sites and the leave settle path. Green on the base, and unchanged by later PRs except the deltas each PR names | A |
-| AC-INVENTORY | Consequence → window table. `writeOnly` tools. Audit class or `retainAuditParameters` for every proposal-reachable tool. Proposal-reachable ∩ `PROJECTABLE_ACTIONS` = ∅ | A |
-| AC-PROBE | A read-only per-row dry run of the real resolver and evaluator, GAID principal resolution, hook verdicts and alignment-required, with a refusal code per pending row and owner activity (`isActive`, `lastSeenAt`). Recorded before PR-B and PR-C | A (re-run before B and C) |
-| AC-INERT | After PR-A, the approve route's behaviour is unchanged for every existing envelope | A |
-| AC-NOPARK | An approved converted envelope is allowed, not re-parked or re-minted | A |
-| AC-DISPATCH | The approve route checks for the marker before `runApprovedExternalRequest`'s TaskRun branch. A TaskRun-bound converted envelope runs through the platform runner, not the external-task resume | A |
-| AC-RERAISE | Ask again on a converted envelope, then Authorize, runs the call exactly once with the marker's source | A |
-| AC-TRANSPORT | MCP transports cannot set `approvalCompletion`, `proposeBoundary` or `chatMessageId` | A |
-| AC-STRAND | Owned by `BI-5B34D277`: one gate test per post-reservation exit (`mcp-governed-execute.ts:496-526`, `:536-548`, `:586-603`, `:606-632`) finalises the envelope `failed` with the refusal as its outcome | dependency of B and C |
-| AC-RAISE | S1 (chat) and S2 mint an envelope whose fingerprint equals the call's binding fingerprint, and create zero proposal rows | B |
-| AC-RUN | Authorizing runs the exact call once. A second approve or a replay returns `settled`. A mismatched argument fingerprint returns `not-run`. `approval_outcome` is recorded once | A (runner), B (wired) |
-| AC-BOUNDARY | A propose-boundary call never executes before approval and never pauses its TaskRun on either pause site, including the forced-fallback collision. `policyProjectionAllowed` is false | B |
-| AC-LEAVE | Leave approve and reject behave as characterised (after `BI-4E192035`). The recommendation reads through `decisionInteractionId`. Guard-only items render. The manager decision resolves the DecisionInteraction. No envelope is minted. Needs-you is deduplicated by `requestId` | B |
-| AC-LEGACY | Legacy approve produces the characterised handler-visible tool, arguments, user and `{ agentId, threadId }`, and the characterised row end state, through the monitor, covering all four gate outcomes. A double approve is refused by the compare-and-set. Reject is unchanged | C |
-| AC-RATCHET-ZERO | No dynamic site. Neither file listed | C |
-| AC-UX | Chat inline card. Scheduled propose-boundary card. A legacy approve from Needs-you. The leave page. The operations-map confirm | B, C |
+| AC-CHAR | OBJ-NODISRUPT | Characterisation suites for S1 (chat and every autonomous caller), S2, S3, S4, S5, proactivity change, the v1 route, both direct sites and the leave settle path. Green on the base, and unchanged by later PRs except the deltas each PR names (phase: A) |
+| AC-INVENTORY | OBJ-CONVERGE | Consequence → window table. `writeOnly` tools. Audit class or `retainAuditParameters` for every proposal-reachable tool. Proposal-reachable ∩ `PROJECTABLE_ACTIONS` = ∅ (phase: A) |
+| AC-PROBE | OBJ-NODISRUPT | A read-only per-row dry run of the real resolver and evaluator, GAID principal resolution, hook verdicts and alignment-required, with a refusal code per pending row and owner activity (`isActive`, `lastSeenAt`). Recorded before PR-B and PR-C (phase: A (re-run before B and C)) |
+| AC-INERT | OBJ-NODISRUPT | After PR-A, the approve route's behaviour is unchanged for every existing envelope (phase: A) |
+| AC-NOPARK | OBJ-CONVERGE | An approved converted envelope is allowed, not re-parked or re-minted (phase: A) |
+| AC-DISPATCH | OBJ-CONVERGE | The approve route checks for the marker before `runApprovedExternalRequest`'s TaskRun branch. A TaskRun-bound converted envelope runs through the platform runner, not the external-task resume (phase: A) |
+| AC-RERAISE | OBJ-CONVERGE | Ask again on a converted envelope, then Authorize, runs the call exactly once with the marker's source (phase: A) |
+| AC-TRANSPORT | OBJ-CONVERGE | MCP transports cannot set `approvalCompletion`, `proposeBoundary` or `chatMessageId` (phase: A) |
+| AC-STRAND | OBJ-NODISRUPT | Owned by `BI-5B34D277`: one gate test per post-reservation exit (`mcp-governed-execute.ts:496-526`, `:536-548`, `:586-603`, `:606-632`) finalises the envelope `failed` with the refusal as its outcome (phase: dependency of B and C) |
+| AC-RAISE | OBJ-CONVERGE | S1 (chat) and S2 mint an envelope whose fingerprint equals the call's binding fingerprint, and create zero proposal rows (phase: B) |
+| AC-RUN | OBJ-CONVERGE | Authorizing runs the exact call once. A second approve or a replay returns `settled`. A mismatched argument fingerprint returns `not-run`. `approval_outcome` is recorded once (phase: A (runner), B (wired)) |
+| AC-BOUNDARY | OBJ-CONVERGE | A propose-boundary call never executes before approval and never pauses its TaskRun on either pause site, including the forced-fallback collision. `policyProjectionAllowed` is false (phase: B) |
+| AC-LEAVE | OBJ-CONVERGE, OBJ-NODISRUPT | Leave approve and reject behave as characterised (after `BI-4E192035`). The recommendation reads through `decisionInteractionId`. Guard-only items render. The manager decision resolves the DecisionInteraction. No envelope is minted. Needs-you is deduplicated by `requestId` (phase: B) |
+| AC-LEGACY | OBJ-NODISRUPT, OBJ-HISTORY | Legacy approve produces the characterised handler-visible tool, arguments, user and `{ agentId, threadId }`, and the characterised row end state, through the monitor, covering all four gate outcomes. A double approve is refused by the compare-and-set. Reject is unchanged (phase: C) |
+| AC-RATCHET-ZERO | OBJ-MEDIATION | No dynamic site. Neither file listed (phase: C) |
+| AC-UX | OBJ-NODISRUPT | Chat inline card. Scheduled propose-boundary card. A legacy approve from Needs-you. The leave page. The operations-map confirm (phase: B, C) |
+| AC-OVERRIDE | OBJ-NODISRUPT | A non-delegate admin can approve or decline with a reason; the record and the card name the admin, the owner and the reason. A non-admin non-delegate is still refused, and the delegate path is unchanged (founder answer to W6; plan row B8) (phase: B) |
 
 ## 7. Research and benchmarking
 
