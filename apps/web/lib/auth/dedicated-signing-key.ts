@@ -7,6 +7,11 @@
 // now provisions both (scripts/installer/dedicated-signing-keys-contract.test.mjs),
 // so one secret no longer signs sessions, reach links and receipts.
 //
+// BI-231A4BC7 extends the same contract to self-upgrade target bindings
+// (lib/self-upgrade/target-binding.ts, DPF_SELF_UPGRADE_TARGET_BINDING_SECRET)
+// and delivery task hub cursors (lib/work-capsules/delivery-task-hub-store.ts,
+// DPF_DELIVERY_TASK_CURSOR_SECRET), with one cutoff for all four handle kinds.
+//
 // Rotation follows WWMD DI-BE92FB0A3417:
 // - Dedicated key set: SIGN with it. VERIFY with it first; a handle that fails
 //   is re-checked under AUTH_SECRET / NEXTAUTH_SECRET only before
@@ -31,7 +36,7 @@ export type SigningKeyCandidate = { secret: string; source: SigningKeySource };
 /**
  * End of the grace window: about 30 days after this change ships. After it a
  * handle signed with the session secret is refused on any install that has a
- * dedicated key. One constant for both handle kinds, so the window is stated once.
+ * dedicated key. One constant for every handle kind, so the window is stated once.
  */
 export const SESSION_SECRET_GRACE_CUTOFF = new Date("2026-11-09T00:00:00.000Z");
 

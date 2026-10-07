@@ -139,4 +139,30 @@ describe("self-upgrade target binding — dedicated signing key (BI-231A4BC7)", 
     const overlong = createSelfUpgradeTargetBinding(TARGET, { now: NOW, secret: SESSION, ttlMs: 24 * 60 * 60 * 1_000 });
     expect(verifySelfUpgradeTargetBinding(overlong, { now: NOW }).ok).toBe(false);
   });
+
+  it("refuses an AUTH_SECRET-signed binding issued in the future", () => {
+    vi.stubEnv("DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", DEDICATED);
+    const futureDated = createSelfUpgradeTargetBinding(TARGET, { now: new Date(NOW.getTime() + 60_000), secret: SESSION });
+    expect(verifySelfUpgradeTargetBinding(futureDated, { now: NOW })).toEqual({ ok: false, error: "signature-mismatch" });
+  });
+
+  it("logs each grace-window use without the secret or the token", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const inFlight = createSelfUpgradeTargetBinding(TARGET, { now: NOW, secret: SESSION });
+      vi.stubEnv("DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", DEDICATED);
+      verifySelfUpgradeTargetBinding(inFlight, { now: NOW });
+      expect(warn).toHaveBeenCalledTimes(1);
+      const line = String(warn.mock.calls[0]?.[0]);
+      expect(line).toContain("self-upgrade-target-binding");
+      expect(line).not.toContain(SESSION);
+      expect(line).not.toContain(inFlight);
+
+      warn.mockClear();
+      verifySelfUpgradeTargetBinding(createSelfUpgradeTargetBinding(TARGET, { now: NOW }), { now: NOW });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

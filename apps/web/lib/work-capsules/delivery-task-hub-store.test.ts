@@ -221,4 +221,26 @@ describe("delivery task cursor signing key (BI-231A4BC7)", () => {
 
     expect(decodeDeliveryTaskCursor(encodeDeliveryTaskCursor(CURSOR))).toEqual(CURSOR);
   });
+
+  it("decodes a cursor the pre-upgrade portal signed with AUTH_SECRET until the grace cutoff, and not after", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      vi.stubEnv("AUTH_SECRET", "session-secret");
+      vi.stubEnv("DPF_DELIVERY_TASK_CURSOR_SECRET", "");
+      const inFlight = encodeDeliveryTaskCursor(CURSOR);
+      vi.stubEnv("DPF_DELIVERY_TASK_CURSOR_SECRET", "dedicated-cursor-secret");
+
+      vi.setSystemTime(new Date("2026-11-08T23:59:59.000Z"));
+      expect(decodeDeliveryTaskCursor(inFlight)).toEqual(CURSOR);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain("delivery-task-cursor");
+
+      vi.setSystemTime(new Date("2026-11-09T00:00:00.000Z"));
+      expect(() => decodeDeliveryTaskCursor(inFlight)).toThrow(/cursor/i);
+    } finally {
+      vi.useRealTimers();
+      warn.mockRestore();
+    }
+  });
 });

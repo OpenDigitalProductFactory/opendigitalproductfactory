@@ -781,6 +781,17 @@ if [ "$(dpf_env_ensure_secret_hex DPF_DELEGATION_RECEIPT_SECRET .env 32 \
   info "Generated DPF_DELEGATION_RECEIPT_SECRET in .env"
 fi
 
+# Signing keys for self-upgrade target bindings and delivery task hub cursors
+# (BI-231A4BC7), so AUTH_SECRET no longer signs them. Same rules as above.
+if [ "$(dpf_env_ensure_secret_hex DPF_SELF_UPGRADE_TARGET_BINDING_SECRET .env 32 \
+  '# Signing key for self-upgrade target bindings (BI-231A4BC7). Distinct from every other secret; never rotated by the installer.')" != "kept" ]; then
+  info "Generated DPF_SELF_UPGRADE_TARGET_BINDING_SECRET in .env"
+fi
+if [ "$(dpf_env_ensure_secret_hex DPF_DELIVERY_TASK_CURSOR_SECRET .env 32 \
+  '# Signing key for delivery task hub cursors (BI-231A4BC7). Distinct from every other secret; never rotated by the installer.')" != "kept" ]; then
+  info "Generated DPF_DELIVERY_TASK_CURSOR_SECRET in .env"
+fi
+
 # Inngest signing and event keys (BI-3267763F). The portal and the inngest
 # service verify each other with them, so a value published in the repository
 # lets anyone who can reach /api/inngest forge signed invocations. Filled when
