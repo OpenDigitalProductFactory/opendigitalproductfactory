@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   decodeDeliveryTaskCursor,
@@ -193,5 +193,54 @@ describe("delivery task hub store", () => {
       observedAt: "2026-09-04T12:05:00.000Z",
       asyncOperation: { status: "completed" },
     });
+  });
+});
+
+// BI-231A4BC7: delivery task cursors read DPF_DELIVERY_TASK_CURSOR_SECRET and fall
+// back to AUTH_SECRET; no install path provisions the key. Same fix as the
+// self-upgrade target binding: blank counts as unset, and the dedicated key signs.
+describe("delivery task cursor signing key (BI-231A4BC7)", () => {
+  const CURSOR = { id: "row-40", updatedAt: "2026-09-01T12:00:00.000Z", windowStart: "2026-08-05T12:00:00.000Z" };
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("signs with the dedicated key when it is set, not the session secret", () => {
+    vi.stubEnv("AUTH_SECRET", "session-secret");
+    vi.stubEnv("DPF_DELIVERY_TASK_CURSOR_SECRET", "dedicated-cursor-secret");
+    const cursor = encodeDeliveryTaskCursor(CURSOR);
+
+    expect(decodeDeliveryTaskCursor(cursor, { secret: "dedicated-cursor-secret" })).toEqual(CURSOR);
+    expect(() => decodeDeliveryTaskCursor(cursor, { secret: "session-secret" })).toThrow(/cursor/i);
+  });
+
+  it("treats a blank dedicated key as unset, as docker-compose passes it to an install whose .env lacks it", () => {
+    vi.stubEnv("AUTH_SECRET", "session-secret");
+    vi.stubEnv("DPF_DELIVERY_TASK_CURSOR_SECRET", "");
+
+    expect(decodeDeliveryTaskCursor(encodeDeliveryTaskCursor(CURSOR))).toEqual(CURSOR);
+  });
+
+  it("decodes a cursor the pre-upgrade portal signed with AUTH_SECRET until the grace cutoff, and not after", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      vi.stubEnv("AUTH_SECRET", "session-secret");
+      vi.stubEnv("DPF_DELIVERY_TASK_CURSOR_SECRET", "");
+      const inFlight = encodeDeliveryTaskCursor(CURSOR);
+      vi.stubEnv("DPF_DELIVERY_TASK_CURSOR_SECRET", "dedicated-cursor-secret");
+
+      vi.setSystemTime(new Date("2026-11-08T23:59:59.000Z"));
+      expect(decodeDeliveryTaskCursor(inFlight)).toEqual(CURSOR);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain("delivery-task-cursor");
+
+      vi.setSystemTime(new Date("2026-11-09T00:00:00.000Z"));
+      expect(() => decodeDeliveryTaskCursor(inFlight)).toThrow(/cursor/i);
+    } finally {
+      vi.useRealTimers();
+      warn.mockRestore();
+    }
   });
 });

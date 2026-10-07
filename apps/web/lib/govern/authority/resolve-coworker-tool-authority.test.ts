@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   deriveAllowedRouteContexts,
@@ -7,6 +7,7 @@ import {
   resolveBoundInitiativeReviewBinding,
   resolveBoundInitiativeReviewItem,
   resolveInitiativeAuthorityContext,
+  resolveTrustedInitiativeItemId,
 } from "./resolve-coworker-tool-authority";
 
 describe("deriveAllowedRouteContexts", () => {
@@ -295,5 +296,33 @@ describe("deriveCoworkerApprovalPolicy", () => {
       hitlPolicy: "always",
       serverBoundInitiativeReview: true,
     })).toBe("all");
+  });
+});
+
+describe("resolveTrustedInitiativeItemId (BI-099A0BA3, security review L1)", () => {
+  const task = (taskRunId: string) => ({ taskRunId, parentTaskRunId: null, authorityScope: [], a2aMetadata: {} });
+
+  it("takes an external run's subject from its bound packet", async () => {
+    const loadStewardItemId = vi.fn();
+    await expect(resolveTrustedInitiativeItemId({
+      task: task("TR-MCP-1"), toolName: "record_initiative_evidence", boundItemId: "BI-BOUND", loadStewardItemId,
+    })).resolves.toBe("BI-BOUND");
+    expect(loadStewardItemId).not.toHaveBeenCalled();
+  });
+
+  it("takes a steward run's subject from the packet the platform issued its room, never from model arguments", async () => {
+    const loadStewardItemId = vi.fn(async () => "BI-ROUTED");
+    await expect(resolveTrustedInitiativeItemId({
+      task: task("TR-SCHED-ABCD1234"), toolName: "record_initiative_evidence", boundItemId: null, loadStewardItemId,
+    })).resolves.toBe("BI-ROUTED");
+    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-ABCD1234");
+  });
+
+  it("asks nothing for another tool or a non-scheduled run", async () => {
+    const loadStewardItemId = vi.fn(async () => "BI-ROUTED");
+    await expect(resolveTrustedInitiativeItemId({ task: task("TR-SCHED-1"), toolName: "record_workroom_evidence", boundItemId: null, loadStewardItemId })).resolves.toBeNull();
+    await expect(resolveTrustedInitiativeItemId({ task: task("TR-CHAT-1"), toolName: "record_initiative_evidence", boundItemId: null, loadStewardItemId })).resolves.toBeNull();
+    await expect(resolveTrustedInitiativeItemId({ task: null, toolName: "record_initiative_evidence", boundItemId: null, loadStewardItemId })).resolves.toBeNull();
+    expect(loadStewardItemId).not.toHaveBeenCalled();
   });
 });

@@ -15,6 +15,7 @@ status: draft
 | First consumer | BI-580A970A (EP-MBSE-WORKROOM-SPINE): the R2D reference room, a linear spine that forks at Deploy, one branch per target |
 | Normative owner | [GPP](../../architecture/gated-permissions-process.md) §7, §12.4 |
 | Verified against | `origin/main` at `879b344fa1`. Review revisions re-checked on `origin/main` at `6ce2f7e445`, which adds #5977 (PR-3b-4/5). #5977 touches none of the drive files cited here. Line numbers in `work-shapes.ts`, `decompile.ts`, `emit.ts` and `work-shape-binding-diff.ts` are taken from `6ce2f7e445` wherever that is stated. |
+| Implementation status | PR-3c-1 to PR-3c-5 merged and **every graph construct is enabled**: parallel split/join and rework edges (incl. refuse routes) since PR-3c-2 and PR-3c-3, stage deadline (PR-3c-4) and sub-shape (PR-3c-5) since BI-086DC167. They had been held off on 2026-10-07 because a graph marking was discarded at every UTC midnight; BI-086DC167 made a marking one run that crosses calendar boundaries (§4.2). |
 
 ## 1. Problem
 
@@ -127,7 +128,7 @@ The persisted state gains an **optional** `marking` block inside the existing
 // workspaceState.workroomDrive (existing keys unchanged), plus, only for graph shapes:
 marking?: {
   format: "drive-marking/1";
-  /** The cycle this marking belongs to (projectWorkShapeCycleBoundary's cycleKey). A new cycle starts fresh (§4.2). */
+  /** The RUN key: projectWorkShapeCycleBoundary's cycleKey on the day this run started. Fixed while the run is in flight (§4.2, BI-086DC167). */
   cycleKey: string;
   /** 1-safe. Stage and join-arrival tokens, sorted by node then from (the interpreter's GppToken). */
   tokens: Array<{
@@ -145,7 +146,7 @@ marking?: {
   iterations: Record<string, number>;
   /** Times each rework edge (edge element id) has been taken. Mirrors GppShapeMarking.reworkTaken. */
   reworkTaken: Record<string, number>;
-  /** Deadline notices by key `<cycleKey>#<stageKey>#<iteration>`: raised once, notified at least once (§8). */
+  /** Deadline notices by key `<cycleKey>#<stageKey>#<iteration>` (`cycleKey` is the run key): raised once, notified at least once (§8). */
   deadlines: Record<string, { raisedAt: string; notifiedAt: string | null }>;
   /** Sub-shape children by key `<cycleKey>#<stageKey>#<iteration>` (§9). */
   children: Record<string, { capsuleId: string; ref: string }>;
@@ -153,7 +154,9 @@ marking?: {
 pendingAttentions?: Array<{ principalRef: string | null; stageKey: string; reason: string }>;
 ```
 
-A receipt gains an optional `iteration?: number`. Absent means `0`.
+A receipt gains an optional `iteration?: number`. Absent means `0`. A graph receipt also carries an
+optional `runKey?: string` (BI-086DC167, §4.2). Absent means "every run", which is the meaning of
+every sequential receipt and every receipt written before BI-086DC167.
 
 ### 4.2 Why this shape
 
@@ -205,13 +208,44 @@ A receipt gains an optional `iteration?: number`. Absent means `0`.
   - The `construct_not_executable` and `marking_unreadable` pauses keep the stored `stageKey` and the
     stored marking, instead of `emptyPlan`'s nulls.
   - Turning the kill switch off again resumes the room from the same marking.
-- **A marking belongs to one cycle (review item 4).** `marking.cycleKey` records the cycle. When
-  `projectWorkShapeCycleBoundary` yields a different `cycleKey`, the drive discards the old marking
-  and starts fresh from the shape's start, as the sequential drive does after `cycle_complete`.
-  - Deadline keys and child idempotency keys carry the cycle key.
-  - Without it, a new cycle's child would resolve to the previous cycle's completed room:
-    `createWorkCapsule` returns the existing row for an existing `idempotencyKey`
-    (`work-capsule-store.ts:130-133`). A deadline would also never fire again.
+- **A marking is one run, and a run crosses calendar boundaries (BI-086DC167, revising review
+  item 4).** PR-3c-1 scoped a marking to the tick's cycle and discarded it when the cycle key
+  changed. A shape's cycle key is `<key>@<version>:<UTC date>` for every trigger class
+  (`work-shapes.ts:510`, through `projectDriveCycle`), so every graph room restarted at UTC midnight:
+  a deadline of a day or more never came due, a sub-shape child running at midnight was abandoned,
+  and multi-day parallel or rework runs could not complete. The sequential drive never had this
+  defect: its `stageKey` survives midnight and a new pass starts only after `stop/success`. The rule
+  now matches it.
+  - `marking.cycleKey` is the **run key**: the calendar cycle key of the day the run started, in
+    exactly the existing format. It does not change while the run is in flight.
+  - `readStoredDriveMarking` keeps a run that has any token left, whatever the date. It starts a
+    fresh run only when the stored run has **concluded** (no token left) **and** the tick's calendar
+    key differs from the run key. The concluded run comes back as `previous`. An unreadable marking
+    still pauses with `marking_unreadable`.
+  - So at most one run starts per calendar key, and the run key keeps deadline keys and child
+    idempotency keys unique. Without that, a new run's child would resolve to the previous run's
+    completed room: `createWorkCapsule` returns the existing row for an existing `idempotencyKey`
+    (`work-capsule-store.ts:130-133`). A deadline would also never fire again. The guard test in
+    `drive-marking-durable.test.ts` proves at most one run starts per calendar key.
+  - The **calendar** key stays in the snapshot's and each token's `lastCycleKey`. It bounds the
+    writeback latch (one retry per calendar day) and the cycle-complete sleep.
+  - The success sleep **and** the `refused_to_stop` hold key on the calendar day the run concluded
+    (`priorDrive.cycleKey`), not on the run key. A run that started on an earlier day and concluded
+    today sleeps (or stays stopped) for the rest of today, as a sequential room does. Both persist
+    the **concluded** marking. Persisting a fresh one would start the next run a day early, keyed
+    and clocked from the sleeping day. A run concluded under today's key also sleeps after a quiet
+    or paused tick, so no second run starts under the same key.
+  - Only a concluded run's live children are carried into the fresh run, so they are abandoned,
+    never orphaned. A run in flight keeps its children itself.
+  - **Receipts are scoped to their run.** The graph earns every receipt (`earnGraphReceipts`) and
+    every latched `blocked` receipt with the marking's run key. A receipt that carries a run key
+    completes a stage, or latches it, only within that run, so a new run never replays the
+    previous run's receipts. A receipt without one keeps its meaning. Reuse of sequential receipts
+    across days is a separate defect (BI-853120EE). It is deliberately not changed here, because
+    the sequential path stays byte-identical (the PR-3c-1 golden reproduces).
+  - The persist merge compares **run keys** on the graph path. A snapshot that carries no marking
+    is on the row's run. So a receipt recorded during the tick that crosses midnight is kept.
+    Sequential snapshots still compare `lastCycleKey`.
 - **The writeback latch is per token (review blocker 2).** `writebackLatchHolds` returns `false`
   whenever `prior.stageKey !== stageKey` (`writeback-latch.ts:53-54`). The prior it receives is
   room-level, built from the snapshot's single `stageKey` (`workroom-drive-state.ts:51-58`). So every
@@ -572,9 +606,16 @@ For the guard to see what the shape says, the decompiler must carry four things 
   (§6.1 table, "Cancellation region / interrupting boundary event"). A person who sees the notice
   can record a refuse verdict, and that verdict routes. See Q3.
 - **Idempotency.**
-  - The key is `<cycleKey>#<stageKey>#<iteration>`. A rework starts a new iteration with a fresh
-    `enteredAt`, so it can owe a new notice. A new cycle starts a fresh marking (§4.2), so the same
-    stage can be noticed again next cycle. The same cycle and iteration never raise twice.
+  - The key is `<cycleKey>#<stageKey>#<iteration>`, where `cycleKey` is the marking's **run key**
+    (BI-086DC167, §4.2): the calendar key of the day the run started, unchanged while the run is in
+    flight. So a deadline of any length, days included, comes due once, measured from the token's
+    own `enteredAt`, even across UTC midnight. A rework starts a new iteration with a fresh
+    `enteredAt`, so it can owe a new notice. A new run starts only after the previous one concluded
+    (§4.2), so the same stage can be noticed again in the next run. The same run and iteration never
+    raise twice.
+  - Until BI-086DC167 the marking was discarded at every UTC midnight, so a deadline of a day or
+    more never came due, and the flag was held off (decision 2026-10-07). It is on since
+    BI-086DC167, with `drive-parity-deadline.test.ts` and the runner suites on two-day deadlines.
   - Notification is **at least once**. The notice is sent on the tick *after* the snapshot carrying
     the key commits under the existing compare-and-set (`workroom-drive.ts:671-681`).
     `notifiedAt` is then written on the next persist. A failed send leaves `notifiedAt` null and
@@ -602,8 +643,13 @@ A sub-shape stage runs its child as a **separate Workroom**, pinned to the exact
   through `createWorkCapsule`, as the system actor.
   - `idempotencyKey = "sub-shape:<parentCapsuleId>:<cycleKey>:<stageKey>:<iteration>"`. This is safe
     under retries, because an existing key returns the existing room (`work-capsule-store.ts:130-133`).
-    The cycle key is needed because the same return would otherwise hand a new cycle the previous
-    cycle's completed child.
+    `cycleKey` is the marking's **run key** (BI-086DC167, §4.2): the calendar key of the day the
+    run started, unchanged while the run is in flight. It is needed because the same return would
+    otherwise hand a new run the previous run's completed child. Because the key does not change at
+    UTC midnight, a child still running across midnight is neither abandoned nor created twice.
+    Until BI-086DC167 the parent's marking was discarded at midnight, which abandoned the child and
+    restarted the parent, so the flag was held off (decision 2026-10-07). It is on since
+    BI-086DC167, with `drive-parity-sub-shape.test.ts` and the runner suite.
   - `scopeClaims = withWorkShapeClaim([], stage.subShape)`.
   - Its owner is the parent's owner.
   - The drive writes a `contains` relation from parent to child, through the same path the nesting
@@ -624,6 +670,9 @@ A sub-shape stage runs its child as a **separate Workroom**, pinned to the exact
     `sub_shape_stopped` to its owner, quoting the child's stop disposition. The token waits, as the
     interpreter's `child-stop` rule says. A person may then record a refuse verdict on a gated
     parent stage (rework) or a failure stop. See Q2.
+- **A concluded run with a live child.** Only when the parent's run has concluded (no token
+  left) and the next run starts are the concluded run's live children carried into the fresh
+  marking, so they are abandoned, never orphaned (§4.2).
 - **Rework across a sub-shape stage.** The rework starts a new iteration and so a new child. In
   one transaction, `abandonChild` sets the previous child `abandoned` with a reason and deletes its
   parent→child `contains` row.
@@ -682,14 +731,18 @@ A sub-shape stage runs its child as a **separate Workroom**, pinned to the exact
 | AC-3C-PARALLEL-PARITY | OBJ-3C-MARKING, OBJ-3C-PARITY | Over seeded event sequences on the parallel fixtures, including a four-branch fork, the drive's marked stages and stop equal the reference interpreter's after every prefix, and the parallel-split-join flag is enabled only in that change. |
 | AC-3C-REWORK-PARITY | OBJ-3C-MARKING, OBJ-3C-PARITY, OBJ-3C-ACCOUNTABLE | Over seeded sequences of receipts and gate verdicts, the drive matches the interpreter on refuse routes to earlier stages and to stops, on the bounded counter reaching the budget stop, on a refuse whose route is exhausted with no budget stop keeping the token, on shadow gates, and on defer holding a refuse-route stage (DI-0D9DFB0FC0EF); the rework-edge flag is enabled only in that change. |
 | AC-3C-DEADLINE-PARITY | OBJ-3C-MARKING, OBJ-3C-PARITY, OBJ-3C-ACCOUNTABLE | Deadline events never change the drive's or the interpreter's marking, the drive raises exactly one deadline notice per stage iteration and retries an unsent notice, and the stage-deadline flag is enabled only in that change. |
+| AC-DEADLINE-MULTIDAY | OBJ-3C-MARKING, OBJ-3C-ACCOUNTABLE | A 48-hour stage deadline is raised once, at 48 hours, and notified once, across the calendar boundaries it spans (BI-086DC167; `workroom-drive-cross-cycle.test.ts`); the stage-deadline flag is enabled only in that change. |
 | AC-3C-SUBSHAPE-PARITY | OBJ-3C-MARKING, OBJ-3C-PARITY, OBJ-3C-CONTAINMENT | A sub-shape stage creates exactly one contained child room per cycle and iteration pinned to the declared version, removes the containment row when the child completes or is abandoned, a child success advances the parent exactly as a completing receipt does in the interpreter, a child failure or budget stop holds the parent with attention to its owner, and the sub-shape flag is enabled only in that change. |
+| AC-CHILD-SURVIVES-BOUNDARY | OBJ-3C-MARKING, OBJ-3C-CONTAINMENT | A sub-shape child running across UTC midnight keeps its key and its room, is not abandoned, no second child is created, and its success still advances the parent (BI-086DC167; `workroom-drive-cross-cycle.test.ts`); the sub-shape flag is enabled only in that change. |
 | AC-3C-SUBSHAPE-NO-WIDEN | OBJ-3C-CONTAINMENT | The compiler refuses a document whose sub-shape grants or stage tools exceed the parent's grants (D-9), or whose sub-shape reference does not resolve or forms a cycle (D-10). |
 | AC-3C-FAILCLOSED | OBJ-3C-FAILCLOSED | A registry shape that uses a construct whose executable flag is off makes the drive pause with construct_not_executable naming the construct, and the registry guard test fails for any graph shape that is unsound, not executable or not on the allow list. |
 | AC-3C-CONFORMANCE | OBJ-3C-MARKING, OBJ-3C-NODISRUPT | Flow-aware conformance raises no out-of-order deviation for legal split, join and rework moves, still raises one for an illegal move, and returns results identical to today's for sequential shapes. |
 | AC-3C-REBIND | OBJ-3C-FAILCLOSED, OBJ-3C-CONTAINMENT | A rebind is refused with marking_not_mappable while a room holds more than one token, a token inside a parallel block, a rework counter, or a live child room. |
 | AC-3C-FLAG-FLIP | OBJ-3C-PARITY | In each construct's change, the not-executable test shows exactly that construct's finding removed and every other construct still refused. |
 | AC-3C-BUILD-STUDIO | OBJ-3C-NODISRUPT | No change in this phase touches the Build Studio libraries, packs or routes. |
-| AC-3C-MARKING-DURABLE | OBJ-3C-MARKING, OBJ-3C-FAILCLOSED | For a graph shape every persisted drive snapshot carries a marking: a plan without one copies the stored marking forward, a malformed marking is kept verbatim, a room paused by the kill switch resumes the same marking when the flag returns, a room that goes quiet and live again keeps its rework counters, and a new cycle starts a fresh marking. |
+| AC-3C-MARKING-DURABLE | OBJ-3C-MARKING, OBJ-3C-FAILCLOSED | For a graph shape every persisted drive snapshot carries a marking: a plan without one copies the stored marking forward, a malformed marking is kept verbatim, a room paused by the kill switch resumes the same marking when the flag returns, a room that goes quiet and live again keeps its rework counters, a run in flight keeps its marking across a calendar boundary, and a fresh run starts only after the stored run concluded, under a new calendar key (BI-086DC167). |
+| AC-GRAPH-CROSS-CYCLE | OBJ-3C-MARKING | A graph run whose tokens are in flight at a calendar boundary keeps its marking: token clocks, iterations, rework counters and children (BI-086DC167; `workroom-drive-cross-cycle.test.ts`). |
+| AC-RUN-UNIQUE | OBJ-3C-MARKING | At most one run starts per calendar key, each keyed by the day it started, and a receipt earned in one run never completes or latches a stage in another (BI-086DC167; the guard in `drive-marking-durable.test.ts`). |
 | AC-3C-BRANCH-LATCH | OBJ-3C-MARKING, OBJ-3C-FAILCLOSED | Each concurrent agent branch that produces no writeback is dispatched at most once per cycle and then latches, and a branch task is deactivated in the tick its token leaves the stage. |
 | AC-3C-CONCLUDED | OBJ-3C-ACCOUNTABLE | Every drive reason introduced in this phase is registered with a blockage or in-motion meaning, so the drive conclusion never reports it as unconcluded. |
 

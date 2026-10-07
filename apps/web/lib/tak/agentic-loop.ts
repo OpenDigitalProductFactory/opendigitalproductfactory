@@ -1024,7 +1024,7 @@ export type RunAgenticLoopParams = {
    * call records the same token id in ToolExecution audit rows.
    */
   apiTokenId?: string | null;
-  tokenScope?: "read" | "write" | "admin";
+  tokenScope?: "read" | "write" | "admin"; tokenGrantScopes?: string[]; // nested governed dispatch is authorized against these (BI-F8C661D0)
   /**
    * Governed Hermes learning Slice 1: active coworker skill for this run.
    * When set, every governed tool call records the same skillId in
@@ -2423,7 +2423,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             threadId,
             taskRunId: taskRunId ?? undefined,
             apiTokenId: apiTokenId ?? undefined,
-            tokenScope: params.tokenScope,
+            tokenScope: params.tokenScope, tokenGrantScopes: params.tokenGrantScopes,
             skillId: tracker.activeSkillId ?? undefined,
             // In-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS
             // to the tool surface (actions/agent-coworker.ts). Flag the turn so

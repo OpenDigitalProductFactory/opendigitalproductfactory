@@ -384,3 +384,23 @@ BI-7A4E70E9. Independent review and provider-verified coverage are pending.
 No initiative scope baseline exists for BI-02E5CE5A. The independent baseline
 request currently depends on the routing repair recorded against BI-EE99767C.
 This draft is not implementation authorization or evidence of delivered recovery.
+
+
+## Bounded source repair evidence — 2026-10-07
+
+The operator's recovery authorization permits source repair while the independent
+baseline-reader path is unavailable. It does not waive review, publication,
+production integrity or grants. The baseline gate remains unrun.
+
+The first repair narrows legacy process detection to the invoked Node entry point
+or Docker build context and retains ancestry-based descendant fencing. A shell
+payload or unrelated argument naming the runner is not an executable identity.
+Quoted executable/script paths are covered; POSIX `ps` text cannot reconstruct
+lost argument boundaries, so this is not proof of the full host-worker contract.
+Lease cleanup shares an in-flight call and remembers completion only after success;
+a rejected call can be retried without discarding the run result.
+
+The gate and lease-supervisor suites passed 57 tests locally. Two new admission
+regressions failed before the repair. This evidence does not satisfy VER-IT-1 or
+VER-IT-2: host-worker single execution, automatic retry/fairness, DNS injection,
+offline restoration and full document-lifecycle acceptance remain outstanding.

@@ -458,6 +458,13 @@ export const EXIT_BUILDER_RESOURCE_EXHAUSTED = 6;
  * Before this, those paths exited 1 and were recorded as a reasonless `failed`.
  */
 export const EXIT_RUNNER_PREREQUISITE_UNAVAILABLE = 8;
+/**
+ * BI-277ECBDB: before claiming, the gate found that NO slot's PostgreSQL
+ * container can run (it tried to start each stopped one). Nothing was claimed
+ * and nothing was graded. Not retryable as-is: the same command fails the same
+ * way until the container runs, so the status names the container and remedy.
+ */
+export const EXIT_SLOT_SUBSTRATE_UNAVAILABLE = 9;
 export const EXIT_VITEST_RUNNER_TERMINATION = 86;
 /**
  * The local-CI child was killed by a SIGNAL rather than exiting (BI-F22B4EEE).

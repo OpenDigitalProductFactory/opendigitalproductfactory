@@ -51,13 +51,26 @@ export function classifyOwnerAttentionLane(
     // reservation so a waiting lead is never batched into a digest (BI-A36CF68D).
     return decision("needs-you-now", "A customer is waiting on a reply.", true, appliedLevel);
   }
+  if (item.source === "coworker-envelope" && item.envelope?.expiredUnanswered) {
+    // The window closed with nobody answering (BI-0012E6CA). Nothing is held on
+    // it any more — the coworker was told to carry on — so it waits in the
+    // low-urgency review with "Ask again" rather than inflating today's count.
+    // A deep link to it still opens it (the inbox pins the requested card).
+    return decision(
+      "weekly-digest",
+      "Nobody answered this request in time and nothing is waiting on it; ask again if it is still wanted.",
+      false,
+      appliedLevel,
+    );
+  }
   if (item.source === "coworker-envelope") {
-    // A governed coworker is HELD until this employee decides, and the approval
-    // window is minutes wide. Batching it into a digest guarantees it expires
+    // A governed coworker is HELD until this employee decides. An outward
+    // request's window is minutes wide and even a durable one closes in days
+    // (approval-lifetime.ts); batching it into a digest risks it expiring
     // unanswered, so it is hard-floored like a waiting guest (BI-7CB2CCDE).
     return decision(
       "needs-you-now",
-      "A coworker cannot act until you decide, and the window closes soon.",
+      "A coworker cannot act until you decide, and the request closes if nobody answers.",
       true,
       appliedLevel,
     );

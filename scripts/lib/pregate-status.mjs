@@ -36,6 +36,7 @@
 // in the headline, not FAIL with a buried metadata line.
 
 import { hasBoundDocumentationEvidence, isTestStubGateRecord } from "./local-ci-gate-state.mjs";
+import { SLOT_SUBSTRATE_UNAVAILABLE_STATUS } from "./local-ci-slot-substrate.mjs";
 
 /** Terminal verdicts, ordered worst-to-best for slot reconciliation. */
 export const PREGATE_VERDICTS = Object.freeze([
@@ -95,7 +96,23 @@ const BLOCKED_GATE_STATUSES = new Set([
   "blocked_sandbox_drift",
   "blocked_control_plane_starvation",
   "blocked_child_signal_death",
+  SLOT_SUBSTRATE_UNAVAILABLE_STATUS,
 ]);
+
+/**
+ * How many claims were ahead of this one when it was parked, from the newest
+ * queued lease event (BI-277ECBDB). Position 1 is next in line, so N claims are
+ * ahead at position N+1. Null when no position was recorded.
+ */
+function claimsAheadFromState(state) {
+  const events = Array.isArray(state?.leaseEvents) ? state.leaseEvents : [];
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (events[i]?.type === "queued" && Number.isInteger(events[i].queuePosition)) {
+      return Math.max(0, events[i].queuePosition - 1);
+    }
+  }
+  return null;
+}
 
 function rank(verdict) {
   const index = PREGATE_VERDICTS.indexOf(verdict);
@@ -268,10 +285,31 @@ function classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha, 
           + "then re-run pregate on this SHA.",
       };
     }
+    const ahead = status === "queued" ? claimsAheadFromState(state) : null;
+    if (ahead !== null) {
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: `gate record status queued — queued behind ${ahead} other claim${ahead === 1 ? "" : "s"} for the local-CI pool. This is a queue, not a failure of the diff; the waiter runs it when a slot frees.`,
+      };
+    }
     return {
       ...base,
       verdict: "INCONCLUSIVE",
       reason: `gate record status ${status} — the gate did not run. This is not a failure of the diff. Re-run pregate.`,
+    };
+  }
+  if (status === SLOT_SUBSTRATE_UNAVAILABLE_STATUS) {
+    const substrate = state?.substrate || {};
+    const container = substrate.container || "the slot Postgres container";
+    const observed = substrate.state || "unavailable";
+    const remedy = substrate.remedy || `start ${container}`;
+    return {
+      ...base,
+      verdict: "INCONCLUSIVE",
+      reason: `BLOCKED — slot substrate unavailable: ${container} is ${observed}. The gate claimed nothing; this is infrastructure, not a verdict on the diff, and running the gate again changes nothing until the substrate is back.`,
+      rerun: false,
+      remedy,
     };
   }
   if (BLOCKED_GATE_STATUSES.has(status) || status.startsWith("blocked_")) {
@@ -469,7 +507,9 @@ export function formatStatusReport(result, { headBranch, headSha, now = Date.now
   if (result.slot) lines.push(`  slot        ${result.slot}`);
   if (result.evidenceId) lines.push(`  evidence    ${result.evidenceId}`);
   if (result.logFile) lines.push(`  full log    ${result.logFile}`);
-  if (result.verdict !== "PASS") {
+  if (result.rerun === false) {
+    lines.push(`  next        ${result.remedy || "restore the gate substrate"}`);
+  } else if (result.verdict !== "PASS") {
     lines.push("  next        pnpm run pregate   (foreground, unpiped, as the sole command)");
   }
   return lines;

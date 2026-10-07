@@ -323,6 +323,14 @@ services:
       DPF_ATTENTION_REACH_SECRET: ${DPF_ATTENTION_REACH_SECRET:-}
       DPF_DELEGATION_RECEIPT_SECRET: ${DPF_DELEGATION_RECEIPT_SECRET:-}
       DPF_DELEGATION_RECEIPT_KEY_ID: ${DPF_DELEGATION_RECEIPT_KEY_ID:-}
+      # Dedicated HMAC keys for self-upgrade target bindings and delivery task
+      # hub cursors (apps/web/lib/self-upgrade/target-binding.ts,
+      # apps/web/lib/work-capsules/delivery-task-hub-store.ts, BI-231A4BC7).
+      # Provisioned exactly like the keys above. Optional: without them both fall
+      # back to AUTH_SECRET, as before. Portal only: never pass them to the
+      # sandbox (BI-F1C680C7).
+      DPF_SELF_UPGRADE_TARGET_BINDING_SECRET: ${DPF_SELF_UPGRADE_TARGET_BINDING_SECRET:-}
+      DPF_DELIVERY_TASK_CURSOR_SECRET: ${DPF_DELIVERY_TASK_CURSOR_SECRET:-}
       HIVE_CONTRIBUTION_TOKEN: ${HIVE_CONTRIBUTION_TOKEN:-}
       HIVE_OPS_TOKEN: ${HIVE_OPS_TOKEN:-}
       INNGEST_BASE_URL: http://inngest:8288
@@ -553,7 +561,12 @@ services:
       - sandbox_workspace:/workspace
     environment:
       DATABASE_URL: postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf
-      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
+      # No AUTH_SECRET here, ever (BI-F1C680C7). Agent CLIs run in this
+      # container unprompted through `docker exec`, which inherits this
+      # environment, and the portal's secret signs its sessions and MCP tokens.
+      # The sandbox's own app gets a sandbox-only secret from
+      # scripts/sandbox-entrypoint.sh, scoped to the dev server process.
+      # Guarded by scripts/installer/sandbox-auth-secret-isolation-contract.test.mjs.
       AUTH_TRUST_HOST: "true"
       APP_URL: http://localhost:3035
       NODE_ENV: development

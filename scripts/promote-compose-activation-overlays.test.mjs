@@ -136,3 +136,17 @@ test("release installs carry the activation table where the promoter reads it", 
   assert.ok(releaseCopy, "no release-assets copy into scripts/installer/lib");
   assert.match(releaseCopy, /scripts\/installer\/lib\/activation-overlays\.txt/);
 });
+
+test("every installer/lib file the release assets copy is COPYed into the build stage first (BI-B55CCFAA)", async () => {
+  // #6060 named activation-overlays.txt in the release-assets cp but never
+  // COPYed it into the stage, so every self-upgrade prebuild failed with a
+  // missing file (SUR-8CE880A6). The cp can only copy what a COPY brought in.
+  const { readFile } = await import("node:fs/promises");
+  const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");
+  const releaseCopy = dockerfile.split("\n").filter((line) => line.includes("/dpf-release-assets/scripts/installer/lib/") && line.includes("cp "));
+  const named = new Set(releaseCopy.flatMap((line) => [...line.matchAll(/scripts\/installer\/lib\/[^\s/]+/g)].map((m) => m[0])));
+  assert.ok(named.size > 0, "no installer/lib files found in the release-assets copy");
+  const copied = new Set([...dockerfile.matchAll(/^COPY (scripts\/installer\/lib\/[^\s]+) /gm)].map((m) => m[1]));
+  const missing = [...named].filter((file) => !copied.has(file));
+  assert.deepEqual(missing, [], `release assets copy files no COPY brings into the stage: ${missing.join(", ")}`);
+});

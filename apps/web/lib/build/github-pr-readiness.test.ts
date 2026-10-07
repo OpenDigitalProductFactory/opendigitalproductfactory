@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  observeGithubPullRequest,
   projectGithubPrReadiness,
+  rerunFailedWorkflowJobs,
   updatePullRequestBranch,
   type GithubPrObservation,
 } from "./github-pr-readiness";
@@ -130,5 +132,55 @@ describe("updatePullRequestBranch", () => {
       token: "secret",
       fetchImpl: fetchImpl as never,
     })).resolves.toBe("accepted");
+  });
+});
+
+describe("observeGithubPullRequest check detail (BI-88341B5D)", () => {
+  it("carries each failing run's page and workflow run id so the room can name and re-run it", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          repository: {
+            pullRequest: {
+              id: "PR_node", number: 42, url: "https://github.com/o/r/pull/42", state: "OPEN", merged: false,
+              headRefOid: "abc123", mergeStateStatus: "BLOCKED", autoMergeRequest: null, mergeQueueEntry: null,
+              reviewThreads: { nodes: [], pageInfo: { hasNextPage: false } },
+              commits: { nodes: [{ commit: { statusCheckRollup: { contexts: {
+                nodes: [
+                  { name: "typecheck", status: "COMPLETED", conclusion: "FAILURE",
+                    detailsUrl: "https://github.com/o/r/actions/runs/9/job/1", checkSuite: { workflowRun: { databaseId: 9 } } },
+                  { context: "legacy", state: "ERROR", targetUrl: "https://ci.example/1" },
+                ],
+                pageInfo: { hasNextPage: false },
+              } } } }] },
+            },
+          },
+        },
+      }),
+    });
+    const observation = await observeGithubPullRequest({ owner: "o", repo: "r", prNumber: 42, token: "t", fetchImpl: fetchImpl as never });
+    expect(observation.checks).toEqual([
+      { name: "typecheck", status: "COMPLETED", conclusion: "FAILURE", detailsUrl: "https://github.com/o/r/actions/runs/9/job/1", workflowRunId: 9 },
+      { name: "legacy", status: "COMPLETED", conclusion: "ERROR", detailsUrl: "https://ci.example/1", workflowRunId: null },
+    ]);
+  });
+});
+
+describe("rerunFailedWorkflowJobs", () => {
+  it("re-runs only the failed jobs and reports a run GitHub will not re-run", async () => {
+    const accepted = vi.fn().mockResolvedValue({ status: 201 });
+    await expect(rerunFailedWorkflowJobs({ owner: "o", repo: "r", workflowRunId: 9, token: "t", fetchImpl: accepted as never }))
+      .resolves.toBe("accepted");
+    expect(accepted).toHaveBeenCalledWith(
+      "https://api.github.com/repos/o/r/actions/runs/9/rerun-failed-jobs",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const refused = vi.fn().mockResolvedValue({ status: 403 });
+    await expect(rerunFailedWorkflowJobs({ owner: "o", repo: "r", workflowRunId: 9, token: "t", fetchImpl: refused as never }))
+      .resolves.toBe("not-rerunnable");
+    const broken = vi.fn().mockResolvedValue({ status: 500 });
+    await expect(rerunFailedWorkflowJobs({ owner: "o", repo: "r", workflowRunId: 9, token: "t", fetchImpl: broken as never }))
+      .rejects.toThrow("HTTP 500");
   });
 });

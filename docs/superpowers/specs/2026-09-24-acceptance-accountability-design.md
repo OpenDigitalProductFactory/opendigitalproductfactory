@@ -117,8 +117,9 @@ Each run:
    whole pool is revisited every ceil(N / page) runs. Readiness is never
    evaluated for the whole pool in one tick.
 2. Computes readiness and the owed projection. An item whose completion verdict
-   is already `allowed` is reported as `closable`. The sweep does not close it:
-   closing stays the terminal transition's decision, made through its gate.
+   is already `allowed` is reported as `closable`. Under a recorded operator
+   pre-authorisation the sweep closes it through the terminal transition, whose
+   gate decides (§3.6, BI-45D3BBF4); without one it only reports it.
 3. Records changed `acceptance_owed` snapshots.
 4. Routes aged items, oldest first, up to `ACCEPTANCE_SWEEP_ROUTE_LIMIT` per
    run (default 10). The bound serves responsible capacity use: 157 aged items
@@ -167,6 +168,67 @@ command-center summary (`lib/workspace-home/command-center.ts:346-348`) count
 aged share shown, so merged-but-unproven work is visible and never reads as
 finished. Colours use `--dpf-*` tokens (AGENTS.md §9).
 
+### 3.6 Closing what the gate already allows (as built, BI-45D3BBF4)
+
+Measured 2026-10-07: about 298 of 685 awaiting-acceptance items pass delivery
+and acceptance on merge evidence, so their completion gate allows `done`, and
+nothing performed the close. These need no judgment, only an authorised actor.
+
+**The authorisation.** One `PlatformConfig` row,
+`acceptance-sweep.close-authorisation`, value
+`{ schemaVersion: 1, scope: "close-when-gate-allows", enabled, setByUserId,
+setAt, reason, maxClosuresPerRun, revokedByUserId?, revokedAt?, revokeReason? }`
+(`lib/backlog/acceptance-sweep/close-authorisation.ts`). It defaults to absent,
+which means disabled. The governed writer is two server actions,
+`grantAcceptanceSweepCloseAuthorisation` and
+`revokeAcceptanceSweepCloseAuthorisation`
+(`lib/actions/acceptance-sweep-close-authorisation.ts`), restricted to a user
+holding both `manage_platform` and `manage_backlog`, with a reason of at least
+12 characters. A revocation keeps the grant's provenance and adds its own; the
+row is never deleted.
+
+**Checked at every run, against current state.** The record must parse, carry
+the scope, and be enabled; the operator who recorded it must still be active and
+still hold `manage_backlog` (`currentUserContext` + `can`); and the sweep's
+coworker must hold a stored grant (`getAgentToolGrantsAsync`, never registry
+defaults) that satisfies `update_backlog_item_status`'s mapping. Any failure
+disables closing for that run, and the summary's `closing.disabledReason` /
+`closing.because` say which: `not-recorded`, `malformed`, `out-of-scope`,
+`revoked`, `operator-not-authorised`, `agent-not-granted`, `unavailable`.
+
+**The closure.** Only an item whose projection is `closable` *and* whose
+completion decision's verdict is `allowed` is passed on; the close module also
+refuses any other verdict before calling anything. It re-reads the row, skips an
+item no longer in `awaiting-acceptance`, and calls
+`completeBacklogItemTransition` (the same boundary as the MCP status tool, the
+backlog editor and the ops route) with:
+
+- actor `{ actorType: "agent", actorRef: AGT-WS-PORTFOLIO, humanContextRef:
+  <authorising operator>, agentContextRef: AGT-WS-PORTFOLIO }`;
+- authority `actionKey: update_backlog_item_status`, snapshot
+  `effectiveHumanCapability: manage_backlog`, `effectiveAgentGrant: <held
+  grant>` (today `backlog_write`, already in the seed; no grant was added), and
+  a rationale citing the pre-authorisation (key, scope, who, when, reason);
+- `completionEvidence` citing the readiness decision acted on and each satisfied
+  requirement's evidence refs.
+
+The transition re-evaluates its own gate in a serializable transaction and
+writes the authority decision log and readiness receipt, so a verdict that went
+stale since the read is refused there and reported as `refused`.
+
+**Bound and report.** At most `maxClosuresPerRun` per run (default 25, max 100,
+never more than the page). The run summary gains `closing`: enabled, reason,
+`authorisedBy`, limit, attempted, `closed` ids, `refused` (id, code), `skipped`,
+`errored`, and `deferredByLimit`. The headline says how many were closed, or
+`closing off (<reason>)`.
+
+**Known limit.** The sweep's verdict comes from the `get_backlog_item` read
+projection, which does not evaluate the merge-through-gates signal for items
+that are not yet `done`. Items whose `allowed` verdict depends only on merge
+recognition may therefore read `input-required` on the sweep and not be closed;
+whether the live count falls (AC-5) is to be measured on the install after
+enabling, not assumed.
+
 ## 4. Research and benchmarking
 
 | System | Mechanism | DPF adopts | DPF rejects |
@@ -174,6 +236,9 @@ finished. Colours use `--dpf-*` tokens (AGENTS.md §9).
 | ServiceNow Incident: `Resolved` then `Closed` | A resolved incident awaits caller confirmation and auto-closes after N days (`glide.ui.autoclose.time`) | A distinct resolved-but-unconfirmed state with a clock on it | Auto-close on timeout. Silence is not acceptance, and `structural-verification-is-not-functional` forbids treating it as one |
 | GitLab `gitlab-triage` policies | Scheduled, declarative sweeps over issues by age and label that mention or reassign an owner | A deterministic scheduled sweep keyed on age, routing to an owner, idempotent per run | Label-driven ownership. DPF resolves the owner from grant-backed readiness lanes, not a free-form label |
 | Jira Service Management SLAs | A clock per state with breach and at-risk thresholds, shown on the work item | Age measured from state entry, not last update, and shown where delivery is reported | Per-project SLA configuration. One named threshold serves every install until evidence says otherwise |
+| GitHub auto-merge | A maintainer opts a PR in; it merges only once every required check and review passes, and the opt-in is revocable and attributed | §3.6: an explicit, attributed, revocable opt-in; the action fires only when the existing gate already passes | A per-object opt-in. One install-wide scope suits a pool of hundreds of items |
+| Jira Automation rule actor | Rules act as a named actor ("Automation for Jira" or a chosen user), recorded in the history | §3.6: the closure records the steward coworker as actor in the authorising operator's human context | A free-form rule language. The only rule here is "the gate allows" |
+| Renovate `automerge` | Off by default; enabled per config; merges only when tests pass; bounded by `prConcurrentLimit` / `prHourlyLimit` | §3.6: default off, gate-conditional, bounded per run | Platform-native automerge that bypasses the bot. Every closure goes through DPF's own transition |
 | Kubernetes controllers | Level-triggered reconcile: recompute desired state each pass, act on the difference | Recompute owed acceptance each run; write a snapshot only when it changed | Nothing |
 
 Standard followed: level-triggered reconciliation with bounded work per pass.
@@ -224,4 +289,6 @@ remedy is raising the page size, not a redesign.
 - Changing the delivery shapes' `accept` stage from `role:` to an agent. The
   steward room carries the agent stage, so the delivery shape keeps its human
   governed decision for rooms the author drives.
-- Closing items automatically.
+- Closing items on a timeout or on silence. The only closure is §3.6's: an item
+  the completion gate already allows, under a recorded operator
+  pre-authorisation.

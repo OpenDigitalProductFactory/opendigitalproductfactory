@@ -160,3 +160,20 @@ current delivery attempt is read: rows older than the newest reopen are ignored.
 The predicate, the three-valued answer and the conflict/malformed refusal are unchanged.
 The signal lives in `merge-delivery-signal.ts`. `merge-delivery-attested-pr.test.ts`
 drives it against real repositories.
+
+Amended 2026-10-06 (BI-094B41AC). The read projection now gives the same answer as
+the gate. `get_backlog_item` builds its readiness view, and the acceptance sweep reads
+its completion verdict from that view. That view never consulted the merge signal, so
+merged direct-merge items the gate would close read `input-required` and the sweep
+refused to close them. The completion evaluation (merge signal, deployment closure,
+the shape-proportional acceptance lanes, the conflict/malformed refusal) now lives in
+one function, `evaluateBacklogItemCompletion` in `backlog-completion-evaluation.ts`.
+`completeBacklogItemTransition` calls it inside its locked transaction, and
+`get_backlog_item` calls it through `readBacklogItemCompletion` for items in
+`awaiting-acceptance`. The read never mutates and brings no completion manifest,
+because a read has none. When the evaluation cannot run, the read keeps the projection
+it had before. An unavailable merge signal is a result, not a failure: the read gets
+the gate's refusal along with the "UNKNOWN here" reason, and the readiness view reports
+`completionEvaluation.mergeDelivery`. `backlog-completion-evaluation.test.ts` runs the
+gate and the read side by side for the merged, unmerged, signal-unavailable and
+customer-feature cases.

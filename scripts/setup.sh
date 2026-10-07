@@ -157,10 +157,11 @@ for _env_file in apps/web/.env.local .env; do
   fi
 done
 
-# Reach-link and delegation-receipt signing keys (BI-F6929F50): same rules and
-# same two files as the permit key, so AUTH_SECRET no longer signs them.
+# Reach-link and delegation-receipt signing keys (BI-F6929F50), and the
+# self-upgrade target-binding and delivery-cursor keys (BI-231A4BC7): same rules
+# and same two files as the permit key, so AUTH_SECRET no longer signs them.
 for _env_file in apps/web/.env.local .env; do
-  for _signing_key in DPF_ATTENTION_REACH_SECRET DPF_DELEGATION_RECEIPT_SECRET; do
+  for _signing_key in DPF_ATTENTION_REACH_SECRET DPF_DELEGATION_RECEIPT_SECRET DPF_SELF_UPGRADE_TARGET_BINDING_SECRET DPF_DELIVERY_TASK_CURSOR_SECRET; do
     if [ "$(dpf_env_ensure_secret_hex "$_signing_key" "$_env_file" 32)" != "kept" ]; then
       ok "Generated $_signing_key in $_env_file"
     fi

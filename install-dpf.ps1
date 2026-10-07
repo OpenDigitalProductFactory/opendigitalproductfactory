@@ -1695,9 +1695,10 @@ if ($gppPermitValue.Length -eq 0 -or $gppPermitValue.StartsWith("<")) {
 }
 
 # Signing keys for attention reach links and coworker delegation receipts
-# (BI-F6929F50), so AUTH_SECRET no longer signs them. Same rules as the permit
+# (BI-F6929F50), self-upgrade target bindings and delivery task hub cursors
+# (BI-231A4BC7), so AUTH_SECRET no longer signs them. Same rules as the permit
 # key: added when missing or still a placeholder, never rotated, never printed.
-foreach ($signingKeyName in @("DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET")) {
+foreach ($signingKeyName in @("DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET", "DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", "DPF_DELIVERY_TASK_CURSOR_SECRET")) {
     $signingKeyEnv = Get-Content -Path "$DPF_DIR\.env" -Raw -ErrorAction SilentlyContinue
     if ($null -eq $signingKeyEnv) { $signingKeyEnv = "" }
     $signingKeyMatch = [System.Text.RegularExpressions.Regex]::Match($signingKeyEnv, "(?m)^$signingKeyName=(.*)$")

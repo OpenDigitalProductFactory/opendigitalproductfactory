@@ -24,6 +24,8 @@
 // tests and future surfaces (roster UI, factory door) without dragging in
 // prisma or filesystem access.
 
+import { EXTERNAL_CLI_EXECUTION_TYPE, IN_PROCESS_EXECUTION_TYPE } from "./execution-runtime";
+
 export type CoworkerRosterEntry = {
   agentId: string;
   slugId: string;
@@ -116,7 +118,7 @@ export function assembleCoworkerDefinitions(
     // canonical record route. agent-routing-server resolves that route by id,
     // loads the coworker's prompt and skills, and enforces its lifecycle gate.
     // External CLI participants deliberately have no in-portal invocation path.
-    if (registryMirror?.executionRuntimeType === "in_process") {
+    if (registryMirror?.executionRuntimeType === IN_PROCESS_EXECUTION_TYPE) {
       boundRoutes.push(`/platform/ai/agent/${encodeURIComponent(seed.agentId)}`);
     }
     return {
@@ -174,7 +176,7 @@ export function checkDefinitionConformance(
 
   for (const def of definitions) {
     const isExternalCli =
-      def.registryMirror?.executionRuntimeType === "external_cli";
+      def.registryMirror?.executionRuntimeType === EXTERNAL_CLI_EXECUTION_TYPE;
     if (def.grants.length === 0) {
       findings.push({
         checkId: "LIFE-001",

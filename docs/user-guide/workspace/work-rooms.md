@@ -167,6 +167,8 @@ Unresolved external identities or room attachments are quarantined from room act
 
 - A **finite room** closes when its bounded outcome and closure rule are satisfied.
 - A **standing room** supports recurring work. Each cycle still has its own objective, measures, stop conditions, and structured outcome.
+- Each new run of a standing room starts fresh. Every stage has to earn its evidence again, and every decision is asked for again, so yesterday's decision never completes today's run. A run still in progress at midnight carries on where it was.
+- A room started for a single piece of work, not on a schedule, runs once. When its run succeeds it stays finished; it is not started again the next day.
 
 Completion produces an Outcome Packet from governed decisions, artifacts, actions, receipts, evidence, and unresolved work. Conversation alone cannot complete a room.
 

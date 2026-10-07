@@ -11,7 +11,14 @@ import {
   parseInitiativeReviewBinding,
   requiredToolNames as requiredToolNamesFromScope,
   validateInitiativeReviewAuthorityScope,
+  type InitiativeReviewBinding,
 } from "@/lib/mcp-task-review-contract";
+import {
+  loadAcceptanceStewardObjectiveMappingAuthority,
+  STEWARD_LANE_TOKEN_SCOPE,
+  type StewardAuthorityDb,
+} from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
+import { SCHEDULED_RUN_PREFIX } from "@/lib/work-management/room-stage-mandate";
 import {
   err,
   ok,
@@ -144,6 +151,94 @@ function exactArtifactRef(
     && leftIdentity.expectedBlobId.toLocaleLowerCase("en-US") === rightIdentity.expectedBlobId.toLocaleLowerCase("en-US");
 }
 
+/** The lane a TaskRun's objective-mapping authority came through. */
+export type ObjectiveMappingLane = "external-mcp" | "acceptance-steward";
+
+/** A TaskRun's claimed packet, before the shared binding, key and Workroom checks. */
+type BoundObjectiveMappingPacket = {
+  lane: ObjectiveMappingLane;
+  binding: InitiativeReviewBinding;
+  requestKey: string;
+  requestedAgentId: string;
+  requestObjective: string;
+  title: string;
+  requiredToolNames: string[];
+};
+
+type ExecutingTaskRun = {
+  taskRunId: string;
+  userId: string | null;
+  currentAgentId: string | null;
+  status: string;
+  completedAt: Date | null;
+  archivedAt: Date | null;
+  title: string | null;
+  objective: string | null;
+  authorityScope: unknown;
+  a2aMetadata: unknown;
+};
+
+/** The packet an external-MCP TaskRun carries in its request metadata, as `request_coworker` admitted it. */
+function externalObjectiveMappingPacket(run: ExecutingTaskRun, args: {
+  proposerUserId: string;
+  proposerAgentId: string;
+}): BoundObjectiveMappingPacket | null {
+  const metadata = object(run.a2aMetadata);
+  const binding = parseInitiativeReviewBinding(metadata?.initiativeReviewBinding);
+  const requestKey = nonEmptyString(metadata?.idempotencyKey);
+  const requestedAgentId = nonEmptyString(metadata?.requestedAgentId);
+  const requestObjective = nonEmptyString(metadata?.requestObjective);
+  const title = nonEmptyString(run.title);
+  const authorityScope = Array.isArray(run.authorityScope)
+    && run.authorityScope.every((entry) => typeof entry === "string")
+    ? run.authorityScope as string[]
+    : null;
+  if (run.status !== "working" || run.completedAt !== null || run.archivedAt !== null
+    || metadata?.trigger !== "external-mcp" || !binding || !requestKey
+    || !requestedAgentId || !requestObjective || !title || !authorityScope
+    || run.userId !== args.proposerUserId
+    || requestedAgentId !== args.proposerAgentId || run.currentAgentId !== requestedAgentId
+    || validateInitiativeReviewAuthorityScope(binding, authorityScope)) return null;
+  return {
+    lane: "external-mcp",
+    binding,
+    requestKey,
+    requestedAgentId,
+    requestObjective,
+    title,
+    requiredToolNames: requiredToolNamesFromScope(authorityScope),
+  };
+}
+
+/**
+ * BI-099A0BA3: the packet the platform issued to the item's acceptance steward
+ * room, for that room's own drive-dispatched run and bound coworker
+ * (acceptance-sweep/steward-objective-mapping-authority.ts). The run's user is
+ * the room's task owner; the writer must be the run's agent.
+ */
+async function stewardObjectiveMappingPacket(tx: Prisma.TransactionClient, run: ExecutingTaskRun, args: {
+  itemId: string;
+  proposerUserId: string;
+  proposerAgentId: string;
+}): Promise<BoundObjectiveMappingPacket | null> {
+  if (run.userId !== args.proposerUserId || run.currentAgentId !== args.proposerAgentId) return null;
+  const authority = await loadAcceptanceStewardObjectiveMappingAuthority(tx as unknown as StewardAuthorityDb, {
+    run,
+    itemId: args.itemId,
+  });
+  if (!authority.ok) return null;
+  const { packet } = authority.data;
+  return {
+    lane: "acceptance-steward",
+    binding: packet.binding,
+    requestKey: packet.requestKey,
+    requestedAgentId: packet.targetAgent,
+    requestObjective: packet.objective,
+    title: packet.questionPacketSummary,
+    requiredToolNames: packet.requiredToolNames,
+  };
+}
+
 async function validateExecutingObjectiveMappingTask(args: {
   tx: Prisma.TransactionClient;
   taskRunId: string;
@@ -153,7 +248,7 @@ async function validateExecutingObjectiveMappingTask(args: {
   proposerAgentId: string;
   baselineId: string;
   eligibleEvidenceActivityIds: string[];
-}): Promise<ActionSuccess<{ binding: ObjectiveMappingBinding }> | (
+}): Promise<ActionSuccess<{ binding: ObjectiveMappingBinding; lane: ObjectiveMappingLane }> | (
   ActionFailure & { code: string }
 )> {
   await args.tx.$queryRaw`SELECT "id" FROM "TaskRun" WHERE "taskRunId" = ${args.taskRunId} FOR SHARE`;
@@ -172,37 +267,27 @@ async function validateExecutingObjectiveMappingTask(args: {
       a2aMetadata: true,
     },
   });
-  const metadata = object(run?.a2aMetadata);
-  const binding = parseInitiativeReviewBinding(metadata?.initiativeReviewBinding);
-  const requestKey = nonEmptyString(metadata?.idempotencyKey);
-  const requestedAgentId = nonEmptyString(metadata?.requestedAgentId);
-  const requestObjective = nonEmptyString(metadata?.requestObjective);
-  const title = nonEmptyString(run?.title);
-  const authorityScope = Array.isArray(run?.authorityScope)
-    && run.authorityScope.every((entry) => typeof entry === "string")
-    ? run.authorityScope as string[]
-    : null;
-  if (!run || run.status !== "working" || run.completedAt !== null || run.archivedAt !== null
-    || metadata?.trigger !== "external-mcp" || !binding || !requestKey
-    || !requestedAgentId || !requestObjective || !title || !authorityScope
+  const bound = !run
+    ? null
+    : object(run.a2aMetadata)?.trigger === "scheduled"
+      ? await stewardObjectiveMappingPacket(args.tx, run, args)
+      : externalObjectiveMappingPacket(run, args);
+  const binding = bound?.binding;
+  if (!bound || !binding
     || binding.gate !== "objective-mapping" || binding.writerToolName !== "record_initiative_evidence"
     || binding.itemId !== args.itemId || binding.expectedCurrentBaselineId !== args.baselineId
     || !binding.workroomRef || !binding.eligibleEvidenceActivityIds
-    || run.userId !== args.proposerUserId
-    || requestedAgentId !== args.proposerAgentId || run.currentAgentId !== requestedAgentId
-    || validateInitiativeReviewAuthorityScope(binding, authorityScope)
     || !exactStringSet(binding.eligibleEvidenceActivityIds, args.eligibleEvidenceActivityIds)) {
     const error = "The executing TaskRun does not carry the exact current server-issued objective-mapping authority.";
     return { ...err(error), code: "OBJECTIVE_MAPPING_AUTHORITY_CONFLICT" };
   }
 
-  const requiredToolNames = requiredToolNamesFromScope(authorityScope);
   if (!validateObjectiveMappingRequestKey({
-    targetAgent: requestedAgentId,
-    objective: requestObjective,
-    questionPacketSummary: title,
-    requiredToolNames,
-    requestKey,
+    targetAgent: bound.requestedAgentId,
+    objective: bound.requestObjective,
+    questionPacketSummary: bound.title,
+    requiredToolNames: bound.requiredToolNames,
+    requestKey: bound.requestKey,
     binding: binding as ObjectiveMappingBinding,
   })) {
     const error = "The executing TaskRun request key is not the server-derived identity for its immutable packet.";
@@ -237,7 +322,7 @@ async function validateExecutingObjectiveMappingTask(args: {
     const error = "The executing TaskRun no longer matches the current live Workroom identity.";
     return { ...err(error), code: "OBJECTIVE_MAPPING_AUTHORITY_CONFLICT" };
   }
-  return ok({ binding: binding as ObjectiveMappingBinding });
+  return ok({ binding: binding as ObjectiveMappingBinding, lane: bound.lane });
 }
 
 export function normalizeInitiativeObjectiveMappings(
@@ -269,7 +354,11 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
   authorityDecisionId: string | null;
   tokenScope: string | null;
 }): Promise<InitiativeObjectiveMappingResult> {
-  if (!args.taskRunId || !args.proposerAgentId || !args.authorityDecisionId || !args.tokenScope || !args.reason.trim()) {
+  // A scheduled steward run carries no client token. Its lane is decided in the
+  // transaction, and only a validated steward packet proceeds without one.
+  const tokenlessSteward = !args.tokenScope && Boolean(args.taskRunId?.startsWith(SCHEDULED_RUN_PREFIX));
+  if (!args.taskRunId || !args.proposerAgentId || !args.authorityDecisionId
+    || (!args.tokenScope && !tokenlessSteward) || !args.reason.trim()) {
     const error = "Executing TaskRun, authenticated proposer, authority decision, token scope, and reason are required.";
     return { ...err(error), code: "AUTHORIZATION_DENIED" };
   }
@@ -308,6 +397,10 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
       eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds,
     });
     if (!taskAuthority.ok) return taskAuthority;
+    const tokenScope = taskAuthority.data.lane === "acceptance-steward" ? STEWARD_LANE_TOKEN_SCOPE : args.tokenScope;
+    if (!tokenScope) {
+      return { ok: false, code: "AUTHORIZATION_DENIED", error: "An external objective-mapping write requires its connection's token scope." };
+    }
     // BI-2515F779: the baseline a decomposed child is mapped against may be
     // its parent's; the resolver returns own rows when present, else inherited.
     const baselineSource = await loadBaselineSourceForItem(tx as unknown as BaselineSourceDb, { id: item.id, itemId: item.itemId });
@@ -406,7 +499,7 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
         decision: "allow",
         effectiveHumanCapability: "manage_backlog",
         effectiveAgentGrant: "initiative_evidence_write",
-        tokenScope: args.tokenScope!,
+        tokenScope,
         organizationId,
         actionKey: "record_initiative_evidence",
         policyVersion: authority.policyVersion ?? "coworker-authority.v1",

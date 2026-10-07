@@ -185,3 +185,14 @@ test("exit 1 whose record says FAIL is still a failure", async () => {
   assert.equal(result.outcome, "failed");
   assert.equal(result.exitCode, 1);
 });
+
+// BI-277ECBDB: a dead slot substrate is final until the container runs. Retrying
+// re-probes, fails the same way, and only burns the host.
+test("an unavailable slot substrate is a non-verdict that is never retried", () => {
+  const v = classifyGateExit({ code: GATE_EXIT.SLOT_SUBSTRATE_UNAVAILABLE });
+  assert.equal(v.kind, "substrate-unavailable");
+  assert.equal(v.verdict, "none");
+  assert.equal(v.retry, false);
+  assert.match(v.summary, /^BLOCKED — slot substrate unavailable/);
+  assert.match(v.next, /pregate:status/);
+});

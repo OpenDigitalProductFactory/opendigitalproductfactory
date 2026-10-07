@@ -18,10 +18,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
-import { envelopeInboxRoute, envelopeStatusRoute } from "@/lib/coworker/envelope-routes";
+import { envelopeInboxRoute, envelopeResultRoute, envelopeStatusRoute } from "@/lib/coworker/envelope-routes";
 import { SOURCE_CATALOG } from "@dpf/i18n";
 
 const COPY = SOURCE_CATALOG.approvals.card;
+const EXPIRED = SOURCE_CATALOG.approvals.expiredUnanswered;
 
 type Outcome = "authorized" | "declined" | "settled";
 
@@ -46,6 +47,7 @@ export function CoworkerEnvelopeApproval({
   const [execution, setExecution] = useState<Execution | null>(null);
   const [pending, setPending] = useState(false);
   const [recorded, setRecorded] = useState<RecordedOutcome | null>(null);
+  const [reraised, setReraised] = useState(false);
   // The decision may or may not have been saved, and the card cannot tell.
   const [unknown, setUnknown] = useState(false);
   const decision = approval.decision;
@@ -101,7 +103,7 @@ export function CoworkerEnvelopeApproval({
           setError(body.outcomeWarning);
           return;
         }
-        router.replace(envelopeInboxRoute(approval.envelopeId));
+        router.replace(envelopeResultRoute(approval.envelopeId));
         router.refresh();
         return;
       }
@@ -114,7 +116,7 @@ export function CoworkerEnvelopeApproval({
           setExecution({ status: "not-run", message: body.error });
         }
         setOutcome("settled");
-        router.replace(envelopeInboxRoute(approval.envelopeId));
+        router.replace(envelopeResultRoute(approval.envelopeId));
         router.refresh();
         return;
       }
@@ -122,6 +124,35 @@ export function CoworkerEnvelopeApproval({
       setError(body?.error ?? "That decision could not be saved. Please try again.");
     } finally {
       clearTimeout(timer);
+      setPending(false);
+    }
+  }
+
+  // BI-0012E6CA: put a request nobody answered back in front of this person.
+  // The server re-checks the delegate, the lapse and the stored binding; the
+  // coworker's call still runs through the full authority gate if approved.
+  async function askAgain() {
+    if (pending || reraised || !approval.reraiseHref) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(approval.reraiseHref, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: AbortSignal.timeout(DECISION_TIMEOUT_MS),
+      });
+      // Refusals use the canonical API error body ({ code, message }).
+      const body = (await response.json().catch(() => null)) as { envelope?: { id?: string }; message?: string } | null;
+      if (!response.ok || !body?.envelope?.id) {
+        setError(body?.message ?? EXPIRED.askFailed);
+        return;
+      }
+      setReraised(true);
+      router.replace(envelopeInboxRoute(body.envelope.id));
+      router.refresh();
+    } catch {
+      setError(EXPIRED.askFailed);
+    } finally {
       setPending(false);
     }
   }
@@ -185,14 +216,25 @@ export function CoworkerEnvelopeApproval({
         )}
       </Surface>
 
-      {outcome ? (
+      {approval.expiredUnanswered ? (
+        <div className="space-y-2">
+          <p className="text-xs text-[var(--dpf-text)]" role="note">
+            {reraised ? EXPIRED.asked : EXPIRED.explanation}
+          </p>
+          {reraised ? null : (
+            <Button size="sm" variant="secondary" disabled={pending || !approval.reraiseHref} onClick={() => void askAgain()}>
+              {pending ? EXPIRED.asking : EXPIRED.askAgain}
+            </Button>
+          )}
+        </div>
+      ) : outcome ? (
         <p className="text-xs font-semibold text-[var(--dpf-text)]" role="status">
           {recorded ? `${recorded.label}. ${recorded.nextAction}` : outcomeMessage(outcome, execution)}
         </p>
       ) : unknown ? (
         <div role="alert" className="space-y-1 text-xs text-[var(--dpf-error)]">
           <p>{COPY.unknownResult}</p>
-          <a className="font-semibold text-[var(--dpf-accent)] hover:opacity-80" href={envelopeInboxRoute(approval.envelopeId)}>
+          <a className="font-semibold text-[var(--dpf-accent)] hover:opacity-80" href={envelopeResultRoute(approval.envelopeId)}>
             {COPY.unknownLink}
           </a>
         </div>
@@ -244,6 +286,7 @@ function outcomeMessage(outcome: Outcome, execution: Execution | null): string {
 }
 
 function statusLabel(approval: AttentionEnvelopeApproval): string {
+  if (approval.expiredUnanswered) return EXPIRED.label;
   if (approval.status === "proposed") {
     return approval.actionable ? "Waiting for your decision" : "Closed: the window expired";
   }

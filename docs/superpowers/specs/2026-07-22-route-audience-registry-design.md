@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Route Audience & Destination-Kind Registry — design
 
 **BI:** BI-8C0F219A (EP-UX-COGLOAD — Live UX cognitive-load audit follow-up)
@@ -14,7 +18,7 @@ The audit also found the largest audience bucket is technical/admin/knowledge (1
 routes), and section homes like `/finance` expose long destination catalogs in the same
 owner-facing flow. Without an explicit, machine-checkable classification there is no way
 to enforce rules like "global nav is limited to durable domains" or "advanced/technical
-routes must sit behind a progressive-disclosure boundary" (the latter is what BI-1D718FCA
+routes must sit behind a progressive-disclosure boundary" (the latter is what BI-E8D91AF6
 needs).
 
 ## Design
@@ -51,7 +55,7 @@ single source of truth — do **not** fork the inventory or re-walk the filesyst
   Low-confidence routes with no override are printed as a **non-fatal warning** listing
   their paths — the "warns when a new page route is unclassified" acceptance.
 - **Consumer helpers:** `isAdvancedRoute()` / `isSectionHome()` expose the progressive-
-  disclosure boundary and the durable-domain set for nav + BI-1D718FCA to consume.
+  disclosure boundary and the durable-domain set for nav + BI-E8D91AF6 to consume.
 
 Initial run: 330 page routes → owner 148, admin 140, public 16, auth-setup 11,
 customer 10, builder 3, worker 2; kinds detail 154, advanced-diagnostic 94, section-home
@@ -75,5 +79,5 @@ customer 10, builder 3, worker 2; kinds detail 154, advanced-diagnostic 94, sect
 
 This PR delivers the registry + gate + query helpers. **Rewiring navigation** to consume
 it (global nav limited to durable `section-home`s, advanced routes gated behind
-disclosure) is **BI-1D718FCA**'s progressive-disclosure work, which builds on
+disclosure) is **BI-E8D91AF6**'s progressive-disclosure work, which builds on
 `isAdvancedRoute()` / the `advanced-diagnostic` set here.

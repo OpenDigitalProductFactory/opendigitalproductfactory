@@ -230,6 +230,9 @@ export async function executeRemoteTaskAttempt(input: {
       taskRunId: run.taskRunId,
       apiTokenId: token.tokenId,
       tokenScope: token.capability,
+      // The task's authority scope bounds the reviewer's nested governed dispatch
+      // (a writer re-reading its bound artifact); without it that check sees no grants (BI-F8C661D0).
+      tokenGrantScopes: parsed.authorityScope,
       taskType: "external-mcp",
       agentDisplayName: optionalString(agent.displayName) ?? resolvedAgentId,
       ...(effortWarrant ? { effortWarrant } : {}),

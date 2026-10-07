@@ -441,8 +441,16 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const { assessDeliverySensitivity } = await import("@/lib/backlog/initiative-readiness/delivery-sensitivity");
   const boundWorkShape = await readBoundWorkShapeRef(prisma, item.itemId);
   const declaredPaths = await readBoundEditPaths(prisma, item.itemId).catch(() => []);
+  const evaluatedAt = new Date().toISOString();
+  // BI-094B41AC: an item awaiting acceptance reads the completion gate's own
+  // evaluation (merge signal included), so this view and the gate agree. Null
+  // — any other status, or an evaluation that could not run — keeps the
+  // existing projection.
+  const { readBacklogItemCompletion } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
+  const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt });
   // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
-  const readiness = withReadinessGoverningPrinciples(projectBacklogItemReadinessSummary({
+  const projectedReadiness = withReadinessGoverningPrinciples(projectBacklogItemReadinessSummary({
+    completionDecision: gateCompletion?.decision ?? null,
     inheritedScope,
     item: {
       id: item.id,
@@ -464,8 +472,11 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
       .map((activity) => ({ ...activity, gateKey: activity.gateKey ?? null })),
     hasSpec,
     hasPlan,
-    evaluatedAt: new Date().toISOString(),
+    evaluatedAt,
   }));
+  const readiness = gateCompletion
+    ? { ...projectedReadiness, completionEvaluation: { source: "completion-gate" as const, mergeDelivery: gateCompletion.mergedThroughGates } }
+    : projectedReadiness;
   const completion = readiness.decisions?.completion;
   const needsPirRecovery = completion && completion.verdict !== "allowed"
     && [...completion.blockers, ...completion.unmet]

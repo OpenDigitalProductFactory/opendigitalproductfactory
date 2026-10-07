@@ -15,17 +15,30 @@ import {
   ACCEPTANCE_AGED_DAYS,
   ACCEPTANCE_SWEEP_AGENT_ID,
   ACCEPTANCE_SWEEP_PAGE_SIZE,
+  ACCEPTANCE_SWEEP_ROUTE_LIMIT,
   ACCEPTANCE_SWEEP_ROUTING,
   ACCEPTANCE_TREND_DAYS,
 } from "@dpf/db";
 
 import { computeNextCronRun } from "@/lib/operate/cron-next-run";
+import { resolveWorkOwner, type AccountableOwnerDb } from "@/lib/portfolio/accountable-owner";
 
 import { loadAcceptancePoolAges, type AcceptancePoolAgeDb } from "./acceptance-pool-age";
+import { closeAllowedAcceptanceItem, type AcceptanceSweepCloseDb } from "./acceptance-sweep-close";
 import { evaluateOwedAcceptance, productionSweepEvaluateDeps } from "./acceptance-sweep-evaluate";
 import { selectAcceptanceSweepPage, type AcceptanceSweepPageDb } from "./acceptance-sweep-page";
 import { runAcceptanceSweep, type AcceptanceSweepConfig, type AcceptanceSweepPorts, type AcceptanceSweepSummary } from "./acceptance-sweep-run";
-import type { OwedAcceptanceOwnerDb } from "./owed-acceptance-owner";
+import type { InPlatformOwnerDb } from "./in-platform-owners";
+import type { AgedSweepCandidate } from "./acceptance-sweep-routing";
+import type { DeliveryActorDb } from "./delivery-actors";
+import { issueAcceptanceObjectiveMappingPacket, type IssuePacketDb } from "./issue-objective-mapping-packet";
+import { routeAgedItems, type AcceptanceRouteDb, type RouteOutcome } from "./route-aged-item";
+import {
+  COMPLETION_TRANSITION_TOOL,
+  resolveCloseAuthorisation,
+  type CloseAuthorisation,
+  type CloseAuthorisationPorts,
+} from "./close-authorisation";
 import { recordOwedAcceptanceSnapshot, type OwedSnapshotDb } from "./owed-snapshot";
 
 /** Stable identity of the standing Acceptance steward room. */
@@ -124,7 +137,81 @@ export async function recordSweepRun(db: RoomDb, summary: AcceptanceSweepSummary
   return { activityId: activity.id };
 }
 
-type SweepDb = RoomDb & TaskStatusDb & AcceptancePoolAgeDb & AcceptanceSweepPageDb & OwedSnapshotDb & OwedAcceptanceOwnerDb;
+type PlatformConfigDb = {
+  platformConfig: { findUnique(args: { where: { key: string }; select: { value: true } }): Promise<{ value: unknown } | null> };
+};
+
+type RouteTextDb = {
+  backlogItem: {
+    findMany(args: {
+      where: { id: { in: string[] } };
+      select: { id: true; title: true; body: true };
+    }): Promise<Array<{ id: string; title: string; body: string | null }>>;
+  };
+};
+
+type SweepDb = RoomDb & TaskStatusDb & AcceptancePoolAgeDb & AcceptanceSweepPageDb & OwedSnapshotDb & InPlatformOwnerDb
+  & AcceptanceSweepCloseDb & PlatformConfigDb & AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb & IssuePacketDb
+  & DeliveryActorDb;
+
+/**
+ * Give this run's aged, non-closable items a steward room each (BI-C1781121).
+ * The room brief quotes the item's title and acceptance criteria, read here
+ * because the page selects ids only. The room's owner is the person
+ * accountable for the platform's automatic work (resolveWorkOwner, Foundational).
+ * A routed medium or large item's live room is issued the owner's
+ * objective-mapping packet (BI-099A0BA3, issue-objective-mapping-packet.ts).
+ */
+export async function routeAgedSweepCandidates(
+  db: AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb & IssuePacketDb,
+  now: Date,
+  candidates: readonly AgedSweepCandidate[],
+  limit: number,
+): Promise<RouteOutcome[]> {
+  const rows = await db.backlogItem.findMany({
+    where: { id: { in: candidates.map((candidate) => candidate.item.id) } },
+    select: { id: true, title: true, body: true },
+  });
+  const text = new Map(rows.map((row) => [row.id, row]));
+  return routeAgedItems({
+    db,
+    now,
+    limit,
+    candidates: candidates.map(({ item, ageDays, projection }) => ({
+      rowId: item.id,
+      itemId: item.itemId,
+      title: text.get(item.id)?.title ?? item.itemId,
+      body: text.get(item.id)?.body ?? null,
+      ageDays,
+      projection,
+    })),
+    resolveOwnerUserId: async () => (await resolveWorkOwner(db, {})).userId,
+    issuePacket: (args) => issueAcceptanceObjectiveMappingPacket({ db, now, ...args }),
+  });
+}
+
+/**
+ * Current authority behind the pre-authorisation (BI-45D3BBF4): the operator's
+ * live membership, and the coworker's stored grants (never the registry
+ * defaults). Lazy imports keep both off the scheduler's import graph.
+ */
+export function productionCloseAuthorisationPorts(db: PlatformConfigDb): CloseAuthorisationPorts {
+  return {
+    readConfig: async (key) => (await db.platformConfig.findUnique({ where: { key }, select: { value: true } }))?.value ?? null,
+    operatorMayCloseBacklog: async (userId) => {
+      const { currentUserContext } = await import("@/lib/govern/current-user-context");
+      const { can } = await import("@/lib/permissions");
+      const context = await currentUserContext(userId);
+      return context !== null && can(context, "manage_backlog");
+    },
+    agentCompletionGrant: async (agentId) => {
+      const { expandGrants, getAgentToolGrantsAsync, getToolGrantMapping } = await import("@/lib/tak/agent-grants");
+      const held = new Set(expandGrants(await getAgentToolGrantsAsync(agentId)));
+      // Required grants are alternatives (grantsSatisfyRequirement); cite the one actually held.
+      return (getToolGrantMapping()[COMPLETION_TRANSITION_TOOL] ?? []).find((grant) => held.has(grant)) ?? null;
+    },
+  };
+}
 
 function productionPorts(db: SweepDb, now: Date, agentId: string): AcceptanceSweepPorts {
   const evaluateDeps = productionSweepEvaluateDeps(db);
@@ -136,6 +223,13 @@ function productionPorts(db: SweepDb, now: Date, agentId: string): AcceptanceSwe
     evaluate: (item) => evaluateOwedAcceptance(item, evaluateDeps),
     recordSnapshot: (item, projection) => recordOwedAcceptanceSnapshot({ db, backlogItemId: item.id, projection, recordedByAgentId: agentId }),
     recordRun: (summary) => recordSweepRun(db, summary, agentId),
+    route: (candidates, limit) => routeAgedSweepCandidates(db, now, candidates, limit),
+    resolveCloseAuthorisation: (): Promise<CloseAuthorisation> =>
+      resolveCloseAuthorisation(agentId, productionCloseAuthorisationPorts(db)),
+    close: async (item, decision, authorisation) => {
+      const { completeBacklogItemTransition } = await import("@/lib/backlog/initiative-readiness/backlog-terminal-transition");
+      return closeAllowedAcceptanceItem({ item, decision, authorisation, agentId, now, db, complete: completeBacklogItemTransition });
+    },
   };
 }
 
@@ -163,6 +257,7 @@ export async function executeAcceptanceSweepTask(
       agedDays: ACCEPTANCE_AGED_DAYS,
       trendDays: ACCEPTANCE_TREND_DAYS,
       routing: ACCEPTANCE_SWEEP_ROUTING,
+      routeLimit: ACCEPTANCE_SWEEP_ROUTE_LIMIT,
       recordedByAgentId: agentId,
     });
     console.info("[acceptance-sweep] %s", summary.headline);

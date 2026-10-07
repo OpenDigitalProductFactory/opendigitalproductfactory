@@ -189,14 +189,17 @@ test("an upgrade persists the reach and receipt keys promote.sh exported, and ne
   assert.match(added, new RegExp(`^DPF_DELEGATION_RECEIPT_SECRET=${"b".repeat(64)}$`, "m"));
   const placeholder = ensureDedicatedSigningKeys('DPF_ATTENTION_REACH_SECRET="<generate a distinct value>"\n', "\n", exported);
   assert.match(placeholder, new RegExp(`^DPF_ATTENTION_REACH_SECRET=${"a".repeat(64)}$`, "m"));
-  const real = `DPF_ATTENTION_REACH_SECRET="${"1".repeat(64)}"\nDPF_DELEGATION_RECEIPT_SECRET='${"2".repeat(64)}'\n`;
+  // BI-231A4BC7: the list also carries the target-binding and delivery-cursor keys.
+  const real = `DPF_ATTENTION_REACH_SECRET="${"1".repeat(64)}"\nDPF_DELEGATION_RECEIPT_SECRET='${"2".repeat(64)}'\n`
+    + `DPF_SELF_UPGRADE_TARGET_BINDING_SECRET=${"3".repeat(64)}\nDPF_DELIVERY_TASK_CURSOR_SECRET="${"4".repeat(64)}"\n`;
   assert.equal(ensureDedicatedSigningKeys(real, "\n", exported), real);
   const generated = ensureDedicatedSigningKeys("", "\n", {});
   assert.match(generated, /^DPF_ATTENTION_REACH_SECRET=[0-9a-f]{64}$/m);
   assert.match(generated, /^DPF_DELEGATION_RECEIPT_SECRET=[0-9a-f]{64}$/m);
   assert.notEqual(generated.match(/^DPF_ATTENTION_REACH_SECRET=(.*)$/m)[1], generated.match(/^DPF_DELEGATION_RECEIPT_SECRET=(.*)$/m)[1]);
   const crlf = ensureDedicatedSigningKeys("DPF_IMAGE_TAG=v1\r\n", "\r\n", exported);
-  assert.ok(crlf.endsWith(`DPF_DELEGATION_RECEIPT_SECRET=${"b".repeat(64)}\r\n`));
+  assert.ok(crlf.includes(`\r\nDPF_DELEGATION_RECEIPT_SECRET=${"b".repeat(64)}\r\n`));
+  assert.ok(!crlf.replaceAll("\r\n", "").includes("\n"), "every appended line uses the file's CRLF newline");
 });
 
 // BI-3267763F: no install keeps running Inngest on the keys published in the repo.

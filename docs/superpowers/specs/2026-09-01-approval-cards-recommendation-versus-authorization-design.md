@@ -120,3 +120,12 @@ GitHub's protected-environment reviews and Argo CD's sync windows both check eli
 ### Verification
 
 Unit tests for each deliverable. Production build. Runtime check after merge, on the live install: an OAuth replay of the incident's call by a non-owner returns `workroom_handover_not_owner` and mints no envelope.
+
+## As built — approval lifetime (BI-0012E6CA, 2026-10-07)
+
+Design §3 above says replay looks back over "the existing 15-minute window". That window was the single envelope lifetime, `AUTHORITY_APPROVAL_TTL_MS`. BI-0012E6CA split it into two:
+
+- **Replay window.** `APPROVAL_REPLAY_WINDOW_MS` in `apps/web/lib/coworker/approval-lifetime.ts` is still 15 minutes. §3 behaves exactly as written.
+- **Decision lifetime.** This is how long a person has to answer. It is now `approvalLifetimeMs(consequence)`: 15 minutes for an `outward` or unclassified call, seven days for everything else. Execution re-checks it against the call's current classification.
+
+So "after the window, the coworker may ask again" refers to the replay window. A request that closes unanswered no longer disappears. It shows as **Expired unanswered**, and the delegating person can choose **Ask again** (`POST /api/agent/envelope/:id/reraise`). Deep links now open the request's own card instead of the outcome panel. The original text above is unchanged.

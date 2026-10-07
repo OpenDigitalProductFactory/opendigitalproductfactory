@@ -79,3 +79,23 @@ describe("mapDemandRows", () => {
     });
   });
 });
+
+describe("mapDemandRows value-input provenance (BI-00C68162)", () => {
+  const minimal = {
+    itemId: "BI-2", title: "T", status: "open", workType: "bug", demandStage: null,
+    demandScore: 0.333, demandScoreFramework: "rice", effortSize: "medium", jobSize: 3,
+    impact: 1, investmentBucket: "run", estimateAiJobSize: 3, estimateHumanJobSize: null,
+    estimateSource: "ai", estimateAgreed: null, claimStatus: null, claimedByAgentId: null,
+    epic: null,
+  };
+
+  it("carries an agent-proposed source onto the activation explanation", () => {
+    const [view] = mapDemandRows([{ ...minimal, demandInputSource: "ai" }]);
+    expect(view!.activation!.score.inputSource).toBe("ai");
+  });
+
+  it("reads an absent or unknown source as unattributed", () => {
+    expect(mapDemandRows([minimal])[0]!.activation!.score.inputSource).toBeNull();
+    expect(mapDemandRows([{ ...minimal, demandInputSource: "robot" }])[0]!.activation!.score.inputSource).toBeNull();
+  });
+});

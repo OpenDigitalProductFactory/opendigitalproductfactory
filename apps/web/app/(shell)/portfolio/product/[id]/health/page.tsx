@@ -16,6 +16,9 @@ import {
 import { loadReleaseHealthState } from "@/lib/release-health/state";
 import type { CapabilityServiceHealthProjection } from "@/lib/platform-runtime/service-health";
 import { loadCapabilityServiceHealth } from "@/lib/platform-runtime/service-health-loader";
+import { DockerVmRestartPanel } from "@/components/monitoring/DockerVmRestartPanel";
+import { getDockerVmRestartOffer } from "@/lib/actions/docker-vm-restart";
+import type { DockerVmRestartCheck } from "@/lib/remote-action/docker-vm-restart-action";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -56,9 +59,9 @@ export default async function ProductHealthPage({ params }: Props) {
   // BI-3630773C — last-known release stamp state for the portal's Latest
   // Release card. Read from PlatformConfig (written by the release-health
   // cron); null when never polled or never stamped.
-  const [releaseHealth, capabilityHealth] = isPortal
-    ? await Promise.all([loadReleaseHealthCard(), loadCapabilityHealth()])
-    : [null, null];
+  const [releaseHealth, capabilityHealth, vmRestartOffer] = isPortal
+    ? await Promise.all([loadReleaseHealthCard(), loadCapabilityHealth(), loadVmRestartOffer()])
+    : [null, null, null];
 
   return (
     <div>
@@ -68,6 +71,7 @@ export default async function ProductHealthPage({ params }: Props) {
           productId={id}
           releaseHealth={releaseHealth}
           capabilityHealth={capabilityHealth}
+          vmRestartOffer={vmRestartOffer}
         />
       ) : (
         <ProductHealth
@@ -114,20 +118,37 @@ function PortalHealth({
   productId,
   releaseHealth,
   capabilityHealth,
+  vmRestartOffer,
 }: {
   openBugs: number;
   productId: string;
   releaseHealth: ReleaseHealthCardData | null;
   capabilityHealth: CapabilityServiceHealthProjection | null;
+  vmRestartOffer: DockerVmRestartCheck | null;
 }) {
+  // BI-F8F8C383: the restart control appears only while the VM is reported wedged.
+  const showVmRestart = vmRestartOffer !== null
+    && (vmRestartOffer.offered || vmRestartOffer.reason !== "no-wedged-vm");
   return (
-    <ServiceHealthDashboard
-      openBacklogItems={openBugs}
-      backlogHref={`/portfolio/product/${productId}/backlog`}
-      releaseHealth={releaseHealth}
-      capabilityHealth={capabilityHealth}
-    />
+    <>
+      {showVmRestart ? <DockerVmRestartPanel offer={vmRestartOffer} /> : null}
+      <ServiceHealthDashboard
+        openBacklogItems={openBugs}
+        backlogHref={`/portfolio/product/${productId}/backlog`}
+        releaseHealth={releaseHealth}
+        capabilityHealth={capabilityHealth}
+      />
+    </>
   );
+}
+
+/** Null for a viewer without manage_platform: they see the condition, not the control. */
+async function loadVmRestartOffer(): Promise<DockerVmRestartCheck | null> {
+  try {
+    return await getDockerVmRestartOffer();
+  } catch {
+    return null;
+  }
 }
 
 function ProductHealth({

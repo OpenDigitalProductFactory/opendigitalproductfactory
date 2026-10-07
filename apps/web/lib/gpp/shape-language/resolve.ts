@@ -12,7 +12,9 @@
 // up in the platform's own registries and returns what it found: each tool's
 // registration, consequence class (O/A/I = `consequential`) and grant
 // requirement; each accountable agent's existence and resolved grants; each
-// sub-shape reference's and gate resolver's existence. Whether a fact is a
+// sub-shape reference's and gate resolver's existence; and, for a sub-shape
+// (GPP Phase 3c PR-3c-5), the child's grants and stage tools and the first
+// cycle in the sub-shape call graph. Whether a fact is a
 // violation (C-2 unregistered tool, C-4 grant not held, D-7 missing resolver,
 // ...) is the DRC's call (PR-3b-3), made over these facts.
 //
@@ -52,6 +54,19 @@ export type GppResolveSources = {
   importResolver(module: string, exportName: string): Promise<boolean>;
   /** True when `<key>@<version>` names a registered current or frozen prior shape version. */
   shapeVersionExists(ref: string): boolean;
+  /**
+   * The registered shape version's grants and stages (GPP Phase 3c PR-3c-5,
+   * D-9 and D-10), or null when it is not registered. Optional: a source
+   * without it lets D-9 and the cycle walk check only what the document
+   * itself says.
+   */
+  shapeDefinition?(ref: string): GppSubShapeDefinition | null;
+};
+
+/** What D-9 and D-10 read of a registered shape version. */
+export type GppSubShapeDefinition = {
+  grants: readonly string[];
+  stages: ReadonlyArray<{ key: string; tools?: readonly string[]; subShape?: string }>;
 };
 
 export type GppResolvedTool = {
@@ -82,7 +97,20 @@ export type GppResolvedStage = {
   tools?: GppResolvedTool[];
   gate?: { elementId: string; resolver?: { module: string; exportName: string; exists: boolean } };
   binding?: { elementId: string; egress: Array<{ toolName: string; registered: boolean }> };
-  subShape?: { ref: string; exists: boolean };
+  /**
+   * `exists`: the ref names a registered shape version. When the source can
+   * read the version (shapeDefinition), `grants` and `tools` are the child's
+   * declared ceiling and stage tools (D-9), and `cycle` is the first sub-shape
+   * call path from this document that returns to a shape already on it, or
+   * null (D-10). A ref that does not resolve carries none of them.
+   */
+  subShape?: {
+    ref: string;
+    exists: boolean;
+    grants?: readonly string[];
+    tools?: ReadonlyArray<{ stageKey: string; toolName: string }>;
+    cycle?: readonly string[] | null;
+  };
 };
 
 export type GppResolution = {
@@ -115,6 +143,29 @@ function resolveTool(stageKey: string, toolName: string, sources: GppResolveSour
   };
 }
 
+/**
+ * The first sub-shape call path from `root` through `ref` that reaches a shape
+ * already on the path (the root included), or null. Walked depth-first over the
+ * registered versions' own `subShape` refs; a ref the source cannot read ends
+ * its branch. Bounded by the number of distinct refs met.
+ */
+function subShapeCycle(root: string, ref: string, sources: GppResolveSources): string[] | null {
+  const seen = new Set<string>();
+  const walk = (path: string[], next: string): string[] | null => {
+    if (path.includes(next)) return [...path, next];
+    if (seen.has(next)) return null;
+    seen.add(next);
+    const definition = sources.shapeVersionExists(next) ? sources.shapeDefinition?.(next) ?? null : null;
+    for (const stage of definition?.stages ?? []) {
+      if (stage.subShape === undefined) continue;
+      const found = walk([...path, next], stage.subShape);
+      if (found) return found;
+    }
+    return null;
+  };
+  return walk([root], ref);
+}
+
 /** Step 3. Pure over its sources; returns facts in document order. */
 export async function resolveShapeDocument(document: GppShapeDocument, sources: GppResolveSources): Promise<GppResolution> {
   const stages: GppResolvedStage[] = [];
@@ -140,7 +191,19 @@ export async function resolveShapeDocument(document: GppShapeDocument, sources: 
       };
     }
     if (stage.subShape !== undefined) {
-      resolved.subShape = { ref: stage.subShape, exists: sources.shapeVersionExists(stage.subShape) };
+      const exists = sources.shapeVersionExists(stage.subShape);
+      const child = exists ? sources.shapeDefinition?.(stage.subShape) ?? null : null;
+      resolved.subShape = {
+        ref: stage.subShape,
+        exists,
+        ...(child
+          ? {
+            grants: [...child.grants],
+            tools: child.stages.flatMap((entry) => (entry.tools ?? []).map((toolName) => ({ stageKey: entry.key, toolName }))),
+          }
+          : {}),
+        cycle: subShapeCycle(`${document.key}@${document.version}`, stage.subShape, sources),
+      };
     }
     stages.push(resolved);
   }

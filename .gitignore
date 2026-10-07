@@ -132,6 +132,13 @@ dev/null/
 # a worktree's own Tier-A SessionEnd reap).
 .dpf-session-heartbeat.json
 
+# The Build Studio sandbox's own Auth.js secret, generated on the sandbox
+# workspace volume by scripts/sandbox-entrypoint.sh (BI-F1C680C7). This file is
+# copied into that workspace at bootstrap, so the rule keeps the secret out of
+# every build commit, diff and promotion.
+.dpf-sandbox-auth-secret
+.dpf-sandbox-auth-secret.*
+
 # Sandbox build worktrees. Build Studio creates .builds/<buildId>/ inside the
 # sandbox source tree and its GC removes them again, so tracking this path makes
 # routine build activity leave the tree "dirty" — which the source-currency

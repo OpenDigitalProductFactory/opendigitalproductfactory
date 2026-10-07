@@ -260,7 +260,29 @@ describe("characterization: performPlanToBuildTransition (autonomous playbook sh
     ]);
     expect(activities()[0]).toEqual(["FB-X", "autonomous_playbook_shadow", "Shadow plan gate would withhold advancement: would withhold."]);
     expect(m.wwmd.mock.calls[0]![0]).toHaveProperty("riskTier");
+    // BI-7FFFBEE3 slice B: a shadow verdict is tagged so it never reaches the owner inbox.
+    expect(m.wwmd.mock.calls[0]![0]).toHaveProperty("enforcement", "shadow");
     expect(m.eligibility).toHaveBeenCalledWith({ buildId: "FB-X", checkpoint: "plan", gateOutcome: "defer" });
+  });
+
+  // BI-7FFFBEE3 / BI-F521E322: the gate's risk tier follows the plan's files,
+  // not the prose-keyword sensitivity in plan.deliverableSensitivity.
+  it("derives the risk tier from the plan's files, not the prose sensitivity", async () => {
+    const { deriveTransitionRiskTier } = await import("@/lib/decision-perspective/graduated-autonomy");
+    m.wwmd.mockResolvedValue({ allowed: true, operatorMessage: "ok", evaluation: { outcomeType: "arbitrate" } });
+    m.findUnique.mockResolvedValue(planBuild({
+      plan: { processSize: "medium", deliverableSensitivity: "high" },
+      buildPlan: { tasks: [{ title: "t" }], fileStructure: [{ path: "apps/mobile/src/cart/CartBar.tsx", action: "create" }] },
+    }));
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(m.wwmd.mock.calls.at(-1)![0].riskTier).toBe(deriveTransitionRiskTier({ sensitivity: "low", transition: "plan-advance" }));
+
+    m.findUnique.mockResolvedValue(planBuild({
+      plan: { processSize: "medium" },
+      buildPlan: { tasks: [{ title: "t" }], fileStructure: [{ path: "apps/web/lib/auth/session.ts", action: "modify" }] },
+    }));
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(m.wwmd.mock.calls.at(-1)![0].riskTier).toBe(deriveTransitionRiskTier({ sensitivity: "high", transition: "plan-advance" }));
   });
 
   it("eligibility not cleared: shadow does not park", async () => {

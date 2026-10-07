@@ -22,6 +22,7 @@ export const GATE_EXIT = Object.freeze({
   SANDBOX_DRIFT: 3,
   EVIDENCE_PENDING: 4,
   CONTROL_PLANE_STARVATION: 5,
+  SLOT_SUBSTRATE_UNAVAILABLE: 9,
   ABANDONED_OR_UNRECORDED: 7,
   DURABLE_WAIT: 75,
   WAIT_CANCELLED: 81,
@@ -85,6 +86,14 @@ export function classifyGateExit({ code, output = "" }) {
         kind: "cancelled", retry: false, verdict: "none",
         summary: "the queued wait was cancelled, or its lease may not be replaced; nothing ran",
         next: "run pregate again only if the work should still be gated",
+      };
+    // BI-277ECBDB: the gate refused to claim because no slot's PostgreSQL
+    // container can run. Re-running the same command fails the same way.
+    case GATE_EXIT.SLOT_SUBSTRATE_UNAVAILABLE:
+      return {
+        kind: "substrate-unavailable", retry: false, verdict: "none",
+        summary: "BLOCKED — slot substrate unavailable: no local-CI slot PostgreSQL container can run, so nothing was claimed",
+        next: "read pnpm pregate:status for the container and Docker's refusal; gating again changes nothing until it runs",
       };
     case GATE_EXIT.SOURCE_DRIFT:
       return {

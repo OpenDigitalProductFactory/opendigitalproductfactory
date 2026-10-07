@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildProposalToolResult,
   divertToolCallToProposal,
+  interceptToolCallAsProposal,
   shouldProposeToolCall,
   type ProposalPersistence,
 } from "./propose-interception";
@@ -75,5 +76,59 @@ describe("divertToolCallToProposal", () => {
     // The proposalId round-trips from the persistence layer into the result.
     const createdId = createProposal.mock.calls[0][0].proposalId;
     expect(result.entityId).toBe(createdId);
+  });
+});
+
+describe("interceptToolCallAsProposal: a room cadence's declared writes run (BI-C1781121)", () => {
+  const sideEffect = { sideEffect: true } as const;
+  const call = {
+    toolDef: sideEffect,
+    proposeSideEffects: true,
+    toolName: "record_execution_evidence",
+    args: { itemId: "BI-1" },
+    agentId: "AGT-WS-PORTFOLIO",
+    threadId: "thread-1",
+    routeContext: "/ops/workrooms",
+    taskRunId: "TR-SCHED-1234ABCD",
+  };
+  function persistence() {
+    return {
+      createAssistantMessage: vi.fn(async () => ({ id: "msg-1" })),
+      createProposal: vi.fn(async (input: { proposalId: string }) => ({ proposalId: input.proposalId })),
+    };
+  }
+
+  it("does not divert a write the run's room mandate declares for this agent", async () => {
+    const store = persistence();
+    const resolveMandatedTools = vi.fn(async () => ["record_execution_evidence", "record_workroom_evidence"]);
+    const result = await interceptToolCallAsProposal(call, { persistence: store, resolveMandatedTools });
+    expect(result).toBeNull();
+    expect(resolveMandatedTools).toHaveBeenCalledWith({ taskRunId: "TR-SCHED-1234ABCD", agentId: "AGT-WS-PORTFOLIO" });
+    expect(store.createProposal).not.toHaveBeenCalled();
+  });
+
+  it("still diverts every write the mandate does not declare", async () => {
+    const store = persistence();
+    const result = await interceptToolCallAsProposal(
+      { ...call, toolName: "update_backlog_item_status" },
+      { persistence: store, resolveMandatedTools: async () => ["record_execution_evidence"] },
+    );
+    expect(result?.data?.status).toBe("proposed");
+    expect(store.createProposal).toHaveBeenCalledTimes(1);
+  });
+
+  it("diverts when the mandate cannot be read (fail closed)", async () => {
+    const store = persistence();
+    const result = await interceptToolCallAsProposal(call, {
+      persistence: store,
+      resolveMandatedTools: async () => { throw new Error("db down"); },
+    });
+    expect(result?.data?.status).toBe("proposed");
+  });
+
+  it("never consults the mandate outside a propose boundary", async () => {
+    const resolveMandatedTools = vi.fn(async () => []);
+    expect(await interceptToolCallAsProposal({ ...call, proposeSideEffects: false }, { persistence: persistence(), resolveMandatedTools })).toBeNull();
+    expect(resolveMandatedTools).not.toHaveBeenCalled();
   });
 });

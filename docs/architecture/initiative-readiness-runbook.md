@@ -98,6 +98,8 @@ Live assignment in [`packages/db/data/agent_registry.json`](../../packages/db/da
 
 **Independence is by principal.** A reviewer coworker's receipt is attributed to that coworker's principal; on a single-human-principal install the reviewer coworker is the *only* independent reviewer available, which is *why* the author (human or external agent) cannot self-approve and must route (`reviewer-identity.ts`). If no production coworker holds the grant, the packet escalates `no-eligible-reviewer` — activate one; do not proxy the receipt.
 
+**One eligibility rule picks every lane owner.** `loadEligibleGrantHolders` (same file) returns the active, production, unarchived holders of a lane's grants, ordered by agent id. The reviewer routes use it, and so does the daily acceptance sweep for a **small or break-fix** item's delivery-coordinator evidence (`ACCEPTANCE_EVIDENCE_REQUIRED`, `DELIVERY_EVIDENCE_REQUIRED`). That lane has no reviewer packet: the sweep names the first in-platform holder of a grant that authorizes `record_execution_evidence` who did not deliver the item (the whole delivery-actor set is excluded: every agent that created, held or worked any of the item's rooms, its claimant, and the item's own agent — `delivery-actors.ts`, BI-099A0BA3), and its acceptance-verification room asks that coworker to record the runtime check (`apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts`, BI-7C7E8CAC). The terminal refusal still gives the author the small-shape hint.
+
 ## 5. Drive-to-completion checklist
 
 For a `feature` initiative:

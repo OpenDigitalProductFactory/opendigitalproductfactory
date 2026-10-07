@@ -136,6 +136,60 @@ Independently shippable. It changes no behaviour until the sweep calls it.
 - Tests: component and loader unit tests for the counts.
 - UX verification: `dpf-ux-fit-review`, then a check on the running app
   through the shared nonproduction lease (AC-AA-05).
+- The 14-day threshold is `ACCEPTANCE_AGED_DAYS` in
+  `apps/web/lib/backlog/acceptance-sweep/aged-acceptance.ts`; phase 2 imports
+  it rather than defining a second one.
+
+**UX fit review (phase 4, text-only; running-app check still owed)**
+
+- Decision: fits-with-guardrails.
+- Owning area: Workspace (Backlog tile on `/workspace`) and Operations
+  (`/ops` epic list). No new route, tab, card or primitive.
+- Primary persona: founder/operator reading delivery status, who must not
+  mistake merged-but-unproven work for finished work.
+- Navigation layer touched: none. Existing epic status mix, progress bar and
+  workspace tile metric rows gain values.
+- Reuse: the existing `EpicStatusMix` parts list and `TileMetric` rows; colours
+  `--dpf-warning` (awaiting) and `--dpf-error` (aged), per AGENTS.md §9.
+- Source truth: `BacklogItem.status` for counts; entry age from
+  `BacklogItemActivity` `status_change` rows via `acceptanceEnteredAt`,
+  creation as a marked fallback, never `updatedAt`.
+- Empty/failure: zero awaiting shows `0` on the tile and no aged row; on `/ops`
+  a failed age read shows the awaiting count without the aged share.
+- AI boundary: display only; nothing sends a prompt.
+- Guardrails: an aged count that includes creation-based ages reads `up to N`
+  with a tooltip saying why; awaiting acceptance never adds to done or to
+  `Done %`.
+
+## Phase 2b: close what the gate allows (BI-45D3BBF4), after phase 2 — as built
+
+Design §3.6. No schema; the authorisation is a `PlatformConfig` row.
+
+- `acceptance-sweep/close-authorisation.ts`: the record, its parser, and
+  `resolveCloseAuthorisation`, which disables closing unless the record is in
+  scope and enabled, its operator is still active with `manage_backlog`, and
+  the steward holds a stored grant for `update_backlog_item_status`.
+- `acceptance-sweep/close-authorisation-writer.ts` and
+  `actions/acceptance-sweep-close-authorisation.ts`: grant and revoke, needing
+  `manage_platform` and `manage_backlog` and a reason; revocation keeps the
+  grant's provenance.
+- `acceptance-sweep/acceptance-sweep-close.ts`: one closure through
+  `completeBacklogItemTransition` with the steward actor, the operator's human
+  context, an authority citing the pre-authorisation, and completionEvidence
+  citing the readiness decision.
+- `acceptance-sweep-run.ts`: resolves the authorisation once per run, closes
+  closable items whose decision verdict is `allowed` up to the bound, and
+  reports `closing` in the summary. `acceptance-sweep-evaluate.ts` carries the
+  decision with the projection.
+- Tests: allowed→closed citing the authorisation; input-required, denied,
+  signal-unavailable and readiness-unavailable never closed; absent, revoked,
+  operator-not-authorised, agent-not-granted and unreadable authorisation close
+  nothing and say why; the bound; refusals, skips and errors recorded; the
+  steward's registry grant pinned by a test (no grant added).
+- Live proof, AC-5: after an operator grants the authorisation, read two
+  consecutive run summaries and the awaiting-acceptance count. Not yet run.
+- Rollback: revoke the authorisation (the next run closes nothing) or revert
+  the PR.
 
 ## Risks and rollback
 
@@ -162,6 +216,7 @@ Umbrella: BI-5F3D6A37. Decision: `decomposed`.
 | Acceptance sweep task | BI-DF255666 | BI-04140C98 |
 | Coworker routing | BI-C1781121 | BI-DF255666 |
 | Delivery surfaces | BI-CEC60185 | BI-04140C98 |
+| Close what the gate allows | BI-45D3BBF4 | BI-DF255666 |
 
 Coverage receipt: recorded with `record_plan_backlog_coverage` after spec
 approval mints the objective baseline.

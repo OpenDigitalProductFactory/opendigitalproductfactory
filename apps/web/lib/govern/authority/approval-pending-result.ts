@@ -44,6 +44,10 @@ export function approvalPendingResult(
     detail,
     `${toolName} is available to you — this is not a missing tool or a denied grant,`,
     "and calling it again will not advance it. Report that the work is awaiting approval.",
+    // BI-0012E6CA: the person may be away for hours. A pending approval must
+    // never stall unrelated work, and a lapse is visible to them, not silent.
+    "Do not wait on it: carry on with any other work that does not depend on this call.",
+    "If nobody answers before it expires, the person sees it as expired unanswered and can ask again; you may also send a fresh request later.",
     "Once a person approves, the same call runs once; calling it again afterwards returns that recorded outcome, whether it succeeded or failed.",
   ].filter(Boolean).join(" ");
   return {

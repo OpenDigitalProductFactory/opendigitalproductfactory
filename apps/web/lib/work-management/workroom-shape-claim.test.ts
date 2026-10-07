@@ -5,9 +5,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildWorkroomShapeClaim,
   buildWorkShapeClaim,
+  buildWorkShapeRoleBindingsClaim,
   parseWorkShapeRef,
   readWorkroomShapeClaim,
   readWorkShapeClaim,
+  readWorkShapeRoleBindings,
   resolveWorkShapeClaim,
   withWorkShapeClaim,
 } from "./workroom-shape-claim";
@@ -111,5 +113,23 @@ describe("declared work-shape claim", () => {
     const first = withWorkShapeClaim([], valid, now);
     const second = withWorkShapeClaim(first, `${OBLIGATION_ASSURANCE_WATCH_SHAPE_KEY}@1.0.0`, new Date("2026-08-31T00:00:00.000Z"));
     expect(second.filter((entry) => readWorkShapeClaim([entry]) !== null)).toHaveLength(1);
+  });
+});
+
+describe("work-shape role bindings (BI-C1781121)", () => {
+  it("round-trips a role binding entry beside the shape claim", () => {
+    const claims = [
+      { workShape: "acceptance-verification@1.0.0", recordedAt: "2026-09-25T05:00:00.000Z" },
+      buildWorkShapeRoleBindingsClaim({ "acceptance-verifier": "agent:AGT-WS-BUILD" }, new Date("2026-09-25T05:00:00.000Z")),
+    ];
+    expect(readWorkShapeRoleBindings(claims)).toEqual({ "acceptance-verifier": "agent:AGT-WS-BUILD" });
+    // The binding entry is not a shape claim.
+    expect(readWorkShapeClaim(claims)).toEqual({ key: "acceptance-verification", version: "1.0.0" });
+  });
+
+  it("reads nothing from rooms without bindings or with malformed ones", () => {
+    expect(readWorkShapeRoleBindings(null)).toEqual({});
+    expect(readWorkShapeRoleBindings([{ workShapeRoleBindings: "agent:x" }])).toEqual({});
+    expect(readWorkShapeRoleBindings([{ workShapeRoleBindings: { verifier: 42, ok: "agent:A" } }])).toEqual({ ok: "agent:A" });
   });
 });

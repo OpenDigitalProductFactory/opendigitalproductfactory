@@ -99,9 +99,12 @@ published image can be reached (offline or air-gapped) does it build
    preserved. A re-run only adds generated secrets the file is missing:
    `DPF_GIT_WEBHOOK_SECRET`, the GPP permit signing key
    `DPF_GPP_PERMIT_SECRET`, the reach-link and delegation-receipt signing keys
-   `DPF_ATTENTION_REACH_SECRET` and `DPF_DELEGATION_RECEIPT_SECRET` (so
-   `AUTH_SECRET` no longer signs them; links and receipts signed with
-   `AUTH_SECRET` before the upgrade keep verifying until 9 November 2026), and
+   `DPF_ATTENTION_REACH_SECRET` and `DPF_DELEGATION_RECEIPT_SECRET`, the
+   self-upgrade target-binding and delivery-task cursor signing keys
+   `DPF_SELF_UPGRADE_TARGET_BINDING_SECRET` and
+   `DPF_DELIVERY_TASK_CURSOR_SECRET` (so `AUTH_SECRET` no longer signs any of
+   them; anything signed with `AUTH_SECRET` before the upgrade keeps verifying
+   until 9 November 2026), and
    the Inngest `INNGEST_SIGNING_KEY` and
    `INNGEST_EVENT_KEY`. A real value already set is never rotated. The
    installer also replaces an Inngest key that still
@@ -365,6 +368,16 @@ benign â€” WSL2 sizes dynamically and `autoMemoryReclaim` returns freed pages â€
 an explicit `memory=` in `%USERPROFILE%\.wslconfig` pins it. Remove or lower it,
 then `wsl --shutdown`. (On macOS the VM is fixed-size and never returns memory to
 the host, so over-allocation there ratchets until builds fail.)
+
+**Containers cannot be stopped, or the platform reports the Docker VM is wedged.**
+Processes stuck in uninterruptible I/O (for example a `sync` against a dead file
+share) survive `docker kill`; only a Docker VM restart clears them. Do not run
+`wsl --shutdown` by hand while DPF is running. The platform raises a "Docker VM is
+wedged" condition, and the portal's Health tab offers **Restart Docker VM**. It
+drains the platform, then the native Edge agent on this machine stops Docker
+Desktop, shuts the VM down, clears Docker's stale socket folders, and starts
+Docker and DPF again. It never reboots Windows. The control needs the native Edge
+agent (`install-dpf.ps1 -WithEdge`) with remote actions enabled.
 
 **`/api/health` returns 500.**
 The database migrations may not have completed. Tail the portal-init

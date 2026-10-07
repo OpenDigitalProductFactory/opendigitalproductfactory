@@ -590,8 +590,14 @@ export function projectBacklogItemReadinessSummary(args: {
   hasSpec: boolean;
   hasPlan: boolean;
   evaluatedAt: string;
+  /**
+   * BI-094B41AC: the completion gate's own evaluation for this item
+   * (readBacklogItemCompletion), when the caller ran it. A persisted terminal
+   * decision still wins; absent both, completion is projected as before.
+   */
+  completionDecision?: InitiativeReadinessDecision | null;
 }) {
-  const terminalCompletion = persistedTerminalCompletionDecision(args.activities, args.item);
+  const terminalCompletion = persistedTerminalCompletionDecision(args.activities, args.item) ?? args.completionDecision ?? null;
   const decisions = Object.fromEntries((["design", "plan", "implementation", "completion"] as const).map((target) => {
     if (target === "completion" && terminalCompletion) return [target, terminalCompletion];
     const projected = projectBacklogItemReadiness({

@@ -4,6 +4,15 @@ import { gateAtEntry } from "../quiescence-gates";
 
 export const BUILD_PR_DELIVERY_RECONCILE_CRON = "2,7,12,17,22,27,32,37,42,47,52,57 * * * *";
 
+/**
+ * PR follow-through is a Workroom duty (BI-88341B5D): every non-terminal room
+ * with a bound PR is reconciled here, whichever client opened the PR. Build
+ * Studio rooms keep their autonomy-eligibility check; every other room acts
+ * within its own posture (resolvePrFollowThroughPosture).
+ */
+const ROOM_SCAN_WINDOW = 200;
+const ROOMS_PER_RUN = 25;
+
 export async function runBuildPrDeliveryReconcile(): Promise<{
   observed: number;
   actuated: number;
@@ -27,6 +36,12 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
     readBuildPrDeliveryState,
     writeBuildPrDeliveryState,
   } = await import("@/lib/build/build-pr-delivery-state");
+  const {
+    announcePrFollowThrough,
+    resolvePrFollowThroughPosture,
+  } = await import("@/lib/build/pr-follow-through-announce");
+  const { getWorkroomPostureDefault } = await import("@/lib/work-management/workroom-posture-defaults");
+  const { createPlatformIssueReport } = await import("@/lib/quality/platform-issue-reports");
 
   const mode = resolveBuildPrReconcilerMode();
   if (mode === "off") return { observed: 0, actuated: 0, escalated: 0, compareAndSwapLost: 0 };
@@ -36,9 +51,10 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
   );
   if (!token) throw new Error("Build PR delivery reconcile: GitHub credential unavailable");
 
-  const capsules = await prisma.workroom.findMany({
+  const platformDefaultActionBoundary = (await getWorkroomPostureDefault())?.actionBoundary ?? null;
+
+  const scanWindow = await prisma.workroom.findMany({
     where: {
-      featureBuildId: { not: null },
       pullRequestNumber: { not: null },
       pullRequestUrl: { not: null },
       status: { notIn: ["complete", "abandoned", "archived"] },
@@ -50,12 +66,22 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       repositoryFullName: true,
       pullRequestNumber: true,
       pullRequestUrl: true,
+      scopeClaims: true,
       workspaceState: true,
       updatedAt: true,
     },
-    take: 25,
+    take: ROOM_SCAN_WINDOW,
     orderBy: { updatedAt: "asc" },
   });
+  // A room the reconciler has stopped on is skipped without a write, so its
+  // updatedAt never advances. Filtering before the per-run cap keeps a pile of
+  // stopped rooms from starving every live one behind them.
+  const capsules = scanWindow
+    .filter((capsule) => {
+      const status = readBuildPrDeliveryState(capsule.workspaceState)?.status;
+      return status !== "escalated" && status !== "closed" && status !== "deployed";
+    })
+    .slice(0, ROOMS_PER_RUN);
 
   let observed = 0;
   let actuated = 0;
@@ -65,15 +91,8 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
   for (const capsule of capsules) {
     const prNumber = capsule.pullRequestNumber;
     const prUrl = capsule.pullRequestUrl;
-    if (!prNumber || !prUrl || !capsule.featureBuildId) continue;
+    if (!prNumber || !prUrl) continue;
     const existing = readBuildPrDeliveryState(capsule.workspaceState);
-    if (
-      existing?.status === "escalated" ||
-      existing?.status === "closed" ||
-      existing?.status === "deployed"
-    ) {
-      continue;
-    }
     const repository = existing?.repository || capsule.repositoryFullName || (() => {
       try {
         return new URL(prUrl).pathname.split("/").filter(Boolean).slice(0, 2).join("/");
@@ -91,7 +110,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       );
       const autonomousMode = getAutonomousPlaybookMode();
       let semanticBuildId: string | null = null;
-      if (autonomousMode !== "off") {
+      if (capsule.featureBuildId && autonomousMode !== "off") {
         semanticBuildId = (
           await prisma.featureBuild.findUnique({
             where: { id: capsule.featureBuildId },
@@ -140,6 +159,10 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       const observation = await observeGithubPullRequest({ owner, repo, prNumber, token });
       observed += 1;
       const readiness = projectGithubPrReadiness(observation);
+      const posture = resolvePrFollowThroughPosture({
+        scopeClaims: capsule.scopeClaims,
+        platformDefaultActionBoundary,
+      });
       const outcome = await executeBuildPrDeliveryAction({
         state,
         observation,
@@ -148,6 +171,12 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         token,
         owner,
         repo,
+        // Build Studio rooms were gated by autonomy eligibility above.
+        actuationAllowed: capsule.featureBuildId ? true : posture.actuationAllowed,
+        repairAuthority: posture.authority,
+        // No dispatchRepair yet: whether the platform coding coworker can push
+        // to an existing external branch is the design's open question (§8), so
+        // a repair the room may dispatch is staged for a person instead.
       });
       if (outcome.actuated) actuated += 1;
 
@@ -158,13 +187,45 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
             capsule.workspaceState,
             outcome.state,
           ) as unknown as import("@dpf/db").Prisma.InputJsonValue,
-          headSha: outcome.state.lastObservedHeadSha,
+          // Never erase a room's recorded head on an observation that lacked one.
+          ...(outcome.state.lastObservedHeadSha ? { headSha: outcome.state.lastObservedHeadSha } : {}),
         },
       });
       if (saved.count === 0) {
         compareAndSwapLost += 1;
         continue;
       }
+
+      await announcePrFollowThrough({
+        room: { id: capsule.id, capsuleId: capsule.capsuleId, featureBuildId: capsule.featureBuildId, prNumber, prUrl },
+        priorAttentionKey: state.followThrough.attentionKey,
+        decision: outcome.followThrough,
+        deps: {
+          recordActivity: async (activity) => {
+            await prisma.workroomActivity.create({
+              data: {
+                workCapsuleId: activity.roomId,
+                kind: activity.kind,
+                summary: activity.summary,
+                payload: activity.payload as import("@dpf/db").Prisma.InputJsonValue,
+              },
+            });
+          },
+          raiseIssue: async (issue) => {
+            await createPlatformIssueReport({
+              type: "build-stall-escalation",
+              source: "workroom-pr-follow-through",
+              severity: "high",
+              title: issue.title,
+              description: issue.description,
+              featureBuildId: issue.featureBuildId,
+              triggerKind: "build-pr-delivery-reconcile",
+              dedupeKey: issue.dedupeKey,
+              selfFixClass: issue.selfFixClass,
+            });
+          },
+        },
+      });
 
       if (
         semanticBuildId
@@ -185,14 +246,14 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         outcome.action.kind === "escalate" &&
         state.escalationKey !== outcome.state.escalationKey
       ) {
-        const { createPlatformIssueReport } = await import("@/lib/quality/platform-issue-reports");
+        const surface = capsule.featureBuildId ? "Build Studio" : `Workroom ${capsule.capsuleId}`;
         await createPlatformIssueReport({
           type: "build-stall-escalation",
-          source: "build-studio",
+          source: capsule.featureBuildId ? "build-studio" : "workroom-pr-follow-through",
           severity: "high",
-          title: `Build Studio needs a PR delivery decision: #${prNumber}`,
+          title: `${surface} needs a PR delivery decision: #${prNumber}`,
           description:
-            `Build Studio stopped autonomous PR delivery for ${capsule.capsuleId}.\n\n` +
+            `${surface} stopped autonomous PR delivery for ${capsule.capsuleId}.\n\n` +
             `Reason: ${outcome.action.reason}\nHead: ${outcome.action.headSha ?? "unknown"}\nPR: ${prUrl}\n\n` +
             "No direct merge, force-push, or automatic conflict edit was attempted.",
           featureBuildId: capsule.featureBuildId,

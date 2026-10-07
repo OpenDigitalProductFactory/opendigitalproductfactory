@@ -10,6 +10,7 @@ import { diffWorkShapeBinding, type BindingChangeKind, type WorkShapeBindingDiff
 import { isCompletingWorkroomDriveReceipt } from "./workroom-drive-receipts";
 import { getWorkShape, getWorkShapeVersion, readWorkShapeDefinitionContract, type WorkShapeDefinition } from "./work-shapes";
 import { hasStoredDriveMarking } from "./drive-graph-tick";
+import { liveSubShapeChildren } from "./drive-child-rooms";
 import { readStoredDriveMarking } from "./drive-marking";
 import { backwardReach, buildShapeFlowGraph, forwardReach } from "./work-shape-flow-graph";
 import { readWorkShapeClaim } from "./workroom-shape-claim";
@@ -84,9 +85,9 @@ function insideParallelBlock(definition: WorkShapeDefinition, nodeId: string): b
  * or null when it can (GPP Phase 3c PR-3c-1, AC-3C-REBIND). Only one token,
  * outside any parallel block of either version, with no rework taken and no
  * child room, maps by stage key the way the sequential `stageKey` does. A
- * marking that cannot be read is refused: the guard fails closed. Every
- * `children` entry counts as live until the sub-shape PR (PR-3c-5) can read
- * the child's state.
+ * marking that cannot be read is refused: the guard fails closed. A
+ * `children` entry is live until the drive records it `completed` or
+ * `abandoned` (PR-3c-5); a live child refuses the rebind.
  */
 export function markingNotMappable(
   workspaceState: unknown,
@@ -101,7 +102,8 @@ export function markingNotMappable(
   if (Object.values(marking.reworkTaken).some((count) => count > 0)) {
     return "This room has taken a rework route this cycle. Rebind once the cycle completes.";
   }
-  if (Object.keys(marking.children).length > 0) return "This room has a sub-shape child room. Rebind once it has finished.";
+  const live = liveSubShapeChildren(marking);
+  if (live.length > 0) return `This room has a live sub-shape child room (${live.map(([, entry]) => entry.capsuleId).join(", ")}). Rebind once it has finished.`;
   const token = marking.tokens[0];
   if (token && [from, to].some((definition) => definition !== null && insideParallelBlock(definition, token.node))) {
     return "This room's work is inside a parallel block. Rebind once the block has joined.";

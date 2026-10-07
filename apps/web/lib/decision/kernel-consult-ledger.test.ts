@@ -56,10 +56,27 @@ function makeDb(overrides: {
   profile?: { profileId: string; kind: string } | null;
   version?: { versionId: string } | null;
   createImpl?: (args: { data: Record<string, unknown> }) => Promise<unknown>;
+  /** Agent.agentId values that exist. */
+  agents?: string[];
 } = {}) {
   const created: Array<Record<string, unknown>> = [];
+  const ledger: Array<{ where: { ledgerId: string }; create: Record<string, unknown> }> = [];
   return {
     created,
+    ledger,
+    agent: {
+      findMany: vi.fn(async (args: { where: { agentId: { in: string[] } } }) =>
+        args.where.agentId.in
+          .filter((id) => (overrides.agents ?? []).includes(id))
+          .map((agentId) => ({ agentId })),
+      ),
+    },
+    decisionShadowLedger: {
+      upsert: vi.fn(async (args: { where: { ledgerId: string }; create: Record<string, unknown> }) => {
+        ledger.push(args);
+        return args.create;
+      }),
+    },
     decisionPerspectiveProfile: {
       findUnique: vi.fn(async () =>
         overrides.profile === undefined
@@ -223,6 +240,62 @@ describe("recordKernelConsultInteraction", () => {
       artifactFingerprint: "sha256:exact",
     });
     expect(Array.isArray(payload.topContributors)).toBe(true);
+  });
+
+  // BI-6082C235: the coworker that asked the kernel was recorded only inside
+  // outcomePayload.caller, so no decision could be attributed to a coworker
+  // and the shadow ledger stayed empty. It now lands in its own column and the
+  // decision is bridged into the ledger, at shadow, record only.
+  it("records the asking coworker and bridges the decision into the shadow ledger", async () => {
+    const db = makeDb({ agents: ["AGT-EXT-CLAUDE"] });
+    const outcome = await recordKernelConsultInteraction({
+      db: db as never,
+      result: makeResult(),
+      callerContext: wwmdContext,
+      question: "q",
+      optionIds: ["option-a", "option-b"],
+      optionDescriptions: {},
+      appliedPrincipleCount: 1,
+      caller: { client: "claude-code/2", agentId: "AGT-EXT-CLAUDE" },
+    });
+
+    expect(outcome.recorded).toBe(true);
+    expect(db.created[0]!.agentId).toBe("AGT-EXT-CLAUDE");
+    expect(outcome.shadowLedger).toEqual({
+      written: true,
+      ledgerId: `DSL-${outcome.interactionId}`,
+      agreement: null,
+    });
+    expect(db.ledger).toHaveLength(1);
+    expect(db.ledger[0]!.create).toMatchObject({
+      agentId: "AGT-EXT-CLAUDE",
+      activityType: "governed_decision_kernel_consult",
+      riskClass: "internal-reversible",
+      autonomyLevel: "shadow",
+      decisionInteractionId: outcome.interactionId,
+      agreement: null,
+    });
+  });
+
+  it("records no coworker, and writes no ledger row, for an id no Agent row carries", async () => {
+    const db = makeDb({ agents: [] });
+    const outcome = await recordKernelConsultInteraction({
+      db: db as never,
+      result: makeResult(),
+      callerContext: wwmdContext,
+      question: "q",
+      optionIds: ["a"],
+      optionDescriptions: {},
+      appliedPrincipleCount: 1,
+      caller: { agentId: "AGT-GHOST" },
+    });
+
+    expect(outcome.recorded).toBe(true);
+    expect(db.created[0]!.agentId).toBeNull();
+    // The caller's declaration is still kept, verbatim, where it always was.
+    expect((db.created[0]!.outcomePayload as { caller: { agentId: string } }).caller.agentId).toBe("AGT-GHOST");
+    expect(outcome.shadowLedger).toBeNull();
+    expect(db.ledger).toHaveLength(0);
   });
 
   it("skips observably when the governing profile is not provisioned", async () => {

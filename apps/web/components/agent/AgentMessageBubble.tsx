@@ -14,6 +14,8 @@ import {
   type CoworkerDecision,
   type CoworkerDecisionOption,
 } from "@/lib/tak/decision-block";
+import { LEAVE_DECISION_ACTION } from "@/lib/workforce/leave/leave-decision-proposal-contract";
+import { LeaveDecisionProposalCard } from "./LeaveDecisionProposalCard";
 
 /**
  * Format the per-turn provider/model attribution badge shown on assistant
@@ -532,6 +534,12 @@ export function AgentMessageBubble({
               fontSize: 12,
             }}
           >
+            {p.actionType === LEAVE_DECISION_ACTION ? (
+              // BI-4E192035: the leave outcome is asked for explicitly; the
+              // generic Approve / Reject verbs below never render for leave.
+              <LeaveDecisionProposalCard status={p.status} parameters={p.parameters} />
+            ) : (
+            <>
             <div style={{ fontWeight: 600, color: "var(--dpf-text)", marginBottom: 6 }}>
               {actionLabel}
             </div>
@@ -586,6 +594,8 @@ export function AgentMessageBubble({
               <div style={{ color: "var(--dpf-error)", fontSize: 11 }}>
                 Failed: {p.resultError}
               </div>
+            )}
+            </>
             )}
           </div>
         </div>

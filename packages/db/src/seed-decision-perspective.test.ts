@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mergeAutonomyPolicy, OPERATOR_OWNED_AUTONOMY_POLICY_KEYS } from "./seed-decision-perspective";
+import { buildDecisionPerspectiveSeed, mergeAutonomyPolicy, OPERATOR_OWNED_AUTONOMY_POLICY_KEYS } from "./seed-decision-perspective";
 
 describe("mergeAutonomyPolicy (BI-397157EA)", () => {
   it("refreshes seed keys but keeps the operator's decreed room default and Golden Triangle", () => {
@@ -22,5 +22,17 @@ describe("mergeAutonomyPolicy (BI-397157EA)", () => {
     const seeded = { allowRecommendation: true };
     expect(mergeAutonomyPolicy(null, seeded)).toEqual(seeded);
     expect(mergeAutonomyPolicy({ allowRecommendation: false }, seeded)).toEqual(seeded);
+  });
+});
+
+// BI-7FFFBEE3 (operator decision 2026-10-07): platform-development decisions are
+// arbitrated by the delegated policy up to high risk at >= 0.70 confidence.
+describe("platform decision profile delegated policy", () => {
+  it("lets the delegated policy arbitrate up to high risk at 0.70 confidence", () => {
+    expect(buildDecisionPerspectiveSeed().profile.autonomyPolicy).toMatchObject({
+      allowArbitration: true,
+      maxRiskForArbitration: "high",
+      minimumConfidenceForArbitration: 0.7,
+    });
   });
 });

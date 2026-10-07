@@ -40,6 +40,9 @@ Do not approve again just because the original card disappeared; your assistant
 can check the result and the affected work first. You can only read your own
 approval results.
 
+How long a coworker's request waits for you, and what happens if nobody
+answers, is explained in [the attention inbox guide](attention-inbox.md#how-long-a-coworkers-request-waits).
+
 ## Operations and Performance
 
 The main rail separates two different decisions:

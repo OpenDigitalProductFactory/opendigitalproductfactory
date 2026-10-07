@@ -53,6 +53,9 @@ export interface NormalizedSource {
   userAgent: string | null;
   humanId: string; // itemId / epicId / reportId — for display only
   upstreamIssueNumber: number | null;
+  /** The resolved internal row id. Set where the lookup accepts either id, so
+   *  the escalation's mark-up writes the cuid the column expects (BI-C3947AAA). */
+  rowId?: string;
 }
 
 export async function loadSource(
@@ -60,9 +63,19 @@ export async function loadSource(
   id: string,
 ): Promise<NormalizedSource | null> {
   if (kind === "backlog") {
-    const row = await prisma.backlogItem.findUnique({
-      where: { id },
+    const row = await prisma.backlogItem.findFirst({
+      // BI-C3947AAA: a BacklogItem has two ids and callers legitimately hold
+      // either. `propose_improvement` back-links the SEMANTIC one
+      // (ImprovementProposal.backlogItemId = ingest.itemId), while this lookup
+      // only accepted the internal cuid -- so contribute_finding_to_hive, which
+      // passes that link straight through, reported every freshly filed
+      // proposal as "not found". Accepting both resolves it for every caller and
+      // for the proposals already stored that way, rather than migrating rows.
+      // The two id spaces cannot collide: a semantic id is `BI-`-prefixed and a
+      // cuid never is.
+      where: { OR: [{ id }, { itemId: id }] },
       select: {
+        id: true,
         itemId: true,
         title: true,
         body: true,
@@ -71,6 +84,7 @@ export async function loadSource(
     });
     if (!row) return null;
     return {
+      rowId: row.id,
       title: row.title,
       body: row.body,
       severity: null,
@@ -376,7 +390,9 @@ export async function escalateToUpstreamIssue(
   }
 
   try {
-    await recordEscalation(input.kind, input.id, result.number, result.url);
+    // BI-C3947AAA: the lookup may have resolved a semantic id, and this update
+    // keys on the cuid — so record against the row that was actually loaded.
+    await recordEscalation(input.kind, source.rowId ?? input.id, result.number, result.url);
   } catch (err) {
     return {
       status: "failed",

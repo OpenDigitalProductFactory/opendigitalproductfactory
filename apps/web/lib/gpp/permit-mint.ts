@@ -13,6 +13,8 @@
 
 import { randomBytes, randomUUID } from "node:crypto";
 
+import { APPROVAL_DECISION_WINDOW_MS } from "@/lib/coworker/approval-lifetime";
+
 import { bindingRef, type GppBinding } from "./bindings";
 import { computeParamHash } from "./param-hash";
 import type { PermitClaims } from "./permit-claims";
@@ -20,11 +22,14 @@ import { formatPermitHandle, signPermit } from "./permit-handle";
 import { gppPermitStore, type PermitRow } from "./permit-store";
 
 /**
- * Permit lifetime. Mirrors AUTHORITY_APPROVAL_TTL_MS
- * (lib/coworker/authority-approval-envelope.ts), the lifetime of the approval a
- * human-checkpoint permit cites; permit-verdict.test.ts pins the two together.
+ * Permit lifetime: the short decision window (APPROVAL_DECISION_WINDOW_MS,
+ * lib/coworker/approval-lifetime.ts), counted from the gate admit that mints the
+ * permit — never from when the cited approval was raised. Approval lifetimes
+ * are proportional to the action (BI-0012E6CA), but a permit is minted at
+ * execution for one use, so its window stays short whatever the approval's
+ * lifetime was. permit-verdict.test.ts pins the two together.
  */
-export const GPP_PERMIT_TTL_MS = 15 * 60 * 1000;
+export const GPP_PERMIT_TTL_MS = APPROVAL_DECISION_WINDOW_MS;
 
 export type MintShadowPermitInput = {
   binding: GppBinding;

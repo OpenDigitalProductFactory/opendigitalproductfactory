@@ -6,24 +6,17 @@
 //
 // Spec: docs/superpowers/specs/2026-09-24-portfolio-budget-and-investment-wip-design.md
 
-import { resolveBacklogPortfolioWithPath, type BacklogPortfolioPath } from "@dpf/db/backlog-portfolio";
-
+import { FOUNDATIONAL_PORTFOLIO_SLUG } from "./accountable-owner";
+import { resolveBudgetPortfolio, type BudgetAttributionInput, type BudgetPortfolioPath } from "./budget-attribution";
 import { quarterBounds, resolveInvestmentPoints } from "./investment-points";
 
 /** One backlog item with the links attribution reads, as the loader selects it. */
-export type InvestmentItemRow = {
+export type InvestmentItemRow = BudgetAttributionInput & {
   itemId: string;
   status: string;
   effortSize: string | null;
   jobSize: number | null;
   estimateAgreed: boolean | null;
-  storedPortfolioId: string | null;
-  /** The stored portfolioId names no Portfolio row. */
-  storedPortfolioDangling: boolean;
-  productPortfolioId: string | null;
-  taxonomyPortfolioId: string | null;
-  coworkerNeedPortfolioId: string | null;
-  epicPortfolioId: string | null;
   activeBuildId: string | null;
   /** A non-terminal Workroom is bound to the item (design §5.6: in flight). */
   hasLiveWorkroom: boolean;
@@ -45,7 +38,9 @@ export type PortfolioInvestmentRow = {
   inFlightPoints: number;
   deliveredPoints: number;
   unsizedItems: number;
-  paths: Partial<Record<BacklogPortfolioPath, number>>;
+  paths: Partial<Record<BudgetPortfolioPath, number>>;
+  /** The share of this row the platform-default rule attributed (BI-291F7451). */
+  attributedByRule: { items: number; readyPoints: number; inFlightPoints: number; deliveredPoints: number };
   /** Items whose stored portfolioId contradicts their links. */
   storedDisagreements: number;
   /** Items whose stored portfolioId named no portfolio, so it was ignored. */
@@ -74,14 +69,7 @@ function classify(item: InvestmentItemRow, period: { start: Date; end: Date }): 
 
 /** One item's portfolio (with path) and investment class for a period; null class = outside it. */
 export function resolveInvestmentItem(item: InvestmentItemRow, period: { start: Date; end: Date }) {
-  const resolution = resolveBacklogPortfolioWithPath({
-    // A stored id naming no portfolio would open a row no budget can match.
-    portfolioId: item.storedPortfolioDangling ? null : item.storedPortfolioId,
-    digitalProduct: { portfolioId: item.productPortfolioId },
-    taxonomyNode: { portfolioId: item.taxonomyPortfolioId },
-    coworkerNeeds: [{ agent: { portfolioId: item.coworkerNeedPortfolioId } }],
-    epic: { portfolios: item.epicPortfolioId ? [{ portfolioId: item.epicPortfolioId }] : [] },
-  });
+  const resolution = resolveBudgetPortfolio(item);
   return { resolution, itemClass: classify(item, period), points: resolveInvestmentPoints(item).points };
 }
 
@@ -104,18 +92,23 @@ export function summarizePortfolioInvestment(
       portfolioId: resolution.portfolioId,
       items: 0, readyPoints: 0, inFlightPoints: 0, deliveredPoints: 0, unsizedItems: 0,
       paths: {}, storedDisagreements: 0, danglingStoredItems: 0,
+      attributedByRule: { items: 0, readyPoints: 0, inFlightPoints: 0, deliveredPoints: 0 },
     };
+    const byRule = resolution.basis === "platform-default";
     row.items++;
     row.paths[resolution.path] = (row.paths[resolution.path] ?? 0) + 1;
     if (resolution.disagreesWithLinks) row.storedDisagreements++;
     if (item.storedPortfolioDangling) row.danglingStoredItems++;
+    if (byRule) row.attributedByRule.items++;
 
     if (points === null) {
       row.unsizedItems++;
       totals.unsizedItems++;
-    } else if (itemClass === "ready") row.readyPoints += points;
-    else if (itemClass === "inFlight") row.inFlightPoints += points;
-    else row.deliveredPoints += points;
+    } else {
+      const key = itemClass === "ready" ? "readyPoints" : itemClass === "inFlight" ? "inFlightPoints" : "deliveredPoints";
+      row[key] += points;
+      if (byRule) row.attributedByRule[key] += points;
+    }
 
     if (itemClass === "delivered") totals.deliveredThisQuarterItems++;
     else totals.liveItems++;
@@ -129,7 +122,7 @@ type Db = { $queryRaw: <T>(query: TemplateStringsArray, ...values: unknown[]) =>
 
 /**
  * Live items (every status but done and retired) plus items done inside the
- * period, each with the links attribution reads. The epic's portfolio is the
+ * period, each with the links attribution reads (budget-attribution.ts). The epic's portfolio is the
  * lowest id when an epic names several, so the choice is stable.
  */
 export async function loadInvestmentItems(db: Db, period: { start: Date; end: Date }): Promise<InvestmentItemRow[]> {
@@ -140,6 +133,8 @@ export async function loadInvestmentItems(db: Db, period: { start: Date; end: Da
       b."effortSize"     AS "effortSize",
       b."jobSize"        AS "jobSize",
       b."estimateAgreed" AS "estimateAgreed",
+      b."scopeKind"::text AS "scopeKind",
+      (SELECT p."id" FROM "Portfolio" p WHERE p."slug" = ${FOUNDATIONAL_PORTFOLIO_SLUG}) AS "platformDefaultPortfolioId",
       b."portfolioId"    AS "storedPortfolioId",
       (b."portfolioId" IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM "Portfolio" p WHERE p."id" = b."portfolioId")) AS "storedPortfolioDangling",

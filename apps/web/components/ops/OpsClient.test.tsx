@@ -257,4 +257,84 @@ describe("OpsClient", () => {
     expect(html).toContain("Alpha Portfolio");
     expect(html).toContain("Beta Portfolio");
   });
+  it("shows awaiting acceptance and its aged share apart from done (AC-AA-05)", () => {
+    const doneItem = item({ id: "done", itemId: "BI-DONE", status: "done", completedAt: now });
+    const agedEntry = item({ id: "aged-entry", itemId: "BI-AGED-1", status: "awaiting-acceptance" });
+    const agedCreated = item({ id: "aged-created", itemId: "BI-AGED-2", status: "awaiting-acceptance" });
+    const fresh = item({ id: "fresh", itemId: "BI-FRESH", status: "awaiting-acceptance" });
+    const epicItems = [doneItem, agedEntry, agedCreated, fresh];
+
+    const html = renderToStaticMarkup(
+      <OpsClient
+        items={epicItems}
+        digitalProducts={[]}
+        taxonomyNodes={[]}
+        epics={[epic({ items: epicItems })]}
+        portfolios={[]}
+        agedAcceptance={[
+          { id: "aged-entry", ageBasis: "entry" },
+          { id: "aged-created", ageBasis: "created" },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("3 awaiting acceptance");
+    expect(html).toContain("(up to 2 over 14 days)");
+    expect(html).toContain("1 done");
+    expect(html).toContain("1 of 4 items done, 3 awaiting acceptance");
+    expect(html).toContain("counted from creation and may be lower");
+  });
+
+  it("shows an exact aged count when every age is measured from entry, and none when nothing is aged", () => {
+    const awaiting = item({ id: "a1", itemId: "BI-A1", status: "awaiting-acceptance" });
+    const other = item({ id: "a2", itemId: "BI-A2", status: "awaiting-acceptance" });
+
+    const aged = renderToStaticMarkup(
+      <OpsClient
+        items={[awaiting, other]}
+        digitalProducts={[]}
+        taxonomyNodes={[]}
+        epics={[epic({ items: [awaiting, other] })]}
+        portfolios={[]}
+        agedAcceptance={[{ id: "a1", ageBasis: "entry" }]}
+      />,
+    );
+    expect(aged).toContain("2 awaiting acceptance");
+    expect(aged).toContain("(1 over 14 days)");
+    expect(aged).not.toContain("up to");
+
+    const notAged = renderToStaticMarkup(
+      <OpsClient
+        items={[awaiting]}
+        digitalProducts={[]}
+        taxonomyNodes={[]}
+        epics={[epic({ items: [awaiting] })]}
+        portfolios={[]}
+      />,
+    );
+    expect(notAged).toContain("1 awaiting acceptance");
+    expect(notAged).not.toContain("over 14 days");
+    expect(notAged).not.toContain("1 done");
+  });
+
+  it("names hidden awaiting-acceptance items instead of folding them into done", () => {
+    const awaiting = item({ id: "a1", itemId: "BI-A1", status: "awaiting-acceptance", epicId: null });
+    const doneItem = item({ id: "d1", itemId: "BI-D1", status: "done", epicId: null, completedAt: now });
+
+    const html = renderToStaticMarkup(
+      <OpsClient
+        items={[awaiting, doneItem]}
+        digitalProducts={[]}
+        taxonomyNodes={[]}
+        epics={[epic({ items: [awaiting, doneItem] })]}
+        portfolios={[]}
+        focusedItemId="BI-A1"
+      />,
+    );
+
+    // Epic expanded via the focused item; Active only hides both rows.
+    expect(html).toContain("1 awaiting acceptance · 1 done");
+    // Unassigned product section footnote.
+    expect(html).toContain("1 awaiting acceptance · 0 deferred · 1 done · 0 retired");
+  });
 });

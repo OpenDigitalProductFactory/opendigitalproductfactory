@@ -58,6 +58,9 @@ export const GPP_RULE_IDS = [
   "D-6",
   "D-7",
   "D-8",
+  // GPP Phase 3c PR-3c-5 (BI-8875C9DF): sub-shape widening and sub-shape resolution.
+  "D-9",
+  "D-10",
   "E-NOT-EXECUTABLE",
   "W-ORPHAN-LAYOUT",
 ] as const;

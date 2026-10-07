@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@dpf/db", () => ({
   prisma: {
     platformDevConfig: { findUnique: vi.fn() },
-    backlogItem: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+    backlogItem: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn(), findMany: vi.fn() },
     epic: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
     platformIssueReport: { findUnique: vi.fn(), update: vi.fn() },
     credentialEntry: { findUnique: vi.fn() },
@@ -41,9 +41,15 @@ import {
   closeUpstreamIssueForTerminal,
   isUpstreamClosureCandidate,
   sweepUpstreamIssueClosures,
+  loadSource,
 } from "./issue-bridge";
 
-const mockBacklogFind = vi.mocked(prisma.backlogItem.findUnique);
+// BI-C3947AAA: the backlog lookup resolves either id, so it is a findFirst with
+// an OR rather than a findUnique on the cuid alone.
+const mockBacklogFind = vi.mocked(prisma.backlogItem.findFirst);
+// loadTerminalMirror still keys on the cuid alone, so the closure paths below
+// drive findUnique. Two lookups, two aliases — one fixture each.
+const mockBacklogFindUnique = vi.mocked(prisma.backlogItem.findUnique);
 const mockBacklogUpdate = vi.mocked(prisma.backlogItem.update);
 const mockEpicFind = vi.mocked(prisma.epic.findUnique);
 const mockIssueReportFind = vi.mocked(prisma.platformIssueReport.findUnique);
@@ -479,7 +485,7 @@ describe("closeUpstreamIssueForTerminal", () => {
   });
 
   it("comments with the resolution, closes with the status reason, and stamps the sync time", async () => {
-    mockBacklogFind.mockResolvedValue({ ...terminalRow(), itemId: "BI-0996913C" } as never);
+    mockBacklogFindUnique.mockResolvedValue({ ...terminalRow(), itemId: "BI-0996913C" } as never);
     mockConfigFind.mockResolvedValue(seededConfig());
     mockBacklogUpdate.mockResolvedValue({} as never);
     fetchMock.mockImplementation(async (_url: string, init: { method?: string }) =>
@@ -500,7 +506,7 @@ describe("closeUpstreamIssueForTerminal", () => {
   });
 
   it("skips a row that is not a candidate without touching GitHub", async () => {
-    mockBacklogFind.mockResolvedValue({ ...terminalRow({ status: "deferred" }), itemId: "BI-0996913C" } as never);
+    mockBacklogFindUnique.mockResolvedValue({ ...terminalRow({ status: "deferred" }), itemId: "BI-0996913C" } as never);
     const result = await closeUpstreamIssueForTerminal({ kind: "backlog", id: "cuid-9" });
     expect(result.status).toBe("skipped");
     expect(fetchMock).not.toHaveBeenCalled();
@@ -508,7 +514,7 @@ describe("closeUpstreamIssueForTerminal", () => {
   });
 
   it("skips on a private install", async () => {
-    mockBacklogFind.mockResolvedValue({ ...terminalRow(), itemId: "BI-0996913C" } as never);
+    mockBacklogFindUnique.mockResolvedValue({ ...terminalRow(), itemId: "BI-0996913C" } as never);
     mockConfigFind.mockResolvedValue(seededConfig({ contributionMode: "fork_only" }));
     const result = await closeUpstreamIssueForTerminal({ kind: "backlog", id: "cuid-9" });
     expect(result).toMatchObject({ status: "skipped", reason: expect.stringContaining("private") });
@@ -516,7 +522,7 @@ describe("closeUpstreamIssueForTerminal", () => {
   });
 
   it("leaves the row unsynced when GitHub fails, so the sweep retries it", async () => {
-    mockBacklogFind.mockResolvedValue({ ...terminalRow(), itemId: "BI-0996913C" } as never);
+    mockBacklogFindUnique.mockResolvedValue({ ...terminalRow(), itemId: "BI-0996913C" } as never);
     mockConfigFind.mockResolvedValue(seededConfig());
     fetchMock.mockResolvedValue({ ok: false, status: 502, headers: { get: () => null }, json: async () => ({ message: "Bad gateway" }) });
     const result = await closeUpstreamIssueForTerminal({ kind: "backlog", id: "cuid-9" });
@@ -554,7 +560,7 @@ describe("sweepUpstreamIssueClosures", () => {
       { id: "b", itemId: "BI-B", status: "retired", completedAt: T1, upstreamIssueNumber: 2, upstreamSyncedAt: new Date("2026-09-12T00:00:00Z") },
     ] as never);
     vi.mocked(prisma.epic.findMany).mockResolvedValue([] as never);
-    mockBacklogFind.mockImplementation((async (args: { where: { id?: string } }) => {
+    mockBacklogFindUnique.mockImplementation((async (args: { where: { id?: string } }) => {
       const id = args.where.id ?? "";
       return { id, itemId: `BI-${id.toUpperCase()}`, status: "done", triageOutcome: null, resolution: null, completedAt: T1, upstreamIssueNumber: 1, upstreamSyncedAt: T0 };
     }) as never);
@@ -565,7 +571,7 @@ describe("sweepUpstreamIssueClosures", () => {
     const summary = await sweepUpstreamIssueClosures();
 
     expect(summary).toEqual({ candidates: 1, closed: 1, failed: 0, skipped: 0 });
-    expect(mockBacklogFind).toHaveBeenCalledTimes(1);
+    expect(mockBacklogFindUnique).toHaveBeenCalledTimes(1);
   });
 
   it("stops after the first skip when the install cannot reach upstream at all", async () => {
@@ -574,12 +580,48 @@ describe("sweepUpstreamIssueClosures", () => {
       { id: "b", itemId: "BI-B", status: "done", completedAt: T1, upstreamIssueNumber: 2, upstreamSyncedAt: null },
     ] as never);
     vi.mocked(prisma.epic.findMany).mockResolvedValue([] as never);
-    mockBacklogFind.mockResolvedValue({ ...terminalRow({ upstreamSyncedAt: null }), itemId: "BI-A" } as never);
+    mockBacklogFindUnique.mockResolvedValue({ ...terminalRow({ upstreamSyncedAt: null }), itemId: "BI-A" } as never);
     mockConfigFind.mockResolvedValue(seededConfig({ contributionMode: "fork_only" }));
 
     const summary = await sweepUpstreamIssueClosures();
 
     expect(summary).toEqual({ candidates: 2, closed: 0, failed: 0, skipped: 1 });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// BI-C3947AAA: a BacklogItem has two ids and callers legitimately hold either.
+// `propose_improvement` back-links the SEMANTIC one, and this lookup only
+// accepted the internal cuid — so contribute_finding_to_hive, which passes that
+// link straight through, reported every freshly filed proposal as "not found".
+describe("loadSource resolves a backlog item by either of its ids", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.backlogItem.findFirst).mockReset();
+  });
+
+  it("queries on both the cuid and the semantic itemId", async () => {
+    mockBacklogFind.mockResolvedValue({
+      id: "ckrow000000000000000000", itemId: "BI-IMP-30FF169D",
+      title: "A finding", body: "Body", upstreamIssueNumber: null,
+    } as never);
+
+    const source = await loadSource("backlog", "BI-IMP-30FF169D");
+
+    expect(source).not.toBeNull();
+    expect(source?.humanId).toBe("BI-IMP-30FF169D");
+    // The resolved cuid travels with the source so the escalation's mark-up
+    // writes the key that column expects, never the semantic id it was handed.
+    expect(source?.rowId).toBe("ckrow000000000000000000");
+
+    const where = mockBacklogFind.mock.calls[0]?.[0]?.where as { OR?: Array<Record<string, string>> };
+    expect(where?.OR).toEqual(
+      expect.arrayContaining([{ id: "BI-IMP-30FF169D" }, { itemId: "BI-IMP-30FF169D" }]),
+    );
+  });
+
+  it("still returns null when neither id matches, so a genuine miss is still a miss", async () => {
+    mockBacklogFind.mockResolvedValue(null as never);
+
+    expect(await loadSource("backlog", "BI-DOES-NOT-EXIST")).toBeNull();
   });
 });

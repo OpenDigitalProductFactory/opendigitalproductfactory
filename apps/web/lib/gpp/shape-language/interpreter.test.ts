@@ -187,3 +187,92 @@ describe("rework (§6.1 rule 6)", () => {
     expect(run(unbounded, [receipt("a", "x"), receipt("b"), verdict("b", "refuse")]).stopped?.kind).toBe("budget");
   });
 });
+
+// GPP Phase 3c PR-3c-4 (BI-8875C9DF), written from parent §6.1 rule 8 ("timers never change M") and the
+// Phase 3c design §8 (a deadline is non-interrupting: it never routes to a refuse route or a stop).
+describe("stage deadlines (§6.1 rule 8)", () => {
+  const deadline = (stageKey: string): GppShapeEvent => ({ type: "deadline", stageKey });
+  const document = shape([stage("a"), stage("b", { onRefuse: "failure" }), stage("c")]);
+
+  it("returns the marking unchanged, whatever stage it names", () => {
+    const start = startShapeInstance(document);
+    for (const key of ["a", "b", "c", "no-such-stage"]) expect(stepShapeInstance(document, start, deadline(key))).toBe(start);
+  });
+
+  it("records nothing: a receipt or verdict waiting to fire does not fire on a deadline", () => {
+    // b is enabled by the receipt recorded before a moved on; one firing per event leaves it for the next event.
+    const waiting = run(document, [receipt("b"), receipt("a", "x")]);
+    expect(markedStageKeys(document, waiting)).toEqual(["b"]);
+    const after = stepShapeInstance(document, waiting, deadline("b"));
+    expect(after).toBe(waiting);
+    expect(after.receipts).toEqual(waiting.receipts);
+  });
+
+  it("never routes the token to its refuse route or a stop, and never moves it on", () => {
+    const atB = run(document, [receipt("a", "x")]);
+    const overdue = [deadline("b"), deadline("b"), deadline("a")].reduce((marking, event) => stepShapeInstance(document, marking, event), atB);
+    expect(markedStageKeys(document, overdue)).toEqual(["b"]);
+    expect(overdue.stopped).toBeNull();
+    expect(overdue.reworkTaken).toEqual({});
+  });
+
+  it("interleaved with receipts, the run equals the same run without the deadlines", () => {
+    const events = [receipt("a", "x"), receipt("b"), verdict("b", "admit"), receipt("c", "y")];
+    const withDeadlines = events.flatMap((event) => [deadline("b"), event, deadline("c")]);
+    expect(run(document, withDeadlines)).toEqual(run(document, events));
+  });
+
+  it("on a stopped instance it is ignored like every other event", () => {
+    const stopped = run(document, [{ type: "stop", kind: "failure" }]);
+    expect(stepShapeInstance(document, stopped, deadline("a"))).toBe(stopped);
+  });
+});
+
+// GPP Phase 3c PR-3c-5 (BI-8875C9DF), written from the Phase 3c design §6.4 and §9.2 (rule 9): a child's success
+// on a marked stage behaves as a completing receipt for it; a failure or budget stop leaves the marking unchanged.
+describe("sub-shape child stops (rule 9)", () => {
+  const childStop = (stageKey: string, kind: "success" | "failure" | "budget"): GppShapeEvent => ({ type: "child-stop", stageKey, kind });
+  const document = shape([stage("a"), stage("b"), stage("c")]);
+
+  it("success on a marked stage completes it, exactly as a completing receipt would", () => {
+    const atB = run(document, [receipt("a", "x")]);
+    const onSuccess = stepShapeInstance(document, atB, childStop("b", "success"));
+    expect(markedStageKeys(document, onSuccess)).toEqual(["c"]);
+    expect(markedStageKeys(document, onSuccess)).toEqual(markedStageKeys(document, stepShapeInstance(document, atB, receipt("b", "child-completion"))));
+    expect(onSuccess.receipts).toContainEqual({ stageKey: "b", kind: "child-completion" });
+  });
+
+  it("failure or budget leaves the marking unchanged: the token waits, and no stop is propagated", () => {
+    const atB = run(document, [receipt("a", "x")]);
+    for (const kind of ["failure", "budget"] as const) {
+      const after = stepShapeInstance(document, atB, childStop("b", kind));
+      expect(after).toBe(atB);
+      expect(after.stopped).toBeNull();
+    }
+  });
+
+  it("a child stop for a stage that holds no token changes nothing, even a success", () => {
+    const atB = run(document, [receipt("a", "x")]);
+    for (const kind of ["success", "failure", "budget"] as const) expect(stepShapeInstance(document, atB, childStop("c", kind))).toBe(atB);
+  });
+
+  it("behind an enforced, blocking gate the child's success is the receipt; the gate still needs its verdict", () => {
+    const gated = shape([stage("a"), stage("b", {}), stage("c")]);
+    const waiting = stepShapeInstance(gated, run(gated, [receipt("a", "x")]), childStop("b", "success"));
+    expect(markedStageKeys(gated, waiting)).toEqual(["b"]);
+    expect(markedStageKeys(gated, stepShapeInstance(gated, waiting, verdict("b", "admit")))).toEqual(["c"]);
+  });
+
+  it("in a parallel branch it completes only its own branch", () => {
+    const forked = shape([stage("a"), stage("b"), stage("c"), stage("d")], {
+      nodes: [{ id: "p", type: "parallel-split" }, { id: "j", type: "parallel-join", pairs: "p" }],
+      edges: [
+        { from: "a", to: "p" }, { from: "p", to: "b" }, { from: "p", to: "c" },
+        { from: "b", to: "j" }, { from: "c", to: "j" }, { from: "j", to: "d" }, { from: "d", to: "success" },
+      ],
+    });
+    const branches = run(forked, [receipt("a", "x")]);
+    expect(markedStageKeys(forked, branches)).toEqual(["b", "c"]);
+    expect(markedStageKeys(forked, stepShapeInstance(forked, branches, childStop("b", "success")))).toEqual(["c"]);
+  });
+});

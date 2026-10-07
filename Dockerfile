@@ -134,6 +134,9 @@ COPY scripts/bootstrap-organization-pki.ps1 ./scripts/
 COPY scripts/publish-host-gpu.ps1 ./scripts/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/compose-chain.ps1 ./scripts/installer/lib/
+# BI-B55CCFAA: the release-assets step ships the activation table promote.sh
+# reads in release mode (BI-B422ED03); the cp below can only copy what is here.
+COPY scripts/installer/lib/activation-overlays.txt ./scripts/installer/lib/
 COPY scripts/installer/lib/canonical-origin.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/machine-trust.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/mcp-client-env.ps1 ./scripts/installer/lib/

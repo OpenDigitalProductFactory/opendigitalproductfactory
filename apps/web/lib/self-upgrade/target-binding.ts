@@ -1,6 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import {
+  noteSessionSecretGraceUse,
+  signingKey,
+  verificationKeys,
+  type SigningKeyCandidate,
+} from "@/lib/auth/dedicated-signing-key";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 export type SelfUpgradeBoundTarget = {
@@ -21,17 +27,22 @@ type PayloadVerification = ActionResult<BindingPayload>;
 
 export const SELF_UPGRADE_TARGET_BINDING_TTL_MS = 15 * 60 * 1_000;
 
+const BINDING_SECRET_ENV = "DPF_SELF_UPGRADE_TARGET_BINDING_SECRET";
+
+/**
+ * The dedicated DPF_SELF_UPGRADE_TARGET_BINDING_SECRET signs when set; an install
+ * without it keeps signing with AUTH_SECRET / NEXTAUTH_SECRET (BI-231A4BC7,
+ * lib/auth/dedicated-signing-key.ts). A blank value counts as unset, because
+ * docker-compose passes `${KEY:-}` to an install whose .env lacks the key.
+ */
 function signingSecret(): string {
-  const secret =
-    process.env.DPF_SELF_UPGRADE_TARGET_BINDING_SECRET ??
-    process.env.AUTH_SECRET ??
-    process.env.NEXTAUTH_SECRET;
-  if (!secret?.trim()) {
+  const key = signingKey(BINDING_SECRET_ENV);
+  if (!key) {
     throw new Error(
       "Self-upgrade target bindings require a signing secret (DPF_SELF_UPGRADE_TARGET_BINDING_SECRET or AUTH_SECRET).",
     );
   }
-  return secret;
+  return key.secret;
 }
 
 function encode(value: string): string {
@@ -104,7 +115,7 @@ export function createSelfUpgradeTargetBinding(
 
 function verifySignedPayload(
   token: string,
-  options: { secret?: string } = {},
+  options: { now?: Date; secret?: string } = {},
 ): PayloadVerification {
   if (typeof token !== "string" || token.length === 0) return err("malformed");
   const separator = token.lastIndexOf(".");
@@ -112,15 +123,14 @@ function verifySignedPayload(
   const encoded = token.slice(0, separator);
   const actualSignature = token.slice(separator + 1);
 
-  let secret: string;
-  try {
-    secret = options.secret ?? signingSecret();
-  } catch {
-    return err("signature-mismatch");
-  }
-  if (!signaturesMatch(sign(encoded, secret), actualSignature)) {
-    return err("signature-mismatch");
-  }
+  const now = options.now ?? new Date();
+  const keys: Array<SigningKeyCandidate | { secret: string; source: "explicit" }> =
+    options.secret !== undefined
+      ? [{ secret: options.secret, source: "explicit" }]
+      : verificationKeys(BINDING_SECRET_ENV, now);
+  // No key at all is a configuration fault; report it as a mismatch, as before.
+  const matched = keys.find((key) => signaturesMatch(sign(encoded, key.secret), actualSignature));
+  if (!matched) return err("signature-mismatch");
 
   const decoded = decode(encoded);
   if (decoded === null) return err("malformed");
@@ -130,7 +140,23 @@ function verifySignedPayload(
   } catch {
     return err("malformed");
   }
-  return validPayload(payload) ? ok(payload) : err("malformed");
+  if (!validPayload(payload)) return err("malformed");
+
+  if (matched.source === "session-secret-grace") {
+    // Grace bound per binding (BI-231A4BC7): a binding the pre-upgrade portal
+    // signed with the session secret may claim no more life than one minted
+    // now (SELF_UPGRADE_TARGET_BINDING_TTL_MS) and may not be issued in the
+    // future. Genuine pre-upgrade bindings pass; a long-lived binding minted by
+    // whoever holds AUTH_SECRET does not.
+    if (
+      payload.expiresAt - payload.issuedAt > SELF_UPGRADE_TARGET_BINDING_TTL_MS ||
+      payload.issuedAt > now.getTime()
+    ) {
+      return err("signature-mismatch");
+    }
+    noteSessionSecretGraceUse("self-upgrade-target-binding");
+  }
+  return ok(payload);
 }
 
 /**
@@ -142,7 +168,7 @@ function verifySignedPayload(
 export function matchesSignedSelfUpgradeTargetBinding(
   token: string,
   currentTarget: SelfUpgradeBoundTarget,
-  options: { secret?: string } = {},
+  options: { now?: Date; secret?: string } = {},
 ): boolean {
   const signed = verifySignedPayload(token, options);
   return signed.ok &&

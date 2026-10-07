@@ -166,4 +166,29 @@ describe("loadCapsuleLivenessInventory", () => {
     expect(result.livenessSummary.heavyLane).toEqual({ executing: 0, nextReady: 1, dormant: 1 });
     expect(result.livenessSummary.progressSlo).toEqual({ oldestWaitMs: 3_600_000, maxNoTransitionMs: 3_600_000 });
   });
+
+  it("reads a room's PR follow-through from its workspace state: red and waiting on a person is stalled (BI-88341B5D)", async () => {
+    const now = new Date("2026-10-06T18:00:00.000Z");
+    const db = {
+      workroom: { findMany: vi.fn().mockResolvedValue([{
+        capsuleId: "WC-RED", title: "Red PR", status: "working", source: "external-adoption",
+        executorKind: "codex-desktop", decisionScope: null, portfolioRole: null, servedPersona: null,
+        activityKind: null, outcomeAnchor: {}, servesPortfolioRoles: [], dependsOnPortfolioRoles: [],
+        headBranch: "feat/red", worktreePath: "D:/red", pullRequestUrl: "https://github.com/o/r/pull/9", pullRequestNumber: 9,
+        leaseExpiresAt: new Date("2026-10-04T17:00:00.000Z"), lastSyncedAt: null,
+        updatedAt: new Date("2026-10-06T17:55:00.000Z"), featureBuildId: null,
+        workspaceState: { prDelivery: {
+          schemaVersion: 1, status: "checking", repository: "o/r", prNumber: 9, prUrl: "https://github.com/o/r/pull/9",
+          lastObservedAt: "2026-10-06T17:55:00.000Z",
+          followThrough: { hold: "awaiting-person" },
+        } },
+      }]) },
+      featureBuild: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 100 }, now);
+
+    expect(result.capsulesAll[0]).toMatchObject({ liveness: "stalled", isLive: true, isReapable: false });
+    expect(result.capsulesAll[0]).not.toHaveProperty("workspaceState");
+  });
 });

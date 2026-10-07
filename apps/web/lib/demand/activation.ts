@@ -32,6 +32,12 @@ export type DemandActivationInput = {
   estimateAgreed: boolean | null;
   estimateDiverged: boolean;
   fundingDecisionAllowed: boolean;
+  /**
+   * Who supplied the value inputs (BI-00C68162). Shown on the explanation so an
+   * agent-proposed score is recognisable; never read by readiness — standing
+   * follows evidence, not provenance (BI-A5697C5E).
+   */
+  valueInputSource?: DemandEstimateSource;
 };
 
 export type DemandScoreExplanation = DemandScoreResult & {
@@ -39,6 +45,8 @@ export type DemandScoreExplanation = DemandScoreResult & {
   evidenceCount: number;
   effectiveJobSize: number | null;
   estimateSource: DemandEstimateSource;
+  /** Who supplied the value inputs; null when unattributed. */
+  inputSource: DemandEstimateSource;
   provisional: boolean;
 };
 
@@ -184,6 +192,7 @@ export function buildDemandActivationState(
       evidenceCount: input.evidenceCount,
       effectiveJobSize,
       estimateSource: input.estimateSource,
+      inputSource: input.valueInputSource ?? null,
       provisional,
     },
     readiness,

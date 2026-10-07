@@ -455,6 +455,16 @@ model DecisionInteraction {
   // ratchet correctly objected to.
   subjectRef              String?
   autonomous              Boolean                           @default(false)
+  // BI-6082C235. WHICH COWORKER made the decision. Before this a decision
+  // carried a profile, a human trigger, a domain and a risk tier, but no agent,
+  // so nothing could be attributed to a coworker and the shadow ledger (keyed
+  // agentId x activityType x riskClass) stayed empty beside 1,000+ decisions.
+  // The id was already recorded on 872 rows, inside outcomePayload.caller.
+  //
+  // A real foreign key onto Agent.agentId: a decision names an existing
+  // coworker or names none. Null is honest for a decision no coworker made
+  // (the hourly triage drain, an operator review).
+  agentId                 String?
   // Trust-envelope immutability (BI-81CC5D8E, EP-VERIFICATION-INTEGRITY).
   // A recorded decision is sealed into an append-only per-(chainId) hash chain:
   // chainEntryHash = H(canonical{criteria, evidence-digests, weights, composite}
@@ -475,6 +485,7 @@ model DecisionInteraction {
   taskRun                 TaskRun?                          @relation(fields: [taskRunId], references: [taskRunId], onDelete: SetNull)
   deliberationRun         DeliberationRun?                  @relation(fields: [deliberationRunId], references: [id], onDelete: SetNull)
   triggeredByUser         User?                             @relation("DecisionInteractionTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+  agent                   Agent?                            @relation("DecisionInteractionAgent", fields: [agentId], references: [agentId], onDelete: SetNull)
   escalationCapture       EscalationCapture?
   deferralCapture         DeferralCapture?
   resolutionProposals     DecisionResolutionProposal[]
@@ -488,6 +499,7 @@ model DecisionInteraction {
   @@index([taskRunId])
   @@index([deliberationRunId])
   @@index([triggeredByUserId])
+  @@index([agentId, createdAt])
   @@index([domainClass, createdAt])
   @@index([outcomeType, createdAt])
   // Backs the per-tier count/latest queries on the decision log.

@@ -15,6 +15,7 @@ export const contributeFindingToHiveDefinition: ToolDefinition =
       + "Use it for a finding you already captured with `propose_improvement`; pass that call's proposalId (IP-...). Use `contribute_to_hive` instead when you are contributing SHIPPED CODE — that one packages a build's diff and needs an active build. This one needs neither a build nor a diff, which is why an external session can call it at all. "
       + "It sends under this install's pseudonym, never a person, and through the same redaction and the same private/fork-only refusals as every other outbound path. "
       + "Refusals are informative, not errors to retry: 'already-contributed' (it left the install earlier; a second send would file a duplicate), 'no-backlog-item' (a low-severity reference-doc note is batched by the canonical digest instead), 'escalation-refused' (carries the reason verbatim — 'install is private' is a correct answer, not a failure). "
+      + "'escalation-failed' is NOT one of those: it is a fault, not an answer. The finding is still local and the cause needs fixing, so report it as a defect rather than accepting it. "
       + "The proposal is marked contributed only after the escalation actually files, so a refusal never leaves a finding that looks sent and is not.",
     inputSchema: {
       type: "object",

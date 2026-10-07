@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { prisma } from "@dpf/db";
 
 import { extractDeliveredBacklogItemIds, isDocPullRequest, PR_SUBMIT_ACTUATOR } from "@/lib/backlog/pr-submit-awaiting-acceptance";
-import { isReachableFromTrunk, trunkHasMergedPullRequest, trunkRefCommittedAt, trunkRefExists } from "@/lib/work-capsules/git-scanner";
+import { isReachableFromTrunk, refreshTrunkRef, trunkHasMergedPullRequest, trunkRefCommittedAt, trunkRefExists, trustedGitArgs } from "@/lib/work-capsules/git-scanner";
 
 const execFileAsync = promisify(execFile);
 
@@ -71,6 +71,29 @@ export function mergeSignalRoots(): string[] {
     process.cwd(),
   ];
   return [...new Set(roots.filter((r): r is string => Boolean(r)))];
+}
+
+/**
+ * Refresh the trunk the merge signal will read, BEFORE the completion
+ * transaction opens (BI-DC2758DE, founder decision on DI-B26D16D64C62).
+ *
+ * The signal runs inside the terminal transaction, whose default timeout is
+ * seconds, so it must never touch the network itself. This runs just ahead of
+ * it: one bounded fetch of origin/main in the first root that is a real clone.
+ * The scheduled code-graph job keeps the same clone current between
+ * completions. A failed fetch changes nothing, and a stale negative still reads
+ * as "signal-unavailable", never as "not merged".
+ */
+export async function refreshMergeSignalTrunk(
+  roots: readonly string[] = mergeSignalRoots(),
+  refresh: (root: string) => Promise<unknown> = (root) => refreshTrunkRef(root, { timeoutMs: 15_000 }),
+): Promise<string | null> {
+  for (const root of roots) {
+    if (!(await trunkRefExists(root))) continue;
+    await refresh(root);
+    return root;
+  }
+  return null;
 }
 
 /**
@@ -322,7 +345,7 @@ export async function readTrunkPullRequestCommit(
   try {
     const { stdout } = await execFileAsync(
       "git",
-      ["-C", root, "log", trunkRef, "--fixed-strings", `--grep=${marker}`, "-n", "20", "--format=%s%x1f%b%x1e"],
+      trustedGitArgs(root, ["log", trunkRef, "--fixed-strings", `--grep=${marker}`, "-n", "20", "--format=%s%x1f%b%x1e"]),
       { timeout: 5000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
     );
     const commits = stdout.split("\x1e").map((entry) => entry.replace(/^\n/, "")).filter(Boolean).map((entry) => {

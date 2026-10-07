@@ -200,6 +200,36 @@ describe("projectBacklogItemReadiness", () => {
     expect(summary.decisions.completion.verdict).toBe("input-required");
   });
 
+  // BI-094B41AC: the completion gate's own evaluation, when the reader ran it.
+  it("returns the completion gate's evaluation as the completion decision, and only that target", () => {
+    const gateDecision = { ...terminalFixture().decision, decisionId: "unpersisted" };
+    const summary = projectBacklogItemReadinessSummary({
+      item: { ...item, status: "awaiting-acceptance" },
+      activities: [],
+      hasSpec: true,
+      hasPlan: true,
+      evaluatedAt: "2026-08-23T00:00:00.000Z",
+      completionDecision: gateDecision,
+    });
+
+    expect(summary.decisions.completion).toBe(gateDecision);
+    expect(summary.decisions.implementation.target).toBe("implementation");
+  });
+
+  it("lets a persisted terminal decision win over a gate evaluation passed in", () => {
+    const fixture = terminalFixture();
+    const summary = projectBacklogItemReadinessSummary({
+      item: { ...item, status: "done" },
+      activities: [fixture.activity],
+      hasSpec: true,
+      hasPlan: true,
+      evaluatedAt: "2026-08-23T00:00:00.000Z",
+      completionDecision: { ...fixture.decision, verdict: "input-required" },
+    });
+
+    expect(summary.decisions.completion).toEqual(fixture.decision);
+  });
+
   it("does not reuse a terminal completion decision for a nonterminal item", () => {
     const fixture = terminalFixture();
     const summary = projectBacklogItemReadinessSummary({

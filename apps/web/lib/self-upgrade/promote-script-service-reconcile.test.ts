@@ -299,4 +299,69 @@ describe.skipIf(!BASH_OK || !GIT_OK)("never-started recovery", () => {
       expect(readOutcome(fixture.backup)).toMatchObject({ outcome: "degraded", failed: [required[0]] });
     } finally { rmSync(fixture.root, { recursive: true, force: true }); }
   }, PROMOTE_TEST_TIMEOUT_MS);
+
+  // BI-547B788D: a sandbox that self-upgrade could not bring up on the target
+  // image used to leave only a stderr warning, which dies with the promoter
+  // container, so the run read as clean while every reviewer's inference was
+  // down. It must reach the durable outcome as degraded, naming the sandbox.
+  describe("sandbox refresh verification (BI-547B788D)", () => {
+    function runWithSandbox(opts: { sandboxState?: "running" | "exited" | "stale"; sandboxRecreateFails?: boolean }) {
+      const scratch = makeScratch();
+      const r = runPromote({
+        source: scratch.source,
+        backup: scratch.backup,
+        targetSha: scratch.head,
+        fakeBin: scratch.fakeBin,
+        existingServices: discoverRequiredServices(),
+        ...opts,
+      });
+      return { ...scratch, r };
+    }
+
+    it("AC-3: a failed sandbox recreate leaves the run degraded, naming the sandbox, not a clean success", () => {
+      const { root, backup, head, r } = runWithSandbox({ sandboxRecreateFails: true });
+      try {
+        expect(r.status).toBe(0);
+        expect(r.stdout).toContain("step=sandbox-refresh-failed");
+        expect(r.stdout).not.toContain("step=service-reconcile-current");
+        expect(r.stdout).toContain(`step=done target=${head}`);
+        const outcome = readOutcome(backup);
+        expect(outcome.outcome).toBe("degraded");
+        expect(outcome.failed).toContain("sandbox");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }, PROMOTE_TEST_TIMEOUT_MS);
+
+    it("AC-1: a recreated sandbox that is not running is a failed refresh", () => {
+      const { root, backup, r } = runWithSandbox({ sandboxState: "exited" });
+      try {
+        expect(r.stdout).toContain("step=sandbox-refresh-not-running");
+        expect(readOutcome(backup).failed).toContain("sandbox");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }, PROMOTE_TEST_TIMEOUT_MS);
+
+    it("AC-1: a running sandbox still on the old image is a failed refresh", () => {
+      const { root, backup, r } = runWithSandbox({ sandboxState: "stale" });
+      try {
+        expect(r.stdout).toContain("step=sandbox-refresh-stale-image");
+        expect(r.stdout).toContain("expected=sha256:sandbox-target");
+        expect(readOutcome(backup).failed).toContain("sandbox");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }, PROMOTE_TEST_TIMEOUT_MS);
+
+    it("a sandbox running on the target image keeps the run current", () => {
+      const { root, backup, r } = runWithSandbox({});
+      try {
+        expect(r.stdout).not.toContain("step=sandbox-refresh-failed");
+        expect(readOutcome(backup).failed).not.toContain("sandbox");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }, PROMOTE_TEST_TIMEOUT_MS);
+  });
 });

@@ -25,6 +25,7 @@ import {
   resumeUntilAdmitted,
 } from "../local-ci-durable-wait-resumer.mjs";
 import {
+  EXIT_RUNNER_PREREQUISITE_UNAVAILABLE,
   EXIT_CONTROL_PLANE_STARVATION,
   EXIT_SANDBOX_DRIFT,
   EXIT_SOURCE_DRIFT,
@@ -76,6 +77,7 @@ test("a queued gate hands its claim to a resumer instead of exiting bare", () =>
 test("every re-claim runs the gate with its console hidden", async () => {
   const seen = [];
   await resumeUntilAdmitted({
+    random: () => 1,
     gateArgv: ["/repo/scripts/gate-worktree.mjs"],
     intervalMs: 1,
     deadlineMs: 3_600_000,
@@ -178,6 +180,7 @@ test("the resumer keeps re-claiming while the gate says queued, then stops on a 
   let attempt = 0;
   const slept = [];
   const { code, attempts } = await resumeUntilAdmitted({
+    random: () => 1,
     gateArgv: ["/repo/scripts/gate-worktree.mjs"],
     intervalMs: 20_000,
     deadlineMs: 3_600_000,
@@ -201,6 +204,7 @@ test("the resumer keeps re-claiming while the gate says queued, then stops on a 
 test("the resumer gives up at its deadline instead of looping forever", async () => {
   let clock = 0;
   const { code } = await resumeUntilAdmitted({
+    random: () => 1,
     gateArgv: ["/repo/scripts/gate-worktree.mjs"],
     intervalMs: 1_000,
     deadlineMs: 2_000,
@@ -220,6 +224,7 @@ test("a resumer spawn error is retried, never reported as a gate verdict", async
   const outcomes = ["error", 0];
   let attempt = 0;
   const { code, attempts } = await resumeUntilAdmitted({
+    random: () => 1,
     gateArgv: ["/repo/scripts/gate-worktree.mjs"],
     intervalMs: 10,
     deadlineMs: 3_600_000,
@@ -293,6 +298,7 @@ test("a control-plane starvation does not end the wait", async () => {
   let i = 0;
   const slept = [];
   const { code, attempts, blockedAttempts } = await resumeUntilAdmitted({
+    random: () => 1,
     gateArgv: ["/repo/scripts/gate-worktree.mjs"],
     intervalMs: 20_000,
     deadlineMs: 3_600_000,
@@ -316,6 +322,7 @@ test("a killed build child does not end the wait either", async () => {
     const codes = [infra, 1];
     let i = 0;
     const { code, attempts } = await resumeUntilAdmitted({
+    random: () => 1,
       gateArgv: ["/repo/scripts/gate-worktree.mjs"],
       intervalMs: 10,
       deadlineMs: 3_600_000,
@@ -335,6 +342,7 @@ test("a killed build child does not end the wait either", async () => {
 
 test("a product FAIL ends the wait immediately - fail closed on safety", async () => {
   const { code, attempts } = await resumeUntilAdmitted({
+    random: () => 1,
     gateArgv: ["/repo/scripts/gate-worktree.mjs"],
     intervalMs: 10,
     deadlineMs: 3_600_000,
@@ -446,6 +454,7 @@ test("spawnDurableWaitResumer carries the pin through to the resumer command lin
 test("every gate attempt runs from an explicit working directory", async () => {
   const seen = [];
   await resumeUntilAdmitted({
+    random: () => 1,
     gateArgv: ["/repo/scripts/gate-worktree.mjs"],
     intervalMs: 1,
     deadlineMs: 3_600_000,
@@ -466,6 +475,7 @@ for (const [label, stopCode] of [["cancelled", EXIT_WAIT_CANCELLED], ["source-dr
   test(`a ${label} gate ends the wait after one attempt and is never retried`, async () => {
     let attempts = 0;
     const result = await resumeUntilAdmitted({
+    random: () => 1,
       gateArgv: ["/repo/scripts/gate-worktree.mjs"],
       intervalMs: 10,
       deadlineMs: 3_600_000,
@@ -511,6 +521,7 @@ test("eventual admission still ends on the gate's own verdict after queued attem
   const codes = [EXIT_QUEUED, EXIT_QUEUED, 0];
   let attempt = 0;
   const result = await resumeUntilAdmitted({
+    random: () => 1,
     gateArgv: ["/repo/scripts/gate-worktree.mjs"],
     intervalMs: 5,
     deadlineMs: 3_600_000,
@@ -742,3 +753,46 @@ test("the resumer survives its caller's whole process tree being killed", { time
   try { process.kill(resumerPid, "SIGKILL"); } catch { /* already gone would have failed below */ }
   assert.ok(after > before, `resumer stopped when its caller's tree was killed (ticks ${before} -> ${after})`);
 });
+
+
+test("a runner prerequisite outage resumes the same request instead of recording a product failure", async () => {
+  let attempts = 0;
+  const slept = [];
+  const argv = ["/repo/scripts/gate-worktree.mjs", "--sha", "immutable-head"];
+  const result = await resumeUntilAdmitted({
+    random: () => 1,
+    gateArgv: argv, intervalMs: 20_000, deadlineMs: 300_000,
+    now: () => 0,
+    sleepFn: async (ms) => { slept.push(ms); },
+    spawnFn: (_exe, args) => {
+      assert.deepEqual(args, argv);
+      const code = ++attempts < 3 ? EXIT_RUNNER_PREREQUISITE_UNAVAILABLE : 0;
+      return { once(event, handler) { if (event === "exit") queueMicrotask(() => handler(code)); } };
+    },
+  });
+  assert.equal(result.code, 0);
+  assert.equal(result.attempts, 3);
+  assert.deepEqual(slept, [60_000, 90_000]);
+  assert.equal(classifyResumeOutcome(EXIT_RUNNER_PREREQUISITE_UNAVAILABLE).evidence, "inconclusive");
+});
+
+
+for (const [jitter, expectedDelay] of [[0, 30_000], [1, 60_000]]) {
+  test(`prerequisite retry jitter ${jitter} respects the deadline without a late spawn`, async () => {
+    let clock = 0;
+    const delays = [];
+    const result = await resumeUntilAdmitted({
+      gateArgv: ["gate.mjs"], intervalMs: 20_000, deadlineMs: 70_000,
+      random: () => jitter, now: () => clock,
+      sleepFn: async (ms) => { delays.push(ms); clock += ms; },
+      spawnFn: () => ({ once(event, handler) {
+        if (event === "exit") queueMicrotask(() => handler(EXIT_RUNNER_PREREQUISITE_UNAVAILABLE));
+      } }),
+    });
+    assert.equal(delays[0], expectedDelay);
+    assert.equal(clock, 70_000);
+    assert.equal(result.attempts, 2);
+    assert.equal(result.code, EXIT_QUEUED);
+    assert.equal(result.outcome.evidence, "unrun");
+  });
+}

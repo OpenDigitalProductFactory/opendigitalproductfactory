@@ -176,9 +176,12 @@ single-tree mode persists — current behavior, full back-compat.
    preserved. A re-run only adds generated secrets the file is missing:
    `DPF_GIT_WEBHOOK_SECRET`, the GPP permit signing key
    `DPF_GPP_PERMIT_SECRET`, the reach-link and delegation-receipt signing keys
-   `DPF_ATTENTION_REACH_SECRET` and `DPF_DELEGATION_RECEIPT_SECRET` (so
-   `AUTH_SECRET` no longer signs them; links and receipts signed with
-   `AUTH_SECRET` before the upgrade keep verifying until 9 November 2026), and
+   `DPF_ATTENTION_REACH_SECRET` and `DPF_DELEGATION_RECEIPT_SECRET`, the
+   self-upgrade target-binding and delivery-task cursor signing keys
+   `DPF_SELF_UPGRADE_TARGET_BINDING_SECRET` and
+   `DPF_DELIVERY_TASK_CURSOR_SECRET` (so `AUTH_SECRET` no longer signs any of
+   them; anything signed with `AUTH_SECRET` before the upgrade keeps verifying
+   until 9 November 2026), and
    the Inngest `INNGEST_SIGNING_KEY` and
    `INNGEST_EVENT_KEY`. A real value already set is never rotated. The
    installer also replaces an Inngest key that still

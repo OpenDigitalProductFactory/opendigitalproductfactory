@@ -100,7 +100,7 @@ export function presentCapsuleRow(
           ? "lease-expired"
           : verdict.liveness === "build-terminal"
             ? "abandoned-build"
-            : verdict.liveness === "idle-stale"
+            : verdict.liveness === "idle-stale" || verdict.liveness === "stalled"
               ? "stalled"
               : staleCache
                 ? "stale-cache"

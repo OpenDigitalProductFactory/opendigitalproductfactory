@@ -217,6 +217,17 @@ next drive and the operator read the same evidence. Missing or unresolvable evid
 shaped room; the runtime does not infer conformance from the absence of an error. AI coordinators
 must have eligible JSI qualification and TAK authority inputs, and an unknown input fails closed.
 
+**Stage receipts belong to one run** ⟦runtime: 2026-10-06, `BI-853120EE`⟧. A run starts on the
+first drive tick after the previous run concluded (success, or sleeping on a concluded run) on a
+later cycle key, and lasts until it concludes; it does not end at UTC midnight. Its key is the
+cycle key of the tick it started on: a graph room's marking `cycleKey`, a sequential room's
+snapshot `runKey`, both read through `driveRunKeyOf` (`workroom-drive-state.ts`). Receipts carry
+that `runKey`; a new run starts with none, so every stage and every governed decision is earned
+again (`drive-sequential-run.ts`). Only a shape that declares the `cadence` trigger starts a new
+run (`workShapeRecurs`, WWMD DI-8DCB9A4B566C): a claim-triggered room's successful run is final.
+The persist merge compares run keys, so a same-run receipt landed during the tick that crosses
+midnight is kept.
+
 The Workroom surface makes this control legible in **Details → Process Overseer**: coordinator
 identity, explicit versus derived assignment, conformance status, current and expected next stage,
 unresolved deviations, last check, intervention reason, and reconciliation key. Presence remains

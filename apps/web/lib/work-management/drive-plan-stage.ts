@@ -32,6 +32,7 @@ import {
   WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
   isCompletingWorkroomDriveReceipt,
   isCompletingWorkroomDriveReceiptAt,
+  receiptInRun,
   type PriorWorkroomDrive,
 } from "./workroom-drive-receipts";
 
@@ -56,6 +57,24 @@ export function parseAccountablePrincipalRef(
   if (ref.startsWith("role:")) return { kind: "role", value: ref.slice("role:".length) };
   if (ref.startsWith("person:")) return { kind: "person", value: ref.slice("person:".length) };
   return { kind: "unknown", value: ref };
+}
+
+/**
+ * The stage's principal after the room's role binding, when one applies
+ * (BI-C1781121). Honoured only for a non-governed role stage and only when the
+ * binding names an agent; every other stage keeps its declared principal.
+ */
+export function boundStagePrincipal(
+  declared: string,
+  governed: boolean,
+  roleBindings: Readonly<Record<string, string>> | null | undefined,
+): string {
+  const parsed = parseAccountablePrincipalRef(declared);
+  if (governed || parsed.kind !== "role" || !roleBindings) return declared;
+  const bound = roleBindings[parsed.value];
+  if (typeof bound !== "string") return declared;
+  const target = parseAccountablePrincipalRef(bound);
+  return target.kind === "agent" && target.value ? bound : declared;
 }
 
 export function emptyPlan<A extends DriveAction>(
@@ -83,11 +102,21 @@ export function emptyPlan<A extends DriveAction>(
   };
 }
 
-/** The prior tick finished this same cycle (or already slept on it). */
-export function cycleCompleted(prior: PriorWorkroomDrive | null, cycleKey: string): boolean {
-  if (!prior || prior.cycleKey !== cycleKey) return false;
+/**
+ * The prior tick concluded a run: it recorded success, or it already slept on
+ * a concluded run (BI-D10BB58B). Pause, escalate, a conformance stop and a
+ * quiet room do not conclude a run, so a run resumes from them with its
+ * receipts (BI-853120EE).
+ */
+export function runConcluded(prior: PriorWorkroomDrive | null): boolean {
+  if (!prior) return false;
   return (prior.action === "stop" && prior.reason === "success")
     || (prior.action === "do_not_wake" && prior.reason === "cycle_complete");
+}
+
+/** The prior tick finished this same cycle (or already slept on it). */
+export function cycleCompleted(prior: PriorWorkroomDrive | null, cycleKey: string): boolean {
+  return !!prior && prior.cycleKey === cycleKey && runConcluded(prior);
 }
 
 function asShape(
@@ -111,7 +140,10 @@ function asShape(
 }
 
 /** The cycle this tick belongs to: the declared trigger (or the first, or cadence) at `now`. */
-export function projectDriveCycle(input: DriveResolutionInput, definition: WorkShapeDefinitionContract): ProjectedWorkShapeCycle {
+export function projectDriveCycle(
+  input: Pick<DriveResolutionInput, "trigger" | "collaborationShape" | "now">,
+  definition: WorkShapeDefinitionContract,
+): ProjectedWorkShapeCycle {
   const trigger = input.trigger
     ?? (definition.triggers[0] as WorkShapeTriggerClass | undefined)
     ?? "cadence";
@@ -146,11 +178,14 @@ export function planStage(args: {
   cycle: ProjectedWorkShapeCycle;
   prior: PriorDriveForLatch | null;
   iteration?: number;
+  /** Given only by the graph drive (BI-086DC167): the run, so a run-scoped receipt counts only within it. */
+  runKey?: string;
 }): DrivePlan {
   const { input, stage, conformance, cycle, prior } = args;
   const definition = args.definition;
-  const parsed = parseAccountablePrincipalRef(stage.accountablePrincipalRef);
   const governed = stage.advance.kind === "governed-decision";
+  const principalRef = boundStagePrincipal(stage.accountablePrincipalRef, governed, input.roleBindings);
+  const parsed = parseAccountablePrincipalRef(principalRef);
   const humanStage = parsed.kind === "role" || parsed.kind === "person";
   // EP-4614F35E: a governed-decision stage normally raises attention (a human
   // decides). The one exception — full proactivity — is when the accountable
@@ -170,9 +205,9 @@ export function planStage(args: {
       definition: input.definition ?? null,
       shapeVersion: definition.version,
       stageKey: stage.key,
-      accountablePrincipalRef: stage.accountablePrincipalRef,
+      accountablePrincipalRef: principalRef,
       agentId: null,
-      attentionPrincipalRef: stage.accountablePrincipalRef,
+      attentionPrincipalRef: principalRef,
       taskId: null,
       conformance,
       cycle,
@@ -190,10 +225,11 @@ export function planStage(args: {
   }
 
   const iteration = args.iteration;
+  const runKey = args.runKey;
   const completing = input.receipts.some((receipt) =>
     iteration === undefined
       ? isCompletingWorkroomDriveReceipt(receipt, stage.key)
-      : isCompletingWorkroomDriveReceiptAt(receipt, stage.key, iteration),
+      : isCompletingWorkroomDriveReceiptAt(receipt, stage.key, iteration, runKey),
   );
   // On the graph path a `blocked` receipt is scoped to its iteration (PR-3c-3):
   // a pass the stage was sent back from must not latch the fresh pass. The
@@ -201,7 +237,7 @@ export function planStage(args: {
   const blocked = input.receipts.some(
     (receipt) =>
       receipt.stageKey === stage.key && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND
-      && (iteration === undefined || (receipt.iteration ?? 0) === iteration),
+      && (iteration === undefined || ((receipt.iteration ?? 0) === iteration && receiptInRun(receipt, runKey))),
   );
   // Bounded, not permanent: the latch holds within a cycle and releases on the
   // next, so a deployed fix can reach a room that previously failed closed.
@@ -223,7 +259,7 @@ export function planStage(args: {
       definition: input.definition ?? null,
       shapeVersion: definition.version,
       stageKey: stage.key,
-      accountablePrincipalRef: stage.accountablePrincipalRef,
+      accountablePrincipalRef: principalRef,
       agentId: null,
       attentionPrincipalRef: null,
       taskId: null,
@@ -244,7 +280,7 @@ export function planStage(args: {
     definition: input.definition ?? null,
     shapeVersion: definition.version,
     stageKey: stage.key,
-    accountablePrincipalRef: stage.accountablePrincipalRef,
+    accountablePrincipalRef: principalRef,
     agentId: parsed.value,
     attentionPrincipalRef: null,
     taskId: workroomDriveTaskId(input.roomId, definition.key),

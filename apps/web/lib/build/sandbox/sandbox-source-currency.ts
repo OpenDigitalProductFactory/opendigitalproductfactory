@@ -65,6 +65,8 @@ const SOURCE_DIFF_EXCLUDES = [
   ":!pnpm-lock*",
   ":!**/generated/client/**",
   ":!packages/db/generated/**",
+  // The sandbox's own Auth.js secret (BI-F1C680C7) is never source.
+  ":!.dpf-sandbox-auth-secret*",
 ] as const;
 
 /**

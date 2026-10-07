@@ -197,3 +197,8 @@ body {
     background: var(--dpf-surface-3) !important;
   }
 }
+
+/* BI-E8D91AF6: Simple mode hides the diagnostic "More tools" disclosure in section navs. */
+[data-nav-mode="worker"] [data-advanced-tools] {
+  display: none;
+}

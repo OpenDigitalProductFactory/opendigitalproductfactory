@@ -877,3 +877,43 @@ test("an admitted record is an in-flight run, never a FAIL", () => {
   assert.equal(r.verdict, "INCONCLUSIVE");
   assert.match(r.reason, /has not recorded a verdict/);
 });
+
+// BI-277ECBDB (B): "queued" and "the substrate is dead" used the same words, so
+// nobody could tell "wait" from "this cannot work". They must read differently.
+test("a plain queued claim says how many claims are ahead of it", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "queued",
+      evidenceRecordId: "",
+      leaseEvents: [{ type: "queued", queuePosition: 4 }],
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+    queuedWaiter: { checked: true, alive: true, pids: [1] },
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /queued behind 3 other claim/i);
+});
+
+test("an unavailable slot substrate is BLOCKED, names the container, and does not advise a re-run", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "blocked_slot_substrate_unavailable",
+      evidenceRecordId: "",
+      substrate: { container: "dpf-local-ci-postgres-1", state: "exited (255)", remedy: "the platform substrate reconciler or `docker start dpf-local-ci-postgres-1` brings it back" },
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /^BLOCKED — slot substrate unavailable: dpf-local-ci-postgres-1 is exited \(255\)/);
+  assert.doesNotMatch(r.reason, /re-run/i);
+  assert.equal(r.rerun, false);
+  const lines = formatStatusReport(r, { headBranch: "topic", headSha: HEAD, now: NOW });
+  assert.ok(!lines.some((l) => l.includes("pnpm run pregate")), "a substrate block must not advise a re-run");
+  assert.ok(lines.some((l) => /next\s+.*dpf-local-ci-postgres-1/.test(l)), "it names the remedy instead");
+});

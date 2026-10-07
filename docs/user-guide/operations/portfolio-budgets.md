@@ -40,6 +40,21 @@ no portfolio.
   "subscription: $0 recorded, N tokens", because a subscription records no cost
   per call. It does not mean the use was free.
 
+## Which portfolio an item counts against
+
+The panel, the budget proposal and admission all decide an item's portfolio the
+same way, so a budget and the work that uses it always line up:
+
+1. A portfolio the item names directly wins: its own portfolio, its digital
+   product's, its taxonomy node's, its AI coworker's, or its epic's.
+2. Otherwise, platform and common work, and work that was never given a scope,
+   counts as **Foundational**. The item is not changed; the rule is applied each
+   time the figures are read.
+3. Anything else stays **Unallocated** and is shown as such.
+
+The budget proposal shows how much of each portfolio's delivery came from rule 2,
+as `attributedByRule` with the basis `platform-default`.
+
 ## Setting a budget
 
 Choose **Set budget** on a portfolio's row. The proposed figure is the points that

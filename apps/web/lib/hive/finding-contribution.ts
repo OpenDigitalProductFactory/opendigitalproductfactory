@@ -35,6 +35,15 @@ export const CONTRIBUTION_REFUSALS = [
   "already-contributed",
   "no-backlog-item",
   "escalation-refused",
+  // BI-C3947AAA: a FAULT is not a refusal. `escalation-refused` is documented as
+  // a correct answer an agent should record and move on from ("install is
+  // private"), and the route-learning skill tells agents not to retry it. A
+  // failed escalation was being flattened into that same code, so a genuine
+  // defect — a backlog id the escalation could not resolve — arrived wearing the
+  // one code an agent is instructed to accept, and the finding was silently lost
+  // while the routing was reported complete. Faults get their own code so the
+  // caller knows to report a defect rather than accept an answer.
+  "escalation-failed",
 ] as const;
 export type ContributionRefusal = (typeof CONTRIBUTION_REFUSALS)[number];
 
@@ -43,7 +52,10 @@ export type ContributableProposal = {
   proposalId: string;
   title: string;
   contributionStatus: string;
-  /** The BacklogItem row id (cuid) `propose_improvement` back-linked, if any. */
+  /** The BacklogItem id `propose_improvement` back-linked, if any. This is the
+   *  SEMANTIC id (`BI-...`) — the comment here claimed a cuid, and the
+   *  escalation lookup believed it, which is BI-C3947AAA. The lookup now accepts
+   *  either id, so both shapes resolve. */
   backlogItemId: string | null;
 };
 
@@ -134,11 +146,21 @@ export function readEscalationOutcome(
       ledgerSummary: buildLedgerSummary(proposal, outcome),
     };
   }
-  const detail =
-    outcome.status === "skipped"
-      ? `Not contributed: ${outcome.reason}.`
-      : `Contribution failed: ${outcome.error}.`;
-  return { contributed: false, reason: "escalation-refused", detail };
+  // `skipped` is the install or policy declining, which is a correct answer.
+  // `failed` is something going wrong, which is not. They must not share a code.
+  if (outcome.status === "skipped") {
+    return {
+      contributed: false,
+      reason: "escalation-refused",
+      detail: `Not contributed: ${outcome.reason}.`,
+    };
+  }
+  return {
+    contributed: false,
+    reason: "escalation-failed",
+    detail: `Contribution failed: ${outcome.error}. This is a fault, not a refusal — `
+      + "the finding is still local and the cause needs fixing, so report it rather than accepting it.",
+  };
 }
 
 export function buildLedgerSummary(

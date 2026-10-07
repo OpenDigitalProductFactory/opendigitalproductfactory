@@ -20,6 +20,10 @@ export const SCHEDULED_AGENT_TASK_KINDS = [
   // review: readiness projection, grant-backed owner resolution and SQL, so no
   // model judgement enters the run.
   "acceptance-sweep",
+  // BI-00C68162 — the daily demand-scoring steward. Deterministic: proposes RICE
+  // inputs for a bounded batch of unscored triaged items from their recorded
+  // signals and marks them agent-proposed; it never writes over an owner.
+  "demand-scoring-steward",
 ] as const;
 
 export type ScheduledAgentTaskKind =
@@ -39,6 +43,8 @@ export const DECISION_ENGINE_REVIEW_TASK_KIND =
 
 export const ACCEPTANCE_SWEEP_TASK_KIND =
   SCHEDULED_AGENT_TASK_KINDS[6];
+export const DEMAND_SCORING_STEWARD_TASK_KIND =
+  SCHEDULED_AGENT_TASK_KINDS[7];
 
 export function isScheduledAgentTaskKind(
   value: unknown,
