@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SignJWT, decodeJwt } from "jose";
 
 import {
   AUTOMATION_PERSONA_EMAIL,
+  AUTOMATION_SIGN_IN_AUDIENCE,
   AUTOMATION_SIGN_IN_CONSUMED_KEY,
   AUTOMATION_SIGN_IN_GRANT_KEY,
   AUTOMATION_SIGN_IN_PATH,
@@ -146,6 +148,32 @@ describe("mint + consume", () => {
     });
     expect(deps.authorizeSession).toHaveBeenCalledTimes(1);
     expect(state.config.get(AUTOMATION_SIGN_IN_CONSUMED_KEY)).toBeTruthy();
+  });
+
+  it("mints a link token for the automation audience only (BI-7B4B5F5D)", async () => {
+    const minted = await mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, depsFor(fakeDb(state)));
+    if (!minted.issued) throw new Error("expected a link");
+    const claims = decodeJwt(decodeURIComponent(minted.path.split("token=")[1]!));
+    expect(claims.aud).toBe(AUTOMATION_SIGN_IN_AUDIENCE);
+  });
+
+  it("refuses a correctly signed token without the automation audience (BI-7B4B5F5D)", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const persona = await ensureAutomationPersona(deps);
+    const nowSeconds = Math.floor(at.getTime() / 1000);
+    const noAudience = await new SignJWT({ purpose: "dpf.automation-sign-in/1", next: "/" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject(persona.userId)
+      .setJti("jti-without-audience")
+      .setIssuedAt(nowSeconds)
+      .setExpirationTime(nowSeconds + 600)
+      .sign(new TextEncoder().encode(env.AUTH_SECRET));
+    await expect(consumeAutomationSignIn(noAudience, deps)).resolves.toMatchObject({
+      accepted: false,
+      reason: "token-invalid-or-expired",
+    });
+    expect(state.config.get(AUTOMATION_SIGN_IN_CONSUMED_KEY)).toBeUndefined();
   });
 
   it("refuses the same link a second time", async () => {
