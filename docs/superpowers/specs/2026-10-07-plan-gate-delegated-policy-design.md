@@ -46,10 +46,13 @@ In `evaluator.ts`, after the existing principle-conflict and content-aware stanc
   - The existing confidence-floor rules (`minimumConfidenceForRecommendation`, the recommendation band) stay. They already name a policy value or the material's ceiling.
 - A matched regulatory policy requiring human control (BI-E30C0F4F) escalates and names its regulation.
 
-### 2. Policy values (fix the seed)
+### 2. Policy values
 
-- `seed-decision-perspective.ts`: the platform profile (`mark-dpf-platform`) and `dpf-organizational-principles` get `allowArbitration: true`, `maxRiskForArbitration: "high"`, `minimumConfidenceForArbitration: 0.7`. The seed versions the profile; it does not overwrite an operator-edited policy.
-- The org profile's values come from the install's risk envelope (`apply-risk-envelope-to-profile.ts`). The `balanced` posture (this install's) sets the operator's values above. `conservative` and `assertive` keep their current envelope until the operator decides them. The posture is recorded at setup, so the delegation is the owner's.
+The operator decided values for **platform-development (WWMD)** decisions. The `balanced` risk envelope is the default autonomy policy for every organization on every install, and its comment records that no posture lets an agent arbitrate a high-risk call. The operator has not decided to change that for customer businesses, so the envelopes stay as they are.
+
+- **Platform profile (WWMD).** `seed-decision-perspective.ts` sets `mark-dpf-platform` to `allowArbitration: true`, `maxRiskForArbitration: "high"`, `minimumConfidenceForArbitration: 0.7`. These are seed-owned keys, so every self-upgrade refreshes them; operator-owned keys survive, as today.
+- **A new policy field, `maxRiskForRecommendation`.** It replaces the hard-coded "high and above escalates" and defaults to `medium`. Every profile not changed above (all three risk envelopes, profession profiles, the defaults) behaves exactly as before, and its escalations now name the field.
+- **This install's organization profile (WWWD)** gets the operator's values as the owner's own delegated policy in slice C, with the WWWD shadow evaluation. That slice adds the governed way to set it: operator-owned keys that a risk-envelope re-apply does not overwrite. It does not change the envelope.
 
 ### 3. WWWD, shadow first (DI-3D3BEF5109AF)
 
@@ -63,6 +66,12 @@ In `evaluator.ts`, after the existing principle-conflict and content-aware stanc
 ### 5. Shadow verdicts are not inbox items
 
 A gate evaluation that cannot block, because the mode is shadow or because it is the comparison verdict, records `outcomePayload.mode = "shadow"`. `loadAiDecisionItems` excludes those rows, the same way it already excludes retracted ones. The verdict stays in the comparison report and the decision audit.
+
+## Implementation status
+
+- **Slice A (this branch):** §1 and §4 are done, plus the platform half of §2. The evaluator no longer escalates on a risk tier; the delegated policy bounds risk (`maxRiskForArbitration`, or the new `maxRiskForRecommendation`, default `medium`). Every escalation names its profile, field and value. The platform profile seed allows arbitration up to high risk at ≥ 0.70. The customer risk envelopes are unchanged. The plan-to-build risk tier follows the plan's files.
+- **Slice B:** §5, keeping shadow verdicts out of the inbox.
+- **Slice C:** §3, WWWD beside WWMD in shadow with a comparison report, and setting this install's organization delegated policy through operator-owned keys (§2).
 
 ## Non-Goals
 
@@ -79,7 +88,7 @@ A gate evaluation that cannot block, because the mode is shadow or because it is
   - a regulatory human-control row escalates and names its regulation;
   - no rationale says "even though profile confidence".
 - Seed test: platform profile values, versioned and non-clobbering.
-- Envelope test: balanced, conservative and assertive values.
+- Envelope test: the three risk envelopes are unchanged; a high-risk decision under each escalates and names `maxRiskForRecommendation`.
 - Gate test: in shadow, both WWMD and WWWD verdicts are recorded and the comparison row is written; behaviour is unchanged (AC-NO-BUILD-STUDIO-BREAK).
 - Attention test: shadow-mode escalations are not listed; blocking escalations still are.
 - Transition test: the risk tier follows the plan's files, not the prose.
