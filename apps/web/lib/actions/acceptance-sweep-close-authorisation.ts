@@ -10,14 +10,14 @@
 import { prisma } from "@dpf/db";
 
 import { requireCapabilityContext } from "@/lib/actions/shared/guards";
+import { mayManageCloseAuthorisation } from "@/lib/backlog/acceptance-sweep/close-authorisation-access";
 import { writeCloseAuthorisation, type CloseAuthorisationWriterDb } from "@/lib/backlog/acceptance-sweep/close-authorisation-writer";
 import type { CloseAuthorisationRecord } from "@/lib/backlog/acceptance-sweep/close-authorisation";
-import { can } from "@/lib/permissions";
 import { err, type ActionResult } from "@/lib/shared/action-result";
 
 async function requireOperator(): Promise<{ userId: string } | null> {
   const { userId, userContext } = await requireCapabilityContext("manage_platform");
-  return can(userContext, "manage_backlog") ? { userId } : null;
+  return mayManageCloseAuthorisation(userContext) ? { userId } : null;
 }
 
 export async function grantAcceptanceSweepCloseAuthorisation(input: {
