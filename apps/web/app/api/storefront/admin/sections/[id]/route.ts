@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma, type Prisma } from "@dpf/db";
 import { applySectionTextPatch } from "@/lib/storefront/section-text";
+import { apiErrorResponse } from "@/lib/api/error";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -21,14 +22,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       where: { id },
       select: { type: true, content: true },
     });
-    if (!section) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    if (!section) return apiErrorResponse("NOT_FOUND", "Section not found", 404);
     const patch = applySectionTextPatch({ type: section.type, content: section.content, text: body.text });
-    if (!patch.ok) return NextResponse.json({ error: patch.error }, { status: 400 });
-    data.content = patch.content as Prisma.InputJsonValue;
+    if (!patch.ok) return apiErrorResponse("INVALID_SECTION_TEXT", patch.error, 400);
+    data.content = patch.data as Prisma.InputJsonValue;
   }
 
   if (Object.keys(data).length === 0) {
-    return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+    return apiErrorResponse("NOTHING_TO_UPDATE", "Nothing to update", 400);
   }
   await prisma.storefrontSection.update({ where: { id }, data });
   return NextResponse.json({ success: true });

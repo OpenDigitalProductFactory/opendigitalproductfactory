@@ -1,6 +1,9 @@
 "use client";
 // Edit the text a storefront section shows publicly (BI-C279E20B).
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Surface } from "@/components/ui/Surface";
+import { useT } from "@/lib/i18n/use-t";
 import { editableSectionTextFields } from "@/lib/storefront/section-text";
 
 type Props = {
@@ -15,10 +18,12 @@ const inputClass =
   "w-full px-3 py-1.5 text-sm rounded-md bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]";
 
 export function SectionTextDialog({ sectionName, sectionType, initialText, onSave, onClose }: Props) {
+  const t = useT("storefront");
   const fields = editableSectionTextFields(sectionType);
   const [text, setText] = useState<Record<string, string>>(initialText);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const title = t("sectionText.title", { name: sectionName });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,63 +39,52 @@ export function SectionTextDialog({ sectionName, sectionType, initialText, onSav
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`Edit ${sectionName} text`}
+      aria-label={title}
       className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--dpf-bg)]/70 p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-[520px] max-h-[85vh] overflow-y-auto rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6">
-        <h2 className="mb-1 text-base font-semibold text-[var(--dpf-text)]">Edit {sectionName} text</h2>
-        <p className="mb-4 text-xs text-[var(--dpf-muted)]">Visitors see this on your public page as soon as you save.</p>
+      <Surface padding="lg" rounded="xl" className="w-full max-w-[520px] max-h-[85vh] overflow-y-auto">
+        <h2 className="mb-1 text-base font-semibold text-[var(--dpf-text)]">{title}</h2>
+        <p className="mb-4 text-xs text-[var(--dpf-muted)]">{t("sectionText.hint")}</p>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {fields.map((field) => (
-            <label key={field.key} className="block">
-              <span className="mb-1 block text-xs text-[var(--dpf-muted)]">{field.label}</span>
-              {field.multiline ? (
-                <textarea
-                  value={text[field.key] ?? ""}
-                  onChange={(e) => setText((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                  placeholder={field.placeholder}
-                  maxLength={field.maxLength}
-                  rows={6}
-                  className={`${inputClass} resize-y`}
-                />
-              ) : (
-                <input
-                  type="text"
-                  value={text[field.key] ?? ""}
-                  onChange={(e) => setText((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                  placeholder={field.placeholder}
-                  maxLength={field.maxLength}
-                  className={inputClass}
-                />
-              )}
-            </label>
-          ))}
+          {fields.map((field) => {
+            const props = {
+              value: text[field.key] ?? "",
+              placeholder: t(`sectionText.fields.${field.key}.placeholder`),
+              maxLength: field.maxLength,
+              onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+                setText((prev) => ({ ...prev, [field.key]: e.target.value })),
+            };
+            return (
+              <label key={field.key} className="block">
+                <span className="mb-1 block text-xs text-[var(--dpf-muted)]">
+                  {t(`sectionText.fields.${field.key}.label`)}
+                </span>
+                {field.multiline ? (
+                  <textarea {...props} rows={6} className={`${inputClass} resize-y`} />
+                ) : (
+                  <input {...props} type="text" className={inputClass} />
+                )}
+              </label>
+            );
+          })}
           {error && (
             <p role="alert" className="text-xs text-[var(--dpf-error)]">
               {error}
             </p>
           )}
           <div className="flex justify-end gap-2 border-t border-[var(--dpf-border)] pt-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-[var(--dpf-border)] px-4 py-1.5 text-sm text-[var(--dpf-muted)] transition-colors hover:text-[var(--dpf-text)]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-md bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-[var(--dpf-on-accent)] transition-colors disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save text"}
-            </button>
+            <Button type="button" variant="secondary" size="sm" onClick={onClose}>
+              {t("sectionText.cancel")}
+            </Button>
+            <Button type="submit" size="sm" disabled={saving}>
+              {saving ? t("sectionText.saving") : t("sectionText.save")}
+            </Button>
           </div>
         </form>
-      </div>
+      </Surface>
     </div>
   );
 }

@@ -98,8 +98,8 @@ export function SectionsManager({ storefrontId, sections: initial, vocabulary, i
       body: JSON.stringify({ text }),
     });
     if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      return body?.error ?? "The text could not be saved. Try again.";
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      return body?.message ?? "The text could not be saved. Try again.";
     }
     const content = { ...((section.content as Record<string, unknown> | null) ?? {}) };
     for (const [key, value] of Object.entries(text)) {

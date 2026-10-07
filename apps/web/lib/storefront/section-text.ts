@@ -9,23 +9,23 @@
 //
 // Pure: safe to import from client and server code.
 
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+
+/** Keys inside StorefrontSection.content that the public renderers read. Labels live in the storefront message catalog. */
+export type SectionTextKey = "headline" | "subheading" | "body";
+
 export type SectionTextField = {
-  /** Key inside StorefrontSection.content that the public renderer reads. */
-  key: string;
-  label: string;
+  key: SectionTextKey;
   multiline: boolean;
   maxLength: number;
-  placeholder: string;
 };
 
 export const EDITABLE_SECTION_TEXT: Readonly<Record<string, readonly SectionTextField[]>> = {
   hero: [
-    { key: "headline", label: "Headline", multiline: false, maxLength: 120, placeholder: "Defaults to your business name" },
-    { key: "subheading", label: "Subheading", multiline: false, maxLength: 240, placeholder: "Defaults to your tagline" },
+    { key: "headline", multiline: false, maxLength: 120 },
+    { key: "subheading", multiline: false, maxLength: 240 },
   ],
-  about: [
-    { key: "body", label: "Text", multiline: true, maxLength: 2000, placeholder: "Tell visitors who you are and how you work" },
-  ],
+  about: [{ key: "body", multiline: true, maxLength: 2000 }],
 };
 
 export function editableSectionTextFields(type: string): readonly SectionTextField[] {
@@ -43,9 +43,7 @@ export function readSectionText(type: string, content: unknown): Record<string, 
   );
 }
 
-export type SectionTextPatchResult =
-  | { ok: true; content: Record<string, unknown> }
-  | { ok: false; error: string };
+export type SectionTextPatchResult = ActionResult<Record<string, unknown>>;
 
 /**
  * Merge an owner's text edit into a section's existing content. Only the
@@ -60,16 +58,16 @@ export function applySectionTextPatch(input: {
 }): SectionTextPatchResult {
   const fields = editableSectionTextFields(input.type);
   if (fields.length === 0) {
-    return { ok: false, error: `The ${input.type} section has no editable text.` };
+    return err(`The ${input.type} section has no editable text.`);
   }
   if (!input.text || typeof input.text !== "object" || Array.isArray(input.text)) {
-    return { ok: false, error: "text must be an object of field values." };
+    return err("text must be an object of field values.");
   }
   const text = input.text as Record<string, unknown>;
-  const allowed = new Map(fields.map((field) => [field.key, field]));
+  const allowed = new Map<string, SectionTextField>(fields.map((field) => [field.key, field]));
   const unknownKeys = Object.keys(text).filter((key) => !allowed.has(key));
   if (unknownKeys.length > 0) {
-    return { ok: false, error: `Not editable on a ${input.type} section: ${unknownKeys.join(", ")}.` };
+    return err(`Not editable on a ${input.type} section: ${unknownKeys.join(", ")}.`);
   }
 
   const next: Record<string, unknown> =
@@ -78,13 +76,13 @@ export function applySectionTextPatch(input: {
       : {};
   for (const [key, raw] of Object.entries(text)) {
     const field = allowed.get(key)!;
-    if (typeof raw !== "string") return { ok: false, error: `${field.label} must be text.` };
+    if (typeof raw !== "string") return err(`${field.key} must be text.`);
     const value = raw.trim();
     if (value.length > field.maxLength) {
-      return { ok: false, error: `${field.label} is limited to ${field.maxLength} characters.` };
+      return err(`${field.key} is limited to ${field.maxLength} characters.`);
     }
     if (value.length === 0) delete next[key];
     else next[key] = value;
   }
-  return { ok: true, content: next };
+  return ok(next);
 }

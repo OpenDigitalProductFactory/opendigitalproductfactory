@@ -14,12 +14,12 @@ describe("storefront section text (BI-C279E20B)", () => {
       content: { imageUrl: "/a.png" },
       text: { body: "  We run our own business on the platform.  " },
     });
-    expect(result).toEqual({ ok: true, content: { imageUrl: "/a.png", body: "We run our own business on the platform." } });
+    expect(result).toEqual({ ok: true, data: { imageUrl: "/a.png", body: "We run our own business on the platform." } });
   });
 
   it("clears a field when the owner empties it, so the renderer default shows", () => {
     const result = applySectionTextPatch({ type: "hero", content: { headline: "Old" }, text: { headline: "" } });
-    expect(result).toEqual({ ok: true, content: {} });
+    expect(result).toEqual({ ok: true, data: {} });
   });
 
   it("refuses keys the section does not render, non-text values, overlong text and sections without text", () => {
