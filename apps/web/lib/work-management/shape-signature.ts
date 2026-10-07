@@ -16,13 +16,22 @@
  *     organization is marked ⇄ (an outside touchpoint). Stage tool capability
  *     classes would make this stricter once they resolve per stage.
  *
+ * A shape that declares a flow graph (GPP Phase 3c) is drawn as that graph:
+ * parallel branches as `( b ∥ c )` and a rework edge as `↺target`. Without one
+ * the stages run in declared order, which is what every other shape does.
+ *
  * The gate shows who decides, not an authority (WWMD/WWWD/WSID): shapes do not
  * declare one yet (`decisionScope` is a decision name), and a signature that
  * guessed would state something the runtime does not hold.
  *
  * Pure and deterministic.
  */
-import type { WorkShapeDefinitionContract, WorkShapeStage, WorkShapeTriggerClass } from "./work-shapes";
+import type {
+  WorkShapeDefinitionContract,
+  WorkShapeFlow,
+  WorkShapeStage,
+  WorkShapeTriggerClass,
+} from "./work-shapes";
 
 export type ShapeLane = "AI" | "Person" | "Unknown";
 
@@ -57,11 +66,50 @@ function stageToken(stage: WorkShapeStage): string {
   return `◇ ${step} [${stage.accountablePrincipalRef}]`;
 }
 
+function graphSteps(stages: readonly WorkShapeStage[], flow: WorkShapeFlow): string {
+  const stageByKey = new Map(stages.map((stage) => [stage.key, stage]));
+  const nodeById = new Map(flow.nodes.map((node) => [node.id, node]));
+  const forward = (from: string) => flow.edges.filter((edge) => edge.from === from && !edge.rework).map((edge) => edge.to);
+  const rework = (from: string) => flow.edges.filter((edge) => edge.from === from && edge.rework).map((edge) => edge.to);
+  const visited = new Set<string>();
+
+  // Block-structured by the compiler's soundness rules: every split has one
+  // paired join, so a branch is read until it reaches that join.
+  const walk = (start: string | undefined, until: string | null): string[] => {
+    const tokens: string[] = [];
+    let at = start;
+    while (at !== undefined && at !== until && !visited.has(at)) {
+      visited.add(at);
+      const stage = stageByKey.get(at);
+      if (stage) {
+        const loops = rework(at).map((target) => ` ↺${target}`).join("");
+        tokens.push(`${stageToken(stage)}${loops}`);
+        at = forward(at)[0];
+        continue;
+      }
+      const node = nodeById.get(at);
+      if (node?.type === "parallel-split") {
+        const join = flow.nodes.find((candidate) => candidate.type === "parallel-join" && candidate.pairs === node.id);
+        const branches = forward(at).map((branch) => walk(branch, join?.id ?? null).join(" → "));
+        tokens.push(`( ${branches.join(" ∥ ")} )`);
+        at = join ? forward(join.id)[0] : undefined;
+        continue;
+      }
+      // A stop, or a node this renderer does not know: the walk ends here.
+      break;
+    }
+    return tokens;
+  };
+  return walk(stages[0]?.key, null).join(" → ");
+}
+
 export function shapeSignature(
-  definition: Pick<WorkShapeDefinitionContract, "triggers" | "stages" | "stopConditions">,
+  definition: Pick<WorkShapeDefinitionContract, "triggers" | "stages" | "stopConditions"> & { flow?: WorkShapeFlow },
 ): string {
   const triggers = definition.triggers.map((trigger) => `${TRIGGER_GLYPH[trigger]} ${trigger}`).join(" ");
-  const steps = definition.stages.map(stageToken).join(" → ");
+  const steps = definition.flow
+    ? graphSteps(definition.stages, definition.flow)
+    : definition.stages.map(stageToken).join(" → ");
   const stopKinds = (["success", "failure", "budget"] as const).filter((kind) =>
     definition.stopConditions.some((stop) => stop.kind === kind),
   );

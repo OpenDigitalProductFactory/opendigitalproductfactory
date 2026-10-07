@@ -45,3 +45,40 @@ export function scrubGitRepoLocationEnv(env = process.env) {
   for (const name of GIT_REPO_LOCATION_ENV) delete scrubbed[name];
   return scrubbed;
 }
+
+/**
+ * Git config every guard runs under, appended through GIT_CONFIG_COUNT so it
+ * reaches every git process a guard spawns without touching any config file.
+ *
+ * BI-E0FEB8E9: each `git commit` starts `git maintenance run --auto --detach`.
+ * In a test fixture that commits past the loose-object threshold, that
+ * background run packs objects and removes their directories while the
+ * fixture's next commit is writing, and the commit fails with "unable to
+ * create temporary file", "invalid object" or "Could not read". It surfaced as
+ * Janitor Tests failing Build Studio builds whose change it never touched.
+ * Guard fixtures are throwaway, so maintenance there is pointless; gc.auto=0
+ * covers a git old enough to call `gc --auto` instead.
+ */
+const GUARD_GIT_CONFIG = Object.freeze([
+  ["maintenance.auto", "false"],
+  ["gc.auto", "0"],
+]);
+
+/**
+ * The environment a guard runner hands every guard: repository location
+ * scrubbed (BI-062F5687) and git's automatic maintenance off (BI-E0FEB8E9).
+ * Config the caller already passes through GIT_CONFIG_* is kept. The input is
+ * never mutated.
+ */
+export function guardGitEnv(env = process.env) {
+  const out = scrubGitRepoLocationEnv(env);
+  const existing = Number.parseInt(out.GIT_CONFIG_COUNT ?? "0", 10);
+  let index = Number.isInteger(existing) && existing > 0 ? existing : 0;
+  for (const [key, value] of GUARD_GIT_CONFIG) {
+    out[`GIT_CONFIG_KEY_${index}`] = key;
+    out[`GIT_CONFIG_VALUE_${index}`] = value;
+    index += 1;
+  }
+  out.GIT_CONFIG_COUNT = String(index);
+  return out;
+}

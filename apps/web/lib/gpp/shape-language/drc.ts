@@ -72,7 +72,11 @@
 //
 // E-NOT-EXECUTABLE is checked for every construct whose flag in
 // executable-constructs.ts is off: `stage.deadline`, a flow split or join,
-// `flow.edges[].rework`, `gate.onRefuse` and `stage.subShape`.
+// `flow.edges[].rework`, `gate.onRefuse` and `stage.subShape`. The
+// parallel-split-join flag is on since Phase 3c PR-3c-2 (BI-8875C9DF), so a
+// split or join compiles; the other four are still refused. The walk is
+// constructsUsedBy (constructs-used-by.ts), run over the lowered definition,
+// the same walk the drive runs over its definition contract (Phase 3c).
 // `options.executable` replaces the table for tests only; production callers
 // omit it.
 //
@@ -100,7 +104,8 @@ import {
   type GppDiagnosticSeverity,
   type GppRuleId,
 } from "./diagnostics";
-import { elementIdsOf, flowEdgeElementId, flowNodeElementId, gateElementId, shapeElementId } from "./element-ids";
+import { constructsUsedBy } from "./constructs-used-by";
+import { elementIdsOf, gateElementId, shapeElementId } from "./element-ids";
 import { copyGate, lowerToDefinition } from "./emit";
 import { CONSTRUCT_EXECUTABLE, type GppConstruct } from "./executable-constructs";
 import { GATE_RATIFICATION, ratifiedGateFor, type GateRatificationEntry } from "./gate-ratification";
@@ -377,14 +382,8 @@ export function runDesignRules(
             finding("D-8", "error", gateId, gatePath(index, stage), `gate:${stage.key} differs from the ratified gate for "${stage.advance.decisionScope}".`),
           );
         }
-        if (gate.onRefuse !== undefined) {
-          notExecutable("rework-edge", gateId, gatePath(index, stage, "onRefuse"), `gate:${stage.key} routes a refusal to "${gate.onRefuse}".`);
-        }
       }
     }
-
-    if (stage.deadline) notExecutable("stage-deadline", stageId, [...base, "deadline"], `Stage "${stage.key}" declares a deadline.`);
-    if (stage.subShape !== undefined) notExecutable("sub-shape", stageId, [...base, "subShape"], `Stage "${stage.key}" calls sub-shape "${stage.subShape}".`);
   });
 
   // ── entry into O / A / I stages: C-1 clause 2, D-1, D-2, D-3, D-6 ─────────
@@ -460,24 +459,11 @@ export function runDesignRules(
     }
   });
 
-  // ── explicit flow constructs ──────────────────────────────────────────────
-  if (document.flow) {
-    const splitIds = new Set(document.flow.nodes.filter((node) => node.type === "parallel-split").map((node) => node.id));
-    document.flow.nodes.forEach((node, index) => {
-      // One finding per split; a join reports only when it pairs no split (a lone join).
-      if (node.type === "parallel-join" && node.pairs !== undefined && splitIds.has(node.pairs)) return;
-      notExecutable("parallel-split-join", flowNodeElementId(node.id), ["flow", "nodes", index], `Flow node "${node.id}" is a ${node.type}.`);
-    });
-    document.flow.edges.forEach((edge, index) => {
-      if (!edge.rework) return;
-      notExecutable(
-        "rework-edge",
-        flowEdgeElementId(edge.from, edge.to),
-        ["flow", "edges", index, "rework"],
-        `Edge ${edge.from} -> ${edge.to} is a rework edge (at most ${edge.rework.maxIterations}).`,
-      );
-    });
-  }
+  // ── gated constructs: E-NOT-EXECUTABLE ────────────────────────────────────
+  // One walk over the lowered definition, shared with the drive (Phase 3c,
+  // PR-3c-1): gate.onRefuse, stage.deadline, stage.subShape, flow splits and
+  // joins, and rework edges.
+  for (const use of constructsUsedBy(lowered)) notExecutable(use.construct, use.elementId, use.path, use.detail);
 
   // ── S-1…S-6 ───────────────────────────────────────────────────────────────
   out.push(...checkSoundness(document));

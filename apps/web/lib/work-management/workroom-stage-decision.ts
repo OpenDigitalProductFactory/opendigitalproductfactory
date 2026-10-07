@@ -55,6 +55,39 @@ export function readPendingGovernedDecision(workspaceState: unknown): PendingGov
   };
 }
 
+function pendingGovernedDecisionFrom(entry: unknown): PendingGovernedDecision | null {
+  const pending = isRecord(entry) ? entry : null;
+  if (!pending || pending.reason !== "governed_decision") return null;
+  if (typeof pending.stageKey !== "string" || !pending.stageKey.trim()) return null;
+  return {
+    stageKey: pending.stageKey,
+    principalRef: typeof pending.principalRef === "string" && pending.principalRef.trim() ? pending.principalRef : null,
+  };
+}
+
+/**
+ * Every governed decision the room's drive is waiting on (GPP Phase 3c
+ * PR-3c-2, design §4.3 "Attention"). A graph room records one
+ * `pendingAttentions` entry per waiting stage, so several parallel branches
+ * can wait on people at once; a sequential room has no such list, and this
+ * falls back to the single `pendingAttention`, exactly as
+ * readPendingGovernedDecision reads it.
+ */
+export function readPendingGovernedDecisions(workspaceState: unknown): PendingGovernedDecision[] {
+  const drive = isRecord(workspaceState) && isRecord(workspaceState.workroomDrive)
+    ? workspaceState.workroomDrive : null;
+  if (!Array.isArray(drive?.pendingAttentions)) {
+    const single = readPendingGovernedDecision(workspaceState);
+    return single ? [single] : [];
+  }
+  const out: PendingGovernedDecision[] = [];
+  for (const entry of drive.pendingAttentions) {
+    const pending = pendingGovernedDecisionFrom(entry);
+    if (pending && !out.some((other) => other.stageKey === pending.stageKey)) out.push(pending);
+  }
+  return out;
+}
+
 export type GovernedDecisionStage = {
   key: string;
   title: string;

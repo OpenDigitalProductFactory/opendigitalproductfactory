@@ -63,6 +63,7 @@ vi.mock("@dpf/db", () => ({
         return phaseRuns.get(key)!;
       }),
     },
+    $executeRaw: vi.fn(async () => 3),
     adapterRunTelemetry: {
       aggregate: vi.fn(async () => ({
         _sum: { inputTokens: 150, outputTokens: 80, estimatedCostUsd: 0.0012 },
@@ -260,5 +261,35 @@ describe("stampBuildPhaseExecutionProfile", () => {
       },
       data: { executionProfileRef },
     });
+  });
+});
+
+describe("closeOpenBuildPhaseRunsForTerminalBuild (BI-59164941)", () => {
+  it("closes every open run of the build with one correlated update and reports the count", async () => {
+    const { prisma } = await import("@dpf/db");
+    const { closeOpenBuildPhaseRunsForTerminalBuild } = await import("./close-terminal-phase-runs");
+    const now = new Date("2026-10-06T22:00:00.000Z");
+    await expect(closeOpenBuildPhaseRunsForTerminalBuild("FB-TERM", { now })).resolves.toBe(3);
+    const call = (prisma.$executeRaw as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1)!;
+    const sql = (call[0] as TemplateStringsArray).join("?");
+    expect(sql).toContain('UPDATE "BuildPhaseRun"');
+    expect(sql).toContain('"completedAt" IS NULL');
+    expect(call.slice(1)).toEqual([now, now, "FB-TERM"]);
+  });
+
+  it("uses the caller's transaction client when given, and never fails the caller", async () => {
+    const { closeOpenBuildPhaseRunsForTerminalBuild } = await import("./close-terminal-phase-runs");
+    const tx = { $executeRaw: vi.fn(async () => 1) };
+    await expect(closeOpenBuildPhaseRunsForTerminalBuild("FB-TX", { db: tx })).resolves.toBe(1);
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    const failing = { $executeRaw: vi.fn(async () => { throw new Error("boom"); }) };
+    await expect(closeOpenBuildPhaseRunsForTerminalBuild("FB-TX", { db: failing })).resolves.toBe(0);
+  });
+
+  it("swallows a db error outside a transaction and reports zero", async () => {
+    const { prisma } = await import("@dpf/db");
+    const { closeOpenBuildPhaseRunsForTerminalBuild } = await import("./close-terminal-phase-runs");
+    (prisma.$executeRaw as unknown as { mockRejectedValueOnce: (e: Error) => void }).mockRejectedValueOnce(new Error("db down"));
+    await expect(closeOpenBuildPhaseRunsForTerminalBuild("FB-ERR")).resolves.toBe(0);
   });
 });

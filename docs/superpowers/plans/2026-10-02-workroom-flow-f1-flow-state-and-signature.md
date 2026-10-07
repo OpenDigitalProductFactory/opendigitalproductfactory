@@ -25,6 +25,10 @@ status: active
 
 This is one PR. Two pure modules that have no consumer until F2 and F3 are not split further.
 
+## Rebased on GPP Phase 3c (2026-10-06)
+
+Main gained the graph drive (BI-8875C9DF) while this was in review. Its two fail-closed pauses, `construct_not_executable` and `marking_unreadable`, joined the drive vocabulary. Because the classifier is typed over that vocabulary, they failed typecheck until they were classified, and both are `blocked`. A shape that declares a `flow` graph is now drawn as that graph: parallel branches as `( b ∥ c )`, nested splits inside branches, and rework edges as `↺target`.
+
 ## Recorded limitations
 
 - **Outside touchpoints are inferred from evidence kinds.** A stage is marked as an outside touchpoint when its evidence includes `conversation-turn` or `org-business-answer`. The stricter rule from spec §4.2, the GPP `outward` tool class, waits until stage tool classes resolve per stage. Consequently `inquiry-response-watch` stage `send` is not marked yet.

@@ -19,12 +19,50 @@ import { classifyChangedFiles } from "./ci-change-scope.mjs";
 import { checkStaleRootClone } from "./lib/stale-root-clone.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { ensureCompileReady, getChangedFilesAgainstMain } from "./lib/ensure-compile-ready.mjs";
+import { buildGateContext } from "./lib/gate-context.mjs";
 
 /**
  * BI-8CDA7F95: classify the diff with the classifier the cloud trusts. When the
  * changed files cannot be resolved (no merge base — the clone re-shallowed,
  * BI-4EE2E5C0), the scope is unknown and EVERY guard runs.
  */
+/**
+ * The obligations this diff carries, rendered for a refusal banner.
+ *
+ * Compact on purpose: the attestations that are REQUIRED (with the one note
+ * that matters — whether it belongs in the PR body rather than a commit
+ * trailer), and the derived artifacts that are stale WITH the command that
+ * regenerates each. Anything longer gets skimmed, which is how the pointer this
+ * replaced came to be ignored.
+ *
+ * Never throws: a refusal banner that fails to render must not mask the guard
+ * failure it is explaining.
+ */
+export function obligationLines(repoRoot) {
+  try {
+    const changedFiles = getChangedFilesAgainstMain(repoRoot);
+    if (!Array.isArray(changedFiles) || changedFiles.length === 0) return [];
+    const context = buildGateContext({ changedFiles, repoRoot });
+    const lines = [];
+    const required = (context.trailers ?? []).filter((t) => t.level === "required");
+    if (required.length > 0) {
+      lines.push(`this diff REQUIRES ${required.length} attestation(s):`);
+      for (const t of required) {
+        const where = /PR BODY/i.test(t.note ?? "") ? "  [PR BODY, not a commit trailer]" : "";
+        lines.push(`  ${t.trailer}${where}  — ${t.because}`);
+      }
+    }
+    const derived = (context.derivedArtifacts ?? []).filter((d) => d.generate);
+    if (derived.length > 0) {
+      lines.push(`regenerate ${derived.length} derived artifact group(s) in THIS change:`);
+      for (const d of derived) lines.push(`  ${d.generate.join(" ")}   (${d.id})`);
+    }
+    return lines;
+  } catch {
+    return [];
+  }
+}
+
 function resolveChangeScope(worktreePath) {
   const changedFiles = getChangedFilesAgainstMain(worktreePath);
   if (!Array.isArray(changedFiles)) return { changeScope: null, changedFiles: null };
@@ -169,8 +207,26 @@ export async function main() {
     for (const entry of failed) {
       process.stderr.write(`  - ${entry.name}: ${entry.failedCommand}\n`);
     }
+    // PUSH, DO NOT ADVERTISE.
+    //
+    // This used to print "see every constraint that applies to this diff: pnpm
+    // gate:context" and nothing else. That line is a POINTER, and a pointer
+    // costs the reader a decision it will usually decline: measured over one
+    // session of nine PRs, the agent driving them saw this hint on every
+    // preflight run and ran `gate:context` zero times — discovering each
+    // required attestation and each stale derived artifact by colliding with its
+    // refusal instead.
+    //
+    // Prose that asks an agent to remember a second command does not survive
+    // context compaction, and it did not survive here. So the obligations are
+    // EMITTED at the moment of refusal, where they cannot be missed without
+    // ignoring the refusal itself, and each one carries the command that
+    // satisfies it rather than a description of what is wrong.
+    for (const line of obligationLines(process.cwd())) {
+      process.stderr.write(`[pregate-preflight] ${line}\n`);
+    }
     process.stderr.write(
-      `[pregate-preflight] see every constraint that applies to this diff: pnpm gate:context\n` +
+      `[pregate-preflight] full constraint set: pnpm gate:context  ·  one-command landing: pnpm land\n` +
       `[pregate-preflight] emergency skip (recorded honesty, CI still enforces): set ${PREFLIGHT_SKIP_ENV}="<why>"\n`,
     );
     process.exitCode = 1;

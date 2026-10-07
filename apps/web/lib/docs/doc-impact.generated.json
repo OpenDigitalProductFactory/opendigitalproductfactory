@@ -882,6 +882,12 @@
     "apps/web/lib/gpp/permit-carriage.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/lib/gpp/shape-language/executable-constructs.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "apps/web/lib/gpp/shape-language/gate-ratification.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/hooks/system-events.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
@@ -1344,6 +1350,9 @@
     "apps/web/lib/tak/initiative-readiness-tool-grants.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
+    "apps/web/lib/tak/mcp-tool-policy.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/tak/precondition-ordering-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -1426,6 +1435,9 @@
     ],
     "apps/web/lib/work-management/delivery-shapes.ts": [
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
+    ],
+    "apps/web/lib/work-management/drive-marking.ts": [
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/work-management/human-accountability.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md"
@@ -1511,6 +1523,9 @@
     ],
     "apps/web/lib/workspace-home/profiles.ts": [
       "docs/testing/archetype-job-validation.md"
+    ],
+    "apps/web/scripts/build-gpp-shapes.ts": [
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/scripts/gpp-critical-interaction-map.ts": [
       "docs/architecture/gated-permissions-process.md"
@@ -2158,6 +2173,9 @@
     ],
     "scripts/compile-capability-service-catalog.mjs": [
       "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
+    "scripts/compose-init-reaping.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "scripts/detect-hardware-host.ts": [
       "docs/install/linux.md",
@@ -3132,11 +3150,15 @@
       "apps/web/lib/explore/feature-build-types.ts",
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/bindings.ts",
+      "apps/web/lib/gpp/shape-language/executable-constructs.ts",
+      "apps/web/lib/gpp/shape-language/gate-ratification.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
+      "apps/web/lib/work-management/drive-marking.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
       "apps/web/lib/work-management/standing-operations-shapes.ts",
       "apps/web/lib/work-management/work-shape-grants-resolve.test.ts",
       "apps/web/lib/work-management/work-shapes.ts",
+      "apps/web/scripts/build-gpp-shapes.ts",
       "apps/web/scripts/gpp-critical-interaction-map.ts",
       "packages/db/prisma/schema/ai-coworker.prisma",
       "scripts/installer/gpp-permit-secret-contract.test.mjs",
@@ -3176,6 +3198,7 @@
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/permit-carriage.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
+      "apps/web/lib/tak/mcp-tool-policy.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tak/tool-result-provenance.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
@@ -3458,6 +3481,7 @@
       "docker-entrypoint.sh",
       "packages/db/src/discovery-collectors/network.ts",
       "scripts/check-no-url-pathname-fs.mjs",
+      "scripts/compose-init-reaping.test.mjs",
       "scripts/doctools-image-contract.test.mjs",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/doctools-prepull.test.mjs",

@@ -56,6 +56,9 @@ const FLOW_STATE_BY_ACTION_AND_REASON: FlowStateTable = {
     conformance_pause: "blocked",
     unknown_principal: "blocked",
     executor_writeback_unavailable: "blocked",
+    // The graph drive's fail-closed pauses (GPP Phase 3c, BI-8875C9DF).
+    construct_not_executable: "blocked",
+    marking_unreadable: "blocked",
   },
   attention: {
     governed_decision: "awaiting-person",

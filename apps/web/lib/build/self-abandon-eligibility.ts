@@ -1,3 +1,4 @@
+import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-terminal-phase-runs";
 // apps/web/lib/build/self-abandon-eligibility.ts
 //
 // Governed agent self-abandon: let the agent driving a build free its OWN
@@ -234,6 +235,7 @@ export async function abandonOwnStalledBuild(params: {
         abandonReason: `Self-abandoned by owning agent via governed tool: ${reason}`,
       },
     });
+    await closeOpenBuildPhaseRunsForTerminalBuild(buildId, { db: tx, now });
     await tx.buildActivity.create({
       data: {
         buildId,

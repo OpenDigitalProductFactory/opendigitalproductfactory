@@ -14,9 +14,10 @@
 // construct whose Exec flag is off (S-3's unpaired split) also carries
 // E-NOT-EXECUTABLE for it. So each fixture is checked twice: with every flag
 // on (test-only override) it yields exactly its finding; with the real flags
-// it yields its finding plus nothing but E-NOT-EXECUTABLE. The five
+// it yields its finding plus nothing but E-NOT-EXECUTABLE. The four
 // E-NOT-EXECUTABLE fixtures are the converse: their finding exists only
-// under the real flags.
+// under the real flags. (Parallel split/join became executable in Phase 3c
+// PR-3c-2; its fixture is now pass-parallel-split-join.gpp.json.)
 //
 // C-5 appears on every compile as `not-evaluated`, and never as a pass.
 
@@ -88,10 +89,12 @@ describe("the corpus", () => {
     expect(new Set(rules)).toEqual(new Set(COVERED_RULES));
   });
 
-  it("has one E-NOT-EXECUTABLE fixture for each of parallel split, rework edge, stage deadline, sub-shape and refuse edge", () => {
+  // GPP Phase 3c PR-3c-2: parallel split/join is executable, so its fixture is now a passing document
+  // (pass-parallel-split-join.gpp.json); the other four constructs keep their E-NOT-EXECUTABLE fixture.
+  it("has one E-NOT-EXECUTABLE fixture for each of rework edge, stage deadline, sub-shape and refuse edge", () => {
     const notExecutable = VIOLATIONS.filter((name) => EXPECTED[name]?.rule === "E-NOT-EXECUTABLE");
+    expect(PASSING).toContain("pass-parallel-split-join.gpp.json");
     expect(notExecutable.map((name) => [name, EXPECTED[name]?.construct])).toEqual([
-      ["e-not-executable-parallel-split.gpp.json", "parallel-split-join"],
       ["e-not-executable-refuse-edge.gpp.json", "rework-edge"],
       ["e-not-executable-rework-edge.gpp.json", "rework-edge"],
       ["e-not-executable-stage-deadline.gpp.json", "stage-deadline"],
@@ -130,9 +133,11 @@ describe("AC-DRC: each fixture is refused with exactly its rule on its element",
     }
   });
 
-  it("the S-3 fixture's unpaired split also carries E-NOT-EXECUTABLE, which the flag alone removes", async () => {
-    const real = actionable(await compileFixture("s-3-unpaired-split.gpp.json"));
-    expect(real.map(brief)).toEqual([
+  it("the S-3 fixture's unpaired split carries E-NOT-EXECUTABLE only while the parallel flag is off", async () => {
+    // GPP Phase 3c PR-3c-2: the flag is on, so under the real flags only S-3 remains.
+    expect(actionable(await compileFixture("s-3-unpaired-split.gpp.json")).map(brief)).toEqual([{ rule: "S-3", elementId: "node:p" }]);
+    const parallelOff = { ...CONSTRUCT_EXECUTABLE, "parallel-split-join": false };
+    expect(actionable(await compileFixture("s-3-unpaired-split.gpp.json", parallelOff)).map(brief)).toEqual([
       { rule: "E-NOT-EXECUTABLE", elementId: "node:p" },
       { rule: "S-3", elementId: "node:p" },
     ]);

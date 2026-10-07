@@ -1,4 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { PARALLEL_FIXTURE } from "@/lib/work-management/__fixtures__/graph-shape-fixtures";
+import type { RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
+import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-drive-state";
+import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
+import { workroomDriveBranchTaskId } from "@/lib/work-management/drive-resolution";
 
 import { buildWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import { buildWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
@@ -13,6 +19,30 @@ import {
 } from "./workroom-drive";
 import { resolveDrivePlan } from "@/lib/work-management/drive-resolution";
 import { readWorkShapeDefinitionContract, getWorkShape } from "@/lib/work-management/work-shapes";
+
+// Parallel branches (GPP Phase 3c PR-3c-2): the graph fixture is not
+// registered (plan constraint 7), so the shape-claim resolver is overridden
+// for its key only; every registry shape resolves exactly as before. The
+// executable-construct table is a mutable copy so a case can switch the
+// parallel flag off (the kill switch); it starts as the real table.
+const flags = vi.hoisted(() => ({ table: {} as Record<string, boolean>, original: {} as Record<string, boolean> }));
+vi.mock("@/lib/gpp/shape-language/executable-constructs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gpp/shape-language/executable-constructs")>();
+  flags.original = { ...actual.CONSTRUCT_EXECUTABLE };
+  flags.table = { ...actual.CONSTRUCT_EXECUTABLE };
+  return { ...actual, CONSTRUCT_EXECUTABLE: flags.table };
+});
+vi.mock("@/lib/work-management/workroom-shape-claim", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/work-management/workroom-shape-claim")>();
+  const { PARALLEL_FIXTURE: fixture } = await import("@/lib/work-management/__fixtures__/graph-shape-fixtures");
+  return {
+    ...actual,
+    resolveWorkShapeClaim: (scopeClaims: unknown) => {
+      const ref = actual.readWorkShapeClaim(scopeClaims);
+      return ref?.key === fixture.key && ref.version === fixture.version ? fixture : actual.resolveWorkShapeClaim(scopeClaims);
+    },
+  };
+});
 
 const driveDb = {
   workroom: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
@@ -452,5 +482,200 @@ describe("stage-declared tools reach the dispatched task", () => {
     };
     expect(args?.create?.taskConfig).toEqual(expected);
     expect(args?.update?.taskConfig).toEqual(expected);
+  });
+});
+
+// AC-3C-BRANCH-LATCH and per-branch tasks (GPP Phase 3c PR-3c-2, BI-8875C9DF).
+// Design: docs/superpowers/specs/2026-10-02-gpp-phase-3c-drive-graph-execution-design.md
+// §6 ("Dispatch every tick"), §6.1 ("Own risk"); plan PR-3c-2 (workroom-drive.test.ts).
+// Through the real runner with the production merge. PARALLEL_FIXTURE is
+// a → split → (b, c) → join → d → success, every stage an agent stage.
+describe("parallel branches: one task per branch under one lease (PR-3c-2)", () => {
+  const DAY = "2026-03-02";
+  const T0 = new Date(`${DAY}T09:00:00.000Z`);
+  const at = (minutes: number) => new Date(T0.getTime() + minutes * 60_000);
+  const CYCLE = `${PARALLEL_FIXTURE.key}@${PARALLEL_FIXTURE.version}:${DAY}`;
+  const PRIMARY = workroomDriveTaskId("WC-FORK", PARALLEL_FIXTURE.key);
+  const branch = (stageKey: string) => workroomDriveBranchTaskId("WC-FORK", PARALLEL_FIXTURE.key, stageKey);
+
+  type Harness = {
+    workspaceState: Record<string, unknown>;
+    evidence: RecordedEvidence[];
+    dispatchedAt: Map<string, Date>;
+    stopConditionHits: string[];
+    upserts: string[];
+    deactivated: string[];
+    leases: number;
+    /** Stage keys whose upsert fails to schedule. */
+    failing: Set<string>;
+  };
+  const harness = (workspaceState: Record<string, unknown> = {}): Harness =>
+    ({ workspaceState, evidence: [], dispatchedAt: new Map(), stopConditionHits: [], upserts: [], deactivated: [], leases: 0, failing: new Set() });
+
+  async function tick(h: Harness, now: Date) {
+    const before = { upserts: h.upserts.length, deactivated: h.deactivated.length, leases: h.leases };
+    const stored = readStoredWorkroomDriveState(h.workspaceState);
+    const forkRoom: WorkroomDriveRoom = {
+      ...room({ id: "row-fork", capsuleId: "WC-FORK", participants: [coordinatorAssignment("row-fork")] }),
+      scopeClaims: [
+        buildWorkShapeClaim({ key: PARALLEL_FIXTURE.key, version: PARALLEL_FIXTURE.version }),
+        buildWorkroomPostureClaim({ proactivityLevel: "balanced" }, new Date("2026-03-01T00:00:00.000Z")),
+      ],
+      workspaceState: h.workspaceState,
+      ...stored,
+      stopConditionHits: h.stopConditionHits,
+      recordedEvidence: [...h.evidence].reverse(),
+      stageDispatchedAt: null,
+      stageDispatchedAtByStage: new Map(h.dispatchedAt),
+    };
+    const fx: WorkroomDriveEffects = {
+      persist: async (input) => {
+        if (input.observationOnly) return;
+        const written = mergeWorkroomDriveSnapshot(h.workspaceState, input.snapshot, { graphShape: input.graphShape });
+        h.workspaceState = JSON.parse(JSON.stringify({ ...h.workspaceState, workroomDrive: written })) as Record<string, unknown>;
+        // What loadStageDispatchTimesByStage reads off the activity row.
+        for (const key of (input.snapshot.dispatchedStageKeys as string[] | undefined) ?? []) h.dispatchedAt.set(key, now);
+      },
+      acquireLease: async () => { h.leases += 1; return "acquired"; },
+      upsertAgentTask: async (input) => {
+        if (h.failing.has(input.stage.stageKey)) return false;
+        h.upserts.push(`${input.taskId}@${input.stage.stageKey}`);
+        return true;
+      },
+      deactivateAgentTask: async (taskId) => { h.deactivated.push(taskId); },
+    };
+    const result = await runWorkroomDriveJob(now, { listRooms: async () => [forkRoom], effects: fx, reconcileNesting: async () => 0, reconcileNotifications: async () => {} });
+    return {
+      plan: result.plans[0]!,
+      upserts: h.upserts.slice(before.upserts),
+      deactivated: h.deactivated.slice(before.deactivated),
+      leases: h.leases - before.leases,
+    };
+  }
+  const drive = (h: Harness) => h.workspaceState.workroomDrive as Record<string, unknown>;
+  const tokens = (h: Harness) => (drive(h).marking as { tokens: Array<Record<string, unknown>> }).tokens;
+  const done = (h: Harness, stageKey: string, minutes: number) =>
+    h.evidence.push({ stageKey, kind: "assurance-run", outcome: "completed", recordedAt: at(minutes) });
+
+  beforeEach(() => {
+    // The real table: parallel split/join is executable since PR-3c-2.
+    Object.assign(flags.table, flags.original);
+    expect(flags.table["parallel-split-join"]).toBe(true);
+  });
+
+  it("two concurrent agent branches get two upserts with distinct ids fixed on their tokens, under one lease", async () => {
+    const h = harness();
+    expect((await tick(h, at(0))).upserts).toEqual([`${PRIMARY}@a`]);
+    done(h, "a", 5);
+    const split = await tick(h, at(15));
+    expect(split.plan).toMatchObject({ action: "dispatch_agent", reason: "agent_stage" });
+    expect(split.leases).toBe(1);
+    expect(split.upserts).toEqual([`${PRIMARY}@b`, `${branch("c")}@c`]);
+    // a left its stage, but b took the primary id in the same tick, so nothing is deactivated.
+    expect(split.deactivated).toEqual([]);
+    expect(tokens(h)).toEqual([
+      expect.objectContaining({ node: "stage:b", taskId: PRIMARY, lastAction: "dispatch_agent", lastCycleKey: CYCLE }),
+      expect.objectContaining({ node: "stage:c", taskId: branch("c"), lastAction: "dispatch_agent", lastCycleKey: CYCLE }),
+    ]);
+    expect(drive(h).dispatchedStageKeys).toEqual(["b", "c"]);
+    expect(drive(h).stageKey).toBe("b");
+  });
+
+  it("AC-3C-BRANCH-LATCH: two branches that never write back each latch after exactly one dispatch per cycle", async () => {
+    const h = harness();
+    await tick(h, at(0));
+    done(h, "a", 5);
+    await tick(h, at(15));
+    for (const minutes of [30, 45, 60, 75]) {
+      const later = await tick(h, at(minutes));
+      expect(later.plan, `t+${minutes}`).toMatchObject({ action: "pause", reason: "executor_writeback_unavailable" });
+      expect(later.upserts, `t+${minutes}`).toEqual([]);
+    }
+    expect(h.upserts.filter((entry) => entry.endsWith("@b"))).toHaveLength(1);
+    expect(h.upserts.filter((entry) => entry.endsWith("@c"))).toHaveLength(1);
+    // Each latched branch's task is deactivated, and each records its own blocked receipt.
+    expect(new Set(h.deactivated)).toEqual(new Set([PRIMARY, branch("c")]));
+    expect(drive(h).receipts).toEqual(expect.arrayContaining([{ stageKey: "b", kind: "blocked" }, { stageKey: "c", kind: "blocked" }]));
+  });
+
+  it("a branch latched by writeback does not block the other, which still dispatches", async () => {
+    const latched = { node: "stage:b", enteredAt: at(-30).toISOString(), taskId: PRIMARY, lastAction: "dispatch_agent", lastReason: "agent_stage", lastCycleKey: CYCLE };
+    const fresh = { node: "stage:c", enteredAt: at(-30).toISOString(), taskId: branch("c") };
+    const h = harness({ workroomDrive: { kind: "workroom-drive", version: 1, action: "dispatch_agent", reason: "agent_stage", stageKey: "b", lastCycleKey: CYCLE,
+      receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }], marking: { format: "drive-marking/1", cycleKey: CYCLE, tokens: [latched, fresh], iterations: {}, reworkTaken: {}, deadlines: {}, children: {} } } });
+    const result = await tick(h, at(0));
+    // The aggregate is the latched branch's pause (pause outranks dispatch), yet c is dispatched.
+    expect(result.plan).toMatchObject({ action: "pause", reason: "executor_writeback_unavailable" });
+    expect(result.upserts).toEqual([`${branch("c")}@c`]);
+    expect(result.deactivated).toEqual([PRIMARY]);
+    expect(drive(h).dispatchedStageKeys).toEqual(["c"]);
+  });
+
+  it("a branch that fires and waits at the join, then the join completing, each deactivate the leaving task that tick", async () => {
+    const h = harness();
+    await tick(h, at(0));
+    done(h, "a", 5);
+    await tick(h, at(15));
+    done(h, "b", 20);
+    const waits = await tick(h, at(30));
+    expect(waits.deactivated).toContain(PRIMARY);
+    expect(tokens(h).map((token) => [token.node, token.from])).toEqual([["node:j", "stage:b"], ["stage:c", undefined]]);
+    done(h, "c", 35);
+    const joined = await tick(h, at(45));
+    // c's branch task is deactivated as its token leaves; d enters and takes the primary id, which the upsert reactivates.
+    expect(joined.deactivated).toEqual([branch("c")]);
+    expect(joined.upserts).toEqual([`${PRIMARY}@d`]);
+    expect(tokens(h)).toEqual([expect.objectContaining({ node: "stage:d", taskId: PRIMARY })]);
+  });
+
+  it("a branch whose dispatch fails to schedule is not latched: it records no dispatch and is dispatched next tick", async () => {
+    const h = harness();
+    await tick(h, at(0));
+    done(h, "a", 5);
+    h.failing.add("c");
+    const partial = await tick(h, at(15));
+    expect(partial.upserts).toEqual([`${PRIMARY}@b`]);
+    expect(drive(h).dispatchedStageKeys).toEqual(["b"]);
+    const c = tokens(h).find((token) => token.node === "stage:c");
+    expect(c).toEqual({ node: "stage:c", enteredAt: at(15).toISOString(), taskId: branch("c") });
+    h.failing.clear();
+    const retried = await tick(h, at(30));
+    expect(retried.upserts).toEqual([`${branch("c")}@c`]);
+  });
+
+  it("a stop deactivates every branch task the marking names", async () => {
+    const h = harness();
+    await tick(h, at(0));
+    done(h, "a", 5);
+    await tick(h, at(15));
+    h.stopConditionHits = ["The substrate cannot be read."];
+    const stopped = await tick(h, at(30));
+    expect(stopped.plan).toMatchObject({ action: "stop", reason: "conformance_stop" });
+    expect(new Set(stopped.deactivated)).toEqual(new Set([PRIMARY, branch("c")]));
+    expect(stopped.upserts).toEqual([]);
+  });
+
+  it("success deactivates every task, and a sequential twin of the room keeps the primary id throughout", async () => {
+    const h = harness();
+    await tick(h, at(0));
+    done(h, "a", 5);
+    await tick(h, at(15));
+    done(h, "b", 20);
+    done(h, "c", 20);
+    await tick(h, at(30));
+    await tick(h, at(45));
+    done(h, "d", 50);
+    const success = await tick(h, at(60));
+    expect(success.plan).toMatchObject({ action: "stop", reason: "success" });
+    expect(success.deactivated).toContain(PRIMARY);
+    expect(tokens(h)).toEqual([]);
+  });
+
+  it("with the parallel flag off the room pauses construct_not_executable and dispatches nothing", async () => {
+    flags.table["parallel-split-join"] = false;
+    const h = harness();
+    const paused = await tick(h, at(0));
+    expect(paused.plan).toMatchObject({ action: "pause", reason: "construct_not_executable" });
+    expect(paused.upserts).toEqual([]);
   });
 });

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { SPLIT_2 } from "./__fixtures__/graph-shapes/parallel";
+
 import { deriveRoomCoordinator } from "./room-coordinator";
 import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
-import type { WorkShapeDefinitionContract } from "./work-shapes";
+import { readWorkShapeDefinitionContract, type WorkShapeDefinitionContract } from "./work-shapes";
 import {
   evaluateWorkroomLifecycleConformance,
   evaluateWorkroomShapeConformance,
@@ -491,5 +493,116 @@ describe("Workroom lifecycle conformance guard", () => {
         operation: "open-cycle",
       },
     });
+  });
+});
+
+// AC-3C-CONFORMANCE, sequential half (GPP Phase 3c PR-3c-1, BI-8875C9DF):
+// with `flowOrder`, stage order is read from the flow graph; without it, every
+// case above is unchanged.
+describe("evaluateWorkroomShapeConformance with flowOrder (Phase 3c)", () => {
+  const graphDefinition: WorkShapeDefinitionContract = {
+    ...definition,
+    stages: [
+      ...definition.stages.slice(0, 1),
+      { key: "check", title: "Check", accountablePrincipalRef: "agent:watcher", advance: { kind: "status-change", condition: "checked" }, evidence: ["assurance-finding"] },
+      ...definition.stages.slice(1),
+    ],
+    flow: { nodes: [], edges: [{ from: "scan", to: "check" }, { from: "check", to: "review" }, { from: "review", to: "success" }] },
+  };
+  const evaluate = (over: Partial<Parameters<typeof evaluateWorkroomShapeConformance>[0]>) => evaluateWorkroomShapeConformance({
+    definition: graphDefinition,
+    collaborationShape: null,
+    participants: executableRoster,
+    currentStageKey: "scan",
+    proposedStageKey: "check",
+    receipts: [{ stageKey: "scan", kind: "stage-evidence-recorded" }],
+    budgetUsage: [],
+    stopConditionHits: [],
+    reviewDue: false,
+    coordinatorHasProcessCoordinationAuthority: true,
+    flowOrder: { enabled: ["check"], delivered: { scan: true, check: false, review: false } },
+    ...over,
+  });
+
+  it("a forward move the flow enables is legal, and the next permitted stage is the first enabled", () => {
+    const result = evaluate({});
+    expect(result.deviations).toEqual([]);
+    expect(result.disposition).toBe("continue");
+    expect(result.nextPermittedStageKey).toBe("check");
+  });
+
+  it("a stage the flow does not enable raises out_of_order_stage", () => {
+    const result = evaluate({ proposedStageKey: "review" });
+    expect(result.deviations.map((row) => row.code)).toContain("out_of_order_stage");
+    expect(result.disposition).toBe("pause");
+  });
+
+  it("a stage off the shape raises out_of_order_stage", () => {
+    expect(evaluate({ proposedStageKey: "elsewhere" }).deviations).toEqual([
+      { code: "out_of_order_stage", summary: "Proposed stage elsewhere is not on the declared shape." },
+    ]);
+  });
+
+  it("a forward predecessor that has not delivered this iteration raises missing_prerequisite_receipt", () => {
+    const result = evaluate({ flowOrder: { enabled: ["check"], delivered: { scan: false } } });
+    expect(result.deviations).toEqual([{ code: "missing_prerequisite_receipt", summary: "Stage check lacks a receipt from scan." }]);
+  });
+
+  it("the declared refuse route is the one legal backward move", () => {
+    const result = evaluate({ currentStageKey: "review", proposedStageKey: "scan", flowOrder: { enabled: [], delivered: {}, reworkRoute: { from: "review", to: "scan" } } });
+    expect(result.deviations).toEqual([]);
+  });
+
+  it("the start stage needs no predecessor", () => {
+    expect(evaluate({ currentStageKey: null, proposedStageKey: "scan", flowOrder: { enabled: ["scan"], delivered: {} } }).deviations).toEqual([]);
+  });
+
+  it("without flowOrder, the same graph definition is checked by index exactly as before", () => {
+    const result = evaluateWorkroomShapeConformance({
+      definition: graphDefinition, collaborationShape: null, participants: executableRoster, currentStageKey: "scan", proposedStageKey: "review",
+      receipts: [], budgetUsage: [], stopConditionHits: [], reviewDue: false, coordinatorHasProcessCoordinationAuthority: true,
+    });
+    expect(result.deviations.map((row) => row.code).sort()).toEqual(["missing_prerequisite_receipt", "out_of_order_stage"]);
+  });
+});
+
+// AC-3C-CONFORMANCE, parallel half (GPP Phase 3c PR-3c-2, BI-8875C9DF): with
+// `flowOrder`, concurrent branches are legal, and a stage beyond a join that
+// has not received every branch lacks its prerequisite receipt.
+describe("evaluateWorkroomShapeConformance with flowOrder on a parallel flow (Phase 3c)", () => {
+  const split = readWorkShapeDefinitionContract(SPLIT_2);
+  const evaluate = (over: Partial<Parameters<typeof evaluateWorkroomShapeConformance>[0]>) => evaluateWorkroomShapeConformance({
+    definition: split,
+    collaborationShape: null,
+    participants: executableRoster,
+    currentStageKey: "b",
+    proposedStageKey: "b",
+    receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }],
+    budgetUsage: [],
+    stopConditionHits: [],
+    reviewDue: false,
+    coordinatorHasProcessCoordinationAuthority: true,
+    flowOrder: { enabled: ["b", "c"], delivered: { a: true, b: false, c: false, d: false } },
+    ...over,
+  });
+
+  it("each concurrent branch is a legal proposal and raises nothing", () => {
+    for (const proposed of ["b", "c"]) {
+      expect(evaluate({ proposedStageKey: proposed }).deviations, proposed).toEqual([]);
+    }
+  });
+
+  it("a stage beyond an incomplete join raises missing_prerequisite_receipt for the branch that has not delivered", () => {
+    const result = evaluate({ proposedStageKey: "d", flowOrder: { enabled: ["c", "d"], delivered: { a: true, b: true, c: false, d: false } } });
+    expect(result.deviations).toEqual([{ code: "missing_prerequisite_receipt", summary: "Stage d lacks a receipt from c." }]);
+  });
+
+  it("past a complete join the stage is legal", () => {
+    expect(evaluate({ proposedStageKey: "d", flowOrder: { enabled: ["d"], delivered: { a: true, b: true, c: true, d: false } } }).deviations).toEqual([]);
+  });
+
+  it("echoes currentStageKeys only when given, so a sequential result keeps its keys", () => {
+    expect(evaluate({ currentStageKeys: ["b", "c"] }).currentStageKeys).toEqual(["b", "c"]);
+    expect(Object.hasOwn(evaluate({}), "currentStageKeys")).toBe(false);
   });
 });

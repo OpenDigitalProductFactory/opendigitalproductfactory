@@ -240,3 +240,29 @@ describe("the reason vocabulary matches what the drive emits (BI-3ACFD254)", () 
   });
 });
 
+
+// AC-3C-CONCLUDED, part (GPP Phase 3c PR-3c-1, BI-8875C9DF): the graph path's
+// two fail-closed pauses are registered, so they never conclude `unconcluded`.
+describe("the Phase 3c fail-closed pauses conclude (AC-3C-CONCLUDED)", () => {
+  const PHASE_3C_PAUSES = ["construct_not_executable", "marking_unreadable"] as const;
+
+  it("are listed under pause", () => {
+    for (const reason of PHASE_3C_PAUSES) expect(everyDriveOutcome()).toContainEqual({ action: "pause", reason });
+  });
+
+  it("are blockages with an owner and an observable unblocking event, never unconcluded", () => {
+    for (const reason of PHASE_3C_PAUSES) {
+      const decision = resolveDriveConclusion(input({ action: "pause", reason }));
+      expect(decision.kind, reason).toBe("blocked");
+      expect(decision.blockage?.ownerPrincipalId).toBe("PRN-OWNER");
+      expect(decision.blockage?.unblockedBy.length ?? 0).toBeGreaterThan(10);
+    }
+  });
+
+  it("without an owner they surface the missing setup rather than stopping silently", () => {
+    for (const reason of PHASE_3C_PAUSES) {
+      const decision = resolveDriveConclusion(input({ action: "pause", reason, accountability: UNOWNED }));
+      expect(decision.blockage?.ownerSetupRequired).toBe(UNOWNED_MESSAGE);
+    }
+  });
+});

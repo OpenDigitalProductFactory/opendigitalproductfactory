@@ -56,6 +56,12 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  // Discovered external MCP tool review state (BI-8B7B2FE9). Waiting for
+  // review is a warning, never neutral: the tool is unavailable until a person acts.
+  mcpToolPolicy: {
+    "bundled-approved": "info", approved: "success", quarantined: "warning",
+    denied: "danger", blocked: "neutral",
+  },
   workroomStage: {
     passed: "success", holding: "warning", denied: "danger",
     "awaiting-confirmation": "warning", "not-reached": "neutral",

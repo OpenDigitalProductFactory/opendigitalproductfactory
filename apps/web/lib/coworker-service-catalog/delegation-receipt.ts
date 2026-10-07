@@ -2,6 +2,15 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
+import {
+  noteSessionSecretGraceUse,
+  signingKey,
+  verificationKeys,
+  type SigningKeySource,
+} from "@/lib/auth/dedicated-signing-key";
+
+const RECEIPT_SECRET_ENV = "DPF_DELEGATION_RECEIPT_SECRET";
+
 export type CoworkerDelegationReceiptAccessProfile = "internal-a2a" | "partner-a2a" | "external-a2a";
 
 export type CoworkerDelegationReceiptInput = {
@@ -41,7 +50,8 @@ export type CoworkerDelegationReceipt = CoworkerDelegationReceiptInput & {
 };
 
 export type CoworkerDelegationReceiptVerification =
-  | { ok: true }
+  /** `verifiedWith` names the key that matched, so a grace-window fallback is observable. */
+  | { ok: true; verifiedWith: SigningKeySource | "explicit" }
   | { ok: false; reason: "unsupported_algorithm" | "signature_mismatch" };
 
 export function createCoworkerDelegationReceipt(
@@ -60,19 +70,34 @@ export function createCoworkerDelegationReceipt(
 
 export function verifyCoworkerDelegationReceipt(
   receipt: CoworkerDelegationReceipt,
-  options: { secret?: string } = {},
+  options: { secret?: string; now?: Date } = {},
 ): CoworkerDelegationReceiptVerification {
   if (receipt.signature.alg !== "HMAC-SHA256") return { ok: false, reason: "unsupported_algorithm" };
-  const expected = signUnsignedReceipt(stripSignature(receipt), {
-    secret: options.secret,
-    keyId: receipt.signature.keyId,
-  });
+  const now = options.now ?? new Date();
+  const keys = options.secret !== undefined
+    ? [{ secret: options.secret, source: "explicit" as const }]
+    : verificationKeys(RECEIPT_SECRET_ENV, now);
+  const unsigned = stripSignature(receipt);
   const actual = Buffer.from(receipt.signature.value, "hex");
-  const expectedValue = Buffer.from(expected.value, "hex");
-  if (actual.length !== expectedValue.length || !timingSafeEqual(actual, expectedValue)) {
-    return { ok: false, reason: "signature_mismatch" };
+  const matched = keys.find((key) => {
+    const expected = Buffer.from(
+      signUnsignedReceipt(unsigned, { secret: key.secret, keyId: receipt.signature.keyId }).value,
+      "hex",
+    );
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  });
+  if (!matched) return { ok: false, reason: "signature_mismatch" };
+  if (matched.source === "session-secret-grace") {
+    // Grace bound per handle: receipts carry no expiry, so only a receipt issued before the
+    // verification moment (and so before the cutoff, which bounds the window) is accepted
+    // under the session secret. verificationKeys already withholds the key after the cutoff.
+    const issuedAt = Date.parse(receipt.issuedAt);
+    if (!Number.isFinite(issuedAt) || issuedAt > now.getTime()) {
+      return { ok: false, reason: "signature_mismatch" };
+    }
+    noteSessionSecretGraceUse("delegation-receipt");
   }
-  return { ok: true };
+  return { ok: true, verifiedWith: matched.source };
 }
 
 function unsignedReceipt(
@@ -154,16 +179,15 @@ export function canSignDelegationReceipts(): boolean {
  * does. Failing to start is the correct behaviour (BI-2F318FB3).
  */
 function receiptSecret(): string {
-  const secret =
-    process.env.DPF_DELEGATION_RECEIPT_SECRET ??
-    process.env.AUTH_SECRET ??
-    process.env.NEXTAUTH_SECRET;
-  if (!secret || secret.trim().length === 0) {
+  // The dedicated DPF_DELEGATION_RECEIPT_SECRET signs when set; an install without it keeps
+  // signing with AUTH_SECRET / NEXTAUTH_SECRET (BI-F6929F50, lib/auth/dedicated-signing-key.ts).
+  const key = signingKey(RECEIPT_SECRET_ENV);
+  if (!key) {
     throw new Error(
       "Coworker delegation receipts require a signing secret: set DPF_DELEGATION_RECEIPT_SECRET (or AUTH_SECRET / NEXTAUTH_SECRET).",
     );
   }
-  return secret;
+  return key.secret;
 }
 
 function stringValue(value: unknown): string | null {

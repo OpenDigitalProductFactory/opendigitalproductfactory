@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { SPLIT_2, SPLIT_NESTED } from "./__fixtures__/graph-shapes/parallel";
 import { shapeLane, shapeSignature, touchesOutside } from "./shape-signature";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 import { listWorkShapes, type WorkShapeDefinition, type WorkShapeStage } from "./work-shapes";
@@ -60,6 +61,31 @@ describe("shapeSignature", () => {
       stopConditions: [],
     });
     expect(signature).toBe("✋ claim · Person reply ⇄");
+  });
+
+  it("draws a declared parallel split as branches, not as a straight line", () => {
+    expect(shapeSignature(SPLIT_2)).toContain("AI a → ( AI b ∥ AI c ) → AI d");
+  });
+
+  it("draws a split nested inside a branch", () => {
+    expect(shapeSignature(SPLIT_NESTED)).toContain("AI a → ( AI b ∥ ( AI c ∥ AI d ) → AI e ) → AI f");
+  });
+
+  it("marks a rework edge on the stage it leaves", () => {
+    const signature = shapeSignature({
+      triggers: ["claim"],
+      stages: [stage({ key: "draft" }), stage({ key: "review" })],
+      stopConditions: [],
+      flow: {
+        nodes: [],
+        edges: [
+          { from: "draft", to: "review" },
+          { from: "review", to: "draft", rework: { maxIterations: 3 } },
+          { from: "review", to: "success" },
+        ],
+      },
+    });
+    expect(signature).toBe("✋ claim · AI draft → AI review ↺draft");
   });
 
   it("gives every current and frozen prior shape a signature with no unknown lane", () => {

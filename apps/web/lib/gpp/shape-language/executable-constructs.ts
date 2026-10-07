@@ -27,7 +27,15 @@
 // (environment boundary) compile: what the document says is exactly what the
 // runtime does with it.
 //
-// OFFLINE TOOLING in Phase 3b: nothing in the running app imports this module.
+// ONE SWITCH, READ BY THE RUNTIME (Phase 3c, BI-8875C9DF). From PR-3c-1 the
+// work-shape drive reads this table at runtime: a room whose pinned shape uses
+// a construct whose flag is off pauses with `construct_not_executable`, naming
+// the construct and element (lib/work-management/drive-resolution-graph.ts,
+// through constructsUsedBy in constructs-used-by.ts). Setting a flag back to
+// false is therefore also the kill switch: the compiler refuses new documents
+// and the drive pauses rooms that use the construct, visibly, never running it
+// some other way. Design: docs/superpowers/specs/
+// 2026-10-02-gpp-phase-3c-drive-graph-execution-design.md §5, §7.1.
 
 /** The §5 constructs, in catalog order (construct 11 split into its two compile targets). Closed. */
 export const GPP_CONSTRUCTS = [
@@ -52,8 +60,15 @@ export type GppConstruct = (typeof GPP_CONSTRUCTS)[number];
 
 /**
  * Whether the runtime executes each construct today (spec §5, Exec column).
- * Off: stage deadline, parallel split/join, rework edge (incl. `gate.onRefuse`),
- * sub-shape — each waits for its Phase 3c PR (BI-8875C9DF).
+ *
+ * | Construct                    | Executable | Since, or the PR that enables it (BI-8875C9DF) |
+ * |------------------------------|------------|------------------------------------------------|
+ * | parallel-split-join          | yes        | PR-3c-2 (drive-parity-parallel.test.ts)        |
+ * | rework-edge (incl. onRefuse) | no         | PR-3c-3                                        |
+ * | stage-deadline               | no         | PR-3c-4                                        |
+ * | sub-shape                    | no         | PR-3c-5                                        |
+ *
+ * Every other construct has been executable since Phase 3b.
  */
 export const CONSTRUCT_EXECUTABLE: Readonly<Record<GppConstruct, boolean>> = Object.freeze({
   trigger: true,
@@ -68,7 +83,7 @@ export const CONSTRUCT_EXECUTABLE: Readonly<Record<GppConstruct, boolean>> = Obj
   "escalation-boundary": true,
   "review-point": true,
   "stage-deadline": false,
-  "parallel-split-join": false,
+  "parallel-split-join": true,
   "rework-edge": false,
   "sub-shape": false,
   "environment-boundary": true,
