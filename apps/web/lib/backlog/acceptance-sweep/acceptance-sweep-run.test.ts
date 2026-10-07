@@ -83,6 +83,9 @@ function ports(overrides: Partial<AcceptanceSweepPorts> = {}) {
       runs.push(summary);
       return { activityId: `run-${runs.length}` };
     }),
+    // BI-45D3BBF4: closing is off unless an operator pre-authorisation is recorded.
+    resolveCloseAuthorisation: async () => ({ state: "disabled", reason: "not-recorded", because: "none recorded" }),
+    close: vi.fn(async () => { throw new Error("close must not be called while closing is off"); }),
     ...overrides,
   };
   return { ports: base, store, runs };
@@ -177,6 +180,14 @@ describe("runAcceptanceSweep", () => {
     const { ports: p } = ports({ loadPoolAges: async () => big });
     const summary = await runAcceptanceSweep(p, CONFIG);
     expect(summary.revisit).toEqual({ poolSize: 100, pageSize: 3, runsPerRevisit: 34, exceedsTrendWindow: true });
+  });
+
+  it("closes nothing and says why when no pre-authorisation is recorded", async () => {
+    const { ports: p } = ports();
+    const summary = await runAcceptanceSweep(p, CONFIG);
+    expect(p.close).not.toHaveBeenCalled();
+    expect(summary.closing).toMatchObject({ enabled: false, disabledReason: "not-recorded", closed: [] });
+    expect(summary.headline).toContain("closing off (not-recorded)");
   });
 
   it("never routes while routing is off", async () => {
