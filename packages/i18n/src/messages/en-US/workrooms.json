@@ -9,7 +9,8 @@
     "choices": {
       "accept": "Accept",
       "patch": "Patch",
-      "defer": "Defer"
+      "defer": "Defer",
+      "refuse": "Send back"
     },
     "deferUntil": "Defer until",
     "rationale": "Rationale",

@@ -22,24 +22,44 @@
  *   game's rules, independent of the reference interpreter (interpreter.ts) so
  *   that the per-construct parity tests compare two statements of the rules.
  *   One firing per tick: the first marked stage, in document order, that has a
- *   completing receipt at its current iteration. It implements the forward
- *   move to a stage or to the success stop (PR-3c-1) and parallel split and
- *   join (PR-3c-2). Every other construct-specific branch (rework, refuse
- *   route, deadline, sub-shape, a forward edge into a failure or budget stop)
- *   throws DriveConstructNotImplementedError; the graph planner turns that into
- *   a fail-closed pause, and with those flags off it is never reached, because
- *   the planner pauses first.
+ *   completing receipt at its current iteration (and, behind an enforced,
+ *   blocking gate with a refuse route, a verdict that moves it). It implements
+ *   the forward move to a stage or to the success stop (PR-3c-1), parallel
+ *   split and join (PR-3c-2), and refuse routes with rework edges (PR-3c-3).
+ *   Every other construct-specific branch (deadline, sub-shape, a forward edge
+ *   into a failure or budget stop) throws DriveConstructNotImplementedError;
+ *   the graph planner turns that into a fail-closed pause, and with those flags
+ *   off it is never reached, because the planner pauses first.
+ * - REFUSE AND REWORK (PR-3c-3, design §6.2). A verdict is read only for a
+ *   stage whose typed gate is enforced and blocking and declares a refuse
+ *   route; any other stage advances on its completing receipt, as today. A
+ *   refuse to a stop consumes every token. A refuse to an earlier stage counts
+ *   the route's edge; past its `maxIterations` the token goes to the first
+ *   budget stop; otherwise every stage of the loop region (forward-reachable
+ *   from the target and forward-reaching the source) starts a new iteration,
+ *   the region's tokens are removed and one token goes on the target with a
+ *   fresh `enteredAt`. Receipts are never deleted: a receipt completes a stage
+ *   only at its own iteration, which is observationally the interpreter's
+ *   clearing. A refuse whose route is spent with no budget stop leaves the
+ *   token where it is (gateHolds names it, so the planner raises
+ *   `gate_refused`).
  * - LATCH (`latchPriorFor`). Each token records its own last action, reason and
  *   cycle, so the writeback latch (writeback-latch.ts) is evaluated per token:
  *   a room-level prior names one stage and would never latch a second branch
  *   (the #5166 defect, review blocker 2).
  */
-import { stageElementId } from "@/lib/gpp/shape-language/element-ids";
+import { flowEdgeElementId, stageElementId } from "@/lib/gpp/shape-language/element-ids";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 import type { DriveAction } from "./drive-resolution";
 import type { DriveReason } from "./drive-conclusion";
-import { buildShapeFlowGraph, type GppFlowGraph } from "./work-shape-flow-graph";
+import {
+  backwardReach,
+  buildShapeFlowGraph,
+  forwardReach,
+  type GppFlowGraph,
+  type InterpretableGate,
+} from "./work-shape-flow-graph";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 import { isCompletingWorkroomDriveReceiptAt } from "./workroom-drive-receipts";
 import type { PriorDriveForLatch } from "./writeback-latch";
@@ -277,18 +297,41 @@ export class DriveConstructNotImplementedError extends Error {
 
 export type DriveMarkingStopped = { stopId: string | null; kind: "success" | "failure" | "budget"; disposition: string | null };
 
+/** A rework the step took (PR-3c-3): the refused stage, the target, the edge counted and the stages that start a new iteration. */
+export type DriveRework = {
+  fromStageKey: string;
+  /** The target stage key (null for a flow-node target, which a sound shape never has). */
+  toStageKey: string | null;
+  /** The counter key in `reworkTaken`: the rework edge's element id. */
+  edgeId: string;
+  /** Every stage of the loop region, in document order: each starts a new iteration and loses its token. */
+  clearedStageKeys: string[];
+};
+
 export type DriveStepResult = {
   marking: DriveMarking;
   /** The stage key that fired this tick, or null. */
   fired: string | null;
   /** Set when the firing reached a stop; every token is then consumed. */
   stopped: DriveMarkingStopped | null;
+  /** Set when the firing was a refuse routed back to an earlier stage (PR-3c-3). */
+  reworked?: DriveRework;
 };
 
+export const DRIVE_GATE_VERDICTS = ["admit", "hold", "escalate", "refuse"] as const;
+export type DriveGateVerdictKind = (typeof DRIVE_GATE_VERDICTS)[number];
+
 /**
- * Rule 7's stop event, for the parity harness and the stop routing to come
- * (PR-3c-3): the first stop of that kind consumes every token. A shape that
- * declares no stop of the kind ignores the observation.
+ * A gate verdict as the step reads it (PR-3c-3): what was decided, under which
+ * gate mode, and for which iteration of the stage. A verdict for another
+ * iteration, or recorded under another mode, never moves the token.
+ */
+export type DriveGateVerdict = { verdict: DriveGateVerdictKind; mode: "shadow" | "enforced"; iteration: number };
+
+/**
+ * Rule 7's stop event, for the parity harness, and the budget stop a spent
+ * refuse route goes to (PR-3c-3): the first stop of that kind consumes every
+ * token. A shape that declares no stop of the kind ignores the observation.
  */
 function stopOfKind(graph: GppFlowGraph, kind: "failure" | "budget"): DriveMarkingStopped | null {
   for (const node of graph.nodes.values()) {
@@ -297,10 +340,115 @@ function stopOfKind(graph: GppFlowGraph, kind: "failure" | "budget"): DriveMarki
   return null;
 }
 
+type MarkingStage = MarkingShape["stages"][number];
+
+/**
+ * The gate that holds this stage's token on a verdict, or null when the stage
+ * advances on its completing receipt alone. Only an enforced, blocking gate
+ * that declares a refuse route (`onRefuse`, or exactly one outgoing rework
+ * edge) holds the token (design §6.2): a shadow or non-blocking gate records
+ * its verdict and moves on, and an enforced gate with no refuse route advances
+ * as the sequential drive does today (the divergence spec §14 Q1 records).
+ */
+function verdictGate(graph: GppFlowGraph, stage: MarkingStage): InterpretableGate | null {
+  if (stage.advance.kind !== "governed-decision") return null;
+  const gate = stage.advance.gate;
+  if (!gate || gate.mode !== "enforced" || !gate.blocking) return null;
+  if (gate.onRefuse !== undefined) return gate;
+  return (graph.reworkFrom.get(stageElementId(stage.key)) ?? []).length === 1 ? gate : null;
+}
+
+/** Whether the stage's token waits on a verdict (an enforced, blocking gate with a refuse route). */
+export function stageAwaitsVerdict(definition: MarkingShape, stageKey: string): boolean {
+  const stage = definition.stages.find((entry) => entry.key === stageKey);
+  return stage ? verdictGate(buildShapeFlowGraph(definition), stage) !== null : false;
+}
+
+type RefuseRoute =
+  | { kind: "stop"; stopped: DriveMarkingStopped }
+  | { kind: "rework"; target: string; edgeId: string; taken: number };
+
+/**
+ * Where a refuse at this stage goes now, or null when it cannot go anywhere
+ * and the token stays: the declared target names nothing, or the route's
+ * bound is spent and the shape declares no budget stop.
+ *
+ * The route is `gate.onRefuse` when declared, else the stage's single rework
+ * edge. A route to a stop goes there. A route to a stage is bounded by the
+ * rework edge into that stage (S-5 requires one for a refuse route to a
+ * stage); without one the bound is 0, so the refusal goes straight to the
+ * budget stop.
+ */
+function refuseRoute(graph: GppFlowGraph, stageKey: string, gate: InterpretableGate, reworkTaken: Readonly<Record<string, number>>): RefuseRoute | null {
+  const outgoing = graph.reworkFrom.get(stageElementId(stageKey)) ?? [];
+  const declared = gate.onRefuse ?? (outgoing.length === 1 ? outgoing[0]!.toRef : null);
+  if (declared === null) return null;
+  const target = graph.resolveRef(declared);
+  const node = target !== null ? graph.nodes.get(target) : undefined;
+  if (target === null || !node) return null;
+  if (node.kind === "stop") {
+    return { kind: "stop", stopped: { stopId: target, kind: node.stopKind ?? "failure", disposition: node.disposition ?? null } };
+  }
+  const edge = outgoing.find((candidate) => candidate.to === target) ?? null;
+  const edgeId = edge?.elementId ?? flowEdgeElementId(stageKey, declared);
+  const taken = reworkTaken[edgeId] ?? 0;
+  if (taken >= (edge?.rework?.maxIterations ?? 0)) {
+    const budget = stopOfKind(graph, "budget");
+    return budget ? { kind: "stop", stopped: budget } : null;
+  }
+  return { kind: "rework", target, edgeId, taken };
+}
+
+/** The stage's latest verdict, when it applies to this gate at this iteration. */
+function applicableVerdict(
+  verdicts: Readonly<Record<string, DriveGateVerdict>> | undefined,
+  stageKey: string,
+  gate: InterpretableGate,
+  iteration: number,
+): DriveGateVerdict | null {
+  const recorded = verdicts?.[stageKey];
+  if (!recorded || recorded.mode !== gate.mode || recorded.iteration !== iteration) return null;
+  return recorded;
+}
+
+export type DriveGateHold = "awaiting_verdict" | "refused_without_route";
+
+/**
+ * Marked stages whose completing receipt does not move the token because
+ * their gate holds it (PR-3c-3), in document order: no applicable verdict, or
+ * `hold` / `escalate` (`awaiting_verdict`), or a refuse whose route cannot be
+ * taken (`refused_without_route`, the planner's `gate_refused`). A stage the
+ * step would fire (admit, or a refuse that routes) is not listed.
+ */
+export function gateHolds(
+  definition: MarkingShape,
+  marking: DriveMarking,
+  observations: { receipts: readonly { stageKey: string; kind: string; iteration?: number }[]; verdicts?: Readonly<Record<string, DriveGateVerdict>> },
+): Map<string, DriveGateHold> {
+  const graph = buildShapeFlowGraph(definition);
+  const out = new Map<string, DriveGateHold>();
+  for (const stage of definition.stages) {
+    if (!stageToken(marking, stage.key)) continue;
+    const gate = verdictGate(graph, stage);
+    if (!gate) continue;
+    const iteration = iterationOf(marking, stage.key);
+    if (!observations.receipts.some((receipt) => isCompletingAt(receipt, stage.key, iteration))) continue;
+    const recorded = applicableVerdict(observations.verdicts, stage.key, gate, iteration);
+    if (recorded?.verdict === "admit") continue;
+    if (recorded?.verdict === "refuse") {
+      if (refuseRoute(graph, stage.key, gate, marking.reworkTaken) === null) out.set(stage.key, "refused_without_route");
+      continue;
+    }
+    out.set(stage.key, "awaiting_verdict");
+  }
+  return out;
+}
+
 /**
  * One drive tick's firing: the first marked stage, in document order, with a
- * completing receipt at its current iteration moves its token along its
- * forward edges. Pure; the input marking is not mutated.
+ * completing receipt at its current iteration (and, behind a verdict gate, a
+ * verdict that moves it) moves its token. Pure; the input marking is not
+ * mutated.
  *
  * Parallel split and join (PR-3c-2, design §6.1). A token reaching a split is
  * replaced by one token on the first node of each branch, recursively through
@@ -309,11 +457,20 @@ function stopOfKind(graph: GppFlowGraph, kind: "failure" | "budget"): DriveMarki
  * arrived, the arrivals are removed and one token goes on the join's
  * successor. There is no partial join. A stop reached on any branch consumes
  * every token. Every placed stage token takes this tick's `now` as enteredAt.
+ *
+ * Refuse routes and rework edges (PR-3c-3, design §6.2): see the module
+ * header. A stage that waits on a verdict and has none that moves it does not
+ * fire, and the next marked stage is tried, exactly as the interpreter does.
  */
 export function stepDriveMarking(
   definition: MarkingShape,
   marking: DriveMarking,
-  observations: { receipts: readonly { stageKey: string; kind: string; iteration?: number }[]; stop?: "failure" | "budget" },
+  observations: {
+    receipts: readonly { stageKey: string; kind: string; iteration?: number }[];
+    /** The latest gate verdict per stage key (PR-3c-3); read only for a stage that waits on a verdict. */
+    verdicts?: Readonly<Record<string, DriveGateVerdict>>;
+    stop?: "failure" | "budget";
+  },
   now: Date,
 ): DriveStepResult {
   const graph = buildShapeFlowGraph(definition);
@@ -329,17 +486,80 @@ export function stepDriveMarking(
     if (stopped) return { marking: { ...marking, tokens: [] }, fired: null, stopped };
   }
 
+  /** Place a token on `target` (arriving from `from`), routing it through splits and joins. */
+  const placeInto = (tokens: DriveMarkingToken[], target: string, from: string, reached: { stopped: DriveMarkingStopped | null }): void => {
+    const holds = (node: string, via?: string) => tokens.some((entry) => entry.node === node && entry.from === via);
+    const enter = (next: string, via: string): void => {
+      if (reached.stopped) return;
+      const node = graph.nodes.get(next);
+      if (!node) return;
+      if (node.kind === "stop") {
+        if (node.stopKind !== "success") {
+          throw new DriveConstructNotImplementedError("stop", next, `a forward edge reaches a ${node.stopKind} stop, which the drive does not route yet.`);
+        }
+        reached.stopped = { stopId: next, kind: "success", disposition: node.disposition ?? null };
+        return;
+      }
+      if (node.kind === "parallel-split") {
+        for (const branch of graph.successors.get(next) ?? []) enter(branch, next);
+        return;
+      }
+      if (node.kind === "parallel-join") {
+        if (!holds(next, via)) tokens.push({ node: next, from: via, enteredAt: now.toISOString() });
+        const incoming = graph.predecessors.get(next) ?? [];
+        if (incoming.length === 0 || !incoming.every((previous) => holds(next, previous))) return;
+        for (let index = tokens.length - 1; index >= 0; index -= 1) if (tokens[index]!.node === next) tokens.splice(index, 1);
+        for (const after of graph.successors.get(next) ?? []) enter(after, next);
+        return;
+      }
+      const nextStage = node.stageKey !== undefined ? stagesByKey.get(node.stageKey) : undefined;
+      if (nextStage?.subShape !== undefined) throw new DriveConstructNotImplementedError("sub-shape", next, "the next stage calls a sub-shape (PR-3c-5).");
+      if (nextStage?.deadline) throw new DriveConstructNotImplementedError("stage-deadline", next, "the next stage declares a deadline (PR-3c-4).");
+      // 1-safe: a stage that already holds a token gains no second one.
+      if (!holds(next)) tokens.push({ node: next, enteredAt: now.toISOString() });
+    };
+    enter(target, from);
+  };
+
   for (const stage of definition.stages) {
     const token = stageToken(marking, stage.key);
     if (!token) continue;
     const iteration = iterationOf(marking, stage.key);
     if (!observations.receipts.some((receipt) => isCompletingAt(receipt, stage.key, iteration))) continue;
     const stageId = token.node;
-    if (stage.advance.kind === "governed-decision" && stage.advance.gate?.onRefuse !== undefined) {
-      throw new DriveConstructNotImplementedError("rework-edge", `gate:${stage.key}`, "the stage declares a refuse route (PR-3c-3).");
-    }
-    if ((graph.reworkFrom.get(stageId) ?? []).length > 0) {
-      throw new DriveConstructNotImplementedError("rework-edge", stageId, "the stage has a rework edge (PR-3c-3).");
+
+    const gate = verdictGate(graph, stage);
+    if (gate) {
+      const recorded = applicableVerdict(observations.verdicts, stage.key, gate, iteration);
+      if (recorded?.verdict === "refuse") {
+        const route = refuseRoute(graph, stage.key, gate, marking.reworkTaken);
+        // No route: the token stays, and the next marked stage may fire (a refuse never defaults to admit).
+        if (route === null) continue;
+        if (route.kind === "stop") return { marking: { ...marking, tokens: [] }, fired: stage.key, stopped: route.stopped };
+        // The loop region: forward-reachable from the target and forward-reaching the refused stage.
+        const back = backwardReach(graph, [stageId]);
+        const region = new Set([...forwardReach(graph, [route.target])].filter((id) => back.has(id)));
+        region.add(stageId);
+        region.add(route.target);
+        const clearedStageKeys = definition.stages.filter((entry) => region.has(stageElementId(entry.key))).map((entry) => entry.key);
+        const iterations = { ...marking.iterations };
+        for (const key of clearedStageKeys) iterations[key] = (iterations[key] ?? 0) + 1;
+        const tokens = marking.tokens.filter((entry) => !region.has(entry.node));
+        const reached: { stopped: DriveMarkingStopped | null } = { stopped: null };
+        // The target is entered afresh: a new token, a fresh enteredAt, no task id or latch history.
+        placeInto(tokens, route.target, stageId, reached);
+        const reworked: DriveRework = {
+          fromStageKey: stage.key,
+          toStageKey: graph.nodes.get(route.target)?.stageKey ?? null,
+          edgeId: route.edgeId,
+          clearedStageKeys,
+        };
+        const next: DriveMarking = { ...marking, tokens: tokens.sort(compareTokens), iterations, reworkTaken: { ...marking.reworkTaken, [route.edgeId]: route.taken + 1 } };
+        if (reached.stopped) return { marking: { ...next, tokens: [] }, fired: stage.key, stopped: reached.stopped, reworked };
+        return { marking: next, fired: stage.key, stopped: null, reworked };
+      }
+      // No verdict for this iteration, hold or escalate: the gate keeps the token.
+      if (recorded?.verdict !== "admit") continue;
     }
 
     if (graph.impliedTerminal === stageId) {
@@ -350,38 +570,8 @@ export function stepDriveMarking(
     if (successors.length === 0) return { marking, fired: stage.key, stopped: null };
 
     const tokens = marking.tokens.filter((entry) => entry !== token);
-    const holds = (node: string, from?: string) => tokens.some((entry) => entry.node === node && entry.from === from);
     const reached: { stopped: DriveMarkingStopped | null } = { stopped: null };
-    const enter = (target: string, from: string): void => {
-      if (reached.stopped) return;
-      const node = graph.nodes.get(target);
-      if (!node) return;
-      if (node.kind === "stop") {
-        if (node.stopKind !== "success") {
-          throw new DriveConstructNotImplementedError("stop", target, `a forward edge reaches a ${node.stopKind} stop, which the drive does not route yet.`);
-        }
-        reached.stopped = { stopId: target, kind: "success", disposition: node.disposition ?? null };
-        return;
-      }
-      if (node.kind === "parallel-split") {
-        for (const next of graph.successors.get(target) ?? []) enter(next, target);
-        return;
-      }
-      if (node.kind === "parallel-join") {
-        if (!holds(target, from)) tokens.push({ node: target, from, enteredAt: now.toISOString() });
-        const incoming = graph.predecessors.get(target) ?? [];
-        if (incoming.length === 0 || !incoming.every((previous) => holds(target, previous))) return;
-        for (let index = tokens.length - 1; index >= 0; index -= 1) if (tokens[index]!.node === target) tokens.splice(index, 1);
-        for (const next of graph.successors.get(target) ?? []) enter(next, target);
-        return;
-      }
-      const next = node.stageKey !== undefined ? stagesByKey.get(node.stageKey) : undefined;
-      if (next?.subShape !== undefined) throw new DriveConstructNotImplementedError("sub-shape", target, "the next stage calls a sub-shape (PR-3c-5).");
-      if (next?.deadline) throw new DriveConstructNotImplementedError("stage-deadline", target, "the next stage declares a deadline (PR-3c-4).");
-      // 1-safe: a stage that already holds a token gains no second one.
-      if (!holds(target)) tokens.push({ node: target, enteredAt: now.toISOString() });
-    };
-    for (const target of successors) enter(target, stageId);
+    for (const target of successors) placeInto(tokens, target, stageId, reached);
     if (reached.stopped) return { marking: { ...marking, tokens: [] }, fired: stage.key, stopped: reached.stopped };
     return { marking: { ...marking, tokens: tokens.sort(compareTokens) }, fired: stage.key, stopped: null };
   }

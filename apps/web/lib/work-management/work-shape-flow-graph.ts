@@ -242,3 +242,19 @@ export function backwardReach(graph: GppFlowGraph, to: readonly string[]): Set<s
   }
   return seen;
 }
+
+/**
+ * Whether a stage's gate declares a refuse route (GPP Phase 3c PR-3c-3,
+ * BI-8875C9DF; design §6.2): a governed-decision stage with a typed gate that
+ * names `onRefuse`, or that has exactly one outgoing rework edge. This says
+ * only that the shape DECLARES where a refusal goes; whether a refusal routes
+ * also needs the gate to be enforced and blocking, and the route's bound not
+ * spent (the drive's step and the reference interpreter decide that).
+ */
+export function declaresRefuseRoute(definition: InterpretableShape, stageKey: string): boolean {
+  const stage = definition.stages.find((entry) => entry.key === stageKey);
+  if (!stage || stage.advance.kind !== "governed-decision" || !stage.advance.gate) return false;
+  if (stage.advance.gate.onRefuse !== undefined) return true;
+  const graph = buildShapeFlowGraph(definition);
+  return (graph.reworkFrom.get(stageElementId(stageKey)) ?? []).length === 1;
+}

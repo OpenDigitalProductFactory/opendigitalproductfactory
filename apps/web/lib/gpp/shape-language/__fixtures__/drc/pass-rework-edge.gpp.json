@@ -1,9 +1,9 @@
 {
   "format": "gpp-shape/0.1",
-  "key": "drc-e-rework-edge",
+  "key": "drc-pass-rework-edge",
   "version": "1.0.0",
-  "title": "DRC fixture drc-e-rework-edge",
-  "description": "Seeded E-NOT-EXECUTABLE: a bounded rework edge back to an earlier stage.",
+  "title": "DRC fixture drc-pass-rework-edge",
+  "description": "Passing since GPP Phase 3c PR-3c-3 (rework edges are executable): a bounded rework edge back to an earlier stage.",
   "triggers": [
     "claim"
   ],

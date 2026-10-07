@@ -370,6 +370,26 @@ describe("decompile carries the Phase 3c graph constructs when a definition decl
     expect(advance.kind === "governed-decision" ? advance.gate : undefined).toBeUndefined();
   });
 
+  // GPP Phase 3c PR-3c-3: a refuse route declared by the stage's single outgoing rework edge is a refuse route too.
+  it("a declared gate whose refuse route is the stage's single rework edge is carried", () => {
+    const { onRefuse: _onRefuse, ...plainGate } = refuseGate;
+    const previous = base.stages[governedIndex - 1]!.key;
+    const reworked: WorkShapeDefinition = {
+      ...base,
+      stages: base.stages.map((stage, index) =>
+        index === governedIndex && stage.advance.kind === "governed-decision" ? { ...stage, advance: { ...stage.advance, gate: plainGate } } : stage),
+      flow: {
+        nodes: [],
+        edges: [
+          ...base.stages.slice(1).map((stage, index) => ({ from: base.stages[index]!.key, to: stage.key })),
+          { from: governed.key, to: previous, rework: { maxIterations: 1 } },
+        ],
+      },
+    };
+    const advance = decompile(reworked, { ratification: NOTHING_RATIFIED }).document.stages[governedIndex]!.advance;
+    expect(advance.kind === "governed-decision" ? advance.gate : undefined).toEqual(plainGate);
+  });
+
   it("round-trips: lower(decompile(S)) carries every construct, and decompile(lower(D)) equals D (L2)", () => {
     const { document } = decompile(graph, { ratification: NOTHING_RATIFIED });
     const lowered = lowerToDefinition(document);

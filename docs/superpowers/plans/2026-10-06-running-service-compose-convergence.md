@@ -51,13 +51,13 @@ status: active
 
 ## D3 (BI-00F7D2E3): step 7e sidecar-converge (AC-2, AC-4) — depends on D1, D2
 
-- **Change:**
-  - After 7d, for each running `stateless` service in the resolved chain, compare `docker compose config --hash <svc>` with its `com.docker.compose.config-hash` label. On a difference, run `up -d --no-deps <svc>` and wait for health.
-  - Leave stopped services alone; an inspection failure means no action.
-  - Write `service-converge-outcome.json`, record it on the run, and show it on `/ops/self-upgrade`.
-  - Fail loud, never abort.
-- **Tests first:** a promoter shell harness with fake `docker` covering a changed hash (recreated), the same hash (untouched), a stopped service (left stopped) and an inspect failure (no action).
-- **Live verification:** the next self-upgrade after a `portal-tls` config change shows it recreated, with its zombie count flat.
+- **Shipped first in shadow mode** (WWMD `DI-C04ABC76BBF4`).
+  - After 7d, the step compares each running service's `com.docker.compose.config-hash` label with `docker compose config --hash` rendered with 7d's daemon-path override.
+  - It records `wouldRecreate`, `unchanged`, `skippedStopped`, `dataOwnerChanged`, `unclassified` and `failed` in `service-converge-outcome.json`.
+  - It recreates nothing and never fails the run. It also runs under `--dry-run`.
+- **Why shadow:** on 2026-10-06 a host render of the live chain matched `portal-tls` and `postgres` but differed for `portal`, `loki`, `alloy`, `inngest` and `redis`, none of which had an intended change. Enforcing at once risked recreating those every upgrade. The shadow report from one live upgrade decides whether the promoter's render is stable.
+- **Then enforce:** a follow-up makes stateless `wouldRecreate` entries run `up -d --no-deps <svc>` with the same arguments, with health checks, stopped services left stopped, and fail-loud-not-abort.
+- **Tests first:** `scripts/promote-sidecar-converge.test.mjs`. A fake `docker` serves the rendered config, the hashes and the container list. The test proves the outcome classification and that no `up`, `rm` or `--force-recreate` call is made.
 
 ## D4 (BI-7F2709F9): step 3c data-owner-converge (AC-3) — depends on D2
 

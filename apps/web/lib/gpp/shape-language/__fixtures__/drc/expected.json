@@ -55,16 +55,6 @@
     "rule": "D-8",
     "elementId": "gate:a"
   },
-  "e-not-executable-refuse-edge.gpp.json": {
-    "rule": "E-NOT-EXECUTABLE",
-    "elementId": "gate:a",
-    "construct": "rework-edge"
-  },
-  "e-not-executable-rework-edge.gpp.json": {
-    "rule": "E-NOT-EXECUTABLE",
-    "elementId": "edge:b->a",
-    "construct": "rework-edge"
-  },
   "e-not-executable-stage-deadline.gpp.json": {
     "rule": "E-NOT-EXECUTABLE",
     "elementId": "stage:a",
