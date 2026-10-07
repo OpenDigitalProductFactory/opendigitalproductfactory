@@ -13,6 +13,8 @@ import {
 } from "./__fixtures__/graph-shape-fixtures";
 import { resolveDrivePlan, workroomDriveTaskId } from "./drive-resolution";
 import type { DriveMarking } from "./drive-marking";
+import { DEFER_ON_REFUSE_ROUTE, REFUSE_BOUND_NO_BUDGET_STOP, REFUSE_TO_STOP, REWORK_1 } from "./__fixtures__/graph-shapes/rework";
+import type { RecordedEvidence } from "./stage-evidence-receipts";
 
 function participant(
   principalRef: string,
@@ -466,12 +468,11 @@ describe("resolveDrivePlan: the Phase 3c graph path", () => {
   });
 
   it("AC-3C-FAILCLOSED: a graph shape using a disabled construct pauses with construct_not_executable, naming it, and keeps its stage", () => {
-    // Parallel split/join is executable since PR-3c-2 (its case is below); the other four constructs stay off.
+    // Parallel split/join (PR-3c-2) and rework edges with refuse routes (PR-3c-3) are executable (their cases are
+    // below); stage deadline and sub-shape stay off.
     for (const [shape, construct, elementId] of [
       [DEADLINE_FIXTURE, "stage-deadline", "stage:b"],
-      [REWORK_FIXTURE, "rework-edge", "edge:b->a"],
       [SUB_SHAPE_FIXTURE, "sub-shape", "stage:b"],
-      [REFUSE_FIXTURE, "rework-edge", "gate:decide"],
     ] as const) {
       const plan = resolveDrivePlan(graphInput(contract(shape), { currentStageKey: "a", receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }] }));
       expect(plan.action, shape.key).toBe("pause");
@@ -555,5 +556,110 @@ describe("resolveDrivePlan: the Phase 3c graph path", () => {
     }));
     expect(plan).toMatchObject({ action: "pause", reason: "conformance_pause", stageKey: "a" });
     expect(plan.marking).toEqual(stored);
+  });
+});
+
+// GPP Phase 3c PR-3c-3 (BI-8875C9DF), design §6.2: verdicts from recorded decisions, refuse routes, rework,
+// `gate_refused` and `refused_to_stop`, through the planner. DI-0D9DFB0FC0EF: `defer` HOLDS the token on a stage that
+// declares a refuse route; on every other stage it keeps advancing (founder decision 2026-10-02).
+describe("resolveDrivePlan: refuse routes and rework (PR-3c-3)", () => {
+  const NOW = new Date("2026-09-01T12:00:00.000Z");
+  const minutes = (delta: number) => new Date(NOW.getTime() + delta * 60_000);
+  const contract = (shape: WorkShapeDefinition) => readWorkShapeDefinitionContract(shape);
+  const input = (shape: WorkShapeDefinition, extras: Partial<Parameters<typeof resolveDrivePlan>[0]> = {}) =>
+    baseInput({ definition: contract(shape), roomId: "WC-RW", collaborationShape: null, now: NOW, ...extras });
+  const cycleOf = (shape: WorkShapeDefinition) => resolveDrivePlan(input(shape)).cycle!.cycleKey;
+  const stored = (shape: WorkShapeDefinition, over: Partial<DriveMarking>): DriveMarking => ({
+    format: "drive-marking/1", cycleKey: cycleOf(shape), tokens: [], iterations: {}, reworkTaken: {}, deadlines: {}, children: {}, ...over,
+  });
+  const at = (shape: WorkShapeDefinition, stageKey: string, over: Partial<DriveMarking> = {}) => ({
+    currentStageKey: stageKey,
+    workspaceState: { workroomDrive: { stageKey, marking: stored(shape, { tokens: [{ node: `stage:${stageKey}`, enteredAt: minutes(-60).toISOString() }], ...over }) } },
+  });
+  const decision = (stageKey: string, choice: string, at: Date): RecordedEvidence =>
+    ({ stageKey, kind: "decision-record", outcome: "completed", choice, recordedAt: at });
+  const done = (stageKey: string, iteration?: number) => ({ stageKey, kind: "stage-evidence-recorded", ...(iteration ? { iteration } : {}) });
+
+  it("defer HOLDS the token on a stage that declares a refuse route, until an accept moves it", () => {
+    const deferred = resolveDrivePlan(input(REWORK_1, { ...at(REWORK_1, "b"), receipts: [done("a"), done("b")], recordedEvidence: [decision("b", "defer", minutes(-30))] }));
+    expect(deferred).toMatchObject({ action: "attention", reason: "governed_decision", stageKey: "b", attentionPrincipalRef: "role:owner" });
+    expect((deferred.marking as DriveMarking).tokens.map((token) => token.node)).toEqual(["stage:b"]);
+    expect(deferred.rework).toBeUndefined();
+    const accepted = resolveDrivePlan(input(REWORK_1, {
+      ...at(REWORK_1, "b"),
+      receipts: [done("a"), done("b")],
+      recordedEvidence: [decision("b", "accept", minutes(-10)), decision("b", "defer", minutes(-30))],
+    }));
+    expect(accepted).toMatchObject({ action: "stop", reason: "success" });
+  });
+
+  it("defer keeps ADVANCING on a stage with no refuse route: the graph path's enforced gate without one, and the sequential drive", () => {
+    const graph = resolveDrivePlan(input(DEFER_ON_REFUSE_ROUTE, { ...at(DEFER_ON_REFUSE_ROUTE, "approve"), receipts: [done("approve")], recordedEvidence: [decision("approve", "defer", minutes(-30))] }));
+    expect(graph).toMatchObject({ action: "stop", reason: "success" });
+    // The sequential drive (no graph construct): the recorded deferral is the completing receipt, and the room moves on.
+    const sequential = resolveDrivePlan(baseInput({ currentStageKey: "review", receipts: [{ stageKey: "scan", kind: "stage-evidence-recorded" }, { stageKey: "review", kind: "stage-evidence-recorded" }] }));
+    expect(sequential).toMatchObject({ action: "stop", reason: "success" });
+  });
+
+  it("Send back routes the token to the earlier stage: the edge is counted, the loop region starts a new iteration, the target is entered afresh", () => {
+    const plan = resolveDrivePlan(input(REWORK_1, { ...at(REWORK_1, "b"), receipts: [done("a"), done("b")], recordedEvidence: [decision("b", "refuse", minutes(-5))] }));
+    expect(plan).toMatchObject({ action: "dispatch_agent", reason: "agent_stage", stageKey: "a", taskId: workroomDriveTaskId("WC-RW", REWORK_1.key) });
+    expect(plan.rework).toEqual({ fromStageKey: "b", toStageKey: "a", edgeId: "edge:b->a", clearedStageKeys: ["a", "b"] });
+    const marking = plan.marking as DriveMarking;
+    expect(marking).toMatchObject({ iterations: { a: 1, b: 1 }, reworkTaken: { "edge:b->a": 1 } });
+    expect(marking.tokens).toEqual([expect.objectContaining({ node: "stage:a", enteredAt: NOW.toISOString(), lastAction: "dispatch_agent" })]);
+    // The declared refuse route is a legal backward move for the Process Overseer.
+    expect(plan.conformance?.deviations ?? []).toEqual([]);
+    expect(plan.ledger.join("\n")).toContain("Stage b was sent back to a over edge:b->a");
+  });
+
+  it("a decision recorded before the token entered the stage is a previous pass's, and never routes it", () => {
+    const plan = resolveDrivePlan(input(REWORK_1, { ...at(REWORK_1, "b"), receipts: [done("a"), done("b")], recordedEvidence: [decision("b", "refuse", minutes(-90))] }));
+    expect(plan).toMatchObject({ action: "attention", reason: "governed_decision", stageKey: "b" });
+    expect(plan.rework).toBeUndefined();
+  });
+
+  it("a refuse to a stop ends the cycle with refused_to_stop, which stays the answer until the next cycle restarts the shape", () => {
+    const plan = resolveDrivePlan(input(REFUSE_TO_STOP, { ...at(REFUSE_TO_STOP, "decide"), receipts: [done("a"), done("decide")], recordedEvidence: [decision("decide", "refuse", minutes(-5))] }));
+    expect(plan).toMatchObject({ action: "stop", reason: "refused_to_stop", stageKey: null });
+    expect((plan.marking as DriveMarking).tokens).toEqual([]);
+    const cycleKey = plan.cycle!.cycleKey;
+    const after = { workspaceState: { workroomDrive: { stageKey: null, marking: plan.marking } }, priorDrive: { action: "stop", reason: "refused_to_stop", stageKey: null, cycleKey } };
+    expect(resolveDrivePlan(input(REFUSE_TO_STOP, { ...after, now: minutes(15) }))).toMatchObject({ action: "stop", reason: "refused_to_stop" });
+    const nextDay = resolveDrivePlan(input(REFUSE_TO_STOP, { ...after, now: new Date("2026-09-02T12:00:00.000Z") }));
+    expect(nextDay).toMatchObject({ action: "dispatch_agent", stageKey: "a" });
+  });
+
+  it("past the bound with no budget stop, a refuse has no route: the token stays and gate_refused names who clears it", () => {
+    const spent = { iterations: { a: 1, b: 1 }, reworkTaken: { "edge:b->a": 1 } };
+    const plan = resolveDrivePlan(input(REFUSE_BOUND_NO_BUDGET_STOP, { ...at(REFUSE_BOUND_NO_BUDGET_STOP, "b", spent), receipts: [done("a", 1), done("b", 1)], recordedEvidence: [decision("b", "refuse", minutes(-5))] }));
+    expect(plan).toMatchObject({ action: "attention", reason: "gate_refused", stageKey: "b", attentionPrincipalRef: "role:owner" });
+    expect((plan.marking as DriveMarking).tokens.map((token) => token.node)).toEqual(["stage:b"]);
+    // The gate's escalation role, when it declares one, is who clears it.
+    const escalating: WorkShapeDefinition = {
+      ...REFUSE_BOUND_NO_BUDGET_STOP,
+      stages: REFUSE_BOUND_NO_BUDGET_STOP.stages.map((stage) => stage.key === "b" && stage.advance.kind === "governed-decision" && stage.advance.gate
+        ? { ...stage, advance: { ...stage.advance, gate: { ...stage.advance.gate, escalation: { role: "role:quality-lead", whileWaiting: "hold" as const } } } }
+        : stage),
+    };
+    const escalated = resolveDrivePlan(input(escalating, { ...at(escalating, "b", spent), receipts: [done("a", 1), done("b", 1)], recordedEvidence: [decision("b", "refuse", minutes(-5))] }));
+    expect(escalated).toMatchObject({ action: "attention", reason: "gate_refused", attentionPrincipalRef: "role:quality-lead" });
+  });
+
+  it("a blocked receipt from the pass a stage was sent back from never latches the fresh pass", () => {
+    const fresh = { iterations: { a: 1, b: 1 }, reworkTaken: { "edge:b->a": 1 } };
+    const stale = resolveDrivePlan(input(REWORK_1, { ...at(REWORK_1, "a", fresh), receipts: [{ stageKey: "a", kind: "blocked" }] }));
+    expect(stale).toMatchObject({ action: "dispatch_agent", stageKey: "a" });
+    const current = resolveDrivePlan(input(REWORK_1, { ...at(REWORK_1, "a", fresh), receipts: [{ stageKey: "a", kind: "blocked", iteration: 1 }] }));
+    expect(current).toMatchObject({ action: "pause", reason: "executor_writeback_unavailable", stageKey: "a" });
+  });
+
+  it("an agent-run gated stage that is complete but has no verdict waits on a person instead of being re-dispatched", () => {
+    const agentGate: WorkShapeDefinition = {
+      ...REWORK_1,
+      stages: REWORK_1.stages.map((stage) => (stage.key === "b" ? { ...stage, accountablePrincipalRef: "agent:reviewer" } : stage)),
+    };
+    const plan = resolveDrivePlan(input(agentGate, { ...at(agentGate, "b"), actionBoundary: "preauthorized", receipts: [done("a"), done("b")] }));
+    expect(plan).toMatchObject({ action: "attention", reason: "governed_decision", stageKey: "b", attentionPrincipalRef: "agent:reviewer", taskId: null });
   });
 });
