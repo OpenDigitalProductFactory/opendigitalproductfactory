@@ -126,7 +126,7 @@ The recommendation is **B**: high confidence, margin 5.84, no commandment confli
 
 - **A loses on `absorb-dont-adopt`** (+0.38 against B's +0.67). It adds a long-running process per host, plus a service-registration surface per OS (scheduled task, launchd, systemd) that must be installed, upgraded and monitored. That process can itself go stale. It wins nothing B cannot reach, because a client that is not running has nothing stale *loaded*.
 - **C is net negative on `platform-function-never-depends-on-a-client`** (−0.04). The platform stays blind, Grok and Antigravity have no comparable hook plane, and customer agents are not covered at all.
-- **Retained as a follow-on:** A, if an unattended remote host ever needs convergence with no agent session. It would reuse B's manifest, updater and report unchanged (§11, Q4).
+- **Retained as a follow-on:** A, if an unattended remote host ever needs convergence with no agent session. It would reuse B's manifest, updater and report unchanged (§11, decision 4).
 
 ## 5. Design
 
@@ -285,12 +285,12 @@ repair: { manifestUrl, reason }
 
 - Floor enforcement applies to **declared** clients only: `below-floor` from §5.2.
 - `undeclared` callers are never refused by the floor (AC-FLOOR-SCOPE).
-- Pre-declaration copies are handled by visibility (§5.2a–c) and convergence (§5.3), and finally by the existing install-wide switch `DPF_MCP_PAT_RESOLUTION_DISABLED`. That switch becomes safe to turn on once Grok has its own credential type (§5.2e) and no DPF-managed client still holds an operator PAT. Whether to also enforce on `undeclared` callers with a DPF User-Agent hint is a founder decision (§11, Q1), and is off by default.
+- Pre-declaration copies are handled by visibility (§5.2a–c) and convergence (§5.3), and finally by the existing install-wide switch `DPF_MCP_PAT_RESOLUTION_DISABLED`. That switch becomes safe to turn on once Grok has its own credential type (§5.2e) and no DPF-managed client still holds an operator PAT. Whether to also enforce on `undeclared` callers with a DPF User-Agent hint is a founder decision (§11, decision 1), and is off by default.
 
 **Grace:**
 
 - `floor.graceStartsAt` ships in the release that raises the floor.
-- During the grace window (default 7 days, §11 Q2) the verdict is reported and announced, but nothing is refused.
+- During the grace window (default 7 days, §11 decision 2) the verdict is reported and announced, but nothing is refused.
 - A floor is a release artifact, so a wrong floor is corrected by the next release.
 
 The first floor is `minPackVersion` = the first declaring pack (0.3.0). The auth rule is the one derived from `mcpClientBearerHeaderRequired`. The design does not keep a second list of retired auth modes.
@@ -304,7 +304,7 @@ The floor is a **conformance control, not a security boundary**:
 **(e) Grok, explicitly (DI-2399DE85DC6A).** Grok has no OAuth client, and `mcpClientBearerHeaderRequired` always returns `true` for it. So:
 
 - **A new `McpApiToken.kind: "agent-client"`.** It carries a dedicated `clientKind` column (`grok`). The `capability` column keeps its existing `read|write` meaning.
-  - **Expiry:** finite, default 90 days (§11 Q3).
+  - **Expiry:** finite, default 90 days (§11 decision 3).
   - **Scopes:** no wider than the OAuth clients' `dpf.read dpf.work dpf.build` equivalents.
   - **Revocation:** per credential.
 - **Minting is by an authenticated MCP tool, `issue_agent_client_token`, called by the agent and not by a script.**
@@ -353,7 +353,7 @@ The updater gains `--from-portal <origin>`. The existing local-directory mode is
 
 **Platform-neutral.** `--from-portal` uses only `urllib`, `tarfile` and `hashlib` from the Python standard library, so the updater runs on Windows, macOS and Linux with no new dependency. A host with no Python reports `missing_cli` through the existing readiness state rather than failing silently.
 
-**Approval policy.** The default is to ask each time. A standing, revocable operator pre-authorization, modelled on the acceptance-sweep pre-authorization and off by default, is §11 Q5.
+**Approval policy.** The default is to ask each time. A standing, revocable operator pre-authorization, modelled on the acceptance-sweep pre-authorization and off by default, is §11 decision 5.
 
 ### 5.4 Backstop: the advisory works in installed-runtime sessions
 
@@ -483,7 +483,9 @@ Each phase is one PR and one clean revert.
 | OBJ-GROK, OBJ-FLOOR | AC-GROK | `agent-client` kind, `issue_agent_client_token`, PAT-switch exemption (P5); floor rule (P6) | Token tests; updater test with a fixture Grok home; live Grok connection verdict |
 | OBJ-BACKSTOP | AC-BACKSTOP | Node wrapper in the plugin `hooks.json` (P7) | Hook test with and without Python; live session in D:\DPF |
 
-## 11. Open questions for the founder
+## 11. Founder decisions
+
+The founder accepted every default below on 2026-10-07. Each is recorded so it can be revisited without re-deriving the design.
 
 1. **Floor on undeclared DPF-looking clients.** Should the floor also refuse writes from undeclared callers whose User-Agent looks like Claude Code or Codex (pre-declaration copies on operator PATs), after grace? The default proposal is **no**: visibility and convergence first, then turn on the existing PAT switch once Grok has its own token type. User-Agent matching would also catch customer agents built on the same SDKs.
 2. **Grace period** before a floor is enforced. The default proposal is 7 days.
