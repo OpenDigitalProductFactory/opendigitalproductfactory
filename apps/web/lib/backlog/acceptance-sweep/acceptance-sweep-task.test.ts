@@ -44,6 +44,10 @@ function summary(overrides: Partial<AcceptanceSweepSummary> = {}): AcceptanceSwe
     items: { closable: [], aged: ["BI-B"], unroutable: ["BI-B"], readinessUnavailable: [] },
     revisit: { poolSize: 2, pageSize: 100, runsPerRevisit: 1, exceedsTrendWindow: false },
     routing: { enabled: false, routed: 0 },
+    closing: {
+      enabled: false, disabledReason: "not-recorded", because: "none recorded", authorisedBy: null, limit: 0,
+      attempted: 0, closed: [], refused: [], skipped: [], errored: [], deferredByLimit: [],
+    },
     cursor: "row-b",
     ...overrides,
   };

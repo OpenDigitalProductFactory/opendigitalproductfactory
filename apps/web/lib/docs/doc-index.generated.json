@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 732,
+  "pageCount": 733,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -5916,6 +5916,18 @@
         "8-message-house",
         "9-backlog-anchors",
         "10-sources-and-market-signals"
+      ]
+    },
+    "docs/operations/acceptance-sweep.md": {
+      "publicHref": "/operations/acceptance-sweep/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "acceptance-sweep-operator-runbook",
+        "closing-items-the-gate-already-allows-off-by-default",
+        "what-the-summary-tells-you",
+        "known-limit"
       ]
     },
     "docs/operations/ai-provider-compliance-source-renewal-runbook.md": {
