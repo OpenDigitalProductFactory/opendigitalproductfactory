@@ -27,6 +27,7 @@ PLUGIN_NAME = "dpf-platform"
 CODEX_PLUGIN_ID = f"{PLUGIN_NAME}@personal"
 MARKETPLACE_NAME = "dpf-platform-local"
 CODEX_LEGACY_PLUGIN_IDS = (f"{PLUGIN_NAME}@{MARKETPLACE_NAME}",)
+CLAUDE_PLUGIN_ID = f"{PLUGIN_NAME}@{MARKETPLACE_NAME}"
 TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
 # The install's canonical origin when nothing names another (design 12.4.1):
 # setup persists DPF_MCP_URL = <PUBLIC_URL>/api/mcp/v1?tier=full (12.4.3), and
@@ -114,6 +115,11 @@ def copy_skill_pack(source: Path, destination: Path, dry_run: bool) -> bool:
     return True
 
 
+def is_build_debris(relative: Path) -> bool:
+    """Files no copy of the pack delivers: the copier and digests skip them."""
+    return "__pycache__" in relative.parts or relative.suffix == ".pyc" or relative.name == ".DS_Store"
+
+
 def codex_content_version(skill_pack: Path) -> str:
     """Invalidate Codex's versioned cache when delivered bytes change."""
     manifest_path = skill_pack / ".codex-plugin" / "plugin.json"
@@ -122,7 +128,7 @@ def codex_content_version(skill_pack: Path) -> str:
     digest = hashlib.sha256()
     for path in sorted(skill_pack.rglob("*")):
         relative = path.relative_to(skill_pack)
-        if not path.is_file() or "__pycache__" in relative.parts or path.suffix == ".pyc" or path.name == ".DS_Store":
+        if not path.is_file() or is_build_debris(relative):
             continue
         content = path.read_bytes()
         if path == manifest_path:
@@ -150,6 +156,50 @@ def codex_managed_plugin_path(home: Path) -> Path:
 def shared_managed_plugin_path(home: Path) -> Path:
     """Return the managed copy consumed by Claude, Grok, and global hooks."""
     return home / ".agents" / "plugins" / "plugins" / PLUGIN_NAME
+
+
+def claude_installed_plugins_path(home: Path) -> Path:
+    """Claude Code's record of which cache directory each install loads."""
+    return home / ".claude" / "plugins" / "installed_plugins.json"
+
+
+def installed_plugin_copies(home: Path, project_dir: Optional[Path] = None) -> list[dict[str, Any]]:
+    """Every installed copy of this pack a client on this machine may load.
+
+    The one list of copy locations (BI-16EAAB62): the copier above writes the
+    first two, and Claude Code materializes the third from a marketplace into
+    its plugin cache. `connector` marks the copies whose claude.mcp.json a
+    Claude client reads as its dpf server; Codex reads its connector from
+    config.toml, so its copy's descriptor is never loaded. Of the Claude cache
+    records, only user-scope ones and the one for `project_dir` load in a
+    session opened there; records for other checkouts are theirs.
+    """
+    copies: list[dict[str, Any]] = [
+        {"label": "shared managed copy (Claude desktop, Grok, global hooks)",
+         "path": shared_managed_plugin_path(home), "connector": True},
+        {"label": "Codex managed copy", "path": codex_managed_plugin_path(home), "connector": False},
+    ]
+    try:
+        records = json.loads(claude_installed_plugins_path(home).read_text(encoding="utf-8-sig"))
+        entries = records.get("plugins", {}).get(CLAUDE_PLUGIN_ID, [])
+    except (OSError, ValueError, AttributeError):
+        entries = []
+    wanted = os.path.normcase(os.path.realpath(project_dir)) if project_dir else None
+    seen: set[str] = set()
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict) or not isinstance(entry.get("installPath"), str):
+            continue
+        project = entry.get("projectPath")
+        loads_here = entry.get("scope") == "user" or (
+            wanted is not None and isinstance(project, str)
+            and os.path.normcase(os.path.realpath(project)) == wanted
+        )
+        if not loads_here or entry["installPath"] in seen:
+            continue
+        seen.add(entry["installPath"])
+        copies.append({"label": f"Claude plugin cache ({entry.get('scope', 'unknown')} scope)",
+                       "path": Path(entry["installPath"]), "connector": True})
+    return copies
 
 
 # Backward-compatible name for existing hook/install helpers and callers.
