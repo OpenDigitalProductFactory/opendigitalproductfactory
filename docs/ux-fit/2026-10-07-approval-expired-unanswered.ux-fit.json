@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "weekly-review-lane",
+  "decisionInteractionId": "DI-AAB4B5E0BF59",
+  "scope": {
+    "files": [
+      "apps/web/components/attention/CoworkerEnvelopeApproval.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "weekly-review-lane",
+      "todays-lane-no-floor",
+      "collapsed-uncounted-group"
+    ]
+  }
+}

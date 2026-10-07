@@ -170,14 +170,18 @@ describe("coworkerEnvelopeToAttentionItem", () => {
 
   // Expiry and resolved states.
 
-  it("marks an expired proposal non-actionable and past due", () => {
+  // BI-0012E6CA: a lapsed proposal is no longer an "overdue" decision — nothing
+  // is held on it and it cannot be decided. It is an expired, unanswered
+  // request the person can ask again, with no deadline to chase.
+  it("marks an expired proposal non-actionable and expired unanswered, with no deadline", () => {
     const item = coworkerEnvelopeToAttentionItem(
       envelope(),
       Date.parse("2026-08-25T20:30:00.000Z"),
     );
 
     expect(item.envelope?.actionable).toBe(false);
-    expect(item.triage.timeToAct).toBe("overdue");
+    expect(item.envelope?.expiredUnanswered).toBe(true);
+    expect(item.triage.timeToAct).toBe("none");
   });
 
   it.each(["approved", "declined", "executed", "failed", "cancelled"] as const)(
