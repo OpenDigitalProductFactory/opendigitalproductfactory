@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -1647,6 +1648,51 @@ class OAuthDefaultTest(unittest.TestCase):
             self.assertIn("https://other.example/mcp", first)
             updater.ensure_codex_config(home, "http://127.0.0.1:3000/api/mcp/v1", False)
             self.assertEqual(first, path.read_text())
+
+class WrapperEndpointParityTest(unittest.TestCase):
+    """BI-772023BC: the shell and PowerShell wrappers are twins of the Python
+    updater. The default endpoint and auth mode have one source, the Python
+    updater (DEFAULT_MCP_URL, DPF_MCP_URL, DPF_MCP_AUTH_MODE); a wrapper only
+    forwards an endpoint the operator named. The .ps1 is parsed as text so the
+    check runs without pwsh."""
+
+    SCRIPTS = Path(__file__).resolve().parent
+    URL_LITERAL = re.compile(r"""https?://[^\s"'$]+/api/mcp""")
+
+    def wrappers(self):
+        repo = Path(__file__).resolve().parents[3]
+        found = {
+            "pack.ps1": self.SCRIPTS / "update-agent-toolchain.ps1",
+            "pack.sh": self.SCRIPTS / "update-agent-toolchain.sh",
+        }
+        repo_ps1 = repo / "scripts/update-dpf-agent-toolchain.ps1"
+        if repo_ps1.exists():
+            found["repo.ps1"] = repo_ps1
+        return {name: path.read_text() for name, path in found.items()}
+
+    def test_wrappers_hard_code_no_endpoint_or_auth_mode(self):
+        for name, text in self.wrappers().items():
+            with self.subTest(wrapper=name):
+                self.assertIsNone(self.URL_LITERAL.search(text), "hard-coded MCP endpoint")
+                self.assertNotIn("--auth-mode", text)
+                self.assertNotIn(updater.TOKEN_ENV_VAR, text)
+
+    def test_ps1_forwards_endpoint_only_when_named(self):
+        text = self.wrappers()["pack.ps1"]
+        self.assertRegex(text, r'\[string\]\$McpUrl\s*=\s*""')
+        self.assertRegex(text, r'if \(\$McpUrl\) \{ \$argsList \+= @\("--mcp-url", \$McpUrl\) \}')
+        self.assertNotRegex(text, r'"--mcp-url", \$McpUrl\s*\n\s*\)')
+
+    def test_sh_forwards_no_default_endpoint(self):
+        code = [line for line in self.wrappers()["pack.sh"].splitlines() if not line.lstrip().startswith("#")]
+        self.assertNotIn("--mcp-url", "\n".join(code))
+
+    def test_python_default_is_canonical_https_oauth(self):
+        self.assertEqual(updater.DEFAULT_MCP_URL, "https://localhost/api/mcp/v1")
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("DPF_MCP_AUTH_MODE", None)
+            self.assertFalse(updater.mcp_client_bearer_header_required(updater.DEFAULT_MCP_URL))
+
 
 class CodexRegistrationConvergenceTest(unittest.TestCase):
     def fixture(self, home, canonical=True, legacy=True):
