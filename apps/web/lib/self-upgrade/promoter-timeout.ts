@@ -3,7 +3,10 @@
 // Docker-only promoter graph into a server bundle (BI-98AF1066).
 
 /** Default hard budget for the promoter subprocess: 25 min (env-overridable). */
-export function resolvePromoterTimeoutMs(params: { timeoutMs?: number }): number {
+// The index signature lets callers pass their whole params object (promoter or
+// prebuild params), as they did before this moved; a bare `{ timeoutMs?: number }`
+// is a weak type and TypeScript rejects objects that share none of its keys.
+export function resolvePromoterTimeoutMs(params: { timeoutMs?: number; readonly [key: string]: unknown }): number {
   if (typeof params.timeoutMs === "number" && params.timeoutMs > 0) return params.timeoutMs;
   const env = Number(process.env.DPF_PROMOTER_TIMEOUT_MS);
   if (Number.isFinite(env) && env > 0) return env;
