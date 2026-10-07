@@ -475,6 +475,44 @@ if [[ -n "${PROMOTE_COMPOSE_ENV_FILE:-}" ]]; then
   _env_args+=(--env-file "$PROMOTE_COMPOSE_ENV_FILE")
 fi
 
+# BI-B422ED03 (BI-C54E691E): the recorded chain above is fixed at install time,
+# but some overlays are switched on later through .env markers
+# (bootstrap-organization-pki writes DPF_ORGANIZATION_TRUST_ENABLED=1). Those
+# overlays never reached the promoter, so portal-tls sat outside every
+# self-upgrade and #6020's reaping init never arrived (live, 2026-10-06).
+# Append them here from the TARGET tree's activation table, the same table the
+# installers read. Reading it from $_compose_root keeps this out of the N-1
+# portal's staged promoter closure (BI-A04D61B9): an older target without the
+# table, or without an overlay file, changes nothing.
+_activation_table="$_compose_root/scripts/installer/lib/activation-overlays.txt"
+_activation_marker_on() {
+  local _name="$1" _value="${!1:-}" _env_file="${PROMOTE_COMPOSE_ENV_FILE:-$_compose_root/.env}"
+  if [[ -z "$_value" && -f "$_env_file" ]]; then
+    _value="$(sed -n "s/^${_name}=//p" "$_env_file" | tail -1 | tr -d '\r')"
+  fi
+  [[ "$_value" == "1" ]]
+}
+if [[ -f "$_activation_table" ]]; then
+  _activated_overlays=()
+  while read -r _marker _overlays || [[ -n "${_marker:-}" ]]; do
+    [[ -z "${_marker:-}" || "$_marker" == \#* ]] && continue
+    _activation_marker_on "$_marker" || continue
+    for _overlay in $_overlays; do
+      if [[ ! -f "$_compose_root/$_overlay" ]]; then
+        printf 'step=compose-activation-overlay-missing marker=%s file=%s\n' "$_marker" "$_overlay"
+        continue
+      fi
+      [[ " ${_compose_files[*]} " == *" $_overlay "* ]] && continue
+      _compose_files+=("$_overlay")
+      _f_args+=(-f "$_compose_root/$_overlay")
+      _activated_overlays+=("$_overlay")
+    done
+  done < "$_activation_table"
+  if [[ ${#_activated_overlays[@]} -gt 0 ]]; then
+    printf 'step=compose-activation-overlays files=%s\n' "$(IFS=,; printf '%s' "${_activated_overlays[*]}")"
+  fi
+fi
+
 # BI-55A30F8B: compose publishes every host port through DPF_HOST_BIND_ADDRESS
 # (default 127.0.0.1, BI-FEE77B68). The portal is recreated in step 4, but the
 # installer only writes the key into the install .env in step 7, so the first

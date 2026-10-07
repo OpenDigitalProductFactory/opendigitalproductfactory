@@ -66,6 +66,7 @@
     "./sovereignty-assessment": "./src/sovereignty-assessment.ts",
     "./cada-readiness": "./src/cada-readiness.ts",
     "./regulation-applicability": "./src/regulation-applicability.ts",
+    "./autonomy-policy-baseline": "./src/autonomy-policy-baseline.ts",
     "./reference-model-applicability": "./src/reference-model-applicability.ts",
     "./workroom-recovery": "./src/workroom-recovery.ts",
     "./seed-deliberation": "./src/seed-deliberation.ts",

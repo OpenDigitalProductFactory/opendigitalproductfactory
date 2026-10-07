@@ -118,6 +118,20 @@ Each started build records why it was picked in its activity, for example
 says so, so unscored work is never started by age without saying it. To have
 an item considered on value, give it a score in Delivery Flow.
 
+### Proposed scores
+
+Each day the Portfolio Advisor proposes a score for a batch of open and
+in-progress items that have none, starting with items in active epics, items a
+user asked for, and bugs with live evidence. It fills in reach, impact,
+confidence, and effort from what the item already records, and picks an
+investment bucket where the work type makes it clear. A proposed score is marked
+as proposed by an agent and lists the reasons behind each number in the item's
+history. Proposed confidence never goes above 80%.
+
+To change a proposed score, score the item yourself. Your values replace the
+proposal, and the advisor never proposes over them again. If an item has no
+effort size or estimate, the advisor leaves it unscored so a person can size it.
+
 Open **Operations > Delivery Flow** (`/ops/demand`) to review demand shared by
 approved DPF connections. A shared item is an observation from another
 installation, not a local backlog item. You can follow it, offer help, or adopt

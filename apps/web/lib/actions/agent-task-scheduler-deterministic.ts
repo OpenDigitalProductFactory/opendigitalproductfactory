@@ -11,6 +11,7 @@ import {
   ACCEPTANCE_SWEEP_TASK_KIND,
   BOOKKEEPING_CYCLE_TASK_KIND,
   DECISION_ENGINE_REVIEW_TASK_KIND,
+  DEMAND_SCORING_STEWARD_TASK_KIND,
 } from "@/lib/operate/scheduled-jobs/agent-task-kind";
 import { executeBookkeepingCycleTask } from "@/lib/finance/bookkeeping/bookkeeping-cycle-task";
 
@@ -39,6 +40,12 @@ export async function runDeterministicScheduledTaskKind(task: DeterministicSched
   if (task.taskKind === ACCEPTANCE_SWEEP_TASK_KIND) {
     const { executeAcceptanceSweepTask } = await import("@/lib/backlog/acceptance-sweep/acceptance-sweep-task");
     await executeAcceptanceSweepTask(task);
+    return true;
+  }
+  // BI-00C68162: the daily demand-scoring steward.
+  if (task.taskKind === DEMAND_SCORING_STEWARD_TASK_KIND) {
+    const { executeDemandScoringStewardTask } = await import("@/lib/demand/scoring-steward-task");
+    await executeDemandScoringStewardTask(task);
     return true;
   }
   return false;

@@ -1,0 +1,10 @@
+# Compose overlays switched on after install by an .env marker (BI-B422ED03).
+# One line per marker: MARKER overlay-file [overlay-file ...], applied in order
+# when the marker is 1 in the process environment or the install .env.
+#
+# The single table read by scripts/installer/lib/compose.sh (Linux/macOS start
+# and stop), scripts/installer/lib/compose-chain.ps1 (Windows) and
+# scripts/promote.sh (self-upgrade). Before it, promote.sh used only the chain
+# recorded at install time, so overlays enabled later (TLS) never upgraded.
+DPF_ORGANIZATION_TRUST_ENABLED docker-compose.organization-trust.yml docker-compose.tls.yml
+DPF_EDGE_ACTION_DISPATCH_CONFIGURED docker-compose.edge-actions.yml
