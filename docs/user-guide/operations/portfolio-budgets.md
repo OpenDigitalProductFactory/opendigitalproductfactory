@@ -47,6 +47,14 @@ portfolio delivered last quarter. Accept it or change it, and say why. The reaso
 and your name are recorded with the budget. A change adds a new version and keeps
 the old one; nothing is overwritten.
 
+For a first quarter, when last quarter's delivery does not reflect how work is
+spread now, ask your AI coworker to propose budgets from a recent stretch of
+delivery instead, for example the last 90 days. It uses `propose_portfolio_budgets`
+with `trailingDays`, which scales those days' delivered points to the length of the
+quarter. The proposal comes with a suggested reason that marks the budget as
+provisional and revisable. Nothing is set until a person accepts each figure, and
+a later change replaces it while keeping the history.
+
 ## Choosing who answers for each portfolio
 
 Open **Show the tie-out**: below the budgets, **Who answers for each portfolio** lists one accountable person per portfolio, or "Not set".
