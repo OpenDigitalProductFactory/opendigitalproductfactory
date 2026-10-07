@@ -5,7 +5,8 @@ import {
 } from "@/lib/backlog/initiative-readiness/terminal-recovery";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
 
-import { projectOwedAcceptance, type OwedAcceptanceOwnerResolver } from "./owed-acceptance";
+import { projectOwedAcceptance, type OwedAcceptanceOwnerRecovery, type OwedAcceptanceOwnerResolver } from "./owed-acceptance";
+import { executionEvidenceGrants, isExecutionEvidenceLane, resolveExecutionEvidenceOwner } from "./execution-evidence-owner";
 import { createOwedAcceptanceOwnerResolver } from "./owed-acceptance-owner";
 import { inPlatformGrants, withNoInPlatformCoworker, type InPlatformOwnerDb } from "./in-platform-owners";
 import type { AcceptanceSweepPageItem } from "./acceptance-sweep-page";
@@ -37,13 +38,22 @@ export type SweepEvaluateDeps = {
  * The resolver the sweep uses: the terminal chain with the author removed from
  * the candidates, and only coworkers the platform can run eligible
  * (in-platform-owners.ts, BI-C1781121).
+ *
+ * A small or break-fix item's delivery-coordinator evidence never goes through
+ * the chain: it is recorded with record_execution_evidence, and its owner is
+ * the first eligible in-platform holder of that tool's grant other than the
+ * author (execution-evidence-owner.ts, BI-7C7E8CAC). The rest of the decision,
+ * if any, still takes the chain.
  */
 export function createSweepOwnerResolver(context: {
   db: InPlatformOwnerDb;
   ports?: Partial<TerminalRecoveryPorts>;
+  /** The grants that authorize record_execution_evidence; the grant registry by default. */
+  executionEvidenceGrants?: () => Promise<readonly string[]>;
 }): OwedAcceptanceOwnerResolver {
   const grants = inPlatformGrants(context.db);
-  return async ({ decision, authorAgentId }) => withNoInPlatformCoworker(await resolveTerminalInitiativeRecovery({
+  const loadLaneGrants = context.executionEvidenceGrants ?? executionEvidenceGrants;
+  const chain: OwedAcceptanceOwnerResolver = async ({ decision, authorAgentId }) => withNoInPlatformCoworker(await resolveTerminalInitiativeRecovery({
     decision,
     currentAgentId: authorAgentId,
     refusedWorkroomId: null,
@@ -60,6 +70,31 @@ export function createSweepOwnerResolver(context: {
       })({ decision: args.decision, authorAgentId: args.currentAgentId }),
     },
   }), grants, authorAgentId);
+
+  return async ({ decision, authorAgentId }) => {
+    const inLane = (entry: InitiativeReadinessDecision["unmet"][number]) => isExecutionEvidenceLane(decision, entry);
+    const lane = [...decision.blockers, ...decision.unmet].filter(inLane);
+    if (lane.length === 0) return chain({ decision, authorAgentId });
+    const rest = {
+      ...decision,
+      blockers: decision.blockers.filter((entry) => !inLane(entry)),
+      unmet: decision.unmet.filter((entry) => !inLane(entry)),
+    };
+    const chained: OwedAcceptanceOwnerRecovery = rest.blockers.length + rest.unmet.length > 0
+      ? await chain({ decision: rest, authorAgentId })
+      : { reviewerRoutes: [], escalations: [], unroutable: [] };
+    const owned = await resolveExecutionEvidenceOwner({
+      entries: lane,
+      authorAgentId,
+      grants,
+      satisfyingGrants: await loadLaneGrants(),
+    });
+    return {
+      reviewerRoutes: [...chained.reviewerRoutes, ...owned.reviewerRoutes],
+      escalations: [...chained.escalations, ...owned.escalations],
+      unroutable: [...chained.unroutable, ...owned.unroutable],
+    };
+  };
 }
 
 /**

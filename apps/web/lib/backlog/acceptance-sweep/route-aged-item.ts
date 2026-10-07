@@ -43,6 +43,7 @@ import {
 } from "@/lib/work-management/acceptance-verification-shape";
 import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim } from "@/lib/work-management/workroom-shape-claim";
 
+import { EXECUTION_EVIDENCE_WRITER } from "./execution-evidence-owner";
 import { ACCEPTANCE_FAMILY_ROLES, type OwedAcceptance, type OwedAcceptanceRequirement } from "./owed-acceptance";
 
 export const ROUTE_OUTCOMES = ["routed", "already-routed", "routed-unresolved", "unroutable", "deferred"] as const;
@@ -96,15 +97,40 @@ const ROOM_VERIFIER_REASON = "Named by the acceptance sweep as the coworker who 
 /**
  * The governed tool that records one owed acceptance-family requirement, or
  * null when none does. The lane map is the readiness resolver's own
- * (readinessLaneForRole); a delivery-coordinator acceptance check is recorded
- * with record_execution_evidence (shape-lane-escalations.ts).
+ * (readinessLaneForRole); a delivery-coordinator acceptance or delivery check
+ * is recorded with record_execution_evidence (shape-lane-escalations.ts,
+ * execution-evidence-owner.ts).
  */
 export function acceptanceWriterTool(entry: Pick<OwedAcceptanceRequirement, "code" | "accountableRole">): string | null {
   if (!ACCEPTANCE_FAMILY_ROLES.includes(entry.accountableRole)) return null;
   if (entry.accountableRole === "delivery-coordinator") {
-    return entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED" ? "record_execution_evidence" : null;
+    return EXECUTION_EVIDENCE_CODES.includes(entry.code) ? EXECUTION_EVIDENCE_WRITER : null;
   }
   return readinessLaneForRole(entry.accountableRole)?.toolName ?? null;
+}
+
+const EXECUTION_EVIDENCE_CODES: readonly string[] = ["ACCEPTANCE_EVIDENCE_REQUIRED", "DELIVERY_EVIDENCE_REQUIRED"];
+
+/**
+ * BI-7C7E8CAC: what a runtime check owed to a delivery-coordinator owner looks
+ * like as a record_execution_evidence call. A small item is accepted by the
+ * runtime check on the live install or the failing-to-passing test
+ * (shape-requirements.ts small()); the dimension each kind lands in is
+ * readiness-guidance.ts CODES_BY_EVIDENCE_DIMENSION.
+ */
+function runtimeCheckLines(itemId: string, codes: readonly string[]): string[] {
+  const lines = [
+    ``,
+    `Record the runtime check with record_execution_evidence, itemId ${itemId}, one call per check, with a summary of what you observed:`,
+  ];
+  if (codes.includes("ACCEPTANCE_EVIDENCE_REQUIRED")) {
+    lines.push(`- ACCEPTANCE_EVIDENCE_REQUIRED: kind "manual_check" for the check you ran on the live install (kind "ux_verified" when what changed is visible in the UI).`);
+  }
+  if (codes.includes("DELIVERY_EVIDENCE_REQUIRED")) {
+    lines.push(`- DELIVERY_EVIDENCE_REQUIRED: kind "test_pass" for the failing-to-passing test you ran (with its URL when there is one), or kind "manual_check" for the delivered change observed on the live install.`);
+  }
+  lines.push(`Where the check fails, record that with kind "test_fail" or "ux_fail" instead. Evidence is all you record: whoever closes the item cites it.`);
+  return lines;
 }
 
 /** The brief the drive sends the coworker, as the room's objective. */
@@ -126,6 +152,10 @@ export function buildAcceptanceRoomObjective(candidate: AgedRouteCandidate): str
       return `- ${entry.code} (${entry.accountableRole})${writable ? `, recorded with ${tool}` : ""}: ${entry.nextAction ?? "no next action was stated; read the item's readiness with get_backlog_item."}`;
     }),
   ];
+  const runtimeChecks = yours
+    .filter((entry) => entry.accountableRole === "delivery-coordinator" && acceptanceWriterTool(entry) === EXECUTION_EVIDENCE_WRITER)
+    .map((entry) => entry.code);
+  if (runtimeChecks.length > 0) lines.push(...runtimeCheckLines(candidate.itemId, runtimeChecks));
   const packetBound = [...new Set(yours
     .map((entry) => acceptanceWriterTool(entry))
     .filter((tool): tool is string => tool !== null && !ACCEPTANCE_VERIFIER_WRITES.includes(tool)))];
