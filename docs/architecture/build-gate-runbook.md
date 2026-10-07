@@ -91,6 +91,17 @@ Arming auto-merge (`gh pr merge <n> --squash --auto`) is a promise that fires on
 
 The alarm is GitHub-side only. The in-portal Needs-you inbox does not yet carry it: the contributor PR snapshot (`apps/web/lib/contributor-change-lanes/`) is read from the `/pulls` list endpoint, which returns neither `mergeable_state` nor the checks, and carries no auto-merge field — so an attention source over it would have nothing to read. That extension is a follow-up, not a half-built source.
 
+### The room follows its PR through CI (BI-88341B5D)
+
+Getting a PR merged is the Workroom's duty, not the client's: the same thing happens whether Claude Code, Codex, Grok, Antigravity or Build Studio opened it. Design: `docs/superpowers/specs/2026-10-01-pr-follow-through-workroom-duty-design.md`. The five-minute reconciler (`apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts`) now covers every non-terminal room with a bound PR, not only Build Studio rooms, and keeps one record per room at `workspaceState.prDelivery` (`prDelivery.followThrough` holds the CI classification, the hold and the reused `post-push-ci-failure` budget). On each pass it:
+
+- **arms auto-merge through the merge queue** when the PR is green, and updates a branch that is `BEHIND`. It never merges by hand, force-pushes, dismisses a check or touches required-check configuration;
+- **classifies a red check once per head SHA** (`apps/web/lib/build/pr-follow-through.ts`). `CANCELLED` / `TIMED_OUT` / `STARTUP_FAILURE` / `STALE` / `ERROR` are infrastructure: it re-runs that workflow run's failed jobs once and then raises the platform operator. `FAILURE` is a defect: at a `preauthorized` boundary the room may dispatch a bounded repair (2 per PR); below that, or while no repair worker is wired, it stages the repair packet for a person. Anything else (`ACTION_REQUIRED`) goes to a person unclassified;
+- **records each step on the room** as a `workroom-pr-follow-through` activity, and sends a hold that needs a person to the escalation inbox once per head;
+- **makes liveness read CI**: a room whose PR is red and waiting on a person reads `stalled` (held, never reaped), not `live`.
+
+A quiet room, or one whose boundary is `advise`, is recorded only. The reconciler still runs in `shadow` by default (`DPF_BUILD_PR_DELIVERY_RECONCILER_MODE`), so it proposes rather than acts until the default flips (design §7 slice 6). Webhook intake of `check_suite` / `workflow_run` / `merge_group`, the repair worker itself (design §8 open question) and the client accelerator readback are later slices. Until they land, keep arming auto-merge yourself with `gh pr merge <n> --squash --auto`; the room arming it again is a no-op.
+
 ## A merged pull request is delivered, not discovered (BI-A6E4D205)
 
 The thread that pushes should be able to end at the push. It could not, because nothing told the platform when a pull request merged — it went looking, on a timer.
