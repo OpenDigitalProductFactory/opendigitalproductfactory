@@ -152,7 +152,7 @@ test("publish pushes exactly once, and a refused push is reported, never retried
     calls.push([cmd, ...args].join(" "));
     return { ok: cmd !== "git", status: cmd === "git" ? 1 : 0, out: "" };
   };
-  const refusal = publish({ branch: "b", base: "main", title: "t", body: "", dry: false, log: () => {}, exec });
+  const refusal = publish({ branch: "b", base: "main", title: "t", body: "", dry: false, log: () => {}, runner: exec });
   assert.equal(refusal?.step, "push");
   assert.deepEqual(calls, ["git push -u origin b"], "one push, and nothing after a refusal");
 
@@ -161,6 +161,6 @@ test("publish pushes exactly once, and a refused push is reported, never retried
     calls.push([cmd, ...args].join(" "));
     return { ok: true, status: 0, out: args.includes(".number") ? "" : "url" };
   };
-  assert.equal(publish({ branch: "b", base: "main", title: "t", body: "x", dry: false, log: () => {}, exec: okExec }), null);
+  assert.equal(publish({ branch: "b", base: "main", title: "t", body: "x", dry: false, log: () => {}, runner: okExec }), null);
   assert.equal(calls.filter((c) => c.startsWith("git push")).length, 1);
 });

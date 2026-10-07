@@ -210,11 +210,11 @@ export function recordedPassAction({ status, headSha, dirty, mergeable }) {
  *
  * @returns {{ step: string, message: string, next?: string } | null} the refusal, or null when done
  */
-export function publish({ branch, base, title, body, dry, log, exec = run }) {
+export function publish({ branch, base, title, body, dry, log, runner = run }) {
   // ── 7. push ───────────────────────────────────────────────────────────────
   log(`pushing ${branch}`);
   if (!dry) {
-    const r = exec("git", ["push", "-u", "origin", branch], { allowFail: true });
+    const r = runner("git", ["push", "-u", "origin", branch], { allowFail: true });
     if (!r.ok) {
       return { step: "push",
         message: "push refused (pre-push gate or remote). It was NOT retried: a second push can "
@@ -224,7 +224,7 @@ export function publish({ branch, base, title, body, dry, log, exec = run }) {
   }
 
   // ── 8. pull request ───────────────────────────────────────────────────────
-  const existing = exec("gh", ["pr", "view", "--json", "number", "-q", ".number"],
+  const existing = runner("gh", ["pr", "view", "--json", "number", "-q", ".number"],
     { capture: true, allowFail: true });
   const prNumber = existing.ok ? existing.out.trim() : "";
   if (prNumber) {
@@ -236,7 +236,7 @@ export function publish({ branch, base, title, body, dry, log, exec = run }) {
     log("opening the PR");
     if (!dry) {
       const args = ["pr", "create", "--base", base, "--head", branch, "--title", title, "--body", body];
-      const r = exec("gh", args, { capture: true, allowFail: true });
+      const r = runner("gh", args, { capture: true, allowFail: true });
       if (!r.ok) {
         return { step: "pull-request", message: `gh pr create failed.\n${r.out.slice(-800)}`,
           next: "read the output" };
@@ -247,8 +247,8 @@ export function publish({ branch, base, title, body, dry, log, exec = run }) {
 
   // ── 9. auto-merge, and VERIFY it took ─────────────────────────────────────
   if (!dry) {
-    exec("gh", ["pr", "merge", "--squash", "--auto"], { capture: true, allowFail: true });
-    const check = exec("gh", ["pr", "view", "--json", "autoMergeRequest", "-q",
+    runner("gh", ["pr", "merge", "--squash", "--auto"], { capture: true, allowFail: true });
+    const check = runner("gh", ["pr", "view", "--json", "autoMergeRequest", "-q",
       ".autoMergeRequest.mergeMethod"], { capture: true, allowFail: true });
     const method = check.out.trim();
     // Verified rather than assumed: `gh pr merge --auto` has reported success
