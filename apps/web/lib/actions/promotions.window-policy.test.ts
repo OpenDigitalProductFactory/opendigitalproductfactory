@@ -299,17 +299,20 @@ describe("triggerSelfUpgrade – automation persona (BI-2128872C)", () => {
 
   it("AC-1: queues an agent-driven click outside the window for the next window instead of running it", async () => {
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
-    vi.mocked(nextUpgradeWindowOpen).mockReturnValue(new Date("2026-10-07T22:00:00.000Z"));
+    // The next window is always in the future relative to the run; a fixed
+    // instant expires and fails every branch once the clock passes it (BI-DC870F3E).
+    const nextWindow = new Date(Math.ceil((Date.now() + 60 * 60 * 1000) / 3_600_000) * 3_600_000);
+    vi.mocked(nextUpgradeWindowOpen).mockReturnValue(nextWindow);
 
     const result = await triggerSelfUpgrade({ force: true });
 
     expect(result).toMatchObject({ queued: false, reason: "deferred-to-window" });
-    expect((result as { runAt?: string | null }).runAt).toMatch(/^2026-10-07T22:00:00/);
+    expect((result as { runAt?: string | null }).runAt).toBe(nextWindow.toISOString());
     expect((result as { message?: string }).message).toContain("maintenance window");
     expect(admitSelfUpgrade).not.toHaveBeenCalled();
     expect(recordDeferredUpgradeRequest).toHaveBeenCalledWith(expect.objectContaining({
       requestedBy: "manual:user-automation",
-      runAt: expect.stringMatching(/^2026-10-07T22:00:00/),
+      runAt: nextWindow.toISOString(),
     }));
   });
 
