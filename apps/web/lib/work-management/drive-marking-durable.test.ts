@@ -15,7 +15,9 @@
 //   with its stageKey and marking intact, then resumes the same marking.
 // - Posture quiet, then balanced: a stored marking holding reworkTaken keeps it.
 // - A malformed stored marking survives a marking_unreadable pause byte-for-byte.
-// - A cycle-key change discards the marking and restarts at the start.
+// - A run in flight crosses the calendar boundary with its marking intact; the
+//   next run starts only after the run concluded, under a new calendar key, and
+//   at most one run starts per calendar key (BI-086DC167).
 // - lease_held changes nothing.
 // - The merge keeps the row's marking when a graph snapshot lacks one.
 
@@ -180,18 +182,95 @@ describe("AC-3C-MARKING-DURABLE", () => {
     }
   });
 
-  it("a cycle-key change discards the marking and restarts at the start", async () => {
+  it("a run in flight crosses the calendar boundary: its run key, token clock, iterations and rework counters are kept (BI-086DC167)", async () => {
     flags.table["rework-edge"] = true;
     const yesterday = `${REWORK_FIXTURE.key}@${REWORK_FIXTURE.version}:2026-03-01`;
-    const stale = {
+    const inFlight = {
       format: "drive-marking/1", cycleKey: yesterday,
       tokens: [{ node: "stage:b", enteredAt: "2026-03-01T12:00:00.000Z", lastAction: "dispatch_agent", lastReason: "agent_stage", lastCycleKey: yesterday }],
-      iterations: { b: 1 }, reworkTaken: { "edge:b->a": 1 }, deadlines: {}, children: {},
+      iterations: { a: 1, b: 1 }, reworkTaken: { "edge:b->a": 1 }, deadlines: {}, children: {},
     };
-    const h = harness({ workroomDrive: { kind: "workroom-drive", version: 1, action: "dispatch_agent", reason: "agent_stage", stageKey: "b", lastCycleKey: yesterday, receipts: [], marking: stale } });
+    // a's second pass completed yesterday, in this run.
+    const receipts = [{ stageKey: "a", kind: "stage-evidence-recorded", iteration: 1, runKey: yesterday }];
+    const h = harness({ workroomDrive: { kind: "workroom-drive", version: 1, action: "dispatch_agent", reason: "agent_stage", stageKey: "b", lastCycleKey: yesterday, receipts, marking: inFlight } });
+    // The writeback latch is still bounded by the calendar day: b gets its one retry today.
     expect(await tick(h, at(0))).toMatchObject({ action: "dispatch_agent", reason: "agent_stage" });
-    expect(drive(h).stageKey).toBe("a");
-    expect(drive(h).marking).toMatchObject({ cycleKey: CYCLE, tokens: [{ node: "stage:a", enteredAt: at(0).toISOString() }], iterations: {}, reworkTaken: {} });
+    expect(drive(h).stageKey).toBe("b");
+    expect(drive(h).lastCycleKey).toBe(CYCLE);
+    expect(drive(h).marking).toMatchObject({
+      cycleKey: yesterday,
+      tokens: [{ node: "stage:b", enteredAt: "2026-03-01T12:00:00.000Z", lastAction: "dispatch_agent", lastCycleKey: CYCLE }],
+      iterations: { a: 1, b: 1 },
+      reworkTaken: { "edge:b->a": 1 },
+    });
+    expect(drive(h).receipts).toEqual(receipts);
+  });
+
+  it("a concluded run sleeps out the calendar day it concluded on, keeping the concluded marking; the next run starts the next day (BI-086DC167)", async () => {
+    flags.table["rework-edge"] = true;
+    const yesterday = `${REWORK_FIXTURE.key}@${REWORK_FIXTURE.version}:2026-03-01`;
+    // Started yesterday, succeeded today.
+    const concluded = { format: "drive-marking/1", cycleKey: yesterday, tokens: [], iterations: {}, reworkTaken: {}, deadlines: {}, children: {} };
+    const h = harness({ workroomDrive: { kind: "workroom-drive", version: 1, action: "stop", reason: "success", stageKey: null, lastCycleKey: CYCLE, receipts: [], marking: concluded } });
+    for (const minutes of [15, 30]) {
+      expect(await tick(h, at(minutes))).toMatchObject({ action: "do_not_wake", reason: "cycle_complete" });
+      expect(drive(h).marking).toEqual(concluded);
+    }
+    const tomorrow = new Date("2026-03-03T00:15:00.000Z");
+    expect(await tick(h, tomorrow)).toMatchObject({ action: "dispatch_agent", reason: "agent_stage" });
+    expect(drive(h).marking).toMatchObject({ cycleKey: `${REWORK_FIXTURE.key}@${REWORK_FIXTURE.version}:2026-03-03`, tokens: [{ node: "stage:a", enteredAt: tomorrow.toISOString() }] });
+  });
+
+  it("GUARD: at most one run starts per calendar key, and each run is keyed by the day it started (BI-086DC167)", async () => {
+    flags.table["rework-edge"] = true;
+    const h = harness();
+    const runs: Array<{ runKey: string; startedOn: string }> = [];
+    let lastRun: string | null = null;
+    const complete = (stageKey: string, now: Date) => h.evidence.push({ stageKey, kind: "assurance-run", outcome: "completed", recordedAt: new Date(now.getTime() + 60_000) });
+    const step = async (now: Date) => {
+      await tick(h, now);
+      const run = (drive(h).marking as { cycleKey: string; tokens: Array<{ enteredAt: string }> } | undefined);
+      if (run && run.cycleKey !== lastRun) {
+        lastRun = run.cycleKey;
+        runs.push({ runKey: run.cycleKey, startedOn: `${REWORK_FIXTURE.key}@${REWORK_FIXTURE.version}:${now.toISOString().slice(0, 10)}` });
+      }
+    };
+    const day = (date: string, time: string) => new Date(`${date}T${time}:00.000Z`);
+
+    // Day 1: a run starts and succeeds the same day; a quiet tick and a live one later that day start nothing new.
+    await step(day("2026-03-02", "09:00"));
+    complete("a", day("2026-03-02", "09:00"));
+    await step(day("2026-03-02", "09:15"));
+    complete("b", day("2026-03-02", "09:15"));
+    await step(day("2026-03-02", "09:30"));
+    expect(drive(h)).toMatchObject({ action: "stop", reason: "success" });
+    h.posture = "quiet";
+    await step(day("2026-03-02", "10:00"));
+    h.posture = "balanced";
+    for (const time of ["10:15", "18:00", "23:45"]) {
+      await step(day("2026-03-02", time));
+      expect(drive(h)).toMatchObject({ action: "do_not_wake", reason: "cycle_complete" });
+    }
+
+    // Day 2: the next run starts, and runs over three days (b never completes until day 4).
+    await step(day("2026-03-03", "00:00"));
+    complete("a", day("2026-03-03", "00:00"));
+    for (const date of ["2026-03-03", "2026-03-04"]) for (const time of ["06:00", "12:00", "23:45"]) await step(day(date, time));
+    await step(day("2026-03-05", "00:15"));
+    complete("b", day("2026-03-05", "00:15"));
+    await step(day("2026-03-05", "00:30"));
+    expect(drive(h)).toMatchObject({ action: "stop", reason: "success" });
+    for (const time of ["06:00", "23:45"]) await step(day("2026-03-05", time));
+
+    // Day 6: the third run.
+    await step(day("2026-03-06", "00:00"));
+
+    expect(runs).toEqual([
+      { runKey: `${REWORK_FIXTURE.key}@${REWORK_FIXTURE.version}:2026-03-02`, startedOn: `${REWORK_FIXTURE.key}@${REWORK_FIXTURE.version}:2026-03-02` },
+      { runKey: `${REWORK_FIXTURE.key}@${REWORK_FIXTURE.version}:2026-03-03`, startedOn: `${REWORK_FIXTURE.key}@${REWORK_FIXTURE.version}:2026-03-03` },
+      { runKey: `${REWORK_FIXTURE.key}@${REWORK_FIXTURE.version}:2026-03-06`, startedOn: `${REWORK_FIXTURE.key}@${REWORK_FIXTURE.version}:2026-03-06` },
+    ]);
+    expect(new Set(runs.map((run) => run.runKey)).size).toBe(runs.length);
   });
 
   it("lease_held changes nothing", async () => {
@@ -232,10 +311,25 @@ describe("mergeWorkroomDriveSnapshot for a graph snapshot", () => {
     expect(merged.pendingAttentions).toEqual(current.workroomDrive.pendingAttentions);
   });
 
-  it("keeps the snapshot's own marking, and never touches a sequential snapshot or another cycle", () => {
+  it("keeps the snapshot's own marking, and never touches a sequential snapshot or another sequential cycle", () => {
     const own = { ...marking, tokens: [{ node: "stage:a", enteredAt: T0.toISOString() }] };
     expect(mergeWorkroomDriveSnapshot(current, { lastCycleKey: CYCLE, receipts: [], marking: own }, { graphShape: true }).marking).toBe(own);
     expect(Object.hasOwn(mergeWorkroomDriveSnapshot(current, { lastCycleKey: CYCLE, receipts: [] }), "marking")).toBe(false);
-    expect(Object.hasOwn(mergeWorkroomDriveSnapshot(current, { lastCycleKey: "other", receipts: [] }, { graphShape: true }), "marking")).toBe(false);
+    expect(Object.hasOwn(mergeWorkroomDriveSnapshot(current, { lastCycleKey: "other", receipts: [] }), "marking")).toBe(false);
+  });
+
+  // BI-086DC167: on the graph path "the same cycle" is the same RUN, which crosses UTC midnight.
+  it("compares run keys on the graph path: a tick crossing midnight in the same run keeps the row's receipts and marking; a new run does not merge", () => {
+    const row = { workroomDrive: { lastCycleKey: CYCLE, receipts: [{ stageKey: "a", kind: "stage-evidence-recorded", iteration: 0, runKey: CYCLE }], marking } };
+    const tomorrow = `${REWORK_FIXTURE.key}@${REWORK_FIXTURE.version}:2026-03-03`;
+    const sameRun = mergeWorkroomDriveSnapshot(row, { lastCycleKey: tomorrow, receipts: [], marking }, { graphShape: true });
+    expect(sameRun.receipts).toEqual(row.workroomDrive.receipts);
+    const carried = mergeWorkroomDriveSnapshot(row, { lastCycleKey: tomorrow, receipts: [] }, { graphShape: true });
+    expect(carried.marking).toBe(marking);
+    expect(carried.receipts).toEqual(row.workroomDrive.receipts);
+    const nextRun = mergeWorkroomDriveSnapshot(row, { lastCycleKey: tomorrow, receipts: [], marking: { ...marking, cycleKey: tomorrow } }, { graphShape: true });
+    expect(nextRun.receipts).toEqual([]);
+    // Sequential snapshots still compare the calendar key, exactly as before.
+    expect(mergeWorkroomDriveSnapshot(row, { lastCycleKey: tomorrow, receipts: [] }).receipts).toEqual([]);
   });
 });

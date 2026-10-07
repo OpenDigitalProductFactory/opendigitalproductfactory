@@ -15,9 +15,19 @@
  * - READ (`readStoredDriveMarking`). An absent marking is derived from the
  *   stored `stageKey` (one token on it, or the start when there is none). A
  *   malformed one is never guessed at: the reader returns it verbatim with
- *   `marking_unreadable`, and the drive pauses and carries it forward. A
- *   marking from another cycle is discarded and a fresh one starts at the
- *   shape's start, as the sequential drive restarts after `cycle_complete`.
+ *   `marking_unreadable`, and the drive pauses and carries it forward.
+ * - RUN (BI-086DC167). A marking is one RUN of the shape. Its `cycleKey` is
+ *   the run key: the calendar cycle key (projectWorkShapeCycleBoundary, the
+ *   tick's UTC date) of the day the run started, in exactly that format. A run
+ *   in flight (any token left) is kept whatever the date, so tokens, their
+ *   clocks, iterations, rework counters, deadlines and children cross UTC
+ *   midnight. A fresh run starts only when the stored run has concluded (no
+ *   token left) AND the tick's calendar key differs from the run key, which is
+ *   what the sequential drive does (a new pass only after `stop/success`, at
+ *   most once per calendar day). So at most one run starts per calendar key,
+ *   and the run key keeps deadline keys and child idempotency keys unique.
+ *   The calendar key stays in the snapshot's and each token's `lastCycleKey`
+ *   (the writeback latch's one retry per day, the cycle-complete sleep).
  * - STEP (`stepDriveMarking`). The drive's own implementation of the token
  *   game's rules, independent of the reference interpreter (interpreter.ts) so
  *   that the per-construct parity tests compare two statements of the rules.
@@ -26,8 +36,13 @@
  *   blocking gate with a refuse route, a verdict that moves it). It implements
  *   the forward move to a stage or to the success stop (PR-3c-1), parallel
  *   split and join (PR-3c-2), and refuse routes with rework edges (PR-3c-3).
- *   Every other construct-specific branch (deadline, sub-shape, a forward edge
- *   into a failure or budget stop) throws DriveConstructNotImplementedError;
+ *   A stage deadline is not a step at all (PR-3c-4): timers never change the
+ *   marking, and drive-deadlines.ts raises its notice beside the step. A
+ *   sub-shape stage is an ordinary stage to the step (PR-3c-5): its child's
+ *   success is its completing receipt (earned from `child-completion`
+ *   evidence), and drive-child-rooms.ts runs the child beside the step.
+ *   The one remaining construct-specific branch (a forward edge into a
+ *   failure or budget stop) throws DriveConstructNotImplementedError;
  *   the graph planner turns that into a fail-closed pause, and with those flags
  *   off it is never reached, because the planner pauses first.
  * - REFUSE AND REWORK (PR-3c-3, design §6.2). A verdict is read only for a
@@ -85,7 +100,11 @@ export type DriveMarkingToken = {
 
 export type DriveMarking = {
   format: typeof DRIVE_MARKING_FORMAT;
-  /** The cycle this marking belongs to (projectWorkShapeCycleBoundary's cycleKey). */
+  /**
+   * The RUN key (BI-086DC167): the calendar cycle key
+   * (projectWorkShapeCycleBoundary's cycleKey) of the day this run started.
+   * It does not change while the run is in flight.
+   */
   cycleKey: string;
   /** 1-safe, sorted by node then from. */
   tokens: DriveMarkingToken[];
@@ -95,9 +114,16 @@ export type DriveMarking = {
   reworkTaken: Record<string, number>;
   /** Deadline notices by `<cycleKey>#<stageKey>#<iteration>` (PR-3c-4). */
   deadlines: Record<string, { raisedAt: string; notifiedAt: string | null }>;
-  /** Sub-shape children by `<cycleKey>#<stageKey>#<iteration>` (PR-3c-5). */
-  children: Record<string, { capsuleId: string; ref: string }>;
+  /**
+   * Sub-shape children by `<cycleKey>#<stageKey>#<iteration>` (PR-3c-5). An
+   * entry without `state` is a live child; `completed` and `abandoned` are
+   * written by the runner once that effect committed, and are kept for audit.
+   */
+  children: Record<string, DriveMarkingChild>;
 };
+
+export const DRIVE_CHILD_STATES = ["completed", "abandoned"] as const;
+export type DriveMarkingChild = { capsuleId: string; ref: string; state?: (typeof DRIVE_CHILD_STATES)[number] };
 
 /** One marked stage's plan inside a graph plan (DrivePlan.tokens). */
 export type DriveTokenPlan = {
@@ -112,7 +138,12 @@ export type DriveTokenPlan = {
 };
 
 export type DriveMarkingRead =
-  | ActionSuccess<{ marking: DriveMarking; source: "stored" | "derived" | "new-cycle" }>
+  | ActionSuccess<{
+    marking: DriveMarking;
+    source: "stored" | "derived" | "new-run";
+    /** On `new-run` only: the concluded run the fresh marking replaces (the sleep and refused holds persist it). */
+    previous?: DriveMarking;
+  }>
   | { ok: false; reason: "marking_unreadable"; raw: unknown };
 
 type MarkingShape = Pick<WorkShapeDefinitionContract, "stages" | "stopConditions" | "flow">;
@@ -188,7 +219,8 @@ function parseMarking(value: unknown, graph: GppFlowGraph): DriveMarking | null 
   const children: DriveMarking["children"] = {};
   for (const [key, entry] of Object.entries(value.children)) {
     if (!isObject(entry) || typeof entry.capsuleId !== "string" || typeof entry.ref !== "string") return null;
-    children[key] = { capsuleId: entry.capsuleId, ref: entry.ref };
+    if (entry.state !== undefined && !(DRIVE_CHILD_STATES as readonly unknown[]).includes(entry.state)) return null;
+    children[key] = { capsuleId: entry.capsuleId, ref: entry.ref, ...(entry.state !== undefined ? { state: entry.state as DriveMarkingChild["state"] } : {}) };
   }
   return {
     format: DRIVE_MARKING_FORMAT,
@@ -212,10 +244,16 @@ export function startDriveMarking(definition: MarkingShape, cycleKey: string, no
 }
 
 /**
- * The room's marking for this tick. `cycleKey` is the current cycle; null
- * means "do not apply the cycle rule" (the runner's receipt earning, which
- * runs before the cycle is projected). `now` dates a derived token when the
- * snapshot records no last run.
+ * The room's marking for this tick. `cycleKey` is the tick's calendar cycle
+ * key; null means "do not apply the run rule" (the runner's receipt earning,
+ * which runs before the cycle is projected). `now` dates a derived token when
+ * the snapshot records no last run, and a fresh run's first token.
+ *
+ * The run rule (BI-086DC167): a stored marking with any token left is a run
+ * in flight and is returned as stored, whatever the date. Only a concluded run
+ * (no token left) whose run key differs from `cycleKey` is replaced by a fresh
+ * run keyed `cycleKey` (`new-run`, carrying the concluded run as `previous`).
+ * An unreadable marking is never replaced: the drive pauses on it.
  */
 export function readStoredDriveMarking(
   workspaceState: unknown,
@@ -228,8 +266,8 @@ export function readStoredDriveMarking(
   if (drive && Object.hasOwn(drive, "marking") && drive.marking !== undefined) {
     const parsed = parseMarking(drive.marking, graph);
     if (!parsed) return { ok: false, reason: "marking_unreadable", raw: drive.marking };
-    if (cycleKey !== null && parsed.cycleKey !== cycleKey) {
-      return ok({ marking: startDriveMarking(definition, cycleKey, now), source: "new-cycle" });
+    if (cycleKey !== null && parsed.tokens.length === 0 && parsed.cycleKey !== cycleKey) {
+      return ok({ marking: startDriveMarking(definition, cycleKey, now), source: "new-run", previous: parsed });
     }
     return ok({ marking: parsed, source: "stored" });
   }
@@ -273,17 +311,23 @@ export function markedKeysWithIteration(definition: Pick<WorkShapeDefinitionCont
   return markedStageKeys(definition, marking).map((key) => `${key}#${iterationOf(marking, key)}`).sort();
 }
 
-/** Is this receipt completing for `stageKey` at `iteration`? The graph path's predicate. */
+/**
+ * Is this receipt completing for `stageKey` at `iteration` within the run
+ * `runKey`? The graph path's predicate: a receipt that carries a run key
+ * counts only within that run (BI-086DC167).
+ */
 export const isCompletingAt = isCompletingWorkroomDriveReceiptAt;
+
+type MarkingReceipt = { stageKey: string; kind: string; iteration?: number; runKey?: string };
 
 /** The marked stages with a completing receipt at their current iteration, in document order. */
 export function enabledStages(
   definition: Pick<WorkShapeDefinitionContract, "stages">,
   marking: DriveMarking,
-  receipts: readonly { stageKey: string; kind: string; iteration?: number }[],
+  receipts: readonly MarkingReceipt[],
 ): string[] {
   return markedStageKeys(definition, marking)
-    .filter((key) => receipts.some((receipt) => isCompletingAt(receipt, key, iterationOf(marking, key))));
+    .filter((key) => receipts.some((receipt) => isCompletingAt(receipt, key, iterationOf(marking, key), marking.cycleKey)));
 }
 
 /** A construct-specific branch of the step that PR-3c-1 does not implement. */
@@ -423,7 +467,7 @@ export type DriveGateHold = "awaiting_verdict" | "refused_without_route";
 export function gateHolds(
   definition: MarkingShape,
   marking: DriveMarking,
-  observations: { receipts: readonly { stageKey: string; kind: string; iteration?: number }[]; verdicts?: Readonly<Record<string, DriveGateVerdict>> },
+  observations: { receipts: readonly MarkingReceipt[]; verdicts?: Readonly<Record<string, DriveGateVerdict>> },
 ): Map<string, DriveGateHold> {
   const graph = buildShapeFlowGraph(definition);
   const out = new Map<string, DriveGateHold>();
@@ -432,7 +476,7 @@ export function gateHolds(
     const gate = verdictGate(graph, stage);
     if (!gate) continue;
     const iteration = iterationOf(marking, stage.key);
-    if (!observations.receipts.some((receipt) => isCompletingAt(receipt, stage.key, iteration))) continue;
+    if (!observations.receipts.some((receipt) => isCompletingAt(receipt, stage.key, iteration, marking.cycleKey))) continue;
     const recorded = applicableVerdict(observations.verdicts, stage.key, gate, iteration);
     if (recorded?.verdict === "admit") continue;
     if (recorded?.verdict === "refuse") {
@@ -466,7 +510,7 @@ export function stepDriveMarking(
   definition: MarkingShape,
   marking: DriveMarking,
   observations: {
-    receipts: readonly { stageKey: string; kind: string; iteration?: number }[];
+    receipts: readonly MarkingReceipt[];
     /** The latest gate verdict per stage key (PR-3c-3); read only for a stage that waits on a verdict. */
     verdicts?: Readonly<Record<string, DriveGateVerdict>>;
     stop?: "failure" | "budget";
@@ -474,12 +518,8 @@ export function stepDriveMarking(
   now: Date,
 ): DriveStepResult {
   const graph = buildShapeFlowGraph(definition);
-  const stagesByKey = new Map(definition.stages.map((stage) => [stage.key, stage]));
-  for (const token of marking.tokens) {
-    const node = graph.nodes.get(token.node);
-    const stage = node?.stageKey !== undefined ? stagesByKey.get(node.stageKey) : undefined;
-    if (stage?.deadline) throw new DriveConstructNotImplementedError("stage-deadline", token.node, "a marked stage declares a deadline (PR-3c-4).");
-  }
+  // A stage deadline never enters the step (PR-3c-4): timers never change M
+  // (parent §6.1 rule 8). The planner raises notices (drive-deadlines.ts).
 
   if (observations.stop) {
     const stopped = stopOfKind(graph, observations.stop);
@@ -512,9 +552,6 @@ export function stepDriveMarking(
         for (const after of graph.successors.get(next) ?? []) enter(after, next);
         return;
       }
-      const nextStage = node.stageKey !== undefined ? stagesByKey.get(node.stageKey) : undefined;
-      if (nextStage?.subShape !== undefined) throw new DriveConstructNotImplementedError("sub-shape", next, "the next stage calls a sub-shape (PR-3c-5).");
-      if (nextStage?.deadline) throw new DriveConstructNotImplementedError("stage-deadline", next, "the next stage declares a deadline (PR-3c-4).");
       // 1-safe: a stage that already holds a token gains no second one.
       if (!holds(next)) tokens.push({ node: next, enteredAt: now.toISOString() });
     };
@@ -525,7 +562,7 @@ export function stepDriveMarking(
     const token = stageToken(marking, stage.key);
     if (!token) continue;
     const iteration = iterationOf(marking, stage.key);
-    if (!observations.receipts.some((receipt) => isCompletingAt(receipt, stage.key, iteration))) continue;
+    if (!observations.receipts.some((receipt) => isCompletingAt(receipt, stage.key, iteration, marking.cycleKey))) continue;
     const stageId = token.node;
 
     const gate = verdictGate(graph, stage);

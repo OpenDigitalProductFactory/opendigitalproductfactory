@@ -97,13 +97,29 @@ describe("readEscalationOutcome", () => {
     expect(result.detail).not.toContain("failed");
   });
 
-  it("distinguishes a real failure from a skip", () => {
+  it("distinguishes a real failure from a skip, by CODE and not only by prose", () => {
     const result = readEscalationOutcome({ status: "failed", error: "upstream unreachable" }, p);
 
-    expect(result).toMatchObject({ contributed: false });
+    // BI-C3947AAA: this used to assert only `contributed: false` and the detail
+    // text, so a fault sharing `escalation-refused` with a legitimate skip went
+    // unnoticed. The code is the part a caller branches on, so the code is what
+    // must differ: `escalation-refused` is documented as an answer to accept and
+    // not retry, which is exactly the wrong handling for a fault.
+    expect(result).toMatchObject({ contributed: false, reason: "escalation-failed" });
     if (result.contributed) throw new Error("expected a refusal");
     expect(result.detail).toContain("failed");
     expect(result.detail).toContain("upstream unreachable");
+    expect(result.detail).toMatch(/fault, not a refusal/);
+  });
+
+  it("never gives a fault and a policy skip the same reason code", () => {
+    const skipped = readEscalationOutcome({ status: "skipped", reason: "install is private" }, p);
+    const failed = readEscalationOutcome({ status: "failed", error: "backlog BI-IMP-1 not found" }, p);
+
+    if (skipped.contributed || failed.contributed) throw new Error("expected two refusals");
+    expect(skipped.reason).not.toBe(failed.reason);
+    expect(skipped.reason).toBe("escalation-refused");
+    expect(failed.reason).toBe("escalation-failed");
   });
 });
 

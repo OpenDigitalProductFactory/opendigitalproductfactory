@@ -52,4 +52,6 @@ export const ACCEPTANCE_SWEEP_PROMPT =
   "Revisit a bounded page of awaiting-acceptance backlog items: compute each item's completion "
   + "readiness, record who owes its acceptance (or why no coworker can be named) when that changed, "
   + "and write one run summary to the standing Acceptance room with the pool's age bands, items aged "
-  + "over 30 days, closable items and unroutable items by code. Deterministic: no model judgement.";
+  + "over 30 days, closable items and unroutable items by code. Only under a recorded operator "
+  + "pre-authorisation (BI-45D3BBF4), close items whose completion gate already allows done, through "
+  + "the governed completion transition, a bounded number per run. Deterministic: no model judgement.";

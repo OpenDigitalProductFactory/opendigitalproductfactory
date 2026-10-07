@@ -29,7 +29,7 @@ import { resolveShapeDocument, type GppResolveSources } from "@/lib/gpp/shape-la
 import { defaultResolveSources } from "@/lib/gpp/shape-language/resolve-sources";
 import { checkSoundness } from "@/lib/gpp/shape-language/soundness";
 
-import { DEADLINE_FIXTURE, PARALLEL_FIXTURE } from "./__fixtures__/graph-shape-fixtures";
+import { DEADLINE_FIXTURE, PARALLEL_FIXTURE, SUB_SHAPE_FIXTURE } from "./__fixtures__/graph-shape-fixtures";
 import { usesGraphConstructs } from "./drive-marking";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 import { listWorkShapes, type WorkShapeDefinition } from "./work-shapes";
@@ -121,10 +121,12 @@ describe("the guard refuses a graph shape injected into the registry", () => {
       stages: shape.stages.map((stage, index) => (index === 0 ? { ...stage, deadline: { afterDays: 1, description: "One day." } } : stage)),
     };
     const allowList = [{ ref: ref(shape), backlogItem: "BI-8875C9DF" }];
-    expect(CONSTRUCT_EXECUTABLE["stage-deadline"]).toBe(false);
-    expect(await guardProblems([withDeadline], { allowList })).toEqual([`${ref(shape)}: E-NOT-EXECUTABLE/stage-deadline stage:${shape.stages[0]!.key}`]);
-    // The flag is the only switch: with it on (test-only), the same shape passes.
-    expect(await guardProblems([withDeadline], { allowList, executable: { ...CONSTRUCT_EXECUTABLE, "stage-deadline": true } })).toEqual([]);
+    // Stage deadlines are executable since BI-086DC167: the kill switch (test-only) brings the refusal back.
+    expect(CONSTRUCT_EXECUTABLE["stage-deadline"]).toBe(true);
+    const deadlineOff = { ...CONSTRUCT_EXECUTABLE, "stage-deadline": false };
+    expect(await guardProblems([withDeadline], { allowList, executable: deadlineOff })).toEqual([`${ref(shape)}: E-NOT-EXECUTABLE/stage-deadline stage:${shape.stages[0]!.key}`]);
+    // The flag is the only switch: with it on, the same shape passes.
+    expect(await guardProblems([withDeadline], { allowList })).toEqual([]);
   }, 120_000);
 
   it("an unsound shape is refused even with every flag on and allow-listed", async () => {
@@ -143,9 +145,21 @@ describe("the guard refuses a graph shape injected into the registry", () => {
   it("the Phase 3c fixtures (unknown agent, flags off, not listed) are refused", async () => {
     const problems = await guardProblems([PARALLEL_FIXTURE, DEADLINE_FIXTURE]);
     expect(problems).toContain(`${ref(PARALLEL_FIXTURE)}: not on KNOWN_GRAPH_SHAPES`);
-    // Parallel split/join is executable since PR-3c-2: the parallel fixture is refused for the allow list
-    // (and its unknown agent), never for E-NOT-EXECUTABLE. The deadline flag is still off.
+    // Parallel split/join (PR-3c-2) and stage deadlines (BI-086DC167) are executable: those fixtures are refused for
+    // the allow list (and their unknown agent), never for E-NOT-EXECUTABLE.
     expect(problems).not.toContain(`${ref(PARALLEL_FIXTURE)}: E-NOT-EXECUTABLE/parallel-split-join node:p`);
-    expect(problems).toContain(`${ref(DEADLINE_FIXTURE)}: E-NOT-EXECUTABLE/stage-deadline stage:b`);
+    expect(problems).toContain(`${ref(DEADLINE_FIXTURE)}: not on KNOWN_GRAPH_SHAPES`);
+    expect(problems).not.toContain(`${ref(DEADLINE_FIXTURE)}: E-NOT-EXECUTABLE/stage-deadline stage:b`);
+  }, 120_000);
+
+  it("a hand-declared sub-shape is held to D-10 (PR-3c-5): an unregistered child ref is refused with the flag on (BI-086DC167) and with it off", async () => {
+    const allowList = [{ ref: ref(SUB_SHAPE_FIXTURE), backlogItem: "BI-8875C9DF" }];
+    expect(CONSTRUCT_EXECUTABLE["sub-shape"]).toBe(true);
+    const real = await guardProblems([SUB_SHAPE_FIXTURE], { allowList });
+    expect(real).toContain(`${ref(SUB_SHAPE_FIXTURE)}: D-10 stage:b`);
+    expect(real.some((problem) => problem.includes("E-NOT-EXECUTABLE"))).toBe(false);
+    const off = await guardProblems([SUB_SHAPE_FIXTURE], { allowList, executable: { ...CONSTRUCT_EXECUTABLE, "sub-shape": false } });
+    expect(off).toContain(`${ref(SUB_SHAPE_FIXTURE)}: D-10 stage:b`);
+    expect(off).toContain(`${ref(SUB_SHAPE_FIXTURE)}: E-NOT-EXECUTABLE/sub-shape stage:b`);
   }, 120_000);
 });

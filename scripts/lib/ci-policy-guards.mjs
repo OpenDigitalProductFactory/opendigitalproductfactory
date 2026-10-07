@@ -831,6 +831,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-1229E42C: the installed plugin descriptor carries a literal URL so
         // the desktop app can start sign-in.
         "scripts/hooks/pin-plugin-mcp-url.test.mjs",
+        // BI-16EAAB62: SessionStart names an installed plugin copy that drifted
+        // from the root clone's pack (version, content, loaded connector).
+        "scripts/hooks/plugin-copy-freshness.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/promoter-compose-mounts.test.mjs",

@@ -23,7 +23,7 @@ esac
 exit 0
 `, { mode: 0o755 });
       const result = spawnSync('sh', [fileURLToPath(new URL('./sandbox-entrypoint.sh', import.meta.url))], {
-        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, DPF_SANDBOX_WORKSPACE_ROOT: root, BOOT_LOG: join(root, 'calls'), BOOT_FAIL: failure },
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, DPF_SANDBOX_WORKSPACE_ROOT: root, BOOT_LOG: join(root, 'calls'), BOOT_FAIL: failure, DPF_SANDBOX_DEV_RESTART_LIMIT: '1' },
         encoding: 'utf8', timeout: 5000,
       });
       const calls = readFileSync(join(root, 'calls'), 'utf8').trim().split('\n');
@@ -64,7 +64,7 @@ printf '%s=%s\\n' "$tag" "\${AUTH_SECRET-<unset>}" >> "$BOOT_ENV_LOG"
 exit 0
 `, { mode: 0o755 });
   const run = (shellArgs = []) => {
-    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, DPF_SANDBOX_WORKSPACE_ROOT: workspace, BOOT_ENV_LOG: join(root, 'env-log') };
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, DPF_SANDBOX_WORKSPACE_ROOT: workspace, BOOT_ENV_LOG: join(root, 'env-log'), DPF_SANDBOX_DEV_RESTART_LIMIT: '1' };
     delete env.AUTH_SECRET;
     delete env.NEXTAUTH_SECRET;
     return spawnSync('sh', [...shellArgs, entrypoint], { env: { ...env, ...existingEnv }, encoding: 'utf8', timeout: 5000 });
@@ -148,7 +148,7 @@ test('a docker exec session, started from the container env, never sees the sand
     const containerEnv = { ...process.env };
     delete containerEnv.AUTH_SECRET;
     const boot = spawnSync('sh', [entrypoint], {
-      env: { ...containerEnv, PATH: `${join(fx.root, 'bin')}:${process.env.PATH}`, DPF_SANDBOX_WORKSPACE_ROOT: fx.workspace, BOOT_ENV_LOG: join(fx.root, 'env-log') },
+      env: { ...containerEnv, PATH: `${join(fx.root, 'bin')}:${process.env.PATH}`, DPF_SANDBOX_WORKSPACE_ROOT: fx.workspace, BOOT_ENV_LOG: join(fx.root, 'env-log'), DPF_SANDBOX_DEV_RESTART_LIMIT: '1' },
       encoding: 'utf8', timeout: 5000,
     });
     assert.equal(boot.status, 0, boot.stderr);
@@ -158,7 +158,7 @@ test('a docker exec session, started from the container env, never sees the sand
     const script = readFileSync(entrypoint, 'utf8');
     assert.doesNotMatch(script, /^\s*export\s+AUTH_SECRET\b/m);
     const assignments = script.split('\n').filter((line) => !/^\s*#/.test(line) && /\bAUTH_SECRET=/.test(line));
-    assert.deepEqual(assignments, ['exec env AUTH_SECRET="$(cat "$secret_file")" pnpm --filter web dev'], 'AUTH_SECRET is only ever set by env(1) on the final exec');
+    assert.deepEqual(assignments, ['  env AUTH_SECRET="$(cat "$secret_file")" pnpm --filter web dev &'], 'AUTH_SECRET is only ever set by env(1) on the supervised dev server');
   } finally { fx.cleanup(); }
 });
 
@@ -186,4 +186,59 @@ test('sandbox boot keeps the secret out of git and fails clearly when the worksp
 test('the repository .gitignore, copied into the sandbox workspace at bootstrap, ignores the secret', () => {
   const gitignore = readFileSync(fileURLToPath(new URL('../.gitignore', import.meta.url)), 'utf8').split(/\r?\n/);
   assert.ok(gitignore.includes(SECRET_FILE), `.gitignore must list ${SECRET_FILE}`);
+});
+
+// BI-B4F07CEB: the dev server crashed on a workspace refresh, and because it was
+// the container's main process Docker restarted dpf-sandbox-1, killing every
+// build's in-flight docker exec. The entrypoint now supervises it.
+function superviseFixture(devScript) {
+  const root = mkdtempSync(join(tmpdir(), 'dpf-sandbox-supervise-'));
+  const bin = join(root, 'bin');
+  mkdirSync(bin);
+  writeFileSync(join(root, '.dpf-version'), 'v');
+  writeFileSync(join(bin, 'pnpm'), `#!/bin/sh
+echo "$*" >> "$BOOT_LOG"
+case "$*" in
+  *"web dev"*) ${devScript} ;;
+esac
+exit 0
+`, { mode: 0o755 });
+  return { root, bin, log: join(root, 'calls') };
+}
+const devStarts = (log) => readFileSync(log, 'utf8').split('\n').filter((line) => line === '--filter web dev').length;
+
+test('a crashed dev server is restarted inside the container instead of ending it', { skip: process.platform === 'win32' }, () => {
+  const { root, bin, log } = superviseFixture('exit 1');
+  try {
+    const result = spawnSync('sh', [entrypoint], {
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, DPF_SANDBOX_WORKSPACE_ROOT: root, BOOT_LOG: log, DPF_SANDBOX_DEV_RESTART_LIMIT: '3', DPF_SANDBOX_DEV_RESTART_DELAY: '0' },
+      encoding: 'utf8', timeout: 10000,
+    });
+    assert.equal(devStarts(log), 3, result.stderr);
+    assert.match(result.stderr, /dev server exited \(1\); restarting/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a container stop still ends the entrypoint and its dev server promptly', { skip: process.platform === 'win32' }, async () => {
+  const { root, bin, log } = superviseFixture('sleep 30');
+  try {
+    const { spawn } = await import('node:child_process');
+    const child = spawn('sh', [entrypoint], {
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, DPF_SANDBOX_WORKSPACE_ROOT: root, BOOT_LOG: log },
+      stdio: 'ignore',
+    });
+    const started = Date.now();
+    while (Date.now() - started < 8000) {
+      try { if (devStarts(log) === 1) break; } catch { /* not yet written */ }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.equal(devStarts(log), 1);
+    const exited = new Promise((resolve) => child.on('exit', (code, signal) => resolve({ code, signal })));
+    const stoppedAt = Date.now();
+    child.kill('SIGTERM');
+    const outcome = await exited;
+    assert.ok(Date.now() - stoppedAt < 5000, 'the entrypoint must stop within the container stop grace');
+    assert.ok(outcome.code === 143 || outcome.signal === 'SIGTERM', JSON.stringify(outcome));
+    assert.equal(devStarts(log), 1, 'a stop must not restart the dev server');
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

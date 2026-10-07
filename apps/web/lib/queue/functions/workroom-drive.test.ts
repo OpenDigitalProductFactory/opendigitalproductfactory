@@ -593,9 +593,9 @@ describe("parallel branches: one task per branch under one lease (PR-3c-2)", () 
     }
     expect(h.upserts.filter((entry) => entry.endsWith("@b"))).toHaveLength(1);
     expect(h.upserts.filter((entry) => entry.endsWith("@c"))).toHaveLength(1);
-    // Each latched branch's task is deactivated, and each records its own blocked receipt.
+    // Each latched branch's task is deactivated, and each records its own blocked receipt, in its run (BI-086DC167).
     expect(new Set(h.deactivated)).toEqual(new Set([PRIMARY, branch("c")]));
-    expect(drive(h).receipts).toEqual(expect.arrayContaining([{ stageKey: "b", kind: "blocked" }, { stageKey: "c", kind: "blocked" }]));
+    expect(drive(h).receipts).toEqual(expect.arrayContaining([{ stageKey: "b", kind: "blocked", runKey: CYCLE }, { stageKey: "c", kind: "blocked", runKey: CYCLE }]));
   });
 
   it("a branch latched by writeback does not block the other, which still dispatches", async () => {

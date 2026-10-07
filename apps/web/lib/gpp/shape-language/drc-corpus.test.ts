@@ -14,12 +14,13 @@
 // construct whose Exec flag is off (S-3's unpaired split) also carries
 // E-NOT-EXECUTABLE for it. So each fixture is checked twice: with every flag
 // on (test-only override) it yields exactly its finding; with the real flags
-// it yields its finding plus nothing but E-NOT-EXECUTABLE. The two
-// E-NOT-EXECUTABLE fixtures are the converse: their finding exists only
-// under the real flags. (Parallel split/join became executable in Phase 3c
-// PR-3c-2, and rework edges with refuse routes in PR-3c-3; their fixtures are
-// now pass-parallel-split-join.gpp.json, pass-rework-edge.gpp.json and
-// pass-refuse-edge.gpp.json.)
+// it yields its finding plus nothing but E-NOT-EXECUTABLE. (An
+// E-NOT-EXECUTABLE fixture would be the converse: its finding exists only
+// under the real flags; none is left.) Parallel split/join became executable
+// in Phase 3c PR-3c-2, rework edges with refuse routes in PR-3c-3, stage
+// deadlines (PR-3c-4) and sub-shapes (PR-3c-5) with BI-086DC167; their fixtures are now pass-parallel-split-join.gpp.json,
+// pass-rework-edge.gpp.json, pass-refuse-edge.gpp.json,
+// pass-stage-deadline.gpp.json and pass-sub-shape.gpp.json.
 //
 // C-5 appears on every compile as `not-evaluated`, and never as a pass.
 
@@ -45,12 +46,12 @@ const VIOLATIONS = DOCUMENTS.filter((name) => !name.startsWith("pass-"));
 const PASSING = DOCUMENTS.filter((name) => name.startsWith("pass-"));
 const ALL_ON = Object.fromEntries(GPP_CONSTRUCTS.map((construct) => [construct, true])) as Record<GppConstruct, boolean>;
 
-/** The rules AC-DRC names, plus the two warnings and E-NOT-EXECUTABLE, each covered by a fixture. */
+/** The rules AC-DRC names, plus the two warnings, each covered by a fixture. (E-NOT-EXECUTABLE has none since PR-3c-5.) */
 const COVERED_RULES = [
   "C-1", "C-2", "C-3", "C-4", "C-7", "C-9",
   "S-1", "S-2", "S-3", "S-4", "S-5", "S-6",
-  "D-1", "D-2", "D-3", "D-4", "D-5", "D-6", "D-7", "D-8",
-  "E-NOT-EXECUTABLE", "W-ORPHAN-LAYOUT",
+  "D-1", "D-2", "D-3", "D-4", "D-5", "D-6", "D-7", "D-8", "D-9", "D-10",
+  "W-ORPHAN-LAYOUT",
 ];
 const WARNING_RULES = new Set(["C-9", "W-ORPHAN-LAYOUT"]);
 
@@ -85,21 +86,24 @@ describe("the corpus", () => {
   it("expected.json lists exactly the violation fixtures, and they cover every rule once", () => {
     expect(Object.keys(EXPECTED).sort()).toEqual(VIOLATIONS);
     const rules = VIOLATIONS.map((name) => EXPECTED[name]?.rule);
-    for (const rule of COVERED_RULES.filter((rule) => rule !== "E-NOT-EXECUTABLE")) {
+    for (const rule of COVERED_RULES) {
       expect(rules.filter((candidate) => candidate === rule), rule).toHaveLength(1);
     }
     expect(new Set(rules)).toEqual(new Set(COVERED_RULES));
   });
 
-  // GPP Phase 3c: parallel split/join (PR-3c-2) and rework edges with refuse routes (PR-3c-3) are executable,
-  // so their fixtures are now passing documents; stage deadline and sub-shape keep their E-NOT-EXECUTABLE fixture.
-  it("has one E-NOT-EXECUTABLE fixture for each of stage deadline and sub-shape", () => {
-    const notExecutable = VIOLATIONS.filter((name) => EXPECTED[name]?.rule === "E-NOT-EXECUTABLE");
-    expect(PASSING).toEqual(expect.arrayContaining(["pass-parallel-split-join.gpp.json", "pass-rework-edge.gpp.json", "pass-refuse-edge.gpp.json"]));
-    expect(notExecutable.map((name) => [name, EXPECTED[name]?.construct])).toEqual([
-      ["e-not-executable-stage-deadline.gpp.json", "stage-deadline"],
-      ["e-not-executable-sub-shape.gpp.json", "sub-shape"],
-    ]);
+  // GPP Phase 3c: parallel split/join (PR-3c-2), rework edges with refuse routes (PR-3c-3), stage deadlines
+  // (PR-3c-4) and sub-shapes (PR-3c-5) are executable, so every former E-NOT-EXECUTABLE fixture is now a passing
+  // document; not-executable.test.ts proves the kill switch brings each refusal back.
+  it("has no E-NOT-EXECUTABLE fixture: every gated construct's fixture passes", () => {
+    expect(VIOLATIONS.filter((name) => EXPECTED[name]?.rule === "E-NOT-EXECUTABLE")).toEqual([]);
+    expect(PASSING).toEqual(expect.arrayContaining([
+      "pass-parallel-split-join.gpp.json",
+      "pass-rework-edge.gpp.json",
+      "pass-refuse-edge.gpp.json",
+      "pass-stage-deadline.gpp.json",
+      "pass-sub-shape.gpp.json",
+    ]));
   });
 
   it("the test-only ratification table is well-formed and names only test scopes", () => {

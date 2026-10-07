@@ -65,6 +65,13 @@ export type StageEvidenceInput = {
    * the function behaves exactly as before.
    */
   iteration?: number;
+  /**
+   * Graph shapes only (BI-086DC167): the run the marking belongs to. When
+   * given, an existing receipt short-circuits only within this run, and the
+   * earned receipt carries it, so the next run never replays it. Omitted, the
+   * function behaves exactly as before.
+   */
+  runKey?: string;
 };
 
 /**
@@ -100,7 +107,7 @@ export function stageHasCompletingEvidence(input: StageEvidenceInput): boolean {
  *  from #5166's `blocked`, which records a dispatch that produced no writeback. */
 export const STAGE_EVIDENCE_RECEIPT_KIND = "stage-evidence-recorded";
 
-export type StageReceipt = { stageKey: string; kind: string; iteration?: number };
+export type StageReceipt = { stageKey: string; kind: string; iteration?: number; runKey?: string };
 
 /**
  * The room's receipts after reading its recorded evidence.
@@ -113,16 +120,17 @@ export function earnEvidenceReceipts(input: StageEvidenceInput & {
 }): readonly StageReceipt[] {
   if (!input.stageKey) return input.existing;
   const iteration = input.iteration;
+  const runKey = input.runKey;
   const done = iteration === undefined
     ? input.existing.some((receipt) => isCompletingWorkroomDriveReceipt(receipt, input.stageKey!))
-    : input.existing.some((receipt) => isCompletingWorkroomDriveReceiptAt(receipt, input.stageKey!, iteration));
+    : input.existing.some((receipt) => isCompletingWorkroomDriveReceiptAt(receipt, input.stageKey!, iteration, runKey));
   if (done) return input.existing;
   if (!stageHasCompletingEvidence(input)) return input.existing;
   const result = appendCompletingWorkroomDriveReceipt(
     input.existing,
     iteration === undefined
       ? { stageKey: input.stageKey, kind: STAGE_EVIDENCE_RECEIPT_KIND }
-      : { stageKey: input.stageKey, kind: STAGE_EVIDENCE_RECEIPT_KIND, iteration },
+      : { stageKey: input.stageKey, kind: STAGE_EVIDENCE_RECEIPT_KIND, iteration, ...(runKey !== undefined ? { runKey } : {}) },
   );
   return result.ok ? result.data : input.existing;
 }

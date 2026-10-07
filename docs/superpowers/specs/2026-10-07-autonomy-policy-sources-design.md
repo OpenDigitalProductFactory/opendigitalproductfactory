@@ -97,6 +97,15 @@ With the WWMD baseline in place, Build Studio's standard delivery pattern (ideat
 - Seed-fit guard: the WWMD baseline covers every platform-development activity class the autonomy code names.
 - Live acceptance: on this install, a Build Studio build's eligibility no longer shows `regulatory_ceiling_requires_human`. A work-pattern promotion for the standard delivery pattern reaches `activate` rather than `escalate`.
 
+## Implementation status
+
+- **Slice 1 (BI-E30C0F4F):**
+  - The WWMD baseline is seeded on every install and every upgrade (`packages/db/src/seed-autonomy-policy-baseline.ts`). It is versioned, and it never touches a lineage an operator has taken over.
+  - The policy-gap rule is in the resolver (`apps/web/lib/autonomy/regulatory-ceiling.ts`).
+  - The human-control basis guard is `assertHumanControlHasBasis`.
+  - Build eligibility treats `supervised` as satisfied by the build's independent review stage. A person is engaged only on a policy that requires human control or caps the work at `propose` or below.
+- **Slice 2:** the WWWD derivation catalogue and setup-completion wiring, plus reporting the `policy-gap-report` evidence to the compliance coworker.
+
 ## Operator decisions (2026-10-07)
 
 1. **WWMD baseline ceiling for platform development: `autopilot`.** Every gate, CI and the independent AI review still run; only human approval is removed.

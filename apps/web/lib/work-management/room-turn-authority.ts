@@ -159,6 +159,20 @@ function boundaryPermitsHandsOn(boundary: ProactivityActionBoundary | null): boo
 }
 
 /**
+ * The room's action boundary: its own declaration, then its collaboration
+ * shape's bias, then the decreed platform default. One precedence for the turn
+ * authority and for the PR follow-through (BI-88341B5D), so they never disagree.
+ */
+export function resolveRoomActionBoundary(
+  room: { declaredActionBoundary: ProactivityActionBoundary | null; shapeActionBoundary: ProactivityActionBoundary | null } | null,
+  platformDefaultActionBoundary: ProactivityActionBoundary | null,
+): ProactivityActionBoundary | null {
+  return room
+    ? room.declaredActionBoundary ?? room.shapeActionBoundary ?? platformDefaultActionBoundary
+    : platformDefaultActionBoundary;
+}
+
+/**
  * Pure derivation. Order of authority, tighten-only:
  *   web:      standing `web_search` grant AND (no room surface OR room surface carries it)
  *   hands-on: the room's action boundary (declared → shape) is propose/preauthorized;
@@ -192,9 +206,7 @@ export function deriveRoomTurnAuthority(facts: RoomTurnAuthorityFacts): RoomTurn
     externalAccess = { enabled: true, reason: "web-search-grant" };
   }
 
-  const actionBoundary: ProactivityActionBoundary | null = room
-    ? room.declaredActionBoundary ?? room.shapeActionBoundary ?? facts.platformDefaultActionBoundary
-    : facts.platformDefaultActionBoundary;
+  const actionBoundary = resolveRoomActionBoundary(room, facts.platformDefaultActionBoundary);
 
   let handsOn: RoomTurnAuthority["handsOn"];
   if (room && (!memberOfRoom || observerOnly)) {

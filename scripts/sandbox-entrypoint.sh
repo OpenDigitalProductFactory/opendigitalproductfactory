@@ -53,7 +53,30 @@ echo '[sandbox-start] Converging dependencies for the current workspace'
 pnpm install --prefer-offline --frozen-lockfile --config.confirmModulesPurge=false --ignore-scripts
 pnpm --filter @dpf/db exec prisma generate --schema prisma/schema
 rm -rf apps/web/.next/dev/cache
-# `env` scopes the secret to the dev server in every POSIX shell, including
-# the image's busybox ash; nothing else in this script or any `docker exec`
-# session inherits it.
-exec env AUTH_SECRET="$(cat "$secret_file")" pnpm --filter web dev
+
+# BI-B4F07CEB: supervise the dev server instead of exec-ing it. As the
+# container's main process, a dev-server crash (it crashes when a workspace
+# refresh changes the source under it) ended the container: Docker restarted
+# dpf-sandbox-1 and every build's in-flight docker exec died with it. Now a
+# crash restarts the server in place; a container stop (TERM/INT) still ends
+# both promptly. DPF_SANDBOX_DEV_RESTART_LIMIT bounds restarts (unset: none).
+dev_pid=
+trap 'trap - TERM INT; [ -z "$dev_pid" ] || kill -TERM "$dev_pid" 2>/dev/null; [ -z "$dev_pid" ] || wait "$dev_pid" 2>/dev/null; exit 143' TERM INT
+starts=0
+while :; do
+  # `env` scopes the sandbox's own secret (BI-F1C680C7) to the dev server in
+  # every POSIX shell, including the image's busybox ash; nothing else in this
+  # script or any `docker exec` session inherits it. Re-read on each restart.
+  env AUTH_SECRET="$(cat "$secret_file")" pnpm --filter web dev &
+  dev_pid=$!
+  status=0
+  wait "$dev_pid" || status=$?
+  dev_pid=
+  starts=$((starts + 1))
+  if [ -n "${DPF_SANDBOX_DEV_RESTART_LIMIT:-}" ] && [ "$starts" -ge "$DPF_SANDBOX_DEV_RESTART_LIMIT" ]; then
+    exit "$status"
+  fi
+  echo "[sandbox-start] dev server exited ($status); restarting" >&2
+  rm -rf apps/web/.next/dev/cache
+  sleep "${DPF_SANDBOX_DEV_RESTART_DELAY:-2}"
+done

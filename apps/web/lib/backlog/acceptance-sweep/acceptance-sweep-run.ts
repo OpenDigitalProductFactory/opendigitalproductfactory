@@ -1,4 +1,8 @@
+import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
+
 import type { OwedAcceptance } from "./owed-acceptance";
+import type { CloseOutcome } from "./acceptance-sweep-close";
+import type { CloseAuthorisation, CloseDisabledReason } from "./close-authorisation";
 import { summarizePoolAge, type AcceptancePoolAge, type AcceptancePoolAgeSummary } from "./acceptance-pool-age";
 import type { AcceptanceSweepPage, AcceptanceSweepPageItem } from "./acceptance-sweep-page";
 
@@ -11,8 +15,11 @@ import type { AcceptanceSweepPage, AcceptanceSweepPageItem } from "./acceptance-
 // projection where it changed, and write one summary. Every I/O step is a port
 // so the run is tested without a database; acceptance-sweep-task.ts binds them.
 //
-// Nothing here closes or routes an item. Closing stays the terminal
-// transition's decision, made through its gate; routing is phase 3
+// Closing (BI-45D3BBF4): an item whose completion verdict is already
+// "allowed" is closed through the terminal transition, and only when a
+// recorded operator pre-authorisation is in force, at most `limit` per run.
+// The transition re-checks its own gate, so the sweep relaxes nothing; with no
+// authorisation it closes nothing and the summary says why. Routing is phase 3
 // (BI-C1781121) and stays off until it lands.
 
 export type AcceptanceSweepConfig = {
@@ -23,6 +30,9 @@ export type AcceptanceSweepConfig = {
   recordedByAgentId: string;
 };
 
+/** The owed projection, with the completion decision it was computed from. */
+export type SweepEvaluation = OwedAcceptance & { decision?: InitiativeReadinessDecision };
+
 export type AcceptanceSweepPorts = {
   now: Date;
   loadPoolAges(): Promise<Map<string, AcceptancePoolAge>>;
@@ -30,7 +40,15 @@ export type AcceptanceSweepPorts = {
   loadLastCursor(): Promise<string | null>;
   selectPage(args: { pageSize: number; cursor: string | null }): Promise<AcceptanceSweepPage>;
   /** The item's owed projection, or null when its readiness cannot be computed. */
-  evaluate(item: AcceptanceSweepPageItem): Promise<OwedAcceptance | null>;
+  evaluate(item: AcceptanceSweepPageItem): Promise<SweepEvaluation | null>;
+  /** The operator pre-authorisation in force for this run, checked against current state. */
+  resolveCloseAuthorisation(): Promise<CloseAuthorisation>;
+  /** Close one item through the governed terminal transition. */
+  close(
+    item: AcceptanceSweepPageItem,
+    decision: InitiativeReadinessDecision,
+    authorisation: Extract<CloseAuthorisation, { state: "enabled" }>,
+  ): Promise<CloseOutcome>;
   recordSnapshot(item: AcceptanceSweepPageItem, projection: OwedAcceptance): Promise<{ written: boolean }>;
   recordRun(summary: AcceptanceSweepSummary): Promise<{ activityId: string }>;
 };
@@ -67,7 +85,26 @@ export type AcceptanceSweepSummary = {
   /** Design §7: the revisit period, stated so a pool past the ceiling stays visible. */
   revisit: { poolSize: number; pageSize: number; runsPerRevisit: number; exceedsTrendWindow: boolean };
   routing: { enabled: false; routed: 0 };
+  /** BI-45D3BBF4: closures made under the operator pre-authorisation. */
+  closing: AcceptanceSweepClosing;
   cursor: string | null;
+};
+
+export type AcceptanceSweepClosing = {
+  enabled: boolean;
+  /** Why nothing was closed, when closing is off. */
+  disabledReason: CloseDisabledReason | null;
+  because: string | null;
+  /** Who recorded the pre-authorisation the closures acted under, and when. */
+  authorisedBy: { userId: string; at: string } | null;
+  limit: number;
+  attempted: number;
+  closed: string[];
+  refused: Array<{ itemId: string; code: string }>;
+  skipped: Array<{ itemId: string; reason: string }>;
+  errored: Array<{ itemId: string; message: string }>;
+  /** Closable items left for a later run because the bound was reached. */
+  deferredByLimit: string[];
 };
 
 function increment(counts: Record<string, number>, key: string): void {
@@ -81,6 +118,9 @@ function headline(summary: Omit<AcceptanceSweepSummary, "headline">, agedDays: n
     `${pool.agedOverTrend} over ${pool.trendDays} days`,
     `${pool.ageBasisCreated} aged from creation (no entry record)`,
     `page of ${page.evaluated}: ${page.snapshotsWritten} changed, ${page.closable} closable, ${page.owned} with an owner, ${page.unroutableItems} unroutable`,
+    summary.closing.enabled
+      ? `${summary.closing.closed.length} closed under operator pre-authorisation`
+      : `closing off (${summary.closing.disabledReason})`,
   ].join("; ").slice(0, 500);
 }
 
@@ -115,6 +155,25 @@ export async function runAcceptanceSweep(
   };
   const listed: AcceptanceSweepSummary["items"] = { closable: [], aged: [], unroutable: [], readinessUnavailable: [] };
 
+  const authorisation = await ports.resolveCloseAuthorisation().catch((error: unknown): CloseAuthorisation => ({
+    state: "disabled",
+    reason: "unavailable",
+    because: `The pre-authorisation could not be read: ${error instanceof Error ? error.message : "unknown error"}`,
+  }));
+  const closing: AcceptanceSweepClosing = {
+    enabled: authorisation.state === "enabled",
+    disabledReason: authorisation.state === "disabled" ? authorisation.reason : null,
+    because: authorisation.state === "disabled" ? authorisation.because : null,
+    authorisedBy: authorisation.state === "enabled" ? { userId: authorisation.setByUserId, at: authorisation.setAt } : null,
+    limit: authorisation.state === "enabled" ? Math.min(authorisation.limit, Math.max(0, config.pageSize)) : 0,
+    attempted: 0,
+    closed: [],
+    refused: [],
+    skipped: [],
+    errored: [],
+    deferredByLimit: [],
+  };
+
   for (const item of items) {
     const itemAge = ages.get(item.id);
     if (itemAge) {
@@ -137,6 +196,7 @@ export async function runAcceptanceSweep(
     if (projection.closable) {
       page.closable += 1;
       listed.closable.push(item.itemId);
+      await closeIfAuthorised(item, projection, authorisation, closing, ports);
     }
     if (projection.owner) page.owned += 1;
     if (projection.unroutable.length > 0) {
@@ -164,11 +224,41 @@ export async function runAcceptanceSweep(
       exceedsTrendWindow: runsPerRevisit > config.trendDays,
     },
     routing: { enabled: false, routed: 0 },
+    closing,
     cursor: nextCursor,
   };
   const summary: AcceptanceSweepSummary = { ...withoutHeadline, headline: headline(withoutHeadline, config.agedDays) };
   await ports.recordRun(summary);
   return summary;
+}
+
+/**
+ * Close one closable item when the pre-authorisation is in force and the bound
+ * allows. Only a decision whose own verdict is "allowed" is ever passed on.
+ */
+async function closeIfAuthorised(
+  item: AcceptanceSweepPageItem,
+  evaluation: SweepEvaluation,
+  authorisation: CloseAuthorisation,
+  closing: AcceptanceSweepClosing,
+  ports: AcceptanceSweepPorts,
+): Promise<void> {
+  if (authorisation.state !== "enabled") return;
+  const decision = evaluation.decision;
+  if (!evaluation.closable || decision?.verdict !== "allowed") return;
+  if (closing.attempted >= closing.limit) {
+    closing.deferredByLimit.push(item.itemId);
+    return;
+  }
+  closing.attempted += 1;
+  try {
+    const outcome = await ports.close(item, decision, authorisation);
+    if (outcome.outcome === "closed") closing.closed.push(item.itemId);
+    else if (outcome.outcome === "refused") closing.refused.push({ itemId: item.itemId, code: outcome.code });
+    else closing.skipped.push({ itemId: item.itemId, reason: outcome.reason });
+  } catch (error) {
+    closing.errored.push({ itemId: item.itemId, message: (error instanceof Error ? error.message : "unknown error").slice(0, 300) });
+  }
 }
 
 /** When the page was truncated, the cursor is the last snapshotted item actually evaluated. */

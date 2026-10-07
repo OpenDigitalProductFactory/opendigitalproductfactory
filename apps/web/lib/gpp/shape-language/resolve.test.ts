@@ -167,8 +167,10 @@ describe("resolveShapeDocument returns facts from its injected sources", () => {
     document.stages[1].binding = { id: "send-out", version: 1, enforcement: "environment", egress: ["send_customer_email", "fax_it"] };
     const { sources, calls } = fakeSources();
     const [draft, send] = (await resolveShapeDocument(document, sources)).stages;
-    expect(draft.subShape).toEqual({ ref: "missing-shape@2.0.0", exists: false });
-    expect(send.subShape).toEqual({ ref: "inquiry-response-watch@1.0.0", exists: true });
+    // Without shapeDefinition (GPP Phase 3c PR-3c-5) the child's ceiling is not read. The worked example is itself
+    // inquiry-response-watch@1.0.0, so a stage of it calling that ref calls itself: the cycle walk names it.
+    expect(draft.subShape).toEqual({ ref: "missing-shape@2.0.0", exists: false, cycle: null });
+    expect(send.subShape).toEqual({ ref: "inquiry-response-watch@1.0.0", exists: true, cycle: ["inquiry-response-watch@1.0.0", "inquiry-response-watch@1.0.0"] });
     expect(send.gate).toEqual({
       elementId: "gate:send",
       resolver: { module: "lib/tak/alignment-tool-gate", exportName: "runTakAlignmentGate", exists: true },
@@ -195,5 +197,38 @@ describe("resolveShapeDocument returns facts from its injected sources", () => {
     expect(JSON.stringify(WORKED_EXAMPLE)).toBe(before);
     const principal = resolution.stages[0].principal;
     expect(principal.kind === "agent" && principal.grants).not.toBe(grants);
+  });
+});
+
+// GPP Phase 3c PR-3c-5 (BI-8875C9DF): the facts D-9 and D-10 read.
+describe("sub-shape facts: the child's ceiling and the call-graph cycle", () => {
+  const definitions: Record<string, { grants: string[]; stages: Array<{ key: string; tools?: string[]; subShape?: string }> }> = {
+    "child@1.0.0": { grants: ["tool:read"], stages: [{ key: "x", tools: ["list_storefront_activity"] }, { key: "y", subShape: "grandchild@1.0.0" }] },
+    "grandchild@1.0.0": { grants: [], stages: [{ key: "z" }] },
+    "loop-a@1.0.0": { grants: [], stages: [{ key: "p", subShape: "loop-b@1.0.0" }] },
+    "loop-b@1.0.0": { grants: [], stages: [{ key: "q", subShape: "loop-a@1.0.0" }] },
+  };
+  const sources = () => fakeSources({ shapeVersionExists: (ref) => ref in definitions, shapeDefinition: (ref) => definitions[ref] ?? null }).sources;
+  const calling = (key: string, ref: string) => {
+    const document = clone(WORKED_EXAMPLE);
+    document.key = key;
+    document.stages[0].subShape = ref;
+    return document;
+  };
+
+  it("a readable child gives its grants and every stage tool; no cycle", async () => {
+    const [stage] = (await resolveShapeDocument(calling("parent", "child@1.0.0"), sources())).stages;
+    expect(stage.subShape).toEqual({ ref: "child@1.0.0", exists: true, grants: ["tool:read"], tools: [{ stageKey: "x", toolName: "list_storefront_activity" }], cycle: null });
+  });
+
+  it("a call path that returns to a shape already on it is the cycle, through the registry or back to the document itself", async () => {
+    expect((await resolveShapeDocument(calling("parent", "loop-a@1.0.0"), sources())).stages[0].subShape?.cycle)
+      .toEqual(["parent@1.0.0", "loop-a@1.0.0", "loop-b@1.0.0", "loop-a@1.0.0"]);
+    expect((await resolveShapeDocument(calling("loop-b", "loop-a@1.0.0"), sources())).stages[0].subShape?.cycle)
+      .toEqual(["loop-b@1.0.0", "loop-a@1.0.0", "loop-b@1.0.0"]);
+  });
+
+  it("an unresolvable ref carries no ceiling", async () => {
+    expect((await resolveShapeDocument(calling("parent", "nowhere@1.0.0"), sources())).stages[0].subShape).toEqual({ ref: "nowhere@1.0.0", exists: false, cycle: null });
   });
 });
