@@ -27,6 +27,10 @@
     "rule": "D-1",
     "elementId": "stage:a"
   },
+  "d-10-sub-shape-unresolved.gpp.json": {
+    "rule": "D-10",
+    "elementId": "stage:a"
+  },
   "d-2-shadow-gate-into-oai.gpp.json": {
     "rule": "D-2",
     "elementId": "gate:a"
@@ -54,6 +58,10 @@
   "d-8-unratified-gate.gpp.json": {
     "rule": "D-8",
     "elementId": "gate:a"
+  },
+  "d-9-sub-shape-widening.gpp.json": {
+    "rule": "D-9",
+    "elementId": "stage:a"
   },
   "e-not-executable-sub-shape.gpp.json": {
     "rule": "E-NOT-EXECUTABLE",

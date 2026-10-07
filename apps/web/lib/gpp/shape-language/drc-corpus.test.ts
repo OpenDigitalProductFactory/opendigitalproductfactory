@@ -50,7 +50,7 @@ const ALL_ON = Object.fromEntries(GPP_CONSTRUCTS.map((construct) => [construct, 
 const COVERED_RULES = [
   "C-1", "C-2", "C-3", "C-4", "C-7", "C-9",
   "S-1", "S-2", "S-3", "S-4", "S-5", "S-6",
-  "D-1", "D-2", "D-3", "D-4", "D-5", "D-6", "D-7", "D-8",
+  "D-1", "D-2", "D-3", "D-4", "D-5", "D-6", "D-7", "D-8", "D-9", "D-10",
   "E-NOT-EXECUTABLE", "W-ORPHAN-LAYOUT",
 ];
 const WARNING_RULES = new Set(["C-9", "W-ORPHAN-LAYOUT"]);
