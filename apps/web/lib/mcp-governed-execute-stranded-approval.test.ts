@@ -8,9 +8,10 @@
 // compare-and-set, and every retry read "the approval was already used by
 // another run of this exact request" until the envelope expired (up to 7 days).
 //
-// The envelope store here is in memory, but finalisation and the settled-outcome
-// lookup are the REAL functions from authority-approval-envelope.ts over a fake
-// db, and the reserve is the same compare-and-set the gate runs against Prisma.
+// The envelope store here is in memory, but finalisation, release and the
+// settled-outcome lookup are the REAL functions from
+// authority-approval-envelope.ts over a fake db, and the reserve is the same
+// compare-and-set the gate runs against Prisma.
 //
 // Two outcomes, decided by the refusal's existing disposition
 // (governed-rejection-disposition.ts):
@@ -19,9 +20,10 @@
 //     the recorded outcome, and a retry gets that outcome back
 //     (AC-RESERVED-REFUSAL-FINALISED, AC-NO-STRANDED-RETRY);
 //   • no answer reached ("inconclusive": receipt_reservation_failed, the
-//     approved task could not be resumed, an exception before the tool ran) or
-//     an input the caller can obtain ("awaiting-input": permit_required)
-//     releases the reservation, because nothing ran and the person's approval
+//     approved task could not be resumed, an exception before the tool ran),
+//     an input the caller can obtain ("awaiting-input": permit_required) or a
+//     person still to rule ("awaiting-person": alignment_escalation_required,
+//     precondition_escalation_required) releases the reservation, because nothing ran and the person's approval
 //     still stands — the retry runs the call once (AC-RESERVED-REFUSAL-RELEASED,
 //     AC-NO-STRANDED-RETRY).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,12 +32,19 @@ import {
   finalizeAuthorityApprovalEnvelope,
   findApprovedAuthorityEnvelope,
   findExecutedAuthorityOutcome,
+  releaseAuthorityApprovalReservation,
 } from "./coworker/authority-approval-envelope";
 import {
   buildCoworkerApprovalBinding,
   fingerprintCoworkerApprovalBinding,
   type CoworkerAuthorityInput,
 } from "./govern/authority/coworker-authority-decision";
+import {
+  handApprovalToToolRun,
+  newApprovalRun,
+  releaseUnsettledApproval,
+  settleApprovalRefusal,
+} from "./govern/authority/approval-reservation";
 import { setBindingEnforcementOverrideForTests } from "./gpp/binding-enforcement";
 import { GPP_BINDINGS, setGppBindingsOverrideForTests, type GppBinding } from "./gpp/bindings";
 import type { GppPermitStore, PermitRow } from "./gpp/permit-store";
@@ -108,7 +117,8 @@ let base: CoworkerAuthorityInput;
 
 /** Just enough of Prisma's where-matching for the three real envelope functions. */
 function matches(value: unknown, cond: unknown): boolean {
-  if (cond && typeof cond === "object" && !(cond instanceof Date)) {
+  if (cond instanceof Date) return value instanceof Date && value.getTime() === cond.getTime();
+  if (cond && typeof cond === "object") {
     const c = cond as Record<string, unknown>;
     if ("in" in c) return (c.in as unknown[]).includes(value);
     if ("not" in c) return value !== c.not;
@@ -155,12 +165,13 @@ function install(overrides: Parameters<typeof _setGovernanceForTests>[0] = {}): 
     authorityApprovalEnvelopeFinalize: finalize as never,
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
     // The gate's own compare-and-set (coworker-tool-authority-gate.ts reserveApprovedEnvelope).
-    policyAuthorityEnvelopeReserve: async (id) => {
+    policyAuthorityEnvelopeReserve: async (id, reservedAt) => {
       const result = await fakeDb.coworkerActionEnvelope.updateMany({
-        where: { id, status: "approved", resolvedAt: null }, data: { resolvedAt: new Date() },
+        where: { id, status: "approved", resolvedAt: null }, data: { resolvedAt: reservedAt },
       });
       return result.count === 1;
     },
+    authorityApprovalReservationRelease: (id, reservedAt) => releaseAuthorityApprovalReservation(id, reservedAt, fakeDb as never),
     authorityExecutedOutcome: (binding) => findExecutedAuthorityOutcome(binding, new Date(), fakeDb as never),
     toolExecutionCreate: async (data) => {
       const row = { ...data, id: `exec-${audits.length + 1}` };
@@ -275,6 +286,7 @@ describe("BI-5B34D277: a settled refusal after reservation finalises the approva
       success: false, error: "approval_outcome_failed",
       data: { envelopeId: ENVELOPE_ID, recordedError: refusal },
     });
+    expect(retry.message).toContain("refused before it ran");
     expect(execute).not.toHaveBeenCalled();
     expect(envelopeCreate).not.toHaveBeenCalled();
   });
@@ -373,5 +385,105 @@ describe("BI-5B34D277: a refusal that reached no verdict releases the reservatio
     expect(retry.message ?? "").not.toContain(ALREADY_USED);
     expect(retry.success).toBe(true);
     expect(envelope.status).toBe("executed");
+  });
+
+  const escalations: Array<[string, string, () => void]> = [
+    ["the WWWD alignment gate escalates", "alignment_escalation_required", () => install({
+      alignmentGate: async () => ({ ...(await alignment("approve")()), verdict: "escalate" as const }),
+    })],
+    ["the precondition ordering gate escalates", "precondition_escalation_required", () => {
+      tool = { ...PRECONDITION_TOOL };
+      seed();
+      install({
+        preconditionGate: async () => ({
+          verdict: "escalate" as const, rationale: "a person must confirm the order",
+          checks: [{ key: "employee-identity", coherent: false, satisfied: false, evidenceRefs: ["ea:value-stream:onboarding:identity", "prisma:model:EmployeeProfile#employeeId"] }],
+        }),
+      });
+    }],
+  ];
+
+  it.each(escalations)("AC-RESERVED-REFUSAL-RELEASED + AC-NO-STRANDED-RETRY: %s", async (_label, refusal, arrange) => {
+    arrange();
+    const refused = await call();
+    expect(refused).toMatchObject({ success: false, error: refusal });
+    expect({ status: envelope.status, resolvedAt: envelope.resolvedAt }).toEqual({ status: "approved", resolvedAt: null });
+
+    // The person rules, the gate now approves: the same approval runs the call once.
+    install({ preconditionGate: async () => ({ verdict: "approve" as const, rationale: "confirmed", checks: [] }) });
+    const retry = await call();
+    expect(retry.message ?? "").not.toContain(ALREADY_USED);
+    expect(retry.success).toBe(true);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(envelope.status).toBe("executed");
+  });
+});
+
+describe("BI-5B34D277: a lost reservation returns the winner's recorded outcome", () => {
+  it("a run that loses the compare-and-set to a run that already settled gets that outcome, not \"already used\"", async () => {
+    // Another run reserved and is mid-flight: this one loses and, with nothing settled yet, is told so.
+    envelope.resolvedAt = new Date();
+    const racing = await call();
+    expect(racing.message).toContain(ALREADY_USED);
+
+    // That run finished: its executed outcome is the answer, without running again.
+    // The resolver still sees `approved` for a moment (a stale read), so the gate reaches the reserve.
+    audits.push({ id: "exec-winner", envelopeId: ENVELOPE_ID, success: true, toolName: TOOL, result: { success: true, message: "created", entityId: "DP-1" } });
+    install({
+      resolveCoworkerAuthorityInput: async () => ({
+        ...base,
+        approval: { envelopeId: ENVELOPE_ID, status: "approved", expiresAt: envelope.expiresAt, binding: buildCoworkerApprovalBinding(base) },
+      }),
+    });
+    envelope.status = "executed";
+    const late = await call();
+    expect(late).toMatchObject({ success: true, entityId: "DP-1", governance: { approvalReplayOf: ENVELOPE_ID } });
+    expect(late.message).not.toContain(ALREADY_USED);
+    expect(execute).not.toHaveBeenCalled();
+  });
+});
+
+describe("BI-5B34D277: a run settles its approval at most once", () => {
+  it("the success path finalises once and never releases", async () => {
+    const release = vi.fn(async () => undefined);
+    install({ authorityApprovalReservationRelease: release });
+    await call();
+    expect(finalize).toHaveBeenCalledTimes(1);
+    expect(release).not.toHaveBeenCalled();
+  });
+
+  it("a settled refusal finalises once and never releases", async () => {
+    const release = vi.fn(async () => undefined);
+    install({
+      authorityApprovalReservationRelease: release,
+      lifecycleHooks: [{ id: "deny-all", onPreToolUse: async () => ({ decision: "deny" as const, reason: "blocked by hook" }) }],
+    });
+    await call();
+    expect(finalize).toHaveBeenCalledTimes(1);
+    expect(finalize).toHaveBeenCalledWith(ENVELOPE_ID, false);
+    expect(release).not.toHaveBeenCalled();
+  });
+
+  it("once the tool is handed the approval, an escaping exception never releases it", async () => {
+    const release = vi.fn(async () => undefined);
+    install({ authorityApprovalReservationRelease: release });
+    const run = newApprovalRun();
+    run.reservation = { envelopeId: ENVELOPE_ID, reservedAt: new Date() };
+    handApprovalToToolRun(run);
+    await releaseUnsettledApproval(run, TOOL);
+    await settleApprovalRefusal(run, TOOL, { success: false, error: "hook_denied", message: "blocked", governance: { rejected: "hook_denied" } });
+    expect(release).not.toHaveBeenCalled();
+    expect(finalize).not.toHaveBeenCalled();
+  });
+
+  it("a refusal settles once: a later exception does not release what was finalised", async () => {
+    const release = vi.fn(async () => undefined);
+    install({ authorityApprovalReservationRelease: release });
+    const run = newApprovalRun();
+    run.reservation = { envelopeId: ENVELOPE_ID, reservedAt: new Date() };
+    await settleApprovalRefusal(run, TOOL, { success: false, error: "hook_denied", message: "blocked", governance: { rejected: "hook_denied" } });
+    await releaseUnsettledApproval(run, TOOL);
+    expect(finalize).toHaveBeenCalledTimes(1);
+    expect(release).not.toHaveBeenCalled();
   });
 });
