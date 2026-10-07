@@ -60,12 +60,22 @@ These callers use it instead of their own lists:
 
 ### 2. Per-service recreate class (OBJ-STATEFUL)
 
-Add `recreateClass` to every service in `scripts/capability-service-catalog.generated.json`, generated from the catalog source:
-- **`stateless`:** recreate whenever the config hash differs. Covers `portal-tls`, the exporters, `alloy`, `grafana`, `prometheus`, `loki` (its data is a volume, and recreate does not touch volumes), `step-ca`, `inngest`, and the edge services.
-- **`data-owner`:** `postgres` and `redis`, plus any service whose `canonicalDataOwner` is itself and whose `backupPolicy` is `included` or `separate-required`. These recreate only when their config hash differs, and only in step 3c (below).
-- **`managed`:** `portal` and `sandbox`, which keep their existing dedicated steps.
+Each service declares its class on itself, as a compose label in the file that defines it:
 
-`portal-tls`, `step-ca` and the edge services are added to the catalog. A contract test fails when a service in any shipped compose file has no catalog entry and class. That also closes the gap that let `portal-tls` go uncatalogued.
+```yaml
+labels:
+  dpf.recreate-class: stateless   # or data-owner, managed
+```
+
+The promoter reads the label from the rendered config it already produces (`docker compose config --format json`). Amended 2026-10-06 by WWMD `DI-3A94F2D28550` (high confidence, margin 2.65), replacing this spec's first proposal of a catalog field. The capability catalog models only capability-projected services in the base, macOS and Linux files. Activation-overlay services such as `portal-tls`, `step-ca` and the edge nodes are switched on by `.env` markers and would have needed a second kind of catalog entry or a parallel registry.
+
+- **`stateless`:** recreate whenever the config hash differs. Covers `portal-tls`, the exporters, `alloy`, `grafana`, `prometheus`, `loki` (its data is a volume, and recreate does not touch volumes), `inngest`, `adp`, `browser-use`, `dpf-tts`, `ollama` and the edge services.
+- **`data-owner`:** `postgres`, `sandbox-postgres`, `dev-postgres`, `redis` and `step-ca` (the certificate authority's keys). These recreate only when their config hash differs, and only in step 3c (below).
+- **`managed`:** `portal`, `sandbox`, the one-shot init jobs, the promoter, and the dev, test and local-CI portals. Each keeps its own lifecycle; convergence leaves them alone.
+
+`scripts/check-no-unclassified-compose-services.mjs` (run by the repo guard loop) fails when any service in any shipped `docker-compose*.yml` has no class, an unknown class, or two files that disagree.
+
+**One-time effect.** Adding the label changes every service's compose config hash. The first upgrade that runs steps 3c and 7e therefore recreates each service once, including one `postgres` restart in step 3c, behind the recovery point. Later upgrades recreate only what changed.
 
 ### 3. Convergence steps in `promote.sh` (OBJ-CONVERGE, OBJ-STATEFUL)
 

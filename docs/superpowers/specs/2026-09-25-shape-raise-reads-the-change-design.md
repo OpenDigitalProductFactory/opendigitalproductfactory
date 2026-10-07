@@ -51,6 +51,8 @@ At claim time no diff exists, so change facts come from what the work declares:
 
 With change facts present, prose cannot raise above what the paths warrant.
 
+> **Superseded 2026-10-07 (operator direction).** Step 3 is removed: prose never raises. On 2026-10-06, 47 of the 126 builds parked in plan owed the large gates only because their prose matched a keyword ("permission", "outbound", "schema", …). A Build Studio plan's `fileStructure` paths are now a change fact, ranked between (1) and (2), so sensitive work is still raised at the plan-to-build gate on the files it will touch.
+
 Options rejected:
 - **Agreement required.** With no path facts, prose alone never raises. That under-protects sensitive work nobody has scoped yet.
 - **Declared paths only.** Ignoring prose entirely has the same gap, and it depends on an edit claim that does not exist at the first claim.

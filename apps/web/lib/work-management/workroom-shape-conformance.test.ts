@@ -557,6 +557,17 @@ describe("evaluateWorkroomShapeConformance with flowOrder (Phase 3c)", () => {
     expect(evaluate({ currentStageKey: null, proposedStageKey: "scan", flowOrder: { enabled: ["scan"], delivered: {} } }).deviations).toEqual([]);
   });
 
+  // GPP Phase 3c PR-3c-3: the drive supplies reworkRoute only for the refuse route it took.
+  it("any other backward move still raises out_of_order_stage", () => {
+    // Back to a stage the declared route does not name.
+    const elsewhere = evaluate({ currentStageKey: "review", proposedStageKey: "check", flowOrder: { enabled: [], delivered: { scan: true }, reworkRoute: { from: "review", to: "scan" } } });
+    expect(elsewhere.deviations.map((row) => row.code)).toContain("out_of_order_stage");
+    // Back with no refuse route recorded at all.
+    const unrouted = evaluate({ currentStageKey: "review", proposedStageKey: "scan", flowOrder: { enabled: [], delivered: {} } });
+    expect(unrouted.deviations.map((row) => row.code)).toContain("out_of_order_stage");
+    expect(unrouted.disposition).toBe("pause");
+  });
+
   it("without flowOrder, the same graph definition is checked by index exactly as before", () => {
     const result = evaluateWorkroomShapeConformance({
       definition: graphDefinition, collaborationShape: null, participants: executableRoster, currentStageKey: "scan", proposedStageKey: "review",

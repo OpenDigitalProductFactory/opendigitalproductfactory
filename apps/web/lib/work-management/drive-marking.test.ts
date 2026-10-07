@@ -21,7 +21,6 @@ import {
   FLOW_TWIN,
   GRAPH_FIXTURES,
   PARALLEL_FIXTURE,
-  REFUSE_FIXTURE,
   REWORK_FIXTURE,
   SEQUENTIAL_TWIN,
   SUB_SHAPE_FIXTURE,
@@ -30,16 +29,20 @@ import {
   DRIVE_MARKING_FORMAT,
   DriveConstructNotImplementedError,
   enabledStages,
+  gateHolds,
   isCompletingAt,
   latchPriorFor,
   markedKeysWithIteration,
   markedStageKeys,
   readStoredDriveMarking,
   startDriveMarking,
+  stageAwaitsVerdict,
   stepDriveMarking,
   usesGraphConstructs,
+  type DriveGateVerdict,
   type DriveMarking,
 } from "./drive-marking";
+import { REFUSE_TO_STOP, REWORK_1, REWORK_INSIDE_BRANCH, SHADOW_GATE, REFUSE_BOUND_NO_BUDGET_STOP, DEFER_ON_REFUSE_ROUTE } from "./__fixtures__/graph-shapes/rework";
 
 const NOW = new Date("2026-03-01T09:00:00.000Z");
 const CYCLE = "graph-fixture-flow@1.0.0:2026-03-01";
@@ -263,12 +266,6 @@ describe("stepDriveMarking: construct-specific branches throw construct_not_impl
   };
   const done = (stageKey: string) => ({ receipts: [{ stageKey, kind: "stage-evidence-recorded" }] });
 
-  it("a rework edge", () => {
-    throwsFor(() => stepDriveMarking(REWORK_FIXTURE, marking({ tokens: [{ node: "stage:b", enteredAt: NOW.toISOString() }] }), done("b"), NOW), "rework-edge");
-  });
-  it("a refuse route", () => {
-    throwsFor(() => stepDriveMarking(REFUSE_FIXTURE, marking({ tokens: [{ node: "stage:decide", enteredAt: NOW.toISOString() }] }), done("decide"), NOW), "rework-edge");
-  });
   it("entering, or holding, a stage with a deadline", () => {
     throwsFor(() => stepDriveMarking(DEADLINE_FIXTURE, marking(), done("a"), NOW), "stage-deadline");
     throwsFor(() => stepDriveMarking(DEADLINE_FIXTURE, marking({ tokens: [{ node: "stage:b", enteredAt: NOW.toISOString() }] }), { receipts: [] }, NOW), "stage-deadline");
@@ -279,5 +276,96 @@ describe("stepDriveMarking: construct-specific branches throw construct_not_impl
   it("a forward edge into a failure stop", () => {
     const failing = { ...FLOW_TWIN, flow: { nodes: [], edges: [{ from: "a", to: "b" }, { from: "b", to: "failure" }] } };
     throwsFor(() => stepDriveMarking(failing, marking({ tokens: [{ node: "stage:b", enteredAt: NOW.toISOString() }] }), done("b"), NOW), "stop");
+  });
+});
+
+// GPP Phase 3c PR-3c-3 (BI-8875C9DF), design §6.2: refuse routes and rework edges in the drive's own step.
+// drive-parity-rework.test.ts compares it with the interpreter over seeded sequences; these pin single moves.
+describe("stepDriveMarking: refuse routes and rework edges (PR-3c-3)", () => {
+  const LATER = new Date("2026-03-01T10:00:00.000Z");
+  const on = (node: string, enteredAt = NOW.toISOString()) => ({ node, enteredAt });
+  const decided = (stageKey: string, verdict: DriveGateVerdict["verdict"], iteration = 0, mode: DriveGateVerdict["mode"] = "enforced") =>
+    ({ [stageKey]: { verdict, mode, iteration } });
+  const receipt = (stageKey: string, iteration?: number) => ({ stageKey, kind: "stage-evidence-recorded", ...(iteration !== undefined ? { iteration } : {}) });
+
+  it("only an enforced, blocking gate with a refuse route waits on a verdict", () => {
+    expect(stageAwaitsVerdict(REWORK_1, "b")).toBe(true);
+    expect(stageAwaitsVerdict(REFUSE_TO_STOP, "decide")).toBe(true);
+    expect(stageAwaitsVerdict(SHADOW_GATE, "b")).toBe(false);
+    expect(stageAwaitsVerdict(DEFER_ON_REFUSE_ROUTE, "approve")).toBe(false);
+    // A rework edge on a stage with no gate is never taken (the interpreter takes one only on a refuse verdict).
+    expect(stageAwaitsVerdict(REWORK_FIXTURE, "b")).toBe(false);
+  });
+
+  it("a refuse to an earlier stage counts the edge, bumps the loop region's iterations and puts a fresh token on the target", () => {
+    const held = marking({ tokens: [{ ...on("stage:b"), taskId: "t-b", lastAction: "attention", lastReason: "governed_decision", lastCycleKey: CYCLE }] });
+    const result = stepDriveMarking(REWORK_1, held, { receipts: [receipt("b")], verdicts: decided("b", "refuse") }, LATER);
+    expect(result.fired).toBe("b");
+    expect(result.stopped).toBeNull();
+    expect(result.reworked).toEqual({ fromStageKey: "b", toStageKey: "a", edgeId: "edge:b->a", clearedStageKeys: ["a", "b"] });
+    expect(result.marking).toEqual({ ...held, tokens: [{ node: "stage:a", enteredAt: LATER.toISOString() }], iterations: { a: 1, b: 1 }, reworkTaken: { "edge:b->a": 1 } });
+    // The input is not mutated.
+    expect(held.tokens).toHaveLength(1);
+  });
+
+  it("a stale-iteration receipt never completes the new iteration", () => {
+    const back = stepDriveMarking(REWORK_1, marking({ tokens: [on("stage:b")] }), { receipts: [receipt("b")], verdicts: decided("b", "refuse") }, LATER).marking;
+    // a's iteration-0 receipt is stale for iteration 1: nothing fires.
+    expect(stepDriveMarking(REWORK_1, back, { receipts: [receipt("a"), receipt("b")] }, LATER)).toMatchObject({ fired: null, marking: back });
+    expect(enabledStages(REWORK_1, back, [receipt("a")])).toEqual([]);
+    expect(stepDriveMarking(REWORK_1, back, { receipts: [receipt("a", 1)] }, LATER).fired).toBe("a");
+    // An iteration-0 verdict does not apply to iteration 1 either.
+    const atB = marking({ tokens: [on("stage:b")], iterations: { a: 1, b: 1 } });
+    expect(stepDriveMarking(REWORK_1, atB, { receipts: [receipt("b", 1)], verdicts: decided("b", "admit", 0) }, LATER).fired).toBeNull();
+    expect(stepDriveMarking(REWORK_1, atB, { receipts: [receipt("b", 1)], verdicts: decided("b", "admit", 1) }, LATER).stopped?.kind).toBe("success");
+  });
+
+  it("past maxIterations a refuse goes to the first budget stop; with no budget stop it has no route and the token stays", () => {
+    const spent = marking({ tokens: [on("stage:b")], iterations: { a: 1, b: 1 }, reworkTaken: { "edge:b->a": 1 } });
+    const observations = { receipts: [receipt("b", 1)], verdicts: decided("b", "refuse", 1) };
+    expect(stepDriveMarking(REWORK_1, spent, observations, LATER)).toEqual({
+      marking: { ...spent, tokens: [] },
+      fired: "b",
+      stopped: { stopId: "stop:budget:1", kind: "budget", disposition: "awaiting-person" },
+    });
+    expect(stepDriveMarking(REFUSE_BOUND_NO_BUDGET_STOP, spent, observations, LATER)).toEqual({ marking: spent, fired: null, stopped: null });
+    expect(gateHolds(REFUSE_BOUND_NO_BUDGET_STOP, spent, observations)).toEqual(new Map([["b", "refused_without_route"]]));
+  });
+
+  it("a refuse to a stop consumes every token", () => {
+    const atDecide = marking({ tokens: [on("stage:decide")] });
+    expect(stepDriveMarking(REFUSE_TO_STOP, atDecide, { receipts: [receipt("decide")], verdicts: decided("decide", "refuse") }, LATER)).toEqual({
+      marking: { ...atDecide, tokens: [] },
+      fired: "decide",
+      stopped: { stopId: "stop:failure:1", kind: "failure", disposition: "inconclusive" },
+    });
+  });
+
+  it("hold (a deferral on a refuse-route stage), escalate and no verdict keep the token; admit moves it", () => {
+    const atB = marking({ tokens: [on("stage:b")] });
+    for (const verdicts of [decided("b", "hold"), decided("b", "escalate"), {}, decided("b", "admit", 0, "shadow")]) {
+      expect(stepDriveMarking(REWORK_1, atB, { receipts: [receipt("b")], verdicts }, LATER), JSON.stringify(verdicts)).toEqual({ marking: atB, fired: null, stopped: null });
+      expect(gateHolds(REWORK_1, atB, { receipts: [receipt("b")], verdicts })).toEqual(new Map([["b", "awaiting_verdict"]]));
+    }
+    expect(stepDriveMarking(REWORK_1, atB, { receipts: [receipt("b")], verdicts: decided("b", "admit") }, LATER).stopped?.kind).toBe("success");
+    // Without a completing receipt the gate holds nothing yet.
+    expect(gateHolds(REWORK_1, atB, { receipts: [], verdicts: decided("b", "refuse") })).toEqual(new Map());
+  });
+
+  it("a shadow gate records a refuse and moves on its receipt; an enforced gate with no refuse route advances on its receipt", () => {
+    const atB = marking({ tokens: [on("stage:b")] });
+    expect(stepDriveMarking(SHADOW_GATE, atB, { receipts: [receipt("b")], verdicts: decided("b", "refuse", 0, "shadow") }, LATER))
+      .toMatchObject({ fired: "b", stopped: { kind: "success" } });
+    const atApprove = marking({ tokens: [on("stage:approve")] });
+    expect(stepDriveMarking(DEFER_ON_REFUSE_ROUTE, atApprove, { receipts: [receipt("approve")] }, LATER)).toMatchObject({ fired: "approve", stopped: { kind: "success" } });
+  });
+
+  it("a rework inside a parallel branch touches only that branch: the sibling token, its task and its iteration are kept", () => {
+    const sibling = { ...on("stage:c"), taskId: "t-c", lastAction: "dispatch_agent", lastReason: "agent_stage", lastCycleKey: CYCLE };
+    const branch = marking({ tokens: [on("stage:b2"), sibling] });
+    const result = stepDriveMarking(REWORK_INSIDE_BRANCH, branch, { receipts: [receipt("b2")], verdicts: decided("b2", "refuse") }, LATER);
+    expect(result.reworked).toEqual({ fromStageKey: "b2", toStageKey: "b1", edgeId: "edge:b2->b1", clearedStageKeys: ["b1", "b2"] });
+    expect(result.marking.tokens).toEqual([{ node: "stage:b1", enteredAt: LATER.toISOString() }, sibling]);
+    expect(result.marking.iterations).toEqual({ b1: 1, b2: 1 });
   });
 });

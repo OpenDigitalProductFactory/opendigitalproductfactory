@@ -9,8 +9,13 @@ import {
   type ResolveCompletionEvidenceResult,
 } from "@/lib/backlog/completion-evidence-runtime";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
-import { isReachableFromTrunk, trunkHasMergedPullRequest, trunkRefCommittedAt, trunkRefExists } from "@/lib/work-capsules/git-scanner";
 
+import {
+  defaultResolveMergeDelivery,
+  mergeSignalRoots,
+  mergeSignalUnavailableReason,
+  type ResolveMergeDelivery,
+} from "./merge-delivery-signal";
 import { projectBacklogItemReadiness, readinessShapeFromWorkShape, type InitiativeReadinessActivity } from "./entry-adapter";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
 import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from "./bound-work-shape";
@@ -128,199 +133,16 @@ function unreadManifestReasons(result: ResolveCompletionEvidenceResult): string[
   ];
 }
 
-/**
- * BI-B04A0203 (EP-4614F35E): a PR merged THROUGH the code gates — CI + the merge
- * queue — is the strongest possible delivery evidence. Branch protection means it
- * could not have reached the trunk without passing them, so a direct-merge item
- * whose branch landed does not need a hand-built delivery manifest. Detect it
- * PROCEDURALLY and LOCALLY: the item's Workroom head SHA reachable from origin/main
- * == merged, reusing the room-closeout reachability helper — no GitHub API, no LLM.
- *
- * BI-043946C5: this used to answer `boolean`, and every infrastructure failure —
- * no candidate root is a git repository, the trunk ref does not resolve, the head
- * was never fetched locally — collapsed into `false`, which the caller could not
- * tell apart from a genuine "this never merged". Measured on a live install: the
- * probe's first root `/host-dpf` is the INSTALLED runtime directory, not a source
- * checkout, so `trunkRefExists` was false for every root and the signal was
- * unconditionally and silently false. Two capabilities were dead as a result —
- * merge-as-delivery-evidence (BI-B04A0203) and direct-merge recognition
- * (EP-4614F35E) — with nothing anywhere saying so.
- *
- * So the signal is now three-valued. `not-merged` is a MEASUREMENT: some root
- * answered and said no. `signal-unavailable` means nothing could answer, and the
- * caller must say that out loud rather than report it as a negative.
- */
-export type MergeDeliverySignal = "merged" | "not-merged" | "signal-unavailable";
-
-export type ResolveMergeDelivery = (args: { itemRowId: string; itemId: string }) => Promise<MergeDeliverySignal>;
-
-/**
- * Candidate source roots the merge signal probes, in order. Reachability stays
- * LOCAL and procedural — no GitHub API, no LLM
- * (platform-function-never-depends-on-a-client). The first root whose trunk ref
- * resolves wins.
- *
- * `/host-dpf` is listed because a source install mounts its checkout there. A
- * CONSUMER install legitimately has no checkout at all — there, `/host-dpf` is the
- * runtime directory and no root resolves, which is precisely the case that must
- * report `signal-unavailable` instead of a silent `false` (BI-043946C5). An
- * operator who wants the signal on such a host points `DPF_HOST_SOURCE_ROOT` at a
- * real checkout.
- */
-export function mergeSignalRoots(): string[] {
-  const roots = [
-    process.env.DPF_REPO_ROOT,
-    process.env.DPF_HOST_SOURCE_ROOT,
-    // The runtime's own source root. On a consumer install this is the Build
-    // Studio workspace volume (`/sandbox-workspace`), which docker-entrypoint.sh
-    // makes a real repo and `start_build` points at the upstream — so the signal
-    // works with NO operator configuration on exactly the installs that have no
-    // host checkout. It was simply never asked (BI-043946C5).
-    process.env.PROJECT_ROOT,
-    "/host-dpf",
-    process.cwd(),
-  ];
-  return [...new Set(roots.filter((r): r is string => Boolean(r)))];
-}
-
-/**
- * How stale a trunk ref may be before a NEGATIVE reachability answer stops
- * counting as a measurement. Positives are unaffected: reachability is monotone,
- * so a stale trunk can only ever miss a merge, never invent one.
- *
- * This exists because the roots above are not guaranteed to be fetched. The
- * Build Studio workspace is refreshed at `start_build`, not on the completion
- * path, and was observed ten days behind on a live install — old enough to
- * report merged work as unmerged with total confidence, which is the exact
- * failure BI-043946C5 set out to remove. Reading the ref is local and cheap;
- * fetching here is deliberately NOT done, because the completion path must not
- * depend on the network.
- */
-const TRUNK_FRESHNESS_WINDOW_MS = (() => {
-  const raw = Number(process.env.DPF_MERGE_SIGNAL_MAX_TRUNK_AGE_MS);
-  return Number.isFinite(raw) && raw > 0 ? raw : 24 * 60 * 60 * 1000;
-})();
-
-/**
- * The operator-facing sentence for an unavailable merge signal. It names the
- * measurement (nothing could answer), never a verdict, and the one lever that
- * changes it. Surfaced through `requirementReasons`, which `requirementNextAction`
- * puts at the FRONT of the next action.
- */
-export function mergeSignalUnavailableReason(roots: readonly string[]): string {
-  const probed = roots.length > 0 ? roots.join(", ") : "no candidate roots";
-  return "The merge-through-gates signal could not run on this runtime, so whether this work "
-    + `landed on the trunk is UNKNOWN here, not answered "no" (probed: ${probed}). `
-    + "Point DPF_HOST_SOURCE_ROOT at a source checkout to enable it.";
-}
-
-/** Pull-request numbers named by an item's evidence links (`.../pull/123`). */
-export function pullRequestNumbersFromActivities(
-  activities: readonly { kind: string; payload: unknown }[],
-): number[] {
-  const numbers = new Set<number>();
-  for (const activity of activities) {
-    if (activity.kind !== "evidence") continue;
-    const url = (activity.payload as { url?: unknown } | null)?.url;
-    const match = typeof url === "string" ? url.match(/\/pull\/(\d+)(?:[/?#]|$)/) : null;
-    if (match) numbers.add(Number(match[1]));
-  }
-  return [...numbers];
-}
-
-/**
- * Delivery evidence is the trunk (BI-AFE8BB73, design §4): a SHA reachable
- * from origin/main satisfies DELIVERY_EVIDENCE_REQUIRED for every shape.
- * Read the Workroom heads first; when no room recorded a head (a fix worked
- * outside a Workroom, or a room whose head was never synced), fall back to the
- * item's linked pull request — the room's `pullRequestNumber` or an evidence
- * link — and look for its merge commit on the trunk. The manifest path stays
- * as the fallback the caller already has.
- */
-/**
- * The git half of the merge signal, with no database and no ambient
- * configuration: given the branch identities to look for and the roots to look
- * in, decide whether the work landed.
- *
- * Split out so it can be driven against REAL repositories in a test
- * (BI-043946C5). The defect this function now encodes lived precisely in the
- * boundary between this module and git, and every existing test stubbed the
- * whole resolver, so the suite stayed green while the shipped code could not
- * answer at all on a live install.
- */
-export async function resolveMergeSignalFromRefs(input: {
-  heads: readonly string[];
-  pullRequests: readonly number[];
-  roots: readonly string[];
-  /** Injectable for tests; defaults to the real clock. */
-  now?: Date;
-  /** Injectable for tests; defaults to reading the trunk tip's commit date. */
-  readTrunkCommittedAt?: (root: string) => Promise<Date | null>;
-}): Promise<MergeDeliverySignal> {
-  const { heads, pullRequests, roots } = input;
-  const now = input.now ?? new Date();
-  const readTrunkCommittedAt = input.readTrunkCommittedAt ?? ((root: string) => trunkRefCommittedAt(root));
-  // Nothing to look up: no room recorded a head and no PR is linked. That is a
-  // real measurement about THIS item — there is no branch identity to find on
-  // the trunk — not a broken probe, so it stays a negative.
-  if (heads.length === 0 && pullRequests.length === 0) return "not-merged";
-  for (const root of roots) {
-    if (!(await trunkRefExists(root))) continue;
-    // A root answered. Distinguish "git said no" from "git could not say":
-    // isReachableFromTrunk / trunkHasMergedPullRequest already return null for
-    // the indeterminate case (sha never fetched, bad ref, git missing), and
-    // flattening those to false is the same silent-negative bug one level down.
-    let sawDefiniteNegative = false;
-    for (const sha of heads) {
-      const reachable = await isReachableFromTrunk(root, sha);
-      if (reachable === true) return "merged";
-      if (reachable === false) sawDefiniteNegative = true;
-    }
-    for (const prNumber of new Set(pullRequests)) {
-      const merged = await trunkHasMergedPullRequest(root, prNumber);
-      if (merged === true) return "merged";
-      if (merged === false) sawDefiniteNegative = true;
-    }
-    if (!sawDefiniteNegative) return "signal-unavailable";
-    // A negative is only a measurement if the trunk it was measured against is
-    // current. An unfetched trunk reports merged work as unmerged, confidently.
-    const trunkAt = await readTrunkCommittedAt(root);
-    if (!trunkAt) return "signal-unavailable";
-    const staleBy = now.getTime() - trunkAt.getTime();
-    return staleBy <= TRUNK_FRESHNESS_WINDOW_MS ? "not-merged" : "signal-unavailable";
-  }
-  // No candidate root is a readable repository.
-  return "signal-unavailable";
-}
-
-async function defaultResolveMergeDelivery(
-  { itemRowId, itemId }: { itemRowId: string; itemId: string },
-): Promise<MergeDeliverySignal> {
-  try {
-    const db = prisma as unknown as {
-      workroom: { findMany(args: unknown): Promise<{ headSha: string | null; pullRequestNumber: number | null }[]> };
-      backlogItemActivity: { findMany(args: unknown): Promise<{ kind: string; payload: unknown }[]> };
-    };
-    const rooms = await db.workroom.findMany({
-      where: { backlogItemId: itemId },
-      orderBy: { updatedAt: "desc" },
-      select: { headSha: true, pullRequestNumber: true },
-    });
-    const heads = rooms.map((room) => room.headSha).filter((sha): sha is string => Boolean(sha));
-    const evidence = await db.backlogItemActivity.findMany({
-      where: { backlogItemId: itemRowId, kind: "evidence" },
-      select: { kind: true, payload: true },
-      take: 200,
-    });
-    const pullRequests = [
-      ...rooms.map((room) => room.pullRequestNumber).filter((n): n is number => typeof n === "number"),
-      ...pullRequestNumbersFromActivities(evidence),
-    ];
-    return await resolveMergeSignalFromRefs({ heads, pullRequests, roots: mergeSignalRoots() });
-  } catch {
-    return "signal-unavailable";
-  }
-}
+// The merge-through-gates signal lives in ./merge-delivery-signal (BI-B04A0203);
+// re-exported so existing importers keep one entry point.
+export {
+  mergeSignalRoots,
+  mergeSignalUnavailableReason,
+  pullRequestNumbersFromActivities,
+  resolveMergeSignalFromRefs,
+  type MergeDeliverySignal,
+  type ResolveMergeDelivery,
+} from "./merge-delivery-signal";
 
 /**
  * The direct-merge-platform predicate (EP-4614F35E, kernel-ratified DI-54AECB341524).
@@ -455,6 +277,7 @@ export async function completeBacklogItemTransition(args: {
       const mergedThroughGates = await (args.dependencies?.resolveMergeDelivery ?? defaultResolveMergeDelivery)({
         itemRowId: lockedItem.id,
         itemId: lockedItem.itemId,
+        workType: lockedItem.workType,
       });
       // EP-4614F35E (kernel DI-54AECB341524): recognize a merge through the code
       // gates (CI + merge queue + PR review) as completing DIRECT-MERGE PLATFORM

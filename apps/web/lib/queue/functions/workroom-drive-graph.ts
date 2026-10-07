@@ -23,6 +23,11 @@
 //   marking names (graphTaskEffects).
 // - A lease held by another worker changes nothing, exactly as on the
 //   sequential path.
+// - A plan that took a rework (PR-3c-3) revokes the permits of the stages it
+//   left, once its snapshot is written (effects.revokeStagePermits, through
+//   lib/gpp/stage-permit-revocation.ts). A tick that writes nothing (a held
+//   lease, a dispatch that never scheduled) committed no rework and revokes
+//   nothing.
 
 import type { DriveReasonFor } from "@/lib/work-management/drive-conclusion";
 import { graphTaskEffects, withUndispatchedTokensRestored } from "@/lib/work-management/drive-graph-tick";
@@ -58,6 +63,11 @@ export async function applyGraphDrivePlan(input: {
   const deactivateLeft = async () => {
     for (const taskId of deactivate) await effects.deactivateAgentTask(taskId);
   };
+  const revokeLeftPermits = async () => {
+    if (!plan.rework || !effects.revokeStagePermits) return;
+    await effects.revokeStagePermits({ workroomId: room.capsuleId, stageKeys: plan.rework.clearedStageKeys, now })
+      .catch(() => 0);
+  };
   const activityKind = plan.action === "attention" ? WORKROOM_DRIVE_ATTENTION_KIND : WORKROOM_DRIVE_ACTIVITY_KIND;
 
   if (dispatch.length === 0) {
@@ -71,6 +81,7 @@ export async function applyGraphDrivePlan(input: {
         : plan.action === "do_not_wake" ? `Drive did not wake: ${plan.reason}` : `Drive ${plan.action}: ${plan.reason}`,
       payload: snapshot,
     });
+    await revokeLeftPermits();
     return outcomeOf(plan.action);
   }
 
@@ -115,6 +126,7 @@ export async function applyGraphDrivePlan(input: {
       summary: "Agent stage is eligible but no owner user is bound for ScheduledAgentTask.",
       payload: unowned,
     });
+    await revokeLeftPermits();
     return "skipped";
   }
 
@@ -156,5 +168,6 @@ export async function applyGraphDrivePlan(input: {
     payload: written,
     ...(dispatched.length > 0 ? { lease: { expiresAt, holderPrincipalId: room.leaseHolderPrincipalId } } : {}),
   });
+  await revokeLeftPermits();
   return dispatched.length > 0 ? "dispatched" : outcomeOf(plan.action);
 }

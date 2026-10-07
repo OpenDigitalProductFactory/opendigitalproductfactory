@@ -4,8 +4,9 @@
 // docs/superpowers/plans/2026-10-02-gpp-phase-3c-drive-graph-execution.md
 // (PR-3c-1).
 //
-// 1. Over each AC-NOT-EXECUTABLE fixture (and the parallel one, a passing
-//    document since PR-3c-2), with every graph construct switched off, the
+// 1. Over each AC-NOT-EXECUTABLE fixture (and the parallel, rework-edge and
+//    refuse-edge ones, passing documents since PR-3c-2 and PR-3c-3), with
+//    every graph construct switched off, the
 //    walk over the lowered document names exactly the constructs and elements
 //    the DRC refuses, so the two readers of the walk cannot disagree.
 // 2. A plain flow edge, a lone join and a paired join are walked as the DRC
@@ -32,10 +33,10 @@ const FIXTURE_DIR = join(__dirname, "__fixtures__", "drc");
 const RATIFICATION = JSON.parse(readFileSync(join(FIXTURE_DIR, "ratification.json"), "utf8")) as Record<string, GateRatificationEntry>;
 const FIXTURES = [
   "pass-parallel-split-join.gpp.json",
-  "e-not-executable-rework-edge.gpp.json",
+  "pass-rework-edge.gpp.json",
   "e-not-executable-stage-deadline.gpp.json",
   "e-not-executable-sub-shape.gpp.json",
-  "e-not-executable-refuse-edge.gpp.json",
+  "pass-refuse-edge.gpp.json",
 ];
 
 const GRAPH_CONSTRUCTS_OFF = {
@@ -61,7 +62,8 @@ describe("constructsUsedBy agrees with the DRC's E-NOT-EXECUTABLE findings", () 
   it.each(FIXTURES)("%s", async (file) => {
     const document = load(file);
     // Every graph construct switched off (test-only), so the walk is compared for each fixture whatever the live
-    // flags say: parallel split/join is executable since PR-3c-2, and its fixture is a passing document now.
+    // flags say: parallel split/join (PR-3c-2) and rework edges with refuse routes (PR-3c-3) are executable, and
+    // their fixtures are passing documents now.
     const findings = runDesignRules(document, await resolveShapeDocument(document, sources), { ratification: RATIFICATION, directSites: new Map(), executable: GRAPH_CONSTRUCTS_OFF });
     const refused = findings
       .filter((finding) => finding.rule === "E-NOT-EXECUTABLE")

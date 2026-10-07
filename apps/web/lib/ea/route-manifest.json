@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 669,
+  "routeCount": 670,
   "routes": [
     {
       "routePath": "/",
@@ -556,6 +556,21 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/agent/cancel/route.ts"
+    },
+    {
+      "routePath": "/api/agent/envelope/[envelopeId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "envelope",
+        "[envelopeId]"
+      ],
+      "dynamicParams": [
+        "envelopeId"
+      ],
+      "file": "apps/web/app/api/agent/envelope/[envelopeId]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/agent/envelope/[envelopeId]/approve",

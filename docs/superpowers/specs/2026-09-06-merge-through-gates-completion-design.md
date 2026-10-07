@@ -145,3 +145,18 @@ root distinguishes merged from not-merged, a directory that is not a repository 
 `signal-unavailable` rather than a negative. `backlog-terminal-transition.test.ts` asserts
 that an unavailable signal is named on every requirement it would have satisfied, and is
 silent for items that could never qualify anyway.
+
+Amended 2026-10-06 (BI-B04A0203). The signal now reads one more branch identity:
+the pull request the server-side PR-submit actuator recorded on the `status_change`
+row when it moved the item to `awaiting-acceptance`. On the live install that row was
+the only record of the delivering PR for 235 of the 535 direct-merge platform items in
+`awaiting-acceptance`, so the gate answered "no branch identity" for work whose squash
+commit is on the trunk. The recorded number is not trusted by itself, because before
+BI-A0020FAC the actuator moved every item a PR mentioned. Instead the squash commit on
+the trunk (the one whose subject ends `(#N)`) is read again and must deliver the item
+under the actuator's current rule (`extractDeliveredBacklogItemIds`). A doc PR counts
+only for a doc item, a PR that was reverted on the trunk does not count, and only the
+current delivery attempt is read: rows older than the newest reopen are ignored.
+The predicate, the three-valued answer and the conflict/malformed refusal are unchanged.
+The signal lives in `merge-delivery-signal.ts`. `merge-delivery-attested-pr.test.ts`
+drives it against real repositories.

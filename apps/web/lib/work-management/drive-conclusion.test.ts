@@ -266,3 +266,37 @@ describe("the Phase 3c fail-closed pauses conclude (AC-3C-CONCLUDED)", () => {
     }
   });
 });
+
+// AC-3C-CONCLUDED, part (GPP Phase 3c PR-3c-3, BI-8875C9DF; design §5 table):
+// the refuse outcomes are registered, so they never conclude `unconcluded`.
+describe("the Phase 3c refuse outcomes conclude (AC-3C-CONCLUDED)", () => {
+  const OUTCOMES = [
+    { action: "attention", reason: "gate_refused" },
+    { action: "stop", reason: "refused_to_stop" },
+  ] as const;
+
+  it("are listed under their action", () => {
+    for (const outcome of OUTCOMES) expect(everyDriveOutcome()).toContainEqual(outcome);
+  });
+
+  it("are blockages with an owner and an observable unblocking event, never unconcluded", () => {
+    for (const { action, reason } of OUTCOMES) {
+      const decision = resolveDriveConclusion(input({ action, reason, attentionPrincipalRef: action === "attention" ? "role:owner" : null }));
+      expect(decision.kind, reason).toBe("blocked");
+      expect(decision.blockage?.ownerPrincipalId).toBe("PRN-OWNER");
+      expect(decision.blockage?.unblockedBy.length ?? 0).toBeGreaterThan(10);
+    }
+  });
+
+  it("gate_refused is cleared by a decision on the refused stage", () => {
+    const decision = resolveDriveConclusion(input({ action: "attention", reason: "gate_refused", attentionPrincipalRef: "role:owner" }));
+    expect(decision.blockage?.unblockedBy).toContain("decision is recorded on the refused stage");
+  });
+
+  it("without an owner they surface the missing setup rather than stopping silently", () => {
+    for (const { action, reason } of OUTCOMES) {
+      const decision = resolveDriveConclusion(input({ action, reason, attentionPrincipalRef: action === "attention" ? "role:owner" : null, accountability: UNOWNED }));
+      expect(decision.blockage?.ownerSetupRequired).toBe(UNOWNED_MESSAGE);
+    }
+  });
+});

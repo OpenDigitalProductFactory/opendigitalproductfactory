@@ -1,10 +1,4 @@
-import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
-import { resolveAutoUpgradeWindow } from "@/lib/self-upgrade/auto-window";
-import {
-  getSelfUpgradeConfig,
-  type SelfUpgradeConfig,
-} from "@/lib/self-upgrade/config";
-import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
+import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { getLatestRun } from "@/lib/self-upgrade/run-store";
 import {
@@ -12,8 +6,15 @@ import {
   resolveCurrentSelfUpgradeTarget,
 } from "@/lib/self-upgrade/admission";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
+import {
+  decideUpgradeTiming,
+  deferUpgradeToWindow,
+  withWindowBypass,
+  type UpgradeDeferralReason,
+  type UpgradeRequesterKind,
+} from "@/lib/self-upgrade/upgrade-timing";
 
-type RequestActorKind = "human" | "agent";
+type RequestActorKind = UpgradeRequesterKind;
 
 type RequestSelfUpgradeInput = {
   requestedBy: string;
@@ -42,8 +43,21 @@ export type RequestSelfUpgradeResult =
     }
   | {
       success: true;
+      /**
+       * BI-2128872C: an agent asked outside the maintenance window (or during an
+       * operator blackout). Nothing runs now; the request is recorded and the
+       * scheduled upgrade picks it up at `runAt`.
+       */
+      status: "deferred_to_window";
+      reason: UpgradeDeferralReason;
+      runAt: string | null;
+      nextWindowStart: string | null;
+      message: string;
+    }
+  | {
+      success: true;
       status: "human_override_required";
-      reason: "outside-window" | "no-window-needs-timezone" | "terminal-recovery-needs-operator-binding";
+      reason: "no-window-needs-timezone" | "terminal-recovery-needs-operator-binding";
       message: string;
     }
   | {
@@ -75,56 +89,14 @@ export type RequestSelfUpgradeResult =
 
 const ACTIVE_RUN_STATUSES = new Set(["running", "queued", "pending"]);
 
-async function agentWindowGate(
-  now: Date,
-  config: SelfUpgradeConfig,
-): Promise<
-  | { allowed: true }
-  | { allowed: false; reason: "outside-window" | "no-window-needs-timezone" }
-> {
-  const { schedule, timezone, timezoneKnown, lowTrafficWindows } =
-    await resolveOperatingScheduleForSystem();
-  const auto =
-    config.maintenanceWindows.length > 0
-      ? { kind: "operating-hours" as const }
-      : resolveAutoUpgradeWindow({
-          schedule,
-          timeZone: timezone,
-          timezoneKnown,
-          lowTrafficWindows,
-          now,
-        });
-
-  if (auto.kind === "needs-timezone") {
-    return { allowed: false, reason: "no-window-needs-timezone" };
-  }
-
-  const explicitWindows =
-    config.maintenanceWindows.length > 0
-      ? config.maintenanceWindows
-      : auto.kind === "auto-overnight"
-        ? auto.windows
-        : undefined;
-  const allowed = isUpgradeWindowOpen({
-    explicitWindows,
-    schedule,
-    timeZone: timezone,
-    now,
-  });
-  return allowed ? { allowed: true } : { allowed: false, reason: "outside-window" };
-}
-
-function humanOverrideMessage(reason: "outside-window" | "no-window-needs-timezone"): string {
-  if (reason === "no-window-needs-timezone") {
-    return "Self-upgrade cannot determine a safe off-hours window because the install needs a timezone. Use /ops/self-upgrade for a human override.";
-  }
-  return "Self-upgrade is outside the allowed maintenance window. Use /ops/self-upgrade for a human override.";
-}
+const NEEDS_TIMEZONE_MESSAGE =
+  "Self-upgrade cannot determine a safe off-hours window because the install needs a timezone. Use /ops/self-upgrade for a human override.";
 
 export async function requestSelfUpgrade(
   input: RequestSelfUpgradeInput,
 ): Promise<RequestSelfUpgradeResult> {
-  const triggeredBy = input.requestedBy.trim() || input.actorKind;
+  const requestedBy = input.requestedBy.trim() || input.actorKind;
+  const now = input.now ?? new Date();
   const latestRun = await getLatestRun();
   if (latestRun && ACTIVE_RUN_STATUSES.has(String(latestRun.status))) {
     return {
@@ -154,22 +126,23 @@ export async function requestSelfUpgrade(
     };
   }
 
-  if (input.actorKind === "agent") {
-    const gate = await agentWindowGate(input.now ?? new Date(), config);
-    if (!gate.allowed) {
-      return {
-        success: true,
-        status: "human_override_required",
-        reason: gate.reason,
-        message: humanOverrideMessage(gate.reason),
-      };
-    }
+  const timing = await decideUpgradeTiming({ requester: input.actorKind, config, now });
+  if (timing.kind === "needs-timezone") {
+    return {
+      success: true,
+      status: "human_override_required",
+      reason: "no-window-needs-timezone",
+      message: NEEDS_TIMEZONE_MESSAGE,
+    };
+  }
 
+  if (input.actorKind === "agent") {
     // Release batching: an agent request is a ROUTINE trigger, so it waits for
     // the batch like the scheduled cron does — one merged PR must not drain the
     // portal on its own. Answer with the tally so the agent knows more PRs are
     // still to be tallied and can defer live validation until the batch
-    // deploys (or an operator overrides via /ops/self-upgrade).
+    // deploys (or an operator overrides via /ops/self-upgrade). Checked before
+    // deferral: a request the batch would decline at the window is not queued.
     const batch = await resolveReleaseBatchStatus({
       fresh: true,
       now: input.now,
@@ -188,6 +161,15 @@ export async function requestSelfUpgrade(
       };
     }
   }
+
+  // BI-2128872C AC-1: an agent outside the window is queued for the next one.
+  if (timing.kind === "defer") {
+    const deferral = await deferUpgradeToWindow({ requestedBy, decision: timing, now });
+    return { success: true, status: "deferred_to_window", ...deferral };
+  }
+
+  // AC-2: an operator outside the window runs now; the trigger records the bypass.
+  const triggeredBy = timing.windowBypassed ? withWindowBypass(requestedBy) : requestedBy;
 
   const target = await resolveCurrentSelfUpgradeTarget();
   if (!target) {

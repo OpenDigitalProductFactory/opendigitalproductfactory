@@ -108,8 +108,10 @@ guards did.
    every later flag as a positional — silently, under `allowPositionals` or
    `strict: false`. `scripts/lib/script-argv.mjs` drops one leading `--`; the
    landing spine (`land`, `gate:local`, `gate:context`, `gate:wait`) uses it.
-   **51** other scripts parse with those options and still drop the flag; they
-   need the helper and a guard that requires it.
+   The other scripts that parse with those options now use it too (#5981,
+   BI-EA76A597), and `scripts/check-no-hand-rolled-argv.mjs` refuses a new one
+   that does not. Promoter and installer scripts run by `node`, never pnpm,
+   are exempt by name.
 6. **`gate:local` is not the full deterministic set.** `land`'s first two real
    runs passed it, then preflight refused three guards: spec-status frontmatter,
    the CI test inventory, and the `gate-context` image closure. The first two are
@@ -160,3 +162,11 @@ guards did.
     or a Docker or disk failure setting up the slot, used to exit 1 and be
     recorded as a reasonless `failed`. Those now exit
     `EXIT_RUNNER_PREREQUISITE_UNAVAILABLE`, recorded as infrastructure.
+11. ~~**The gate could wait on its own parents.**~~ Admission matches live
+    "mutators" by command line. On 2026-10-06 `pnpm land` was launched from a
+    shell whose `-c` string carried a commit message naming the runner script;
+    that shell matched, so land, `gate:wait`, `pregate` and the gate itself all
+    read as live mutators and admission retried until the run was killed.
+    `findConflictingLocalCiMutatorPids` now excludes the gate's own ancestor
+    chain — an ancestor is blocked on the gate, so it cannot be mutating the
+    sandbox. A genuine runner elsewhere under the same shell still blocks.

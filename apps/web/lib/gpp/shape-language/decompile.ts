@@ -23,8 +23,12 @@
 //   correction 12): a gate the definition declares itself WITH a refuse route
 //   (`onRefuse`) wins, so a code-declared refuse route reaches the registry
 //   guard (work-shape-graph-constructs.test.ts) and E-NOT-EXECUTABLE; D-8
-//   still compares that gate with the ratified entry. A declared gate without
-//   a refuse route is not carried: since PR-3b-6 the compiled
+//   still compares that gate with the ratified entry. A refuse route is
+//   `onRefuse`, or (Phase 3c PR-3c-3) the stage's single outgoing rework edge
+//   (declaresRefuseRoute, work-shape-flow-graph.ts): the drive and the
+//   reference interpreter route a refusal over that edge only through the
+//   gate, so a document without it would misstate the shape. A declared gate
+//   without a refuse route is not carried: since PR-3b-6 the compiled
 //   inquiry-response-watch declares the very gate its ratified entry holds,
 //   and the decompiler's contract (and its tests) is that, absent a refuse
 //   route, the gate is the table's. A stage whose scope is not ratified is
@@ -35,6 +39,7 @@
 //
 // OFFLINE TOOLING in Phase 3a: nothing in the running app imports this module.
 
+import { declaresRefuseRoute } from "@/lib/work-management/work-shape-flow-graph";
 import type { WorkShapeDefinition, WorkShapeStage } from "@/lib/work-management/work-shapes";
 
 import { copyBinding, copyGate } from "./emit";
@@ -59,6 +64,7 @@ function decompileAdvance(
   stage: WorkShapeStage,
   table: Readonly<Record<string, GateRatificationEntry>>,
   awaitingRatification: string[],
+  hasRefuseRoute: boolean,
 ): DocumentAdvance {
   const { advance } = stage;
   if (advance.kind === "status-change") return { kind: advance.kind, condition: advance.condition };
@@ -68,7 +74,7 @@ function decompileAdvance(
     decisionScope: advance.decisionScope,
   };
   const ratified = ratifiedGateFor(advance.decisionScope, table);
-  const gate = advance.gate?.onRefuse !== undefined ? advance.gate : ratified;
+  const gate = advance.gate && hasRefuseRoute ? advance.gate : ratified;
   if (gate) typed.gate = copyGate(gate);
   if (!ratified) awaitingRatification.push(stage.key);
   return typed;
@@ -84,7 +90,7 @@ export function decompile(definition: WorkShapeDefinition, options: DecompileOpt
       key: stage.key,
       title: stage.title,
       accountablePrincipalRef: stage.accountablePrincipalRef,
-      advance: decompileAdvance(stage, table, awaitingRatification),
+      advance: decompileAdvance(stage, table, awaitingRatification, declaresRefuseRoute(definition, stage.key)),
       evidence: [...stage.evidence],
     };
     if (stage.tools !== undefined) documentStage.tools = [...stage.tools];

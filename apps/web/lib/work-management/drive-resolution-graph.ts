@@ -32,6 +32,18 @@
  * After a readable marking, every plan carries a marking, so a graph room
  * never loses its marking on a tick (review blocker 1).
  *
+ * GATE VERDICTS (PR-3c-3, design §6.2). For a stage whose typed gate is
+ * enforced, blocking and declares a refuse route, the verdict is read off the
+ * stage's latest recorded decision since its token entered (deriveGateVerdict):
+ * accept and patch admit, refuse refuses, and defer HOLDS the token at the gate
+ * until an accept or a send-back (DI-0D9DFB0FC0EF, 2026-10-06). Every other
+ * stage advances on its completing receipt exactly as today, so `defer` keeps
+ * advancing wherever no refuse route is declared (founder decision
+ * 2026-10-02). A refuse whose route is spent with no budget stop raises
+ * `attention` / `gate_refused` to the gate's escalation role, else the stage
+ * principal; a refuse to a stop ends the cycle with `stop` /
+ * `refused_to_stop`, which stays the room's answer until the next cycle.
+ *
  * A construct-specific branch of the step that PR-3c-1 does not implement
  * throws DriveConstructNotImplementedError; this planner turns it into the
  * same fail-closed pause, so the drive never throws for a room.
@@ -43,12 +55,16 @@ import { CONSTRUCT_EXECUTABLE } from "@/lib/gpp/shape-language/executable-constr
 import type { DriveAction, DrivePlan, DriveResolutionInput } from "./drive-resolution";
 import {
   DriveConstructNotImplementedError,
+  gateHolds,
   iterationOf,
   latchPriorFor,
   markedStageKeys,
   readStoredDriveMarking,
+  stageAwaitsVerdict,
   stageToken,
   stepDriveMarking,
+  type DriveGateVerdict,
+  type DriveGateVerdictKind,
   type DriveMarking,
   type DriveStepResult,
   type DriveTokenPlan,
@@ -63,8 +79,10 @@ import {
   workroomDriveBranchTaskId,
   workroomDriveTaskId,
 } from "./drive-plan-stage";
+import type { RecordedEvidence } from "./stage-evidence-receipts";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 import { evaluateWorkroomShapeConformance } from "./workroom-shape-conformance";
+import { STAGE_DECISION_EVIDENCE_KINDS } from "./workroom-stage-decision";
 import { isCompletingWorkroomDriveReceiptAt } from "./workroom-drive-receipts";
 
 /** Aggregate precedence, highest first (design §4.3). */
@@ -106,6 +124,72 @@ export function withFixedTaskIds(definition: WorkShapeDefinitionContract, markin
   };
 }
 
+/**
+ * A recorded stage decision's choice → the gate verdict (design §6.2).
+ * `defer` holds (DI-0D9DFB0FC0EF): it is read only for a stage that declares a
+ * refuse route, so on every other stage a deferral still advances.
+ */
+const VERDICT_BY_CHOICE: Readonly<Record<string, DriveGateVerdictKind>> = Object.freeze({
+  accept: "admit",
+  patch: "admit",
+  defer: "hold",
+  refuse: "refuse",
+});
+
+/**
+ * The gate verdict for one stage at one iteration, or null (PR-3c-3). Read
+ * only for a stage whose typed gate is enforced, blocking and declares a
+ * refuse route; null for every other stage, which advances on its completing
+ * receipt. The verdict is the latest completed `decision-record` evidence for
+ * the stage, recorded at or after `since` (the token's own `enteredAt`, so a
+ * decision from an earlier pass through the stage never counts), mapped from
+ * its `choice`. Evidence with no choice, or one outside the vocabulary, gives
+ * no verdict: a refuse never defaults to admit, and nothing defaults to refuse.
+ */
+export function deriveGateVerdict(
+  definition: WorkShapeDefinitionContract,
+  stageKey: string,
+  evidence: readonly RecordedEvidence[],
+  iteration: number,
+  since: Date | null,
+): DriveGateVerdict | null {
+  const stage = definition.stages.find((entry) => entry.key === stageKey);
+  if (!stage || stage.advance.kind !== "governed-decision" || !stage.advance.gate) return null;
+  if (!stageAwaitsVerdict(definition, stageKey)) return null;
+  const decisionKinds: readonly string[] = STAGE_DECISION_EVIDENCE_KINDS;
+  let latest: RecordedEvidence | null = null;
+  for (const row of evidence) {
+    if (row.stageKey !== stageKey || row.outcome !== "completed" || typeof row.choice !== "string") continue;
+    if (row.kind === null || !decisionKinds.includes(row.kind)) continue;
+    if (since && row.recordedAt.getTime() < since.getTime()) continue;
+    if (!latest || row.recordedAt.getTime() > latest.recordedAt.getTime()) latest = row;
+  }
+  const verdict = latest?.choice ? VERDICT_BY_CHOICE[latest.choice] : undefined;
+  return verdict ? { verdict, mode: stage.advance.gate.mode, iteration } : null;
+}
+
+/** The verdict of every marked stage that waits on one, keyed by stage. */
+export function gateVerdictsFor(
+  definition: WorkShapeDefinitionContract,
+  marking: DriveMarking,
+  evidence: readonly RecordedEvidence[],
+): Record<string, DriveGateVerdict> {
+  const out: Record<string, DriveGateVerdict> = {};
+  for (const stageKey of markedStageKeys(definition, marking)) {
+    const token = stageToken(marking, stageKey);
+    const since = token ? new Date(token.enteredAt) : null;
+    const verdict = deriveGateVerdict(definition, stageKey, evidence, iterationOf(marking, stageKey), since);
+    if (verdict) out[stageKey] = verdict;
+  }
+  return out;
+}
+
+/** Who a held gate waits on: the gate's escalation role, else the stage's principal. */
+function gatePrincipalRef(stage: WorkShapeDefinitionContract["stages"][number]): string {
+  const gate = stage.advance.kind === "governed-decision" ? stage.advance.gate : undefined;
+  return gate?.escalation?.role ?? stage.accountablePrincipalRef;
+}
+
 export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition: WorkShapeDefinitionContract }): DrivePlan {
   const definition = input.definition;
   const now = input.now ?? new Date(0);
@@ -137,10 +221,21 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
   }
   const stored = read.data.marking;
 
+  // A cycle a refuse sent to a stop stays stopped, visibly, until the next cycle starts a fresh marking.
+  const lastTick = input.priorDrive ?? null;
+  if (read.data.source === "stored" && stored.tokens.length === 0
+    && lastTick?.action === "stop" && lastTick.reason === "refused_to_stop" && lastTick.cycleKey === cycle.cycleKey) {
+    return {
+      ...emptyPlan(input, "stop", "refused_to_stop", { cycle, ledger: [`Cycle ${cycle.cycleKey} was ended by a refusal routed to a stop; the room starts again next cycle.`] }),
+      marking: stored,
+    };
+  }
+
   // 3. One firing, then conformance over the flow.
+  const verdicts = gateVerdictsFor(definition, stored, input.recordedEvidence ?? []);
   let stepped: DriveStepResult;
   try {
-    stepped = stepDriveMarking(definition, stored, { receipts: input.receipts }, now);
+    stepped = stepDriveMarking(definition, stored, { receipts: input.receipts, verdicts }, now);
     stepped = { ...stepped, marking: withFixedTaskIds(definition, stepped.marking, input.roomId) };
   } catch (error) {
     if (!(error instanceof DriveConstructNotImplementedError)) throw error;
@@ -173,7 +268,11 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
     requiredRoles: input.requiredRoles,
     coordinatorEligibility: input.coordinatorEligibility,
     checkedAt: input.now,
-    flowOrder: { enabled: marked, delivered },
+    flowOrder: {
+      enabled: marked,
+      delivered,
+      ...(stepped.reworked?.toStageKey ? { reworkRoute: { from: stepped.reworked.fromStageKey, to: stepped.reworked.toStageKey } } : {}),
+    },
   });
 
   // A tick that does not advance keeps the marking it read (stored, derived or new-cycle).
@@ -197,11 +296,26 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
   }
 
   if (stepped.stopped) {
+    if (stepped.stopped.kind === "success") {
+      return {
+        ...emptyPlan(input, "stop", "success", { conformance, cycle, ledger: ["No further permitted stage; cycle complete."] }),
+        marking: stepped.marking,
+      };
+    }
+    // A refuse routed to a failure stop, or past its bound to the budget stop (PR-3c-3).
     return {
-      ...emptyPlan(input, "stop", "success", { conformance, cycle, ledger: ["No further permitted stage; cycle complete."] }),
+      ...emptyPlan(input, "stop", "refused_to_stop", {
+        conformance,
+        cycle,
+        ledger: [`Stage ${stepped.fired ?? "unknown"} was sent back to the ${stepped.stopped.kind} stop ${stepped.stopped.stopId ?? ""} (${stepped.stopped.disposition ?? "no disposition"}); the cycle ends.`],
+      }),
       marking: stepped.marking,
     };
   }
+  const reworkLedger = stepped.reworked
+    ? [`Stage ${stepped.reworked.fromStageKey} was sent back to ${stepped.reworked.toStageKey ?? "an earlier node"} over ${stepped.reworked.edgeId} (${stepped.marking.reworkTaken[stepped.reworked.edgeId] ?? 0} taken); stages ${stepped.reworked.clearedStageKeys.join(", ")} start a new iteration.`]
+    : [];
+  const holds = gateHolds(definition, stepped.marking, { receipts: input.receipts, verdicts });
 
   // 4. One plan per marked stage, in document order.
   const tokenPlans: Array<{ plan: DrivePlan; token: DriveTokenPlan }> = [];
@@ -211,8 +325,17 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
     if (!stage || !token) continue;
     const iteration = iterationOf(stepped.marking, stageKey);
     const planned = planStage({ input, definition, stage, conformance, cycle, prior: latchPriorFor(token, stageKey), iteration });
+    // A gate holding a completed stage (PR-3c-3) waits on a person, never on a re-dispatch:
+    // a refuse with no route is `gate_refused`; no verdict, hold or escalate stays a governed decision.
+    const gateHold = holds.get(stageKey);
+    const gated: DrivePlan | null = gateHold === "refused_without_route"
+      ? attentionPlan(planned, stage, "gate_refused", `Stage ${stageKey} was sent back, but its refuse route cannot be taken (bound spent, no budget stop); it waits on ${gatePrincipalRef(stage)}.`)
+      : gateHold === "awaiting_verdict" && planned.action === "dispatch_agent"
+        ? attentionPlan(planned, stage, "governed_decision", `Stage ${stageKey} is complete and waits at its gate for a decision from ${gatePrincipalRef(stage)}.`)
+        : null;
+    const decided = gated ?? planned;
     // A dispatch goes through the task id fixed on the token when it entered the stage.
-    const plan = planned.action === "dispatch_agent" && token.taskId ? { ...planned, taskId: token.taskId } : planned;
+    const plan = decided.action === "dispatch_agent" && token.taskId ? { ...decided, taskId: token.taskId } : decided;
     tokenPlans.push({
       plan,
       token: {
@@ -251,8 +374,30 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
     ...chosen.plan,
     // The legacy stageKey is the first marked stage in document order (design §4.2).
     stageKey: marked[0] ?? null,
-    ledger: tokenPlans.flatMap((entry) => entry.plan.ledger),
+    ledger: [...reworkLedger, ...tokenPlans.flatMap((entry) => entry.plan.ledger)],
     tokens: tokenPlans.map((entry) => entry.token),
     marking,
+    ...(stepped.reworked ? { rework: stepped.reworked } : {}),
+  };
+}
+
+/** A token plan turned into attention at its gate (PR-3c-3). */
+function attentionPlan(
+  planned: DrivePlan,
+  stage: WorkShapeDefinitionContract["stages"][number],
+  reason: "gate_refused" | "governed_decision",
+  line: string,
+): DrivePlan {
+  return {
+    ...planned,
+    action: "attention",
+    reason,
+    stageKey: stage.key,
+    accountablePrincipalRef: stage.accountablePrincipalRef,
+    agentId: null,
+    attentionPrincipalRef: gatePrincipalRef(stage),
+    taskId: null,
+    deviations: [],
+    ledger: [line],
   };
 }

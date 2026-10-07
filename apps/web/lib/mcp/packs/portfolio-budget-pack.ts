@@ -18,7 +18,9 @@ import { quarterBounds } from "@/lib/portfolio/investment-points";
 import {
   loadPortfolioBudgets,
   portfolioBudgetLabel,
+  proposalReason,
   proposePortfolioBudgets,
+  resolveProposalBasis,
   setPortfolioBudget,
 } from "@/lib/portfolio/portfolio-budget";
 import { setPortfolioOwner } from "@/lib/portfolio/accountable-owner";
@@ -72,11 +74,12 @@ const definitions: ToolDefinition[] = [
   {
     name: "propose_portfolio_budgets",
     description:
-      "Show each portfolio's current budget for a quarter (or 'No budget set', never zero) beside a proposal derived from the previous quarter's delivered points per portfolio, including the delivered points no portfolio can carry. Read-only: the proposal is never applied. Set a budget with set_portfolio_budget.",
+      "Show each portfolio's current budget for a quarter (or 'No budget set', never zero) beside a proposal derived from delivered points per portfolio, including the delivered points no portfolio can carry. The basis is the previous quarter by default; with trailingDays it is the last N days of delivery, scaled to the target quarter's length (use this for a first quarter, e.g. trailingDays 90). The response carries suggestedReason, which labels a trailing-window proposal provisional and revisable. Read-only: the proposal is never applied. A person applies or edits each figure with set_portfolio_budget.",
     inputSchema: {
       type: "object",
       properties: {
         quarterOf: { type: "string", description: "ISO date inside the target quarter (UTC). Defaults to the current quarter." },
+        trailingDays: { type: "integer", description: "Optional: propose from points delivered in the last N days (1-366) instead of the previous quarter, scaled to the target quarter's length." },
       },
       required: [],
     },
@@ -131,8 +134,13 @@ function targetQuarter(params: Record<string, unknown>) {
 
 async function proposePortfolioBudgetsHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const period = targetQuarter(params);
+  const options = params["trailingDays"] === undefined || params["trailingDays"] === null
+    ? {}
+    : { trailingDays: Number(params["trailingDays"]), asOf: new Date() };
+  const basis = resolveProposalBasis(period, options);
+  if (!basis.ok) return { success: false, error: basis.error, message: basis.message };
   const [proposal, budgets] = await Promise.all([
-    proposePortfolioBudgets(prisma as never, period),
+    proposePortfolioBudgets(prisma as never, period, options),
     loadPortfolioBudgets(prisma as never, period),
   ]);
   const current = new Map(budgets.map((b) => [b.id, b.budget]));
@@ -141,6 +149,7 @@ async function proposePortfolioBudgetsHandler(params: Record<string, unknown>): 
     message: `${budgets.filter((b) => b.budget).length} of ${budgets.length} portfolio(s) have a budget for ${period.start.toISOString().slice(0, 10)}.`,
     data: {
       ...proposal,
+      suggestedReason: proposalReason(proposal),
       rows: proposal.rows.map((row) => ({
         ...row,
         currentBudget: current.get(row.id) ?? null,
