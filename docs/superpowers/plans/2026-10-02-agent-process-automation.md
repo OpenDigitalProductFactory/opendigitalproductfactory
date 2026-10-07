@@ -108,8 +108,10 @@ guards did.
    every later flag as a positional — silently, under `allowPositionals` or
    `strict: false`. `scripts/lib/script-argv.mjs` drops one leading `--`; the
    landing spine (`land`, `gate:local`, `gate:context`, `gate:wait`) uses it.
-   **51** other scripts parse with those options and still drop the flag; they
-   need the helper and a guard that requires it.
+   The other scripts that parse with those options now use it too (#5981,
+   BI-EA76A597), and `scripts/check-no-hand-rolled-argv.mjs` refuses a new one
+   that does not. Promoter and installer scripts run by `node`, never pnpm,
+   are exempt by name.
 6. **`gate:local` is not the full deterministic set.** `land`'s first two real
    runs passed it, then preflight refused three guards: spec-status frontmatter,
    the CI test inventory, and the `gate-context` image closure. The first two are
