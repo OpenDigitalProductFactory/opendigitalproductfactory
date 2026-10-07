@@ -37,9 +37,14 @@ import { runWorkroomDriveJob, type WorkroomDriveEffects, type WorkroomDriveRoom 
 // agent:security-engineer (evidence assurance-run), `rotate` is
 // role:security-owner, governed-decision (evidence decision-record).
 const SHAPE = { key: "credential-hygiene-watch", version: "1.0.0" } as const;
+// market-research-brief@1.0.0 (registry, sequential, triggers: claim only):
+// `frame` and `research` are agent stages, `act-on-it` is a role-owned
+// governed decision.
+const CLAIM_SHAPE = { key: "market-research-brief", version: "1.0.0" } as const;
+const runKeyOn = (day: string, shape: { key: string; version: string } = SHAPE) => `${shape.key}@${shape.version}:${day}`;
 
 type ActivityRow = { kind: string; payload: Record<string, unknown>; recordedAt: Date };
-type Tick = { at: string; action: string; reason: string; stageKey: unknown; receipts: unknown };
+type Tick = { at: string; action: string; reason: string; stageKey: unknown; receipts: unknown; runKey: unknown };
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -65,7 +70,7 @@ function stageDispatchedAtFrom(activity: readonly ActivityRow[], workspaceState:
 }
 
 /** One standing room driven tick by tick through the real runner. */
-function standingRoom() {
+function standingRoom(shape: { key: string; version: string } = SHAPE) {
   let workspaceState: Record<string, unknown> = {};
   let lease: { expiresAt: Date | null; holder: string | null } = { expiresAt: null, holder: "PRN-LEASE" };
   const activity: ActivityRow[] = [];
@@ -87,7 +92,7 @@ function standingRoom() {
       const room: WorkroomDriveRoom = {
         id: "row-run-scope",
         capsuleId: "WC-RUN-SCOPE",
-        scopeClaims: [buildWorkShapeClaim(SHAPE, new Date("2026-01-01T00:00:00.000Z"))],
+        scopeClaims: [buildWorkShapeClaim(shape, new Date("2026-01-01T00:00:00.000Z"))],
         workspaceState,
         leaseExpiresAt: lease.expiresAt,
         leaseHolderPrincipalId: lease.holder,
@@ -137,7 +142,7 @@ function standingRoom() {
       });
       const plan = result.plans[0]!;
       const drive = asObject(workspaceState.workroomDrive);
-      const tick = { at, action: plan.action, reason: plan.reason, stageKey: drive?.stageKey ?? null, receipts: drive?.receipts ?? [] };
+      const tick = { at, action: plan.action, reason: plan.reason, stageKey: drive?.stageKey ?? null, receipts: drive?.receipts ?? [], runKey: drive?.runKey ?? null };
       ticks.push(tick);
       return tick;
     },
@@ -207,6 +212,8 @@ describe("BI-853120EE: a sequential room's receipts are scoped to the run that e
     room.record("2026-10-06T00:05:00.000Z", "rotate", "decision-record");
     // The decision lands in the same run; scan's day-1 receipt still counts, so the run succeeds.
     expect(await room.tick("2026-10-06T00:15:00.000Z")).toMatchObject({ action: "stop", reason: "success" });
+    // One run throughout, keyed by the day it started.
+    expect([...new Set(room.ticks.map((tick) => tick.runKey))]).toEqual([runKeyOn("2026-10-05")]);
   });
 
   it("AC-IN-FLIGHT-SAFE: a same-run receipt landed concurrently on the tick that crosses midnight is not dropped by the persist merge", async () => {
@@ -220,5 +227,58 @@ describe("BI-853120EE: a sequential room's receipts are scoped to the run that e
     expect(receipts.filter((receipt) => receipt.kind !== "blocked")).toEqual([
       expect.objectContaining({ stageKey: "scan", kind: "stage-evidence-recorded" }),
     ]);
+  });
+
+  it("a claim-triggered room's successful run is final: it is not driven back onto stage 1 on a later day (WWMD DI-8DCB9A4B566C)", async () => {
+    const room = standingRoom(CLAIM_SHAPE);
+    expect(await room.tick("2026-10-05T09:00:00.000Z")).toMatchObject({ action: "dispatch_agent", stageKey: "frame" });
+    room.record("2026-10-05T09:05:00.000Z", "frame", "research-question");
+    expect(await room.tick("2026-10-05T09:15:00.000Z")).toMatchObject({ action: "dispatch_agent", stageKey: "research" });
+    room.record("2026-10-05T09:20:00.000Z", "research", "cited-brief");
+    expect(await room.tick("2026-10-05T09:30:00.000Z")).toMatchObject({ action: "attention", reason: "governed_decision", stageKey: "act-on-it" });
+    room.record("2026-10-05T09:35:00.000Z", "act-on-it", "decision-record");
+    expect(await room.tick("2026-10-05T09:45:00.000Z")).toMatchObject({ action: "stop", reason: "success" });
+
+    const later = [
+      await room.tick("2026-10-05T10:00:00.000Z"),
+      await room.tick("2026-10-06T00:05:00.000Z"),
+      await room.tick("2026-10-06T00:20:00.000Z"),
+      await room.tick("2026-10-09T12:00:00.000Z"),
+    ];
+    expect(later.map(({ action, reason, stageKey }) => `${action}/${reason}@${String(stageKey)}`)).toEqual([
+      "do_not_wake/cycle_complete@null",
+      "do_not_wake/cycle_complete@null",
+      "do_not_wake/cycle_complete@null",
+      "do_not_wake/cycle_complete@null",
+    ]);
+    // The concluded run is the only run the room ever had.
+    expect([...new Set(room.ticks.map((tick) => tick.runKey))]).toEqual([runKeyOn("2026-10-05", CLAIM_SHAPE)]);
+  });
+
+  it("at most one run starts per calendar key: a run that crosses midnight and succeeds sleeps out that day, and the next run starts the day after", async () => {
+    const room = standingRoom();
+    await room.tick("2026-10-05T23:45:00.000Z"); // run 1 starts on day 1 and dispatches scan
+    room.record("2026-10-05T23:50:00.000Z", "scan", "assurance-run");
+    expect(await room.tick("2026-10-06T00:00:00.000Z")).toMatchObject({ action: "attention", stageKey: "rotate" });
+    room.record("2026-10-06T00:10:00.000Z", "rotate", "decision-record");
+    expect(await room.tick("2026-10-06T00:15:00.000Z")).toMatchObject({ action: "stop", reason: "success" });
+    // The rest of day 2 is the cycle the run concluded on: no second run, even with fresh evidence.
+    room.record("2026-10-06T08:00:00.000Z", "scan", "assurance-run");
+    for (const at of ["2026-10-06T00:30:00.000Z", "2026-10-06T08:15:00.000Z", "2026-10-06T23:45:00.000Z"]) {
+      expect(await room.tick(at)).toMatchObject({ action: "do_not_wake", reason: "cycle_complete" });
+    }
+    // Day 3 starts run 2, with no receipts carried from run 1.
+    const day3 = await room.tick("2026-10-07T00:05:00.000Z");
+    expect(day3).toMatchObject({ action: "dispatch_agent", stageKey: "scan", runKey: runKeyOn("2026-10-07") });
+    expect((day3.receipts as unknown[]).length).toBe(0);
+
+    const keys = room.ticks.map((tick) => tick.runKey);
+    expect([...new Set(keys)]).toEqual([runKeyOn("2026-10-05"), runKeyOn("2026-10-07")]);
+    // Each run's ticks are contiguous: a run key never comes back once another has started.
+    expect(keys.filter((key, index) => index > 0 && key !== keys[index - 1]).length).toBe(1);
+    // Every receipt a tick held belonged to that tick's run.
+    for (const tick of room.ticks) {
+      for (const receipt of tick.receipts as { runKey?: string }[]) expect(receipt.runKey, tick.at).toBe(tick.runKey);
+    }
   });
 });
