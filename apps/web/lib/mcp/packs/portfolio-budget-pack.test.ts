@@ -55,4 +55,12 @@ describe("propose_portfolio_budgets", () => {
     const result = await propose({}, "user-1");
     expect((result.data as { basis: { kind: string } }).basis.kind).toBe("previous-quarter");
   });
+
+  it("shows how much of each portfolio's delivery the platform-default rule attributed (BI-291F7451)", async () => {
+    db.items = [{ ...done("plat", "2026-09-01T00:00:00Z"), storedPortfolioId: null, scopeKind: "platform", platformDefaultPortfolioId: "p1" }];
+    const result = await propose({ trailingDays: 90 }, "user-1");
+    const data = result.data as { rows: Array<Record<string, unknown>>; attributedByRuleDeliveredPoints: number; unallocatedDeliveredPoints: number };
+    expect(data.rows[0]).toMatchObject({ deliveredPoints: 8, attributedByRule: { basis: "platform-default", deliveredPoints: 8, proposedPoints: 8 } });
+    expect(data).toMatchObject({ attributedByRuleDeliveredPoints: 8, unallocatedDeliveredPoints: 0 });
+  });
 });

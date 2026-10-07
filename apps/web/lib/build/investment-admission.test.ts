@@ -56,3 +56,44 @@ describe("blocksStart (shadow first, WWMD DI-D83D9C13686B)", () => {
     expect(blocksStart({ verdict: "admit", mode: "enforce" })).toBe(false);
   });
 });
+
+describe("admission and the budget proposal attribute an item alike (BI-291F7451 AC-1)", () => {
+  const now = new Date("2026-10-06T00:00:00Z");
+  const base = {
+    status: "open", effortSize: "small", jobSize: null, estimateAgreed: null, storedPortfolioId: null, storedPortfolioDangling: false,
+    productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null,
+    hasLiveWorkroom: false, deliverySurface: "other", traced: false, completedAt: null, platformDefaultPortfolioId: "pf",
+  };
+  const items = [
+    { ...base, itemId: "BI-NEW", scopeKind: "platform" },
+    { ...base, itemId: "BI-FLIGHT", scopeKind: "common", status: "in-progress", effortSize: "large" },
+    { ...base, itemId: "BI-ARCH", scopeKind: "archetype-leaf" },
+    { ...base, itemId: "BI-DONE", scopeKind: "platform", status: "done", effortSize: "medium", completedAt: new Date("2026-09-01T00:00:00Z") },
+  ];
+  const db = {
+    $queryRaw: async (parts: TemplateStringsArray) => {
+      const sql = parts.join("");
+      if (sql.includes('FROM "BacklogItem" b')) return items;
+      if (sql.includes('"PortfolioBudgetPeriod"')) return [];
+      if (sql.includes('"PlatformDevConfig"')) return [{ mode: "shadow" }];
+      if (sql.includes('SELECT "id" FROM "BacklogItem"')) return [{ id: "row-1" }];
+      return [{ id: "pf", slug: "foundational", name: "Foundational" }];
+    },
+  };
+
+  it("draws platform work on Foundational's allowance, the portfolio the proposal credits it to", async () => {
+    const { evaluateItemAdmission } = await import("./investment-admission");
+    const { proposePortfolioBudgets } = await import("@/lib/portfolio/portfolio-budget");
+    const admission = await evaluateItemAdmission(db as never, { itemId: "BI-NEW", startKind: "autonomous", now, weeklyThroughput: null });
+    expect(admission).toMatchObject({ portfolioId: "pf", inFlightPoints: 8, itemPoints: 1 });
+
+    const proposal = await proposePortfolioBudgets(db as never, { start: new Date("2026-10-01T00:00:00Z"), end: new Date("2027-01-01T00:00:00Z") }, { trailingDays: 90, asOf: now });
+    expect(proposal.rows.find((r) => r.id === admission.portfolioId)).toMatchObject({ deliveredPoints: 3, attributedByRule: { deliveredPoints: 3 } });
+  });
+
+  it("keeps archetype work with no portfolio on the unallocated allowance", async () => {
+    const { evaluateItemAdmission } = await import("./investment-admission");
+    expect(await evaluateItemAdmission(db as never, { itemId: "BI-ARCH", startKind: "autonomous", now, weeklyThroughput: null }))
+      .toMatchObject({ portfolioId: null, inFlightPoints: 0 });
+  });
+});

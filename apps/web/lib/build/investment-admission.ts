@@ -18,11 +18,10 @@
 // Spec: docs/superpowers/specs/2026-09-24-portfolio-budget-and-investment-wip-design.md
 
 import { quarterBounds } from "@/lib/portfolio/investment-points";
-import { loadInvestmentItems, summarizePortfolioInvestment } from "@/lib/portfolio/investment-read-model";
+import { loadInvestmentItems, resolveInvestmentItem, summarizePortfolioInvestment } from "@/lib/portfolio/investment-read-model";
 import { loadPortfolioBudgets } from "@/lib/portfolio/portfolio-budget";
 import { resolveInvestmentPoints } from "@/lib/portfolio/investment-points";
 import { deliveredPointsFrom, loadThroughput, measureThroughput, measuredWeeklyThroughput } from "@/lib/portfolio/throughput";
-import { resolveBacklogPortfolioWithPath } from "@dpf/db/backlog-portfolio";
 
 import { sandboxPoolSize } from "./wip-cap";
 
@@ -105,15 +104,9 @@ export async function evaluateItemAdmission(db: ReadDb, input: {
   const period = quarterBounds(now);
   const items = await loadInvestmentItems(db, period);
   const item = items.find((row) => row.itemId === input.itemId) ?? null;
-  const portfolioId = item
-    ? resolveBacklogPortfolioWithPath({
-        portfolioId: item.storedPortfolioDangling ? null : item.storedPortfolioId,
-        digitalProduct: { portfolioId: item.productPortfolioId },
-        taxonomyNode: { portfolioId: item.taxonomyPortfolioId },
-        coworkerNeeds: [{ agent: { portfolioId: item.coworkerNeedPortfolioId } }],
-        epic: { portfolios: item.epicPortfolioId ? [{ portfolioId: item.epicPortfolioId }] : [] },
-      }).portfolioId
-    : null;
+  // The same attribution the read model and the budget proposal use (BI-291F7451),
+  // so platform work draws on the Foundational allowance its budget funds.
+  const portfolioId = item ? resolveInvestmentItem(item, period).resolution.portfolioId : null;
   const summary = summarizePortfolioInvestment(items, now);
   const inFlightPoints = summary.rows.find((row) => row.portfolioId === portfolioId)?.inFlightPoints ?? 0;
   const itemPoints = item ? resolveInvestmentPoints(item).points : null;

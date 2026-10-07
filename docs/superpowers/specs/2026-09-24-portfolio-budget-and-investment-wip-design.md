@@ -147,7 +147,16 @@ which path it used:
 2. The digital product's portfolio
 3. The taxonomy node's portfolio (`taxonomyNodeId`)
 4. The epic's portfolio (`EpicPortfolio`)
-5. **`unallocated`**
+5. **`platform-default`**: an item whose `scopeKind` is `platform` or `common`
+   counts as the Foundational portfolio (operator decision 2026-10-07,
+   BI-291F7451). It is derived at read time, never written to the item, and the
+   budget proposal reports the points it attributed as `attributedByRule`.
+6. **`unallocated`**
+
+The read model, the budget proposal, throughput, the tie-out and admission all
+call one function for this, `resolveBudgetPortfolio`
+(`apps/web/lib/portfolio/budget-attribution.ts`), so a budget and the work that
+consumes it are attributed alike.
 
 Path 4 carries the most weight: 1,201 live items reach a portfolio only through
 their epic, and `EpicPortfolio` is empty. Slice 2 proposes a portfolio for each

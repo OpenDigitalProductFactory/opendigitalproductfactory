@@ -69,3 +69,22 @@ describe("summarizePortfolioInvestment (BI-298A7202)", () => {
     expect(summary.rows[0]).toMatchObject({ inFlightPoints: 3, readyPoints: 0 });
   });
 });
+
+describe("platform work with no portfolio counts as Foundational (BI-291F7451)", () => {
+  it("attributes platform/common items to Foundational by rule, counts them as such, and leaves archetype work unallocated", () => {
+    const delivered = { status: "done", completedAt: new Date("2026-08-01T00:00:00Z"), platformDefaultPortfolioId: "pf" };
+    const summary = summarizePortfolioInvestment([
+      row({ ...delivered, itemId: "plat", scopeKind: "platform", effortSize: "large" }),
+      row({ ...delivered, itemId: "com", scopeKind: "common", effortSize: "small" }),
+      row({ ...delivered, itemId: "explicit", scopeKind: "platform", storedPortfolioId: "pf", effortSize: "medium" }),
+      row({ ...delivered, itemId: "arch", scopeKind: "archetype-leaf", effortSize: "medium" }),
+      row({ itemId: "live", scopeKind: "platform", status: "in-progress", effortSize: "small", platformDefaultPortfolioId: "pf" }),
+    ], now);
+
+    const foundational = summary.rows.find((r) => r.portfolioId === "pf")!;
+    expect(foundational).toMatchObject({ items: 4, deliveredPoints: 12, inFlightPoints: 1 });
+    expect(foundational.paths).toEqual({ "platform-default": 3, stored: 1 });
+    expect(foundational.attributedByRule).toEqual({ items: 3, readyPoints: 0, inFlightPoints: 1, deliveredPoints: 9 });
+    expect(summary.rows.find((r) => r.portfolioId === null)).toMatchObject({ items: 1, deliveredPoints: 3 });
+  });
+});
