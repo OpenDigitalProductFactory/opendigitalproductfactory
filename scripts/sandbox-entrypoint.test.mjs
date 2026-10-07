@@ -96,11 +96,9 @@ test('sandbox boot generates its own auth secret once, root-only, and reuses it 
     fx.resetLog();
     const second = fx.run();
     assert.equal(second.status, 0, second.stderr);
-    const fdAgain = openSync(secretPath, 'r');
-    let secretAgain;
-    try { secretAgain = readFileSync(fdAgain, 'utf8'); } finally { closeSync(fdAgain); }
-    assert.equal(secretAgain, secret, 'a restart reuses the secret');
-    assert.equal(fx.envLog().dev, secret, 'the dev server receives the persisted secret');
+    // The restarted dev server receiving the first boot's secret proves the
+    // file was reused, without re-opening it by path (CodeQL js/file-system-race).
+    assert.equal(fx.envLog().dev, secret, 'a restart reuses the persisted secret');
   } finally { fx.cleanup(); }
 });
 
