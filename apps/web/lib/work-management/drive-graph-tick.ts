@@ -168,13 +168,22 @@ export function graphTaskEffects(plan: DrivePlan, workspaceState: unknown, roomI
   return { dispatch, deactivate: [...new Set([...left, ...paused])].filter((taskId) => !dispatched.has(taskId)) };
 }
 
-/** The room's receipts with a `blocked` receipt for every branch latched on the writeback latch this tick. */
+/**
+ * The room's receipts with a `blocked` receipt for every branch latched on the
+ * writeback latch this tick. Each is scoped to the token's iteration (PR-3c-3),
+ * written only when it is not 0 so an iteration-0 receipt keeps its PR-3c-2
+ * bytes (absent reads 0): a pass the stage is sent back from never latches the
+ * next pass.
+ */
 export function withLatchedBlockedReceipts<R extends WorkroomDriveReceipt>(plan: DrivePlan, receipts: readonly R[]): Array<R | WorkroomDriveReceipt> {
   const out: Array<R | WorkroomDriveReceipt> = [...receipts];
   for (const token of plan.tokens ?? []) {
     if (token.reason !== EXECUTOR_WRITEBACK_UNAVAILABLE_REASON) continue;
-    if (out.some((receipt) => receipt.stageKey === token.stageKey && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND)) continue;
-    out.push({ stageKey: token.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND });
+    if (out.some((receipt) => receipt.stageKey === token.stageKey && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND
+      && (receipt.iteration ?? 0) === token.iteration)) continue;
+    out.push(token.iteration > 0
+      ? { stageKey: token.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND, iteration: token.iteration }
+      : { stageKey: token.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND });
   }
   return out;
 }
