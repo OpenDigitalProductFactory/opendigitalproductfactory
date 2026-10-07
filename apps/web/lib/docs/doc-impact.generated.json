@@ -702,6 +702,9 @@
     "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/lib/coworker/approval-lifetime.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
     "apps/web/lib/coworker/approved-request-run-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -3617,6 +3620,7 @@
       "apps/mobile/eas.json"
     ],
     "docs/operations/observability-coverage.md": [
+      "apps/web/lib/coworker/approval-lifetime.ts",
       "apps/web/lib/observability/monitor-source-reachability.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",
       "apps/web/lib/voice-synthesis/tts-health-contract.test.ts",

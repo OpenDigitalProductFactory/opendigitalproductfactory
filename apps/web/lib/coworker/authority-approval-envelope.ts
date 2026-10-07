@@ -10,13 +10,18 @@ import {
 } from "@/lib/govern/authority/coworker-authority-decision";
 import { markTaskRunWorking } from "@/lib/observability/heartbeat";
 
-export const AUTHORITY_APPROVAL_TTL_MS = 15 * 60 * 1000;
+import {
+  APPROVAL_REPLAY_WINDOW_MS,
+  approvalLifetimeMs,
+  type ApprovalClassification,
+} from "./approval-lifetime";
 
 type EnvelopeSummary = {
   id: string;
   status: string;
   expiresAt: Date | null;
   argsJson?: unknown;
+  createdAt?: Date;
 };
 
 type AuthorityApprovalDb = {
@@ -121,6 +126,13 @@ export async function ensureAuthorityApprovalEnvelope(
     authorityDecisionId: string;
     threadId: string | null;
     explanation: string;
+    /**
+     * The call's resolved consequence, which sizes the request's lifetime
+     * (approval-lifetime.ts, BI-0012E6CA). Deliberately NOT part of the binding
+     * fingerprint, so approvals already granted keep matching. Absent means the
+     * caller could not classify the call, and the short window stands.
+     */
+    consequence?: ApprovalClassification;
     now?: Date;
   },
   db: AuthorityApprovalDb = prisma as unknown as AuthorityApprovalDb,
@@ -129,15 +141,16 @@ export async function ensureAuthorityApprovalEnvelope(
   const approvalBindingFingerprint =
     fingerprintCoworkerApprovalBinding(input.binding);
 
-  // Free the active-binding uniqueness slot when an abandoned proposal has
-  // expired. This is a legal proposed|approved -> cancelled transition.
+  // Free the active-binding uniqueness slot when an unanswered request has
+  // lapsed. It is settled as `expired` — nobody answered — never `cancelled`,
+  // which says a person acted (envelope-state-machine.ts, BI-0012E6CA).
   await db.coworkerActionEnvelope.updateMany({
     where: {
       approvalBindingFingerprint,
       status: { in: ["proposed", "approved"] },
       expiresAt: { lte: now },
     },
-    data: { status: "cancelled", resolvedAt: now },
+    data: { status: "expired", resolvedAt: now },
   });
 
   const existing = await findActiveEnvelope(
@@ -150,7 +163,9 @@ export async function ensureAuthorityApprovalEnvelope(
     return existing;
   }
 
-  const expiresAt = new Date(now.getTime() + AUTHORITY_APPROVAL_TTL_MS);
+  const expiresAt = new Date(
+    now.getTime() + approvalLifetimeMs(input.consequence === undefined ? "unclassified" : input.consequence),
+  );
   let created: EnvelopeSummary;
   try {
     created = await db.coworkerActionEnvelope.create({
@@ -197,6 +212,8 @@ export async function findApprovedAuthorityEnvelope(
   status: "approved";
   expiresAt: Date;
   binding: CoworkerApprovalBinding;
+  /** When it was approved, for the staleness re-check at execution. */
+  approvedAt: Date | null;
 } | null> {
   const approvalBindingFingerprint =
     fingerprintCoworkerApprovalBinding(binding);
@@ -207,7 +224,7 @@ export async function findApprovedAuthorityEnvelope(
       expiresAt: { gt: now },
     },
     orderBy: { createdAt: "desc" },
-    select: { id: true, status: true, expiresAt: true, argsJson: true },
+    select: { id: true, status: true, expiresAt: true, argsJson: true, createdAt: true },
   });
   if (!row?.expiresAt) return null;
 
@@ -231,12 +248,32 @@ export async function findApprovedAuthorityEnvelope(
     status: "approved",
     expiresAt: row.expiresAt,
     binding,
+    approvedAt: approvalTime(args, row.createdAt),
   };
 }
 
 /**
+ * When the request was approved: the person's recorded approval
+ * (humanApproval.approvedAt, BI-E6E2E704), else when the row was written — a
+ * policy-projected envelope is approved as it is created, and an older human
+ * approval without the marker is judged from its earliest possible time, which
+ * is the stricter reading.
+ */
+function approvalTime(args: Record<string, unknown> | null, createdAt: Date | undefined): Date | null {
+  const marker = args?.humanApproval;
+  const approvedAt = marker && typeof marker === "object"
+    ? (marker as Record<string, unknown>).approvedAt
+    : undefined;
+  if (typeof approvedAt === "string") {
+    const parsed = new Date(approvedAt);
+    if (Number.isFinite(parsed.getTime())) return parsed;
+  }
+  return createdAt instanceof Date ? createdAt : null;
+}
+
+/**
  * The settled outcome of an identical call a person already approved, within
- * the approval window: the result it ran with, or, for a run that failed
+ * the replay window (APPROVAL_REPLAY_WINDOW_MS): the result it ran with, or, for a run that failed
  * (BI-F4EB23C1), the failure it recorded. A failed approval is an outcome too;
  * treating it as absent minted a fresh card for every retry of a call that
  * could not succeed.
@@ -255,7 +292,7 @@ export async function findExecutedAuthorityOutcome(
     where: {
       approvalBindingFingerprint: fingerprintCoworkerApprovalBinding(binding),
       status: { in: ["executed", "failed"] },
-      resolvedAt: { gt: new Date(now.getTime() - AUTHORITY_APPROVAL_TTL_MS) },
+      resolvedAt: { gt: new Date(now.getTime() - APPROVAL_REPLAY_WINDOW_MS) },
     },
     orderBy: { createdAt: "desc" },
     select: { id: true, status: true, expiresAt: true },

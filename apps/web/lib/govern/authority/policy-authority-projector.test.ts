@@ -127,6 +127,8 @@ describe("projectPolicyAuthority", () => {
     });
     if (result.outcome === "allow") {
       expect(result.expiresAt.getTime()).toBeGreaterThan(now.getTime());
+      // Without a caller-sized lifetime the projector keeps the short window.
+      expect(result.expiresAt.getTime() - now.getTime()).toBeLessThanOrEqual(15 * 60 * 1000);
       expect(result.auditEvidenceDigest).toMatch(/^[a-f0-9]{64}$/);
       expect(result.contributionLedger).toEqual([{ principleId: "P-1", contribution: 4.2 }]);
     }
@@ -246,13 +248,14 @@ describe("persistPolicyAuthorityProjection", () => {
     expect(projection.outcome).toBe("allow");
     const authorizationCreate = vi.fn().mockResolvedValue({ decisionId: "AUTH-1" });
     const envelopeCreate = vi.fn().mockResolvedValue({ id: "ENV-1" });
+    const lapseWrite = vi.fn().mockResolvedValue({ count: 0 });
     const db = {
       $transaction: vi.fn(async (work: (tx: unknown) => Promise<unknown>) => work({
         authorizationDecisionLog: { create: authorizationCreate },
         coworkerActionEnvelope: {
           findFirst: vi.fn().mockResolvedValue(null),
           create: envelopeCreate,
-          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+          updateMany: lapseWrite,
         },
       })),
     };
@@ -269,6 +272,11 @@ describe("persistPolicyAuthorityProjection", () => {
       envelopeId: "ENV-1",
       reused: false,
     });
+    // BI-0012E6CA: a lapsed, unused authorization is settled as expired, never
+    // as a person's cancel.
+    expect(lapseWrite).toHaveBeenCalledWith(expect.objectContaining({
+      data: { status: "expired", resolvedAt: projection.outcome === "allow" ? projection.issuedAt : undefined },
+    }));
     expect(authorizationCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         decision: "allow",

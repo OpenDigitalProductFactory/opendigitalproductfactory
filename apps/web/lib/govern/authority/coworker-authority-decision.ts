@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
 import type { ToolConsequence } from "@/lib/tool-consequence";
+import { effectiveApprovalExpiry } from "@/lib/coworker/approval-lifetime";
 
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
@@ -147,6 +148,12 @@ export type CoworkerAuthorityInput = {
       | "cancelled";
     expiresAt: Date;
     binding: CoworkerApprovalBinding;
+    /**
+     * When the approval was given. With it, the approval is honoured only
+     * while it is fresh for the call's CURRENT consequence — the staleness
+     * re-check at execution (approval-lifetime.ts, BI-0012E6CA).
+     */
+    approvedAt?: Date | null;
   } | null;
   now?: Date;
   /**
@@ -461,7 +468,12 @@ export function evaluateCoworkerAuthority(
   if (input.approval.status !== "approved") {
     return deny("approval-not-active");
   }
-  if (input.approval.expiresAt.getTime() <= (input.now ?? new Date()).getTime()) {
+  const honouredUntil = effectiveApprovalExpiry({
+    expiresAt: input.approval.expiresAt,
+    approvedAt: input.approval.approvedAt ?? null,
+    consequence: input.action.consequence === undefined ? "unclassified" : input.action.consequence,
+  });
+  if (honouredUntil.getTime() <= (input.now ?? new Date()).getTime()) {
     return deny("approval-expired");
   }
   if (!sameBinding(input.approval.binding, currentBinding)) {

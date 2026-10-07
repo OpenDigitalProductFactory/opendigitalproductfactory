@@ -43,5 +43,14 @@
     "whyAsked": "Why you are asked",
     "covers": "What authorizing covers",
     "status": "Status"
+  },
+  "expiredUnanswered": {
+    "label": "Expired unanswered",
+    "context": "Nobody answered this request before its window closed, so nothing was changed.",
+    "explanation": "Nobody answered this request in time, so nothing was changed. If it is still wanted, ask again and it comes back to you for a decision.",
+    "askAgain": "Ask again",
+    "asking": "Asking again…",
+    "asked": "Asked again. The new request is waiting for your decision.",
+    "askFailed": "The request could not be raised again. Please try again."
   }
 }
