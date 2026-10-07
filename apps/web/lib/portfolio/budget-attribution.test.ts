@@ -30,7 +30,14 @@ describe("resolveBudgetPortfolio (BI-291F7451)", () => {
       .toMatchObject({ portfolioId: FOUNDATIONAL, basis: "platform-default" });
   });
 
-  it.each(["archetype-category", "archetype-leaf", "multi-archetype", "unknown", null])(
+  // Operator decision 2026-10-07 (second): work that was never scoped also counts
+  // as Foundational — 391 finished items with no scopeKind carried ~1,212 points.
+  it.each([null, "unknown"])("counts never-scoped (%s) work with no portfolio as Foundational", (scopeKind) => {
+    expect(resolveBudgetPortfolio(item({ scopeKind })))
+      .toMatchObject({ portfolioId: FOUNDATIONAL, path: "platform-default", basis: "platform-default" });
+  });
+
+  it.each(["archetype-category", "archetype-leaf", "multi-archetype"])(
     "leaves %s-scoped work with no portfolio unallocated",
     (scopeKind) => {
       expect(resolveBudgetPortfolio(item({ scopeKind })))

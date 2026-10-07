@@ -197,9 +197,10 @@ describe("proposal reports what the platform-default rule attributed (BI-291F745
     const q4 = quarterBounds(new Date("2026-10-15T00:00:00Z"));
     const proposal = await proposePortfolioBudgets(db as any, q4);
     expect(proposal.rows.find((r) => r.id === "pf")).toMatchObject({
-      deliveredPoints: 12, attributedByRule: { basis: "platform-default", deliveredPoints: 9, proposedPoints: 9 },
+      // The unscoped item (medium, 3) counts as Foundational too (operator decision 2026-10-07).
+      deliveredPoints: 15, attributedByRule: { basis: "platform-default", deliveredPoints: 12, proposedPoints: 12 },
     });
     expect(proposal.rows.find((r) => r.id === "pw")).toMatchObject({ deliveredPoints: 3, attributedByRule: { deliveredPoints: 0 } });
-    expect(proposal).toMatchObject({ attributedByRuleDeliveredPoints: 9, unallocatedDeliveredPoints: 4, totalDeliveredPoints: 19 });
+    expect(proposal).toMatchObject({ attributedByRuleDeliveredPoints: 12, unallocatedDeliveredPoints: 1, totalDeliveredPoints: 19 });
   });
 });

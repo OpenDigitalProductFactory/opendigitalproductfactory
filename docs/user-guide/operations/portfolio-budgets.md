@@ -47,8 +47,9 @@ same way, so a budget and the work that uses it always line up:
 
 1. A portfolio the item names directly wins: its own portfolio, its digital
    product's, its taxonomy node's, its AI coworker's, or its epic's.
-2. Otherwise, platform and common work counts as **Foundational**. The item is
-   not changed; the rule is applied each time the figures are read.
+2. Otherwise, platform and common work, and work that was never given a scope,
+   counts as **Foundational**. The item is not changed; the rule is applied each
+   time the figures are read.
 3. Anything else stays **Unallocated** and is shown as such.
 
 The budget proposal shows how much of each portfolio's delivery came from rule 2,
