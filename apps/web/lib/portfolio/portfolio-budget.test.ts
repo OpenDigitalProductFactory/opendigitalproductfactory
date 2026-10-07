@@ -99,8 +99,8 @@ describe("proposePortfolioBudgets (AC-2)", () => {
     const proposal = await proposePortfolioBudgets(db as any, q4);
     expect(proposal.basisPeriod).toEqual(previousQuarter(q4));
     expect(proposal.rows).toEqual([
-      { id: "p1", slug: "a", name: "A", deliveredPoints: 9, proposedPoints: 9, share: 1 },
-      { id: "p2", slug: "b", name: "B", deliveredPoints: 0, proposedPoints: 0, share: 0 },
+      { id: "p1", slug: "a", name: "A", deliveredPoints: 9, proposedPoints: 9, share: 1, attributedByRule: { basis: "platform-default", deliveredPoints: 0, proposedPoints: 0 } },
+      { id: "p2", slug: "b", name: "B", deliveredPoints: 0, proposedPoints: 0, share: 0, attributedByRule: { basis: "platform-default", deliveredPoints: 0, proposedPoints: 0 } },
     ]);
     expect(proposal).toMatchObject({ unallocatedDeliveredPoints: 3, totalDeliveredPoints: 12 });
   });
@@ -153,8 +153,8 @@ describe("proposal from a trailing window of delivered points (operator decision
     expect(proposal.basis).toEqual({ kind: "trailing-days", days: 90, scale: 92 / 90 });
     expect(proposal.basisPeriod).toEqual({ start: new Date("2026-07-08T00:00:00Z"), end: asOf });
     expect(proposal.rows).toEqual([
-      { id: "p1", slug: "a", name: "A", deliveredPoints: 40, proposedPoints: 41, share: 0.833 },
-      { id: "p2", slug: "b", name: "B", deliveredPoints: 8, proposedPoints: 8, share: 0.167 },
+      { id: "p1", slug: "a", name: "A", deliveredPoints: 40, proposedPoints: 41, share: 0.833, attributedByRule: { basis: "platform-default", deliveredPoints: 0, proposedPoints: 0 } },
+      { id: "p2", slug: "b", name: "B", deliveredPoints: 8, proposedPoints: 8, share: 0.167, attributedByRule: { basis: "platform-default", deliveredPoints: 0, proposedPoints: 0 } },
     ]);
     expect(proposal).toMatchObject({ unallocatedDeliveredPoints: 3, totalDeliveredPoints: 51 });
   });
@@ -172,5 +172,34 @@ describe("proposalReason", () => {
   it("names a previous-quarter proposal by its quarter", () => {
     expect(proposalReason({ targetPeriod: q4, basisPeriod: previousQuarter(q4), basis: { kind: "previous-quarter", days: null, scale: 1 } }))
       .toBe("Proposed from points delivered in the quarter starting 2026-07-01, for the quarter starting 2026-10-01.");
+  });
+});
+
+describe("proposal reports what the platform-default rule attributed (BI-291F7451 AC-2, AC-3)", () => {
+  it("attributes platform work to Foundational, says how much came from the rule, and keeps unattributable points reported", async () => {
+    const done = (itemId: string, extra: Record<string, unknown>) => ({
+      itemId, status: "done", effortSize: "large", jobSize: null, estimateAgreed: null, storedPortfolioId: null, storedPortfolioDangling: false,
+      productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasLiveWorkroom: false,
+      deliverySurface: "other", traced: false, completedAt: new Date("2026-08-10T00:00:00Z"), scopeKind: null, platformDefaultPortfolioId: "pf", ...extra,
+    });
+    const db = {
+      $queryRaw: async (parts: TemplateStringsArray) => !parts.join("").includes('"BacklogItem"')
+        ? [{ id: "pf", slug: "foundational", name: "Foundational" }, { id: "pw", slug: "for_employees", name: "Workforce" }]
+        : [
+          done("rule-1", { scopeKind: "platform" }),
+          done("rule-2", { scopeKind: "common", effortSize: "small" }),
+          done("explicit-f", { scopeKind: "platform", storedPortfolioId: "pf", effortSize: "medium" }),
+          done("explicit-w", { scopeKind: "platform", epicPortfolioId: "pw", effortSize: "medium" }),
+          done("archetype", { scopeKind: "archetype-leaf", effortSize: "small" }),
+          done("unscoped", { effortSize: "medium" }),
+        ],
+    };
+    const q4 = quarterBounds(new Date("2026-10-15T00:00:00Z"));
+    const proposal = await proposePortfolioBudgets(db as any, q4);
+    expect(proposal.rows.find((r) => r.id === "pf")).toMatchObject({
+      deliveredPoints: 12, attributedByRule: { basis: "platform-default", deliveredPoints: 9, proposedPoints: 9 },
+    });
+    expect(proposal.rows.find((r) => r.id === "pw")).toMatchObject({ deliveredPoints: 3, attributedByRule: { deliveredPoints: 0 } });
+    expect(proposal).toMatchObject({ attributedByRuleDeliveredPoints: 9, unallocatedDeliveredPoints: 4, totalDeliveredPoints: 19 });
   });
 });
