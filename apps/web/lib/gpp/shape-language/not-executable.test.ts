@@ -3,22 +3,20 @@
 // §5 (Exec column), §5.4, §11 (AC-NOT-EXECUTABLE); plan: docs/superpowers/plans/
 // 2026-10-02-gpp-shape-notation-compiler-phase-3.md (PR-3b-3).
 //
-// 1. The executable subset: stage deadline and sub-shape are off. Parallel
-//    split/join is ON since GPP Phase 3c PR-3c-2 (BI-8875C9DF), and rework edge
-//    (incl. gate.onRefuse) since PR-3c-3; each flipped with its
-//    drive-versus-interpreter parity test
-//    (lib/work-management/drive-parity-parallel.test.ts,
-//    drive-parity-rework.test.ts).
-// 2. Each of the two remaining schema-valid fixtures (stage deadline,
-//    sub-shape) is refused with E-NOT-EXECUTABLE naming its construct and
-//    element id. AC-3C-FLAG-FLIP: the parallel fixture (now
-//    pass-parallel-split-join.gpp.json) and the rework-edge and refuse-edge
-//    fixtures (now pass-rework-edge.gpp.json, pass-refuse-edge.gpp.json)
-//    compile with no finding; setting a flag back to false (the kill switch,
-//    test-only here) brings back exactly its E-NOT-EXECUTABLE.
-// 3. Flipping that construct's flag in a test-only override removes only that
-//    finding, and flipping any other flag removes nothing: the flag is the only
-//    switch.
+// 1. The executable subset. Parallel split/join is ON since GPP Phase 3c
+//    PR-3c-2 (BI-8875C9DF) and rework edge (incl. gate.onRefuse) since
+//    PR-3c-3, each flipped with its drive-versus-interpreter parity test.
+//    Stage deadline (PR-3c-4) and sub-shape (PR-3c-5) are implemented and
+//    parity-proven (drive-parity-deadline.test.ts, drive-parity-sub-shape.test.ts)
+//    but OFF until BI-086DC167 (graph markings reset at every cycle boundary).
+// 2. AC-NOT-EXECUTABLE: each of the two schema-valid fixtures for an off
+//    construct is refused with exactly one E-NOT-EXECUTABLE naming its
+//    construct and element id; turning only its flag on (test-only) removes
+//    only that finding and leaves nothing blocking, and turning any other flag
+//    on changes nothing: the flag is the only switch.
+// 3. The kill switch for the ON constructs: each fixture compiles under the
+//    real flags, and setting only its flag to false brings back exactly its
+//    E-NOT-EXECUTABLE; setting any other flag to false changes nothing.
 // 4. No decompiled registry document uses a non-executable construct.
 
 import { readFileSync } from "node:fs";
@@ -40,7 +38,15 @@ import { defaultResolveSources } from "./resolve-sources";
 const FIXTURE_DIR = join(__dirname, "__fixtures__", "drc");
 const RATIFICATION = JSON.parse(readFileSync(join(FIXTURE_DIR, "ratification.json"), "utf8")) as Record<string, GateRatificationEntry>;
 
-const CASES: ReadonlyArray<{ file: string; construct: GppConstruct; elementId: string }> = [
+/** The fixtures of the constructs that are ON, and the element their refusal names when a flag is set back to false. */
+const ON_CASES: ReadonlyArray<{ file: string; construct: GppConstruct; elementId: string }> = [
+  { file: "pass-parallel-split-join.gpp.json", construct: "parallel-split-join", elementId: "node:p" },
+  { file: "pass-rework-edge.gpp.json", construct: "rework-edge", elementId: "edge:b->a" },
+  { file: "pass-refuse-edge.gpp.json", construct: "rework-edge", elementId: "gate:a" },
+];
+
+/** The fixtures of the constructs that are implemented but OFF (BI-086DC167). */
+const OFF_CASES: ReadonlyArray<{ file: string; construct: GppConstruct; elementId: string }> = [
   { file: "e-not-executable-stage-deadline.gpp.json", construct: "stage-deadline", elementId: "stage:a" },
   { file: "e-not-executable-sub-shape.gpp.json", construct: "sub-shape", elementId: "stage:a" },
 ];
@@ -61,11 +67,8 @@ const withFlag = (construct: GppConstruct, value: boolean) => ({ ...CONSTRUCT_EX
 const key = (finding: GppDiagnostic) => JSON.stringify(finding);
 
 describe("the executable subset", () => {
-  it("is the spec §5 Exec column with parallel split/join (PR-3c-2) and rework edge (PR-3c-3) enabled: deadline and sub-shape are off", () => {
-    expect(GPP_CONSTRUCTS.filter((construct) => !CONSTRUCT_EXECUTABLE[construct])).toEqual([
-      "stage-deadline",
-      "sub-shape",
-    ]);
+  it("is the spec §5 Exec column with parallel split/join (PR-3c-2) and rework edge (PR-3c-3) on; stage deadline and sub-shape are off pending BI-086DC167", () => {
+    expect(GPP_CONSTRUCTS.filter((construct) => !CONSTRUCT_EXECUTABLE[construct])).toEqual(["stage-deadline", "sub-shape"]);
     expect(CONSTRUCT_EXECUTABLE["parallel-split-join"]).toBe(true);
     expect(CONSTRUCT_EXECUTABLE["rework-edge"]).toBe(true);
     expect(Object.keys(CONSTRUCT_EXECUTABLE).sort()).toEqual([...GPP_CONSTRUCTS].sort());
@@ -77,8 +80,8 @@ describe("the executable subset", () => {
   });
 });
 
-describe("AC-NOT-EXECUTABLE: a schema-valid document using a non-executable construct is refused", () => {
-  it.each(CASES)("$file is refused with E-NOT-EXECUTABLE $construct at $elementId", async ({ file, construct, elementId }) => {
+describe("AC-NOT-EXECUTABLE: a schema-valid document using a construct that is off is refused", () => {
+  it.each(OFF_CASES)("$file is refused with E-NOT-EXECUTABLE $construct at $elementId", async ({ file, construct, elementId }) => {
     const findings = await compile(file);
     expect(hasBlockingDiagnostic(findings)).toBe(true);
     const refusals = findings.filter((finding) => finding.rule === "E-NOT-EXECUTABLE");
@@ -87,17 +90,16 @@ describe("AC-NOT-EXECUTABLE: a schema-valid document using a non-executable cons
     expect(refusals[0]?.message.startsWith(`E-NOT-EXECUTABLE ${construct} at ${elementId}`)).toBe(true);
   });
 
-  it.each(CASES)("$file: flipping only the $construct flag removes only that finding", async ({ file, construct }) => {
+  it.each(OFF_CASES)("$file: turning only the $construct flag on (test-only) removes only that finding; the implementation compiles clean", async ({ file, construct }) => {
     const before = await compile(file);
     const after = await compile(file, withFlag(construct, true));
     const afterKeys = new Set(after.map(key));
-    const removed = before.filter((finding) => !afterKeys.has(key(finding)));
-    expect(removed.map((finding) => finding.code)).toEqual([`E-NOT-EXECUTABLE/${construct}`]);
+    expect(before.filter((finding) => !afterKeys.has(key(finding))).map((finding) => finding.code)).toEqual([`E-NOT-EXECUTABLE/${construct}`]);
     expect(after.length).toBe(before.length - 1);
     expect(hasBlockingDiagnostic(after)).toBe(false);
   });
 
-  it.each(CASES)("$file: flipping any other flag changes nothing", async ({ file, construct }) => {
+  it.each(OFF_CASES)("$file: turning any other flag on changes nothing", async ({ file, construct }) => {
     const before = (await compile(file)).map(key);
     for (const other of GPP_CONSTRUCTS.filter((candidate) => candidate !== construct && !CONSTRUCT_EXECUTABLE[candidate])) {
       expect((await compile(file, withFlag(other, true))).map(key), other).toEqual(before);
@@ -105,59 +107,27 @@ describe("AC-NOT-EXECUTABLE: a schema-valid document using a non-executable cons
   });
 });
 
-// AC-3C-FLAG-FLIP (GPP Phase 3c PR-3c-2): the parallel flag is on, and only that finding is gone.
-describe("AC-3C-FLAG-FLIP: parallel split/join compiles; every other construct is still refused", () => {
-  const PARALLEL = "pass-parallel-split-join.gpp.json";
-
-  it("the parallel fixture compiles with no error under the real flags", async () => {
-    const findings = await compile(PARALLEL);
-    expect(findings.filter((finding) => finding.rule === "E-NOT-EXECUTABLE")).toEqual([]);
-    expect(hasBlockingDiagnostic(findings)).toBe(false);
-  });
-
-  it("with the parallel flag set back to false (the kill switch), exactly its E-NOT-EXECUTABLE returns", async () => {
-    const on = await compile(PARALLEL);
-    const off = await compile(PARALLEL, withFlag("parallel-split-join", false));
-    const onKeys = new Set(on.map(key));
-    const added = off.filter((finding) => !onKeys.has(key(finding)));
-    expect(added.map((finding) => `${finding.code} ${finding.elementId}`)).toEqual(["E-NOT-EXECUTABLE/parallel-split-join node:p"]);
-    expect(off.length).toBe(on.length + 1);
-  });
-
-  it("each other construct's fixture is still refused under the real flags", async () => {
-    for (const { file, construct } of CASES) {
-      const refusals = (await compile(file)).filter((finding) => finding.rule === "E-NOT-EXECUTABLE");
-      expect(refusals.map((finding) => finding.code), file).toEqual([`E-NOT-EXECUTABLE/${construct}`]);
-    }
-    expect(new Set(CASES.map((entry) => entry.construct))).toEqual(new Set(["stage-deadline", "sub-shape"]));
-  });
-});
-
-// AC-3C-FLAG-FLIP (GPP Phase 3c PR-3c-3): the rework-edge flag is on, covering both notations (a
-// `flow.edges[].rework` edge and a gate's `onRefuse` route, design §11 correction 1), and only those findings are gone.
-describe("AC-3C-FLAG-FLIP: rework edges and refuse routes compile; deadline and sub-shape are still refused", () => {
-  const REWORK = [
-    { file: "pass-rework-edge.gpp.json", elementId: "edge:b->a" },
-    { file: "pass-refuse-edge.gpp.json", elementId: "gate:a" },
-  ];
-
-  it.each(REWORK)("$file compiles with no error under the real flags", async ({ file }) => {
+// AC-3C-FLAG-FLIP for PR-3c-2 and PR-3c-3, kept as the kill switch.
+describe("the kill switch: an ON construct's flag set back to false refuses its document", () => {
+  it.each(ON_CASES)("$file compiles with no error under the real flags", async ({ file }) => {
     const findings = await compile(file);
     expect(findings.filter((finding) => finding.rule === "E-NOT-EXECUTABLE")).toEqual([]);
     expect(hasBlockingDiagnostic(findings)).toBe(false);
   });
 
-  it.each(REWORK)("$file: with the rework-edge flag set back to false (the kill switch), exactly its E-NOT-EXECUTABLE returns", async ({ file, elementId }) => {
+  it.each(ON_CASES)("$file: with only the $construct flag off, exactly E-NOT-EXECUTABLE $construct at $elementId returns", async ({ file, construct, elementId }) => {
     const on = await compile(file);
-    const off = await compile(file, withFlag("rework-edge", false));
+    const off = await compile(file, withFlag(construct, false));
     const onKeys = new Set(on.map(key));
-    const added = off.filter((finding) => !onKeys.has(key(finding)));
-    expect(added.map((finding) => `${finding.code} ${finding.elementId}`)).toEqual([`E-NOT-EXECUTABLE/rework-edge ${elementId}`]);
+    expect(off.filter((finding) => !onKeys.has(key(finding))).map((finding) => `${finding.code} ${finding.elementId}`)).toEqual([`E-NOT-EXECUTABLE/${construct} ${elementId}`]);
     expect(off.length).toBe(on.length + 1);
   });
 
-  it("the parallel fixture is unaffected: it still compiles with no E-NOT-EXECUTABLE", async () => {
-    expect((await compile("pass-parallel-split-join.gpp.json")).filter((finding) => finding.rule === "E-NOT-EXECUTABLE")).toEqual([]);
+  it.each(ON_CASES)("$file: setting any other construct's flag to false changes nothing", async ({ file, construct }) => {
+    const before = (await compile(file)).map(key);
+    for (const other of GPP_CONSTRUCTS.filter((candidate) => candidate !== construct && CONSTRUCT_EXECUTABLE[candidate])) {
+      expect((await compile(file, withFlag(other, false))).map(key), other).toEqual(before);
+    }
   });
 });
 

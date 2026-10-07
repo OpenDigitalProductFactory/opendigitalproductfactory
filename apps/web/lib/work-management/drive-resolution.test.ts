@@ -469,7 +469,9 @@ describe("resolveDrivePlan: the Phase 3c graph path", () => {
 
   it("AC-3C-FAILCLOSED: a graph shape using a disabled construct pauses with construct_not_executable, naming it, and keeps its stage", () => {
     // Parallel split/join (PR-3c-2) and rework edges with refuse routes (PR-3c-3) are executable (their cases are
-    // below); stage deadline and sub-shape stay off.
+    // below). Stage deadline (PR-3c-4) and sub-shape (PR-3c-5) are implemented and parity-proven but off until
+    // BI-086DC167 (graph markings reset at every cycle boundary); their planner cases run under a test-only flag
+    // table in lib/queue/functions/workroom-drive-deadline.test.ts and workroom-drive-children.test.ts.
     for (const [shape, construct, elementId] of [
       [DEADLINE_FIXTURE, "stage-deadline", "stage:b"],
       [SUB_SHAPE_FIXTURE, "sub-shape", "stage:b"],

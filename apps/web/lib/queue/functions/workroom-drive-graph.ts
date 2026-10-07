@@ -28,6 +28,16 @@
 //   lib/gpp/stage-permit-revocation.ts). A tick that writes nothing (a held
 //   lease, a dispatch that never scheduled) committed no rework and revokes
 //   nothing.
+// - Stage deadlines (PR-3c-4): a notice committed on an earlier tick and not
+//   yet sent goes out just before a tick that commits, and its `notifiedAt` is
+//   written in that tick's snapshot only when the send succeeded; a notice
+//   raised this tick gets its `workroom-drive-deadline` activity after the
+//   snapshot (workroom-drive-deadlines.ts). A held lease, or a dispatch that
+//   never scheduled, commits nothing and sends nothing.
+// - Sub-shape children (PR-3c-5): the plan's child effects (create, complete,
+//   abandon) run just before a tick that commits, and each child entry's
+//   capsule id or state is written into that tick's marking only once its
+//   effect committed (workroom-drive-children.ts). A held lease runs none.
 
 import type { DriveReasonFor } from "@/lib/work-management/drive-conclusion";
 import { graphTaskEffects, withUndispatchedTokensRestored } from "@/lib/work-management/drive-graph-tick";
@@ -41,6 +51,8 @@ import {
 } from "@/lib/work-management/workroom-drive-constants";
 
 import type { WorkroomDriveEffects, WorkroomDriveRoom } from "./workroom-drive";
+import { applySubShapeEffects } from "./workroom-drive-children";
+import { recordRaisedDeadlines, sendCommittedDeadlineNotices } from "./workroom-drive-deadlines";
 
 type Outcome = "dispatched" | "attention" | "stopped" | "skipped";
 
@@ -70,18 +82,30 @@ export async function applyGraphDrivePlan(input: {
   };
   const activityKind = plan.action === "attention" ? WORKROOM_DRIVE_ATTENTION_KIND : WORKROOM_DRIVE_ACTIVITY_KIND;
 
+  // Stage deadlines (PR-3c-4): a committed, unsent notice goes out just before a tick that commits.
+  // Sub-shape children (PR-3c-5): created, completed or abandoned just before a tick that commits; what committed is written.
+  const committing = async (written: Record<string, unknown>) => {
+    const children = await applySubShapeEffects({ room, plan, effects, now });
+    return (await sendCommittedDeadlineNotices({ room, plan, effects, now }))(children(written));
+  };
+  const afterCommit = async (written: Record<string, unknown>) => {
+    await revokeLeftPermits();
+    await recordRaisedDeadlines({ room, plan, persist, snapshot: written });
+  };
+
   if (dispatch.length === 0) {
     await deactivateLeft();
+    const written = await committing(snapshot);
     await persist({
       roomId: room.id,
-      snapshot,
+      snapshot: written,
       activityKind,
       summary: plan.action === "attention"
         ? `Stage ${plan.stageKey ?? "unknown"} waiting on ${plan.attentionPrincipalRef ?? "a human"}`
         : plan.action === "do_not_wake" ? `Drive did not wake: ${plan.reason}` : `Drive ${plan.action}: ${plan.reason}`,
-      payload: snapshot,
+      payload: written,
     });
-    await revokeLeftPermits();
+    await afterCommit(written);
     return outcomeOf(plan.action);
   }
 
@@ -112,12 +136,12 @@ export async function applyGraphDrivePlan(input: {
     return "skipped";
   }
   if (!room.ownerUserId) {
-    const unowned = {
+    const unowned = await committing({
       ...snapshot,
       action: "dispatch_agent",
       reason: "missing_task_owner" satisfies DriveReasonFor<"dispatch_agent">,
       dispatchedStageKeys: [],
-    };
+    });
     await deactivateLeft();
     await persist({
       roomId: room.id,
@@ -126,7 +150,7 @@ export async function applyGraphDrivePlan(input: {
       summary: "Agent stage is eligible but no owner user is bound for ScheduledAgentTask.",
       payload: unowned,
     });
-    await revokeLeftPermits();
+    await afterCommit(unowned);
     return "skipped";
   }
 
@@ -156,7 +180,7 @@ export async function applyGraphDrivePlan(input: {
   const marking = plan.marking && !("raw" in plan.marking) && plan.definition
     ? withUndispatchedTokensRestored(plan.marking, room.workspaceState, plan.definition, failed)
     : null;
-  const written: Record<string, unknown> = { ...snapshot, ...(marking ? { marking: marking satisfies DriveMarking } : {}), dispatchedStageKeys: dispatched };
+  const written = await committing({ ...snapshot, ...(marking ? { marking: marking satisfies DriveMarking } : {}), dispatchedStageKeys: dispatched });
   const taskIds = dispatch.filter((token) => dispatched.includes(token.stageKey)).map((token) => token.taskId);
   await persist({
     roomId: room.id,
@@ -168,6 +192,6 @@ export async function applyGraphDrivePlan(input: {
     payload: written,
     ...(dispatched.length > 0 ? { lease: { expiresAt, holderPrincipalId: room.leaseHolderPrincipalId } } : {}),
   });
-  await revokeLeftPermits();
+  await afterCommit(written);
   return dispatched.length > 0 ? "dispatched" : outcomeOf(plan.action);
 }

@@ -25,9 +25,14 @@
  * - earnGraphReceipts: receipts earned per marked stage, each at that stage's
  *   iteration and bounded by that stage's own dispatch time. Only when a
  *   stored marking is present: a graph room's first tick has none, holds no
- *   dispatch yet, and earns through the ordinary path.
+ *   dispatch yet, and earns through the ordinary path. A sub-shape stage
+ *   (PR-3c-5) earns only from `child-completion` evidence recorded after its
+ *   token entered the stage.
  */
 import type { DrivePlan } from "./drive-resolution";
+
+/** The evidence kind a sub-shape child's success records on its parent stage (PR-3c-5). */
+export const CHILD_COMPLETION_EVIDENCE_KIND = "child-completion";
 import {
   iterationOf,
   markedKeysWithIteration,
@@ -233,11 +238,15 @@ export function earnGraphReceipts(input: {
   if (!read.ok) return input.existing;
   let receipts = input.existing;
   for (const stageKey of markedStageKeys(definition, read.data.marking)) {
+    // A sub-shape stage (PR-3c-5) is completed only by its child: the `child-completion` evidence the runner
+    // records on success, recorded after this pass's token entered the stage (so an earlier pass's never counts).
+    const subShape = definition.stages.find((stage) => stage.key === stageKey)?.subShape !== undefined;
+    const enteredAt = subShape ? stageToken(read.data.marking, stageKey)?.enteredAt : undefined;
     receipts = earnEvidenceReceipts({
       stageKey,
-      declaredKinds: stageEvidenceKinds(definition, stageKey),
+      declaredKinds: subShape ? [CHILD_COMPLETION_EVIDENCE_KIND] : stageEvidenceKinds(definition, stageKey),
       evidence: input.evidence,
-      dispatchedAt: input.dispatchedAtByStage?.get(stageKey) ?? null,
+      dispatchedAt: subShape ? (enteredAt ? new Date(enteredAt) : null) : input.dispatchedAtByStage?.get(stageKey) ?? null,
       existing: receipts,
       iteration: iterationOf(read.data.marking, stageKey),
     });
