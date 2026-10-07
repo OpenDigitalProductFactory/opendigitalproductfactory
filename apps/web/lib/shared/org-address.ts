@@ -17,6 +17,8 @@
 // timezone-from-location here — that module imports this one (resolveTimezone-
 // FromAddress), so the dependency must stay one-directional.
 
+import { isProviderDerivedSource } from "@/lib/geocoding/sources";
+
 import { isRecord } from "./coerce";
 
 /**
@@ -337,7 +339,26 @@ export function serializeOrgAddress(
   // (setup-entities.createOrganization) so the display readers don't show both.
   delete result.location;
 
+  // A point a geocoding provider looked up belongs to the text it was looked up
+  // from: when the address changes, drop it so geocode-on-save can look up the
+  // new one (BI-C318C227 §2.1). A point a person placed, or one with no recorded
+  // source (typed in by hand), is kept.
+  if (isRecord(existing) && isProviderDerivedSource(existing.validationSource) && addressTextChanged(existing, result)) {
+    for (const key of ORG_LOCATION_KEYS) delete result[key];
+  }
+
   return result;
+}
+
+/** Keys that carry the organization's own point inside Organization.address. */
+export const ORG_LOCATION_KEYS = ["latitude", "longitude", "lat", "lng", "long", "validationSource", "validatedAt"] as const;
+
+function addressTextChanged(before: Record<string, unknown>, after: Record<string, unknown>): boolean {
+  const a = parseOrgAddress(before);
+  const b = parseOrgAddress(after);
+  return (["line1", "line2", "city", "region", "postalCode", "stateCode", "countryCode"] as const).some(
+    (key) => (a[key] ?? "").toLowerCase() !== (b[key] ?? "").toLowerCase(),
+  );
 }
 
 // Display key order for formatOrgAddressLines — mirrors org-identity's historical

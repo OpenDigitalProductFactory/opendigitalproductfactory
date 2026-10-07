@@ -14,6 +14,7 @@ import {
   searchValidatedSiteAddresses,
   type ValidatedSiteAddress,
 } from "@/lib/shared/site-address-validation";
+import { requestAddressGeocodeIfMissing } from "@/lib/geocoding/request.server";
 import {
   checkCustomerSiteDuplicates,
   customerSiteNormalizedColumns,
@@ -226,6 +227,8 @@ export async function createCustomerSite(
     type: "account_created",
     accountId: input.accountId,
   });
+  // Place the site on the map when the address lookup gave no point (BI-C318C227 §2.1).
+  await requestAddressGeocodeIfMissing(site.primaryAddressId);
 
   revalidatePath("/customer");
   revalidatePath(`/customer/${input.accountId}`);
@@ -326,6 +329,7 @@ export async function updateCustomerSite(input: {
     type: "account_created",
     accountId: input.accountId,
   });
+  if (validatedAddress) await requestAddressGeocodeIfMissing(site.primaryAddressId);
 
   revalidatePath("/customer");
   revalidatePath(`/customer/${input.accountId}`);

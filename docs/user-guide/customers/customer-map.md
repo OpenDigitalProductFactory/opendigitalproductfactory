@@ -53,6 +53,19 @@ It never overwrites a site you placed by hand. When it finishes, the panel shows
 how many sites were placed, how many were not found, and how many are still
 missing.
 
+Once a service is chosen, new locations are found as they are saved, with no
+button to press:
+
+- a new customer site, or a site whose address changes;
+- a new address for one of your business locations;
+- your business's own address, saved during setup.
+
+Each lookup runs in the background, one at a time at the service's own pace, so
+saving is never slowed down. A position someone chose (a suggestion picked
+from the address search, a point placed by hand, or a site confirmed on a
+phone) is never replaced. Your business's own position also lets people nearby
+find you through the phone app's nearby search.
+
 The free public Nominatim service is not offered here. Its usage policy does not
 allow bulk lookups. See
 [Address Validation Providers](../platform/address-validation-providers.md).
