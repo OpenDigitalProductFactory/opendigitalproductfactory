@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   normalizeGapTopic,
   gapFingerprint,
-  gapPageSlug,
   recordCoverageGap,
   type RecordCoverageGapClient,
 } from "./coverage-gap";

@@ -44,7 +44,12 @@
       "binding-enforcement-lowered": "Permission checks are looser: {$detail}",
       "binding-version-changed": "Permissions revised: {$detail}",
       "gate-removed": "No longer needs a decision to move on: {$detail}",
-      "binding-removed": "Permission checks removed: {$detail}"
+      "binding-removed": "Permission checks removed: {$detail}",
+      "flow-changed": "The order the work moves through changed: {$detail}",
+      "deadline-added": "Now has a deadline: {$detail}",
+      "deadline-relaxed": "The deadline is later: {$detail}",
+      "deadline-removed": "No longer has a deadline: {$detail}",
+      "sub-shape-changed": "Hands part of the work to a different child room: {$detail}"
     },
     "rationale": "Why you approve",
     "rationaleHint": "Required, because this widens what the room can reach.",

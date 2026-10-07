@@ -95,11 +95,28 @@ describe("createOperationalCapabilityState", () => {
   });
 
   it("observes only the current Compose project through Docker Engine labels", async () => {
-    vi.stubEnv("HOSTNAME", "portal-id");
     const observed = await observeDockerProjectServices(async (path) => path.includes("portal-id")
       ? { Config: { Labels: { "com.docker.compose.project": "dpf" } } }
-      : [{ State: "running", Status: "Up (healthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "postgres" } }, { State: "running", Status: "Up (health: starting)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "starting" } }, { State: "running", Status: "Up (unhealthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "unhealthy" } }, { State: "exited", Status: "Exited", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "browser-use" } }, { State: "running", Labels: { "com.docker.compose.project": "other", "com.docker.compose.service": "postgres" } }]);
+      : [{ State: "running", Status: "Up (healthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "postgres" } }, { State: "running", Status: "Up (health: starting)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "starting" } }, { State: "running", Status: "Up (unhealthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "unhealthy" } }, { State: "exited", Status: "Exited", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "browser-use" } }, { State: "running", Labels: { "com.docker.compose.project": "other", "com.docker.compose.service": "postgres" } }], "portal-id");
     expect(observed).toEqual({ postgres: { composePresent: true, healthy: true }, starting: { composePresent: true, healthy: false }, unhealthy: { composePresent: true, healthy: false }, "browser-use": { composePresent: true, healthy: false } });
+  });
+
+  // BI-3925A700: Dockerfile sets ENV HOSTNAME=0.0.0.0 (the Next.js bind address),
+  // so the env var is never the container id. Looking up /containers/0.0.0.0
+  // failed, the observer returned {}, and every service read "unavailable".
+  it("finds its own container by the OS hostname, not the HOSTNAME env the image repurposes", async () => {
+    vi.stubEnv("HOSTNAME", "0.0.0.0");
+    const paths: string[] = [];
+    const observed = await observeDockerProjectServices(async (path) => {
+      paths.push(path);
+      if (path.startsWith("/containers/json")) {
+        return [{ State: "running", Status: "Up (healthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "portal" } }];
+      }
+      if (path === "/containers/9f38be6f3fe8/json") return { Config: { Labels: { "com.docker.compose.project": "dpf" } } };
+      throw new Error(`no such container: ${path}`);
+    }, "9f38be6f3fe8");
+    expect(paths[0]).toBe("/containers/9f38be6f3fe8/json");
+    expect(observed).toEqual({ portal: { composePresent: true, healthy: true } });
   });
 
   it.each(["timeout", "oversize"])("bounds Docker socket %s failures and observer falls back without hanging", async (mode) => {

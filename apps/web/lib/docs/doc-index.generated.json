@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 731,
+  "pageCount": 732,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1136,7 +1136,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "backlog-planning-runbook"
+        "backlog-planning-runbook",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/backlog-archetype-scope.md": {
@@ -1172,7 +1173,8 @@
         "reaping-safety-a-live-sessions-worktree-is-never-reaped",
         "rebasing-on-a-shallow-clone-never-a-bare-git-rebase-originmain",
         "housekeeping",
-        "when-a-worktree-is-removed"
+        "when-a-worktree-is-removed",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/build-gate-runbook.md": {
@@ -1184,7 +1186,9 @@
         "build-gate-runbook",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
-        "reaping-the-worktree-when-the-pr-merges-bi-848360ef"
+        "reaping-the-worktree-when-the-pr-merges-bi-848360ef",
+        "task-specific-operating-rules",
+        "a-refusal-carries-its-own-remedy"
       ]
     },
     "docs/architecture/build-studio-namespace.md": {
@@ -1336,7 +1340,8 @@
         "7-subagent-dispatch-discipline",
         "14-release-testing",
         "15-communication",
-        "8a-advise-safe-tools-server-action-exports-coworker-coordination-pointers"
+        "8a-advise-safe-tools-server-action-exports-coworker-coordination-pointers",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/customer-zero-and-use-case-zero.md": {
@@ -1381,7 +1386,8 @@
         "model-metadata-lives-in-the-schema-and-the-catalog",
         "the-steward-watches-growth-not-only-structure",
         "retention-floors-come-from-the-obligations-that-bind-this-install",
-        "evidence-payloads-never-live-inline"
+        "evidence-payloads-never-live-inline",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/decision-vectors-by-archetype.md": {
@@ -1485,7 +1491,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "delivery-surfaces-runbook"
+        "delivery-surfaces-runbook",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/dependency-reduction-routine.md": {
@@ -1526,7 +1533,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "design-research-runbook"
+        "design-research-runbook",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/document-generation-facility.md": {
@@ -2115,13 +2123,17 @@
       "publishedPortal": false,
       "anchors": [
         "mcp-tool-authorization-runbook",
+        "discovered-external-mcp-tools-are-default-deny-bi-8b7b2fe9",
         "protocol-version-window-mechanics-landed-contract-pending-ratification",
         "gpp-permit-handles-phase-2",
         "terminal-readiness-recovery-packets",
         "when-a-workroom-scope-claim-needs-a-person",
         "acting-coworker-binding-what-lets-a-token-join-a-work-room",
         "diagnosing-requires-an-acting-coworker",
-        "diagnosing-an-empty-loadtools-result"
+        "diagnosing-an-empty-loadtools-result",
+        "task-specific-operating-rules",
+        "disclosure-measurement-and-recovery",
+        "recovering-an-interrupted-independent-review"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -2201,7 +2213,8 @@
       "anchors": [
         "architecture-orientation",
         "subsystem-map",
-        "channel-adapter-capabilities"
+        "channel-adapter-capabilities",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/package-boundaries.md": {
@@ -2341,7 +2354,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "skill-surfaces-runbook"
+        "skill-surfaces-runbook",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/standards-review-2026-05-12-round-2.md": {
@@ -2441,7 +2455,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "theme-aware-styling-runbook"
+        "theme-aware-styling-runbook",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/trusted-agent-reference-contract.md": {
@@ -2696,6 +2711,7 @@
         "concurrent-execution-and-recorded-state",
         "the-brief-and-what-advances-a-stage",
         "failing-closed-is-not-the-same-as-locking",
+        "every-reason-the-drive-emits-is-in-its-vocabulary-by-type",
         "a-named-governed-writer-must-be-attached-not-discovered",
         "a-stage-names-the-tools-it-needs",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
@@ -5544,7 +5560,8 @@
       "publishedPortal": false,
       "anchors": [
         "dpf-install-guide-linux-native-docker",
-        "supported-environment",
+        "recommended-first-deployment",
+        "compatibility-and-prerequisites",
         "prerequisites",
         "quick-start",
         "contributor-office-document-conversion",
@@ -5552,6 +5569,7 @@
         "what-the-installer-does",
         "login",
         "network-exposure-after-install",
+        "pilot-acceptance-checks",
         "day-to-day",
         "edge-node-whats-running-and-why",
         "llm-provider",
@@ -5606,7 +5624,9 @@
         "3-docker-compose",
         "4-git-repo-hygiene",
         "room-route-guard-on-windows",
-        "recurring-meta-pattern"
+        "recurring-meta-pattern",
+        "persisted-mcp-endpoint-recovery-bi-9f258707",
+        "required-services-after-container-driven-upgrades-bi-fffea4ed"
       ]
     },
     "docs/install/scratch-install-rehearsal.md": {
@@ -12060,6 +12080,15 @@
         "related"
       ]
     },
+    "docs/user-guide/coworker-permission-reconciliation.md": {
+      "publicHref": "/user-guide/coworker-permission-reconciliation/",
+      "portalHref": "/docs/coworker-permission-reconciliation",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "review-coworker-permissions"
+      ]
+    },
     "docs/user-guide/customers/customer-map.md": {
       "publicHref": "/user-guide/customers/customer-map/",
       "portalHref": "/docs/customers/customer-map",
@@ -12521,7 +12550,8 @@
         "what-happens-if-you-do-nothing",
         "what-is-reversible",
         "recovery-and-help",
-        "what-to-watch"
+        "what-to-watch",
+        "when-required-services-are-degraded"
       ]
     },
     "docs/user-guide/platform/address-validation-providers.md": {
@@ -12669,6 +12699,7 @@
         "start-with-the-object-you-are-managing",
         "read-marketplace-readiness",
         "connect-and-verify",
+        "review-tools-a-service-discovers",
         "native-integration-previews",
         "troubleshooting-and-recovery",
         "what-to-watch"

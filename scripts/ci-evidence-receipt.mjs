@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import {
   mkdirSync,
   readFileSync,
@@ -47,7 +48,7 @@ const REUSABLE_HEAVY_GATE_IDS = [
 function parseArgs(argv) {
   const option = { type: "string" };
   const { values, positionals } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     allowPositionals: true,
     options: { "input-dir": option, "output-dir": option, "source-run-id": option },
   });

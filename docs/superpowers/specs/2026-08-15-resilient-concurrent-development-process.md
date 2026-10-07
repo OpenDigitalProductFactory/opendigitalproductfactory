@@ -119,6 +119,42 @@ The first rollout admits the documentation lane only when `origin/main` is an an
 
 The planner output records its lane, selected commands, reasons, affected tests/routes/packages, policy version, digest, and immutable tree. The executor must run that plan or fail; it may not silently replace an affected plan with an exhaustive one merely because exhaustive is easier to invoke.
 
+### 4.1 Documentation result publication
+
+`BI-C6B2D404` extends the existing result projection to the documentation
+producer. `runPreAdmissionDocumentationLane` writes `executionLane` and a
+schema-versioned `producerEvidence` binding into the existing atomic local-CI
+gate record. The binding names the candidate branch/SHA, candidate and
+integration trees, evidence-plan digest, and canonical evidence record ID.
+There is no sandbox run in this lane, so an older sandbox metadata file is
+diagnostic history rather than the documentation result's producer.
+
+Publication order is: record the in-flight attempt; run the documentation
+commands; verify source is still clean and unchanged; publish canonical
+evidence; verify source again; atomically write the terminal result. A lost
+executor or unavailable publication service leaves an unfinished record.
+Rerunning the normal gate on the unchanged source completes verification and
+publication; deleting or editing evidence files is not a recovery procedure.
+Published evidence survives a source-change refusal and is not relabeled as
+evidence for the newer document.
+
+The authoritative status reader checks the complete supported binding, exact
+branch/SHA, publication, result, and expiry before accepting documentation.
+Missing, legacy, malformed, or unsupported producer bindings require a fresh
+gate. Heavyweight results retain their independent sandbox metadata check.
+Rollback retains all server evidence and local diagnostic files; an older
+reader may reject a documentation result and require a supported reader or
+fresh gate rather than rewriting its metadata.
+
+The ordered repair is writer/reader reproduction, atomic producer binding,
+publication-boundary tests, independent review, and governed PR delivery.
+Acceptance is exercised by the documentation producer through the real atomic
+writer and status reader: a prior code result, failed document checks,
+unavailable/incomplete publication followed by restoration, source edits
+during publication, expired/partial bindings, and unchanged heavyweight
+rejection. These checks consume no shared test capacity; canonical delivery
+verification remains required for the implementation itself.
+
 ## 5. Durable admission and wake-up flow
 
 1. The client requests a gate using the immutable `gateKey` and its owner/task identity.

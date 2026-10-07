@@ -823,6 +823,24 @@ fail-closed guard: a guard whose own output re-triggers its input has no
 recovery path, and the estate it protects can only degrade. Bound the latch to
 something that changes on its own.
 
+### Every reason the drive emits is in its vocabulary, by type
+
+The no-silence rule (BI-12A083B4) concludes every drive row as outcome met, in
+motion or blocked. It walks `DRIVE_REASONS_BY_ACTION`, and that list was once a
+hand list beside an untyped `reason: string`. It drifted. `cycle_complete`,
+`executor_writeback_unavailable`, `lease_held` and `missing_task_owner` were
+missing, and `unknown_principal` was filed under the wrong action. In 30 days,
+11,435 writeback-paused ticks concluded `unconcluded` while the walk stayed
+green (BI-3ACFD254).
+
+`DrivePlan.reason`, the drive's plan constructor and the drive job's overrides
+are now typed from that list. A reason the drive emits but the list omits fails
+typecheck. A writeback-paused room now concludes as blocked, and clears when the
+executor records evidence or a writeback for the dispatched stage. A room with
+no owner user for its agent stage concludes as blocked, and clears when an owner
+user is bound. A finished cycle and a lease held by another worker conclude as
+in motion.
+
 ## A named governed writer must be attached, not discovered
 
 The chain above — owner, authority, brief, evidence receipt — was complete and

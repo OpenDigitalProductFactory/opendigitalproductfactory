@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { resolveBacklogDeploymentClosure, projectDeploymentClosure, type DeploymentClosureProof, type DeploymentClosureResult } from "./deployment-closure";
 
 import { prisma } from "@dpf/db";
 
@@ -370,11 +371,14 @@ export async function completeBacklogItemTransition(args: {
     projectReadiness?: ProjectReadiness;
     resolveMergeDelivery?: ResolveMergeDelivery;
     resolveHasDesignSpec?: ResolveHasDesignSpec;
+    resolveDeploymentClosure?: (args: { itemId: string; workType: string | null; roots: string[] }) => Promise<DeploymentClosureResult>;
   };
 }): Promise<GovernedTerminalTransitionResult> {
   const db = args.db ?? (prisma as unknown as BacklogTerminalDb);
   const evaluatedAt = args.evaluatedAt ?? new Date().toISOString();
   let lockedItem: BacklogTerminalItem | null = null;
+  let deployment: DeploymentClosureProof | null = null;
+  let acceptanceState = "missing";
   return executeGovernedTerminalTransition({
     db,
     actor: args.actor,
@@ -440,6 +444,14 @@ export async function completeBacklogItemTransition(args: {
           ? { baselineSubjectIds: [lockedItem.itemId, inheritedScope.parentItemId] }
           : {}),
       });
+      acceptanceState = reconciliation.state;
+      const deploymentResult = isDirectMergePlatformWork(lockedItem)
+        ? await (args.dependencies?.resolveDeploymentClosure ?? resolveBacklogDeploymentClosure)({
+          itemId: lockedItem.itemId, workType: lockedItem.workType, roots: mergeSignalRoots(),
+        }) : null;
+      deployment = deploymentResult?.kind === "deployed"
+        && reconciliation.state !== "conflict" && reconciliation.state !== "malformed"
+        ? deploymentResult : null;
       const mergedThroughGates = await (args.dependencies?.resolveMergeDelivery ?? defaultResolveMergeDelivery)({
         itemRowId: lockedItem.id,
         itemId: lockedItem.itemId,
@@ -476,7 +488,7 @@ export async function completeBacklogItemTransition(args: {
       // `hasDesignSpec` is retained as a REPORTED fact rather than a gate, so a
       // reader can still tell which merges carried a spec.
       const recognizeMergeThroughGates =
-        mergedThroughGates === "merged" && isDirectMergePlatformWork(lockedItem);
+        (mergedThroughGates === "merged" || deployment !== null) && isDirectMergePlatformWork(lockedItem);
       // BI-043946C5: the item clears every OTHER term of the direct-merge predicate,
       // so the merge signal is the only thing standing between it and recognition —
       // and the signal could not run. That is the difference between "this did not
@@ -490,13 +502,13 @@ export async function completeBacklogItemTransition(args: {
       // the explanation of why — the worst of both, and the operator would be
       // told nothing at all.
       const mergeSignalBlindSpot =
-        mergedThroughGates === "signal-unavailable" && isDirectMergePlatformWork(lockedItem);
+        !deployment && mergedThroughGates === "signal-unavailable" && isDirectMergePlatformWork(lockedItem);
       const mergeSignalReasons = mergeSignalBlindSpot
         ? [mergeSignalUnavailableReason(mergeSignalRoots())]
         : [];
       // A merge through branch protection is authoritative delivery evidence and
       // supersedes a missing/hand-built manifest (BI-B04A0203).
-      const delivery = mergedThroughGates === "merged" ? "pass" : deliveryState(completion);
+      const delivery = mergedThroughGates === "merged" || deployment ? "pass" : deliveryState(completion);
       const directDocumentationAcceptance = completion.kind === "evaluated"
         && completion.verdict.allowed
         && completion.verdict.normalizedManifest?.workClass === "documentation"
@@ -520,10 +532,10 @@ export async function completeBacklogItemTransition(args: {
         reconciliation.state === "pass" ||
         directDocumentationAcceptance ||
         smallShapeAcceptance ||
-        (recognizeMergeThroughGates && reconciliation.state !== "conflict" && reconciliation.state !== "malformed");
+        (!deployment && recognizeMergeThroughGates && reconciliation.state !== "conflict" && reconciliation.state !== "malformed");
       const objectiveReconciliationPass = reconciliation.state === "pass"
         || smallShapeAcceptance
-        || (recognizeMergeThroughGates && reconciliation.state !== "conflict" && reconciliation.state !== "malformed");
+        || (!deployment && recognizeMergeThroughGates && reconciliation.state !== "conflict" && reconciliation.state !== "malformed");
       const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
         item: {
           ...lockedItem,
@@ -569,7 +581,7 @@ export async function completeBacklogItemTransition(args: {
       });
       return {
         governed: projected.governed,
-        decision: projected.decision,
+        decision: deployment ? projectDeploymentClosure(projected.decision, deployment) : projected.decision,
         anchorBacklogItemId: lockedItem.id,
         factsDigest: factsDigest({
           itemId: lockedItem.itemId,
@@ -580,6 +592,8 @@ export async function completeBacklogItemTransition(args: {
           objectiveEvidenceRefs: reconciliation.evidenceRefs,
           deliveryState: delivery,
           mergedThroughGates,
+          deployment,
+          acceptanceState,
           // No longer a gate (DI-273E6E15C8EB) but still worth recording: a
           // reader reconciling a receipt can tell whether this merge carried a
           // design spec or was recognised on the merge alone.
@@ -594,13 +608,16 @@ export async function completeBacklogItemTransition(args: {
     mutate: async (genericTx) => {
       const tx = genericTx as unknown as BacklogTerminalClient;
       if (!lockedItem) throw new Error("Terminal readiness did not resolve a backlog item.");
+      const resolution = deployment
+        ? `${args.resolution}\nDelivery closed on ${deployment.runId}; acceptance ${acceptanceState}. Acceptance remains a separate verification obligation.`
+        : args.resolution;
       const updated = await tx.backlogItem.updateMany({
         where: { id: lockedItem.id, status: args.expectedStatus },
         data: {
           ...args.additionalData,
           status: "done",
           ...(args.expectedStatus === "done" ? {} : { completedAt: new Date(evaluatedAt) }),
-          resolution: args.resolution,
+          resolution,
           claimStatus: "released",
         },
       });
@@ -608,8 +625,11 @@ export async function completeBacklogItemTransition(args: {
         await tx.backlogItemActivity.create({ data: {
           backlogItemId: lockedItem.id,
           kind: "status_change",
-          summary: `${args.expectedStatus} → done`,
-          payload: { from: args.expectedStatus, to: "done", resolution: args.resolution },
+          summary: `${args.expectedStatus} → done${deployment ? ` (deployed; acceptance ${acceptanceState})` : ""}`,
+          payload: { from: args.expectedStatus, to: "done", resolution,
+            ...(deployment ? { closureBasis: "canonical-deployment", deployment, acceptanceState,
+              acceptanceObligation: acceptanceState === "pass" ? "satisfied" : acceptanceState === "fail" ? "corrective-work-required" : "pending-independent-verification" } : {}),
+          },
           recordedById: args.actor.humanContextRef,
           recordedByAgentId: args.actor.agentContextRef,
         } });

@@ -29,6 +29,8 @@ COPY patches/ ./patches/
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/lib/hooks-dir.mjs ./scripts/lib/
 COPY scripts/sbom/generate-platform-sbom.mjs ./scripts/sbom/
+COPY scripts/lib/script-argv.mjs ./scripts/lib/
+COPY scripts/lib/git.mjs ./scripts/lib/
 COPY scripts/lib/pnpm-lock.mjs ./scripts/lib/
 COPY .github/workflows/publish-image.yml ./.github/workflows/
 COPY apps/web/package.json ./apps/web/
@@ -155,6 +157,9 @@ COPY scripts/salvage-sweep.mjs ./scripts/
 # at runtime. Package its exact transitive source closure into the image so a
 # mutable /host-dpf checkout can never substitute different rule bytes.
 COPY scripts/gate-context.mjs ./scripts/
+# gate-context and worktree-janitor read their flags through scriptArgv.
+COPY scripts/lib/script-argv.mjs ./scripts/lib/
+COPY scripts/lib/git.mjs ./scripts/lib/
 COPY scripts/check-design-grounding-decision.mjs ./scripts/
 COPY scripts/check-data-impact.mjs ./scripts/
 # gate-context advertises the Convergence-Impact trailer (BI-B19BE117); the
@@ -275,7 +280,7 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     mkdir -p /dpf-release-assets/scripts/pki && cp scripts/pki/edge-client.tpl /dpf-release-assets/scripts/pki/ && \
     cp uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat /dpf-release-assets/ && \
     cp scripts/bootstrap-organization-pki.ps1 scripts/publish-host-gpu.ps1 /dpf-release-assets/scripts/ && \
-    cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
+    cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/script-argv.mjs scripts/lib/git.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
     cp scripts/installer/local-model-policy.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/validate-install-state.mjs /dpf-release-assets/scripts/installer/ && \
@@ -494,6 +499,8 @@ COPY scripts/installer/install-state.v1.schema.json /promoter/scripts/installer/
 COPY scripts/installer/install-state.v2.schema.json /promoter/scripts/installer/install-state.v2.schema.json
 COPY scripts/lib/resolve-capability-compose-profiles.mjs /promoter/scripts/lib/resolve-capability-compose-profiles.mjs
 COPY scripts/lib/govern-capability-compose-args.mjs /promoter/scripts/lib/govern-capability-compose-args.mjs
+COPY scripts/lib/script-argv.mjs /promoter/scripts/lib/script-argv.mjs
+COPY scripts/lib/git.mjs /promoter/scripts/lib/git.mjs
 COPY scripts/lib/capability-state-hash.mjs /promoter/scripts/lib/capability-state-hash.mjs
 COPY scripts/capability-service-catalog.generated.json /promoter/scripts/capability-service-catalog.generated.json
 

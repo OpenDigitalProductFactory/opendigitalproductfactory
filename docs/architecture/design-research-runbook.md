@@ -27,3 +27,12 @@ It is the leader in DPF's own category, and no DPF spec cited it before [`2026-0
 2. **Checklist before shipping a global priority change** — (a) name the archetype(s) affected; (b) list which stream stages the change reorders or demotes; (c) confirm no **load-bearing** stage for those archetypes is pushed behind a non-load-bearing one without an explicit per-archetype policy override; (d) cite the section of the value-stream doc you checked.
 3. **Per-archetype overrides** — when one industry must differ from the global default, document the override in the design (and seed/config owner), do not hardcode a second ranking table in a random page helper.
 4. **Do not duplicate stage names** in AGENTS.md or feature specs — always point at the value-stream doc so stage vocabulary stays single-source.
+
+## Task-specific operating rules
+
+Read these when this domain is touched. These statements are relocated from AGENTS.md; its invariant core still applies.
+
+- **Absorb, don't adopt; the dependency surface only shrinks.** An added package, image, service or subscription must retire more than it adds. **Commandment tier.** → [kernel principle](../founder-kernel/wiki/principles/absorb-dont-adopt.md)
+- **Evaluate an external tool before adopting it** — security, architecture fit, compliance and integration — via the `tool-evaluation` skill. → [kernel principle](../professions/software-engineer/wiki/tool-evaluation-pipeline.md)
+- **Every new feature spec must include a "Research & Benchmarking" section before finalization** — compare 2–3 open-source leaders and state what DPF adopts or rejects. → [kernel principle](../founder-kernel/wiki/principles/design-research-required.md)
+- **Finalizing a spec runs the §1 check at spec altitude:** deployment contracts, canonical identity, no parallel utilities, no second home for a rule already stated here or in a kernel principle.

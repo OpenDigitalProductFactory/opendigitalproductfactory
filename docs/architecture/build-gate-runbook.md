@@ -4,7 +4,7 @@ CI scopes a pull request from its source head and that head's merge-base with `o
 
 **Public documentation publication.** CI's `Documentation Publication Build` builds `docs/` with the same [GitHub Pages Jekyll action](https://github.com/actions/jekyll-build-pages) used by legacy Pages publication. It runs for changed documentation or CI configuration on PRs, merge candidates and main; missing comparison history runs the build. Unchanged publication inputs produce a terminal no-build result. The job also checks that malformed Liquid is rejected, and feeds the required `Merge Readiness` aggregate. It only builds: the existing Pages channel still owns deployment. A green build is not evidence that the public site has deployed. Jekyll processes Liquid inside code fences; protect literal examples using its [raw tag guidance](https://jekyllrb.com/docs/liquid/tags/#jekyll-processes-all-liquid-filters-in-code-blocks).
 
-**Status:** procedure reference. The *rule* — work is not complete until unit tests, production build, UX verification and migration-apply all pass — lives in [`AGENTS.md`](../../AGENTS.md) §5 and stays always-on. This file holds where each gate runs, the sandbox and portal handling, the local hooks, and the reasoning. Relocated from §5 by BI-0020D511 Phase 1; no rule was dropped, only its procedure moved.
+**Status:** task-specific gate contract. [`AGENTS.md`](../../AGENTS.md) §4 carries the invariant; this reference carries the detailed rules and procedure. For platform or gate failure, read [recovery routing](../../packages/dpf-skill-pack/skills/dpf-systematic-debugging/references/recovery-routing.md) first.
 
 **Documentation impact is part of done.** Every Build Studio build and every external Claude / Codex / Grok implementation thread must decide whether the change affects users, AI coworkers, public-site positioning, setup/install, operations, architecture/contributor workflows, route maps, prompts, or external-agent behavior. If it does, update the correct human-readable docs in the same branch: `docs/user-guide/` for operator workflows and in-app help, `docs/index.html` / `docs/README.md` for public pre-install positioning, `docs/architecture/` for architecture/contributor explanation, `AGENTS.md` for durable development doctrine, and `docs/superpowers/` for implementation history. "Fix first, document later" is only an emergency or explicitly approved sequencing choice: the same branch or Workroom must still record the spec/doc/backlog/WWMD follow-up before the work is claimed done. If no docs are needed, record the concrete no-docs-needed reason in the plan, PR body, or evidence. Do not claim done while docs exposed to users, AI coworkers, or `opendigitalproductfactory.com` are knowingly stale.
 
@@ -130,3 +130,32 @@ That delegation is deliberate rather than tidy. `classifyWorktree` places its li
 - `DPF_WORKTREE_JANITOR_AUTO_REAP` — remove rather than report. Default off, so the event can be soaked before it deletes.
 
 A scan that cannot reach its subject logs UNHEALTHY and returns `ran: false`. It never reports success, because the fleet backstop already proved how expensive that mistake is: its script was never copied into the image, every run died with `MODULE_NOT_FOUND`, and the caught error read exactly like a clean sweep (BI-B3370CB2).
+
+## Task-specific operating rules
+
+The [mandatory build gate](../founder-kernel/wiki/principles/build-gate-mandatory.md) requires affected unit tests, production build, applicable UX verification and added migration application. Tier execution to the change; unrun is not passed.
+
+- **Cheap source-local checks run in the worktree; runtime-bound gates do not** (§1) — never rebuild the live portal by hand; `/ops/self-upgrade` owns quiescence, recovery points and rollback.
+- **Tier the gate to the change; the heavy build runs once, in the cloud.** Fast local checks (typecheck, lint, affected tests — no Docker) gate the push; the full build is the cloud merge-queue safety net; docs → lint only. → [process spec](../superpowers/specs/2026-08-15-resilient-concurrent-development-process.md)
+- **Documentation impact is part of done.** Decide whether a change affects users, AI coworkers, positioning, install, operations, architecture, routes, prompts or external-agent behavior; update the right docs surface in the same branch, or record a concrete no-docs-needed reason. Do not claim done while docs exposed to users or coworkers are knowingly stale.
+- **Pre-existing failures: note them and fix if feasible. Do not defer silently.**
+- **Never weaken auth to make a test pass.** Use a seeded persona at its real privilege level; if a check blocks you, that is the finding.
+- **A gate that could not run is not a verdict.** Infrastructure failure — a fenced lease, a killed child, a starved host — is recorded as inconclusive and re-runs on the same SHA. Never a FAIL against the diff. Fail closed on safety; fail open on infrastructure. → [kernel principle](../founder-kernel/wiki/principles/report-only-the-verdict-you-reached.md)
+
+## A refusal carries its own remedy
+
+`pregate:preflight` used to end a failure with a pointer — "see every constraint
+that applies to this diff: `pnpm gate:context`". A pointer costs the reader a
+decision it usually declines: over one session of nine PRs that line appeared on
+every run and `gate:context` was invoked zero times, so every required
+attestation and every stale derived artifact was found by colliding with its
+refusal instead.
+
+The refusal now EMITS the obligations: which attestations this diff requires,
+which of them belong in the PR body rather than a commit trailer (the Seed
+Contribution Fit gate reads the push-event body, so the same text in a trailer
+does not satisfy it), and each stale derived artifact with the command that
+regenerates it. `pnpm land` consumes the same data.
+
+The rule behind it: an obligation an agent has to remember does not survive
+context compaction. Put it in the gate's output, or in code, and it survives.

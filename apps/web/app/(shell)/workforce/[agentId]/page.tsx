@@ -15,7 +15,6 @@ import { notFound } from "next/navigation";
 import { MessageSquare, Settings2 } from "lucide-react";
 
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
 import { loadCoworkerRecord } from "@/lib/coworker-record/load-record";
 import {
   loadCoworkerCostProjection,
@@ -118,16 +117,12 @@ export default async function CoworkerIdentityPage({
   if (!record) return notFound();
   const { agent, runtime } = record;
 
-  const [session, cost, engagements, teams] = await Promise.all([
+  const [_session, cost, engagements, teams] = await Promise.all([
     auth(),
     loadCoworkerCostProjection(runtime.agentId, { slugId: runtime.slugId }),
     loadCoworkerEngagements(runtime.agentId, runtime.id, { slugId: runtime.slugId }),
     loadCoworkerTeams(runtime.id),
   ]);
-
-  const canWrite =
-    !!session?.user &&
-    can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "manage_platform");
 
   const detailRoute = `/workforce/${encodeURIComponent(agent.agentId)}`;
   const adminRecord = `/platform/ai/agent/${encodeURIComponent(agent.agentId)}`;

@@ -68,6 +68,26 @@ activate a service, grant a coworker access, or prove runtime health.
    then confirm the resulting proposal and execution evidence under Governance
    & Audit.
 
+## Review Tools A Service Discovers
+
+When you connect an MCP service, the tools it reports start as **Waiting for
+review**. Coworkers cannot see or use them yet: a working connection is not
+permission.
+
+1. Open **Platform > Tools > Services** and choose the service.
+2. Expand a tool to read exactly what a coworker would read: its description
+   and inputs, with hidden characters removed.
+3. Choose the **permission a coworker needs** to use it, and say whether it
+   **only reads information** or **can change things outside the platform**.
+4. Select **Approve this text**, or **Block** if coworkers should never use it.
+
+If the service later changes an approved tool's description or inputs, the
+tool goes back to **Waiting for review** and is marked **Changed since
+approval**. Coworkers keep seeing nothing new until you review it again; the
+page shows the approved text and the new text side by side. **Return to
+review** withdraws an approval immediately. Tools that ship with the platform
+show **Included**; their access is set by the release.
+
 ## Native Integration Previews
 
 Native integration pages use customer-supplied credentials and expose

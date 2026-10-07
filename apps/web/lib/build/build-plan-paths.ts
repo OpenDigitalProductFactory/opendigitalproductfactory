@@ -120,7 +120,7 @@ function rewriteTaskText(text: string | undefined, rewrites: BuildPlanPathRewrit
   // Guard: task fields like implement/testFirst/verify are optional strings. When rewrites is
   // empty, Array.reduce returns the initial value unchanged — if text is undefined that propagates
   // to the second reduce and crashes on .replace(). Return early for falsy inputs.
-  if (!text) return text ?? "";
+  if (!text) return "";
   const pathRewritten = rewrites.reduce((current, rewrite) => current.split(rewrite.from).join(rewrite.to), text);
   return LEGACY_BUILD_STUDIO_TEXT_ALIASES.reduce(
     (current, rewrite) => current.replace(rewrite.from, rewrite.to),

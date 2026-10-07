@@ -8,7 +8,10 @@
 import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 import { diffWorkShapeBinding, type BindingChangeKind, type WorkShapeBindingDiff } from "./work-shape-binding-diff";
 import { isCompletingWorkroomDriveReceipt } from "./workroom-drive-receipts";
-import { getWorkShape, getWorkShapeVersion, readWorkShapeDefinitionContract } from "./work-shapes";
+import { getWorkShape, getWorkShapeVersion, readWorkShapeDefinitionContract, type WorkShapeDefinition } from "./work-shapes";
+import { hasStoredDriveMarking } from "./drive-graph-tick";
+import { readStoredDriveMarking } from "./drive-marking";
+import { backwardReach, buildShapeFlowGraph, forwardReach } from "./work-shape-flow-graph";
 import { readWorkShapeClaim } from "./workroom-shape-claim";
 
 export const REBIND_REFUSAL_CODES = [
@@ -21,6 +24,11 @@ export const REBIND_REFUSAL_CODES = [
   "stage_in_flight",
   "rationale_required",
   "rebind_conflict",
+  // GPP Phase 3c (BI-8875C9DF): a graph room's marking cannot be mapped onto
+  // the new version (more than one token, a token inside a parallel block, a
+  // rework counter, or a child room). Camunda refuses a migration whose active
+  // elements cannot be mapped for the same reason.
+  "marking_not_mappable",
 ] as const;
 export type RebindRefusalCode = (typeof REBIND_REFUSAL_CODES)[number];
 
@@ -53,6 +61,52 @@ export function stageInFlight(workspaceState: unknown): string | null {
     && typeof (receipt as Record<string, unknown>).kind === "string"
     && isCompletingWorkroomDriveReceipt(receipt as { stageKey: string; kind: string }, drive.stageKey as string));
   return done ? null : drive.stageKey;
+}
+
+/** A stage token inside a parallel block of the shape: between a split and the join that pairs it, or a join arrival. */
+function insideParallelBlock(definition: WorkShapeDefinition, nodeId: string): boolean {
+  const graph = buildShapeFlowGraph(definition);
+  const node = graph.nodes.get(nodeId);
+  if (node?.kind === "parallel-join") return true;
+  for (const join of graph.nodes.values()) {
+    if (join.kind !== "parallel-join" || join.pairs === undefined) continue;
+    const split = graph.resolveRef(join.pairs);
+    if (!split) continue;
+    const back = backwardReach(graph, [join.id]);
+    const inside = [...forwardReach(graph, [split], new Set([join.id]))].filter((id) => back.has(id) && id !== split && id !== join.id);
+    if (inside.includes(nodeId)) return true;
+  }
+  return false;
+}
+
+/**
+ * Why a graph room's stored marking cannot be mapped onto the target version,
+ * or null when it can (GPP Phase 3c PR-3c-1, AC-3C-REBIND). Only one token,
+ * outside any parallel block of either version, with no rework taken and no
+ * child room, maps by stage key the way the sequential `stageKey` does. A
+ * marking that cannot be read is refused: the guard fails closed. Every
+ * `children` entry counts as live until the sub-shape PR (PR-3c-5) can read
+ * the child's state.
+ */
+export function markingNotMappable(
+  workspaceState: unknown,
+  from: WorkShapeDefinition | null,
+  to: WorkShapeDefinition,
+): string | null {
+  if (!hasStoredDriveMarking(workspaceState)) return null;
+  const read = readStoredDriveMarking(workspaceState, from ?? to, null);
+  if (!read.ok) return "This room's drive marking cannot be read, so it cannot be mapped onto the new version.";
+  const { marking } = read.data;
+  if (marking.tokens.length > 1) return `This room holds ${marking.tokens.length} tokens. Rebind once its parallel work has joined.`;
+  if (Object.values(marking.reworkTaken).some((count) => count > 0)) {
+    return "This room has taken a rework route this cycle. Rebind once the cycle completes.";
+  }
+  if (Object.keys(marking.children).length > 0) return "This room has a sub-shape child room. Rebind once it has finished.";
+  const token = marking.tokens[0];
+  if (token && [from, to].some((definition) => definition !== null && insideParallelBlock(definition, token.node))) {
+    return "This room's work is inside a parallel block. Rebind once the block has joined.";
+  }
+  return null;
 }
 
 /**
@@ -91,6 +145,8 @@ export function planWorkroomShapeRebind(input: {
   }
   // A pin the registry no longer holds diffs as if every stage were new.
   const from = getWorkShapeVersion(pinned.key, pinned.version);
+  const unmappable = markingNotMappable(input.workspaceState, from, current);
+  if (unmappable) return rebindRefusal("marking_not_mappable", unmappable);
   const diff = diffWorkShapeBinding(
     from ? readWorkShapeDefinitionContract(from) : { ...readWorkShapeDefinitionContract(current), version: pinned.version, stages: [], grants: [] },
     readWorkShapeDefinitionContract(current),

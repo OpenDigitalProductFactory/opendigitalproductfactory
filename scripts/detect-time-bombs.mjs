@@ -31,6 +31,7 @@
 // plus a baseline, so it is deliberately not on the critical path of a merge.
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -44,7 +45,7 @@ const VITEST_BIN = path.join(REPO_ROOT, "node_modules", "vitest", "vitest.mjs");
 function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
     options: { days: { type: "string" }, filter: { type: "string" }, help: { type: "boolean", short: "h" } },

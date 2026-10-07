@@ -73,3 +73,29 @@ describe("workroom drive hold", () => {
     expect(readDriveHold(null)).toBeNull();
   });
 });
+
+// GPP Phase 3c PR-3c-1 (BI-8875C9DF): graph rooms key the hold on their marked
+// stages and iterations; a sequential room's key is unchanged.
+describe("the hold on a graph room (Phase 3c)", () => {
+  it("markedKeys replace stageKey, sorted; absent, the key is exactly the sequential one", () => {
+    const base = { action: "pause", reason: "conformance_pause", stageKey: "b", conformance: null };
+    expect(driveHoldKey(base)).toBe("pause|conformance_pause|b");
+    expect(driveHoldKey({ ...base, markedKeys: ["c#0", "b#1"] })).toBe("pause|conformance_pause|b#1,c#0");
+  });
+
+  it("a changed iteration changes the hold", () => {
+    const tick = { action: "pause", reason: "executor_writeback_unavailable", stageKey: "b", conformance: null };
+    const first = nextDriveHold(null, { ...tick, markedKeys: ["b#0"] }, at(0));
+    const second = nextDriveHold(first, { ...tick, markedKeys: ["b#1"] }, at(15));
+    expect(second.key).not.toBe(first.key);
+    expect(second.ticks).toBe(1);
+  });
+
+  it("an iteration change is always news, even when the hold key did not change", () => {
+    const hold = nextDriveHold(null, { action: "attention", reason: "governed_decision", stageKey: "b", conformance: null }, at(0));
+    const same = nextDriveHold(hold, { action: "attention", reason: "governed_decision", stageKey: "b", conformance: null }, at(15));
+    expect(driveTickIsNews(hold, same, "attention")).toBe(false);
+    expect(driveTickIsNews(hold, same, "attention", false)).toBe(false);
+    expect(driveTickIsNews(hold, same, "attention", true)).toBe(true);
+  });
+});

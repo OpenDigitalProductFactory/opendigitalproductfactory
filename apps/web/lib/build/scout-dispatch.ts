@@ -264,9 +264,9 @@ async function runScoutResearch(params: {
 
     let estimatedComplexity: "low" | "medium" | "high" = "low";
     let complexityReason = "";
-    let estimatedEffort: "tiny" | "small" | "medium" | "large" = "small";
+    let estimatedEffort: "tiny" | "small" | "medium" | "large";
     let effortReason = "";
-    let executionApproach: "single-build" | "epic-decompose" | "requires-epic" = "single-build";
+    let executionApproach: "single-build" | "epic-decompose" | "requires-epic";
 
     // Complexity scoring
     if (gapCount > 0 || integrationCount > 2 || modelCount > 3) {

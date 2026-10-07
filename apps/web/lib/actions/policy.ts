@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import {
   type ComplianceActionResult,
   requireViewCompliance, requireManageCompliance,
-  getSessionEmployeeId, logComplianceAction, ensureComplianceCalendarEvent,
+  getSessionEmployeeId, logComplianceAction,
 } from "@/lib/actions/compliance-helpers";
 import {
   generatePolicyId, generateRequirementId, generateCompletionId,

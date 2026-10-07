@@ -1,5 +1,16 @@
 # MCP tool authorization runbook
 
+**Review retries after permission vocabulary changes.** A bound independent review
+keeps its original task, request key and saved authority scope. Adding an unrelated
+grant to an OAuth public scope must not make the same immutable review a different
+request. Replay may retain the saved scope only when every saved grant is still
+available, exact tool and backlog boundaries are unchanged, and the original
+request digest matches with that scope. Removed grants, changed artifacts and
+changed intent still refuse replay. Current connection and coworker authorization
+remain mandatory; this reconciliation neither expands task authority nor revives
+canceled work. BI-224E6E82 exposed this when two unrelated read grants were added
+while a design review was waiting for its receipt.
+
 **OAuth identity and continuing authority.** The approval binds the human,
 client, resource and approved assistant role. The server resolves that role
 before the consent screen renders (BI-05E0EA33): it takes the eligible set,
@@ -60,7 +71,7 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 
 **One MCP client for scripts.** A Node script under `scripts/` talks to `/api/mcp/v1` only through `scripts/lib/mcp-client.mjs`: `mcpCall` returns the unwrapped tool result and throws, and `mcpPost` returns the raw `{ status, text }` so a fail-open caller keeps its own policy. Both run the endpoint check above and the credential resolution below. `scripts/check-no-hand-rolled-mcp-jsonrpc.mjs` refuses a new hand-built JSON-RPC envelope; its allowlist names the two files that cannot import the client and says why.
 
-**MCP token scopes:** tokens have a coarse `scope` of `read`, `write`, or `admin` plus granular per-tool grants. Default tokens are `read` and cannot call side-effecting tools even if an old token row carries a write grant. Use **Issue write token** in Admin > Platform Development > MCP when an agent must create or update Workrooms, backlog items, Build Studio evidence, runtime coordination records, or other side-effecting MCP records. The portal shows the plaintext token once, writes the local client snippet, and supports revocation without editing config files.
+**MCP token scopes:** tokens have a coarse `scope` of `read`, `write`, or `admin` plus granular per-tool grants. Default tokens are `read` and cannot call side-effecting tools even if an old token row carries a write grant. Use **Issue development token** in Admin > Platform Development > MCP when an agent must create or update Workrooms, backlog items, Build Studio evidence, runtime coordination records, or other side-effecting MCP records. A newly issued development connection can also record the author's research note. A write connection already in use whose grants are an earlier prefix of that template gains grants the template gained later, on its next use, without a new secret. A read connection, an admin connection, an OAuth connection, and a custom set with a gap keep the grants they were issued with. The portal shows the plaintext token once, writes the local client snippet, and supports revocation without editing config files.
 
 **Scope escalation rule — two shapes, depending on how you authenticated.**
 
@@ -85,6 +96,8 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 3. Restart the desktop client. On first connection it discovers the authorization server, registers itself (RFC 7591), and opens a browser consent page on the signed-in portal; approve once — the page names the assistant the connection will act as and lists the pinned scopes in plain words (read, work and build for Claude Code); `Adjust permissions` reveals one checkbox per scope if you want to grant less. From then on the access token refreshes silently. `Admin > Platform Development` lists the client beside any remaining PATs. To consent again later (for example after the pin changes), type `/mcp` in the Claude Code composer, pick `dpf`, and choose Authenticate. The desktop app's Settings > Connectors page lists claude.ai connectors only; it is not the place to sign in. `/mcp` shows the plugin's server as the only `dpf` entry — if a second `dpf` appears (a project server), a leftover `.mcp.json` entry is loading beside the plugin; see *Existing machines* above. If the consent page stays on screen after Approve, the sign-in still completed: the redirect targets the `claude://` scheme, so the tab never navigates away.
 
 The SessionStart health hook reads the OAuth challenge on https (a `401` naming `resource_metadata` is the healthy answer) and no longer asks for a token there. Headless callers that cannot open a browser use a `client_credentials` client (design Slice 2b) or, until then, a PAT. Liveness: `OAuthRefreshToken` rows become non-zero on the install and a session authenticates with `source=oauth` (BI-CE5F8C0A).
+
+**Concurrent sessions and refresh.** Several sessions of one client can share a stored refresh token. When the same client refreshes the same token again within `DPF_OAUTH_REFRESH_REUSE_GRACE_SECONDS` (default 60s) of rotating it, the server issues a sibling credential and revokes nothing. Reuse after the window, or by another client, still revokes the whole credential family as `refresh_token_replayed`, and the client reports "This connection was reused. Reconnect to continue." In that case, re-authenticate with `/mcp`. The rule and its security reasoning: [credential-lifecycle amendment](../superpowers/specs/2026-09-21-oauth-external-build-authority-design.md#refresh-reuse-grace-amendment-bi-25c6219e-2026-10-02) (BI-25C6219E).
 
 **Token rotation — the PAT fallback only.** Both tools read the token from the `DPF_MCP_BEARER_TOKEN` environment variable. **The commands below are Windows/PowerShell.** On macOS the variable is set with `launchctl setenv DPF_MCP_BEARER_TOKEN <value>` (a shell-profile `export` is not enough — the desktop clients are launched by launchd, not from your shell), and on Linux it follows that host's user-environment mechanism. The portal's token dialog currently offers only the PowerShell form; see BI-B6088EC6. `.mcp.json` references it as `${DPF_MCP_BEARER_TOKEN}`; Codex does the same via `bearer_token_env_var` in `~/.codex/config.toml`. Token rotation from Admin > Platform Development > MCP is:
 ```powershell
@@ -172,6 +185,48 @@ The paved-road walkthrough is the `dpf-establish-coworker` skill (`packages/dpf-
 
 
 **Schema questions: `describe_committed_model`, no build required.** `describe_model` resolves the caller's active Build Studio build first and returns `"No active build."` to every external CLI session, so it cannot answer schema questions from Claude Code, Codex or Grok. Use `describe_committed_model({ model_name })` instead — it reads the committed Prisma schema (`packages/db/prisma/schema/*.prisma`, split across domain files; there is no monolithic `schema.prisma`) with the `file_read` grant a read-scoped token can hold. Every result names the tree it read — root, branch, HEAD sha — and carries a trust vector that scores an off-default branch down, so a stale checkout is visible rather than silent. A miss is reported as not-found **in the named tree**, and an unreadable schema directory is reported as a read failure, never as an absence.
+
+## Discovered external MCP tools are default-deny (BI-8B7B2FE9)
+
+Tools an operator-registered MCP server reports (`<serverSlug>__<toolName>`)
+reach an in-portal coworker only under a DPF-owned policy on their
+`McpServerTool` row. Discovery, `isEnabled`, server health and remote
+annotations (`readOnlyHint`, `destructiveHint`) never authorize; annotations are
+stored as untrusted `discoveryHints` and never read as policy.
+
+- **States** (`McpToolPolicyStatus`): `quarantined` (default for every new
+  tool and every pre-existing row), `approved`, `denied` (sticky across
+  rediscovery). The six browser-use sidecar tools are covered by the release:
+  their grant comes from `TOOL_TO_GRANTS` and their effect from
+  `BUNDLED_MCP_TOOL_EFFECTS` (`apps/web/lib/tak/mcp-tool-policy.ts`).
+- **Approval** happens on `/platform/tools/services/<server>` (capability
+  `manage_provider_connections`): the reviewer picks one grant from the closed
+  grant vocabulary and says whether the tool only reads or changes things
+  (modes follow: read → advise + act; changes → act only). Approval pins the
+  approved identity, policy version, the text snapshot and
+  `approvedContentDigest` — sha256 of the hidden-Unicode-sanitized
+  description + inputSchema, exactly what a model reads. The approver is the
+  canonical `Principal`; the decision is an `AuthorizationDecisionLog` row
+  (`actionKey: mcp-tool-policy-review`).
+- **Content pinning.** A rediscovery whose digest differs from the approved
+  digest returns the tool to `quarantined`; the approved snapshot is kept so
+  the review page shows approved and newly reported text side by side. The
+  model is served only the sanitized approved snapshot, and the resolver
+  re-hashes both on every listing and call.
+- **One resolver, three checkpoints.** `resolveDiscoveredToolPolicy` +
+  `evaluateDiscoveredToolAccess` decide listing (`getAvailableTools`),
+  governed execution (`governedExecuteTool`, `agentic-loop` source with an
+  acting coworker only — external MCP clients still get `unknown_tool`), and
+  the remote call (`executeMcpServerTool`, which requires an explicit
+  authority and refuses if the approved digest moved). A namespaced call that
+  did not come through the governed executor is refused.
+- **Diagnosing an absent tool.** Read the tool's state on the service page;
+  the reason text names the refusal (`quarantined`, `content-changed`,
+  `identity-mismatch` after a rename, `policy-version-stale`, `unknown-grant`,
+  `incomplete-policy`). Then check the coworker holds the approved grant, the
+  room's surface carries it, and External Access is on. Capability inventory
+  reports `policyClass` per tool. Never restore a permissive fallback; approve
+  the specific tool.
 
 ## Protocol version window (mechanics landed; contract pending ratification)
 
@@ -333,6 +388,14 @@ empty, no active agent in the registry holds `work_room_write`.
 
 ### Diagnosing an empty `load_tools` result
 
+Coworker grants saved under Capabilities apply on the next runtime authorization
+read (BI-F2F09597). The asynchronous resolver reads `AgentToolGrant` each time;
+it does not retain grants between requests. A stored coworker with no grants
+receives none, and an unavailable database grants nothing until a successful
+read. Registry defaults apply only when a successful lookup finds no stored
+coworker. Reconnecting or restarting is not required for a grant change. Token
+scopes, human capabilities and room admission still intersect with those grants.
+
 Every requested name now gets an entry in `status[]` (BI-949FBBAE), whether or
 not anything else in the call loaded. Before, a request that loaded one name of
 four said nothing about the other three. Each entry reports:
@@ -364,3 +427,70 @@ implications, and the result intersected with the token's scopes: what the
 runtime actually checks. Capability reports (`get_capability_completeness`)
 count a tool reachable when any one required grant is held, the same rule the
 runtime applies (BI-378D3659).
+
+## Task-specific operating rules
+
+- **Discover before fallback.** Codex/Claude use a full catalog with host-side lazy attachment; other clients default to core. Call `load_tools` by name/query, refresh the list or use the programmatic catalog. Missing grants are permission failures, not missing tools. → [MCP authorization runbook](../architecture/mcp-tool-authorization-runbook.md)
+- **External coding agents use the MCP JSON-RPC transport at `/api/mcp/v1`.** Bearer tokens follow the `dpfmcp_...` pattern, are issued from Admin › Contributing & GitHub, and live only in local credential files — never commit them.
+- **Tokens carry a coarse scope (`read`/`write`/`admin`) plus granular per-tool grants; default tokens are `read` and cannot call side-effecting tools.** Agent `tool_grants` in `agent_registry.json` are enforced at runtime, intersected with the user's role capabilities. `insufficient_token_scope` is a §1 refusal.
+- **A side-effect tool may stay visible in advise mode only if it is advise-safe** — read-shaped, reversible, and non-committing. Anything else is hidden, not merely warned about.
+- **`"use server"` modules export only functions and concrete values.** Type aliases and interfaces stay local or move to a non-server module.
+- **Coworker capability filtering is single-source:** grants live in `agent_registry.json` / `AgentToolGrant` and are intersected at runtime — never re-derived per surface. → [kernel principle](../founder-kernel/wiki/principles/single-source-of-truth.md)
+
+
+## Disclosure measurement and recovery
+
+`load_tools` ranks intent in the token/role-visible catalog before coworker filtering. It loads only authorized matches; a relevant denied match returns its name and authority remedy, not its schema. Generic matches must not replace an unavailable specific capability. Exact-name loading remains supported.
+
+The connection briefing carries bounded identity, mission, locale and owning-scope decision routes. Decision tools resolve detailed business doctrine on demand. `node scripts/mcp-progressive-disclosure-conformance.mjs` reports initialization bytes, catalog bytes, their one-time composition and a hypothetical per-tool repetition cost. Attached, cached and billed tokens stay unknown without host telemetry; a full catalog does not establish that the model received every schema. The source ratchet also counts skill metadata once.
+
+For recovery, begin with the local [routing reference](../../packages/dpf-skill-pack/skills/dpf-systematic-debugging/references/recovery-routing.md). Protocol conformance and deterministic routing tests do not establish fresh-model behavior. After deployment, exercise normal delivery, broken upgrade, unavailable MCP/CI, denied authority and stale expedite occupancy on supported hosts, recording tools attached, route selected, outcome and actual usage where available.
+
+
+## Recovering an interrupted independent review
+
+Read the canonical task with MCP `tasks/get` and `tasks/result`. Native review
+readback reports the immutable deadline, remaining attempts, request digest,
+execution classification and next action. Polling helps only while execution is
+active. A capacity refusal before dispatch is infrastructure-inconclusive;
+transport loss remains uncertain. Neither is a failed code review or permission
+to publish. Workroom history retains the reviewer checkpoints and receipts.
+
+Within the original window, the original requester can confirm
+`retry_semantic_review`. Current saved authority, grants, quiescence and bounded
+attempts are checked again. A confirmed replacement can incur another charge;
+repeated review submissions do not authorize it.
+
+After expiry, the same operation accepts `remediationVerificationId` and
+`expectedRequestDigest` together. It permits one successor per lineage. Before
+calling it, reconcile the provider and executor against authorized runtime
+observations. Establish that every unresolved branch has stopped, repair the
+infrastructure, and run a health check on the affected canonical runtime. Record
+the real check through `record_runtime_verification`, using:
+
+- `kind: health`, `status: passed`, the affected runtime target and Workroom,
+  the executed command, and its actual completion time.
+- `result.semanticReviewRecovery`: the predecessor `taskRunId` and
+  `requestDigest`, `executionSettled: true`, every unresolved `settledNodeIds`,
+  and an `observation` explaining the observed settlement and remediation.
+
+This is execution evidence, never a review receipt. Do not infer settlement from
+an old heartbeat alone or record a passing health check that was not run. The
+server requires evidence newer than the parked task and no older than 30 minutes.
+Missing scope, unresolved nodes, revoked authority, stale failure-analysis
+evidence, quiescence, an actual failing review, or a previous successor refuses
+admission. A changed source or verification identity needs its own review.
+
+Admission atomically fences the predecessor and creates a separate immutable
+request with the same change identity and a bounded 30-minute window. It retains
+the old request, deadline, consumed attempts, completed checkpoints and unknown
+provider outcomes. Successful reviewer checkpoints can be reused only under the
+bound predecessor identity. Concurrent recovery admits at most one successor;
+late responses cannot publish across its fence. Observe the returned task until
+an independent pass or fail receipt exists. An inconclusive result still blocks
+publication.
+
+For the review service's own repair, use the existing recovery routing and build
+gate runbooks. They provide no alternative independent-review receipt and do
+not relax DCO, grants, ownership or production integrity. Record unavailable
+checks as unrun, then reconcile them after canonical recovery.

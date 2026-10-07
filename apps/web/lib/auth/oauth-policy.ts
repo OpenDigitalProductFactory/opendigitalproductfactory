@@ -76,6 +76,17 @@ export function refreshTokenTtlSeconds(): number {
   return envInt("DPF_OAUTH_REFRESH_TTL_SECONDS", 60 * 60 * 24 * 30, 3600, 60 * 60 * 24 * 365);
 }
 
+/** Reuse grace for refresh rotation (BI-25C6219E). Several sessions of one
+ *  client can share one stored refresh token and refresh within a second of
+ *  each other; inside this window the same client presenting a just-consumed
+ *  token gets a sibling pair instead of a family revocation. Auth0 "reuse
+ *  interval", Okta "grace period", RFC 9700 §4.14.2. 0 disables it; the cap
+ *  keeps the window short enough that it stays a race allowance, not a
+ *  second life for a stolen token. */
+export function refreshTokenReuseGraceSeconds(): number {
+  return envInt("DPF_OAUTH_REFRESH_REUSE_GRACE_SECONDS", 60, 0, 300);
+}
+
 /** Authorization codes are single-use and short-lived. OAuth 2.1 recommends
  *  a maximum of 10 minutes; 60s is ample for a loopback redirect. */
 export function authorizationCodeTtlSeconds(): number {

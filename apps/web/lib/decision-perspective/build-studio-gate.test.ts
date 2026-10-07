@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import { evaluateBuildStudioPlanAdvancementGate } from "./build-studio-gate";

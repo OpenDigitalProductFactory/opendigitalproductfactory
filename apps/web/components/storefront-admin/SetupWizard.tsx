@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { slugify } from "@/lib/shared/slugify";
 import { setupQuestionsFor } from "@/lib/storefront/setup-questions";
 import { ArchetypeActivationSummary } from "./ArchetypeActivationSummary";
 import { FinancialSetupStep } from "./FinancialSetupStep";
@@ -94,11 +93,6 @@ export function SetupWizard({
   const [customPortalLabel, setCustomPortalLabel] = useState("");
   const [customStakeholderLabel, setCustomStakeholderLabel] = useState("");
   const [customCreating, setCustomCreating] = useState(false);
-
-  // Derive slug from name
-  function derivedSlug(name: string) {
-    return slugify(name);
-  }
 
   const builtIn = archetypes.filter((a) => a.isBuiltIn !== false);
   const custom = archetypes.filter((a) => a.isBuiltIn === false);

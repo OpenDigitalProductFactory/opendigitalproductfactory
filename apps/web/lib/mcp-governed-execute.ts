@@ -7,7 +7,6 @@
 // closes the audit gap on the REST and JSON-RPC paths and gives the future
 // external-MCP transport a stable hook.
 
-import { prisma } from "@dpf/db";
 import { can, type CapabilityKey } from "./permissions";
 import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./govern/authority/governed-rejection-disposition";
 import { approvalPendingResult, settledApprovalResult } from "./govern/authority/approval-pending-result";
@@ -34,6 +33,7 @@ export type {
 } from "./govern/authority/coworker-tool-authority-gate";
 import { PLATFORM_TOOLS, executeTool } from "./mcp-tools";
 import type { ToolDefinition, ToolResult, ToolExecutionContext } from "./mcp-tool-types";
+import { resolveGovernedTool, discoveredToolExecutionContext, discoveredToolGrantAllowed } from "./tak/discovered-tool-governance";
 import type {
   GovernedExecuteArgs,
   GovernedExecuteContext,
@@ -311,7 +311,7 @@ export async function governedExecuteTool(
   let authorityDecisionId: string | undefined;
   let alignmentDecision: AlignmentGateDecision | null = null;
   let preconditionDecision: PreconditionOrderingDecision | null = null;
-  const tool = findTool(args.toolName);
+  const { tool, discovered } = await resolveGovernedTool(args, findTool(args.toolName)); // BI-8B7B2FE9
   if (!tool) {
     return {
       success: false,
@@ -394,7 +394,7 @@ export async function governedExecuteTool(
       const { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } = await import("@/lib/coworker/authorized-surface-coworker-contract");
       grants = Array.from(new Set([...grants, ...COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS]));
     }
-    const agentGrantAllowed = await isAllowedByGrants(args.toolName, grants);
+    const agentGrantAllowed = discovered ? discoveredToolGrantAllowed(discovered.policy, grants, args) : await isAllowedByGrants(args.toolName, grants);
 
     // Deterministic target preconditions run before authority escalation,
     // including when a missing capability/grant would otherwise create an
@@ -659,7 +659,7 @@ export async function governedExecuteTool(
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
       authorityDecisionId,
       approvedAuthorityEnvelopeId,
-      ...(gppPermit?.permitId ? { gppPermitId: gppPermit.permitId } : {}),
+      ...(gppPermit?.permitId ? { gppPermitId: gppPermit.permitId } : {}), ...discoveredToolExecutionContext(discovered),
       governedDispatch: async (nestedToolName, nestedParams, surfaceInvocation) => {
         const nestedTool = findTool(nestedToolName);
         if (!nestedTool) {

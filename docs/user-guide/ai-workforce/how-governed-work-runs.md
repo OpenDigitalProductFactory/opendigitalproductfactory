@@ -211,11 +211,18 @@ nobody named it.
 
 Reaching outward is not the same as reaching the business. A tool whose outward effect is platform development or operations (opening a pull request, contributing to the hive, running a discovery sweep) declares a platform consequence scope: it is still consequential, receipted and outward-reviewed, but the business-stance alignment check is not applied, because the founder kernel owns that judgement and the business owner should never be asked what the business would do about a pull request.
 
-Two independent checks then apply, and both must pass:
+Three independent checks then apply, and all must pass:
 
 - **The authority intersection.** A tool is unavailable unless the coworker's grant *and*
   the acting user's capability both allow it. Default deny. Asking in natural language is not
   a route around this.
+- **Tools from a connected service need approval first.** A tool that a connected MCP service
+  reports is invisible to coworkers until someone approves it on the service's page under
+  **Platform > Tools > Services**. The approval names the permission a coworker must hold and
+  is tied to the exact description and inputs that were reviewed. If the service changes them,
+  the tool goes back to review and the coworker sees nothing new. The check runs again on every
+  call, so a list the coworker saw earlier is never permission on its own. See
+  [Tools and integrations](../platform/tools-and-integrations.md#review-tools-a-service-discovers).
 - **The autonomy envelope.** This decides whether a human turn is required at all:
   *shadow-only* (recorded, never taken), *propose-for-approval*, *supervised-action*, or
   *autonomous-action* — the only mode that permits acting without a human.
