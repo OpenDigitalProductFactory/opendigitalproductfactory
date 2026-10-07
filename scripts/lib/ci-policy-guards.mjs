@@ -279,6 +279,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-F6929F50: every install path provisions the reach-link and
       // delegation-receipt signing keys and a self-upgrade never rotates them.
       conformanceTest("scripts/installer/dedicated-signing-keys-contract.test.mjs"),
+      // BI-F1C680C7: the Build Studio sandbox, where agent CLIs run unprompted,
+      // never receives the portal's AUTH_SECRET / NEXTAUTH_SECRET.
+      conformanceTest("scripts/installer/sandbox-auth-secret-isolation-contract.test.mjs"),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
