@@ -189,3 +189,73 @@ describe("runSandboxTests picks each package's own test runner", () => {
     expect(result.passed).toBe(false);
   });
 });
+
+// FB-0C05A927 (2026-10-07) was escalated because its mobile changes were never
+// type-checked: verification ran `tsc` in apps/web only, so the review rightly
+// found "Mobile TypeScript compilation not verified" and no repair could add it.
+describe("runSandboxTests type-checks every package the change touches", () => {
+  async function run(changedFiles: string[], tsc: Record<string, string> = {}) {
+    const { execInSandbox } = await import("@/lib/sandbox");
+    const exec = vi.mocked(execInSandbox);
+    exec.mockReset();
+    exec.mockImplementation(async (_id: string, cmd: string) => {
+      if (cmd.startsWith("test -f")) return "__no__";
+      const pkg = /cd \/workspace\/\.builds\/FB-1\/([^ ]+) && pnpm exec tsc --noEmit/.exec(cmd)?.[1];
+      if (pkg) return tsc[pkg] ?? "";
+      return "";
+    });
+    const { runSandboxTests } = await import("./coding-agent");
+    const result = await runSandboxTests("c1", { changedFiles, workdir: "/workspace/.builds/FB-1" });
+    return { result, commands: exec.mock.calls.map(([, cmd]) => cmd) };
+  }
+
+  it("checks apps/mobile as well as apps/web when mobile files change, never through npx", async () => {
+    const { commands } = await run(["apps/mobile/src/features/visitor/visitor.store.ts"]);
+    const tsc = commands.filter((cmd) => /tsc --noEmit/.test(cmd));
+    expect(tsc.some((cmd) => cmd.includes("/apps/mobile && pnpm exec tsc --noEmit"))).toBe(true);
+    expect(tsc.some((cmd) => cmd.includes("/apps/web && pnpm exec tsc --noEmit"))).toBe(true);
+    expect(tsc.some((cmd) => /npx /.test(cmd))).toBe(false);
+  });
+
+  it("fails on a type error in a changed mobile file, reported relative to the package", async () => {
+    const { result } = await run(["apps/mobile/src/features/visitor/visitor.store.ts"], {
+      "apps/mobile": "src/features/visitor/visitor.store.ts(12,5): error TS2322: Type 'string' is not assignable to type 'number'.",
+    });
+    expect(result.typeCheckPassed).toBe(false);
+    expect(result.typeCheckOutput).toMatch(/# apps\/mobile/);
+  });
+
+  it("ignores a pre-existing error in an unchanged file of a touched package", async () => {
+    const { result } = await run(["apps/mobile/src/features/visitor/visitor.store.ts"], {
+      "apps/mobile": "src/features/agent/agent.store.ts(3,1): error TS2304: Cannot find name 'x'.",
+    });
+    expect(result.typeCheckPassed).toBe(true);
+  });
+});
+
+// apps/mobile is its own pnpm workspace (own lockfile; excluded from the root
+// workspace), so the sandbox's root install never installs it: tsc and jest are
+// "not found" there. Verification installs a separately-locked package first.
+describe("runSandboxTests installs a separately-locked package before checking it", () => {
+  it("installs apps/mobile from its own lockfile before type-checking and testing it", async () => {
+    const { execInSandbox } = await import("@/lib/sandbox");
+    const exec = vi.mocked(execInSandbox);
+    exec.mockReset();
+    exec.mockImplementation(async (_id: string, cmd: string) => {
+      if (cmd.includes("apps/mobile/pnpm-lock.yaml")) return "__yes__";
+      if (cmd.startsWith("test -f")) return cmd.includes(".test.") ? "__yes__" : "__no__";
+      if (/cat "[^"]+apps\/mobile\/package\.json"/.test(cmd)) return JSON.stringify({ scripts: { test: "jest" } });
+      if (/pnpm exec (jest|vitest)/.test(cmd)) return "Tests: 1 passed\n__dpf_exit=0";
+      return "";
+    });
+    const { runSandboxTests } = await import("./coding-agent");
+    await runSandboxTests("c1", { changedFiles: ["apps/mobile/src/cart/cart.ts"], workdir: "/workspace/.builds/FB-1" });
+    const commands = exec.mock.calls.map(([, cmd]) => cmd);
+    const install = commands.findIndex((cmd) => /apps\/mobile && .*pnpm install --offline --frozen-lockfile/.test(cmd));
+    const tsc = commands.findIndex((cmd) => cmd.includes("/apps/mobile && pnpm exec tsc --noEmit"));
+    const jest = commands.findIndex((cmd) => /apps\/mobile && .*pnpm exec jest/.test(cmd));
+    expect(install).toBeGreaterThanOrEqual(0);
+    expect(install).toBeLessThan(tsc);
+    expect(install).toBeLessThan(jest);
+  });
+});
