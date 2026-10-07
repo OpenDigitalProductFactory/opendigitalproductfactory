@@ -40,23 +40,22 @@ Standard: declarative convergence to versioned desired state (infrastructure as 
 
 ## Design
 
-### 1. One compose-chain resolver (OBJ-CHAIN)
+### 1. One activation table for the compose chain (OBJ-CHAIN)
 
-Add `scripts/lib/compose-chain.mjs`: `resolveComposeChain({ installState, env, platform }) → string[]`. It owns the rule that `compose.sh:103-120` holds today:
-- the base file;
-- the platform overlay;
-- the release overlay when release-built;
-- `docker-compose.organization-trust.yml` and `docker-compose.tls.yml` when `DPF_ORGANIZATION_TRUST_ENABLED=1`;
-- `docker-compose.edge-actions.yml` when `DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1`;
-- and any further activation overlay registered there.
+The chain has two parts:
+- **Install-time choices:** dev or release mode, platform overlay, and edge. These cannot be re-derived later (`DPF_INCLUDE_EDGE` is not persisted), so they stay recorded in `install-state.json` and `DPF_SELF_UPGRADE_COMPOSE_FILES`.
+- **Activation overlays:** switched on later by `.env` markers. This half drifted.
 
-These callers use it instead of their own lists:
-- `compose.sh` (via `node`);
-- `release-target.ts`;
-- `promote.sh` (when it builds `_f_args`);
-- `bootstrap-organization-pki.{sh,ps1}`.
+`scripts/installer/lib/activation-overlays.txt` is the single table of `MARKER overlay-file...`:
+- `DPF_ORGANIZATION_TRUST_ENABLED` adds `docker-compose.organization-trust.yml` and `docker-compose.tls.yml`;
+- `DPF_EDGE_ACTION_DISPATCH_CONFIGURED` adds `docker-compose.edge-actions.yml`.
 
-`install-state.json.composeFiles` becomes the derived output of the resolver, refreshed on every install, start or upgrade, not a second source. `DPF_SELF_UPGRADE_COMPOSE_FILES` stays only as an explicit operator override and is logged when it differs from the derived chain. The PowerShell installer (`compose-chain.ps1`) is aligned to the same rule, through a parity test against fixtures, because it cannot call `node` before Node is provisioned.
+Readers:
+- **`compose.sh`** (Linux/macOS install, start and stop) reads it instead of hard-coding the markers.
+- **`promote.sh`** appends the overlays whose marker is `1`, in the promoter's environment or the install env file, to the recorded chain. It reads the table from the target tree (`$_compose_root`), not from the promoter's own directory. That keeps the change outside the N-1 portal's staged promoter closure (BI-A04D61B9): an older target without the table changes nothing. Release assets ship the table beside `compose-chain.ps1`.
+- **`compose-chain.ps1`** (Windows) keeps its own branches; a parity test fails when any marker adds different overlays there than in the table. It is not rewritten to read the table yet, because the change could not be exercised without PowerShell.
+
+The promoter logs `step=compose-activation-overlays files=…` when it appends an overlay.
 
 ### 2. Per-service recreate class (OBJ-STATEFUL)
 
