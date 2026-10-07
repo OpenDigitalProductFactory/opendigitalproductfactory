@@ -21,7 +21,6 @@ import test from "node:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "..", "..");
-const hook = join(here, "plugin-copy-freshness.sh");
 const twin = join(here, "plugin-copy-freshness.ps1");
 const posix = process.platform !== "win32";
 const hasPython = posix && spawnSync("sh", ["-c", "command -v python3"], { stdio: "ignore" }).status === 0;
