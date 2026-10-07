@@ -385,6 +385,30 @@ describe("completeBacklogItemTransition", () => {
     expect(seen[0]?.requirementReasons?.DELIVERY_EVIDENCE_REQUIRED ?? []).toEqual([]);
   });
 
+  it("BI-B04A0203: the merge signal is asked with the item's work type, so an attested doc PR closes only a doc item", async () => {
+    const fake = fakeDb();
+    const asked: Array<{ itemRowId: string; itemId: string; workType?: string | null }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Landed through the merge queue.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
+        resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async (args) => { asked.push(args); return "merged" as const; },
+        projectReadiness: (() => projected("allowed")) as never,
+      },
+    });
+    expect(asked).toHaveLength(1);
+    expect(asked[0]?.workType).toBe("feature");
+    expect(asked[0]?.itemId).toBe("BI-1");
+  });
+
   it("BI-B04A0203: an UNMERGED branch falls back to the recorded delivery manifest", async () => {
     const fake = fakeDb();
     const seen: Array<{ deliveryEvidence: string }> = [];

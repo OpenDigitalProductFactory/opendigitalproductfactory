@@ -126,6 +126,7 @@ scripts/probes/marketing-media/gemini-tts-response.test.mjs
 scripts/promote-compose-activation-overlays.test.mjs
 scripts/promote-host-bind-address.test.mjs
 scripts/promote-install-state-rollback.test.mjs
+scripts/promote-sidecar-converge.test.mjs
 scripts/promoter-build-context.test.mjs
 scripts/promoter-contract.test.mjs
 scripts/promoter-migration-envelope.test.mjs

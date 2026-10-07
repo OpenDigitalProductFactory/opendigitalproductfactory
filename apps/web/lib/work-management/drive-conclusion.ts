@@ -58,12 +58,16 @@ export type ConclusionKind = (typeof CONCLUSION_KINDS)[number];
  */
 export const DRIVE_REASONS_BY_ACTION = Object.freeze({
   do_not_wake: ["missing_shape", "quiet", "no_posture", "cycle_complete"],
-  stop: ["unreachable_substrate", "empty_read", "conformance_stop", "success"],
+  // `refused_to_stop`: a refuse verdict routed to a declared failure stop, or
+  // past its rework bound to the budget stop (GPP Phase 3c PR-3c-3).
+  stop: ["unreachable_substrate", "empty_read", "conformance_stop", "success", "refused_to_stop"],
   escalate: ["conformance_escalate"],
   // `construct_not_executable` and `marking_unreadable` are the graph path's
   // fail-closed pauses (GPP Phase 3c PR-3c-1, BI-8875C9DF; design §5 table).
   pause: ["conformance_pause", "unknown_principal", "executor_writeback_unavailable", "construct_not_executable", "marking_unreadable"],
-  attention: ["governed_decision", "role_stage", "person_stage"],
+  // `gate_refused`: a refuse verdict whose route cannot be taken (its bound is
+  // spent and the shape has no budget stop); the token stays (PR-3c-3).
+  attention: ["governed_decision", "role_stage", "person_stage", "gate_refused"],
   // `lease_held` and `missing_task_owner` are set by the drive job
   // (lib/queue/functions/workroom-drive.ts) when it cannot act on a dispatch plan.
   dispatch_agent: ["agent_stage", "lease_held", "missing_task_owner"],
@@ -148,6 +152,14 @@ const BLOCKAGES: Record<string, { what: string; unblockedBy: string }> = {
   marking_unreadable: {
     what: "The room's stored drive marking cannot be read, so the drive will not guess where its work stands.",
     unblockedBy: "the room's drive marking is repaired, or the room is reset",
+  },
+  gate_refused: {
+    what: "A stage was sent back, but its refuse route cannot be taken any more, so the work waits at that stage rather than being passed.",
+    unblockedBy: "a new decision is recorded on the refused stage",
+  },
+  refused_to_stop: {
+    what: "A stage was sent back to a stop the work shape declares, so this cycle ended without reaching its outcome.",
+    unblockedBy: "the room's next cycle starts, or the room is rebound to a shape version that routes the refusal elsewhere",
   },
 };
 

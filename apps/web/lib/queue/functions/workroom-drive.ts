@@ -148,6 +148,8 @@ export type WorkroomDriveEffects = {
     lease: { roomId: string; expiresAt: Date; holderPrincipalId: string | null };
   }) => Promise<boolean>;
   deactivateAgentTask: (taskId: string) => Promise<void>;
+  /** Revoke the permits of the stages a rework left (GPP Phase 3c PR-3c-3). Optional; graph rooms only. */
+  revokeStagePermits?: (input: { workroomId: string; stageKeys: readonly string[]; now: Date }) => Promise<number>;
 };
 
 export type WorkroomDriveResult = {
@@ -484,6 +486,7 @@ export async function runWorkroomDriveJob(
       now,
       priorDrive: priorDriveFromStored(stored),
       workspaceState: room.workspaceState,
+      recordedEvidence: room.recordedEvidence ?? [],
     });
     plans.push({
       roomId: room.capsuleId,
@@ -627,6 +630,7 @@ export function createWorkroomDriveEffects(
       );
     },
     notifyStall: async (input) => (await import("@/lib/work-management/workroom-stall-notice")).notifyWorkroomStall(input),
+    revokeStagePermits: async (input) => (await import("@/lib/gpp/stage-permit-revocation")).revokeStagePermits(input),
     async persist(input) {
       const prisma = await loadDb();
       const activity = await prisma.$transaction(async (tx) => {

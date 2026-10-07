@@ -195,9 +195,13 @@ export function planStage(args: {
       ? isCompletingWorkroomDriveReceipt(receipt, stage.key)
       : isCompletingWorkroomDriveReceiptAt(receipt, stage.key, iteration),
   );
+  // On the graph path a `blocked` receipt is scoped to its iteration (PR-3c-3):
+  // a pass the stage was sent back from must not latch the fresh pass. The
+  // sequential drive passes no iteration and reads every blocked receipt, as before.
   const blocked = input.receipts.some(
     (receipt) =>
-      receipt.stageKey === stage.key && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
+      receipt.stageKey === stage.key && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND
+      && (iteration === undefined || (receipt.iteration ?? 0) === iteration),
   );
   // Bounded, not permanent: the latch holds within a cycle and releases on the
   // next, so a deployed fix can reach a room that previously failed closed.

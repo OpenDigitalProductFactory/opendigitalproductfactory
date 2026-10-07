@@ -1,9 +1,23 @@
+---
+status: active
+---
+
 # Agent-Safe Self-Upgrade Trigger Design
 
 Date: 2026-06-30
 Status: Approved for implementation
 Backlog: BI-F5F0AC1D
 Work Capsule: WC-793D9EDA
+
+> **Amended 2026-10-06 (BI-2128872C, operator decision "nightly window only").**
+> An agent request outside the window is no longer answered with
+> `human_override_required`; it is deferred to the next window
+> (`status: "deferred_to_window"`, with `runAt`) and the scheduled gate honours
+> it there. `human_override_required` remains only for an install with no
+> computable window. A browser session signed in as the automation persona is
+> treated as an agent. An operator's out-of-window "Upgrade now" records
+> `+outside-window` on the run trigger. The outside-window contract below is
+> superseded by `apps/web/lib/self-upgrade/upgrade-timing.ts`.
 
 ## Problem
 

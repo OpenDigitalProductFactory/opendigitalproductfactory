@@ -23,7 +23,8 @@ import {
   type WorkroomShapeConformanceDeviation,
 } from "./workroom-shape-conformance";
 import type { DriveReason, DriveReasonsByAction } from "./drive-conclusion";
-import type { DriveMarking, DriveTokenPlan } from "./drive-marking";
+import type { DriveMarking, DriveRework, DriveTokenPlan } from "./drive-marking";
+import type { RecordedEvidence } from "./stage-evidence-receipts";
 import { usesGraphConstructs } from "./drive-marking";
 import { cycleCompleted, emptyPlan, ledgerFrom, planStage, projectDriveCycle } from "./drive-plan-stage";
 import { resolveGraphDrivePlan } from "./drive-resolution-graph";
@@ -61,7 +62,8 @@ export type DriveResolutionInput = {
   postureLevel: ProactivityLevel | null;
   participants: readonly WorkroomParticipantView[];
   currentStageKey: string | null;
-  receipts: readonly { stageKey: string; kind: string }[];
+  /** `iteration` is set only on graph-shape receipts (GPP Phase 3c); absent reads 0. */
+  receipts: readonly { stageKey: string; kind: string; iteration?: number }[];
   budgetUsage: readonly { kind: string; used: number }[];
   stopConditionHits: readonly string[];
   reviewDue: boolean;
@@ -89,6 +91,12 @@ export type DriveResolutionInput = {
    * 3c), which keeps its marking there; the sequential path never reads it.
    */
   workspaceState?: unknown;
+  /**
+   * The room's recorded stage evidence. Read only by the graph path (GPP Phase
+   * 3c PR-3c-3), which derives a gate verdict from a stage's latest recorded
+   * decision (`choice`); the sequential path never reads it.
+   */
+  recordedEvidence?: readonly RecordedEvidence[];
 };
 
 export type DrivePlan = {
@@ -120,6 +128,12 @@ export type DrivePlan = {
    * marking forward unchanged" (applyDrivePlan). Absent on every sequential plan.
    */
   marking?: DriveMarking | { raw: unknown };
+  /**
+   * Graph shapes only (PR-3c-3): the rework this tick took, when a refuse was
+   * routed back to an earlier stage. The runner revokes the cleared stages'
+   * permits on it. Absent on every sequential plan.
+   */
+  rework?: DriveRework;
 };
 
 export { parseAccountablePrincipalRef, workroomDriveBranchTaskId, workroomDriveTaskId } from "./drive-plan-stage";

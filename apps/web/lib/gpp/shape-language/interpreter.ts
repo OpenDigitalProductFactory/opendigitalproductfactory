@@ -58,7 +58,10 @@
 // them. The parallel-split-join flag is ON since Phase 3c PR-3c-2
 // (BI-8875C9DF): the drive's own step (lib/work-management/drive-marking.ts)
 // runs split and join, and drive-parity-parallel.test.ts proves it equal to
-// these rules after every event. Rework, deadline and sub-shape stay off.
+// these rules after every event. The rework-edge flag (rework edges and refuse
+// routes) is ON since PR-3c-3: the drive's step routes a refuse verdict, and
+// drive-parity-rework.test.ts proves it equal to rule 6 and the gate rules
+// after every event. Deadline and sub-shape stay off.
 //
 // Flow references. An edge endpoint (and `gate.onRefuse`) names a stage key, a
 // flow node id, a stop element id (`stop:<kind>:<n>`, element-ids.ts), or a

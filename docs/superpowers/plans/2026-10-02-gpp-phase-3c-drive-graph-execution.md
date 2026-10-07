@@ -569,8 +569,9 @@ AC-3C-CONFORMANCE, AC-3C-FLAG-FLIP.
 - PR-3b-4 is merged (#5977), which gives `WorkShapeAdvance` its `gate?: WorkShapeGate` with
   `onRefuse` (`work-shapes.ts:54-56, 73-84` at `6ce2f7e445`).
 - One flag covers both notations (design correction 1).
-- **Q1 must be asked before PR-3c-3 merges.** Its answer blocks only a shape adopting a refuse route
-  on a stage that offers `defer`.
+- **Q1 is decided: DI-0D9DFB0FC0EF** (WWMD, followed 2026-10-06, founder-delegated). On a stage
+  that declares a refuse route, `defer` holds the token at the gate until an accept or a send-back;
+  on every other stage it keeps advancing (founder decision 2026-10-02). Spec §14 Q1.
 
 **Files**
 
@@ -588,15 +589,18 @@ AC-3C-CONFORMANCE, AC-3C-FLAG-FLIP.
     stage at this iteration using `RecordedEvidence.choice`:
     - `accept` → `admit`
     - `patch` → `admit`
-    - `defer` → `admit`, per the founder decision of 2026-10-02 that `defer` keeps advancing. `hold`
-      waits for the spec §14 Q1 confirmation, and changing it is a one-line follow-up with its own
-      decision.
+    - `defer` → `hold` (DI-0D9DFB0FC0EF). Because a verdict is derived only on a refuse-route
+      stage, `defer` keeps advancing on every other stage, as today.
     - `refuse` → `refuse`
   - Only for enforced, blocking gates with a refuse route.
+  - The decision read is the latest one recorded at or after the token's `enteredAt`, so a
+    decision from an earlier pass never counts.
   - A refuse with no route → `attention` / `gate_refused` to `gate.escalation.role` ?? the stage
     principal.
-- `drive-conclusion.ts`: register `gate_refused` under `attention`, with a `BLOCKAGES` entry
-  (design §5 table).
+- `drive-conclusion.ts`: register `gate_refused` under `attention`, and `refused_to_stop` under
+  `stop` (a refuse routed to a failure stop, or past its bound to the budget stop), each with a
+  `BLOCKAGES` entry (design §5 table). `refused_to_stop` was found missing while implementing: no
+  existing stop reason describes a cycle a refusal ended.
 - `workroom-stage-decision.ts`:
   - Add `"refuse"` to `STAGE_DECISION_CHOICES` and `STAGE_DECISION_CHOICE_LABEL.refuse = "Send back"`.
   - `stageDecisionChoices` gains a second parameter `hasRefuseRoute` and appends `refuse` only then.
@@ -606,6 +610,16 @@ AC-3C-CONFORMANCE, AC-3C-FLAG-FLIP.
   through the existing permit store. It is a no-op while no permit carries `stageKey`. It is called
   on every rework transition.
 - `executable-constructs.ts`: `"rework-edge": true`.
+- Found while implementing, each recorded in the PR:
+  - `decompile.ts` carries a definition's own gate when its refuse route is the stage's single
+    rework edge, not only when it names `onRefuse` (extends correction 12). Without it the
+    decompiled document drops that gate and the interpreter on the document never routes.
+  - `blocked` receipts on the graph path carry the token's iteration (written only when not 0),
+    and the per-token latch reads only its own iteration's, so a pass that was sent back never
+    latches the fresh pass (flagged by PR-3c-2).
+  - The runner passes the room's recorded evidence to the planner (`recordedEvidence`), which only
+    the graph path reads, and wires `revokeStagePermits` as an optional effect, called after a
+    rework's snapshot is written.
 
 **Tests**
 
@@ -618,15 +632,18 @@ AC-3C-CONFORMANCE, AC-3C-FLAG-FLIP.
       shape has no budget stop, so the token stays (`interpreter.ts:420-441`). This parity-only
       fixture is deliberately not S-6-sound.
     - `shadow-gate`
-    - `defer-on-refuse-route`: a `defer` decision on a refuse-route stage advances the token
+    - `defer-on-refuse-route`: a `defer` decision on a refuse-route stage holds the token
+      (DI-0D9DFB0FC0EF); the fixture's enforced gate without a refuse route still advances
     - `rework-inside-branch` (a rework inside a parallel branch, same-block rule)
   - Events add `gate-verdict`. For the drive, a verdict is a `decision-record` evidence row with
     `choice`.
-  - The harness maps `defer` to an `admit` verdict for the interpreter.
+  - The harness maps `defer` to a `hold` verdict for the interpreter on a refuse-route stage
+    (DI-0D9DFB0FC0EF).
   - For enforced, blocking gates **without** a refuse route, where the drive derives no verdict,
     the harness feeds the interpreter `admit` alongside every completing receipt. The interpreter
     otherwise holds such a token (`interpreter.ts:471-477`) while the drive advances it. That
-    divergence is recorded as part of Q1, not hidden.
+    divergence is recorded as part of Q1, not hidden. This admit feeding stays under
+    DI-0D9DFB0FC0EF, which changes only refuse-route stages.
   - Asserted after each event: marked stages, stopped, and `reworkTaken`, compared with the
     interpreter's `reworkTaken`.
   - Plus: a stale-iteration receipt never completes the new iteration.
@@ -646,8 +663,8 @@ AC-3C-CONFORMANCE, AC-3C-FLAG-FLIP.
 **Rollout.**
 
 - No registry stage declares a refuse route, so "Send back" appears nowhere.
-- Q1 must be asked before PR-3c-3 merges. Its answer blocks only a shape adopting a refuse route on
-  a stage that offers `defer`.
+- Q1 is decided (DI-0D9DFB0FC0EF). A shape that adopts a refuse route on a stage offering `defer`
+  holds on `defer` from its first room; no running room changes.
 
 **Rollback.** Flip the flag back, or revert.
 
@@ -810,8 +827,8 @@ AC-3C-SUBSHAPE-PARITY, AC-3C-SUBSHAPE-NO-WIDEN, AC-3C-REBIND, AC-3C-CONCLUDED, A
 
 ### PR-3c-3 (after PR-3c-2; PR-3b-4 is merged)
 
-- [ ] Put Q1 to the founder after WWMD consultation; it must be asked before merge
-- [ ] Refuse routing and iteration bump; verdict derivation (`defer → admit`); "Send back" choice; `gate_refused` conclusion entry
+- [x] Q1 decided after WWMD consultation: DI-0D9DFB0FC0EF (defer holds on a refuse-route stage)
+- [ ] Refuse routing and iteration bump; verdict derivation (`defer → hold` on refuse-route stages only); "Send back" choice; `gate_refused` and `refused_to_stop` conclusion entries
 - [ ] Revocation hook and test; rework parity; flag flip
 - [ ] Fast local gate; PR
 
@@ -841,9 +858,8 @@ The design's §11 lists the corrections to the parent. These items are open for 
 3. **`usesGraphConstructs` reads the typed gate.** #5977 merged `WorkShapeGate.onRefuse`
    (`work-shapes.ts:73-84` at `6ce2f7e445`), so no structural read is needed.
 4. **Status of design Q1–Q7** (spec §14):
-   - **Q1:** decided for every existing stage (`defer` keeps advancing; 3c maps `defer → admit`).
-     The refuse-route case must be asked before PR-3c-3 merges. Its answer blocks only a shape
-     adopting a refuse route on a stage that offers `defer`.
+   - **Q1:** decided for every existing stage (`defer` keeps advancing), and for refuse-route
+     stages by DI-0D9DFB0FC0EF (2026-10-06): `defer` holds there until an accept or a send-back.
    - **Q2 and Q6:** decided (founder, 2026-10-02). What remains for PR-3c-5 is the technical check
      that `updateWorkCapsuleStatus` accepts the system actor.
    - **Q3, Q4, Q5 and Q7:** design-review defaults, open only until the review records a verdict.
@@ -859,7 +875,7 @@ The design's §11 lists the corrections to the parent. These items are open for 
 | R2 | The flow-graph move breaks the compiler | Pure move with re-exports; the AC-INTERPRETER, soundness and DRC suites unchanged and green |
 | R3 | Parity passes but the drive differs in production because of evidence timing | Parity feeds the drive through `earnEvidenceReceipts`-equivalent receipts. Per-stage dispatch bounds are unit-tested. R2D's live verification is the functional proof |
 | R4 | Branch tasks leak after a stop | Deactivate every branch task named in the prior marking; a test asserts none stays active |
-| R5 | `defer → hold` reaches a live stage | Not applied. Per the founder decision of 2026-10-02, 3c maps `defer → admit` everywhere, refuse-route stages included. Q1 must be asked before PR-3c-3 merges. Its answer blocks only a shape adopting a refuse route on a stage that offers `defer`. Spec §14 Q1 |
+| R5 | `defer → hold` reaches a live stage | Applied only on a stage that declares a refuse route (DI-0D9DFB0FC0EF, 2026-10-06), a construct no running room uses; the drive derives no verdict anywhere else, so `defer` keeps advancing on every existing stage (founder decision 2026-10-02). The parity harness proves both. Spec §14 Q1 |
 | R6 | The deadline notice duplicates or is lost | Key per cycle, stage and iteration; notify after commit; retry on failure |
 | R7 | Child rooms orphan or multiply | Idempotency key per cycle, stage and iteration; terminal on stop; abandon on rework; the drive deletes the `contains` row in the same transaction, because the existing reconcile covers only `standing-room:` keys |
 | R8 | PR-3c-2 slips and blocks PR-3c-3, -4 and -5 (their in-branch fixtures need it) | PR-3c-2 is second in the sequence anyway, because it unblocks R2D. PR-3b-4 is already merged (#5977) |

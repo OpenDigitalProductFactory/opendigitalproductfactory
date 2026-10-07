@@ -64,7 +64,7 @@ export type GppConstruct = (typeof GPP_CONSTRUCTS)[number];
  * | Construct                    | Executable | Since, or the PR that enables it (BI-8875C9DF) |
  * |------------------------------|------------|------------------------------------------------|
  * | parallel-split-join          | yes        | PR-3c-2 (drive-parity-parallel.test.ts)        |
- * | rework-edge (incl. onRefuse) | no         | PR-3c-3                                        |
+ * | rework-edge (incl. onRefuse) | yes        | PR-3c-3 (drive-parity-rework.test.ts)          |
  * | stage-deadline               | no         | PR-3c-4                                        |
  * | sub-shape                    | no         | PR-3c-5                                        |
  *
@@ -84,7 +84,7 @@ export const CONSTRUCT_EXECUTABLE: Readonly<Record<GppConstruct, boolean>> = Obj
   "review-point": true,
   "stage-deadline": false,
   "parallel-split-join": true,
-  "rework-edge": false,
+  "rework-edge": true,
   "sub-shape": false,
   "environment-boundary": true,
 });

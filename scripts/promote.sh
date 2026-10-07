@@ -1453,6 +1453,84 @@ if [[ $_dry_run -eq 0 ]]; then
   fi
 fi
 
+# --- Step 7e: sidecar-converge (shadow) ---
+# BI-00F7D2E3 (BI-C54E691E): no step recreates a RUNNING service whose rendered
+# compose config changed, except portal, sandbox and inngest. #6020 gave
+# portal-tls a reaping init that therefore never arrived (live, 2026-10-06:
+# 11,844 zombies until an operator recreated it).
+#
+# This step reports, per running service, whether compose would recreate it:
+# the desired `config --hash` (rendered with step 7d's daemon-path override)
+# against the container's com.docker.compose.config-hash label. Classes come from
+# each service's `dpf.recreate-class` label (BI-22A2CA0D). SHADOW MODE (WWMD
+# DI-C04ABC76BBF4): it recreates nothing. Whether a host-created container and
+# the promoter's render hash identically is only provable on a live upgrade;
+# once one run shows only genuinely changed services as would-recreate, a
+# follow-up makes stateless ones converge. Read-only, so it also runs under
+# --dry-run. Never fails the promotion.
+emit_step sidecar-converge
+_converge_ok=1
+_converge_f_args=("${_f_args[@]}")
+_converge_rendered="$(mktemp)"
+_converge_hashes="$(mktemp)"
+_converge_running="$(mktemp)"
+_converge_mounts=""
+if [[ $_dry_run -eq 0 ]]; then
+  _converge_mounts="$(mktemp)"
+  _converge_install_root=""
+  [[ $_release_mode -eq 0 ]] || _converge_install_root="$PROMOTE_INSTALL_ROOT"
+  if docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+    "${_f_args[@]}" config --format json \
+    | node "$_promoter_dir/lib/govern-capability-compose-args.mjs" "$_compose_root" "$_converge_install_root" > "$_converge_mounts"; then
+    _converge_f_args+=(-f "$_converge_mounts")
+  else
+    _converge_ok=0
+  fi
+fi
+docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+  "${_converge_f_args[@]}" config --format json > "$_converge_rendered" 2>/dev/null || _converge_ok=0
+docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+  "${_converge_f_args[@]}" config --hash '*' > "$_converge_hashes" 2>/dev/null || _converge_ok=0
+docker ps -a --filter "label=com.docker.compose.project=$_project" \
+  --format '{{.Label "com.docker.compose.service"}}	{{.Label "com.docker.compose.config-hash"}}	{{.State}}' \
+  > "$_converge_running" 2>/dev/null || _converge_ok=0
+_converge_summary="$(node -e '
+  const fs = require("node:fs");
+  const [target, ok, renderedPath, hashesPath, runningPath, dir] = process.argv.slice(1);
+  const out = { mode: "shadow", targetSha: target, at: new Date().toISOString(), outcome: "current",
+    wouldRecreate: [], unchanged: [], skippedStopped: [], dataOwnerChanged: [], unclassified: [], failed: [] };
+  try {
+    if (ok !== "1") throw new Error("render");
+    const services = JSON.parse(fs.readFileSync(renderedPath, "utf8")).services ?? {};
+    const desired = new Map(fs.readFileSync(hashesPath, "utf8").split("\n").map((l) => l.trim().split(/\s+/)).filter((p) => p.length === 2));
+    for (const line of fs.readFileSync(runningPath, "utf8").split("\n").filter(Boolean)) {
+      const [service, current, state] = line.split("\t");
+      const spec = services[service];
+      if (!spec) continue; // a container outside this chain is not ours to judge
+      const cls = spec.labels?.["dpf.recreate-class"];
+      const want = desired.get(service);
+      if (!cls) { out.unclassified.push(service); continue; }
+      if (cls === "managed") continue;
+      if (!want) { out.failed.push(service); continue; }
+      const change = { service, from: current, to: want };
+      if (cls === "data-owner") { if (want !== current) out.dataOwnerChanged.push(change); continue; }
+      if (state !== "running") { out.skippedStopped.push(service); continue; }
+      if (want !== current) out.wouldRecreate.push(change); else out.unchanged.push(service);
+    }
+    out.outcome = out.failed.length ? "degraded" : out.wouldRecreate.length ? "would-recreate" : "current";
+  } catch { out.outcome = "degraded"; }
+  const byName = (a, b) => (a.service ?? a).localeCompare(b.service ?? b);
+  for (const key of ["wouldRecreate", "unchanged", "skippedStopped", "dataOwnerChanged", "unclassified", "failed"]) out[key].sort(byName);
+  if (dir) {
+    try { fs.writeFileSync(`${dir}/service-converge-outcome.json.tmp`, JSON.stringify(out) + "\n"); fs.renameSync(`${dir}/service-converge-outcome.json.tmp`, `${dir}/service-converge-outcome.json`); } catch {}
+  }
+  const names = (list) => list.map((e) => e.service ?? e).join(",") || "none";
+  process.stdout.write(`outcome=${out.outcome} would-recreate=${names(out.wouldRecreate)} data-owner-changed=${names(out.dataOwnerChanged)} unclassified=${names(out.unclassified)}`);
+' "$PROMOTE_TARGET_SHA" "$_converge_ok" "$_converge_rendered" "$_converge_hashes" "$_converge_running" "${DPF_PROMOTER_STATE_DIR:-}" 2>/dev/null)" \
+  || _converge_summary="outcome=degraded"
+printf 'step=sidecar-converge-shadow target=%s %s\n' "${_built_sha:-$PROMOTE_TARGET_SHA}" "$_converge_summary"
+rm -f "$_converge_rendered" "$_converge_hashes" "$_converge_running" ${_converge_mounts:+"$_converge_mounts"}
+
 # --- Step 8: cleanup ---
 # A successful swap leaves the PREVIOUS portal image untagged (dangling) plus BuildKit
 # cache layers from step 3's rebuild. Nothing else sweeps them, so across upgrades they
