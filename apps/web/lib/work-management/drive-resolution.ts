@@ -65,7 +65,7 @@ export type DriveResolutionInput = {
   participants: readonly WorkroomParticipantView[];
   currentStageKey: string | null;
   /** `iteration` is set only on graph-shape receipts (GPP Phase 3c); absent reads 0. */
-  receipts: readonly { stageKey: string; kind: string; iteration?: number }[];
+  receipts: readonly { stageKey: string; kind: string; iteration?: number; runKey?: string }[];
   budgetUsage: readonly { kind: string; used: number }[];
   stopConditionHits: readonly string[];
   reviewDue: boolean;

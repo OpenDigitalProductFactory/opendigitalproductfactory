@@ -185,8 +185,8 @@ describe("Send back through the runner: rework clears the left stage's task, rev
       { node: "node:j", from: "stage:c", enteredAt: at(-45).toISOString() },
       expect.objectContaining({ node: "stage:b1", enteredAt: at(15).toISOString(), taskId: PRIMARY, lastAction: "dispatch_agent" }),
     ]);
-    // The refused pass's receipt is kept for audit, scoped to iteration 0.
-    expect(drive(h).receipts).toEqual(expect.arrayContaining([{ stageKey: "b2", kind: "stage-evidence-recorded", iteration: 0 }]));
+    // The refused pass's receipt is kept for audit, scoped to iteration 0 and to its run (BI-086DC167).
+    expect(drive(h).receipts).toEqual(expect.arrayContaining([{ stageKey: "b2", kind: "stage-evidence-recorded", iteration: 0, runKey: CYCLE }]));
     expect(drive(h).pendingAttentions).toEqual([]);
   });
 
@@ -198,7 +198,7 @@ describe("Send back through the runner: rework clears the left stage's task, rev
     const latched = await tick(h, at(30));
     expect(latched.plan).toMatchObject({ action: "pause", reason: "executor_writeback_unavailable" });
     expect(latched.upserts).toEqual([]);
-    expect(drive(h).receipts).toEqual(expect.arrayContaining([{ stageKey: "b1", kind: "blocked", iteration: 1 }]));
+    expect(drive(h).receipts).toEqual(expect.arrayContaining([{ stageKey: "b1", kind: "blocked", iteration: 1, runKey: CYCLE }]));
     expect(marking(h).tokens.map((token) => token.node)).toEqual(["node:j", "stage:b1"]);
     // b1's new evidence, after its new dispatch, earns iteration 1 and moves the token to b2 again.
     h.evidence.push({ stageKey: "b1", kind: "assurance-run", outcome: "completed", recordedAt: at(35) });

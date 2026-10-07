@@ -30,6 +30,11 @@ import type {
 } from "@/lib/decision-perspective/types";
 import { sealDecision, type SealablePayload } from "@/lib/decision/decision-chain";
 import { citationsToSources, type AdmissibleCitation } from "@/lib/decision/evidence-grounding";
+import {
+  resolveDecisionAgentId,
+  type DecisionAgentLookupDb,
+  type ShadowLedgerSyncOutcome,
+} from "@/lib/decision/decision-shadow-ledger-bridge";
 
 type ProfileResolverDb = {
   decisionPerspectiveProfile: {
@@ -58,7 +63,7 @@ type ProfileResolverDb = {
       select: { chainEntryHash: true };
     }): Promise<{ chainEntryHash: string | null } | null>;
   };
-} & Parameters<typeof persistDecisionInteraction>[0]["db"];
+} & DecisionAgentLookupDb & Parameters<typeof persistDecisionInteraction>[0]["db"];
 
 /** Look up the current head hash of a chain, defensively (fail-open to null). */
 async function resolveChainHead(db: ProfileResolverDb, chainId: string): Promise<string | null> {
@@ -82,6 +87,11 @@ export type KernelConsultLedgerOutcome = {
   profileId?: string;
   /** Why the write was skipped, when it was. */
   reason?: string;
+  /**
+   * BI-6082C235: the decision's shadow-ledger row. Null when the consult named
+   * no coworker an Agent row carries, so there was nobody to attribute it to.
+   */
+  shadowLedger?: ShadowLedgerSyncOutcome | null;
 };
 
 /**
@@ -362,10 +372,16 @@ export async function recordKernelConsultInteraction(input: {
       }
     }
 
-    const { interactionId } = await persistDecisionInteraction({
+    // BI-6082C235: the asking coworker gets its own column (a real foreign key)
+    // instead of living only in outcomePayload.caller. An id no Agent row
+    // carries is recorded as no agent; the declaration stays in the payload.
+    const agentId = await resolveDecisionAgentId(input.db, input.caller?.agentId);
+
+    const { interactionId, shadowLedger } = await persistDecisionInteraction({
       db: input.db,
       build: null,
       evaluation,
+      agentId,
       taskRunId: input.taskRunId ?? null,
       triggeredByUserId: input.triggeredByUserId ?? null,
       routeContext: input.routeContext ?? input.callingSurface ?? "mcp:principle_decide",
@@ -432,7 +448,7 @@ export async function recordKernelConsultInteraction(input: {
       },
     });
 
-    return { recorded: true, interactionId, profileId: profile.profileId };
+    return { recorded: true, interactionId, profileId: profile.profileId, shadowLedger };
   } catch (err) {
     console.warn("[kernel-consult-ledger] write failed (fail-open):", err);
     return { recorded: false, reason: "write-failed" };

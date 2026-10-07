@@ -63,16 +63,6 @@
     "rule": "D-9",
     "elementId": "stage:a"
   },
-  "e-not-executable-stage-deadline.gpp.json": {
-    "rule": "E-NOT-EXECUTABLE",
-    "elementId": "stage:a",
-    "construct": "stage-deadline"
-  },
-  "e-not-executable-sub-shape.gpp.json": {
-    "rule": "E-NOT-EXECUTABLE",
-    "elementId": "stage:a",
-    "construct": "sub-shape"
-  },
   "s-1-unreachable-stage.gpp.json": {
     "rule": "S-1",
     "elementId": "stage:c"
