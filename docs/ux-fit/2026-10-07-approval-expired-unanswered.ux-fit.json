@@ -4,8 +4,6 @@
   "decisionInteractionId": "DI-AAB4B5E0BF59",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/workspace/inbox/page.tsx",
-      "apps/web/components/attention/AttentionInbox.tsx",
       "apps/web/components/attention/CoworkerEnvelopeApproval.tsx"
     ]
   },
