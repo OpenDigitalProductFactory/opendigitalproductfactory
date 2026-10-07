@@ -22,6 +22,7 @@
 | P5 | Grok `agent-client` token | BI-84C1F526 | P2b, P3 |
 | P6 | Floor enforcement (read-only below floor) | BI-DFC0270C | P3, P5 |
 | P7 | Installed-session freshness advisory | BI-A67B65F4 | P1, P2b |
+| P8 | Client capabilities as one verified profile, drift flag, weekly re-verification | to be filed when the DPF connection is back (MCP was disconnected 2026-10-07 during a self-upgrade) | P3 |
 
 ## Phases
 
@@ -75,8 +76,10 @@
 - Descriptor generation: the declaration is written into `claude.mcp.json` and `antigravity.mcp.json` and into the Codex and Grok shapes, outside any `${DPF_MCP_URL}` expansion.
 - `scripts/hooks/lib/pin-plugin-mcp-url.mjs` preserves the query.
 - `apps/web/lib/auth/mcp-host-writer.ts` stops writing a duplicate `dpf` entry.
+- Claude user/local scope: back up, then `claude mcp remove dpf -s user|local` for a `dpf` server that targets the DPF endpoint path.
+- Run the `pin-plugin-mcp-url.mjs` step for every converged project-scope record, not only the source repo's.
 
-**Verification:** AC-CONVERGE-ALL and AC-REPORT-VERIFY (updater part), via:
+**Verification:** AC-CONVERGE-ALL, AC-USER-SCOPE-DUPLICATE and AC-REPORT-VERIFY (updater part), via:
 - `update_agent_toolchain_test.py` with fixture homes on Windows;
 - the same suite on Linux and macOS CI runners;
 - `mcp-host-writer` tests;
@@ -163,6 +166,26 @@
 
 **Rollback:** revert. The hook is advisory.
 
+### P8 — Client capabilities stay current (item to be filed)
+
+**Files:**
+- `packages/dpf-skill-pack/client-capabilities.json` (new).
+- `packages/integration-shared/src/mcp-client-credential-policy.ts` reads it.
+- `packages/dpf-skill-pack/scripts/mcp-credential-policy-cases.json` is generated from it.
+- `docs/architecture/agent-client-capability-parity.md` gets a rendered matrix.
+- `apps/web/lib/agent-toolchain/fleet-readiness.ts`: unverified-version flag.
+- An intake call with the key `client-capability:<client>@<version>`.
+- A weekly `scheduledAgentTask` on `apps/web/lib/actions/agent-task-scheduler.ts`.
+
+**Verification:** AC-CAPABILITY-SOURCE and AC-CAPABILITY-DRIFT, via:
+- generator and drift-check tests;
+- policy tests showing unchanged behaviour for today's rows;
+- a flag unit test;
+- an intake dedupe test;
+- the first scheduled run observed on the dev install.
+
+**Rollback:** revert. Today's policy behaviour is preserved by the generated cases.
+
 ## Traceability
 
 | Requirement | Verification | Contract | Flow | Backlog item |
@@ -180,6 +203,9 @@
 | OBJ-FLOOR | AC-FLOOR-READONLY | toolchainFloorRefusalResult | connection declares toolchain | BI-DFC0270C |
 | OBJ-FLOOR | AC-FLOOR-SCOPE | resolveToolchainVerdict | connection declares toolchain | BI-DFC0270C |
 | OBJ-BACKSTOP | AC-BACKSTOP | hooks/toolchain-freshness.mjs | agent converges host | BI-A67B65F4 |
+| OBJ-CONVERGE | AC-USER-SCOPE-DUPLICATE | update_agent_toolchain.py --from-portal | agent converges host | BI-DE1E6485 |
+| OBJ-CAPABILITY | AC-CAPABILITY-SOURCE | client-capabilities.json | release publishes toolchain | P8 item |
+| OBJ-CAPABILITY | AC-CAPABILITY-DRIFT | client-capabilities.json | connection declares toolchain | P8 item |
 
 ## Risks and rollback
 

@@ -328,6 +328,7 @@ The updater gains `--from-portal <origin>`. The existing local-directory mode is
 4. **Converge every scope on this host:**
    - **Claude `local` scope:** existing behaviour.
    - **Claude project scope:** every project-scope record whose folder exists, plus retirement of a duplicate project `.mcp.json` `dpf` entry by backup and disable, never delete. This calls **BI-B9F359AC's** functions; it does not reimplement them. Records whose folder is gone are reported as prunable and not touched.
+   - **Claude user scope:** a `dpf` server in `~/.claude.json` `mcpServers` (or in a project's `mcpServers` there) that targets the DPF endpoint path duplicates the plugin connector. Seen on this host on 2026-10-07: `http://127.0.0.1:3000/api/mcp/v1?tier=full` beside the plugin's OAuth connector, which surfaced as two `dpf` rows in the connector list. It is retired by `claude mcp remove dpf -s user|local`, after its definition is written to a backup file. Hand-editing the live settings file is never used.
    - **Shared copy:** carries the declaration, because it is shipped.
    - **Codex:** managed copy, config and hooks.
    - **Grok:** plugin, hooks and `config.toml`, plus the `agent-client` token from §5.2e.
@@ -372,6 +373,52 @@ A small **Node** wrapper ships in the pack (`hooks/toolchain-freshness.mjs`), be
 
 The source-repo-only `.claude/settings.json` registration is removed, so the advisory does not run twice. Grok and Antigravity load the same `hooks.json` through their manifests. Codex gets it through the managed `hooks.json` path. The hook only accelerates: the server-side verdict (§5.2) is the guarantee.
 
+The same move applies to `pin-plugin-mcp-url.mjs`. It writes the literal endpoint the desktop app needs, but today it runs only from the source repo's `reconcile-claude-plugin` hook. So in an installed-runtime session (D:\DPF) the desktop app refused sign-in with "This session's copy of the connector points at a different server URL". This was observed 2026-10-07, and the cache was repaired by running the helper by hand. Until P2 bakes a parseable URL into the shipped descriptor, the updater runs the pin step for **every** project-scope record it converges, not only the source repo's.
+
+### 5.5 Client capabilities are platform data, re-verified as clients change
+
+Client capabilities change roughly weekly. Today they live in two homes that drift apart:
+
+- **The rule that enforces them.** `mcpClientBearerHeaderRequired` hard-codes per-client OAuth support. For example, Grok always needs a bearer, which matches the founder's 2026-10-07 experience that the Grok CLI cannot complete OAuth against a local install.
+- **The tracker that describes them.** `docs/architecture/agent-client-capability-parity.md` calls itself the weekly-changing record. Its last full refresh was 2026-06-20 and its last spot check 2026-08-12. Its monthly refresh ritual was documented but never scheduled.
+
+Nothing notices when a client release changes what it can do.
+
+**One machine-readable profile.**
+- `packages/dpf-skill-pack/client-capabilities.json` becomes the single source.
+- Each row is per client kind and per verified version range. It carries these fields, each with a `verifiedAt` date, the `verifiedVersion` it was proven on, and an evidence link:
+
+| Field | Values / meaning |
+|---|---|
+| `oauthHttps` | OAuth works over https |
+| `oauthLoopbackHttp` | OAuth works over loopback http |
+| `staticHeaders` | Static request headers supported |
+| `declarationCarrier` | `query` or `header`, from the P1 spike |
+| `pluginScopes` | Plugin scopes the client supports |
+| `hookPlane` | Hook plane the client offers |
+| `reloadRequired` | Whether a reload is needed to pick up changes |
+| `skillsLoad` | Whether skills load |
+
+- `mcpClientBearerHeaderRequired` becomes a pure function of the profile and the endpoint, keeping its signature. `mcp-credential-policy-cases.json` is generated from the profile as its test fixture.
+- The profile ships inside the manifest's `clients` map (§5.1).
+- The capability matrix in the parity tracker becomes a rendered view of the profile, with a pointer back to it. Its prose history stays.
+
+**Drift is noticed when it happens, not monthly.**
+- Each connection's `clientInfo.version` is recorded by P3 (§5.2b).
+- When a connection reports a client version newer than the profile's `verifiedVersion` for that client, the fleet view marks the client "capabilities unverified for <version>".
+- One backlog item per client and version, deduplicated on the intake key `client-capability:<client>@<version>`, is filed to re-verify the profile.
+- The updater's report also carries each client CLI's own `--version`, so drift is visible even before that client connects.
+
+**A scheduled re-verification.** The tracker's documented refresh ritual is wired as a **weekly** `scheduledAgentTask` on the existing `agent-task-scheduler.ts` substrate, so no new scheduler is added. The task:
+1. reads each client's official release notes and documentation;
+2. diffs them against the profile;
+3. files or updates the per-client item with what changed.
+
+**Profile changes still ship through a reviewed PR.**
+- A changed field (for example, Grok gaining OAuth) lands as a PR to `client-capabilities.json` that carries the evidence.
+- On the next release, every rule that reads the profile changes with it: the auth rule, the floor (§5.2d), the carrier and the descriptors.
+- A capability is never assumed from a version number alone. It is proven, with evidence, before the profile says so.
+
 ## 6. What each client experiences after the next release
 
 | Client | Its next session after the release |
@@ -399,6 +446,7 @@ Each phase is one PR and one clean revert.
 | P5 | `agent-client` token kind + `issue_agent_client_token` + PAT-switch exemption; Grok convergence | P2, P3 |
 | P6 | `isToolAllowedBelowToolchainFloor` + `toolchainFloorRefusalResult` in `tools/call` and `tasks/*`, behind grace; first floor = 0.3.0 | P3, P5 |
 | P7 | Node freshness wrapper in plugin `hooks.json` against the manifest; remove source-repo-only registration; retire `reconcile-claude-plugin`'s project repair after parity | P1, P2 |
+| P8 | `client-capabilities.json` as the single capability source; `mcpClientBearerHeaderRequired` and its test cases derived from it; tracker matrix rendered from it; unverified-version drift flag from recorded `clientInfo.version`; weekly re-verification `scheduledAgentTask` | P3 |
 
 ## 8. Retirements (absorb-dont-adopt)
 
@@ -447,6 +495,8 @@ Each phase is one PR and one clean revert.
 
 **OBJ-GROK:** Grok's bearer-token path is an explicit, bounded credential policy rather than an implicit exception.
 
+**OBJ-CAPABILITY:** Each client's capabilities are one versioned, evidence-backed platform record that every rule reads, and a client version the record has not verified is noticed when it connects and re-verified on a weekly schedule.
+
 **OBJ-BACKSTOP:** The SessionStart freshness advisory runs in installed-runtime sessions, not only in the source repository, and is never silent.
 
 | Acceptance | Objectives | Statement |
@@ -463,6 +513,9 @@ Each phase is one PR and one clean revert.
 | AC-REPORT-VERIFY | OBJ-CONVERGE, OBJ-OBSERVE | The updater's JSON report is recorded through record_surface_readiness, and a copy counts as current only when the client's next connection declares the new digest. |
 | AC-NO-RETIRED-DEFAULT | OBJ-CONVERGE | No updater, wrapper or host writer writes the http://127.0.0.1:3000 endpoint unless the manifest names it, and writeMcpJsonToHost no longer writes a dpf entry that duplicates the plugin connector. |
 | AC-GROK | OBJ-GROK, OBJ-FLOOR | Grok converges to an agent-client token for client grok with a finite expiry minted by issue_agent_client_token for the caller's own client only, the token stays resolvable when operator PAT resolution is disabled, a Grok declaration on an operator PAT is below floor after grace, and an expired Grok token returns the same repair link. |
+| AC-CAPABILITY-SOURCE | OBJ-CAPABILITY | mcpClientBearerHeaderRequired, the floor's auth rule and the manifest clients map all derive from client-capabilities.json, whose rows each carry a verified version, date and evidence link, and CI fails when the generated policy cases or the rendered tracker matrix drift from it. |
+| AC-CAPABILITY-DRIFT | OBJ-CAPABILITY | A connection reporting a client version newer than that client's verified version marks the client capabilities-unverified in the fleet view and files one deduplicated re-verification item for that client and version, and a weekly scheduled task diffs official client release notes against the profile. |
+| AC-USER-SCOPE-DUPLICATE | OBJ-CONVERGE | A dpf server in the Claude user or local settings that targets the DPF endpoint path is retired through the client's own remove command after its definition is backed up, and the updater pins a parseable connector URL for every converged project-scope record. |
 | AC-BACKSTOP | OBJ-BACKSTOP | A Claude Code session started in the installed-runtime folder runs the freshness advisory from the plugin's own hooks against the portal manifest, prints a stale warning for a stale copy, and prints unknown when the portal or Python is unavailable. |
 
 ### Traceability
@@ -481,6 +534,9 @@ Each phase is one PR and one clean revert.
 | OBJ-CONVERGE, OBJ-OBSERVE | AC-REPORT-VERIFY | Report to `record_surface_readiness`; connection-confirmed `current` (P2, P3) | Live: report recorded, copy flips to current only after reconnect |
 | OBJ-CONVERGE | AC-NO-RETIRED-DEFAULT | Manifest-sourced endpoints; host-writer fix (P2) | CI grep guard; host-writer test |
 | OBJ-GROK, OBJ-FLOOR | AC-GROK | `agent-client` kind, `issue_agent_client_token`, PAT-switch exemption (P5); floor rule (P6) | Token tests; updater test with a fixture Grok home; live Grok connection verdict |
+| OBJ-CAPABILITY | AC-CAPABILITY-SOURCE | `client-capabilities.json`, derived policy, rendered matrix (P8) | Generator and drift-check tests; policy unit tests unchanged in behaviour for today's rows |
+| OBJ-CAPABILITY | AC-CAPABILITY-DRIFT | Unverified-version flag, deduplicated intake, weekly scheduled task (P8) | Unit test on the flag; intake dedupe test; scheduled task registered and its first run's item observed on the dev install |
+| OBJ-CONVERGE | AC-USER-SCOPE-DUPLICATE | User/local-scope retirement and per-project pin in the updater (P2) | Updater test with a fixture `~/.claude.json`; live run on this host retires the 127.0.0.1:3000 user entry |
 | OBJ-BACKSTOP | AC-BACKSTOP | Node wrapper in the plugin `hooks.json` (P7) | Hook test with and without Python; live session in D:\DPF |
 
 ## 11. Founder decisions
@@ -518,6 +574,9 @@ Updated in the same branch as each phase:
 - AGENTS.md §1 "Self-provision before working": add a pointer to the portal manifest.
 
 ## 14. Architecture review disposition
+
+Founder input on 2026-10-07, after the review, added §5.5 (capabilities change weekly; Grok cannot complete OAuth locally) and the Claude user-scope duplicate (§5.3) observed on this host. Both still need the independent design review.
+
 
 An independent agent ran the advisory review on 2026-10-07 using `dpf-architecture-review`. All 15 findings are folded in:
 
