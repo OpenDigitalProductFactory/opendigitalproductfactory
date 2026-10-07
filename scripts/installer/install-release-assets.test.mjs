@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureGitWebhookSecret, ensureGppPermitSecret, ensureInngestKeys, installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
+import { ensureDedicatedSigningKeys, ensureGitWebhookSecret, ensureGppPermitSecret, ensureInngestKeys, installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
 
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 
@@ -179,6 +179,24 @@ test("updateEnv carries the permit key into the committed install env without to
     if (previous.permit === undefined) delete process.env.DPF_GPP_PERMIT_SECRET; else process.env.DPF_GPP_PERMIT_SECRET = previous.permit;
     if (previous.webhook === undefined) delete process.env.DPF_GIT_WEBHOOK_SECRET; else process.env.DPF_GIT_WEBHOOK_SECRET = previous.webhook;
   }
+});
+
+// BI-F6929F50: the reach-link and delegation-receipt signing keys reach every install the same way.
+test("an upgrade persists the reach and receipt keys promote.sh exported, and never replaces a real one", () => {
+  const exported = { DPF_ATTENTION_REACH_SECRET: "a".repeat(64), DPF_DELEGATION_RECEIPT_SECRET: "b".repeat(64) };
+  const added = ensureDedicatedSigningKeys("DPF_IMAGE_TAG=v1\n", "\n", exported);
+  assert.match(added, new RegExp(`^DPF_ATTENTION_REACH_SECRET=${"a".repeat(64)}$`, "m"));
+  assert.match(added, new RegExp(`^DPF_DELEGATION_RECEIPT_SECRET=${"b".repeat(64)}$`, "m"));
+  const placeholder = ensureDedicatedSigningKeys('DPF_ATTENTION_REACH_SECRET="<generate a distinct value>"\n', "\n", exported);
+  assert.match(placeholder, new RegExp(`^DPF_ATTENTION_REACH_SECRET=${"a".repeat(64)}$`, "m"));
+  const real = `DPF_ATTENTION_REACH_SECRET="${"1".repeat(64)}"\nDPF_DELEGATION_RECEIPT_SECRET='${"2".repeat(64)}'\n`;
+  assert.equal(ensureDedicatedSigningKeys(real, "\n", exported), real);
+  const generated = ensureDedicatedSigningKeys("", "\n", {});
+  assert.match(generated, /^DPF_ATTENTION_REACH_SECRET=[0-9a-f]{64}$/m);
+  assert.match(generated, /^DPF_DELEGATION_RECEIPT_SECRET=[0-9a-f]{64}$/m);
+  assert.notEqual(generated.match(/^DPF_ATTENTION_REACH_SECRET=(.*)$/m)[1], generated.match(/^DPF_DELEGATION_RECEIPT_SECRET=(.*)$/m)[1]);
+  const crlf = ensureDedicatedSigningKeys("DPF_IMAGE_TAG=v1\r\n", "\r\n", exported);
+  assert.ok(crlf.endsWith(`DPF_DELEGATION_RECEIPT_SECRET=${"b".repeat(64)}\r\n`));
 });
 
 // BI-3267763F: no install keeps running Inngest on the keys published in the repo.
