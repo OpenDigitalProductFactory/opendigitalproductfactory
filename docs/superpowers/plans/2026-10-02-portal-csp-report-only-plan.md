@@ -52,11 +52,11 @@ Nonces, the derived or proxied image allowlist, `form-action` and `upgrade-insec
 
 ## Acceptance traceability
 
-| AC | Tasks | Evidence |
-|----|-------|----------|
-| AC-1 | 1, 2 | policy module tests; proxy header tests |
-| AC-2 | 3 | report endpoint tests |
-| AC-3 | 1, 2 | tests asserting no enforcing header |
+| AC | Objective | Tasks and evidence |
+|----|-----------|---------------------|
+| AC-1 | OBJ-CSP-POLICY | Phases 1, 2: policy module tests; proxy header tests |
+| AC-2 | OBJ-CSP-REPORTS | Phase 3: report endpoint tests |
+| AC-3 | OBJ-CSP-NO-BREAKAGE | Phases 1, 2: tests asserting no enforcing header |
 
 ## Backlog coverage
 

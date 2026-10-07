@@ -43,11 +43,17 @@ Nothing is enforced. Report-only cannot block a load, so every image in the tabl
 
 ## Objectives and acceptance
 
-Quoted from the backlog item:
+- **OBJ-CSP-POLICY:** Every portal response that passes through `proxy.ts` carries a `Content-Security-Policy-Report-Only` header written by one policy module, with separate storefront and shell directive sets and no arbitrary image hosts.
+- **OBJ-CSP-REPORTS:** Browsers' violation reports are collected by a same-origin endpoint that bounds what it reads, rate-limits per client and logs safely.
+- **OBJ-CSP-NO-BREAKAGE:** Nothing is blocked in this phase: operator-configured images keep rendering, because the header is report-only and never enforcing.
 
-- **AC-1:** Every portal response that passes through `proxy.ts` (pages, redirects, API, quiescence 503s) carries a `Content-Security-Policy-Report-Only` header built by the single policy module; storefront and shell surfaces get their own directive sets; `img-src` on both excludes arbitrary hosts.
-- **AC-2:** Violations reach the report endpoint (`report-uri` `application/csp-report` and `report-to` `application/reports+json`) and are logged through `sanitizeForLog` with printf `%s`, with a bounded body size, bounded field lengths, a bounded batch size and a per-client rate limit.
-- **AC-3:** Org branding, integration logos and storefront media still render: the header is Report-Only, never enforcing, and tests assert that no enforcing `Content-Security-Policy` header is emitted.
+Acceptance, quoted from the backlog item:
+
+| Acceptance | Objective | Statement |
+|------------|-----------|-----------|
+| AC-1 | OBJ-CSP-POLICY | Every portal response that passes through `proxy.ts` (pages, redirects, API, quiescence 503s) carries a `Content-Security-Policy-Report-Only` header built by the single policy module; storefront and shell surfaces get their own directive sets; `img-src` on both excludes arbitrary hosts. |
+| AC-2 | OBJ-CSP-REPORTS | Violations reach the report endpoint (`report-uri` `application/csp-report` and `report-to` `application/reports+json`) and are logged through `sanitizeForLog` with printf `%s`, with a bounded body size, bounded field lengths, a bounded batch size and a per-client rate limit. |
+| AC-3 | OBJ-CSP-NO-BREAKAGE | Org branding, integration logos and storefront media still render: the header is Report-Only, never enforcing, and tests assert that no enforcing `Content-Security-Policy` header is emitted. |
 
 Zero legitimate violations before enforcement is the entry condition of `BI-E7F94498`, not of this item.
 
