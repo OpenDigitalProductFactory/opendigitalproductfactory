@@ -718,6 +718,35 @@ export function parseQAVerification(qaContent: string): QAVerification {
 
 // ─── Task Resume Logic ─────────────────────────────────────────────────────
 
+type ExecuteTool = (typeof import("@/lib/mcp-tools"))["executeTool"];
+
+/**
+ * Persist a build's verification verdict on THAT build. The tool resolves its
+ * target from an explicit buildId; without one it falls back to "the owner's
+ * only open build" and refuses when there are several (BI-F82915D7). On a live
+ * install the owner had 128 open builds, so every unscoped save was refused and
+ * no build since 2026-09-15 kept a typecheck verdict: evidence auto-accept read
+ * `typecheckPassed` as missing and every build stalled at review->ship. A refused
+ * save now fails loudly instead of being dropped.
+ */
+export async function saveVerificationOutForBuild(
+  executeTool: ExecuteTool,
+  buildId: string,
+  value: Record<string, unknown>,
+  userId: string,
+  threadId: string | undefined,
+): Promise<void> {
+  const result = await executeTool(
+    "saveBuildEvidence",
+    { buildId, field: "verificationOut", value },
+    userId,
+    { routeContext: "/build", agentId: "AGT-ORCH-300", threadId },
+  );
+  if (!result.success) {
+    throw new Error(`verificationOut not saved for ${buildId}: ${result.error ?? result.message ?? "unknown"}`);
+  }
+}
+
 /** Stored task result shape from saveBuildEvidence("taskResults", ...) */
 export type StoredTaskResult = {
   taskIndex?: number;
@@ -1552,22 +1581,19 @@ async function runBuildOrchestratorInner(params: {
         changedFiles,
       });
 
-      await executeTool("saveBuildEvidence", {
-        field: "verificationOut",
-        value: {
-          ...verification,
-          // Gate-facing fields reflect the changed surface, not the whole repo.
-          typecheckPassed: scoped.typecheckPassed ?? verification.typecheckPassed,
-          testsFailed: scoped.testsFailed ?? verification.testsFailed,
-          testsPassed: scoped.testsPassed ?? verification.testsPassed,
-          outOfScopeNoise: scoped.outOfScopeNoise,
-          globalTestsFailed: scoped.globalTestsFailed,
-          failureAxis: scoped.failureAxis,
-          scopedToChangedFiles: changedFiles,
-          fullOutput: qaContent.slice(0, 2000),
-          timestamp: new Date().toISOString(),
-        },
-      }, userId, { routeContext: "/build", agentId: "AGT-ORCH-300", threadId: parentThreadId });
+      await saveVerificationOutForBuild(executeTool, buildId, {
+        ...verification,
+        // Gate-facing fields reflect the changed surface, not the whole repo.
+        typecheckPassed: scoped.typecheckPassed ?? verification.typecheckPassed,
+        testsFailed: scoped.testsFailed ?? verification.testsFailed,
+        testsPassed: scoped.testsPassed ?? verification.testsPassed,
+        outOfScopeNoise: scoped.outOfScopeNoise,
+        globalTestsFailed: scoped.globalTestsFailed,
+        failureAxis: scoped.failureAxis,
+        scopedToChangedFiles: changedFiles,
+        fullOutput: qaContent.slice(0, 2000),
+        timestamp: new Date().toISOString(),
+      }, userId, parentThreadId);
 
       // BI-99B06AD1 — build/codegen verification → bounded fix loop. If THIS
       // build's own changed surface failed typecheck/tests, don't just stall at
@@ -1639,23 +1665,20 @@ async function runBuildOrchestratorInner(params: {
         if (loop.rounds > 0) {
           // Persist the post-repair verdict so the phase gate evaluates the
           // repaired state rather than the pre-repair failure.
-          await executeTool("saveBuildEvidence", {
-            field: "verificationOut",
-            value: {
-              ...verification,
-              typecheckPassed: loop.final.typecheckPassed ?? scoped.typecheckPassed,
-              testsFailed: loop.final.testsFailed ?? scoped.testsFailed,
-              testsPassed: loop.repaired ? 1 : (scoped.testsPassed ?? verification.testsPassed),
-              outOfScopeNoise: scoped.outOfScopeNoise,
-              globalTestsFailed: scoped.globalTestsFailed,
-              failureAxis: loop.final.failureAxis,
-              scopedToChangedFiles: changedFiles,
-              fullOutput: (loop.final.output ?? qaContent).slice(0, 2000),
-              timestamp: new Date().toISOString(),
-              verificationRepairRounds: loop.rounds,
-              verificationRepaired: loop.repaired,
-            },
-          }, userId, { routeContext: "/build", agentId: "AGT-ORCH-300", threadId: parentThreadId });
+          await saveVerificationOutForBuild(executeTool, buildId, {
+            ...verification,
+            typecheckPassed: loop.final.typecheckPassed ?? scoped.typecheckPassed,
+            testsFailed: loop.final.testsFailed ?? scoped.testsFailed,
+            testsPassed: loop.repaired ? 1 : (scoped.testsPassed ?? verification.testsPassed),
+            outOfScopeNoise: scoped.outOfScopeNoise,
+            globalTestsFailed: scoped.globalTestsFailed,
+            failureAxis: loop.final.failureAxis,
+            scopedToChangedFiles: changedFiles,
+            fullOutput: (loop.final.output ?? qaContent).slice(0, 2000),
+            timestamp: new Date().toISOString(),
+            verificationRepairRounds: loop.rounds,
+            verificationRepaired: loop.repaired,
+          }, userId, parentThreadId);
           await prisma.buildActivity.create({
             data: {
               buildId,
