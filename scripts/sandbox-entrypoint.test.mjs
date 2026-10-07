@@ -150,7 +150,7 @@ test('a docker exec session, started from the container env, never sees the sand
     const script = readFileSync(entrypoint, 'utf8');
     assert.doesNotMatch(script, /^\s*export\s+AUTH_SECRET\b/m);
     const assignments = script.split('\n').filter((line) => !/^\s*#/.test(line) && /\bAUTH_SECRET=/.test(line));
-    assert.deepEqual(assignments, ['AUTH_SECRET="$(cat "$secret_file")" exec pnpm --filter web dev'], 'AUTH_SECRET is only ever a prefix of the final exec');
+    assert.deepEqual(assignments, ['exec env AUTH_SECRET="$(cat "$secret_file")" pnpm --filter web dev'], 'AUTH_SECRET is only ever set by env(1) on the final exec');
   } finally { fx.cleanup(); }
 });
 

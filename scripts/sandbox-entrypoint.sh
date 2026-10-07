@@ -53,4 +53,7 @@ echo '[sandbox-start] Converging dependencies for the current workspace'
 pnpm install --prefer-offline --frozen-lockfile --config.confirmModulesPurge=false --ignore-scripts
 pnpm --filter @dpf/db exec prisma generate --schema prisma/schema
 rm -rf apps/web/.next/dev/cache
-AUTH_SECRET="$(cat "$secret_file")" exec pnpm --filter web dev
+# `env` scopes the secret to the dev server in every POSIX shell, including
+# the image's busybox ash; nothing else in this script or any `docker exec`
+# session inherits it.
+exec env AUTH_SECRET="$(cat "$secret_file")" pnpm --filter web dev
