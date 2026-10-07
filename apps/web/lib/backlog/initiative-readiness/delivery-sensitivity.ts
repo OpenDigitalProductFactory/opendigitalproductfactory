@@ -15,10 +15,16 @@
  *      the change says it edits and is re-read at completion;
  *   2. the repo paths the item body cites — at claim time no diff exists yet,
  *      and a body that names its files is naming the change.
- * With change facts, prose cannot raise above what the paths warrant. Without
- * them, the keyword heuristic still raises — genuinely sensitive work still
- * owes more — and the trigger says the raise came from prose, so the author can
- * see how to replace a word with a fact.
+ * With change facts, prose cannot raise above what the paths warrant.
+ *
+ * Operator direction 2026-10-07 supersedes DI-52BAAB9E6835's prose fallback: a
+ * word is not evidence. On 2026-10-06, 47 of 126 builds parked in plan owed the
+ * large gates only because their prose said "permission", "outbound",
+ * "schema"... With no change fact the shape stays as declared, and a build's
+ * plan is a change fact (3, below), so sensitive work is still raised on the
+ * files it will touch, at the plan-to-build gate where the plan exists.
+ *   3. the files a Build Studio plan lists (buildPlan.fileStructure), outranked
+ *      by a declared scope and outranking paths the body cites.
  *
  * WWMD DI-B9DCC3F456F9: substrate is STRUCTURAL. Schema, migrations, routes and
  * external surfaces are elevated; the access-control boundary is high. A domain
@@ -27,7 +33,6 @@
  * substrate whatever they are named.
  */
 
-import { matchDeliverableSensitivityKeyword } from "@/lib/explore/sensitivity-keywords";
 import type { ReadinessSensitivity, SensitivityTrigger } from "./types";
 
 export type { SensitivityTrigger };
@@ -106,15 +111,25 @@ export function assessDeliverySensitivity(input: {
   title?: string | null;
   body?: string | null;
   workType?: string | null;
-  /** The bound Workroom's declared edit paths; outrank anything the body cites. */
+  /** The bound Workroom's declared edit paths; outrank anything else. */
   declaredPaths?: readonly string[] | null;
+  /** The files a Build Studio plan will create or change; outrank paths the body cites. */
+  planPaths?: readonly string[] | null;
 }): DeliverySensitivityAssessment {
   const declared = (input.declaredPaths ?? []).filter((path) => path.trim().length > 0);
   if (declared.length > 0) return assessPaths(declared, "declared-scope");
+  const planned = (input.planPaths ?? []).filter((path) => path.trim().length > 0);
+  if (planned.length > 0) return assessPaths(planned, "build-plan-paths");
   const cited = extractCitedRepoPaths(`${input.title ?? ""}\n${input.body ?? ""}`);
   if (cited.length > 0) return assessPaths(cited, "item-body-paths");
-  const { level, keyword } = matchDeliverableSensitivityKeyword(`${input.title ?? ""}\n${input.body ?? ""}`);
-  return keyword
-    ? { level, trigger: { signal: "keyword", source: "item-prose", evidence: keyword } }
-    : { level: "low", trigger: null };
+  return { level: "low", trigger: null };
+}
+
+/** The file paths a Build Studio plan lists, or [] when it lists none. */
+export function buildPlanPaths(buildPlan: unknown): string[] {
+  const files = (buildPlan as { fileStructure?: unknown } | null)?.fileStructure;
+  if (!Array.isArray(files)) return [];
+  return files
+    .map((file) => (file as { path?: unknown } | null)?.path)
+    .filter((path): path is string => typeof path === "string" && path.trim().length > 0);
 }
