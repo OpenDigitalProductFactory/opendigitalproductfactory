@@ -71,7 +71,7 @@ describe("ensureAcceptanceSweepScheduledTask", () => {
     expect(task.agentId).toBe(ACCEPTANCE_SWEEP_AGENT_ID);
     expect(task.schedule).toBe(ACCEPTANCE_SWEEP_SCHEDULE);
     expect(task.ownerUserId).toBe("user-super");
-    expect(task.nextRunAt).toEqual(new Date("2026-10-06T05:00:00.000Z"));
+    expect(task.nextRunAt).toEqual(new Date("2026-10-06T05:00:00.000Z")); // clock-bomb-guard: allow — "now" is injected as 2026-10-06T04:00Z, so the next 05:00 run is fixed
     expect(jobs.get(ACCEPTANCE_SWEEP_TASK_ID)).toMatchObject({ schedule: ACCEPTANCE_SWEEP_SCHEDULE });
   });
 
@@ -82,7 +82,7 @@ describe("ensureAcceptanceSweepScheduledTask", () => {
 
     expect(second.created).toBe(false);
     expect(tasks.size).toBe(1);
-    expect(tasks.get(ACCEPTANCE_SWEEP_TASK_ID)!.nextRunAt).toEqual(new Date("2026-10-06T05:00:00.000Z"));
+    expect(tasks.get(ACCEPTANCE_SWEEP_TASK_ID)!.nextRunAt).toEqual(new Date("2026-10-06T05:00:00.000Z")); // clock-bomb-guard: allow — both runs inject "now"; the first run's due time is kept
   });
 
   it("refuses to seed when no superuser owner exists", async () => {
