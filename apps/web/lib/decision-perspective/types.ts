@@ -85,6 +85,11 @@ export type DecisionAutonomyPolicy = {
   allowRecommendation: boolean;
   allowArbitration: boolean;
   maxRiskForArbitration: DecisionRiskTier;
+  /**
+   * BI-7FFFBEE3: the highest risk the delegate may proceed on by recommendation.
+   * Absent means "medium", which was the hard-coded rule before it was a policy.
+   */
+  maxRiskForRecommendation?: DecisionRiskTier;
   minimumConfidenceForRecommendation: number;
   minimumConfidenceForArbitration: number;
 };

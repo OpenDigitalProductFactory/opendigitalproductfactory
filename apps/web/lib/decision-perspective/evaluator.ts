@@ -180,12 +180,22 @@ export function evaluateDecisionPerspective(
     };
   }
 
-  if (input.riskTier === "high" || input.riskTier === "critical") {
+  // BI-7FFFBEE3 (operator rule 2026-10-07): the delegated policy bounds the risk
+  // a decision may proceed at; there is no hard-coded tier that goes to a person.
+  // Beyond the policy's limit the decision escalates, and says which limit.
+  const policy = selectedProfile.autonomyPolicy;
+  const maxRiskForRecommendation = policy.maxRiskForRecommendation ?? "medium";
+  const delegatedLimit = policy.allowArbitration && !riskWithin(policy.maxRiskForArbitration, maxRiskForRecommendation)
+    ? policy.maxRiskForArbitration
+    : maxRiskForRecommendation;
+  if (!riskWithin(input.riskTier, delegatedLimit)) {
     return {
       ...baseResult,
       outcomeType: "escalate",
       rationale:
-        `Escalate this high-risk decision to the accountable resolver even though profile confidence is ${confidence}.`,
+        `Escalate: ${input.riskTier} risk exceeds the delegated policy of ${selectedProfile.profileId} `
+        + `(maxRiskForArbitration=${policy.maxRiskForArbitration}${policy.allowArbitration ? "" : ", arbitration off"}; `
+        + `maxRiskForRecommendation=${maxRiskForRecommendation}).`,
     };
   }
 
@@ -244,12 +254,14 @@ export function evaluateDecisionPerspective(
     };
   }
 
-  if (confidence < 0.9 && input.riskTier !== "low") {
+  if (confidence < policy.minimumConfidenceForArbitration && input.riskTier !== "low") {
     return {
       ...baseResult,
       outcomeType: "escalate",
       rationale:
-        `Escalate because profile confidence ${confidence} is not high enough for a ${input.riskTier}-risk decision.`,
+        `Escalate: profile confidence ${confidence} is below the delegated policy's `
+        + `minimumConfidenceForArbitration=${policy.minimumConfidenceForArbitration} for a ${input.riskTier}-risk decision `
+        + `(${selectedProfile.profileId}).`,
     };
   }
 
