@@ -70,6 +70,7 @@ import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
 import { buildIsDelegated, defaultBuildStrategy } from "./lib/local-integration-ci.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
+  createRetryableRelease,
   admittedLeaseTtlMs,
   authoritySafetyMarginMs,
   superviseLeaseRun,
@@ -544,11 +545,36 @@ export function collectDescendantPids(rootPid, processRows) {
   return descendants;
 }
 
-const LOCAL_CI_MUTATOR_COMMANDS = [
-  /(?:^|[\\/])local-ci-runner\.mjs(?:\s|$)/i,
-  /(?:^|[\\/])local-integration-ci\.mjs(?:\s|$)/i,
-  /(?:^|[\\/])\.local-ci-runner(?:-[^\\/\s"]+)?(?:[\\/\s"]|$)/i,
-];
+// Inspect the invoked program and its entry point, never shell payload text.
+// `ps` does not preserve argv boundaries on POSIX; quoted paths from Windows
+// are retained here, and callers with exact argv can provide it directly.
+function isLocalCiMutator(row) {
+  const argv = Array.isArray(row?.argv) ? row.argv :
+    (String(row?.commandLine ?? "").match(/"[^"\n]*"|'[^'\n]*'|[^\s]+/g) ?? [])
+      .map((token) => token.replace(/^("|')(.*)\1$/, "$2"));
+  const executable = String(argv[0] ?? "").replaceAll("\\", "/").split("/").at(-1).toLowerCase();
+  if (/^node(?:\.exe)?$/.test(executable)) {
+    for (let i = 1; i < argv.length; i += 1) {
+      const arg = argv[i];
+      // Inline code has no script entry point. A later runner name is data.
+      if (/^(?:-e|-p|--eval|--print)(?:=|$)/.test(arg)) return false;
+      if (["-r", "--require", "--import", "--loader", "--experimental-loader"].includes(arg)) { i += 1; continue; }
+      if (arg === "--") {
+        return /(?:^|[\\/])local-(?:ci-runner|integration-ci)\.mjs$/i.test(argv[i + 1] ?? "");
+      }
+      if (arg.startsWith("-")) continue;
+      return /(?:^|[\\/])local-(?:ci-runner|integration-ci)\.mjs$/i.test(arg);
+    }
+    return false;
+  }
+  // Detached Docker builds may outlive the Node parent. Only a build's
+  // context identifies a mutator; inspect/log commands mentioning it do not.
+  if (/^docker(?:\.exe)?$/.test(executable)
+      && (argv[1] === "build" || (argv[1] === "buildx" && argv[2] === "build"))) {
+    return /(?:^|[\\/])\.local-ci-runner(?:-[^\\/]+)?[\\/]?$/i.test(argv.at(-1) ?? "");
+  }
+  return false;
+}
 
 export function findLiveLocalCiMutatorPids(processRows, { excludePids = [] } = {}) {
   const rows = Array.isArray(processRows) ? processRows : [];
@@ -561,12 +587,11 @@ export function findLiveLocalCiMutatorPids(processRows, { excludePids = [] } = {
 
   for (const row of rows) {
     const pid = Number(row?.pid);
-    const commandLine = typeof row?.commandLine === "string" ? row.commandLine : "";
     if (
       !Number.isInteger(pid)
       || pid <= 0
       || excluded.has(pid)
-      || !LOCAL_CI_MUTATOR_COMMANDS.some((pattern) => pattern.test(commandLine))
+      || !isLocalCiMutator(row)
     ) {
       continue;
     }
@@ -1566,7 +1591,6 @@ async function main() {
   let leaseId = "";
   let localFenceToken = "";
   let queueObserverPath = "";
-  let leaseReleased = false;
   let receivedSignal = "";
   let queuedClaimInterruptedByQuiescence = false;
   let terminalClaimAttemptSequence = 0;
@@ -1605,9 +1629,7 @@ async function main() {
     sha,
   }).path;
 
-  const releaseLeaseOnce = async () => {
-    if (!leaseId || leaseReleased) return;
-    leaseReleased = true;
+  const releaseConfirmedLease = createRetryableRelease(async () => {
     const response = await mcpCall("release_nonprod_environment_lease", {
       leaseId,
       ownerSessionId,
@@ -1622,7 +1644,8 @@ async function main() {
       });
       queueObserverPath = "";
     }
-  };
+  });
+  const releaseLeaseOnce = () => leaseId ? releaseConfirmedLease() : Promise.resolve();
 
   // BI-3A34D7A9: the admission loop below is the first side effect that writes
   // a provider. The lease and the evidence record share a CLOSED vocabulary with

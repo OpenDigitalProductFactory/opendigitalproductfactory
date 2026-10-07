@@ -164,6 +164,31 @@ export function resolveBoundInitiativeReviewBinding(
   return binding;
 }
 
+/**
+ * The item a bound initiative write is about, from server facts only. An
+ * external run names it in its bound packet; an acceptance steward room's
+ * scheduled run names it through the packet the platform issued its room
+ * (BI-099A0BA3, security review L1: before this the subject came from model
+ * arguments, so the decision could carry no object and a tenant item's
+ * organization could not be matched). Null when neither applies.
+ */
+export async function resolveTrustedInitiativeItemId(input: {
+  task: InitiativeReviewTask | null;
+  toolName: string;
+  boundItemId: string | null;
+  loadStewardItemId: (taskRunId: string) => Promise<string | null>;
+}): Promise<string | null> {
+  if (input.boundItemId) return input.boundItemId;
+  if (input.toolName !== "record_initiative_evidence" || !input.task?.taskRunId.startsWith(SCHEDULED_RUN_PREFIX)) return null;
+  return input.loadStewardItemId(input.task.taskRunId);
+}
+
+async function loadAcceptanceStewardItemId(taskRunId: string): Promise<string | null> {
+  const { resolveAcceptanceStewardRunBinding } = await import("@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority");
+  const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
+  return steward?.ok ? steward.data.itemId : null;
+}
+
 export function resolveBoundInitiativeReviewItem(
   task: InitiativeReviewTask | null,
   executingToolName: string,
@@ -383,7 +408,12 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       task,
       execution.toolName,
     );
-    const trustedBoundItemId = initiativeReviewBinding?.itemId ?? null;
+    const trustedBoundItemId = await resolveTrustedInitiativeItemId({
+      task,
+      toolName: execution.toolName,
+      boundItemId: initiativeReviewBinding?.itemId ?? null,
+      loadStewardItemId: loadAcceptanceStewardItemId,
+    });
     const [agent, delegation, initiativeAuthority] = await Promise.all([
       agentPromise,
       delegationPromise,
@@ -424,7 +454,9 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     const approvalPolicy = deriveCoworkerApprovalPolicy({
       hitlTierDefault: agent.hitlTierDefault,
       hitlPolicy: agent.governanceProfile?.hitlPolicy ?? null,
-      serverBoundInitiativeReview: Boolean(trustedBoundItemId),
+      // Only an external review binding changes the approval policy; a steward
+      // run is steered by its room's declared mandate instead.
+      serverBoundInitiativeReview: Boolean(initiativeReviewBinding),
     });
     const sensitivity = coerceDataSensitivity(agent.sensitivity);
     const decisionVersionIds = [

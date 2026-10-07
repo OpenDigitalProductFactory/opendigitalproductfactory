@@ -13,7 +13,8 @@
 // Verified-safe primitive (same host): Node `fs.rmdirSync` (win32) / `fs.unlinkSync`
 // (posix) on a reparse point UNLINKS it without following it (target survives).
 // So: unlink the node_modules junctions/symlinks FIRST, THEN `git worktree remove`
-// — which now has nothing to follow.
+// — which now has nothing to follow. That includes links nested inside a REAL
+// node_modules directory, such as scoped @dpf entries (BI-995E17AB).
 //
 // USAGE (from worktree-janitor.sh / scripts):
 //   node scripts/lib/junction-safe-worktree-remove.mjs <root> <worktreePath> [--force]
@@ -48,11 +49,36 @@ export function candidateNodeModulesPaths(worktreePath, readdir = safeReaddirDir
   return out;
 }
 
-/** Reparse points (junctions/symlinks) among the candidate node_modules paths. */
+/**
+ * Every reparse point (junction/symlink) under the worktree's node_modules: a
+ * candidate that is itself a link, plus every link anywhere beneath a candidate
+ * that is a REAL directory (BI-995E17AB). A real pnpm install leaves
+ * each services package's node_modules as a real directory whose scoped @dpf/ entries are
+ * junctions; git on Windows cannot delete those and stops at "Directory not
+ * empty" after it has already unregistered the worktree. The walk never
+ * descends into a link, so it never reaches outside the worktree.
+ */
 export function findReparsePoints(worktreePath, deps = {}) {
   const readdir = deps.readdir ?? safeReaddirDirs;
   const isReparse = deps.isReparse ?? defaultIsReparse;
-  return candidateNodeModulesPaths(worktreePath, readdir).filter(isReparse);
+  const readEntries = deps.readEntries ?? safeReadEntries;
+  const found = [];
+  for (const candidate of candidateNodeModulesPaths(worktreePath, readdir)) {
+    if (isReparse(candidate)) {
+      found.push(candidate);
+      continue;
+    }
+    const pending = [candidate];
+    while (pending.length > 0) {
+      const dir = pending.pop();
+      for (const entry of readEntries(dir)) {
+        const p = `${dir}/${entry.name}`;
+        if (entry.isLink) found.push(p);
+        else if (entry.isDirectory) pending.push(p);
+      }
+    }
+  }
+  return found;
 }
 
 /**
@@ -135,6 +161,20 @@ function safeReaddirDirs(dir) {
     return readdirSync(dir, { withFileTypes: true })
       .filter((d) => d.isDirectory() || d.isSymbolicLink())
       .map((d) => d.name);
+  } catch {
+    return [];
+  }
+}
+
+// Dirent reports a win32 junction as a symbolic link, so isSymbolicLink() covers
+// both link kinds; a missing or unreadable directory yields no entries.
+function safeReadEntries(dir) {
+  try {
+    return readdirSync(dir, { withFileTypes: true }).map((d) => ({
+      name: d.name,
+      isLink: d.isSymbolicLink(),
+      isDirectory: d.isDirectory(),
+    }));
   } catch {
     return [];
   }

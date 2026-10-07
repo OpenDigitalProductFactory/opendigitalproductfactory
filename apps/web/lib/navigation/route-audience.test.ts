@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyRoute,
   isAdvancedRoute,
+  isDiagnosticHref,
   isSectionHome,
   ROUTE_AUDIENCE_OVERRIDES,
   type ClassifiableRoute,
@@ -76,10 +77,15 @@ describe("classifyRoute — destination kind", () => {
     expect(classifyRoute(route("/finance")).destinationKind).toBe("section-home");
   });
 
-  it("flags deep technical pages as advanced-diagnostic", () => {
+  it("flags named diagnostic pages as advanced-diagnostic", () => {
     const c = classifyRoute(route("/platform/ai/runtime-health"));
     expect(c.destinationKind).toBe("advanced-diagnostic");
     expect(c.audience).toBe("admin");
+  });
+
+  it("treats other deep admin pages as detail, not advanced (BI-E8D91AF6)", () => {
+    expect(classifyRoute(route("/platform/identity/principals")).destinationKind).toBe("detail");
+    expect(classifyRoute(route("/admin/platform-development")).destinationKind).toBe("detail");
   });
 });
 
@@ -99,11 +105,15 @@ describe("classifyRoute — overrides", () => {
 });
 
 describe("registry query helpers", () => {
-  it("isAdvancedRoute is true for admin/builder/advanced-diagnostic", () => {
-    expect(isAdvancedRoute({ audience: "admin", destinationKind: "detail" })).toBe(true);
-    expect(isAdvancedRoute({ audience: "builder", destinationKind: "detail" })).toBe(true);
-    expect(isAdvancedRoute({ audience: "owner", destinationKind: "advanced-diagnostic" })).toBe(true);
-    expect(isAdvancedRoute({ audience: "owner", destinationKind: "section-home" })).toBe(false);
+  it("isAdvancedRoute is true only for advanced-diagnostic", () => {
+    expect(isAdvancedRoute({ destinationKind: "advanced-diagnostic" })).toBe(true);
+    expect(isAdvancedRoute({ destinationKind: "detail" })).toBe(false);
+    expect(isAdvancedRoute({ destinationKind: "section-home" })).toBe(false);
+  });
+
+  it("isDiagnosticHref ignores the query string", () => {
+    expect(isDiagnosticHref("/platform/ai/operations-map?view=live")).toBe(true);
+    expect(isDiagnosticHref("/platform/ai/providers")).toBe(false);
   });
 
   it("isSectionHome is true only for section homes", () => {

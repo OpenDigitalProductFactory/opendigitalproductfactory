@@ -3,6 +3,15 @@ import { asString, isRecord } from "@/lib/shared/coerce";
 export const LEAVE_DECISION_ACTION = "leave.decide";
 export const LEAVE_DECISION_ROUTE = "/employee?view=timeoff";
 
+/**
+ * Why the generic proposal verbs refuse a leave.decide proposal (BI-4E192035):
+ * approving a "deny" recommendation used to approve the leave. The leave is
+ * decided only by the explicit Approve leave / Deny leave actions
+ * (approveLeaveRequest / rejectLeaveRequest).
+ */
+export const LEAVE_DECISION_VERB_REFUSAL =
+  "Leave is decided with Approve leave / Deny leave, not by approving or rejecting the advisor's recommendation.";
+
 export type LeaveDecisionProposalParameters = {
   requestId: string;
   recommendation: "approve" | "deny" | "escalate";

@@ -152,3 +152,31 @@ describe("recordMarketingGrounding (BI-06BB96F0)", () => {
     expect(mocks.prisma.marketingStrategy.update).not.toHaveBeenCalled();
   });
 });
+
+describe("routeToMarket can be corrected after bootstrap (BI-FB24DC2C)", () => {
+  beforeEach(() => {
+    mocks.prisma.marketingStrategy.update.mockReset();
+    mocks.prisma.marketingStrategy.update.mockResolvedValue({} as never);
+  });
+
+  it("writes a valid route to market", async () => {
+    const result = await recordMarketingGrounding({
+      strategyId: "s-1",
+      grounding: { routeToMarket: "channel-partner" },
+    });
+    expect(result.updatedFields).toEqual(["routeToMarket"]);
+    const data = mocks.prisma.marketingStrategy.update.mock.calls[0]?.[0]?.data;
+    expect(data.routeToMarket).toBe("channel-partner");
+  });
+
+  it("refuses an unknown route by name instead of storing it", async () => {
+    const result = await recordMarketingGrounding({
+      strategyId: "s-1",
+      grounding: { routeToMarket: "billboards" },
+    });
+    expect(result.updatedFields).toEqual([]);
+    expect(result.rejectedFields?.[0]).toMatch(/^routeToMarket/);
+    expect(result.message).toMatch(/Rejected/);
+    expect(mocks.prisma.marketingStrategy.update).not.toHaveBeenCalled();
+  });
+});

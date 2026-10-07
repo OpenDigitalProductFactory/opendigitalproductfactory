@@ -28,7 +28,8 @@ describe("roomStageMandatedTools (BI-C1781121)", () => {
   it("grants the room-bound agent exactly the writes its stage declares, for the room's own drive task", () => {
     expect(roomStageMandatedTools({ scheduledTaskId: TASK, room: room(), agentIds: ["AGT-WS-PORTFOLIO"] }))
       .toEqual([...ACCEPTANCE_VERIFIER_WRITES].sort());
-    expect(ACCEPTANCE_VERIFIER_WRITES).toEqual(["record_execution_evidence", "record_workroom_evidence"]);
+    // BI-099A0BA3: the objective-mapping writer, which refuses unless the platform issued the room a packet.
+    expect(ACCEPTANCE_VERIFIER_WRITES).toEqual(["record_execution_evidence", "record_workroom_evidence", "record_initiative_evidence"]);
   });
 
   it("grants nothing to any other agent, task, unbound, archived or finished room", () => {

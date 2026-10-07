@@ -391,6 +391,21 @@ separate deadline terminates the child tree before that window expires if no
 successful renewal advances it. MCP requests have their own bounded transport
 deadline, so a hung heartbeat cannot outlive the lease silently.
 
+**Prerequisite failures remain retryable.** A runner prerequisite failure
+(exit 8, including a required base fetch that cannot reach the network) is
+infrastructure evidence. The durable resumer retries the same pinned request,
+with exponential backoff and equal jitter capped at 90 seconds. It stops starting
+attempts at the wait deadline; an already-running attempt remains governed by its
+own execution and lease-authority bounds. A product failure or cancellation stops
+resumption. This does not establish host-worker single execution or outage fairness.
+
+**Cleanup and legacy process identity.** Concurrent release callers share one
+request. Only confirmed success completes cleanup; a failed call stays retryable.
+Legacy admission checks the invoked Node script or Docker build context and follows
+its descendants. Merely naming a runner in a shell payload or an unrelated command
+argument does not establish a live mutator. POSIX process-list text can lose argument
+boundaries; exact argv, when available, takes precedence.
+
 **The heartbeat is protected from the gate's own work.** A renewal timer only
 helps if the process is free to run it, and for a period it was not: the
 in-run descendant scan used a synchronous `ps` on a fixed interval, so on a
@@ -822,6 +837,14 @@ records local-only evidence with `networkTolerance=explicit-offline`, then
 runs `.githooks/pre-push-gate` through
 the same no-network Git wrapper and proves the same unexpired SHA-bound record
 is sufficient for later publication.
+
+The contract runs on Windows hosts with Git Bash as well as in CI (BI-1B4910B4).
+The injected curl transport quotes its arguments for MSYS `sh`, which would
+otherwise collapse `\\` in a JSON body that carries a Windows path. A test's
+`DPF_LOCAL_CI_COMMAND` must work under `cmd.exe` too, because the gate runs it
+through the platform shell. The three `local-ci-runner.mjs` unshallow tests
+skip on Windows: they stub git with a POSIX script on `PATH`, and Windows only
+ever resolves `git.exe`.
 
 **Quiescence-aware evidence recovery.** `pnpm run pregate` now preflights
 `get_quiescence_status` once before the expensive gate. If the portal is actively
