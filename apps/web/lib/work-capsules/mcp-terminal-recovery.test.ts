@@ -122,6 +122,35 @@ describe("workroom terminal MCP recovery projection", () => {
     });
   });
 
+  // BI-C9912C22 AC-2: WC-BFDF763B's PR merged and its item was done, yet
+  // `complete` answered "request review_semantic_change", which needs a fresh
+  // gate on merged code. A delivered room's refusal names the governed close-out
+  // the reaper already uses for merged rooms, which re-gates nothing.
+  it("names the delivered close-out, not a re-review, when the room's PR merged and its item is done", async () => {
+    const refusal = Object.assign(new mocks.Refused({
+      code: "failure_review_required",
+      reason: "Failure-analysis evidence is missing, stale, or changed; refresh it and request internal review.",
+    }), { deliveredCloseout: { backlogItemId: "BI-3BF3CBDF", pullRequestNumber: 5896, status: "archived" } });
+    mocks.updateStatus.mockRejectedValue(refusal);
+
+    const result = await updateWorkCapsuleStatusTool(
+      { capsuleId: "WC-BFDF763B", status: "complete", reason: "Delivered." },
+      "USR-ONE",
+      { agentId: "AGT-ONE" },
+    );
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "failure_review_required",
+      data: {
+        requestedStatus: "complete",
+        deliveredCloseout: { status: "archived", pullRequestNumber: 5896, backlogItemId: "BI-3BF3CBDF" },
+        nextAction: expect.stringMatching(/PR #5896[\s\S]*BI-3BF3CBDF[\s\S]*status "archived"/),
+      },
+    });
+    expect(String(result.data?.nextAction)).not.toContain("review_semantic_change");
+  });
+
   it("still surfaces unknown failures as thrown errors", async () => {
     mocks.updateStatus.mockRejectedValue(new Error("database gone"));
     await expect(updateWorkCapsuleStatusTool(
