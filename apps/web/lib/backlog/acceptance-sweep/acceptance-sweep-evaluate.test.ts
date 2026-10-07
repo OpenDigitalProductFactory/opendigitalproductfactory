@@ -182,6 +182,7 @@ describe("evaluateOwedAcceptance", () => {
     const loadCompletionDecision = vi.fn().mockResolvedValue(decision);
     const result = await evaluateOwedAcceptance(item, {
       loadAuthorAgentId: vi.fn().mockResolvedValue("AGT-A-AUTHOR"),
+      loadDeliveryActorIds: vi.fn().mockResolvedValue({ ok: true, data: ["AGT-OLDER-DELIVERER"] }),
       loadCompletionDecision,
       resolveOwner,
     });
@@ -193,9 +194,28 @@ describe("evaluateOwedAcceptance", () => {
   it("returns null when readiness cannot be computed", async () => {
     const result = await evaluateOwedAcceptance(item, {
       loadAuthorAgentId: vi.fn().mockResolvedValue(null),
+      loadDeliveryActorIds: vi.fn().mockResolvedValue({ ok: true, data: [] }),
       loadCompletionDecision: vi.fn().mockResolvedValue(null),
       resolveOwner: vi.fn(),
     });
     expect(result).toBeNull();
+  });
+
+  it("BI-099A0BA3 (M1): excludes every delivery actor, and evaluates nothing when they cannot be read", async () => {
+    const resolveOwner = vi.fn().mockResolvedValue({ reviewerRoutes: [], escalations: [], unroutable: [] });
+    await evaluateOwedAcceptance(item, {
+      loadAuthorAgentId: vi.fn().mockResolvedValue("AGT-A-AUTHOR"),
+      loadDeliveryActorIds: vi.fn().mockResolvedValue({ ok: true, data: ["AGT-OLDER-DELIVERER"] }),
+      loadCompletionDecision: vi.fn().mockResolvedValue(decision),
+      resolveOwner,
+    });
+    expect(resolveOwner.mock.calls[0]![0].excludedAgentIds).toEqual(["AGT-A-AUTHOR", "AGT-OLDER-DELIVERER"]);
+
+    await expect(evaluateOwedAcceptance(item, {
+      loadAuthorAgentId: vi.fn().mockResolvedValue("AGT-A-AUTHOR"),
+      loadDeliveryActorIds: vi.fn().mockResolvedValue({ ok: false, error: "unbounded" }),
+      loadCompletionDecision: vi.fn().mockResolvedValue(decision),
+      resolveOwner,
+    })).rejects.toThrow(/delivery actors/);
   });
 });

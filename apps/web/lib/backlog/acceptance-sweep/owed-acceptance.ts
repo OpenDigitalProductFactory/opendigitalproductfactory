@@ -69,6 +69,12 @@ export type OwedAcceptance = {
    * mapping. The sweep issues it to the item's steward room.
    */
   objectiveMappingPacket?: InitiativeReviewerRecovery["reviewerRoutes"][number]["requestCoworker"];
+  /**
+   * BI-099A0BA3 (security review M1): every agent excluded from owning this
+   * item's acceptance, the author and every other delivery actor
+   * (delivery-actors.ts). Routing uses it to withdraw a stale packet.
+   */
+  excludedAgentIds?: string[];
 };
 
 /**
@@ -80,6 +86,8 @@ export type OwedAcceptance = {
 export type OwedAcceptanceOwnerResolver = (args: {
   decision: InitiativeReadinessDecision;
   authorAgentId: string | null;
+  /** The author plus every other delivery actor; none may own the acceptance. */
+  excludedAgentIds?: readonly string[];
 }) => Promise<OwedAcceptanceOwnerRecovery>;
 
 /**
@@ -104,12 +112,21 @@ function isFamily(entry: { accountableRole: string }): boolean {
   return ACCEPTANCE_FAMILY_ROLES.includes(entry.accountableRole);
 }
 
+/** The author and every listed delivery actor, sorted and de-duplicated. */
+export function excludedAgentSet(authorAgentId: string | null, excludedAgentIds: readonly string[] = []): string[] {
+  return [...new Set([...(authorAgentId ? [authorAgentId] : []), ...excludedAgentIds].filter((id) => id.trim()))].sort();
+}
+
 export async function projectOwedAcceptance(input: {
   decision: InitiativeReadinessDecision;
   authorAgentId: string | null;
+  /** BI-099A0BA3 (M1): every other agent that delivered the item (delivery-actors.ts). */
+  excludedAgentIds?: readonly string[];
   resolveOwner: OwedAcceptanceOwnerResolver;
 }): Promise<OwedAcceptance> {
   const { decision, authorAgentId } = input;
+  const excludedAgentIds = excludedAgentSet(authorAgentId, input.excludedAgentIds);
+  const excluded = new Set(excludedAgentIds);
   const requirements = [...decision.blockers, ...decision.unmet];
   const owed = requirements.map((entry) => ({
     code: entry.code,
@@ -129,10 +146,11 @@ export async function projectOwedAcceptance(input: {
       unmet: decision.unmet.filter(isFamily),
     },
     authorAgentId,
+    excludedAgentIds,
   });
 
   const familyRoutes = recovery.reviewerRoutes.filter(isFamily);
-  const routable = familyRoutes.filter((route) => route.targetAgentId !== authorAgentId);
+  const routable = familyRoutes.filter((route) => !excluded.has(route.targetAgentId));
   const ownerRoute = routable[0] ?? null;
   const ownedRoles = new Set(
     routable.filter((route) => route.targetAgentId === ownerRoute?.targetAgentId).map((route) => route.accountableRole),
@@ -164,7 +182,7 @@ export async function projectOwedAcceptance(input: {
       unroutable.push({
         ...base,
         reason: "author-excluded",
-        nextAction: "The only coworker granted this lane authored the item; an acceptance sweep never routes the work back to its author. Grant the lane to another production coworker.",
+        nextAction: "The only coworkers granted this lane delivered the item; an acceptance sweep never routes the work back to anyone who delivered it. Grant the lane to another production coworker.",
       });
       continue;
     }
@@ -174,5 +192,8 @@ export async function projectOwedAcceptance(input: {
   const packetRoute = ownerRoute
     ? routable.find((route) => route.targetAgentId === ownerRoute.targetAgentId && route.gate === "objective-mapping")
     : undefined;
-  return { owed, owner, unroutable, closable, ...(packetRoute ? { objectiveMappingPacket: packetRoute.requestCoworker } : {}) };
+  return {
+    owed, owner, unroutable, closable, excludedAgentIds,
+    ...(packetRoute ? { objectiveMappingPacket: packetRoute.requestCoworker } : {}),
+  };
 }

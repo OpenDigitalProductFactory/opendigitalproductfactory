@@ -20,7 +20,10 @@
 import type { WorkShapeDefinition } from "./work-shapes";
 
 export const ACCEPTANCE_VERIFICATION_SHAPE_KEY = "acceptance-verification";
-export const ACCEPTANCE_VERIFICATION_SHAPE_VERSION = "1.0.0";
+// 1.1.0 (BI-099A0BA3): the verify stage also writes the objective mapping the
+// platform issues the room. 1.0.0 stays resolvable for pinned rooms
+// (work-shape-prior-versions.ts).
+export const ACCEPTANCE_VERIFICATION_SHAPE_VERSION = "1.1.0";
 export const ACCEPTANCE_VERIFICATION_SHAPE_REF =
   `${ACCEPTANCE_VERIFICATION_SHAPE_KEY}@${ACCEPTANCE_VERIFICATION_SHAPE_VERSION}`;
 

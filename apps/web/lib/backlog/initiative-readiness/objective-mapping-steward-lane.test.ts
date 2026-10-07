@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { ACCEPTANCE_VERIFICATION_SHAPE_REF } from "@/lib/work-management/acceptance-verification-shape";
 import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim } from "@/lib/work-management/workroom-shape-claim";
 
 const mocks = vi.hoisted(() => ({
@@ -108,11 +109,12 @@ function stewardRoom(over: Record<string, unknown> = {}) {
     id: "room-steward",
     capsuleId: STEWARD_CAPSULE,
     idempotencyKey: `acceptance:${ITEM}`,
+    source: "scheduled-steward",
     status: "working",
     archivedAt: null,
     outcomeAnchor: { kind: "backlog-item", id: ITEM },
     scopeClaims: [
-      buildWorkShapeClaim("acceptance-verification@1.0.0", NOW),
+      buildWorkShapeClaim(ACCEPTANCE_VERIFICATION_SHAPE_REF, NOW),
       buildWorkShapeRoleBindingsClaim({ "acceptance-verifier": `agent:${VERIFIER}` }, NOW),
     ],
     ...over,
@@ -130,6 +132,16 @@ function deliveryRoom() {
   };
 }
 
+function deliveryActorRoom(capsuleId: string, creatorAgentId: string) {
+  return {
+    capsuleId,
+    executorKind: null,
+    createdByPrincipal: { kind: "agent", aliases: [{ aliasValue: creatorAgentId }] },
+    leaseHolderPrincipal: null,
+    participants: [],
+  };
+}
+
 function packetActivity(over: Record<string, unknown> = {}) {
   return {
     payload: { schemaVersion: 1, itemId: ITEM, requestCoworker: issuedPacket() },
@@ -143,6 +155,9 @@ function txDb(options: {
   run?: Record<string, unknown> | null;
   steward?: Record<string, unknown> | null;
   activity?: Record<string, unknown> | null;
+  /** The item's delivery Workrooms, as delivery-actors.ts reads them. */
+  deliveryRooms?: Array<Record<string, unknown>>;
+  item?: Record<string, unknown>;
 } = {}) {
   const run = options.run === undefined ? scheduledRun() : options.run;
   const steward = options.steward === undefined ? stewardRoom() : options.steward;
@@ -152,9 +167,13 @@ function txDb(options: {
     workroom: {
       findUnique: vi.fn(async ({ where }: { where: { capsuleId: string } }) =>
         where.capsuleId === STEWARD_CAPSULE ? steward : where.capsuleId === "WC-DELIVERY" ? deliveryRoom() : null),
+      findMany: vi.fn().mockResolvedValue(options.deliveryRooms ?? [deliveryActorRoom("WC-DELIVERY", "AGT-AUTHOR")]),
     },
     workroomActivity: {
       findFirst: vi.fn().mockResolvedValue(options.activity === undefined ? packetActivity() : options.activity),
+    },
+    backlogItem: {
+      findUnique: vi.fn().mockResolvedValue({ id: "row-1", itemId: ITEM, claimedByAgentId: "AGT-AUTHOR", agentId: null, ...options.item }),
     },
     backlogItemActivity: {
       findMany: vi.fn(async (query: { where?: { kind?: string } }) => query.where?.kind === "evidence"
@@ -238,10 +257,25 @@ describe("objective mapping from an acceptance steward room's scheduled run (BI-
     ["a scheduled run that is not the steward room's drive task", { run: scheduledRun({ a2aMetadata: { trigger: "scheduled", sourceRef: { kind: "scheduled-task", id: "some-other-task" } } }) }],
     ["a finished scheduled run", { run: scheduledRun({ status: "completed", completedAt: NOW }) }],
     ["a steward room bound to another coworker", {
-      steward: stewardRoom({ scopeClaims: [buildWorkShapeClaim("acceptance-verification@1.0.0", NOW), buildWorkShapeRoleBindingsClaim({ "acceptance-verifier": "agent:AGT-OTHER" }, NOW)] }),
+      steward: stewardRoom({ scopeClaims: [buildWorkShapeClaim(ACCEPTANCE_VERIFICATION_SHAPE_REF, NOW), buildWorkShapeRoleBindingsClaim({ "acceptance-verifier": "agent:AGT-OTHER" }, NOW)] }),
     }],
     ["an archived steward room", { steward: stewardRoom({ archivedAt: NOW }) }],
     ["a steward room anchored to another item", { steward: stewardRoom({ outcomeAnchor: { kind: "backlog-item", id: "BI-OTHER" } }) }],
+    ["a room with the steward key that the sweep did not create", { steward: stewardRoom({ source: "external-claim" }) }],
+    // Security review M1: the verifier delivered the item in an OLDER room while
+    // a newer room made another agent the item's "author".
+    ["a verifier that delivered the item in an older room", {
+      deliveryRooms: [deliveryActorRoom("WC-R1-OLDER", VERIFIER), deliveryActorRoom("WC-R2-NEWER", "AGT-AUTHOR")],
+    }],
+    // L2: a room still pinned to 1.0.0 never declared the objective-mapping write.
+    ["a steward room pinned to the 1.0.0 shape", {
+      steward: stewardRoom({ scopeClaims: [buildWorkShapeClaim("acceptance-verification@1.0.0", NOW), buildWorkShapeRoleBindingsClaim({ "acceptance-verifier": `agent:${VERIFIER}` }, NOW)] }),
+    }],
+    ["a verifier that is the item's claimant", { item: { claimedByAgentId: VERIFIER } }],
+    ["a verifier that is the item's agent", { item: { agentId: VERIFIER } }],
+    ["an item whose delivery actors cannot be bounded", {
+      deliveryRooms: Array.from({ length: 201 }, (_, index) => deliveryActorRoom(`WC-${index}`, "AGT-AUTHOR")),
+    }],
   ])("refuses %s", async (_label, options) => {
     mocks.transaction.mockImplementation(async (work) => work(txDb(options)));
 

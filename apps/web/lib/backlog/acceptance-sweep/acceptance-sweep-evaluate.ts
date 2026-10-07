@@ -4,8 +4,10 @@ import {
   type TerminalRecoveryPorts,
 } from "@/lib/backlog/initiative-readiness/terminal-recovery";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
+import type { ActionResult } from "@/lib/shared/action-result";
 
-import { projectOwedAcceptance, type OwedAcceptanceOwnerResolver } from "./owed-acceptance";
+import { loadItemDeliveryActorIds, type DeliveryActorDb } from "./delivery-actors";
+import { excludedAgentSet, projectOwedAcceptance, type OwedAcceptanceOwnerResolver } from "./owed-acceptance";
 import { createOwedAcceptanceOwnerResolver } from "./owed-acceptance-owner";
 import { inPlatformGrants, withNoInPlatformCoworker, type InPlatformOwnerDb } from "./in-platform-owners";
 import type { AcceptanceSweepPageItem } from "./acceptance-sweep-page";
@@ -29,6 +31,8 @@ import type { SweepEvaluation } from "./acceptance-sweep-run";
 
 export type SweepEvaluateDeps = {
   loadAuthorAgentId(item: AcceptanceSweepPageItem): Promise<string | null>;
+  /** BI-099A0BA3 (M1): every agent that delivered the item, any room (delivery-actors.ts). */
+  loadDeliveryActorIds(item: AcceptanceSweepPageItem): Promise<ActionResult<string[]>>;
   loadCompletionDecision(itemId: string, authorAgentId: string | null): Promise<InitiativeReadinessDecision | null>;
   resolveOwner: OwedAcceptanceOwnerResolver;
 };
@@ -43,7 +47,7 @@ export function createSweepOwnerResolver(context: {
   ports?: Partial<TerminalRecoveryPorts>;
 }): OwedAcceptanceOwnerResolver {
   const grants = inPlatformGrants(context.db);
-  return async ({ decision, authorAgentId }) => withNoInPlatformCoworker(await resolveTerminalInitiativeRecovery({
+  return async ({ decision, authorAgentId, excludedAgentIds }) => withNoInPlatformCoworker(await resolveTerminalInitiativeRecovery({
     decision,
     currentAgentId: authorAgentId,
     refusedWorkroomId: null,
@@ -57,9 +61,9 @@ export function createSweepOwnerResolver(context: {
         ...(args.planArtifact !== undefined ? { planArtifact: args.planArtifact } : {}),
         expectedCurrentBaselineId: args.expectedCurrentBaselineId ?? null,
         ...(args.eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds } : {}),
-      })({ decision: args.decision, authorAgentId: args.currentAgentId }),
+      })({ decision: args.decision, authorAgentId: args.currentAgentId, excludedAgentIds: excludedAgentSet(authorAgentId, excludedAgentIds) }),
     },
-  }), grants, authorAgentId);
+  }), grants, excludedAgentSet(authorAgentId, excludedAgentIds));
 }
 
 /**
@@ -80,13 +84,20 @@ export async function evaluateOwedAcceptance(
   const authorAgentId = await deps.loadAuthorAgentId(item);
   const decision = await deps.loadCompletionDecision(item.itemId, authorAgentId);
   if (!decision) return null;
+  // Fail closed: an item whose delivery actors cannot be read names no owner this run.
+  const actors = await deps.loadDeliveryActorIds(item);
+  if (!actors.ok) throw new Error(`The delivery actors of ${item.itemId} could not be read: ${actors.error}`);
   // The decision travels with the projection so a closure (BI-45D3BBF4) cites the gate it acted on.
-  return { ...(await projectOwedAcceptance({ decision, authorAgentId, resolveOwner: deps.resolveOwner })), decision };
+  return {
+    ...(await projectOwedAcceptance({ decision, authorAgentId, excludedAgentIds: actors.data, resolveOwner: deps.resolveOwner })),
+    decision,
+  };
 }
 
 /** Production bindings. Lazy imports keep the read tools off the scheduler's import graph. */
-export function productionSweepEvaluateDeps(db: InPlatformOwnerDb): SweepEvaluateDeps {
+export function productionSweepEvaluateDeps(db: InPlatformOwnerDb & DeliveryActorDb): SweepEvaluateDeps {
   return {
+    loadDeliveryActorIds: (item) => loadItemDeliveryActorIds(db, item.itemId),
     loadAuthorAgentId: async (item) => {
       const { loadRoomAuthors } = await import("@/lib/backlog/initiative-readiness/server-reviewer-dispatch");
       // A room may record the item's BI- id or its row id (Build Studio writes the row id).

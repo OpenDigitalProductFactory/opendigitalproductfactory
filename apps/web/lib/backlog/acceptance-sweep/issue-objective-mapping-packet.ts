@@ -14,29 +14,41 @@
 // The room's brief is refreshed at the same time, so the next drive dispatch
 // tells the coworker the mapping it may now record.
 
+// Security review fixes (BI-099A0BA3): a packet is never issued to a delivery
+// actor, and when the room's newest packet names one it is withdrawn (M1); the
+// room must carry the steward key, capsule id and source the sweep wrote
+// (Info); and a room still pinned to the 1.0.0 shape, whose stage does not
+// write the mapping, is reported `shape-outdated` rather than issued (L2).
+
 import type { Prisma } from "@dpf/db";
 import { ACCEPTANCE_SWEEP_AGENT_ID } from "@dpf/db/acceptance-sweep-config";
 
-import { ACCEPTANCE_VERIFIER_ROLE } from "@/lib/work-management/acceptance-verification-shape";
+import { ACCEPTANCE_OBJECTIVE_MAPPING_WRITER } from "@/lib/work-management/acceptance-verification-shape";
+import { roomStageMandatedTools } from "@/lib/work-management/room-stage-mandate";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
-import { readWorkShapeRoleBindings } from "@/lib/work-management/workroom-shape-claim";
 
+import { ACCEPTANCE_ROOM_SOURCE, acceptanceRoomCapsuleId, acceptanceRoomKey } from "./acceptance-room-identity";
 import {
   ACCEPTANCE_OBJECTIVE_MAPPING_PACKET_KIND,
-  acceptanceRoomKey,
+  acceptanceStewardDriveTaskId,
+  isWithdrawal,
   parseIssuedObjectiveMappingPacket,
 } from "./steward-objective-mapping-authority";
 
-// `not-issuable` covers a packet that fails the server checks, targets anyone
-// but the owner, or targets an owner the room's verify stage is not bound to
-// (rooms are never re-created, so an owner change leaves the old binding).
-export const PACKET_ISSUE_OUTCOMES = ["issued", "current", "no-live-room", "not-issuable"] as const;
+// `not-issuable`: the packet fails the server checks, targets anyone but the
+// owner, targets a delivery actor, or targets an owner the room's verify stage
+// is not bound to (rooms are never re-created, so an owner change leaves the
+// old binding). `withdrawn`: the room's previous packet was withdrawn and no
+// successor was issued.
+export const PACKET_ISSUE_OUTCOMES = ["issued", "current", "withdrawn", "shape-outdated", "no-live-room", "not-issuable"] as const;
 export type PacketIssueOutcome = (typeof PACKET_ISSUE_OUTCOMES)[number];
+
+type StewardRoomRow = { id: string; capsuleId: string; source: string; archivedAt: Date | null; status: string; scopeClaims: unknown };
 
 /** Exactly the reads and writes issuing performs; `prisma` satisfies it. */
 export type IssuePacketDb = {
   workroom: {
-    findUnique(args: unknown): Promise<{ id: string; archivedAt: Date | null; status: string; scopeClaims: unknown } | null>;
+    findUnique(args: unknown): Promise<StewardRoomRow | null>;
     update(args: unknown): Promise<unknown>;
   };
   workroomActivity: {
@@ -45,41 +57,81 @@ export type IssuePacketDb = {
   };
 };
 
-function requestKeyOf(payload: unknown): string | null {
+function requestCoworkerOf(payload: unknown): Record<string, unknown> | null {
   const packet = payload && typeof payload === "object" && !Array.isArray(payload)
     ? (payload as { requestCoworker?: unknown }).requestCoworker
     : null;
-  const key = packet && typeof packet === "object" ? (packet as { requestKey?: unknown }).requestKey : null;
-  return typeof key === "string" ? key : null;
+  return packet && typeof packet === "object" && !Array.isArray(packet) ? packet as Record<string, unknown> : null;
 }
 
+/**
+ * Issue the owner's packet to the item's steward room, withdrawing the room's
+ * current packet first when its coworker is now a known delivery actor. Null
+ * when there was nothing to issue and nothing to withdraw.
+ */
 export async function issueAcceptanceObjectiveMappingPacket(input: {
   db: IssuePacketDb;
   itemId: string;
-  /** The owner the sweep routed the item to; never the author (owed-acceptance.ts). */
-  ownerAgentId: string;
+  /** The owner the sweep routed the item to; never a delivery actor (owed-acceptance.ts). */
+  ownerAgentId: string | null;
+  /** The server-minted packet for the owner, or undefined when none is owed this run. */
   packet: unknown;
   /** The room brief rebuilt with the packet (route-aged-item.ts buildAcceptanceRoomObjective). */
   objective: string;
+  /** The author and every other agent that delivered the item (delivery-actors.ts). */
+  excludedAgentIds?: readonly string[];
   now: Date;
-}): Promise<PacketIssueOutcome> {
+}): Promise<PacketIssueOutcome | null> {
   const { db, itemId } = input;
-  const packet = parseIssuedObjectiveMappingPacket(input.packet, itemId);
-  if (!packet || packet.targetAgent !== input.ownerAgentId) return "not-issuable";
+  const excluded = new Set(input.excludedAgentIds ?? []);
   const room = await db.workroom.findUnique({
     where: { idempotencyKey: acceptanceRoomKey(itemId) },
-    select: { id: true, archivedAt: true, status: true, scopeClaims: true },
+    select: { id: true, capsuleId: true, source: true, archivedAt: true, status: true, scopeClaims: true },
   } satisfies Prisma.WorkroomFindUniqueArgs);
-  if (!room || room.archivedAt !== null || TERMINAL_WORKROOM_STATUSES.has(room.status)) return "no-live-room";
-  if (readWorkShapeRoleBindings(room.scopeClaims)[ACCEPTANCE_VERIFIER_ROLE] !== `agent:${packet.targetAgent}`) return "not-issuable";
+  if (!room || room.capsuleId !== acceptanceRoomCapsuleId(itemId) || room.source !== ACCEPTANCE_ROOM_SOURCE
+    || room.archivedAt !== null || TERMINAL_WORKROOM_STATUSES.has(room.status)) return "no-live-room";
   const latest = await db.workroomActivity.findFirst({
     where: { workCapsuleId: room.id, kind: ACCEPTANCE_OBJECTIVE_MAPPING_PACKET_KIND },
     orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
     select: { payload: true, recordedByAgentId: true },
   } satisfies Prisma.WorkroomActivityFindFirstArgs);
-  if (latest?.recordedByAgentId === ACCEPTANCE_SWEEP_AGENT_ID && requestKeyOf(latest.payload) === packet.requestKey) {
-    return "current";
+  const current = latest?.recordedByAgentId === ACCEPTANCE_SWEEP_AGENT_ID && !isWithdrawal(latest.payload)
+    ? requestCoworkerOf(latest.payload)
+    : null;
+
+  let withdrew = false;
+  if (current && typeof current.targetAgent === "string" && excluded.has(current.targetAgent)) {
+    await db.workroomActivity.create({
+      data: {
+        workCapsuleId: room.id,
+        kind: ACCEPTANCE_OBJECTIVE_MAPPING_PACKET_KIND,
+        summary: `Objective-mapping packet for ${itemId} withdrawn: ${current.targetAgent} delivered the item and cannot verify it.`,
+        payload: {
+          schemaVersion: 1,
+          itemId,
+          withdrawn: true,
+          withdrawnAt: input.now.toISOString(),
+          withdrawnRequestKey: typeof current.requestKey === "string" ? current.requestKey : null,
+          withdrawnTargetAgent: current.targetAgent,
+          reason: "target-delivered-item",
+        },
+        recordedByAgentId: ACCEPTANCE_SWEEP_AGENT_ID,
+      },
+      select: { id: true },
+    } satisfies Prisma.WorkroomActivityCreateArgs);
+    withdrew = true;
   }
+
+  if (input.packet === undefined || !input.ownerAgentId) return withdrew ? "withdrawn" : null;
+  const packet = parseIssuedObjectiveMappingPacket(input.packet, itemId);
+  if (!packet || packet.targetAgent !== input.ownerAgentId || excluded.has(packet.targetAgent)) {
+    return withdrew ? "withdrawn" : "not-issuable";
+  }
+  const scheduledTaskId = acceptanceStewardDriveTaskId(itemId);
+  const writes = roomStageMandatedTools({ scheduledTaskId, room, agentIds: [packet.targetAgent] });
+  if (writes.length === 0) return withdrew ? "withdrawn" : "not-issuable";
+  if (!writes.includes(ACCEPTANCE_OBJECTIVE_MAPPING_WRITER)) return withdrew ? "withdrawn" : "shape-outdated";
+  if (!withdrew && current?.requestKey === packet.requestKey) return "current";
   await db.workroomActivity.create({
     data: {
       workCapsuleId: room.id,

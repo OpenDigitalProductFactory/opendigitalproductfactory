@@ -26,7 +26,10 @@
 // - the packet's request key is the server's HMAC identity for its immutable
 //   contents (validateObjectiveMappingRequestKey). A model or client can read a
 //   packet but cannot mint or alter one;
-// - the packet targets the run's agent.
+// - the packet targets the run's agent;
+// - the run's agent did not deliver the item: it is outside the item's whole
+//   delivery-actor set (delivery-actors.ts), re-read in the same serializable
+//   transaction as the write (security review M1).
 //
 // The objective-mapping repository then applies every check it applies to an
 // external packet: current baseline, exact eligible evidence set, and the
@@ -43,6 +46,9 @@ import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/ac
 import { ACCEPTANCE_VERIFICATION_SHAPE_KEY } from "@/lib/work-management/acceptance-verification-shape";
 import { roomStageMandatedTools, SCHEDULED_RUN_PREFIX } from "@/lib/work-management/room-stage-mandate";
 
+import { ACCEPTANCE_ROOM_SOURCE, acceptanceRoomCapsuleId, acceptanceRoomKey } from "./acceptance-room-identity";
+import { loadItemDeliveryActorIds, type DeliveryActorDb } from "./delivery-actors";
+
 /** The WorkroomActivity kind the sweep appends a platform-issued packet as. */
 export const ACCEPTANCE_OBJECTIVE_MAPPING_PACKET_KIND = "acceptance-objective-mapping-packet";
 
@@ -56,14 +62,7 @@ export const OBJECTIVE_MAPPING_WRITER = "record_initiative_evidence";
  */
 export const STEWARD_LANE_TOKEN_SCOPE = "organization";
 
-export function acceptanceRoomKey(itemId: string): string {
-  return `acceptance:${itemId}`;
-}
-
-/** Stable, human-quotable room id: one room per item. */
-export function acceptanceRoomCapsuleId(itemId: string): string {
-  return `WC-ACC-${itemId.replace(/^BI-/i, "").toUpperCase()}`;
-}
+export { acceptanceRoomCapsuleId, acceptanceRoomKey };
 
 const DRIVE_TASK_PREFIX = "workroom-";
 const DRIVE_TASK_SUFFIX = `-${ACCEPTANCE_VERIFICATION_SHAPE_KEY}`;
@@ -122,6 +121,16 @@ export function parseIssuedObjectiveMappingPacket(value: unknown, itemId: string
   return { targetAgent, objective, questionPacketSummary, requestKey, requiredToolNames, binding: bound };
 }
 
+/**
+ * A packet activity that withdraws the room's previous packet, appended by the
+ * sweep when that packet's coworker turned out to have delivered the item
+ * (issue-objective-mapping-packet.ts). As the newest packet activity it leaves
+ * the room with no valid packet.
+ */
+export function isWithdrawal(payload: unknown): boolean {
+  return record(payload)?.withdrawn === true;
+}
+
 /** The steward room capsule a scheduled run's drive task names, or null when it names none. */
 export function stewardCapsuleIdFromRun(a2aMetadata: unknown): string | null {
   const sourceRef = record(record(a2aMetadata)?.sourceRef);
@@ -145,6 +154,7 @@ type StewardRoom = {
   id: string;
   capsuleId: string;
   idempotencyKey: string | null;
+  source: string;
   status: string;
   archivedAt: Date | null;
   scopeClaims: unknown;
@@ -152,7 +162,7 @@ type StewardRoom = {
 };
 
 /** Exactly the reads the authority performs; a Prisma client or transaction satisfies it. */
-export type StewardAuthorityDb = {
+export type StewardAuthorityDb = DeliveryActorDb & {
   workroom: { findUnique(args: unknown): Promise<StewardRoom | null> };
   workroomActivity: {
     findFirst(args: unknown): Promise<{ payload: unknown; recordedByAgentId: string | null; recordedById: string | null } | null>;
@@ -165,7 +175,10 @@ export type StewardRefusal =
   | "room-not-bound"
   | "packet-not-issued"
   | "packet-not-server-issued"
-  | "packet-targets-another-agent";
+  | "packet-targets-another-agent"
+  | "packet-withdrawn"
+  | "verifier-delivered-item"
+  | "delivery-actors-unavailable";
 
 export type StewardRefused = ActionFailure & { reason: StewardRefusal };
 
@@ -195,7 +208,7 @@ export async function loadAcceptanceStewardObjectiveMappingAuthority(
   }
   const room = await db.workroom.findUnique({
     where: { capsuleId },
-    select: { id: true, capsuleId: true, idempotencyKey: true, status: true, archivedAt: true, scopeClaims: true, outcomeAnchor: true },
+    select: { id: true, capsuleId: true, idempotencyKey: true, source: true, status: true, archivedAt: true, scopeClaims: true, outcomeAnchor: true },
   });
   const anchor = record(room?.outcomeAnchor);
   const itemId = anchor?.kind === "backlog-item" ? text(anchor.id) : null;
@@ -204,6 +217,7 @@ export async function loadAcceptanceStewardObjectiveMappingAuthority(
     || (input.itemId !== undefined && input.itemId !== itemId)
     || room.capsuleId !== acceptanceRoomCapsuleId(itemId)
     || room.idempotencyKey !== acceptanceRoomKey(itemId)
+    || room.source !== ACCEPTANCE_ROOM_SOURCE
     || scheduledTaskId !== acceptanceStewardDriveTaskId(itemId)
     // Live, the acceptance-verification shape, and its verify stage bound to this agent.
     || !roomStageMandatedTools({ scheduledTaskId, room, agentIds: [run.currentAgentId] }).includes(OBJECTIVE_MAPPING_WRITER)) {
@@ -218,9 +232,14 @@ export async function loadAcceptanceStewardObjectiveMappingAuthority(
   if (issued.recordedByAgentId !== ACCEPTANCE_SWEEP_AGENT_ID || issued.recordedById !== null) {
     return refuse("packet-not-server-issued");
   }
+  if (isWithdrawal(issued.payload)) return refuse("packet-withdrawn");
   const packet = parseIssuedObjectiveMappingPacket(record(issued.payload)?.requestCoworker, itemId);
   if (!packet) return refuse("packet-not-server-issued");
   if (packet.targetAgent !== run.currentAgentId) return refuse("packet-targets-another-agent");
+  // Independence, re-read where the write happens: no delivery actor maps its own delivery.
+  const actors = await loadItemDeliveryActorIds(db, itemId);
+  if (!actors.ok) return refuse("delivery-actors-unavailable");
+  if (actors.data.includes(run.currentAgentId)) return refuse("verifier-delivered-item");
   return ok({ itemId, packet });
 }
 

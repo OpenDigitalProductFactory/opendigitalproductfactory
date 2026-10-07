@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { ACCEPTANCE_VERIFICATION_SHAPE_REF } from "@/lib/work-management/acceptance-verification-shape";
 import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim } from "@/lib/work-management/workroom-shape-claim";
 
 import { issueAcceptanceObjectiveMappingPacket, type IssuePacketDb } from "./issue-objective-mapping-packet";
@@ -37,18 +38,22 @@ function store() {
     id: "room-1",
     capsuleId: "WC-ACC-DF255666",
     idempotencyKey: `acceptance:${ITEM}`,
+    source: "scheduled-steward",
     status: "working",
     archivedAt: null as Date | null,
     objective: "",
     outcomeAnchor: { kind: "backlog-item", id: ITEM },
     scopeClaims: [
-      buildWorkShapeClaim("acceptance-verification@1.0.0", NOW),
+      buildWorkShapeClaim(ACCEPTANCE_VERIFICATION_SHAPE_REF, NOW),
       buildWorkShapeRoleBindingsClaim({ "acceptance-verifier": `agent:${VERIFIER}` }, NOW),
     ],
   };
   const activities: Array<{ workCapsuleId: string; kind: string; payload: unknown; recordedByAgentId: string | null; recordedById: string | null }> = [];
+  const deliveryRooms: Array<Record<string, unknown>> = [];
   const db = {
+    backlogItem: { findUnique: async () => ({ id: "row-1", itemId: ITEM, claimedByAgentId: "AGT-AUTHOR", agentId: null }) },
     workroom: {
+      findMany: async () => deliveryRooms,
       findUnique: async ({ where }: { where: { idempotencyKey?: string; capsuleId?: string } }) =>
         where.idempotencyKey === room.idempotencyKey || where.capsuleId === room.capsuleId ? room : null,
       update: async ({ data }: { data: { objective: string } }) => { room.objective = data.objective; return room; },
@@ -62,7 +67,7 @@ function store() {
       },
     },
   };
-  return { room, activities, db };
+  return { room, activities, db, deliveryRooms };
 }
 
 const run = (over: Record<string, unknown> = {}) => ({
@@ -110,5 +115,29 @@ describe("steward objective-mapping authority (BI-099A0BA3)", () => {
     })).resolves.toMatchObject({ ok: false, reason: "not-a-steward-run" });
     await expect(loadAcceptanceStewardObjectiveMappingAuthority(db as unknown as StewardAuthorityDb, { run: run({ currentAgentId: "AGT-OTHER" }) }))
       .resolves.toMatchObject({ ok: false, reason: "room-not-bound" });
+  });
+});
+
+describe("steward authority after the review fixes (BI-099A0BA3)", () => {
+  it("M1: a packet withdrawn by the sweep no longer admits its run", async () => {
+    const { db } = store();
+    const issueDb = db as unknown as IssuePacketDb;
+    await issueAcceptanceObjectiveMappingPacket({ db: issueDb, itemId: ITEM, ownerAgentId: VERIFIER, packet: packet(), objective: "b", now: NOW });
+    await expect(issueAcceptanceObjectiveMappingPacket({
+      db: issueDb, itemId: ITEM, ownerAgentId: null, packet: undefined, objective: "b", now: NOW, excludedAgentIds: [VERIFIER],
+    })).resolves.toBe("withdrawn");
+
+    await expect(loadAcceptanceStewardObjectiveMappingAuthority(db as unknown as StewardAuthorityDb, { run: run(), itemId: ITEM }))
+      .resolves.toMatchObject({ ok: false, reason: "packet-withdrawn" });
+  });
+
+  it("M1: the run's agent delivering the item in any room is refused at write time", async () => {
+    const { db, deliveryRooms } = store();
+    await issueAcceptanceObjectiveMappingPacket({ db: db as unknown as IssuePacketDb, itemId: ITEM, ownerAgentId: VERIFIER, packet: packet(), objective: "b", now: NOW });
+    deliveryRooms.push({ capsuleId: "WC-OLD", executorKind: null, createdByPrincipal: null, leaseHolderPrincipal: null,
+      participants: [{ roles: ["contributor"], principal: { kind: "agent", aliases: [{ aliasValue: VERIFIER }] } }] });
+
+    await expect(loadAcceptanceStewardObjectiveMappingAuthority(db as unknown as StewardAuthorityDb, { run: run(), itemId: ITEM }))
+      .resolves.toMatchObject({ ok: false, reason: "verifier-delivered-item" });
   });
 });

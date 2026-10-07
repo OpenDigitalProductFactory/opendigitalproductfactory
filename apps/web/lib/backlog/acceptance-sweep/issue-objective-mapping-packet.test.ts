@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { ACCEPTANCE_VERIFICATION_SHAPE_REF } from "@/lib/work-management/acceptance-verification-shape";
 import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim } from "@/lib/work-management/workroom-shape-claim";
 
 import { issueAcceptanceObjectiveMappingPacket, type IssuePacketDb } from "./issue-objective-mapping-packet";
@@ -43,9 +44,9 @@ function packet(over: { targetAgent?: string; requestKey?: string; itemId?: stri
 
 function liveRoom(over: Record<string, unknown> = {}, verifier = "AGT-WS-VERIFY") {
   return {
-    id: "room-1", archivedAt: null, status: "working",
+    id: "room-1", capsuleId: "WC-ACC-AAAA0001", source: "scheduled-steward", archivedAt: null, status: "working",
     scopeClaims: [
-      buildWorkShapeClaim("acceptance-verification@1.0.0", NOW),
+      buildWorkShapeClaim(ACCEPTANCE_VERIFICATION_SHAPE_REF, NOW),
       buildWorkShapeRoleBindingsClaim({ "acceptance-verifier": `agent:${verifier}` }, NOW),
     ],
     ...over,
@@ -108,7 +109,6 @@ describe("issueAcceptanceObjectiveMappingPacket (BI-099A0BA3)", () => {
     ["a packet whose key the server did not derive", { packet: packet({ requestKey: "forged" }) }],
     ["a packet for another coworker than the owner", { ownerAgentId: "AGT-OTHER" }],
     ["a packet for another item", { packet: packet({ itemId: "BI-OTHER" }) }],
-    ["no packet", { packet: undefined }],
   ])("issues nothing for %s", async (_label, over) => {
     const { db, raw } = fakeDb();
     await expect(issue(db, over as never)).resolves.toBe("not-issuable");
@@ -130,6 +130,56 @@ describe("issueAcceptanceObjectiveMappingPacket: the room's bound verifier (BI-0
   it("issues nothing when the room's verify stage is bound to another coworker than the owner", async () => {
     const { db, raw } = fakeDb({ room: liveRoom({}, "AGT-EARLIER-OWNER") });
     await expect(issue(db)).resolves.toBe("not-issuable");
+    expect(raw.workroomActivity.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("issueAcceptanceObjectiveMappingPacket: review findings (BI-099A0BA3)", () => {
+  const sweepPacket = (targetAgent: string) => ({ payload: { requestCoworker: packet(targetAgent === "AGT-WS-VERIFY" ? {} : { targetAgent }) }, recordedByAgentId: "AGT-WS-PORTFOLIO" });
+
+  it("M1: withdraws the room's packet when its coworker turns out to have delivered the item, so it is no longer the newest", async () => {
+    const { db, raw } = fakeDb({ latest: sweepPacket("AGT-WS-VERIFY") });
+
+    await expect(issue(db, { packet: undefined, ownerAgentId: null, excludedAgentIds: ["AGT-WS-VERIFY"] })).resolves.toBe("withdrawn");
+
+    expect(raw.workroomActivity.create).toHaveBeenCalledTimes(1);
+    expect(raw.workroomActivity.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        kind: ACCEPTANCE_OBJECTIVE_MAPPING_PACKET_KIND,
+        recordedByAgentId: "AGT-WS-PORTFOLIO",
+        payload: expect.objectContaining({ withdrawn: true, withdrawnTargetAgent: "AGT-WS-VERIFY", withdrawnRequestKey: packet().requestKey }),
+      }),
+      select: { id: true },
+    });
+  });
+
+  it("M1: never issues a packet to a delivery actor", async () => {
+    const { db, raw } = fakeDb();
+    await expect(issue(db, { excludedAgentIds: ["AGT-WS-VERIFY"] })).resolves.toBe("not-issuable");
+    expect(raw.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for a room with no packet owed and none to withdraw", async () => {
+    const { db, raw } = fakeDb();
+    await expect(issue(db, { packet: undefined, ownerAgentId: null, excludedAgentIds: ["AGT-OTHER"] })).resolves.toBeNull();
+    expect(raw.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["another capsule id under the steward key", { capsuleId: "WC-SOMETHING-ELSE" }],
+    ["a room the sweep did not create", { source: "external-claim" }],
+  ])("Info: treats %s as no steward room", async (_label, over) => {
+    const { db, raw } = fakeDb({ room: liveRoom(over) });
+    await expect(issue(db)).resolves.toBe("no-live-room");
+    expect(raw.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  it("L2: a room still pinned to the 1.0.0 shape (no objective-mapping write) is reported shape-outdated, not issued", async () => {
+    const { db, raw } = fakeDb({ room: liveRoom({ scopeClaims: [
+      buildWorkShapeClaim("acceptance-verification@1.0.0", NOW),
+      buildWorkShapeRoleBindingsClaim({ "acceptance-verifier": "agent:AGT-WS-VERIFY" }, NOW),
+    ] }) });
+    await expect(issue(db)).resolves.toBe("shape-outdated");
     expect(raw.workroomActivity.create).not.toHaveBeenCalled();
   });
 });

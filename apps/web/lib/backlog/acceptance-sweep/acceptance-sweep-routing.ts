@@ -37,7 +37,17 @@ export type AcceptanceSweepRouting = {
    * (issue-objective-mapping-packet.ts), so the room's own coworker records
    * the mapping. `current` rooms already held this packet.
    */
-  objectiveMapping: { issued: number; current: number; noLiveRoom: number; notIssuable: number; failed: number };
+  objectiveMapping: {
+    issued: number;
+    current: number;
+    /** A packet withdrawn because its coworker delivered the item (security review M1). */
+    withdrawn: number;
+    /** Rooms still pinned to acceptance-verification 1.0.0, whose stage cannot write the mapping until rebound. */
+    shapeOutdated: number;
+    noLiveRoom: number;
+    notIssuable: number;
+    failed: number;
+  };
   rooms: Array<Pick<RouteOutcome, "itemId" | "outcome" | "capsuleId" | "ownerAgentId" | "ageDays" | "reason" | "objectiveMapping">>;
   /** Set when the routing step itself failed; the rest of the run still recorded. */
   error: string | null;
@@ -54,7 +64,7 @@ export function emptyRouting(enabled: boolean, routeLimit: number): AcceptanceSw
     unroutable: 0,
     deferred: 0,
     unroutableByReason: {},
-    objectiveMapping: { issued: 0, current: 0, noLiveRoom: 0, notIssuable: 0, failed: 0 },
+    objectiveMapping: { issued: 0, current: 0, withdrawn: 0, shapeOutdated: 0, noLiveRoom: 0, notIssuable: 0, failed: 0 },
     rooms: [],
     error: null,
   };
@@ -76,6 +86,8 @@ const COUNTER = {
 const PACKET_COUNTER = {
   issued: "issued",
   current: "current",
+  withdrawn: "withdrawn",
+  "shape-outdated": "shapeOutdated",
   "no-live-room": "noLiveRoom",
   "not-issuable": "notIssuable",
   failed: "failed",

@@ -30,6 +30,7 @@ import { selectAcceptanceSweepPage, type AcceptanceSweepPageDb } from "./accepta
 import { runAcceptanceSweep, type AcceptanceSweepConfig, type AcceptanceSweepPorts, type AcceptanceSweepSummary } from "./acceptance-sweep-run";
 import type { InPlatformOwnerDb } from "./in-platform-owners";
 import type { AgedSweepCandidate } from "./acceptance-sweep-routing";
+import type { DeliveryActorDb } from "./delivery-actors";
 import { issueAcceptanceObjectiveMappingPacket, type IssuePacketDb } from "./issue-objective-mapping-packet";
 import { routeAgedItems, type AcceptanceRouteDb, type RouteOutcome } from "./route-aged-item";
 import {
@@ -150,7 +151,8 @@ type RouteTextDb = {
 };
 
 type SweepDb = RoomDb & TaskStatusDb & AcceptancePoolAgeDb & AcceptanceSweepPageDb & OwedSnapshotDb & InPlatformOwnerDb
-  & AcceptanceSweepCloseDb & PlatformConfigDb & AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb & IssuePacketDb;
+  & AcceptanceSweepCloseDb & PlatformConfigDb & AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb & IssuePacketDb
+  & DeliveryActorDb;
 
 /**
  * Give this run's aged, non-closable items a steward room each (BI-C1781121).

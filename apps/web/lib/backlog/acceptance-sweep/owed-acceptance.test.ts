@@ -218,3 +218,19 @@ describe("projectOwedAcceptance: the owner's objective-mapping packet (BI-099A0B
     expect(otherLane.objectiveMappingPacket).toBeUndefined();
   });
 });
+
+describe("projectOwedAcceptance: every delivery actor is excluded (BI-099A0BA3, security review M1)", () => {
+  it("never names an agent that delivered the item in an older room, though a newer room made another agent the author", async () => {
+    const resolveOwner = resolverReturning({ reviewerRoutes: [route("AGT-A-DELIVERED")] });
+
+    const result = await projectOwedAcceptance({
+      decision: smallFix, authorAgentId: "AGT-B-NEWER", excludedAgentIds: ["AGT-A-DELIVERED", "AGT-B-NEWER"], resolveOwner,
+    });
+
+    expect(result.owner).toBeNull();
+    expect(result.objectiveMappingPacket).toBeUndefined();
+    expect(result.unroutable).toEqual([expect.objectContaining({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", reason: "author-excluded" })]);
+    expect(resolveOwner.mock.calls[0]![0].excludedAgentIds).toEqual(["AGT-A-DELIVERED", "AGT-B-NEWER"]);
+    expect(result.excludedAgentIds).toEqual(["AGT-A-DELIVERED", "AGT-B-NEWER"]);
+  });
+});
