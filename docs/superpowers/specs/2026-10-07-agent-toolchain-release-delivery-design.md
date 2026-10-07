@@ -159,7 +159,28 @@ The portal loads the manifest **once per process** from the file. No request pat
 
 Both are read-only, contain no secrets (the pack is the open-source package), and need no MCP auth: a client whose auth is the broken part must still be able to repair. Both opt into `lib/api/rate-limit.ts`. `/.well-known` reads have no rate limiter today, so the routes cannot inherit one.
 
-**The manifest is not a trust anchor.** The hashes prove integrity against the same origin, not authenticity. The trust boundary is that the updater accepts `--from-portal` only for an origin that equals an already-configured DPF connector origin on that host, over https or loopback (§5.3). Signing the manifest (Sigstore or minisign) is a named follow-on, not part of this design.
+**Authenticity: the manifest is signed by the installation's own identity key.** Hashes alone prove integrity against the same origin, not authenticity, and the updater executes what it downloads. So the trust anchor is the install's existing long-lived Ed25519 identity:
+- `generateInstanceSigningKeypair` and `deriveDeviceId` in `lib/federation/instance-identity.ts` already provide it.
+- The private key is encrypted at rest by `demand-identity.ts`.
+- Its device id `did_<sha256 of the public key>` is already stated in every MCP connection's instructions (`INSTALLATION: … (did_…)`).
+
+No new key, service or vendor is added.
+
+1. **Signed at publish.** The served manifest carries `signature` (Ed25519 over the canonical manifest bytes), `signingPublicKey` and `deviceId`. `archiveSha256` and `packDigest` sit inside the signed bytes, so the signature authenticates the archive too. Signing happens once per process at manifest load (§5.1), not per request.
+2. **Expected identity from an authenticated channel.**
+   - The agent passes the device id it read from its own **authenticated** MCP connection to the updater as `--expect-installation did_…`. That connection is OAuth-bound to this install, or bearer-bound for Grok.
+   - The updater refuses unless `deriveDeviceId(signingPublicKey) == expected` and the signature verifies.
+   - The device id is also pinned in `~/.dpf/trusted-installations.json` at first successful convergence. The installer seeds it on a fresh install. A later run whose device id differs from the pin is refused, even when the agent supplies it, until the user approves the change in plain words ("This portal's identity changed; update anyway?").
+3. **Failure is closed.** There is no unsigned path:
+   - a missing signature, a bad signature or an identity mismatch means nothing is extracted or executed;
+   - the refusal is reported through `record_surface_readiness` as `failed_smoke` with the reason, and the current copy is left untouched.
+4. **What this defends against:**
+   - **Defended:** a wrong or misconfigured connector origin, a DNS or proxy redirect, or a tampered archive. An attacker would need the install's private key.
+   - **Not defended:** a compromise of the portal host itself, which already holds the key and serves the MCP endpoint. That case is out of scope here, as it is for every other platform function.
+   - **Key rotation:** follows the federation identity's lifecycle. Rotation changes the device id, so the pin refuses until the user approves the new identity.
+5. **Rollout.** The signing and verifying code ship together in P1/P2. `--from-portal` does not exist before verification exists, so no release ever offers an unauthenticated download-and-execute path.
+
+Upstream supply-chain signing of the open-source image itself (for example Sigstore over the release) is a separate, existing concern of the release pipeline. It is not what authorizes a client to run an install's pack.
 
 **One version source, one digest.**
 
@@ -323,7 +344,9 @@ The floor is a **conformance control, not a security boundary**:
 The updater gains `--from-portal <origin>`. The existing local-directory mode is kept for the source repo and CI.
 
 1. **Refuse an untrusted origin.** The origin must equal an already-configured DPF connector origin on this host (shared-copy descriptor, Codex or Grok config), over https or loopback. On a first install there is no configured origin, so the installer's own endpoint is the origin.
-2. **Fetch and verify.** Fetch the manifest and download the pack. Refuse unless `sha256(archive) == archiveSha256`, and unless the extracted tree's `delivered_digest == packDigest`.
+2. **Fetch and verify authenticity, then integrity.**
+   - Fetch the manifest. Refuse unless its Ed25519 signature verifies and its device id equals both `--expect-installation` and the host pin (§5.1).
+   - Only then download the pack. Refuse unless `sha256(archive) == archiveSha256` and the extracted tree's `delivered_digest == packDigest`.
 3. **Re-exec from the verified pack,** so the *new* updater does the converging.
 4. **Converge every scope on this host:**
    - **Claude `local` scope:** existing behaviour.
@@ -409,10 +432,20 @@ Nothing notices when a client release changes what it can do.
 - One backlog item per client and version, deduplicated on the intake key `client-capability:<client>@<version>`, is filed to re-verify the profile.
 - The updater's report also carries each client CLI's own `--version`, so drift is visible even before that client connects.
 
-**A scheduled re-verification.** The tracker's documented refresh ritual is wired as a **weekly** `scheduledAgentTask` on the existing `agent-task-scheduler.ts` substrate, so no new scheduler is added. The task:
-1. reads each client's official release notes and documentation;
-2. diffs them against the profile;
-3. files or updates the per-client item with what changed.
+**A scheduled re-verification, bounded.** The tracker's documented refresh ritual is wired as a **weekly** `scheduledAgentTask` on the existing `agent-task-scheduler.ts` substrate, so no new scheduler is added. Its contract:
+
+- **Inputs are declared, not discovered.** Each profile row lists its `sources[]`: the official release-notes and documentation URLs for that client. The task reads only those, plus each client's own `--version` output carried in the latest updater reports (§5.3). A new source is added by a profile PR, never by the task.
+- **Output is a proposal, never an edit.**
+  - For each client whose sources mention a changed capability field, the task files or updates **one** backlog item. The item is deduplicated on `client-capability:<client>@<version>`, and the run is capped at one item per client.
+  - The item carries the quoted source passage, the field it affects and the proposed value.
+  - The task has read-only grants plus backlog create/update. It cannot write the profile, the policy or any client configuration.
+- **Failure is visible, never silent.**
+  - If a source is unreachable, changed shape or yields nothing parseable, the client's row is marked `verificationStale` with the reason and date.
+  - The fleet view shows "capabilities unverified" for that client.
+  - The item, if open, records the failed run.
+  - The profile is left as it was, because the last verified value stays authoritative.
+  - Two consecutive failed runs raise one `PlatformNotification`.
+- **Approval boundary.** A profile value changes only through a PR to `client-capabilities.json`. That PR cites the evidence (source passage plus a live probe on the dev install where the capability can be exercised, for example an OAuth sign-in from that client) and passes the normal review gates. The scheduled task never approves anything.
 
 **Profile changes still ship through a reviewed PR.**
 - A changed field (for example, Grok gaining OAuth) lands as a PR to `client-capabilities.json` that carries the evidence.
@@ -509,12 +542,13 @@ Each phase is one PR and one clean revert.
 | AC-INSTRUCT | OBJ-OBSERVE, OBJ-FLOOR | The initialize instructions of a non-current connection contain a TOOLCHAIN line naming what is stale, the portal repair and a restart request, and never a shell command for the user. |
 | AC-FLOOR-READONLY | OBJ-FLOOR | After the grace period, a declared client below the security floor cannot write: every tools/call that is not a read-grant or readOnlyHint tool, including start_build, write_sandbox_file and run_sandbox_command, and every tasks/submit is refused with agent_toolchain_below_floor and a repair link, while reads, load_tools, record_surface_readiness and issue_agent_client_token succeed. |
 | AC-FLOOR-SCOPE | OBJ-FLOOR | An undeclared caller, including one whose User-Agent resembles a DPF client, is never refused by the toolchain floor, and a client for which mcpClientBearerHeaderRequired is true is never below floor for using a bearer. |
+| AC-AUTHENTIC | OBJ-CONVERGE | The served manifest carries an Ed25519 signature by the installation identity key over bytes that include the archive hash and pack digest, and the updater executes nothing unless the signature verifies and the signing key's device id equals both the device id from the authenticated MCP connection and the host pin, refusing and reporting otherwise. |
 | AC-CONVERGE-ALL | OBJ-CONVERGE | One --from-portal run on Windows and one on macOS/Linux bring Claude local scope, every existing Claude project-scope pin, the shared copy, Codex, Grok and Antigravity to the manifest digest; retire each duplicate project .mcp.json dpf entry by backup and disable; report missing-folder pins as prunable; refuse an origin that is not an already-configured DPF connector origin; and refuse an archive or tree whose hash mismatches. |
 | AC-REPORT-VERIFY | OBJ-CONVERGE, OBJ-OBSERVE | The updater's JSON report is recorded through record_surface_readiness, and a copy counts as current only when the client's next connection declares the new digest. |
 | AC-NO-RETIRED-DEFAULT | OBJ-CONVERGE | No updater, wrapper or host writer writes the http://127.0.0.1:3000 endpoint unless the manifest names it, and writeMcpJsonToHost no longer writes a dpf entry that duplicates the plugin connector. |
 | AC-GROK | OBJ-GROK, OBJ-FLOOR | Grok converges to an agent-client token for client grok with a finite expiry minted by issue_agent_client_token for the caller's own client only, the token stays resolvable when operator PAT resolution is disabled, a Grok declaration on an operator PAT is below floor after grace, and an expired Grok token returns the same repair link. |
 | AC-CAPABILITY-SOURCE | OBJ-CAPABILITY | mcpClientBearerHeaderRequired, the floor's auth rule and the manifest clients map all derive from client-capabilities.json, whose rows each carry a verified version, date and evidence link, and CI fails when the generated policy cases or the rendered tracker matrix drift from it. |
-| AC-CAPABILITY-DRIFT | OBJ-CAPABILITY | A connection reporting a client version newer than that client's verified version marks the client capabilities-unverified in the fleet view and files one deduplicated re-verification item for that client and version, and a weekly scheduled task diffs official client release notes against the profile. |
+| AC-CAPABILITY-DRIFT | OBJ-CAPABILITY | A connection reporting a client version newer than that client's verified version marks the client capabilities-unverified in the fleet view and files one deduplicated re-verification item for that client and version, and a weekly scheduled task reads only each row's declared sources, files at most one proposal item per client without editing the profile, and marks a row verificationStale with its reason when a source fails. |
 | AC-USER-SCOPE-DUPLICATE | OBJ-CONVERGE | A dpf server in the Claude user or local settings that targets the DPF endpoint path is retired through the client's own remove command after its definition is backed up, and the updater pins a parseable connector URL for every converged project-scope record. |
 | AC-BACKSTOP | OBJ-BACKSTOP | A Claude Code session started in the installed-runtime folder runs the freshness advisory from the plugin's own hooks against the portal manifest, prints a stale warning for a stale copy, and prints unknown when the portal or Python is unavailable. |
 
@@ -530,6 +564,7 @@ Each phase is one PR and one clean revert.
 | OBJ-OBSERVE | AC-RELEASE-VISIBLE | `announceToolchainReleaseOnBoot`, notification wiring, `/ops/self-upgrade` section (P4) | Self-upgrade on the dev install through `/ops/self-upgrade`; observe the notification and rows with no command run; restart without a release writes nothing |
 | OBJ-FLOOR | AC-FLOOR-READONLY | `isToolAllowedBelowToolchainFloor`, refusal in `tools/call` and `tasks/*`, grace (P6) | Ratchet test for the named tools; live call from a below-floor client after a test floor raise |
 | OBJ-FLOOR | AC-FLOOR-SCOPE | Verdict scoping (P3, P6) | Unit fixtures for undeclared, SDK-style User-Agent, and plain-http bearer |
+| OBJ-CONVERGE | AC-AUTHENTIC | Manifest signing at load (P1), `--expect-installation` + host pin verification in the updater (P2) | Unit tests for sign and verify, wrong key, missing signature and pin mismatch; live run with the agent-supplied device id |
 | OBJ-CONVERGE | AC-CONVERGE-ALL | `--from-portal`, origin check, report; BI-B9F359AC functions (P0, P2) | Updater tests with fixture homes on the Windows host and on Linux and macOS CI runners; one live run on this host |
 | OBJ-CONVERGE, OBJ-OBSERVE | AC-REPORT-VERIFY | Report to `record_surface_readiness`; connection-confirmed `current` (P2, P3) | Live: report recorded, copy flips to current only after reconnect |
 | OBJ-CONVERGE | AC-NO-RETIRED-DEFAULT | Manifest-sourced endpoints; host-writer fix (P2) | CI grep guard; host-writer test |
@@ -575,7 +610,14 @@ Updated in the same branch as each phase:
 
 ## 14. Architecture review disposition
 
-Founder input on 2026-10-07, after the review, added §5.5 (capabilities change weekly; Grok cannot complete OAuth locally) and the Claude user-scope duplicate (§5.3) observed on this host. Both still need the independent design review.
+Founder input on 2026-10-07, after the advisory review, added §5.5 (capabilities change weekly; Grok cannot complete OAuth locally) and the Claude user-scope duplicate (§5.3) observed on this host. Both are covered by the governed design-spec review below.
+
+The governed design-spec review (Change Reviewer, AGT-WS-REVIEW) failed the design at 1f8c7fa8 with two findings. Recording that fail was itself blocked by BI-F8C661D0, which is fixed separately. Both findings are folded in:
+
+| Finding | Severity | Where folded |
+|---|---|---|
+| The updater downloads and executes code with authenticity resting only on origin plus same-origin hashes | critical | §5.1 "Authenticity": the manifest is signed by the install's existing Ed25519 identity, the device id comes from the authenticated MCP connection and a host pin, failure is closed, and there is no unsigned path in any release; §5.3 step 2 |
+| §5.5 lacks reviewable inputs, failure behaviour and an approval boundary for the scheduled task | important | §5.5 "A scheduled re-verification, bounded": declared `sources[]`, proposal-only output with dedupe and a cap, visible `verificationStale` failure, profile changes only by PR with evidence |
 
 
 An independent agent ran the advisory review on 2026-10-07 using `dpf-architecture-review`. All 15 findings are folded in:

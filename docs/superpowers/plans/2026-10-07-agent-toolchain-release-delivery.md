@@ -34,6 +34,7 @@
 - `packages/dpf-skill-pack/scripts/installed_copy_freshness.py`: `delivered_digest` becomes the shared module. `update_agent_toolchain.py` `codex_content_version` derives from it. A TS port goes in `apps/web/lib/agent-toolchain/pack-digest.ts`, tested against a shared fixture tree.
 - `Dockerfile`: build step producing `toolchain-manifest.json` and the deterministic `agent-toolchain.tar.gz`.
 - `apps/web/app/api/agent-toolchain/manifest/route.ts` and `pack.tar.gz/route.ts` (new), using `apps/web/lib/api/rate-limit.ts`. The manifest is loaded once per process.
+- Sign the manifest at load with the installation identity key (`lib/federation/instance-identity.ts`, key from `demand-identity.ts`); include `signature`, `signingPublicKey` and `deviceId` (AC-AUTHENTIC).
 
 **Spike:**
 - Measure for Claude Code (CLI and desktop), Codex and Antigravity:
@@ -69,6 +70,7 @@
 **Files:**
 - `packages/dpf-skill-pack/scripts/update_agent_toolchain.py`:
   - `--from-portal` with an origin check against configured connector origins;
+  - `--expect-installation did_…` plus the `~/.dpf/trusted-installations.json` pin; Ed25519 verification before any download is extracted (AC-AUTHENTIC);
   - `archiveSha256` and tree-digest verification;
   - re-exec from the verified pack;
   - `--report-json`;
@@ -193,6 +195,8 @@
 | OBJ-DELIVER | AC-MANIFEST | GET /api/agent-toolchain/manifest | release publishes toolchain | BI-52934B3E |
 | OBJ-DELIVER | AC-SINGLE-VERSION | toolchain-version.json | release publishes toolchain | BI-52934B3E |
 | OBJ-CONVERGE | AC-NO-RETIRED-DEFAULT | toolchain-version.json | agent converges host | BI-772023BC |
+| OBJ-CONVERGE | AC-AUTHENTIC | GET /api/agent-toolchain/manifest | release publishes toolchain | BI-52934B3E |
+| OBJ-CONVERGE | AC-AUTHENTIC | update_agent_toolchain.py --from-portal | agent converges host | BI-DE1E6485 |
 | OBJ-CONVERGE | AC-CONVERGE-ALL | update_agent_toolchain.py --from-portal | agent converges host | BI-DE1E6485 |
 | OBJ-CONVERGE, OBJ-OBSERVE | AC-REPORT-VERIFY | record_surface_readiness | agent converges host | BI-DE1E6485 |
 | OBJ-OBSERVE | AC-VERDICT | resolveToolchainVerdict | connection declares toolchain | BI-54469E18 |
