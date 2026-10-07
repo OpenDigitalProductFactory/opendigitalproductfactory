@@ -218,11 +218,8 @@ export async function agentHasAnyGrant(agentId: string, toolNames: string[]): Pr
 }
 
 /** An OAuth call's exact-room admission. */
-async function oauthRoomRefusal(toolName: string, params: Record<string, unknown>, userId: string, ctx?: ToolLifecycleEvent["context"]): Promise<ToolResult | null> {
-  if (ctx?.authSource !== "oauth") return null;
-  const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
-  return workroomTargetAccessRefusal({ params, userId, ...ctx, toolName, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
-}
+const oauthRoomRefusal = async (toolName: string, params: Record<string, unknown>, userId: string, ctx?: ToolLifecycleEvent["context"]): Promise<ToolResult | null> => ctx?.authSource !== "oauth" ? null
+  : (await import("./work-capsules/oauth-workroom-ownership")).workroomTargetAccessRefusal({ params, userId, ...ctx, toolName, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
 
 async function callExecuteTool(
   toolName: string,
