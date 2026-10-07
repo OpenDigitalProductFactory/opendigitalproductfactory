@@ -357,7 +357,10 @@ async function resolveDatabaseUrl(env, manifest) {
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  return "";
+  // BI-277ECBDB: a container that runs but never accepts connections is
+  // substrate failure. Returning "" here let the gate continue against the
+  // port-1 placeholder and fail later as if the diff were at fault.
+  dieUnavailable(`slot PostgreSQL ${manifest.postgres.container} never became ready (pg_isready failed for 30s)`);
 }
 
 export const LOCAL_CI_MISSING_DATABASE_URL = "postgresql://dpf:dpf_dev@127.0.0.1:1/dpf_local_ci_missing_database";

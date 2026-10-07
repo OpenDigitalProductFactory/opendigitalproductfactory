@@ -10,6 +10,7 @@ import {
   type SubstrateContainer,
   type SubstrateDeps,
 } from "./substrate-reconciler";
+import { LOCAL_CI_POOL_STALLED_ISSUE_KEY } from "@/lib/nonprod/local-ci-pool-liveness";
 
 const NOW = new Date("2026-09-26T14:00:00.000Z");
 
@@ -158,5 +159,53 @@ describe("reconcileSubstrate: wedged Docker VM", () => {
     const result = await reconcileSubstrate(d);
     expect(result.wedged).toBe(0);
     expect(result.topUnreadable).toBe(1);
+  });
+});
+
+describe("reconcileSubstrate: evidence for who stops a required service (BI-547B788D)", () => {
+  it("records when the stopped container exited and with what code, so the stopper can be correlated", async () => {
+    const d = deps({
+      listContainers: async () => [container({
+        id: "c-sandbox", name: "dpf-sandbox-1", service: "sandbox", state: "exited",
+        stoppedAt: "2026-09-26T07:12:01.000Z", exitCode: 137,
+      })],
+    });
+    await reconcileSubstrate(d);
+    expect(d.opened[0]?.details).toMatchObject({ stoppedAt: "2026-09-26T07:12:01.000Z", exitCode: 137 });
+    expect(d.opened[0]?.summary).toMatch(/exited 137 at 2026-09-26T07:12:01/);
+  });
+});
+
+describe("reconcileSubstrate: local-CI pool liveness (BI-277ECBDB C)", () => {
+  const stalled = (n: number) => ({
+    leaseId: `NPEL-${n}`,
+    admittedAt: new Date(NOW.getTime() - n * 10 * 60_000),
+    releasedAt: new Date(NOW.getTime() - n * 10 * 60_000 + 60_000),
+    evidenceRecordId: null,
+    status: "released",
+  });
+
+  it("raises one condition when admissions keep ending without a result", async () => {
+    const d = deps({ localCiLeases: async () => [1, 2, 3, 4].map(stalled) });
+    const result = await reconcileSubstrate(d);
+    expect(result.localCiPoolDegraded).toBe(true);
+    expect(d.opened).toEqual([expect.objectContaining({
+      issueKey: LOCAL_CI_POOL_STALLED_ISSUE_KEY,
+      severity: "error",
+      summary: expect.stringMatching(/4 local-CI admissions/),
+    })]);
+  });
+
+  it("resolves the condition once a run records a result", async () => {
+    const d = deps({ localCiLeases: async () => [...[1, 2, 3].map(stalled), { ...stalled(4), evidenceRecordId: "ev-1" }] });
+    await reconcileSubstrate(d);
+    expect(d.resolved).toContain(LOCAL_CI_POOL_STALLED_ISSUE_KEY);
+  });
+
+  it("an unreadable lease table neither raises nor clears the condition", async () => {
+    const d = deps({ localCiLeases: async () => { throw new Error("db down"); } });
+    const result = await reconcileSubstrate(d);
+    expect(result.localCiPoolDegraded).toBeNull();
+    expect(d.resolved).not.toContain(LOCAL_CI_POOL_STALLED_ISSUE_KEY);
   });
 });

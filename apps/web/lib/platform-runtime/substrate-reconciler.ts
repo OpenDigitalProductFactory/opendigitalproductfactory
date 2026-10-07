@@ -23,13 +23,21 @@
  *   endpoint (ps runs inside the VM) and raises ONE condition when any process
  *   has sat in D state for more than ten minutes. Only a Docker VM (WSL)
  *   restart clears such a process, and that stops the portal, every container
- *   and running gates, so the condition says so. Executing that restart
- *   needs a host executor, which is a separately designed item.
+ *   and running gates, so the condition says so. The operator approves the
+ *   restart on the Health tab; the native Edge agent runs it on the host
+ *   (lib/remote-action/docker-vm-restart-action.ts, BI-F8F8C383).
+ * - measures local-CI pool liveness and raises one condition when admissions
+ *   keep ending without a recorded result (BI-277ECBDB).
  *
  * All I/O is injected; the cron wrapper lives in queue/functions.
  */
 
 import type { ActionResult } from "@/lib/shared/action-result";
+import {
+  LOCAL_CI_POOL_STALLED_ISSUE_KEY,
+  assessLocalCiPoolLiveness,
+  type LocalCiLeaseLivenessRow,
+} from "@/lib/nonprod/local-ci-pool-liveness";
 
 export const DOCKER_VM_WEDGED_ISSUE_KEY = "substrate:docker-vm-wedged";
 export const WEDGED_AFTER_SECONDS = 10 * 60;
@@ -47,6 +55,9 @@ export type SubstrateContainer = {
   state: string;
   restartPolicy: string;
   inProject: boolean;
+  /** When an exited container stopped and its exit code, from inspect (BI-547B788D). */
+  stoppedAt?: string | null;
+  exitCode?: number | null;
 };
 
 export type TopRow = { pid: string; stat: string; etime: string; wchan: string; comm: string };
@@ -67,6 +78,8 @@ export type SubstrateDeps = {
   openIssue: (issue: SubstrateIssue) => Promise<void>;
   resolveIssue: (issueKey: string) => Promise<void>;
   now: () => Date;
+  /** Recent local-integration-ci leases for the pool liveness check; omitted, the check is skipped. */
+  localCiLeases?: () => Promise<LocalCiLeaseLivenessRow[]>;
 };
 
 export type SubstrateResult = {
@@ -75,6 +88,8 @@ export type SubstrateResult = {
   restartSkippedReason: string | null;
   wedged: number;
   topUnreadable: number;
+  /** null when the lease table could not be read or the check was not wired. */
+  localCiPoolDegraded: boolean | null;
 };
 
 /** ps `etime`: [[dd-]hh:]mm:ss, in seconds; null when unreadable. */
@@ -93,6 +108,7 @@ export async function reconcileSubstrate(deps: SubstrateDeps): Promise<Substrate
     restartSkippedReason: null,
     wedged: 0,
     topUnreadable: 0,
+    localCiPoolDegraded: null,
   };
   const at = deps.now().toISOString();
 
@@ -111,11 +127,21 @@ export async function reconcileSubstrate(deps: SubstrateDeps): Promise<Substrate
       const started = await deps.startContainer(container);
       if (started.ok) {
         result.restarted.push(container.service);
+        const stopped = container.stoppedAt
+          ? ` It had exited ${container.exitCode ?? "?"} at ${container.stoppedAt}; match that time against the host's process audit to find what stopped it.`
+          : "";
         await deps.openIssue({
           issueKey,
           severity: "warn",
-          summary: `Required service ${container.service} (${container.name}) was found stopped and the platform restarted it at ${at}. A repeat means something keeps stopping it.`,
-          details: { source: "substrate-reconciler", container: container.name, service: container.service, restartedAt: at },
+          summary: `Required service ${container.service} (${container.name}) was found stopped and the platform restarted it at ${at}. A repeat means something keeps stopping it.${stopped}`,
+          details: {
+            source: "substrate-reconciler",
+            container: container.name,
+            service: container.service,
+            restartedAt: at,
+            stoppedAt: container.stoppedAt ?? null,
+            exitCode: container.exitCode ?? null,
+          },
         });
       } else {
         result.restartFailed.push(container.service);
@@ -152,7 +178,7 @@ export async function reconcileSubstrate(deps: SubstrateDeps): Promise<Substrate
     await deps.openIssue({
       issueKey: DOCKER_VM_WEDGED_ISSUE_KEY,
       severity: "error",
-      summary: `${stuck.length} process${stuck.length === 1 ? "" : "es"} in ${where} ${stuck.length === 1 ? "has" : "have"} been stuck in uninterruptible I/O for over ${WEDGED_AFTER_SECONDS / 60} minutes. Their containers cannot be stopped; only a Docker VM restart clears them, and that stops the portal, every container and any running gate.`,
+      summary: `${stuck.length} process${stuck.length === 1 ? "" : "es"} in ${where} ${stuck.length === 1 ? "has" : "have"} been stuck in uninterruptible I/O for over ${WEDGED_AFTER_SECONDS / 60} minutes. Their containers cannot be stopped; only a Docker VM restart clears them, and that stops the portal, every container and any running gate. An operator can approve one from the portal Health tab (Restart Docker VM).`,
       details: {
         source: "substrate-reconciler",
         observedAt: at,
@@ -161,6 +187,35 @@ export async function reconcileSubstrate(deps: SubstrateDeps): Promise<Substrate
     });
   } else if (result.topUnreadable === 0) {
     await deps.resolveIssue(DOCKER_VM_WEDGED_ISSUE_KEY);
+  }
+
+  if (deps.localCiLeases) {
+    let leases: LocalCiLeaseLivenessRow[] | null = null;
+    try {
+      leases = await deps.localCiLeases();
+    } catch {
+      leases = null;
+    }
+    if (leases) {
+      const liveness = assessLocalCiPoolLiveness({ leases, now: deps.now() });
+      result.localCiPoolDegraded = liveness.degraded;
+      if (liveness.degraded) {
+        await deps.openIssue({
+          issueKey: LOCAL_CI_POOL_STALLED_ISSUE_KEY,
+          severity: "error",
+          summary: liveness.summary,
+          details: {
+            source: "substrate-reconciler",
+            observedAt: at,
+            windowMs: liveness.windowMs,
+            admittedWithoutResult: liveness.admittedWithoutResult,
+            stalledLeaseIds: liveness.stalledLeaseIds,
+          },
+        });
+      } else {
+        await deps.resolveIssue(LOCAL_CI_POOL_STALLED_ISSUE_KEY);
+      }
+    }
   }
   return result;
 }

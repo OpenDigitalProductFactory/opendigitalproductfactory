@@ -64,7 +64,8 @@ export function describeLeaseCallFailure(error) {
     + "if this box regularly runs several gates at once";
 }
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
-import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH, EXIT_SOURCE_DRIFT, EXIT_USAGE, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
+import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH, EXIT_SLOT_SUBSTRATE_UNAVAILABLE, EXIT_SOURCE_DRIFT, EXIT_USAGE, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
+import { SLOT_SUBSTRATE_UNAVAILABLE_STATUS, assessSlotSubstrate, ensureSlotPostgres } from "./lib/local-ci-slot-substrate.mjs";
 import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
 import { buildIsDelegated, defaultBuildStrategy } from "./lib/local-integration-ci.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
@@ -247,6 +248,19 @@ function waiting(text) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * BI-277ECBDB (A): probe every slot's PostgreSQL container before claiming, and
+ * start a stopped one, so a dead substrate is refused here instead of being
+ * discovered after a slot is granted.
+ */
+export function observeSlotSubstrate(input) {
+  if (process.env.NODE_ENV === "test" && process.env.DPF_LOCAL_CI_SLOT_SUBSTRATE_JSON) {
+    return assessSlotSubstrate(JSON.parse(process.env.DPF_LOCAL_CI_SLOT_SUBSTRATE_JSON));
+  }
+  return assessSlotSubstrate(LOCAL_CI_SLOT_KEYS.map((slotKey) =>
+    ensureSlotPostgres(createLocalCiSlotManifest({ ...input, slotKey }).postgres.container)));
 }
 
 async function observeLocalCiHostPressure(input) {
@@ -1615,6 +1629,27 @@ async function main() {
   // no "unknown" member, so an unresolved provider has no honest value — refuse
   // rather than attribute this run to whichever client is most common. Everything
   // above (--dry-run, the runner-wiring check) stays runnable unattributed.
+  const substrate = observeSlotSubstrate({ rootClone, gitCommonDir, candidateGitDir });
+  if (substrate.blocked) {
+    writeState(stateFile, {
+      branch, sha, gatePassed: false, leaseId: "", evidenceId: "",
+      status: SLOT_SUBSTRATE_UNAVAILABLE_STATUS, expiresAt: "", resilience: null,
+      leaseEvents: [{ type: "slot-substrate-unavailable", at: new Date().toISOString(), probes: substrate.probes }],
+      substrate: { container: substrate.container, state: substrate.state, remedy: substrate.remedy },
+      failureReason: `slot substrate unavailable: ${substrate.container} is ${substrate.state}`,
+    });
+    process.stderr.write(`${JSON.stringify({
+      status: SLOT_SUBSTRATE_UNAVAILABLE_STATUS,
+      code: "local_ci_slot_substrate_unavailable",
+      container: substrate.container,
+      state: substrate.state,
+      probes: substrate.probes,
+      nextAction: substrate.remedy,
+    })}
+`);
+    process.exit(EXIT_SLOT_SUBSTRATE_UNAVAILABLE);
+  }
+
   let claimAttempt = 0;
   let nextQueueReconciliationAt = 0;
   for (;;) {

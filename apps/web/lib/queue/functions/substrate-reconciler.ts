@@ -17,9 +17,14 @@ import {
 import { openMonitorIssue, resolveMonitorIssue, type MonitorIssueDb } from "@/lib/observability/monitor-issue-writer";
 import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
 import { err, ok } from "@/lib/shared/action-result";
+import { LOCAL_CI_LIVENESS_WINDOW_MS } from "@/lib/nonprod/local-ci-pool-liveness";
 
 type DockerSummary = { Id: string; Names?: string[]; State?: string; Labels?: Record<string, string> };
-type DockerInspect = { HostConfig?: { RestartPolicy?: { Name?: string } }; Config?: { Labels?: Record<string, string> } };
+type DockerInspect = {
+  HostConfig?: { RestartPolicy?: { Name?: string } };
+  Config?: { Labels?: Record<string, string> };
+  State?: { FinishedAt?: string; ExitCode?: number };
+};
 type DockerTop = { Titles?: string[]; Processes?: string[][] };
 
 const TOP_COLUMNS = "-o pid,stat,etime,wchan,comm";
@@ -38,11 +43,11 @@ async function listContainers(): Promise<SubstrateContainer[]> {
     const inProject = Boolean(project) && summary.Labels?.["com.docker.compose.project"] === project;
     const state = String(summary.State ?? "").toLowerCase();
     // Only an exited project container can be restarted, so only it needs the
-    // restart policy (one inspect per such container, not per container).
-    const restartPolicy = inProject && state === "exited"
-      ? String((await dockerSocketGet(`/containers/${encodeURIComponent(summary.Id)}/json`) as DockerInspect)
-        .HostConfig?.RestartPolicy?.Name ?? "")
-      : "";
+    // restart policy and stop time (one inspect per such container, not per container).
+    const inspected = inProject && state === "exited"
+      ? await dockerSocketGet(`/containers/${encodeURIComponent(summary.Id)}/json`) as DockerInspect
+      : null;
+    const restartPolicy = String(inspected?.HostConfig?.RestartPolicy?.Name ?? "");
     containers.push({
       id: summary.Id,
       name: String(summary.Names?.[0] ?? summary.Id).replace(/^\//, ""),
@@ -50,6 +55,8 @@ async function listContainers(): Promise<SubstrateContainer[]> {
       state,
       restartPolicy,
       inProject,
+      stoppedAt: inspected?.State?.FinishedAt ?? null,
+      exitCode: typeof inspected?.State?.ExitCode === "number" ? inspected.State.ExitCode : null,
     });
   }
   return containers;
@@ -101,6 +108,13 @@ export const substrateReconciler = jobs.createFunction(
         await openMonitorIssue(monitorDb, { ...issue, issueType: "health_alert" });
       },
       resolveIssue: (issueKey) => resolveMonitorIssue(monitorDb, issueKey),
+      localCiLeases: () => prisma.nonProductionEnvironmentLease.findMany({
+        where: {
+          environmentKey: "local-integration-ci",
+          admittedAt: { gte: new Date(Date.now() - LOCAL_CI_LIVENESS_WINDOW_MS) },
+        },
+        select: { leaseId: true, admittedAt: true, releasedAt: true, evidenceRecordId: true, status: true },
+      }),
       now: () => new Date(),
     }));
   },

@@ -216,3 +216,23 @@ func TestResolvePlatform_mapsWindowsToWin32(t *testing.T) {
 		t.Errorf("override path returned %q", got)
 	}
 }
+
+// BI-F8F8C383: only a native Windows agent sits outside the Docker VM it would
+// restart, so only that agent offers the restart.
+func TestDockerVmRestartEnabledOnlyForTheNativeWindowsAgent(t *testing.T) {
+	cases := []struct {
+		platform, mode string
+		want           bool
+	}{
+		{"win32", "native", true},
+		{"win32", "container-vm", false},
+		{"darwin", "native", false},
+		{"linux", "native", false},
+	}
+	for _, c := range cases {
+		cfg := &Config{Platform: c.platform, InstallMode: c.mode}
+		if got := cfg.DockerVmRestartEnabled(); got != c.want {
+			t.Fatalf("%s/%s: got %v want %v", c.platform, c.mode, got, c.want)
+		}
+	}
+}

@@ -459,6 +459,7 @@ test("a prerequisite the runner could not set up exits as infrastructure, not 1"
   for (const prerequisite of [
     "could not provision ${manifest.postgres.container}",
     "could not start ${manifest.postgres.container}",
+    "slot PostgreSQL ${manifest.postgres.container} never became ready",
     "could not create scratch workspace",
     "required origin/main refresh failed",
   ]) {

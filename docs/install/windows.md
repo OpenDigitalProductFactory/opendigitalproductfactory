@@ -369,6 +369,16 @@ an explicit `memory=` in `%USERPROFILE%\.wslconfig` pins it. Remove or lower it,
 then `wsl --shutdown`. (On macOS the VM is fixed-size and never returns memory to
 the host, so over-allocation there ratchets until builds fail.)
 
+**Containers cannot be stopped, or the platform reports the Docker VM is wedged.**
+Processes stuck in uninterruptible I/O (for example a `sync` against a dead file
+share) survive `docker kill`; only a Docker VM restart clears them. Do not run
+`wsl --shutdown` by hand while DPF is running. The platform raises a "Docker VM is
+wedged" condition, and the portal's Health tab offers **Restart Docker VM**. It
+drains the platform, then the native Edge agent on this machine stops Docker
+Desktop, shuts the VM down, clears Docker's stale socket folders, and starts
+Docker and DPF again. It never reboots Windows. The control needs the native Edge
+agent (`install-dpf.ps1 -WithEdge`) with remote actions enabled.
+
 **`/api/health` returns 500.**
 The database migrations may not have completed. Tail the portal-init
 container: `docker compose logs portal-init`.

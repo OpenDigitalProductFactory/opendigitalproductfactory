@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "decidedOption": "conditional-panel-on-portal-health-tab",
+  "decisionInteractionId": "DI-877D45C6C0CC",
+  "scope": {
+    "files": [
+      "apps/web/components/monitoring/DockerVmRestartPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "conditional-panel-on-portal-health-tab",
+      "dedicated-ops-route",
+      "coworker-tool-only"
+    ],
+    "recordedVia": "principle_decide (callingPopulation: external_coding_agent, decisionDomain: platform-development, consumerContexts: [ui], stakes: elevated)",
+    "composite": 9.415,
+    "margin": 2.486,
+    "confidence": "high",
+    "autonomyEligible": true,
+    "topContributors": [
+      "No Hardcoded Colors",
+      "Single Source of Truth"
+    ],
+    "whyNotSweepMeasurement": "The control renders only while the substrate:docker-vm-wedged condition is open, which no sweep fixture produces, so a sweep of /portfolio/product/[id]/health would measure the page without the control. The placement was decided among three options instead.",
+    "notes": "The panel adds one control (a danger-variant confirmed button) and nothing else. It is mounted on the portal Health tab only while the VM is reported wedged; the attention card for that condition links to it. The default view is unchanged when the VM is healthy."
+  }
+}

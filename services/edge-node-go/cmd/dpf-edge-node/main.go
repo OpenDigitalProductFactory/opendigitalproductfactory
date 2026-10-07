@@ -207,7 +207,13 @@ func run() error {
 				},
 			}
 		}
-		runner := &actionrunner.Runner{Client: actionClient, Executor: executor, NodeToken: st.NodeToken, BatchSize: 1}
+		if cfg.DockerVmRestartEnabled() {
+			executor.DockerVmRestart = newDockerVmRestartHandler(cfg)
+		}
+		runner := &actionrunner.Runner{
+			Client: actionClient, Executor: executor, NodeToken: st.NodeToken, BatchSize: 1,
+			Pending: actionrunner.FilePendingReports{Dir: filepath.Join(cfg.StateDir, "pending-action-reports")},
+		}
 		go func() { errCh <- runActionDispatch(ctx, actionClient, runner, st.NodeToken) }()
 	}
 

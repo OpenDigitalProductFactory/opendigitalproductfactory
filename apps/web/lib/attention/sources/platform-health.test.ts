@@ -54,4 +54,18 @@ describe("healthAlertToAttentionItem", () => {
     expect(item.title).toBe("Unknown alert");
     expect(item.context).toBe("Something is degraded");
   });
+
+  // BI-F8F8C383: a wedged Docker VM needs the operator's approval, so its card
+  // goes straight to the restart control rather than the general health page.
+  it("sends a wedged Docker VM to the restart control", () => {
+    const item = healthAlertToAttentionItem({
+      ...base,
+      issueKey: "substrate:docker-vm-wedged",
+      summary: "2 processes in happy_agnesi have been stuck in uninterruptible I/O for over 10 minutes.",
+      details: { source: "substrate-reconciler" },
+    });
+    expect(item.actions).toEqual([
+      { kind: "open-in-context", label: "Review Docker VM restart", href: "/ops/health#docker-vm-restart" },
+    ]);
+  });
 });
