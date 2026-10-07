@@ -27,7 +27,8 @@ import type { OwedAcceptanceOwnerRecovery } from "./owed-acceptance";
 // id) over the grants that authorize record_execution_evidence, read from the
 // grant registry (TOOL_TO_GRANTS with GRANT_IMPLICATIONS), through the
 // in-platform grant read so external agents never qualify, with the author
-// removed. Nothing here defaults to a person.
+// and every other agent that delivered the item removed (BI-099A0BA3, security
+// review M1: delivery-actors.ts). Nothing here defaults to a person.
 
 export const EXECUTION_EVIDENCE_WRITER = "record_execution_evidence";
 const LANE_ROLE = "delivery-coordinator";
@@ -61,12 +62,15 @@ export async function executionEvidenceGrants(): Promise<string[]> {
 export async function resolveExecutionEvidenceOwner(input: {
   entries: ReadonlyArray<Pick<ReadinessRequirementResult, "code">>;
   authorAgentId: string | null;
+  /** The author and every other delivery actor (delivery-actors.ts); none may own the check. */
+  excludedAgentIds?: readonly string[];
   grants: InPlatformGrants;
   satisfyingGrants: readonly string[];
 }): Promise<OwedAcceptanceOwnerRecovery> {
   const codes: ReadinessCode[] = [...new Set(input.entries.map((entry) => entry.code))];
+  const excluded = [...new Set([...(input.authorAgentId ? [input.authorAgentId] : []), ...(input.excludedAgentIds ?? [])])];
   const holders = (await loadEligibleGrantHolders(input.grants.db, input.satisfyingGrants))
-    .filter((row) => row.agent.agentId !== input.authorAgentId);
+    .filter((row) => !excluded.includes(row.agent.agentId));
   const owner = holders[0];
   if (owner) {
     return {
@@ -83,7 +87,7 @@ export async function resolveExecutionEvidenceOwner(input: {
     };
   }
   const grantList = input.satisfyingGrants.join(" or ") || "(no grant authorizes it)";
-  const external = [...new Set(input.satisfyingGrants.flatMap((grant) => input.grants.externalHoldersOf(grant, input.authorAgentId ? [input.authorAgentId] : [])))].sort();
+  const external = [...new Set(input.satisfyingGrants.flatMap((grant) => input.grants.externalHoldersOf(grant, excluded)))].sort();
   return {
     reviewerRoutes: [],
     unroutable: [],
@@ -98,12 +102,12 @@ export async function resolveExecutionEvidenceOwner(input: {
             nextAction:
               `${external.join(", ")} hold ${grantList} for ${EXECUTION_EVIDENCE_WRITER} but run only outside the platform `
               + "(execution runtime not in_process), so no dispatch can reach them. Grant it to an in-platform "
-              + "coworker other than the author; do not route it to a person.",
+              + "coworker that did not deliver the item; do not route it to a person.",
           }
         : {
             reason: "no-eligible-reviewer" as const,
             nextAction:
-              `No active production in-platform coworker other than the author holds ${grantList} for ${EXECUTION_EVIDENCE_WRITER}. `
+              `No active production in-platform coworker that did not deliver the item holds ${grantList} for ${EXECUTION_EVIDENCE_WRITER}. `
               + "Grant it to one; do not route the check to a person or back to the author.",
           }),
     }],

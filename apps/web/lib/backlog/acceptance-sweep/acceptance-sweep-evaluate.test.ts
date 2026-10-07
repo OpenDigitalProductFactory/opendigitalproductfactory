@@ -289,6 +289,30 @@ describe("createSweepOwnerResolver: the small-shape execution-evidence lane (BI-
     expect(result.owner).toEqual({ agentId: "AGT-WS-OPS", displayName: "AGT-WS-OPS name", codes: ["DELIVERY_EVIDENCE_REQUIRED"] });
   });
 
+  it("BI-099A0BA3 (M1): never names a delivery actor other than the guessed author for a small item", async () => {
+    // AGT-WS-BUILD delivered in an older room; a newer room made AGT-A-AUTHOR the guessed author.
+    const db = grantDb([
+      holder("AGT-A-AUTHOR", "backlog_write"),
+      holder("AGT-WS-BUILD", "build_evidence"),
+      holder("AGT-WS-OPS", "backlog_write"),
+    ]);
+    const resolveOwner = createSweepOwnerResolver({ db, ports: terminalPorts() });
+    const result = await projectOwedAcceptance({
+      decision: smallDecision, authorAgentId: "AGT-A-AUTHOR", excludedAgentIds: ["AGT-WS-BUILD"], resolveOwner,
+    });
+    expect(result.owner?.agentId).toBe("AGT-WS-OPS");
+
+    const onlyDeliverers = createSweepOwnerResolver({
+      db: grantDb([holder("AGT-A-AUTHOR", "backlog_write"), holder("AGT-WS-BUILD", "build_evidence")]),
+      ports: terminalPorts(),
+    });
+    const none = await projectOwedAcceptance({
+      decision: smallDecision, authorAgentId: "AGT-A-AUTHOR", excludedAgentIds: ["AGT-WS-BUILD"], resolveOwner: onlyDeliverers,
+    });
+    expect(none.owner).toBeNull();
+    expect(none.unroutable.map((entry) => entry.reason)).toEqual(["no-eligible-reviewer", "no-eligible-reviewer"]);
+  });
+
   it("never names the author: the lane reads no-eligible-reviewer when the author is its only holder", async () => {
     const resolveOwner = createSweepOwnerResolver({ db: grantDb([holder("AGT-A-AUTHOR", "backlog_write")]), ports: terminalPorts() });
     const result = await projectOwedAcceptance({ decision: smallDecision, authorAgentId: "AGT-A-AUTHOR", resolveOwner });

@@ -90,6 +90,8 @@ export function createSweepOwnerResolver(context: {
     const owned = await resolveExecutionEvidenceOwner({
       entries: lane,
       authorAgentId,
+      // BI-099A0BA3 (M1): every delivery actor, not only the guessed author.
+      excludedAgentIds: excludedAgentSet(authorAgentId, excludedAgentIds),
       grants,
       satisfyingGrants: await loadLaneGrants(),
     });
