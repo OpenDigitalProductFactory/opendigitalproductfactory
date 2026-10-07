@@ -7,10 +7,13 @@
 //
 // Distinct from `lib/api/jwt.ts`: that helper is for the public mobile API
 // access tokens. This helper is internal-only and tied to a different
-// audience (`dpf-mcp-server`), so a mobile access token (which carries no
-// `aud`) is refused here. The reverse direction is NOT yet prevented:
-// `verifyAccessToken` checks neither issuer nor audience, so a session token
-// from this module verifies on the mobile API (BI-7B4B5F5D).
+// issuer and audience (`dpf-mcp-internal` / `dpf-mcp-server`). Both directions
+// are refused (BI-7B4B5F5D): this verifier refuses a mobile access token
+// (`aud=dpf-mobile-api`), and `verifyAccessToken` requires the mobile issuer,
+// audience and `at+jwt` type, so a session token from this module gets a 401
+// on the mobile API. Social-login temp tokens and automation sign-in links,
+// also signed with AUTH_SECRET, carry their own audiences and are refused by
+// both.
 //
 // Lifetime (BI-44D9B67B): a valid signature is not enough. The verifier requires
 // `exp` and `iat`, refuses an `iat` in the future beyond the clock skew, and
