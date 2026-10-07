@@ -165,10 +165,119 @@ export function gateFailureSite(status, headSha) {
   return status.boundSha === headSha ? "verdict" : "preflight";
 }
 
+/**
+ * Whether a PASS already recorded for HEAD can be landed as it stands.
+ *
+ * Merging origin/main forward is right BEFORE a gate, and wrong after one: it
+ * mints a new SHA, the recorded PASS no longer binds to it, and another gate
+ * run is queued — while GitHub's merge queue re-tests against current main
+ * regardless. Observed on PR #6029 (2026-10-06): gate:wait hit its deadline
+ * with the local-CI pool closed, the durable resumer later recorded PASS on
+ * HEAD, and re-running land would have thrown that PASS away.
+ *
+ * A conflicting PR still merges forward: the queue cannot test what does not
+ * merge. A dirty tree still gates: the PASS says nothing about uncommitted
+ * bytes. A test-stub PASS is not evidence about the diff.
+ *
+ * @param {{ status: object|null, headSha: string, dirty: boolean, mergeable: string|null }} state
+ *   status from parseGateStatus; mergeable from `gh pr view --json mergeable`, null with no PR
+ * @returns {{ action: "land-recorded-pass"|"gate", reason: string }}
+ */
+export function recordedPassAction({ status, headSha, dirty, mergeable }) {
+  if (!status || status.verdict !== "PASS") {
+    return { action: "gate", reason: `no PASS recorded (${status?.verdict ?? "status unreadable"})` };
+  }
+  if (!headSha || status.boundSha !== headSha) {
+    return { action: "gate", reason: `the recorded PASS is bound to ${status.boundSha || "no SHA"}, not HEAD` };
+  }
+  if (status.testStub === true) return { action: "gate", reason: "the recorded PASS is a test stub" };
+  if (dirty) return { action: "gate", reason: "uncommitted changes are not covered by the recorded PASS" };
+  if (mergeable === "CONFLICTING") {
+    return { action: "gate", reason: "the PR conflicts with main, so it must merge forward and re-gate" };
+  }
+  return { action: "land-recorded-pass", reason: `PASS recorded for HEAD ${headSha.slice(0, 10)}` };
+}
+
+/**
+ * Push, open (or find) the PR, enable auto-merge — shared by the gated path
+ * and the recorded-PASS path.
+ *
+ * Pushes EXACTLY ONCE. The pre-push hook starts a gate run when it does not see
+ * a PASS for the SHA, so re-running `git push`, even only to re-read a refusal,
+ * can claim a rival lease and overwrite a recorded PASS (plan
+ * 2026-10-02-agent-process-automation.md, item 9). On refusal, the hook's text
+ * from that one attempt is what the operator gets.
+ *
+ * @returns {{ step: string, message: string, next?: string } | null} the refusal, or null when done
+ */
+export function publish({ branch, base, title, body, dry, log, exec = run }) {
+  // ── 7. push ───────────────────────────────────────────────────────────────
+  log(`pushing ${branch}`);
+  if (!dry) {
+    const r = exec("git", ["push", "-u", "origin", branch], { allowFail: true });
+    if (!r.ok) {
+      return { step: "push",
+        message: "push refused (pre-push gate or remote). It was NOT retried: a second push can "
+          + "claim a new gate lease and overwrite a recorded PASS.",
+        next: "read the output above, then `pnpm pregate:status` (read-only) — never re-push to re-read it" };
+    }
+  }
+
+  // ── 8. pull request ───────────────────────────────────────────────────────
+  const existing = exec("gh", ["pr", "view", "--json", "number", "-q", ".number"],
+    { capture: true, allowFail: true });
+  const prNumber = existing.ok ? existing.out.trim() : "";
+  if (prNumber) {
+    log(`PR #${prNumber} already open for this branch`);
+  } else if (!title) {
+    return { step: "pull-request", message: "--title is required to open a PR.",
+      next: 'pass --title "type(scope): ..."' };
+  } else {
+    log("opening the PR");
+    if (!dry) {
+      const args = ["pr", "create", "--base", base, "--head", branch, "--title", title, "--body", body];
+      const r = exec("gh", args, { capture: true, allowFail: true });
+      if (!r.ok) {
+        return { step: "pull-request", message: `gh pr create failed.\n${r.out.slice(-800)}`,
+          next: "read the output" };
+      }
+      log(r.out.trim());
+    }
+  }
+
+  // ── 9. auto-merge, and VERIFY it took ─────────────────────────────────────
+  if (!dry) {
+    exec("gh", ["pr", "merge", "--squash", "--auto"], { capture: true, allowFail: true });
+    const check = exec("gh", ["pr", "view", "--json", "autoMergeRequest", "-q",
+      ".autoMergeRequest.mergeMethod"], { capture: true, allowFail: true });
+    const method = check.out.trim();
+    // Verified rather than assumed: `gh pr merge --auto` has reported success
+    // while the PR never entered the queue. An unverified enable is a PR that
+    // sits open looking finished.
+    log(method ? `auto-merge enabled (${method})` : "! auto-merge did NOT take — enable it by hand");
+  }
+  return null;
+}
+
+function readBody(file) {
+  return file && existsSync(file) ? readFileSync(file, "utf8") : "";
+}
+
+function readGateStatus() {
+  return parseGateStatus(run("pnpm", ["-s", "pregate:status", "--json"], { capture: true, allowFail: true }).out);
+}
+
 function fail(step, message, next) {
   process.stderr.write(`\n[land] STOPPED at ${step}\n\n  ${message}\n`);
   if (next) process.stderr.write(`\n  next: ${next}\n`);
   process.exitCode = 1;
+}
+
+function failMissingAttestations(missing) {
+  return fail("context",
+    "the PR BODY must carry these attestations, and this will not invent them:\n    - "
+      + missing.join("\n    - "),
+    "add them to your --body-file, then re-run pnpm land");
 }
 
 function main() {
@@ -207,6 +316,36 @@ function main() {
       "node scripts/lib/bootstrap-worktree-deps.mjs .");
   }
   log(`branch ${branch}, base ${values.base}`);
+
+  // ── 1a. a PASS already recorded for HEAD is landed, not re-earned ─────────
+  // Read before sync: merging forward would mint a new SHA and discard it.
+  const headSha = git("rev-parse", "HEAD");
+  const recorded = readGateStatus();
+  const mergeable = recorded?.verdict === "PASS" && recorded.boundSha === headSha
+    ? (run("gh", ["pr", "view", "--json", "mergeable", "-q", ".mergeable"],
+      { capture: true, allowFail: true }).out.trim() || null)
+    : null;
+  const shortcut = recordedPassAction({
+    status: recorded, headSha, dirty: git("status", "--porcelain").length > 0, mergeable,
+  });
+  if (shortcut.action === "land-recorded-pass") {
+    log(`${shortcut.reason} — skipping merge-forward and gate:wait; the merge queue re-tests against main`);
+    // Body attestations are read-only to check and cheap to get wrong, so they
+    // are still refused here rather than after the push.
+    const body = readBody(values["body-file"]);
+    const context = readContext();
+    if (!context) {
+      return fail("context", "could not read `pnpm gate:context --json`.",
+        "run it directly and fix the failure it reports");
+    }
+    const missing = missingBodyAttestations(context, body);
+    if (missing.length > 0) return failMissingAttestations(missing);
+    const refusal = publish({ branch, base: values.base, title: values.title, body, dry, log });
+    if (refusal) return fail(refusal.step, refusal.message, refusal.next);
+    log("done. The queue owns it from here; `pnpm pr:health` reports readiness.");
+    return;
+  }
+  if (recorded?.verdict === "PASS") log(`not landing the recorded PASS: ${shortcut.reason}`);
 
   // ── 1b. sync: merge the base forward before anything is derived from it ──
   let behind = null;
@@ -248,16 +387,9 @@ function main() {
 
   // Body attestations are knowable now, so refuse now — not after a gate run
   // and a push have been spent on a branch whose PR would be refused.
-  const body = values["body-file"] && existsSync(values["body-file"])
-    ? readFileSync(values["body-file"], "utf8")
-    : "";
+  const body = readBody(values["body-file"]);
   const missing = missingBodyAttestations(context, body);
-  if (missing.length > 0) {
-    return fail("context",
-      "the PR BODY must carry these attestations, and this will not invent them:\n    - "
-        + missing.join("\n    - "),
-      "add them to your --body-file, then re-run pnpm land");
-  }
+  if (missing.length > 0) return failMissingAttestations(missing);
 
   // ── 3. regenerate derived artifacts, from the commands the registry carries ─
   for (const d of derived) {
@@ -318,8 +450,7 @@ function main() {
         + "diff. This is not a failure of the code.", "re-run pnpm land when the queue drains");
     }
     if (!r.ok) {
-      const status = parseGateStatus(
-        run("pnpm", ["-s", "pregate:status", "--json"], { capture: true, allowFail: true }).out);
+      const status = readGateStatus();
       const where = gateFailureSite(status, git("rev-parse", "HEAD"));
       if (where === "preflight") {
         return fail("gate", "a deterministic guard refused BEFORE a lease was claimed, so no gate "
@@ -333,43 +464,9 @@ function main() {
     }
   }
 
-  // ── 7. push ───────────────────────────────────────────────────────────────
-  log(`pushing ${branch}`);
-  if (!dry) {
-    const r = run("git", ["push", "-u", "origin", branch], { allowFail: true });
-    if (!r.ok) return fail("push", "push refused (pre-push gate or remote).", "read the output above");
-  }
-
-  // ── 8. pull request ───────────────────────────────────────────────────────
-  const existing = run("gh", ["pr", "view", "--json", "number", "-q", ".number"],
-    { capture: true, allowFail: true });
-  const prNumber = existing.ok ? existing.out.trim() : "";
-  if (prNumber) {
-    log(`PR #${prNumber} already open for this branch`);
-  } else if (!values.title) {
-    return fail("pull-request", "--title is required to open a PR.", 'pass --title "type(scope): ..."');
-  } else {
-    log("opening the PR");
-    if (!dry) {
-      const args = ["pr", "create", "--base", values.base, "--head", branch, "--title", values.title];
-      if (body) args.push("--body", body); else args.push("--body", "");
-      const r = run("gh", args, { capture: true, allowFail: true });
-      if (!r.ok) return fail("pull-request", `gh pr create failed.\n${r.out.slice(-800)}`, "read the output");
-      log(r.out.trim());
-    }
-  }
-
-  // ── 9. auto-merge, and VERIFY it took ─────────────────────────────────────
-  if (!dry) {
-    run("gh", ["pr", "merge", "--squash", "--auto"], { capture: true, allowFail: true });
-    const check = run("gh", ["pr", "view", "--json", "autoMergeRequest", "-q",
-      ".autoMergeRequest.mergeMethod"], { capture: true, allowFail: true });
-    const method = check.out.trim();
-    // Verified rather than assumed: `gh pr merge --auto` has reported success
-    // while the PR never entered the queue. An unverified enable is a PR that
-    // sits open looking finished.
-    log(method ? `auto-merge enabled (${method})` : "! auto-merge did NOT take — enable it by hand");
-  }
+  // ── 7–9. push once, PR, auto-merge ────────────────────────────────────────
+  const refusal = publish({ branch, base: values.base, title: values.title, body, dry, log });
+  if (refusal) return fail(refusal.step, refusal.message, refusal.next);
 
   log("done. The queue owns it from here; `pnpm pr:health` reports readiness.");
 }
