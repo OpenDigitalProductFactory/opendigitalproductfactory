@@ -1,6 +1,8 @@
 // BI-4E192035 — AC-LEAVE-EXPLICIT on the v1 approvals API. A leave.decide
-// proposal's outcome is a leave decision; the endpoint must not record the
-// proposal as decided while the LeaveRequest it names is left untouched.
+// proposal's outcome is a leave decision, which this endpoint cannot express:
+// it refuses with 409 and points at the explicit leave actions (option B,
+// WWMD DI-DC208379563E) instead of flipping the proposal status and stranding
+// the LeaveRequest as pending.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -32,6 +34,10 @@ vi.mock("@/lib/proactivity/proactivity-override-preferences", () => ({
 }));
 
 import { POST } from "./route";
+import {
+  LEAVE_DECISION_ROUTE,
+  LEAVE_DECISION_VERB_REFUSAL,
+} from "@/lib/workforce/leave/leave-decision-proposal-contract";
 
 function post(decision: "approve" | "reject") {
   return POST(
@@ -53,9 +59,15 @@ describe("AC-LEAVE-EXPLICIT: v1 approvals endpoint on a leave.decide proposal", 
     mocks.rejectLeaveRequest.mockResolvedValue({ success: true });
   });
 
-  it.each(["deny", "approve"] as const)(
-    "approving a %s-recommendation proposal does not mark it decided while its leave request is untouched",
-    async (recommendation) => {
+  it.each([
+    ["approve", "deny"],
+    ["approve", "approve"],
+    ["approve", "escalate"],
+    ["reject", "deny"],
+    ["reject", "approve"],
+  ] as const)(
+    "%s on a %s-recommendation proposal returns 409, points at the leave actions, and changes nothing",
+    async (decision, recommendation) => {
       mocks.prisma.agentActionProposal.findUnique.mockResolvedValue({
         id: "cuid-leave",
         proposalId: "AP-LEAVE",
@@ -65,21 +77,17 @@ describe("AC-LEAVE-EXPLICIT: v1 approvals endpoint on a leave.decide proposal", 
         thread: { userId: "user-1" },
       });
 
-      const response = await post("approve");
+      const response = await post(decision);
 
-      const leaveFollowed =
-        mocks.approveLeaveRequest.mock.calls.length + mocks.rejectLeaveRequest.mock.calls.length > 0;
-      const refused = response.status >= 400;
-      // Either the leave decision path ran, or the endpoint refused — never a
-      // bare proposal status flip that strands the LeaveRequest as pending.
-      expect(
-        leaveFollowed || refused,
-        `leave decision path ran=${leaveFollowed}, endpoint refused=${refused} (HTTP ${response.status})`,
-      ).toBe(true);
-      expect(mocks.prisma.agentActionProposal.update).not.toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ status: "approve" }) }),
-      );
-      if (recommendation === "deny") expect(mocks.approveLeaveRequest).not.toHaveBeenCalled();
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        code: "LEAVE_DECIDED_EXPLICITLY",
+        message: LEAVE_DECISION_VERB_REFUSAL,
+        decideAt: LEAVE_DECISION_ROUTE,
+      });
+      expect(mocks.prisma.agentActionProposal.update).not.toHaveBeenCalled();
+      expect(mocks.approveLeaveRequest).not.toHaveBeenCalled();
+      expect(mocks.rejectLeaveRequest).not.toHaveBeenCalled();
     },
   );
 });

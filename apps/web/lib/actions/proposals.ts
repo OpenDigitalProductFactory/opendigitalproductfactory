@@ -15,10 +15,9 @@ import {
   persistProactivityFact,
   scopeKeyFor,
 } from "@/lib/proactivity/proactivity-override-preferences";
-import { approveLeaveRequest, rejectLeaveRequest } from "@/lib/actions/leave";
 import {
   LEAVE_DECISION_ACTION,
-  parseLeaveDecisionProposalParameters,
+  LEAVE_DECISION_VERB_REFUSAL,
 } from "@/lib/workforce/leave/leave-decision-proposal-contract";
 
 
@@ -36,11 +35,11 @@ export async function approveProposal(
   if (proposal.actionType === PROACTIVITY_CHANGE_ACTION) {
     return approveProactivityChangeProposal(proposal, user.id);
   }
+  // BI-4E192035: a leave.decide proposal is a recommendation. "Approve" or
+  // "reject" of it does not say which leave outcome the person meant, so the
+  // leave is decided only by the explicit Approve leave / Deny leave actions.
   if (proposal.actionType === LEAVE_DECISION_ACTION) {
-    const parameters = parseLeaveDecisionProposalParameters(proposal.parameters);
-    return parameters
-      ? approveLeaveRequest(parameters.requestId)
-      : { success: false, error: "Invalid leave decision proposal" };
+    return { success: false, error: LEAVE_DECISION_VERB_REFUSAL };
   }
 
   // Check capability
@@ -139,11 +138,11 @@ export async function rejectProposal(
   if (proposal.actionType === PROACTIVITY_CHANGE_ACTION) {
     return rejectProactivityChangeProposal(proposal, user.id, reason);
   }
+  // BI-4E192035: a leave.decide proposal is a recommendation. "Approve" or
+  // "reject" of it does not say which leave outcome the person meant, so the
+  // leave is decided only by the explicit Approve leave / Deny leave actions.
   if (proposal.actionType === LEAVE_DECISION_ACTION) {
-    const parameters = parseLeaveDecisionProposalParameters(proposal.parameters);
-    return parameters
-      ? rejectLeaveRequest(parameters.requestId, reason ?? "Manager declined this request")
-      : { success: false, error: "Invalid leave decision proposal" };
+    return { success: false, error: LEAVE_DECISION_VERB_REFUSAL };
   }
 
   await prisma.agentActionProposal.update({

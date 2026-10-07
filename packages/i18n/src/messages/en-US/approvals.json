@@ -52,5 +52,20 @@
     "asking": "Asking again…",
     "asked": "Asked again. The new request is waiting for your decision.",
     "askFailed": "The request could not be raised again. Please try again."
+  },
+  "leaveDecision": {
+    "title": "Time-off request {$requestId}",
+    "recommends": "Advisor recommends:",
+    "recommendation": { "approve": "approve", "deny": "deny", "escalate": "needs your judgement" },
+    "unreadable": "This time-off recommendation could not be read. Decide the request in Time off.",
+    "yourDecision": "Your decision on the leave:",
+    "approveLeave": "Approve leave",
+    "denyLeave": "Deny leave",
+    "denyTitle": "Deny leave request",
+    "denyReasonPrompt": "Reason the employee will see:",
+    "approved": "Leave approved",
+    "denied": "Leave denied",
+    "approveFailed": "The leave could not be approved. Please try again.",
+    "denyFailed": "The leave could not be denied. Please try again."
   }
 }
