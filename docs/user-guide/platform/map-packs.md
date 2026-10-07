@@ -43,7 +43,22 @@ your business's own address) by state or province, and for each one says either:
 
 The same answer, with the exact area each pack should cover, is available to
 installation tooling at `/api/map-assets/recommendation` (administrators only).
-Fetching and installing the pack itself is not automatic yet.
+
+## Install A Recommended Map Pack
+
+Next to a region that no pack covers, select **Install this street map**. DPF
+downloads just that region's street data from the Protomaps build of
+OpenStreetMap, checks it, and adds it to your map packs. You can leave the page
+while it works; the panel shows each step and says when the map is installed.
+
+- It covers the region around your own locations, with full street detail for a
+  state or province. A very large region is installed with slightly less
+  detail so the download stays a sensible size.
+- Only administrators can start it, and one map installs at a time.
+- Only the region's map tiles are requested. No customer data is sent.
+- A pack is only offered to maps once it is complete and checked, so a stopped
+  install never shows a half-drawn map. Starting it again picks up where it
+  stopped.
 
 ## Attribution
 

@@ -33,7 +33,15 @@
     "streetMapsNone": "No locations are placed yet, so no street map is needed.",
     "streetMapsCovered": "{$region}: covered by the installed street map {$pack}. Placed locations: {$count}.",
     "streetMapsMissing": "{$region}: no street map installed yet. Placed locations: {$count}. Recommended map: {$pack}.",
-    "streetMapsNoCountry": "{$region}: {$count} placed. Add a country to these addresses so a street map can be recommended."
+    "streetMapsNoCountry": "{$region}: {$count} placed. Add a country to these addresses so a street map can be recommended.",
+    "streetMapsInstall": "Install this street map",
+    "streetMapsInstallStarted": "Installing the street map. You can leave this page.",
+    "streetMapsInstallRunning": "Another street map is installing. Try again when it finishes.",
+    "streetMapsInstallPlanning": "Preparing the {$region} street map…",
+    "streetMapsInstallDownloading": "Downloading the {$region} street map: part {$done} of {$count}.",
+    "streetMapsInstallFinalizing": "Checking the {$region} street map…",
+    "streetMapsInstallDone": "The {$region} street map is installed.",
+    "streetMapsInstallFailed": "The {$region} street map didn't install. Try again."
   },
   "showMap": "Show customers on the map",
   "hideMap": "Hide the map",

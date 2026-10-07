@@ -31,6 +31,7 @@ import { auth } from "@/lib/auth";
 import { loadCustomerMap } from "@/lib/crm/customer-map.server";
 import { readGeocodingSettings } from "@/lib/geocoding/backfill.server";
 import { loadMapRegionRecommendation } from "@/lib/twin/map-region-recommendation.server";
+import { readInstallStatus } from "@/lib/twin/map-pack-install/status.server";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { getT } from "@/lib/i18n/t.server";
 import { can, getAccessibleSectionNavEntries } from "@/lib/permissions";
@@ -253,13 +254,14 @@ export default async function CustomerPage({
   );
   const customerSurface = resolveCustomerSurface(archetypeId, []);
   const [mapT, locale] = await Promise.all([getT("customerMap"), getLocaleContext()]);
-  const [customerMap, geocoding, mapRegions] = mapView
+  const [customerMap, geocoding, mapRegions, mapPackInstall] = mapView
     ? await Promise.all([
         loadCustomerMap(),
         allowed("manage_platform") ? readGeocodingSettings() : null,
         allowed("manage_platform") ? loadMapRegionRecommendation() : null,
+        allowed("manage_platform") ? readInstallStatus() : null,
       ])
-    : [null, null, null];
+    : [null, null, null, null];
 
   return (
     <div>
@@ -305,6 +307,7 @@ export default async function CustomerPage({
                 opencageKeyConfigured={geocoding.opencageKeyConfigured}
                 status={geocoding.status}
                 regions={mapRegions}
+                install={mapPackInstall}
               />
             ) : null}
           </div>

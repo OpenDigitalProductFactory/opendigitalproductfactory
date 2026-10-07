@@ -10,10 +10,15 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { FormStatus, SelectField, TextField } from "@/components/ui/form";
 import { Surface } from "@/components/ui/Surface";
-import { saveGeocodingProviderAction, startGeocodingBackfillAction } from "@/lib/actions/customer-map";
+import {
+  installRecommendedMapPackAction,
+  saveGeocodingProviderAction,
+  startGeocodingBackfillAction,
+} from "@/lib/actions/customer-map";
 import type { GeocodingConfig } from "@/lib/geocoding/providers";
 import type { GeocodingBackfillStatus } from "@/lib/geocoding/backfill.server";
 import type { RegionRecommendation } from "@/lib/twin/map-region-recommendation";
+import type { MapPackInstallStatus } from "@/lib/twin/map-pack-install/status.server";
 import { useT } from "@/lib/i18n/use-t";
 
 export function GeocodingAdminPanel({
@@ -21,12 +26,15 @@ export function GeocodingAdminPanel({
   opencageKeyConfigured,
   status,
   regions = null,
+  install = null,
 }: {
   config: GeocodingConfig;
   opencageKeyConfigured: boolean;
   status: GeocodingBackfillStatus;
   /** Street-map regions the placed locations need (BI-C318C227 §2.3). */
   regions?: RegionRecommendation | null;
+  /** Progress of a street-map pack install (BI-43BBCC26). */
+  install?: MapPackInstallStatus | null;
 }) {
   const t = useT("customerMap");
   const router = useRouter();
@@ -43,6 +51,20 @@ export function GeocodingAdminPanel({
       router.refresh();
     });
   }
+
+  function installPack(packId: string) {
+    startTransition(async () => {
+      const result = await installRecommendedMapPackAction(packId).catch(() => null);
+      setMessage(
+        result?.ok
+          ? { kind: "success", text: t("admin.streetMapsInstallStarted") }
+          : { kind: "error", text: t(result && !result.ok && result.error === "already-running" ? "admin.streetMapsInstallRunning" : "placeFailed") },
+      );
+      router.refresh();
+    });
+  }
+
+  const installing = install ? ["planning", "downloading", "finalizing"].includes(install.state) : false;
 
   function start() {
     startTransition(async () => {
@@ -117,10 +139,34 @@ export function GeocodingAdminPanel({
                     : group.suggestedPackId
                       ? t("admin.streetMapsMissing", { region: group.label, pack: group.suggestedPackId, count: group.pointCount })
                       : t("admin.streetMapsNoCountry", { region: group.label, count: group.pointCount })}
+                  {!group.coveredBy && group.suggestedPackId ? (
+                    <div className="mt-1">
+                      <Button
+                        variant="secondary"
+                        onClick={() => installPack(group.suggestedPackId!)}
+                        disabled={pending || installing}
+                      >
+                        {t("admin.streetMapsInstall")}
+                      </Button>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
           )}
+          {install && install.state !== "idle" && install.region ? (
+            <p role="status" className={install.state === "done" ? "text-[var(--dpf-muted)]" : undefined}>
+              {install.state === "planning"
+                ? t("admin.streetMapsInstallPlanning", { region: install.region })
+                : install.state === "downloading"
+                  ? t("admin.streetMapsInstallDownloading", { region: install.region, done: install.chunksDone, count: install.chunkCount })
+                  : install.state === "finalizing"
+                    ? t("admin.streetMapsInstallFinalizing", { region: install.region })
+                    : install.state === "done"
+                      ? t("admin.streetMapsInstallDone", { region: install.region })
+                      : t("admin.streetMapsInstallFailed", { region: install.region })}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </Surface>
