@@ -38,6 +38,8 @@ export { loadStandingRoomIds, STANDING_ROOM_SCAN_LIMIT } from "./workroom-drive-
 import { earnGraphReceipts, graphSnapshotFields, hasStoredDriveMarking, withLatchedBlockedReceipts } from "@/lib/work-management/drive-graph-tick";
 import { applyGraphDrivePlan } from "./workroom-drive-graph";
 import type { DeadlineNoticeInput } from "./workroom-drive-deadlines";
+import { createSubShapeChildEffects, withSubShapeChildren, type SubShapeChildEffects } from "./workroom-drive-children";
+import type { SubShapeChildObservation } from "@/lib/work-management/drive-child-rooms";
 import { earnEvidenceReceipts, type RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
 
 import { gateAtEntry } from "../quiescence-gates";
@@ -94,6 +96,8 @@ export type WorkroomDriveRoom = {
   stageDispatchedAt?: Date | null;
   /** Graph rooms only (Phase 3c): when each marked stage most recently started. */
   stageDispatchedAtByStage?: ReadonlyMap<string, Date> | null;
+  /** Graph rooms only (PR-3c-5): each live sub-shape child's status and drive action/reason, by capsule id. */
+  subShapeChildren?: Readonly<Record<string, SubShapeChildObservation>>;
   budgetUsage: { kind: string; used: number }[];
   stopConditionHits: string[];
   reviewDue: boolean;
@@ -103,7 +107,7 @@ export type WorkroomDriveRoom = {
   coordinatorEligibility?: WorkroomCoordinatorEligibility | null;
 };
 
-export type WorkroomDriveEffects = {
+export type WorkroomDriveEffects = SubShapeChildEffects & {
   /**
    * BI-12A083B4: who answers for this room, asked ONLY when a tick ends in a
    * blockage. Resolving it walks the room's containment lineage, so the drive
@@ -441,12 +445,12 @@ export async function runWorkroomDriveJob(
     const dispatchByRoom = await loadStageDispatchTimes(rooms.map((room) => room.capsuleId));
     const dispatchByStage = await loadStageDispatchTimesByStage(
       rooms.filter((room) => hasStoredDriveMarking(room.workspaceState)).map((room) => room.capsuleId));
-    rooms = rooms.map((room) => ({
+    rooms = await withSubShapeChildren(rooms.map((room) => ({
       ...room,
       recordedEvidence: evidenceByRoom.get(room.capsuleId) ?? [],
       stageDispatchedAt: dispatchByRoom.get(room.capsuleId) ?? null,
       ...(dispatchByStage.has(room.capsuleId) ? { stageDispatchedAtByStage: dispatchByStage.get(room.capsuleId) } : {}),
-    }));
+    })));
   }
   const effects = deps?.effects ?? createWorkroomDriveEffects();
   const plans: WorkroomDriveResult["plans"] = [];
@@ -490,6 +494,7 @@ export async function runWorkroomDriveJob(
       priorDrive: priorDriveFromStored(stored),
       workspaceState: room.workspaceState,
       recordedEvidence: room.recordedEvidence ?? [],
+      ...(room.subShapeChildren ? { subShapeChildren: room.subShapeChildren } : {}),
     });
     plans.push({
       roomId: room.capsuleId,
@@ -618,6 +623,7 @@ export function createWorkroomDriveEffects(
   clock: () => Date = () => new Date(),
 ): WorkroomDriveEffects {
   return {
+    ...createSubShapeChildEffects(loadDb as never),
     // BI-12A083B4: the drive asks this only when a tick ends stuck, so a
     // blockage can name who clears it instead of waiting on nobody. Composed
     // from the same lineage walk the room workforce read uses, so the two

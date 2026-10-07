@@ -25,6 +25,7 @@ import {
 import type { DriveReason, DriveReasonsByAction } from "./drive-conclusion";
 import type { DriveMarking, DriveRework, DriveTokenPlan } from "./drive-marking";
 import type { DueDeadline } from "./drive-deadlines";
+import type { SubShapeChildObservation, SubShapeEffects } from "./drive-child-rooms";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
 import { usesGraphConstructs } from "./drive-marking";
 import { cycleCompleted, emptyPlan, ledgerFrom, planStage, projectDriveCycle } from "./drive-plan-stage";
@@ -98,6 +99,12 @@ export type DriveResolutionInput = {
    * decision (`choice`); the sequential path never reads it.
    */
   recordedEvidence?: readonly RecordedEvidence[];
+  /**
+   * The room's sub-shape child rooms, by capsule id: each child's status and
+   * its own drive snapshot's action and reason. Read only by the graph path
+   * (GPP Phase 3c PR-3c-5).
+   */
+  subShapeChildren?: Readonly<Record<string, SubShapeChildObservation>>;
 };
 
 export type DrivePlan = {
@@ -141,6 +148,12 @@ export type DrivePlan = {
    * the notice itself goes out on the next tick, once they are committed.
    */
   deadlinesDue?: DueDeadline[];
+  /**
+   * Graph shapes only (PR-3c-5): the child rooms to create, complete or
+   * abandon this tick. The runner applies them and writes each child entry's
+   * capsule id or state into the marking only once its effect committed.
+   */
+  subShapes?: SubShapeEffects;
 };
 
 export { parseAccountablePrincipalRef, workroomDriveBranchTaskId, workroomDriveTaskId } from "./drive-plan-stage";

@@ -272,8 +272,10 @@ describe("stepDriveMarking: construct-specific branches throw construct_not_impl
     expect(stepDriveMarking(DEADLINE_FIXTURE, atB, { receipts: [] }, NOW)).toEqual(stepDriveMarking(SEQUENTIAL_TWIN, atB, { receipts: [] }, NOW));
     expect(stepDriveMarking(DEADLINE_FIXTURE, atB, done("b"), NOW)).toEqual(stepDriveMarking(SEQUENTIAL_TWIN, atB, done("b"), NOW));
   });
-  it("entering a sub-shape stage", () => {
-    throwsFor(() => stepDriveMarking(SUB_SHAPE_FIXTURE, marking(), done("a"), NOW), "sub-shape");
+  it("never for a sub-shape stage (PR-3c-5): entering or completing one steps exactly as the twin without it", () => {
+    const atB = marking({ tokens: [{ node: "stage:b", enteredAt: NOW.toISOString() }] });
+    expect(stepDriveMarking(SUB_SHAPE_FIXTURE, marking(), done("a"), NOW)).toEqual(stepDriveMarking(SEQUENTIAL_TWIN, marking(), done("a"), NOW));
+    expect(stepDriveMarking(SUB_SHAPE_FIXTURE, atB, done("b"), NOW)).toEqual(stepDriveMarking(SEQUENTIAL_TWIN, atB, done("b"), NOW));
   });
   it("a forward edge into a failure stop", () => {
     const failing = { ...FLOW_TWIN, flow: { nodes: [], edges: [{ from: "a", to: "b" }, { from: "b", to: "failure" }] } };

@@ -27,8 +27,11 @@
  *   the forward move to a stage or to the success stop (PR-3c-1), parallel
  *   split and join (PR-3c-2), and refuse routes with rework edges (PR-3c-3).
  *   A stage deadline is not a step at all (PR-3c-4): timers never change the
- *   marking, and drive-deadlines.ts raises its notice beside the step.
- *   Every other construct-specific branch (sub-shape, a forward edge into a
+ *   marking, and drive-deadlines.ts raises its notice beside the step. A
+ *   sub-shape stage is an ordinary stage to the step (PR-3c-5): its child's
+ *   success is its completing receipt (earned from `child-completion`
+ *   evidence), and drive-child-rooms.ts runs the child beside the step.
+ *   The one remaining construct-specific branch (a forward edge into a
  *   failure or budget stop) throws DriveConstructNotImplementedError;
  *   the graph planner turns that into a fail-closed pause, and with those flags
  *   off it is never reached, because the planner pauses first.
@@ -97,9 +100,16 @@ export type DriveMarking = {
   reworkTaken: Record<string, number>;
   /** Deadline notices by `<cycleKey>#<stageKey>#<iteration>` (PR-3c-4). */
   deadlines: Record<string, { raisedAt: string; notifiedAt: string | null }>;
-  /** Sub-shape children by `<cycleKey>#<stageKey>#<iteration>` (PR-3c-5). */
-  children: Record<string, { capsuleId: string; ref: string }>;
+  /**
+   * Sub-shape children by `<cycleKey>#<stageKey>#<iteration>` (PR-3c-5). An
+   * entry without `state` is a live child; `completed` and `abandoned` are
+   * written by the runner once that effect committed, and are kept for audit.
+   */
+  children: Record<string, DriveMarkingChild>;
 };
+
+export const DRIVE_CHILD_STATES = ["completed", "abandoned"] as const;
+export type DriveMarkingChild = { capsuleId: string; ref: string; state?: (typeof DRIVE_CHILD_STATES)[number] };
 
 /** One marked stage's plan inside a graph plan (DrivePlan.tokens). */
 export type DriveTokenPlan = {
@@ -190,7 +200,8 @@ function parseMarking(value: unknown, graph: GppFlowGraph): DriveMarking | null 
   const children: DriveMarking["children"] = {};
   for (const [key, entry] of Object.entries(value.children)) {
     if (!isObject(entry) || typeof entry.capsuleId !== "string" || typeof entry.ref !== "string") return null;
-    children[key] = { capsuleId: entry.capsuleId, ref: entry.ref };
+    if (entry.state !== undefined && !(DRIVE_CHILD_STATES as readonly unknown[]).includes(entry.state)) return null;
+    children[key] = { capsuleId: entry.capsuleId, ref: entry.ref, ...(entry.state !== undefined ? { state: entry.state as DriveMarkingChild["state"] } : {}) };
   }
   return {
     format: DRIVE_MARKING_FORMAT,
@@ -476,7 +487,6 @@ export function stepDriveMarking(
   now: Date,
 ): DriveStepResult {
   const graph = buildShapeFlowGraph(definition);
-  const stagesByKey = new Map(definition.stages.map((stage) => [stage.key, stage]));
   // A stage deadline never enters the step (PR-3c-4): timers never change M
   // (parent §6.1 rule 8). The planner raises notices (drive-deadlines.ts).
 
@@ -511,8 +521,6 @@ export function stepDriveMarking(
         for (const after of graph.successors.get(next) ?? []) enter(after, next);
         return;
       }
-      const nextStage = node.stageKey !== undefined ? stagesByKey.get(node.stageKey) : undefined;
-      if (nextStage?.subShape !== undefined) throw new DriveConstructNotImplementedError("sub-shape", next, "the next stage calls a sub-shape (PR-3c-5).");
       // 1-safe: a stage that already holds a token gains no second one.
       if (!holds(next)) tokens.push({ node: next, enteredAt: now.toISOString() });
     };
