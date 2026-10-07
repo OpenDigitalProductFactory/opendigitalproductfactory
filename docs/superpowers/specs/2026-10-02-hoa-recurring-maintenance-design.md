@@ -65,7 +65,15 @@ Missing: a record for a maintained feature, a link from a recurring job to a ven
 | AC-HRM-PLACE-1 | OBJ-HRM-WHAT | A feature's point or boundary is saved as a territory-layout placement with `entityRef.kind` `maintained-feature`, survives a service-area save, and is drawn on the customer map with a kind letter. |
 | AC-HRM-PLAN-1 | OBJ-HRM-WHEN | A plan with a valid RRULE, time zone, start and optional supplier is saved as a recurring WorkEngagement for the feature, and the editor shows the next five dates. An invalid rule is refused with the reason. |
 | AC-HRM-MATERIALIZE-1 | OBJ-HRM-WHEN | The daily job materializes each active plan's occurrences 60 days ahead, idempotently. A cancelled or overridden occurrence stays so, and each occurrence carries the plan's supplier. |
+| AC-HRM-A11Y-1 | OBJ-HRM-WHAT | Drawing a point or boundary and pinning a site plan work by keyboard alone. Every feature kind on the map has its own letter and shape. The work order is offered as a structured DOCX alongside the PDF, and the plan editor and feature list meet WCAG 2.2 AA in automated checks. |
 | AC-HRM-ORDER-1 | OBJ-HRM-SCOPE | An occurrence's work order renders as a PDF naming the community, feature, kind, job, due date, supplier and the boundary corners or point. It is sent only by a staff action. |
+
+## 2a. Accessibility (WCAG 2.2 AA; UX review, 2026-10-06)
+
+- **Keyboard drawing.** MapLibre pans and zooms with the arrow and plus/minus keys. Drawing and site-plan pinning add an **Add corner here** button that places a corner at the centre crosshair. A keyboard user pans, adds corners, then finishes, with the same Undo and Finish buttons the mouse flow uses. Each corner is announced through a live region ("Corner 3 added"). This applies to the existing service-area drawing too, because it shares the interaction (`service-area-drawing.ts`).
+- **Kind never by colour alone (WCAG 1.4.1).** Each maintained-feature kind has its own letter and marker shape: a circle for points, an outline style for boundaries. The legend names each pair.
+- **The work order.** It is rendered as a structured DOCX, with headings, a table of the job and a text list of the boundary corners, alongside the PDF. Both come from the same document-engine call. The DOCX is the screen-reader copy, and the boundary is always given in text, never only as a picture.
+- **Forms.** The plan editor and feature list use the shared form primitives, with labelled fields, the rule preview announced as text, and focus order following the visual order. Status and error messages use the shared accessible feedback component.
 
 ## 3. Design choices and their reasons
 
@@ -108,7 +116,8 @@ There is no backfill, and it applies to any data state. The daily job is registe
   - placement save and coexistence with a service-area save (AC-HRM-PLACE-1);
   - plan validation and next-five preview (AC-HRM-PLAN-1);
   - materialization horizon, idempotence, exceptions and supplier inheritance (AC-HRM-MATERIALIZE-1);
-  - work order content (AC-HRM-ORDER-1).
+  - work order content (AC-HRM-ORDER-1);
+  - keyboard-only drawing through Add corner here and the live-region announcements, a distinct letter and shape per kind, a DOCX with headings and the corner list, and axe checks on the plan editor and feature list (AC-HRM-A11Y-1).
   - site-plan pinning and the style's same-origin rule (AC-HRM-UNDERLAY-1);
 - **UX:** on the contributor preview, pin a site plan, draw a lawn zone, add a weekly in-season mowing plan with a supplier, run the job, and open a work order.
 - **Migration** applies cleanly.
