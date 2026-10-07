@@ -22,14 +22,22 @@ for you, but only after you allow it.
 - **Who it acts as:** the Portfolio Advisor, on your behalf. Each closure
   records you as the person who allowed it, when, and your reason.
 
-**Turn it on.** An operator with both the `manage_platform` and
-`manage_backlog` permissions grants it with a reason
-(`grantAcceptanceSweepCloseAuthorisation`). It is stored as the platform
-setting `acceptance-sweep.close-authorisation`.
+**Where:** Admin > Platform Development, the card **Let the acceptance sweep
+close finished work**. It shows whether closing is on or off, who allowed it
+and when, their reason, the per-run limit, and how many items the last sweep
+closed (or why it closed nothing). Only people with both the
+`manage_platform` and `manage_backlog` permissions see the card.
 
-**Turn it off.** The same operator permissions revoke it with a reason
-(`revokeAcceptanceSweepCloseAuthorisation`). The next run closes nothing. The
-record keeps who allowed it and who stopped it.
+**Turn it on.** On the card, say why (at least 12 characters) and choose
+**Allow closing**. To change the per-run limit, open **Change how many it
+closes per run** first. It is stored as the platform setting
+`acceptance-sweep.close-authorisation`.
+
+**Turn it off.** On the same card, say why and choose **Stop closing**. The
+next run closes nothing. The record keeps who allowed it and who stopped it.
+
+The card calls the server actions `grantAcceptanceSweepCloseAuthorisation` and
+`revokeAcceptanceSweepCloseAuthorisation`, which check both permissions again.
 
 It also switches itself off if the person who allowed it is deactivated or
 loses `manage_backlog`, or if the Portfolio Advisor loses the grant that
