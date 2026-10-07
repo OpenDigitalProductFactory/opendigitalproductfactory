@@ -33,6 +33,8 @@ services:
   # CPU-only by default; customers with GPU passthrough can add
   # device reservations.
   ollama:
+    labels:
+      dpf.recreate-class: stateless
     profiles: ["runtime-external-ai"]
     image: ollama/ollama:latest
     restart: unless-stopped
