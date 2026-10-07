@@ -1260,7 +1260,8 @@
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
         "diagnosing-capability-drift-bi-5acbac50",
-        "safe-operating-rules"
+        "safe-operating-rules",
+        "how-self-upgrade-may-recreate-a-service"
       ]
     },
     "docs/architecture/complexity-shield-acceptance-standard.md": {
