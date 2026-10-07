@@ -63,6 +63,12 @@ export type WorkroomShapeConformance = {
   processOverseerPrincipalRef: string | null;
   processOverseerSource: "explicit" | "derived" | "none";
   currentStageKey: string | null;
+  /**
+   * Graph rooms only (GPP Phase 3c PR-3c-2): every stage the drive's marking
+   * holds, in document order, so the room view marks each one current. Absent
+   * on every sequential room, which has the one `currentStageKey`.
+   */
+  currentStageKeys?: string[];
   nextPermittedStageKey: string | null;
   observed: WorkroomShapeObservedState;
   deviations: WorkroomShapeConformanceDeviation[];
@@ -145,6 +151,11 @@ export type WorkroomShapeConformanceInput = {
     delivered: Readonly<Record<string, boolean>>;
     reworkRoute?: { from: string; to: string };
   };
+  /**
+   * Graph rooms only (PR-3c-2): every currently marked stage, echoed on the
+   * result as `currentStageKeys` for the room view. It changes no check.
+   */
+  currentStageKeys?: readonly string[];
 };
 
 function iso(value: Date | string | undefined): string {
@@ -531,6 +542,7 @@ export function evaluateWorkroomShapeConformance(
     processOverseerPrincipalRef,
     processOverseerSource,
     currentStageKey: input.currentStageKey,
+    ...(input.currentStageKeys ? { currentStageKeys: [...input.currentStageKeys] } : {}),
     nextPermittedStageKey: disposition === "continue"
       ? (input.proposedStageKey ?? nextPermittedStageKey)
       : disposition === "complete"

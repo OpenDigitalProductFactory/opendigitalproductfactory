@@ -35,7 +35,8 @@ import {
   reconcileStandingRoomNesting,
 } from "./workroom-drive-data";
 export { loadStandingRoomIds, STANDING_ROOM_SCAN_LIMIT } from "./workroom-drive-data";
-import { earnGraphReceipts, graphSnapshotFields, hasStoredDriveMarking } from "@/lib/work-management/drive-graph-tick";
+import { earnGraphReceipts, graphSnapshotFields, hasStoredDriveMarking, withLatchedBlockedReceipts } from "@/lib/work-management/drive-graph-tick";
+import { applyGraphDrivePlan } from "./workroom-drive-graph";
 import { earnEvidenceReceipts, type RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
 
 import { gateAtEntry } from "../quiescence-gates";
@@ -224,9 +225,12 @@ export async function applyDrivePlan(input: {
   effects: WorkroomDriveEffects;
 }): Promise<"dispatched" | "attention" | "stopped" | "skipped"> {
   const { room, plan, now, effects } = input;
-  const receipts = [...room.receipts];
+  // Graph shapes only (Phase 3c): marking carry-forward and the marked keys. Null for every sequential room.
+  const graph = graphSnapshotFields(plan, room.workspaceState);
+  const receipts = graph ? withLatchedBlockedReceipts(plan, room.receipts) : [...room.receipts];
   if (
-    plan.reason === EXECUTOR_WRITEBACK_UNAVAILABLE_REASON
+    !graph
+    && plan.reason === EXECUTOR_WRITEBACK_UNAVAILABLE_REASON
     && plan.stageKey
     && !receipts.some((receipt) =>
       receipt.stageKey === plan.stageKey && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND
@@ -255,15 +259,13 @@ export async function applyDrivePlan(input: {
   });
 
   const priorHold = readDriveHold(room.workspaceState);
-  // Graph shapes only (Phase 3c): marking carry-forward and the marked keys. Null for every sequential room.
-  const graph = graphSnapshotFields(plan, room.workspaceState);
   const hold = nextDriveHold(priorHold, { action: plan.action, reason: plan.reason, stageKey: plan.stageKey, conformance: plan.conformance,
     ...(graph?.markedKeys ? { markedKeys: graph.markedKeys } : {}) }, now);
   if (stallNoticeDue(hold) && effects.notifyStall) {
     await effects.notifyStall({ room, hold, reason: plan.reason, conformance: plan.conformance })
       .then(() => { hold.notifiedAt = now.toISOString(); }, () => undefined);
   }
-  const quiet = !driveTickIsNews(priorHold, hold, plan.action, graph?.iterationChanged);
+  const quiet = !driveTickIsNews(priorHold, hold, plan.action, graph ? graph.iterationChanged || graph.dispatching : undefined);
   const persist: WorkroomDriveEffects["persist"] = (args) =>
     effects.persist({ ...args, quiet: quiet && !args.observationOnly, ...(graph ? { graphShape: true } : {}) });
 
@@ -293,6 +295,8 @@ export async function applyDrivePlan(input: {
     hold,
     ...graph?.fields,
   };
+  // A graph room dispatches one task per branch (PR-3c-2); a sequential room never takes this branch.
+  if (graph) return applyGraphDrivePlan({ room, plan, now, effects, snapshot, persist });
 
   if (plan.action === "do_not_wake") {
     if (plan.shapeKey) {

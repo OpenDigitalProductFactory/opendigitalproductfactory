@@ -156,8 +156,10 @@ guards did.
     pregate had just written said INCONCLUSIVE (`blocked_wrapper_exited`, "not a
     product verdict") and `land` stopped on "gate failed". `gate:wait` now
     re-reads the record after an exit-1 failure and retries on INCONCLUSIVE.
-    The runner side — a network error at base refresh recorded as FAIL with no
-    reason (2026-10-02) — is a separate fix.
+    The runner side is fixed too: a network error at base refresh (2026-10-02),
+    or a Docker or disk failure setting up the slot, used to exit 1 and be
+    recorded as a reasonless `failed`. Those now exit
+    `EXIT_RUNNER_PREREQUISITE_UNAVAILABLE`, recorded as infrastructure.
 11. ~~**The gate could wait on its own parents.**~~ Admission matches live
     "mutators" by command line. On 2026-10-06 `pnpm land` was launched from a
     shell whose `-c` string carried a commit message naming the runner script;

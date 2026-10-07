@@ -143,7 +143,9 @@ describe("the guard refuses a graph shape injected into the registry", () => {
   it("the Phase 3c fixtures (unknown agent, flags off, not listed) are refused", async () => {
     const problems = await guardProblems([PARALLEL_FIXTURE, DEADLINE_FIXTURE]);
     expect(problems).toContain(`${ref(PARALLEL_FIXTURE)}: not on KNOWN_GRAPH_SHAPES`);
-    expect(problems).toContain(`${ref(PARALLEL_FIXTURE)}: E-NOT-EXECUTABLE/parallel-split-join node:p`);
+    // Parallel split/join is executable since PR-3c-2: the parallel fixture is refused for the allow list
+    // (and its unknown agent), never for E-NOT-EXECUTABLE. The deadline flag is still off.
+    expect(problems).not.toContain(`${ref(PARALLEL_FIXTURE)}: E-NOT-EXECUTABLE/parallel-split-join node:p`);
     expect(problems).toContain(`${ref(DEADLINE_FIXTURE)}: E-NOT-EXECUTABLE/stage-deadline stage:b`);
   }, 120_000);
 });

@@ -308,6 +308,15 @@ services:
       # The key id defaults to "local-install" when unset.
       DPF_GPP_PERMIT_SECRET: ${DPF_GPP_PERMIT_SECRET:-}
       DPF_GPP_PERMIT_KEY_ID: ${DPF_GPP_PERMIT_KEY_ID:-}
+      # Dedicated HMAC keys for attention reach links and coworker delegation
+      # receipts (apps/web/lib/attention/reach-link.ts,
+      # apps/web/lib/coworker-service-catalog/delegation-receipt.ts,
+      # BI-F6929F50). Provisioned exactly like the permit key above. Optional:
+      # without them both fall back to AUTH_SECRET, as before. The receipt key
+      # id defaults to "local-install" when unset.
+      DPF_ATTENTION_REACH_SECRET: ${DPF_ATTENTION_REACH_SECRET:-}
+      DPF_DELEGATION_RECEIPT_SECRET: ${DPF_DELEGATION_RECEIPT_SECRET:-}
+      DPF_DELEGATION_RECEIPT_KEY_ID: ${DPF_DELEGATION_RECEIPT_KEY_ID:-}
       HIVE_CONTRIBUTION_TOKEN: ${HIVE_CONTRIBUTION_TOKEN:-}
       HIVE_OPS_TOKEN: ${HIVE_OPS_TOKEN:-}
       INNGEST_BASE_URL: http://inngest:8288

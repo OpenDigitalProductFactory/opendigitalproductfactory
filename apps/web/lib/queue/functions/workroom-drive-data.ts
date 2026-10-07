@@ -180,11 +180,16 @@ export async function loadStageDispatchTimes(
  *
  * - A dispatch row counts for every stage it names in
  *   `payload.dispatchedStageKeys` (or, when absent, its single
- *   `payload.stageKey`), within the room's current cycle.
- * - An attention row counts for a stage the room is STILL waiting on as a
+ *   `payload.stageKey`), within the room's current cycle. A graph tick that
+ *   dispatched one branch while another paused records the aggregate action
+ *   `pause`, so a row carrying `dispatchedStageKeys` counts whatever its
+ *   action (PR-3c-2); a lease-held or unowned row carries an empty list.
+ * - A drive row counts for a stage the room is STILL waiting on as a
  *   governed decision: an entry of the stored `pendingAttentions` with reason
- *   `governed_decision`, matched against the row's own `pendingAttentions`. As
- *   for the sequential loader, the attention branch is not cycle-scoped.
+ *   `governed_decision`, matched against the row's own `pendingAttentions`.
+ *   The row may be an attention row or, when another branch dispatched in the
+ *   same tick, a dispatch row (PR-3c-2). As for the sequential loader, this
+ *   branch is not cycle-scoped.
  *
  * The latest row per stage wins, so a rework's fresh dispatch bounds the new
  * iteration's evidence.
@@ -213,7 +218,7 @@ export async function loadStageDispatchTimesByStage(
       WHERE w."capsuleId" = ANY(${[...capsuleIds]}::text[])
         AND jsonb_typeof(w."workspaceState" #> '{workroomDrive,marking}') = 'object'
         AND a."kind" = 'workroom-drive'
-        AND a."payload" ->> 'action' = 'dispatch_agent'
+        AND (a."payload" ->> 'action' = 'dispatch_agent' OR jsonb_typeof(a."payload" -> 'dispatchedStageKeys') = 'array')
         AND a."payload" ->> 'lastCycleKey' = w."workspaceState" #>> '{workroomDrive,lastCycleKey}'
       UNION ALL
       SELECT w."capsuleId", p ->> 'stageKey' AS "stageKey", a."recordedAt" AS "dispatchedAt"
@@ -224,7 +229,7 @@ export async function loadStageDispatchTimesByStage(
       ) AS p
       WHERE w."capsuleId" = ANY(${[...capsuleIds]}::text[])
         AND jsonb_typeof(w."workspaceState" #> '{workroomDrive,marking}') = 'object'
-        AND a."kind" = 'workroom-drive-attention'
+        AND a."kind" IN ('workroom-drive-attention', 'workroom-drive')
         AND p ->> 'reason' = 'governed_decision'
         AND jsonb_typeof(w."workspaceState" #> '{workroomDrive,pendingAttentions}') = 'array'
         AND EXISTS (

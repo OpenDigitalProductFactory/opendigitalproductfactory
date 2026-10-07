@@ -2,6 +2,31 @@ import { describe, expect, it } from "vitest";
 
 import { readStoredWorkroomDriveState, projectStoredWorkroomDriveObservation } from "./workroom-drive-state";
 
+// GPP Phase 3c PR-3c-2: a graph room's marking reaches the room view as currentStageKeys.
+describe("projectStoredWorkroomDriveObservation: several current stages", () => {
+  const marking = {
+    format: "drive-marking/1", cycleKey: "c",
+    tokens: [
+      { node: "node:j", from: "stage:b", enteredAt: "2026-03-02T09:00:00.000Z" },
+      { node: "stage:c", enteredAt: "2026-03-02T09:00:00.000Z", taskId: "t-c" },
+      { node: "stage:d", enteredAt: "2026-03-02T09:00:00.000Z" },
+    ],
+    iterations: { c: 1, bad: -1 }, reworkTaken: {}, deadlines: {}, children: {},
+  };
+
+  it("lists every marked stage (never a join arrival) with its iteration", () => {
+    expect(projectStoredWorkroomDriveObservation({ workroomDrive: { stageKey: "c", marking } }))
+      .toMatchObject({ currentStageKey: "c", currentStageKeys: ["c", "d"], stageIterations: { c: 1 } });
+  });
+
+  it("adds no key for a room with no marking, so a sequential room's observation is unchanged", () => {
+    const observed = projectStoredWorkroomDriveObservation({ workroomDrive: { stageKey: "c" } });
+    expect(Object.hasOwn(observed, "currentStageKeys")).toBe(false);
+    expect(Object.hasOwn(observed, "stageIterations")).toBe(false);
+    expect(Object.hasOwn(projectStoredWorkroomDriveObservation({ workroomDrive: { stageKey: "c", marking: { tokens: "x" } } }), "currentStageKeys")).toBe(false);
+  });
+});
+
 describe("readStoredWorkroomDriveState", () => {
   it("retains a recorded role wait in the shared process observation", () => {
     expect(projectStoredWorkroomDriveObservation({ workroomDrive: {

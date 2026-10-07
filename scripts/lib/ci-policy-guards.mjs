@@ -276,6 +276,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-8541D491: every install path provisions the GPP permit signing key
       // and a self-upgrade never rotates it.
       conformanceTest("scripts/installer/gpp-permit-secret-contract.test.mjs"),
+      // BI-F6929F50: every install path provisions the reach-link and
+      // delegation-receipt signing keys and a self-upgrade never rotates them.
+      conformanceTest("scripts/installer/dedicated-signing-keys-contract.test.mjs"),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
@@ -489,6 +492,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("compose-resource-budgets-guard", "Compose Resource Budgets Guard", [
       node("--test", "scripts/check-compose-resource-budgets.test.mjs"),
       node("scripts/check-compose-resource-budgets.mjs"),
+    ], { inputs: ["code"] }),
+    // BI-95BB9CB1: a service whose PID 1 does not reap children (a shell
+    // entrypoint, caddy) leaked tens of thousands of zombies until Docker
+    // could not fork. Those services run Docker's init.
+    guard("compose-init-reaping-guard", "Compose Init Reaping Guard", [
+      conformanceTest("scripts/compose-init-reaping.test.mjs"),
     ], { inputs: ["code"] }),
     guard("n-minus-one-caller-honesty", "N-1 Caller Honesty", [
       node("--test", "scripts/check-n-minus-one-caller-honesty.test.mjs"),
