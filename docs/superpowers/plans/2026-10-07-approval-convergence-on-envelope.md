@@ -94,7 +94,7 @@ Branch `feat/approval-convergence-substrate`. Acceptance: AC-CHAR, AC-INVENTORY,
 
 ## PR-B: new requests raise envelopes
 
-Branch `feat/approval-convergence-raise`. Acceptance: AC-RAISE, AC-RUN (wired), AC-BOUNDARY, AC-LEAVE, and AC-UX (B items). It is merge-blocked per the gate table above.
+Branch `feat/approval-convergence-raise`. Acceptance: AC-RAISE, AC-RUN (wired), AC-BOUNDARY, AC-LEAVE, AC-OVERRIDE, and AC-UX (B items). It is merge-blocked per the gate table above.
 
 | Task | Change | Files |
 |---|---|---|
@@ -105,6 +105,7 @@ Branch `feat/approval-convergence-raise`. Acceptance: AC-RAISE, AC-RUN (wired), 
 | B5 (S5) | `proposeLeaveDecision` writes the assistant message and the `decisionInteractionId` link, but no proposal. `approveLeaveRequest` and `rejectLeaveRequest` call `recordDecisionOutcome` (`lib/decision/decision-outcome-store.ts:109`) on the request's `decisionInteractionId` when one exists. `settleLeaveDecisionProposal` stays for legacy rows. The Needs-you leave item moves to `business-approvals`, deduplicated by `requestId`. Its audience is unchanged, and the leak is recorded as FU-8 | `lib/workforce/leave/decide-proposal.ts`, `lib/actions/leave.ts`, `lib/attention/sources/business-approvals.ts`, `lib/attention/sources/agent-proposal.ts` |
 | B6 | Source guard: any non-test call to `agentActionProposal.create` fails | `lib/coworker/no-new-proposals.test.ts` |
 | B7 | Docs: user guide `getting-started/ai-coworker.md` (lines 59 and 140) and `ai-workforce/index.md:103`; the operations-map copy; the approval-cards spec "As built" note | as named |
+| B8 (W6) | **Admin override.** `approveEnvelope` / `denyEnvelope` allow only the delegate today (`assertCallerIsDelegate`, `lib/coworker/envelope-actions.ts:124`). Add an on-behalf path. The caller must hold the admin capability the user-management surface checks (verify it, don't invent one) and must give a non-empty reason. The `humanApproval` marker records `{ by, onBehalfOf, reason }`, and an audit row names both people. The card offers "Decide on their behalf" only to an admin who is not the delegate, and the settled card reads "Decided by <admin> on behalf of <owner>: <reason>". The delegate path is unchanged. This covers envelopes raised today too, since none of them has an override | `lib/coworker/envelope-actions.ts`, `lib/coworker/envelope-routes.ts`, `components/attention/CoworkerEnvelopeApproval.tsx` |
 
 **Named characterisation deltas (only these):**
 - **S1, chat:** the proposal row becomes an envelope (or a list of envelopes).

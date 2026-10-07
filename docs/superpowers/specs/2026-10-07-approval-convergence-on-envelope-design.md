@@ -378,10 +378,10 @@ PR-B and PR-C are merge-blocked until each item below has a recorded founder ans
 | W1, W4 | WWMD (platform) | Accept: one lifetime rule across every approval surface | DI-63CCA242F626, high confidence, followed |
 | W2, W5 | WWMD (platform) | Accept: enforce grants at raise and run; refuse plaintext-secret and unprovable requests | DI-A7B848DB59BC, high confidence, followed |
 | W3, Q1 | WWMD (platform) | Accept W3 (remove the ops-token path); Q1: no second approver | DI-587137D2BB72, high confidence, followed |
-| W6 | WWWD (the operating organisation) | **Open, founder call.** The organisation's recorded stance supports the narrowing (alignment 1.0, confidence 0.75). Because the decision is high-risk, the gate still escalates it to a person | DI-4A1553CA4E27 |
-| Q2 | Founder (kernel doctrine edit) | **Open, founder call** | — |
+| W6 | WWWD (the operating organisation), escalated to the founder | **Answered, with a change.** The person whose authority is lent (for a scheduled task, its owner) is the primary approver. An admin can still **override** and decide in their place, for example when that person has left or their sign-in doesn't work. An override records the overriding admin, the named owner and a reason, and the card says it was decided on someone else's behalf. The founder also observed that on this install most work runs under the shared admin account, which makes the owner and the admin the same principal (FU-9) | DI-4A1553CA4E27 escalated; founder answer 2026-10-07 |
+| Q2 | Founder (kernel doctrine edit) | **Approved:** add the propose-boundary line to the principle page | founder answer 2026-10-07 |
 
-PR-B and PR-C remain merge-blocked on W6 only. Q2 blocks only the principle-page line in PR-A.
+Every waiver and question now has a recorded answer. **AC-OVERRIDE** (PR-B, plan B8): a non-delegate admin can approve or decline with a reason. The record and the card name the admin, the owner and the reason. A non-admin non-delegate is still refused, and the delegate path is unchanged. The W6 admin override is in scope for PR-B (raise and approve) and PR-C (legacy rows keep today's rule anyway).
 
 ## 11. Contradictions found (code against item and docs): 10
 
@@ -408,3 +408,4 @@ Gap 2 (§4), the stranded approval, is a defect, not a contradiction. It is file
 - **FU-6:** dead `propose_file_change` stamping (`build-ops-pack.ts:398`).
 - **FU-7:** autonomous loop callers silently drop proposal-mode calls (`autonomous-work-run.ts:589`).
 - **FU-8:** leave and proposal Needs-you items are visible to every operator (`agent-proposal.ts:109`).
+- **FU-9:** most work on this install runs under the shared admin account, so "the person whose authority is lent" and "an admin" are often the same principal. Owner-scoped approval only means something once people work under their own sign-ins. Track nudging operators off the shared admin account (per-person sign-in, and showing who acted) as a separate item.
