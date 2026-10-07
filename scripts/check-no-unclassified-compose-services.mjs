@@ -25,10 +25,10 @@
 // file, and every file that states a class must agree.
 
 import { readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import { parseComposeServices } from "./check-capability-compose-profiles.mjs";
+import { gitText } from "./lib/git.mjs";
 
 export const RECREATE_CLASS_LABEL = "dpf.recreate-class";
 export const RECREATE_CLASSES = new Set(["stateless", "data-owner", "managed"]);
@@ -68,9 +68,7 @@ export function checkComposeRecreateClasses(files) {
 }
 
 function trackedComposeFiles() {
-  return execFileSync("git", ["ls-files", "docker-compose*.yml"], { encoding: "utf8" })
-    .split("\n")
-    .filter(Boolean);
+  return gitText(["ls-files", "docker-compose*.yml"]).split("\n").filter(Boolean);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

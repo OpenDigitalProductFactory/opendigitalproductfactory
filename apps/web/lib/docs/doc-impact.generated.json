@@ -2108,6 +2108,9 @@
     "scripts/check-no-unattributable-deferral.mjs": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "scripts/check-no-unclassified-compose-services.mjs": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
     "scripts/check-no-unlocalized-ui.mjs": [
       "docs/architecture/localization-runbook.md"
     ],
@@ -2968,6 +2971,7 @@
       "packages/db/data/platform-runtime-capabilities.json",
       "scripts/capability-service-catalog.generated.json",
       "scripts/check-capability-compose-profiles.mjs",
+      "scripts/check-no-unclassified-compose-services.mjs",
       "scripts/compile-capability-service-catalog.mjs",
       "scripts/dpf-compose.mjs",
       "scripts/lib/resolve-capability-compose-profiles.mjs",
