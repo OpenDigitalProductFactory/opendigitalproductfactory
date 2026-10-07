@@ -36,6 +36,14 @@ After you confirm, the row shows its progress: **Saving…**, then **Saved**, or
 **Couldn't save** with a **Retry** button. If a change fails it is rolled back,
 so the list always matches what customers actually see.
 
+## Writing your section text
+
+The welcome banner and your about section show your own words. Open the
+section's **Manage** button and choose **Edit … text**. The welcome banner has a
+headline and a subheading (left blank, they fall back to your business name and
+tagline); the about section has one block of text. Visitors see the change as
+soon as you save, so write it the way you would say it to a customer.
+
 ## Fixing generated content that doesn't fit
 
 If setup or an earlier business type left behind content that doesn't belong —

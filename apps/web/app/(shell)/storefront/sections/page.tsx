@@ -17,7 +17,7 @@ export default async function SectionsPage() {
   const sections = await prisma.storefrontSection.findMany({
     where: { storefrontId: config.id },
     orderBy: { sortOrder: "asc" },
-    select: { id: true, type: true, title: true, sortOrder: true, isVisible: true },
+    select: { id: true, type: true, title: true, sortOrder: true, isVisible: true, content: true },
   });
 
   const vocabulary = getVocabulary(
