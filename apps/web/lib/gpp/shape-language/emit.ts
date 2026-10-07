@@ -133,6 +133,7 @@ function lowerStage(stage: DocumentStage): DocumentStage {
   };
   // Absent means undeclared; [] is a declaration that the stage reaches nothing.
   if (stage.tools !== undefined) lowered.tools = [...stage.tools];
+  if (stage.mandatedTools !== undefined) lowered.mandatedTools = [...stage.mandatedTools];
   if (stage.binding !== undefined) lowered.binding = copyBinding(stage.binding);
   if (stage.deadline !== undefined) lowered.deadline = { afterDays: stage.deadline.afterDays, description: stage.deadline.description };
   if (stage.subShape !== undefined) lowered.subShape = stage.subShape;

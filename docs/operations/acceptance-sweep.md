@@ -59,6 +59,45 @@ Each run's summary in the Acceptance room has a `closing` section:
 The headline ends with either `N closed under operator pre-authorisation` or
 `closing off (<reason>)`.
 
+## Who verifies an item that is not closable
+
+With routing on, an item that has waited past the aged threshold gets its own
+**Acceptance verification** room, bound to one coworker who checks it on the
+live install and records the evidence. The sweep never picks the item's
+author, an agent that runs only outside the platform (such as the external
+Claude, Codex or Grok agents), or a person.
+
+- **Small and break-fix items** are accepted by a runtime check or the
+  failing-to-passing test. The coworker is the first active, in-platform
+  coworker (by agent id) holding the grant for `record_execution_evidence`
+  (`build_evidence`, or `backlog_write`, which includes it). The room brief
+  tells it to record the check with `record_execution_evidence`.
+- **Medium and larger items** go to the coworker holding the acceptance
+  reviewer grant, as before.
+
+When nobody qualifies, the summary lists the item as unroutable with the
+reason: `no-eligible-reviewer` (grant the lane to a coworker other than the
+author) or `no-in-platform-coworker` (only external agents hold it).
+
+## How the portal knows work was merged
+
+Merged platform work closes on the merge signal: the portal checks whether the
+item's branch head, or its linked pull request, is on `origin/main`. On an
+install it reads the Build Studio workspace clone (`/sandbox-workspace`); a
+host with a source checkout can point `DPF_HOST_SOURCE_ROOT` at it instead.
+
+- **Kept current:** the code-graph job fetches `origin/main` into that clone
+  every 15 minutes, and the completion step fetches once more just before it
+  checks. Only the `origin/main` ref moves. The fetch runs as the clone's
+  owner, and a failed fetch changes nothing.
+- **Ownership:** the portal runs as root while the clone belongs to the
+  workspace user, so each check trusts exactly that clone for that one git
+  command (BI-DC2758DE). Nothing is trusted globally.
+- **"The merge-through-gates signal could not run":** no checked location
+  could answer. This means "unknown", never "not merged". Check that the
+  clone exists and has an `origin/main`. The item stays awaiting acceptance
+  with its evidence until the signal can answer.
+
 ## Known limit
 
 The sweep reads each item's verdict from the same readiness view as

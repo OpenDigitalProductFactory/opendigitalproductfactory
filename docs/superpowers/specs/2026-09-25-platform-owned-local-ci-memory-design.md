@@ -128,14 +128,103 @@ is the safe error.
   - The founder's position in BI-D3BF53A9 ("providing more memory … is
     fundamentally wrong") governs any VM-size change. The measured need decides,
     not a guess.
-- **C: wedge detection and containment.**
-  - Detect processes in D-state in FUSE/9p waits past a threshold.
-  - Raise one platform condition with evidence.
-  - Detach platform-labelled helpers from Docker's view.
-  - A VM restart is operator-approved through the portal only.
-- **D: slot substrate.** Slot Postgres needs a restart policy and an
-  ensure-start (BI-277ECBDB). After the 2026-09-25 WSL restart,
+- **C: substrate reconciler (BI-4D08C53C, as built).** The Inngest cron
+  `ops/substrate-reconciler` runs every 5 minutes at offset :04, is gated by
+  quiescence, and appears in the scheduled-jobs catalog. The logic lives in
+  `apps/web/lib/platform-runtime/substrate-reconciler.ts` with injected I/O.
+  - **Restart.** It starts an exited compose-project container when both of
+    these hold:
+    - its service is required by the enabled runtime capabilities
+      (`loadOperationalCapabilityState().serviceRequirements`);
+    - its restart policy is `always` or `unless-stopped`.
+
+    One-shot init containers, optional services and disabled services are never
+    started. When the required set cannot be read, nothing is restarted. Each
+    restart opens a warn MonitorIssue `substrate:service-restarted:<service>`,
+    or an error if the start fails. The issue resolves once the container is
+    running. A repeat means something keeps stopping the service; the caller
+    is tracked on BI-547B788D.
+  - **Wedge detection.** It reads every running container's processes through
+    the Engine `top` endpoint, where ps runs inside the VM. Any process in
+    D state for 10 minutes or more raises one error MonitorIssue,
+    `substrate:docker-vm-wedged`. The issue names the processes and says that
+    only a VM restart clears them, which also stops the portal, every
+    container and running gates. It resolves when every `top` is readable and
+    clean.
+  - **Deferred, then delivered in E3.** Executing the VM restart needs a host
+    executor, which the portal container does not have. WWMD DI-46E06C5441CF chose detect-and-report
+    now and an operator-approved restart through a designed host executor later.
+    Detaching helpers from Docker's view is dropped: the reconciler reports the
+    wedge, and the cache-drop guard from slice A prevents the helpers.
+- **D: slot substrate (BI-D2402DAB, child of BI-277ECBDB).** Slot Postgres is
+  provisioned with `--restart unless-stopped`. On reuse, the runner applies
+  `docker update --restart unless-stopped` before `docker start`, so existing
+  containers converge on their next gate. The ensure-start (`docker start` and
+  then `pg_isready`) already existed. After the 2026-09-25 WSL restart,
   `dpf-local-ci-postgres-0` stayed exited (255).
+- **Installer reclaim key (BI-7371D444).** `install-dpf.ps1` writes
+  `autoMemoryReclaim=gradual` under `[experimental]`, the only section where WSL
+  reads it (WWMD DI-BC3B38A641C7).
+
+- **E: the remaining substrate outcomes (one PR, 2026-10-07).**
+  - **E1, local-CI substrate visibility (BI-277ECBDB parts A–C).**
+    - *Precondition before claiming:* `scripts/lib/local-ci-slot-substrate.mjs`
+      probes every slot's PostgreSQL container before the gate claims a lease,
+      and starts a stopped one itself. It refuses to claim only when no slot's
+      container can run, with gate status `blocked_slot_substrate_unavailable`
+      and exit 9.
+    - *Distinct states:* `pregate:status` reads `queued behind N other claims`
+      for a queue, and `BLOCKED — slot substrate unavailable: <container> is
+      <state>` for a dead substrate. The blocked state names Docker's refusal as
+      the remedy instead of advising a re-run.
+    - *Runner:* a slot database that never becomes ready now exits as
+      infrastructure. Before, the run continued against a placeholder URL and
+      could fail as if the diff were at fault.
+    - *Pool liveness:* `apps/web/lib/nonprod/local-ci-pool-liveness.ts` counts
+      leases admitted within 90 minutes that ended without a recorded result.
+      The substrate reconciler raises `local-ci:pool-admissions-without-results`
+      when at least three did and none completed, and resolves it on the next
+      recorded result.
+  - **E2, self-upgrade leaves the sandbox running (BI-547B788D AC-1, AC-3).**
+    Step 7b of `scripts/promote.sh` reads the recreated sandbox back. It must
+    be running on the image the service now resolves to. A failed or stale
+    refresh adds `sandbox` to the durable service-reconcile outcome as degraded,
+    instead of leaving only a stderr warning that dies with the promoter. The
+    functional harness covers the failed-recreate, exited and stale-image
+    branches. The reconciler's restart condition now records when the stopped
+    container exited, and with what code, so the external stopper can be matched
+    against host process audit. The repository holds no code that stops the
+    main sandbox with a 3-second grace.
+  - **E3, the operator-approved Docker VM restart (BI-F8F8C383; WWMD
+    DI-46E06C5441CF, placement DI-877D45C6C0CC).**
+    - *Executor:* the native Windows Edge agent is the only DPF process outside
+      the VM. It already polls the signed, machine-bound remote-action channel,
+      so the restart is a new privileged action type,
+      `substrate.docker-vm.restart`, rather than new substrate.
+    - *Gating:* the action needs high risk, machine binding, an approved
+      ChangeRequest that is re-checked at claim, and a per-node allowlist entry.
+      Its only parameter is the issue key it clears.
+    - *Operator surface:* the portal Health tab shows a control only while
+      `substrate:docker-vm-wedged` is open. The control asks for one danger-tone
+      confirmation that states the impact, including running gates. The server
+      action records the approved change, drains the platform through
+      quiescence (trigger `docker-vm-restart`), and then queues the action.
+      Nothing queues it automatically.
+    - *Host procedure* (`internal/action/docker_vm_restart.go`):
+      1. Stop Docker Desktop.
+      2. Run `wsl.exe --shutdown`.
+      3. Move the orphaned IPC socket directories aside (BI-DDA569D9).
+      4. Start Docker Desktop and wait for the engine.
+      5. Run the DPF autostart task.
+
+      Its commands go through an allowlist of `taskkill`, `wsl.exe`, `docker`
+      and `schtasks`, so a host reboot cannot be issued.
+    - *Reporting back:* the runner keeps a terminal report the portal could not
+      take and delivers it before the next claim. The VM restart has a 30-minute
+      claim timeout.
+    - *Availability:* the channel stays off unless the install enables remote
+      action dispatch and the node allowlists the type. Without a native agent,
+      the control says so instead of offering a shell.
 
 ## Out of scope
 

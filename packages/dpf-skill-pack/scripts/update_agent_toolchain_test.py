@@ -845,6 +845,138 @@ class ClaudeInstallTest(unittest.TestCase):
         )
 
 
+class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
+    """BI-B9F359AC: project-scope records and project .mcp.json leftovers."""
+
+    class _Result:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def _home(self, root: Path, entries: list[dict]) -> Path:
+        home = root / "home"
+        path = updater.claude_installed_plugins_path(home)
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"version": 2, "plugins": {updater.CLAUDE_PLUGIN_ID: entries}}))
+        return home
+
+    def _project(self, root: Path, name: str) -> Path:
+        project = root / name
+        project.mkdir()
+        return project
+
+    def test_stale_project_records_are_updated_in_their_project(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = self._project(root, "stale")
+            current = self._project(root, "current")
+            home = self._home(root, [
+                {"scope": "local", "projectPath": str(root), "version": "0.2.5"},
+                {"scope": "project", "projectPath": str(stale), "version": "0.2.5"},
+                {"scope": "project", "projectPath": str(current), "version": "0.2.8"},
+            ])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", return_value=self._Result()
+            ) as run:
+                result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+        self.assertEqual(result["updated"], [str(stale)])
+        self.assertEqual(result["current"], [str(current)])
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(
+            run.call_args[0][0],
+            ["/fake/claude", "plugin", "update", "dpf-platform@dpf-platform-local", "--scope", "project"],
+        )
+        self.assertEqual(run.call_args[1]["cwd"], str(stale))
+
+    def test_records_for_missing_projects_are_reported_not_touched(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gone = str(root / "gone")
+            home = self._home(root, [{"scope": "project", "projectPath": gone, "version": "0.2.5"}])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run"
+            ) as run:
+                result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+        self.assertEqual(result["pruned"], [gone])
+        run.assert_not_called()
+
+    def test_failed_update_is_reported(self) -> None:
+        failed = self._Result()
+        failed.returncode = 1
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = self._project(root, "stale")
+            home = self._home(root, [{"scope": "project", "projectPath": str(stale), "version": "0.2.5"}])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", return_value=failed
+            ):
+                result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+        self.assertEqual(result["failed"], [str(stale)])
+
+    def test_dry_run_reports_without_running_or_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = self._project(root, "stale")
+            (stale / ".mcp.json").write_text(json.dumps(
+                {"mcpServers": {"dpf": {"type": "http", "url": "https://localhost/api/mcp/v1?tier=full"}}}
+            ))
+            home = self._home(root, [{"scope": "project", "projectPath": str(stale), "version": "0.2.5"}])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run"
+            ) as run:
+                lines = updater.converge_claude_project_connectors(home, "0.2.8", dry_run=True)
+            self.assertTrue((stale / ".mcp.json").exists())
+            self.assertFalse((stale / ".mcp.json.legacy-bak").exists())
+        run.assert_not_called()
+        self.assertIn(f"    would update to 0.2.8: {stale}", lines)
+        self.assertTrue(any("would disable duplicate dpf connector" in line for line in lines))
+
+    def test_dpf_only_project_mcp_json_is_renamed_to_a_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            original = json.dumps({"mcpServers": {"dpf": {
+                "type": "http", "url": "${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}",
+                "headers": {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"},
+            }}})
+            (project / ".mcp.json").write_text(original)
+            backup = updater.retire_duplicate_project_mcp_json(project, dry_run=False)
+            self.assertEqual(backup, str(project / ".mcp.json.legacy-bak"))
+            self.assertFalse((project / ".mcp.json").exists())
+            self.assertEqual((project / ".mcp.json.legacy-bak").read_text(), original)
+
+    def test_existing_backup_is_never_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / ".mcp.json.legacy-bak").write_text("older")
+            (project / ".mcp.json").write_text(json.dumps(
+                {"mcpServers": {"dpf": {"url": "https://localhost/api/mcp/v1?tier=full"}}}
+            ))
+            backup = updater.retire_duplicate_project_mcp_json(project, dry_run=False)
+            self.assertEqual(backup, str(project / ".mcp.json.legacy-bak.1"))
+            self.assertEqual((project / ".mcp.json.legacy-bak").read_text(), "older")
+
+    def test_other_servers_survive_and_only_the_duplicate_is_dropped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            other = {"command": "npx", "args": ["other-server"]}
+            (project / ".mcp.json").write_text(json.dumps({"mcpServers": {
+                "dpf": {"url": "https://localhost/api/mcp/v1?tier=full"}, "other": other,
+            }}))
+            backup = updater.retire_duplicate_project_mcp_json(project, dry_run=False)
+            kept = json.loads((project / ".mcp.json").read_text())
+            self.assertEqual(kept, {"mcpServers": {"other": other}})
+            self.assertIn("dpf", json.loads(Path(backup).read_text())["mcpServers"])
+
+    def test_unrelated_or_absent_project_mcp_json_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self.assertIsNone(updater.retire_duplicate_project_mcp_json(project, dry_run=False))
+            content = json.dumps({"mcpServers": {"dpf": {"url": "https://example.com/other/endpoint"}}})
+            (project / ".mcp.json").write_text(content)
+            self.assertIsNone(updater.retire_duplicate_project_mcp_json(project, dry_run=False))
+            self.assertEqual((project / ".mcp.json").read_text(), content)
+
+
 class AntigravityMcpConfigTest(unittest.TestCase):
     def test_skipped_when_agy_absent(self) -> None:
         with patch.object(updater, "resolve_antigravity_binary", return_value=None):

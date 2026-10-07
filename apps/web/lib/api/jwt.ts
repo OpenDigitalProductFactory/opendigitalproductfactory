@@ -35,6 +35,24 @@ export type AccessTokenPayload = {
 const ACCESS_TOKEN_TTL = "15m";
 
 /**
+ * Issuer and audience of mobile API access tokens (BI-7B4B5F5D).
+ *
+ * Several token kinds are HS256-signed with the same AUTH_SECRET: these access
+ * tokens, MCP session tokens (lib/mcp/session-token.ts), automation sign-in
+ * links (lib/govern/automation-sign-in.ts) and social-auth temp tokens
+ * (lib/govern/social-auth.ts). The signature alone proves only that the portal
+ * minted the token, not which surface it was minted for, so the verifier
+ * requires this exact issuer and audience. A token without them is refused,
+ * including an access token minted before this change: the mobile client
+ * answers that 401 by refreshing (packages/api-client/src/client.ts), and the
+ * refresh route mints a token that carries them.
+ */
+export const MOBILE_ACCESS_ISSUER = "dpf-portal";
+export const MOBILE_ACCESS_AUDIENCE = "dpf-mobile-api";
+/** RFC 9068 access-token media type. */
+const MOBILE_ACCESS_TOKEN_TYPE = "at+jwt";
+
+/**
  * Sign a short-lived (15-minute) JWT access token.
  */
 export async function signAccessToken(payload: AccessTokenPayload): Promise<string> {
@@ -45,21 +63,33 @@ export async function signAccessToken(payload: AccessTokenPayload): Promise<stri
     ...(payload.amr ? { amr: payload.amr } : {}),
     ...(payload.acr ? { acr: payload.acr } : {}),
   })
-    .setProtectedHeader({ alg: "HS256" })
+    .setProtectedHeader({ alg: "HS256", typ: MOBILE_ACCESS_TOKEN_TYPE })
     .setSubject(payload.sub)
+    .setIssuer(MOBILE_ACCESS_ISSUER)
+    .setAudience(MOBILE_ACCESS_AUDIENCE)
     .setIssuedAt()
     .setExpirationTime(ACCESS_TOKEN_TTL)
     .sign(getSecret());
 }
 
 /**
- * Verify a JWT access token and return the decoded payload.
- * Throws on invalid/expired tokens.
+ * Verify a mobile API access token and return the decoded payload.
+ * Throws on an invalid or expired token, and on any token minted for another
+ * surface (wrong or missing issuer/audience/type, or no subject).
  */
 export async function verifyAccessToken(token: string): Promise<AccessTokenPayload> {
-  const { payload } = await jwtVerify(token, getSecret());
+  const { payload } = await jwtVerify(token, getSecret(), {
+    issuer: MOBILE_ACCESS_ISSUER,
+    audience: MOBILE_ACCESS_AUDIENCE,
+    typ: MOBILE_ACCESS_TOKEN_TYPE,
+    algorithms: ["HS256"],
+    requiredClaims: ["sub", "exp", "iat"],
+  });
+  if (typeof payload.sub !== "string" || payload.sub.length === 0) {
+    throw new Error("Access token has no subject");
+  }
   return {
-    sub: payload.sub ?? "",
+    sub: payload.sub,
     email: (payload.email as string) ?? "",
     platformRole: (payload.platformRole as string | null) ?? null,
     isSuperuser: (payload.isSuperuser as boolean) ?? false,

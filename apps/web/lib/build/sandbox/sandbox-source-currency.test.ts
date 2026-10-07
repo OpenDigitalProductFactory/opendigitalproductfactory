@@ -161,6 +161,8 @@ describe("buildSandboxSourceCurrencyProbeCommand", () => {
     expect(command).toContain(":!**/.next/**");
     expect(command).toContain(":!apps/web/next-env.d.ts");
     expect(command).toContain(":!.pnpm-store");
+    // BI-F1C680C7: the sandbox's own auth secret never counts as source.
+    expect(command).toContain(":!.dpf-sandbox-auth-secret*");
   });
 });
 

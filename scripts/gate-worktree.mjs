@@ -64,11 +64,13 @@ export function describeLeaseCallFailure(error) {
     + "if this box regularly runs several gates at once";
 }
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
-import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH, EXIT_SOURCE_DRIFT, EXIT_USAGE, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
+import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH, EXIT_SLOT_SUBSTRATE_UNAVAILABLE, EXIT_SOURCE_DRIFT, EXIT_USAGE, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
+import { SLOT_SUBSTRATE_UNAVAILABLE_STATUS, assessSlotSubstrate, ensureSlotPostgres } from "./lib/local-ci-slot-substrate.mjs";
 import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
 import { buildIsDelegated, defaultBuildStrategy } from "./lib/local-integration-ci.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
+  createRetryableRelease,
   admittedLeaseTtlMs,
   authoritySafetyMarginMs,
   superviseLeaseRun,
@@ -247,6 +249,19 @@ function waiting(text) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * BI-277ECBDB (A): probe every slot's PostgreSQL container before claiming, and
+ * start a stopped one, so a dead substrate is refused here instead of being
+ * discovered after a slot is granted.
+ */
+export function observeSlotSubstrate(input) {
+  if (process.env.NODE_ENV === "test" && process.env.DPF_LOCAL_CI_SLOT_SUBSTRATE_JSON) {
+    return assessSlotSubstrate(JSON.parse(process.env.DPF_LOCAL_CI_SLOT_SUBSTRATE_JSON));
+  }
+  return assessSlotSubstrate(LOCAL_CI_SLOT_KEYS.map((slotKey) =>
+    ensureSlotPostgres(createLocalCiSlotManifest({ ...input, slotKey }).postgres.container)));
 }
 
 async function observeLocalCiHostPressure(input) {
@@ -530,11 +545,36 @@ export function collectDescendantPids(rootPid, processRows) {
   return descendants;
 }
 
-const LOCAL_CI_MUTATOR_COMMANDS = [
-  /(?:^|[\\/])local-ci-runner\.mjs(?:\s|$)/i,
-  /(?:^|[\\/])local-integration-ci\.mjs(?:\s|$)/i,
-  /(?:^|[\\/])\.local-ci-runner(?:-[^\\/\s"]+)?(?:[\\/\s"]|$)/i,
-];
+// Inspect the invoked program and its entry point, never shell payload text.
+// `ps` does not preserve argv boundaries on POSIX; quoted paths from Windows
+// are retained here, and callers with exact argv can provide it directly.
+function isLocalCiMutator(row) {
+  const argv = Array.isArray(row?.argv) ? row.argv :
+    (String(row?.commandLine ?? "").match(/"[^"\n]*"|'[^'\n]*'|[^\s]+/g) ?? [])
+      .map((token) => token.replace(/^("|')(.*)\1$/, "$2"));
+  const executable = String(argv[0] ?? "").replaceAll("\\", "/").split("/").at(-1).toLowerCase();
+  if (/^node(?:\.exe)?$/.test(executable)) {
+    for (let i = 1; i < argv.length; i += 1) {
+      const arg = argv[i];
+      // Inline code has no script entry point. A later runner name is data.
+      if (/^(?:-e|-p|--eval|--print)(?:=|$)/.test(arg)) return false;
+      if (["-r", "--require", "--import", "--loader", "--experimental-loader"].includes(arg)) { i += 1; continue; }
+      if (arg === "--") {
+        return /(?:^|[\\/])local-(?:ci-runner|integration-ci)\.mjs$/i.test(argv[i + 1] ?? "");
+      }
+      if (arg.startsWith("-")) continue;
+      return /(?:^|[\\/])local-(?:ci-runner|integration-ci)\.mjs$/i.test(arg);
+    }
+    return false;
+  }
+  // Detached Docker builds may outlive the Node parent. Only a build's
+  // context identifies a mutator; inspect/log commands mentioning it do not.
+  if (/^docker(?:\.exe)?$/.test(executable)
+      && (argv[1] === "build" || (argv[1] === "buildx" && argv[2] === "build"))) {
+    return /(?:^|[\\/])\.local-ci-runner(?:-[^\\/]+)?[\\/]?$/i.test(argv.at(-1) ?? "");
+  }
+  return false;
+}
 
 export function findLiveLocalCiMutatorPids(processRows, { excludePids = [] } = {}) {
   const rows = Array.isArray(processRows) ? processRows : [];
@@ -547,12 +587,11 @@ export function findLiveLocalCiMutatorPids(processRows, { excludePids = [] } = {
 
   for (const row of rows) {
     const pid = Number(row?.pid);
-    const commandLine = typeof row?.commandLine === "string" ? row.commandLine : "";
     if (
       !Number.isInteger(pid)
       || pid <= 0
       || excluded.has(pid)
-      || !LOCAL_CI_MUTATOR_COMMANDS.some((pattern) => pattern.test(commandLine))
+      || !isLocalCiMutator(row)
     ) {
       continue;
     }
@@ -1552,7 +1591,6 @@ async function main() {
   let leaseId = "";
   let localFenceToken = "";
   let queueObserverPath = "";
-  let leaseReleased = false;
   let receivedSignal = "";
   let queuedClaimInterruptedByQuiescence = false;
   let terminalClaimAttemptSequence = 0;
@@ -1591,9 +1629,7 @@ async function main() {
     sha,
   }).path;
 
-  const releaseLeaseOnce = async () => {
-    if (!leaseId || leaseReleased) return;
-    leaseReleased = true;
+  const releaseConfirmedLease = createRetryableRelease(async () => {
     const response = await mcpCall("release_nonprod_environment_lease", {
       leaseId,
       ownerSessionId,
@@ -1608,13 +1644,35 @@ async function main() {
       });
       queueObserverPath = "";
     }
-  };
+  });
+  const releaseLeaseOnce = () => leaseId ? releaseConfirmedLease() : Promise.resolve();
 
   // BI-3A34D7A9: the admission loop below is the first side effect that writes
   // a provider. The lease and the evidence record share a CLOSED vocabulary with
   // no "unknown" member, so an unresolved provider has no honest value — refuse
   // rather than attribute this run to whichever client is most common. Everything
   // above (--dry-run, the runner-wiring check) stays runnable unattributed.
+  const substrate = observeSlotSubstrate({ rootClone, gitCommonDir, candidateGitDir });
+  if (substrate.blocked) {
+    writeState(stateFile, {
+      branch, sha, gatePassed: false, leaseId: "", evidenceId: "",
+      status: SLOT_SUBSTRATE_UNAVAILABLE_STATUS, expiresAt: "", resilience: null,
+      leaseEvents: [{ type: "slot-substrate-unavailable", at: new Date().toISOString(), probes: substrate.probes }],
+      substrate: { container: substrate.container, state: substrate.state, remedy: substrate.remedy },
+      failureReason: `slot substrate unavailable: ${substrate.container} is ${substrate.state}`,
+    });
+    process.stderr.write(`${JSON.stringify({
+      status: SLOT_SUBSTRATE_UNAVAILABLE_STATUS,
+      code: "local_ci_slot_substrate_unavailable",
+      container: substrate.container,
+      state: substrate.state,
+      probes: substrate.probes,
+      nextAction: substrate.remedy,
+    })}
+`);
+    process.exit(EXIT_SLOT_SUBSTRATE_UNAVAILABLE);
+  }
+
   let claimAttempt = 0;
   let nextQueueReconciliationAt = 0;
   for (;;) {

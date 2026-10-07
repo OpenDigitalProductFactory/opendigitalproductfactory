@@ -18,7 +18,10 @@ import { randomBytes } from "node:crypto";
 import {
   canTransitionDispatch,
   claimableActionsForNode,
+  claimTimeoutMsForActionType,
   DEFAULT_CLAIM_TIMEOUT_MS,
+  DOCKER_VM_RESTART_ACTION_TYPE,
+  isPrivilegedDispatchActionType,
   type ClaimingNodeView,
   type DispatchableActionView,
   type RemoteActionDispatchState,
@@ -38,6 +41,15 @@ import { decryptSecret as decryptStoredSecret, encryptSecret as encryptStoredSec
 import { isRecord } from "@/lib/shared/coerce";
 
 const MAX_CLAIM_BATCH = 25;
+
+/** The MonitorIssue a Docker VM restart clears (platform-runtime/substrate-reconciler). */
+const DOCKER_VM_WEDGED_ISSUE_KEY = "substrate:docker-vm-wedged";
+
+function isDockerVmRestartParameters(value: unknown): boolean {
+  return isRecord(value)
+    && Object.keys(value).length === 1
+    && value.issueKey === DOCKER_VM_WEDGED_ISSUE_KEY;
+}
 
 export interface ClaimableActionRow {
   actionKey: string;
@@ -120,7 +132,7 @@ export async function claimActionsForNode(
   });
 
   const changeRequestIds = candidates
-    .filter((candidate) => isOrganizationJoinActionType(candidate.actionType) && candidate.changeRequestId)
+    .filter((candidate) => isPrivilegedDispatchActionType(candidate.actionType) && candidate.changeRequestId)
     .map((candidate) => candidate.changeRequestId!);
   const approvedChanges = changeRequestIds.length
     ? await db.changeRequest.findMany({
@@ -168,6 +180,15 @@ export async function claimActionsForNode(
         continue;
       }
       dispatchParameters = validated.value;
+    }
+    if (e.actionType === DOCKER_VM_RESTART_ACTION_TYPE) {
+      // BI-F8F8C383: the host runs a fixed procedure; the only parameter is the
+      // issue it clears. Anything else is refused before it is signed.
+      if (!isDockerVmRestartParameters(dispatchParameters)) {
+        await failUndispatchableAction(db, e.actionKey, now, "docker-vm-restart-parameters-invalid");
+        continue;
+      }
+      dispatchParameters = { issueKey: DOCKER_VM_WEDGED_ISSUE_KEY };
     }
     const envelope: EdgeActionEnvelope = {
       version: EDGE_ACTION_ENVELOPE_VERSION,
@@ -343,13 +364,24 @@ export async function timeoutStaleClaims(
   }
   const res = await db.remoteAction.updateMany({
     where: {
-      actionType: { not: "organization.join.import" },
+      actionType: { notIn: ["organization.join.import", DOCKER_VM_RESTART_ACTION_TYPE] },
       status: { in: ["claimed", "running"] },
       startedAt: { lt: cutoff },
     },
     data: { status: "timed-out", completedAt: now },
   });
-  return { timedOut: res.count + sensitiveTimedOut };
+  // A VM restart takes the portal down with it and reports only once it is
+  // back, so it is judged on its own, longer window (BI-F8F8C383).
+  const vmCutoff = new Date(now.getTime() - (opts.timeoutMs ?? claimTimeoutMsForActionType(DOCKER_VM_RESTART_ACTION_TYPE)));
+  const vm = await db.remoteAction.updateMany({
+    where: {
+      actionType: DOCKER_VM_RESTART_ACTION_TYPE,
+      status: { in: ["claimed", "running"] },
+      startedAt: { lt: vmCutoff },
+    },
+    data: { status: "timed-out", completedAt: now },
+  });
+  return { timedOut: res.count + sensitiveTimedOut + vm.count };
 }
 
 /** Clear issued package ciphertext as soon as its embedded expiry passes, even

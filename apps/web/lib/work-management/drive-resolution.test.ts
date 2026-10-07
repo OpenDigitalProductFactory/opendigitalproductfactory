@@ -467,23 +467,13 @@ describe("resolveDrivePlan: the Phase 3c graph path", () => {
     expect(Object.hasOwn(plan, "marking")).toBe(false);
   });
 
-  it("AC-3C-FAILCLOSED: a graph shape using a disabled construct pauses with construct_not_executable, naming it, and keeps its stage", () => {
-    // Parallel split/join (PR-3c-2) and rework edges with refuse routes (PR-3c-3) are executable (their cases are
-    // below). Stage deadline (PR-3c-4) and sub-shape (PR-3c-5) are implemented and parity-proven but off until
-    // BI-086DC167 (graph markings reset at every cycle boundary); their planner cases run under a test-only flag
-    // table in lib/queue/functions/workroom-drive-deadline.test.ts and workroom-drive-children.test.ts.
-    for (const [shape, construct, elementId] of [
-      [DEADLINE_FIXTURE, "stage-deadline", "stage:b"],
-      [SUB_SHAPE_FIXTURE, "sub-shape", "stage:b"],
-    ] as const) {
+  it("AC-3C-FAILCLOSED: no Phase 3c fixture pauses construct_not_executable now that every flag is on (BI-086DC167)", () => {
+    // The kill switch (a flag set back to false pauses the room, naming the construct, keeping its stage and marking)
+    // is proved with a test-only flag table in drive-marking-durable.test.ts and the runner suites
+    // (workroom-drive-rework, -deadline and -children tests).
+    for (const shape of [DEADLINE_FIXTURE, SUB_SHAPE_FIXTURE, PARALLEL_FIXTURE]) {
       const plan = resolveDrivePlan(graphInput(contract(shape), { currentStageKey: "a", receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }] }));
-      expect(plan.action, shape.key).toBe("pause");
-      expect(plan.reason, shape.key).toBe("construct_not_executable");
-      expect(plan.stageKey, shape.key).toBe("a");
-      expect(plan.taskId).toBeNull();
-      expect(plan.ledger.join("\n"), shape.key).toContain(`construct_not_executable: ${construct} at ${elementId}`);
-      // Absent: applyDrivePlan carries the stored marking forward unchanged.
-      expect(Object.hasOwn(plan, "marking"), shape.key).toBe(false);
+      expect(plan.reason, shape.key).not.toBe("construct_not_executable");
     }
   });
 
@@ -663,5 +653,57 @@ describe("resolveDrivePlan: refuse routes and rework (PR-3c-3)", () => {
     };
     const plan = resolveDrivePlan(input(agentGate, { ...at(agentGate, "b"), actionBoundary: "preauthorized", receipts: [done("a"), done("b")] }));
     expect(plan).toMatchObject({ action: "attention", reason: "governed_decision", stageKey: "b", attentionPrincipalRef: "agent:reviewer", taskId: null });
+  });
+});
+
+describe("resolveDrivePlan: a room binds a role stage to its agent (BI-C1781121)", () => {
+  const verifierShape: WorkShapeDefinitionContract = {
+    ...definition,
+    stages: [{
+      key: "verify",
+      title: "Verify",
+      accountablePrincipalRef: "role:acceptance-verifier",
+      advance: { kind: "status-change", condition: "evidence recorded" },
+      evidence: ["acceptance-receipt"],
+    }],
+  };
+
+  it("dispatches the agent the room bound to a non-governed role stage", () => {
+    const plan = resolveDrivePlan(baseInput({
+      definition: verifierShape,
+      roleBindings: { "acceptance-verifier": "agent:AGT-WS-BUILD" },
+    }));
+    expect(plan.action).toBe("dispatch_agent");
+    expect(plan.agentId).toBe("AGT-WS-BUILD");
+    expect(plan.accountablePrincipalRef).toBe("agent:AGT-WS-BUILD");
+  });
+
+  it("without a binding the role stage still raises attention", () => {
+    const plan = resolveDrivePlan(baseInput({ definition: verifierShape }));
+    expect(plan.action).toBe("attention");
+    expect(plan.reason).toBe("role_stage");
+  });
+
+  it("never binds a governed-decision stage: a role that decides stays with its human", () => {
+    const governed: WorkShapeDefinitionContract = {
+      ...verifierShape,
+      stages: [{ ...verifierShape.stages[0]!, advance: { kind: "governed-decision", condition: "accepted", decisionScope: "wwmd" } }],
+    };
+    const plan = resolveDrivePlan(baseInput({
+      definition: governed,
+      actionBoundary: "preauthorized",
+      roleBindings: { "acceptance-verifier": "agent:AGT-WS-BUILD" },
+    }));
+    expect(plan.action).toBe("attention");
+    expect(plan.agentId).toBeNull();
+  });
+
+  it("ignores a binding that does not name an agent", () => {
+    const plan = resolveDrivePlan(baseInput({
+      definition: verifierShape,
+      roleBindings: { "acceptance-verifier": "person:someone" },
+    }));
+    expect(plan.action).toBe("attention");
+    expect(plan.agentId).toBeNull();
   });
 });

@@ -87,7 +87,11 @@ beforeEach(() => {
   auditRows = [];
   executeMock = vi.fn(async (): Promise<ToolResult> => ({ success: true, message: "ok" }));
   approvalEnvelopeCreate = vi.fn(async () => ({ id: "ENV-1", status: "proposed", expiresAt: new Date(Date.now() + 15 * 60_000) }));
-  _setGovernanceForTests({
+  _setGovernanceForTests(baseGovernance() as never);
+});
+
+function baseGovernance() {
+  return {
     resolveAgentGrants: async () => ["backlog_read", "backlog_write"],
     isAllowedByGrants: () => true,
     executeTool: executeMock as never,
@@ -104,8 +108,8 @@ beforeEach(() => {
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
     policyAuthorityEnvelopeReserve: async () => true,
     authorityExecutedOutcome: async () => null,
-  } as never);
-});
+  };
+}
 
 afterEach(() => {
   _setGovernanceForTests({
@@ -131,6 +135,28 @@ describe("governedExecuteTool — room access before approval", () => {
     const result = await governedExecuteTool(handover);
     expect(result).toMatchObject({ success: false, error: "approval_required" });
     expect(approvalEnvelopeCreate).toHaveBeenCalledOnce();
+  });
+
+  // BI-0012E6CA: the call's resolved consequence travels to the envelope writer,
+  // which sizes the request's lifetime from it; it never joins the binding.
+  it("hands the call's resolved consequence to the envelope writer", async () => {
+    _setGovernanceForTests({
+      ...baseGovernance(),
+      resolveCoworkerAuthorityInput: async () => authorityInput({
+        action: {
+          ...authorityInput().action,
+          toolName: "reassign_workroom_executor",
+          sideEffect: true,
+          approvalPolicy: "side-effects",
+          consequence: "irreversible",
+        },
+        rawParams: handover.rawParams,
+      }),
+    } as never);
+    await governedExecuteTool(handover);
+    expect(approvalEnvelopeCreate).toHaveBeenCalledWith(expect.objectContaining({ consequence: "irreversible" }));
+    const binding = (approvalEnvelopeCreate.mock.calls[0]![0] as { binding: Record<string, unknown> }).binding;
+    expect(binding).not.toHaveProperty("consequence");
   });
 
   it("lets an approved run reach the gate, so its refusal closes the approval as failed", async () => {

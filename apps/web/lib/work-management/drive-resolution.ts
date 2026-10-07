@@ -28,7 +28,8 @@ import type { DueDeadline } from "./drive-deadlines";
 import type { SubShapeChildObservation, SubShapeEffects } from "./drive-child-rooms";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
 import { usesGraphConstructs } from "./drive-marking";
-import { cycleCompleted, emptyPlan, ledgerFrom, planStage, projectDriveCycle } from "./drive-plan-stage";
+import { workShapeRecurs } from "./work-shapes";
+import { cycleCompleted, emptyPlan, ledgerFrom, planStage, projectDriveCycle, runConcluded } from "./drive-plan-stage";
 import { resolveGraphDrivePlan } from "./drive-resolution-graph";
 import {
   isCompletingWorkroomDriveReceipt,
@@ -65,7 +66,7 @@ export type DriveResolutionInput = {
   participants: readonly WorkroomParticipantView[];
   currentStageKey: string | null;
   /** `iteration` is set only on graph-shape receipts (GPP Phase 3c); absent reads 0. */
-  receipts: readonly { stageKey: string; kind: string; iteration?: number }[];
+  receipts: readonly { stageKey: string; kind: string; iteration?: number; runKey?: string }[];
   budgetUsage: readonly { kind: string; used: number }[];
   stopConditionHits: readonly string[];
   reviewDue: boolean;
@@ -105,6 +106,15 @@ export type DriveResolutionInput = {
    * (GPP Phase 3c PR-3c-5).
    */
   subShapeChildren?: Readonly<Record<string, SubShapeChildObservation>>;
+  /**
+   * The room's own binding of a shape role to a principal (BI-C1781121), read
+   * from its scope claims. A shape names the ROLE that answers for a stage; a
+   * room created for one item can name the agent that holds that role there.
+   * Honoured only for a non-governed stage and only when it names an agent:
+   * a governed decision stays with its human, and a person binding changes
+   * nothing because a person stage is attention either way.
+   */
+  roleBindings?: Readonly<Record<string, string>> | null;
 };
 
 export type DrivePlan = {
@@ -156,7 +166,7 @@ export type DrivePlan = {
   subShapes?: SubShapeEffects;
 };
 
-export { parseAccountablePrincipalRef, workroomDriveBranchTaskId, workroomDriveTaskId } from "./drive-plan-stage";
+export { boundStagePrincipal, parseAccountablePrincipalRef, workroomDriveBranchTaskId, workroomDriveTaskId } from "./drive-plan-stage";
 
 export function nextStageKey(
   definition: WorkShapeDefinitionContract,
@@ -244,6 +254,16 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
       conformance,
       cycle,
       ledger: [`Cycle ${cycle.cycleKey} is complete; the room wakes in the next cycle.`],
+    });
+  }
+  // BI-853120EE, WWMD DI-8DCB9A4B566C: only a recurring (cadence) shape starts
+  // a new run in a later cycle. A claim-triggered room's successful run is
+  // final, so it is never driven back onto stage 1.
+  if (!workShapeRecurs(input.definition) && runConcluded(input.priorDrive ?? null)) {
+    return emptyPlan(input, "do_not_wake", "cycle_complete", {
+      conformance,
+      cycle,
+      ledger: ["The run is complete. This shape does not recur, so the room does not start another run."],
     });
   }
 

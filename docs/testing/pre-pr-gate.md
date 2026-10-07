@@ -391,6 +391,21 @@ separate deadline terminates the child tree before that window expires if no
 successful renewal advances it. MCP requests have their own bounded transport
 deadline, so a hung heartbeat cannot outlive the lease silently.
 
+**Prerequisite failures remain retryable.** A runner prerequisite failure
+(exit 8, including a required base fetch that cannot reach the network) is
+infrastructure evidence. The durable resumer retries the same pinned request,
+with exponential backoff and equal jitter capped at 90 seconds. It stops starting
+attempts at the wait deadline; an already-running attempt remains governed by its
+own execution and lease-authority bounds. A product failure or cancellation stops
+resumption. This does not establish host-worker single execution or outage fairness.
+
+**Cleanup and legacy process identity.** Concurrent release callers share one
+request. Only confirmed success completes cleanup; a failed call stays retryable.
+Legacy admission checks the invoked Node script or Docker build context and follows
+its descendants. Merely naming a runner in a shell payload or an unrelated command
+argument does not establish a live mutator. POSIX process-list text can lose argument
+boundaries; exact argv, when available, takes precedence.
+
 **The heartbeat is protected from the gate's own work.** A renewal timer only
 helps if the process is free to run it, and for a period it was not: the
 in-run descendant scan used a synchronous `ps` on a fixed interval, so on a
@@ -532,6 +547,19 @@ for a `PASS` bound to the current HEAD**, so `pnpm run pregate:status && git
 push` is a correct composition. Add `--json` for machine use. It never claims a
 lease and never runs a gate, so it is safe to call at any time, including while
 someone else's gate is mid-run.
+
+**Queued and broken read differently (BI-277ECBDB).** A queued claim reads
+`queued behind N other claims`: it is waiting on other work, and its waiter runs
+it. Before claiming, the gate probes every slot's PostgreSQL container
+(`dpf-local-ci-postgres-<N>`) and starts a stopped one itself. When no slot's
+container can run, it claims nothing, exits **9**, and `pregate:status` reads
+`BLOCKED — slot substrate unavailable: <container> is <state>`. That status
+carries Docker's refusal and the remedy instead of `pnpm run pregate`, because
+gating again changes nothing until the container runs. The slot containers carry
+`--restart unless-stopped`, so a host or Docker restart no longer removes them.
+A pool that keeps admitting gates that never record a result raises the
+`local-ci:pool-admissions-without-results` condition through the substrate
+reconciler, so the stall is surfaced instead of inferred by each session.
 
 Everything else about a pregate run lies in a documented direction, which is why
 the reader exists (BI-B1065D41):

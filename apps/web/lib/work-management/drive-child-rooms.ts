@@ -19,9 +19,13 @@
  *
  * - ENSURE. A marked sub-shape stage whose pass (`<cycleKey>#<stageKey>#<iteration>`)
  *   has no child entry gets one created, idempotently, under
- *   `sub-shape:<parentCapsuleId>:<cycleKey>:<stageKey>:<iteration>`. The cycle
- *   key is in it because createWorkCapsule returns the existing row for an
- *   existing key, which would hand a new cycle the previous cycle's child.
+ *   `sub-shape:<parentCapsuleId>:<cycleKey>:<stageKey>:<iteration>`. The
+ *   marking's `cycleKey` is its RUN key (BI-086DC167: the calendar key of the
+ *   day the run started, unchanged while the run is in flight), and it is in
+ *   the key because createWorkCapsule returns the existing row for an existing
+ *   key, which would hand a new run the previous run's child. A child running
+ *   across UTC midnight keeps its key, so it is neither abandoned nor created
+ *   twice.
  * - COMPLETE. A live child whose drive reached its success stop: record
  *   `child-completion` on the parent stage, set the child `complete`, and
  *   delete the parent→child `contains` row, in one transaction.
@@ -30,8 +34,8 @@
  *   the token's plan is `attention` / `sub_shape_stopped` quoting the child's
  *   disposition. Nothing is propagated.
  * - ABANDON. A live child whose pass no token holds any more (a rework across
- *   the stage started a new iteration, a stop consumed every token, or the
- *   cycle changed): set it `abandoned` with a reason and delete its
+ *   the stage started a new iteration, a stop consumed every token, or its
+ *   run concluded and a new one started): set it `abandoned` with a reason and delete its
  *   `contains` row, in one transaction.
  *
  * The runner writes an entry's `state` (`completed`, `abandoned`) only after
@@ -43,7 +47,7 @@ import type { WorkShapeDefinitionContract } from "./work-shapes";
 
 type SubShapeShape = Pick<WorkShapeDefinitionContract, "stages">;
 
-/** The child entry's key: one pass through one stage in one cycle (the deadline key's form). */
+/** The child entry's key: one pass through one stage in one run (the deadline key's form). */
 export const subShapeChildKey = deadlineKey;
 
 /** The idempotency key of the child room for one pass (design §9.2). */

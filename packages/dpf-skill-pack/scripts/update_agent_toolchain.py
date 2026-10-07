@@ -179,15 +179,10 @@ def installed_plugin_copies(home: Path, project_dir: Optional[Path] = None) -> l
          "path": shared_managed_plugin_path(home), "connector": True},
         {"label": "Codex managed copy", "path": codex_managed_plugin_path(home), "connector": False},
     ]
-    try:
-        records = json.loads(claude_installed_plugins_path(home).read_text(encoding="utf-8-sig"))
-        entries = records.get("plugins", {}).get(CLAUDE_PLUGIN_ID, [])
-    except (OSError, ValueError, AttributeError):
-        entries = []
     wanted = os.path.normcase(os.path.realpath(project_dir)) if project_dir else None
     seen: set[str] = set()
-    for entry in entries if isinstance(entries, list) else []:
-        if not isinstance(entry, dict) or not isinstance(entry.get("installPath"), str):
+    for entry in claude_plugin_records(home):
+        if not isinstance(entry.get("installPath"), str):
             continue
         project = entry.get("projectPath")
         loads_here = entry.get("scope") == "user" or (
@@ -898,6 +893,125 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
         if result.returncode != 0:
             return f"failed: {' '.join(command[:3])} exited {result.returncode}"
     return "installed and refreshed"
+
+
+def claude_plugin_records(home: Path) -> list[dict[str, Any]]:
+    """Every installed_plugins.json record of the dpf-platform plugin."""
+    try:
+        records = json.loads(claude_installed_plugins_path(home).read_text(encoding="utf-8-sig"))
+        entries = records.get("plugins", {}).get(CLAUDE_PLUGIN_ID, [])
+    except (OSError, ValueError, AttributeError):
+        return []
+    return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
+
+
+def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> dict[str, list[str]]:
+    """Update every project-scope record still pinned to an older version.
+
+    `install_claude_plugin` refreshes only the local-scope record. Claude Code
+    keeps one project-scope record per checkout the plugin was ever installed
+    from, and each keeps loading its own cached version: on 2026-10-07 the
+    D:\\DPF record still loaded 0.2.5's bearer descriptor beside the 0.2.8 OAuth
+    one (BI-B9F359AC). `claude plugin update --scope project` acts on the
+    record for its working directory, so it runs once per existing project.
+    A record whose projectPath is gone is reported as prunable and left alone:
+    Claude Code owns the file and drops it on its own uninstall.
+    """
+    result: dict[str, list[str]] = {"updated": [], "current": [], "pruned": [], "failed": []}
+    claude = resolve_claude_binary()
+    for entry in claude_plugin_records(home):
+        project = entry.get("projectPath")
+        if entry.get("scope") != "project" or not isinstance(project, str):
+            continue
+        if not Path(project).is_dir():
+            result["pruned"].append(project)
+            continue
+        if entry.get("version") == version:
+            result["current"].append(project)
+            continue
+        if dry_run:
+            result["updated"].append(project)
+            continue
+        if not claude:
+            result["failed"].append(project)
+            continue
+        command = [claude, "plugin", "update", CLAUDE_PLUGIN_ID, "--scope", "project"]
+        completed = subprocess.run(command, cwd=project, capture_output=True, text=True)
+        result["updated" if completed.returncode == 0 else "failed"].append(project)
+    return result
+
+
+_MCP_URL_TEMPLATE = re.compile(r"^\$\{DPF_MCP_URL:-([^}]+)\}$")
+
+
+def _dpf_endpoint_path(url: object) -> Optional[str]:
+    if not isinstance(url, str):
+        return None
+    match = _MCP_URL_TEMPLATE.match(url)
+    try:
+        return urlsplit(match.group(1) if match else url).path.rstrip("/")
+    except ValueError:
+        return None
+
+
+def retire_duplicate_project_mcp_json(project: Path, dry_run: bool) -> Optional[str]:
+    """Disable a project .mcp.json `dpf` server that duplicates the plugin's.
+
+    The plugin descriptor is the one dpf connector (BI-5201141C); a leftover
+    project .mcp.json naming `dpf` on the same /api/mcp/v1 endpoint loads as a
+    second `dpf` connector (BI-B9F359AC). Disable-not-delete: the original is
+    kept as .mcp.json.legacy-bak. A file with only that server is renamed; a
+    file with other servers keeps them and loses only the duplicate entry.
+    Returns the backup path when it acted (or would act, in dry run).
+    """
+    path = project / ".mcp.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        servers = data["mcpServers"]
+        dpf = servers["dpf"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(dpf, dict) or _dpf_endpoint_path(dpf.get("url")) != "/api/mcp/v1":
+        return None
+    backup = project / ".mcp.json.legacy-bak"
+    suffix = 1
+    while backup.exists():
+        backup = project / f".mcp.json.legacy-bak.{suffix}"
+        suffix += 1
+    if dry_run:
+        return str(backup)
+    remaining = {name: server for name, server in servers.items() if name != "dpf"}
+    if not remaining:
+        path.rename(backup)
+        return str(backup)
+    shutil.copy2(path, backup)
+    path.write_text(json.dumps({**data, "mcpServers": remaining}, indent=2) + "\n", encoding="utf-8")
+    return str(backup)
+
+
+def converge_claude_project_connectors(home: Path, version: str, dry_run: bool) -> list[str]:
+    """Converge stale project-scope plugin pins and duplicate project connectors."""
+    plugins = converge_claude_project_plugins(home, version, dry_run)
+    verb = "would update" if dry_run else "updated"
+    lines = [f"  Claude project scope: {verb} {len(plugins['updated'])}, "
+             f"current {len(plugins['current'])}, failed {len(plugins['failed'])}, "
+             f"prunable {len(plugins['pruned'])}"]
+    lines += [f"    {verb} to {version}: {project}" for project in plugins["updated"]]
+    lines += [f"    FAILED to update: {project}" for project in plugins["failed"]]
+    lines += [f"    prunable (projectPath gone): {project}" for project in plugins["pruned"]]
+    projects = {
+        entry["projectPath"]
+        for entry in claude_plugin_records(home)
+        if entry.get("scope") in ("project", "local") and isinstance(entry.get("projectPath"), str)
+    }
+    for project in sorted(projects):
+        if not Path(project).is_dir():
+            continue
+        backup = retire_duplicate_project_mcp_json(Path(project), dry_run)
+        if backup:
+            action = "would disable" if dry_run else "disabled"
+            lines.append(f"    {action} duplicate dpf connector in {Path(project) / '.mcp.json'} (backup {backup})")
+    return lines
 
 
 def _claude_plugin_matches(installed_id: str, competitive_id: str) -> bool:
@@ -2130,6 +2244,9 @@ def main(argv: list[str]) -> int:
         if not args.skip_claude_cli_install:
             status = install_claude_plugin(home, args.dry_run)
         print(f"  Claude     : marketplace converged; plugin install {status}")
+        if not args.skip_claude_cli_install:
+            for line in converge_claude_project_connectors(home, version, args.dry_run):
+                print(line)
         claude_competitive_status = "skipped by flag"
         if not args.skip_claude_cli_install:
             claude_competitive_status = disable_competitive_claude_plugins(

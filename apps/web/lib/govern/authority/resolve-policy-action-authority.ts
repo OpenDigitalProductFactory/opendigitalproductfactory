@@ -11,6 +11,7 @@ import {
   type PolicyAuthorityProjectionInput,
 } from "./policy-authority-projector";
 import type { PolicyAuthorityProjectionAttempt } from "./coworker-tool-authority-gate";
+import { approvalLifetimeMs } from "@/lib/coworker/approval-lifetime";
 
 const PROJECTABLE_ACTIONS = new Set(Object.keys(INITIATIVE_READINESS_LANES));
 const MAX_JUDGMENT_AGE_MS = 60 * 60 * 1000;
@@ -215,6 +216,11 @@ export async function resolveAndPersistPolicyActionAuthority(
       const profileScope = record(row.profile.scope);
       const projection = projectPolicyAuthority({
         now,
+        // Sized by the call's resolved consequence (BI-0012E6CA); the
+        // delegation's own expiry still caps it inside the projector.
+        ttlMs: approvalLifetimeMs(
+          authorityInput.action.consequence === undefined ? "unclassified" : authorityInput.action.consequence,
+        ),
         binding: {
           gate,
           actionKey: execution.toolName,

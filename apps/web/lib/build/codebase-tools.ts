@@ -115,6 +115,9 @@ const BLOCKED_PATTERNS = [
   // share a prefix (`secrets-management`, `credentials-rotation`).
   /(?:^|[\\/])credentials(?:[\\/.]|$)/i,
   /(?:^|[\\/])secrets(?:[\\/.]|$)/i,
+  // The Build Studio sandbox's own Auth.js secret, on the sandbox workspace
+  // volume this module reads as /sandbox-workspace (BI-F1C680C7).
+  /(?:^|[\\/])\.dpf-sandbox-auth-secret/,
   /[\\/]\.git[\\/]/,
   /^\.git[\\/]/,
   /^\.git$/,

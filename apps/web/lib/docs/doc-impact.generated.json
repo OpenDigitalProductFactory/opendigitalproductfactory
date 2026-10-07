@@ -587,6 +587,9 @@
       "docs/architecture/contributor-procedure-runbook.md",
       "docs/professions/data-architect/wiki/strongly-typed-string-enums.md"
     ],
+    "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -701,6 +704,9 @@
     ],
     "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "apps/web/lib/coworker/approval-lifetime.ts": [
+      "docs/operations/observability-coverage.md"
     ],
     "apps/web/lib/coworker/approved-request-run-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -3210,6 +3216,7 @@
       "scripts/installer/install-release-assets.mjs"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
+      "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts",
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
       "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
       "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
@@ -3617,6 +3624,7 @@
       "apps/mobile/eas.json"
     ],
     "docs/operations/observability-coverage.md": [
+      "apps/web/lib/coworker/approval-lifetime.ts",
       "apps/web/lib/observability/monitor-source-reachability.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",
       "apps/web/lib/voice-synthesis/tts-health-contract.test.ts",

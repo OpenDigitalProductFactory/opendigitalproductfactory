@@ -12,8 +12,18 @@ export const EXECUTOR_WRITEBACK_UNAVAILABLE_REASON = "executor_writeback_unavail
  * its own iteration. Absent means 0, so every receipt written before Phase 3c,
  * and every receipt of a sequential shape, keeps exactly its meaning. Design:
  * docs/superpowers/specs/2026-10-02-gpp-phase-3c-drive-graph-execution-design.md §4.2.
+ *
+ * `runKey` scopes a receipt to one run of the shape: the cycle key of the
+ * tick the run started on. A graph room's run is its marking's `cycleKey`
+ * (BI-086DC167); a sequential room's is its snapshot's `runKey`
+ * (BI-853120EE, drive-sequential-run.ts). Both are read through
+ * driveRunKeyOf. A receipt that carries one completes a stage only within
+ * that run, so a new run never replays the previous run's receipts. A
+ * receipt without one is a receipt written before run keys existed; a
+ * sequential room stamps it on its next tick, or drops it when that tick
+ * starts a new run.
  */
-export type WorkroomDriveReceipt = { stageKey: string; kind: string; iteration?: number };
+export type WorkroomDriveReceipt = { stageKey: string; kind: string; iteration?: number; runKey?: string };
 
 export type PriorWorkroomDrive = {
   action: string;
@@ -32,16 +42,28 @@ export function isCompletingWorkroomDriveReceipt(
 }
 
 /**
+ * Whether a receipt belongs to the run `runKey` (BI-086DC167): a receipt that
+ * carries no run key belongs to every run (its pre-BI-086DC167 meaning), and
+ * so does any receipt when the caller does not know the run.
+ */
+export function receiptInRun(receipt: { runKey?: string }, runKey: string | undefined): boolean {
+  return receipt.runKey === undefined || runKey === undefined || receipt.runKey === runKey;
+}
+
+/**
  * The iteration-aware form of isCompletingWorkroomDriveReceipt, for the graph
- * path: the receipt completes `stageKey` only at `iteration` (absent reads 0).
- * The sequential path keeps using isCompletingWorkroomDriveReceipt unchanged.
+ * path: the receipt completes `stageKey` only at `iteration` (absent reads 0),
+ * and, when it carries a run key, only within the run `runKey`
+ * (BI-086DC167). The sequential path keeps using
+ * isCompletingWorkroomDriveReceipt unchanged.
  */
 export function isCompletingWorkroomDriveReceiptAt(
-  receipt: { stageKey: string; kind: string; iteration?: number },
+  receipt: { stageKey: string; kind: string; iteration?: number; runKey?: string },
   stageKey: string,
   iteration: number,
+  runKey?: string,
 ): boolean {
-  return isCompletingWorkroomDriveReceipt(receipt, stageKey) && (receipt.iteration ?? 0) === iteration;
+  return isCompletingWorkroomDriveReceipt(receipt, stageKey) && (receipt.iteration ?? 0) === iteration && receiptInRun(receipt, runKey);
 }
 
 export function appendCompletingWorkroomDriveReceipt(
@@ -54,16 +76,22 @@ export function appendCompletingWorkroomDriveReceipt(
   if (kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND) {
     return err("blocked_kind_not_completing");
   }
-  // Deduplicated on (stageKey, kind, iteration ?? 0): for a receipt without an
-  // iteration that is exactly the pre-Phase-3c key.
+  // Deduplicated on (stageKey, kind, iteration ?? 0, runKey): for a receipt
+  // without an iteration or a run key that is exactly the pre-Phase-3c key.
   const iteration = receipt.iteration ?? 0;
-  if (existing.some((entry) => entry.stageKey === stageKey && entry.kind === kind && (entry.iteration ?? 0) === iteration)) {
+  if (existing.some((entry) => entry.stageKey === stageKey && entry.kind === kind && (entry.iteration ?? 0) === iteration
+    && entry.runKey === receipt.runKey)) {
     return ok([...existing]);
   }
   return ok([
     ...existing.filter((entry) =>
       !(entry.stageKey === stageKey && entry.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND)
     ),
-    receipt.iteration !== undefined ? { stageKey, kind, iteration: receipt.iteration } : { stageKey, kind },
+    {
+      stageKey,
+      kind,
+      ...(receipt.iteration !== undefined ? { iteration: receipt.iteration } : {}),
+      ...(receipt.runKey !== undefined ? { runKey: receipt.runKey } : {}),
+    },
   ]);
 }

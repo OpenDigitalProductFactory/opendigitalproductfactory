@@ -335,3 +335,55 @@ describe("autoAcceptBuildOnEvidence — never throws (fail-closed)", () => {
     expect(mockSaveBuildArtifactRevision).not.toHaveBeenCalled();
   });
 });
+
+describe("autoAcceptBuildOnEvidence — a missing verdict is checked, not assumed (BI-1CC992A5)", () => {
+  const ran = (typecheckPassed: boolean) => vi.fn(async () => ({
+    verification: { typecheckPassed, testsPassed: 1, testsFailed: 0, source: "deterministic-scoped", scope: "scoped" },
+    changedFiles: ["apps/web/lib/x.ts"],
+    output: "Deterministic scoped verification",
+  }));
+
+  it("runs the scoped checks once, records them, and accepts when they pass", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue(greenBuild({ verificationOut: { gauntletRepair: { attempts: 1 } } }));
+    const verify = ran(true);
+
+    const result = await autoAcceptBuildOnEvidence("FB-MISSING", { verifyMissingVerdict: verify });
+
+    expect(verify).toHaveBeenCalledWith("FB-MISSING");
+    expect(mockSaveBuildArtifactRevision).toHaveBeenCalledWith(expect.objectContaining({
+      field: "verificationOut",
+      value: expect.objectContaining({ typecheckPassed: true, gauntletRepair: { attempts: 1 } }),
+    }));
+    expect(result.accepted).toBe(true);
+  });
+
+  it("records a failing check and declines", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue(greenBuild({ verificationOut: null }));
+
+    const result = await autoAcceptBuildOnEvidence("FB-MISSING", { verifyMissingVerdict: ran(false) });
+
+    expect(result).toEqual({ accepted: false, reason: "typecheck-not-clean" });
+    expect(mockSaveBuildArtifactRevision).toHaveBeenCalledTimes(1);
+  });
+
+  it("never re-runs a recorded failing verdict", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue(greenBuild({ verificationOut: { typecheckPassed: false } }));
+    const verify = ran(true);
+
+    const result = await autoAcceptBuildOnEvidence("FB-FAILED", { verifyMissingVerdict: verify });
+
+    expect(verify).not.toHaveBeenCalled();
+    expect(result.accepted).toBe(false);
+  });
+
+  it("declines when the checks cannot run", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue(greenBuild({ verificationOut: {} }));
+
+    const result = await autoAcceptBuildOnEvidence("FB-NOSANDBOX", {
+      verifyMissingVerdict: vi.fn(async () => { throw new Error("sandbox unavailable"); }),
+    });
+
+    expect(result).toEqual({ accepted: false, reason: "error" });
+    expect(mockSaveBuildArtifactRevision).not.toHaveBeenCalled();
+  });
+});

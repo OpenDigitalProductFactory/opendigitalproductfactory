@@ -5928,6 +5928,8 @@
         "acceptance-sweep-operator-runbook",
         "closing-items-the-gate-already-allows-off-by-default",
         "what-the-summary-tells-you",
+        "who-verifies-an-item-that-is-not-closable",
+        "how-the-portal-knows-work-was-merged",
         "known-limit"
       ]
     },
@@ -12421,6 +12423,7 @@
         "manage-roles-and-account-access",
         "what-is-not-yet-a-people-page-workflow",
         "who-can-approve-leave",
+        "when-a-coworker-recommends-a-leave-decision",
         "evidence-and-recovery-checklist"
       ]
     },
@@ -12548,6 +12551,7 @@
         "use-this-doc-for",
         "overview",
         "reading-the-panel",
+        "which-portfolio-an-item-counts-against",
         "setting-a-budget",
         "choosing-who-answers-for-each-portfolio",
         "confirming-an-epics-portfolio",
@@ -12940,7 +12944,8 @@
         "overview",
         "key-concepts",
         "what-shows-up-here",
-        "what-you-can-do"
+        "what-you-can-do",
+        "how-long-a-coworkers-request-waits"
       ]
     },
     "docs/user-guide/workspace/documents.md": {

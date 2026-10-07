@@ -132,11 +132,20 @@ export async function interceptToolCallAsProposal(input: {
   threadId: string;
   routeContext: string;
   taskRunId: string | null;
-}): Promise<ToolResult | null> {
+}, deps: {
+  persistence?: ProposalPersistence;
+  /** Test seam; production reads room-stage-mandate.ts. */
+  resolveMandatedTools?: (input: { taskRunId: string | null; agentId: string }) => Promise<readonly string[]>;
+} = {}): Promise<ToolResult | null> {
   if (!shouldProposeToolCall(input.toolDef, input.proposeSideEffects)) return null;
+  // BI-C1781121: a write the run's Workroom stage declares is a recorded
+  // decision (the same one the escalation gate steers as `scheduled-mandate`),
+  // so it runs. The propose boundary stays in force for every other write, and
+  // an unreadable mandate diverts as before.
+  if (await runMandatesTool(input, deps.resolveMandatedTools)) return null;
   try {
     return await divertToolCallToProposal({
-      persistence: prismaProposalPersistence(),
+      persistence: deps.persistence ?? prismaProposalPersistence(),
       toolName: input.toolName,
       args: input.args,
       agentId: input.agentId,
@@ -153,6 +162,19 @@ export async function interceptToolCallAsProposal(input: {
       error: "propose_divert_failed",
       message: `Could not queue \`${input.toolName}\` for approval; it was not run. Continue without it.`,
     };
+  }
+}
+
+async function runMandatesTool(
+  input: { toolName: string; agentId: string; taskRunId: string | null },
+  resolve?: (input: { taskRunId: string | null; agentId: string }) => Promise<readonly string[]>,
+): Promise<boolean> {
+  try {
+    const load = resolve
+      ?? (await import("@/lib/work-management/room-stage-mandate")).loadScheduledRoomMandateLive;
+    return (await load({ taskRunId: input.taskRunId, agentId: input.agentId })).includes(input.toolName);
+  } catch {
+    return false;
   }
 }
 

@@ -60,17 +60,18 @@ test("every installer and setup script that writes an install .env generates bot
   const installSh = await read("install-dpf.sh");
   for (const key of KEYS) assert.match(installSh, new RegExp(`dpf_env_ensure_secret_hex ${key} \\.env 32`), `install-dpf.sh: ${key}`);
   const setupSh = await read("scripts/setup.sh");
-  assert.match(setupSh, /for _env_file in apps\/web\/\.env\.local \.env; do\s+for _signing_key in DPF_ATTENTION_REACH_SECRET DPF_DELEGATION_RECEIPT_SECRET; do\s+if \[ "\$\(dpf_env_ensure_secret_hex "\$_signing_key" "\$_env_file" 32\)" != "kept" \]/);
+  assert.match(setupSh, /for _env_file in apps\/web\/\.env\.local \.env; do\s+for _signing_key in DPF_ATTENTION_REACH_SECRET DPF_DELEGATION_RECEIPT_SECRET(?: [A-Z_]+)*; do\s+if \[ "\$\(dpf_env_ensure_secret_hex "\$_signing_key" "\$_env_file" 32\)" != "kept" \]/);
   const installPs1 = await read("install-dpf.ps1");
-  assert.match(installPs1, /foreach \(\$signingKeyName in @\("DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET"\)\)/);
+  assert.match(installPs1, /foreach \(\$signingKeyName in @\("DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET"(?:, "[A-Z_]+")*\)\)/);
   assert.match(installPs1, /-Key \$signingKeyName -Value \(New-RandomPassword 32\)/);
   const setupPs1 = await read("scripts/setup.ps1");
-  assert.match(setupPs1, /foreach \(\$secretKey in @\("DPF_GIT_WEBHOOK_SECRET", "DPF_GPP_PERMIT_SECRET", "DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET"\)\)/);
+  assert.match(setupPs1, /foreach \(\$secretKey in @\("DPF_GIT_WEBHOOK_SECRET", "DPF_GPP_PERMIT_SECRET", "DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET"(?:, "[A-Z_]+")*\)\)/);
   const promote = await read("scripts/promote.sh");
-  assert.match(promote, /for _signing_key in DPF_ATTENTION_REACH_SECRET DPF_DELEGATION_RECEIPT_SECRET; do/);
+  assert.match(promote, /for _signing_key in DPF_ATTENTION_REACH_SECRET DPF_DELEGATION_RECEIPT_SECRET(?: [A-Z_]+)*; do/);
   assert.match(promote, /_signing_key_value="\$\(node -e 'process\.stdout\.write\(require\("node:crypto"\)\.randomBytes\(32\)\.toString\("hex"\)\)'\)"/);
   const assets = await read("scripts/installer/install-release-assets.mjs");
-  assert.match(assets, /export const DEDICATED_SIGNING_KEYS = Object\.freeze\(\["DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET"\]\);/);
+  // BI-231A4BC7 adds keys to the same list; the list must keep these two.
+  assert.match(assets, /export const DEDICATED_SIGNING_KEYS = Object\.freeze\(\[\s*"DPF_ATTENTION_REACH_SECRET",\s*"DPF_DELEGATION_RECEIPT_SECRET"[,\s"A-Z_]*\]\);/);
   assert.match(assets, /text = ensureDedicatedSigningKeys\(text, newline\);/);
 });
 

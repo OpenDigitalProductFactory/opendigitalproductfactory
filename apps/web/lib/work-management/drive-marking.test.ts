@@ -3,8 +3,10 @@
 // §4; plan: docs/superpowers/plans/2026-10-02-gpp-phase-3c-drive-graph-execution.md
 // (PR-3c-1, drive-marking.test.ts).
 //
-// 1. Reading: absent (derived from stageKey, or the start), stored, from
-//    another cycle (fresh start), and malformed (marking_unreadable, verbatim).
+// 1. Reading: absent (derived from stageKey, or the start), stored, a run in
+//    flight from an earlier day (kept), a concluded run (the next run starts
+//    only on a new calendar key; BI-086DC167), and malformed
+//    (marking_unreadable, verbatim).
 // 2. The iteration predicate and the per-token latch prior.
 // 3. The forward move on a two-stage flow equals nextStageKey on its
 //    sequential twin, over seeded receipt sequences.
@@ -104,10 +106,22 @@ describe("readStoredDriveMarking", () => {
       .toEqual({ ok: true, data: { source: "stored", marking: stored } });
   });
 
-  it("discards a marking from another cycle and starts fresh at the shape's start", () => {
+  // BI-086DC167: a marking is one run, keyed by the calendar day it started. It is never discarded while in flight.
+  it("keeps a run in flight that started on an earlier calendar day, unchanged (BI-086DC167)", () => {
     const stored = marking({ cycleKey: "graph-fixture-flow@1.0.0:2026-02-28", tokens: [{ node: "stage:b", enteredAt: "2026-02-28T08:00:00.000Z" }], iterations: { b: 2 } });
     const read = readStoredDriveMarking({ workroomDrive: { marking: stored } }, FLOW_TWIN, CYCLE, NOW);
-    expect(read).toEqual({ ok: true, data: { source: "new-cycle", marking: marking({ tokens: [{ node: "stage:a", enteredAt: NOW.toISOString() }] }) } });
+    expect(read).toEqual({ ok: true, data: { source: "stored", marking: stored } });
+  });
+
+  it("starts the next run only when the stored run concluded AND the calendar key changed; the concluded run comes back as previous (BI-086DC167)", () => {
+    const concluded = marking({ cycleKey: "graph-fixture-flow@1.0.0:2026-02-28", tokens: [], iterations: { b: 2 }, reworkTaken: { "edge:b->a": 1 } });
+    expect(readStoredDriveMarking({ workroomDrive: { marking: concluded } }, FLOW_TWIN, CYCLE, NOW)).toEqual({
+      ok: true,
+      data: { source: "new-run", marking: marking({ tokens: [{ node: "stage:a", enteredAt: NOW.toISOString() }] }), previous: concluded },
+    });
+    // Concluded under today's key: no second run today.
+    const today = marking({ tokens: [] });
+    expect(readStoredDriveMarking({ workroomDrive: { marking: today } }, FLOW_TWIN, CYCLE, NOW)).toEqual({ ok: true, data: { source: "stored", marking: today } });
   });
 
   it("with no current cycle (the runner's receipt earning) keeps the stored cycle", () => {
@@ -147,6 +161,9 @@ describe("iterations, enabled stages and the per-token latch", () => {
     expect(enabledStages(FLOW_TWIN, current, [{ stageKey: "b", kind: "stage-evidence-recorded", iteration: 1 }])).toEqual(["b"]);
     expect(enabledStages(FLOW_TWIN, current, [{ stageKey: "b", kind: "blocked", iteration: 1 }])).toEqual([]);
     expect(isCompletingAt({ stageKey: "b", kind: "k" }, "b", 0)).toBe(true);
+    // BI-086DC167: a receipt earned in another run never completes this run's pass.
+    expect(enabledStages(FLOW_TWIN, current, [{ stageKey: "b", kind: "stage-evidence-recorded", iteration: 1, runKey: "graph-fixture-flow@1.0.0:2026-02-28" }])).toEqual([]);
+    expect(enabledStages(FLOW_TWIN, current, [{ stageKey: "b", kind: "stage-evidence-recorded", iteration: 1, runKey: current.cycleKey }])).toEqual(["b"]);
   });
 
   it("marked keys carry the iteration, sorted", () => {

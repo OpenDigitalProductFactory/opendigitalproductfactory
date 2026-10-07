@@ -2,6 +2,8 @@
 
 exports[`shapeSignature > gives every current and frozen prior shape a signature with no unknown lane 1`] = `
 {
+  "acceptance-verification@1.0.0": "⬆ escalation · Person verify → ● success | ⊗ failure | ⧖ budget",
+  "acceptance-verification@1.1.0": "⬆ escalation · Person verify → ● success | ⊗ failure | ⧖ budget",
   "adopter-health-watch@1.0.0": "⏱ cadence · AI read → AI report → ◇ Person act [role:customer-owner] → ● success | ⊗ failure | ⧖ budget",
   "architecture-alignment-review@1.0.0": "⏱ cadence 🛡 authority-change · AI compare → ◇ Person ratify [role:architecture-owner] → ● success | ⊗ failure | ⧖ budget",
   "bookkeeping-period-cycle@1.0.0": "⏱ cadence ✋ claim · AI gather → AI import → AI categorize → AI reconcile → ◇ Person owner-close [role:finance-owner] → ● success | ⊗ failure | ⧖ budget",

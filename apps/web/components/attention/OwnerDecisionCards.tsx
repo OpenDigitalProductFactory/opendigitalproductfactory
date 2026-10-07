@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { ownerDecisionCardDomId } from "@/lib/attention/owner-decision-dom-id";
 import type { OwnerAttentionEntry } from "@/lib/attention/owner-projection";
 import { ExpandableCard, StatusBadge } from "@/components/ui/report-kit";
 import { CoworkerEnvelopeApproval } from "./CoworkerEnvelopeApproval";
@@ -14,17 +15,37 @@ import { LEAVE_DECISION_ROUTE } from "@/lib/workforce/leave/leave-decision-propo
 export function OwnerDecisionCards({
   entries,
   limit,
+  focusItemId,
 }: {
   entries: OwnerAttentionEntry[];
   limit?: number;
+  /**
+   * The card a deep link asked for (BI-0012E6CA): it renders open and is
+   * scrolled into view. Without it, a URL fragment naming a card's DOM id
+   * (envelopeInboxRoute) has the same effect.
+   */
+  focusItemId?: string;
 }) {
-  const [openId, setOpenId] = useState<string | null>(null);
   const shown = typeof limit === "number" ? entries.slice(0, limit) : entries;
+  const [openId, setOpenId] = useState<string | null>(
+    focusItemId && shown.some((entry) => entry.item.id === focusItemId) ? focusItemId : null,
+  );
+
+  useEffect(() => {
+    const fragment = typeof window === "undefined" ? "" : decodeURIComponent(window.location.hash.slice(1));
+    const target = focusItemId
+      ?? shown.find((entry) => ownerDecisionCardDomId(entry.item.id) === fragment)?.item.id;
+    if (!target || !shown.some((entry) => entry.item.id === target)) return;
+    setOpenId(target);
+    document.getElementById(ownerDecisionCardDomId(target))?.scrollIntoView?.({ block: "start" });
+    // Focus once, on arrival; later re-renders must not yank the reader back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusItemId]);
 
   return (
     <div className="space-y-3">
       {shown.map((entry) => {
-        const disclosureId = `owner-decision-${safeId(entry.item.id)}`;
+        const disclosureId = ownerDecisionCardDomId(entry.item.id);
         const open = openId === entry.item.id;
         return (
           <ExpandableCard
@@ -36,6 +57,7 @@ export function OwnerDecisionCards({
             summary={<DecisionSummary entry={entry} />}
             actions={<DecisionActions entry={entry} />}
             panelClassName="bg-[var(--dpf-surface-2)]"
+            className="scroll-mt-4"
           >
             <TechnicalDetail entry={entry} />
           </ExpandableCard>
@@ -198,10 +220,6 @@ function TechnicalDetail({ entry }: { entry: OwnerAttentionEntry }) {
       </div>
     </div>
   );
-}
-
-function safeId(value: string): string {
-  return value.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
 }
 
 function stripConsequenceLead(value: string): string {

@@ -2320,3 +2320,26 @@ test("the gate's own ancestors are never its conflicting mutators", () => {
     [],
   );
 });
+
+
+test("local-CI admission ignores runner names in shell payloads and unrelated arguments", () => {
+  const commands = [
+    '/bin/zsh -c "node /repo/scripts/local-ci-runner.mjs --check; sleep 300"',
+    'sleep 300',
+    'node /repo/report.mjs /repo/scripts/local-ci-runner.mjs',
+    'node -e "console.log(1)" /repo/scripts/local-ci-runner.mjs',
+    'cat /repo/.local-ci-runner/output.log',
+    'docker inspect /repo/.local-ci-runner',
+  ];
+  const rows = commands.map((commandLine, index) => ({ pid: index + 10, parentPid: index === 1 ? 10 : 1, commandLine }));
+  assert.deepEqual(findLiveLocalCiMutatorPids(rows), []);
+});
+
+test("local-CI admission recognizes quoted executable and script paths with Node options", () => {
+  const rows = [
+    { pid: 10, parentPid: 1, commandLine: '\"C:\\Program Files\\nodejs\\node.exe\" --require \"C:\\tools\\hook.cjs\" \"D:\\DPF source\\scripts\\local-ci-runner.mjs\" --candidate fix/x' },
+    { pid: 11, parentPid: 10, commandLine: 'vitest run' },
+    { pid: 12, parentPid: 1, commandLine: 'node --max-old-space-size=4096 /repo/scripts/local-integration-ci.mjs' },
+  ];
+  assert.deepEqual(findLiveLocalCiMutatorPids(rows), [10, 11, 12]);
+});

@@ -6,7 +6,7 @@ import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-dri
 import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { workroomDriveBranchTaskId } from "@/lib/work-management/drive-resolution";
 
-import { buildWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim } from "@/lib/work-management/workroom-shape-claim";
 import { buildWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
 import {
@@ -208,7 +208,8 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
       reason: "executor_writeback_unavailable",
     });
     expect(secondSnapshot.receipts).toEqual(
-      expect.arrayContaining([{ stageKey: snapshot.stageKey, kind: "blocked" }]),
+      // The blocked receipt belongs to the room's run (BI-853120EE).
+      expect.arrayContaining([{ stageKey: snapshot.stageKey, kind: "blocked", runKey: "obligation-assurance-watch@1.0.0:2026-09-01" }]),
     );
   });
 
@@ -220,10 +221,13 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     });
     await runWorkroomDriveJob(new Date("2026-09-01T00:02:00Z"), { listRooms: async () => [current], effects: fx });
     const snapshot = fx.persist.mock.calls.at(-1)?.[0]?.snapshot as Record<string, unknown>;
-    expect(snapshot.receipts).toEqual([{ stageKey: "sweep", kind: "stage-evidence-recorded" }]);
+    // Earned receipts carry the room's run, and the snapshot names it (BI-853120EE).
+    const run = "obligation-assurance-watch@1.0.0:2026-09-01";
+    expect(snapshot.receipts).toEqual([{ stageKey: "sweep", kind: "stage-evidence-recorded", runKey: run }]);
+    expect(snapshot.runKey).toBe(run);
     expect(snapshot.stageKey).toBe("raise");
     await runWorkroomDriveJob(new Date("2026-09-01T00:03:00Z"), { listRooms: async () => [room({ workspaceState: { workroomDrive: snapshot } })], effects: fx });
-    expect(fx.persist.mock.calls.at(-1)?.[0]?.snapshot.receipts).toEqual(expect.arrayContaining([{ stageKey: "sweep", kind: "stage-evidence-recorded" }]));
+    expect(fx.persist.mock.calls.at(-1)?.[0]?.snapshot.receipts).toEqual(expect.arrayContaining([{ stageKey: "sweep", kind: "stage-evidence-recorded", runKey: run }]));
   });
 
   it("contains delivery notification reconciliation failure after preserving the drive result", async () => {
@@ -593,9 +597,9 @@ describe("parallel branches: one task per branch under one lease (PR-3c-2)", () 
     }
     expect(h.upserts.filter((entry) => entry.endsWith("@b"))).toHaveLength(1);
     expect(h.upserts.filter((entry) => entry.endsWith("@c"))).toHaveLength(1);
-    // Each latched branch's task is deactivated, and each records its own blocked receipt.
+    // Each latched branch's task is deactivated, and each records its own blocked receipt, in its run (BI-086DC167).
     expect(new Set(h.deactivated)).toEqual(new Set([PRIMARY, branch("c")]));
-    expect(drive(h).receipts).toEqual(expect.arrayContaining([{ stageKey: "b", kind: "blocked" }, { stageKey: "c", kind: "blocked" }]));
+    expect(drive(h).receipts).toEqual(expect.arrayContaining([{ stageKey: "b", kind: "blocked", runKey: CYCLE }, { stageKey: "c", kind: "blocked", runKey: CYCLE }]));
   });
 
   it("a branch latched by writeback does not block the other, which still dispatches", async () => {
@@ -677,5 +681,27 @@ describe("parallel branches: one task per branch under one lease (PR-3c-2)", () 
     const paused = await tick(h, at(0));
     expect(paused.plan).toMatchObject({ action: "pause", reason: "construct_not_executable" });
     expect(paused.upserts).toEqual([]);
+  });
+});
+
+describe("runWorkroomDriveJob: an acceptance steward room dispatches its bound coworker (BI-C1781121)", () => {
+  it("dispatches the agent the room bound to the verifier role, briefed with the room objective", async () => {
+    const fx = effects();
+    const steward = room({
+      capsuleId: "WC-ACC-C1781121",
+      objective: "Verify BI-C1781121 on the live install.",
+      scopeClaims: [
+        buildWorkShapeClaim("acceptance-verification@1.0.0"),
+        buildWorkShapeRoleBindingsClaim({ "acceptance-verifier": "agent:AGT-WS-BUILD" }),
+      ],
+      participants: [{ ...coordinatorAssignment("row-1"), kind: "person" as const }],
+    });
+    const result = await runWorkroomDriveJob(new Date("2026-09-25T06:00:00.000Z"), { listRooms: async () => [steward], effects: fx });
+    expect(result.dispatched).toBe(1);
+    expect(fx.upsertAgentTask).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: "AGT-WS-BUILD",
+      taskId: workroomDriveTaskId("WC-ACC-C1781121", "acceptance-verification"),
+      prompt: expect.stringContaining("Verify BI-C1781121 on the live install."),
+    }));
   });
 });
