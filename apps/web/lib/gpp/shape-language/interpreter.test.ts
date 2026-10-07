@@ -187,3 +187,43 @@ describe("rework (§6.1 rule 6)", () => {
     expect(run(unbounded, [receipt("a", "x"), receipt("b"), verdict("b", "refuse")]).stopped?.kind).toBe("budget");
   });
 });
+
+// GPP Phase 3c PR-3c-4 (BI-8875C9DF), written from parent §6.1 rule 8 ("timers never change M") and the
+// Phase 3c design §8 (a deadline is non-interrupting: it never routes to a refuse route or a stop).
+describe("stage deadlines (§6.1 rule 8)", () => {
+  const deadline = (stageKey: string): GppShapeEvent => ({ type: "deadline", stageKey });
+  const document = shape([stage("a"), stage("b", { onRefuse: "failure" }), stage("c")]);
+
+  it("returns the marking unchanged, whatever stage it names", () => {
+    const start = startShapeInstance(document);
+    for (const key of ["a", "b", "c", "no-such-stage"]) expect(stepShapeInstance(document, start, deadline(key))).toBe(start);
+  });
+
+  it("records nothing: a receipt or verdict waiting to fire does not fire on a deadline", () => {
+    // b is enabled by the receipt recorded before a moved on; one firing per event leaves it for the next event.
+    const waiting = run(document, [receipt("b"), receipt("a", "x")]);
+    expect(markedStageKeys(document, waiting)).toEqual(["b"]);
+    const after = stepShapeInstance(document, waiting, deadline("b"));
+    expect(after).toBe(waiting);
+    expect(after.receipts).toEqual(waiting.receipts);
+  });
+
+  it("never routes the token to its refuse route or a stop, and never moves it on", () => {
+    const atB = run(document, [receipt("a", "x")]);
+    const overdue = [deadline("b"), deadline("b"), deadline("a")].reduce((marking, event) => stepShapeInstance(document, marking, event), atB);
+    expect(markedStageKeys(document, overdue)).toEqual(["b"]);
+    expect(overdue.stopped).toBeNull();
+    expect(overdue.reworkTaken).toEqual({});
+  });
+
+  it("interleaved with receipts, the run equals the same run without the deadlines", () => {
+    const events = [receipt("a", "x"), receipt("b"), verdict("b", "admit"), receipt("c", "y")];
+    const withDeadlines = events.flatMap((event) => [deadline("b"), event, deadline("c")]);
+    expect(run(document, withDeadlines)).toEqual(run(document, events));
+  });
+
+  it("on a stopped instance it is ignored like every other event", () => {
+    const stopped = run(document, [{ type: "stop", kind: "failure" }]);
+    expect(stepShapeInstance(document, stopped, deadline("a"))).toBe(stopped);
+  });
+});

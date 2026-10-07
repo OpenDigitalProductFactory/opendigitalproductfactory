@@ -38,7 +38,11 @@
 //    must be produced again (the permit revocation of §5 construct 13).
 // 7. Stop: reaching a stop consumes every token and records its disposition.
 //    A failure or budget stop fires from any marking on a `stop` event.
-// 8. Timers never change M, so they are not events here.
+// 8. Timers never change M. A stage deadline is the event
+//    `{ type: "deadline"; stageKey }` (GPP Phase 3c PR-3c-4, BI-8875C9DF): it
+//    records nothing and fires nothing, so the marking comes back unchanged.
+//    The deadline is non-interrupting: it never moves a token to a refuse
+//    route or a stop (Phase 3c design §8).
 //
 // Gates (§6.2), for a governed-decision stage with a typed `gate`:
 // - `shadow`, or `enforced` with `blocking: false`: the verdict is recorded
@@ -136,7 +140,9 @@ export type GppShapeMarking = {
 export type GppShapeEvent =
   | { type: "receipt"; stageKey: string; kind: string }
   | { type: "gate-verdict"; stageKey: string; verdict: GppGateVerdict; mode: GppGateMode }
-  | { type: "stop"; kind: "failure" | "budget" };
+  | { type: "stop"; kind: "failure" | "budget" }
+  /** Rule 8: a stage deadline passed. Returns the marking unchanged (PR-3c-4). */
+  | { type: "deadline"; stageKey: string };
 
 function compareTokens(left: GppToken, right: GppToken): number {
   if (left.node !== right.node) return left.node < right.node ? -1 : 1;
@@ -320,6 +326,8 @@ export function stepShapeInstance(
   event: GppShapeEvent,
 ): GppShapeMarking {
   if (marking.stopped) return marking;
+  // Rule 8: timers never change M. Nothing is recorded and nothing fires.
+  if (event.type === "deadline") return marking;
   const graph = buildShapeFlowGraph(definition);
   const work: Work = {
     tokens: marking.tokens.map((token) => ({ ...token })),
