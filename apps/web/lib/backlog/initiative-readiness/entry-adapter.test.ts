@@ -535,6 +535,44 @@ describe("plan-review binds the plan artifact, not the design (BI-B5C8FEFC)", ()
   });
 });
 
+describe("a design amended after its spec approval owes the approval again (BI-7531B73C)", () => {
+  const later = new Date(Date.now() + 60_000);
+  const amended = (id: string, gateKey: string, digest = "sha256:amended") => {
+    const base = receipt(id, gateKey);
+    return { ...base, recordedAt: later, payload: { ...base.payload, artifactDigest: digest } };
+  };
+  const project = (activities: ReturnType<typeof readyActivities>) => projectBacklogItemReadiness({
+    item,
+    activities,
+    target: "implementation",
+    transitionObject,
+    authorization: "pass",
+    capsuleIdentity: "pass",
+    evaluatedAt: "2026-08-22T00:00:00.000Z",
+  });
+
+  it("reads spec approval stale once a review records against a newer design", () => {
+    const projection = project([...readyActivities(), amended("r-data-amended", "data-review")]);
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")?.state).toBe("stale");
+  });
+
+  it("stays satisfied when later receipts bind the approved design", () => {
+    const projection = project([...readyActivities(), amended("r-data-same", "data-review", "sha256:design")]);
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")).toBeUndefined();
+  });
+
+  it("ignores a plan review, which binds the plan", () => {
+    const projection = project([...readyActivities(), amended("r-plan-later", "plan-review", "sha256:plan-v2")]);
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")).toBeUndefined();
+  });
+
+  it("ignores receipts recorded before the baseline, such as research on an earlier draft", () => {
+    const early = { ...receipt("r-research-draft", "research"), payload: { ...receipt("r-research-draft", "research").payload, artifactDigest: "sha256:draft" } };
+    const projection = project([...readyActivities(), early]);
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")).toBeUndefined();
+  });
+});
+
 describe("v3: the bound delivery shape keys the gates", () => {
   it("parses the Workroom workShape ref and ignores non-delivery shapes", () => {
     expect(readinessShapeFromWorkShape("delivery-small@1.0.0")).toBe("small");
