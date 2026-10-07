@@ -4,7 +4,6 @@
   "decisionInteractionId": "DI-B4431F33811A",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx",
       "apps/web/components/platform/coworker-record/CapabilitiesEditor.tsx",
       "apps/web/components/platform/coworker-record/AuthorityReconciliation.tsx"
     ]

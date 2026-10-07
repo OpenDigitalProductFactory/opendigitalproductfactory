@@ -91,7 +91,11 @@ export async function seedOnboardingAgent(): Promise<void> {
   // atomic insert that DB-side no-ops on existing rows (ON CONFLICT DO NOTHING),
   // so it is idempotent AND race-safe. The upsert's update was a no-op ({}), so
   // there is no lost mutation. Revocation tombstones (BI-4FA040D5) still honored.
-  await prisma.agentToolGrant.createMany({
+  const previous = await prisma.agent.findUnique({ where: { agentId: agent.agentId },
+    select: { _count: { select: { toolGrants: true, toolGrantRevocations: true } } } });
+  // Existing duplicate decisions await administrator approval. Do not let
+  // first-run defaults resolve their canonical absence in the meantime.
+  if (!previous || (!previous._count.toolGrants && !previous._count.toolGrantRevocations)) await prisma.agentToolGrant.createMany({
     data: grants
       .filter((grantKey) => !revokedKeys.has(grantKey))
       .map((grantKey) => ({ agentId: authority.id, grantKey })),

@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import pg from "pg";
 import { COWORKER_SLUG_TO_CANONICAL_AGENT_ID } from "./agent-identity";
+import registry from "../data/agent_registry.json";
+import { seedCanonicalAgentToolGrants, type CanonicalGrantSeedDb } from "./seed-agent-tool-grants";
 
 const sql = readFileSync(new URL("../prisma/migrations/20261005010000_retire_duplicate_grant_authority/migration.sql", import.meta.url), "utf8");
 let client: pg.Client | undefined;
@@ -56,5 +58,42 @@ describe("duplicate permission authority migration", () => {
     expect((await client.query('SELECT count(*)::int n FROM "Agent"')).rows[0].n).toBe(7);
     await client.query(sql);
     expect((await client.query('SELECT * FROM "ToolExecution" ORDER BY id')).rows).toEqual(audit);
+
+    // Exercise the actual registry seed helper on the migrated PostgreSQL
+    // fixture. Deliberate removals survive; unresolved identities stay pending.
+    const dbClient = client;
+    const db: CanonicalGrantSeedDb = {
+      agent: { async findUnique({ where }) {
+        const result = await dbClient.query(`SELECT
+          (SELECT count(*)::int FROM "AgentToolGrant" g WHERE g."agentId"=a.id) AS grants,
+          (SELECT count(*)::int FROM "AgentToolGrantRevocation" r WHERE r."agentId"=a.id) AS removals
+          FROM "Agent" a WHERE a."agentId"=$1`, [where.agentId]);
+        return result.rows[0] ? { _count: { toolGrants: result.rows[0].grants, toolGrantRevocations: result.rows[0].removals } } : null;
+      } },
+      agentToolGrant: { async upsert({ create }) {
+        return dbClient.query(`INSERT INTO "AgentToolGrant" (id,"agentId","grantKey") VALUES ($1,$2,$3)
+          ON CONFLICT ("agentId","grantKey") DO NOTHING`, [`seed:${create.agentId}:${create.grantKey}`, create.agentId, create.grantKey]);
+      } },
+    };
+    await dbClient.query(`INSERT INTO "AgentToolGrantRevocation" (id,"agentId","grantKey","revokedBy","revokedAt")
+      VALUES ('r3','c','coworker_engagement_write','operator-choice','2026-01-03')`);
+    const removals = (await dbClient.query('SELECT * FROM "AgentToolGrantRevocation" ORDER BY id')).rows;
+    const revoked = new Set<string>(removals.map(row => `${row.agentId}:${row.grantKey}`));
+    const profiles = [{ id: "c", agentId: "AGT-EXT-CODEX" }, { id: "cc", agentId: "AGT-EXT-CLAUDE" }, { id: "cg", agentId: "AGT-EXT-GROK" }];
+    const seed = async () => { for (const agent of profiles) {
+      const grants = registry.agents.find(row => row.agent_id === agent.agentId)!.config_profile.tool_grants;
+      await seedCanonicalAgentToolGrants(db, agent, grants, revoked);
+    } };
+    await seed();
+    const seeded = (await dbClient.query('SELECT * FROM "AgentToolGrant" ORDER BY id')).rows;
+    expect(seeded).toContainEqual(expect.objectContaining({ agentId: "c", grantKey: "coworker_catalog_read" }));
+    expect(seeded.some(row => row.agentId === "c" && row.grantKey === "coworker_engagement_write")).toBe(false);
+    expect(seeded.filter(row => ["cc", "cg"].includes(row.agentId))).toEqual(beforeGrants.filter(row => ["cc", "cg"].includes(row.agentId)));
+    expect(seeded.find(row => row.id === "g1")).toEqual(beforeGrants.find(row => row.id === "g1"));
+    expect(seeded.some(row => row.agentId === "a")).toBe(false);
+    await seed();
+    expect((await dbClient.query('SELECT * FROM "AgentToolGrant" ORDER BY id')).rows).toEqual(seeded);
+    expect((await dbClient.query('SELECT * FROM "AgentToolGrantRevocation" ORDER BY id')).rows).toEqual(removals);
+    expect((await dbClient.query('SELECT * FROM "ToolExecution" ORDER BY id')).rows).toEqual(audit);
   });
 });

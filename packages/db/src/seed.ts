@@ -6,6 +6,7 @@ import { prisma } from "./client.js";
 import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import { resolveAgentIdentity, resolveCanonicalAgentId } from "./agent-identity.js";
+import { seedCanonicalAgentToolGrants } from "./seed-agent-tool-grants.js";
 import { resolvePrincipalSensitivityClearance } from "./principal-sensitivity.js";
 import { convergeAgentPrincipals, type AgentPrincipalDb } from "./agent-principal-convergence.js";
 import { upsertCoworkerAgentTolerant } from "./coworker-agent-upsert.js";
@@ -327,16 +328,7 @@ async function seedAgents(): Promise<void> {
       });
 
       // Seed AgentToolGrant rows from tool_grants array
-      if (cp.tool_grants && resolveCanonicalAgentId(agent.agentId) === agent.agentId) {
-        for (const grantKey of cp.tool_grants) {
-          if (revokedGrants.has(`${agent.id}:${grantKey}`)) continue; // BI-4FA040D5: honor durable revocation
-          await prisma.agentToolGrant.upsert({
-            where: { agentId_grantKey: { agentId: agent.id, grantKey } },
-            update: {},
-            create: { agentId: agent.id, grantKey },
-          });
-        }
-      }
+      if (cp.tool_grants) await seedCanonicalAgentToolGrants(prisma, agent, cp.tool_grants, revokedGrants);
     }
   }
   console.log(`Seeded ${seen.size} agents (skipped ${registry.agents.length - seen.size} duplicates)`);

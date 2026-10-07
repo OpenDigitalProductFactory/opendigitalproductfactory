@@ -16,11 +16,19 @@ beforeEach(() => {
     differences: [{ grantKey: "release_plan_read", canonical: "revoked", alias: "granted" }] });
   mocks.confirm.mockResolvedValue(true); mocks.approve.mockResolvedValue({ ok: true });
 });
+async function reviewReady() {
+  fireEvent.click(screen.getByRole("button", { name: "Review permission differences" }));
+  const choice = await screen.findByRole("button", { name: "Keep current permissions for all" });
+  // Preview content can mount while its transition still disables controls.
+  // Exercise the same enabled control a person can actually use.
+  await waitFor(() => expect(choice).toBeEnabled());
+}
+
 describe("administrator permission review", () => {
   it("requires a choice and confirmation before submitting the exact preview", async () => {
     render(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={initialPreview} />));
     expect(screen.queryByRole("combobox")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Review permission differences" }));
+    await reviewReady();
     fireEvent.click(await screen.findByText("Review individually"));
     const select = await screen.findByRole("combobox");
     const approve = screen.getByRole("button", { name: "Approve choices" });
@@ -36,7 +44,7 @@ describe("administrator permission review", () => {
   it("cancelled confirmation makes no change", async () => {
     mocks.confirm.mockResolvedValue(false);
     render(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={initialPreview} />));
-    fireEvent.click(screen.getByRole("button", { name: "Review permission differences" }));
+    await reviewReady();
     fireEvent.click(await screen.findByText("Review individually"));
     fireEvent.change(await screen.findByRole("combobox"), { target: { value: "canonical" } });
     fireEvent.click(screen.getByRole("button", { name: "Approve choices" }));
@@ -46,7 +54,7 @@ describe("administrator permission review", () => {
   it("shows a stale-state refusal and retains the preview for re-review", async () => {
     mocks.approve.mockResolvedValue({ ok: false, error: "Permissions changed after preview. Review a fresh preview." });
     render(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={initialPreview} />));
-    fireEvent.click(screen.getByRole("button", { name: "Review permission differences" }));
+    await reviewReady();
     fireEvent.click(await screen.findByText("Review individually"));
     fireEvent.change(await screen.findByRole("combobox"), { target: { value: "alias" } });
     fireEvent.click(screen.getByRole("button", { name: "Approve choices" }));
@@ -64,7 +72,7 @@ describe("administrator permission review", () => {
       { grantKey: "inventory_read", canonical: "absent" as const, alias: "granted" as const }] };
     mocks.preview.mockResolvedValue(two);
     render(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={two} />));
-    fireEvent.click(screen.getByRole("button", { name: "Review permission differences" }));
+    await reviewReady();
     fireEvent.click(await screen.findByRole("button", { name: "Keep current permissions for all" }));
     expect(screen.getByText("2 of 2 choices selected")).toBeVisible();
     fireEvent.click(screen.getByText("Review individually"));
@@ -76,12 +84,12 @@ describe("administrator permission review", () => {
   it("shows unavailable review honestly and can recover", async () => {
     render(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={null} loadError="Review unavailable" />));
     expect(screen.getByRole("alert")).toHaveTextContent("Review unavailable");
-    fireEvent.click(screen.getByRole("button", { name: "Review permission differences" }));
+    await reviewReady();
     expect(await screen.findByRole("button", { name: "Keep current permissions for all" })).toBeVisible();
   });
   it("invalidates displayed choices when server props refresh to a different digest", async () => {
     const { rerender } = render(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={initialPreview} />));
-    fireEvent.click(screen.getByRole("button", { name: "Review permission differences" }));
+    await reviewReady();
     fireEvent.click(await screen.findByRole("button", { name: "Use previous permissions for all" }));
     rerender(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={{ ...initialPreview, digest: "updated" }} />));
     expect(screen.queryByRole("button", { name: "Approve choices" })).toBeNull();
