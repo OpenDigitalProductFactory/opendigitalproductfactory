@@ -214,3 +214,14 @@ test("macOS host install preserves the one-time token in its protected runtime e
   assert.match(runtimeEnv, /^DPF_INSTALL_MODE=native$/m);
   assert.match(runtimeEnv, /^DPF_AUTHORITY_URL=http:\/\/192\.168\.50\.25:3000$/m);
 });
+
+// BI-F8F8C383: after an approved Docker VM restart the native agent runs the
+// same logon task install-dpf.ps1 registers, so the stack comes back the way it
+// does after a sign-in. The two names must not drift.
+test("the native Windows agent is told the DPF autostart task it runs after a Docker VM restart", async () => {
+  const installer = await read("install-dpf.ps1");
+  const hostInstaller = await read("scripts/installer/native-edge-host.ps1");
+  const declared = /\$AUTOSTART_TASK_NAME\s*=\s*"([^"]+)"/.exec(installer)?.[1];
+  assert.ok(declared, "install-dpf.ps1 declares the autostart task name");
+  assert.match(hostInstaller, new RegExp(`DPF_AUTOSTART_TASK_NAME = '${declared}'`));
+});

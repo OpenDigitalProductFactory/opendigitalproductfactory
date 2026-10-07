@@ -94,6 +94,16 @@ for arg in "$@"; do
 done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
+  *"ps -q sandbox"*) printf 'sandbox-container' ;;
+  *"config --images sandbox"*) printf 'dpf-sandbox:target\\n' ;;
+  *"image inspect --format {{.Id}} dpf-sandbox:target"*) printf 'sha256:sandbox-target' ;;
+  *"{{.State.Running}} {{.Image}}"*)
+    case "\${DPF_TEST_SANDBOX_STATE:-running}" in
+      exited) printf 'false sha256:sandbox-target' ;;
+      stale) printf 'true sha256:sandbox-old' ;;
+      *) printf 'true sha256:sandbox-target' ;;
+    esac
+    ;;
   *"config --format json"*) printf '{"services":{}}' ;;
   *"ps -a -q "*) for service in "$@"; do :; done; printf '%s' "$service" ;;
   *".State.Status"*)
@@ -145,6 +155,7 @@ case "$*" in
     fi
     ;;
   *"up -d --no-deps --force-recreate portal"*|*"up -d --no-deps --force-recreate sandbox"*)
+    case "$*" in *"force-recreate sandbox"*) [ "\${DPF_TEST_SANDBOX_RECREATE_FAILS:-0}" = "1" ] && exit 1 ;; esac
     service=
     for service in "$@"; do :; done
     effective_state_dir="$(sed -n 's/^DPF_STATE_DIR=//p' "$env_file" | tail -n 1)"
@@ -198,6 +209,10 @@ export function runPromote(opts: {
   existingServices?: string[];
   createdService?: string;
   inspectFailService?: string;
+  /** What the sandbox reads as after its recreate (BI-547B788D). Default: running on the target image. */
+  sandboxState?: "running" | "exited" | "stale";
+  /** Make `up -d --no-deps --force-recreate sandbox` itself fail (BI-547B788D AC-3). */
+  sandboxRecreateFails?: boolean;
   /** Make the reconcile `up -d --no-recreate` fail, to prove it never aborts the upgrade. */
   reconcileFails?: boolean;
   /** Make only `up` of this one service fail (its image tag no longer resolves). */
@@ -275,6 +290,8 @@ export function runPromote(opts: {
       : []),
     ...(opts.createdService ? [`export DPF_TEST_CREATED_SERVICE=${shellQuote(opts.createdService)}`] : []),
     ...(opts.inspectFailService ? [`export DPF_TEST_INSPECT_FAIL_SERVICE=${shellQuote(opts.inspectFailService)}`] : []),
+    ...(opts.sandboxState ? [`export DPF_TEST_SANDBOX_STATE=${shellQuote(opts.sandboxState)}`] : []),
+    ...(opts.sandboxRecreateFails ? ["export DPF_TEST_SANDBOX_RECREATE_FAILS=1"] : []),
     ...(opts.reconcileFails ? ["export DPF_TEST_RECONCILE_FAILS=1"] : []),
     ...(opts.reconcileFailService
       ? [`export DPF_TEST_RECONCILE_FAIL_SERVICE=${shellQuote(opts.reconcileFailService)}`]

@@ -1274,7 +1274,28 @@ if [[ $_dry_run -eq 0 ]]; then
     docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
       "${_f_args[@]}" up -d --no-deps --force-recreate sandbox || _sandbox_ok=0
   fi
+  # BI-547B788D AC-1: a recreate that "succeeded" is not proof. Read the sandbox
+  # back and require it RUNNING on the image the service now resolves to; a
+  # container that exited at once, or kept the old image, is a failed refresh.
+  if [[ $_sandbox_ok -eq 1 ]]; then
+    _sbx_id="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" ps -q sandbox 2>/dev/null)" || _sbx_id=""
+    _sbx_image_ref="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" config --images sandbox 2>/dev/null | head -n 1)" || _sbx_image_ref=""
+    _sbx_target_id=""
+    [[ -n "$_sbx_image_ref" ]] && _sbx_target_id="$(docker image inspect --format '{{.Id}}' "$_sbx_image_ref" 2>/dev/null)"
+    _sbx_observed=""
+    [[ -n "$_sbx_id" && "$_sbx_id" != *$'\n'* ]] && _sbx_observed="$(docker inspect --format '{{.State.Running}} {{.Image}}' "$_sbx_id" 2>/dev/null)"
+    if [[ "${_sbx_observed%% *}" != "true" ]]; then
+      printf 'step=sandbox-refresh-not-running target=%s state=%s\n' "$_built_sha" "${_sbx_observed:-unreadable}"
+      _sandbox_ok=0
+    elif [[ -z "$_sbx_target_id" || "${_sbx_observed#* }" != "$_sbx_target_id" ]]; then
+      printf 'step=sandbox-refresh-stale-image target=%s running=%s expected=%s\n' "$_built_sha" "${_sbx_observed#* }" "${_sbx_target_id:-unreadable}"
+      _sandbox_ok=0
+    fi
+  fi
   if [[ $_sandbox_ok -eq 0 ]]; then
+    _sandbox_refresh_failed=1
     printf 'step=sandbox-refresh-failed target=%s\n' "$_built_sha"
     printf 'warning: dpf-sandbox rebuild/recreate failed after a successful portal promotion — the portal upgrade stands, but the sandbox may be stale (Build Studio builds can fail at the coding phase until it is refreshed via recover_sandbox or a manual `docker compose build sandbox && docker compose up -d --force-recreate sandbox`) (BI-A8686CFC)\n' >&2
   fi
@@ -1397,6 +1418,13 @@ if [[ $_dry_run -eq 0 ]]; then
       fi
     fi
   done <<< "$_reconcile_required"
+  # BI-547B788D AC-1: a sandbox that step 7b could not bring up on the target
+  # image makes this run degraded, by name, through the same durable outcome
+  # file the portal reads. A stderr warning alone dies with this container.
+  if [[ "${_sandbox_refresh_failed:-0}" -eq 1 ]] \
+    && ! printf '%s\n' ${_reconcile_failed[@]+"${_reconcile_failed[@]}"} | grep -qxF sandbox; then
+    _reconcile_failed+=("sandbox")
+  fi
   if [[ ${#_reconcile_missing[@]} -gt 0 ]]; then
     printf 'step=service-reconcile-creating target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_missing[*]}")"
     _reconcile_f_args=("${_f_args[@]}")

@@ -240,7 +240,8 @@ describe("recordActionResult", () => {
 
 describe("timeoutStaleClaims", () => {
   function timeoutDb(count: number) {
-    const updateMany = vi.fn().mockResolvedValue({ count });
+    // The general sweep times out `count`; the VM-restart sweep finds none.
+    const updateMany = vi.fn().mockResolvedValueOnce({ count }).mockResolvedValue({ count: 0 });
     const findMany = vi.fn().mockResolvedValue([]);
     return {
       db: {
@@ -257,7 +258,7 @@ describe("timeoutStaleClaims", () => {
     expect(res).toEqual({ timedOut: 2 });
     const arg = updateMany.mock.calls[0]![0] as { where: { status: unknown; startedAt: { lt: Date } }; data: Record<string, unknown> };
     expect(arg.where.status).toEqual({ in: ["claimed", "running"] });
-    expect((arg.where as Record<string, unknown>).actionType).toEqual({ not: "organization.join.import" });
+    expect((arg.where as Record<string, unknown>).actionType).toEqual({ notIn: ["organization.join.import", "substrate.docker-vm.restart"] });
     expect(arg.where.startedAt.lt).toEqual(new Date(NOW.getTime() - 600_000));
     expect(arg.data).toEqual({ status: "timed-out", completedAt: NOW });
   });
@@ -267,6 +268,56 @@ describe("timeoutStaleClaims", () => {
     await timeoutStaleClaims(db, { now: NOW });
     const arg = updateMany.mock.calls[0]![0] as { where: { startedAt: { lt: Date } } };
     expect(arg.where.startedAt.lt).toEqual(new Date(NOW.getTime() - 10 * 60 * 1000));
+  });
+});
+
+describe("Docker VM restart dispatch (BI-F8F8C383)", () => {
+  const restart = candidate({
+    actionKey: "ra_vm",
+    actionType: "substrate.docker-vm.restart",
+    riskClass: "high",
+    edgeNodeId: "node_1",
+    changeRequestId: "cr_1",
+    parameters: { issueKey: "substrate:docker-vm-wedged" },
+  });
+  const host = { ...trustedInternalNode, allowedActionTypes: ["substrate.docker-vm.restart"], organizationTrustRole: null };
+
+  it("re-checks the ChangeRequest approval at claim time, as for every privileged type", async () => {
+    const { db } = claimDb([restart]);
+    (db.changeRequest.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "cr_1", status: "approved", approvedAt: NOW, approvedById: "u1" },
+    ]);
+    const res = await claimActionsForNode(db, host, claimOptions);
+    expect(res.claimed).toHaveLength(1);
+    expect(res.claimed[0]!.parameters).toEqual({ issueKey: "substrate:docker-vm-wedged" });
+  });
+
+  it("is not claimed while its ChangeRequest is not approved", async () => {
+    const { db } = claimDb([restart]);
+    const res = await claimActionsForNode(db, host, claimOptions);
+    expect(res.claimed).toHaveLength(0);
+  });
+
+  it("refuses any parameters other than the wedged-VM issue key", async () => {
+    const { db, updateMany } = claimDb([{ ...restart, parameters: { issueKey: "x", command: "shutdown /r" } }]);
+    (db.changeRequest.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "cr_1", status: "approved", approvedAt: NOW, approvedById: "u1" },
+    ]);
+    const res = await claimActionsForNode(db, host, claimOptions);
+    expect(res.claimed).toHaveLength(0);
+    expect(updateMany.mock.calls[0]![0]).toMatchObject({ data: { status: "failed", evidence: { errorCode: "docker-vm-restart-parameters-invalid" } } });
+  });
+
+  it("times out on its own longer window", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const db = {
+      remoteAction: { updateMany, findMany: vi.fn().mockResolvedValue([]), findUnique: vi.fn(), update: vi.fn() },
+      changeRequest: { findMany: vi.fn() },
+    } as unknown as DispatchOrchestratorDb;
+    await timeoutStaleClaims(db, { now: NOW });
+    const vm = updateMany.mock.calls.map((c) => c[0] as { where: { actionType: unknown; startedAt: { lt: Date } } })
+      .find((arg) => arg.where.actionType === "substrate.docker-vm.restart");
+    expect(vm?.where.startedAt.lt).toEqual(new Date(NOW.getTime() - 30 * 60 * 1000));
   });
 });
 

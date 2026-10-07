@@ -63,6 +63,12 @@ const (
 	EnvOrganizationTrustRole = "DPF_ORGANIZATION_TRUST_ROLE"
 	EnvPkiDir                = "DPF_PKI_DIR"
 	EnvOrganizationCAURL     = "DPF_ORGANIZATION_CA_URL"
+
+	// BI-F8F8C383: the operator-approved Docker VM restart. Both optional: the
+	// Docker Desktop path defaults to the per-user then the machine install,
+	// and without a task name the restart relies on restart policies alone.
+	EnvDockerDesktopExe  = "DPF_DOCKER_DESKTOP_EXE"
+	EnvAutostartTaskName = "DPF_AUTOSTART_TASK_NAME"
 )
 
 // Config is the loaded, validated runtime configuration.
@@ -83,6 +89,14 @@ type Config struct {
 	OrganizationTrustRole          string
 	PkiDir                         string
 	OrganizationCAURL              string
+	DockerDesktopExe               string
+	AutostartTaskName              string
+}
+
+// DockerVmRestartEnabled reports whether this host can run the operator-approved
+// Docker VM restart: only a native Windows agent sits outside the VM it restarts.
+func (c *Config) DockerVmRestartEnabled() bool {
+	return c.Platform == "win32" && c.InstallMode == "native"
 }
 
 func (c *Config) OrganizationJoinEnabled() bool {
@@ -124,6 +138,8 @@ func Load(version string) (*Config, error) {
 		OrganizationTrustRole:          strings.TrimSpace(os.Getenv(EnvOrganizationTrustRole)),
 		PkiDir:                         filepath.Clean(strings.TrimSpace(os.Getenv(EnvPkiDir))),
 		OrganizationCAURL:              strings.TrimRight(strings.TrimSpace(os.Getenv(EnvOrganizationCAURL)), "/"),
+		DockerDesktopExe:               strings.TrimSpace(os.Getenv(EnvDockerDesktopExe)),
+		AutostartTaskName:              strings.TrimSpace(os.Getenv(EnvAutostartTaskName)),
 	}
 
 	if cfg.EdgeNodeName == "" {

@@ -533,6 +533,19 @@ push` is a correct composition. Add `--json` for machine use. It never claims a
 lease and never runs a gate, so it is safe to call at any time, including while
 someone else's gate is mid-run.
 
+**Queued and broken read differently (BI-277ECBDB).** A queued claim reads
+`queued behind N other claims`: it is waiting on other work, and its waiter runs
+it. Before claiming, the gate probes every slot's PostgreSQL container
+(`dpf-local-ci-postgres-<N>`) and starts a stopped one itself. When no slot's
+container can run, it claims nothing, exits **9**, and `pregate:status` reads
+`BLOCKED — slot substrate unavailable: <container> is <state>`. That status
+carries Docker's refusal and the remedy instead of `pnpm run pregate`, because
+gating again changes nothing until the container runs. The slot containers carry
+`--restart unless-stopped`, so a host or Docker restart no longer removes them.
+A pool that keeps admitting gates that never record a result raises the
+`local-ci:pool-admissions-without-results` condition through the substrate
+reconciler, so the stall is surfaced instead of inferred by each session.
+
 Everything else about a pregate run lies in a documented direction, which is why
 the reader exists (BI-B1065D41):
 

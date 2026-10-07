@@ -16,6 +16,9 @@ import { resolveEdgeNodeMtls, type EdgeNodeMtlsDb } from "@/lib/auth/edge-node-m
 import { loadEdgeMtlsProxySecret } from "@/lib/auth/edge-mtls-proxy-secret";
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { recordActionResult, type DispatchOrchestratorDb } from "@/lib/remote-action/dispatch-orchestrator";
+import { changeStepsForRestartReport } from "@/lib/remote-action/docker-vm-restart-action";
+import { driveChangeThrough } from "@/lib/change-management/register-change";
+import { DOCKER_VM_RESTART_ACTION_TYPE } from "@dpf/db/remote-action-dispatch";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 const BODY_SIZE_CAP_BYTES = 96 * 1024; // accommodates the bounded 64 KiB join package plus JSON framing
@@ -102,5 +105,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: res.reason }, { status });
   }
 
+  await recordDockerVmRestartChange(actionKey, outcome, evidence);
   return NextResponse.json({ ok: true, actionKey, status: res.status }, { status: 200 });
+}
+
+/**
+ * BI-F8F8C383: a Docker VM restart's report also moves its ChangeRequest. Best
+ * effort: the change register is an audit mirror, and a mirror failure must
+ * not refuse the node's report.
+ */
+async function recordDockerVmRestartChange(
+  actionKey: string,
+  outcome: "running" | "succeeded" | "failed",
+  evidence: Record<string, unknown> | undefined,
+): Promise<void> {
+  try {
+    const action = await prisma.remoteAction.findUnique({
+      where: { actionKey },
+      select: { actionType: true, changeRequestId: true },
+    });
+    if (action?.actionType !== DOCKER_VM_RESTART_ACTION_TYPE || !action.changeRequestId) return;
+    const errorCode = typeof evidence?.errorCode === "string" ? evidence.errorCode : null;
+    await driveChangeThrough({ id: action.changeRequestId }, changeStepsForRestartReport(outcome, errorCode));
+  } catch (error) {
+    console.error(`[edge-actions/result] could not mirror ${actionKey} into its change record:`, error);
+  }
 }

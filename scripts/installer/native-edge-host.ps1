@@ -140,6 +140,7 @@ function Install-DPFNativeEdgeNode {
 `$env:DPF_EDGE_NODE_NAME = '$escapedNodeName'
 `$env:DPF_INSTALL_MODE = 'native'
 `$env:DPF_EDGE_STATE_DIR = '$escapedState'
+`$env:DPF_AUTOSTART_TASK_NAME = 'DPF-AutoStart'
 $organizationEnvironment
 $actionEnvironment& '$escapedBinary' *>> '$($logDir.Replace("'", "''"))\edge-node.log'
 "@ | Set-Content -LiteralPath $runner -Encoding ASCII
