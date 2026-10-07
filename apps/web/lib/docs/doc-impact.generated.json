@@ -888,6 +888,9 @@
     "apps/web/lib/gpp/shape-language/gate-ratification.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
+    "apps/web/lib/gpp/stage-permit-revocation.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/hooks/system-events.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
@@ -3149,6 +3152,7 @@
       "apps/web/lib/gpp/bindings.ts",
       "apps/web/lib/gpp/shape-language/executable-constructs.ts",
       "apps/web/lib/gpp/shape-language/gate-ratification.ts",
+      "apps/web/lib/gpp/stage-permit-revocation.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/drive-marking.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
