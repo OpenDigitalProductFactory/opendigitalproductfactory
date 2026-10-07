@@ -48,6 +48,7 @@ vi.mock("@/lib/build-flow-state", () => ({
 
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
   reconcileQuiescenceOnBoot: (...args: unknown[]) => reconcileQuiescenceOnBootMock(...args),
+  getQuiescenceLevel: async () => "normal", // BI-E9DAA23F pause cases: instrumentation.upgrade-pause.test.ts
 }));
 
 vi.mock("@/lib/self-upgrade/run-store", () => ({
@@ -69,6 +70,7 @@ vi.mock("@dpf/db", () => ({
     buildActivity: {
       create: (...args: unknown[]) => buildActivityCreateMock(...args),
       findMany: (...args: unknown[]) => buildActivityFindManyMock(...args),
+      findFirst: async () => null,
     },
     productVersion: {
       findMany: (...args: unknown[]) => productVersionFindManyMock(...args),
@@ -105,13 +107,11 @@ beforeEach(() => {
   isFeatureBuildDeployedMock.mockReset();
   reconcileBuildCompletionMock.mockReset();
   completeLocalDeliveryBuildMock.mockReset();
-  reconcileQuiescenceOnBootMock.mockReset();
-  reconcileQuiescenceOnBootMock.mockResolvedValue({ reconciled: 0, failed: 0 });
+  reconcileQuiescenceOnBootMock.mockReset().mockResolvedValue({ reconciled: 0, failed: 0 });
   featureBuildUpdateMock.mockResolvedValue({});
   featureBuildUpdateManyMock.mockResolvedValue({ count: 1 });
   buildActivityCreateMock.mockResolvedValue({});
-  buildActivityFindManyMock.mockReset();
-  buildActivityFindManyMock.mockResolvedValue([]);
+  buildActivityFindManyMock.mockReset().mockResolvedValue([]);
   queueBuildReviewVerificationMock.mockResolvedValue(undefined);
   productVersionFindManyMock.mockResolvedValue([]);
   changePromotionUpdateManyMock.mockResolvedValue({ count: 0 });

@@ -336,7 +336,7 @@ export function registerCoworkerAuthorityCases(
     harness.applyOverrides({
       resolveCoworkerAuthorityInput: async () => pending,
       authorityExecutedOutcome: async () => ({
-        envelopeId: "ENV-DONE",
+        envelopeId: "ENV-DONE", status: "executed",
         result: { success: true, message: "Created BI-9.", entityId: "BI-9", data: { itemId: "BI-9" } },
       }),
     });

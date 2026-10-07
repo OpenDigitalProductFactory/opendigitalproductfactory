@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Demand Management — turn the raw backlog into a governed value-ranked investment funnel
 
 | Field | Value |
@@ -150,6 +154,8 @@ Extend `ingestBacklogItem` with a **semantic dedup pass** (in addition to today'
 ## 7. Ranking gate between triage and promote
 
 Today `promote_to_build_studio` draws build-eligible items by `priority`-int + recency ([governed-backlog-tee-up.ts:125](../../../apps/web/lib/governed-backlog-tee-up.ts)). Change the **ordering signal** (not the Definition-of-Ready) so the auto-sweep and `get_next_recommended_work` draw **highest `demandScore`-per-portfolio-envelope first**, with the existing dependency cascade ([2026-06-22 plan](../plans/2026-06-22-portfolio-prioritization-cascade.md)) still able to *floor* (not override) the rank of dependencies of sold offerings. `priority Int?` is retained as an explicit **manual override** (operator pin) that trumps the computed rank, logged as a WWWD decision. The readiness scorer `recommend.ts` keeps its spec/plan-presence weighting but its `priority present +2` flat term is replaced by the normalized `demandScore`.
+
+**Implementation status (BI-78540D2C, 2026-10).** The governed tee-up and the capacity drain now share one ordering, `rankForStart` in `apps/web/lib/demand/start-ranking.ts`: scored before unscored, a starved investment bucket first within a tier when `demandBucketTargets` is set, then `demandScore`, with active epic and age only as tie-breaks; each started build's activity records the reason. Not yet implemented from this section: the per-portfolio-envelope normalization, the dependency-cascade floor, and the `priority` operator pin.
 
 **Two governance planes** (ServiceNow pattern): the Screen gate (`triageOutcome=build`) is *demand qualification*; the Ready gate (investment-approved, within budget envelope) is *portfolio investment approval* — a distinct, WWWD-governed step so "worth doing" and "fund it now" are not conflated.
 

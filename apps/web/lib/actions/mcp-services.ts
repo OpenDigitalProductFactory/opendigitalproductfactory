@@ -6,6 +6,9 @@ import { requireUser } from "@/lib/actions/shared/guards";
 import { checkMcpServerHealth } from "@/lib/mcp-server-health";
 import { discoverMcpServerTools } from "@/lib/mcp-server-tools";
 import { validateConnectionConfig, redactConfig, type McpConnectionConfig } from "@/lib/mcp-server-types";
+import { classifyDiscoveredToolForInventory, computeMcpToolContentDigest } from "@/lib/tak/mcp-tool-policy";
+import { ok, err, type ActionResult } from "@/lib/shared/action-result";
+import { McpToolReviewError, reviewMcpServerTool, type McpToolReviewInput } from "@/lib/tak/mcp-tool-review";
 
 async function requireManageProviders(): Promise<string> {
   const user = await requireUser();
@@ -194,5 +197,41 @@ export async function getMcpServerDetail(serverId: string) {
   if (!server) return null;
 
   const config = server.config as McpConnectionConfig;
-  return { ...server, config: redactConfig(config) };
+  // BI-8B7B2FE9: every tool carries its DPF-owned review class and the digest
+  // of the text it reports now, so the operator reviews exactly what a model
+  // would read. Connectivity and isEnabled are never shown as authority.
+  const tools = server.tools.map((tool) => {
+    const review = classifyDiscoveredToolForInventory({ ...tool, server: { serverId: server.serverId, status: server.status } });
+    const contentDigest = computeMcpToolContentDigest(tool.description, tool.inputSchema);
+    return {
+      ...tool,
+      review,
+      contentDigest,
+      contentChanged: tool.approvedContentDigest !== null && tool.approvedContentDigest !== contentDigest,
+    };
+  });
+  return { ...server, tools, config: redactConfig(config) };
+}
+
+/**
+ * Approve, deny or return a discovered tool to review (BI-8B7B2FE9). Approval
+ * binds to the content digest the reviewer was shown.
+ */
+export async function reviewMcpServerToolAction(
+  input: McpToolReviewInput,
+): Promise<ActionResult<{ message: string }>> {
+  const userId = await requireManageProviders();
+  try {
+    const { status } = await reviewMcpServerTool(userId, input);
+    return ok({
+      message: status === "approved"
+        ? "Approved. Coworkers holding the chosen permission can now use this tool."
+        : status === "denied"
+          ? "Blocked. Coworkers cannot use this tool."
+          : "Returned to review. Coworkers cannot use this tool until it is approved again.",
+    });
+  } catch (error) {
+    if (error instanceof McpToolReviewError) return err(error.message);
+    throw error;
+  }
 }

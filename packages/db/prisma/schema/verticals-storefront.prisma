@@ -988,27 +988,9 @@ model CourseRegistration {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   courseInstance   CourseInstance @relation(fields: [courseInstanceId], references: [id])
-  examVoucher      ExamVoucher?
 
   @@index([courseInstanceId, paymentStatus])
   @@index([email])
   @@index([stripeRef])
   @@index([xeroRef])
-}
-
-model ExamVoucher {
-  id               String             @id @default(cuid())
-  registrationId   String             @unique
-  ogId             String?
-  voucherType      String?
-  voucherExpiry1   DateTime?
-  voucherExpiry2   DateTime?
-  ogStoreReference String?
-  status           String             @default("pending")
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  registration     CourseRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-
-  @@index([ogId])
-  @@index([status])
 }

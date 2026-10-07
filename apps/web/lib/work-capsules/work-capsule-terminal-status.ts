@@ -14,14 +14,32 @@ import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 export class WorkCapsulePublicationRefusedError extends Error {
   readonly code: "workroom_identity_incomplete" | "failure_review_required";
   readonly reason: string;
+  /** BI-C9912C22: set when the refused room is already delivered. */
+  readonly deliveredCloseout?: DeliveredCloseout;
 
-  constructor(input: { code: WorkCapsulePublicationRefusedError["code"]; reason: string }) {
+  constructor(input: {
+    code: WorkCapsulePublicationRefusedError["code"];
+    reason: string;
+    deliveredCloseout?: DeliveredCloseout;
+  }) {
     super(input.reason);
     this.name = "WorkCapsulePublicationRefusedError";
     this.code = input.code;
     this.reason = input.reason;
+    if (input.deliveredCloseout) this.deliveredCloseout = input.deliveredCloseout;
   }
 }
+
+/**
+ * The governed close-out for a room whose pull request is bound and whose
+ * backlog item is done: archive it as delivered, as the Workroom reaper does
+ * for merged rooms. It grants nothing; `archived` is not review-bound.
+ */
+export type DeliveredCloseout = {
+  backlogItemId: string;
+  pullRequestNumber: number;
+  status: "archived";
+};
 
 export class WorkCapsuleCompletionDeniedError extends Error {
   readonly result: Extract<GovernedTerminalTransitionResult, { ok: false }>;

@@ -68,6 +68,21 @@ describe("WorkroomStageDecision", () => {
     await waitFor(() => expect(m.refresh).toHaveBeenCalled());
   });
 
+  // GPP Phase 3c PR-3c-3: "Send back" appears only when the stage offers it (its gate declares a refuse route).
+  it("offers Send back only when the view carries it, and records it without a date", async () => {
+    renderDecision({ ...VIEW, choices: ["accept", "defer", "refuse"] });
+    fireEvent.click(screen.getByRole("button", { name: "Decide" }));
+    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("value"))).toEqual(["accept", "defer", "refuse"]);
+    fireEvent.click(screen.getByRole("radio", { name: "Send back" }));
+    expect(screen.queryByLabelText(/Defer until/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Record decision" }));
+    await waitFor(() => expect(m.record).toHaveBeenCalledWith("case-1", "room-row-1", { stageKey: "decide", choice: "refuse" }));
+    cleanup();
+    renderDecision(VIEW);
+    fireEvent.click(screen.getByRole("button", { name: "Decide" }));
+    expect(screen.queryByRole("radio", { name: "Send back" })).not.toBeInTheDocument();
+  });
+
   it("shows everyone else who decides, with no control", () => {
     renderDecision({ ...VIEW, canDecide: false, refusal: "Only Alex Owner (the room's accountable owner) can record this decision." });
     expect(screen.getByText("Waiting on Alex Owner to decide: Decide the response to each finding.")).toBeInTheDocument();

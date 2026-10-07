@@ -26,6 +26,7 @@ import {
   matchingRemoteTaskRequestDigest,
   remoteTaskRequestDigest,
   remoteTaskRequestMatches,
+  reconcileReviewReplayScope,
 } from "./mcp-task-capacity-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
@@ -232,6 +233,7 @@ export async function submitRemoteCoworkerTask(input: {
       status: true,
       progressPayload: true,
       a2aMetadata: true,
+      authorityScope: true,
       lastHeartbeatAt: true,
       completedAt: true,
       updatedAt: true,
@@ -247,6 +249,8 @@ export async function submitRemoteCoworkerTask(input: {
   }
   const existing = await prisma.taskRun.findFirst(existingQuery);
   if (existing) {
+    const savedReviewScope = reconcileReviewReplayScope(existing.a2aMetadata, existing.authorityScope, parsed);
+    if (savedReviewScope) parsed.authorityScope = savedReviewScope;
     const replayRefusal = await revalidateRemoteObjectiveMappingReplay(
       objectiveMappingAdmission.data.admission,
     );

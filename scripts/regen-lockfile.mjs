@@ -25,6 +25,7 @@
 // Spec: docs/superpowers/specs/2026-07-21-agent-process-efficiency-hardening-design.md
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import { runGit } from "./lib/git.mjs";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
@@ -37,7 +38,7 @@ const LOCKFILE = "pnpm-lock.yaml";
 function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
     options: { help: { type: "boolean", short: "h" }, expect: { type: "string" } },

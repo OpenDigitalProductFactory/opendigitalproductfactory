@@ -1,6 +1,6 @@
 import { describeReadinessRefusal } from "@/lib/build/readiness-refusal-message";
 import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from "@/lib/backlog/initiative-readiness/bound-work-shape";
-import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
+import { assessDeliverySensitivity, buildPlanPaths } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { randomUUID } from "node:crypto";
 
@@ -114,6 +114,7 @@ export async function enforceBuildInitiativeReadiness(args: {
       originatingBacklogItemId: true,
       designDoc: true,
       designReview: true,
+      buildPlan: true,
       originator: {
         select: {
           id: true, itemId: true, title: true, type: true, source: true, workType: true, scopeKind: true,
@@ -173,6 +174,8 @@ export async function enforceBuildInitiativeReadiness(args: {
         body: build.originator.body,
         workType: build.originator.workType,
         declaredPaths,
+        // The plan's files are the change at this gate (operator direction 2026-10-07).
+        planPaths: buildPlanPaths(build.buildPlan),
       }),
     },
     buildDesign: {

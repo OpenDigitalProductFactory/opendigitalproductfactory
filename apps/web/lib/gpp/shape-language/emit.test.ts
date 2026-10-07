@@ -187,7 +187,10 @@ describe("emitted modules type-check against WorkShapeDefinition", () => {
   it("the worked example type-checks; a corrupted copy fails `satisfies`", async () => {
     const { module } = await compileOk(WORKED_EXAMPLE_TEXT, "apps/web/lib/work-management/shape-documents/inquiry-response-watch.gpp.json");
     const badEvidence = module.replace('"draft-artifact"', '"not-an-evidence-kind"');
-    const extraField = module.replace("  collaborationShape:", '  flow: { nodes: [], edges: [] },\n  collaborationShape:');
+    // An undeclared field fails `satisfies`. This used `flow`, which was not a
+    // WorkShapeDefinition field until GPP Phase 3c PR-3c-1 (BI-8875C9DF) made it
+    // one; the corruption now uses a field that no definition declares.
+    const extraField = module.replace("  collaborationShape:", '  notAShapeField: true,\n  collaborationShape:');
     const badGate = module.replace('mode: "enforced"', 'mode: "advisory"');
     expect(badEvidence).not.toBe(module);
     expect(extraField).not.toBe(module);
@@ -201,7 +204,7 @@ describe("emitted modules type-check against WorkShapeDefinition", () => {
     });
     expect(diagnostics.filter((line) => line.startsWith("good."))).toEqual([]);
     expect(diagnostics.some((line) => line.startsWith("bad-evidence.") && /not-an-evidence-kind/.test(line))).toBe(true);
-    expect(diagnostics.some((line) => line.startsWith("extra-field.") && /flow/.test(line))).toBe(true);
+    expect(diagnostics.some((line) => line.startsWith("extra-field.") && /notAShapeField/.test(line))).toBe(true);
     expect(diagnostics.some((line) => line.startsWith("bad-gate.") && /advisory/.test(line))).toBe(true);
   }, 120_000);
 

@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { ensureAcceptanceSweepScheduledTask } from "./seed-acceptance-sweep";
 import { ensureBookkeepingCycleScheduledTask } from "./seed-bookkeeping-cycle";
 import { ensureDataModelMirrorScheduledTask } from "./seed-data-model-mirror";
 import { ensureDecisionEngineReviewScheduledTask } from "./seed-decision-engine-review";
@@ -38,6 +39,7 @@ function fakePrisma() {
 }
 
 const SEEDS: Array<[string, (db: never, now?: Date) => Promise<unknown>]> = [
+  ["acceptance-sweep", ensureAcceptanceSweepScheduledTask],
   ["bookkeeping-cycle", ensureBookkeepingCycleScheduledTask],
   ["data-model-mirror", ensureDataModelMirrorScheduledTask],
   ["decision-engine-review", ensureDecisionEngineReviewScheduledTask],

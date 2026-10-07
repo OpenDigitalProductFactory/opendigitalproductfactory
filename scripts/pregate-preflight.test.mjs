@@ -613,3 +613,13 @@ test("createDefaultExecute hands guards an environment without git's repository-
   assert.equal(result.exitCode, 0, result.output);
   assert.equal(result.output.trim(), "[]");
 });
+
+test("createDefaultExecute runs guards with git's automatic maintenance off (BI-E0FEB8E9)", async () => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  const execute = createDefaultExecute({ ...process.env });
+  // --show-origin: a repository or global config that already says false must
+  // not satisfy this; the runner itself has to set it for every guard.
+  const result = execute("git", ["config", "--show-origin", "--get", "maintenance.auto"]);
+  assert.equal(result.exitCode, 0, result.output);
+  assert.match(result.output.trim(), /^command line:\s+false$/);
+});

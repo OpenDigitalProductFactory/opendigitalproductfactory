@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -15,7 +16,7 @@ import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
 
 // strict: false keeps the old tolerance: flags this script does not read are ignored.
 const { values: cliValues } = utilParseArgs({
-  args: process.argv.slice(2),
+  args: scriptArgv(),
   strict: false,
   allowPositionals: true,
   options: {

@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "decidedOption": "plain-handover-with-collapsed-technical",
+  "decisionInteractionId": "DI-8AB9551B002A",
+  "scope": {
+    "files": [
+      "apps/web/components/attention/CoworkerEnvelopeApproval.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-8AB9551B002A",
+    "consideredOptions": [
+      "plain-handover-with-collapsed-technical",
+      "keep-exact-content-card",
+      "dedicated-handover-review-route"
+    ]
+  },
+  "notes": {
+    "decision": "Fits with guardrails. A room handover on the existing Inbox approval card reads in plain words: who takes over which room, what changes, what stays the same, and the next step. Authorize and Decline effects are separate lines. The tool name, ids, arguments and handoff manifest sit in a collapsed Technical details block on the same card. No new route. A dedicated handover review page was considered and rejected: it adds navigation for a decision that fits on the card. The generic exact-content card is kept for every other shape, and for a handover whose receiving assistant is not the one asking.",
+    "persona": "The room owner, asked by their own assistant to let it take over a room. They decide from the card without reading JSON.",
+    "reuse": "Composes Surface, Button and the existing Fact rows with --dpf-* tokens. Copy lives in the approvals message catalog. The status read reuses loadApprovalOutcomes, the Inbox result projection.",
+    "sourceTruth": "CoworkerActionEnvelope plus the pending ToolExecution parameters (summarizeCoworkerEnvelopeDecision). The recorded outcome comes from the approval-outcome projection behind GET /api/agent/envelope/:id.",
+    "states": "Actionable shows the buttons. Pressing one shows 'Saving your decision' at once. After 30 seconds with no answer the card reads the recorded state. 'Waiting' means nothing was saved, so the buttons return with that explanation. A saved state shows its label and next step with no buttons. An unreadable state says the result is unknown, not to approve again, and links to the Inbox result. Expired and closed requests show their persisted status. The decision is never resubmitted automatically.",
+    "aiBoundary": "Authorize and Decline remain explicit human confirmations and send no prompt. Handover copy is shown only when the room goes to the assistant that asked, which is the assistant the handler admits.",
+    "verification": "Card tests cover the handover summary and collapsed details, the exact-card fallback, progress, timeout reconcile (waiting, saved, unknown), and one POST only. A route test covers the owner-only status read. Live check on the canonical runtime after merge."
+  }
+}

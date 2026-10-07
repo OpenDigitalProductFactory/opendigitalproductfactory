@@ -1,4 +1,5 @@
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./script-argv.mjs";
 import path from "node:path";
 
 export const DEFAULT_ORG_NAME = "Digital Product Factory Scratch";
@@ -27,7 +28,7 @@ export function parseWalkthroughArgs(argv, options = {}) {
     "timeout-ms": { type: "string" },
   };
   // strict: false plus the token checks below keep the old messages, in argument order.
-  const { values, tokens } = utilParseArgs({ args: argv, options: schema, strict: false, allowPositionals: true, tokens: true });
+  const { values, tokens } = utilParseArgs({ args: scriptArgv(argv), options: schema, strict: false, allowPositionals: true, tokens: true });
   for (const token of tokens) {
     if (token.kind !== "option" || !Object.hasOwn(schema, token.name)) {
       throw new Error(`Unknown argument: ${token.rawName ?? token.value ?? "--"}`);

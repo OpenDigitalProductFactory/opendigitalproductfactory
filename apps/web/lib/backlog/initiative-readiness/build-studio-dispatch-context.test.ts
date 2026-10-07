@@ -38,7 +38,7 @@ describe("resolveBuildStudioDispatch (BI-926A7E90 PR-2)", () => {
       itemId: "BI-1",
       dispatchContext: { workroomId: "WC-BUILD1", repositoryFullName: REPO, branchName: "build/FB-1", headSha: "sha256:design3" },
       canonicalArtifact: { resolved: true, kind: "feature-build-revision", revisionId: "rev_design_3", valueDigest: "sha256:design3", buildId: "FB-1" },
-      planArtifact: { resolved: true, kind: "feature-build-revision", revisionId: "rev_plan_2", valueDigest: "sha256:plan2", buildId: "FB-1" },
+      planArtifact: { resolved: true, kind: "feature-build-revision", revisionId: "rev_plan_2", valueDigest: "plan2", buildId: "FB-1" },
     });
   });
 

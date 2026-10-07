@@ -48,6 +48,7 @@ import {
   refusePlanToBuild,
   transitionPlanToBuild,
 } from "@/lib/build/plan-to-build-transition-core";
+import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-terminal-phase-runs";
 
 // GPP C-8 (PR-F): the plan→build gate profiles and the one transition function
 // live in the dependency-leaf plan-to-build-transition-core.ts and are
@@ -239,14 +240,16 @@ async function abandonDeadlockedDependent(args: {
         select: { phase: true, abandonedAt: true },
       });
       if (!fresh || fresh.abandonedAt || fresh.phase !== "plan") return;
+      const abandonedAt = new Date();
       await tx.featureBuild.update({
         where: { buildId },
         data: {
           phase: "abandoned",
-          abandonedAt: new Date(),
+          abandonedAt,
           abandonReason: reason,
         },
       });
+      await closeOpenBuildPhaseRunsForTerminalBuild(buildId, { db: tx, now: abandonedAt });
       await tx.buildActivity.create({
         data: {
           buildId,

@@ -85,8 +85,15 @@ export function resolveInvestmentItem(item: InvestmentItemRow, period: { start: 
   return { resolution, itemClass: classify(item, period), points: resolveInvestmentPoints(item).points };
 }
 
-export function summarizePortfolioInvestment(items: InvestmentItemRow[], now: Date): PortfolioInvestmentSummary {
-  const period = quarterBounds(now);
+/**
+ * `period` defaults to the quarter containing `now`. A budget proposal from a
+ * trailing window passes that window, so "delivered" means done inside it.
+ */
+export function summarizePortfolioInvestment(
+  items: InvestmentItemRow[],
+  now: Date,
+  period: { start: Date; end: Date } = quarterBounds(now),
+): PortfolioInvestmentSummary {
   const rows = new Map<string | null, PortfolioInvestmentRow>();
   const totals = { liveItems: 0, deliveredThisQuarterItems: 0, unsizedItems: 0 };
 

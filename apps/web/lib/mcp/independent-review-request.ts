@@ -91,7 +91,7 @@ export async function authorizeCoworkerRequest(
   // A Build Studio room records the item's ROW id in backlogItemId (the
   // attachment writes backlogItem.id); an adopted room records the BI- id.
   const room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, archivedAt: null },
-    select: { id: true, backlogItemId: true, executorKind: true, requestedByPrincipalId: true } });
+    select: { id: true, backlogItemId: true, executorKind: true, requestedByPrincipalId: true, featureBuild: { select: { createdById: true } } } });
   const roomOwnsItem = Boolean(room) && (room!.backlogItemId === binding.itemId
     || (room!.backlogItemId !== null && room!.backlogItemId === (await prisma.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true } }))?.id));
   const buildStudioRoom = roomOwnsItem && room!.executorKind === "build-studio";
@@ -101,8 +101,12 @@ export async function authorizeCoworkerRequest(
   // room check for such a room; every other check above still applies.
   const admitted = !roomOwnsItem ? false
     : buildStudioRoom
-      ? room!.requestedByPrincipalId !== null && (await prisma.principalAlias.findFirst({
-        where: { aliasType: "user", aliasValue: userId, issuer: "" }, select: { principalId: true } }))?.principalId === room!.requestedByPrincipalId!
+      // The person who requested the build: the room's requester when it has
+      // one, else the build's creator (Build Studio attaches rooms with neither
+      // principal set, but every build records who asked for it).
+      ? room!.featureBuild?.createdById === userId
+        || (room!.requestedByPrincipalId !== null && (await prisma.principalAlias.findFirst({
+          where: { aliasType: "user", aliasValue: userId, issuer: "" }, select: { principalId: true } }))?.principalId === room!.requestedByPrincipalId!)
       : (await resolveAgentWorkroomAccess({ userId, agentId: context.agentId, workroomId: room!.id, requested: "action" })).decision.level === "action";
   if (!admitted) {
     return deny(buildStudioRoom

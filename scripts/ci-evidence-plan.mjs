@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import {
   appendFileSync,
   mkdirSync,
@@ -19,7 +20,7 @@ function parseArgs(args) {
   // strict: false keeps the old tolerance: unknown flags are ignored, and a flag
   // given with no value reads as `true`, as before.
   const { values } = utilParseArgs({
-    args,
+    args: scriptArgv(args),
     strict: false,
     allowPositionals: true,
     options: Object.fromEntries([

@@ -40,4 +40,13 @@ describe("record_workroom_evidence schema/handler parity", () => {
     expect(body).toContain("invalid_outcome");
     expect(body).toContain("evidence.outcome");
   });
+
+  // BI-C9912C22 AC-3: stage evidence answers whether the drive can advance the
+  // stage from it, or why not, instead of a bare "Recorded evidence".
+  it("reports what the drive will do with stage evidence", () => {
+    const handler = handlerSource.slice(handlerSource.indexOf("export async function recordCapsuleEvidenceTool"));
+    const body = handler.slice(0, handler.indexOf("\nexport async function", 10));
+    expect(body).toContain("describeStageEvidenceReach(");
+    expect(body).toContain("stageReach");
+  });
 });

@@ -12,6 +12,7 @@
 // here so the lease/resource contract has one implementation source.
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import { runGit } from "./lib/git.mjs";
 import { X_OK } from "node:constants";
@@ -30,17 +31,27 @@ import {
   resolveBaseFreshnessPolicy,
 } from "./lib/local-ci-base-freshness.mjs";
 import { ensureFullHistory } from "./lib/git-shallow-preflight.mjs";
-import { EXIT_CHILD_SIGNAL_DEATH } from "./lib/sandbox-freshness.mjs";
+import { EXIT_CHILD_SIGNAL_DEATH, EXIT_RUNNER_PREREQUISITE_UNAVAILABLE } from "./lib/sandbox-freshness.mjs";
 import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./lib/pinned-pnpm.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 
-function die(message) {
+function die(message, code = 1) {
   // BI-8304AB09: write BOTH streams so gate-worktree log capture cannot drop the cause.
   const line = `local-ci-runner: ${message}\n`;
   process.stdout.write(line);
   process.stderr.write(line);
-  process.exit(1);
+  process.exit(code);
+}
+
+/**
+ * A prerequisite the runner sets up before grading was unavailable — network,
+ * Docker or disk. Exit 1 would be recorded as a reasonless `failed` against a
+ * SHA nothing graded; this code is recorded as infrastructure and retried.
+ * Not for conditions a retry cannot clear (a foreign port owner, bad input).
+ */
+function dieUnavailable(message) {
+  die(message, EXIT_RUNNER_PREREQUISITE_UNAVAILABLE);
 }
 
 function git(args, cwd) {
@@ -300,12 +311,12 @@ async function resolveDatabaseUrl(env, manifest) {
       "pgvector/pgvector:pg16",
     ], { encoding: "utf8" });
     if (run.status !== 0) {
-      die(`could not provision ${manifest.postgres.container}: ${(run.stderr || run.stdout || "").trim()}`);
+      dieUnavailable(`could not provision ${manifest.postgres.container}: ${(run.stderr || run.stdout || "").trim()}`);
     }
   } else {
     const start = spawnSync("docker", ["start", manifest.postgres.container], { encoding: "utf8" });
     if (start.status !== 0) {
-      die(`could not start ${manifest.postgres.container}: ${(start.stderr || start.stdout || "").trim()}`);
+      dieUnavailable(`could not start ${manifest.postgres.container}: ${(start.stderr || start.stdout || "").trim()}`);
     }
   }
 
@@ -444,7 +455,7 @@ function ensureScratchWorkspace(root, workspace) {
   const add = git(["-C", root, "worktree", "add", "--detach", workspace]);
   if (!add.ok) {
     const forced = git(["-C", root, "worktree", "add", "--force", "--detach", workspace]);
-    if (!forced.ok) die(`could not create scratch workspace ${workspace}: ${forced.stderr}`);
+    if (!forced.ok) dieUnavailable(`could not create scratch workspace ${workspace}: ${forced.stderr}`);
   }
 }
 
@@ -456,7 +467,7 @@ function cleanScratchWorkspace(workspace, manifest) {
 }
 
 async function main() {
-  const argv = process.argv.slice(2);
+  const argv = scriptArgv();
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
   const { values } = utilParseArgs({
     args: argv,
@@ -582,7 +593,7 @@ async function main() {
       baseFreshness,
       completedAt: new Date().toISOString(),
     }, null, 2)}\n`);
-    die(`required origin/main refresh failed: ${baseFreshness.error}`);
+    dieUnavailable(`required origin/main refresh failed: ${baseFreshness.error}`);
   }
   if (!baseSha) die(`accepted base ref not found locally: ${baseRef} (fetch or set DPF_LOCAL_CI_BASE_REF to a local ref)`);
 

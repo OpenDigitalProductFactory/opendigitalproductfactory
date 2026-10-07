@@ -187,7 +187,6 @@ EpicPortfolio
 EscalationCapture
 EvidenceBundle
 EvidenceSource
-ExamVoucher
 ExecutionRecipe
 ExternalEvidenceRecord
 FeatureBuild
@@ -411,7 +410,6 @@ ValueStreamTeam
 ValueStreamTeamRole
 VectorEmbedding
 VoiceProfile
-VoiceTrainingJob
 WikiLintFinding
 WikiPage
 WikiPageLink

@@ -8,12 +8,13 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { requestSelfUpgrade } from "@/lib/self-upgrade/request";
+import { portalRequesterKind } from "@/lib/self-upgrade/upgrade-timing";
 import { getUpgradeVersionState, type UpgradeVersionState } from "@/lib/self-upgrade/version";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 async function requireSelfUpgradeOperator(
   capability: "view_operations" | "manage_provider_connections",
-): Promise<{ userId: string | null }> {
+): Promise<{ userId: string | null; email: string | null }> {
   const session = await auth();
   const user = session?.user;
   if (
@@ -25,7 +26,7 @@ async function requireSelfUpgradeOperator(
   ) {
     throw new Error("Unauthorized");
   }
-  return { userId: user.id ?? null };
+  return { userId: user.id ?? null, email: user.email ?? null };
 }
 
 export type SelfUpgradeRunListItem = {
@@ -133,8 +134,10 @@ export async function getSelfUpgradeDashboardAction(): Promise<SelfUpgradeDashbo
 }
 
 export async function requestPortalSelfUpgradeAction(): Promise<void> {
-  const { userId } = await requireSelfUpgradeOperator("manage_provider_connections");
+  const { userId, email } = await requireSelfUpgradeOperator("manage_provider_connections");
   const triggeredBy = userId ? `manual:${userId}` : "manual";
-  await requestSelfUpgrade({ requestedBy: triggeredBy, actorKind: "human" });
+  // BI-2128872C: the automation persona is an agent (deferred to the window);
+  // any other operator runs now, with the window bypass recorded.
+  await requestSelfUpgrade({ requestedBy: triggeredBy, actorKind: portalRequesterKind(email) });
   revalidatePath("/ops/self-upgrade");
 }

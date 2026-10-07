@@ -22,6 +22,11 @@ export function envelopeDeclineRoute(envelopeId: string): string {
   return `/api/agent/envelope/${encodeURIComponent(envelopeId)}/deny`;
 }
 
+/** GET target for the delegating user's recorded outcome of one envelope. */
+export function envelopeStatusRoute(envelopeId: string): string {
+  return `/api/agent/envelope/${encodeURIComponent(envelopeId)}`;
+}
+
 /** Exact owner-only Inbox readback, including requests outside recent history. */
 export function envelopeInboxRoute(envelopeId: string): string {
   return `/workspace/inbox?approval=${encodeURIComponent(envelopeId)}#approval-result`;

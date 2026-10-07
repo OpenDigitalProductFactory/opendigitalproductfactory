@@ -12,10 +12,12 @@
 // or prior version added later enters every check below with no edit here.
 //
 // 1. AC-SCHEMA: every decompiled document passes gppShapeDocumentSchema.
-// 2. L1, field for field: legacy(lower(decompile(S))) equals S under canonical
-//    JSON AND has equal own-key sets at every object node (canonical JSON
+// 2. L1, field for field: legacy(lower(decompile(S))) equals legacy(S) under
+//    canonical JSON AND has equal own-key sets at every object node (canonical JSON
 //    cannot tell an absent key from one set to `undefined`, and emitted
-//    TypeScript would show the difference).
+//    TypeScript would show the difference). legacy(S) is S for every
+//    hand-declared shape; a compiled shape (PR-3b-6) already carries its
+//    ratified gate, which the projection drops on both sides.
 // 3. L2: decompile(lower(D)) equals D for each decompiled document D.
 // 4. R: every field L1 drops appears in buildRatificationReport, and the
 //    report over the whole registry must equal the committed, sorted
@@ -136,10 +138,11 @@ describe.each(CASES)("registry-wide suite: %s", (id, definition) => {
 
   it("L1: lower(decompile(S)) equals S under the legacy projection, field for field", () => {
     const projected = legacyProjection(lowerToDefinition(decompile(definition).document));
+    const original = legacyProjection(definition);
 
-    expect(firstDifference(projected, definition)).toBeNull();
-    expect(firstOwnKeyDifference(projected, definition)).toBeNull();
-    expect(canonicalJson(projected)).toBe(canonicalJson(definition));
+    expect(firstDifference(projected, original)).toBeNull();
+    expect(firstOwnKeyDifference(projected, original)).toBeNull();
+    expect(canonicalJson(projected)).toBe(canonicalJson(original));
   });
 
   it("L2: decompile(lower(D)) equals D for the decompiled document", () => {

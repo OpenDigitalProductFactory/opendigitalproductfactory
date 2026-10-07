@@ -68,6 +68,23 @@ describe("Work Room read model", () => {
     expect(room.work.attentionReason).toBe(terminal ? null : "Stage design-note is waiting on role:author.");
     expect(room.work.nextAction).toBe(terminal ? "Continue work" : "Stage design-note is waiting on role:author.");
   });
+  // GPP Phase 3c PR-3c-2: several current stages travel to the check, in document order, and the
+  // stage order is read from the flow, so a legal parallel position raises no out-of-order deviation.
+  it("carries several current stages to the process check; a sequential observation is unchanged", () => {
+    const build = (observation: BuildWorkroomViewInput["processOverseerObservation"]) => buildWorkroomView({
+      caseKey: "booking%3ABK-100", detail: caseDetail(), scopeClaims: [{ workShape: "delivery-small@1.0.0" }],
+      now: new Date("2026-09-21T03:00:00Z"), processOverseerObservation: observation,
+    });
+    const parallel = build({
+      currentStageKey: "repair", proposedStageKey: "repair", currentStageKeys: ["runtime-check", "repair"],
+      receipts: [{ stageKey: "reproduce", kind: "stage-evidence-recorded" }],
+    });
+    expect(parallel.processOverseer.currentStageKeys).toEqual(["repair", "runtime-check"]);
+    expect(parallel.processOverseer.deviations.map((row) => row.code)).not.toContain("out_of_order_stage");
+    expect(parallel.processOverseer.deviations.map((row) => row.code)).not.toContain("missing_prerequisite_receipt");
+    const sequential = build({ currentStageKey: "repair", proposedStageKey: "repair", receipts: [{ stageKey: "reproduce", kind: "stage-evidence-recorded" }] });
+    expect(Object.hasOwn(sequential.processOverseer, "currentStageKeys")).toBe(false);
+  });
   it.each(["closed", "cancelled"] as const)("does not reopen a %s room because its current coordinator is missing", (state) => {
     const room = buildWorkroomView({
       caseKey: "booking%3ABK-100",

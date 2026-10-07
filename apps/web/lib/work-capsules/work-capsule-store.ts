@@ -940,7 +940,7 @@ export async function updateWorkCapsuleStatus(args: {
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
 
   const hasGovernedLink = Boolean(capsule.backlogItemId || capsule.featureBuildId || capsule.taskRunId);
-  await assertWorkroomPublishable({ capsuleId: args.capsuleId, status: args.status, repositoryFullName: capsule.repositoryFullName });
+  await assertWorkroomPublishable({ ...capsule, capsuleId: args.capsuleId, status: args.status, backlogItem: args.db.backlogItem });
   if (args.status === "complete" && hasGovernedLink) {
     return completeGovernedWorkCapsuleStatus({
       db: args.db,

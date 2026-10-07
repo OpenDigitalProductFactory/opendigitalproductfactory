@@ -88,6 +88,7 @@ test("consumer release assets are integrity-bound and execute the canonical adap
       "docker-compose.release.yml",
       "scripts/lib/resolve-capability-compose-profiles.mjs",
       "scripts/lib/govern-capability-compose-args.mjs",
+      "scripts/lib/script-argv.mjs",
       "scripts/lib/capability-state-hash.mjs",
       "scripts/capability-service-catalog.generated.json",
       "scripts/installer/install-state.schema.json",
@@ -351,6 +352,7 @@ test("dpf-compose uses XDG state and effective roots outside the working directo
     await mkdir(elsewhere); await mkdir(stateDir, { recursive: true });
     await copyFile(join(root, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(install, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
     await copyFile(join(root, "scripts", "lib", "govern-capability-compose-args.mjs"), join(install, "scripts", "lib", "govern-capability-compose-args.mjs"));
+    await copyFile(join(root, "scripts", "lib", "script-argv.mjs"), join(install, "scripts", "lib", "script-argv.mjs"));
     await copyFile(join(root, "scripts", "lib", "capability-state-hash.mjs"), join(install, "scripts", "lib", "capability-state-hash.mjs"));
     await mkdir(join(install, "scripts", "installer"), { recursive: true });
     for (const file of ["install-state-transaction.mjs", "install-state-lock-contract.json", "validate-install-state.mjs", "install-state-schema-registry.mjs", "install-state.schema.json", "install-state.v1.schema.json", "install-state.v2.schema.json"]) {

@@ -17,6 +17,7 @@
 // deleted on merge; commits are unique and permanent.
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { mcpCall } from "./lib/mcp-client.mjs";
 import { spawnSync } from "node:child_process";
 
@@ -55,7 +56,7 @@ function parseArgs(argv) {
   let parsed;
   try {
     parsed = utilParseArgs({
-      args: argv,
+      args: scriptArgv(argv),
       allowPositionals: true,
       options: { json: { type: "boolean" }, all: { type: "boolean" }, help: { type: "boolean", short: "h" } },
     });

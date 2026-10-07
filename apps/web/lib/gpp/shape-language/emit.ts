@@ -32,7 +32,7 @@
 //
 // OFFLINE TOOLING in Phase 3: nothing in the running app imports this module.
 
-import type { WorkShapeBinding } from "@/lib/work-management/work-shapes";
+import type { WorkShapeBinding, WorkShapeGate } from "@/lib/work-management/work-shapes";
 
 import type { GppBinding, GppGate, GppShapeDocument } from "./gpp-shape-schema";
 
@@ -40,9 +40,9 @@ import type { GppBinding, GppGate, GppShapeDocument } from "./gpp-shape-schema";
  * A WorkShapeDefinition that may carry the §4.4 additive fields. Structurally
  * a shape document without `format`; gpp-shape-schema.ts asserts at compile
  * time that this is assignable to WorkShapeDefinition (every added field is
- * optional). WorkShapeDefinition carries `gate?` and `binding?` since PR-3b-4;
- * `deadline`, `subShape` and `flow` arrive with the Phase 3c PR that makes
- * each executable, and the compile pipeline refuses them until then
+ * optional). WorkShapeDefinition carries `gate?` and `binding?` since PR-3b-4,
+ * and `deadline?`, `subShape?` and `flow?` since Phase 3c PR-3c-1; the compile
+ * pipeline still refuses each of those three until its flag is on
  * (E-NOT-EXECUTABLE).
  */
 export type LoweredWorkShapeDefinition = Omit<GppShapeDocument, "format">;
@@ -57,9 +57,10 @@ function copyJson<T>(value: T): T {
 
 /**
  * A copy of a gate in schema field order, optional fields only when present.
- * Shared by the decompiler (from the ratification table) and the lowering.
+ * Shared by the decompiler (from the ratification table, or a definition's
+ * own declared refuse-route gate since Phase 3c) and the lowering.
  */
-export function copyGate(gate: GppGate): GppGate {
+export function copyGate(gate: GppGate | WorkShapeGate): GppGate {
   return {
     authority: gate.authority,
     ...(gate.gateKey !== undefined ? { gateKey: gate.gateKey } : {}),
@@ -147,8 +148,8 @@ export function lowerToDefinition(document: GppShapeDocument): LoweredWorkShapeD
     description: document.description,
     triggers: [...document.triggers],
     stages: document.stages.map(lowerStage),
-    // `flow` is not yet a WorkShapeDefinition field (it arrives with the Phase 3c
-    // PR that makes it executable); it sits after `stages`, as in the schema.
+    // `flow` sits after `stages`, as in the schema; WorkShapeDefinition carries
+    // it since Phase 3c PR-3c-1.
     ...(document.flow !== undefined ? { flow: copyJson(document.flow) } : {}),
     stopConditions: document.stopConditions.map((stop) => ({
       kind: stop.kind,

@@ -47,6 +47,9 @@ export const PROMOTER_BUILD_CONTEXT_SOURCES: readonly string[] = [
   "scripts/installer/install-state.v2.schema.json",
   "scripts/lib/resolve-capability-compose-profiles.mjs",
   "scripts/lib/govern-capability-compose-args.mjs",
+  "scripts/lib/script-argv.mjs",
+  // salvage-sweep.mjs has imported it since #5707; the image never carried it.
+  "scripts/lib/git.mjs",
   "scripts/lib/capability-state-hash.mjs",
   "scripts/capability-service-catalog.generated.json",
 ] as const;

@@ -293,6 +293,11 @@ export const INTENTIONAL_FIELD_REMOVALS = new Set([
   // Migration: 20260925060000_document_rendition_kind_enum. Prune once shipped
   // fleet-wide.
   "DocumentRendition.renditionKind",
+  // 2026-10-06 BI-911840CB: back-relations of the two models retired below
+  // (INTENTIONAL_MODEL_REMOVALS). They are list/optional relation fields with
+  // no column of their own. Prune with the model entries.
+  "VoiceProfile.trainingJobs",
+  "CourseRegistration.examVoucher",
 ]);
 
 // Model attributes intentionally removed through a steward-reviewed migration.
@@ -310,6 +315,25 @@ export const INTENTIONAL_MODEL_ATTRIBUTE_REMOVALS = new Set([
   // Current remote-identity uniqueness is enforced by ExternalChannelProjection.
   // Migration: 20260822062000_allow_external_update_receipts.
   "OutboundPublication.@@unique([channelId, externalId])",
+]);
+
+// Models intentionally RETIRED through a steward-reviewed migration. A listed
+// model may disappear entirely; its back-relation fields on surviving models
+// still need their own INTENTIONAL_FIELD_REMOVALS entries, so retiring a model
+// cannot silently excuse a field drop elsewhere. Add an entry ONLY alongside the
+// migration that retires the table (and its data-impact manifest); prune each
+// entry once the migration has shipped fleet-wide.
+export const INTENTIONAL_MODEL_REMOVALS = new Set([
+  // 2026-10-06 BI-911840CB (EP-PORTFOLIO-BUDGET-WIP): the contraction offsetting
+  // PortfolioBudgetPeriod and BudgetReservation under the prismaModelCount
+  // ratchet. Neither model has a reader or writer in live code. VoiceTrainingJob
+  // has been unwritten since the Chatterbox zero-shot cut-over; ExamVoucher is
+  // the leaf of the course-management schema whose code was reverted
+  // (c2dbf25679). DATA SAFETY: the migration drops a table only when it is
+  // empty and otherwise archives it as <name>_retired_bi911840cb with every row.
+  // Migration: 20261006200000_retire_voice_training_job_and_exam_voucher.
+  "VoiceTrainingJob",
+  "ExamVoucher",
 ]);
 
 // Models intentionally RENAMED via a steward-reviewed change (AGENTS.md §11).
@@ -356,6 +380,7 @@ export function diffSchemas(
   allowlist = INTENTIONAL_FIELD_REMOVALS,
   renames = INTENTIONAL_MODEL_RENAMES,
   attributeAllowlist = INTENTIONAL_MODEL_ATTRIBUTE_REMOVALS,
+  modelRemovals = INTENTIONAL_MODEL_REMOVALS,
 ) {
   const regressions = [];
 
@@ -373,6 +398,7 @@ export function diffSchemas(
   for (const [name, baseLines] of base.models) {
     const renamedTo = honouredRenames.get(name);
     if (!head.models.has(name) && !renamedTo) {
+      if (modelRemovals.has(name)) continue;
       regressions.push(`model ${name} removed entirely`);
       continue;
     }

@@ -1694,6 +1694,20 @@ if ($gppPermitValue.Length -eq 0 -or $gppPermitValue.StartsWith("<")) {
     Write-Host "  Generated DPF_GPP_PERMIT_SECRET in .env"
 }
 
+# Signing keys for attention reach links and coworker delegation receipts
+# (BI-F6929F50), so AUTH_SECRET no longer signs them. Same rules as the permit
+# key: added when missing or still a placeholder, never rotated, never printed.
+foreach ($signingKeyName in @("DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET")) {
+    $signingKeyEnv = Get-Content -Path "$DPF_DIR\.env" -Raw -ErrorAction SilentlyContinue
+    if ($null -eq $signingKeyEnv) { $signingKeyEnv = "" }
+    $signingKeyMatch = [System.Text.RegularExpressions.Regex]::Match($signingKeyEnv, "(?m)^$signingKeyName=(.*)$")
+    $signingKeyValue = if ($signingKeyMatch.Success) { $signingKeyMatch.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+    if ($signingKeyValue.Length -eq 0 -or $signingKeyValue.StartsWith("<")) {
+        Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key $signingKeyName -Value (New-RandomPassword 32)
+        Write-Host "  Generated $signingKeyName in .env"
+    }
+}
+
 # Inngest signing and event keys (BI-3267763F). The portal and the inngest
 # service verify each other with them; compose no longer supplies a default,
 # because the old one was published in the repository and let anyone who could

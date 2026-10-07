@@ -14,6 +14,7 @@
 // a ff-only merge it attempted actually failed.
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { existsSync } from "node:fs";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { pathToFileURL } from "node:url";
@@ -24,7 +25,7 @@ import { refreshRootClone } from "./lib/root-clone-refresh.mjs";
 function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
     options: { json: { type: "boolean" }, "no-fetch": { type: "boolean" }, root: { type: "string" }, help: { type: "boolean", short: "h" } },

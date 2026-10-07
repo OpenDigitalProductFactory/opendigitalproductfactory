@@ -23,6 +23,10 @@ is intentionally not an isolated development workspace:
    operator's checked-out working tree is not reset. This isolation protects
    the root checkout, but self-upgrade still owns the clone as release source
    authority; feature work does not belong there.
+   It also reads the upgrade target URL from the root clone's `origin` remote,
+   so sessions must not rename, remove or add remotes there. A read that fails
+   transiently is retried, then falls back to the upstream URL recorded in
+   `.upgrade-workspace/` from the previous run (BI-574098A3).
 2. **Other concurrent agent sessions.** Each one may `git checkout <its-branch>`
    and `git reset` the root to do its own work. Observed in the reflog as
    `checkout: moving from <branchA> to <branchB>` followed by `reset: moving to HEAD`.

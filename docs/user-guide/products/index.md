@@ -385,3 +385,5 @@ one-off quote or order snapshot unless an operator explicitly promotes it.
 ## Reading Product Health
 
 The product health view includes the same capability-aware service summary used by platform monitoring. A disabled optional capability is shown as **Optional — inactive**, not as a false outage. An enabled optional service that cannot be observed is **Optional — degraded**; an unavailable required service is **Required — unavailable**. External AI runtimes are labeled **External — provider managed** and use reconciled provider evidence. These labels and their actions, rather than color alone, explain whether operator attention is required.
+
+The same rule governs the monitoring signals on that page. Health monitoring checks every service the platform can run, including services whose capability is switched off. When a disabled capability's service cannot be reached, its **Platform Services** tile reads **Inactive**, not DOWN. That missing service does not make **Platform Status** Critical, and it raises no alert banner. Once the capability is enabled, an unreachable service reports DOWN and counts toward Platform Status again.

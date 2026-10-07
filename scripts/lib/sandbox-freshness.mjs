@@ -449,6 +449,15 @@ export const EXIT_CONTROL_PLANE_STARVATION = 5;
  * set ships the new value; see the item.
  */
 export const EXIT_BUILDER_RESOURCE_EXHAUSTED = 6;
+/**
+ * The runner could not set up what grading needs — the origin/main refresh
+ * (network), the slot's PostgreSQL container (Docker), or its scratch
+ * workspace (disk) — so nothing was graded. Same recorded STATUS as
+ * EXIT_CONTROL_PLANE_STARVATION, for the same deployed-portal reason as
+ * EXIT_BUILDER_RESOURCE_EXHAUSTED; its own summary, because the remedy differs.
+ * Before this, those paths exited 1 and were recorded as a reasonless `failed`.
+ */
+export const EXIT_RUNNER_PREREQUISITE_UNAVAILABLE = 8;
 export const EXIT_VITEST_RUNNER_TERMINATION = 86;
 /**
  * The local-CI child was killed by a SIGNAL rather than exiting (BI-F22B4EEE).
@@ -514,6 +523,14 @@ export function classifyGateOutcome({ freshnessVerdict, gateExitCode }) {
       gatePassed: false,
       productEvidence: false,
       summary: "local-CI gate blocked: the production build ran out of memory inside the BUILDER's own cap — the shared control plane was healthy throughout. This is infrastructure evidence, NOT a product build failure. Do not go looking at Docker, PostgreSQL or the portal: the remedy is build capacity (the recorded policy names the cap, and the build log names the worker count and the step that was killed).",
+    };
+  }
+  if (gateExitCode === EXIT_RUNNER_PREREQUISITE_UNAVAILABLE) {
+    return {
+      status: "blocked_control_plane_starvation",
+      gatePassed: false,
+      productEvidence: false,
+      summary: "local-CI gate blocked: the runner could not set up a prerequisite (origin/main refresh, the slot's PostgreSQL container, or its scratch workspace) before it could grade the diff. This is infrastructure evidence, NOT a product build failure; the log names the prerequisite. Re-run on the same SHA once it is reachable.",
     };
   }
   if (gateExitCode === EXIT_CONTROL_PLANE_STARVATION) {

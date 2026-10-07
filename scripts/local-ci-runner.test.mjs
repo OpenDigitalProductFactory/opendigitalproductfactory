@@ -424,3 +424,22 @@ test("clearStaleStageReceipts actually deletes on disk", () => {
     assert.equal(existsSync(`${meta}${suffix}`), false, `${suffix} must not survive into the next run`);
   }
 });
+
+test("a prerequisite the runner could not set up exits as infrastructure, not 1", () => {
+  // Observed 2026-10-02: "required origin/main refresh failed: ... Could not
+  // resolve host" exited 1 and was recorded as a reasonless `failed`.
+  // classifyGateOutcome maps EXIT_RUNNER_PREREQUISITE_UNAVAILABLE to a
+  // blocked_* status; this keeps each network/Docker/disk setup failure on it.
+  const source = readFileSync(cli, "utf8");
+  assert.match(source, /function dieUnavailable\(message\) \{\s*die\(message, EXIT_RUNNER_PREREQUISITE_UNAVAILABLE\);/);
+  for (const prerequisite of [
+    "could not provision ${manifest.postgres.container}",
+    "could not start ${manifest.postgres.container}",
+    "could not create scratch workspace",
+    "required origin/main refresh failed",
+  ]) {
+    const at = source.indexOf(prerequisite);
+    assert.ok(at > 0, `expected the runner to name: ${prerequisite}`);
+    assert.match(source.slice(Math.max(0, at - 40), at), /dieUnavailable\(`$/, `${prerequisite} must exit as infrastructure`);
+  }
+});

@@ -26,13 +26,16 @@ import {
   getWorkShape,
   readDeclaredWorkShapeKey,
   readWorkShapeDefinitionContract,
+  type WorkShapeDefinition,
 } from "./work-shapes";
+import { isCompletingWorkroomDriveReceiptAt } from "./workroom-drive-receipts";
 import { readWorkShapeClaim, resolveWorkShapeClaim } from "./workroom-shape-claim";
 import {
   evaluateWorkroomShapeConformance,
   projectUnresolvedWorkroomShapeConformance,
   projectUnshapedWorkroomConformance,
   type WorkroomCoordinatorEligibility,
+  type WorkroomShapeConformanceInput,
 } from "./workroom-shape-conformance";
 import {
   getWorkCaseSourceEntry,
@@ -95,7 +98,11 @@ export interface BuildWorkroomViewInput {
     attentionReason?: string | null;
     currentStageKey?: string | null;
     proposedStageKey?: string | null;
-    receipts?: readonly { stageKey: string; kind: string }[];
+    /** Graph rooms only (GPP Phase 3c PR-3c-2): every stage the drive's marking holds. Absent means one current stage. */
+    currentStageKeys?: readonly string[];
+    /** Graph rooms only: each marked stage's current iteration (absent means 0). */
+    stageIterations?: Readonly<Record<string, number>>;
+    receipts?: readonly { stageKey: string; kind: string; iteration?: number }[];
     budgetUsage?: readonly { kind: string; used: number }[];
     stopConditionHits?: readonly string[];
     reviewDue?: boolean;
@@ -107,6 +114,28 @@ export interface BuildWorkroomViewInput {
     unresolvedDeviationCount?: number;
     coordinatorEligibility?: WorkroomCoordinatorEligibility | null;
   };
+}
+
+/**
+ * Graph rooms only (GPP Phase 3c PR-3c-2, design §4.3 "Room view"): the
+ * marked stages in document order, echoed on the check so the view marks each
+ * one current, and the flow-aware order check the drive itself runs, so a
+ * legal parallel position is not read as out of order by the index rules.
+ * Nothing for a sequential room, whose observation carries no marked stages.
+ */
+function graphStageOrder(
+  shape: WorkShapeDefinition,
+  observation: BuildWorkroomViewInput["processOverseerObservation"],
+): Pick<WorkroomShapeConformanceInput, "currentStageKeys" | "flowOrder"> {
+  const marked = observation?.currentStageKeys;
+  if (!marked) return {};
+  const keys = shape.stages.map((stage) => stage.key).filter((key) => marked.includes(key));
+  const delivered = Object.fromEntries(shape.stages.map((stage) => [
+    stage.key,
+    (observation?.receipts ?? []).some((receipt) =>
+      isCompletingWorkroomDriveReceiptAt(receipt, stage.key, observation?.stageIterations?.[stage.key] ?? 0)),
+  ]));
+  return { currentStageKeys: keys, flowOrder: { enabled: keys, delivered } };
 }
 
 function primarySourceRef(detail: WorkCaseDetail): WorkCaseSourceRef {
@@ -258,6 +287,7 @@ export function buildWorkroomView(
         })
       : evaluateWorkroomShapeConformance({
           roomKey: caseRef.caseId,
+          ...graphStageOrder(resolvedShape, observation),
           definition: readWorkShapeDefinitionContract(resolvedShape),
           collaborationShape: input.shapeKey ?? resolvedShape.collaborationShape,
           participants,

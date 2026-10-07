@@ -6,6 +6,7 @@
 // a PR without letting GitHub Actions discover the first obvious blocker?"
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
@@ -36,7 +37,7 @@ function parseArgs(argv) {
   };
   // strict: false plus the token check keeps the old message for unknown input and
   // still accepts a --pr-body that starts with "-" (a markdown list, say).
-  const { values, tokens } = utilParseArgs({ args: argv.slice(2), options, strict: false, allowPositionals: true, tokens: true });
+  const { values, tokens } = utilParseArgs({ args: scriptArgv(argv.slice(2)), options, strict: false, allowPositionals: true, tokens: true });
   const unknown = tokens.find((token) => token.kind !== "option" || !Object.hasOwn(options, token.name));
   if (unknown) throw new Error(`Unknown argument: ${unknown.rawName ?? unknown.value ?? "--"}`);
   // A value flag given last with nothing after it falls back as before.

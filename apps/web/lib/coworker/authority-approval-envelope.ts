@@ -235,35 +235,56 @@ export async function findApprovedAuthorityEnvelope(
 }
 
 /**
- * BI-12E5DD91 — the recorded outcome of an identical call that already ran on
- * a person's approval. A caller that retries after approval gets that outcome
- * instead of a second run or a second card. Only a successful run within the
- * approval window counts; a failed or declined one may be asked again.
+ * The settled outcome of an identical call a person already approved, within
+ * the approval window: the result it ran with, or, for a run that failed
+ * (BI-F4EB23C1), the failure it recorded. A failed approval is an outcome too;
+ * treating it as absent minted a fresh card for every retry of a call that
+ * could not succeed.
  */
 export async function findExecutedAuthorityOutcome(
   binding: CoworkerApprovalBinding,
   now: Date = new Date(),
   db: AuthorityApprovalDb & {
-    toolExecution: { findFirst(args: unknown): Promise<{ result: unknown } | null> };
+    toolExecution: {
+      findFirst(args: unknown): Promise<{ result: unknown } | null>;
+      findMany(args: unknown): Promise<Array<{ result: unknown }>>;
+    };
   } = prisma as never,
-): Promise<{ envelopeId: string; result: unknown } | null> {
+): Promise<SettledAuthorityOutcome | null> {
   const envelope = await db.coworkerActionEnvelope.findFirst({
     where: {
       approvalBindingFingerprint: fingerprintCoworkerApprovalBinding(binding),
-      status: "executed",
+      status: { in: ["executed", "failed"] },
       resolvedAt: { gt: new Date(now.getTime() - AUTHORITY_APPROVAL_TTL_MS) },
     },
     orderBy: { createdAt: "desc" },
     select: { id: true, status: true, expiresAt: true },
   });
   if (!envelope) return null;
-  const run = await db.toolExecution.findFirst({
-    where: { envelopeId: envelope.id, success: true },
+  if (envelope.status === "executed") {
+    const run = await db.toolExecution.findFirst({
+      where: { envelopeId: envelope.id, success: true },
+      orderBy: { createdAt: "desc" },
+      select: { result: true },
+    });
+    return run ? { envelopeId: envelope.id, status: "executed", result: run.result } : null;
+  }
+  // The same envelope also carries the original approval_required row and the
+  // approval_outcome receipt; the failure is the run that is neither.
+  const runs = await db.toolExecution.findMany({
+    where: { envelopeId: envelope.id, success: false, toolName: { not: "approval_outcome" } },
     orderBy: { createdAt: "desc" },
+    take: 5,
     select: { result: true },
   });
-  return run ? { envelopeId: envelope.id, result: run.result } : null;
+  const failure = runs.find((run) => {
+    const result = run.result && typeof run.result === "object" ? run.result as Record<string, unknown> : null;
+    return result?.["error"] !== "approval_required";
+  });
+  return { envelopeId: envelope.id, status: "failed", result: failure?.result ?? null };
 }
+
+export type SettledAuthorityOutcome = { envelopeId: string; status: "executed" | "failed"; result: unknown };
 
 export async function resumeAuthorityApprovalTask(
   taskRunId: string,

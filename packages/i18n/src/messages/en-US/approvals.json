@@ -24,5 +24,24 @@
     "task-not-waiting": "The task has moved on. Your assistant must check its current result before retrying.",
     "task-waiting-again": "The task continued and needs another decision. Review the next request in your Inbox.",
     "expired": "The approval window closed before execution. Your assistant must check the target before sending a fresh request."
+  },
+  "card": {
+    "authorizationNeeded": "Human authorization needed",
+    "saving": "Saving your decision. This can take a few seconds.",
+    "notReached": "Your decision did not reach the platform. Nothing was approved. You can decide again.",
+    "unknownResult": "We could not confirm whether your decision was saved. Do not approve again until you have checked its result.",
+    "unknownLink": "See this request's result",
+    "ifAuthorize": "If you authorize",
+    "ifDecline": "If you decline",
+    "whatChanges": "What changes",
+    "whatStays": "What stays the same",
+    "nextStep": "Next step it was given",
+    "technical": "Technical details",
+    "tool": "Tool",
+    "request": "Request",
+    "assistant": "Assistant",
+    "whyAsked": "Why you are asked",
+    "covers": "What authorizing covers",
+    "status": "Status"
   }
 }

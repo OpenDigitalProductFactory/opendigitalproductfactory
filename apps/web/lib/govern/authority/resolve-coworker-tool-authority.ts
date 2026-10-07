@@ -441,6 +441,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         roomAuthorityAllowed: roomAuthorizesTool(
           execution.toolName,
           roomAuthority?.authorizedGrants,
+          tool.discoveredPolicyGrants,
         ),
         sideEffect: tool.sideEffect === true,
         executionMode: tool.executionMode ?? "immediate",

@@ -2,17 +2,24 @@
 // exactly the five fields spec §4.4 adds and never an existing one, so
 // "equal under the legacy projection" cannot hide a lost field.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { describe, expect, it } from "vitest";
 
-import { getWorkShape, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
+import type { WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
 import { legacyDroppedFields, legacyProjection } from "./legacy";
 
+/**
+ * inquiry-response-watch@1.0.0 as it was hand-declared, with no additive field
+ * (the pinned pre-migration fixture; the registry now holds the compiled
+ * definition, which carries its ratified gate).
+ */
 function inquiry(): WorkShapeDefinition {
-  const definition = getWorkShape("inquiry-response-watch");
-  if (!definition) throw new Error("inquiry-response-watch is not registered");
-  return definition;
+  const fixture = join(__dirname, "../../work-management/__fixtures__/inquiry-response-watch@1.0.0.pre-migration.json");
+  return JSON.parse(readFileSync(fixture, "utf8")) as WorkShapeDefinition;
 }
 
 const GATE = { authority: "wwwd", mode: "enforced", blocking: true, resolution: "accountable-human" } as const;

@@ -12,7 +12,7 @@
 // (room-turn-authority.server.ts) loads the room and the grants and hands
 // them here. Every rule below is deny-by-default and tighten-only —
 // a room may narrow what a coworker's standing grants permit; it never widens.
-import { COWORKER_READ_BASELINE_GRANTS, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
+import { COWORKER_READ_BASELINE_GRANTS, grantsSatisfyRequirement, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
 import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
 
@@ -146,8 +146,11 @@ export function roomGrantsFromWorkShape(grants: readonly string[]): string[] {
 export function roomAuthorizesTool(
   toolName: string,
   authorizedGrants: readonly string[] | null | undefined,
+  /** A discovered external tool's policy-resolved grants (BI-8B7B2FE9); bundled names resolve via TOOL_TO_GRANTS. */
+  discoveredPolicyGrants?: readonly string[],
 ): boolean {
   if (!authorizedGrants) return true;
+  if (discoveredPolicyGrants) return grantsSatisfyRequirement(discoveredPolicyGrants, authorizedGrants);
   return isToolAllowedByGrants(toolName, [...authorizedGrants]);
 }
 

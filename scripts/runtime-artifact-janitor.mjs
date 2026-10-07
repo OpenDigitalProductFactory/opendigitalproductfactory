@@ -43,6 +43,7 @@
 //   node scripts/runtime-artifact-janitor.mjs --json                # CI/automation
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,7 +73,7 @@ function parseArgs(argv) {
   };
   // strict: false plus the token check below keeps the old message for unknown input
   // and still accepts a negative --staleness-days value, which the range check rejects.
-  const { values, tokens } = utilParseArgs({ args: argv, options, strict: false, allowPositionals: true, tokens: true });
+  const { values, tokens } = utilParseArgs({ args: scriptArgv(argv), options, strict: false, allowPositionals: true, tokens: true });
   const unknown = tokens.find((token) => token.kind !== "option" || !Object.hasOwn(options, token.name));
   if (unknown) throw new Error(`unknown argument: ${unknown.rawName ?? unknown.value ?? "--"}`);
   // --dry-run, --apply and --live toggle one mode; the last one given wins.

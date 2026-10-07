@@ -25,6 +25,7 @@
 //       genuine offline fork. The pre-push gate treats exit 2 as a loud warning.
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { fileURLToPath } from "node:url";
 
 import { findUnsignedCommits, resolvePushRange } from "./lib/dco-signoff.mjs";
@@ -32,7 +33,7 @@ import { findUnsignedCommits, resolvePushRange } from "./lib/dco-signoff.mjs";
 export function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
     options: { base: { type: "string" }, head: { type: "string" }, range: { type: "string" } },

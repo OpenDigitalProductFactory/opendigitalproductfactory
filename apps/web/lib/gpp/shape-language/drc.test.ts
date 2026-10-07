@@ -17,6 +17,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { setBindingEnforcementOverrideForTests } from "../binding-enforcement";
 import type { GppDiagnostic } from "./diagnostics";
 import { runDesignRules, type DesignRuleOptions } from "./drc";
+import { CONSTRUCT_EXECUTABLE } from "./executable-constructs";
 import type { GateRatificationEntry } from "./gate-ratification";
 import type { GppGate, GppShapeDocument } from "./gpp-shape-schema";
 import { gppShapeDocumentSchema } from "./gpp-shape-schema";
@@ -110,7 +111,8 @@ describe("C-1 Stage coverage, entry clause", () => {
         ],
       },
     });
-    expect(actionable(await run(document))).toEqual(["E-NOT-EXECUTABLE/parallel-split-join node:p", "C-1 stage:d"]);
+    // Parallel split/join is executable since GPP Phase 3c PR-3c-2, so only C-1 remains.
+    expect(actionable(await run(document))).toEqual(["C-1 stage:d"]);
   });
 
   it("a read-only start stage needs no gate", async () => {
@@ -249,13 +251,16 @@ describe("standing reports and sidecars", () => {
     expect(findings.find((finding) => finding.rule === "W-ORPHAN-LAYOUT")?.message).toMatch(/unit@2\.0\.0/);
   });
 
-  it("a lone join is not executable either (and is S-3)", async () => {
+  it("a lone join is S-3, and not executable while the parallel flag is off", async () => {
     const document = documentWith([stage("a"), stage("b")], {
       flow: { nodes: [{ id: "j", type: "parallel-join" }], edges: [{ from: "a", to: "b" }, { from: "b", to: "success" }] },
     });
     const findings = actionable(await run(document));
-    expect(findings).toContain("E-NOT-EXECUTABLE/parallel-split-join node:j");
     expect(findings.some((finding) => finding.startsWith("S-3 "))).toBe(true);
+    // GPP Phase 3c PR-3c-2: the flag is on, so the lone join is refused by S-3 alone; off (test-only), it is also E-NOT-EXECUTABLE.
+    expect(findings).not.toContain("E-NOT-EXECUTABLE/parallel-split-join node:j");
+    expect(actionable(await run(document, { executable: { ...CONSTRUCT_EXECUTABLE, "parallel-split-join": false } })))
+      .toContain("E-NOT-EXECUTABLE/parallel-split-join node:j");
   });
 });
 

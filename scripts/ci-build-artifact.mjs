@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   cpSync,
@@ -32,7 +33,7 @@ const DEFAULT_ARTIFACT_PREFIX = "web-production-build";
 function parseArgs(argv) {
   const option = { type: "string" };
   const { values, positionals } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     allowPositionals: true,
     options: {
       "artifact-name": option,

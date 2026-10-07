@@ -104,15 +104,20 @@ describe("AC-EMIT-INTEGRITY: committed generated files equal a fresh compile", (
     expect(run.files).toEqual(expect.arrayContaining([GENERATED_INDEX_REL, RATIFICATION_REPORT_REL]));
   });
 
-  it("at merge there are no shape documents and the generated index is empty", async () => {
-    expect(listGeneratedShapeModules(REPO_ROOT)).toEqual([]);
+  it("the committed documents are exactly the proof migration (PR-3b-6), and the index lists exactly its module", async () => {
+    expect(listGeneratedShapeModules(REPO_ROOT)).toEqual([`${GENERATED_SHAPES_REL}/inquiry-response-watch.shape.generated.ts`]);
     const { outputs } = await buildGppShapeOutputs(REPO_ROOT, context);
-    expect(outputs.get(GENERATED_INDEX_REL)).toMatch(/GENERATED_WORK_SHAPES: readonly WorkShapeDefinition\[\] = \[\];/);
+    expect(outputs.get(GENERATED_INDEX_REL)).toMatch(
+      /GENERATED_WORK_SHAPES: readonly WorkShapeDefinition\[\] = \[\n  INQUIRY_RESPONSE_WATCH_1_0_0,\n\];/,
+    );
     expect(outputs.get(GENERATED_INDEX_REL)).toMatch(/GENERATED_PRIOR_WORK_SHAPES: readonly WorkShapeDefinition\[\] = \[\];/);
   });
 
-  it("the generated index is not imported by work-shapes.ts (Phase 3b: nothing reaches the runtime)", () => {
-    expect(read(REPO_ROOT, "apps/web/lib/work-management/work-shapes.ts")).not.toMatch(/generated\/index\.generated/);
+  it("work-shapes.ts reads the generated index only to check registration; it never spreads it into the registry", () => {
+    const source = read(REPO_ROOT, "apps/web/lib/work-management/work-shapes.ts");
+    expect(source).toMatch(/import \{ GENERATED_WORK_SHAPES \} from "\.\/generated\/index\.generated";/);
+    expect(source).not.toMatch(/\.\.\.\s*GENERATED_/);
+    expect(source).not.toMatch(/GENERATED_PRIOR_WORK_SHAPES/);
   });
 });
 

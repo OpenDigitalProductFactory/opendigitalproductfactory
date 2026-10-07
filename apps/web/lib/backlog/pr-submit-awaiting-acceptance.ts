@@ -7,6 +7,10 @@ export type CodingPoolStatus = (typeof CODING_POOL_STATUSES)[number];
 
 export const AWAITING_ACCEPTANCE_STATUS = "awaiting-acceptance" as const;
 
+/** The `actuator` this module stamps on every status row it writes. The merge
+ * signal reads those rows as the PR that delivered the item (BI-B04A0203). */
+export const PR_SUBMIT_ACTUATOR = "pr-submit-awaiting-acceptance" as const;
+
 const ITEM_ID_RE = /\bBI-[A-Z0-9]+(?:-[A-Z0-9]+)*\b/g;
 
 export type GitHubPullRequestEvent = {
@@ -189,7 +193,7 @@ async function transitionItem(args: {
           from: args.from,
           to: args.to,
           reason: args.reason,
-          actuator: "pr-submit-awaiting-acceptance",
+          actuator: PR_SUBMIT_ACTUATOR,
           pullRequestNumber: args.pullRequestNumber,
           pullRequestUrl: args.pullRequestUrl,
           ...(args.to === AWAITING_ACCEPTANCE_STATUS ? { claimAction: "released" } : {}),
@@ -375,7 +379,7 @@ export async function fileAcceptanceMiss(args: {
         correctiveItemId: created.itemId,
         servedSha: args.servedSha,
         fingerprint: args.fingerprint,
-        actuator: "pr-submit-awaiting-acceptance",
+        actuator: PR_SUBMIT_ACTUATOR,
       },
     },
   });

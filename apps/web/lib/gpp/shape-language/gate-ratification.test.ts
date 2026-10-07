@@ -2,8 +2,9 @@
 // `decisionScope` string the shape registry uses to a proposed typed gate and a
 // status. These tests keep it complete in both directions, keep every proposal
 // valid against the shape schema and honest about today's drive behaviour, and
-// hold that nothing is ratified at merge: ratification belongs to the founder
-// (WWMD), not to the agent that wrote the proposals.
+// hold every ratified entry to a WWMD decision id and an ISO date:
+// ratification belongs to the founder (WWMD), not to the agent that wrote the
+// proposals.
 
 import { describe, expect, it } from "vitest";
 
@@ -149,17 +150,10 @@ describe("gate ratification table", () => {
     expect(gateRatificationRefusals({ "synthetic-scope": { status: "proposed", proposed: PROPOSED_GATE, basis: "Synthetic." } })).toEqual([]);
   });
 
-  // PR-3b-R, the first ratification PR, deletes this assertion. Until then the
-  // table is inert: the decompiler reads only ratified entries.
-  it("no entry is ratified at merge", () => {
-    const ratified = Object.entries(GATE_RATIFICATION)
-      .filter(([, entry]) => entry.status !== "proposed")
-      .map(([scope]) => scope);
-    expect(ratified).toEqual([]);
-  });
-
   it("ratifiedGateFor returns null for a proposed or unknown scope and the gate for a ratified one", () => {
-    for (const scope of Object.keys(GATE_RATIFICATION)) expect(ratifiedGateFor(scope)).toBeNull();
+    for (const [scope, entry] of Object.entries(GATE_RATIFICATION)) {
+      expect(ratifiedGateFor(scope)).toEqual(entry.status === "ratified" ? entry.proposed : null);
+    }
     expect(ratifiedGateFor("no-such-scope")).toBeNull();
 
     const injected = {

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { NearbyBusiness, PublicMenu } from "@dpf/types";
+import type { ApiError, NearbyBusiness, PublicMenu } from "@dpf/types";
 import { api } from "@/src/lib/apiClient";
 
 /**
@@ -9,6 +9,23 @@ import { api } from "@/src/lib/apiClient";
  * docs/superpowers/specs/2026-08-05-viral-walkup-consumer-front-door-design.md
  * (BI-9FEB61B8).
  */
+/**
+ * What a visitor sees when a lookup fails. The underlying error (e.g. "fetch
+ * failed: Could not connect to the server.") is for developers, so it goes to
+ * the console and never to the screen.
+ */
+export const NEARBY_UNAVAILABLE_MESSAGE =
+  "We couldn't load businesses near you. Check your connection, then try again.";
+export const MENU_UNAVAILABLE_MESSAGE =
+  "We couldn't load this menu. Check your connection, then try again.";
+export const MENU_NOT_FOUND_MESSAGE =
+  "This business's menu isn't available right now.";
+
+/** The API client throws a plain ApiError object (not an Error) for HTTP errors. */
+function isNotFound(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as Partial<ApiError>).code === "NOT_FOUND";
+}
+
 interface VisitorState {
   businesses: NearbyBusiness[];
   isLoadingNearby: boolean;
@@ -42,11 +59,8 @@ export const useVisitorStore = create<VisitorState>((set) => ({
       const res = await api.storefront.nearby({ latitude, longitude });
       set({ businesses: res.businesses, isLoadingNearby: false });
     } catch (err) {
-      set({
-        isLoadingNearby: false,
-        nearbyError:
-          err instanceof Error ? err.message : "Couldn't find nearby businesses",
-      });
+      console.warn("[visitor] nearby lookup failed", err);
+      set({ isLoadingNearby: false, nearbyError: NEARBY_UNAVAILABLE_MESSAGE });
     }
   },
 
@@ -58,9 +72,10 @@ export const useVisitorStore = create<VisitorState>((set) => ({
       const menu = await api.storefront.menu(slug);
       set({ menu, isLoadingMenu: false });
     } catch (err) {
+      console.warn("[visitor] menu load failed", err);
       set({
         isLoadingMenu: false,
-        menuError: err instanceof Error ? err.message : "Couldn't load the menu",
+        menuError: isNotFound(err) ? MENU_NOT_FOUND_MESSAGE : MENU_UNAVAILABLE_MESSAGE,
       });
     }
   },

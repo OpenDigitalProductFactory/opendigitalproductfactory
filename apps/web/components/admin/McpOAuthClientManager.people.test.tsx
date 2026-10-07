@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { namespaceMessages } from "@dpf/i18n";
 
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
@@ -79,7 +79,29 @@ describe("McpOAuthClientManager People panel identity (BI-287D3EFD)", () => {
     // The whole panel, not just its heading: on the live install scrolling only
     // the heading left the people and their revoke buttons below the fold.
     const scroll = Element.prototype.scrollIntoView as unknown as ReturnType<typeof vi.fn>;
-    expect(scroll.mock.contexts).toContain(panel);
+    await waitFor(() => expect(scroll.mock.contexts).toContain(panel));
+  });
+
+  it("scrolls the panel once its people have loaded, so the grown panel is still in view", async () => {
+    // Live check after #5974: the scroll ran while the list was a loading
+    // skeleton; the loaded rows then grew the panel past the bottom edge.
+    peopleMock.mockResolvedValue({
+      ok: true,
+      data: [
+        { userId: "u1", email: "admin@dpf.local", liveAccessTokens: 0, liveRefreshGrants: 4, lastUsedAt: null, lastRevocation: null, isYou: false },
+      ],
+    });
+    const rowsAtScroll: boolean[] = [];
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      if (this.matches?.("section")) rowsAtScroll.push(Boolean(this.textContent?.includes("admin@dpf.local")));
+    });
+    renderManager();
+    fireEvent.click(screen.getByText(/Existing keys/));
+    await screen.findByRole("table", { name: "Keys for automated tools" });
+    fireEvent.click(screen.getByRole("button", { name: /dpfoc_second22/ }));
+    const panel = await screen.findByRole("region", { name: /dpfoc_second22/ });
+    await within(panel).findByText("admin@dpf.local");
+    await waitFor(() => expect(rowsAtScroll).toContain(true));
   });
 
   it("keeps the row actions reachable on a narrow screen by letting the wide table scroll sideways", async () => {

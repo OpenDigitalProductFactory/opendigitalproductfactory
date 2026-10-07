@@ -232,3 +232,33 @@ test("candidate promoter build stages exactly the COPY sources, never the whole 
     "candidate build must NOT pass the whole workspace sourcePath as the docker context",
   );
 });
+
+// The promoter build context is staged by the already-deployed (N-1) portal
+// from the file list baked into ITS image. A staged script that imports a file
+// the N-1 list does not know makes every newer target unbuildable by every
+// deployed install, and the upgrade that would teach it IS the blocked upgrade.
+// Live: SUR-F67B9933 died on `Cannot find module /promoter/lib/script-argv.mjs`
+// after #5981 added that import and the list entry in one PR. Growing the
+// closure is a two-step: first ship the list entry (recorded here once that
+// portal is released), only then may a staged script import it.
+const N_MINUS_ONE_CLOSURE_FILE = "scripts/promoter-closure-n-minus-one.json";
+
+test("every relative import among staged promoter scripts resolves inside the N-1 deployed closure", async () => {
+  const [staged, released] = await Promise.all([
+    readPromoterBuildContextSources(root),
+    readFile(join(root, N_MINUS_ONE_CLOSURE_FILE), "utf8").then(JSON.parse),
+  ]);
+  const deployed = new Set(released.deployedClosure);
+  const knownGap = new Set((released.knownGaps ?? []).map((gap) => `${gap.from} -> ${gap.to}`));
+  for (const source of staged.filter((file) => file.endsWith(".mjs"))) {
+    const code = await readFile(join(root, source), "utf8");
+    for (const [, spec] of code.matchAll(/^\s*import\s[^'"]*['"](\.{1,2}\/[^'"]+)['"]/gm)) {
+      const target = posix.normalize(posix.join(posix.dirname(source), spec));
+      assert.ok(staged.includes(target), `${source} imports ${target}, which is not a staged promoter source`);
+      if (knownGap.has(`${source} -> ${target}`)) continue;
+      assert.ok(deployed.has(target),
+        `${source} imports ${target}, which the already-deployed (N-1) promoter closure does not stage; `
+        + `land the list entry in ${N_MINUS_ONE_CLOSURE_FILE} first, in its own release, before any staged script imports it`);
+    }
+  }
+});

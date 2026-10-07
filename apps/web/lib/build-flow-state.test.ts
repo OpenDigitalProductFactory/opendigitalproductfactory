@@ -24,7 +24,7 @@ vi.mock("@/lib/backlog/initiative-readiness/build-terminal-transition", () => te
 
 import { prisma } from "@dpf/db";
 import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
-import { getBuildFlowState, reconcileBuildCompletion, completeLocalDeliveryBuild } from "./build-flow-state";
+import { getBuildFlowState, reconcileBuildCompletion, completeLocalDeliveryBuild, completeBuildWhenDelivered } from "./build-flow-state";
 import { createBuildPrDeliveryState, writeBuildPrDeliveryState } from "./build/build-pr-delivery-state";
 
 // ─── Fixture helpers ────────────────────────────────────────────────────────
@@ -454,6 +454,58 @@ describe("reconcileBuildCompletion", () => {
       buildId: "FB-TEST-001",
       expectedPhase: "ship",
     });
+  });
+});
+
+// BI-BDB63485: the owner's explicit complete (advanceBuildPhase → complete,
+// completeBuild) runs reconcileBuildCompletion's delivery preconditions first.
+describe("completeBuildWhenDelivered", () => {
+  const deployedPromotion = [{ id: "pv-1", promotions: [{ promotionId: "CP-1", status: "deployed", deployedAt: new Date(), rollbackReason: null, deploymentLog: null, createdAt: new Date() }] }];
+
+  it("refuses a build that is not in ship, without the terminal transition", async () => {
+    mockBuild({ phase: "review" });
+    await expect(completeBuildWhenDelivered("FB-TEST-001")).resolves.toEqual({
+      ok: false, error: "Cannot complete this build: it is in review, not ship.",
+    });
+    expect(terminalTransition.completeFeatureBuildTransition).not.toHaveBeenCalled();
+  });
+
+  it("refuses while a release fork is unfinished", async () => {
+    mockBuild({ phase: "ship" });
+    await expect(completeBuildWhenDelivered("FB-TEST-001")).resolves.toEqual({
+      ok: false, error: "Cannot complete this build: not every release fork has finished.",
+    });
+    expect(terminalTransition.completeFeatureBuildTransition).not.toHaveBeenCalled();
+  });
+
+  it("refuses while the merged change is not deployed", async () => {
+    mockBuild({ phase: "ship", productVersions: deployedPromotion });
+    mockPack({ packId: "FP-1", prUrl: "https://github.com/org/repo/pull/42", prNumber: 42 });
+    vi.mocked(isFeatureBuildDeployed).mockResolvedValue(false);
+    await expect(completeBuildWhenDelivered("FB-TEST-001")).resolves.toEqual({
+      ok: false, error: "Cannot complete this build: the merged change is not deployed yet.",
+    });
+    expect(terminalTransition.completeFeatureBuildTransition).not.toHaveBeenCalled();
+  });
+
+  it("maps a readiness block to the refusal assertFeatureBuildCompletion used to throw", async () => {
+    mockBuild({ phase: "ship", productVersions: deployedPromotion });
+    mockPack({ packId: "FP-1", prUrl: "https://github.com/org/repo/pull/42", prNumber: 42 });
+    terminalTransition.completeFeatureBuildTransition.mockResolvedValueOnce({
+      ok: false, code: "DELIVERY_EVIDENCE_REQUIRED",
+      decision: { blockers: [], unmet: [{ code: "DELIVERY_EVIDENCE_REQUIRED" }, { code: "ACCEPTANCE_EVIDENCE_REQUIRED" }] },
+    });
+    await expect(completeBuildWhenDelivered("FB-TEST-001")).resolves.toEqual({
+      ok: false, error: "Cannot complete this build: DELIVERY_EVIDENCE_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED.",
+    });
+  });
+
+  it("completes through the terminal transition once delivered", async () => {
+    mockBuild({ phase: "ship", productVersions: deployedPromotion });
+    mockPack({ packId: "FP-1", prUrl: "https://github.com/org/repo/pull/42", prNumber: 42 });
+    terminalTransition.completeFeatureBuildTransition.mockResolvedValueOnce({ ok: true });
+    await expect(completeBuildWhenDelivered("FB-TEST-001")).resolves.toEqual({ ok: true });
+    expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({ buildId: "FB-TEST-001", expectedPhase: "ship" });
   });
 });
 

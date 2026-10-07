@@ -9,21 +9,37 @@
 // - Copies every current field verbatim, in the schema's order, prefixed by
 //   `format: "gpp-shape/0.1"`. Values are copied, never shared, so a document
 //   can be edited without touching the registry.
-// - Never emits `flow` (every current shape is sequential), `deadline` or
-//   `subShape` (no current shape has them, and WorkShapeDefinition does not
-//   carry them until the Phase 3c PR that makes each executable).
+// - Copies `flow`, `stage.deadline` and `stage.subShape` when the definition
+//   carries them (Phase 3c PR-3c-1, design correction 5: WorkShapeDefinition
+//   carries all three since then). A sequential definition carries none, so
+//   its document is unchanged. Without this the Phase 3c registry guard
+//   (work-shape-graph-constructs.test.ts) could not see a hand-declared graph
+//   construct, and L1 would fail for such a shape.
 // - Copies `stage.binding` when the definition carries one, in schema order
 //   (WorkShapeStage.binding exists since PR-3b-4; no registry shape has one).
 //   This keeps L2, decompile(compile(D)) ≡ D, true for a bound document.
-// - Adds `advance.gate` ONLY from a ratified GATE_RATIFICATION entry for the
-//   stage's `decisionScope`. Otherwise the advance stays untyped and the stage
-//   is returned in `awaitingRatification`; a shape with any such stage is not
-//   migrated (§10).
+// - `advance.gate` comes from a ratified GATE_RATIFICATION entry for the
+//   stage's `decisionScope`, with one exception (Phase 3c PR-3c-1, design
+//   correction 12): a gate the definition declares itself WITH a refuse route
+//   (`onRefuse`) wins, so a code-declared refuse route reaches the registry
+//   guard (work-shape-graph-constructs.test.ts) and E-NOT-EXECUTABLE; D-8
+//   still compares that gate with the ratified entry. A refuse route is
+//   `onRefuse`, or (Phase 3c PR-3c-3) the stage's single outgoing rework edge
+//   (declaresRefuseRoute, work-shape-flow-graph.ts): the drive and the
+//   reference interpreter route a refusal over that edge only through the
+//   gate, so a document without it would misstate the shape. A declared gate
+//   without a refuse route is not carried: since PR-3b-6 the compiled
+//   inquiry-response-watch declares the very gate its ratified entry holds,
+//   and the decompiler's contract (and its tests) is that, absent a refuse
+//   route, the gate is the table's. A stage whose scope is not ratified is
+//   returned in `awaitingRatification` either way; a shape with any such stage
+//   is not migrated (§10).
 // - `tools` absent stays absent; `tools: []` stays `[]`.
 // - Emits no layout: the canvas lays out a sidecar-less document (Phase 4).
 //
 // OFFLINE TOOLING in Phase 3a: nothing in the running app imports this module.
 
+import { declaresRefuseRoute } from "@/lib/work-management/work-shape-flow-graph";
 import type { WorkShapeDefinition, WorkShapeStage } from "@/lib/work-management/work-shapes";
 
 import { copyBinding, copyGate } from "./emit";
@@ -48,6 +64,7 @@ function decompileAdvance(
   stage: WorkShapeStage,
   table: Readonly<Record<string, GateRatificationEntry>>,
   awaitingRatification: string[],
+  hasRefuseRoute: boolean,
 ): DocumentAdvance {
   const { advance } = stage;
   if (advance.kind === "status-change") return { kind: advance.kind, condition: advance.condition };
@@ -56,9 +73,10 @@ function decompileAdvance(
     condition: advance.condition,
     decisionScope: advance.decisionScope,
   };
-  const gate = ratifiedGateFor(advance.decisionScope, table);
+  const ratified = ratifiedGateFor(advance.decisionScope, table);
+  const gate = advance.gate && hasRefuseRoute ? advance.gate : ratified;
   if (gate) typed.gate = copyGate(gate);
-  else awaitingRatification.push(stage.key);
+  if (!ratified) awaitingRatification.push(stage.key);
   return typed;
 }
 
@@ -72,11 +90,13 @@ export function decompile(definition: WorkShapeDefinition, options: DecompileOpt
       key: stage.key,
       title: stage.title,
       accountablePrincipalRef: stage.accountablePrincipalRef,
-      advance: decompileAdvance(stage, table, awaitingRatification),
+      advance: decompileAdvance(stage, table, awaitingRatification, declaresRefuseRoute(definition, stage.key)),
       evidence: [...stage.evidence],
     };
     if (stage.tools !== undefined) documentStage.tools = [...stage.tools];
     if (stage.binding !== undefined) documentStage.binding = copyBinding(stage.binding);
+    if (stage.deadline !== undefined) documentStage.deadline = { afterDays: stage.deadline.afterDays, description: stage.deadline.description };
+    if (stage.subShape !== undefined) documentStage.subShape = stage.subShape;
     return documentStage;
   });
 
@@ -88,6 +108,22 @@ export function decompile(definition: WorkShapeDefinition, options: DecompileOpt
     description: definition.description,
     triggers: [...definition.triggers],
     stages,
+    ...(definition.flow !== undefined
+      ? {
+          flow: {
+            nodes: definition.flow.nodes.map((node) => ({
+              id: node.id,
+              type: node.type,
+              ...(node.pairs !== undefined ? { pairs: node.pairs } : {}),
+            })),
+            edges: definition.flow.edges.map((edge) => ({
+              from: edge.from,
+              to: edge.to,
+              ...(edge.rework !== undefined ? { rework: { maxIterations: edge.rework.maxIterations } } : {}),
+            })),
+          },
+        }
+      : {}),
     stopConditions: definition.stopConditions.map((stop) => ({
       kind: stop.kind,
       condition: stop.condition,

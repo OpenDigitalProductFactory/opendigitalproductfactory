@@ -100,6 +100,24 @@ subscription, and fulfillment records are evidence only when they really
 exist. The completeness line measures classified, evidence-linked,
 explainably-scored, and funding-decided records; it does not reward clicks.
 
+### What Build Studio starts next
+
+When the governed backlog lane is on, the daily tee-up (and the capacity drain,
+when it is switched on) starts accepted, build-ready work in this order:
+
+1. Items with a demand score come before items without one, highest score
+   first.
+2. If you have set investment-bucket targets, an item whose bucket (Run, Grow
+   or Transform) is below its target in the work already in flight goes ahead
+   of higher-scored work in the same group. The balance is re-checked after
+   each start.
+3. Ties go to work on an active epic, then to the oldest item.
+
+Each started build records why it was picked in its activity, for example
+"Ranked 1 of 12 eligible by demand score 42 (rice)". An item with no score
+says so, so unscored work is never started by age without saying it. To have
+an item considered on value, give it a score in Delivery Flow.
+
 Open **Operations > Delivery Flow** (`/ops/demand`) to review demand shared by
 approved DPF connections. A shared item is an observation from another
 installation, not a local backlog item. You can follow it, offer help, or adopt

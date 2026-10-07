@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getLatestRun: vi.fn(),
   getLastCheckedAt: vi.fn(),
   getScheduledDecline: vi.fn(),
+  getDeferredUpgradeRequest: vi.fn(),
 }));
 
 vi.mock("@/lib/self-upgrade/request", () => ({
@@ -34,6 +35,12 @@ vi.mock("@/lib/self-upgrade/scheduled-gate", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/self-upgrade/scheduled-gate")>()),
   getScheduledDecline: mocks.getScheduledDecline,
   recordScheduledDecline: vi.fn(),
+}));
+
+// Keep the real pending arithmetic; stub only the DB reader.
+vi.mock("@/lib/self-upgrade/deferred-request", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/self-upgrade/deferred-request")>()),
+  getDeferredUpgradeRequest: mocks.getDeferredUpgradeRequest,
 }));
 
 import { selfUpgradePack } from "./self-upgrade-pack";
@@ -127,6 +134,21 @@ describe("self-upgrade MCP tools on consumer installs", () => {
 
     const result = await call("get_self_upgrade_queue_status") as unknown as { data: { scheduledGate: unknown } };
     expect(result.data.scheduledGate).toBeNull();
+  });
+
+  it("BI-2128872C: reports an agent request still waiting for the next window, and drops a fulfilled one", async () => {
+    mocks.getSelfUpgradeConfig.mockResolvedValue({ enabled: true, sourceMode: "upstream", checkIntervalHours: 24 });
+    mocks.getLastCheckedAt.mockResolvedValue(new Date("2026-10-07T10:00:00.000Z"));
+    mocks.getScheduledDecline.mockResolvedValue(null);
+    const deferred = { requestedBy: "mcp:codex", requestedAt: "2026-10-07T15:20:00.000Z", runAt: "2026-10-07T22:00:00.000Z" };
+    mocks.getDeferredUpgradeRequest.mockResolvedValue(deferred);
+
+    const pending = await call("get_self_upgrade_queue_status") as unknown as { data: { deferredRequest: unknown } };
+    expect(pending.data.deferredRequest).toEqual(deferred);
+
+    mocks.getLastCheckedAt.mockResolvedValue(new Date("2026-10-07T22:00:00.000Z"));
+    const fulfilled = await call("get_self_upgrade_queue_status") as unknown as { data: { deferredRequest: unknown } };
+    expect(fulfilled.data.deferredRequest).toBeNull();
   });
 
   it("reports that the promoter is release-managed", async () => {

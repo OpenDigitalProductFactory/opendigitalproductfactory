@@ -244,6 +244,28 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — service reconcile (BI-D011E
 
 // BI-FFFEA4ED: Created is not an operator stop; the first startup never succeeded.
 describe.skipIf(!BASH_OK || !GIT_OK)("never-started recovery", () => {
+  it("preserves existing services when the inventory exceeds a pipe buffer", () => {
+    const required = discoverRequiredServices();
+    const fixture = makeScratch();
+    const dockerLog = join(fixture.root, "docker.log");
+    try {
+      const service = required[0];
+      const existingServices = [
+        ...required,
+        ...Array.from({ length: 3000 }, (_, index) => `unrelated-existing-service-${index}`),
+      ];
+      const result = runPromote({ ...fixture, targetSha: fixture.head, dockerLog,
+        existingServices, createdService: service,
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(readOutcome(fixture.backup)).toMatchObject({
+        outcome: "complete", created: [service], failed: [],
+      });
+      const creates = readFileSync(dockerLog, "utf8").split("\n")
+        .filter(line => line.startsWith("reconcile-create "));
+      expect(creates).toHaveLength(1);
+    } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+  }, PROMOTE_TEST_TIMEOUT_MS);
   for (const fails of [false, true]) {
     it(`retries a never-started service and records ${fails ? "failure" : "success"}`, () => {
       const required = discoverRequiredServices();

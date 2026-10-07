@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Attention Reach Layer — design (P1: deep link only)
 
 - **Backlog item:** BI-C7D25599 (EP-ATTENTION-SURFACE)
@@ -96,6 +99,12 @@ review the one-click path genuinely needs.
 
 Secret resolution: `DPF_ATTENTION_REACH_SECRET ?? AUTH_SECRET ?? NEXTAUTH_SECRET`, and it
 **throws** when none is set. No default, no dev fallback — `never-hardcode-secrets`.
+
+Since BI-F6929F50 every install path provisions `DPF_ATTENTION_REACH_SECRET`, so new links
+are signed with the dedicated key, not the session secret. A link signed with `AUTH_SECRET`
+before the upgrade still verifies until 2026-11-09 (`SESSION_SECRET_GRACE_CUTOFF` in
+`apps/web/lib/auth/dedicated-signing-key.ts`), and only if its `exp` is within one
+`REACH_LINK_TTL_MS` of now. An install without the dedicated key keeps the resolution above.
 
 Expiry is enforced on verify, not merely encoded, and the reason is distinguishable
 (`expired` vs `signature_mismatch` vs `malformed`) so an operator following a stale link

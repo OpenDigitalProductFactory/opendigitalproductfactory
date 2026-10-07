@@ -31,6 +31,7 @@
 //                                                    [--json <path>]
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "../lib/script-argv.mjs";
 import { parsePackageKeys, splitNameVersion } from "../lib/pnpm-lock.mjs";
 import { LOCKFILE_ROOTS, rootFile } from "./lockfile-roots.mjs";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -132,7 +133,7 @@ export function classifyAges(entries, publishedAt, { minutes, exclude, now }) {
 function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
     options: { base: { type: "string" }, "require-online": { type: "boolean" }, json: { type: "string" } },

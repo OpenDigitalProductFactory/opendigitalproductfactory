@@ -164,3 +164,39 @@ describe("diffWorkShapeBinding: typed gates and bindings", () => {
     expect(diff.changes.filter((row) => row.class === "widening")).toEqual([]);
   });
 });
+
+// GPP Phase 3c PR-3c-1 (BI-8875C9DF): the graph-construct rows. Each fires only
+// when one side declares the field.
+describe("Phase 3c rows: flow, deadline, sub-shape", () => {
+  const withStage = (stage: Partial<WorkShapeStage>, version = "1.1.0"): WorkShapeDefinitionContract =>
+    ({ ...v1, version, stages: [{ ...scan, ...stage }, review] });
+  const kinds = (from: WorkShapeDefinitionContract, to: WorkShapeDefinitionContract) =>
+    diffWorkShapeBinding(from, to).changes.map((row) => [row.kind, row.class, row.stageKey] as const);
+  const flow = { nodes: [], edges: [{ from: "scan", to: "review" }, { from: "review", to: "success" }] };
+
+  it("flow-changed (widening) when either side declares a flow and they differ", () => {
+    expect(kinds(v1, { ...v1, version: "1.1.0", flow })).toEqual([["flow-changed", "widening", null]]);
+    expect(kinds({ ...v1, flow }, { ...v1, version: "1.1.0" })).toEqual([["flow-changed", "widening", null]]);
+    expect(kinds({ ...v1, flow }, { ...v1, version: "1.1.0", flow: { ...flow, edges: [...flow.edges] } })).toEqual([]);
+  });
+
+  it("deadline-added (narrowing), deadline-relaxed and deadline-removed (widening)", () => {
+    const two = { deadline: { afterDays: 2, description: "two" } };
+    const five = { deadline: { afterDays: 5, description: "five" } };
+    expect(kinds(withStage({}, "1.0.0"), withStage(two))).toEqual([["deadline-added", "narrowing", "scan"]]);
+    expect(kinds(withStage(two, "1.0.0"), withStage(five))).toEqual([["deadline-relaxed", "widening", "scan"]]);
+    expect(kinds(withStage(two, "1.0.0"), withStage({}))).toEqual([["deadline-removed", "widening", "scan"]]);
+    expect(diffWorkShapeBinding(withStage(two, "1.0.0"), withStage(five)).classification).toBe("widening");
+    expect(diffWorkShapeBinding(withStage({}, "1.0.0"), withStage(two)).classification).toBe("narrowing");
+  });
+
+  it("sub-shape-changed (widening) when either side calls a sub-shape and the call differs", () => {
+    expect(kinds(withStage({}, "1.0.0"), withStage({ subShape: "child@1.0.0" }))).toEqual([["sub-shape-changed", "widening", "scan"]]);
+    expect(kinds(withStage({ subShape: "child@1.0.0" }, "1.0.0"), withStage({ subShape: "child@1.1.0" }))).toEqual([["sub-shape-changed", "widening", "scan"]]);
+    expect(kinds(withStage({ subShape: "child@1.0.0" }, "1.0.0"), withStage({ subShape: "child@1.0.0" }))).toEqual([]);
+  });
+
+  it("a shape declaring none of them gains no row", () => {
+    expect(kinds(v1, { ...v1, version: "1.1.0" })).toEqual([]);
+  });
+});

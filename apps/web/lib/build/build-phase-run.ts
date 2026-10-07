@@ -22,6 +22,7 @@ import { prisma } from "@dpf/db";
 import { emitRing12FromCompletedPhase } from "@/lib/gear-interface/emit-ring-1-2";
 import { emitRing23FromCompletedShip } from "@/lib/gear-interface/emit-ring-2-3";
 import { getQuiescenceLevel, QuiescingError } from "@/lib/self-upgrade/quiescence";
+import { UPGRADE_WAIT_ACTIVITY_TOOL } from "@/lib/build/build-liveness";
 import type { AutonomousBuildExecutionProfileRefV1 } from "@/lib/build/autonomous-build-eligibility-reader";
 
 export type BuildPhaseName = "ideate" | "plan" | "build" | "review" | "ship";
@@ -45,7 +46,7 @@ export async function admitPhaseTransition(
   await prisma.buildActivity.create({
     data: {
       buildId,
-      tool: "phase:upgrade-wait",
+      tool: UPGRADE_WAIT_ACTIVITY_TOOL,
       summary: `Waiting for the platform upgrade to finish: ${from} → ${to} continues after it.`,
     },
   }).catch(() => {});

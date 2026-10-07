@@ -1,9 +1,9 @@
 {
   "format": "gpp-shape/0.1",
-  "key": "drc-e-parallel-split",
+  "key": "drc-pass-rework-edge",
   "version": "1.0.0",
-  "title": "DRC fixture drc-e-parallel-split",
-  "description": "Seeded E-NOT-EXECUTABLE: a sound parallel split and join.",
+  "title": "DRC fixture drc-pass-rework-edge",
+  "description": "Passing since GPP Phase 3c PR-3c-3 (rework edges are executable): a bounded rework edge back to an earlier stage.",
   "triggers": [
     "claim"
   ],
@@ -31,56 +31,25 @@
       "evidence": [
         "manual-check"
       ]
-    },
-    {
-      "key": "c",
-      "title": "Stage c",
-      "accountablePrincipalRef": "role:shape-owner",
-      "advance": {
-        "kind": "status-change",
-        "condition": "Stage c recorded its evidence."
-      },
-      "evidence": [
-        "manual-check"
-      ]
     }
   ],
   "flow": {
-    "nodes": [
-      {
-        "id": "p",
-        "type": "parallel-split"
-      },
-      {
-        "id": "j",
-        "type": "parallel-join",
-        "pairs": "p"
-      }
-    ],
+    "nodes": [],
     "edges": [
       {
         "from": "a",
-        "to": "p"
-      },
-      {
-        "from": "p",
         "to": "b"
       },
       {
-        "from": "p",
-        "to": "c"
+        "from": "b",
+        "to": "success"
       },
       {
         "from": "b",
-        "to": "j"
-      },
-      {
-        "from": "c",
-        "to": "j"
-      },
-      {
-        "from": "j",
-        "to": "success"
+        "to": "a",
+        "rework": {
+          "maxIterations": 2
+        }
       }
     ]
   },

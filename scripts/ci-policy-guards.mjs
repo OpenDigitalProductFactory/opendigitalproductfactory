@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { appendFileSync, writeFileSync } from "node:fs";
 
 import {
@@ -13,7 +14,7 @@ import { isEntryModule } from "./lib/entry-module.mjs";
 function argument(name) {
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
   const { values } = utilParseArgs({
-    args: process.argv.slice(2),
+    args: scriptArgv(),
     strict: false,
     allowPositionals: true,
     options: { "profile": { type: "string" }, "results": { type: "string" } },

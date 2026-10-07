@@ -283,7 +283,7 @@ export async function getAvailableTools(
   // Agent-scoped filtering: intersection of user capabilities and agent tool grants.
   // EP-AI-WORKFORCE-001: use the async DB-first resolver so grants written via
   // the DB (e.g. via seed or Admin UI) take precedence over the JSON fallback.
-  const { getAgentToolGrantsAsync, isToolAllowedByGrants, getToolGrantMapping } =
+  const { getAgentToolGrantsAsync, isToolAllowedByGrants } =
     await import("./agent-grants");
   let agentGrants: string[] = [];
   if (options?.agentId) {
@@ -308,26 +308,27 @@ export async function getAvailableTools(
 
   if (options?.externalAccessEnabled) {
     try {
-      const { getMcpServerTools } = await import("./mcp-server-tools");
-      const mcpTools = await getMcpServerTools();
-      const modeFiltered = options?.mode === "advise" ? [] : mcpTools;
-      // Grant-gate discovered MCP tools, closing the Verdict 5 authority gap
-      // (EP-BROWSER-DRIVE, spec 2026-06-05 §8.2). Previously every discovered
-      // MCP tool was appended ungated whenever External Access was on — so a
-      // side-effecting browser tool was ambiently callable. Now a discovered
-      // tool that carries a TOOL_TO_GRANTS entry (the namespaced browser-driving
-      // tools) is denied unless the agent holds the grant; this denies them even
-      // for an agent with no grants at all (empty agentGrants → false). Discovered
-      // tools WITHOUT a mapping retain prior behavior so other MCP servers are not
-      // regressed — tightening those to default-deny is tracked separately
-      // (architect review Slice 0 item 4, the discovered-tool policy overlay).
-      const grantMap = getToolGrantMapping();
-      const grantFiltered = modeFiltered.filter((tool) =>
-        grantMap[tool.name] ? isToolAllowedByGrants(tool.name, agentGrants) : true,
-      );
-      return [...platformTools, ...grantFiltered];
+      // Dynamically discovered external MCP tools are DEFAULT-DENY
+      // (BI-8B7B2FE9, spec 2026-08-30 §11). Only a tool whose DPF-owned policy
+      // resolves — bundled mapping or operator approval, complete, current, and
+      // with unchanged content — is a candidate, and it is admitted only when
+      // the acting coworker's grants, the room's surface, the mode and External
+      // Access all pass. Omission of policy never authorizes (the former
+      // "unmapped → allowed" fallback is gone). Remote annotations are never read.
+      const { getDiscoveredToolCandidates } = await import("./tak/mcp-server-tools");
+      const { evaluateDiscoveredToolAccess } = await import("./tak/mcp-tool-policy");
+      const candidates = await getDiscoveredToolCandidates();
+      const admitted = candidates
+        .filter(({ policy }) => evaluateDiscoveredToolAccess(policy, {
+          agentGrants: options?.agentId ? agentGrants : [],
+          roomAuthorizedGrants: options?.roomAuthorizedGrants ?? null,
+          mode: options?.mode ?? "act",
+          externalAccessEnabled: true,
+        }).allowed)
+        .map(({ definition }) => definition as ToolDefinition);
+      return [...platformTools, ...admitted];
     } catch {
-      // MCP server tools unavailable — return platform tools only
+      // Discovered tools unavailable — return platform tools only (fail closed)
     }
   }
 
@@ -580,7 +581,23 @@ export async function executeTool(
       const { parseNamespacedTool, executeMcpServerTool } = await import("./mcp-server-tools");
       const parsed = parseNamespacedTool(toolName);
       if (parsed) {
-        return executeMcpServerTool(parsed.serverSlug, parsed.toolName, params);
+        // A discovered external tool runs only on the authorization the
+        // governed executor resolved for THIS call (BI-8B7B2FE9). A direct
+        // executeTool call — a replayed proposal, a stale list — carries none
+        // and is refused before any remote call.
+        const authorized = context?.discoveredToolAuthorization;
+        if (!context?.governedSource || !authorized || authorized.namespacedName !== toolName) {
+          return {
+            success: false,
+            error: "discovered_tool_not_authorized",
+            message: "Discovered external tools run only through the governed executor.",
+          };
+        }
+        return executeMcpServerTool(parsed.serverSlug, parsed.toolName, params, {
+          kind: "governed-call",
+          namespacedName: authorized.namespacedName,
+          contentDigest: authorized.contentDigest,
+        });
       }
       // CodeQL #52 (js/tainted-format-string): toolName is user-influenced.
       // Use a constant message and put the raw value in error for diagnostics.

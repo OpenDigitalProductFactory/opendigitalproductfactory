@@ -67,6 +67,8 @@
 
 services:
   edge-node:
+    labels:
+      dpf.recreate-class: stateless
     # Compose uses `image` as the local tag; if it can't pull (GHCR auth
     # denied, offline, dev branch not released yet), `build` runs and tags
     # the resulting image with the `image` name. Operators don't have to
@@ -177,6 +179,8 @@ services:
   # 2026-05-16 ADR. See:
   #   docs/superpowers/specs/2026-05-20-edge-node-deployment-matrix.md
   edge-node-host:
+    labels:
+      dpf.recreate-class: stateless
     profiles:
       - linux-host-network
     image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-edge-node:${DPF_IMAGE_TAG:-latest}

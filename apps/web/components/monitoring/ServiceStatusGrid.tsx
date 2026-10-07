@@ -17,9 +17,18 @@ type Props = {
   // UNSCRAPED_SERVICES (AI Inference, Voice STT) appended.
   services?: ServiceDefinition[];
   className?: string;
+  // Services whose runtime capability is inactive (BI-36DE938C): their static
+  // scrape targets render as "Inactive" instead of DOWN.
+  inactiveServices?: ReadonlySet<string>;
 };
 
-export function ServiceStatusGrid({ services, className = "" }: Props) {
+const NO_INACTIVE_SERVICES: ReadonlySet<string> = new Set();
+
+export function ServiceStatusGrid({
+  services,
+  className = "",
+  inactiveServices = NO_INACTIVE_SERVICES,
+}: Props) {
   // Legacy code path: when an explicit `services` array is passed in, render
   // it exactly the way SystemHealthDashboard used to. Used as the fallback
   // when callers haven't migrated yet.
@@ -27,7 +36,9 @@ export function ServiceStatusGrid({ services, className = "" }: Props) {
     return <LegacyServiceStatusGrid services={services} className={className} />;
   }
 
-  return <TargetsDrivenServiceStatusGrid className={className} />;
+  return (
+    <TargetsDrivenServiceStatusGrid className={className} inactiveServices={inactiveServices} />
+  );
 }
 
 function LegacyServiceStatusGrid({
@@ -42,9 +53,20 @@ function LegacyServiceStatusGrid({
   return <Grid rows={rows} className={className} />;
 }
 
-function TargetsDrivenServiceStatusGrid({ className }: { className: string }) {
+function TargetsDrivenServiceStatusGrid({
+  className,
+  inactiveServices,
+}: {
+  className: string;
+  inactiveServices: ReadonlySet<string>;
+}) {
   const { targets, loading, offline } = useTargetsQuery();
-  const scraped = deriveServiceStatusesFromTargets({ targets, loading, offline });
+  const scraped = deriveServiceStatusesFromTargets({
+    targets,
+    loading,
+    offline,
+    inactiveServices,
+  });
   // Append the canonical "exists but unscraped" tiles unconditionally — they
   // don't depend on Prometheus targets data.
   const unscraped = UNSCRAPED_SERVICES.map((svc) => ({

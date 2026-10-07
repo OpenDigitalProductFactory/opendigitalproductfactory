@@ -98,7 +98,7 @@ const { mockGetQuiescenceLevel } = vi.hoisted(() => ({
 const { mockEnforceBuildInitiativeReadiness } = vi.hoisted(() => ({
   mockEnforceBuildInitiativeReadiness: vi.fn(),
 }));
-const mockAssertFeatureBuildCompletion = vi.hoisted(() => vi.fn());
+const mockCompleteBuildWhenDelivered = vi.hoisted(() => vi.fn(async () => ({ ok: true as const })));
 vi.mock("@/lib/auth", () => ({
   auth: mockAuth,
 }));
@@ -147,7 +147,7 @@ vi.mock("@/lib/build/build-entry-gate", () => ({
   assertBuildPhaseInitiativeReadiness: mockEnforceBuildInitiativeReadiness,
   checkBuildPhaseInitiativeReadiness: async (a: unknown) => { try { await mockEnforceBuildInitiativeReadiness(a); return null; } catch (e) { return e instanceof Error && e.message ? e.message : "refused"; } }, // BI-C5D978E9
 }));
-vi.mock("@/lib/backlog/initiative-readiness/build-terminal-transition", () => ({ assertFeatureBuildCompletion: mockAssertFeatureBuildCompletion }));
+vi.mock("@/lib/build-flow-state", () => ({ completeBuildWhenDelivered: mockCompleteBuildWhenDelivered }));
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
@@ -981,10 +981,8 @@ describe("governed build start approvals", () => {
 
     await completeBuild("FB-READ");
 
-    expect(mockAssertFeatureBuildCompletion).toHaveBeenCalledWith({
-      buildId: "FB-READ",
-      expectedPhase: undefined,
-    });
+    // BI-BDB63485: completion goes through the delivery preconditions first.
+    expect(mockCompleteBuildWhenDelivered).toHaveBeenCalledWith("FB-READ");
     expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

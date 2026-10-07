@@ -43,6 +43,8 @@ For locally capability-activated services, runtime profile names are mechanicall
 
 **How an upgraded install reaches its required services.** A fresh install runs a full `docker compose up -d`; a self-upgrade creates missing services in `scripts/promote.sh` step 7d (service-reconcile), against `requiredServices` from the capability projection. Each missing service is created on its own `up`, so one image that cannot be pulled leaves only that service absent. The new portal marks the run succeeded when it boots, before step 7d runs, so promote.sh writes what it created and what it could not to `service-reconcile-outcome.json` on the state mount. The portal merges that into the run's `completionEvidence.serviceReconcile`, and the Upgrade Center shows the run as **degraded** and names the services that are not running. The run's status stays `succeeded`, because the portal swap did land and the upstream freshness gate reads the latest succeeded run (BI-DB87D925).
 
+Service inventory matching uses exact names and direct input redirection. An early-exiting search in a pipeline can make its writer fail under `pipefail`, falsely classifying an existing service as missing. Inventory size must not change the recovery decision: only missing services and containers proven never started are candidates for creation; intentionally stopped services remain stopped.
+
 PostgreSQL, `portal-init`, and the portal are `runtime:core` and have no profile. The resolver filters service bindings by `hostPlatforms` before returning profiles and required services. The Linux overlay therefore provides a deliberate hybrid: the same `runtime:external-ai` capability can select host-local Ollama on Linux while external provider configurations remain outside Compose on every host. Linux-only `cadvisor` and `node-exporter` remain under the explicit `linux-monitoring` overlay.
 
 Lifecycle overlays are not capability state. `promote`, `dev`, `integration-test`, `linux-monitoring`, and `linux-host-network` are explicit, allowlisted overlays. `runtime:development` has `activationPolicy: lifecycle-profile`; selecting `dev` or `integration-test` is therefore explicit lifecycle intent and does not convert development infrastructure into an install capability profile. The `runtime:adp-integration` binding is also intentionally exceptional: its `adp` service remains a `separate-distribution` boundary under the retained `integrations-adp` profile, rather than being folded into the local runtime-profile naming convention. The one-release compatibility aliases are:
@@ -170,5 +172,20 @@ state outside the transition protocol leaves the cause in place.
 - Retire a capability in two phases — mark it `retired` and leave the entry for a release, then delete it. Deleting the entry outright wedges every install that still has it enabled.
 - Use governed self-upgrade and its recovery point for release changes; do not mutate the live topology with an ad hoc Compose rebuild.
 - Do not remove optional volumes, schedules, or provider records merely because a capability is inactive.
+
+## How self-upgrade may recreate a service
+
+Every service in every shipped compose file declares, where it is defined, how the self-upgrade promoter may converge it when its rendered config changes:
+
+```yaml
+labels:
+  dpf.recreate-class: stateless   # or data-owner, managed
+```
+
+- `stateless` services are recreated after the portal swap when their config hash differs. Their volumes are kept.
+- `data-owner` services (the Postgres instances, Redis and the certificate authority) are recreated only when changed, before the swap, behind the recovery point.
+- `managed` services (portal, sandbox, init jobs, the promoter, and the dev and CI portals) keep their own lifecycle steps.
+
+Overlay services that the capability catalog does not model, such as `portal-tls`, carry the label too. [check-no-unclassified-compose-services.mjs](../../scripts/check-no-unclassified-compose-services.mjs) fails on a missing, unknown or conflicting class. The design is [running-service compose convergence](../superpowers/specs/2026-10-06-running-service-compose-convergence-design.md) (BI-C54E691E).
 
 The executable conformance checks are [check-capability-compose-profiles.mjs](../../scripts/check-capability-compose-profiles.mjs), the resolver tests, installer/lifecycle contract tests, and the substrate ratchet described in [Platform substrate boundaries and budgets](platform-substrate-boundaries.md).

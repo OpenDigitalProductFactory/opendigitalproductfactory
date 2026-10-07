@@ -68,6 +68,7 @@ export function gitInit(dir: string): string {
   mkdirSync(join(dir, "scripts", "lib"), { recursive: true });
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(dir, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "govern-capability-compose-args.mjs"), join(dir, "scripts", "lib", "govern-capability-compose-args.mjs"));
+  copyFileSync(join(REPO_ROOT, "scripts", "lib", "script-argv.mjs"), join(dir, "scripts", "lib", "script-argv.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "capability-state-hash.mjs"), join(dir, "scripts", "lib", "capability-state-hash.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), join(dir, "scripts", "capability-service-catalog.generated.json"));
   execFileSync("git", ["-C", dir, "add", "-A"], { env });
@@ -242,6 +243,9 @@ export function runPromote(opts: {
       ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(",")}}`
       : JSON.stringify(value) ?? "null";
   const signature = createHmac("sha256", secret).update(canonical(envelope)).digest("hex");
+  // Keep large inventories out of the Windows shell command-line limit.
+  const inventoryPath = join(opts.backup, "existing-services.txt");
+  if (opts.existingServices) writeFileSync(inventoryPath, opts.existingServices.join("\n"));
   const exports = [
     "unset DPF_STATE_DIR",
     // promote.sh writes `git config --global`; confine it to a scratch file so
@@ -267,7 +271,7 @@ export function runPromote(opts: {
       ? [`export DPF_TEST_PRINCIPAL_RECOVERY_DECISION=${shellQuote(opts.principalRecoveryDecision)}`]
       : []),
     ...(opts.existingServices
-      ? [`export DPF_TEST_EXISTING_SERVICES=${shellQuote(opts.existingServices.join("\n"))}`]
+      ? [`export DPF_TEST_EXISTING_SERVICES="$(cat ${shellQuote(toBashPath(inventoryPath))})"`]
       : []),
     ...(opts.createdService ? [`export DPF_TEST_CREATED_SERVICE=${shellQuote(opts.createdService)}`] : []),
     ...(opts.inspectFailService ? [`export DPF_TEST_INSPECT_FAIL_SERVICE=${shellQuote(opts.inspectFailService)}`] : []),

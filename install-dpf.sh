@@ -769,6 +769,18 @@ if [ "$(dpf_env_ensure_secret_hex DPF_GPP_PERMIT_SECRET .env 32 \
   info "Generated DPF_GPP_PERMIT_SECRET in .env"
 fi
 
+# Signing keys for attention reach links and coworker delegation receipts
+# (BI-F6929F50), so AUTH_SECRET no longer signs them. Same rules as the permit
+# key: filled when missing or a placeholder, never rotated, never printed.
+if [ "$(dpf_env_ensure_secret_hex DPF_ATTENTION_REACH_SECRET .env 32 \
+  '# Signing key for attention reach links (BI-F6929F50). Distinct from every other secret; never rotated by the installer.')" != "kept" ]; then
+  info "Generated DPF_ATTENTION_REACH_SECRET in .env"
+fi
+if [ "$(dpf_env_ensure_secret_hex DPF_DELEGATION_RECEIPT_SECRET .env 32 \
+  '# Signing key for coworker delegation receipts (BI-F6929F50). Distinct from every other secret; never rotated by the installer.')" != "kept" ]; then
+  info "Generated DPF_DELEGATION_RECEIPT_SECRET in .env"
+fi
+
 # Inngest signing and event keys (BI-3267763F). The portal and the inngest
 # service verify each other with them, so a value published in the repository
 # lets anyone who can reach /api/inngest forge signed invocations. Filled when

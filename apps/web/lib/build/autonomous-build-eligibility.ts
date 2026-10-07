@@ -77,6 +77,8 @@ const CHECKPOINT_ACTION: Record<
   release: "await-release",
 };
 
+const CEILINGS_A_BUILD_CAN_SATISFY = new Set(["autopilot", "supervised"]);
+
 const ESCALATION_BLOCKERS = new Set([
   "recovery_budget_exhausted",
   "active_pattern_binding_missing",
@@ -141,9 +143,12 @@ export function evaluateAutonomousBuildEligibility(
   if (input.sensitivity === "high") {
     blockers.push("high_sensitivity_requires_human");
   }
+  // BI-E30C0F4F: supervised means an independent AI reviewer approves, which the
+  // build's review stage provides. A person is engaged only when a matched policy
+  // requires human control or caps the work below supervised.
   if (
-    input.regulatory.ceiling !== "autopilot"
-    || input.regulatory.humanControlRequired
+    input.regulatory.humanControlRequired
+    || !CEILINGS_A_BUILD_CAN_SATISFY.has(input.regulatory.ceiling)
   ) {
     blockers.push("regulatory_ceiling_requires_human");
   }

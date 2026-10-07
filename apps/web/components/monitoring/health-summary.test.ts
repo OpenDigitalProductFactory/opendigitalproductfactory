@@ -19,6 +19,7 @@ import type {
   CapabilityHealthState,
   CapabilityServiceHealthProjection,
 } from "@/lib/platform-runtime/service-health";
+import { inactiveCapabilityServices } from "@/lib/platform-runtime/inactive-scrape-targets";
 
 function capabilityHealth(
   state: CapabilityHealthState,
@@ -445,5 +446,101 @@ describe("isHostTelemetryConfigured", () => {
     expect(isHostTelemetryConfigured(null)).toBe(false);
     expect(isHostTelemetryConfigured(undefined)).toBe(false);
     expect(isHostTelemetryConfigured([])).toBe(false);
+  });
+});
+
+// BI-36DE938C — the static Prometheus config scrapes adp:8600 on every
+// install, but the adp service exists only while runtime:adp-integration is
+// active. The capability projection, not the scrape config, decides whether a
+// down target is an outage.
+describe("scrape targets owned by an inactive capability (BI-36DE938C)", () => {
+  function adpProjection(state: CapabilityHealthState): CapabilityServiceHealthProjection {
+    return {
+      items: [
+        {
+          key: "adp",
+          kind: "service",
+          state,
+          availability: state === "optional_inactive" ? "inactive" : "unavailable",
+          label: state === "optional_inactive" ? "Optional — inactive" : "Optional — degraded",
+          action: "Inspect the service.",
+          tone: state === "optional_inactive" ? "neutral" : "warning",
+          healthSemantics: "compose-healthcheck",
+        },
+      ],
+      aggregate:
+        state === "optional_inactive"
+          ? { value: "Operational", tone: "success", detail: "Required platform services are available" }
+          : { value: "Degraded", tone: "warning", detail: "adp requires attention" },
+    };
+  }
+
+  const adpDownAlert: MonitoringAlert = {
+    labels: { alertname: "ContainerDown", severity: "critical", job: "adp", instance: "adp:8600" },
+    annotations: { summary: "Service adp is down" },
+    state: "firing",
+    activeAt: "2026-10-06T10:00:00.000Z",
+  };
+  const adpDownTarget = target("adp", "adp:8600", "down", {
+    lastError: 'Get "http://adp:8600/metrics": dial tcp: lookup adp: no such host',
+  });
+
+  it("AC-1: a down target of a disabled capability does not make platform status Critical", () => {
+    const summary = derivePlatformSummary({
+      checked: true,
+      online: true,
+      capabilityHealth: adpProjection("optional_inactive"),
+      alerts: [adpDownAlert],
+    });
+
+    expect(summary).toEqual({
+      value: "Operational",
+      tone: "success",
+      detail: "Required platform services are available",
+    });
+  });
+
+  it("AC-1: the tile for a disabled capability's target reads inactive, not DOWN", () => {
+    const rows = deriveServiceStatusesFromTargets({
+      targets: [target("portal", "portal:3000"), adpDownTarget],
+      loading: false,
+      offline: false,
+      inactiveServices: inactiveCapabilityServices(adpProjection("optional_inactive")),
+    });
+
+    const adp = rows.find((row) => row.job === "adp");
+    expect(adp).toMatchObject({ state: "inactive", label: "Inactive", tone: "neutral" });
+    expect(rows.find((row) => row.job === "portal")).toMatchObject({ state: "up" });
+  });
+
+  it("AC-2: with the capability enabled, an unreachable adp still reports Critical and DOWN", () => {
+    const projection = adpProjection("optional_degraded");
+    const summary = derivePlatformSummary({
+      checked: true,
+      online: true,
+      capabilityHealth: projection,
+      alerts: [adpDownAlert],
+    });
+    expect(summary.value).toBe("Critical");
+    expect(summary.detail).toBe("Service adp is down");
+
+    const rows = deriveServiceStatusesFromTargets({
+      targets: [adpDownTarget],
+      loading: false,
+      offline: false,
+      inactiveServices: inactiveCapabilityServices(projection),
+    });
+    expect(rows[0]).toMatchObject({ state: "down", tone: "critical" });
+    expect(rows[0]?.label).toMatch(/^DOWN/);
+  });
+
+  it("still reports UP when an inactive capability's target is observed healthy (observation wins)", () => {
+    const rows = deriveServiceStatusesFromTargets({
+      targets: [target("adp", "adp:8600", "up")],
+      loading: false,
+      offline: false,
+      inactiveServices: inactiveCapabilityServices(adpProjection("optional_inactive")),
+    });
+    expect(rows[0]).toMatchObject({ state: "up", label: "UP" });
   });
 });

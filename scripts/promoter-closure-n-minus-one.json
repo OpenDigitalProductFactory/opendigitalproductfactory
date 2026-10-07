@@ -1,0 +1,38 @@
+{
+  "_comment": "The promoter build-context closure as the most recently RELEASED portal stages it (apps/web/lib/self-upgrade/promoter-build-context.ts at that release). A staged promoter script may import only files listed here; add an entry only after the portal that stages it has shipped. See scripts/promoter-build-context.test.mjs.",
+  "releasedAt": "2026-10-04",
+  "releasedPortalSha": "502a71f3ada1cefbbdf6f945be237ed4e410f273",
+  "deployedClosure": [
+    "promoter-contract.json",
+    "Dockerfile",
+    "scripts/promote.sh",
+    "scripts/governed-teardown.mjs",
+    "scripts/salvage-sweep.mjs",
+    "scripts/apply-runtime-capability-transition.mjs",
+    "scripts/runtime-transition-authority.mjs",
+    "scripts/rotate-runtime-transition-secret.mjs",
+    "scripts/lib/transition-signing.mjs",
+    "scripts/promoter-migration-envelope.mjs",
+    "scripts/installer/validate-install-state.mjs",
+    "scripts/installer/migrate-install-state.mjs",
+    "scripts/installer/resolve-host-identity.mjs",
+    "scripts/installer/install-state-transaction.mjs",
+    "scripts/installer/install-release-assets.mjs",
+    "scripts/installer/install-state-lock-contract.json",
+    "scripts/installer/install-state-schema-registry.mjs",
+    "scripts/installer/install-state.schema.json",
+    "scripts/installer/install-state.v1.schema.json",
+    "scripts/installer/install-state.v2.schema.json",
+    "scripts/lib/resolve-capability-compose-profiles.mjs",
+    "scripts/lib/govern-capability-compose-args.mjs",
+    "scripts/lib/capability-state-hash.mjs",
+    "scripts/capability-service-catalog.generated.json"
+  ],
+  "knownGaps": [
+    {
+      "from": "scripts/salvage-sweep.mjs",
+      "to": "scripts/lib/git.mjs",
+      "reason": "Imported since #5707 but never staged; promote.sh does not run salvage-sweep, so no promoter has executed it. Staged from this release on; remove this entry once a released portal lists scripts/lib/git.mjs."
+    }
+  ]
+}

@@ -67,3 +67,16 @@ it("keeps the plain refusal when the person could not hand the room over either"
   expect(await workroomTargetAccessRefusal({ ...input, toolName: "get_workroom" })).toMatchObject({ error: "workroom_access_denied" });
   expect(await workroomTargetAccessRefusal({ ...input, toolName: "reassign_workroom_executor" })).toMatchObject({ error: "workroom_access_denied" });
 });
+// BI-F4EB23C1 — a handover that cannot happen says why, before anyone is asked to approve it.
+it.each([
+  ["not-owner", "workroom_handover_not_owner", /does not own it/],
+  ["assistant-in-room", "workroom_handover_assistant_in_room", /removed from this workroom or limited/],
+] as const)("names a %s refusal for the handover and for ordinary room calls", async (handoverRefusal, error, message) => {
+  mocks.access.mockResolvedValue({ decision: { level: "none", reason: "not-admitted" }, handoverRefusal });
+  for (const toolName of ["reassign_workroom_executor", "get_workroom"]) {
+    const refusal = await workroomTargetAccessRefusal({ ...input, toolName });
+    expect(refusal).toMatchObject({ success: false, error });
+    expect(refusal?.message).toMatch(message);
+    expect(refusal?.message).not.toMatch(/invite_room_participant|self/);
+  }
+});

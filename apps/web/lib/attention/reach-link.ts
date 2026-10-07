@@ -19,6 +19,13 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
+import {
+  noteSessionSecretGraceUse,
+  signingKey,
+  verificationKeys,
+  type SigningKeySource,
+} from "@/lib/auth/dedicated-signing-key";
+
 /** Payload carried in the link. Deliberately minimal — see the no-business-content rule. */
 export type ReachLinkPayload = {
   /** The attention item to land on. */
@@ -30,7 +37,8 @@ export type ReachLinkPayload = {
 };
 
 export type ReachLinkVerification =
-  | { ok: true; payload: ReachLinkPayload }
+  /** `verifiedWith` names the key that matched, so a grace-window fallback is observable. */
+  | { ok: true; payload: ReachLinkPayload; verifiedWith: SigningKeySource | "explicit" }
   | { ok: false; reason: ReachLinkFailure };
 
 /** Distinguishable so the landing route can say something true and useful. An operator
@@ -52,6 +60,8 @@ function base64UrlDecode(value: string): string | null {
   }
 }
 
+const REACH_SECRET_ENV = "DPF_ATTENTION_REACH_SECRET";
+
 /**
  * Signing secret. Throws when unset — there is deliberately NO fallback constant.
  *
@@ -59,18 +69,18 @@ function base64UrlDecode(value: string): string | null {
  * valid tokens (`never-hardcode-secrets`). Failing to start is the correct behaviour: a
  * reach link that cannot be trusted is worse than no reach link, because the operator would
  * act on it.
+ *
+ * The dedicated DPF_ATTENTION_REACH_SECRET signs when set; an install without it keeps
+ * signing with AUTH_SECRET / NEXTAUTH_SECRET (BI-F6929F50, lib/auth/dedicated-signing-key.ts).
  */
 function reachSecret(): string {
-  const secret =
-    process.env.DPF_ATTENTION_REACH_SECRET ??
-    process.env.AUTH_SECRET ??
-    process.env.NEXTAUTH_SECRET;
-  if (!secret || secret.trim().length === 0) {
+  const key = signingKey(REACH_SECRET_ENV);
+  if (!key) {
     throw new Error(
       "Attention reach links require a signing secret: set DPF_ATTENTION_REACH_SECRET (or AUTH_SECRET / NEXTAUTH_SECRET).",
     );
   }
-  return secret;
+  return key.secret;
 }
 
 function sign(encodedPayload: string, secret: string): string {
@@ -120,16 +130,14 @@ export function verifyReachLink(
   const encoded = token.slice(0, separator);
   const signature = token.slice(separator + 1);
 
-  let secret: string;
-  try {
-    secret = options.secret ?? reachSecret();
-  } catch {
-    // A missing secret is a configuration fault, not a bad link. Report it as a mismatch
-    // rather than leaking the distinction to whoever is holding the URL.
-    return { ok: false, reason: "signature_mismatch" };
-  }
-
-  if (!signaturesMatch(sign(encoded, secret), signature)) {
+  const nowDate = options.now ?? new Date();
+  const keys = options.secret !== undefined
+    ? [{ secret: options.secret, source: "explicit" as const }]
+    : verificationKeys(REACH_SECRET_ENV, nowDate);
+  // No key at all is a configuration fault, not a bad link. Report it as a mismatch rather
+  // than leaking the distinction to whoever is holding the URL.
+  const matched = keys.find((key) => signaturesMatch(sign(encoded, key.secret), signature));
+  if (!matched) {
     return { ok: false, reason: "signature_mismatch" };
   }
 
@@ -144,10 +152,17 @@ export function verifyReachLink(
   }
   if (!isReachLinkPayload(parsed)) return { ok: false, reason: "malformed" };
 
-  const now = (options.now ?? new Date()).getTime();
+  const now = nowDate.getTime();
+  if (matched.source === "session-secret-grace" && parsed.exp > now + REACH_LINK_TTL_MS) {
+    // Grace bound per handle: a link signed with the session secret may not claim more
+    // life than a link minted now could have. Genuine pre-upgrade links (REACH_LINK_TTL_MS)
+    // pass; a far-future exp minted by whoever holds AUTH_SECRET does not.
+    return { ok: false, reason: "signature_mismatch" };
+  }
   if (parsed.exp <= now) return { ok: false, reason: "expired" };
 
-  return { ok: true, payload: parsed };
+  if (matched.source === "session-secret-grace") noteSessionSecretGraceUse("attention-reach");
+  return { ok: true, payload: parsed, verifiedWith: matched.source };
 }
 
 function isReachLinkPayload(value: unknown): value is ReachLinkPayload {

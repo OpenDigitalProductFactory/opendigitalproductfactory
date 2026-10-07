@@ -8,7 +8,9 @@
 // 2026-10-02-gpp-shape-notation-compiler-phase-3.md (PR-3b-2, BI-6DA17863).
 //
 // `checkSoundness(document)` reads the same flow graph the reference
-// interpreter executes (`buildShapeFlowGraph`), over the implied sequence or
+// interpreter executes (`buildShapeFlowGraph`, which lives in
+// lib/work-management/work-shape-flow-graph.ts since Phase 3c so the drive
+// reads it too), over the implied sequence or
 // the explicit `flow`. Because the flow is block-structured the checks are
 // graph walks, not a state-space search (van der Aalst et al., 2011): each is
 // a linear pass, and the per-block region walk of S-3 is linear per block.
@@ -50,7 +52,7 @@ import { validateWorkShape } from "@/lib/work-management/work-shapes";
 import { toJsonPointer, sortDiagnostics, type GppDiagnostic } from "./diagnostics";
 import { gateElementId, shapeElementId } from "./element-ids";
 import type { GppShapeDocument } from "./gpp-shape-schema";
-import { buildShapeFlowGraph, forwardReach, type GppFlowEdge, type GppFlowGraph } from "./interpreter";
+import { buildShapeFlowGraph, forwardReach, type GppFlowEdge, type GppFlowGraph } from "@/lib/work-management/work-shape-flow-graph";
 
 type SoundnessRule = "S-1" | "S-2" | "S-3" | "S-4" | "S-5" | "S-6";
 type Segment = string | number;

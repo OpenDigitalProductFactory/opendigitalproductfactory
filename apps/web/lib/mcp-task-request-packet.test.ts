@@ -40,6 +40,8 @@ vi.mock("@/lib/tak/task-records", () => ({ createTaskMessage: vi.fn() }));
 vi.mock("@/lib/jobs", () => ({ jobs: { send: vi.fn() } }));
 
 import { submitRemoteCoworkerTask } from "./mcp-task-submit";
+import { remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
+import { parseRemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -71,6 +73,28 @@ beforeEach(() => {
 });
 
 describe("remote TaskRun request packet", () => {
+  it("replays the saved review after an additive grant without reviving a canceled task", async () => {
+    const params = parseRemoteTaskSubmitParams({
+      agentId: "AGT-WS-REVIEW", routeContext: "/build", title: "Review",
+      objective: "Review design", prompt: "Review design", riskClass: "bounded-write", idempotencyKey: "review:stable",
+      authorityScope: ["initiative_design_review", "backlog-item:BI-TEST", "tool:record_initiative_design_review", "tool:read_source_at_version"],
+      initiativeReviewBinding: { writerToolName: "record_initiative_design_review", itemId: "BI-TEST", gate: "spec-approval",
+        artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "org/repo", commitSha: "a".repeat(40), path: "docs/design.md", providerBlobId: "b".repeat(40) } },
+    });
+    if (typeof params === "string") throw new Error(params);
+    db.findFirst.mockResolvedValue({ taskRunId: "task-original", status: "canceled",
+      authorityScope: params.authorityScope, progressPayload: {},
+      a2aMetadata: { requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest(params) } });
+    const outcome = await submitRemoteCoworkerTask({
+      token: { tokenId: "PAT-REPLAY", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      params: { ...params, authorityScope: [...params.authorityScope!, "payables_read"] },
+    });
+    expect(outcome).toMatchObject({ kind: "result", result: { taskRunId: "task-original", status: "canceled", idempotentReplay: true, resumable: false } });
+    expect(autonomous.create).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(db.updateMany).not.toHaveBeenCalled();
+  });
   it("persists the complete normalized objective in server-owned metadata", async () => {
     const objective = `Review the complete remote request packet. ${"evidence ".repeat(150)}`.trim();
 

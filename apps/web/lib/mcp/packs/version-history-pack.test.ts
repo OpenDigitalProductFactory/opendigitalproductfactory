@@ -492,6 +492,14 @@ describe("read_build_artifact_revision (BI-926A7E90)", () => {
     });
     expect(String((result.data as { content: string }).content)).toContain("Route the owed reviews.");
   });
+  it("accepts the prefixed form of the stored bare digest and echoes the bound form", async () => {
+    db.prisma.buildArtifactRevision.findUnique.mockResolvedValue({ ...revision, valueDigest: "abc" });
+    const result = await versionHistoryPack.handlers.read_build_artifact_revision({
+      path: "build-artifact-revision/rev_1", version: "rev_1", expectedBlobId: "sha256:abc",
+    }, "u1");
+    expect(result).toMatchObject({ success: true, data: { blobId: "sha256:abc" } });
+  });
+
   it("fails closed on a digest mismatch and on an identity mismatch", async () => {
     db.prisma.buildArtifactRevision.findUnique.mockResolvedValue(revision);
     expect(await versionHistoryPack.handlers.read_build_artifact_revision({

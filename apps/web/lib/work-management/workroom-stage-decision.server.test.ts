@@ -3,7 +3,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/work-capsules/activity-events", () => ({ publishRecordedWorkCapsuleActivity: vi.fn() }));
 vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn() }));
 
+// GPP Phase 3c PR-3c-2: a graph fixture with two governed branches is not
+// registered (plan constraint 7), so the claim resolver is overridden for its
+// key only; every registry shape resolves as before.
+vi.mock("./workroom-shape-claim", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./workroom-shape-claim")>();
+  const { SPLIT_TWO_DECISIONS } = await import("./__fixtures__/graph-shapes/parallel");
+  return {
+    ...actual,
+    resolveWorkShapeClaim: (scopeClaims: unknown) => {
+      const ref = actual.readWorkShapeClaim(scopeClaims);
+      return ref?.key === SPLIT_TWO_DECISIONS.key ? SPLIT_TWO_DECISIONS : actual.resolveWorkShapeClaim(scopeClaims);
+    },
+  };
+});
+
 import { buildWorkShapeClaim } from "./workroom-shape-claim";
+import { SPLIT_TWO_DECISIONS } from "./__fixtures__/graph-shapes/parallel";
 import {
   loadWorkroomStageDecisionView,
   recordWorkroomStageDecisionForUser,
@@ -13,14 +29,14 @@ import {
 const now = new Date("2026-09-29T12:00:00.000Z");
 const OWNER_PRINCIPAL = "principal-owner";
 
-function fakeDb(overrides: { pendingAttention?: unknown; scopeClaims?: unknown; ownerPrincipal?: string | null; callerPrincipal?: string | null } = {}) {
+function fakeDb(overrides: { pendingAttention?: unknown; scopeClaims?: unknown; ownerPrincipal?: string | null; callerPrincipal?: string | null; workspaceState?: unknown } = {}) {
   const claim = buildWorkShapeClaim({ key: "dependency-advisory-watch", version: "1.0.0" }, now);
   const room = {
     id: "room-row-1",
     capsuleId: "WC-DECIDE",
     archivedAt: null,
     scopeClaims: overrides.scopeClaims ?? [claim],
-    workspaceState: { workroomDrive: { stageKey: "decide", pendingAttention: overrides.pendingAttention === undefined
+    workspaceState: overrides.workspaceState ?? { workroomDrive: { stageKey: "decide", pendingAttention: overrides.pendingAttention === undefined
       ? { reason: "governed_decision", stageKey: "decide", principalRef: "role:security-owner" }
       : overrides.pendingAttention } },
   };
@@ -123,6 +139,40 @@ describe("recordWorkroomStageDecisionForUser", () => {
       ok: false, error: "A deferral needs a date to come back to it.",
     });
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("two decisions pending at once on parallel branches (GPP Phase 3c PR-3c-2)", () => {
+  beforeEach(() => vi.clearAllMocks());
+  const pending = (stageKey: string) => ({ reason: "governed_decision", stageKey, principalRef: "role:owner" });
+  const twoWaiting = () => fakeDb({
+    scopeClaims: [buildWorkShapeClaim({ key: SPLIT_TWO_DECISIONS.key, version: SPLIT_TWO_DECISIONS.version }, now)],
+    workspaceState: { workroomDrive: { stageKey: "legal", pendingAttention: pending("legal"), pendingAttentions: [pending("legal"), pending("security")] } },
+  });
+
+  it("records a decision on either waiting stage, by the stage key the control posts", async () => {
+    for (const stageKey of ["security", "legal"]) {
+      const { db, create } = twoWaiting();
+      expect(await recordWorkroomStageDecisionForUser(db, { ...accept, stageKey })).toEqual({ ok: true });
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(create.mock.calls[0][0].data.payload).toMatchObject({ kind: "decision-record", stageKey, outcome: "completed", result: { choice: "accept" } });
+    }
+  });
+
+  it("refuses a stage that is not one of the waiting decisions", async () => {
+    const { db, create } = twoWaiting();
+    expect((await recordWorkroomStageDecisionForUser(db, { ...accept, stageKey: "ship" })).ok).toBe(false);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("deciding one leaves the other pending: once the drive lists only it, only it can be decided", async () => {
+    const { db, create } = fakeDb({
+      scopeClaims: [buildWorkShapeClaim({ key: SPLIT_TWO_DECISIONS.key, version: SPLIT_TWO_DECISIONS.version }, now)],
+      workspaceState: { workroomDrive: { stageKey: "security", pendingAttention: pending("security"), pendingAttentions: [pending("security")] } },
+    });
+    expect((await recordWorkroomStageDecisionForUser(db, { ...accept, stageKey: "legal" })).ok).toBe(false);
+    expect(await recordWorkroomStageDecisionForUser(db, { ...accept, stageKey: "security" })).toEqual({ ok: true });
+    expect(create).toHaveBeenCalledTimes(1);
   });
 });
 
