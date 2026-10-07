@@ -86,7 +86,7 @@ describe("steward objective-mapping authority (BI-099A0BA3)", () => {
 
     const authority = await loadAcceptanceStewardObjectiveMappingAuthority(db as unknown as StewardAuthorityDb, { run: run(), itemId: ITEM });
 
-    expect(authority).toMatchObject({ ok: true, itemId: ITEM, packet: { targetAgent: VERIFIER, requestKey: packet().requestKey } });
+    expect(authority).toMatchObject({ ok: true, data: { itemId: ITEM, packet: { targetAgent: VERIFIER, requestKey: packet().requestKey } } });
   });
 
   it("the drive task id names the room the sweep keyed for the item", () => {
@@ -99,7 +99,7 @@ describe("steward objective-mapping authority (BI-099A0BA3)", () => {
     const { db } = store();
     await issueAcceptanceObjectiveMappingPacket({ db: db as unknown as IssuePacketDb, itemId: ITEM, ownerAgentId: VERIFIER, packet: packet(), objective: "b", now: NOW });
     await expect(loadAcceptanceStewardObjectiveMappingAuthority(db as unknown as StewardAuthorityDb, { run: run(), itemId: "BI-OTHER" }))
-      .resolves.toEqual({ ok: false, reason: "room-not-bound" });
+      .resolves.toMatchObject({ ok: false, reason: "room-not-bound" });
   });
 
   it("refuses an external-MCP run and a run of another agent", async () => {
@@ -107,8 +107,8 @@ describe("steward objective-mapping authority (BI-099A0BA3)", () => {
     await issueAcceptanceObjectiveMappingPacket({ db: db as unknown as IssuePacketDb, itemId: ITEM, ownerAgentId: VERIFIER, packet: packet(), objective: "b", now: NOW });
     await expect(loadAcceptanceStewardObjectiveMappingAuthority(db as unknown as StewardAuthorityDb, {
       run: run({ taskRunId: "TR-MCP-1", a2aMetadata: { trigger: "external-mcp", sourceRef: { kind: "scheduled-task", id: acceptanceStewardDriveTaskId(ITEM) } } }),
-    })).resolves.toEqual({ ok: false, reason: "not-a-steward-run" });
+    })).resolves.toMatchObject({ ok: false, reason: "not-a-steward-run" });
     await expect(loadAcceptanceStewardObjectiveMappingAuthority(db as unknown as StewardAuthorityDb, { run: run({ currentAgentId: "AGT-OTHER" }) }))
-      .resolves.toEqual({ ok: false, reason: "room-not-bound" });
+      .resolves.toMatchObject({ ok: false, reason: "room-not-bound" });
   });
 });

@@ -55,7 +55,7 @@ describe("record_initiative_evidence in an acceptance steward run (BI-099A0BA3)"
   });
 
   it("writes the mapping with the item, baseline and evidence set the platform issued, ignoring model-supplied ones", async () => {
-    mocks.stewardBinding.mockResolvedValue({ ok: true, itemId: "BI-ROUTED", binding });
+    mocks.stewardBinding.mockResolvedValue({ ok: true, data: { itemId: "BI-ROUTED", binding } });
 
     const result = await handler()({
       operation: "objective-mapping",
@@ -76,7 +76,7 @@ describe("record_initiative_evidence in an acceptance steward run (BI-099A0BA3)"
   });
 
   it("refuses when the room holds no current platform-issued packet, and writes nothing", async () => {
-    mocks.stewardBinding.mockResolvedValue({ ok: false, reason: "packet-not-issued" });
+    mocks.stewardBinding.mockResolvedValue({ ok: false, error: "refused", reason: "packet-not-issued" });
 
     const result = await handler()({
       operation: "objective-mapping",
@@ -91,7 +91,7 @@ describe("record_initiative_evidence in an acceptance steward run (BI-099A0BA3)"
   });
 
   it("refuses any other operation from a steward room", async () => {
-    mocks.stewardBinding.mockResolvedValue({ ok: true, itemId: "BI-ROUTED", binding });
+    mocks.stewardBinding.mockResolvedValue({ ok: true, data: { itemId: "BI-ROUTED", binding } });
 
     const result = await handler()({
       gate: "classification", decision: "pass", itemId: "BI-ROUTED", reason: "x",
@@ -103,7 +103,7 @@ describe("record_initiative_evidence in an acceptance steward run (BI-099A0BA3)"
   });
 
   it("refuses a model-named item other than the one the packet binds", async () => {
-    mocks.stewardBinding.mockResolvedValue({ ok: true, itemId: "BI-ROUTED", binding });
+    mocks.stewardBinding.mockResolvedValue({ ok: true, data: { itemId: "BI-ROUTED", binding } });
 
     const result = await handler()({
       operation: "objective-mapping",

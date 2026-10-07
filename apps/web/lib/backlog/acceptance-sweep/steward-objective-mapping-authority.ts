@@ -39,6 +39,7 @@ import {
   type ObjectiveMappingBinding,
 } from "@/lib/mcp-task-objective-mapping-request-key";
 import { parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 import { ACCEPTANCE_VERIFICATION_SHAPE_KEY } from "@/lib/work-management/acceptance-verification-shape";
 import { roomStageMandatedTools, SCHEDULED_RUN_PREFIX } from "@/lib/work-management/room-stage-mandate";
 
@@ -166,11 +167,13 @@ export type StewardRefusal =
   | "packet-not-server-issued"
   | "packet-targets-another-agent";
 
-export type StewardAuthority =
-  | { ok: true; itemId: string; packet: IssuedObjectiveMappingPacket }
-  | { ok: false; reason: StewardRefusal };
+export type StewardRefused = ActionFailure & { reason: StewardRefusal };
 
-const refuse = (reason: StewardRefusal): StewardAuthority => ({ ok: false, reason });
+export type StewardAuthority =
+  | ActionSuccess<{ itemId: string; packet: IssuedObjectiveMappingPacket }>
+  | StewardRefused;
+
+const refuse = (reason: StewardRefusal): StewardRefused => ({ ...err(`Steward objective-mapping authority refused: ${reason}.`), reason });
 
 /**
  * The platform-issued objective-mapping packet a scheduled acceptance steward
@@ -218,7 +221,7 @@ export async function loadAcceptanceStewardObjectiveMappingAuthority(
   const packet = parseIssuedObjectiveMappingPacket(record(issued.payload)?.requestCoworker, itemId);
   if (!packet) return refuse("packet-not-server-issued");
   if (packet.targetAgent !== run.currentAgentId) return refuse("packet-targets-another-agent");
-  return { ok: true, itemId, packet };
+  return ok({ itemId, packet });
 }
 
 /**
@@ -228,8 +231,8 @@ export async function loadAcceptanceStewardObjectiveMappingAuthority(
  */
 export async function resolveAcceptanceStewardRunBinding(taskRunId: string | null | undefined): Promise<
   | null
-  | { ok: true; itemId: string; binding: ObjectiveMappingBinding }
-  | { ok: false; reason: StewardRefusal }
+  | ActionSuccess<{ itemId: string; binding: ObjectiveMappingBinding }>
+  | StewardRefused
 > {
   if (!taskRunId?.startsWith(SCHEDULED_RUN_PREFIX)) return null;
   const { prisma } = await import("@dpf/db");
@@ -239,5 +242,5 @@ export async function resolveAcceptanceStewardRunBinding(taskRunId: string | nul
   });
   if (!run || !stewardCapsuleIdFromRun(run.a2aMetadata)) return null;
   const authority = await loadAcceptanceStewardObjectiveMappingAuthority(prisma as unknown as StewardAuthorityDb, { run });
-  return authority.ok ? { ok: true, itemId: authority.itemId, binding: authority.packet.binding } : authority;
+  return authority.ok ? ok({ itemId: authority.data.itemId, binding: authority.data.packet.binding }) : authority;
 }

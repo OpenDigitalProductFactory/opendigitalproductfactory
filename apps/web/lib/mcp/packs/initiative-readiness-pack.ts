@@ -322,13 +322,14 @@ async function resolveStewardRoomBinding(
   const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
   if (!steward) return null;
   if (params.operation !== "objective-mapping"
-    || (params.itemId !== undefined && params.itemId !== (steward.ok ? steward.itemId : params.itemId))) {
+    || (params.itemId !== undefined && params.itemId !== (steward.ok ? steward.data.itemId : params.itemId))) {
     return { refusal: { success: false, error: "steward-room-objective-mapping-only", message: "An acceptance steward room records only the objective mapping the platform issued it, for its own item: call record_initiative_evidence with operation \"objective-mapping\"." } };
   }
   if (!steward.ok) {
     return { refusal: { success: false, error: "objective-mapping-packet-unavailable", message: `This room holds no current platform-issued objective-mapping packet (${steward.reason}). Record what you verified with record_workroom_evidence; the next acceptance sweep issues a current packet.` } };
   }
-  return { binding: { ...steward.binding, artifactRef: steward.binding.artifactRef as InitiativeArtifactRef } };
+  const { binding } = steward.data;
+  return { binding: { ...binding, artifactRef: binding.artifactRef as InitiativeArtifactRef } };
 }
 
 function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {

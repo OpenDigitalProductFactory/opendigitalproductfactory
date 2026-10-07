@@ -227,7 +227,7 @@ async function stewardObjectiveMappingPacket(tx: Prisma.TransactionClient, run: 
     itemId: args.itemId,
   });
   if (!authority.ok) return null;
-  const { packet } = authority;
+  const { packet } = authority.data;
   return {
     lane: "acceptance-steward",
     binding: packet.binding,
