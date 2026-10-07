@@ -316,7 +316,7 @@ function EpicStatusMix({ summary, acceptance }: { summary: BacklogStatusSummary;
           {index > 0 ? <span className="mr-1.5 text-[var(--dpf-border)]">·</span> : null}
           {summary[key]} {label}
           {key === "awaitingAcceptance" && acceptance.aged > 0 ? (
-            <span className="ml-1 text-[var(--dpf-error)]" title={describeAgedShare(acceptance)}>
+            <span className="ms-1 text-[var(--dpf-error)]" title={describeAgedShare(acceptance)}>
               {agedSuffix(acceptance).trim()}
             </span>
           ) : null}
