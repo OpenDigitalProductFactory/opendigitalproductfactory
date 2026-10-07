@@ -7,20 +7,22 @@
 
 import { prisma } from "@dpf/db";
 import { validateMessageInput } from "@/lib/agent-coworker-types";
+import { apiError, ApiError } from "@/lib/api/error";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
-export type AcceptUserMessageResult =
-  | { ok: true; userMessageId: string }
-  | { ok: false; status: 400 | 404 | 500; error: string };
-
+/**
+ * Returns the persisted user message id. Throws ApiError (400 / 404 / 500)
+ * when the message must not be acknowledged; the caller answers with it.
+ */
 export async function acceptUserMessage(input: {
   userId: string;
   threadId: string;
   content: string;
   routeContext: string;
   attachmentId?: string;
-}): Promise<AcceptUserMessageResult> {
+}): Promise<string> {
   const validationError = validateMessageInput(input);
-  if (validationError) return { ok: false, status: 400, error: validationError };
+  if (validationError) throw apiError("VALIDATION_ERROR", validationError, 400);
 
   try {
     const thread = await prisma.agentThread.findUnique({
@@ -29,7 +31,7 @@ export async function acceptUserMessage(input: {
     });
     // Not found and not yours answer the same, so thread ids cannot be probed.
     if (!thread || thread.userId !== input.userId) {
-      return { ok: false, status: 404, error: "Conversation not found" };
+      throw apiError("NOT_FOUND", "Conversation not found", 404);
     }
 
     const row = await prisma.agentMessage.create({
@@ -47,12 +49,13 @@ export async function acceptUserMessage(input: {
         data: { messageId: row.id },
       });
     }
-    return { ok: true, userMessageId: row.id };
+    return row.id;
   } catch (err) {
+    if (err instanceof ApiError) throw err;
     console.error(
       "[accept-user-message] could not persist the user message: %s",
-      JSON.stringify(err instanceof Error ? err.message : String(err)),
+      JSON.stringify(getErrorMessage(err)),
     );
-    return { ok: false, status: 500, error: "Your message could not be saved. Try again." };
+    throw apiError("PERSIST_FAILED", "Your message could not be saved. Try again.", 500);
   }
 }

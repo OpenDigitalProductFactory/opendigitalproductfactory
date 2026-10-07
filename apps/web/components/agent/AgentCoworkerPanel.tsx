@@ -692,7 +692,7 @@ export function AgentCoworkerPanel({
     }).then(async (res) => {
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: "Send failed" }));
-        console.warn("[submitMessage] send failed:", body.error);
+        console.warn("[submitMessage] send failed:", body.message ?? body.error);
         setMessages((prev) =>
           prev.map((message) =>
             message.id === optimisticMessage.id ? failOptimisticMessage(message) : message,

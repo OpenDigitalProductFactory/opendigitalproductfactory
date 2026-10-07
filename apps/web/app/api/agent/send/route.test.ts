@@ -126,7 +126,7 @@ describe("POST /api/agent/send", () => {
     const response = await POST(sendRequest({}) as any);
 
     expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({ error: expect.any(String) });
+    await expect(response.json()).resolves.toEqual({ code: "PERSIST_FAILED", message: expect.any(String) });
     expect(mockSendMessage).not.toHaveBeenCalled();
     expect(mockAgentEventBus.markActive).not.toHaveBeenCalled();
   });

@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Async Coworker Messaging — Design Spec
 
 | Field | Value |
