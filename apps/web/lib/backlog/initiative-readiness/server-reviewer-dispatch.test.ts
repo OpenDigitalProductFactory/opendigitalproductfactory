@@ -11,7 +11,7 @@ const prismaMock = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => ({ prisma: prismaMock }));
 
-import { dispatchOwedIndependentReviews, REVIEW_DISPATCH_ACTIVITY_KIND } from "./server-reviewer-dispatch";
+import { dispatchOwedIndependentReviews, dispatchReviewerRequest, REVIEW_DISPATCH_ACTIVITY_KIND } from "./server-reviewer-dispatch";
 
 const NOW = new Date("2026-09-24T02:00:00.000Z");
 const alias = (kind: string, value: string) => ({ kind, aliases: [{ aliasValue: value }] });
@@ -202,5 +202,37 @@ describe("dispatchOwedIndependentReviews — Build Studio builds in plan (BI-926
     const d = deps();
     await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([]);
     expect(d.owedRoutes).not.toHaveBeenCalled();
+  });
+});
+
+// BI-2C8750FC: the room drive's review stage sends one packet through the same runner.
+describe("dispatchReviewerRequest (the drive's review-stage dispatch)", () => {
+  const personRoom = { roomId: "row-1", capsuleId: "WC-1", userId: "user-1", agentId: null };
+
+  it("carries person-authored work on the person's own live connection", async () => {
+    const d = deps({ findUserConnection: vi.fn(async () => connection as never) });
+    const outcome = await dispatchReviewerRequest({ room: personRoom, itemId: "BI-1", requestCoworker: packet, carrier: "requesting-user", now: NOW, deps: d });
+    expect(outcome).toMatchObject({ outcome: "dispatched", requestKey: packet.requestKey, capsuleId: "WC-1" });
+    expect(d.findUserConnection).toHaveBeenCalledWith("user-1");
+    expect(d.findConnection).not.toHaveBeenCalled();
+    expect(d.execute).toHaveBeenCalledWith(expect.objectContaining({ toolName: "request_coworker", rawParams: packet }));
+  });
+
+  it("is idempotent on the request key within the cooldown", async () => {
+    prismaMock.workroomActivity.findFirst.mockResolvedValue({ id: "recent" });
+    const d = deps({ findUserConnection: vi.fn(async () => connection as never) });
+    const outcome = await dispatchReviewerRequest({ room: personRoom, itemId: "BI-1", requestCoworker: packet, carrier: "requesting-user", now: NOW, deps: d });
+    expect(outcome.outcome).toBe("cooling-down");
+    expect(d.execute).not.toHaveBeenCalled();
+  });
+
+  it("refuses a packet with no request key and records why it could not send without a connection", async () => {
+    const d = deps();
+    expect((await dispatchReviewerRequest({ room: personRoom, itemId: "BI-1", requestCoworker: { targetAgent: "AGT-WS-REVIEW" }, carrier: "requesting-user", now: NOW, deps: d })).outcome)
+      .toBe("refused");
+    const outcome = await dispatchReviewerRequest({ room: personRoom, itemId: "BI-1", requestCoworker: packet, carrier: "requesting-user", now: NOW, deps: d });
+    expect(outcome.outcome).toBe("no-author-connection");
+    expect(prismaMock.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({ summary: expect.stringContaining("no live authorized connection") }) });
+    expect(d.execute).not.toHaveBeenCalled();
   });
 });

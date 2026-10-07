@@ -85,6 +85,9 @@ const FLOW_STATE_BY_ACTION_AND_REASON: FlowStateTable = {
     // Another worker holds the stage; the stage is being worked.
     lease_held: "working",
     missing_task_owner: "blocked",
+    // A review stage owes its non-author reviewer, but the request could not be
+    // sent (BI-2C8750FC): stuck with a cause until the reviewer can be reached.
+    reviewer_dispatch_unavailable: "blocked",
   },
 };
 

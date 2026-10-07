@@ -32,6 +32,7 @@ import type { GovernedExecuteArgs, GovernedExecuteResult } from "@/lib/mcp-gover
 import { findStandingConnection, findStandingConnectionForUser, type StandingConnection } from "@/lib/mcp/standing-connection";
 
 import { BUILD_STUDIO_ASSISTANT_AGENT_ID, buildStudioOwedRoutes } from "./build-studio-owed-routes";
+import type { ReadinessReviewRoute } from "@/lib/work-management/readiness-review-stages";
 
 /** A dispatch for the same request is not repeated within this window. */
 export const REVIEW_DISPATCH_COOLDOWN_MS = 30 * 60 * 1000;
@@ -217,6 +218,36 @@ async function defaultOwedRoutes(itemId: string, authorAgentId: string, candidat
     .map((route) => ({ workroomId: route.workroomId, requestCoworker: route.requestCoworker as unknown as Record<string, unknown> }));
 }
 
+/**
+ * The independent design-phase reviews the item owes now (design-spec,
+ * spec-approval, plan-review), from the implementation readiness recovery.
+ * Read by the room drive's review stages (BI-2C8750FC). Null when readiness
+ * could not be read; empty when nothing independent is owed.
+ */
+export async function loadDesignPhaseOwedReviewRoutes(itemId: string, authorAgentId: string | null): Promise<ReadinessReviewRoute[] | null> {
+  const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
+  const item = await getBacklogItem({ itemId }, authorAgentId);
+  const decision = (item.data?.readiness as { decisions?: { implementation?: unknown } } | undefined)?.decisions?.implementation as
+    | import("@/lib/backlog/initiative-readiness").InitiativeReadinessDecision
+    | undefined;
+  if (!item.success || !decision) return null;
+  if (decision.verdict === "allowed") return [];
+  const { designPhaseReviewDecision } = await import("./design-phase-recovery");
+  const designPhase = designPhaseReviewDecision(decision);
+  if (!designPhase) return [];
+  const { resolveTerminalInitiativeRecovery } = await import("./terminal-recovery");
+  const recovery = await resolveTerminalInitiativeRecovery({ decision: designPhase, currentAgentId: authorAgentId, refusedWorkroomId: null });
+  return recovery.reviewerRoutes
+    .filter((route) => route.independent)
+    .map((route) => ({
+      gate: route.gate,
+      accountableRole: route.accountableRole,
+      targetAgentId: route.targetAgentId,
+      independent: route.independent,
+      requestCoworker: route.requestCoworker as unknown as Record<string, unknown>,
+    }));
+}
+
 async function recentlyDispatched(roomId: string, requestKey: string, now: Date): Promise<boolean> {
   const recent = await prisma.workroomActivity.findFirst({
     where: {
@@ -239,6 +270,74 @@ async function record(room: RoomAuthor, outcome: RouteOutcome, summary: string):
       payload: { ...outcome, source: "platform-reviewer-dispatch" },
     },
   });
+}
+
+const BUILD_STUDIO_NO_CONNECTION_SUMMARY =
+  "An independent review of this build's design is owed, but the person who requested the build has no live authorized connection the platform may send on. Reconnect an assistant (Claude Code or Codex) to let the platform request it.";
+
+/**
+ * Send ONE server-issued reviewer packet on the author's side, idempotently.
+ * Shared by the owed-review sweep below and the room drive's review stages
+ * (BI-2C8750FC), so both send the same packet through the same governed
+ * `request_coworker` lane with the same cooldown and the same room record.
+ *
+ * `author-assistant` carries it on the authoring assistant's own connection;
+ * `requesting-user` on any live connection of the person the work is for (a
+ * Build Studio build, or work a person authored with no assistant).
+ */
+export async function dispatchReviewerRequest(args: {
+  room: RoomAuthor;
+  itemId: string;
+  requestCoworker: Record<string, unknown>;
+  carrier: "author-assistant" | "requesting-user";
+  workroomId?: string;
+  now?: Date;
+  /** What the room records when no connection may carry the request. */
+  noConnectionSummary?: string;
+  deps?: Pick<Deps, "findConnection" | "findUserConnection" | "execute">;
+}): Promise<RouteOutcome> {
+  const { room, requestCoworker } = args;
+  const now = args.now ?? new Date();
+  const requestKey = typeof requestCoworker.requestKey === "string" ? requestCoworker.requestKey : null;
+  const at = { itemId: args.itemId, capsuleId: args.workroomId ?? room.capsuleId, requestKey };
+  if (!requestKey) return { ...at, outcome: "refused", detail: "The reviewer packet carries no request key." };
+  if (!room.userId || (args.carrier === "author-assistant" && !room.agentId)) return { ...at, outcome: "no-author" };
+  if (await recentlyDispatched(room.roomId, requestKey, now)) return { ...at, outcome: "cooling-down" };
+  const findConnection = args.deps?.findConnection
+    ?? ((userId: string, agentId: string) => findStandingConnection(userId, agentId, "request_coworker", "platform-reviewer-dispatch"));
+  const findUserConnection = args.deps?.findUserConnection
+    ?? ((userId: string) => findStandingConnectionForUser(userId, "request_coworker", "platform-reviewer-dispatch", {
+      preferAgentIds: BUILD_STUDIO_PREFERRED_CARRIER_AGENT_IDS,
+    }));
+  const connection = args.carrier === "requesting-user"
+    ? await findUserConnection(room.userId)
+    : await findConnection(room.userId, room.agentId!);
+  if (!connection) {
+    const outcome: RouteOutcome = { ...at, outcome: "no-author-connection" };
+    await record(room, outcome, args.noConnectionSummary ?? (args.carrier === "requesting-user"
+      ? "An independent review of this work is owed, but the person it is for has no live authorized connection the platform may send on. Reconnect an assistant (Claude Code or Codex) to let the platform request it."
+      : "An independent review is owed, but the author's assistant has no live authorized connection. The author can request it, or reconnect the assistant."));
+    return outcome;
+  }
+  const execute = args.deps?.execute ?? (await import("@/lib/mcp-governed-execute")).governedExecuteTool;
+  const result = await execute({
+    toolName: "request_coworker",
+    rawParams: requestCoworker,
+    userId: connection.token.userId,
+    userContext: connection.userContext,
+    context: connection.context,
+    source: "external-jsonrpc",
+  });
+  const outcome: RouteOutcome = {
+    ...at,
+    outcome: result.success ? "dispatched" : "refused",
+    ...(result.success ? {} : { detail: result.error ?? result.message }),
+    ...(connection.context.agentId ? { carriedByAgentId: connection.context.agentId } : {}),
+  };
+  await record(room, outcome, result.success
+    ? `The platform asked ${String(requestCoworker.targetAgent)} for the independent review this work owes, on the author's connection.`
+    : `The platform could not request the independent review this work owes: ${result.message ?? result.error ?? "refused"}.`);
+  return outcome;
 }
 
 /**
@@ -269,42 +368,12 @@ export async function dispatchOwedIndependentReviews(deps: Deps = {}): Promise<R
         : (await loadRoomAuthors({ capsuleId: route.workroomId }))[0] ?? null;
       const at = { itemId: candidate.itemId, capsuleId: route.workroomId, requestKey };
       if (!room?.userId || !room.agentId) { outcomes.push({ ...at, outcome: "no-author" }); continue; }
-      if (await recentlyDispatched(room.roomId, requestKey, now)) {
-        outcomes.push({ ...at, outcome: "cooling-down" });
-        continue;
-      }
-      // A Build Studio room's assistant holds no connection; the request travels
-      // on a live connection of the person who requested the build (spec §4).
-      const connection = candidate.target === "implementation"
-        ? await findUserConnection(room.userId)
-        : await findConnection(room.userId, room.agentId);
-      if (!connection) {
-        const outcome: RouteOutcome = { ...at, outcome: "no-author-connection" };
-        await record(room, outcome, candidate.target === "implementation"
-          ? "An independent review of this build's design is owed, but the person who requested the build has no live authorized connection the platform may send on. Reconnect an assistant (Claude Code or Codex) to let the platform request it."
-          : "An independent review is owed, but the author's assistant has no live authorized connection. The author can request it, or reconnect the assistant.");
-        outcomes.push(outcome);
-        continue;
-      }
-      const execute = deps.execute ?? (await import("@/lib/mcp-governed-execute")).governedExecuteTool;
-      const result = await execute({
-        toolName: "request_coworker",
-        rawParams: route.requestCoworker,
-        userId: connection.token.userId,
-        userContext: connection.userContext,
-        context: connection.context,
-        source: "external-jsonrpc",
-      });
-      const outcome: RouteOutcome = {
-        ...at,
-        outcome: result.success ? "dispatched" : "refused",
-        ...(result.success ? {} : { detail: result.error ?? result.message }),
-        ...(connection.context.agentId ? { carriedByAgentId: connection.context.agentId } : {}),
-      };
-      await record(room, outcome, result.success
-        ? `The platform asked ${String(route.requestCoworker.targetAgent)} for the independent review this work owes, on the author's connection.`
-        : `The platform could not request the independent review this work owes: ${result.message ?? result.error ?? "refused"}.`);
-      outcomes.push(outcome);
+      outcomes.push(await dispatchReviewerRequest({
+        room, itemId: candidate.itemId, requestCoworker: route.requestCoworker,
+        carrier: candidate.target === "implementation" ? "requesting-user" : "author-assistant",
+        workroomId: route.workroomId, now, deps: { ...deps, findConnection, findUserConnection },
+        ...(candidate.target === "implementation" ? { noConnectionSummary: BUILD_STUDIO_NO_CONNECTION_SUMMARY } : {}),
+      }));
     }
   }
   return outcomes;
