@@ -1185,6 +1185,7 @@
       "anchors": [
         "build-gate-runbook",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
+        "the-room-follows-its-pr-through-ci-bi-88341b5d",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
         "reaping-the-worktree-when-the-pr-merges-bi-848360ef",
         "task-specific-operating-rules",
