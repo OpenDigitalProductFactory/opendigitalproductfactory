@@ -93,4 +93,18 @@ describe("SelfUpgradeTriggerControl — an admitted upgrade cannot be triggered 
     // therefore the button) can still be true for one more paint.
     await waitFor(() => expect(screen.getByRole("button", { name: /upgrade now/i })).toBeEnabled());
   });
+
+  it("BI-2128872C: a request deferred to the maintenance window says when it will run, not that it failed", async () => {
+    triggerMock.mockResolvedValue({
+      queued: false,
+      reason: "deferred-to-window",
+      runAt: "2026-10-07T22:00:00.000Z",
+      message: "Agent-requested upgrades run only in the maintenance window. The request is queued for the next window and the scheduled upgrade will pick it up at 2026-10-07T22:00:00.000Z.",
+    });
+    render(<SelfUpgradeTriggerControl {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+    await waitFor(() => expect(screen.getByText(/Queued for the maintenance window:/)).toBeInTheDocument());
+    expect(screen.getByText(/2026-10-07T22:00:00.000Z/)).toBeInTheDocument();
+    expect(screen.queryByText(/Not admitted:/)).not.toBeInTheDocument();
+  });
 });
