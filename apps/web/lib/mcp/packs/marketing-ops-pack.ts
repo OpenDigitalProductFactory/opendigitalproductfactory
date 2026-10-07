@@ -352,15 +352,35 @@ async function suggestCampaignIdeasHandler(): Promise<ToolResult> {
     take: 10,
   });
 
+  // A business whose own offer is the platform sells to OTHER archetypes: give
+  // the coworker each buyer type's benefits so it plans one campaign per buyer
+  // instead of one generic message (BI-B4BE6934).
+  const { resolveOrgMarketingFitContext } = await import("@/lib/marketing/fit-guard");
+  const { sellsThePlatform, listBuyerArchetypeValues, PLATFORM_CLAIM_LIMITS } = await import(
+    "@/lib/marketing/buyer-archetype-value"
+  );
+  const { ownOffer } = await resolveOrgMarketingFitContext(context.organizationId);
+  const buyerTargeting = sellsThePlatform(ownOffer)
+    ? {
+        guidance:
+          "This business sells the platform. Plan campaigns per buyer archetype below — name the buyer in the brief's audience and speak to that owner's benefit. Partners (MSPs, IT providers) are a separate audience.",
+        buyerArchetypes: listBuyerArchetypeValues(),
+        claimLimits: PLATFORM_CLAIM_LIMITS,
+      }
+    : null;
+
   return {
     success: true,
-    message: `Campaign context for ${config.archetype.name}`,
+    message: buyerTargeting
+      ? `Campaign context for ${config.archetype.name} — selling to ${buyerTargeting.buyerArchetypes.length} buyer archetypes`
+      : `Campaign context for ${config.archetype.name}`,
     data: {
       archetype: { name: config.archetype.name, category: config.archetype.category, ctaType: config.archetype.ctaType },
       playbook,
       season,
       currentMonth: new Date().toLocaleString("en-GB", { month: "long", year: "numeric" }),
       activeItems: items.map((i) => ({ name: i.name, priceType: i.priceType, ctaType: i.ctaType })),
+      ...(buyerTargeting ? { buyerTargeting } : {}),
     },
   };
 }

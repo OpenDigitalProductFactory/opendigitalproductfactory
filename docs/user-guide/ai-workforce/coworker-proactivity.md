@@ -77,7 +77,7 @@ reversible piece of work on your behalf:
 
 | Coworker | What it does without being asked |
 |---|---|
-| Marketing Specialist | Keeps a current acquisition campaign brief on the Campaigns page |
+| Marketing Specialist | Reviews the marketing plan, records whether to keep or change the current campaign, and drafts its next asset for your review |
 | Finance Controller | Reports burn, revenue, and runway — and says what is unknown |
 | Inventory Specialist | Reviews stock position and flags what needs ordering |
 | Documentation Specialist | Refreshes the documentation health overview |

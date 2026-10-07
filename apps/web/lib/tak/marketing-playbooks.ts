@@ -3,6 +3,7 @@
 // Each business model has distinct marketing objectives, stakeholders, and engagement patterns.
 
 import { getPlaybookForLeafArchetype } from "./marketing-playbooks-leaf";
+import { SOFTWARE_PLATFORM_PLAYBOOK } from "./marketing-playbooks-software-platform";
 
 export { getPlaybookForLeafArchetype };
 
@@ -20,6 +21,9 @@ import type { MarketingPlaybook } from "./marketing-playbook-types";
 // ─── Category-Based Playbooks (primary lookup) ─────────────────────────────
 
 const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
+  // Lives in its own module (BI-3101AED6); this table is near its size ceiling.
+  "software-platform": SOFTWARE_PLATFORM_PLAYBOOK,
+
   "hoa-property-management": {
     primaryGoal: "Homeowner engagement, bylaw compliance, and community satisfaction",
     stakeholders: "Homeowners, board members, subcontractors, property managers",
