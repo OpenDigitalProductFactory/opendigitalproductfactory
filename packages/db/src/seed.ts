@@ -109,6 +109,7 @@ import {
 } from "./provider-connection.js";
 import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
 import { seedAbsorptionPosture } from "./seed-absorption-posture.js";
+import { seedAutonomyPolicyBaseline } from "./seed-autonomy-policy-baseline.js";
 import {
   loadPlatformSbomFromRepository,
   persistPlatformSbom,
@@ -2517,6 +2518,7 @@ async function main(): Promise<void> {
 
   await step("integrationCoverage", () => seedIntegrationCoverage(prisma, bootstrapOrganizationId));
   await step("absorptionPosture", () => seedAbsorptionPosture(prisma));
+  await step("autonomyPolicyBaseline", () => seedAutonomyPolicyBaseline(prisma));
   await step("stallThresholds", () => seedStallThresholds(prisma));
   await step("geographicData", () => seedGeographicData(prisma));
   await step("taxJurisdictions", () => seedTaxJurisdictions(prisma));
