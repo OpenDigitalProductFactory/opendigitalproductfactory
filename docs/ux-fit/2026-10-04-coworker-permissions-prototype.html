@@ -1,4 +1,50 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Coworker permissions</title>
-<style>:root{color-scheme:light dark;font:16px system-ui}body{max-width:760px;margin:48px auto;padding:20px}section{border:1px solid GrayText;border-radius:12px;padding:24px;margin:24px 0}button,select{font:inherit;padding:10px;margin:6px 0}p{line-height:1.5}small{color:GrayText}label{display:flex;justify-content:space-between;align-items:center;gap:20px}details{margin-top:16px}</style>
-<h1>Codex permissions</h1><section><h2>Saved permissions</h2><p>Read registry · Read backlog · Update backlog</p><label>Add permission <select><option>Choose a permission</option><option>Read release plans</option></select></label><button>Add permission</button><p role="status" id="saved">Changes apply on the next request.</p><small>Access also depends on this connection, the signed-in person's permissions, and the work room.</small></section>
-<section id="conflict"><h2>Review 2 permission differences</h2><p>A previous record has different permissions. Current access stays in place until you approve a choice.</p><button onclick="document.querySelectorAll('#conflict select').forEach(s=>s.value='current')">Keep current permissions for all</button> <button onclick="document.querySelectorAll('#conflict select').forEach(s=>s.value='previous')">Use previous permissions for all</button><details><summary>Review individually</summary><label>Read release plans <select aria-label="Read release plans"><option value="">Choose</option><option value="current">Current: removed</option><option value="previous">Previous: allowed</option></select></label><label>Read inventory <select aria-label="Read inventory"><option value="">Choose</option><option value="current">Current: not assigned</option><option value="previous">Previous: allowed</option></select></label></details><p><button onclick="if([...document.querySelectorAll('#conflict select')].some(s=>!s.value)){document.getElementById('notice').textContent='Choose an option for both differences first.';return}document.getElementById('conflict').hidden=true;document.getElementById('saved').textContent='Permissions saved. Previous permission record retired.'">Review and approve choices</button></p><p id="notice" role="alert"></p></section>
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coworker permissions — interaction prototype</title>
+<link rel="stylesheet" href="../../apps/web/app/globals.css">
+<style>
+body{max-width:760px;margin:32px auto;padding:20px;background:var(--dpf-bg);color:var(--dpf-text);font:16px var(--dpf-font-body)}
+section,dialog{border:1px solid var(--dpf-border);border-radius:12px;padding:24px;background:var(--dpf-surface-1)}section{margin:24px 0}
+h1{font-size:28px}h2{font-size:20px;margin-top:0}p{line-height:1.5}small{color:var(--dpf-text-secondary)}
+button,select{font:inherit;padding:10px 14px;border-radius:8px;border:1px solid var(--dpf-border);color:var(--dpf-text);background:var(--dpf-surface-2)}
+button{cursor:pointer}button:disabled{opacity:.5;cursor:default}.primary{background:var(--dpf-accent);color:var(--dpf-on-accent);border-color:var(--dpf-accent)}
+:focus-visible{outline:3px solid var(--dpf-accent);outline-offset:3px}label{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:12px 0}
+.actions{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}details{margin:20px 0}summary{cursor:pointer}
+[role=alert]{color:var(--dpf-error)}[role=status]{color:var(--dpf-text-secondary)}dialog{width:min(500px,calc(100% - 48px));box-sizing:border-box}
+dialog::backdrop{background:color-mix(in srgb,var(--dpf-text) 35%,transparent)}
+@media(max-width:520px){body{margin:0;padding:16px}section{padding:16px}label{align-items:stretch;flex-direction:column;gap:8px}}
+</style></head><body>
+<header><small>Interaction prototype · example data only</small><h1>Codex permissions</h1></header>
+<section aria-labelledby="savedTitle"><h2 id="savedTitle">Saved permissions</h2><p id="permissions">Read registry · Read backlog · Update backlog</p>
+<label for="permission">Add permission <select id="permission"><option value="">Choose a permission</option><option value="release">Read release plans</option></select></label>
+<button id="add" disabled>Add permission</button><p role="status" id="saved" aria-live="polite">Changes apply on the next request.</p>
+<small>Access also depends on this connection, the signed-in person's permissions, and the work room.</small></section>
+<section id="conflict" aria-labelledby="conflictTitle"><h2 id="conflictTitle">Review 2 permission differences</h2>
+<p>A previous record has different permissions. Current access stays in place until you approve a choice.</p>
+<div class="actions"><button id="current">Keep current permissions for all</button><button id="previous">Use previous permissions for all</button></div>
+<details id="individual"><summary>Review individually</summary>
+<label for="release">Read release plans <select id="release"><option value="">Choose</option><option value="current">Current: removed</option><option value="previous">Previous: allowed</option></select></label>
+<label for="inventory">Read inventory <select id="inventory"><option value="">Choose</option><option value="current">Current: not assigned</option><option value="previous">Previous: allowed</option></select></label></details>
+<button class="primary" id="review">Review choices</button><p id="notice" role="alert"></p></section>
+<details><summary>Prototype recovery examples</summary><p>These controls demonstrate failure states; they do not call the platform.</p>
+<div class="actions"><button id="change">Simulate changed permissions</button><button id="failure">Simulate failed save</button><button id="reset">Reset example</button></div><p role="status" id="exampleState"></p></details>
+<dialog id="approval" aria-labelledby="approvalTitle" aria-describedby="approvalHelp"><h2 id="approvalTitle">Approve permission choices</h2>
+<p id="approvalHelp">Review the choices below. Approval retires the previous permission record.</p><ul id="choices"></ul>
+<div class="actions"><button id="cancel" autofocus>Cancel</button><button class="primary" id="approve">Approve choices</button></div>
+<details><summary>Example concurrent change</summary><button id="changePreview">Simulate changed permissions</button><p id="previewState" role="status"></p></details></dialog>
+<script>
+const byId=id=>document.getElementById(id),fields=[byId('release'),byId('inventory')],labels=['Read release plans','Read inventory'];
+let revision=1,preview=null,failNext=false;
+const selectAll=source=>{fields.forEach(field=>{field.value=source});byId('notice').textContent=''};
+byId('current').onclick=()=>selectAll('current');byId('previous').onclick=()=>selectAll('previous');
+byId('permission').onchange=()=>{byId('add').disabled=!byId('permission').value};
+byId('add').onclick=()=>{byId('permissions').textContent+=' · Read release plans';byId('permission').value='';byId('permission').options[1].disabled=true;byId('add').disabled=true;byId('saved').textContent='Permission saved in this example.'};
+byId('review').onclick=()=>{if(fields.some(field=>!field.value)){byId('notice').textContent='Choose an option for both differences first.';byId('individual').open=true;fields.find(field=>!field.value).focus();return}byId('notice').textContent='';preview={revision,choices:fields.map(field=>field.value)};byId('choices').replaceChildren(...preview.choices.map((source,index)=>{const row=document.createElement('li');row.textContent=`${labels[index]}: ${source==='current'?'keep current state':'use previous allowed state'}`;return row}));byId('approval').showModal()};
+byId('cancel').onclick=()=>byId('approval').close();byId('approval').addEventListener('close',()=>byId('review').focus());
+byId('approve').onclick=()=>{byId('approval').close();if(!preview||preview.revision!==revision){selectAll('');byId('notice').textContent='Permissions changed. Review a fresh preview.';return}if(failNext){failNext=false;byId('notice').textContent='Permissions could not be saved. Current access is unchanged. Try again.';return}byId('conflict').hidden=true;byId('saved').textContent='Permissions saved in this example. Previous permission record retired.';byId('permission').focus()};
+byId('change').onclick=()=>{revision++;byId('exampleState').textContent='Example permissions changed; an earlier preview is now stale.'};
+byId('changePreview').onclick=()=>{revision++;byId('previewState').textContent='Example permissions changed; this preview is now stale.'};
+byId('failure').onclick=()=>{failNext=true;byId('exampleState').textContent='The next example save will fail without changing access.'};
+byId('reset').onclick=()=>{revision++;failNext=false;preview=null;selectAll('');byId('conflict').hidden=false;byId('permissions').textContent='Read registry · Read backlog · Update backlog';byId('permission').options[1].disabled=false;byId('saved').textContent='Changes apply on the next request.';byId('exampleState').textContent='Example reset.';byId('review').focus()};
+</script></body></html>
