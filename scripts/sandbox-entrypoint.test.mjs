@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { chmodSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, fstatSync, mkdtempSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -80,9 +80,17 @@ test('sandbox boot generates its own auth secret once, root-only, and reuses it 
     const first = fx.run();
     assert.equal(first.status, 0, first.stderr);
     const secretPath = join(fx.workspace, SECRET_FILE);
-    const secret = readFileSync(secretPath, 'utf8');
+    // One open handle for both content and mode, so the check and the read
+    // can never see two different files (CodeQL js/file-system-race).
+    const fd = openSync(secretPath, 'r');
+    let secret;
+    let mode;
+    try {
+      secret = readFileSync(fd, 'utf8');
+      mode = fstatSync(fd).mode;
+    } finally { closeSync(fd); }
     assert.match(secret, HEX64, 'the secret is 32 random bytes, hex');
-    assert.equal(statSync(secretPath).mode & 0o777, 0o600, 'the secret file is mode 600');
+    assert.equal(mode & 0o777, 0o600, 'the secret file is mode 600');
     assert.deepEqual(readdirSync(fx.workspace).filter((name) => name.startsWith(`${SECRET_FILE}.`)), [], 'no temp file is left behind');
 
     fx.resetLog();
