@@ -170,6 +170,13 @@ jobs:
         run: |
           node --test scripts/promote-host-bind-address.test.mjs \
             | tee "$DPF_N1_EVIDENCE/promotion-host-bind-address.tap"
+      - name: Promotion composes the overlays an install switched on after install
+        # BI-B422ED03: TLS enabled by the PKI bootstrap lives in .env markers,
+        # not the chain recorded at install; the promoter must append those
+        # overlays or portal-tls never upgrades (live, 2026-10-06).
+        run: |
+          node --test scripts/promote-compose-activation-overlays.test.mjs \
+            | tee "$DPF_N1_EVIDENCE/promotion-activation-overlays.tap"
       - name: Resolve N-1 baseline
         id: baseline
         # BI-9E5E6063: prefer a live merge-base over a potentially stale
