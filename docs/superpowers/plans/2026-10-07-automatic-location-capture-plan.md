@@ -125,6 +125,14 @@ Phase 3 goes last, as the design §7 requires, so it can be held without holding
   - the route on the contributor preview with a seeded preview job;
   - the phone flow in the iOS simulator against the preview, with a simulated location.
 
+## Acceptance traceability
+
+| Phase | Objectives | Acceptance verified in that phase |
+|---|---|---|
+| 1 | OBJ-ALC-SAVE, OBJ-ALC-GEOFENCE | AC-ALC-SAVE-1, AC-ALC-SAVE-2, AC-ALC-SAVE-3, AC-ALC-SAVE-4, AC-ALC-GEOFENCE-1 |
+| 2 | OBJ-ALC-REGION | AC-ALC-REGION-1, AC-ALC-REGION-2 |
+| 3 | OBJ-ALC-VISIT | AC-ALC-VISIT-1, AC-ALC-VISIT-2, AC-ALC-VISIT-3, AC-ALC-VISIT-4 |
+
 ## Cross-cutting obligations
 
 - **Theme:** the theme-aware styling runbook applies to the panel line and the phone sheet.
