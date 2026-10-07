@@ -170,6 +170,13 @@ jobs:
         run: |
           node --test scripts/promote-host-bind-address.test.mjs \
             | tee "$DPF_N1_EVIDENCE/promotion-host-bind-address.tap"
+      - name: Promotion reports which running services compose would recreate (shadow)
+        # BI-00F7D2E3: step 7e compares each running service's config hash with
+        # the rendered one and records would-recreate without acting (WWMD
+        # DI-C04ABC76BBF4); the test proves it never runs compose up.
+        run: |
+          node --test scripts/promote-sidecar-converge.test.mjs \
+            | tee "$DPF_N1_EVIDENCE/promotion-sidecar-converge.tap"
       - name: Resolve N-1 baseline
         id: baseline
         # BI-9E5E6063: prefer a live merge-base over a potentially stale
