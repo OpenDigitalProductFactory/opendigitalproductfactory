@@ -136,7 +136,13 @@ describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () 
     expect(outcome.state.status).toBe("queued");
     expect(outcome.calls).toHaveLength(1);
     expect(outcome.calls[0]?.body).toContain("enablePullRequestAutoMerge");
-    expect(outcome.calls.some((call) => /mergePullRequest|\/merge"?$/.test(`${call.url} ${call.body ?? ""}`))).toBe(false);
+    expect(
+      outcome.calls.some((call) => {
+        const text = `${call.url} ${call.body ?? ""}`;
+        // No direct merge: neither the GraphQL mutation nor a REST URL ending in /merge.
+        return /mergePullRequest/.test(text) || /\/merge"?$/.test(text);
+      }),
+    ).toBe(false);
   });
 
   it("withholds GitHub actuation when the room's boundary does, but still records the state", async () => {
