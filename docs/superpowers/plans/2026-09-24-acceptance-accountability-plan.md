@@ -81,6 +81,20 @@ Independently shippable. It changes no behaviour until the sweep calls it.
   in `pnpm run pregate`.
 - Live check: run the task once on the development install and record the run
   activity id as evidence for AC-AA-01 and AC-AA-02.
+- As built (BI-DF255666):
+  - The second page tier is a round-robin by row id from the cursor the last
+    run summary recorded, not "oldest snapshot" (see design §3.3 step 1).
+  - Owner resolution runs the terminal recovery chain
+    (`resolveTerminalInitiativeRecovery`) with only its final resolver swapped
+    for the author-excluding port, so the item's live Workroom, baseline and
+    evidence are supplied where they exist. That chain now returns the
+    resolver's own reason when no objective-mapping packet was produced,
+    instead of "refresh readiness".
+  - Pool age (bands, aged, over 30 days, `ageBasis: created`) is measured for
+    the whole pool every run; readiness stays bounded by the page.
+  - The scheduler's deterministic kinds moved to
+    `actions/agent-task-scheduler-deterministic.ts`. Single-flight is the
+    scheduler's existing guarded claim (BI-D1CD3A11); the sweep adds no lock.
 
 ## Phase 3: coworker routing (BI-C1781121), after phase 2
 

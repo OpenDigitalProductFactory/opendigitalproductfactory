@@ -3,6 +3,10 @@ import type {
   ReadinessCode,
   ReadinessRequirementResult,
 } from "@/lib/backlog/initiative-readiness/types";
+import type {
+  TerminalInitiativeRecovery,
+  TerminalRecoveryEscalationReason,
+} from "@/lib/backlog/initiative-readiness/terminal-recovery";
 import type { InitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
 
 // Owed acceptance: who owes an awaiting-acceptance item's acceptance and what
@@ -34,6 +38,8 @@ export type OwedAcceptanceOwner = {
 
 export type OwedAcceptanceUnroutableReason =
   | InitiativeReviewerRecovery["escalations"][number]["reason"]
+  /** The terminal recovery chain (Workroom, baseline, evidence) could not bind a route; the sweep's resolver runs it. */
+  | TerminalRecoveryEscalationReason
   /** The accountable role has no writer lane (resolver `unroutable`). */
   | "no-writer-lane"
   /** The only route the resolver found targets the authoring agent. */
@@ -58,13 +64,15 @@ export type OwedAcceptance = {
 };
 
 /**
- * Port over `resolveInitiativeReviewerRecovery`. The production adapter is
- * `createOwedAcceptanceOwnerResolver`; tests inject their own.
+ * Port over `resolveInitiativeReviewerRecovery`. The production adapters are
+ * `createOwedAcceptanceOwnerResolver` (given a dispatch context) and the
+ * sweep's `createSweepOwnerResolver` (which runs the terminal recovery chain to
+ * find the item's Workroom, baseline and evidence); tests inject their own.
  */
 export type OwedAcceptanceOwnerResolver = (args: {
   decision: InitiativeReadinessDecision;
   authorAgentId: string | null;
-}) => Promise<InitiativeReviewerRecovery>;
+}) => Promise<InitiativeReviewerRecovery | TerminalInitiativeRecovery>;
 
 function isFamily(entry: { accountableRole: string }): boolean {
   return ACCEPTANCE_FAMILY_ROLES.includes(entry.accountableRole);

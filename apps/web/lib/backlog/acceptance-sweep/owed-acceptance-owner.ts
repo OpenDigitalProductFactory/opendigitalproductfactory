@@ -2,6 +2,7 @@ import {
   resolveInitiativeReviewerRecovery,
   type InitiativeRecoveryCanonicalArtifact,
   type InitiativeRecoveryDispatchContext,
+  type InitiativeReviewerRecovery,
 } from "@/lib/tak/initiative-readiness-tool-grants";
 
 import type { OwedAcceptanceOwnerResolver } from "./owed-acceptance";
@@ -28,9 +29,10 @@ export function createOwedAcceptanceOwnerResolver(context: {
   db: OwedAcceptanceOwnerDb;
   dispatchContext: InitiativeRecoveryDispatchContext | null;
   canonicalArtifact?: InitiativeRecoveryCanonicalArtifact | null;
+  planArtifact?: InitiativeRecoveryCanonicalArtifact | null;
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: readonly string[];
-}): OwedAcceptanceOwnerResolver {
+}): (...args: Parameters<OwedAcceptanceOwnerResolver>) => Promise<InitiativeReviewerRecovery> {
   return ({ decision, authorAgentId }) => resolveInitiativeReviewerRecovery({
     decision,
     currentAgentId: authorAgentId,
@@ -44,6 +46,7 @@ export function createOwedAcceptanceOwnerResolver(context: {
     },
     dispatchContext: context.dispatchContext,
     canonicalArtifact: context.canonicalArtifact ?? null,
+    ...(context.planArtifact !== undefined ? { planArtifact: context.planArtifact } : {}),
     expectedCurrentBaselineId: context.expectedCurrentBaselineId ?? null,
     ...(context.eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds: context.eligibleEvidenceActivityIds } : {}),
   });

@@ -110,10 +110,12 @@ Each run:
 
 1. Selects a bounded page of `awaiting-acceptance` items
    (`ACCEPTANCE_SWEEP_PAGE_SIZE`, default 100). Items with no `acceptance_owed`
-   snapshot come first, then the items whose last snapshot is oldest. Newly
-   entered items are therefore seen on the next run, and the whole pool is
-   revisited every ceil(N / page) runs. Readiness is never evaluated for the
-   whole pool in one tick.
+   snapshot come first, then snapshotted items round-robin from a cursor the
+   previous run recorded. (Ordering by oldest snapshot would stall: a snapshot
+   is written only on change, so an unchanged item's snapshot never gets
+   newer.) Newly entered items are therefore seen on the next run, and the
+   whole pool is revisited every ceil(N / page) runs. Readiness is never
+   evaluated for the whole pool in one tick.
 2. Computes readiness and the owed projection. An item whose completion verdict
    is already `allowed` is reported as `closable`. The sweep does not close it:
    closing stays the terminal transition's decision, made through its gate.
