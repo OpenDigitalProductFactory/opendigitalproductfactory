@@ -20,6 +20,7 @@ const EXPECTED_LEGACY_JOBS = [
   "client-server-boundary-guard",
   "compose-bind-posture-guard",
   "compose-env-contract-guard",
+  "compose-init-reaping-guard",
   "compose-resource-budgets-guard",
   "context-economy-guard",
   "convergence-impact-gate",
