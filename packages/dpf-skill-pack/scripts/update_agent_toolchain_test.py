@@ -1687,6 +1687,46 @@ class WrapperEndpointParityTest(unittest.TestCase):
         code = [line for line in self.wrappers()["pack.sh"].splitlines() if not line.lstrip().startswith("#")]
         self.assertNotIn("--mcp-url", "\n".join(code))
 
+    # The bootstrap twins need a concrete endpoint for their probes and the
+    # plan bridge. When the operator names none they read the updater's own
+    # DEFAULT_MCP_URL line, so there is still one home for the default.
+    SH_DEFAULT_READ = """sed -n 's/^DEFAULT_MCP_URL = "\\(.*\\)"$/\\1/p'"""
+    PS1_DEFAULT_READ = """'^DEFAULT_MCP_URL = "(.*)"$'"""
+
+    def bootstraps(self):
+        repo = Path(__file__).resolve().parents[3]
+        sh = repo / "scripts/dpf-bootstrap-agent-toolchain.sh"
+        ps1 = repo / "scripts/dpf-bootstrap-agent-toolchain.ps1"
+        if not sh.exists():
+            self.skipTest("Repository bootstraps are not shipped in standalone packs")
+        return sh.read_text(), ps1.read_text()
+
+    def test_bootstraps_hard_code_no_endpoint(self):
+        for name, text in zip(("bootstrap.sh", "bootstrap.ps1"), self.bootstraps()):
+            with self.subTest(bootstrap=name):
+                self.assertIsNone(self.URL_LITERAL.search(text), "hard-coded MCP endpoint")
+
+    def test_bootstraps_fall_back_to_the_updater_default(self):
+        sh, ps1 = self.bootstraps()
+        self.assertIn(self.SH_DEFAULT_READ, sh)
+        self.assertIn(self.PS1_DEFAULT_READ, ps1)
+        source = self.SCRIPTS / "update_agent_toolchain.py"
+        read = subprocess.run(["sh", "-c", self.SH_DEFAULT_READ + ' "$1"', "sh", str(source)],
+                              capture_output=True, text=True, check=True)
+        self.assertEqual(read.stdout.strip(), updater.DEFAULT_MCP_URL)
+        match = [m.group(1) for m in map(re.compile(self.PS1_DEFAULT_READ.strip("'")).match, source.read_text().splitlines()) if m]
+        self.assertEqual(match, [updater.DEFAULT_MCP_URL])
+
+    def test_bootstraps_forward_only_the_named_endpoint_to_the_updater(self):
+        sh, ps1 = self.bootstraps()
+        self.assertNotIn('--mcp-url "$MCP_ENDPOINT"', sh)
+        self.assertIn('--mcp-url "$MCP_ENDPOINT_NAMED"', sh)
+        self.assertNotRegex(ps1, r"-McpUrl \$McpEndpoint\b(?!Named)")
+        self.assertIn("-McpUrl $McpEndpointNamed", ps1)
+        # Persisting a non-https endpoint keys on the operator naming one, not
+        # on a comparison with a hard-coded default.
+        self.assertIn('if [ -n "$MCP_ENDPOINT_NAMED" ]; then', sh)
+
     def test_python_default_is_canonical_https_oauth(self):
         self.assertEqual(updater.DEFAULT_MCP_URL, "https://localhost/api/mcp/v1")
         with patch.dict(os.environ, {}, clear=False):
@@ -1844,16 +1884,20 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
             stub = Path(tmp) / "packages/dpf-skill-pack/scripts/update-agent-toolchain.sh"
             stub.parent.mkdir(parents=True)
             stub.write_text('printf "%s\\n" "$@"\nexit "$DPF_TEST_EXIT"\n')
-            for exit_code in (0, 7):
+            for exit_code, named in ((0, "https://example.invalid/api/mcp/v1"), (7, "https://example.invalid/api/mcp/v1"), (0, "")):
                 result = subprocess.run(
                     ["bash", "-c", 'fail() { printf "%s\\n" "$1"; }\n' + block + '\nprintf "PLAN_REACHED\\n"'],
-                    env={**os.environ, "REPO_ROOT": tmp, "MCP_ENDPOINT": "https://example.invalid/api/mcp/v1",
-                         "DRY_RUN": "1", "DPF_TEST_EXIT": str(exit_code)},
+                    env={**os.environ, "REPO_ROOT": tmp, "MCP_ENDPOINT": "https://localhost/api/mcp/v1",
+                         "MCP_ENDPOINT_NAMED": named, "DRY_RUN": "1", "DPF_TEST_EXIT": str(exit_code)},
                     capture_output=True, text=True,
                 )
                 self.assertIn("--dry-run", result.stdout)
                 self.assertIn("--codex-plugin-only", result.stdout)
-                self.assertIn("https://example.invalid/api/mcp/v1", result.stdout)
+                # Only an endpoint the operator named reaches the updater.
+                if named:
+                    self.assertIn(named, result.stdout)
+                else:
+                    self.assertNotIn("--mcp-url", result.stdout)
                 self.assertEqual(result.returncode, 0 if exit_code == 0 else 1)
                 self.assertEqual("PLAN_REACHED" in result.stdout, exit_code == 0)
 
