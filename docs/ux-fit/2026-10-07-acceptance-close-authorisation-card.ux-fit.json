@@ -2,9 +2,17 @@
   "version": "1",
   "decidedOption": "card-beside-autonomy-switch",
   "decisionInteractionId": "DI-1D4908E707DA",
-  "scope": { "files": [
-    "apps/web/components/admin/AcceptanceSweepCloseAuthorisationCard.tsx",
-    "apps/web/app/(shell)/admin/platform-development/page.tsx"
-  ] },
-  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["card-beside-autonomy-switch", "dedicated-acceptance-page", "mcp-tool-only"] }
+  "scope": {
+    "files": [
+      "apps/web/components/admin/AcceptanceSweepCloseAuthorisationCard.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "card-beside-autonomy-switch",
+      "dedicated-acceptance-page",
+      "mcp-tool-only"
+    ]
+  }
 }
