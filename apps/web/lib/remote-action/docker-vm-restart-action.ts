@@ -34,7 +34,8 @@ export interface HostExecutorView {
   trustState: string;
   customerAccountId: string | null;
   scopePolicy: unknown;
-  capabilityRows: Array<{ capability: string; mode: string }>;
+  /** action.execute row; its evidence carries the node's dockerRuntime (BI-28EFE18A). */
+  capabilityRows: Array<{ capability: string; mode: string; evidence?: unknown }>;
 }
 
 export interface DockerVmRestartDeps {
@@ -56,11 +57,20 @@ export interface DockerVmRestartDeps {
 
 export type DockerVmRestartCheck =
   | { offered: true; edgeNodeId: string; nodeId: string; impact: string; runningGates: number; wedged: string }
-  | { offered: false; reason: "no-wedged-vm" | "restart-already-in-flight" | "no-host-executor"; message: string };
+  | {
+    offered: false;
+    reason: "no-wedged-vm" | "restart-already-in-flight" | "no-host-executor" | "host-reboot-required";
+    message: string;
+  };
 
 function allowedActionTypes(scopePolicy: unknown): string[] {
   if (!isRecord(scopePolicy) || !Array.isArray(scopePolicy.actionTypes)) return [];
   return scopePolicy.actionTypes.filter((item): item is string => typeof item === "string");
+}
+
+function reportedDockerRuntime(node: HostExecutorView): string | null {
+  const row = node.capabilityRows.find((item) => item.capability === "action.execute");
+  return isRecord(row?.evidence) && typeof row.evidence.dockerRuntime === "string" ? row.evidence.dockerRuntime : null;
 }
 
 function canRunRestart(node: HostExecutorView): boolean {
@@ -88,8 +98,18 @@ export async function checkDockerVmRestart(deps: DockerVmRestartDeps): Promise<D
     return {
       offered: false,
       reason: "no-host-executor",
-      message: "No host executor can run this. The restart runs through the native Edge agent on the Windows host: "
-        + "install with -WithEdge, enable remote action dispatch, and allow substrate.docker-vm.restart for that node.",
+      message: "No host agent can run this yet. The restart runs through this install's edge node on the host. "
+        + "It is set up when the node enrolls and the platform enables host upkeep for it; until then, restart Docker from the host.",
+    };
+  }
+  if (reportedDockerRuntime(node) === "engine") {
+    // BI-28EFE18A: native Docker Engine on Linux has no VM. A process stuck in
+    // the host kernel clears only with a host reboot, which DPF never performs.
+    return {
+      offered: false,
+      reason: "host-reboot-required",
+      message: "This host runs Docker Engine directly, with no VM to restart. A process stuck in uninterruptible I/O "
+        + "there is cleared only by rebooting the host, which the platform never does on its own. Reboot the host when it suits you.",
     };
   }
   const runningGates = await deps.countRunningGates();

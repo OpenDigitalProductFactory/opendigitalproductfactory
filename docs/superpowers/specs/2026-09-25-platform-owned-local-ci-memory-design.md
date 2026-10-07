@@ -226,6 +226,36 @@ is the safe error.
       action dispatch and the node allowlists the type. Without a native agent,
       the control says so instead of offering a shell.
 
+- **F: the edge node is every install's host-upkeep agent (BI-28EFE18A;
+  WWMD DI-93310A596E88, composite 12.39, margin 2.85, high).** The founder
+  accepted the edge node as the carrier on the condition that it works on Linux
+  and macOS too.
+  - *Agent:* the restart procedure is per runtime.
+    - Docker Desktop on macOS and Linux uses `docker desktop restart`, then
+      waits for the engine and starts the platform's autostart (LaunchAgent
+      `local.dpf-autostart`, user unit `dpf.service`).
+    - Windows keeps its procedure.
+    - Native Linux Engine has no VM, so the agent refuses with
+      `host_reboot_required`.
+    - The command allowlist now checks arguments too, so `systemctl reboot` or
+      `launchctl reboot` cannot pass on any platform.
+    - The node reports its `dockerRuntime` in the `action.execute` evidence, and
+      `DPF_EDGE_ROLE=host-upkeep` turns off the network sweep and discovery.
+  - *Portal:* the substrate job converges the install's own node once
+    (`action.execute` enabled, the restart allowlisted). On a native Engine the
+    Health panel says only a reboot clears the wedge, instead of offering a
+    restart.
+  - *Installers:* every install converges the native node.
+    - On Windows, the role is `host-upkeep` unless `-WithEdge`.
+    - On macOS, likewise unless `--with-edge`. With edge on, the node runs its
+      full role.
+    - On Linux it runs a `systemd --user` unit in the host-upkeep role, with its
+      own one-time token. The edge container stays for opted-in edge features.
+    - The PKI bootstrap sets the dispatch flag beside the trust bundle.
+  - *Convergence for existing installs:* the host installer, which re-provisions
+    the native node and the PKI env on every governed run. A container
+    self-upgrade cannot install host services.
+
 ## Out of scope
 
 Changing the 16 GiB hard ceiling, the 4 GiB floor, or host-stage calibration.

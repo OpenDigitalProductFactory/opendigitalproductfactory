@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/action"
@@ -30,6 +31,7 @@ func dockerDesktopExe(cfg *config.Config) string {
 func newDockerVmRestartHandler(cfg *config.Config) *action.DockerVmRestartHandler {
 	return &action.DockerVmRestartHandler{
 		Config: action.DockerVmRestartConfig{
+			Platform:           cfg.Platform,
 			DockerDesktopExe:   dockerDesktopExe(cfg),
 			LocalAppData:       os.Getenv("LOCALAPPDATA"),
 			AutostartTaskName:  cfg.AutostartTaskName,
@@ -58,4 +60,28 @@ func newDockerVmRestartHandler(cfg *config.Config) *action.DockerVmRestartHandle
 		Sleep:  time.Sleep,
 		Now:    func() time.Time { return time.Now().UTC() },
 	}
+}
+
+var (
+	dockerRuntimeOnce   sync.Once
+	dockerRuntimeCached = action.DockerRuntimeUnknown
+)
+
+// currentHostUpkeep reports the restart capability and the Docker runtime,
+// detected once per process: switching between Docker Desktop and a native
+// engine needs a reinstall, and the agent restarts with the host anyway.
+func currentHostUpkeep(cfg *config.Config) hostUpkeepReport {
+	if !cfg.DockerVmRestartEnabled() {
+		return hostUpkeepReport{}
+	}
+	dockerRuntimeOnce.Do(func() {
+		run := func(ctx context.Context, name string, args ...string) (string, error) {
+			commandContext, cancel := context.WithTimeout(ctx, 20*time.Second)
+			defer cancel()
+			out, err := exec.CommandContext(commandContext, name, args...).CombinedOutput()
+			return string(out), err
+		}
+		dockerRuntimeCached = action.DetectDockerRuntime(context.Background(), cfg.Platform, run)
+	})
+	return hostUpkeepReport{dockerVmRestart: true, dockerRuntime: dockerRuntimeCached}
 }
