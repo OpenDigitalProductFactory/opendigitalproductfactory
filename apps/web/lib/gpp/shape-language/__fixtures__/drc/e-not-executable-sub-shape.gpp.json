@@ -1,9 +1,9 @@
 {
   "format": "gpp-shape/0.1",
-  "key": "drc-pass-sub-shape",
+  "key": "drc-e-sub-shape",
   "version": "1.0.0",
-  "title": "DRC fixture drc-pass-sub-shape",
-  "description": "A stage that calls a registered sub-shape within the parent's grants: executable since GPP Phase 3c PR-3c-5, so it compiles with no finding.",
+  "title": "DRC fixture drc-e-sub-shape",
+  "description": "Seeded E-NOT-EXECUTABLE: a stage that calls a registered sub-shape within the parent's grants (implemented and parity-proven in GPP Phase 3c PR-3c-5, not enabled pending BI-086DC167).",
   "triggers": [
     "claim"
   ],

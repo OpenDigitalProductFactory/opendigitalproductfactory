@@ -1,7 +1,9 @@
 // AC-3C-SUBSHAPE-NO-WIDEN, rule by rule (GPP Phase 3c PR-3c-5, BI-8875C9DF). Design:
 // docs/superpowers/specs/2026-10-02-gpp-phase-3c-drive-graph-execution-design.md §9.4.
 // The corpus fixtures (d-9-sub-shape-widening, d-10-sub-shape-unresolved) are in
-// drc-corpus.test.ts; these pin each clause over resolve facts given directly.
+// drc-corpus.test.ts; these pin each clause over resolve facts given directly. The
+// sub-shape flag is off (BI-086DC167), and D-9 and D-10 run whatever it says: the
+// last case checks them under the real flags.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -14,13 +16,13 @@ import type { GppResolution } from "./resolve";
 const ALL_ON = { trigger: true, stage: true, "capability-set": true, gate: true, "advisory-consult": true, "status-transition": true, "human-checkpoint": true, evidence: true, stop: true, "escalation-boundary": true, "review-point": true, "stage-deadline": true, "parallel-split-join": true, "rework-edge": true, "sub-shape": true, "environment-boundary": true } as const;
 
 function documentWith(grants: string[]) {
-  const parsed = parseShapeDocument(readFileSync(join(__dirname, "__fixtures__", "drc", "pass-sub-shape.gpp.json"), "utf8"));
+  const parsed = parseShapeDocument(readFileSync(join(__dirname, "__fixtures__", "drc", "e-not-executable-sub-shape.gpp.json"), "utf8"));
   if (!parsed.accepted) throw new Error("fixture changed");
   return { ...parsed.document, grants };
 }
 
 function resolution(subShape: NonNullable<GppResolution["stages"][number]["subShape"]>): GppResolution {
-  return { shapeElementId: "shape:drc-pass-sub-shape@1.0.0", stages: [{ elementId: "stage:a", stageKey: "a", principal: { kind: "role", ref: "role:shape-owner" }, subShape }] };
+  return { shapeElementId: "shape:drc-e-sub-shape@1.0.0", stages: [{ elementId: "stage:a", stageKey: "a", principal: { kind: "role", ref: "role:shape-owner" }, subShape }] };
 }
 
 const subShapeRules = (grants: string[], subShape: Parameters<typeof resolution>[0]) =>
@@ -65,9 +67,16 @@ describe("D-10 sub-shape resolution", () => {
   });
 
   it("refuses a cycle in the sub-shape call graph, naming the path, before any widening check", () => {
-    const [finding, ...rest] = subShapeRules([], { ...child, grants: ["tool:anything"], tools: [], cycle: ["drc-pass-sub-shape@1.0.0", "child@1.0.0", "drc-pass-sub-shape@1.0.0"] });
+    const [finding, ...rest] = subShapeRules([], { ...child, grants: ["tool:anything"], tools: [], cycle: ["drc-e-sub-shape@1.0.0", "child@1.0.0", "drc-e-sub-shape@1.0.0"] });
     expect(rest).toEqual([]);
     expect(finding?.rule).toBe("D-10");
-    expect(finding?.message).toContain("drc-pass-sub-shape@1.0.0 -> child@1.0.0 -> drc-pass-sub-shape@1.0.0");
+    expect(finding?.message).toContain("drc-e-sub-shape@1.0.0 -> child@1.0.0 -> drc-e-sub-shape@1.0.0");
+  });
+});
+
+describe("D-9 and D-10 run under the real flags too (the sub-shape flag is off, BI-086DC167)", () => {
+  it("a widening sub-shape is refused with D-9 beside its E-NOT-EXECUTABLE", () => {
+    const findings = runDesignRules(documentWith(["tool:read"]), resolution({ ...child, grants: ["tool:read", "tool:workroom_evidence_write"], tools: [] }), { directSites: new Map() });
+    expect(findings.filter((finding) => finding.severity === "error").map((finding) => finding.code).sort()).toEqual(["D-9", "E-NOT-EXECUTABLE/sub-shape"]);
   });
 });

@@ -12,14 +12,16 @@
 // registered (plan constraint 7), so the shape-claim resolver is overridden for
 // its key only. The executable-construct table is a
 // mutable copy, set per case: the stage-deadline flag is switched on here for
-// the runner cases (the flag itself flips only with the parity proof) and off
-// for the kill-switch case.
+// the runner cases (the real flag stays off until BI-086DC167, graph markings
+// reset at every cycle boundary) and left as it really is for the off cases.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEADLINE_FIXTURE } from "@/lib/work-management/__fixtures__/graph-shape-fixtures";
 import { DAY_MS } from "@/lib/work-management/drive-deadlines";
-import { workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
+import { resolveDrivePlan, workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
+import { projectPersistedWorkroomRoster } from "@/lib/work-management/room-participant-assignment";
+import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
 import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-drive-state";
 import { buildWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
@@ -245,13 +247,69 @@ describe("a stage deadline through the runner: notify once, after commit, retrie
     expect(nextCycle.notices).toEqual([]);
   });
 
-  it("with the stage-deadline flag off the room pauses construct_not_executable: nothing is raised or sent, the marking is kept", async () => {
-    flags.table["stage-deadline"] = false;
+  it("under the real flags (stage-deadline off, BI-086DC167) the room pauses construct_not_executable: nothing is raised or sent, the marking is kept", async () => {
+    Object.assign(flags.table, flags.original);
+    expect(flags.table["stage-deadline"]).toBe(false);
     const h = waitingOnB({ deadlines: { [KEY]: { raisedAt: at(6 * HOUR_MS).toISOString(), notifiedAt: null } } });
     const paused = await tick(h, at(9 * HOUR_MS));
     expect(paused.plan).toMatchObject({ action: "pause", reason: "construct_not_executable" });
     expect(paused.notices).toEqual([]);
     expect(marking(h).deadlines[KEY]?.notifiedAt).toBeNull();
     expect(marking(h).tokens.map((token) => token.node)).toEqual(["stage:b"]);
+  });
+});
+
+// The planner on its own (moved here from drive-resolution.test.ts so it runs under this file's test-only flag table:
+// the stage-deadline flag is off until BI-086DC167).
+describe("resolveDrivePlan raises a stage deadline and changes nothing else (PR-3c-4)", () => {
+  beforeEach(() => {
+    Object.assign(flags.table, flags.original, { "stage-deadline": true });
+  });
+  const NOW = new Date("2026-09-01T12:00:00.000Z");
+  const definition = readWorkShapeDefinitionContract(DEADLINE_FIXTURE);
+  const cycle = `${DEADLINE_FIXTURE.key}@${DEADLINE_FIXTURE.version}:2026-09-01`;
+  const twin = readWorkShapeDefinitionContract({
+    ...DEADLINE_FIXTURE,
+    stages: DEADLINE_FIXTURE.stages.map(({ deadline: _deadline, ...stage }) => stage),
+    flow: { nodes: [], edges: [{ from: "a", to: "b" }, { from: "b", to: "success" }] },
+  });
+  const plan = (shape: typeof definition, enteredAt: Date, deadlines: Record<string, unknown> = {}) => resolveDrivePlan({
+    roomId: "WC-DL", definition: shape, collaborationShape: null, postureLevel: "balanced", currentStageKey: "b",
+    participants: projectPersistedWorkroomRoster({ assignments: [coordinator()], presencePrincipalRefs: [] }),
+    receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }], budgetUsage: [], stopConditionHits: [], reviewDue: false,
+    substrateReachable: true, substrateEmpty: false, coordinatorEligibility: { jsi: "eligible", authorityBinding: "eligible" }, now: NOW,
+    workspaceState: { workroomDrive: { stageKey: "b", marking: {
+      format: "drive-marking/1", cycleKey: cycle, tokens: [{ node: "stage:b", enteredAt: enteredAt.toISOString() }],
+      iterations: {}, reworkTaken: {}, deadlines, children: {},
+    } } },
+  });
+
+  it("an overdue token's notice is raised (unsent) and listed; the plan is otherwise the twin's, token and all", () => {
+    const entered = new Date(NOW.getTime() - 2 * DAY_MS);
+    const raised = plan(definition, entered);
+    const without = plan(twin, entered);
+    const key = `${cycle}#b#0`;
+    expect(raised).toMatchObject({ action: without.action, reason: without.reason, stageKey: "b", taskId: without.taskId });
+    expect((raised.marking as { tokens: unknown }).tokens).toEqual((without.marking as { tokens: unknown }).tokens);
+    expect((raised.marking as { deadlines: unknown }).deadlines).toEqual({ [key]: { raisedAt: NOW.toISOString(), notifiedAt: null } });
+    expect(raised.deadlinesDue?.map((due) => [due.key, due.escalationRef])).toEqual([[key, "agent:graph-worker"]]);
+    expect(raised.ledger.at(-1)).toContain("Stage b is past its deadline (Two days.");
+    expect(without.deadlinesDue).toBeUndefined();
+  });
+
+  it("not yet due, or already raised, raises nothing", () => {
+    expect(plan(definition, new Date(NOW.getTime() - 2 * DAY_MS + 1)).deadlinesDue).toBeUndefined();
+    const already = { [`${cycle}#b#0`]: { raisedAt: "2026-09-01T00:00:00.000Z", notifiedAt: null } };
+    const again = plan(definition, new Date(NOW.getTime() - 3 * DAY_MS), already);
+    expect(again.deadlinesDue).toBeUndefined();
+    expect((again.marking as { deadlines: unknown }).deadlines).toEqual(already);
+  });
+
+  it("under the real flags (stage-deadline off, BI-086DC167) the room pauses construct_not_executable and raises nothing", () => {
+    Object.assign(flags.table, flags.original);
+    expect(flags.table["stage-deadline"]).toBe(false);
+    const paused = plan(definition, new Date(NOW.getTime() - 2 * DAY_MS));
+    expect(paused).toMatchObject({ action: "pause", reason: "construct_not_executable", stageKey: "b" });
+    expect(paused.deadlinesDue).toBeUndefined();
   });
 });

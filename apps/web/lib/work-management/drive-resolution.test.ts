@@ -467,13 +467,23 @@ describe("resolveDrivePlan: the Phase 3c graph path", () => {
     expect(Object.hasOwn(plan, "marking")).toBe(false);
   });
 
-  it("AC-3C-FAILCLOSED: no Phase 3c fixture pauses construct_not_executable now that every flag is on (PR-3c-5)", () => {
-    // The kill switch (a flag set back to false pauses the room, naming the construct, keeping its stage and marking)
-    // is proved with a test-only flag table in drive-marking-durable.test.ts and the runner suites
-    // (workroom-drive-rework, -deadline and -children tests).
-    for (const shape of [DEADLINE_FIXTURE, SUB_SHAPE_FIXTURE, PARALLEL_FIXTURE]) {
+  it("AC-3C-FAILCLOSED: a graph shape using a disabled construct pauses with construct_not_executable, naming it, and keeps its stage", () => {
+    // Parallel split/join (PR-3c-2) and rework edges with refuse routes (PR-3c-3) are executable (their cases are
+    // below). Stage deadline (PR-3c-4) and sub-shape (PR-3c-5) are implemented and parity-proven but off until
+    // BI-086DC167 (graph markings reset at every cycle boundary); their planner cases run under a test-only flag
+    // table in lib/queue/functions/workroom-drive-deadline.test.ts and workroom-drive-children.test.ts.
+    for (const [shape, construct, elementId] of [
+      [DEADLINE_FIXTURE, "stage-deadline", "stage:b"],
+      [SUB_SHAPE_FIXTURE, "sub-shape", "stage:b"],
+    ] as const) {
       const plan = resolveDrivePlan(graphInput(contract(shape), { currentStageKey: "a", receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }] }));
-      expect(plan.reason, shape.key).not.toBe("construct_not_executable");
+      expect(plan.action, shape.key).toBe("pause");
+      expect(plan.reason, shape.key).toBe("construct_not_executable");
+      expect(plan.stageKey, shape.key).toBe("a");
+      expect(plan.taskId).toBeNull();
+      expect(plan.ledger.join("\n"), shape.key).toContain(`construct_not_executable: ${construct} at ${elementId}`);
+      // Absent: applyDrivePlan carries the stored marking forward unchanged.
+      expect(Object.hasOwn(plan, "marking"), shape.key).toBe(false);
     }
   });
 
@@ -653,44 +663,5 @@ describe("resolveDrivePlan: refuse routes and rework (PR-3c-3)", () => {
     };
     const plan = resolveDrivePlan(input(agentGate, { ...at(agentGate, "b"), actionBoundary: "preauthorized", receipts: [done("a"), done("b")] }));
     expect(plan).toMatchObject({ action: "attention", reason: "governed_decision", stageKey: "b", attentionPrincipalRef: "agent:reviewer", taskId: null });
-  });
-});
-
-// GPP Phase 3c PR-3c-4 (BI-8875C9DF), design §8: the planner raises a stage deadline and changes nothing else.
-describe("resolveDrivePlan: stage deadlines (PR-3c-4)", () => {
-  const NOW = new Date("2026-09-01T12:00:00.000Z");
-  const contract = (shape: WorkShapeDefinition) => readWorkShapeDefinitionContract(shape);
-  const input = (shape: WorkShapeDefinition, extras: Partial<Parameters<typeof resolveDrivePlan>[0]> = {}) =>
-    baseInput({ definition: contract(shape), roomId: "WC-DL", collaborationShape: null, now: NOW, ...extras });
-  const cycle = resolveDrivePlan(input(DEADLINE_FIXTURE)).cycle!.cycleKey;
-  const atB = (enteredAt: Date, deadlines: DriveMarking["deadlines"] = {}) => ({
-    currentStageKey: "b",
-    receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }],
-    workspaceState: { workroomDrive: { stageKey: "b", marking: {
-      format: "drive-marking/1", cycleKey: cycle, tokens: [{ node: "stage:b", enteredAt: enteredAt.toISOString() }],
-      iterations: {}, reworkTaken: {}, deadlines, children: {},
-    } } },
-  });
-  const twin = { ...DEADLINE_FIXTURE, stages: DEADLINE_FIXTURE.stages.map(({ deadline: _deadline, ...stage }) => stage), flow: { nodes: [], edges: [{ from: "a", to: "b" }, { from: "b", to: "success" }] } };
-
-  it("an overdue token's notice is raised (unsent) and listed; the plan is otherwise the twin's, token and all", () => {
-    const entered = new Date(NOW.getTime() - 2 * 86_400_000);
-    const plan = resolveDrivePlan(input(DEADLINE_FIXTURE, atB(entered)));
-    const without = resolveDrivePlan(input(twin, atB(entered)));
-    const key = `${cycle}#b#0`;
-    expect(plan).toMatchObject({ action: without.action, reason: without.reason, stageKey: "b", taskId: without.taskId });
-    expect((plan.marking as DriveMarking).tokens).toEqual((without.marking as DriveMarking).tokens);
-    expect((plan.marking as DriveMarking).deadlines).toEqual({ [key]: { raisedAt: NOW.toISOString(), notifiedAt: null } });
-    expect(plan.deadlinesDue?.map((due) => [due.key, due.escalationRef])).toEqual([[key, "agent:graph-worker"]]);
-    expect(plan.ledger.at(-1)).toContain("Stage b is past its deadline (Two days.");
-    expect(without.deadlinesDue).toBeUndefined();
-  });
-
-  it("not yet due, or already raised, raises nothing", () => {
-    expect(resolveDrivePlan(input(DEADLINE_FIXTURE, atB(new Date(NOW.getTime() - 2 * 86_400_000 + 1)))).deadlinesDue).toBeUndefined();
-    const raised = { [`${cycle}#b#0`]: { raisedAt: "2026-09-01T00:00:00.000Z", notifiedAt: null } };
-    const again = resolveDrivePlan(input(DEADLINE_FIXTURE, atB(new Date(NOW.getTime() - 3 * 86_400_000), raised)));
-    expect(again.deadlinesDue).toBeUndefined();
-    expect((again.marking as DriveMarking).deadlines).toEqual(raised);
   });
 });

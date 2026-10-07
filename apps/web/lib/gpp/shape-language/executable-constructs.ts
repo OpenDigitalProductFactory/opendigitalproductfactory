@@ -19,8 +19,8 @@
 // draft.
 //
 // §5 lists 15 constructs. Construct 11 (Timer) has two compile targets with
-// different answers — the shape's review point and a stage deadline (executed
-// since Phase 3c PR-3c-4) — so it is two keys here, `review-point` and
+// different answers — the shape's review point (executed) and a stage
+// deadline (implemented in Phase 3c PR-3c-4, not enabled) — so it is two keys here, `review-point` and
 // `stage-deadline`. Construct 13 (Rework edge) has two notations — a
 // `flow.edges[].rework` edge and a gate's `onRefuse` route — and both are
 // `rework-edge`. "Recorded only" (advisory consult) and "Declared only"
@@ -65,12 +65,26 @@ export type GppConstruct = (typeof GPP_CONSTRUCTS)[number];
  * |------------------------------|------------|------------------------------------------------|
  * | parallel-split-join          | yes        | PR-3c-2 (drive-parity-parallel.test.ts)        |
  * | rework-edge (incl. onRefuse) | yes        | PR-3c-3 (drive-parity-rework.test.ts)          |
- * | stage-deadline               | yes        | PR-3c-4 (drive-parity-deadline.test.ts)        |
- * | sub-shape                    | yes        | PR-3c-5 (drive-parity-sub-shape.test.ts)       |
+ * | stage-deadline               | no         | implemented and parity-proven in PR-3c-4       |
+ * | sub-shape                    | no         | implemented and parity-proven in PR-3c-5       |
  *
- * Every other construct has been executable since Phase 3b. Since PR-3c-5 no
- * construct is off: setting one back to false is the kill switch (§5 of the
- * Phase 3c design), never a second runtime flag.
+ * Every other construct has been executable since Phase 3b.
+ *
+ * WHY STAGE DEADLINE AND SUB-SHAPE ARE OFF (founder/coordinator decision
+ * 2026-10-07): a construct whose semantics are known to be wrong for real use
+ * is not enabled. A graph room's drive marking belongs to one cycle, and a
+ * shape's cycle key is the tick's UTC date (projectWorkShapeCycleBoundary), so
+ * every graph room restarts its marking at each cycle boundary. A stage
+ * deadline of a day or more therefore never comes due, and a sub-shape child
+ * still running at midnight is abandoned while its parent restarts. Both
+ * constructs are fully implemented and proved equal to the reference
+ * interpreter (drive-parity-deadline.test.ts, drive-parity-sub-shape.test.ts,
+ * which run without reading this table, and the runner suites, which use a
+ * test-only table with them on). Their flags turn on only once BI-086DC167
+ * (graph rooms reset their marking at every cycle boundary) is fixed. Until
+ * then the compiler refuses them with E-NOT-EXECUTABLE (D-9 and D-10 still
+ * check a sub-shape document) and a room whose shape uses one pauses with
+ * construct_not_executable.
  */
 export const CONSTRUCT_EXECUTABLE: Readonly<Record<GppConstruct, boolean>> = Object.freeze({
   trigger: true,
@@ -84,9 +98,9 @@ export const CONSTRUCT_EXECUTABLE: Readonly<Record<GppConstruct, boolean>> = Obj
   stop: true,
   "escalation-boundary": true,
   "review-point": true,
-  "stage-deadline": true,
+  "stage-deadline": false,
   "parallel-split-join": true,
   "rework-edge": true,
-  "sub-shape": true,
+  "sub-shape": false,
   "environment-boundary": true,
 });

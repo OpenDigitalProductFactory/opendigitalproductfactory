@@ -15,6 +15,7 @@ status: draft
 | First consumer | BI-580A970A (EP-MBSE-WORKROOM-SPINE): the R2D reference room, a linear spine that forks at Deploy, one branch per target |
 | Normative owner | [GPP](../../architecture/gated-permissions-process.md) §7, §12.4 |
 | Verified against | `origin/main` at `879b344fa1`. Review revisions re-checked on `origin/main` at `6ce2f7e445`, which adds #5977 (PR-3b-4/5). #5977 touches none of the drive files cited here. Line numbers in `work-shapes.ts`, `decompile.ts`, `emit.ts` and `work-shape-binding-diff.ts` are taken from `6ce2f7e445` wherever that is stated. |
+| Implementation status | PR-3c-1 to PR-3c-3 merged; parallel split/join and rework edges (incl. refuse routes) are executable. Stage deadline (PR-3c-4) and sub-shape (PR-3c-5) are **implemented and parity-proven, but NOT enabled**: their flags stay off until BI-086DC167 is fixed. A graph room's marking resets at every cycle boundary (the tick's UTC date), so a deadline of a day or more never fires and a running child is abandoned at midnight (decision 2026-10-07: a construct whose semantics are known to be wrong for real use is not enabled). |
 
 ## 1. Problem
 
