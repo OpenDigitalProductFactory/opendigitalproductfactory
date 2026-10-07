@@ -96,7 +96,10 @@ test('sandbox boot generates its own auth secret once, root-only, and reuses it 
     fx.resetLog();
     const second = fx.run();
     assert.equal(second.status, 0, second.stderr);
-    assert.equal(readFileSync(secretPath, 'utf8'), secret, 'a restart reuses the secret');
+    const fdAgain = openSync(secretPath, 'r');
+    let secretAgain;
+    try { secretAgain = readFileSync(fdAgain, 'utf8'); } finally { closeSync(fdAgain); }
+    assert.equal(secretAgain, secret, 'a restart reuses the secret');
     assert.equal(fx.envLog().dev, secret, 'the dev server receives the persisted secret');
   } finally { fx.cleanup(); }
 });
