@@ -17,7 +17,7 @@
 // explicitly (a `dpf worktree --bootstrap` CLI / the seed script / an opt-in env),
 // so worktree creation stays fast and convergence is a deliberate step.
 
-import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseAllowBuilds } from "../check-build-script-policy.mjs";
@@ -101,11 +101,83 @@ export function missingCompileArtifacts(worktreePath, deps = {}) {
   return missing;
 }
 
+/**
+ * Is this worktree's node_modules a symlink/junction into another tree?
+ * (BI-5DF74F0D)
+ *
+ * The guidance told every agent "never `rm -rf` node_modules — it is a junction
+ * to the root clone". That is true of the Windows shape and false of a worktree
+ * whose node_modules is its own directory, which is what pnpm writes here on
+ * macOS and Linux. Stated unconditionally it removed the only remedy that works
+ * when the build record is unreadable, leaving an agent with no legal move. So
+ * the warning is now a function of the shape on disk, not of the platform the
+ * guidance was written on.
+ *
+ * Unknown shape reads as a link: the warning is the safe default.
+ *
+ * @param {string} worktreePath
+ * @param {{ lstat?: (p: string) => { isSymbolicLink(): boolean } }} [deps]
+ */
+export function nodeModulesIsLinked(worktreePath, deps = {}) {
+  const lstat = deps.lstat ?? ((p) => lstatSync(p));
+  try {
+    return lstat(`${norm(worktreePath)}/node_modules`).isSymbolicLink();
+  } catch (cause) {
+    return cause?.code !== "ENOENT";
+  }
+}
+
+/**
+ * Is this node_modules older than the lockfile that describes it? (BI-5DF74F0D)
+ *
+ * `pnpm ls --depth -1` lists the workspace packages; it does NOT verify that
+ * every dependency the lockfile declares is actually linked. So a node_modules
+ * that is present and internally consistent but STALE relative to the current
+ * base passed the probe, `bootstrapWorktreeDeps` skipped the install it was
+ * about to need, and the worktree reported compile-ready and then failed to
+ * typecheck on a dependency it had never installed. Observed three times in one
+ * session on 2026-10-02, from two different base commits: maplibre-gl + pmtiles
+ * (added by #5906), then the @dpf/integration-shared workspace package.
+ *
+ * mtime comparison is the cheap, exact test for that: pnpm rewrites
+ * node_modules/.modules.yaml on every install that changes the tree, so a
+ * lockfile newer than it means the base gained dependencies this install has
+ * never seen. Two stat calls, no I/O over the tree.
+ *
+ * Absent .modules.yaml is NOT reported stale here — that is the separate
+ * build_record_unreadable state, which has its own reason string.
+ *
+ * @param {string} worktreePath
+ * @param {{ stat?: (p: string) => { mtimeMs: number } }} [deps]
+ * @returns {boolean} true when an install is owed
+ */
+export function installPredatesLockfile(worktreePath, deps = {}) {
+  const stat = deps.stat ?? ((p) => statSync(p));
+  const wt = norm(worktreePath);
+  const mtime = (p) => {
+    try {
+      return stat(p).mtimeMs;
+    } catch {
+      return null;
+    }
+  };
+  const lockfile = mtime(`${wt}/pnpm-lock.yaml`);
+  const modules = mtime(`${wt}/node_modules/.modules.yaml`);
+  if (lockfile === null || modules === null) return false;
+  return lockfile > modules;
+}
+
 /** Operator-readable reason for the readiness outcome (written to the marker). */
-export function readinessReason({ hasNodeModules, depProbeOk, gateOk, staleWorkspaceLinks }) {
+export function readinessReason({
+  hasNodeModules, depProbeOk, gateOk, staleWorkspaceLinks, installStale,
+}) {
   if (!hasNodeModules) return "node_modules_missing";
   if (!depProbeOk) return "dependency_resolution_failed";
   if (staleWorkspaceLinks && staleWorkspaceLinks.length > 0) return "workspace_links_stale";
+  if (installStale) {
+    return "install_predates_lockfile:the base added dependencies since this node_modules was written; "
+      + "one managed install reconciles it";
+  }
   if (!gateOk) return "cheap_gate_failed";
   return "managed_bootstrap_ok";
 }
@@ -134,10 +206,6 @@ function executeCommand(cmd, args, cwd, opts = {}) {
       stderr: String(cause?.stderr ?? ""),
     };
   }
-}
-
-function run(cmd, args, cwd, opts = {}) {
-  return (opts.execute ?? executeCommand)(cmd, args, cwd, opts).ok;
 }
 
 // `pnpm ignored-builds` prints several sections. Only the "Automatically
@@ -350,7 +418,15 @@ export function probeWorktreeReadiness(worktreePath, opts = {}) {
   const linkCheck = depProbeOk
     ? checkWorkspaceLinksResolveLocally(worktreePath, opts.linkCheckDeps)
     : { ok: true, stale: [] };
-  const gateOk = depProbeOk && ignoredBuilds.ok && linkCheck.ok && missing.length === 0;
+  const installStale = hasNodeModules && installPredatesLockfile(worktreePath, opts.staleDeps);
+  // BI-5DF74F0D: an install that legitimately linked nothing new never reaches
+  // pnpm's build phase, so it writes no `ignoredBuilds` key — indistinguishable
+  // from a node_modules pnpm did not write. When THIS call just completed a
+  // successful install, the missing record is the former, and failing on it made
+  // the documented `--force` recovery unable to recover.
+  const buildRecordOk = ignoredBuilds.ok
+    || (opts.buildRecordOptional === true && ignoredBuilds.indeterminate && ignoredBuilds.packages.length === 0);
+  const gateOk = depProbeOk && buildRecordOk && linkCheck.ok && missing.length === 0 && !installStale;
   return {
     status: classifyReadiness({ hasNodeModules, depProbeOk, gateOk }),
     reason: !ignoredBuilds.ok && ignoredBuilds.packages.length > 0
@@ -358,17 +434,29 @@ export function probeWorktreeReadiness(worktreePath, opts = {}) {
       // BI-5318366C: name the state and its remedy. This is not a dependency
       // anyone must classify — the package manager has no build record to read,
       // and a clean install writes one.
-      : ignoredBuilds.indeterminate
+      // A stale install is reported AHEAD of an unreadable build record when
+      // both hold: one managed install reconciles it and is now run
+      // automatically, whereas build_record_unreadable sends the reader to
+      // remove-and-reinstall. Observed on a four-day-stale tree: the heavier
+      // remedy was printed for a condition the cheaper one already fixes.
+      : installStale
+      ? readinessReason({
+        hasNodeModules, depProbeOk, gateOk, staleWorkspaceLinks: linkCheck.stale, installStale,
+      })
+      : ignoredBuilds.indeterminate && !buildRecordOk
       ? "build_record_unreadable:the package manager kept no build record for this node_modules; "
         + "remove node_modules at the workspace root and install again to write one"
       : missing.length > 0 && hasNodeModules && depProbeOk && linkCheck.ok
       ? `missing_compile_artifacts:${missing.map((m) => m.path).join(",")}`
-      : readinessReason({ hasNodeModules, depProbeOk, gateOk, staleWorkspaceLinks: linkCheck.stale }),
+      : readinessReason({
+        hasNodeModules, depProbeOk, gateOk, staleWorkspaceLinks: linkCheck.stale, installStale,
+      }),
     missing,
     checks: {
       hasNodeModules,
       depProbeOk,
       gateOk,
+      installStale,
       packageManagerVersion: runner?.pinnedVersion ?? runner?.currentVersion ?? null,
       ignoredBuilds: ignoredBuilds.packages,
       dependencyPolicyReviewKeys,
@@ -437,8 +525,9 @@ export function diagnoseUnprovisionedFailure(outputText, readiness) {
  * @param {string} worktreePath
  * @returns {string[]} empty when the worktree is compile-ready (say nothing)
  */
-export function formatReadinessBanner(readiness, worktreePath) {
+export function formatReadinessBanner(readiness, worktreePath, deps = {}) {
   if (readiness.status === "compile-ready") return [];
+  const linked = nodeModulesIsLinked(worktreePath, deps);
   const lines = [
     `Worktree verification-readiness: SOURCE-ONLY (${readiness.reason})`,
     `  ${worktreePath}`,
@@ -449,7 +538,11 @@ export function formatReadinessBanner(readiness, worktreePath) {
   lines.push(
     "  Do NOT report failures from those commands as code defects, and do not claim a gate you cannot run.",
     "  Compile-ready costs one managed install: node scripts/lib/bootstrap-worktree-deps.mjs .",
-    "  (Never `pnpm install` bare in a worktree and never `rm -rf` node_modules — it is a junction to the root clone.)",
+    linked
+      ? "  (Never `pnpm install` bare here, and never `rm -rf` node_modules — it is a junction/symlink into"
+        + " another tree, so removing it would empty the target.)"
+      : "  (Never `pnpm install` bare here. This node_modules is this worktree's own directory, so if a reason"
+        + " above tells you to remove and reinstall it, that is safe to do.)",
   );
   return lines;
 }
@@ -492,6 +585,7 @@ export function managedInstallArgs(worktreePath, deps = {}) {
 export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
   const pkgMgr = opts.packageManager ?? "pnpm";
   const execute = opts.execute ?? executeCommand;
+  let installed = false;
   try {
     // Gate the install on MEASURED READINESS, not on the bare existence of
     // node_modules (BI-705AE7E3). This function's own header says presence is
@@ -530,8 +624,12 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
         const { ok: _ok, ...failure } = install;
         return { status: "source-only", reason: "managed_install_failed", failure: { phase: "install", ...failure } };
       }
+      installed = true;
     }
-    return probeWorktreeReadiness(worktreePath, opts);
+    // BI-5DF74F0D: after a successful install, a missing build record means pnpm
+    // linked nothing new — not that this node_modules is foreign. Forgiving it
+    // only on this path keeps the untouched-tree probe strict.
+    return probeWorktreeReadiness(worktreePath, installed ? { ...opts, buildRecordOptional: true } : opts);
   } catch {
     return { status: "source-only", reason: "bootstrap_threw" };
   }

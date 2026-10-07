@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { worktreeContextFromGit } from "../pregate-status.mjs";
+import { readLocalCiGateState, writeLocalCiGateState } from "./local-ci-gate-state.mjs";
 
 import {
   classifySlotRecord,
@@ -66,6 +67,82 @@ function passingState(overrides = {}) {
     ...overrides,
   };
 }
+
+test("atomic documentation evidence survives a previous sandbox candidate without erasing it", () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-doc-gate-contract-"));
+  try {
+    const file = join(directory, "state.json");
+    const metadata = { candidateSha: OLD, execution: { status: "failed", failedCommand: "old diagnostic" } };
+    writeLocalCiGateState(file, {
+      ...passingState(), evidenceId: "EXT-DOC", leaseId: "", leaseEvents: [],
+      executionLane: "documentation",
+      producerEvidence: {
+        schemaVersion: 1, producer: "documentation-evidence-lane",
+        candidateSha: HEAD, candidateBranch: "claude/topic", evidenceRecordId: "EXT-DOC",
+        headTreeSha: "c".repeat(40), integrationTreeSha: "d".repeat(40), evidencePlanDigest: "e".repeat(64),
+      },
+    });
+    const result = classifySlotRecord({ state: readLocalCiGateState(file), metadata, headSha: HEAD, headBranch: "claude/topic", now: NOW });
+    assert.equal(result.verdict, "PASS");
+    assert.equal(result.candidateSha, HEAD);
+    assert.equal(metadata.execution.failedCommand, "old diagnostic");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+function documentationState() {
+  return passingState({
+    executionLane: "documentation", leaseId: "",
+    producerEvidence: {
+      schemaVersion: 1, producer: "documentation-evidence-lane", candidateSha: HEAD,
+      candidateBranch: "claude/topic", evidenceRecordId: "EXT-1",
+      headTreeSha: "c".repeat(40), integrationTreeSha: "d".repeat(40), evidencePlanDigest: "e".repeat(64),
+    },
+  });
+}
+
+test("documentation evidence rejects partial, unsupported and mismatched bindings even without sandbox metadata", () => {
+  const changes = [
+    (s) => { delete s.producerEvidence; },
+    (s) => { s.producerEvidence = null; },
+    (s) => { s.producerEvidence.schemaVersion = 2; },
+    (s) => { s.producerEvidence.producer = "unknown"; },
+    (s) => { s.producerEvidence.candidateSha = OLD; },
+    (s) => { s.producerEvidence.candidateBranch = "other"; },
+    (s) => { s.producerEvidence.evidenceRecordId = "other"; },
+    (s) => { s.evidenceRecordId = ""; s.producerEvidence.evidenceRecordId = ""; },
+    (s) => { s.producerEvidence.headTreeSha = ""; },
+    (s) => { s.producerEvidence.integrationTreeSha = ""; },
+    (s) => { s.producerEvidence.evidencePlanDigest = ""; },
+    (s) => { s.expiresAt = "invalid"; },
+    (s) => { s.recordedAt = "invalid"; },
+    (s) => { s.status = "running"; },
+    (s) => { s.leaseId = "unrelated-sandbox"; },
+    (s) => { s.executionLane = "unknown"; },
+    (s) => { delete s.executionLane; },
+  ];
+  for (const change of changes) {
+    const state = documentationState();
+    change(state);
+    assert.notEqual(classifySlotRecord({ state, metadata: null, headSha: HEAD, headBranch: "claude/topic", now: NOW }).verdict, "PASS", String(change));
+  }
+});
+
+test("documentation evidence retains expiry, source, pending, failure and legacy protections", () => {
+  for (const [overrides, expected] of [
+    [{ expiresAt: "2026-08-04T11:00:00.000Z" }, "STALE"],
+    [{ sha: OLD }, "STALE"],
+    [{ branch: "other" }, "STALE"],
+    [{ evidencePending: true }, "PENDING"],
+    [{ gatePassed: false, status: "failed" }, "FAIL"],
+    [{ gatePassed: false, status: "running" }, "INCONCLUSIVE"],
+    [{ testStub: true }, "INCONCLUSIVE"],
+    [{ executionLane: undefined, producerEvidence: undefined, leaseEvents: [{ type: "documentation-lane" }] }, "INCONCLUSIVE"],
+  ]) {
+    assert.equal(classifySlotRecord({ state: { ...documentationState(), ...overrides }, metadata: { candidateSha: HEAD }, headSha: HEAD, headBranch: "claude/topic", now: NOW }).verdict, expected);
+  }
+});
 
 test("PASS requires a passing record bound to THIS head", () => {
   const r = classifySlotRecord({

@@ -3,7 +3,6 @@
 import {
   BaseEdge,
   getBezierPath,
-  MarkerType,
   type EdgeProps,
 } from "@xyflow/react";
 import type { NodeStatus } from "@/lib/build/process-graph-builder";

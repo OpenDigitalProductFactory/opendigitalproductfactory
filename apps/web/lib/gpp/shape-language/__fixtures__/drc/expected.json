@@ -27,6 +27,10 @@
     "rule": "D-1",
     "elementId": "stage:a"
   },
+  "d-10-sub-shape-unresolved.gpp.json": {
+    "rule": "D-10",
+    "elementId": "stage:a"
+  },
   "d-2-shadow-gate-into-oai.gpp.json": {
     "rule": "D-2",
     "elementId": "gate:a"
@@ -55,20 +59,9 @@
     "rule": "D-8",
     "elementId": "gate:a"
   },
-  "e-not-executable-parallel-split.gpp.json": {
-    "rule": "E-NOT-EXECUTABLE",
-    "elementId": "node:p",
-    "construct": "parallel-split-join"
-  },
-  "e-not-executable-refuse-edge.gpp.json": {
-    "rule": "E-NOT-EXECUTABLE",
-    "elementId": "gate:a",
-    "construct": "rework-edge"
-  },
-  "e-not-executable-rework-edge.gpp.json": {
-    "rule": "E-NOT-EXECUTABLE",
-    "elementId": "edge:b->a",
-    "construct": "rework-edge"
+  "d-9-sub-shape-widening.gpp.json": {
+    "rule": "D-9",
+    "elementId": "stage:a"
   },
   "e-not-executable-stage-deadline.gpp.json": {
     "rule": "E-NOT-EXECUTABLE",

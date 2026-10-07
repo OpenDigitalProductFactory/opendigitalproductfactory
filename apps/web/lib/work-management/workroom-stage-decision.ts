@@ -24,35 +24,83 @@
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { isRecord } from "@/lib/shared/coerce";
 import type { EffectiveHumanAccountability } from "./human-accountability";
+import { declaresRefuseRoute } from "./work-shape-flow-graph";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 
 /** Evidence kinds that record a human decision. A governed stage must declare one. */
 export const STAGE_DECISION_EVIDENCE_KINDS = ["decision-record"] as const;
 
-export const STAGE_DECISION_CHOICES = ["accept", "patch", "defer"] as const;
+/**
+ * `refuse` (GPP Phase 3c PR-3c-3, BI-8875C9DF; design §6.2) is offered only on
+ * a stage whose gate declares a refuse route, labelled "Send back": the drive
+ * then routes the token back (or to the declared stop). No registry stage
+ * declares one yet, so no existing stage offers it.
+ */
+export const STAGE_DECISION_CHOICES = ["accept", "patch", "defer", "refuse"] as const;
 export type StageDecisionChoice = (typeof STAGE_DECISION_CHOICES)[number];
 
 export const STAGE_DECISION_CHOICE_LABEL: Record<StageDecisionChoice, string> = {
   accept: "Accept",
   patch: "Patch",
   defer: "Defer",
+  refuse: "Send back",
 };
 
 export type StageDecisionDecidedBy = "role-holder" | "accountable-owner-fallback";
 
 export type PendingGovernedDecision = { stageKey: string; principalRef: string | null };
 
+/**
+ * Attention reasons a person clears by recording a stage decision:
+ * `governed_decision`, and `gate_refused` (PR-3c-3), a refused stage whose
+ * route is spent, which a new decision on that stage clears.
+ */
+const DECISION_ATTENTION_REASONS: readonly unknown[] = ["governed_decision", "gate_refused"];
+
 /** The governed decision the room's drive last asked for, or null. */
 export function readPendingGovernedDecision(workspaceState: unknown): PendingGovernedDecision | null {
   const drive = isRecord(workspaceState) && isRecord(workspaceState.workroomDrive)
     ? workspaceState.workroomDrive : null;
   const pending = isRecord(drive?.pendingAttention) ? drive.pendingAttention : null;
-  if (!pending || pending.reason !== "governed_decision") return null;
+  if (!pending || !DECISION_ATTENTION_REASONS.includes(pending.reason)) return null;
   if (typeof pending.stageKey !== "string" || !pending.stageKey.trim()) return null;
   return {
     stageKey: pending.stageKey,
     principalRef: typeof pending.principalRef === "string" && pending.principalRef.trim() ? pending.principalRef : null,
   };
+}
+
+function pendingGovernedDecisionFrom(entry: unknown): PendingGovernedDecision | null {
+  const pending = isRecord(entry) ? entry : null;
+  if (!pending || !DECISION_ATTENTION_REASONS.includes(pending.reason)) return null;
+  if (typeof pending.stageKey !== "string" || !pending.stageKey.trim()) return null;
+  return {
+    stageKey: pending.stageKey,
+    principalRef: typeof pending.principalRef === "string" && pending.principalRef.trim() ? pending.principalRef : null,
+  };
+}
+
+/**
+ * Every governed decision the room's drive is waiting on (GPP Phase 3c
+ * PR-3c-2, design §4.3 "Attention"). A graph room records one
+ * `pendingAttentions` entry per waiting stage, so several parallel branches
+ * can wait on people at once; a sequential room has no such list, and this
+ * falls back to the single `pendingAttention`, exactly as
+ * readPendingGovernedDecision reads it.
+ */
+export function readPendingGovernedDecisions(workspaceState: unknown): PendingGovernedDecision[] {
+  const drive = isRecord(workspaceState) && isRecord(workspaceState.workroomDrive)
+    ? workspaceState.workroomDrive : null;
+  if (!Array.isArray(drive?.pendingAttentions)) {
+    const single = readPendingGovernedDecision(workspaceState);
+    return single ? [single] : [];
+  }
+  const out: PendingGovernedDecision[] = [];
+  for (const entry of drive.pendingAttentions) {
+    const pending = pendingGovernedDecisionFrom(entry);
+    if (pending && !out.some((other) => other.stageKey === pending.stageKey)) out.push(pending);
+  }
+  return out;
 }
 
 export type GovernedDecisionStage = {
@@ -72,9 +120,12 @@ export type GovernedDecisionStage = {
  * offered; patch only when the condition names it (dependency-advisory-watch:
  * "accepts, patches, or defers with a date"). Other governed stages use other
  * verbs; they get the generic accept/defer rather than an invented vocabulary.
+ * `refuse` ("Send back") is appended only when the stage's gate declares a
+ * refuse route (PR-3c-3); without one the result is exactly as before.
  */
-export function stageDecisionChoices(condition: string): StageDecisionChoice[] {
-  return /\bpatch/i.test(condition) ? ["accept", "patch", "defer"] : ["accept", "defer"];
+export function stageDecisionChoices(condition: string, hasRefuseRoute = false): StageDecisionChoice[] {
+  const choices: StageDecisionChoice[] = /\bpatch/i.test(condition) ? ["accept", "patch", "defer"] : ["accept", "defer"];
+  return hasRefuseRoute ? [...choices, "refuse"] : choices;
 }
 
 /** The governed stage a human can decide, or null when the shape does not make it one. */
@@ -96,7 +147,7 @@ export function governedDecisionStage(
     decisionScope: stage.advance.decisionScope ?? null,
     principalRef: stage.accountablePrincipalRef,
     evidenceKind,
-    choices: stageDecisionChoices(stage.advance.condition),
+    choices: stageDecisionChoices(stage.advance.condition, declaresRefuseRoute(definition, stage.key)),
     priorStages: definition.stages.slice(0, index).map((prior) => ({ key: prior.key, title: prior.title })),
   };
 }
@@ -174,7 +225,7 @@ export function buildStageDecisionEvidence(input: {
   const { stage, decision } = input;
   const verb = decision.choice === "defer"
     ? `deferred until ${decision.deferUntil}`
-    : decision.choice === "patch" ? "chose to patch" : "accepted";
+    : decision.choice === "patch" ? "chose to patch" : decision.choice === "refuse" ? "sent back" : "accepted";
   return {
     kind: stage.evidenceKind,
     stageKey: stage.key,

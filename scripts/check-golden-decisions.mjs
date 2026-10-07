@@ -24,6 +24,7 @@
 // corpus, so any behavioral divergence surfaces as one going red.
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { gitText } from "./lib/git.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -219,7 +220,7 @@ export function runCheck(dir = PRINCIPLES_DIR, { commandments } = {}) {
 const invokedDirectly = process.argv[1] && process.argv[1].replace(/\\/g, "/").endsWith("check-golden-decisions.mjs");
 if (invokedDirectly) {
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
-  const { values } = utilParseArgs({ args: process.argv.slice(2), strict: false, allowPositionals: true, options: { "merge-with": { type: "string" } } });
+  const { values } = utilParseArgs({ args: scriptArgv(), strict: false, allowPositionals: true, options: { "merge-with": { type: "string" } } });
   const mergeWithGiven = values["merge-with"] !== undefined;
   const mergeWith = !mergeWithGiven ? null : typeof values["merge-with"] === "string" ? values["merge-with"] : undefined;
   if (mergeWithGiven && !mergeWith) {

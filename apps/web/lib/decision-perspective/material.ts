@@ -260,6 +260,7 @@ function toDecisionPerspectiveProfile(row: DbDecisionPerspectiveProfile): Decisi
       allowRecommendation: autonomyPolicy.allowRecommendation ?? true,
       allowArbitration: autonomyPolicy.allowArbitration ?? false,
       maxRiskForArbitration: autonomyPolicy.maxRiskForArbitration ?? "low",
+      maxRiskForRecommendation: autonomyPolicy.maxRiskForRecommendation ?? "medium",
       minimumConfidenceForRecommendation: autonomyPolicy.minimumConfidenceForRecommendation ?? 0.55,
       minimumConfidenceForArbitration: autonomyPolicy.minimumConfidenceForArbitration ?? 0.9,
     },

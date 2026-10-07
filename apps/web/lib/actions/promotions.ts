@@ -2,13 +2,13 @@
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { requireCapability } from "@/lib/actions/shared/guards";
+import { requireCapability, requireCapabilityContext } from "@/lib/actions/shared/guards";
 import { prisma, type Prisma } from "@dpf/db";
 import { slugify } from "@/lib/shared/slugify";
 import { revalidatePath } from "next/cache";
 import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
-import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
+import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
 import { resolveSelfUpgradeStatusTarget } from "@/lib/self-upgrade/status-target";
@@ -21,6 +21,8 @@ import { getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-stor
 import { resolveRecoveryPredecessor } from "@/lib/self-upgrade/recovery-predecessor";
 import { admitSelfUpgrade, resolveCurrentSelfUpgradeTarget } from "@/lib/self-upgrade/admission";
 import { selectSelfUpgradeAdmissionTarget } from "@/lib/self-upgrade/target-admission";
+import { operatorRunTrigger, portalRequesterKind } from "@/lib/self-upgrade/upgrade-timing";
+import { requestUpgradeAsPortalAgent } from "@/lib/self-upgrade/portal-agent-request";
 import {
   getCurrentImpactSummaryId,
   loadRunImpactDigest,
@@ -31,18 +33,10 @@ import type {
   RunImpactDigest,
   UpgradeImpactSummary,
 } from "@/lib/self-upgrade/impact/types";
-import {
-  isStoreOpen,
-  isUpgradeWindowOpen,
-  nextUpgradeWindowOpen,
-} from "@/lib/self-upgrade/window";
-import {
-  resolveAutoUpgradeWindow,
-  nextAutoWindowOpen,
-  describeWindows,
-} from "@/lib/self-upgrade/auto-window";
+import { isStoreOpen } from "@/lib/self-upgrade/window";
+import { describeWindows } from "@/lib/self-upgrade/auto-window";
+import { resolveEffectiveUpgradeWindow } from "@/lib/self-upgrade/effective-window";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
-import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import {
   getQuiescenceActivity,
@@ -366,7 +360,7 @@ export async function rejectPromotion(promotionId: string, rationale: string) {
 }
 
 export async function markDeployed(promotionId: string, deploymentLog?: string) {
-  const userId = await requireOpsAccess();
+  await requireOpsAccess();
   await prisma.changePromotion.update({
     where: { promotionId },
     data: {
@@ -629,59 +623,25 @@ export async function getSelfUpgradeStatus() {
   // truth: operating hours). inMaintenanceWindow = "upgrades may run now" = store
   // closed (or inside an explicit override / auto-overnight window). storeOpen
   // lets the panel explain WHY truthfully.
-  const { schedule, timezone, timezoneKnown, lowTrafficWindows } =
-    await resolveOperatingScheduleForSystem();
-  const hasExplicitWindows = config.maintenanceWindows.length > 0;
-  const storeOpen = isStoreOpen(schedule, new Date(), timezone);
+  // Precedence (explicit > auto-overnight for a 24/7 store with a known
+  // timezone > operating hours) lives in effective-window.ts, shared with the
+  // scheduled gate and the agent request path (BI-2128872C), so the window the
+  // panel shows is the one a deferred request is promised. windowSource tells
+  // the panel which model is in play; "needs-timezone" is the only state that
+  // asks the operator for input. (BI-A6382FB9)
   const now = new Date();
-  // A 24/7 store has no derived "closed" window. With a known timezone we
-  // auto-pick a low-traffic overnight window (observed trough if available, else
-  // ~02:00-04:00 local); with no known timezone we surface a prompt instead of
-  // guessing. Explicit operator windows still win. (BI-A6382FB9)
-  const auto = hasExplicitWindows
-    ? null
-    : resolveAutoUpgradeWindow({ schedule, timeZone: timezone, timezoneKnown, lowTrafficWindows, now });
-  const effectiveWindows = hasExplicitWindows
-    ? config.maintenanceWindows
-    : auto?.kind === "auto-overnight"
-      ? auto.windows
-      : undefined;
-  const inMaintenanceWindow = isUpgradeWindowOpen({
-    explicitWindows: effectiveWindows,
-    schedule,
-    timeZone: timezone,
-  });
-  // The window is always defined now (operating-hours or auto-overnight), so it
-  // is never "unconfigured". windowSource tells the panel which model is in play;
-  // "needs-timezone" is the only state that asks the operator for input.
+  const effectiveWindow = await resolveEffectiveUpgradeWindow({ config, now });
+  const { schedule, timezone } = effectiveWindow;
+  const storeOpen = isStoreOpen(schedule, now, timezone);
+  const inMaintenanceWindow = effectiveWindow.open;
   const windowConfigured = true;
-  const windowSource: "explicit" | "operating-hours" | "auto-overnight" | "needs-timezone" =
-    hasExplicitWindows
-      ? "explicit"
-      : auto?.kind === "auto-overnight"
-        ? "auto-overnight"
-        : auto?.kind === "needs-timezone"
-          ? "needs-timezone"
-          : "operating-hours";
+  const windowSource = effectiveWindow.source;
   // Friendly "2:00 AM-4:00 AM" summary for the auto-overnight schedule note (display only).
   const autoWindowSummary =
-    auto?.kind === "auto-overnight" ? describeWindows(auto.windows) : null;
+    windowSource === "auto-overnight" && effectiveWindow.windows ? describeWindows(effectiveWindow.windows) : null;
   // Next time the upgrade window opens, so the panel can show WHEN scheduled
-  // upgrades will next be eligible. Explicit + auto-overnight windows use their
-  // configured/derived start; the operating-hours model derives it from the next
-  // store-close transition (null while already in-window, or for needs-timezone,
-  // where the panel asks for a timezone instead).
-  const nextWindowStart = hasExplicitWindows
-    ? nextMaintenanceWindowStart(config, now, timezone)?.toISOString() ?? null
-    : auto?.kind === "auto-overnight"
-      ? inMaintenanceWindow
-        ? null
-        : nextAutoWindowOpen(auto.windows, now, timezone)?.toISOString() ?? null
-      : auto?.kind === "needs-timezone"
-        ? null
-        : inMaintenanceWindow
-          ? null
-          : nextUpgradeWindowOpen(schedule, now, timezone)?.toISOString() ?? null;
+  // upgrades will next be eligible (null while in-window, or for needs-timezone).
+  const nextWindowStart = effectiveWindow.nextWindowStart?.toISOString() ?? null;
   const nextWindowStartDate = nextWindowStart ? new Date(nextWindowStart) : null;
   const nextScheduledCheckAt = computeNextScheduledUpgradeCheckAt({
     enabled: support.enabled,
@@ -779,8 +739,9 @@ export async function triggerSelfUpgrade(opts?: {
   dryRun?: boolean; force?: boolean;
   targetBinding?: string;
 }) {
-  const userId = await requireOpsAccess();
-  const triggeredBy = `manual:${userId}`;
+  const { userId, email } = await requireCapabilityContext("view_operations");
+  // BI-2128872C: an agent-driven browser session is routine, never an override.
+  if (!opts?.dryRun && portalRequesterKind(email) === "agent") return await requestUpgradeAsPortalAgent(`manual:${userId}`);
   const config = await getSelfUpgradeConfig();
   const support = await readSelfUpgradeSupport(config.enabled);
   if (!support.supported) {
@@ -794,8 +755,10 @@ export async function triggerSelfUpgrade(opts?: {
     if (!support.enabled) {
       return { queued: false, reason: "disabled" } as const;
     }
-    // Manual triggers skip the routine window; force is only for an emergency drain override.
+    // Manual triggers skip the routine window (the trigger records the bypass);
+    // force is only for an emergency drain override.
   }
+  const triggeredBy = opts?.dryRun ? `manual:${userId}` : await operatorRunTrigger(`manual:${userId}`, config);
   const latestRun = await getLatestRun();
   if (latestRun?.status === "running") {
     return { queued: false, reason: "already-running", runId: latestRun.runId } as const;

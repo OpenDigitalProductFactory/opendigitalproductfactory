@@ -4,7 +4,6 @@
 
 import { createHash } from "crypto";
 import {
-  FEDERATION_RELATIONSHIP_PRESETS,
   isFederationRelationshipPreset,
   type FederationRelationshipPreset,
 } from "./federation-link-types";

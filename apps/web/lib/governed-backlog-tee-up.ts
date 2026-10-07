@@ -17,10 +17,11 @@ import {
   shouldAutoApproveGovernedDraft,
   type AutonomousTeeUpStart,
 } from "@/lib/build/autonomous-tee-up";
+import { rankForStart, type RankedForStart, type StartRankingContext } from "@/lib/demand/start-ranking";
+import { loadStartRankingContext } from "@/lib/demand/start-ranking-context";
 export { shouldAutoApproveGovernedDraft } from "@/lib/build/autonomous-tee-up";
 
 const ELIGIBLE_EFFORT_SIZES = new Set(["small", "medium", "large"]);
-const ACTIVE_EPIC_STATUSES = new Set(["open", "in-progress"]);
 const DEFAULT_DAILY_CAP = 3;
 
 /** Structured Fix Context fields carried on FeatureBrief.fixContext for kind=fix. */
@@ -135,6 +136,10 @@ export type GovernedBacklogTeeUpCandidate = {
   epicId: string | null;
   createdAt: Date;
   epic: { status: string } | null;
+  /** Demand ranking inputs (BI-78540D2C); null = not scored / no bucket. */
+  demandScore?: number | null;
+  demandScoreFramework?: string | null;
+  investmentBucket?: string | null;
 };
 
 type GovernedBacklogConfig = {
@@ -246,28 +251,21 @@ function isEligibleCandidate(item: GovernedBacklogTeeUpCandidate): boolean {
   );
 }
 
-function candidatePriority(item: GovernedBacklogTeeUpCandidate): number {
-  return ACTIVE_EPIC_STATUSES.has(item.epic?.status ?? "") ? 0 : 1;
+/** Eligible candidates in start order, by the shared demand ranking (BI-78540D2C). */
+export function rankGovernedBacklogTeeUpCandidates(
+  items: GovernedBacklogTeeUpCandidate[],
+  limit: number,
+  context?: StartRankingContext,
+): RankedForStart<GovernedBacklogTeeUpCandidate>[] {
+  return rankForStart(items.filter(isEligibleCandidate), limit, context);
 }
 
 export function selectGovernedBacklogTeeUpCandidates(
   items: GovernedBacklogTeeUpCandidate[],
   limit: number,
+  context?: StartRankingContext,
 ): GovernedBacklogTeeUpCandidate[] {
-  if (limit <= 0) return [];
-
-  return items
-    .filter(isEligibleCandidate)
-    .sort((left, right) => {
-      const priorityDiff = candidatePriority(left) - candidatePriority(right);
-      if (priorityDiff !== 0) return priorityDiff;
-
-      const createdAtDiff = left.createdAt.getTime() - right.createdAt.getTime();
-      if (createdAtDiff !== 0) return createdAtDiff;
-
-      return left.itemId.localeCompare(right.itemId);
-    })
-    .slice(0, limit);
+  return rankGovernedBacklogTeeUpCandidates(items, limit, context).map((entry) => entry.item);
 }
 
 export async function promoteBacklogItemToBuildDraft(
@@ -660,6 +658,7 @@ export async function runGovernedBacklogTeeUp(input: {
     select: {
       governedBacklogEnabled: true,
       backlogTeeUpDailyCap: true,
+      demandBucketTargets: true,
     },
   });
 
@@ -685,7 +684,6 @@ export async function runGovernedBacklogTeeUp(input: {
       // Exclude items already being delivered by a decomposition Epic (BI-1D0CA7A0).
       activeEpicId: null,
     },
-    orderBy: { createdAt: "asc" },
     select: {
       id: true,
       itemId: true,
@@ -701,6 +699,9 @@ export async function runGovernedBacklogTeeUp(input: {
       portfolioId: true,
       epicId: true,
       createdAt: true,
+      demandScore: true,
+      demandScoreFramework: true,
+      investmentBucket: true,
       epic: {
         select: {
           status: true,
@@ -709,13 +710,13 @@ export async function runGovernedBacklogTeeUp(input: {
     },
   });
 
-  const selected = selectGovernedBacklogTeeUpCandidates(items, requestedLimit);
+  const selected = rankGovernedBacklogTeeUpCandidates(items, requestedLimit, await loadStartRankingContext(prisma, config));
   const builds: Array<{ backlogItemId: string; buildId: string }> = [];
   const refused: Array<{ backlogItemId: string; reason: string }> = [];
   let skippedCount = 0;
   const admit = input.admit ?? liveTeeUpAdmission(userId, trigger);
 
-  for (const item of selected) {
+  for (const { item, reason: rankingReason } of selected) {
     const admission = await admit(item.itemId);
     // Shadow mode records the refusal and lets the start proceed (WWMD DI-D83D9C13686B).
     if (blocksStart(admission)) {
@@ -723,10 +724,8 @@ export async function runGovernedBacklogTeeUp(input: {
       skippedCount += 1;
       continue;
     }
-    const activitySummary =
-      trigger === "daily"
-        ? `Created by the daily backlog tee-up from ${item.itemId}.`
-        : `Created by manual backlog processing from ${item.itemId}.`;
+    const origin = trigger === "daily" ? "the daily backlog tee-up" : trigger === "capacity-drain" ? "the capacity drain" : "manual backlog processing";
+    const activitySummary = `Created by ${origin} from ${item.itemId}. ${rankingReason}`;
 
     const autonomousStart = await resolveAutonomousTeeUpStart({
       item,

@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveDocLink, toPosix, sourcePathToPublicHref } from "../apps/web/lib/docs/doc-link-resolver.mjs";
+import { resolveDocLink, toPosix } from "../apps/web/lib/docs/doc-link-resolver.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const USER_GUIDE_DIR = path.join(REPO_ROOT, "docs", "user-guide");

@@ -14,6 +14,7 @@ status: active
 | Decision relied on | DI-035897A0F1D6 (WWMD): shape source of truth is the JSON-Schema superset of `WorkShapeDefinition`; iconography derives from BPMN on the `@xyflow/react` EA canvas; BPMN-subset and SysML v2 are export formats only. This spec does **not** reopen notation. It adds a measurement overlay and an actor-lane projection to that notation |
 | Prototype | [assets/2026-10-02-workroom-flow-map-prototype.html](assets/2026-10-02-workroom-flow-map-prototype.html) (illustrative data, labelled as such) |
 | Verified against | `origin/main` at `24e12c5601`; live install database 2026-10-02 |
+| Executable-construct flags | Parallel split/join is executable since GPP Phase 3c PR-3c-2, and rework edges (incl. refuse routes) since PR-3c-3 (BI-8875C9DF, 2026-10-06), so the map may draw both. Stage deadline (timer) and sub-shape are implemented and parity-proven but NOT enabled, pending BI-086DC167 (graph markings reset at every cycle boundary), so they are not drawn (§4 rule "Never draw what the runtime does not execute"). Each later flag flip updates this row. |
 
 ## 1. Founder direction (2026-10-02)
 

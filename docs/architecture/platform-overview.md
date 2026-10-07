@@ -407,6 +407,8 @@ flowchart TB
 
 The monitoring stack (Prometheus, Loki, Alloy, Grafana, and the metric exporters) is **capability-activated, not default**: every one of them sits behind the `runtime-deep-observability` Compose profile and starts only when the `runtime:deep-observability` capability is enabled. An installation that has not enabled it collects nothing, and the metric-backed surfaces have no source. Grafana is a further step again — the platform renders its own context-aware dashboards and delivers alerts via the Inngest poll-bridge rather than through Grafana, so the Grafana UI is for power users.
 
+On an install that was upgraded rather than freshly installed, the stack's containers are created by the self-upgrade's service-reconcile step once the capability is enabled. If one of them cannot be created, the upgrade is shown as degraded in the Upgrade Center and names the missing services. See [capability-driven runtime profiles](capability-driven-runtime-profiles.md).
+
 ⟦runtime: this paragraph previously claimed the headless stack "runs as part of the default Docker Compose stack". That was false against the Compose file and it made a real drift harder to spot — BI-5ACBAC50 found a live install whose capability state read `runtime:deep-observability: active` while no collector existed. Verify against `docker-compose.yml` profiles before restating it.⟧
 
 ```mermaid

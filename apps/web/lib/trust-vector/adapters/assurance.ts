@@ -98,7 +98,7 @@ function buildScanFreshnessDimension(summary: BomSummary, asOf: Date): TrustDime
       label: "Scan freshness",
       score: 0.7,
       weight: 2,
-      rationale: `Latest assurance scan completed ${ageDays} ${ageDays === 1 ? "day" : "days"} ago.`,
+      rationale: `Latest assurance scan completed ${ageDays} days ago.`,
       measuredAt: completedDate.toISOString(),
       evidenceRefs: [],
     };
@@ -109,7 +109,7 @@ function buildScanFreshnessDimension(summary: BomSummary, asOf: Date): TrustDime
     label: "Scan freshness",
     score: 0.2,
     weight: 2,
-    rationale: `Latest assurance scan completed ${ageDays} ${ageDays === 1 ? "day" : "days"} ago.`,
+    rationale: `Latest assurance scan completed ${ageDays} days ago.`,
     measuredAt: completedDate.toISOString(),
     evidenceRefs: [],
   };

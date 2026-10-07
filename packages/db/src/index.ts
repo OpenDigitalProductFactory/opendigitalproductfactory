@@ -31,6 +31,13 @@ export { WorkerClassification } from "../generated/client/client";
 // Document rendition kinds (BI-9D43CBEF): exported as a value so the app
 // composes from the generated enum instead of re-typing its members.
 export { DocumentRenditionKind } from "../generated/client/client";
+// Discovered external MCP tool policy (BI-8B7B2FE9): exported as values so the
+// app composes from the generated enums instead of re-typing their members.
+export {
+  McpToolEffect,
+  McpToolExecutionMode,
+  McpToolPolicyStatus,
+} from "../generated/client/client";
 // GPP Phase 2 permit vocabulary (BI-69415B68). Exported as values so the app
 // composes from the generated enums instead of re-typing their members.
 export {
@@ -51,7 +58,7 @@ export {
 // The type still closes the set at compile time, and Postgres closes it at
 // write time, so a writer spells the member as a literal and TS rejects any
 // member the schema does not define.
-export type { DecisionSubjectKind } from "../generated/client/client";
+export type { DecisionSubjectKind, BacklogTriageAssessmentOutcome } from "../generated/client/client";
 export {
   WorkroomParticipantRole,
   WorkroomParticipantAssignmentSource,
@@ -464,6 +471,15 @@ export {
 export { DATA_MODEL_MIRROR_TASK_ID } from "./data-model-mirror-config";
 export { SYSML_PROJECTION_TASK_ID } from "./sysml-projection-config";
 export { SELF_OPTIMIZATION_SWEEP_TASK_ID } from "./self-optimization-sweep-config";
+export {
+  ACCEPTANCE_AGED_DAYS,
+  ACCEPTANCE_SWEEP_AGENT_ID,
+  ACCEPTANCE_SWEEP_PAGE_SIZE,
+  ACCEPTANCE_SWEEP_ROUTE_LIMIT,
+  ACCEPTANCE_SWEEP_ROUTING,
+  ACCEPTANCE_SWEEP_TASK_KIND,
+  ACCEPTANCE_TREND_DAYS,
+} from "./acceptance-sweep-config";
 // Canonical SysML projection applier — shared by seed-time views (packages/db
 // seed-ea-sysml-*.ts) and runtime extractors (apps/web/lib/ea, via this barrel).
 export {

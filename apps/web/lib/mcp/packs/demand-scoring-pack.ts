@@ -331,6 +331,19 @@ async function buildScorePatch(
   return { patch, result, framework, nextStage };
 }
 
+const VALUE_INPUT_KEYS = ["reach", "impact", "confidence", "businessValue", "timeCriticality", "riskOpportunity"] as const;
+
+/** Who supplied the value inputs on this write, or null when none were supplied. */
+export function stampValueInputSource(
+  params: Record<string, unknown>,
+  who: { userId?: string; agentId?: string },
+): { demandInputSource: "ai" | "human"; demandInputActorRef: string | null; demandInputAt: Date } | null {
+  if (!VALUE_INPUT_KEYS.some((key) => typeof params[key] === "number")) return null;
+  return who.agentId
+    ? { demandInputSource: "ai", demandInputActorRef: who.agentId, demandInputAt: new Date() }
+    : { demandInputSource: "human", demandInputActorRef: who.userId ?? null, demandInputAt: new Date() };
+}
+
 async function scoreDemandItemHandler(
   params: Record<string, unknown>,
   userId?: string,
@@ -364,6 +377,11 @@ async function scoreDemandItemHandler(
     humanJobSize: item.estimateHumanJobSize,
     agreed: item.estimateAgreed,
   });
+  // Value-input provenance (BI-00C68162): supplying any value input attributes
+  // the inputs to whoever supplied them. A person's write is the owner override
+  // the demand-scoring steward never proposes over; an agent's stays "ai".
+  const inputSource = stampValueInputSource(params, { userId, agentId: context?.agentId });
+  if (inputSource) Object.assign(patch, inputSource);
   await prisma.$transaction([
     prisma.backlogItem.update({ where: { itemId }, data: patch }),
     prisma.backlogItemActivity.create({
@@ -390,6 +408,7 @@ async function scoreDemandItemHandler(
               ? null
               : patch["investmentBucket"],
           demandStage: nextStage,
+          inputSource: inputSource?.demandInputSource ?? item.demandInputSource ?? null,
         },
         recordedById: userId ?? null,
         recordedByAgentId: context?.agentId ?? null,

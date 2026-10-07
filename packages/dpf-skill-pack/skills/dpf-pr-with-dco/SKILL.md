@@ -97,19 +97,19 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
 
 3b. **Freeze the local review target.** Create the DCO-signed commit that contains the complete concern, confirm the worktree is clean, and compute the exact base tree, head tree, and committed-diff digest. Do not review an uncommitted or moving tree.
 
-3c. **Run independent semantic review before pregate or first publication.** Call `review_semantic_change` for the governing Workroom and exact committed tree. Runtime code requires an actual Change Reviewer pass; a low-risk docs-only change may receive a durable auto-pass. Address blocking findings and re-run against the new commit. Stop after two failed repair rounds and escalate rather than oscillating. A commit, rebase, diff, reviewer/policy version, or specialist-set change invalidates the old receipt. Phase 3 defaults to shadow observation; never hide a failed receipt just because deterministic blocking has not yet been ratcheted on.
-
-   Persist the returned receipt into the worktree's git-dir sidecar before pregate so the pre-push control can validate it without a model, portal, database, or network call:
-   ```
-   pnpm review:semantic-gate -- record --receipt-file <tool-result.json> --evidence-id <ExternalEvidenceRecord-id>
-   ```
-   An infrastructure-inconclusive result is not a semantic failure and must not be repaired as though it found a code defect; retry the review when capacity returns.
-
-3d. **Local-CI sandbox gate (default-on pre-push, BI-C74F4DE9).** For runtime-code branches, run `pnpm run pregate` before the push — the chained pre-push hook refuses an ungated push otherwise. Carry the evidence into the PR body as a trailer so `pnpm pr:health` reads the branch as merge-ready even when checked from another machine:
+3c. **Local-CI sandbox gate (default-on pre-push, BI-C74F4DE9).** For runtime-code branches, run `pnpm run pregate` before the push — the chained pre-push hook refuses an ungated push otherwise. Carry the evidence into the PR body as a trailer so `pnpm pr:health` reads the branch as merge-ready even when checked from another machine:
    ```
    Local-CI-Evidence: <evidence-record-id> (<branch>@<sha>)
    ```
    If the gate was consciously skipped (docs-adjacent config, verified-clean revert), attest explicitly instead: `Local-CI-Override: <reason>`. A runtime-code PR with neither is a pr:health blocker.
+
+3d. **Run independent semantic review after gate evidence and before publication.** Call `review_semantic_change` for the governing Workroom and exact committed tree, binding its failure analysis to the executed gate evidence. The current reviewer resolves those evidence records; source-local test prose alone cannot satisfy it. Runtime code requires an actual Change Reviewer pass; a low-risk docs-only change may receive a durable auto-pass. Address blocking findings and re-run against the new commit. Stop after two failed repair rounds and escalate rather than oscillating. A commit, rebase, diff, reviewer/policy version, or specialist-set change invalidates the old receipt. The current failure-readiness contract is authoritative; never treat a shadow-mode adapter as permission to omit review.
+
+   Persist the returned receipt into the worktree's git-dir sidecar before the final push so the pre-push control can validate it without a model, portal, database, or network call:
+   ```
+   pnpm review:semantic-gate -- record --receipt-file <tool-result.json> --evidence-id <ExternalEvidenceRecord-id>
+   ```
+   An infrastructure-inconclusive result is not a semantic failure and must not be repaired as though it found a code defect; retry the review when capacity returns.
 
 4. **DCO check.** Every commit on your branch must have `Signed-off-by:`:
    ```

@@ -294,23 +294,6 @@ export function resolveEvaluatedToolUse(input: {
   return input.toolFidelity.newScore >= TOOL_USE_MIN_FIDELITY;
 }
 
-/** Resolve the best modelId for a provider (same as fallback.ts). */
-async function resolveModelId(providerId: string): Promise<string> {
-  const profile = await prisma.modelProfile.findFirst({
-    where: { providerId },
-    orderBy: { generatedAt: "desc" },
-    select: { modelId: true },
-  });
-  if (profile) return profile.modelId;
-
-  const discovered = await prisma.discoveredModel.findFirst({
-    where: { providerId, NOT: { modelId: { contains: "embed" } } },
-    orderBy: { modelId: "asc" },
-    select: { modelId: true },
-  });
-  return discovered?.modelId ?? "";
-}
-
 /** Run golden test evaluation for one dimension on one endpoint. */
 async function evalDimension(
   endpointId: string,

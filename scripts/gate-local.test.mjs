@@ -7,6 +7,9 @@ import { LOCAL_GATES, buildGateEnv, parseArgs, runLocalGates } from "./gate-loca
 test("buildGateEnv scrubs git redirects, includes the working tree by default, and feeds the planned message as PR_BODY", () => {
   const env = buildGateEnv({ base: { PATH: "/bin", GIT_DIR: "/x/.git", PR_BODY: "existing" }, messageFile: "m.txt", readFile: () => "feat: x\n\nDocs-Impact-Decision: none needed" });
   assert.equal(env.GIT_DIR, undefined);
+  // BI-E0FEB8E9: gates run with git's automatic maintenance off.
+  assert.equal(env.GIT_CONFIG_KEY_0, "maintenance.auto");
+  assert.equal(env.GIT_CONFIG_VALUE_0, "false");
   assert.equal(env[INCLUDE_WORKING_TREE_ENV], "1");
   assert.match(env.PR_BODY, /^existing\n\nfeat: x/);
   const committed = buildGateEnv({ base: { PATH: "/bin" }, committed: true });

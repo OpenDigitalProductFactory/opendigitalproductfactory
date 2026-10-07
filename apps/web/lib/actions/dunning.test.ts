@@ -39,7 +39,6 @@ import { prisma } from "@dpf/db";
 import { composeDunningEmail, sendEmail } from "@/lib/email";
 import {
   seedDefaultDunningSequence,
-  getDefaultDunningSequence,
   runDunning,
   getAgedDebtors,
 } from "./dunning";

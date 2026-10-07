@@ -26,6 +26,10 @@
 // - D-4: governedDecisionStage on the lowered definition.
 // - D-7: the resolver facts resolve.ts found by the bindings.test.ts import.
 // - D-8: ratifiedGateFor over the ratification table.
+// - D-9 (GPP Phase 3c PR-3c-5): roomGrantsFromWorkShape and
+//   isToolAllowedByGrants, the runtime's own reading of a shape's ceiling.
+// - D-10 (PR-3c-5): the sub-shape facts resolve.ts found (existence, and the
+//   first cycle in the sub-shape call graph).
 // - S-1…S-6: checkSoundness.
 //
 // Each violation is reported ONCE, under the rule that names it, so a seeded
@@ -72,7 +76,15 @@
 //
 // E-NOT-EXECUTABLE is checked for every construct whose flag in
 // executable-constructs.ts is off: `stage.deadline`, a flow split or join,
-// `flow.edges[].rework`, `gate.onRefuse` and `stage.subShape`.
+// `flow.edges[].rework`, `gate.onRefuse` and `stage.subShape`. The
+// parallel-split-join flag is on since Phase 3c PR-3c-2 (BI-8875C9DF), so a
+// split or join compiles, the rework-edge flag since PR-3c-3, so a rework
+// edge or a refuse route compiles. Stage deadline and sub-shape are
+// implemented (PR-3c-4, PR-3c-5) but still refused: their flags stay off until
+// BI-086DC167 (graph markings reset at every cycle boundary) is fixed. D-9 and
+// D-10 check a sub-shape document whatever its flag says. The walk is
+// constructsUsedBy (constructs-used-by.ts), run over the lowered definition,
+// the same walk the drive runs over its definition contract (Phase 3c).
 // `options.executable` replaces the table for tests only; production callers
 // omit it.
 //
@@ -87,6 +99,7 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 import { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } from "@/lib/coworker/authorized-surface-coworker-contract";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
+import { roomGrantsFromWorkShape } from "@/lib/work-management/room-turn-authority";
 import { KNOWN_STAGE_TOOL_GAPS, stageToolGapKey } from "@/lib/work-management/stage-tool-gaps";
 import { governedDecisionStage } from "@/lib/work-management/workroom-stage-decision";
 
@@ -100,7 +113,8 @@ import {
   type GppDiagnosticSeverity,
   type GppRuleId,
 } from "./diagnostics";
-import { elementIdsOf, flowEdgeElementId, flowNodeElementId, gateElementId, shapeElementId } from "./element-ids";
+import { constructsUsedBy } from "./constructs-used-by";
+import { elementIdsOf, gateElementId, shapeElementId } from "./element-ids";
 import { copyGate, lowerToDefinition } from "./emit";
 import { CONSTRUCT_EXECUTABLE, type GppConstruct } from "./executable-constructs";
 import { GATE_RATIFICATION, ratifiedGateFor, type GateRatificationEntry } from "./gate-ratification";
@@ -156,6 +170,46 @@ function typedGate(stage: Stage): GppGate | undefined {
 /** The gate's pointer: the typed block when present, else the governed advance it belongs to. */
 function gatePath(index: number, stage: Stage, ...rest: Segment[]): Segment[] {
   return typedGate(stage) ? ["stages", index, "advance", "gate", ...rest] : ["stages", index, "advance"];
+}
+
+/**
+ * D-9 sub-shape widening and D-10 sub-shape resolution for one stage that
+ * calls a sub-shape (GPP Phase 3c PR-3c-5, BI-8875C9DF; Phase 3c design §9.4).
+ *
+ * - D-10: the `key@version` must name a registered shape version, and the
+ *   sub-shape call graph must have no cycle (the parent catalog's "Child
+ *   key@version resolves; no cycles", §5 row 14). One finding per stage, for
+ *   whichever fails first.
+ * - D-9: a child may not hold more than its parent. Its declared `grants` must
+ *   be a subset of the parent's, and every child stage tool must be allowed by
+ *   the parent's grants. Both are compared as the runtime reads a shape's
+ *   ceiling (roomGrantsFromWorkShape: `tool:read` is the coworker read
+ *   baseline, a capability class expands to its grants), and a tool is
+ *   checked with isToolAllowedByGrants, which denies a tool with no grant
+ *   mapping. Evaluated only when the source could read the child; one finding
+ *   per stage naming every excess.
+ */
+function subShapeFindings(document: GppShapeDocument, stage: Stage, index: number, facts: GppResolvedStage | undefined): GppDiagnostic[] {
+  const stageId = `stage:${stage.key}`;
+  const path: Segment[] = ["stages", index, "subShape"];
+  const fact = facts?.subShape;
+  if (!fact || !fact.exists) {
+    return [finding("D-10", "error", stageId, path, `Stage "${stage.key}" calls sub-shape "${stage.subShape}", which is not a registered shape version.`)];
+  }
+  if (fact.cycle) {
+    return [finding("D-10", "error", stageId, path, `Stage "${stage.key}" calls sub-shape "${fact.ref}", and the sub-shape calls form a cycle: ${fact.cycle.join(" -> ")}.`)];
+  }
+  if (!fact.grants) return [];
+  const ceiling = roomGrantsFromWorkShape(document.grants);
+  const allowed = new Set(ceiling);
+  const extraGrants = roomGrantsFromWorkShape(fact.grants).filter((grant) => !allowed.has(grant));
+  const extraTools = (fact.tools ?? []).filter((tool) => !isToolAllowedByGrants(tool.toolName, ceiling));
+  if (extraGrants.length === 0 && extraTools.length === 0) return [];
+  const parts = [
+    ...(extraGrants.length > 0 ? [`grants the parent does not hold (${extraGrants.join(", ")})`] : []),
+    ...(extraTools.length > 0 ? [`stage tools outside the parent's grants (${extraTools.map((tool) => `${tool.stageKey}:${tool.toolName}`).join(", ")})`] : []),
+  ];
+  return [finding("D-9", "error", stageId, path, `Sub-shape "${fact.ref}" of stage "${stage.key}" would widen the parent's authority: it declares ${parts.join(" and ")}.`)];
 }
 
 /** Every design-rule finding for a schema-valid document and its resolve facts, in diagnostic order. */
@@ -329,6 +383,9 @@ export function runDesignRules(
       });
     }
 
+    // Sub-shape: D-9 widening, D-10 resolution (GPP Phase 3c PR-3c-5).
+    if (stage.subShape !== undefined) out.push(...subShapeFindings(document, stage, index, facts));
+
     // Gates: C-7, D-4, D-7, D-8, onRefuse.
     if (stage.advance.kind === "governed-decision") {
       const gateId = gateElementId(stage.key);
@@ -377,14 +434,8 @@ export function runDesignRules(
             finding("D-8", "error", gateId, gatePath(index, stage), `gate:${stage.key} differs from the ratified gate for "${stage.advance.decisionScope}".`),
           );
         }
-        if (gate.onRefuse !== undefined) {
-          notExecutable("rework-edge", gateId, gatePath(index, stage, "onRefuse"), `gate:${stage.key} routes a refusal to "${gate.onRefuse}".`);
-        }
       }
     }
-
-    if (stage.deadline) notExecutable("stage-deadline", stageId, [...base, "deadline"], `Stage "${stage.key}" declares a deadline.`);
-    if (stage.subShape !== undefined) notExecutable("sub-shape", stageId, [...base, "subShape"], `Stage "${stage.key}" calls sub-shape "${stage.subShape}".`);
   });
 
   // ── entry into O / A / I stages: C-1 clause 2, D-1, D-2, D-3, D-6 ─────────
@@ -460,24 +511,11 @@ export function runDesignRules(
     }
   });
 
-  // ── explicit flow constructs ──────────────────────────────────────────────
-  if (document.flow) {
-    const splitIds = new Set(document.flow.nodes.filter((node) => node.type === "parallel-split").map((node) => node.id));
-    document.flow.nodes.forEach((node, index) => {
-      // One finding per split; a join reports only when it pairs no split (a lone join).
-      if (node.type === "parallel-join" && node.pairs !== undefined && splitIds.has(node.pairs)) return;
-      notExecutable("parallel-split-join", flowNodeElementId(node.id), ["flow", "nodes", index], `Flow node "${node.id}" is a ${node.type}.`);
-    });
-    document.flow.edges.forEach((edge, index) => {
-      if (!edge.rework) return;
-      notExecutable(
-        "rework-edge",
-        flowEdgeElementId(edge.from, edge.to),
-        ["flow", "edges", index, "rework"],
-        `Edge ${edge.from} -> ${edge.to} is a rework edge (at most ${edge.rework.maxIterations}).`,
-      );
-    });
-  }
+  // ── gated constructs: E-NOT-EXECUTABLE ────────────────────────────────────
+  // One walk over the lowered definition, shared with the drive (Phase 3c,
+  // PR-3c-1): gate.onRefuse, stage.deadline, stage.subShape, flow splits and
+  // joins, and rework edges.
+  for (const use of constructsUsedBy(lowered)) notExecutable(use.construct, use.elementId, use.path, use.detail);
 
   // ── S-1…S-6 ───────────────────────────────────────────────────────────────
   out.push(...checkSoundness(document));

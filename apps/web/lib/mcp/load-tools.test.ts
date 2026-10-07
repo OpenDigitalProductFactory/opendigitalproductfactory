@@ -292,3 +292,21 @@ describe("load_tools per-name status", () => {
     )).toBeUndefined();
   });
 });
+
+
+describe("intent discovery with missing coworker authority", () => {
+  it("finds the relevant denied capability without substituting an unrelated tool", async () => {
+    const { resolveLoadToolsRequest } = await import("./load-tools");
+    const visible = [
+      { name: "request_self_upgrade", description: "Request a platform self upgrade." },
+      { name: "report_quality_issue", description: "Report a platform issue." },
+    ];
+    const args = resolveLoadToolsRequest({ query: "broken platform self upgrade" }, visible);
+    expect(args.names).toEqual(["request_self_upgrade"]);
+    const noMatch = classifyLoadToolsNoMatch(args, new Set(visible.map(t => t.name)), new Set(["report_quality_issue"]), new Set());
+    const result = buildLoadToolsResult([], [], noMatch);
+    expect(result.structuredContent.noMatch).toMatchObject({ reason: "not-granted" });
+    expect(result.structuredContent.note).not.toMatch(/broader query/);
+    expect(resolveLoadToolsRequest({ query: "upgrade" }, []).names).toEqual([]);
+  });
+});

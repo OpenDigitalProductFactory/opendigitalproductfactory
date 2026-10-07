@@ -5,7 +5,6 @@ import type { Prisma } from "@dpf/db";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   authorizeObjectiveMappingRequestKeyEvolution,
-  validateObjectiveMappingRequestKey,
   objectiveMappingHistoricalProviderProofDigest,
   type ObjectiveMappingRequestHistory,
 } from "@/lib/mcp-task-objective-mapping-request-key";
@@ -18,7 +17,7 @@ import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inven
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
 import { loadBaselineSource, type BaselineSourceDb } from "./baseline-source";
 import { discoverCanonicalReviewArtifact } from "./canonical-artifact-discovery";
-import { designPhaseReviewDecision, loadPlanReviewArtifact, routeDesignReviewsBeforeBaseline } from "./design-phase-recovery";
+import { designPhaseReviewDecision, isArchetypePhaseReview, loadPlanReviewArtifact, routeDesignReviewsBeforeBaseline } from "./design-phase-recovery";
 import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
   selectEligibleObjectiveEvidenceActivityIds,
@@ -403,7 +402,8 @@ async function defaultLoadObjectiveMappingHistory(args: {
   return loadObjectiveMappingHistoryFromDb(prisma, args);
 }
 
-const DEFAULT_PORTS: TerminalRecoveryPorts = {
+/** Production ports; a caller overrides only the ports it must (the acceptance sweep excludes the author, BI-DF255666). */
+export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
   loadLiveRooms: defaultLoadLiveRooms,
   loadBaselinePayloads: defaultLoadBaselinePayloads,
   loadEligibleEvidenceActivityIds: defaultLoadEligibleEvidenceActivityIds,
@@ -548,7 +548,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
   refusedWorkroomId: string | null;
   ports?: TerminalRecoveryPorts;
 }): Promise<TerminalInitiativeRecovery> {
-  const ports = args.ports ?? DEFAULT_PORTS;
+  const ports = args.ports ?? DEFAULT_TERMINAL_RECOVERY_PORTS;
   const acceptanceLane = [...args.decision.blockers, ...args.decision.unmet]
     .find((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
   if (acceptanceLane && acceptanceLane.accountableRole === "delivery-coordinator") {
@@ -651,7 +651,10 @@ export async function resolveTerminalInitiativeRecovery(args: {
 
   // BI-D3E1F6D9: a design review reads the room's current design at its head,
   // exactly as the refused claim issues it; only acceptance keeps the pinned commit.
-  const baselineArtifact = !designPhase && baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
+  // BI-D9DECD1B: so do the archetype reviews owed before implementation. The
+  // claim issues them at the head, and the review guard rebuilds them here.
+  const readsHead = designPhase !== null || isArchetypePhaseReview(decision);
+  const baselineArtifact = !readsHead && baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
       === room.repositoryFullName.toLocaleLowerCase("en-US")
     ? {
       commitSha: baseline.artifactRef.commitSha,
@@ -689,6 +692,10 @@ export async function resolveTerminalInitiativeRecovery(args: {
   const packet = recovery.reviewerRoutes.find((route) => route.gate === "objective-mapping")?.requestCoworker;
   const binding = packet?.initiativeReviewBinding;
   const requiredToolNames = packet?.requiredToolNames;
+  // No packet because the resolver said why (no eligible reviewer, no artifact,
+  // no evidence): that reason is the true one. "Refresh readiness" would send
+  // the reader after the wrong remedy (BI-DF255666 found this through the sweep).
+  if (!packet && (recovery.escalations.length > 0 || recovery.unroutable.length > 0)) return recovery;
   if (!packet || !binding || !requiredToolNames) {
     return escalation(
       "objective-mapping-history-unavailable",

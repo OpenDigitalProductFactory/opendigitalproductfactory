@@ -19,12 +19,15 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { err, type ActionResult } from "@/lib/shared/action-result";
+import type { StageDecisionChoice } from "@/lib/work-management/workroom-stage-decision";
 import { recordWorkroomStageDecisionForUser } from "@/lib/work-management/workroom-stage-decision.server";
 
 export async function recordWorkroomStageDecision(
   caseKey: string,
   roomRowId: string,
-  decision: { stageKey: string; choice: "accept" | "patch" | "defer"; deferUntil?: string; rationale?: string },
+  // `refuse` ("Send back") is offered only on a stage whose gate declares a refuse route (GPP Phase 3c PR-3c-3);
+  // the server validates the choice against what the stage offers.
+  decision: { stageKey: string; choice: StageDecisionChoice; deferUntil?: string; rationale?: string },
 ): Promise<ActionResult> {
   const session = await auth();
   const userId = session?.user?.id;

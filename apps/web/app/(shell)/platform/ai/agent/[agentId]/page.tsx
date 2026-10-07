@@ -383,10 +383,11 @@ export default async function AgentDetailPage({
   });
   const capabilitiesEditor = (
     <CapabilitiesEditor
-      agentCuid={record.runtime.id}
-      agentBusinessId={record.runtime.agentId}
+      agentCuid={record.authority.id}
+      agentBusinessId={record.authority.agentId}
+      skillAgentBusinessId={record.runtime.agentId}
       slugId={record.runtime.slugId}
-      heldGrants={record.runtime.heldGrantKeys}
+      heldGrants={record.authority.heldGrantKeys}
       allGrantKeys={knownGrantKeys()}
       assignedSkills={assignedSkills}
       catalogSkills={catalogSkillRows}
