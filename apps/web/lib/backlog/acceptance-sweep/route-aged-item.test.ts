@@ -5,7 +5,12 @@ import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mappi
 import { loadBacklogWorkroomOwnership, assertBacklogWorkroomClaimAvailable } from "@/lib/work-capsules/backlog-workroom-ownership";
 import { readWorkShapeClaim, readWorkShapeRoleBindings } from "@/lib/work-management/workroom-shape-claim";
 
-import type { OwedAcceptance } from "./owed-acceptance";
+import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
+import type { TerminalRecoveryPorts } from "@/lib/backlog/initiative-readiness/terminal-recovery";
+import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
+
+import { createSweepOwnerResolver } from "./acceptance-sweep-evaluate";
+import { projectOwedAcceptance, type OwedAcceptance } from "./owed-acceptance";
 import {
   acceptanceRoomKey,
   acceptanceWriterTool,
@@ -309,6 +314,7 @@ describe("routeAgedItems: owner user and writer tools on main's projection (BI-C
   it("names the readiness lane writer for an acceptance-family code, and none for another role", () => {
     expect(acceptanceWriterTool({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", accountableRole: "acceptance-reviewer" })).toBe("record_initiative_evidence");
     expect(acceptanceWriterTool({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", accountableRole: "delivery-coordinator" })).toBe("record_execution_evidence");
+    expect(acceptanceWriterTool({ code: "DELIVERY_EVIDENCE_REQUIRED", accountableRole: "delivery-coordinator" })).toBe("record_execution_evidence");
     expect(acceptanceWriterTool({ code: "CAPSULE_IDENTITY_MISMATCH", accountableRole: "delivery-coordinator" })).toBeNull();
     expect(acceptanceWriterTool({ code: "REVIEW_REQUIRED", accountableRole: "design-checklist-reviewer" })).toBeNull();
   });
@@ -446,5 +452,76 @@ describe("buildAcceptanceRoomObjective keeps author text out of the instructions
     await routeAgedItems({ db, now: NOW, limit: 10, candidates: [hostile] });
     const args = raw.workroom.upsert.mock.calls[0]![0] as unknown as { create: { title: string } };
     expect(args.create.title).toBe("Acceptance: BI-AAAA0001");
+  });
+});
+
+// BI-7C7E8CAC acceptance criterion 1: an aged small item with no closure path
+// gets an acceptance-verification room bound to an in-platform coworker holding
+// the record_execution_evidence grant, and the brief tells that coworker to
+// record the runtime check with record_execution_evidence.
+describe("routing a small item's execution-evidence lane end to end (BI-7C7E8CAC)", () => {
+  const smallDecision: InitiativeReadinessDecision = {
+    decisionId: "unpersisted",
+    policyVersion: "initiative-readiness.v3",
+    subject: { kind: "backlog-item", id: "BI-SMALL0002" },
+    transitionObject: { kind: "backlog-item", id: "BI-SMALL0002", expectedVersion: "read-projection", targetState: "completion" },
+    profile: "fix",
+    target: "completion",
+    verdict: "input-required",
+    shapeDecision: { declared: "small", effective: "small", sensitivity: null, raised: false },
+    satisfied: [],
+    unmet: [
+      readinessRequirement({ code: "DELIVERY_EVIDENCE_REQUIRED", state: "missing", accountableRole: "delivery-coordinator" }),
+      readinessRequirement({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "missing", accountableRole: "delivery-coordinator" }),
+    ],
+    blockers: [],
+    evaluatedAt: "2026-10-06T05:00:00.000Z",
+  };
+
+  function holder(agentId: string, grantKey: string) {
+    return { grantKey, agent: { agentId, displayName: `${agentId} name`, status: "active", archived: false, lifecycleStage: "production" } };
+  }
+
+  it("binds the room's verifier role to the in-platform grant holder, never the author or an external agent", async () => {
+    const external = ["AGT-EXT-CLAUDE"];
+    const grantDb = {
+      agentToolGrant: { findMany: vi.fn(async () => [
+        holder("AGT-A-AUTHOR", "backlog_write"),
+        holder("AGT-EXT-CLAUDE", "build_evidence"),
+        holder("AGT-WS-OPS", "build_evidence"),
+      ]) },
+      agent: { findMany: vi.fn(async (args: { where: { agentId: { in: string[] } } }) => args.where.agentId.in.map((agentId) => ({
+        agentId,
+        executionConfig: { executionType: external.includes(agentId) ? "external_cli" : "in_process" },
+      }))) },
+    };
+    const terminal: Partial<TerminalRecoveryPorts> = {
+      loadLiveRooms: vi.fn(async () => { throw new Error("the execution-evidence lane needs no Workroom"); }),
+    };
+    const projectionResult = await projectOwedAcceptance({
+      decision: smallDecision,
+      authorAgentId: "AGT-A-AUTHOR",
+      resolveOwner: createSweepOwnerResolver({ db: grantDb, ports: terminal }),
+    });
+    expect(projectionResult.closable).toBe(false);
+
+    const { db, raw } = fakeDb({ agentPrincipals: { "AGT-WS-OPS": "prn-ops" } });
+    const outcomes = await routeAgedItems({
+      db, now: NOW, limit: 10,
+      candidates: [candidate("BI-SMALL0002", 20, { projection: projectionResult })],
+    });
+
+    expect(outcomes).toEqual([expect.objectContaining({ itemId: "BI-SMALL0002", outcome: "routed", ownerAgentId: "AGT-WS-OPS" })]);
+    const create = (raw.workroom.upsert.mock.calls[0]![0] as { create: Record<string, unknown> }).create;
+    expect(readWorkShapeClaim(create.scopeClaims)).toEqual({ key: "acceptance-verification", version: "1.1.0" });
+    expect(readWorkShapeRoleBindings(create.scopeClaims)).toEqual({ "acceptance-verifier": "agent:AGT-WS-OPS" });
+    const objective = create.objective as string;
+    expect(objective).toMatch(/ACCEPTANCE_EVIDENCE_REQUIRED \(delivery-coordinator\), recorded with record_execution_evidence/);
+    expect(objective).toMatch(/DELIVERY_EVIDENCE_REQUIRED \(delivery-coordinator\), recorded with record_execution_evidence/);
+    expect(objective).toMatch(/record_execution_evidence, itemId BI-SMALL0002/);
+    expect(objective).toMatch(/ACCEPTANCE_EVIDENCE_REQUIRED: kind "manual_check"/);
+    expect(objective).toMatch(/DELIVERY_EVIDENCE_REQUIRED: kind "test_pass"/);
+    expect(objective).not.toMatch(/record_initiative_evidence/);
+    expect(objective).not.toMatch(/Not yours/);
   });
 });

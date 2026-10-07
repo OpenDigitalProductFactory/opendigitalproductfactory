@@ -91,11 +91,24 @@ export type OwedAcceptanceOwnerResolver = (args: {
 }) => Promise<OwedAcceptanceOwnerRecovery>;
 
 /**
+ * A coworker an owner resolver names for an accountable role. A reviewer route
+ * covers every owed code of its role; a route with `codes` covers only those
+ * (the small-shape execution-evidence lane, execution-evidence-owner.ts, owns
+ * the delivery-coordinator's evidence codes and not, say, its capsule identity).
+ */
+export type OwedAcceptanceRoute = Pick<
+  InitiativeReviewerRecovery["reviewerRoutes"][number],
+  "accountableRole" | "toolName" | "grant" | "targetAgentId" | "targetDisplayName"
+> & Partial<Pick<InitiativeReviewerRecovery["reviewerRoutes"][number], "gate" | "requestCoworker">>
+  & { codes?: readonly ReadinessCode[] };
+
+/**
  * What an owner resolver returns: the reviewer recovery (or the terminal
  * chain's), whose escalation reasons may also be `no-in-platform-coworker`.
+ * An escalation with `codes` applies to those codes of its role only.
  */
 export type OwedAcceptanceOwnerRecovery = {
-  reviewerRoutes: InitiativeReviewerRecovery["reviewerRoutes"];
+  reviewerRoutes: OwedAcceptanceRoute[];
   unroutable: InitiativeReviewerRecovery["unroutable"];
   escalations: Array<{
     accountableRole: string;
@@ -105,8 +118,14 @@ export type OwedAcceptanceOwnerRecovery = {
       | TerminalInitiativeRecovery["escalations"][number]["reason"]
       | "no-in-platform-coworker";
     nextAction: string;
+    codes?: readonly ReadinessCode[];
   }>;
 };
+
+/** Does a route or escalation speak for this owed requirement? */
+function covers(row: { accountableRole: string; codes?: readonly ReadinessCode[] }, entry: { accountableRole: string; code: ReadinessCode }): boolean {
+  return row.accountableRole === entry.accountableRole && (!row.codes || row.codes.includes(entry.code));
+}
 
 function isFamily(entry: { accountableRole: string }): boolean {
   return ACCEPTANCE_FAMILY_ROLES.includes(entry.accountableRole);
@@ -152,33 +171,32 @@ export async function projectOwedAcceptance(input: {
   const familyRoutes = recovery.reviewerRoutes.filter(isFamily);
   const routable = familyRoutes.filter((route) => !excluded.has(route.targetAgentId));
   const ownerRoute = routable[0] ?? null;
-  const ownedRoles = new Set(
-    routable.filter((route) => route.targetAgentId === ownerRoute?.targetAgentId).map((route) => route.accountableRole),
-  );
+  const ownerRoutes = routable.filter((route) => route.targetAgentId === ownerRoute?.targetAgentId);
+  const isOwned = (entry: (typeof family)[number]) => ownerRoutes.some((route) => covers(route, entry));
 
   const owner: OwedAcceptanceOwner | null = ownerRoute
     ? {
         agentId: ownerRoute.targetAgentId,
         displayName: ownerRoute.targetDisplayName,
-        codes: family.filter((entry) => ownedRoles.has(entry.accountableRole)).map((entry) => entry.code),
+        codes: family.filter(isOwned).map((entry) => entry.code),
       }
     : null;
 
   const unroutable: OwedAcceptanceUnroutable[] = [];
   for (const entry of family) {
-    if (ownedRoles.has(entry.accountableRole)) continue;
+    if (isOwned(entry)) continue;
     const base = { code: entry.code, accountableRole: entry.accountableRole };
     const noLane = recovery.unroutable.find((row) => row.code === entry.code && row.accountableRole === entry.accountableRole);
     if (noLane) {
       unroutable.push({ ...base, reason: "no-writer-lane", nextAction: noLane.nextAction });
       continue;
     }
-    const escalation = recovery.escalations.find((row) => row.accountableRole === entry.accountableRole);
+    const escalation = recovery.escalations.find((row) => covers(row, entry));
     if (escalation) {
       unroutable.push({ ...base, reason: escalation.reason, nextAction: escalation.nextAction });
       continue;
     }
-    if (familyRoutes.some((route) => route.accountableRole === entry.accountableRole)) {
+    if (familyRoutes.some((route) => covers(route, entry))) {
       unroutable.push({
         ...base,
         reason: "author-excluded",
@@ -194,6 +212,6 @@ export async function projectOwedAcceptance(input: {
     : undefined;
   return {
     owed, owner, unroutable, closable, excludedAgentIds,
-    ...(packetRoute ? { objectiveMappingPacket: packetRoute.requestCoworker } : {}),
+    ...(packetRoute?.requestCoworker ? { objectiveMappingPacket: packetRoute.requestCoworker } : {}),
   };
 }

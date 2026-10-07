@@ -5928,6 +5928,7 @@
         "acceptance-sweep-operator-runbook",
         "closing-items-the-gate-already-allows-off-by-default",
         "what-the-summary-tells-you",
+        "who-verifies-an-item-that-is-not-closable",
         "how-the-portal-knows-work-was-merged",
         "known-limit"
       ]

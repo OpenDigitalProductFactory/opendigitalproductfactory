@@ -59,6 +59,26 @@ Each run's summary in the Acceptance room has a `closing` section:
 The headline ends with either `N closed under operator pre-authorisation` or
 `closing off (<reason>)`.
 
+## Who verifies an item that is not closable
+
+With routing on, an item that has waited past the aged threshold gets its own
+**Acceptance verification** room, bound to one coworker who checks it on the
+live install and records the evidence. The sweep never picks the item's
+author, an agent that runs only outside the platform (such as the external
+Claude, Codex or Grok agents), or a person.
+
+- **Small and break-fix items** are accepted by a runtime check or the
+  failing-to-passing test. The coworker is the first active, in-platform
+  coworker (by agent id) holding the grant for `record_execution_evidence`
+  (`build_evidence`, or `backlog_write`, which includes it). The room brief
+  tells it to record the check with `record_execution_evidence`.
+- **Medium and larger items** go to the coworker holding the acceptance
+  reviewer grant, as before.
+
+When nobody qualifies, the summary lists the item as unroutable with the
+reason: `no-eligible-reviewer` (grant the lane to a coworker other than the
+author) or `no-in-platform-coworker` (only external agents hold it).
+
 ## How the portal knows work was merged
 
 Merged platform work closes on the merge signal: the portal checks whether the
