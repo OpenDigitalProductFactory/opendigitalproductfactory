@@ -46,9 +46,16 @@ Folding "a human must decide this now" into the backlog is a category error: the
 - **Review the business decision** using the plain action on the card. In Simple view, builder-only links never appear as the main owner action — and neither does a placeholder button in their place.
 - **Accept, keep, or narrow a proactivity boundary** without leaving the workspace.
 - **Approve or decline a held coworker action** on the card. Once the answer is saved, or the time runs out, the buttons go away and the record stays readable. Pressing twice, or reloading and pressing again, cannot answer it twice.
+- **Ask again** on a request that expired before anyone answered it. The same request comes back to you for a fresh decision.
 - **Open Technical detail** when a builder or specialist needs the full source record.
 - **Clear or snooze the Friday review** as one batch, or review an item individually.
 - Ask your [digital coworker](../getting-started/ai-coworker.md) for a briefing on what is in the inbox and why.
+
+## How long a coworker's request waits
+
+A request that sends something outside your business, such as an email, a post, an ad or a pull request, waits 15 minutes. What it was going to send can go out of date, and it cannot be recalled once it is sent. Every other request waits up to seven days, so a request raised while you are away is still there when you come back. Before an approved request runs, it is checked again. An approval that is too old for what the action now is does not run.
+
+If nobody answers in time, the request is not lost. It comes back in the Friday review as **Expired unanswered**, with no Authorize or Decline buttons, so a closed request can never be approved by accident. Choose **Ask again** and the same request returns to you for a fresh decision. Nothing is asked again unless you or your coworker choose to. A link to a request opens that request's own card, even when it is in the Friday review.
 
 Deadline-bearing items show a plain tag such as **Due in 10 minutes**, **Due in 6 hours**, or **Due in 3 days** — always in the largest unit that is still accurate, so a short window is never dressed up as a long one. A window that has closed reads **Past due**. Impact tags use words such as **Costs money**, **Goes public**, and **Reversible**.
 

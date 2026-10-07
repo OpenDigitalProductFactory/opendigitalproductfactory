@@ -3,9 +3,9 @@
 //
 // Reproduction (2026-10-01): an external agent's merge_backlog_items call
 // minted envelope cmupffie10cdu01t491xmoiby with expiresAt = now + 15 minutes.
-// Every authority envelope gets the same fixed window
-// (AUTHORITY_APPROVAL_TTL_MS), so a request raised while the operator is away
-// lapses before they return. When the agent re-asks, the lapsed proposal is
+// Every authority envelope got the same fixed window
+// (the old AUTHORITY_APPROVAL_TTL_MS), so a request raised while the operator is away
+// lapsed before they returned. When the agent re-asked, the lapsed proposal was
 // written as `cancelled` — the mark for "a person acted" — which is the
 // opposite of what happened.
 import { describe, expect, it, vi } from "vitest";
@@ -19,9 +19,11 @@ import {
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
 
 import {
-  AUTHORITY_APPROVAL_TTL_MS,
-  ensureAuthorityApprovalEnvelope,
-} from "./authority-approval-envelope";
+  APPROVAL_REPLAY_WINDOW_MS,
+  approvalLifetimeMs,
+  effectiveApprovalExpiry,
+} from "./approval-lifetime";
+import { ensureAuthorityApprovalEnvelope } from "./authority-approval-envelope";
 
 const NOW = new Date("2026-10-01T04:00:00Z");
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
@@ -63,7 +65,7 @@ function db() {
 /**
  * The gate knows the call's resolved consequence when it mints the envelope
  * (input.action.consequence, after per-call refinement). The fix passes it
- * through; today the parameter does not exist and is ignored.
+ * through to the writer.
  */
 type MintInput = Parameters<typeof ensureAuthorityApprovalEnvelope>[0];
 function mint(toolName: string, consequence: "outward" | "irreversible" | "authority" | null): MintInput {
@@ -158,9 +160,51 @@ describe("AC-TTL-PROPORTIONAL: an approval lives as long as the decision it asks
         expiresAt: new Date(NOW.getTime() + 6 * ONE_DAY),
         binding: buildCoworkerApprovalBinding(input),
         approvedAt: approvedTwoHoursAgo,
-      } as NonNullable<CoworkerAuthorityInput["approval"]>,
+      },
     });
     expect(decision).toMatchObject({ outcome: "deny", reasonCode: "approval-expired" });
+
+    // The same approval for a call still classified durable is honoured: the
+    // re-check narrows only when the classification calls for it.
+    const durableInput: CoworkerAuthorityInput = {
+      ...input,
+      action: { ...input.action, toolName: "merge_backlog_items", consequence: "irreversible" },
+    };
+    expect(evaluateCoworkerAuthority({
+      ...durableInput,
+      approval: {
+        status: "approved",
+        expiresAt: new Date(NOW.getTime() + 6 * ONE_DAY),
+        binding: buildCoworkerApprovalBinding(durableInput),
+        approvedAt: approvedTwoHoursAgo,
+      },
+    })).toMatchObject({ outcome: "allow", reasonCode: "authorized" });
+  });
+});
+
+describe("approval lifetime classification (approval-lifetime.ts)", () => {
+  it("is short only for outward or unclassified calls", () => {
+    expect(approvalLifetimeMs("outward")).toBe(FIFTEEN_MINUTES);
+    expect(approvalLifetimeMs("unclassified")).toBe(FIFTEEN_MINUTES);
+    expect(approvalLifetimeMs("irreversible")).toBe(7 * ONE_DAY);
+    expect(approvalLifetimeMs("authority")).toBe(7 * ONE_DAY);
+    expect(approvalLifetimeMs(null)).toBe(7 * ONE_DAY);
+  });
+
+  it("keeps the short window when a caller cannot classify the call", async () => {
+    const mockDb = db();
+    const { consequence: _omitted, ...unclassified } = mint("some_discovered_tool", null) as MintInput & { consequence?: unknown };
+    await ensureAuthorityApprovalEnvelope(unclassified as MintInput, mockDb);
+    expect(mintedLifetimeMs(mockDb)).toBe(FIFTEEN_MINUTES);
+  });
+
+  it("honours an approval until the earlier of its stored expiry and its classification's lifetime", () => {
+    const approvedAt = new Date(NOW.getTime() - 60_000);
+    const expiresAt = new Date(NOW.getTime() + 6 * ONE_DAY);
+    expect(effectiveApprovalExpiry({ expiresAt, approvedAt, consequence: "outward" }))
+      .toEqual(new Date(approvedAt.getTime() + FIFTEEN_MINUTES));
+    expect(effectiveApprovalExpiry({ expiresAt, approvedAt, consequence: "irreversible" })).toEqual(expiresAt);
+    expect(effectiveApprovalExpiry({ expiresAt, approvedAt: null, consequence: "outward" })).toEqual(expiresAt);
   });
 });
 
@@ -179,9 +223,9 @@ describe("AC-EXPIRY-VISIBLE: a lapse is recorded as expired, never as a person's
   });
 
   it("keeps the replay window for settled outcomes separate from the decision lifetime", () => {
-    // findExecutedAuthorityOutcome reuses AUTHORITY_APPROVAL_TTL_MS as its
-    // replay window. Lengthening the decision lifetime must not silently
-    // lengthen replay; the constant stays the short window.
-    expect(AUTHORITY_APPROVAL_TTL_MS).toBe(FIFTEEN_MINUTES);
+    // findExecutedAuthorityOutcome used the decision constant as its replay
+    // window. Lengthening the decision lifetime must not silently lengthen
+    // replay; the replay window is its own constant and stays short.
+    expect(APPROVAL_REPLAY_WINDOW_MS).toBe(FIFTEEN_MINUTES);
   });
 });

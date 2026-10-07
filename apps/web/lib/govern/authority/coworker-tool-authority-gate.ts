@@ -15,6 +15,7 @@ import {
   type CoworkerAuthorityInput,
 } from "./coworker-authority-decision";
 import { escalationReasonSentence } from "./escalation-gate";
+import type { ApprovalClassification } from "@/lib/coworker/approval-lifetime";
 
 export type CoworkerAuthorityInputResolver = (args: {
   execution: GovernedExecuteArgs;
@@ -34,6 +35,8 @@ export type AuthorityApprovalEnvelopeCreate = (input: {
   authorityDecisionId: string;
   threadId: string | null;
   explanation: string;
+  /** Sizes the request's lifetime; never part of the binding (BI-0012E6CA). */
+  consequence?: ApprovalClassification;
 }) => Promise<{ id: string; status: string; expiresAt: Date | null }>;
 
 export type AuthorityApprovalTaskResume = (taskRunId: string) => Promise<void>;
@@ -426,6 +429,9 @@ export async function enforceCoworkerToolAuthority(
         authorityDecisionId: decisionId,
         threadId: execution.context?.threadId ?? null,
         explanation: approvalExplanation(decision),
+        // The call's resolved consequence sizes how long the person has to
+        // answer: outward stays short, everything else waits for them.
+        ...(input.action.consequence !== undefined ? { consequence: input.action.consequence } : {}),
       });
       return {
         outcome: "reject",

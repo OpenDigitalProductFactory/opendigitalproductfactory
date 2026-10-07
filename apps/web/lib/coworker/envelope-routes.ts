@@ -12,6 +12,8 @@
 // An AgentActionProposal decision NEVER travels through here, and an envelope
 // decision never travels through the proposal server actions (BI-7CB2CCDE).
 
+import { ownerDecisionCardDomId } from "@/lib/attention/owner-decision-dom-id";
+
 /** POST target that records the delegating user's approval of an envelope. */
 export function envelopeApproveRoute(envelopeId: string): string {
   return `/api/agent/envelope/${encodeURIComponent(envelopeId)}/approve`;
@@ -27,7 +29,34 @@ export function envelopeStatusRoute(envelopeId: string): string {
   return `/api/agent/envelope/${encodeURIComponent(envelopeId)}`;
 }
 
-/** Exact owner-only Inbox readback, including requests outside recent history. */
+/** POST target that raises an expired, unanswered envelope again (BI-0012E6CA). */
+export function envelopeReraiseRoute(envelopeId: string): string {
+  return `/api/agent/envelope/${encodeURIComponent(envelopeId)}/reraise`;
+}
+
+/** The attention item id an envelope projects to (attention/sources/coworker-envelope). */
+export function envelopeAttentionItemId(envelopeId: string): string {
+  return `coworker-envelope:${envelopeId}`;
+}
+
+/**
+ * Exact owner-only Inbox readback, including requests outside recent history.
+ *
+ * The fragment addresses the request's own card (BI-0012E6CA). It used to be
+ * `#approval-result`, the outcome-history panel above the queue, so the link
+ * landed on a generic panel above every other card. When the request is no
+ * longer on a card (decided, run), the page still opens that outcome panel
+ * first because `?approval=` is present.
+ */
 export function envelopeInboxRoute(envelopeId: string): string {
+  return `/workspace/inbox?approval=${encodeURIComponent(envelopeId)}#${ownerDecisionCardDomId(envelopeAttentionItemId(envelopeId))}`;
+}
+
+/**
+ * The same owner-only readback, opened at the request's recorded RESULT (the
+ * outcome panel) rather than its card. For links that are about what happened —
+ * after a decision, or "see this request's result" — where the card is gone.
+ */
+export function envelopeResultRoute(envelopeId: string): string {
   return `/workspace/inbox?approval=${encodeURIComponent(envelopeId)}#approval-result`;
 }

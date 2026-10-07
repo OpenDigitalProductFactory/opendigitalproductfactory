@@ -17,11 +17,14 @@ export function AttentionInbox({
   failedSources,
   nowMs = Date.now(),
   digestDisposition = null,
+  focusItemId,
 }: {
   projection: OwnerAttentionProjection;
   failedSources: AttentionSource[];
   nowMs?: number;
   digestDisposition?: WeeklyDigestDisposition | null;
+  /** The card an approval deep link asked for (BI-0012E6CA). */
+  focusItemId?: string;
 }) {
   return (
     <div className="space-y-4">
@@ -48,7 +51,7 @@ export function AttentionInbox({
         )}
       </div>
 
-      {projection.count > 0 ? <OwnerDecisionCards entries={projection.needsYouNow} /> : null}
+      {projection.count > 0 ? <OwnerDecisionCards entries={projection.needsYouNow} focusItemId={focusItemId} /> : null}
 
       <DigitalTeamHandlingStrip
         custodianCount={projection.count === 0 ? 0 : projection.custodian.length}

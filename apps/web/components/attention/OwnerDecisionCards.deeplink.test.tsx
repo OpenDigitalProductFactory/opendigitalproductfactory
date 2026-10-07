@@ -2,11 +2,12 @@
 //
 // BI-0012E6CA AC-DEEPLINK — the approval deep link opens the specific card.
 //
-// envelopeInboxRoute(id) is `/workspace/inbox?approval=<id>#approval-result`.
-// `#approval-result` is the ApprovalOutcomeHistory <details> panel, rendered
-// ABOVE the queue; the card itself is an ExpandableCard whose only DOM ids are
-// `owner-decision-<safeId(item.id)>-trigger` / `-panel`, and it renders closed
-// among every other card. So the link lands on a generic panel, not the card.
+// envelopeInboxRoute(id) used to end in `#approval-result`: the
+// ApprovalOutcomeHistory <details> panel rendered ABOVE the queue. The card was
+// an ExpandableCard whose only DOM ids were `<id>-trigger` / `-panel`, and it
+// rendered closed among every other card, so the link landed on a generic panel.
+// The fragment now names the card's own id (owner-decision-dom-id.ts), which
+// is on its <article>, and the card opens on arrival.
 
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -82,5 +83,19 @@ describe("AC-DEEPLINK: the approval link targets the specific card", () => {
     const card = anchor!.closest("article");
     expect(card?.textContent).toContain("Merge BI-B into BI-A?");
     expect(card?.getAttribute("data-open")).toBe("true");
+  });
+
+  it("opens the card named by focusItemId even without a fragment", () => {
+    render(
+      <OwnerDecisionCards
+        focusItemId="coworker-envelope:env-2"
+        entries={[
+          entry("coworker-envelope:env-1", "First"),
+          entry("coworker-envelope:env-2", "Second"),
+        ]}
+      />,
+    );
+    expect(document.getElementById("owner-decision-coworker-envelope-env-2")?.getAttribute("data-open")).toBe("true");
+    expect(document.getElementById("owner-decision-coworker-envelope-env-1")?.getAttribute("data-open")).toBe("false");
   });
 });
