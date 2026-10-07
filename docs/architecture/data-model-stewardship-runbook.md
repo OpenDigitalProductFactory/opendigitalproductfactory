@@ -88,6 +88,15 @@ Findings reconcile into `EaConformanceIssue` beside the structural ones (visible
 - **Why it matters.** Before the ceiling, one 16-day-old install held ~560 MB (32% of the database) of local-CI console text twice, inside `ExternalEvidenceRecord.details` and `ToolExecution.parameters`, growing ~6.5 GB/year per copy. Backfill for rows written before the ceiling: `apps/web/scripts/offload-evidence-output.ts` (dry-run by default, `--apply` to rewrite).
 - **Adding a new evidence-bearing writer?** Route the body through `offloadEvidenceOutput` (or `boundLargeStrings` if the row is a pure ledger) before the insert. A JSON column is a place for structure and references, never for a log.
 
+## Retiring a model nothing reads
+
+**How a model leaves the schema (BI-911840CB).** The `prismaModelCount` ratchet makes every new model owned debt, and a retirement is how that debt is paid back. Show that no live code path reads or writes the model (the Prisma accessor, its back-relation fields, and raw SQL against the table), then land in one PR:
+
+- **The migration** handles any data state. It is a no-op when the table is absent, drops the table only when it is empty, and otherwise renames it to `<Model>_retired_<item>` with every row, its indexes renamed off the original names, and a table comment naming the item. It never deletes a row. [`20261006200000_retire_voice_training_job_and_exam_voucher`](../../packages/db/prisma/migrations/20261006200000_retire_voice_training_job_and_exam_voucher/migration.sql) is the reference.
+- **The schema-regression guard** gets one `INTENTIONAL_MODEL_REMOVALS` entry per model, plus an `INTENTIONAL_FIELD_REMOVALS` entry for each back-relation field on a surviving model ([`schema-regression-guard.mjs`](../../packages/db/scripts/schema-regression-guard.mjs)). Retiring a model does not excuse those fields.
+- **The shrink-only baselines** drop the model's entries: the legacy coverage baseline, model metadata, stewardship scope, closed-set strings and FK-index coverage. `scripts/platform-substrate-baseline.json` records the lower count.
+- **A data-impact manifest** records the live row counts and what the migration does to existing rows.
+
 ## Task-specific operating rules
 
 Read these when this domain is touched. These statements are relocated from AGENTS.md; its invariant core still applies.
