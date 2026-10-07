@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { TileStatus } from "@/components/shell/WorkspaceTiles";
+import type { TileStatus } from "@/lib/workspace-home/types";
 import {
   loadAcceptanceBacklogShare,
   withAcceptanceBacklogTile,
