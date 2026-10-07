@@ -19,8 +19,8 @@ status: active
 | PR | Must be true before merge |
 |---|---|
 | A | None beyond the build gate. PR-A changes no behaviour (AC-INERT). |
-| B | (1) `BI-5B34D277` is merged. (2) W6 has a recorded founder answer. W1, W2, W4, W5 and Q1 are answered by WWMD; see spec §10 "Recorded answers". Q2 gates only the principle-page line in PR-A. (3) The A2 probe has been re-run and attached as workroom evidence. |
-| C | (1) `BI-5B34D277` and `BI-4E192035` are merged. (2) W6 has a recorded founder answer. W2 and W3 are answered by WWMD; see spec §10. (3) The A2 probe has been re-run, and every live pending row either is admissible or has a recorded waiver disposition. |
+| B | (1) `BI-5B34D277` is merged (AC-STRAND, #6101). (2) W6 has a recorded founder answer. W1, W2, W4, W5 and Q1 are answered by WWMD; see spec §10 "Recorded answers". Q2 gates only the principle-page line in PR-A. (3) The A2 probe has been re-run and attached as workroom evidence. |
+| C | (1) `BI-5B34D277` (AC-STRAND, #6101) and `BI-4E192035` (#6103) are merged. (2) W6 has a recorded founder answer. W2 and W3 are answered by WWMD; see spec §10. (3) The A2 probe has been re-run, and every live pending row either is admissible or has a recorded waiver disposition. |
 
 ## Why three PRs
 
