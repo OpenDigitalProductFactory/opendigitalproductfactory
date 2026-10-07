@@ -43,6 +43,13 @@
 //    records nothing and fires nothing, so the marking comes back unchanged.
 //    The deadline is non-interrupting: it never moves a token to a refuse
 //    route or a stop (Phase 3c design §8).
+// 9. Sub-shape (GPP Phase 3c PR-3c-5): a stage that calls a sub-shape runs it
+//    as a child instance. The event `{ type: "child-stop"; stageKey; kind }`
+//    reports how the child stopped. `success` on a marked stage behaves as a
+//    completing receipt for that stage. `failure` or `budget`, or any
+//    child-stop for a stage that holds no token, leaves the marking
+//    unchanged: the token waits (a person decides; the stop kind is never
+//    propagated to the parent, founder decision 2026-10-02).
 //
 // Gates (§6.2), for a governed-decision stage with a typed `gate`:
 // - `shadow`, or `enforced` with `blocking: false`: the verdict is recorded
@@ -113,6 +120,9 @@ export {
 
 // ── input ───────────────────────────────────────────────────────────────────
 
+/** The receipt kind a child's success records for its parent stage (rule 9): the `child-completion` evidence kind. */
+export const CHILD_COMPLETION_RECEIPT_KIND = "child-completion";
+
 export const GPP_GATE_VERDICTS = ["admit", "hold", "escalate", "refuse"] as const;
 export type GppGateVerdict = (typeof GPP_GATE_VERDICTS)[number];
 
@@ -145,7 +155,9 @@ export type GppShapeEvent =
   | { type: "gate-verdict"; stageKey: string; verdict: GppGateVerdict; mode: GppGateMode }
   | { type: "stop"; kind: "failure" | "budget" }
   /** Rule 8: a stage deadline passed. Returns the marking unchanged (PR-3c-4). */
-  | { type: "deadline"; stageKey: string };
+  | { type: "deadline"; stageKey: string }
+  /** Rule 9: the stage's sub-shape child stopped (PR-3c-5). */
+  | { type: "child-stop"; stageKey: string; kind: "success" | "failure" | "budget" };
 
 function compareTokens(left: GppToken, right: GppToken): number {
   if (left.node !== right.node) return left.node < right.node ? -1 : 1;
@@ -331,6 +343,10 @@ export function stepShapeInstance(
   if (marking.stopped) return marking;
   // Rule 8: timers never change M. Nothing is recorded and nothing fires.
   if (event.type === "deadline") return marking;
+  // Rule 9: only a child's success on a marked stage records anything.
+  if (event.type === "child-stop" && (event.kind !== "success" || !marking.tokens.some((token) => token.node === stageElementId(event.stageKey) && token.from === undefined))) {
+    return marking;
+  }
   const graph = buildShapeFlowGraph(definition);
   const work: Work = {
     tokens: marking.tokens.map((token) => ({ ...token })),
@@ -352,6 +368,13 @@ export function stepShapeInstance(
     case "receipt": {
       if (!work.receipts.some((entry) => entry.stageKey === event.stageKey && entry.kind === event.kind)) {
         work.receipts.push({ stageKey: event.stageKey, kind: event.kind });
+      }
+      break;
+    }
+    case "child-stop": {
+      // A success on a marked stage (the only kind that reaches here) is that stage's completing receipt.
+      if (!work.receipts.some((entry) => entry.stageKey === event.stageKey && entry.kind === CHILD_COMPLETION_RECEIPT_KIND)) {
+        work.receipts.push({ stageKey: event.stageKey, kind: CHILD_COMPLETION_RECEIPT_KIND });
       }
       break;
     }
