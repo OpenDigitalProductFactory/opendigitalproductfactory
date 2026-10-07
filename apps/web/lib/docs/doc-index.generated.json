@@ -1260,7 +1260,8 @@
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
         "diagnosing-capability-drift-bi-5acbac50",
-        "safe-operating-rules"
+        "safe-operating-rules",
+        "how-self-upgrade-may-recreate-a-service"
       ]
     },
     "docs/architecture/complexity-shield-acceptance-standard.md": {
@@ -1387,6 +1388,7 @@
         "the-steward-watches-growth-not-only-structure",
         "retention-floors-come-from-the-obligations-that-bind-this-install",
         "evidence-payloads-never-live-inline",
+        "retiring-a-model-nothing-reads",
         "task-specific-operating-rules"
       ]
     },
@@ -12487,6 +12489,7 @@
         "reading-epic-progress",
         "shared-demand",
         "activate-local-demand",
+        "what-build-studio-starts-next",
         "founder-shared-portfolio",
         "promotions",
         "being-reached-when-you-are-away",
@@ -12546,6 +12549,7 @@
         "use-this-doc-for",
         "overview",
         "workflow",
+        "who-can-upgrade-outside-the-maintenance-window",
         "when-work-is-still-running",
         "what-happens-if-you-do-nothing",
         "what-is-reversible",

@@ -53,7 +53,8 @@ import {
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { assertBuildPhaseInitiativeReadiness, checkBuildPhaseInitiativeReadiness } from "@/lib/build/build-entry-gate";
 import { PLAN_TO_BUILD_PASS, refusePlanToBuild, transitionPlanToBuild } from "@/lib/build/plan-to-build-transition";
-import { assertFeatureBuildCompletion } from "@/lib/backlog/initiative-readiness/build-terminal-transition";
+import { completeBuildWhenDelivered } from "@/lib/build-flow-state";
+import { buildStartApprovalRefusal, requiresBuildStartApproval } from "@/lib/build/build-start-approval";
 import { updateFeatureBrief as updateFeatureBriefAction } from "@/lib/actions/build-feature-brief";
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
@@ -360,18 +361,8 @@ export async function advanceBuildPhase(
 
   const currentPhase = build.phase as BuildPhase;
 
-  const requiresStartApproval =
-    build.originatingBacklogItemId != null
-    && build.draftApprovedAt == null
-    && (
-      (currentPhase === "ideate" && targetPhase === "plan")
-      || (currentPhase === "plan" && targetPhase === "build")
-    );
-
-  if (requiresStartApproval) {
-    return { ok: false, message: currentPhase === "ideate"
-      ? "Approve Start before moving this governed backlog draft into planning."
-      : "Approve Start before moving this backlog-linked draft into implementation." };
+  if (requiresBuildStartApproval(build, currentPhase, targetPhase)) {
+    return { ok: false, message: buildStartApprovalRefusal(currentPhase) };
   }
 
   if (!canTransitionPhase(currentPhase, targetPhase)) {
@@ -503,7 +494,12 @@ export async function advanceBuildPhase(
     });
     if (transition.kind === "readiness-refused") return { ok: false, message: transition.message }; // BI-C5D978E9: refusals return
     if (transition.kind === "refused") return transition.refusal;
-  } else if (targetPhase === "complete") await assertFeatureBuildCompletion({ buildId, expectedPhase: currentPhase });
+  } else if (targetPhase === "complete") {
+    // BI-BDB63485: ship → complete needs the delivery preconditions (forks
+    // terminal, merged SHA deployed or upstream skipped) before the terminal transition.
+    const completion = await completeBuildWhenDelivered(buildId);
+    if (!completion.ok) return { ok: false, message: completion.error };
+  }
   else { const refusal = await checkBuildPhaseInitiativeReadiness({ buildId, currentPhase, targetPhase }); if (refusal) return { ok: false, message: refusal }; } // BI-C5D978E9: refusals return
 
   if (currentPhase === "ideate" && targetPhase === "plan") {
@@ -1460,14 +1456,17 @@ export async function shipBuild(input: {
   };
 }
 
-export async function completeBuild(buildId: string): Promise<void> {
+export async function completeBuild(buildId: string): Promise<ActionResult> {
   const userId = await requireBuildAccess();
 
   const build = await prisma.featureBuild.findUnique({ where: { buildId } });
   if (!build) throw new Error("Build not found");
   if (build.createdById !== userId) throw new Error("Forbidden");
 
-  await assertFeatureBuildCompletion({ buildId, expectedPhase: build.phase });
+  // BI-BDB63485: the same delivery preconditions as reconcileBuildCompletion
+  // (ship, forks terminal, deployed or upstream skipped); a refusal is returned.
+  const completion = await completeBuildWhenDelivered(buildId);
+  if (!completion.ok) return completion;
   revalidatePortalContextForBuild(buildId);
   await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
     console.error("[completeBuild] dependency readiness check failed:", err);
@@ -1476,6 +1475,7 @@ export async function completeBuild(buildId: string): Promise<void> {
     .then((m) => m.releaseSandboxForTerminalBuild(buildId, { deleteBranch: false }))
     .catch(() => {});
   revalidatePath("/build");
+  return ok();
 }
 
 // ─── Create Epic + Backlog Items for a Build ────────────────────────────────

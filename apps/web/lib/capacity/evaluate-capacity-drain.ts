@@ -1,7 +1,10 @@
 // Capacity-drain evaluator (server) — reads live state, applies the pure
 // drain-policy, and (when draining) dispatches top demand-ranked ready work via
-// the existing governed tee-up. EP-DEMAND-MGMT capacity automation; kernel
-// decision DI-5FED0D945EBB (capacity-aware tee-up throttle).
+// the existing governed tee-up, whose order is the shared start ranking in
+// lib/demand/start-ranking.ts (BI-78540D2C): demand score first, starved
+// investment buckets first when targets are set, age only as a tie-break.
+// EP-DEMAND-MGMT capacity automation; kernel decision DI-5FED0D945EBB
+// (capacity-aware tee-up throttle).
 
 import type { PrismaClient } from "@dpf/db";
 import { evaluateDrain, nextWeeklyReset, type DrainDecision } from "./drain-policy";

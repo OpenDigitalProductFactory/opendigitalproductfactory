@@ -40,32 +40,41 @@ Standard: declarative convergence to versioned desired state (infrastructure as 
 
 ## Design
 
-### 1. One compose-chain resolver (OBJ-CHAIN)
+### 1. One activation table for the compose chain (OBJ-CHAIN)
 
-Add `scripts/lib/compose-chain.mjs`: `resolveComposeChain({ installState, env, platform }) → string[]`. It owns the rule that `compose.sh:103-120` holds today:
-- the base file;
-- the platform overlay;
-- the release overlay when release-built;
-- `docker-compose.organization-trust.yml` and `docker-compose.tls.yml` when `DPF_ORGANIZATION_TRUST_ENABLED=1`;
-- `docker-compose.edge-actions.yml` when `DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1`;
-- and any further activation overlay registered there.
+The chain has two parts:
+- **Install-time choices:** dev or release mode, platform overlay, and edge. These cannot be re-derived later (`DPF_INCLUDE_EDGE` is not persisted), so they stay recorded in `install-state.json` and `DPF_SELF_UPGRADE_COMPOSE_FILES`.
+- **Activation overlays:** switched on later by `.env` markers. This half drifted.
 
-These callers use it instead of their own lists:
-- `compose.sh` (via `node`);
-- `release-target.ts`;
-- `promote.sh` (when it builds `_f_args`);
-- `bootstrap-organization-pki.{sh,ps1}`.
+`scripts/installer/lib/activation-overlays.txt` is the single table of `MARKER overlay-file...`:
+- `DPF_ORGANIZATION_TRUST_ENABLED` adds `docker-compose.organization-trust.yml` and `docker-compose.tls.yml`;
+- `DPF_EDGE_ACTION_DISPATCH_CONFIGURED` adds `docker-compose.edge-actions.yml`.
 
-`install-state.json.composeFiles` becomes the derived output of the resolver, refreshed on every install, start or upgrade, not a second source. `DPF_SELF_UPGRADE_COMPOSE_FILES` stays only as an explicit operator override and is logged when it differs from the derived chain. The PowerShell installer (`compose-chain.ps1`) is aligned to the same rule, through a parity test against fixtures, because it cannot call `node` before Node is provisioned.
+Readers:
+- **`compose.sh`** (Linux/macOS install, start and stop) reads it instead of hard-coding the markers.
+- **`promote.sh`** appends the overlays whose marker is `1`, in the promoter's environment or the install env file, to the recorded chain. It reads the table from the target tree (`$_compose_root`), not from the promoter's own directory. That keeps the change outside the N-1 portal's staged promoter closure (BI-A04D61B9): an older target without the table changes nothing. Release assets ship the table beside `compose-chain.ps1`.
+- **`compose-chain.ps1`** (Windows) keeps its own branches; a parity test fails when any marker adds different overlays there than in the table. It is not rewritten to read the table yet, because the change could not be exercised without PowerShell.
+
+The promoter logs `step=compose-activation-overlays files=…` when it appends an overlay.
 
 ### 2. Per-service recreate class (OBJ-STATEFUL)
 
-Add `recreateClass` to every service in `scripts/capability-service-catalog.generated.json`, generated from the catalog source:
-- **`stateless`:** recreate whenever the config hash differs. Covers `portal-tls`, the exporters, `alloy`, `grafana`, `prometheus`, `loki` (its data is a volume, and recreate does not touch volumes), `step-ca`, `inngest`, and the edge services.
-- **`data-owner`:** `postgres` and `redis`, plus any service whose `canonicalDataOwner` is itself and whose `backupPolicy` is `included` or `separate-required`. These recreate only when their config hash differs, and only in step 3c (below).
-- **`managed`:** `portal` and `sandbox`, which keep their existing dedicated steps.
+Each service declares its class on itself, as a compose label in the file that defines it:
 
-`portal-tls`, `step-ca` and the edge services are added to the catalog. A contract test fails when a service in any shipped compose file has no catalog entry and class. That also closes the gap that let `portal-tls` go uncatalogued.
+```yaml
+labels:
+  dpf.recreate-class: stateless   # or data-owner, managed
+```
+
+The promoter reads the label from the rendered config it already produces (`docker compose config --format json`). Amended 2026-10-06 by WWMD `DI-3A94F2D28550` (high confidence, margin 2.65), replacing this spec's first proposal of a catalog field. The capability catalog models only capability-projected services in the base, macOS and Linux files. Activation-overlay services such as `portal-tls`, `step-ca` and the edge nodes are switched on by `.env` markers and would have needed a second kind of catalog entry or a parallel registry.
+
+- **`stateless`:** recreate whenever the config hash differs. Covers `portal-tls`, the exporters, `alloy`, `grafana`, `prometheus`, `loki` (its data is a volume, and recreate does not touch volumes), `inngest`, `adp`, `browser-use`, `dpf-tts`, `ollama` and the edge services.
+- **`data-owner`:** `postgres`, `sandbox-postgres`, `dev-postgres`, `redis` and `step-ca` (the certificate authority's keys). These recreate only when their config hash differs, and only in step 3c (below).
+- **`managed`:** `portal`, `sandbox`, the one-shot init jobs, the promoter, and the dev, test and local-CI portals. Each keeps its own lifecycle; convergence leaves them alone.
+
+`scripts/check-no-unclassified-compose-services.mjs` (run by the repo guard loop) fails when any service in any shipped `docker-compose*.yml` has no class, an unknown class, or two files that disagree.
+
+**One-time effect.** Adding the label changes every service's compose config hash. The first upgrade that runs steps 3c and 7e therefore recreates each service once, including one `postgres` restart in step 3c, behind the recovery point. Later upgrades recreate only what changed.
 
 ### 3. Convergence steps in `promote.sh` (OBJ-CONVERGE, OBJ-STATEFUL)
 

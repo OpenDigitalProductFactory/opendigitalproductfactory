@@ -89,6 +89,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
+      // BI-22A2CA0D: every compose service declares dpf.recreate-class, so the
+      // self-upgrade knows which services it may converge (BI-C54E691E).
+      node("--test", "scripts/check-no-unclassified-compose-services.test.mjs"),
       // BI-334CB7DE: doc-diagram fence extraction must stay line-ending
       // invariant. A CRLF working copy re-hashed every fence in a page and
       // demanded a re-render no diagram needed — invisible in `git diff`

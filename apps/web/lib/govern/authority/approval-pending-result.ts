@@ -44,7 +44,7 @@ export function approvalPendingResult(
     detail,
     `${toolName} is available to you — this is not a missing tool or a denied grant,`,
     "and calling it again will not advance it. Report that the work is awaiting approval.",
-    "Once a person approves, the same call runs once; calling it again afterwards returns that recorded outcome.",
+    "Once a person approves, the same call runs once; calling it again afterwards returns that recorded outcome, whether it succeeded or failed.",
   ].filter(Boolean).join(" ");
   return {
     success: false,
@@ -66,20 +66,34 @@ export function approvalPendingResult(
  * BI-12E5DD91 — the identical call already ran once on a person's approval
  * (the platform ran it, or an earlier retry did). Return that recorded outcome
  * so a retry neither runs the action twice nor puts a second card in front of
- * the person.
+ * the person. A failed run is returned as the failure it was (BI-F4EB23C1):
+ * asking again cannot change a refusal, so it must not mint another card.
  */
 export function settledApprovalResult(
   toolName: string,
-  settled: { envelopeId: string; result: unknown },
+  settled: { envelopeId: string; status: "executed" | "failed"; result: unknown },
 ): GovernedExecuteResult {
   const recorded = settled.result && typeof settled.result === "object"
     ? settled.result as Record<string, unknown>
     : {};
+  const recordedMessage = typeof recorded["message"] === "string" ? ` ${recorded["message"]}` : "";
+  if (settled.status === "failed") {
+    const recordedError = typeof recorded["error"] === "string" ? recorded["error"] : null;
+    return {
+      success: false,
+      error: "approval_outcome_failed",
+      message: `${toolName} already ran once after a person approved it (approval request ${settled.envelopeId}) and did not complete`
+        + (recordedError ? ` (${recordedError}).` : ".") + recordedMessage
+        + " Calling it again returns this same outcome and does not ask the person again."
+        + " Fix the cause first; once the approval window has closed, a new request can be made.",
+      data: { envelopeId: settled.envelopeId, recordedError, inboxHref: envelopeInboxRoute(settled.envelopeId) },
+      governance: { approvalReplayOf: settled.envelopeId },
+    } as GovernedExecuteResult;
+  }
   return {
     success: true,
     message: `${toolName} already ran once after a person approved it (approval request ${settled.envelopeId}). `
-      + `This is its recorded outcome; it was not run again.`
-      + (typeof recorded["message"] === "string" ? ` ${recorded["message"]}` : ""),
+      + `This is its recorded outcome; it was not run again.` + recordedMessage,
     ...(recorded["data"] !== undefined ? { data: recorded["data"] as GovernedExecuteResult["data"] } : {}),
     ...(typeof recorded["entityId"] === "string" ? { entityId: recorded["entityId"] } : {}),
     governance: { approvalReplayOf: settled.envelopeId },

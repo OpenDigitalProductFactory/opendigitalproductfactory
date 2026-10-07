@@ -162,3 +162,11 @@ guards did.
     or a Docker or disk failure setting up the slot, used to exit 1 and be
     recorded as a reasonless `failed`. Those now exit
     `EXIT_RUNNER_PREREQUISITE_UNAVAILABLE`, recorded as infrastructure.
+11. ~~**The gate could wait on its own parents.**~~ Admission matches live
+    "mutators" by command line. On 2026-10-06 `pnpm land` was launched from a
+    shell whose `-c` string carried a commit message naming the runner script;
+    that shell matched, so land, `gate:wait`, `pregate` and the gate itself all
+    read as live mutators and admission retried until the run was killed.
+    `findConflictingLocalCiMutatorPids` now excludes the gate's own ancestor
+    chain — an ancestor is blocked on the gate, so it cannot be mutating the
+    sandbox. A genuine runner elsewhere under the same shell still blocks.

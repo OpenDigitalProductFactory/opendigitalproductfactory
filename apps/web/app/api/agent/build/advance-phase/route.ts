@@ -17,6 +17,7 @@ import { checkBuildPhaseGate } from "@/lib/work-posture/verification-depth-gate"
 import { evaluateBuildStudioPlanAdvancementGate } from "@/lib/decision-perspective/build-studio-gate";
 import { resolvePlannedFilePaths } from "@/lib/decision-perspective/planned-file-paths";
 import { PLAN_TO_BUILD_PASS, refusePlanToBuild, transitionPlanToBuild } from "@/lib/build/plan-to-build-transition";
+import { buildStartApprovalRefusal, requiresBuildStartApproval } from "@/lib/build/build-start-approval";
 
 export const dynamic = "force-dynamic";
 
@@ -79,24 +80,8 @@ export async function POST(request: NextRequest): Promise<Response> {
     select: { governedBacklogEnabled: true },
   });
 
-  const requiresStartApproval =
-    build.originatingBacklogItemId != null
-    && build.draftApprovedAt == null
-    && (
-      (currentPhase === "ideate" && targetPhase === "plan")
-      || (currentPhase === "plan" && targetPhase === "build")
-    );
-
-  if (requiresStartApproval) {
-    return NextResponse.json(
-      {
-        error:
-          currentPhase === "ideate"
-            ? "Approve Start before moving this governed backlog draft into planning."
-            : "Approve Start before moving this backlog-linked draft into implementation.",
-      },
-      { status: 422 },
-    );
+  if (requiresBuildStartApproval(build, currentPhase, targetPhase)) {
+    return NextResponse.json({ error: buildStartApprovalRefusal(currentPhase) }, { status: 422 });
   }
 
   if (!canTransitionPhase(currentPhase, targetPhase)) {

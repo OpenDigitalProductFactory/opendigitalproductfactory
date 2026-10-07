@@ -27,6 +27,7 @@ import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
 import { buildExecute } from "./build-execute";
 import { preBuildReviewRepair } from "./pre-build-review-repair";
+import { buildResumeAfterUpgradePause } from "./build-resume-after-upgrade-pause";
 import { buildGauntletRepair } from "./build-gauntlet-repair";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
@@ -257,6 +258,7 @@ export const eventFunctions = [
   buildReviewVerification,
   buildExecute,
   preBuildReviewRepair,
+  buildResumeAfterUpgradePause, // BI-E9DAA23F: on platform.quiescence-cleared, resume builds the pause held
   buildGauntletRepair,
   assuranceBomGenerate,
   assuranceScanRun,

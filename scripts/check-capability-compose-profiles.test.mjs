@@ -134,3 +134,13 @@ test("compatibility_aliases_equal_their_portable_runtime_profile_closures", asyn
     );
   }
 });
+
+test("parses block-list profiles and map labels the same as inline ones", async () => {
+  const { parseComposeServices } = await import("./check-capability-compose-profiles.mjs");
+  const services = parseComposeServices(
+    "services:\n  edge-node-host:\n    profiles:\n      - linux-host-network\n    labels:\n      dpf.recreate-class: stateless\n    image: x\n  web:\n    profiles: [a, b]\n",
+  );
+  assert.deepEqual(services.get("edge-node-host").profiles, ["linux-host-network"]);
+  assert.deepEqual(services.get("edge-node-host").labels, { "dpf.recreate-class": "stateless" });
+  assert.deepEqual(services.get("web").profiles, ["a", "b"]);
+});

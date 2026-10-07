@@ -42,6 +42,8 @@ x-dev-workspace-volumes: &dev-workspace-volumes
 
 services:
   postgres:
+    labels:
+      dpf.recreate-class: data-owner
     # Built from docker/postgres/Dockerfile (FROM pgvector + baked-in inngest
     # init script) rather than the stock pgvector image with a host bind mount.
     # The bind mount made postgres un-startable when the self-upgrade promoter
@@ -80,6 +82,8 @@ services:
   # To list models:   docker model list
 
   portal-init:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       target: runner
@@ -106,6 +110,8 @@ services:
   # Production-served runtime for the real install. Keep localhost:3000 reserved
   # for this surface so customer-zero verification always targets the live path.
   portal:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       target: runner
@@ -476,6 +482,8 @@ services:
 
   # ─── Sandbox Database (isolated from production) ────────────────────────
   sandbox-postgres:
+    labels:
+      dpf.recreate-class: data-owner
     profiles: ["runtime-build"]
     image: pgvector/pgvector:pg16
     restart: unless-stopped
@@ -495,6 +503,8 @@ services:
 
   # ─── Sandbox Init (migrations on sandbox DB) ──────────────────────────
   sandbox-init:
+    labels:
+      dpf.recreate-class: managed
     profiles: ["runtime-build"]
     build:
       context: .
@@ -519,6 +529,8 @@ services:
   # Legacy dpf-sandbox-1 on port 3035 remains as fallback.
   # This is the isolated build/runtime surface, not the production-served app.
   sandbox:
+    labels:
+      dpf.recreate-class: managed
     profiles: ["runtime-build"]
     build:
       context: .
@@ -575,6 +587,8 @@ services:
   # Triggered by: execute_promotion MCP tool or operator "Deploy" button.
   # Not started by default (profiles: promote).
   promoter:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       dockerfile: Dockerfile.promoter
@@ -606,6 +620,8 @@ services:
   # in the browser-automation capability profile. Portal clients report the
   # capability as inactive until the sidecar is enabled and healthy.
   browser-use:
+    labels:
+      dpf.recreate-class: stateless
     profiles: ["runtime-browser-automation"]
     build:
       context: ./services/browser-use
@@ -637,6 +653,8 @@ services:
       start_period: 30s
 
   adp:
+    labels:
+      dpf.recreate-class: stateless
     build:
       context: .
       dockerfile: services/adp/Dockerfile
@@ -671,6 +689,8 @@ services:
       start_period: 15s
 
   integration-test-harness:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       dockerfile: services/integration-test-harness/Dockerfile
@@ -693,6 +713,8 @@ services:
 
   # ─── Dev Environment (isolated databases for development) ──────────────────
   dev-postgres:
+    labels:
+      dpf.recreate-class: data-owner
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     logging: *default-logging
@@ -714,6 +736,8 @@ services:
       retries: 5
 
   dev-init:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       target: dev
@@ -738,6 +762,8 @@ services:
   # Developer runtime surface. Use localhost:3001 for local non-production app
   # work so localhost:3000 remains the production-served portal.
   dev-portal:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       target: dev
@@ -773,6 +799,8 @@ services:
   # Grafana (power-user tool) available at :3002.
 
   prometheus:
+    labels:
+      dpf.recreate-class: stateless
     profiles: ["runtime-deep-observability", "observability-ui"]
     image: prom/prometheus:v3.12.0
     restart: unless-stopped
@@ -796,6 +824,8 @@ services:
       retries: 3
 
   grafana:
+    labels:
+      dpf.recreate-class: stateless
     image: grafana/grafana-oss:13.0.2
     restart: unless-stopped
     logging: *default-logging
@@ -838,6 +868,8 @@ services:
   # Captures EVERY container's stdout/stderr with 14-day retention so errors
   # stop scrolling out of the ephemeral Docker buffer unseen.
   loki:
+    labels:
+      dpf.recreate-class: stateless
     # NOT profile-gated (BI-F8024A9D). This pair reads container logs through
     # the Docker socket with no host-path bind mount, so it runs identically on
     # macOS/Windows Docker Desktop and native Linux. Gating it made the capture
@@ -869,6 +901,8 @@ services:
     # scrapes it and the portal's log-issues panel talks to its API.
 
   alloy:
+    labels:
+      dpf.recreate-class: stateless
     image: grafana/alloy:v1.7.5
     restart: unless-stopped
     logging: *default-logging
@@ -902,6 +936,8 @@ services:
   # should use docker-compose.linux.yml, which also mounts the matching
   # Prometheus scrape config for these exporter targets.
   cadvisor:
+    labels:
+      dpf.recreate-class: stateless
     image: gcr.io/cadvisor/cadvisor:v0.52.1
     restart: unless-stopped
     logging: *default-logging
@@ -915,6 +951,8 @@ services:
     privileged: true
 
   node-exporter:
+    labels:
+      dpf.recreate-class: stateless
     image: prom/node-exporter:v1.9.1
     restart: unless-stopped
     logging: *default-logging
@@ -933,6 +971,8 @@ services:
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
 
   postgres-exporter:
+    labels:
+      dpf.recreate-class: stateless
     profiles: ["runtime-deep-observability", "observability-ui"]
     image: prometheuscommunity/postgres-exporter:v0.19.1
     restart: unless-stopped
@@ -950,6 +990,8 @@ services:
 
   # ─── Durable Execution (Inngest + Redis) ──────────────────────────────
   redis:
+    labels:
+      dpf.recreate-class: data-owner
     image: redis:7-alpine
     restart: unless-stopped
     logging: *default-logging
@@ -971,6 +1013,8 @@ services:
   # exposes it on :9121/metrics in Prometheus format. Lets the platform Health
   # tab promote the "Redis" tile from "Not scraped" to a real UP/DOWN tile.
   redis-exporter:
+    labels:
+      dpf.recreate-class: stateless
     profiles: ["runtime-durable-automation"]
     image: oliver006/redis_exporter:v1.86.0
     restart: unless-stopped
@@ -985,6 +1029,8 @@ services:
     # scraping /metrics is the effective health signal.
 
   inngest:
+    labels:
+      dpf.recreate-class: stateless
     # Pinned (was :latest). :latest drifted onto 1.26.0, which has a
     # self-hosted `inngest start` regression: every queued item fails its
     # capacity-lease with "missing envID" (itemLeaseConstraintCheck) and
@@ -1062,6 +1108,8 @@ services:
   # Compatibility alias selects the full local-speech closure:
   #   docker compose --profile tts up
   dpf-tts:
+    labels:
+      dpf.recreate-class: stateless
     # BI-A0A0568F: profile-gated only (never always-on). See
     # docs/architecture/2026-08-09-tts-idle-process-elimination.md.
     image: ${DPF_TTS_IMAGE:-travisvn/chatterbox-tts-api:v0.1.0}

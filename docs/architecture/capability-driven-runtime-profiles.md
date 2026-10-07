@@ -173,4 +173,19 @@ state outside the transition protocol leaves the cause in place.
 - Use governed self-upgrade and its recovery point for release changes; do not mutate the live topology with an ad hoc Compose rebuild.
 - Do not remove optional volumes, schedules, or provider records merely because a capability is inactive.
 
+## How self-upgrade may recreate a service
+
+Every service in every shipped compose file declares, where it is defined, how the self-upgrade promoter may converge it when its rendered config changes:
+
+```yaml
+labels:
+  dpf.recreate-class: stateless   # or data-owner, managed
+```
+
+- `stateless` services are recreated after the portal swap when their config hash differs. Their volumes are kept.
+- `data-owner` services (the Postgres instances, Redis and the certificate authority) are recreated only when changed, before the swap, behind the recovery point.
+- `managed` services (portal, sandbox, init jobs, the promoter, and the dev and CI portals) keep their own lifecycle steps.
+
+Overlay services that the capability catalog does not model, such as `portal-tls`, carry the label too. [check-no-unclassified-compose-services.mjs](../../scripts/check-no-unclassified-compose-services.mjs) fails on a missing, unknown or conflicting class. The design is [running-service compose convergence](../superpowers/specs/2026-10-06-running-service-compose-convergence-design.md) (BI-C54E691E).
+
 The executable conformance checks are [check-capability-compose-profiles.mjs](../../scripts/check-capability-compose-profiles.mjs), the resolver tests, installer/lifecycle contract tests, and the substrate ratchet described in [Platform substrate boundaries and budgets](platform-substrate-boundaries.md).
