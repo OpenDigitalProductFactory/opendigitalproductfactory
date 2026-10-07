@@ -189,7 +189,10 @@ describe("BI-2E479619 executor recognises a natively executed terminal writer", 
   });
 
   it("AC-3: consults loadTaskInitiativeReviewOutcome(taskRunId, binding) before classifying missing-terminal-writer; a persisted receipt wins", async () => {
-    db.executions.push(nativeWriterSuccess());
+    // The receipt was minted by an EARLIER attempt on this TaskRun, so this
+    // attempt's records (and its native fold) cannot see the writer; only the
+    // persisted-receipt guard can.
+    db.executions.push({ ...nativeWriterSuccess(), createdAt: new Date(Date.now() - 10 * 60 * 1000) });
     autonomous.execute.mockResolvedValue(liveCliLoopResult());
 
     const outcome = await run();
@@ -212,5 +215,21 @@ describe("BI-2E479619 executor recognises a natively executed terminal writer", 
     expect(outcome).toMatchObject({ result: { status: "input-required" } });
     expect(settledData()?.status).toBe("input-required");
     expect(settledData()?.progressPayload).not.toHaveProperty("reviewOutcome");
+  });
+
+  it("labels a refused native writer as a writer refusal, not prose noncompliance, and carries its error to the summary", async () => {
+    db.executions.push(nativeRead(), nativeWriterRefused());
+    db.item = { ...(db.item as Record<string, unknown>), activities: [] };
+    autonomous.execute.mockResolvedValue(liveCliLoopResult());
+
+    await run();
+
+    const progress = settledData()!.progressPayload as { summary: string; executedToolCount: number;
+      terminalWriterWait: Record<string, unknown> };
+    expect(progress.terminalWriterWait).not.toHaveProperty("noncompliance");
+    expect(progress.terminalWriterWait).toMatchObject({ writerRejection: { error: "CANONICAL_DESIGN_REQUIRED" } });
+    expect(progress.summary).toContain("AC-CHAR has a malformed objective link.");
+    expect(progress.summary).not.toContain("did not honor the required writer tool-call contract");
+    expect(progress.executedToolCount).toBe(2);
   });
 });

@@ -107,6 +107,12 @@ export type TerminalToolRecord = {
   name: string;
   /** The reader ran, but a model-facing cap withheld part of its evidence. */
   modelEvidenceTruncated?: boolean;
+  /**
+   * A call the CLI ran natively whose ToolExecution row persists no result
+   * (metrics_only readers). It is audit truth, not evidence: it neither proves
+   * a traversal nor spends the reader budget (BI-2E479619).
+   */
+  nativeResultWithheld?: boolean;
   args?: Record<string, unknown>;
   result: { success: boolean; error?: string; message?: string; data?: Record<string, unknown> };
 };
@@ -311,7 +317,7 @@ export function summarizeTerminalToolProgress(
   records: readonly TerminalToolRecord[],
 ): TerminalToolProgress {
   const readers = new Set(policy.readerToolNames);
-  const readerRecords = records.filter((record) => readers.has(record.name));
+  const readerRecords = records.filter((record) => readers.has(record.name) && !record.nativeResultWithheld);
   if (policy.persistedEvidenceAvailable) {
     return {
       readerAttempts: readerRecords.length,
@@ -597,7 +603,7 @@ export function buildTerminalToolReminder(
     return "Part of the source was withheld by the model context budget. Restart the same immutable traversal with smaller maxChars pages; do not record a disposition until every page is visible.";
   }
   if (progress.partialEvidence) return `Continue ${pageReaderOf(policy)} with cursor ${progress.continuationCursor}; the writer remains unavailable until traversal completes.`;
-  const remaining = effectiveReaderBudget(policy, records.filter((record) => policy.readerToolNames.includes(record.name))) - progress.readerAttempts;
+  const remaining = effectiveReaderBudget(policy, records.filter((record) => policy.readerToolNames.includes(record.name) && !record.nativeResultWithheld)) - progress.readerAttempts;
   return `Use the immutable evidence readers before ${policy.writerToolName}. ${remaining} bounded evidence calls remain; reserve the terminal step for the governed writer.`;
 }
 

@@ -1381,6 +1381,9 @@
     "apps/web/lib/tak/mcp-tool-policy.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/lib/tak/native-mcp-executions.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/tak/precondition-ordering-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -3230,6 +3233,7 @@
       "apps/web/lib/mcp/external-coworker-task-adapter.ts",
       "apps/web/lib/mcp/packs/coworker-pack.ts",
       "apps/web/lib/tak/initiative-readiness-tool-grants.ts",
+      "apps/web/lib/tak/native-mcp-executions.ts",
       "apps/web/lib/work-capsules/governed-work-claim.ts",
       "apps/web/lib/work-management/room-shapes.ts",
       "packages/db/data/agent_registry.json"

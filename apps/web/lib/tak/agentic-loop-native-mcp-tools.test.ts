@@ -160,6 +160,26 @@ describe("BI-2E479619 native-MCP tool calls are visible to the terminal-writer p
     expect(records.map((record) => record.name)).toEqual([reader, reader]);
   });
 
+  it("keeps today's nudge for native-reads-only turns: metrics_only reader rows prove no evidence and spend no read budget", async () => {
+    vi.mocked(routeAndCall).mockImplementation(async () => {
+      // More native reads than maximumReaderCalls (6), with identical arguments and
+      // the empty metrics_only result: neither the read budget nor the loop's
+      // repetition guard may trip on calls the loop never dispatched.
+      if (vi.mocked(routeAndCall).mock.calls.length === 1) table.rows.push(...Array.from({ length: 7 }, () => nativeRead()));
+      return cliProse("The design looks sound overall.") as never;
+    });
+
+    const outcome = await runAgenticLoop(params);
+
+    expect(routeAndCall).toHaveBeenCalledTimes(2);
+    const secondTurn = vi.mocked(routeAndCall).mock.calls[1]![0].map((message) => String(message.content));
+    expect(secondTurn.some((content) => content.includes("Read the bound immutable evidence from the beginning now"))).toBe(true);
+    expect(secondTurn.at(-1)).toContain("6 bounded evidence calls remain");
+    expect(outcome.failure?.kind).toBe("terminal-writer-missing");
+    expect(outcome.content).not.toContain("bounded read budget is exhausted");
+    expect(outcome.executedTools.filter((tool) => tool.name === reader)).toHaveLength(7);
+  });
+
   it("AC-2: a successful native writer ends the run as complete, with the native calls in executedTools", async () => {
     vi.mocked(routeAndCall).mockImplementation(async () => {
       if (vi.mocked(routeAndCall).mock.calls.length === 1) table.rows.push(nativeRead(), nativeRead(), nativeRead(), nativeWriterSuccess());

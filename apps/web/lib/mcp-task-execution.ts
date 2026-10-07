@@ -8,7 +8,8 @@ import { remoteReviewSensitivity } from "./mcp-task-review-sensitivity";
 import { prisma, type Prisma } from "@dpf/db";
 import { terminalWriterDispatchContractForProvider } from "@/lib/routing/execution-plan";
 import type { RequestContract } from "@/lib/routing/request-contract";
-import { loadInitiativeReviewOutcome } from "./mcp-task-review-outcome";
+import { loadInitiativeReviewOutcome, loadTaskInitiativeReviewOutcome } from "./mcp-task-review-outcome";
+import { foldNativeMcpExecutions } from "@/lib/tak/native-mcp-executions";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import {
   executeAutonomousAgenticLoop,
@@ -214,6 +215,8 @@ export async function executeRemoteTaskAttempt(input: {
     terminalWriterContext: input.terminalWriterContext,
   });
 
+  // BI-2E479619: rows a CLI wrote natively during THIS attempt start here.
+  const attemptStartedMs = Date.now();
   try {
     const result = await executeAutonomousAgenticLoop({
       systemPrompt: conversation.systemPrompt,
@@ -240,12 +243,29 @@ export async function executeRemoteTaskAttempt(input: {
       ...(modelRequirements ? { modelRequirements } : {}),
     });
 
+    // BI-2E479619: a CLI adapter runs the governed tools natively, so the
+    // loop's records can miss them. Fold this attempt's native rows (deduped
+    // against any the loop already folded) so the writer check, a writer
+    // refusal and executedToolCount all read the same calls.
+    if (terminalToolPolicy) {
+      await foldNativeMcpExecutions({
+        taskRunId: run.taskRunId,
+        providerId: (result as { providerId?: string }).providerId,
+        sinceMs: attemptStartedMs,
+        records: (result.executedTools ??= []),
+      });
+    }
     const writerResult = parsed.initiativeReviewBinding
       ? result.executedTools?.filter((tool) => tool.name === parsed.initiativeReviewBinding!.writerToolName && tool.result.success).at(-1)?.result
       : undefined;
     const receiptId = optionalString(writerResult?.data?.["receiptId"]);
-    const persistedOutcome = receiptId && parsed.initiativeReviewBinding
-      ? await loadInitiativeReviewOutcome(parsed.initiativeReviewBinding, receiptId) : null;
+    // The persisted receipt is the authority, not this turn's records: before
+    // anything is classified as a missing writer, consult the receipt this
+    // TaskRun's writer recorded (also one minted by an earlier attempt).
+    const persistedOutcome = parsed.initiativeReviewBinding
+      ? (receiptId ? await loadInitiativeReviewOutcome(parsed.initiativeReviewBinding, receiptId) : null)
+        ?? await loadTaskInitiativeReviewOutcome(run.taskRunId, parsed.initiativeReviewBinding)
+      : null;
     if (persistedOutcome) {
       result.content = persistedOutcome.summary;
       result.failure = undefined;

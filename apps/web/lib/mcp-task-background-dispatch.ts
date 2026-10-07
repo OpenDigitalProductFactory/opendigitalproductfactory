@@ -24,6 +24,7 @@ import { parseResourceWaitProjection, resourceWaitDue } from "./mcp-task-capacit
 import { parseTerminalWriterWait } from "./mcp-task-replay-projection";
 import { recoverTerminalWriterEscalation, TERMINAL_WRITER_MAX_ATTEMPTS } from "./mcp-task-terminal-writer-escalation";
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
+import { loadTaskInitiativeReviewOutcome, persistedReviewCompletionData } from "./mcp-task-review-outcome";
 
 export { REMOTE_TASK_EXECUTION_EVENT };
 
@@ -52,6 +53,33 @@ export async function automaticReviewerRecoveryWait(row: {
     }),
   ]);
   return writer || envelope ? null : wait;
+}
+
+/**
+ * BI-2E479619: a reviewer parked as a missing writer whose governed writer in
+ * fact recorded a verified receipt (a CLI ran it natively, so the turn never
+ * saw it) is settled to that recorded outcome. It is never re-dispatched:
+ * automaticReviewerRecoveryWait keeps refusing rows with a writer row, and
+ * this separate branch completes them instead. Compare-and-set on the parked
+ * state, so a concurrent resume or operator action wins.
+ */
+export async function healParkedReviewFromReceipt(row: {
+  taskRunId: string; status: string; updatedAt: Date; progressPayload: unknown; a2aMetadata: unknown;
+}): Promise<boolean> {
+  if (row.status !== "input-required") return false;
+  const metadata = record(row.a2aMetadata);
+  if (metadata?.["trigger"] !== "external-mcp") return false;
+  const binding = parseInitiativeReviewBinding(metadata["initiativeReviewBinding"]);
+  const wait = parseTerminalWriterWait(row.progressPayload);
+  if (!binding || !wait || wait.writerToolName !== binding.writerToolName) return false;
+  const outcome = await loadTaskInitiativeReviewOutcome(row.taskRunId, binding);
+  if (!outcome) return false;
+  const settled = await prisma.taskRun.updateMany({
+    where: { taskRunId: row.taskRunId, status: "input-required", updatedAt: row.updatedAt },
+    data: persistedReviewCompletionData(row.progressPayload, outcome),
+  });
+  if (settled.count === 1) console.info(`[mcp-task-dispatch] settled ${row.taskRunId} to its recorded ${outcome.gate} receipt ${outcome.receiptId}`);
+  return settled.count === 1;
 }
 
 export type RemoteTaskDispatchProjection = {
@@ -363,6 +391,7 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
     const isResourceWaitCandidate = row.status === "submitted"
       && metadata?.["trigger"] === "external-mcp"
       && parseResourceWaitProjection(progress) !== null;
+    if (await healParkedReviewFromReceipt(row)) continue;
     const isReviewerRecoveryCandidate = await automaticReviewerRecoveryWait(row, now);
     if (!isDurableCandidate && !isOrdinaryCandidate && !isResourceWaitCandidate && !isReviewerRecoveryCandidate) {
       raced += 1;
