@@ -17,7 +17,7 @@ import {
 // grant's provenance and adds its own, so the record always says who allowed
 // the sweep to close and who stopped it. Nothing deletes the row.
 
-const MIN_REASON_LENGTH = 12;
+export const MIN_REASON_LENGTH = 12;
 
 export type CloseAuthorisationWriterDb = {
   platformConfig: {
