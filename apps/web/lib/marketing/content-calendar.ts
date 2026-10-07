@@ -10,6 +10,7 @@
 import { prisma } from "@dpf/db";
 import { getMarketingWorkspaceSnapshot } from "../marketing";
 import { parseDueWindowToDate } from "./scheduler";
+import { ACTIVE_MARKETING_WORK } from "./retire-work";
 
 export type CalendarEntry = {
   taskId: string;
@@ -135,6 +136,7 @@ export async function getContentCalendar(input: {
   const tasks = await prisma.marketingAssetTask.findMany({
     where: {
       organizationId: snapshot.organization.id,
+      ...ACTIVE_MARKETING_WORK,
       ...(input.campaignId ? { campaignId: input.campaignId } : {}),
     },
     orderBy: { createdAt: "asc" },

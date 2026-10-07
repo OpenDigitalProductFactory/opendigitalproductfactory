@@ -27,6 +27,7 @@ import {
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { planUpcomingMarketingDraftsHandler } from "../marketing-cadence-handler";
 import { recordMarketingGroundingDefinition, recordMarketingGroundingHandler } from "../marketing-grounding-tool";
+import { retireMarketingWorkDefinition, retireMarketingWorkHandler } from "../marketing-retire-tool";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -275,6 +276,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: false,
   },
   recordMarketingGroundingDefinition,
+  retireMarketingWorkDefinition,
 ];
 
 async function getMarketingSummaryHandler(params: Record<string, unknown>): Promise<ToolResult> {
@@ -770,6 +772,7 @@ const handlers: Record<string, ToolPackHandler> = {
   create_marketing_automation_candidate: (params, userId, context) => createMarketingAutomationCandidateHandler(params, userId, context),
   analyze_seo_opportunity: () => analyzeSeoOpportunityHandler(),
   record_marketing_grounding: (params) => recordMarketingGroundingHandler(params),
+  retire_marketing_work: (params) => retireMarketingWorkHandler(params),
 };
 
 export const marketingOpsPack: ToolPack = {
@@ -783,6 +786,7 @@ export const marketingOpsPack: ToolPack = {
     create_marketing_campaign_brief: ["marketing_write"],
     create_marketing_asset_task: ["marketing_write"],
     record_marketing_grounding: ["marketing_write"],
+    retire_marketing_work: ["marketing_write"],
     publish_to_linkedin: ["marketing_write"],
     send_marketing_email: ["marketing_write"],
     place_linkedin_ad: ["marketing_write"],
