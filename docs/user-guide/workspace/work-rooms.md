@@ -10,6 +10,7 @@ relatedCode:
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
   - apps/web/components/workspace/workroom/WorkroomFlowMap.tsx
   - apps/web/components/ops/workrooms/AreaFlowPanel.tsx
+  - apps/web/components/workspace-home/MainStreamHero.tsx
   - apps/web/components/workspace/workroom/WorkroomParticipants.tsx
   - apps/web/lib/work-management/coworker-engagement-case-projection.ts
   - apps/web/lib/work-management/room-channel-continuity.ts
@@ -184,6 +185,18 @@ Choose a shape to see it drawn across all of its rooms:
 - Choose a step to list the rooms at that step, then open any room.
 
 **Products** (`/portfolio`) shows the four portfolios side by side on the same measures. Rooms with no portfolio are shown in their own **Unplaced** column and never counted in another.
+
+### The main value stream on your home page
+
+Below **What needs you**, the home page shows your business's **main value stream**. This is the work of the portfolio your business type puts first. For a repair shop it might be the jobs you deliver; for a software business it is the changes you build and release.
+
+The panel shows four things:
+
+- **One sentence** naming where the most work is held right now, and why. For example: *5 rooms are held at merge in Small change (waiting on a person).*
+- **Four numbers**: in flow now, flow time, flow efficiency, and finished per week.
+- **The busiest work shape**, drawn live.
+
+Choose a step on the map to open that step in the area's Work view, where you can see the rooms waiting there.
 
 ## Access and Other Channels
 

@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "decidedOption": "hero-below-attention-cockpit",
+  "decisionInteractionId": "DI-10A2E3AC2DF9",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace-home/MainStreamHero.tsx",
+      "apps/web/app/(shell)/workspace/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "hero-below-attention-cockpit",
+      "hero-above-cockpit",
+      "hero-merged-into-cockpit"
+    ]
+  },
+  "rationale": "EP-B70E718D F7 (BI-F19A1128). The home leads with the archetype's main value-delivery area: its primary portfolio from the activation profile. When several portfolios are primary, the busiest one is used; when none is declared, the busiest overall. The hero shows:\n- one sentence naming where the most work is held, and why;\n- four flow numbers;\n- that portfolio's busiest shape, drawn live.\n\nChoosing a step opens the area drill-in. The hero sits below the attention cockpit, so the one attention surface stays first. On twin homes it sits below the twin hero. If the read fails, the hero renders nothing.\n\nRejected options:\n- Above the cockpit, because it would compete with the attention surface.\n- Merged into the cockpit, because that loses the picture and the drill-in.",
+  "verification": "main-stream-hero.test.ts covers the choice of primary portfolio (declared, tie broken by load, fallback to the busiest) and the bottleneck sentence, including the case where nothing is waiting. The map and drill-in are covered by the F3/F4 tests."
+}
