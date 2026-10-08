@@ -79,6 +79,8 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — service reconcile (BI-D011E
       expect(r.status).toBe(0);
       expect(r.stdout).toContain("step=service-reconcile");
       expect(r.stdout).toContain("step=service-reconcile-creating");
+      requiredServices = Object.freeze([...readOutcome(backup).required]);
+      expect(requiredServices.length).toBeGreaterThan(0);
 
       const dockerCalls = readFileSync(dockerLog, "utf8");
       // It reconciles by CREATING, never by recreating: --no-recreate is what
@@ -97,24 +99,8 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — service reconcile (BI-D011E
     // holding exactly that set is reported current. A service added to the
     // catalog later changes both halves together, so this cannot rot into a
     // false pass.
-    const first = makeScratch();
-    let alreadyPresent: string[];
-    try {
-      const discover = runPromote({
-        source: first.source,
-        backup: first.backup,
-        targetSha: first.head,
-        fakeBin: first.fakeBin,
-        existingServices: [],
-      });
-      expect(discover.status).toBe(0);
-      const line = /step=service-reconcile-creating target=\S+ services=(\S+)/.exec(discover.stdout);
-      expect(line, "expected the reconcile step to report what it creates").not.toBeNull();
-      alreadyPresent = line![1].split(",");
-      expect(alreadyPresent.length).toBeGreaterThan(0);
-    } finally {
-      rmSync(first.root, { recursive: true, force: true });
-    }
+    const alreadyPresent = discoverRequiredServices();
+    expect(alreadyPresent.length).toBeGreaterThan(0);
 
     const { root, source, backup, fakeBin, head } = makeScratch();
     const dockerLog = join(root, "docker.log");

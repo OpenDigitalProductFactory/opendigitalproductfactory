@@ -14,6 +14,7 @@ import {
   activityHarnessOverridesFromProposalRows,
   type ActivityHarnessApprovalProposalRow,
 } from "@/lib/routing/activity-harness-approval-source";
+import type { ActivityHarnessConfidenceOverride } from "@/lib/routing/activity-harness-governance";
 
 type ActivityPhaseSelection = Pick<ModelSelectionOverview, "generatedAt" | "phases">;
 
@@ -28,7 +29,10 @@ export function projectActivityRoutingFromLiveState(input: {
   routeDecisions: Parameters<typeof projectActivityOutcomes>[0]["routeDecisions"];
   tokenUsage: Parameters<typeof projectActivityOutcomes>[0]["tokenUsage"];
   routeOutcomes: Parameters<typeof projectActivityOutcomes>[0]["routeOutcomes"];
-  activityHarnessApprovalProposals: ActivityHarnessApprovalProposalRow[];
+  /** Legacy approved proposal rows, when the caller read them itself. */
+  activityHarnessApprovalProposals?: ActivityHarnessApprovalProposalRow[];
+  /** Already-resolved overrides (facts and legacy proposals, BI-C8EC05C9); preferred when present. */
+  approvedConfidenceOverrides?: ActivityHarnessConfidenceOverride[];
   phaseModelSelection: ActivityPhaseSelection;
 }): ReturnType<typeof projectBuildStudioActivityRouting> | null {
   const packages = activityPackagesFromLiveState({
@@ -40,9 +44,8 @@ export function projectActivityRoutingFromLiveState(input: {
     tokenUsage: input.tokenUsage,
     routeOutcomes: input.routeOutcomes,
   });
-  const overrides = activityHarnessOverridesFromProposalRows(
-    input.activityHarnessApprovalProposals,
-  );
+  const overrides = input.approvedConfidenceOverrides
+    ?? activityHarnessOverridesFromProposalRows(input.activityHarnessApprovalProposals ?? []);
 
   if (input.phaseModelSelection.phases.length > 0) {
     return mergeActivityRoutingWithPackages(

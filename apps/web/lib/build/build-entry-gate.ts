@@ -5,6 +5,7 @@ import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/
 import { randomUUID } from "node:crypto";
 
 import { prisma } from "@dpf/db";
+import { CLAIM_READINESS_ACTIVITY_KINDS } from "@/lib/work-capsules/governed-work-claim";
 
 import {
   projectBacklogItemReadiness,
@@ -120,10 +121,13 @@ export async function enforceBuildInitiativeReadiness(args: {
           id: true, itemId: true, title: true, type: true, source: true, workType: true, scopeKind: true,
           body: true,
           archetypeCategories: true, archetypeIds: true,
+          // BI-7027C26E: the same rows the claim reads. A small fix may leave
+          // ideate with no design review (FIX_SMALL_GATES), and then its research
+          // is its recorded reproduction — `evidence` rows (BI-6EB2DBBB). No cap:
+          // evidence rows must not crowd receipts out of the projection.
           activities: {
-            where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+            where: { kind: { in: [...CLAIM_READINESS_ACTIVITY_KINDS] } },
             orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
-            take: 100,
             select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
           },
         },

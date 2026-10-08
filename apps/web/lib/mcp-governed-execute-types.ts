@@ -129,6 +129,24 @@ export type GovernedExecuteContext = {
    * binding promoted to enforced (PR-E, lib/gpp/binding-enforcement.ts).
    */
   permitHandle?: string;
+  /**
+   * Approval convergence (BI-C8EC05C9, spec D2/D3). SERVER-ONLY: set by the
+   * platform's own callers (propose-interception, chat, convert-and-run),
+   * never mapped from a transport — /api/mcp/v1 and /api/mcp/call build their
+   * context explicitly (AC-TRANSPORT).
+   *
+   * `proposeBoundary`: the coworker runs under a propose boundary, so the
+   * escalation gate puts every side-effecting call to a person.
+   */
+  proposeBoundary?: boolean;
+  /**
+   * `"platform"`: the platform completes a person's approval of this call
+   * itself, so the park row carries the `_approvalResume` marker the
+   * approved-request runner replays (lib/coworker/approval-resume-marker.ts).
+   */
+  approvalCompletion?: "platform";
+  /** The chat message an approval request raised by this call belongs to. */
+  chatMessageId?: string;
 };
 
 export type GovernedExecuteArgs = {
