@@ -7,6 +7,7 @@ const { mockDispatchAgentThread, mockPrisma } = vi.hoisted(() => ({
     $transaction: vi.fn(),
     agentThread: {
       findUniqueOrThrow: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       updateMany: vi.fn(),
     },
@@ -14,6 +15,7 @@ const { mockDispatchAgentThread, mockPrisma } = vi.hoisted(() => ({
       create: vi.fn(),
       update: vi.fn(),
       findFirst: vi.fn(),
+      count: vi.fn(),
     },
     agentMessage: {
       create: vi.fn(),
@@ -72,6 +74,8 @@ describe("spawnWorkThread guards", () => {
     // EP-A2A: spawnWorkThread now looks up the parent thread's TaskRun to
     // populate parentTaskRunId; root chat threads have none.
     mockPrisma.taskRun.findFirst.mockResolvedValue(null);
+    mockPrisma.agentThread.findMany.mockResolvedValue([]);
+    mockPrisma.taskRun.count.mockResolvedValue(0);
   });
 
   async function expectSpawnError(parent: {
@@ -210,11 +214,35 @@ describe("spawnWorkThread guards", () => {
     );
   });
 
-  it("rejects when the parent already has five children", async () => {
+  it("rejects when the parent already has five open children", async () => {
+    mockPrisma.agentThread.findMany.mockResolvedValue([1, 2, 3, 4, 5].map((n) => ({ id: `child-${n}` })));
+    mockPrisma.taskRun.count.mockResolvedValue(5);
     await expectSpawnError(
       { userId: "caller-1", parentThreadId: null, childCount: 5, cancelledAt: null },
       THREAD_ERRORS.CHILD_LIMIT_EXCEEDED,
     );
+    expect(mockPrisma.taskRun.count).toHaveBeenCalledWith({
+      where: {
+        threadId: { in: ["child-1", "child-2", "child-3", "child-4", "child-5"] },
+        status: { notIn: ["completed", "failed", "canceled", "rejected", "archived"] },
+      },
+    });
+  });
+
+  // BI-A0BFA63E: childCount only ever grew, so a parent got five children per lifetime.
+  it("spawns a sixth child once earlier children have finished", async () => {
+    mockPrisma.agentThread.findUniqueOrThrow.mockResolvedValue({
+      id: "parent-1", userId: "caller-1", parentThreadId: null, childCount: 5, cancelledAt: null,
+    });
+    mockPrisma.agentThread.findMany.mockResolvedValue([1, 2, 3, 4, 5].map((n) => ({ id: `child-${n}` })));
+    mockPrisma.taskRun.count.mockResolvedValue(0);
+    mockPrisma.agentThread.create.mockResolvedValue({ id: "child-6" });
+    mockPrisma.taskRun.create.mockResolvedValue({ taskRunId: "ctaskrun6" });
+
+    await expect(spawnWorkThread("parent-1", "One more", "caller-1")).resolves.toEqual({
+      child: { id: "child-6" },
+      taskRunId: "ctaskrun6",
+    });
   });
 
   it("rejects when the parent thread is cancelled", async () => {

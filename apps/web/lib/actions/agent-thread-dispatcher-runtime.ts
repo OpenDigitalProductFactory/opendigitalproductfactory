@@ -50,6 +50,7 @@ async function emitCollaborationReturn(
     });
     const prov = readCollaborationProvenance(tr?.a2aMetadata);
     if (!prov) return; // only emit returns for governed collaboration spawns
+    if (prov.delegationLinkId) await closeDelegationLink(prov.delegationLinkId, outcome);
     let ownerMessage: string | undefined;
     if (prov.summary === PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY) {
       const advisory = outcome === "completed" && options?.specialistReply
@@ -81,6 +82,20 @@ async function emitCollaborationReturn(
   } catch {
     // non-fatal — the panel's in-flight poll still flips the done indicator.
   }
+}
+
+/**
+ * Close the handoff's DelegationChain link with the child's outcome
+ * (BI-A0BFA63E): links used to stay `active` forever. Only an active link is
+ * closed, so a repeated return cannot rewrite an outcome.
+ */
+async function closeDelegationLink(linkId: string, outcome: "completed" | "failed" | "canceled"): Promise<void> {
+  await prisma.delegationChain.updateMany({
+    where: { id: linkId, status: "active" },
+    data: outcome === "completed"
+      ? { status: "completed", completedAt: new Date() }
+      : { status: "failed", completedAt: new Date(), reason: `child ${outcome}` },
+  });
 }
 
 const TERMINAL_STATUSES = new Set([
