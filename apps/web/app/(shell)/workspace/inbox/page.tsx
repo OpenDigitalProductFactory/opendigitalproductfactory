@@ -14,7 +14,8 @@ import { runEscalationHygiene } from "@/lib/quality/escalation-hygiene-runner";
 import { AttentionInbox } from "@/components/attention/AttentionInbox";
 import { ApprovalOutcomeHistory } from "@/components/attention/ApprovalOutcomeHistory";
 import { loadApprovalOutcomes } from "@/lib/coworker/approval-outcome-store";
-import { loadCoworkerEnvelopeItems } from "@/lib/attention/sources/coworker-envelope";
+import { loadCoworkerEnvelopeItems, loadOnBehalfEnvelopeItem } from "@/lib/attention/sources/coworker-envelope";
+import { can } from "@/lib/permissions";
 import { envelopeAttentionItemId } from "@/lib/coworker/envelope-routes";
 import { getT } from "@/lib/i18n/t.server";
 
@@ -28,6 +29,9 @@ export default async function WorkspaceInboxPage({ searchParams }: { searchParam
   const t = await getT("approvals");
   const outcomes = (await loadApprovalOutcomes(session.user.id, approvalId)).map((outcome) => ({
     ...outcome, label: t(`states.${outcome.state}.label`), nextAction: t(outcome.nextActionKey),
+    ...(outcome.decidedOnBehalf ? { onBehalfText: t("card.decidedOnBehalf", {
+      by: outcome.decidedOnBehalf.by, owner: outcome.decidedOnBehalf.onBehalfOf, reason: outcome.decidedOnBehalf.reason,
+    }) } : {}),
   }));
   const outcomeCopy = { result: t("result"), recent: t("recent"), unavailable: t("unavailable"), details: t("details"), open: t("open") };
 
@@ -45,6 +49,11 @@ export default async function WorkspaceInboxPage({ searchParams }: { searchParam
   const focusItemId = approvalId ? envelopeAttentionItemId(approvalId) : undefined;
   if (approvalId && !items.some((item) => item.id === focusItemId)) {
     items.push(...await loadCoworkerEnvelopeItems(prisma, session.user.id, Date.now(), approvalId));
+  }
+  // BI-7BCC87BB (AC-OVERRIDE): an admin (the user-management capability) opening another
+  // person's waiting request by its exact link gets that card, to decide on their behalf.
+  if (approvalId && !items.some((item) => item.id === focusItemId) && can(session.user, "manage_users")) {
+    items.push(...await loadOnBehalfEnvelopeItem(prisma, approvalId, session.user.id, Date.now()));
   }
   // V1 operator-view; worker scoping (own approvals only) is BI-AS-4.
   const visible = filterAttentionForAudience(items, { operator: true });

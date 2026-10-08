@@ -18,8 +18,10 @@
 // BI-0F9C291C / EP-COWORKER-INTERACTIVITY.
 
 import { prisma, type Prisma } from "@dpf/db";
+import { createAuthorizationDecisionLog } from "@/lib/governance-data";
 import { isRecord } from "@/lib/shared/coerce";
 import { humanApprovalMarker } from "./human-approved-execution";
+import { labelOnBehalfDecision, readOnBehalfDecision, type OnBehalfDecision } from "./on-behalf-decision";
 
 import {
   describeTransitionError,
@@ -86,6 +88,79 @@ function assertCallerIsDelegate(envelope: EnvelopeRow, callerUserId: string): En
   return { ok: true, envelope };
 }
 
+// ─── Deciding on someone's behalf (BI-7BCC87BB, plan B8, AC-OVERRIDE) ──────────
+//
+// The founder's answer to waiver W6: the person whose authority is lent (for a
+// scheduled task, its owner) is the primary approver, and an admin can decide
+// in their place — when that person has left, or cannot sign in — with a reason.
+// "Admin" is the capability the user-management surface checks (manage_users,
+// lib/actions/users.ts); the route resolves it from the session and passes it
+// in. The request keeps its delegating user: the approved call still runs with
+// that person's authority, re-checked by the monitor (spec D4). Nothing is
+// reassigned (BI-D9562C1D's WWMD answer, no reassignment, stands); the
+// override is a recorded decision, not a transfer.
+
+/** What the caller asked for when deciding someone else's request. */
+export type OnBehalfDecisionRequest = { reason: string; callerIsAdmin: boolean };
+
+export { readOnBehalfDecision, type OnBehalfDecision } from "./on-behalf-decision";
+
+/** The on-behalf record with each person named by their sign-in email, for the card. */
+export async function describeOnBehalfDecision(argsJson: unknown): Promise<OnBehalfDecision | null> {
+  const decision = readOnBehalfDecision(argsJson);
+  if (!decision) return null;
+  const users = await prisma.user.findMany({
+    where: { id: { in: [decision.by, decision.onBehalfOf] } },
+    select: { id: true, email: true },
+  }).catch(() => [] as Array<{ id: string; email: string }>);
+  return labelOnBehalfDecision(decision, new Map(users.map((user) => [user.id, user.email])));
+}
+
+/** The bound authority envelope's metadata, or null for a screen-action envelope (verbatim args). */
+function boundAuthorityArgs(envelope: EnvelopeRow): Record<string, unknown> | null {
+  return envelope.approvalBindingFingerprint
+    && isRecord(envelope.argsJson) && isRecord(envelope.argsJson.approvalBinding)
+    ? envelope.argsJson : null;
+}
+
+/**
+ * Who may decide: the delegate, unchanged; otherwise an admin with a non-empty
+ * reason, on a bound authority envelope only. Returns the cleaned reason when
+ * this is an on-behalf decision, null when it is the delegate's own.
+ */
+function authorizeDecider(
+  envelope: EnvelopeRow,
+  callerUserId: string,
+  onBehalf: OnBehalfDecisionRequest | undefined,
+): { ok: true; reason: string | null } | { ok: false; reason: string; httpStatus: number } {
+  if (envelope.delegatingUserId === callerUserId) return { ok: true, reason: null };
+  const refused = assertCallerIsDelegate(envelope, callerUserId);
+  if (!onBehalf?.callerIsAdmin) return refused as { ok: false; reason: string; httpStatus: number };
+  const reason = onBehalf.reason.trim();
+  if (!reason) {
+    return { ok: false, reason: "Deciding someone else's request needs a reason, which is recorded with the decision.", httpStatus: 400 };
+  }
+  if (!boundAuthorityArgs(envelope)) {
+    return { ok: false, reason: "Only the person who was asked can decide this request.", httpStatus: 409 };
+  }
+  return { ok: true, reason };
+}
+
+async function auditOnBehalf(envelope: EnvelopeRow, by: string, reason: string, verb: "approve" | "decline"): Promise<void> {
+  await createAuthorizationDecisionLog({
+    actorType: "user",
+    actorRef: by,
+    humanContextRef: envelope.delegatingUserId,
+    actionKey: `coworker_envelope.${verb}_on_behalf`,
+    objectRef: envelope.id,
+    decision: "allow",
+    rationale: {
+      by, onBehalfOf: envelope.delegatingUserId, reason,
+      toolName: envelope.manifestActionId, coworkerAgentId: envelope.coworkerAgentId,
+    },
+  });
+}
+
 /**
  * A decision that arrives after the window closed settles the request as
  * `expired` instead of approving or declining it (BI-12E5DD91, BI-78D3CF1E).
@@ -117,10 +192,11 @@ async function refuseIfLapsed(envelope: EnvelopeRow): Promise<EnvelopeActionResu
 export async function approveEnvelope(
   envelopeId: string,
   callerUserId: string,
+  onBehalf?: OnBehalfDecisionRequest,
 ): Promise<EnvelopeActionResult<EnvelopeRow>> {
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
-  const authz = assertCallerIsDelegate(load.envelope, callerUserId);
+  const authz = authorizeDecider(load.envelope, callerUserId, onBehalf);
   if (!authz.ok) return authz;
   const lapsed = await refuseIfLapsed(load.envelope);
   if (lapsed) return lapsed;
@@ -136,16 +212,18 @@ export async function approveEnvelope(
 
   // Bound authority envelopes store metadata, not executable arguments. Screen
   // action envelopes replay argsJson verbatim, so never add metadata to them.
-  const boundArgs = load.envelope.approvalBindingFingerprint
-    && isRecord(load.envelope.argsJson) && isRecord(load.envelope.argsJson.approvalBinding)
-    ? load.envelope.argsJson : null;
+  const boundArgs = boundAuthorityArgs(load.envelope);
+  const marker = humanApprovalMarker(callerUserId);
   const data = {
     status: "approved",
     // BI-E6E2E704: distinguish an authenticated person's decision from a
     // policy-projected envelope. Preserve the existing exact-call binding.
+    // BI-7BCC87BB: an on-behalf approval names the admin, the owner and why.
     ...(boundArgs ? { argsJson: {
       ...boundArgs,
-      humanApproval: humanApprovalMarker(callerUserId),
+      humanApproval: authz.reason
+        ? { ...marker, by: callerUserId, onBehalfOf: load.envelope.delegatingUserId, reason: authz.reason }
+        : marker,
     } as Prisma.InputJsonObject } : {}),
   };
   // Conditional on still being proposed: two overlapping decisions (a slow
@@ -158,6 +236,7 @@ export async function approveEnvelope(
   if (claimed.count !== 1) {
     return { ok: false, reason: "This request was already decided.", httpStatus: 409 };
   }
+  if (authz.reason) await auditOnBehalf(load.envelope, callerUserId, authz.reason, "approve");
   const updated = { ...load.envelope, ...data };
   // Approving does NOT mark the waiting task working here, and must not.
   // Marking it working at approval time makes the resume's CAS on
@@ -178,10 +257,11 @@ export async function approveEnvelope(
 export async function denyEnvelope(
   envelopeId: string,
   callerUserId: string,
+  onBehalf?: OnBehalfDecisionRequest,
 ): Promise<EnvelopeActionResult<EnvelopeRow>> {
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
-  const authz = assertCallerIsDelegate(load.envelope, callerUserId);
+  const authz = authorizeDecider(load.envelope, callerUserId, onBehalf);
   if (!authz.ok) return authz;
   const lapsed = await refuseIfLapsed(load.envelope);
   if (lapsed) return lapsed;
@@ -195,10 +275,17 @@ export async function denyEnvelope(
     };
   }
 
+  const declinedOnBehalf = authz.reason ? {
+    argsJson: {
+      ...boundAuthorityArgs(load.envelope),
+      humanDecline: { by: callerUserId, onBehalfOf: load.envelope.delegatingUserId, reason: authz.reason, declinedAt: new Date().toISOString() },
+    } as Prisma.InputJsonObject,
+  } : {};
   const updated = await prisma.coworkerActionEnvelope.update({
     where: { id: envelopeId },
-    data: { status: "declined", resolvedAt: new Date() },
+    data: { status: "declined", resolvedAt: new Date(), ...declinedOnBehalf },
   });
+  if (authz.reason) await auditOnBehalf(load.envelope, callerUserId, authz.reason, "decline");
   return { ok: true, envelope: updated as EnvelopeRow };
 }
 

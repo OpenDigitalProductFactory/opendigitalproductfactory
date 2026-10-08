@@ -12,10 +12,13 @@ const COPY = SOURCE_CATALOG.approvals.card;
 
 export function EnvelopeDecisionButtons({
   pending,
+  disabled = false,
   onAuthorize,
   onDecline,
 }: {
   pending: boolean;
+  /** Held closed until the caller's precondition is met (an on-behalf reason, BI-7BCC87BB). */
+  disabled?: boolean;
   onAuthorize: () => void;
   onDecline: () => void;
 }) {
@@ -27,10 +30,10 @@ export function EnvelopeDecisionButtons({
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" disabled={pending} onClick={onAuthorize}>
+        <Button size="sm" disabled={pending || disabled} onClick={onAuthorize}>
           Authorize
         </Button>
-        <Button variant="secondary" size="sm" disabled={pending} onClick={onDecline}>
+        <Button variant="secondary" size="sm" disabled={pending || disabled} onClick={onDecline}>
           Decline
         </Button>
       </div>

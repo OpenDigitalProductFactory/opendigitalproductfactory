@@ -175,7 +175,8 @@ describe("S1 — autonomous loop callers drop a proposal and persist nothing (ch
   // proposal; it renders the approval requests the monitor raised.
   it("the chat caller persists no proposal-mode call; it ends on the pending approval", () => {
     const source = readFileSync(join(WEB_ROOT, "lib/actions/agent-coworker.ts"), "utf8");
-    expect(source).not.toContain("agentActionProposal");
+    // Clearing a conversation still deletes legacy rows (FK on messageId); nothing creates one.
+    expect(source).not.toMatch(/agentActionProposal\.create/);
     expect(source).not.toContain('const proposalId = "AP-" +');
     expect(source).toContain("agenticResult.pendingApproval");
   });

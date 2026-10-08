@@ -13,6 +13,7 @@ import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { ThreadSensitivityNotice } from "./ThreadSensitivityNotice";
 import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
+import { approvalFollowUpMessage } from "@/lib/tak/approval-follow-up";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
@@ -780,12 +781,7 @@ export function AgentCoworkerPanel({
       );
 
       // Auto-send a follow-up so the agent reacts to the result
-      if (result.success) {
-        const followUp = result.resultEntityId
-          ? `I approved ${actionType.replace(/_/g, " ")}. Result: ${result.resultEntityId}. What's next?`
-          : `I approved ${actionType.replace(/_/g, " ")}. What's next?`;
-        submitMessage(followUp);
-      }
+      if (result.success) submitMessage(approvalFollowUpMessage(actionType, result.resultEntityId));
     } catch (e) {
       console.error("[handleApprove]", e);
       setMessages((prev) =>
@@ -964,6 +960,7 @@ export function AgentCoworkerPanel({
               }) : null}
               onApprove={handleApprove}
               onReject={handleReject}
+              onApprovalAuthorized={(run) => submitMessage(approvalFollowUpMessage(run.toolName, run.entityId))}
               {...(decisionActive ? { onDecision: (value: string) => handleSend(value) } : {})}
               {...(msg.deliveryState ? { deliveryState: msg.deliveryState } : {})}
               {...(msg.deliveryState === "failed" ? { onRetry: () => handleRetry(msg.id) } : {})}

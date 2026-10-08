@@ -7,7 +7,7 @@ import { generateCannedResponse } from "@/lib/agent-routing";
 import { loadOpeningBriefingPayload } from "@/lib/agent/opening-briefing-loader";
 import type { OpeningBriefingPayload } from "@/lib/agent/opening-briefing";
 import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
-import { serializeMessage, loadProviderInfo } from "@/lib/agent-coworker-data";
+import { serializeMessage, loadProviderInfo, loadInlineApprovalRequests } from "@/lib/agent-coworker-data";
 import {
   NoAllowedProvidersForSensitivityError,
   NoProvidersAvailableError,
@@ -1298,7 +1298,7 @@ export async function sendMessage(input: {
   }
 
   // BI-867263F4: in Advise mode, keep the side-effecting tools and let the loop
-  // capture each call as an AgentActionProposal, so the coworker's recommended
+  // raise each call as an approval request (envelope), so the coworker's recommended
   // actions surface as selectable Approve/Reject cards instead of prose that
   // asks the employee to flip a global toggle. Off in Act mode (tools run) and
   // during a build phase (phase gating owns the surface).
@@ -1962,7 +1962,7 @@ export async function sendMessage(input: {
         roomTurn: roomAuthority,
         // BI-867263F4: Advise mode surfaces recommended actions as proposals —
         // the loop diverts each side-effecting non-artifact call to an
-        // AgentActionProposal card instead of executing it.
+        // approval request (envelope) card instead of executing it (BI-7BCC87BB).
         proposeSideEffects: surfaceAsProposals,
         ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
         onProgress: (event) => agentEventBus.emit(input.threadId, event),
@@ -1977,36 +1977,27 @@ export async function sendMessage(input: {
     // EP-ASYNC-COWORKER-001: done event moved to caller (API route) so it fires
     // AFTER message persistence, enabling SSE-driven async completion.
 
-    // Handle proposal — agent wants to take a side-effecting action that needs approval
-    if (agenticResult.proposal) {
-      const tc = agenticResult.proposal;
-      const proposalId = "AP-" + Math.random().toString(36).substring(2, 7).toUpperCase();
+    // BI-7BCC87BB (spec D2 S1): a declared-proposal call raised approval requests bound to the
+    // exact call; the turn ends on them and the message lists them inline (no AgentActionProposal).
+    if (agenticResult.pendingApproval) {
       const agentMsg = await prisma.agentMessage.create({
         data: {
           id: pendingAgentMessageId,
           threadId: input.threadId, role: "assistant",
           taskRunId: currentTaskRun?.taskRunId ?? null,
-          content: tc.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
+          content: agenticResult.content,
           agentId: agent.agentId, routeContext: input.routeContext,
           providerId: agenticResult.providerId,
           modelId: agenticResult.modelId,
           taskType: taskTypeId !== "unknown" ? taskTypeId : null,
           routedEndpointId: null, // EP-INF-009b: routing handled per-iteration by routeAndCall
-          contextTrace, // BI-3E218D80 — proposal path (see also the plain-response write)
+          contextTrace, // BI-3E218D80 — pending-approval path (see also the plain-response write)
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
       });
-      const proposal = await prisma.agentActionProposal.create({
-        data: {
-          proposalId, threadId: input.threadId, messageId: agentMsg.id,
-          taskRunId: currentTaskRun?.taskRunId ?? null,
-          agentId: agent.agentId, actionType: tc.name,
-          parameters: tc.arguments as import("@dpf/db").Prisma.InputJsonValue, status: "proposed",
-        },
-        select: { proposalId: true, actionType: true, parameters: true, status: true, resultEntityId: true, resultError: true },
-      });
+      const approvalRequests = await loadInlineApprovalRequests([agentMsg]);
       observeConversation(input.threadId, input.routeContext).catch((err) => console.error("[process-observer]", err));
-      return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, proposal) };
+      return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, undefined, undefined, approvalRequests.get(agentMsg.id)) };
     }
 
     // The Golden Triangle review already ran inside executeAutonomousAgenticLoop.
@@ -2404,7 +2395,7 @@ export async function sendMessage(input: {
       modelId: responseIsSystemFailure ? null : responseModelId,
       taskType: taskTypeId !== "unknown" ? taskTypeId : null,
       routedEndpointId: null, // EP-INF-009b: routing is per-iteration via routeAndCall
-      contextTrace, // BI-3E218D80 — plain-response path (see also the proposal write)
+      contextTrace, // BI-3E218D80 — plain-response path (see also the pending-approval write)
     },
     select: {
       id: true,

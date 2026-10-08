@@ -142,10 +142,12 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
 
 export async function loadAgentProposalItems(db: Db): Promise<AttentionItem[]> {
   const rows = await db.agentActionProposal.findMany({
-    where: { status: "proposed" },
+    // BI-7BCC87BB: a time-off request is its own business-approval item, keyed by
+    // requestId (business-approvals.ts); a legacy leave.decide row would duplicate it.
+    where: { status: "proposed", actionType: { not: LEAVE_DECISION_ACTION } },
     orderBy: { proposedAt: "desc" },
     take: 50,
     select: { proposalId: true, actionType: true, parameters: true, proposedAt: true, agentId: true },
   });
-  return rows.map(agentProposalToAttentionItem);
+  return rows.filter((row) => row.actionType !== LEAVE_DECISION_ACTION).map(agentProposalToAttentionItem);
 }

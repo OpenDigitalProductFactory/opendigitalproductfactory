@@ -172,7 +172,7 @@ describe("S2 — propose-interception raises an approval request through the mon
     const refused = { success: false, error: "authority_denied", message: "run_discovery_triage rejected: the coworker lacks the grant." };
     const result = await interceptToolCallAsProposal({ ...call, execute: async () => refused }, { persistence: store, resolveMandatedTools: noMandate });
     expect(result).toMatchObject({ success: false, error: "authority_denied" });
-    expect(result?.message).toMatch(/it was not run/);
+    expect(result?.message).toMatch(/it was not run/i);
     expect(store.createAssistantMessage).not.toHaveBeenCalled();
   });
 

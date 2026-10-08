@@ -33,6 +33,36 @@ async function settleLeaveDecisionProposal(input: {
   });
 }
 
+/**
+ * BI-7BCC87BB (approval convergence PR-B, spec D2 S5, AC-LEAVE): the manager's
+ * decision is the resolution of the advisor's recommendation, recorded on its
+ * DecisionInteraction (which also completes the shadow ledger). A request with
+ * no interaction (no recommendation, or a guard-only one) records nothing. A
+ * failure to record is logged and never undoes the manager's decision.
+ */
+async function resolveLeaveRecommendation(input: {
+  decisionInteractionId: string | null | undefined;
+  chosenOptionId: "approve" | "deny";
+  rationale: string;
+}): Promise<void> {
+  if (!input.decisionInteractionId) return;
+  try {
+    const { recordDecisionOutcome } = await import("@/lib/decision/decision-outcome-store");
+    const result = await recordDecisionOutcome({
+      db: prisma as never,
+      interactionId: input.decisionInteractionId,
+      chosenOptionId: input.chosenOptionId,
+      resolvedBy: "human",
+      rationale: input.rationale,
+    });
+    if (!result.recorded) {
+      console.warn(`[leave] recommendation outcome not recorded interaction=${input.decisionInteractionId}: ${result.reason}`);
+    }
+  } catch (error) {
+    console.warn(`[leave] recommendation outcome not recorded interaction=${input.decisionInteractionId}:`, error);
+  }
+}
+
 // ─── Leave Request Flow ──────────────────────────────────────────────────────
 
 export async function submitLeaveRequest(input: {
@@ -150,6 +180,11 @@ export async function approveLeaveRequest(
     },
   });
   await settleLeaveDecisionProposal({ requestId, userId: session.user.id, status: "executed" });
+  await resolveLeaveRecommendation({
+    decisionInteractionId: request.decisionInteractionId,
+    chosenOptionId: "approve",
+    rationale: "The manager approved the leave request.",
+  });
 
   await createAuthorizationDecisionLog({
     actorType: "user",
@@ -209,6 +244,7 @@ export async function rejectLeaveRequest(
     },
   });
   await settleLeaveDecisionProposal({ requestId, userId: session.user.id, status: "rejected" });
+  await resolveLeaveRecommendation({ decisionInteractionId: request.decisionInteractionId, chosenOptionId: "deny", rationale: reason });
 
   await createAuthorizationDecisionLog({
     actorType: "user",

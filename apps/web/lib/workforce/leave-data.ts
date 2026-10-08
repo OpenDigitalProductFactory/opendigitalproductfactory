@@ -7,6 +7,9 @@ import {
   LEAVE_DECISION_ACTION,
   parseLeaveDecisionProposalParameters,
 } from "@/lib/workforce/leave/leave-decision-proposal-contract";
+import { evaluateCurrentLeaveGuards } from "@/lib/workforce/leave/leave-guard-facts";
+import { resolveLeaveDecision } from "@/lib/workforce/leave/leave-decision-policy";
+import { mapOrgDecisionToLeaveOutcome } from "@/lib/workforce/leave/leave-decision-surface";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -110,6 +113,8 @@ export const getLeaveRequests = cache(async (filters?: {
   employeeProfileId?: string;
   status?: string;
   managerId?: string;
+  /** Evaluate the hard guards now for pending requests with no interaction (default true). */
+  withCurrentGuards?: boolean;
 }): Promise<LeaveRequestRow[]> => {
   const where: Record<string, unknown> = {};
   if (filters?.requestId) where["requestId"] = filters.requestId;
@@ -157,6 +162,29 @@ export const getLeaveRequests = cache(async (filters?: {
     ? rows.filter((r) => r.employeeProfile.managerEmployeeId === filters.managerId)
     : rows;
 
+  // BI-7BCC87BB (spec D2 S5, AC-LEAVE): DecisionInteraction first, then the hard
+  // guards evaluated now, then the legacy proposal (recommendationByRequest).
+  const fromInteraction = await recommendationsFromInteractions(filtered);
+  const fromGuards = filters?.withCurrentGuards === false
+    ? new Map<string, string[]>()
+    : await evaluateCurrentLeaveGuards(
+      filtered
+        .filter((r) => r.status === "pending" && !fromInteraction.has(r.requestId))
+        .map((r) => ({
+          requestId: r.requestId, employeeProfileId: r.employeeProfileId, departmentId: r.employeeProfile.departmentId,
+          leaveType: r.leaveType, startDate: r.startDate.toISOString(), endDate: r.endDate.toISOString(), days: r.days,
+        })),
+    ).catch(() => new Map<string, string[]>());
+  const recommendationFor = (requestId: string): LeaveDecisionProjection | undefined => {
+    const interaction = fromInteraction.get(requestId);
+    if (interaction) return interaction;
+    const reasons = fromGuards.get(requestId);
+    if (reasons) {
+      return { decisionRecommendation: "escalate", decisionRationale: `Needs a human approver: ${reasons.join(" ")}`, decisionGuardReasons: reasons };
+    }
+    return recommendationByRequest.get(requestId);
+  };
+
   return filtered.map((r) => ({
     id: r.id,
     requestId: r.requestId,
@@ -174,7 +202,7 @@ export const getLeaveRequests = cache(async (filters?: {
     approvedAt: r.approvedAt?.toISOString() ?? null,
     rejectionReason: r.rejectionReason,
     decisionInteractionId: r.decisionInteractionId,
-    ...(recommendationByRequest.get(r.requestId) ?? {
+    ...(recommendationFor(r.requestId) ?? {
       decisionRecommendation: null,
       decisionRationale: null,
       decisionGuardReasons: [],
@@ -182,6 +210,38 @@ export const getLeaveRequests = cache(async (filters?: {
     createdAt: r.createdAt.toISOString(),
   }));
 });
+
+/**
+ * The recommendation each request's DecisionInteraction carries. An interaction
+ * exists only when no hard guard fired, so it maps to approve, deny or escalate
+ * exactly as the advisor resolved it (leave-decision-coworker.ts).
+ */
+async function recommendationsFromInteractions(
+  rows: Array<{ requestId: string; decisionInteractionId: string | null }>,
+): Promise<Map<string, LeaveDecisionProjection>> {
+  const byRequest = new Map<string, LeaveDecisionProjection>();
+  const ids = [...new Set(rows.flatMap((r) => (r.decisionInteractionId ? [r.decisionInteractionId] : [])))];
+  if (ids.length === 0) return byRequest;
+  const interactions = await prisma.decisionInteraction.findMany({
+    where: { interactionId: { in: ids } },
+    select: { interactionId: true, outcomeType: true, recommendedOptionId: true, rationale: true },
+  });
+  for (const row of rows) {
+    const interaction = interactions.find((i) => i.interactionId === row.decisionInteractionId);
+    if (!interaction) continue;
+    const outcome = mapOrgDecisionToLeaveOutcome({
+      outcomeType: interaction.outcomeType,
+      recommendedOptionId: interaction.recommendedOptionId,
+      allowed: interaction.outcomeType === "recommend" || interaction.outcomeType === "arbitrate",
+    });
+    byRequest.set(row.requestId, {
+      decisionRecommendation: resolveLeaveDecision({ guards: { forceEscalate: false, reasons: [] }, decisionOutcome: outcome }),
+      decisionRationale: interaction.rationale ?? null,
+      decisionGuardReasons: [],
+    });
+  }
+  return byRequest;
+}
 
 export const getTeamLeaveCalendar = cache(async (
   departmentId?: string,

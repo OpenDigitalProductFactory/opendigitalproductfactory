@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import type { OperationsMapActivityRouting } from "@/lib/ai-operations-map/types";
-import { proposeActivityHarnessOverrideAction } from "@/lib/actions/activity-harness-routing";
+import { confirmActivityHarnessOverrideAction } from "@/lib/actions/activity-harness-routing";
+import { SOURCE_CATALOG } from "@dpf/i18n";
 import {
   ACTIVITY_CLASS_COPY,
   CONFIDENCE_COPY,
@@ -16,6 +17,9 @@ import {
 import { TechnicalDetails } from "./ActivityRoutingPresentation";
 
 type ActivityStep = OperationsMapActivityRouting["activities"][number];
+
+// BI-7BCC87BB (spec D2 S3): the operator confirms an override; it runs through the monitor.
+const OVERRIDE_COPY = SOURCE_CATALOG.approvals.routingOverride;
 
 /** "summarizing · routine work · Low stakes" — the card subtitle in operator words. */
 function describeActivityShape(activity: ActivityStep): string {
@@ -140,7 +144,7 @@ export function ActivityRoutingWorkbench({
 
     setPendingProposalId(proposalId);
     startApprovalTransition(async () => {
-      const result = await proposeActivityHarnessOverrideAction({
+      const result = await confirmActivityHarnessOverrideAction({
         proposalId,
         activityClass: activity.activityClass,
         harnessRecipeKey,
@@ -152,11 +156,7 @@ export function ActivityRoutingWorkbench({
 
       setApprovalStatusByActivity((current) => ({
         ...current,
-        [activity.activityId]: result.success
-          ? result.existing
-            ? "Approval already queued"
-            : "Approval queued"
-          : result.error,
+        [activity.activityId]: result.success ? OVERRIDE_COPY.applied : `${OVERRIDE_COPY.failed} ${result.error}`,
       }));
       setPendingProposalId(null);
     });
@@ -292,7 +292,7 @@ export function ActivityRoutingWorkbench({
                         disabled={isApprovalPending && pendingProposalId === activity.actionProposalId}
                         className="mt-2 inline-flex min-h-8 items-center rounded border border-[var(--dpf-accent)] px-2 py-1 text-xs font-medium text-[var(--dpf-text)] transition-colors hover:bg-[var(--dpf-accent-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] disabled:cursor-wait disabled:opacity-60"
                       >
-                        {isApprovalPending && pendingProposalId === activity.actionProposalId ? "Queueing..." : "Queue approval"}
+                        {isApprovalPending && pendingProposalId === activity.actionProposalId ? OVERRIDE_COPY.confirming : OVERRIDE_COPY.confirm}
                       </button>
                     ) : null}
                     {approvalStatusByActivity[activity.activityId] ? (
@@ -390,7 +390,7 @@ function ActivityReviewQueue({
                     disabled={pending}
                     className="inline-flex min-h-8 items-center rounded border border-[var(--dpf-accent)] px-2 py-1 text-xs font-medium text-[var(--dpf-text)] transition-colors hover:bg-[var(--dpf-accent-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] disabled:cursor-wait disabled:opacity-60"
                   >
-                    {pending ? "Queueing..." : "Queue approval"}
+                    {pending ? OVERRIDE_COPY.confirming : OVERRIDE_COPY.confirm}
                   </button>
                 ) : buildHref ? (
                   <a

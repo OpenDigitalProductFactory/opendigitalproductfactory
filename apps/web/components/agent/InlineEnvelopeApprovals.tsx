@@ -24,23 +24,26 @@ function stateLabel(status: string): string {
 type Outcome = { tone: "done" | "problem"; text: string };
 
 /** What the approve endpoint reports about running the approved request. */
-type Execution = { status: string; message?: string };
+type Execution = { status: string; message?: string; entityId?: string };
+
+/** Told when an authorized request ran, so the chat can follow up with its result (BI-7BCC87BB). */
+type OnAuthorized = (run: { toolName: string; entityId?: string }) => void;
 
 function readable(toolName: string): string {
   return toolName.replace(/_/g, " ");
 }
 
-export function InlineEnvelopeApprovals({ requests }: { requests: InlineApprovalRequest[] }) {
+export function InlineEnvelopeApprovals({ requests, onAuthorized }: { requests: InlineApprovalRequest[]; onAuthorized?: OnAuthorized }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: "85%", marginTop: 4 }}>
       {requests.map((request) => (
-        <InlineEnvelopeApproval key={request.envelopeId} request={request} />
+        <InlineEnvelopeApproval key={request.envelopeId} request={request} onAuthorized={onAuthorized} />
       ))}
     </div>
   );
 }
 
-function InlineEnvelopeApproval({ request }: { request: InlineApprovalRequest }) {
+function InlineEnvelopeApproval({ request, onAuthorized }: { request: InlineApprovalRequest; onAuthorized?: OnAuthorized }) {
   const [pending, setPending] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const open = request.status === "proposed" && !outcome;
@@ -56,7 +59,10 @@ function InlineEnvelopeApproval({ request }: { request: InlineApprovalRequest })
       const body = (await response.json().catch(() => null)) as { execution?: Execution; error?: string } | null;
       if (response.ok) {
         if (choice === "decline") setOutcome({ tone: "done", text: "Declined. Nothing was changed." });
-        else if (body?.execution?.status === "executed") setOutcome({ tone: "done", text: "Authorized and done." });
+        else if (body?.execution?.status === "executed") {
+          setOutcome({ tone: "done", text: "Authorized and done." });
+          onAuthorized?.({ toolName: request.toolName, ...(body.execution.entityId ? { entityId: body.execution.entityId } : {}) });
+        }
         else setOutcome({ tone: "problem", text: `Authorized. ${body?.execution?.message ?? "Nothing has run yet."}` });
         return;
       }

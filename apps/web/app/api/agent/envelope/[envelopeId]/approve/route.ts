@@ -23,7 +23,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { runApprovedExternalRequest, runApprovedPlatformRequest } from "@/lib/coworker/approved-request-run";
 import type { ApprovedRequestRun, PlatformRequestRun } from "@/lib/coworker/approved-request-run-types";
-import { approveEnvelope } from "@/lib/coworker/envelope-actions";
+import { approveEnvelope, describeOnBehalfDecision } from "@/lib/coworker/envelope-actions";
+import { readOnBehalfRequest } from "@/lib/coworker/envelope-on-behalf-request";
 import { recordApprovalOutcome } from "@/lib/coworker/approval-outcome-store";
 
 type RouteContext = {
@@ -40,7 +41,7 @@ function recordablePlatformRun(run: PlatformRequestRun): ApprovedRequestRun {
     : { status: "failed", message: run.message };
 }
 
-export async function POST(_request: Request, context: RouteContext): Promise<Response> {
+export async function POST(request: Request, context: RouteContext): Promise<Response> {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -51,10 +52,15 @@ export async function POST(_request: Request, context: RouteContext): Promise<Re
     return NextResponse.json({ error: "envelopeId required" }, { status: 400 });
   }
 
-  const result = await approveEnvelope(envelopeId, session.user.id);
+  // BI-7BCC87BB (AC-OVERRIDE): an admin may decide on the owner's behalf, with a reason.
+  const onBehalf = await readOnBehalfRequest(request, session.user);
+  const result = onBehalf
+    ? await approveEnvelope(envelopeId, session.user.id, onBehalf)
+    : await approveEnvelope(envelopeId, session.user.id);
   if (!result.ok) {
     return NextResponse.json({ error: result.reason }, { status: result.httpStatus });
   }
+  const decidedOnBehalf = onBehalf ? await describeOnBehalfDecision(result.envelope.argsJson) : null;
 
   // BI-12E5DD91: the approval completes the call it approved. A direct MCP
   // call runs here, once, through the governed executor; a call parked inside
@@ -70,9 +76,12 @@ export async function POST(_request: Request, context: RouteContext): Promise<Re
     status: "failed" as const,
     message: error instanceof Error ? error.message : "The approved action could not be run.",
   }));
-  const response = { ok: true, envelope: result.envelope, execution };
+  const response = { ok: true, envelope: result.envelope, execution, ...(decidedOnBehalf ? { onBehalf: decidedOnBehalf } : {}) };
   try {
-    await recordApprovalOutcome(envelopeId, session.user.id, execution);
+    // The receipt belongs to the owner's request; an admin deciding for them is its actor.
+    await (decidedOnBehalf
+      ? recordApprovalOutcome(envelopeId, result.envelope.delegatingUserId, execution, undefined, session.user.id)
+      : recordApprovalOutcome(envelopeId, session.user.id, execution));
   } catch {
     // Approval/execution may already have happened. Never return an ordinary
     // retryable decision error that invites another authorization attempt.

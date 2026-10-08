@@ -13,10 +13,18 @@
 // PERSON: one item per delegate who is not using the portal, counting the
 // approvals that went to them unanswered in the lookback. The item informs a
 // superuser and links to where connections are managed; it never offers a
-// control that decides someone else's approval. Reassignment is a separate,
-// undecided question (BI-D9562C1D).
+// control that decides someone else's approval itself.
+//
+// BI-7BCC87BB (founder answer to waiver W6, plan B8): an admin may decide a
+// request on the absent person's behalf, with a recorded reason. So when one
+// of that person's requests is still waiting, the item also links to it; the
+// request's own card holds the only control. This absorbs BI-D9562C1D's need
+// without reassignment: the request keeps its delegating user, and the
+// override is recorded on it and in the audit log.
 
 import type { prisma } from "@dpf/db";
+
+import { envelopeInboxRoute } from "@/lib/coworker/envelope-routes";
 
 import type { AttentionItem } from "../types";
 
@@ -35,6 +43,9 @@ const MCP_ADMIN_HREF = "/admin/platform-development";
 const UNANSWERED_STATUSES = ["proposed", "expired"] as const;
 
 export type OrphanEnvelopeRow = {
+  /** The request id, for the link to the newest one still waiting (BI-7BCC87BB). */
+  id?: string;
+  expiresAt?: Date | null;
   delegatingUserId: string;
   manifestActionId: string;
   status: string;
@@ -72,6 +83,9 @@ export function projectOrphanedApprovals(rows: OrphanEnvelopeRow[], now: Date): 
     const tools = [...new Set(list.map((r) => r.manifestActionId))].sort();
     const oldest = list.reduce((min, r) => (r.createdAt < min ? r.createdAt : min), list[0].createdAt);
     const noun = list.length === 1 ? "approval request" : "approval requests";
+    const waiting = list
+      .filter((r) => r.id && r.status === "proposed" && (!r.expiresAt || r.expiresAt.getTime() > now.getTime()))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
     return {
       id: `orphaned-approval:${userId}`,
       source: "orphaned-approval",
@@ -91,7 +105,10 @@ export function projectOrphanedApprovals(rows: OrphanEnvelopeRow[], now: Date): 
         irreversible: false,
       },
       createdAtIso: oldest.toISOString(),
-      actions: [{ kind: "open-in-context", label: "Review AI connections", href: MCP_ADMIN_HREF }],
+      actions: [
+        { kind: "open-in-context", label: "Review AI connections", href: MCP_ADMIN_HREF },
+        ...(waiting?.id ? [{ kind: "open-in-context" as const, label: "Decide on their behalf", href: envelopeInboxRoute(waiting.id) }] : []),
+      ],
       deepLink: MCP_ADMIN_HREF,
       audience: { operator: true },
       portfolio: "for-employees",
@@ -110,7 +127,7 @@ export async function loadOrphanedApprovalItems(db: OrphanDb, now: Date = new Da
       status: { in: [...UNANSWERED_STATUSES] },
       createdAt: { gte: new Date(now.getTime() - ORPHAN_LOOKBACK_DAYS * DAY_MS) },
     },
-    select: { delegatingUserId: true, manifestActionId: true, status: true, createdAt: true },
+    select: { id: true, expiresAt: true, delegatingUserId: true, manifestActionId: true, status: true, createdAt: true },
     orderBy: { createdAt: "desc" },
     take: ORPHAN_SCAN_LIMIT,
   });

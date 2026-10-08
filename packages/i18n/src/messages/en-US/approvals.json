@@ -42,7 +42,18 @@
     "assistant": "Assistant",
     "whyAsked": "Why you are asked",
     "covers": "What authorizing covers",
-    "status": "Status"
+    "status": "Status",
+    "onBehalfWaiting": "This request is waiting for {$owner}. As an admin you can decide it on their behalf; the decision and your reason are recorded.",
+    "decideOnBehalf": "Decide on their behalf",
+    "onBehalfReason": "Reason (recorded with the decision)",
+    "onBehalfReasonHint": "For example: they have left, or cannot sign in.",
+    "decidedOnBehalf": "Decided by {$by} on behalf of {$owner}: {$reason}"
+  },
+  "routingOverride": {
+    "confirm": "Confirm override",
+    "confirming": "Confirming…",
+    "applied": "Override applied. Routing uses it from the next request.",
+    "failed": "The override was not applied."
   },
   "expiredUnanswered": {
     "label": "Expired unanswered",

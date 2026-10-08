@@ -1,12 +1,13 @@
 import "server-only";
 import { prisma } from "@dpf/db";
 import { projectApprovalOutcome, type ApprovalOutcome, type ApprovalOutcomeRow } from "./approval-outcome";
+import { labelOnBehalfDecision } from "./on-behalf-decision";
 import type { ApprovedRequestRun } from "./approved-request-run-types";
 
 type Db = typeof prisma;
 
 const select = {
-  id: true, status: true, createdAt: true, expiresAt: true,
+  id: true, status: true, createdAt: true, expiresAt: true, argsJson: true,
   toolExecutions: {
     where: { executionMode: "approval-outcome" },
     orderBy: { createdAt: "desc" as const }, take: 1,
@@ -19,12 +20,14 @@ const select = {
  * This never changes the envelope's authority, expiry, or execution reservation. */
 export async function recordApprovalOutcome(
   envelopeId: string, userId: string, outcome: ApprovedRequestRun, db: Db = prisma,
+  /** BI-7BCC87BB: an admin who decided on `userId`'s behalf; the request stays `userId`'s. */
+  decidedByUserId?: string,
 ): Promise<void> {
   const envelope = await db.coworkerActionEnvelope.findFirst({ where: { id: envelopeId, delegatingUserId: userId } });
   if (!envelope) throw new Error("Approval request not available.");
   await db.toolExecution.create({ data: {
     threadId: envelope.threadId, agentId: envelope.coworkerAgentId,
-    userId, delegatingUserId: userId, envelopeId, taskRunId: envelope.taskRunId,
+    userId: decidedByUserId ?? userId, delegatingUserId: userId, envelopeId, taskRunId: envelope.taskRunId,
     toolName: "approval_outcome", executionMode: "approval-outcome",
     parameters: {}, success: outcome.status === "executed",
     // Raw handler messages can contain private task data; the shared projection
@@ -60,5 +63,15 @@ export async function loadApprovalOutcomes(
     },
     orderBy: { createdAt: "desc" }, take: envelopeId ? 1 : 10, select,
   });
-  return rows.map((row) => projectApprovalOutcome(row as ApprovalOutcomeRow, now));
+  const outcomes = rows.map((row) => projectApprovalOutcome(row as ApprovalOutcomeRow, now));
+  return labelOnBehalfOutcomes(outcomes, db);
+}
+
+/** BI-7BCC87BB: name the admin and the owner of an on-behalf decision by email. */
+async function labelOnBehalfOutcomes(outcomes: ApprovalOutcome[], db: Db): Promise<ApprovalOutcome[]> {
+  const ids = [...new Set(outcomes.flatMap((o) => (o.decidedOnBehalf ? [o.decidedOnBehalf.by, o.decidedOnBehalf.onBehalfOf] : [])))];
+  if (ids.length === 0) return outcomes;
+  const users = await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, email: true } }).catch(() => []);
+  const labels = new Map(users.map((user) => [user.id, user.email]));
+  return outcomes.map((o) => (o.decidedOnBehalf ? { ...o, decidedOnBehalf: labelOnBehalfDecision(o.decidedOnBehalf, labels) } : o));
 }

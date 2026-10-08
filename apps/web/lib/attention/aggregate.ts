@@ -34,6 +34,7 @@ import {
   loadOutboundItems,
   loadBillItems,
   loadExpenseItems,
+  loadLeaveApprovalItems,
   loadRegulatoryItems,
   loadResearchItems,
 } from "./sources/business-approvals";
@@ -123,6 +124,7 @@ export function attentionSourceLoaders(
     { source: "approval-outbound", load: () => loadOutboundItems(db) },
     { source: "approval-bill", load: () => loadBillItems(db) },
     { source: "approval-expense", load: () => loadExpenseItems(db) },
+    { source: "approval-leave", load: () => loadLeaveApprovalItems(db) },
     { source: "compliance-submission", load: () => loadRegulatoryItems(db) },
     { source: "research-proposal", load: () => loadResearchItems(db) },
     { source: "coworker-memory", load: () => loadCoworkerMemoryItems(db as unknown as CoworkerMemoryAttentionDb) },

@@ -76,6 +76,8 @@ type Props = {
   showAgentLabel: boolean;
   agentName: string | null;
   onApprove?: (proposalId: string) => void;
+  /** An inline approval request was authorized and ran (BI-7BCC87BB); the panel sends the follow-up. */
+  onApprovalAuthorized?: (run: { toolName: string; entityId?: string }) => void;
   onReject?: (proposalId: string) => void;
   /**
    * Present only when this message is the latest turn and the panel is idle:
@@ -371,6 +373,7 @@ export function AgentMessageBubble({
   agentName,
   onApprove,
   onReject,
+  onApprovalAuthorized,
   onDecision,
   deliveryState,
   onRetry,
@@ -723,7 +726,7 @@ export function AgentMessageBubble({
         <DecisionButtons decision={decision} onDecision={onDecision} />
       )}
       {!isUser && message.approvalRequests && message.approvalRequests.length > 0 && (
-        <InlineEnvelopeApprovals requests={message.approvalRequests} />
+        <InlineEnvelopeApprovals requests={message.approvalRequests} {...(onApprovalAuthorized ? { onAuthorized: onApprovalAuthorized } : {})} />
       )}
       {isUser && deliveryState && deliveryState !== "sent" && (
         <div
