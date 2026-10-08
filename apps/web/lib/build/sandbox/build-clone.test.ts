@@ -111,6 +111,25 @@ describe("build clone (W1, M1)", () => {
     expect(git(shared, "worktree", "list")).not.toContain(".builds");
   });
 
+  // FB-91774D92 (2026-10-08): the repo's postinstall (scripts/set-hooks-path.mjs)
+  // re-points core.hooksPath at .githooks AFTER the clone's config set /dev/null.
+  // On the next re-ensure the platform's own push into the shared repo ran the
+  // contributor pre-push gate, which refused it, and the build failed at start.
+  it("syncs the branch even when an install re-pointed the clone's hooks at a refusing pre-push hook", () => {
+    sh(cloneCommand());
+    writeFileSync(join(path, "feature.txt"), "work\n");
+    git(path, "add", "-A");
+    git(path, "commit", "-qm", "feature");
+    const hooks = join(root, "hooks");
+    execFileSync("mkdir", ["-p", hooks]);
+    writeFileSync(join(hooks, "pre-push"), "#!/bin/sh\necho '[pre-push-gate] Run the sandbox gate first' >&2\nexit 1\n", { mode: 0o755 });
+    git(path, "config", "core.hooksPath", hooks);
+
+    sh(buildSandboxBuildCloneSyncCommand(path, branch));
+    expect(git(shared, "rev-parse", branch)).toBe(git(path, "rev-parse", "HEAD"));
+    expect(() => sh(cloneCommand())).not.toThrow();
+  });
+
   it("is a no-op sync for a path that is not a clone on the branch", () => {
     expect(() => sh(buildSandboxBuildCloneSyncCommand(join(root, "missing"), branch))).not.toThrow();
   });
