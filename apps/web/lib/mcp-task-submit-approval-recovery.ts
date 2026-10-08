@@ -40,6 +40,7 @@ const GOVERNED_AUDIT_PARAMETER_KEYS = new Set([
   "_surface",
   "_takAlignment",
   "_takPrecondition",
+  "_approvalResume",
 ]);
 
 function originalToolParameters(value: unknown): Record<string, unknown> | null {

@@ -17,7 +17,7 @@ vi.mock("@/lib/mcp-tools", () => ({ PLATFORM_TOOLS: [] }));
 
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 
-import { runApprovedPlatformRequest } from "./approved-request-run";
+import { runApprovedPlatformRequest, type ResolveApprovalRoom } from "./approved-request-run";
 
 const NOW = new Date("2026-10-07T12:00:00Z");
 const PARAMS = { trigger: "cadence" };
@@ -57,8 +57,8 @@ function fixtures(over: {
     toolExecution: { findFirst },
     agentMessage: { create: vi.fn(async () => ({ id: "msg-1" })) },
   };
-  const execute = vi.fn(async () => over.result ?? { success: true, message: "Triage ran.", entityId: "TRIAGE-1" });
-  const resolveRoom = vi.fn(async () => ({ roomAuthority: { workroomId: "WC-1" }, externalAccessEnabled: true }));
+  const execute = vi.fn(async (_args: Record<string, unknown>) => over.result ?? { success: true, message: "Triage ran.", entityId: "TRIAGE-1" });
+  const resolveRoom = vi.fn<ResolveApprovalRoom>(async () => ({ roomAuthority: { workroomId: "WC-1" } as never, externalAccessEnabled: true }));
   const resolveStandingAccess = vi.fn(async () => true);
   return { db, execute, findFirst, resolveRoom, resolveStandingAccess };
 }

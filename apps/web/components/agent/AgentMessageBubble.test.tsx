@@ -477,7 +477,7 @@ describe("AgentMessageBubble — inline approval requests", () => {
   };
   const request = (envelopeId: string) => ({
     envelopeId, toolName: "contribute_to_hive", status: "proposed",
-    expiresAt: "2026-10-07T00:15:00.000Z", rationale: "This action is defined as a proposal, so a person decides it.",
+    expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(), rationale: "This action is defined as a proposal, so a person decides it.",
   });
 
   it("renders one decision card per request, with Authorize and Decline", () => {

@@ -169,7 +169,6 @@ const PLAYBOOK_TASK = {
   organizationId: "org-1",
   productLineId: null,
   businessProductId: "product-1",
-  nextRunAt: new Date("2026-07-28T09:00:00.000Z"),
 };
 
 function arrangePlaybook(executedResult: Record<string, unknown>) {

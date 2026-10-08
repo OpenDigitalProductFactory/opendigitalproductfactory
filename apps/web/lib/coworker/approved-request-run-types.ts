@@ -7,7 +7,8 @@
 // needs apps/web's all-imports graph acyclic).
 
 export type ApprovedRequestRun =
-  | { status: "executed"; message: string }
+  /** `entityId`: what the run created, when the handler names it (BI-C8EC05C9). */
+  | { status: "executed"; message: string; entityId?: string }
   | { status: "failed"; message: string }
   /** Not run here; the reason says why and what still can run it. */
   | { status: "not-run"; reason: ApprovedRequestNotRunReason; message: string };
@@ -23,3 +24,12 @@ export type ApprovedRequestNotRunReason =
   | "scope-insufficient"
   | "task-not-waiting"
   | "task-waiting-again";
+
+/**
+ * The platform runner's result (approved-request-run.ts, BI-C8EC05C9): an
+ * ordinary run, or `settled` when this exact approved call already ran and
+ * its recorded outcome is the answer. It never runs twice.
+ */
+export type PlatformRequestRun =
+  | ApprovedRequestRun
+  | { status: "settled"; outcome: "executed" | "failed"; message: string; entityId?: string };

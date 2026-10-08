@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    userFact: { findMany: async () => [] }, // BI-C8EC05C9 dual read: no override fact exists yet
     agentActionProposal: {
       findMany: mocks.agentActionProposalFindMany,
     },

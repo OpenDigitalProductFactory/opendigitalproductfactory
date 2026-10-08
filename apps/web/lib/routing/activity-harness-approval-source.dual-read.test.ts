@@ -27,7 +27,7 @@ function db(facts: Array<Record<string, unknown>> = []) {
 describe("loadApprovedActivityHarnessOverrides", () => {
   it("with no facts, returns exactly what the legacy proposal read returns (parity)", async () => {
     const store = db();
-    await expect(loadApprovedActivityHarnessOverrides(store, { take: 40 })).resolves.toEqual(activityHarnessOverridesFromProposalRows(legacy));
+    await expect(loadApprovedActivityHarnessOverrides(store as never, { take: 40 })).resolves.toEqual(activityHarnessOverridesFromProposalRows(legacy));
     expect(store.agentActionProposal.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { actionType: ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION, status: { in: ["approve", "approved", "executed"] } },
       take: 40,
@@ -42,7 +42,7 @@ describe("loadApprovedActivityHarnessOverrides", () => {
       userId: "user-2", key: "activity-routing-override:build|k2|p2|m2", createdAt: new Date("2026-10-08T00:00:00.000Z"),
       value: JSON.stringify({ activityClass: "build", harnessRecipeKey: "k2", providerId: "p2", modelId: "m2", confidence: "degraded", approvedAt: "2026-10-08T00:00:00.000Z" }),
     }]);
-    const overrides = await loadApprovedActivityHarnessOverrides(store, { take: 40 });
+    const overrides = await loadApprovedActivityHarnessOverrides(store as never, { take: 40 });
     expect(overrides.map((o) => [o.calibrationKey, o.confidence, o.approvedBy])).toEqual([
       ["build|k2|p2|m2", "degraded", "user-2"],
       ["plan|k|p|unknown-model", "trusted", "user-1"],
@@ -50,7 +50,7 @@ describe("loadApprovedActivityHarnessOverrides", () => {
   });
 
   it("ignores a malformed fact rather than inventing an override", async () => {
-    const overrides = await loadApprovedActivityHarnessOverrides(db([{ userId: "u", key: "x", createdAt: new Date(), value: "{not json" }]), { take: 40 });
+    const overrides = await loadApprovedActivityHarnessOverrides(db([{ userId: "u", key: "x", createdAt: new Date(), value: "{not json" }]) as never, { take: 40 });
     expect(overrides).toEqual(activityHarnessOverridesFromProposalRows(legacy));
   });
 });

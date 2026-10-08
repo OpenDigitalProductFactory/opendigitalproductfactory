@@ -57,6 +57,8 @@ A non-damaging action with no steering reaches a human only when it has a side e
 
 A tool declared as a proposal is always put to a person, because that is its declared shape.
 
+A coworker set to propose, not act, puts every change it attempts to a person, and no recorded policy decides it on that person's behalf.
+
 ## Why
 
 Founder ruling, 2026-09-09: "The only reason to escalate to a human is for more sensitive, damaging decisions, notably if there is no automated decision process to steer decisions, as the delegation system for the human in the loop." And, on where the rule belongs: "less prose, more process."

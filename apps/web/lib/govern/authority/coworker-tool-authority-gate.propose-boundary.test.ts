@@ -60,16 +60,16 @@ let resume: ReturnType<typeof vi.fn>;
 let reserve: ReturnType<typeof vi.fn>;
 
 function arrange(input: CoworkerAuthorityInput) {
-  ensure = vi.fn(async () => ({ id: "ENV-NEW", status: "proposed", expiresAt: new Date("2026-10-14T00:00:00Z") }));
+  ensure = vi.fn(async () => ({ id: "ENV-NEW", status: "proposed", expiresAt: new Date(Date.now() + 7 * 86_400_000) }));
   resume = vi.fn(async () => undefined);
   reserve = vi.fn(async () => true);
   setCoworkerToolAuthorityOverridesForTests({
     resolveCoworkerAuthorityInput: async () => input,
     authorizationDecisionCreate: async () => ({}),
-    authorityApprovalEnvelopeCreate: ensure,
-    authorityApprovalTaskResume: resume,
+    authorityApprovalEnvelopeCreate: ensure as never,
+    authorityApprovalTaskResume: resume as never,
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
-    policyAuthorityEnvelopeReserve: reserve,
+    policyAuthorityEnvelopeReserve: reserve as never,
     authorityExecutedOutcome: async () => null,
   });
 }

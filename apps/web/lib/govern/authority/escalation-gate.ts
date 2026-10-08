@@ -120,6 +120,7 @@ export const ESCALATION_REASON_CODES = [
   "damaging-sensitivity",
   "damaging-work-case",
   "declared-proposal",
+  "propose-boundary",
   "unsteered-side-effect",
 ] as const;
 export type EscalationReasonCode = (typeof ESCALATION_REASON_CODES)[number];
@@ -152,6 +153,12 @@ export type EscalationInput = {
   operatorRequiresApproval: boolean;
   /** Server-resolved; `none` when nothing recorded can steer this action. */
   steering: EscalationSteering;
+  /**
+   * BI-C8EC05C9: the call runs under a propose boundary (a coworker set to
+   * propose, not act). Server-set by the propose-interception caller only;
+   * no transport maps it (AC-TRANSPORT).
+   */
+  proposeBoundary?: boolean;
 };
 
 /** Is this action damaging? Any one of the three grounds is enough. */
@@ -195,6 +202,15 @@ export function resolveEscalation(input: EscalationInput): EscalationDecision {
     return { verdict: "human", reasonCode: "declared-proposal", ...base };
   }
 
+  // 1b. A coworker set to propose, not act, puts every change it attempts to
+  //     a person (BI-C8EC05C9). This reproduces the diversion
+  //     propose-interception has always made BEFORE the monitor, so it adds
+  //     no escalation; it only moves that decision into the gate. Reads were
+  //     never diverted and fall through to branch 2.
+  if (input.proposeBoundary === true && input.action.sideEffect) {
+    return { verdict: "human", reasonCode: "propose-boundary", ...base };
+  }
+
   // 2. An immediate read decides nothing and commits nothing.
   if (!input.action.sideEffect) {
     return { verdict: "automated", reasonCode: "routine-read", ...base };
@@ -227,6 +243,7 @@ export function resolveEscalation(input: EscalationInput): EscalationDecision {
  */
 const HUMAN_REASON_SENTENCES: Partial<Record<EscalationReasonCode, string>> = {
   "declared-proposal": "This action is defined as a proposal, so a person decides it.",
+  "propose-boundary": "This coworker is set to propose, not act, so a person decides each change it makes.",
   "damaging-consequence":
     "It declares a consequence a person must decide: it reaches outside, cannot be undone, or changes someone's authority.",
   "damaging-sensitivity": "It touches restricted data, so a person decides it.",
@@ -241,7 +258,7 @@ export function escalationReasonSentence(reasonCode: EscalationReasonCode): stri
 
 /**
  * The rule in words, derived from the same constants the gate runs on.
- * `check-escalation-gate.ts` fails the build unless the kernel principle page
+ * escalation-gate.conformance.test.ts fails the build unless the kernel principle page
  * states these verbatim, so what an agent reads and what the platform enforces
  * cannot drift (BI-6B3DA9DD: the principle follows the process).
  */
@@ -258,5 +275,6 @@ export function describeEscalationRule(): string[] {
     "A non-damaging action with steering is decided automatically and mints no approval envelope.",
     "A non-damaging action with no steering reaches a human only when it has a side effect; an immediate read never escalates.",
     "A tool declared as a proposal is always put to a person, because that is its declared shape.",
+    "A coworker set to propose, not act, puts every change it attempts to a person, and no recorded policy decides it on that person's behalf.",
   ];
 }

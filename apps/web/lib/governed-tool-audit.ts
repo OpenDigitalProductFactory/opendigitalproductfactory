@@ -4,6 +4,7 @@ import type { AlignmentGateDecision } from "./tak/alignment-tool-gate";
 import type { PreconditionOrderingDecision } from "./tak/precondition-ordering-types";
 import { deriveAuditClassForTool, deriveCapabilityId } from "./tool-audit-helpers";
 import { boundLargeStrings } from "./evidence/bounded-evidence-output";
+import { APPROVAL_RESUME_MARKER_KEY, buildApprovalResumeMarker } from "./coworker/approval-resume-marker";
 import type { GovernedExecuteContext, GovernedExecuteSource } from "./mcp-governed-execute-types";
 import type { ToolDefinition, ToolResult } from "./mcp-tool-types";
 
@@ -77,6 +78,11 @@ export async function writeGovernedToolAudit(data: {
         checks: data.alignmentDecision.alignment.checks,
       } } : {}),
       ...(data.preconditionDecision ? { _takPrecondition: data.preconditionDecision } : {}),
+      // BI-C8EC05C9 (spec D3): what the platform runner replays once a person
+      // approves. Server-written, and only for a call the platform completes.
+      ...(data.context?.approvalCompletion === "platform" && data.result.error === "approval_required"
+        ? { [APPROVAL_RESUME_MARKER_KEY]: buildApprovalResumeMarker(data.source, data.context) }
+        : {}),
     } : {},
     // Metrics-only rows drop payloads, but a failure with no error code is
     // indistinguishable from a crash. Keep the code alone so the efficiency

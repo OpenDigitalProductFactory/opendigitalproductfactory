@@ -125,7 +125,7 @@ describe("selectVisibleTelemetry", () => {
 describe("serializeMessage — inline approval requests", () => {
   const request = {
     envelopeId: "ENV-1", toolName: "contribute_to_hive", status: "proposed",
-    expiresAt: "2026-07-12T00:15:00.000Z", rationale: "This action is defined as a proposal, so a person decides it.",
+    expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(), rationale: "This action is defined as a proposal, so a person decides it.",
   };
 
   it("attaches every request raised for the message, in order", () => {

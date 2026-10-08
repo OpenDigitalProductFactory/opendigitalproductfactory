@@ -67,9 +67,8 @@ vi.mock("@dpf/db", () => ({
     deliberationRun: {
       findMany: vi.fn(),
     },
-    agentActionProposal: {
-      findMany: vi.fn(),
-    },
+    agentActionProposal: { findMany: vi.fn() },
+    userFact: { findMany: vi.fn(async () => []) }, // BI-C8EC05C9 dual read: no override fact exists yet
   },
 }));
 vi.mock("@/lib/inference/phase-model-resolution", () => ({

@@ -63,6 +63,16 @@ async function findActiveEnvelope(
   });
 }
 
+/**
+ * BI-C8EC05C9 (spec D2 S2, "No pause"): a request raised under a propose
+ * boundary is metadata on argsJson, never part of the binding. The run that
+ * raised it carries on and finishes; it is not parked in input-required.
+ */
+function raisedUnderProposeBoundary(envelope: { argsJson?: unknown } | null): boolean {
+  const args = envelope?.argsJson;
+  return Boolean(args && typeof args === "object" && (args as Record<string, unknown>).proposeBoundary === true);
+}
+
 async function pauseBoundTask(
   taskRunId: string | null,
   db: AuthorityApprovalDb,
@@ -133,6 +143,10 @@ export async function ensureAuthorityApprovalEnvelope(
      * caller could not classify the call, and the short window stands.
      */
     consequence?: ApprovalClassification;
+    /** BI-C8EC05C9: raised under a propose boundary (metadata, not binding). */
+    proposeBoundary?: boolean;
+    /** BI-C8EC05C9: the chat message this request belongs to, for the inline card. */
+    chatMessageId?: string | null;
     now?: Date;
   },
   db: AuthorityApprovalDb = prisma as unknown as AuthorityApprovalDb,
@@ -159,7 +173,9 @@ export async function ensureAuthorityApprovalEnvelope(
     db,
   );
   if (existing) {
-    await pauseBoundTask(input.binding.taskRunId, db);
+    // The forced fallback re-calls the same tool on the same TaskRun, so its
+    // binding collides with a boundary request here; that must not pause it.
+    if (!raisedUnderProposeBoundary(existing)) await pauseBoundTask(input.binding.taskRunId, db);
     return existing;
   }
 
@@ -177,7 +193,11 @@ export async function ensureAuthorityApprovalEnvelope(
         // Never persist raw tool arguments in the universal authority
         // envelope. The exact-call fingerprint and bounded binding are enough
         // to prove what the human approved.
-        argsJson: { approvalBinding: input.binding },
+        argsJson: {
+          approvalBinding: input.binding,
+          ...(input.proposeBoundary === true ? { proposeBoundary: true } : {}),
+        },
+        ...(input.chatMessageId ? { chatMessageId: input.chatMessageId } : {}),
         rationale: input.explanation,
         taskRunId: input.binding.taskRunId,
         delegationChainId: input.binding.chainId,
@@ -199,7 +219,7 @@ export async function ensureAuthorityApprovalEnvelope(
     created = winner;
   }
 
-  await pauseBoundTask(input.binding.taskRunId, db);
+  if (!raisedUnderProposeBoundary(created)) await pauseBoundTask(input.binding.taskRunId, db);
   return created;
 }
 
@@ -214,6 +234,8 @@ export async function findApprovedAuthorityEnvelope(
   binding: CoworkerApprovalBinding;
   /** When it was approved, for the staleness re-check at execution. */
   approvedAt: Date | null;
+  /** Raised under a propose boundary: its TaskRun was never paused (BI-C8EC05C9). */
+  proposeBoundary?: true;
 } | null> {
   const approvalBindingFingerprint =
     fingerprintCoworkerApprovalBinding(binding);
@@ -249,6 +271,7 @@ export async function findApprovedAuthorityEnvelope(
     expiresAt: row.expiresAt,
     binding,
     approvedAt: approvalTime(args, row.createdAt),
+    ...(raisedUnderProposeBoundary(row) ? { proposeBoundary: true as const } : {}),
   };
 }
 
