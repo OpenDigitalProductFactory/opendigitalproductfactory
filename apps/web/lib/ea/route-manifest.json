@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 671,
+  "routeCount": 673,
   "routes": [
     {
       "routePath": "/",
@@ -2351,6 +2351,23 @@
       "file": "apps/web/app/api/v1/compliance/regulations/route.ts"
     },
     {
+      "routePath": "/api/v1/customer-sites/[siteId]/location/device-confirmation",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer-sites",
+        "[siteId]",
+        "location",
+        "device-confirmation"
+      ],
+      "dynamicParams": [
+        "siteId"
+      ],
+      "file": "apps/web/app/api/v1/customer-sites/[siteId]/location/device-confirmation/route.ts",
+      "exposure": "authenticated"
+    },
+    {
       "routePath": "/api/v1/customer/accounts",
       "kind": "route",
       "segments": [
@@ -3992,6 +4009,22 @@
         "itemId"
       ],
       "file": "apps/web/app/api/v1/work-items/[itemId]/evidence/route.ts"
+    },
+    {
+      "routePath": "/api/v1/work-items/[itemId]/sites",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "work-items",
+        "[itemId]",
+        "sites"
+      ],
+      "dynamicParams": [
+        "itemId"
+      ],
+      "file": "apps/web/app/api/v1/work-items/[itemId]/sites/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/v1/work-queue/[itemId]/claim",
