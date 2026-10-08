@@ -50,6 +50,11 @@
       "cpus": "2.0",
       "profiles": ["runtime-local-speech", "tts"],
       "notes": "BI-A0A0568F: keep profile-gated; do not promote to always-on. Idle-process elimination is the preferred long-term path."
+    },
+    "sandbox": {
+      "cpus": "4.0",
+      "profiles": ["runtime-build"],
+      "notes": "BI-F5D4FA50: Build Studio sandbox. CPU-bounded so one build cannot close the local-CI pool for host-cpu-high; vitest and jest workers capped at 2 in its env. No memory ceiling yet: next build and tsc inside it have not been sized, and an OOM-killed build is worse than a slow one."
     }
   }
 }

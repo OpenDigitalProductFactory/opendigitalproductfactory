@@ -1779,8 +1779,8 @@ async function runBuildOrchestratorInner(params: {
     const { canTransitionPhase } = await import("@/lib/feature-build-types");
     const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
     const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
-    // The synthetic QA task (taskIndex === -1, "Full verification: tests +
-    // typecheck") is dispatched to the model, which runs the full suite via
+    // The synthetic QA task (taskIndex === -1, "Scoped verification: changed-file
+    // tests + typecheck") is dispatched to the model, which ran the full suite via
     // opencode — flaky and slow on a local model (observed: 61s pass for one
     // build, then a 301s rate-limit FAILURE for the next) and REDUNDANT: the
     // authoritative verification is the scoped checkPhaseGate below, which reads
