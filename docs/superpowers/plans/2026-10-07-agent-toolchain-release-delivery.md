@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Plan — a release delivers and verifies the agent toolchain on every client
 
 - **Umbrella item:** BI-D4BB5AE3 (delivery-large), Workroom WC-7C3279BB
