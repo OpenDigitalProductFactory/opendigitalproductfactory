@@ -7,7 +7,11 @@ import type { PortfolioFlowWithCost, ShapeFlowView } from "@/lib/work-management
 import { getWorkShape } from "@/lib/work-management/work-shapes";
 import { buildShapeFlowMap } from "@/lib/work-management/workroom-flow-map";
 
-import { PortfolioFlowComparison, PortfolioFlowTiles, ShapeFlowDrillIn } from "./AreaFlowPanel";
+import { translate } from "@dpf/i18n";
+
+import { PortfolioFlowComparison, PortfolioFlowTiles, ShapeFlowDrillIn, type FlowT } from "./AreaFlowPanel";
+
+const t: FlowT = (key, args) => translate("en-US", "workrooms", key, args);
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams("view=work&shape=delivery-small"),
@@ -34,7 +38,7 @@ const flow = (key: PortfolioFlowWithCost["key"], overrides: Partial<PortfolioFlo
 
 describe("PortfolioFlowTiles", () => {
   it("shows the five measures with their change against the prior window", () => {
-    render(<PortfolioFlowTiles flow={flow("manufactureAndDeliver")} areaHref="/area/delivery?view=work" />);
+    render(<PortfolioFlowTiles flow={flow("manufactureAndDeliver")} areaHref="/area/delivery?view=work" t={t} />);
     expect(screen.getByText("In flow now")).toBeInTheDocument();
     expect(screen.getByText("1d 6h")).toBeInTheDocument();
     expect(screen.getByText(/−10h vs prior 28 days/)).toBeInTheDocument();
@@ -46,14 +50,14 @@ describe("PortfolioFlowTiles", () => {
   });
 
   it("links each shape to its drill-in and names where it waits", () => {
-    render(<PortfolioFlowTiles flow={flow("manufactureAndDeliver")} areaHref="/area/delivery?view=work" />);
+    render(<PortfolioFlowTiles flow={flow("manufactureAndDeliver")} areaHref="/area/delivery?view=work" t={t} />);
     const link = screen.getByRole("link", { name: getWorkShape("delivery-small")!.title });
     expect(link).toHaveAttribute("href", "/area/delivery?view=work&shape=delivery-small");
     expect(screen.getByText("3 at merge · waiting on a person")).toBeInTheDocument();
   });
 
   it("says so when nothing is in flow, and shows dashes instead of invented numbers", () => {
-    render(<PortfolioFlowTiles flow={flow("forEmployees", { flowLoad: 0, shapes: [], flowTime: { p50Ms: null, priorP50Ms: null, runs: 0 }, flowEfficiency: { value: null, prior: null } })} areaHref="/area/team?view=work" />);
+    render(<PortfolioFlowTiles flow={flow("forEmployees", { flowLoad: 0, shapes: [], flowTime: { p50Ms: null, priorP50Ms: null, runs: 0 }, flowEfficiency: { value: null, prior: null } })} areaHref="/area/team?view=work" t={t} />);
     expect(screen.getByText("No rooms in this area are in flow right now.")).toBeInTheDocument();
     expect(screen.getByText("No runs finished yet")).toBeInTheDocument();
   });
@@ -74,7 +78,7 @@ describe("ShapeFlowDrillIn", () => {
   };
 
   it("draws the shape across its rooms with queue counts, a version picker and the rooms at a step", () => {
-    render(<ShapeFlowDrillIn view={view} backHref="/area/delivery?view=work" baseHref="/area/delivery?view=work" stageKey="merge" />);
+    render(<ShapeFlowDrillIn view={view} backHref="/area/delivery?view=work" baseHref="/area/delivery?view=work" stageKey="merge" t={t} />);
     expect(screen.getByRole("button", { name: /^Merge.*3 rooms here, 3 waiting/ })).toBeInTheDocument();
     const versions = screen.getByRole("navigation", { name: "Shape version" });
     expect(within(versions).getByRole("link", { name: `v${definition.version}` })).toHaveAttribute("aria-current", "page");
@@ -86,7 +90,7 @@ describe("ShapeFlowDrillIn", () => {
 describe("PortfolioFlowComparison", () => {
   it("puts the four portfolios and the unplaced rooms side by side", () => {
     const flows = (["productsAndServicesSold", "manufactureAndDeliver", "forEmployees", "foundational", "unplaced"] as const).map((k) => flow(k, k === "unplaced" ? { points: null } : {}));
-    render(<PortfolioFlowComparison flows={flows} areaHrefByRole={{ manufactureAndDeliver: "/area/delivery?view=work" }} />);
+    render(<PortfolioFlowComparison flows={flows} areaHrefByRole={{ manufactureAndDeliver: "/area/delivery?view=work" }} t={t} />);
     expect(screen.getAllByRole("columnheader")).toHaveLength(6);
     expect(screen.getByRole("link", { name: "Manufacturing and delivery" })).toHaveAttribute("href", "/area/delivery?view=work");
     expect(screen.getByRole("columnheader", { name: "Unplaced" })).toBeInTheDocument();

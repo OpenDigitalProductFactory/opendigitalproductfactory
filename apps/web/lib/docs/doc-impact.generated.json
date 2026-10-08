@@ -438,6 +438,9 @@
     "apps/web/components/ops/SelfUpgradeLiveProvider.tsx": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
+    "apps/web/components/ops/workrooms/AreaFlowPanel.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx": [
       "docs/architecture/workroom-vocabulary-boundary.md"
     ],
@@ -490,6 +493,9 @@
     "apps/web/components/workbooks/grid-office-export.ts": [
       "docs/user-guide/workspace/workbooks.md"
     ],
+    "apps/web/components/workspace-home/MainStreamHero.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/components/workspace/WorkCaseAttentionLens.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -497,6 +503,9 @@
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/components/workspace/workroom/WorkroomCycles.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/components/workspace/workroom/WorkroomParticipants.tsx": [
@@ -1478,6 +1487,9 @@
     ],
     "apps/web/lib/work-management/portfolio-activity-projection.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md"
+    ],
+    "apps/web/lib/work-management/room-ai-spend.ts": [
+      "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/lib/work-management/room-channel-continuity.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -3986,11 +3998,15 @@
     "docs/user-guide/workspace/work-rooms.md": [
       "apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx",
       "apps/web/app/(shell)/workspace/my-queue/page.tsx",
+      "apps/web/components/ops/workrooms/AreaFlowPanel.tsx",
+      "apps/web/components/workspace-home/MainStreamHero.tsx",
       "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
       "apps/web/components/workspace/WorkCaseDetailView.tsx",
       "apps/web/components/workspace/workroom/WorkroomCycles.tsx",
+      "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx",
       "apps/web/components/workspace/workroom/WorkroomParticipants.tsx",
       "apps/web/lib/work-management/coworker-engagement-case-projection.ts",
+      "apps/web/lib/work-management/room-ai-spend.ts",
       "apps/web/lib/work-management/room-channel-continuity.ts",
       "apps/web/lib/work-management/room-channel-ingress.ts",
       "apps/web/lib/work-management/room-participation.ts",

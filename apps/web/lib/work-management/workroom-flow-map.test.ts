@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { QueueTelemetryRow } from "@/lib/queue/queue-metrics-rollup";
 
 import { getWorkShape } from "./work-shapes";
-import { MIN_BASELINE_EXITS, buildWorkroomFlowMap, formatDuration } from "./workroom-flow-map";
+import { formatDuration } from "@/lib/datetime";
+
+import { MIN_BASELINE_EXITS, buildWorkroomFlowMap } from "./workroom-flow-map";
 import { workroomStageQueueKey } from "./workroom-stage-telemetry";
 
 const definition = getWorkShape("dependency-advisory-watch")!;

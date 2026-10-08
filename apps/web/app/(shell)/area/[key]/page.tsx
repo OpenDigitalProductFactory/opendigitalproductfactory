@@ -46,6 +46,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
   const view: AreaView = requested === "team" || requested === "setup" ? requested : "work";
 
   const t = await getT("shell");
+  const tFlow = await getT("workrooms");
   const granted = new Set<string>(getGrantedCapabilities(user));
   const setupEntries = getAreaSetupEntries(section.key).filter(
     (entry) => entry.capabilityKey === null || granted.has(entry.capabilityKey),
@@ -93,11 +94,11 @@ export default async function AreaPage({ params, searchParams }: Props) {
           <>
             {shapeFlow ? (
               <div className="my-6">
-                <ShapeFlowDrillIn view={shapeFlow} backHref={workHref} baseHref={workHref} stageKey={stage ?? null} />
+                <ShapeFlowDrillIn view={shapeFlow} backHref={workHref} baseHref={workHref} stageKey={stage ?? null} t={tFlow} />
               </div>
             ) : portfolioFlow ? (
               <div className="my-6">
-                <PortfolioFlowTiles flow={portfolioFlow} areaHref={workHref} />
+                <PortfolioFlowTiles flow={portfolioFlow} areaHref={workHref} t={tFlow} />
               </div>
             ) : null}
             {work}

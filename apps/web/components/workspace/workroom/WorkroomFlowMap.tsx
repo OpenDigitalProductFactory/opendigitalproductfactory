@@ -5,8 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { TRIGGER_GLYPH } from "@/lib/work-management/shape-signature";
 import { describeHoldCause } from "@/lib/work-management/workroom-stage-telemetry";
+import { formatDuration } from "@/lib/datetime";
 import {
-  formatDuration,
   type FlowMapStage,
   type FlowMapStageState,
   type WorkroomFlowMapModel,

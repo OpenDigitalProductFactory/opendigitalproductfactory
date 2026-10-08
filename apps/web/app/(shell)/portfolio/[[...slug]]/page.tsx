@@ -8,6 +8,7 @@ import { PortfolioOverview } from "@/components/portfolio/PortfolioOverview";
 import { PortfolioFlowComparison } from "@/components/ops/workrooms/AreaFlowPanel";
 import { AREA_SECTIONS } from "@/lib/navigation/portal-shell-sections";
 import { loadPortfolioFlowView } from "@/lib/work-management/area-flow.server";
+import { getT } from "@/lib/i18n/t.server";
 import { PortfolioNodeDetail } from "@/components/portfolio/PortfolioNodeDetail";
 import { CompletenessStrip } from "@/components/portfolio/CompletenessStrip";
 import { CoveragePanel } from "@/components/portfolio/CoveragePanel";
@@ -57,6 +58,7 @@ export default async function PortfolioPage({ params, searchParams }: Props) {
         <PlatformGridSection entityType="digital_product" view={view} />
         {!view && portfolioFlow ? (
           <PortfolioFlowComparison
+            t={await getT("workrooms")}
             flows={portfolioFlow}
             areaHrefByRole={Object.fromEntries(AREA_SECTIONS.filter((s) => s.portfolioRole).map((s) => [s.portfolioRole!, `/area/${s.key}?view=work`]))}
           />

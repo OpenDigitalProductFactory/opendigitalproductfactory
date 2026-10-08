@@ -179,18 +179,6 @@ export function buildWorkroomFlowMap(input: {
   };
 }
 
-/** "3d 4h", "2h 10m", "45m", "<1m". */
-export function formatDuration(ms: number): string {
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 1) return "<1m";
-  const days = Math.floor(minutes / 1440);
-  const hours = Math.floor((minutes % 1440) / 60);
-  const mins = minutes % 60;
-  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-  if (hours > 0) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-  return `${mins}m`;
-}
-
 /**
  * The shape-level map (BI-C5CD9EAE, F4): the same picture, read across every
  * room on the shape version. No step has a single "current" state; instead each
@@ -213,4 +201,3 @@ export function buildShapeFlowMap(input: {
   });
   return { ...base, stages, aggregate: { roomsInFlow } };
 }
-
