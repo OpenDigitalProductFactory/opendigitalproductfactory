@@ -1,6 +1,5 @@
 import type { McpTokenScope } from "@/lib/auth/mcp-api-token";
-import { readInstallHostProfile } from "@/lib/install/host-profile";
-import { buildAgentHostInstructions } from "@/lib/mcp/agent-host-instructions";
+import { loadAgentHostContext } from "@/lib/mcp/agent-host-context";
 import { MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS } from "@/lib/mcp/load-tools";
 import {
   FALLBACK_PROTOCOL_VERSION,
@@ -12,27 +11,6 @@ type InitializeAuthority = {
   scope: McpTokenScope;
   scopes: readonly string[];
 };
-
-/**
- * Resolve the instance stance for the connect-time briefing.
- *
- * Imported lazily and separately from the org-context bundle so a database or
- * install-state read failure degrades this one block rather than the whole
- * handshake. Returns `undefined` on failure, which omits the briefing instead of
- * asserting a stance the server could not establish.
- */
-async function composeInstanceStance() {
-  try {
-    const [{ loadInstanceStance, prismaInstanceStanceStore }, { prisma }] = await Promise.all([
-      import("@/lib/install/instance-stance"),
-      import("@dpf/db"),
-    ]);
-    return await loadInstanceStance(prismaInstanceStanceStore(prisma));
-  } catch (error) {
-    console.warn("[mcp/initialize] instance-stance compose failed (fail-open):", error);
-    return undefined;
-  }
-}
 
 /**
  * Resolve WHICH installation this is, for the handshake (BI-C7151B1B).
@@ -109,12 +87,7 @@ export async function buildMcpInitializeResult(args: {
 
   let instructions = MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS;
   try {
-    instructions += `\n\n${buildAgentHostInstructions(
-      await readInstallHostProfile(),
-      args.authority,
-      await composeInstanceStance(),
-      installation?.label,
-    )}`;
+    instructions += `\n\n${(await loadAgentHostContext(args.authority, installation?.label)).instructions}`;
   } catch (error) {
     console.warn("[mcp/initialize] agent-host compose failed (fail-open):", error);
   }
