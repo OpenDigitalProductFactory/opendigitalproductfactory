@@ -2,9 +2,16 @@ import type { ReactNode } from "react";
 
 import type { InternalAgentCard } from "@/lib/tak/agent-card-types";
 import { oversightLabel } from "@/lib/workforce/oversight-copy";
+import { SOURCE_CATALOG } from "@dpf/i18n";
+
+import { AgentCardEnvelopeDecision, type AgentCardViewer } from "./AgentCardEnvelopeDecision";
+
+const PENDING_LABEL = SOURCE_CATALOG.approvals.agentCard.pendingApprovals;
 
 type AgentCardSupervisorPanelProps = {
   cards: InternalAgentCard[];
+  /** Who is looking: decides whether a pending request offers its buttons (BI-7BCC87BB). */
+  viewer?: AgentCardViewer;
 };
 
 const TOOL_PREVIEW_LIMIT = 6;
@@ -97,9 +104,11 @@ function sortCardsForSupervisor(cards: InternalAgentCard[]) {
   });
 }
 
-function AgentCardArticle({ card }: { card: InternalAgentCard }) {
+function AgentCardArticle({ card, viewer }: { card: InternalAgentCard; viewer?: AgentCardViewer }) {
   const authority = card.extensions.tak.authority;
   const decisionState = authority.supervisorDecisionState;
+  // BI-7BCC87BB (DI-FFD78D222548): show whichever pending item is newest.
+  const pendingEnvelope = decisionState.latestPendingKind === "envelope" ? decisionState.latestPendingEnvelope ?? null : null;
   const approvalPosture = authority.requiresApprovalForSideEffects
     ? "proposal/review"
     : "direct";
@@ -159,12 +168,14 @@ function AgentCardArticle({ card }: { card: InternalAgentCard }) {
         <div className="grid grid-cols-1 gap-3 border-y border-[var(--dpf-border)] py-3 lg:grid-cols-2">
           <div>
             <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
-              Pending proposals
+              {PENDING_LABEL}
             </p>
             <p className="mt-2 text-sm font-semibold text-[var(--dpf-text)]">
-              {decisionState.pendingProposalCount}
+              {decisionState.pendingProposalCount + (decisionState.pendingEnvelopeCount ?? 0)}
             </p>
-            {decisionState.latestPendingProposal ? (
+            {pendingEnvelope ? (
+              <AgentCardEnvelopeDecision envelope={pendingEnvelope} {...(viewer ? { viewer } : {})} />
+            ) : decisionState.latestPendingProposal ? (
               <>
                 <p className="mt-1 break-all text-xs text-[var(--dpf-muted)]">
                   {decisionState.latestPendingProposal.proposalId} /{" "}
@@ -269,7 +280,7 @@ function AgentCardArticle({ card }: { card: InternalAgentCard }) {
   );
 }
 
-export function AgentCardSupervisorPanel({ cards }: AgentCardSupervisorPanelProps) {
+export function AgentCardSupervisorPanel({ cards, viewer }: AgentCardSupervisorPanelProps) {
   const linkedCount = cards.filter((card) => card.extensions.gaid.gaid !== null).length;
   const approvalCount = cards.filter(
     (card) => card.extensions.tak.authority.requiresApprovalForSideEffects,
@@ -279,7 +290,9 @@ export function AgentCardSupervisorPanel({ cards }: AgentCardSupervisorPanelProp
     0,
   );
   const pendingProposalCount = cards.reduce(
-    (total, card) => total + card.extensions.tak.authority.supervisorDecisionState.pendingProposalCount,
+    (total, card) => total
+      + card.extensions.tak.authority.supervisorDecisionState.pendingProposalCount
+      + (card.extensions.tak.authority.supervisorDecisionState.pendingEnvelopeCount ?? 0),
     0,
   );
   const recentReceiptCount = cards.reduce(
@@ -309,7 +322,7 @@ export function AgentCardSupervisorPanel({ cards }: AgentCardSupervisorPanelProp
         <Metric label="Projected cards" value={cards.length} note={`${linkedCount} GAID linked`} />
         <Metric label="Approval posture" value={approvalCount} note="proposal/review constrained" />
         <Metric label="Exposed tools" value={exposedToolCount} note="from AIDoc or grant mapping" />
-        <Metric label="Pending proposals" value={pendingProposalCount} note="awaiting employee decision" />
+        <Metric label={PENDING_LABEL} value={pendingProposalCount} note="awaiting employee decision" />
         <Metric label="Recent receipts" value={recentReceiptCount} note="receipt-backed executions" />
       </div>
 
@@ -321,7 +334,7 @@ export function AgentCardSupervisorPanel({ cards }: AgentCardSupervisorPanelProp
         <div className="space-y-3">
           <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
             {primaryCards.map((card) => (
-              <AgentCardArticle key={card.agentId} card={card} />
+              <AgentCardArticle key={card.agentId} card={card} {...(viewer ? { viewer } : {})} />
             ))}
           </div>
 
@@ -332,7 +345,7 @@ export function AgentCardSupervisorPanel({ cards }: AgentCardSupervisorPanelProp
               </summary>
               <div className="mt-3 grid grid-cols-1 gap-3 2xl:grid-cols-2">
                 {additionalCards.map((card) => (
-                  <AgentCardArticle key={card.agentId} card={card} />
+                  <AgentCardArticle key={card.agentId} card={card} {...(viewer ? { viewer } : {})} />
                 ))}
               </div>
             </details>

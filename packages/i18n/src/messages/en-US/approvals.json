@@ -49,6 +49,14 @@
     "onBehalfReasonHint": "For example: they have left, or cannot sign in.",
     "decidedOnBehalf": "Decided by {$by} on behalf of {$owner}: {$reason}"
   },
+  "agentCard": {
+    "pendingApprovals": "Pending approvals",
+    "waitingFor": "Waiting for {$owner}. Only they, or an admin on their behalf, can decide it.",
+    "done": "Authorized and done.",
+    "authorized": "Authorized.",
+    "declined": "Declined. Nothing was changed.",
+    "notSaved": "That decision could not be saved. Please try again."
+  },
   "routingOverride": {
     "confirm": "Confirm override",
     "confirming": "Confirming…",
