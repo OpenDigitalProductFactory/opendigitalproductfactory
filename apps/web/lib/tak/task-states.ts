@@ -35,7 +35,9 @@ export const TASK_STATES = [
 
 export type TaskState = (typeof TASK_STATES)[number];
 
-const TERMINAL_TASK_STATES = new Set<string>(["completed", "failed", "canceled", "rejected", "archived"] satisfies TaskState[]);
+/** Outcomes a task never leaves; usable as a Prisma `notIn` list. */
+export const TERMINAL_TASK_STATE_LIST = ["completed", "failed", "canceled", "rejected", "archived"] as const satisfies readonly TaskState[];
+const TERMINAL_TASK_STATES = new Set<string>(TERMINAL_TASK_STATE_LIST);
 
 /** Terminal outcomes are distinct from recoverable waits and upgrade pauses. */
 export function isTerminalTaskStatus(status: string): boolean {
