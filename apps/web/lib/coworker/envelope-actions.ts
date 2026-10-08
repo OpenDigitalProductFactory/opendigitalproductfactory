@@ -132,18 +132,18 @@ function authorizeDecider(
   envelope: EnvelopeRow,
   callerUserId: string,
   onBehalf: OnBehalfDecisionRequest | undefined,
-): { ok: true; reason: string | null } | { ok: false; reason: string; httpStatus: number } {
-  if (envelope.delegatingUserId === callerUserId) return { ok: true, reason: null };
-  const refused = assertCallerIsDelegate(envelope, callerUserId);
-  if (!onBehalf?.callerIsAdmin) return refused as { ok: false; reason: string; httpStatus: number };
+): { refusal: Extract<EnvelopeActionResult, { ok: false }> } | { refusal: null; reason: string | null } {
+  if (envelope.delegatingUserId === callerUserId) return { refusal: null, reason: null };
+  const notDelegate = assertCallerIsDelegate(envelope, callerUserId);
+  if (!onBehalf?.callerIsAdmin) return { refusal: notDelegate as Extract<EnvelopeActionResult, { ok: false }> };
   const reason = onBehalf.reason.trim();
   if (!reason) {
-    return { ok: false, reason: "Deciding someone else's request needs a reason, which is recorded with the decision.", httpStatus: 400 };
+    return { refusal: { ok: false, reason: "Deciding someone else's request needs a reason, which is recorded with the decision.", httpStatus: 400 } };
   }
   if (!boundAuthorityArgs(envelope)) {
-    return { ok: false, reason: "Only the person who was asked can decide this request.", httpStatus: 409 };
+    return { refusal: { ok: false, reason: "Only the person who was asked can decide this request.", httpStatus: 409 } };
   }
-  return { ok: true, reason };
+  return { refusal: null, reason };
 }
 
 async function auditOnBehalf(envelope: EnvelopeRow, by: string, reason: string, verb: "approve" | "decline"): Promise<void> {
@@ -197,7 +197,7 @@ export async function approveEnvelope(
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
   const authz = authorizeDecider(load.envelope, callerUserId, onBehalf);
-  if (!authz.ok) return authz;
+  if (authz.refusal) return authz.refusal;
   const lapsed = await refuseIfLapsed(load.envelope);
   if (lapsed) return lapsed;
 
@@ -262,7 +262,7 @@ export async function denyEnvelope(
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
   const authz = authorizeDecider(load.envelope, callerUserId, onBehalf);
-  if (!authz.ok) return authz;
+  if (authz.refusal) return authz.refusal;
   const lapsed = await refuseIfLapsed(load.envelope);
   if (lapsed) return lapsed;
 
