@@ -115,6 +115,13 @@ export type DriveResolutionInput = {
    * nothing because a person stage is attention either way.
    */
   roleBindings?: Readonly<Record<string, string>> | null;
+  /**
+   * Why an agent may not run this room's role:author stage (BI-8A32EBFF): the
+   * operator pre-authorisation is not in force, or the work is not funded
+   * within budget (author-stage-autonomy.ts). Read only to name the missing
+   * condition on the attention the stage raises; it grants nothing.
+   */
+  authorStageWithheldBecause?: string | null;
 };
 
 export type DrivePlan = {
