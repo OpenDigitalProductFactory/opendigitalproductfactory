@@ -70,7 +70,8 @@ export function buildPublishedReadinessCommand(input: {
 
   const remoteRef = `refs/remotes/origin/${input.branchName}`;
   const remoteUrl = `https://github.com/${input.repositoryOwner}/${input.repositoryName}.git`;
-  const bodyFile = `.dpf-pr-body-${input.commitSha}.md`;
+  // Outside the checkout: an untracked file there fails the clean-tree check.
+  const bodyFile = `/tmp/.dpf-pr-body-${input.commitSha}.md`;
   return [
     `cd '${workdir}'`,
     "IFS= read -r DPF_GITHUB_TOKEN",

@@ -72,6 +72,22 @@ describe("Build Studio PR readiness", () => {
   // BI-5C4933EB: the check detached the shared /workspace root and then tried
   // to restore build/<id>, which git refuses while that branch is checked out
   // in the build's own worktree, so readiness never completed.
+  // BI-D9287821: a body file inside the checkout is an untracked file, and the
+  // readiness check refuses any tree with uncommitted changes.
+  it("writes the PR body outside the checkout it validates", () => {
+    const command = buildPublishedReadinessCommand({
+      branchName: "dpf/abc/fix",
+      commitSha: "a".repeat(40),
+      restoreBranch: "build/FB-1",
+      prBodyBase64: "Ym9keQ==",
+      repositoryOwner: "o",
+      repositoryName: "r",
+      workdir: "/workspace/.builds/FB-1",
+    });
+    expect(command).toContain(`--pr-body-file '/tmp/.dpf-pr-body-${"a".repeat(40)}.md'`);
+    expect(command).not.toMatch(/> '\.dpf-pr-body/);
+  });
+
   it("runs in the build's own workdir, never the shared root", () => {
     const command = buildPublishedReadinessCommand({
       branchName: "build/FB-123",
