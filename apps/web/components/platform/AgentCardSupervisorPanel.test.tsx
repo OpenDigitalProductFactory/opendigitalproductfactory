@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined }) }));
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { AgentCardSupervisorPanel } from "./AgentCardSupervisorPanel";
@@ -103,7 +105,7 @@ describe("AgentCardSupervisorPanel", () => {
     expect(html).toContain("validated");
     expect(html).toContain("Reviewed");
     expect(html).toContain("3 exposed tools");
-    expect(html).toContain("Pending proposals");
+    expect(html).toContain("Pending approvals");
     expect(html).toContain("PROP-002");
     expect(html).toContain("Register digital product from build");
     expect(html).toContain("Approval workflow");
@@ -149,5 +151,39 @@ describe("AgentCardSupervisorPanel", () => {
     expect(html).toContain("<details");
     expect(html).toContain("Additional projected cards");
     expect(html).toContain("2 more cards");
+  });
+
+  // BI-7BCC87BB (DI-FFD78D222548): the card shows whichever pending item is newest.
+  it("shows a newer pending approval request with its decision control, not the proposal endpoint", () => {
+    const decisionState = baseCard.extensions.tak.authority.supervisorDecisionState;
+    const card: InternalAgentCard = {
+      ...baseCard,
+      extensions: {
+        ...baseCard.extensions,
+        tak: {
+          ...baseCard.extensions.tak,
+          authority: {
+            ...baseCard.extensions.tak.authority,
+            supervisorDecisionState: {
+              ...decisionState,
+              pendingEnvelopeCount: 1,
+              latestPendingKind: "envelope",
+              latestPendingEnvelope: {
+                envelopeId: "env-9", delegatingUserId: "owner-1", ownerLabel: "owner@x.test",
+                toolName: "run_discovery_triage", actionLabel: "run discovery triage",
+                rationale: "This coworker is set to propose, not act.",
+                proposedAt: "2026-10-07T09:00:00.000Z", expiresAt: "2099-01-01T00:00:00.000Z",
+                approveHref: "/api/agent/envelope/env-9/approve", declineHref: "/api/agent/envelope/env-9/deny",
+              },
+            },
+          },
+        },
+      },
+    };
+    const html = renderToStaticMarkup(<AgentCardSupervisorPanel cards={[card]} viewer={{ userId: "owner-1", isAdmin: false }} />);
+    expect(html).toContain("Pending approvals");
+    expect(html).toContain("run discovery triage");
+    expect(html).toContain("Authorize");
+    expect(html).not.toContain("/api/v1/governance/approvals/prop-row-2");
   });
 });

@@ -9,6 +9,12 @@ vi.mock("@dpf/db", () => ({
     agentActionProposal: {
       findMany: vi.fn(),
     },
+    coworkerActionEnvelope: {
+      findMany: vi.fn(),
+    },
+    user: {
+      findMany: vi.fn(),
+    },
     toolExecution: {
       findMany: vi.fn(),
     },
@@ -28,6 +34,8 @@ describe("resolveInternalAgentCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.coworkerActionEnvelope.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.user.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([] as never);
   });
 
@@ -438,6 +446,10 @@ describe("resolveInternalAgentCard", () => {
         proposedAt: "2026-05-20T15:00:00.000Z",
         decisionEndpoint: "/api/v1/governance/approvals/prop-row-2",
       },
+      // BI-7BCC87BB (DI-FFD78D222548): envelopes are counted beside proposals; none here.
+      pendingEnvelopeCount: 0,
+      latestPendingEnvelope: null,
+      latestPendingKind: "proposal",
       recentReceiptCount: 2,
       latestReceipt: {
         receiptId: "receipt-2",
