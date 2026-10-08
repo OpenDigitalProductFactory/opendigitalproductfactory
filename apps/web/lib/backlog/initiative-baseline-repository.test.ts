@@ -344,7 +344,8 @@ describe("recordInitiativeSpecApproval", () => {
       reviewerAgentId: "agent-reviewer",
       authorityDecisionId: "decision-1",
       tokenScope: "write",
-    })).resolves.toMatchObject({ ok: false, code: "CLASSIFICATION_REQUIRED" });
+    })).resolves.toMatchObject({ ok: false, code: "CLASSIFICATION_REQUIRED",
+      error: expect.stringContaining("Expected profile: archetype") });
     expect(mocks.activityCreate).not.toHaveBeenCalled();
   });
 });
