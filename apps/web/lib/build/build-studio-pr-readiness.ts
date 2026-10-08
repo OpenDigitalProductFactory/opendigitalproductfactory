@@ -3,6 +3,8 @@ export interface BuildVerificationReadinessInput {
   testsFailed: number;
   acceptanceMet: number;
   acceptanceTotal: number;
+  /** False when the build's review→ship policy drops acceptance (doc builds). */
+  acceptanceRequired?: boolean;
 }
 
 export interface ReadinessVerdict {
@@ -28,6 +30,7 @@ export function evaluateBuildVerificationReadiness(
   if (!input.typecheckPassed) blockers.push("TypeCheck did not pass.");
   if (input.testsFailed > 0) blockers.push(`${input.testsFailed} test(s) failed.`);
   if (input.acceptanceTotal < 1) {
+    if (input.acceptanceRequired === false) return { ready: blockers.length === 0, blockers };
     blockers.push("No acceptance criteria were recorded as verification evidence.");
   } else if (input.acceptanceMet < input.acceptanceTotal) {
     blockers.push(
@@ -67,7 +70,8 @@ export function buildPublishedReadinessCommand(input: {
 
   const remoteRef = `refs/remotes/origin/${input.branchName}`;
   const remoteUrl = `https://github.com/${input.repositoryOwner}/${input.repositoryName}.git`;
-  const bodyFile = `.dpf-pr-body-${input.commitSha}.md`;
+  // Outside the checkout: an untracked file there fails the clean-tree check.
+  const bodyFile = `/tmp/.dpf-pr-body-${input.commitSha}.md`;
   return [
     `cd '${workdir}'`,
     "IFS= read -r DPF_GITHUB_TOKEN",

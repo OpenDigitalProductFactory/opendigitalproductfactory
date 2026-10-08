@@ -29,6 +29,28 @@ describe("Build Studio PR readiness", () => {
     }).ready).toBe(false);
   });
 
+  // BI-D9287821: a doc build's process policy drops acceptance, so nothing ever
+  // records it; publishing must not demand what the policy never asked for.
+  it("does not demand acceptance when the build's policy does not require it", () => {
+    expect(evaluateBuildVerificationReadiness({
+      typecheckPassed: true,
+      testsFailed: 0,
+      acceptanceMet: 0,
+      acceptanceTotal: 0,
+      acceptanceRequired: false,
+    })).toEqual({ ready: true, blockers: [] });
+  });
+
+  it("still blocks recorded criteria that are unmet when acceptance is not required", () => {
+    expect(evaluateBuildVerificationReadiness({
+      typecheckPassed: true,
+      testsFailed: 0,
+      acceptanceMet: 0,
+      acceptanceTotal: 1,
+      acceptanceRequired: false,
+    }).ready).toBe(false);
+  });
+
   it("builds an exact published-ref command without embedding the PR body", () => {
     const command = buildPublishedReadinessCommand({
       branchName: "build/FB-123",
@@ -50,6 +72,22 @@ describe("Build Studio PR readiness", () => {
   // BI-5C4933EB: the check detached the shared /workspace root and then tried
   // to restore build/<id>, which git refuses while that branch is checked out
   // in the build's own worktree, so readiness never completed.
+  // BI-D9287821: a body file inside the checkout is an untracked file, and the
+  // readiness check refuses any tree with uncommitted changes.
+  it("writes the PR body outside the checkout it validates", () => {
+    const command = buildPublishedReadinessCommand({
+      branchName: "dpf/abc/fix",
+      commitSha: "a".repeat(40),
+      restoreBranch: "build/FB-1",
+      prBodyBase64: "Ym9keQ==",
+      repositoryOwner: "o",
+      repositoryName: "r",
+      workdir: "/workspace/.builds/FB-1",
+    });
+    expect(command).toContain(`--pr-body-file '/tmp/.dpf-pr-body-${"a".repeat(40)}.md'`);
+    expect(command).not.toMatch(/> '\.dpf-pr-body/);
+  });
+
   it("runs in the build's own workdir, never the shared root", () => {
     const command = buildPublishedReadinessCommand({
       branchName: "build/FB-123",
