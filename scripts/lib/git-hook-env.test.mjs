@@ -2,13 +2,13 @@
 // hook must never operate on the real repository.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-import { GIT_REPO_LOCATION_ENV, scrubGitRepoLocationEnv } from "./git-hook-env.mjs";
+import { GIT_REPO_LOCATION_ENV, guardGitEnv, scrubGitRepoLocationEnv } from "./git-hook-env.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -89,6 +89,56 @@ test("the janitor freshness fixture no longer commits to a GIT_DIR it inherited 
     assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
     assert.equal(git(["rev-parse", "HEAD"]), head, "the guard must not move the inherited repository's HEAD");
     assert.equal(git(["status", "--porcelain"]), "", "the guard must leave the inherited repository clean");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// BI-E0FEB8E9: every `git commit` starts `git maintenance run --auto --detach`.
+// In a fixture that writes past the loose-object threshold, that background run
+// packs objects and removes their directories while the next commit is writing,
+// so the commit fails ("unable to create temporary file", "invalid object",
+// "Could not read"). Live: 35 of 792 parallel sandbox runs of the freshness
+// fixture failed with maintenance on, 0 of 288 with it off.
+const configPairs = (env) => {
+  const count = Number(env.GIT_CONFIG_COUNT ?? 0);
+  return Array.from({ length: count }, (_, i) => [env[`GIT_CONFIG_KEY_${i}`], env[`GIT_CONFIG_VALUE_${i}`]]);
+};
+
+test("guardGitEnv scrubs the repository location and turns git's automatic maintenance off", () => {
+  const input = { PATH: "/usr/bin", GIT_DIR: "/real/.git", GIT_AUTHOR_NAME: "keep me" };
+  const out = guardGitEnv(input);
+  for (const name of GIT_REPO_LOCATION_ENV) assert.equal(name in out, false, name);
+  assert.equal(out.GIT_AUTHOR_NAME, "keep me");
+  assert.deepEqual(configPairs(out), [["maintenance.auto", "false"], ["gc.auto", "0"]]);
+  assert.equal(input.GIT_DIR, "/real/.git", "input must not be mutated");
+  assert.equal("GIT_CONFIG_COUNT" in input, false, "input must not be mutated");
+});
+
+test("guardGitEnv appends to config the caller already passes through the environment", () => {
+  const out = guardGitEnv({ GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "safe.directory", GIT_CONFIG_VALUE_0: "*" });
+  assert.deepEqual(configPairs(out), [["safe.directory", "*"], ["maintenance.auto", "false"], ["gc.auto", "0"]]);
+});
+
+test("under guardGitEnv a commit starts no background maintenance", () => {
+  const root = mkdtempSync(join(tmpdir(), "dpf-git-guard-env-"));
+  try {
+    const identity = {
+      GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.invalid",
+      GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.invalid",
+    };
+    const traced = (env) => {
+      const trace = join(root, `trace-${Math.random().toString(36).slice(2)}.json`);
+      execFileSync("git", ["commit", "-q", "--allow-empty", "-m", "probe"], { cwd: root, env: { ...env, ...identity, GIT_TRACE2_EVENT: trace } });
+      return readFileSync(trace, "utf8").includes('"maintenance","run","--auto"');
+    };
+    execFileSync("git", ["init", "-q", root], { env: scrubGitRepoLocationEnv(process.env) });
+    // Drop config inherited through the environment: under a guard runner this
+    // process already carries guardGitEnv's settings.
+    const inherited = Object.fromEntries(Object.entries(scrubGitRepoLocationEnv(process.env)).filter(([name]) => !/^GIT_CONFIG_(COUNT|KEY_|VALUE_|PARAMETERS)/.test(name)));
+    const isolated = { ...inherited, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: join(root, "empty-gitconfig") };
+    assert.equal(traced(isolated), true, "the probe must see git's default auto maintenance, or it proves nothing");
+    assert.equal(traced(guardGitEnv(isolated)), false, "guardGitEnv must stop the commit from starting maintenance");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

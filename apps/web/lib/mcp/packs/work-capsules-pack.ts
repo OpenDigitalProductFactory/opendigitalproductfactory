@@ -182,7 +182,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "declare_break_fix",
     description:
-      "Declare the break-fix expedite lane on a claimed backlog item (design 2026-09-02 §4): an operational repair of a live defect that skips pre-authorisation and owes a post-implementation review receipt within 48 hours by someone other than the declarer. Human-only; WIP 1 per installation (a second open break-fix is refused); a declarer whose earlier break-fix missed its PIR is refused. Binds delivery-break-fix@1.0.0 on the item's live Workroom and records break_fix_declared with the PIR deadline.",
+      "Declare the break-fix expedite lane on a claimed backlog item (design 2026-09-02 §4): an operational repair of a live defect that skips pre-authorisation and owes a post-implementation review receipt within 48 hours by someone other than the declarer. Human-only; independent emergencies may be declared concurrently; a declarer whose earlier break-fix missed its PIR is refused. Binds delivery-break-fix@1.0.0 on the item's live Workroom and records break_fix_declared with the PIR deadline.",
     inputSchema: {
       type: "object",
       properties: {

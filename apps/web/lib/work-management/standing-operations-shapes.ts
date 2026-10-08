@@ -7,9 +7,12 @@
 //
 // The import back to work-shapes.ts is TYPE-ONLY and therefore erased at
 // compile time: work-shapes.ts imports these values, this file imports only its
-// types, and no runtime cycle exists.
+// types, and no runtime cycle exists. The generated module a compiled shape
+// comes from (generated/*.shape.generated.ts) imports work-shapes.ts type-only
+// too, so referencing it here adds no cycle either.
 
 import type { WorkShapeDefinition } from "./work-shapes";
+import { INQUIRY_RESPONSE_WATCH_1_0_0 } from "./generated/inquiry-response-watch.shape.generated";
 
 // ── standing business-operations shapes (BI-7E7B93DF) ────────────────────────
 //
@@ -408,54 +411,10 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   },
 
   // ── productsAndServicesSold · Adopter and Inquiry Desk ─────────────────────
-  [INQUIRY_RESPONSE_WATCH_SHAPE_KEY]: {
-    key: INQUIRY_RESPONSE_WATCH_SHAPE_KEY,
-    version: "1.0.0",
-    title: "Inquiry response watch",
-    description:
-      "The customer advisor drafts a grounded reply to each waiting inquiry and attaches the "
-      + "evidence it rests on. Sending is a human stage by construction — anything leaving the "
-      + "business under its own name is never an unattended act.",
-    triggers: ["escalation", "cadence"],
-    stages: [
-      {
-        key: "draft",
-        title: "Draft a grounded reply",
-        accountablePrincipalRef: "agent:customer-advisor",
-        advance: {
-          kind: "status-change",
-          condition: "Every waiting inquiry has a draft reply whose every claim cites recorded evidence.",
-        },
-        evidence: ["draft-artifact"],
-        tools: ["list_storefront_activity", "list_customer_accounts"],
-      },
-      {
-        key: "send",
-        title: "Send the reply",
-        // Outbound. Never an agent, at any posture.
-        accountablePrincipalRef: "role:customer-owner",
-        advance: {
-          kind: "governed-decision",
-          condition: "The accountable owner sends the reply, edits it first, or declines to answer.",
-          decisionScope: "outbound-customer-communication",
-        },
-        evidence: ["decision-record"],
-      },
-    ],
-    stopConditions: [
-      { kind: "success", condition: "No waiting inquiry is without a draft reply.", disposition: "proceed" },
-      { kind: "failure", condition: "The inquiry store cannot be read — the run stops and reports, and never drafts a reply to an inquiry it could not read.", disposition: "inconclusive" },
-      { kind: "budget", condition: "More than 25 drafts in one run — the run stops and escalates rather than generating a queue nobody can review.", disposition: "awaiting-person" },
-    ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
-    measures: [
-      { key: "inquiries-drafted", description: "Waiting inquiries given a grounded draft reply." },
-      { key: "oldest-inquiry-age-days", description: "Age of the longest-waiting unanswered inquiry." },
-    ],
-    budgets: [{ kind: "findings-per-run", limit: 25, unit: "drafts" }],
-    reviewPoint: MONTHLY_REVIEW,
-    collaborationShape: "outward-review",
-  },
+  // Compiled from shape-documents/inquiry-response-watch.gpp.json (GPP Phase 3b
+  // proof migration, PR-3b-6). Edit the document, then run
+  // `pnpm --filter web build:gpp-shapes`; never edit the generated module.
+  [INQUIRY_RESPONSE_WATCH_SHAPE_KEY]: INQUIRY_RESPONSE_WATCH_1_0_0,
 
   [ADOPTER_HEALTH_WATCH_SHAPE_KEY]: {
     key: ADOPTER_HEALTH_WATCH_SHAPE_KEY,

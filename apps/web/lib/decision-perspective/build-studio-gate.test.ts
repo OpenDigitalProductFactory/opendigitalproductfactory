@@ -139,6 +139,22 @@ function makeDb() {
 }
 
 describe("evaluateBuildStudioPlanAdvancementGate", () => {
+  // BI-7FFFBEE3 slice B: a verdict that cannot block is recorded as shadow, so
+  // the owner inbox (attention/sources/ai-decision) never lists it.
+  it("records a shadow-enforcement verdict as shadow", async () => {
+    const db = makeDb();
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+      triggeredByUserId: "user-1",
+      now: new Date("2026-05-17T12:00:00.000Z"),
+      enforcement: "shadow",
+    });
+    const data = (db.decisionInteraction.create.mock.calls[0]![0] as { data: { outcomePayload: Record<string, unknown> } }).data;
+    expect(data.outcomePayload).toMatchObject({ enforcement: "shadow" });
+  });
+
   it("persists a decision interaction and allows a high-confidence recommendation", async () => {
     const db = makeDb();
     const trace = vi.spyOn(console, "info").mockImplementation(() => {});

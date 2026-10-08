@@ -217,6 +217,7 @@ model Principal {
   // host-attributes side table keyed by `principalId`. 1:1 cardinality.
   edgeNode                            EdgeNode?                           @relation("EdgeNodeIdentity")
   edgeNodesApproved                   EdgeNode[]                          @relation("EdgeNodeApprover")
+  mcpServerToolsApproved              McpServerTool[]                     @relation("McpServerToolApprover")
   // EP-MSP-FEDERATION · B1 — a federated peer (another DPF deployment) is a
   // Principal(kind="federated-peer") with FederationLink as its side table,
   // exactly as EdgeNode is for an edge agent. No parallel identity table.

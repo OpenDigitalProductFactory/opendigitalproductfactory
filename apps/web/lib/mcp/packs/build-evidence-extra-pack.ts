@@ -15,6 +15,7 @@ import { prisma } from "@dpf/db";
 
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import { buildStartApprovalRefusal, requiresBuildStartApproval } from "@/lib/build/build-start-approval";
 import { extractBuildIdHint, logBuildActivity, resolveActiveBuildId } from "@/lib/mcp/build-tool-helpers";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
@@ -121,6 +122,8 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
+const SAVE_PHASE_HANDOFF_DEFINITION = definitions.find((d) => d.name === "save_phase_handoff")!;
+
 const saveBuildNotes: ToolPackHandler = async (params, userId) => {
   const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
   if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
@@ -163,9 +166,23 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
   if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
   const latestBuild = await prisma.featureBuild.findUnique({
     where: { buildId },
-    select: { buildId: true, phase: true, kind: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, uxVerificationStatus: true, brief: true, plan: true },
+    select: { buildId: true, phase: true, kind: true, threadId: true, originatingBacklogItemId: true, draftApprovedAt: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, uxVerificationStatus: true, brief: true, plan: true },
   });
   if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
+
+  // BI-BDB63485: the tool's own `buildPhases` tag is the single source of the
+  // phases it may act in. The native coworker filters its tool list by it, but
+  // the external MCP route does not, so the handler enforces it: a build in
+  // ship (or a terminal phase) is refused before anything is written, and
+  // completion stays with reconcileBuildCompletion.
+  const handoffPhases: readonly string[] = SAVE_PHASE_HANDOFF_DEFINITION.buildPhases ?? [];
+  if (!handoffPhases.includes(latestBuild.phase)) {
+    return {
+      success: false,
+      error: "phase_out_of_scope",
+      message: `save_phase_handoff works in the ${handoffPhases.join(", ")} phases; build ${latestBuild.buildId} is in ${latestBuild.phase}. Nothing was saved.`,
+    };
+  }
 
   // Determine the next phase. Hidden task-handoff controls are accepted
   // only from the build orchestrator context; public callers keep the
@@ -282,6 +299,13 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
       const gateBlocked = (reason: string | undefined) =>
         ({ success: true, message: `Phase handoff saved but gate blocked advance: ${reason}. Evidence may be incomplete.` });
 
+      // BI-BDB63485: Approve Start, the caller check the canonical
+      // advance-build-phase profile runs before ideate → plan and plan → build
+      // (PLAN_TO_BUILD_GATE_PROFILES["save-phase-handoff"].callerChecksBefore).
+      if (requiresBuildStartApproval(latestBuild, latestBuild.phase, toPhase)) {
+        return gateBlocked(buildStartApprovalRefusal(latestBuild.phase).replace(/\.$/, ""));
+      }
+
       if (latestBuild.phase === "plan" && toPhase === "build") {
         // GPP C-8 (PR-F, BI-45F9CB7A). The gate order, the phase write and the
         // PR-B shadow record ("gpp-c8-transition-gate-skipped") live in the
@@ -308,25 +332,9 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
       } else {
         const gate = await evaluateStructuralGate();
         if (!gate.allowed) return gateBlocked(gate.reason);
-        if (toPhase === "complete") {
-          const { completeFeatureBuildTransition } = await import(
-            "@/lib/backlog/initiative-readiness/build-terminal-transition"
-          );
-          const terminal = await completeFeatureBuildTransition({
-            buildId: latestBuild.buildId,
-            expectedPhase: latestBuild.phase,
-          });
-          if (!terminal.ok) {
-            return {
-              success: false,
-              error: "initiative_not_ready",
-              message: `Build completion is blocked by ${terminal.code}.`,
-              data: { code: terminal.code, readiness: terminal.decision },
-            };
-          }
-        } else {
-          await prisma.featureBuild.update({ where: { buildId: latestBuild.buildId }, data: { phase: toPhase } });
-        }
+        // The phase scope above keeps this handler out of ship, so it never
+        // reaches `complete` (BI-BDB63485).
+        await prisma.featureBuild.update({ where: { buildId: latestBuild.buildId }, data: { phase: toPhase } });
       }
       if (toPhase === "review") {
         const { queueBuildReviewVerification } = await import("@/lib/build-review-verification-trigger");

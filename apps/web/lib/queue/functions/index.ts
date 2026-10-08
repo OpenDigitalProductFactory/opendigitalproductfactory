@@ -19,6 +19,7 @@ import { agentTaskDispatch } from "./agent-task-dispatch";
 import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
+import { geocodeOnSave } from "./geocode-on-save";
 import { materialFreshnessDecay } from "./material-freshness-decay";
 import { prSubmitAwaitingAcceptanceReconcile } from "./pr-submit-awaiting-acceptance-reconcile";
 import { budgetReservationSettle } from "./budget-reservation-settle";
@@ -27,6 +28,7 @@ import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
 import { buildExecute } from "./build-execute";
 import { preBuildReviewRepair } from "./pre-build-review-repair";
+import { buildResumeAfterUpgradePause } from "./build-resume-after-upgrade-pause";
 import { buildGauntletRepair } from "./build-gauntlet-repair";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
@@ -62,6 +64,7 @@ import {
   postgresTrialRestoreRequested,
 } from "./postgres-daily-backup";
 import { runtimeTargetJanitor } from "./runtime-target-janitor";
+import { substrateReconciler } from "./substrate-reconciler";
 import { edgeNodeJanitor } from "./edge-node-janitor";
 import { runtimeArtifactJanitor } from "./runtime-artifact-janitor";
 import { worktreeJanitor } from "./worktree-janitor";
@@ -98,6 +101,10 @@ import {
   decisionConciergeSweepScheduled,
   decisionConciergeSweepRequested,
 } from "./decision-concierge-sweep";
+import {
+  decisionTrustRecomputeScheduled,
+  decisionTrustRecomputeRequested,
+} from "./decision-trust-recompute";
 import {
   catalogEnrichmentSweepScheduled,
   catalogEnrichmentSweepRequested,
@@ -159,6 +166,7 @@ import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 export const scheduledFunctions = [
   decisionConciergeSweepScheduled, // EP-0AF96937: drafts what the owner should do about decisions waiting on them, every 4h
+  decisionTrustRecomputeScheduled, // BI-7D1E43DE: governed-decision TrustState from the shadow ledger, report only, every 6h
   prometheusPoll,
   fullDiscoverySweep,
   modelDiscoveryRefresh,
@@ -196,6 +204,7 @@ export const scheduledFunctions = [
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
+  substrateReconciler,   // BI-903FB5F9/BI-547B788D: restart stopped required substrate; report a wedged Docker VM, every 5 min
   edgeNodeJanitor, // BI-D4F79CE2: retire an installer enrollment a live one has superseded, hourly
   runtimeArtifactJanitor, // BI-DBF3F426/BI-A55BE432: orphaned CI images + stray compose projects (+ their volumes), daily 05:20; DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED=observe, +DPF_RUNTIME_ARTIFACT_JANITOR_AUTO_REAP=live
   worktreeJanitor, // BI-42FA7DD8: host worktree Tier-A fleet backstop; daily 05:40
@@ -243,6 +252,7 @@ export const eventFunctions = [
   pullRequestMergedBinding, // BI-A6E4D205: event-triggered on build/pr-merged.received — NOT a cron
   pullRequestMergedReap, // BI-848360EF: reap the merged branch's worktree, via the janitor's own rules
   decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
+  decisionTrustRecomputeRequested, // BI-7D1E43DE: the same recompute, on demand
   localModelInstall,
   providerCatalogRefresh, // BI-7F2FBDA3: on-demand provider re-discovery after a model refusal — event-triggered, NOT a cron
   rateRecovery,
@@ -253,10 +263,12 @@ export const eventFunctions = [
   evalBackground,
   probeBackground,
   brandExtract,
+  geocodeOnSave,
   researchExecute,
   buildReviewVerification,
   buildExecute,
   preBuildReviewRepair,
+  buildResumeAfterUpgradePause, // BI-E9DAA23F: on platform.quiescence-cleared, resume builds the pause held
   buildGauntletRepair,
   assuranceBomGenerate,
   assuranceScanRun,

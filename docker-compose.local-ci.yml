@@ -2,6 +2,8 @@ name: ${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME must come from the admitted l
 
 services:
   local-ci-portal:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       target: runner

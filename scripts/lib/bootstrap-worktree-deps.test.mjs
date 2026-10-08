@@ -18,6 +18,8 @@ import {
   classifyIgnoredBuilds,
   policyDeniedBuilds,
   dependencyPolicyReviewKey,
+  installPredatesLockfile,
+  nodeModulesIsLinked,
 } from "./bootstrap-worktree-deps.mjs";
 
 test("pnpm 11 delegates to the repository pin instead of overriding it", () => {
@@ -249,6 +251,9 @@ test("the banner names the tree, the gaps, and forbids claiming an unrun gate", 
       missing: [{ label: "root node_modules", state: "absent", forbids: "any pnpm script" }],
     },
     "D:/DPF-worktrees/topic",
+    // BI-5DF74F0D: the warning is now a function of the shape on disk, so this
+    // case states the shape it was written about — a junctioned worktree.
+    { lstat: () => ({ isSymbolicLink: () => true }) },
   );
   assert.match(lines[0], /SOURCE-ONLY/);
   assert.ok(lines.some((l) => l.includes("D:/DPF-worktrees/topic")));
@@ -543,4 +548,113 @@ test("readiness names an unreadable build record and its remedy, not a phantom p
   assert.deepEqual(result.checks.ignoredBuilds, []);
   // And no dependency-policy review is raised for a decision nobody owes.
   assert.deepEqual(result.checks.dependencyPolicyReviewKeys, []);
+});
+
+// BI-5DF74F0D: a node_modules that satisfies `pnpm ls` but predates the lockfile
+// reported compile-ready and then failed to typecheck on a dependency it had
+// never installed. The install it needed was skipped precisely because the probe
+// said it was not needed.
+test("an install older than the lockfile is not compile-ready, so the install is not skipped", () => {
+  const stat = (path) => {
+    if (path.endsWith("/pnpm-lock.yaml")) return { mtimeMs: 2_000 };
+    if (path.endsWith("/node_modules/.modules.yaml")) return { mtimeMs: 1_000 };
+    throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+  };
+  assert.equal(installPredatesLockfile("/wt", { stat }), true);
+
+  // Reason text names the state and the one-step remedy.
+  const reason = readinessReason({
+    hasNodeModules: true, depProbeOk: true, gateOk: false, staleWorkspaceLinks: [], installStale: true,
+  });
+  assert.match(reason, /^install_predates_lockfile:/);
+  assert.match(reason, /one managed install reconciles it/);
+});
+
+test("an install newer than the lockfile, or either file absent, is not reported stale", () => {
+  const fresh = (path) => ({ mtimeMs: path.endsWith("/pnpm-lock.yaml") ? 1_000 : 2_000 });
+  assert.equal(installPredatesLockfile("/wt", { stat: fresh }), false);
+
+  // Equal mtimes: the install is not OWED, so not stale.
+  assert.equal(installPredatesLockfile("/wt", { stat: () => ({ mtimeMs: 5 }) }), false);
+
+  // Absent .modules.yaml is the separate build_record state, not staleness —
+  // reporting it here would mask that reason with a misleading one.
+  const noRecord = (path) => {
+    if (path.endsWith("/pnpm-lock.yaml")) return { mtimeMs: 2_000 };
+    throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+  };
+  assert.equal(installPredatesLockfile("/wt", { stat: noRecord }), false);
+  assert.equal(
+    readinessReason({ hasNodeModules: true, depProbeOk: true, gateOk: true, staleWorkspaceLinks: [] }),
+    "managed_bootstrap_ok",
+  );
+});
+
+// BI-5DF74F0D: `--force` ran the install and then failed its own post-install
+// probe on build_record_unreadable, because an install that links nothing new
+// never reaches pnpm's build phase. The documented recovery could not recover.
+test("a missing build record is forgiven only after an install this call completed", () => {
+  const withNoBuildRecord = (buildRecordOptional) => {
+    const sizes = { "ignored-builds": "Automatically ignored builds during installation:\n  Cannot identify as no node_modules found\n" };
+    return probeWorktreeReadiness("/wt", {
+      buildRecordOptional,
+      artifactDeps: { exists: () => true, readdir: () => ["pkg"] },
+      linkCheckDeps: { readdir: () => [], exists: () => true },
+      staleDeps: { stat: () => ({ mtimeMs: 1 }) },
+      execute: (cmd, args) => args?.[0] === "ignored-builds"
+        ? { ok: true, stdout: sizes["ignored-builds"] }
+        : { ok: true, stdout: args?.[0] === "rev-parse" ? "abc123" : "" },
+    });
+  };
+
+  // Strict by default: an untouched tree with no build record stays source-only.
+  assert.match(withNoBuildRecord(undefined).reason, /^build_record_unreadable:/);
+  // Forgiving right after a successful install, which is the only caller that
+  // sets the flag — otherwise --force can never reach compile-ready.
+  assert.doesNotMatch(withNoBuildRecord(true).reason, /^build_record_unreadable:/);
+});
+
+// BI-5DF74F0D: the banner told every agent node_modules is "a junction to the
+// root clone" unconditionally. On a worktree whose node_modules is its own
+// directory that is false, and it withdrew the only remedy that works.
+test("the banner's removal warning follows the shape on disk, not the platform it was written for", () => {
+  const readiness = { status: "source-only", reason: "build_record_unreadable:x", missing: [] };
+  const asLink = { lstat: () => ({ isSymbolicLink: () => true }) };
+  const asDirectory = { lstat: () => ({ isSymbolicLink: () => false }) };
+
+  assert.equal(nodeModulesIsLinked("/wt", asLink), true);
+  assert.equal(nodeModulesIsLinked("/wt", asDirectory), false);
+
+  const linked = formatReadinessBanner(readiness, "/wt", asLink).join("\n");
+  assert.match(linked, /never `rm -rf` node_modules/);
+  assert.match(linked, /junction\/symlink into\s+another tree/);
+
+  const owned = formatReadinessBanner(readiness, "/wt", asDirectory).join("\n");
+  assert.doesNotMatch(owned, /never `rm -rf` node_modules/);
+  assert.match(owned, /safe to do/);
+  // Both shapes keep the bare-install prohibition, which is shape-independent.
+  for (const banner of [linked, owned]) assert.match(banner, /Never `pnpm install` bare/);
+
+  // Unknown shape reads as a link: the warning is the safe default.
+  assert.equal(nodeModulesIsLinked("/wt", { lstat: () => { throw new Error("EPERM"); } }), true);
+});
+
+// BI-5DF74F0D: when a tree is BOTH stale and missing a build record, the reason
+// must name the cheaper remedy — one managed install, which the bootstrap now
+// runs on its own — not remove-and-reinstall. Observed on a four-day-stale tree.
+test("a stale install outranks an unreadable build record in the reported reason", () => {
+  const probe = probeWorktreeReadiness("/wt", {
+    artifactDeps: { exists: () => true, readdir: () => ["pkg"] },
+    linkCheckDeps: { readdir: () => [], exists: () => true },
+    // Lockfile newer than the install AND no build record: both conditions.
+    staleDeps: { stat: (p) => ({ mtimeMs: p.endsWith("/pnpm-lock.yaml") ? 2_000 : 1_000 }) },
+    execute: (cmd, args) => args?.[0] === "ignored-builds"
+      ? { ok: true, stdout: "Automatically ignored builds during installation:\n  Cannot identify as no node_modules found\n" }
+      : { ok: true, stdout: args?.[0] === "rev-parse" ? "abc123" : "" },
+  });
+
+  assert.equal(probe.status, "source-only");
+  assert.equal(probe.checks.installStale, true);
+  assert.match(probe.reason, /^install_predates_lockfile:/);
+  assert.doesNotMatch(probe.reason, /^build_record_unreadable:/);
 });

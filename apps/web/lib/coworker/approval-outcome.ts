@@ -1,6 +1,6 @@
 import { SOURCE_CATALOG, type MessageKey } from "@dpf/i18n";
 import { isRecord } from "@/lib/shared/coerce";
-import { envelopeInboxRoute } from "./envelope-routes";
+import { envelopeResultRoute } from "./envelope-routes";
 
 /** A read model, not an authority or execution state machine. */
 export type ApprovalOutcomeState = "waiting" | "executed" | "failed" | "not-run" | "expired" | "declined" | "cancelled" | "unknown";
@@ -47,7 +47,7 @@ export function projectApprovalOutcome(row: ApprovalOutcomeRow, now: Date): Appr
     envelopeId: row.id, state, label,
     nextAction: state === "not-run" && reason ? RECOVERY[reason] : nextAction,
     nextActionKey,
-    inboxHref: envelopeInboxRoute(row.id),
+    inboxHref: envelopeResultRoute(row.id),
     createdAtIso: row.createdAt.toISOString(),
   };
 }

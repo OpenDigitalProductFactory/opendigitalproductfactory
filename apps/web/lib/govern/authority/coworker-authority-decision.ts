@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
 import type { ToolConsequence } from "@/lib/tool-consequence";
+import { effectiveApprovalExpiry } from "@/lib/coworker/approval-lifetime";
 
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
@@ -96,6 +97,11 @@ export type CoworkerAuthorityInput = {
     /** A Work Case may elevate an otherwise ordinary mutation to consequential. */
     workCaseConsequential?: boolean;
     requiresDelegationChain?: boolean;
+    /**
+     * BI-C8EC05C9: server-set propose boundary. Escalation input only, never
+     * part of the approval binding, so no existing approval stops matching.
+     */
+    proposeBoundary?: boolean;
   };
   /**
    * BI-6B3DA9DD: what can decide this action without a person, server-resolved.
@@ -147,6 +153,17 @@ export type CoworkerAuthorityInput = {
       | "cancelled";
     expiresAt: Date;
     binding: CoworkerApprovalBinding;
+    /**
+     * When the approval was given. With it, the approval is honoured only
+     * while it is fresh for the call's CURRENT consequence — the staleness
+     * re-check at execution (approval-lifetime.ts, BI-0012E6CA).
+     */
+    approvedAt?: Date | null;
+    /**
+     * BI-C8EC05C9: the approved envelope was raised under a propose boundary.
+     * Its TaskRun was never paused, so the gate must not resume it.
+     */
+    proposeBoundary?: boolean;
   } | null;
   now?: Date;
   /**
@@ -334,6 +351,7 @@ function escalationFor(input: CoworkerAuthorityInput): EscalationDecision {
     },
     dataPolicy: { sensitivity: input.dataPolicy.sensitivity },
     steering: input.steering ?? "none",
+    ...(input.action.proposeBoundary === true ? { proposeBoundary: true } : {}),
   });
 }
 
@@ -461,7 +479,12 @@ export function evaluateCoworkerAuthority(
   if (input.approval.status !== "approved") {
     return deny("approval-not-active");
   }
-  if (input.approval.expiresAt.getTime() <= (input.now ?? new Date()).getTime()) {
+  const honouredUntil = effectiveApprovalExpiry({
+    expiresAt: input.approval.expiresAt,
+    approvedAt: input.approval.approvedAt ?? null,
+    consequence: input.action.consequence === undefined ? "unclassified" : input.action.consequence,
+  });
+  if (honouredUntil.getTime() <= (input.now ?? new Date()).getTime()) {
     return deny("approval-expired");
   }
   if (!sameBinding(input.approval.binding, currentBinding)) {

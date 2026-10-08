@@ -1,7 +1,7 @@
 // apps/web/components/ops/OpsClient.tsx
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { BacklogPanel } from "./BacklogPanel";
 import { BacklogItemRow } from "./BacklogItemRow";
 import { EpicCard, type EpicSort } from "./EpicCard";
@@ -10,6 +10,7 @@ import { OperatorTriageBand } from "./OperatorTriageBand";
 import { summarizeBacklogStatuses, visibleUnderActiveOnly } from "@/lib/backlog-visibility";
 import { FilterBar, type FacetDef } from "@/components/ui/report-kit";
 import { backlogItemOrigin, BACKLOG_ORIGIN_FILTERS } from "@/lib/operate/backlog-origin";
+import type { AgeBasis, AgedAcceptanceItem } from "@/lib/backlog/acceptance-sweep/aged-acceptance";
 import type {
   BacklogItemWithRelations,
   DigitalProductSelect,
@@ -46,7 +47,12 @@ type Props = {
   /** Current operator's user id — resolves the "mine" scope in the Needs-you-next
    *  band (BI-01CC2356). */
   currentUserId?: string;
+  /** Awaiting-acceptance items aged past the threshold, shown beside each
+   *  epic's awaiting count so it never reads as done (BI-CEC60185). */
+  agedAcceptance?: AgedAcceptanceItem[];
 };
+
+const NO_AGED_ACCEPTANCE: AgedAcceptanceItem[] = [];
 
 const TYPE_LABELS: Record<string, string> = {
   portfolio: "Portfolio Backlog",
@@ -105,10 +111,15 @@ function SortButton({ label, field, sort, onSort }: {
   );
 }
 
-export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfolios, focusedItemId, initialOrigin, currentUserId }: Props) {
+export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfolios, focusedItemId, initialOrigin, currentUserId, agedAcceptance = NO_AGED_ACCEPTANCE }: Props) {
   const [panel, setPanel] = useState<ItemPanelState>({ open: false });
   const [epicPanel, setEpicPanel] = useState<EpicPanelState>(null);
   const [epicSort, setEpicSort] = useState<SortState>(null);
+  // Stable map so the memoized EpicCards do not re-render on unrelated state.
+  const agedAcceptanceById = useMemo(
+    () => new Map<string, AgeBasis>(agedAcceptance.map((aged) => [aged.id, aged.ageBasis])),
+    [agedAcceptance],
+  );
   const [activeOnly, setActiveOnly] = useState(true);
   const [filters, setFilters] = useState<Record<string, string>>(
     // Pre-apply a valid ?origin=… lens from the URL so origin deep-links (e.g. the
@@ -211,7 +222,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
                 checked={activeOnly}
                 onChange={(e) => setActiveOnly(e.target.checked)}
                 className="w-3 h-3 rounded border-[var(--dpf-border)] accent-[var(--dpf-accent)]"
-                title="Show triaging, open, and in-progress work; hide done and deferred items."
+                title="Show triaging, open, and in-progress work; hide awaiting acceptance, done, and deferred items."
               />
               <span className="text-[10px] text-[var(--dpf-muted)]">Active only</span>
             </label>
@@ -285,6 +296,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
                       onEdit={openEditEpic}
                       onItemEdit={openEdit}
                       focusedItemId={focusedItemId}
+                      agedAcceptanceById={agedAcceptanceById}
                     />
                   ))
                 )}
@@ -348,7 +360,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
               {hiddenItemCount > 0 && (
                 <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
                   {hiddenItemCount} non-active item{hiddenItemCount !== 1 ? "s" : ""} hidden
-                  {" — "}{statusSummary.deferred} deferred · {statusSummary.done} done · {statusSummary.retired} retired
+                  {" — "}{statusSummary.awaitingAcceptance} awaiting acceptance · {statusSummary.deferred} deferred · {statusSummary.done} done · {statusSummary.retired} retired
                 </p>
               )}
             </section>

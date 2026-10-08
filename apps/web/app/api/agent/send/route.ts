@@ -9,6 +9,8 @@ import { agentEventBus } from "@/lib/agent-event-bus";
 import type { AgentFormAssistContext } from "@/lib/agent-form-assist";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolveAgentForRoute } from "@/lib/agent-routing";
+import { acceptUserMessage } from "@/lib/agent/accept-user-message";
+import { ApiError } from "@/lib/api/error";
 // Note: this route uses the sync version since it only needs agentId for message logging
 import { prisma } from "@dpf/db";
 
@@ -82,6 +84,22 @@ export async function POST(request: NextRequest): Promise<Response> {
   delete (input as Record<string, unknown>).externalAccessEnabled;
   delete (input as Record<string, unknown>).elevatedFormFillEnabled;
 
+  // BI-DEFA25EE: the panel shows the message as "sent" on a 200, so the user
+  // row is written before we answer. A refresh after this point cannot lose it.
+  let userMessageId: string;
+  try {
+    userMessageId = await acceptUserMessage({
+      userId: session.user.id,
+      threadId: input.threadId,
+      content: input.content,
+      routeContext: input.routeContext,
+      attachmentId: input.attachmentId,
+    });
+  } catch (err) {
+    if (err instanceof ApiError) return err.toResponse();
+    throw err;
+  }
+
   // Clear any stale cancellation for this thread
   agentEventBus.clearCancel(input.threadId);
 
@@ -89,12 +107,12 @@ export async function POST(request: NextRequest): Promise<Response> {
   agentEventBus.markActive(input.threadId);
 
   // Return immediately — agent execution runs in background
-  const response = NextResponse.json({ status: "processing" });
+  const response = NextResponse.json({ status: "processing", userMessageId });
 
   // Fire-and-forget: run sendMessage in background and emit enriched "done" on completion
   (async () => {
     try {
-      const result = await sendMessage(input);
+      const result = await sendMessage({ ...input, acceptedUserMessageId: userMessageId });
 
       agentEventBus.markIdle(input.threadId);
 

@@ -57,7 +57,7 @@ vi.mock("@/lib/build/build-entry-gate", () => ({
   assertBuildPhaseInitiativeReadiness: vi.fn(),
   checkBuildPhaseInitiativeReadiness: (...a: unknown[]) => { trace.push("gate:initiative-readiness"); return m.initiative(...a); },
 }));
-vi.mock("@/lib/backlog/initiative-readiness/build-terminal-transition", () => ({ assertFeatureBuildCompletion: vi.fn() }));
+vi.mock("@/lib/build-flow-state", () => ({ completeBuildWhenDelivered: vi.fn() }));
 vi.mock("@/lib/work-posture/verification-depth-gate", () => ({
   checkBuildPhaseGate: (...a: unknown[]) => { trace.push("gate:structural-phase-gate"); return m.phaseGate(...a); },
 }));

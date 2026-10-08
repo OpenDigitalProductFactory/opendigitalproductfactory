@@ -6,12 +6,18 @@ import { HealthCheckButton } from "@/components/platform/HealthCheckButton";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { McpToolReviewList, type McpToolReviewRow } from "@/components/platform/McpToolReviewList";
+import { DISCOVERED_TOOL_REASON_TEXT, sanitizeModelVisibleToolText } from "@/lib/tak/mcp-tool-policy";
+import { knownGrantKeys } from "@/lib/tak/agent-grants";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 
 const HEALTH_LABELS: Record<string, { text: string; className: string }> = {
-  healthy: { text: "Healthy", className: "text-green-600" },
-  degraded: { text: "Degraded", className: "text-yellow-600" },
-  unreachable: { text: "Unreachable", className: "text-red-600" },
-  unknown: { text: "Unknown", className: "text-gray-500" },
+  healthy: { text: "Healthy", className: "text-[var(--dpf-success)]" },
+  degraded: { text: "Degraded", className: "text-[var(--dpf-warning)]" },
+  unreachable: { text: "Unreachable", className: "text-[var(--dpf-error)]" },
+  unknown: { text: "Unknown", className: "text-[var(--dpf-muted)]" },
 };
 
 export default async function ToolsServiceDetailPage({
@@ -24,12 +30,35 @@ export default async function ToolsServiceDetailPage({
   if (!server) notFound();
 
   const session = await auth();
+  const locale = await getLocaleContext();
   const canWrite = !!session?.user && can(
     { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
     "manage_provider_connections",
   );
 
-  const health = HEALTH_LABELS[server.healthStatus] ?? { text: "Unknown", className: "text-gray-500" };
+  const health = HEALTH_LABELS[server.healthStatus] ?? { text: "Unknown", className: "text-[var(--dpf-muted)]" };
+
+  // BI-8B7B2FE9: review rows show the sanitized text a coworker would read.
+  const reviewRows: McpToolReviewRow[] = server.tools.map((tool) => {
+    const now = sanitizeModelVisibleToolText(tool.description, tool.inputSchema);
+    const approved = tool.contentChanged && tool.approvedInputSchema !== null
+      ? sanitizeModelVisibleToolText(tool.approvedDescription, tool.approvedInputSchema)
+      : null;
+    return {
+      id: tool.id,
+      toolName: tool.toolName,
+      policyClass: tool.review.policyClass,
+      reasonText: tool.review.reason ? DISCOVERED_TOOL_REASON_TEXT[tool.review.reason] : null,
+      contentDigest: tool.contentDigest,
+      contentChanged: tool.contentChanged,
+      description: now.description,
+      inputSchemaText: JSON.stringify(now.inputSchema, null, 2),
+      approvedDescription: approved ? approved.description : null,
+      approvedInputSchemaText: approved ? JSON.stringify(approved.inputSchema, null, 2) : null,
+      grantKey: tool.policyGrantKey,
+      effect: tool.policyEffect,
+    };
+  });
 
   return (
     <div className="p-6 space-y-8 max-w-3xl">
@@ -74,30 +103,11 @@ export default async function ToolsServiceDetailPage({
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Tools ({server.tools.length})</h2>
         {server.tools.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No tools discovered yet.</p>
+          <p className="text-sm text-[var(--dpf-muted)]">No tools discovered yet.</p>
         ) : (
-          <table className="w-full text-sm border rounded-lg overflow-hidden">
-            <thead className="bg-muted">
-              <tr>
-                <th className="text-left p-2">Name</th>
-                <th className="text-left p-2">Description</th>
-                <th className="text-left p-2 w-20">Enabled</th>
-              </tr>
-            </thead>
-            <tbody>
-              {server.tools.map((tool) => (
-                <tr key={tool.id} className="border-t">
-                  <td className="p-2 font-mono text-xs">{tool.toolName}</td>
-                  <td className="p-2 text-muted-foreground">{tool.description ?? "\u2014"}</td>
-                  <td className="p-2">
-                    <span className={tool.isEnabled ? "text-green-600" : "text-gray-400"}>
-                      {tool.isEnabled ? "Yes" : "No"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <MessagesProvider locale={locale.language} messages={{ mcpTools: namespaceMessages(locale.language, "mcpTools") }}>
+            <McpToolReviewList tools={reviewRows} canReview={canWrite} grantOptions={knownGrantKeys()} />
+          </MessagesProvider>
         )}
       </section>
 

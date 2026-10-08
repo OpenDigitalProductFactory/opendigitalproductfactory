@@ -5,6 +5,8 @@ import { resolveRoomSensitivityCeiling } from "./room-sensitivity-ceiling.server
 import { readWorkspaceRoomPolicy } from "./workspace-room-access";
 
 const principalSelect = { id: true, principalId: true, kind: true, status: true, sensitivityClearance: true } as const;
+/** Why an owner-requested handover was refused, for a person admitted to the room. */
+export type HandoverRefusal = "not-owner" | "assistant-in-room";
 const denied: WorkroomAccessDecision = { level: "none", reason: "not-admitted" };
 type Principal = { id: string; principalId: string; sensitivityClearance: string[] };
 type Membership = { principalId: string; lifecycle: string; roles: string[]; principal?: { kind: string } | null };
@@ -64,11 +66,18 @@ export async function resolveAgentWorkroomAccess(input: {
   const holders = [room.createdByPrincipalId, room.requestedByPrincipalId, room.leaseHolderPrincipalId];
   const policy = readWorkspaceRoomPolicy(room.workItem?.evidence);
   const ceiling = await resolveRoomSensitivityCeiling(room, db);
-  const handover = input.handover === true && input.requested === "action"
-    && !room.participants.some((row) => row.principalId === assistant.id) && ownsRoom(human, room.participants, holders);
+  const askedHandover = input.handover === true && input.requested === "action";
+  const assistantInRoom = room.participants.some((row) => row.principalId === assistant.id);
+  const handover = askedHandover && !assistantInRoom && ownsRoom(human, room.participants, holders);
+  // Why a handover cannot happen is told only to a person already admitted to
+  // the room, so the reason reveals nothing they could not already see (BI-F4EB23C1).
+  const handoverRefusal: HandoverRefusal | null = askedHandover && !handover && admitted(human, room.participants, holders, false)
+    ? (assistantInRoom ? "assistant-in-room" : "not-owner") : null;
   for (const principal of [human, assistant]) {
     const handedOver = handover && principal === assistant;
-    if (!handedOver && !admitted(principal, room.participants, holders, input.requested === "action")) return fail(assistant.principalId);
+    if (!handedOver && !admitted(principal, room.participants, holders, input.requested === "action")) {
+      return handoverRefusal ? { ...fail(assistant.principalId), handoverRefusal } : fail(assistant.principalId);
+    }
     // An explicit case policy restricts admission; it never supplies a room invitation.
     const policyRefs = input.requested === "action" ? policy.actionPrincipalRefs ?? policy.admittedPrincipalRefs
       : policy.admittedPrincipalRefs || policy.actionPrincipalRefs

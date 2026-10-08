@@ -427,7 +427,12 @@ async function readBuildArtifactRevisionHandler(params: Record<string, unknown>)
   if (!revision) {
     return { success: false, error: "IMMUTABLE_SOURCE_UNAVAILABLE", message: `No Build Studio artifact revision ${revisionId} exists.` };
   }
-  if (revision.valueDigest !== expectedBlobId) {
+  // The install stores the digest as bare hex while receipts carry it as
+  // `sha256:<hex>`; a binding may arrive in either form. Compare the hex and
+  // echo the BOUND form, since the terminal policy checks the page's blobId
+  // against the binding it issued.
+  const bareHex = (value: string) => value.replace(/^sha256:/i, "").toLowerCase();
+  if (bareHex(revision.valueDigest) !== bareHex(expectedBlobId)) {
     return {
       success: false,
       error: "immutable_blob_mismatch",
@@ -443,7 +448,7 @@ async function readBuildArtifactRevisionHandler(params: Record<string, unknown>)
     content,
     ref: version,
     path,
-    blobId: revision.valueDigest,
+    blobId: expectedBlobId,
     cursor: params.cursor,
     startLine: params.startLine,
     maxLines: params.maxLines,

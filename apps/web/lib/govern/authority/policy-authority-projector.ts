@@ -5,6 +5,7 @@ import {
   type CoworkerApprovalBinding,
   type CoworkerAuthoritySubject,
 } from "./coworker-authority-decision";
+import { APPROVAL_DECISION_WINDOW_MS } from "@/lib/coworker/approval-lifetime";
 
 export const POLICY_AUTHORITY_PROJECTOR_VERSION = "policy-authority-projector.v1";
 
@@ -305,7 +306,7 @@ export function projectPolicyAuthority(
     }
   }
 
-  const requestedExpiry = new Date(now.getTime() + (input.ttlMs ?? 15 * 60 * 1000));
+  const requestedExpiry = new Date(now.getTime() + (input.ttlMs ?? APPROVAL_DECISION_WINDOW_MS));
   const expiresAt = input.delegation && input.delegation.expiresAt < requestedExpiry
     ? input.delegation.expiresAt
     : requestedExpiry;
@@ -382,7 +383,8 @@ export async function persistPolicyAuthorityProjection(input: {
         status: "approved",
         expiresAt: { lte: input.projection.issuedAt },
       },
-      data: { status: "cancelled", resolvedAt: input.projection.issuedAt },
+      // A lapsed, unused authorization expired; nobody cancelled it (BI-0012E6CA).
+      data: { status: "expired", resolvedAt: input.projection.issuedAt },
     });
     const existing = await tx.coworkerActionEnvelope.findFirst({
       where: {

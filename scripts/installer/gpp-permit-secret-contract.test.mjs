@@ -58,7 +58,7 @@ test("every installer and setup script that writes an install .env generates the
   assert.match(setupSh, /for _env_file in apps\/web\/\.env\.local \.env; do\s+if \[ "\$\(dpf_env_ensure_secret_hex DPF_GPP_PERMIT_SECRET "\$_env_file" 32\)" != "kept" \]/);
   assert.match(await read("install-dpf.ps1"), /-Key "DPF_GPP_PERMIT_SECRET" -Value \(New-RandomPassword 32\)/);
   const setupPs1 = await read("scripts/setup.ps1");
-  assert.match(setupPs1, /foreach \(\$secretKey in @\("DPF_GIT_WEBHOOK_SECRET", "DPF_GPP_PERMIT_SECRET"\)\)/);
+  assert.match(setupPs1, /foreach \(\$secretKey in @\("DPF_GIT_WEBHOOK_SECRET", "DPF_GPP_PERMIT_SECRET"(?:, "[A-Z_]+")*\)\)/);
   assert.match(setupPs1, /\[System\.Security\.Cryptography\.RandomNumberGenerator\]::Create\(\)\.GetBytes\(\$secretBytes\)/);
   const promote = await read("scripts/promote.sh");
   assert.match(promote, /_gpp_permit_value="\$\(node -e 'process\.stdout\.write\(require\("node:crypto"\)\.randomBytes\(32\)\.toString\("hex"\)\)'\)"/);
@@ -66,15 +66,8 @@ test("every installer and setup script that writes an install .env generates the
   assert.match(assets, /text = ensureGppPermitSecret\(text, newline\);/);
 });
 
-test("no install path provisions the attention-reach or delegation-receipt secrets", async () => {
-  for (const path of ["install-dpf.sh", "install-dpf.ps1", "scripts/setup.sh", "scripts/setup.ps1", "scripts/promote.sh",
-    "scripts/installer/install-release-assets.mjs", "docker-compose.yml", ".env.example", ".env.docker.example"]) {
-    const text = await read(path);
-    for (const other of ["DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET"]) {
-      assert.ok(!text.includes(other), `${path} must not provision ${other} (out of scope for BI-8541D491)`);
-    }
-  }
-});
+// The reach-link and delegation-receipt keys (slice 2, BI-F6929F50) are guarded
+// by dedicated-signing-keys-contract.test.mjs.
 
 function runBash(script, env = {}) {
   return spawnSync(bash, ["-c", script], { cwd: root, env: { ...process.env, ...env }, encoding: "utf8" });

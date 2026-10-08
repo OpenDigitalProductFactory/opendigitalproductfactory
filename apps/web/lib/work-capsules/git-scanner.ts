@@ -1,4 +1,5 @@
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { lazyChildProcess, lazyFsPromises, lazyOs, lazyUtil } from "@/lib/shared/lazy-node";
 
 const { execFile } = lazyChildProcess();
 const { promisify } = lazyUtil();
@@ -104,6 +105,74 @@ export async function getWorktreeDirtySummary(worktreePath: string): Promise<Git
 }
 
 /**
+ * `git -C <root>` with a trust exception for exactly that root (BI-DC2758DE).
+ *
+ * The merge signal probes the portal's workspace clone, which a different uid
+ * owns (the portal runs as root; /sandbox-workspace belongs to uid 1000). Git
+ * refuses every command in such a repository as "dubious ownership", so the
+ * probe could never answer and every merged item stayed unclosable. The code
+ * graph already reads the same clone this way (code-graph/git-snapshot.ts): one
+ * `-c safe.directory=<root>` per invocation, never a global or `*` exception.
+ */
+export function trustedGitArgs(repoRoot: string, args: readonly string[]): string[] {
+  return ["-c", `safe.directory=${repoRoot}`, "-C", repoRoot, ...args];
+}
+
+export type TrunkRefreshResult =
+  | { status: "refreshed" }
+  | { status: "failed"; error: string };
+
+/**
+ * Bring `origin/main` in a local clone up to date (BI-DC2758DE, founder decision
+ * on DI-B26D16D64C62: a scheduled refresh plus one before completion).
+ *
+ * The portal's workspace clone is fetched only when Build Studio starts a build,
+ * so it drifts hours or days behind. Every reader of it then sees an old trunk:
+ * the merge signal reports merged work as not merged, reviewers cannot read
+ * recent artifacts (BI-B61B4FF3), and the code graph indexes an old main.
+ *
+ * Only the trunk ref moves: no checkout, no working-tree change, no tags. The
+ * fetch runs as the clone's OWNER. The portal runs as root and the clone belongs
+ * to uid 1000, so a root fetch would leave root-owned objects that Build Studio's
+ * own git could no longer write next to. Best-effort and bounded: it never
+ * throws, and a failure leaves the trunk exactly as it was.
+ */
+export async function refreshTrunkRef(
+  repoRoot: string,
+  options: { timeoutMs?: number; remote?: string; branch?: string } = {},
+): Promise<TrunkRefreshResult> {
+  const remote = options.remote ?? "origin";
+  const branch = options.branch ?? "main";
+  try {
+    const owner = await lazyFsPromises().stat(repoRoot);
+    const runningAsRoot = typeof process.getuid === "function" && process.getuid() === 0;
+    const asOwner = runningAsRoot && owner.uid !== 0 ? { uid: owner.uid, gid: owner.gid } : {};
+    await execFileAsync(
+      "git",
+      trustedGitArgs(repoRoot, [
+        "fetch", "--quiet", "--no-tags", "--no-write-fetch-head",
+        remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`,
+      ]),
+      {
+        timeout: options.timeoutMs ?? 30_000,
+        windowsHide: true,
+        ...asOwner,
+        // The owner cannot read root's HOME, and git fails on an unreadable
+        // global config. A scratch HOME keeps the fetch independent of both.
+        env: { ...process.env, HOME: lazyOs().tmpdir(), GIT_TERMINAL_PROMPT: "0" },
+      },
+    );
+    return { status: "refreshed" };
+  } catch (error) {
+    const stderr = (error as { stderr?: unknown } | null)?.stderr;
+    const message = typeof stderr === "string" && stderr.trim()
+      ? stderr.trim()
+      : getErrorMessage(error);
+    return { status: "failed", error: message.slice(0, 500) };
+  }
+}
+
+/**
  * True when the trunk ref (default `origin/main`) resolves in this local repo —
  * i.e. reachability checks here are meaningful. False when there is no local git
  * repo, no fetched trunk, or git is unavailable (the portal-runtime case), so a
@@ -112,7 +181,7 @@ export async function getWorktreeDirtySummary(worktreePath: string): Promise<Git
  */
 export async function trunkRefExists(repoRoot: string, trunkRef = "origin/main"): Promise<boolean> {
   try {
-    await execFileAsync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", `${trunkRef}^{commit}`], {
+    await execFileAsync("git", trustedGitArgs(repoRoot, ["rev-parse", "--verify", "--quiet", `${trunkRef}^{commit}`]), {
       timeout: 5000,
       windowsHide: true,
     });
@@ -136,7 +205,7 @@ export async function trunkRefCommittedAt(repoRoot: string, trunkRef = "origin/m
   try {
     const { stdout } = await execFileAsync(
       "git",
-      ["-C", repoRoot, "log", "-1", "--format=%cI", trunkRef],
+      trustedGitArgs(repoRoot, ["log", "-1", "--format=%cI", trunkRef]),
       { timeout: 5000, windowsHide: true },
     );
     const parsed = new Date(stdout.trim());
@@ -172,7 +241,7 @@ export async function trunkHasMergedPullRequest(
   try {
     const { stdout } = await execFileAsync(
       "git",
-      ["-C", repoRoot, "log", trunkRef, "--fixed-strings", `--grep=(#${prNumber})`, "-1", "--format=%H"],
+      trustedGitArgs(repoRoot, ["log", trunkRef, "--fixed-strings", `--grep=(#${prNumber})`, "-1", "--format=%H"]),
       { timeout: 5000, windowsHide: true },
     );
     return stdout.trim().length > 0;
@@ -190,7 +259,7 @@ export async function isReachableFromTrunk(
   try {
     await execFileAsync(
       "git",
-      ["-C", repoRoot, "merge-base", "--is-ancestor", headSha, trunkRef],
+      trustedGitArgs(repoRoot, ["merge-base", "--is-ancestor", headSha, trunkRef]),
       { timeout: 5000, windowsHide: true },
     );
     return true; // exit 0 → headSha is reachable from trunk (merged)

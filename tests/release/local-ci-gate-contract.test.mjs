@@ -181,6 +181,14 @@ printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\
     packages: [{ name: "next", lockedVersion: "16.2.9", resolvedVersion: "16.2.7" }],
     convergence: { attempted: true, command: "pnpm install --frozen-lockfile", exitCode: 1 },
   });
+  // The gate runs DPF_LOCAL_CI_COMMAND through the platform shell, which is
+  // cmd.exe on Windows, so the command is a node script rather than POSIX shell
+  // syntax (BI-1B4910B4).
+  const driftCommand = join(temp, "write-drift-report.mjs");
+  writeFileSync(driftCommand, `import { writeFileSync } from "node:fs";
+writeFileSync(process.env.DPF_LOCAL_CI_FRESHNESS_REPORT_FILE, ${JSON.stringify(freshnessReport)});
+process.exit(3);
+`);
 
   const result = runGate([
     "--branch",
@@ -198,7 +206,7 @@ printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\
       // and the gate refuses to claim a lease it cannot attribute.
       DPF_GATE_OWNER_PROVIDER: "codex",
       DPF_GATE_OWNER_SESSION_ID: "contract-thread",
-      DPF_LOCAL_CI_COMMAND: `printf '%s' '${freshnessReport}' > "$DPF_LOCAL_CI_FRESHNESS_REPORT_FILE"; exit 3`,
+      DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${driftCommand}"`,
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
     },
@@ -1205,6 +1213,15 @@ shellContractTest("local-ci-runner.mjs refuses to gate main or a detached HEAD",
 // branches share real ancestry on the remote. local-ci-runner.mjs must
 // unshallow the root once, up front, before that merge ever runs.
 
+// These stub git by putting an extensionless POSIX script first on PATH. On
+// Windows, local-ci-runner's execFileSync("git") only ever resolves git.exe, so
+// the stub never runs and the real git answers instead (BI-1B4910B4).
+const pathStubGitSkipReason = shellContractSkipReason || (process.platform === "win32"
+  ? "Windows resolves execFileSync(\"git\") to git.exe only, so a POSIX git stub on PATH is never run; covered by CI/Linux"
+  : false);
+const pathStubGitTest = (name, fn) =>
+  test(name, { skip: pathStubGitSkipReason, timeout: 30_000 }, fn);
+
 function stubGitFor(shallow) {
   const stubDir = mkdtempSync(join(tmpdir(), "dpf-local-ci-shallow-stub-"));
   const callsFile = join(stubDir, "calls.log");
@@ -1233,7 +1250,7 @@ esac
   return { stubDir, callsFile };
 }
 
-shellContractTest("local-ci-runner.mjs unshallows the root clone before merging when the root is shallow", () => {
+pathStubGitTest("local-ci-runner.mjs unshallows the root clone before merging when the root is shallow", () => {
   const { stubDir, callsFile } = stubGitFor(true);
   const metadataFile = join(stubDir, "metadata.json");
 
@@ -1259,7 +1276,7 @@ shellContractTest("local-ci-runner.mjs unshallows the root clone before merging 
   assert.match(result.stderr, /candidate ref not found locally/);
 });
 
-shellContractTest("local-ci-runner.mjs skips the unshallow fetch when the root clone is already full", () => {
+pathStubGitTest("local-ci-runner.mjs skips the unshallow fetch when the root clone is already full", () => {
   const { stubDir, callsFile } = stubGitFor(false);
   const metadataFile = join(stubDir, "metadata.json");
 
@@ -1278,7 +1295,7 @@ shellContractTest("local-ci-runner.mjs skips the unshallow fetch when the root c
   assert.doesNotMatch(calls, /fetch --unshallow/);
 });
 
-shellContractTest("local-ci-runner.mjs --dry-run never fetches --unshallow even on a shallow root", () => {
+pathStubGitTest("local-ci-runner.mjs --dry-run never fetches --unshallow even on a shallow root", () => {
   const { stubDir, callsFile } = stubGitFor(true);
   const metadataFile = join(stubDir, "metadata.json");
 

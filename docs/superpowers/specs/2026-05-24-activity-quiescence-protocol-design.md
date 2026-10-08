@@ -996,6 +996,12 @@ The protocol is complete when:
 
 **Delivery:** docs/superpowers/plans/2026-09-30-upgrade-waits-for-work-plan.md.
 
+**Amendment 2026-10-07 — a parked build resumes when the pause clears (BI-E9DAA23F).** Point 1's "resumed after the swap" had no trigger of its own: a parked build waited for the 10-minute stranded-build tick, and a build parked that way for a week was aged out by the 7-day cap (59 of 126 plan-parked builds on 2026-10-07 last stopped on the wait). Now:
+- A build is *held by the pause* while the `phase:upgrade-wait` row is the last activity on it. Any later row means an attempt was made after the wait, and its outcome, not the platform, explains the build.
+- `build/resume-after-upgrade-pause` subscribes to `platform.quiescence-cleared` (emitted on every way a pause ends) and re-fires the canonical pre-build resume for each held build, one durable step per build. It does nothing if a new pause has already begun.
+- The stranded-build resumer skips pre-build resumes and age-outs while the level is not `normal`; a resume during a pause only records another wait. The `build`-phase step-machine resume is unchanged, and the 10-minute tick remains the backstop.
+- The 7-day age-out skips a held build. The wait marker no longer counts as liveness, so the tick does not hold a waiting build back for 15 minutes after the clear.
+
 ## 12. Operator Decisions (Locked Defaults)
 
 The six questions originally listed here have been resolved with the recommended defaults below (operator-acknowledged 2026-05-24 during in-session implementation directive). Each decision is locked into the implementation BIs and can be revisited via a follow-up spec edit + corresponding BI if a default needs to flip.

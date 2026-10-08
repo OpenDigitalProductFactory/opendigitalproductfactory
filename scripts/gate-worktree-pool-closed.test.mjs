@@ -88,3 +88,29 @@ test("the shortfall is omitted, not invented, when the policy carries no numbers
   });
   assert.doesNotMatch(line, /GiB/);
 });
+
+// BI-277ECBDB (A): the gate refuses to claim only when NO slot's substrate can run.
+test("the pre-claim substrate check blocks only when every slot's Postgres is down", async () => {
+  const { observeSlotSubstrate } = await import("./gate-worktree.mjs");
+  const previous = { env: process.env.NODE_ENV, json: process.env.DPF_LOCAL_CI_SLOT_SUBSTRATE_JSON };
+  process.env.NODE_ENV = "test";
+  try {
+    process.env.DPF_LOCAL_CI_SLOT_SUBSTRATE_JSON = JSON.stringify([
+      { container: "dpf-local-ci-postgres-0", state: "running", available: true },
+      { container: "dpf-local-ci-postgres-1", state: "exited (255)", available: false },
+    ]);
+    assert.equal(observeSlotSubstrate({}).blocked, false);
+    process.env.DPF_LOCAL_CI_SLOT_SUBSTRATE_JSON = JSON.stringify([
+      { container: "dpf-local-ci-postgres-0", state: "exited (1)", available: false, error: "port is already allocated" },
+      { container: "dpf-local-ci-postgres-1", state: "exited (255)", available: false },
+    ]);
+    const blocked = observeSlotSubstrate({});
+    assert.equal(blocked.blocked, true);
+    assert.equal(blocked.container, "dpf-local-ci-postgres-0");
+    assert.match(blocked.remedy, /port is already allocated/);
+  } finally {
+    process.env.NODE_ENV = previous.env;
+    if (previous.json === undefined) delete process.env.DPF_LOCAL_CI_SLOT_SUBSTRATE_JSON;
+    else process.env.DPF_LOCAL_CI_SLOT_SUBSTRATE_JSON = previous.json;
+  }
+});

@@ -9,6 +9,7 @@ import {
   type BuilderCalibrationStore,
 } from "./local-ci-builder-memory-calibration";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
+import type { findLocalCiEvidenceWorkroom } from "./local-ci-evidence-workroom";
 import type { LocalIntegrationStatus } from "../../../../scripts/lib/local-integration-status.mjs";
 
 export type LocalIntegrationResultInput = {
@@ -46,6 +47,8 @@ type LocalIntegrationDependencies = {
   writeEvidenceBlob?: import("@/lib/evidence/bounded-evidence-output").EvidenceBlobWriter;
   /** BI-903FB5F9: where measured builder peaks accumulate. Defaults to PlatformConfig. */
   builderCalibration?: BuilderCalibrationStore;
+  /** BI-C9912C22: where the gated branch's Workroom is found. Defaults to prisma. */
+  workroom?: Parameters<typeof findLocalCiEvidenceWorkroom>[0];
 };
 
 /**
@@ -153,13 +156,16 @@ export async function recordLocalIntegrationResult(
     );
   }
 
+  // Loaded like the blob writer above: a dynamic import keeps this module's
+  // static graph unchanged across the build-evidence pack's dynamic boundary.
+  const { findLocalCiEvidenceWorkroom } = await import("./local-ci-evidence-workroom");
+  const room = typeof evidenceObject?.headTreeHash === "string"
+    ? await findLocalCiEvidenceWorkroom(dependencies.workroom ?? prisma.workroom, {
+      branch: input.candidateBranch, sha: String(evidenceObject.sha ?? ""), sessionId: input.externalSessionId,
+    })
+    : undefined;
   const result = await recordExternalEvidence({
-    ...(typeof evidenceObject?.headTreeHash === "string" ? {
-      workCapsuleId: (await prisma.workroom.findFirst({ where: {
-        headBranch: input.candidateBranch, headSha: String(evidenceObject.sha ?? ""),
-        executorRef: input.externalSessionId, archivedAt: null,
-      }, select: { id: true } }))?.id,
-    } : {}),
+    ...(room !== undefined ? { workCapsuleId: room && room !== "ambiguous" ? room.id : undefined } : {}),
     actorUserId: input.actorUserId,
     routeContext: input.routeContext,
     operationType: "local_integration_ci",

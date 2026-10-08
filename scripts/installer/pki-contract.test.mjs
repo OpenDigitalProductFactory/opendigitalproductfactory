@@ -90,6 +90,9 @@ test("successful PKI bootstrap persists member trust and Edge actions for normal
     read("install-dpf.ps1"),
     read("scripts/installer/lib/compose.sh"),
   ]);
+  // BI-B422ED03: the marker -> overlay rule lives in one table that compose.sh,
+  // compose-chain.ps1 and promote.sh all read.
+  const activationTable = await read("scripts/installer/lib/activation-overlays.txt");
   // dpf-start.ps1 resolves its chain through Get-DPFComposeArgs, so the overlay
   // names live in compose-chain.ps1; the start script must still route through it.
   assert.match(windowsStartScript, /Get-DPFComposeArgs/);
@@ -100,10 +103,9 @@ test("successful PKI bootstrap persists member trust and Edge actions for normal
     assert.match(source, /DPF_PKI_TRUST_BUNDLE/);
     assert.match(source, /DPF_TLS_DIR/);
   }
-  assert.match(composeLib, /docker-compose\.organization-trust\.yml/);
-  assert.match(composeLib, /docker-compose\.tls\.yml/);
-  assert.match(composeLib, /DPF_EDGE_ACTION_DISPATCH_CONFIGURED/);
-  assert.match(composeLib, /docker-compose\.edge-actions\.yml/);
+  assert.match(composeLib, /activation-overlays\.txt/);
+  assert.match(activationTable, /^DPF_ORGANIZATION_TRUST_ENABLED docker-compose\.organization-trust\.yml docker-compose\.tls\.yml$/m);
+  assert.match(activationTable, /^DPF_EDGE_ACTION_DISPATCH_CONFIGURED docker-compose\.edge-actions\.yml$/m);
   assert.match(shellStart, /DPF_ORGANIZATION_TRUST_ENABLED|organization-trust/);
   assert.match(windowsStart, /docker-compose\.organization-trust\.yml/);
   assert.match(windowsStart, /docker-compose\.tls\.yml/);

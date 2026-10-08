@@ -402,7 +402,8 @@ async function defaultLoadObjectiveMappingHistory(args: {
   return loadObjectiveMappingHistoryFromDb(prisma, args);
 }
 
-const DEFAULT_PORTS: TerminalRecoveryPorts = {
+/** Production ports; a caller overrides only the ports it must (the acceptance sweep excludes the author, BI-DF255666). */
+export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
   loadLiveRooms: defaultLoadLiveRooms,
   loadBaselinePayloads: defaultLoadBaselinePayloads,
   loadEligibleEvidenceActivityIds: defaultLoadEligibleEvidenceActivityIds,
@@ -547,7 +548,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
   refusedWorkroomId: string | null;
   ports?: TerminalRecoveryPorts;
 }): Promise<TerminalInitiativeRecovery> {
-  const ports = args.ports ?? DEFAULT_PORTS;
+  const ports = args.ports ?? DEFAULT_TERMINAL_RECOVERY_PORTS;
   const acceptanceLane = [...args.decision.blockers, ...args.decision.unmet]
     .find((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
   if (acceptanceLane && acceptanceLane.accountableRole === "delivery-coordinator") {
@@ -691,6 +692,10 @@ export async function resolveTerminalInitiativeRecovery(args: {
   const packet = recovery.reviewerRoutes.find((route) => route.gate === "objective-mapping")?.requestCoworker;
   const binding = packet?.initiativeReviewBinding;
   const requiredToolNames = packet?.requiredToolNames;
+  // No packet because the resolver said why (no eligible reviewer, no artifact,
+  // no evidence): that reason is the true one. "Refresh readiness" would send
+  // the reader after the wrong remedy (BI-DF255666 found this through the sweep).
+  if (!packet && (recovery.escalations.length > 0 || recovery.unroutable.length > 0)) return recovery;
   if (!packet || !binding || !requiredToolNames) {
     return escalation(
       "objective-mapping-history-unavailable",

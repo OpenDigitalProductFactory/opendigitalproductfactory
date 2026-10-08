@@ -42,6 +42,7 @@ import {
   isHappyPathIntakeReady,
   normalizeHappyPathState,
 } from "@/lib/feature-build-types";
+import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-terminal-phase-runs";
 
 export type ResumePreBuildOutcome =
   | { kind: "resumed"; phase: string; via: string; detail: string }
@@ -162,6 +163,7 @@ export async function abandonStrandedPreBuild(params: {
             `re-stranding it on the next upgrade (BI-A009313E). Re-promote the backlog item to retry.`,
         },
       });
+      await closeOpenBuildPhaseRunsForTerminalBuild(buildId, { db: tx, now });
       await tx.buildActivity.create({
         data: {
           buildId,

@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 732,
+  "pageCount": 734,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1111,6 +1111,7 @@
         "jsi-weights-that-learn-the-job",
         "earning-autonomy-from-passive-to-proactive",
         "the-decision-ledger",
+        "governed-decision-trust-state-report-only",
         "the-learning-loop",
         "current-boundaries"
       ]
@@ -1185,9 +1186,11 @@
       "anchors": [
         "build-gate-runbook",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
+        "the-room-follows-its-pr-through-ci-bi-88341b5d",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
         "reaping-the-worktree-when-the-pr-merges-bi-848360ef",
-        "task-specific-operating-rules"
+        "task-specific-operating-rules",
+        "a-refusal-carries-its-own-remedy"
       ]
     },
     "docs/architecture/build-studio-namespace.md": {
@@ -1259,7 +1262,8 @@
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
         "diagnosing-capability-drift-bi-5acbac50",
-        "safe-operating-rules"
+        "safe-operating-rules",
+        "how-self-upgrade-may-recreate-a-service"
       ]
     },
     "docs/architecture/complexity-shield-acceptance-standard.md": {
@@ -1386,6 +1390,7 @@
         "the-steward-watches-growth-not-only-structure",
         "retention-floors-come-from-the-obligations-that-bind-this-install",
         "evidence-payloads-never-live-inline",
+        "retiring-a-model-nothing-reads",
         "task-specific-operating-rules"
       ]
     },
@@ -2122,6 +2127,7 @@
       "publishedPortal": false,
       "anchors": [
         "mcp-tool-authorization-runbook",
+        "discovered-external-mcp-tools-are-default-deny-bi-8b7b2fe9",
         "protocol-version-window-mechanics-landed-contract-pending-ratification",
         "gpp-permit-handles-phase-2",
         "terminal-readiness-recovery-packets",
@@ -2709,6 +2715,8 @@
         "concurrent-execution-and-recorded-state",
         "the-brief-and-what-advances-a-stage",
         "failing-closed-is-not-the-same-as-locking",
+        "every-reason-the-drive-emits-is-in-its-vocabulary-by-type",
+        "every-stage-is-a-queue",
         "a-named-governed-writer-must-be-attached-not-discovered",
         "a-stage-names-the-tools-it-needs",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
@@ -5913,6 +5921,20 @@
         "10-sources-and-market-signals"
       ]
     },
+    "docs/operations/acceptance-sweep.md": {
+      "publicHref": "/operations/acceptance-sweep/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "acceptance-sweep-operator-runbook",
+        "closing-items-the-gate-already-allows-off-by-default",
+        "what-the-summary-tells-you",
+        "who-verifies-an-item-that-is-not-closable",
+        "how-the-portal-knows-work-was-merged",
+        "known-limit"
+      ]
+    },
     "docs/operations/ai-provider-compliance-source-renewal-runbook.md": {
       "publicHref": "/operations/ai-provider-compliance-source-renewal-runbook/",
       "portalHref": null,
@@ -6400,6 +6422,7 @@
         "archetype-scoped-marketing-content-bi-cc580161",
         "fit-engine-source-of-truth",
         "enforcement-points-1",
+        "selling-to-other-archetypes",
         "first-viewport-decision",
         "standards-referenced",
         "operator-identity-and-personalization",
@@ -7513,6 +7536,7 @@
         "heuristic",
         "why",
         "the-expert-trade-off",
+        "how-to-make-the-portal-faster",
         "see-also"
       ]
     },
@@ -9578,6 +9602,23 @@
         "sources"
       ]
     },
+    "docs/security/tool-evaluations/2026-10-07-chatterbox-tts-api.md": {
+      "publicHref": "/security/tool-evaluations/2026-10-07-chatterbox-tts-api/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-travisvnchatterbox-tts-api-v101-dpf-tts-re-pin",
+        "what-is-evaluated",
+        "api-compatibility-source-read-at-upstream-tag-v101",
+        "cosai-security-findings",
+        "compliance",
+        "architecture-fit",
+        "integration-test-results",
+        "conditions",
+        "re-evaluation"
+      ]
+    },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
       "publicHref": "/specs/device-identification-and-portfolio-placement-spec/",
       "portalHref": null,
@@ -11512,6 +11553,7 @@
         "what-decision-perspective-does",
         "consequential-action-alignment",
         "the-confidence-model",
+        "measuring-how-often-a-coworker-agrees-with-you",
         "the-inheritance-chain",
         "profile-kinds",
         "what-onboarding-seeds-for-wwwd",
@@ -12150,6 +12192,8 @@
         "build-a-campaign-before-building-assets",
         "review-and-publish",
         "quarantined-or-imported-content",
+        "marketing-to-other-business-types",
+        "correcting-a-plan-that-started-wrong",
         "understand-the-two-funnels",
         "treat-automation-as-a-proposal",
         "a-practical-operating-rhythm",
@@ -12403,6 +12447,7 @@
         "manage-roles-and-account-access",
         "what-is-not-yet-a-people-page-workflow",
         "who-can-approve-leave",
+        "when-a-coworker-recommends-a-leave-decision",
         "evidence-and-recovery-checklist"
       ]
     },
@@ -12484,6 +12529,8 @@
         "reading-epic-progress",
         "shared-demand",
         "activate-local-demand",
+        "what-build-studio-starts-next",
+        "proposed-scores",
         "founder-shared-portfolio",
         "promotions",
         "being-reached-when-you-are-away",
@@ -12528,6 +12575,7 @@
         "use-this-doc-for",
         "overview",
         "reading-the-panel",
+        "which-portfolio-an-item-counts-against",
         "setting-a-budget",
         "choosing-who-answers-for-each-portfolio",
         "confirming-an-epics-portfolio",
@@ -12543,6 +12591,7 @@
         "use-this-doc-for",
         "overview",
         "workflow",
+        "who-can-upgrade-outside-the-maintenance-window",
         "when-work-is-still-running",
         "what-happens-if-you-do-nothing",
         "what-is-reversible",
@@ -12696,6 +12745,7 @@
         "start-with-the-object-you-are-managing",
         "read-marketplace-readiness",
         "connect-and-verify",
+        "review-tools-a-service-discovers",
         "native-integration-previews",
         "troubleshooting-and-recovery",
         "what-to-watch"
@@ -12815,6 +12865,7 @@
         "use-this-doc-for",
         "workflow",
         "managing-a-row",
+        "writing-your-section-text",
         "fixing-generated-content-that-doesnt-fit",
         "what-to-watch",
         "purchase-traceability"
@@ -12918,7 +12969,8 @@
         "overview",
         "key-concepts",
         "what-shows-up-here",
-        "what-you-can-do"
+        "what-you-can-do",
+        "how-long-a-coworkers-request-waits"
       ]
     },
     "docs/user-guide/workspace/documents.md": {

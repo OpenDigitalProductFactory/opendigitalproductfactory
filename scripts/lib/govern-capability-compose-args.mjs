@@ -2,7 +2,6 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import { scriptArgv } from './script-argv.mjs';
 
 const EXPLICIT_OVERLAYS = new Set(["promote", "dev", "integration-test", "linux-monitoring", "linux-host-network"]);
 const COMPATIBILITY_ALIASES = new Map([
@@ -101,7 +100,12 @@ export function mountOverride(config, mounts, { composeRoot, installRoot } = {})
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const { positionals: [composeRoot, installRoot] } = parseArgs({ args: scriptArgv(), allowPositionals: true });
+    // Promoter runtime: run with node by promote.sh, never through pnpm, so no
+    // forwarded `--` can arrive. It must NOT import script-argv.mjs: the promoter
+    // build context is staged by the already-deployed (N-1) portal from the file
+    // list baked into ITS image, and SUR-F67B9933 died on exactly that import
+    // (`Cannot find module /promoter/lib/script-argv.mjs`, BI-A04D61B9).
+    const { positionals: [composeRoot, installRoot] } = parseArgs({ args: process.argv.slice(2), allowPositionals: true });
     const config = JSON.parse(readFileSync(0, 'utf8'));
     const hasBinds = Object.values(config.services ?? {}).some((service) => service.volumes?.some((volume) => volume.type === 'bind'));
     const mounts = hasBinds ? JSON.parse(execFileSync('docker', ['inspect', process.env.HOSTNAME, '--format', '{{json .Mounts}}'], { encoding: 'utf8' })) : [];

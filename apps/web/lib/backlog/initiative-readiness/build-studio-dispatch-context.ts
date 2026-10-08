@@ -102,8 +102,15 @@ function latestAccepted(revisions: ReadonlyArray<RevisionRow & { field: string }
   return revisions.find((revision) => revision.field === field) ?? null;
 }
 
-function normalizedDigest(valueDigest: string): string {
-  return valueDigest.startsWith("sha256:") ? valueDigest : `sha256:${valueDigest}`;
+/**
+ * The digest exactly as BuildArtifactRevision stores it (bare hex on the
+ * install). The reader compares the bound value with the stored one and the
+ * request key is derived from it, so the binding must carry the stored form:
+ * prefixing it `sha256:` made every read fail `immutable_blob_mismatch` on
+ * 2026-10-06 (BI-926A7E90 live proof).
+ */
+function storedDigest(valueDigest: string): string {
+  return valueDigest.trim();
 }
 
 /**
@@ -123,7 +130,7 @@ export function resolveBuildStudioDispatch(
   const design = latestAccepted(build.artifactRevisions, "designDoc");
   if (!design) return { available: false, reason: "no-accepted-design" };
   const plan = latestAccepted(build.artifactRevisions, "buildPlan");
-  const designDigest = normalizedDigest(design.valueDigest);
+  const designDigest = storedDigest(design.valueDigest);
   const canonicalArtifact = {
     resolved: true as const,
     kind: "feature-build-revision" as const,
@@ -147,7 +154,7 @@ export function resolveBuildStudioDispatch(
         resolved: true as const,
         kind: "feature-build-revision" as const,
         revisionId: plan.id,
-        valueDigest: normalizedDigest(plan.valueDigest),
+        valueDigest: storedDigest(plan.valueDigest),
         buildId: build.buildId,
       }
       : null,

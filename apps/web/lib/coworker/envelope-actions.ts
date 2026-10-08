@@ -139,18 +139,26 @@ export async function approveEnvelope(
   const boundArgs = load.envelope.approvalBindingFingerprint
     && isRecord(load.envelope.argsJson) && isRecord(load.envelope.argsJson.approvalBinding)
     ? load.envelope.argsJson : null;
-  const updated = await prisma.coworkerActionEnvelope.update({
-    where: { id: envelopeId },
-    data: {
-      status: "approved",
-      // BI-E6E2E704: distinguish an authenticated person's decision from a
-      // policy-projected envelope. Preserve the existing exact-call binding.
-      ...(boundArgs ? { argsJson: {
-        ...boundArgs,
-        humanApproval: humanApprovalMarker(callerUserId),
-      } as Prisma.InputJsonObject } : {}),
-    },
+  const data = {
+    status: "approved",
+    // BI-E6E2E704: distinguish an authenticated person's decision from a
+    // policy-projected envelope. Preserve the existing exact-call binding.
+    ...(boundArgs ? { argsJson: {
+      ...boundArgs,
+      humanApproval: humanApprovalMarker(callerUserId),
+    } as Prisma.InputJsonObject } : {}),
+  };
+  // Conditional on still being proposed: two overlapping decisions (a slow
+  // first POST and a second press after the card reconciled, BI-F4EB23C1)
+  // record one approval; the other is told it is already settled.
+  const claimed = await prisma.coworkerActionEnvelope.updateMany({
+    where: { id: envelopeId, status: "proposed" },
+    data,
   });
+  if (claimed.count !== 1) {
+    return { ok: false, reason: "This request was already decided.", httpStatus: 409 };
+  }
+  const updated = { ...load.envelope, ...data };
   // Approving does NOT mark the waiting task working here, and must not.
   // Marking it working at approval time makes the resume's CAS on
   // `status: "input-required"` unmatchable and the approval unusable — #4796
@@ -158,7 +166,9 @@ export async function approveEnvelope(
   // resume itself (approved-task-run.ts, BI-9FD11E5E), taking that same CAS, so
   // it and a client replay of the immutable packet cannot both run the writer.
   // If an approval appears not to take effect, check the envelope's
-  // `expiresAt` first: the window is 15 minutes.
+  // `expiresAt` first: outward requests close after 15 minutes, everything
+  // else after seven days (approval-lifetime.ts, BI-0012E6CA), and execution
+  // re-checks freshness against the call's current classification.
   return { ok: true, envelope: updated as EnvelopeRow };
 }
 

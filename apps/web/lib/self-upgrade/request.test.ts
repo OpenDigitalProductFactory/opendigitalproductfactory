@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   resolveOperatingScheduleForSystem: vi.fn(),
   resolveAutoUpgradeWindow: vi.fn(),
   isUpgradeWindowOpen: vi.fn(),
+  nextUpgradeWindowOpen: vi.fn(),
+  getActiveSelfUpgradeBlackout: vi.fn(),
+  recordDeferredUpgradeRequest: vi.fn(),
   getLatestRun: vi.fn(),
   createRun: vi.fn(),
   failRun: vi.fn(),
@@ -27,6 +30,7 @@ vi.mock("@/lib/queue/functions/self-upgrade", () => ({
 
 vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: mocks.getSelfUpgradeConfig,
+  nextMaintenanceWindowStart: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("@/lib/operating-hours-read", () => ({
@@ -35,10 +39,24 @@ vi.mock("@/lib/operating-hours-read", () => ({
 
 vi.mock("@/lib/self-upgrade/auto-window", () => ({
   resolveAutoUpgradeWindow: mocks.resolveAutoUpgradeWindow,
+  nextAutoWindowOpen: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("@/lib/self-upgrade/window", () => ({
   isUpgradeWindowOpen: mocks.isUpgradeWindowOpen,
+  nextUpgradeWindowOpen: mocks.nextUpgradeWindowOpen,
+}));
+
+vi.mock("@/lib/self-upgrade/blackout", () => ({
+  getActiveSelfUpgradeBlackout: mocks.getActiveSelfUpgradeBlackout,
+}));
+
+vi.mock("@/lib/self-upgrade/deferred-request", () => ({
+  recordDeferredUpgradeRequest: mocks.recordDeferredUpgradeRequest,
+}));
+
+vi.mock("@/lib/govern/automation-sign-in", () => ({
+  AUTOMATION_PERSONA_EMAIL: "automation@dpf.local",
 }));
 
 vi.mock("@/lib/self-upgrade/release-batch-status", () => ({
@@ -110,6 +128,9 @@ describe("requestSelfUpgrade", () => {
     });
     mocks.resolveAutoUpgradeWindow.mockReturnValue({ kind: "operating-hours" });
     mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    mocks.nextUpgradeWindowOpen.mockReturnValue(null);
+    mocks.getActiveSelfUpgradeBlackout.mockResolvedValue(null);
+    mocks.recordDeferredUpgradeRequest.mockResolvedValue(undefined);
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-QUEUED1", status: "queued" });
     mocks.inngestSend.mockResolvedValue({ ids: ["evt-1"] });
@@ -155,7 +176,28 @@ describe("requestSelfUpgrade", () => {
       routine: false,
     }));
     expect(mocks.inngestSend).not.toHaveBeenCalled();
-    expect(mocks.isUpgradeWindowOpen).not.toHaveBeenCalled();
+  });
+
+  it("BI-2128872C AC-2: an operator outside the window runs now and the run records the bypass", async () => {
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    mocks.nextUpgradeWindowOpen.mockReturnValue(new Date("2026-10-07T22:00:00.000Z"));
+
+    const result = await requestSelfUpgrade({
+      requestedBy: "manual:user-ops-1",
+      actorKind: "human",
+      now: new Date("2026-10-07T15:20:00.000Z"),
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      status: "queued",
+      triggeredBy: "manual:user-ops-1+outside-window",
+    });
+    expect(mocks.admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({
+      triggeredBy: "manual:user-ops-1+outside-window",
+      routine: false,
+    }));
+    expect(mocks.recordDeferredUpgradeRequest).not.toHaveBeenCalled();
   });
 
   it("queues an artifact-native upgrade on a consumer release install", async () => {
@@ -237,21 +279,69 @@ describe("requestSelfUpgrade", () => {
     expect(mocks.failRun).not.toHaveBeenCalled();
   });
 
-  it("requires human override when an agent requests outside the effective window", async () => {
+  it("BI-2128872C AC-1: an agent outside the window is queued for the next window, with when it will run", async () => {
     mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    mocks.nextUpgradeWindowOpen.mockReturnValue(new Date("2026-10-07T22:00:00.000Z"));
 
     const result = await requestSelfUpgrade({
       requestedBy: "mcp:codex",
       actorKind: "agent",
+      now: new Date("2026-10-07T15:20:00.000Z"),
     });
 
     expect(result).toMatchObject({
       success: true,
-      status: "human_override_required",
+      status: "deferred_to_window",
       reason: "outside-window",
+      runAt: "2026-10-07T22:00:00.000Z",
+      nextWindowStart: "2026-10-07T22:00:00.000Z",
     });
+    expect(result.status === "deferred_to_window" && result.message).toContain("2026-10-07T22:00:00.000Z");
+    expect(mocks.recordDeferredUpgradeRequest).toHaveBeenCalledWith({
+      requestedBy: "mcp:codex",
+      requestedAt: "2026-10-07T15:20:00.000Z",
+      runAt: "2026-10-07T22:00:00.000Z",
+    });
+    expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
     expect(mocks.createRun).not.toHaveBeenCalled();
     expect(mocks.inngestSend).not.toHaveBeenCalled();
+  });
+
+  it("BI-2128872C: an agent inside the window but during an operator blackout is deferred past it", async () => {
+    mocks.getActiveSelfUpgradeBlackout.mockResolvedValue({
+      name: "Quarter close",
+      endAt: new Date("2026-10-09T06:00:00.000Z"),
+    });
+
+    const result = await requestSelfUpgrade({
+      requestedBy: "mcp:codex",
+      actorKind: "agent",
+      now: new Date("2026-10-07T15:20:00.000Z"),
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      status: "deferred_to_window",
+      reason: "blackout-period",
+      runAt: "2026-10-09T06:00:00.000Z",
+    });
+    expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
+  });
+
+  it("does not defer an agent request the release batch would decline anyway", async () => {
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    mocks.nextUpgradeWindowOpen.mockReturnValue(new Date("2026-10-07T22:00:00.000Z"));
+    mocks.resolveReleaseBatchStatus.mockResolvedValue({
+      ...BATCH_ELIGIBLE,
+      eligible: false,
+      reason: "below-threshold",
+      pendingCount: 2,
+    });
+
+    const result = await requestSelfUpgrade({ requestedBy: "mcp:codex", actorKind: "agent" });
+
+    expect(result).toMatchObject({ success: true, status: "batch_below_threshold", pendingPrCount: 2 });
+    expect(mocks.recordDeferredUpgradeRequest).not.toHaveBeenCalled();
   });
 
   it("allows an agent request inside the effective window without force", async () => {
@@ -339,7 +429,8 @@ describe("requestSelfUpgrade", () => {
       status: "human_override_required",
       reason: "no-window-needs-timezone",
     });
-    expect(mocks.isUpgradeWindowOpen).not.toHaveBeenCalled();
+    expect(mocks.recordDeferredUpgradeRequest).not.toHaveBeenCalled();
+    expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
     expect(mocks.createRun).not.toHaveBeenCalled();
   });
 });

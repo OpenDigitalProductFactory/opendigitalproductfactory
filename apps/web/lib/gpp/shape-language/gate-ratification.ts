@@ -13,9 +13,10 @@
 // turns the parent design's "reported for founder ratification" step into a
 // reviewable file.
 //
-// EVERY ENTRY IS `proposed` AT MERGE. Ratifying an entry is the founder's
-// decision (WWMD), recorded as a DI, and lands as its own small PR (PR-3b-R
-// for `outbound-customer-communication`). A ratification is a one-entry edit:
+// EVERY ENTRY WAS `proposed` AT MERGE of PR-3a-2. Ratifying an entry is the
+// founder's decision (WWMD), recorded as a DI, and lands as its own small PR
+// (PR-3b-R ratified `outbound-customer-communication`, DI-BEEAF36D0244). A
+// ratification is a one-entry edit:
 //
 //   "outbound-customer-communication": {
 //     status: "ratified",
@@ -170,10 +171,14 @@ export const GATE_RATIFICATION: Readonly<Record<string, GateRatificationEntry>> 
     "wwwd",
     "Only a confirmed answer becomes the organization's stated position; WWWD by definition.",
   ),
-  "outbound-customer-communication": proposed(
-    "wwwd",
-    "Replying to a customer is the organization's business decision; matches the WWWD tak-alignment-admit binding that covers outward calls (design §4.5).",
-  ),
+  "outbound-customer-communication": Object.freeze({
+    status: "ratified",
+    proposed: Object.freeze({ authority: "wwwd", mode: "enforced", blocking: true, resolution: "accountable-human" }),
+    basis:
+      "Replying to a customer is the organization's business decision; matches the WWWD tak-alignment-admit binding that covers outward calls (design §4.5). Ratified as proposed by the founder on 2026-10-02.",
+    decisionId: "DI-BEEAF36D0244",
+    ratifiedAt: "2026-10-02",
+  }),
   "outbound-reply-approval": proposed(
     "wwwd",
     "Approving a reply that leaves under the organization's name is a business decision, as for outbound-customer-communication.",

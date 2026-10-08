@@ -36,5 +36,61 @@
     "dialogMessage": "{$email} will be disconnected from {$client}. Everyone else stays connected. They can reconnect by signing in again. Why is their access ending?",
     "dialogPlaceholder": "For example: setup account nobody uses",
     "revokedNotice": ".input {$grants :integer}\n.input {$tokens :integer}\n.match $grants $tokens\none one {{Ended {$email}'s access (1 sign-in grant, 1 access token).}}\none * {{Ended {$email}'s access (1 sign-in grant, {$tokens} access tokens).}}\n* one {{Ended {$email}'s access ({$grants} sign-in grants, 1 access token).}}\n* * {{Ended {$email}'s access ({$grants} sign-in grants, {$tokens} access tokens).}}"
+  },
+  "closeAuthorisation": {
+    "heading": "Let the acceptance sweep close finished work",
+    "on": "On",
+    "off": "Off",
+    "summary": {
+      "off": "The sweep closes nothing.",
+      "on": "Allowed by {$by} on",
+      "stopped": "Stopped by {$by} on",
+      "recordProblem": "The saved setting cannot be used, so the sweep closes nothing.",
+      "lastClosed": "Last sweep closed {$closed}."
+    },
+    "intro": "Each morning the sweep checks work waiting for acceptance. When this is on, it closes the items that already pass every completion check, and nothing that needs a decision.",
+    "recordProblem": "The saved setting is incomplete or for something else, so the sweep closes nothing. Allow it again to fix it.",
+    "allowedBy": "Allowed by",
+    "reason": "Reason",
+    "limit": "Limit",
+    "limitValue": "Up to {$limit} items per run",
+    "stoppedBy": "Stopped by",
+    "lastRunNone": "No sweep has run since closing was added.",
+    "lastRunPrefix": "Last sweep,",
+    "lastRunClosed": "{$closed} closed",
+    "lastRunRefused": "{$refused} refused when checked again",
+    "lastRunDeferred": "{$deferred} left for the next run",
+    "lastRunNothing": "closed nothing because {$why}",
+    "offReason": {
+      "notRecorded": "nobody had allowed it yet.",
+      "revoked": "it had been switched off.",
+      "malformed": "the saved setting was incomplete. Allow it again to fix it.",
+      "outOfScope": "the saved setting was for something else. Allow it again to fix it.",
+      "operatorNotAuthorised": "the person who allowed it is no longer active or no longer manages the backlog. Someone with that permission needs to allow it again.",
+      "agentNotGranted": "the Portfolio Advisor is no longer permitted to complete backlog items.",
+      "unavailable": "the setting could not be read during that run. The next run tries again.",
+      "other": "closing was off for that run."
+    },
+    "reasonGrant": "Why are you allowing it?",
+    "reasonRevoke": "Why are you stopping it?",
+    "reasonHint": "At least {$min} characters. It is kept with the record.",
+    "limitDisclosure": "Change how many it closes per run ({$limit})",
+    "limitField": "Most items to close in one run",
+    "limitHint": "1 to {$max}. The rest wait for the next run.",
+    "consequence": {
+      "summaryGrant": "The next sweep closes items that pass every check.",
+      "summaryRevoke": "The next sweep closes nothing.",
+      "what": "The platform setting for the acceptance sweep.",
+      "who": "Work waiting for acceptance. Each closure is recorded with your name and reason.",
+      "reversibilityGrant": "You can stop it at any time. Items already closed stay closed.",
+      "reversibilityRevoke": "Yes. Allow it again at any time.",
+      "recovery": "Reopen a closed item from the backlog if it should not have closed."
+    },
+    "successGrant": "Allowed. The next sweep can close items.",
+    "successRevoke": "Stopped. The next sweep closes nothing.",
+    "notPermitted": "You need permission to manage both the platform and the backlog to change this.",
+    "allow": "Allow closing",
+    "stop": "Stop closing",
+    "saving": "Saving…"
   }
 }

@@ -5,6 +5,7 @@ import type { CoworkerApprovalBinding } from "@/lib/govern/authority/coworker-au
 import {
   ensureAuthorityApprovalEnvelope,
   findApprovedAuthorityEnvelope,
+  findExecutedAuthorityOutcome,
   resumeAuthorityApprovalTask,
 } from "./authority-approval-envelope";
 
@@ -124,7 +125,35 @@ describe("authority approval envelopes", () => {
       status: "approved",
       expiresAt: new Date("2026-07-27T11:15:00Z"),
       binding: BINDING,
+      approvedAt: null,
     });
+  });
+
+  // BI-0012E6CA: the approval time feeds the staleness re-check at execution.
+  it("reports when the person approved, falling back to when the row was written", async () => {
+    const mockDb = db();
+    mockDb.coworkerActionEnvelope.findFirst.mockResolvedValueOnce({
+      id: "ENV-APPROVED",
+      status: "approved",
+      expiresAt: new Date("2026-08-03T11:00:00Z"),
+      createdAt: new Date("2026-07-27T09:00:00Z"),
+      argsJson: {
+        approvalBinding: BINDING,
+        humanApproval: { userId: "user-1", approvedAt: "2026-07-27T10:30:00.000Z" },
+      },
+    });
+    await expect(findApprovedAuthorityEnvelope(BINDING, new Date("2026-07-27T11:00:00Z"), mockDb))
+      .resolves.toMatchObject({ approvedAt: new Date("2026-07-27T10:30:00.000Z") });
+
+    mockDb.coworkerActionEnvelope.findFirst.mockResolvedValueOnce({
+      id: "ENV-PROJECTED",
+      status: "approved",
+      expiresAt: new Date("2026-08-03T11:00:00Z"),
+      createdAt: new Date("2026-07-27T09:00:00Z"),
+      argsJson: { approvalBinding: BINDING },
+    });
+    await expect(findApprovedAuthorityEnvelope(BINDING, new Date("2026-07-27T11:00:00Z"), mockDb))
+      .resolves.toMatchObject({ approvedAt: new Date("2026-07-27T09:00:00Z") });
   });
 
   it("resumes only the task bound to the approved envelope", async () => {
@@ -207,5 +236,115 @@ describe("an approval raised outside a chat still gets an envelope", () => {
     expect(mockDb.agentThread.upsert).not.toHaveBeenCalled();
     const created = mockDb.coworkerActionEnvelope.create.mock.calls[0]![0] as { data: { threadId: string } };
     expect(created.data.threadId).toBe("THREAD-REAL");
+  });
+});
+
+// BI-F4EB23C1 — a failed approved run settles its replay instead of minting another card.
+describe("findExecutedAuthorityOutcome", () => {
+  const NOW = new Date("2026-10-02T03:15:00Z");
+  function replayDb(envelope: { id: string; status: string } | null, runs: Array<{ success: boolean; result: unknown; toolName?: string }>) {
+    return {
+      coworkerActionEnvelope: { findFirst: vi.fn().mockResolvedValue(envelope ? { ...envelope, expiresAt: null } : null), create: vi.fn(), updateMany: vi.fn() },
+      taskRun: { updateMany: vi.fn() },
+      toolExecution: {
+        findFirst: vi.fn().mockImplementation(async () => runs.find((run) => run.success) ?? null),
+        // Honours the filter, so dropping the approval_outcome exclusion fails the test.
+        findMany: vi.fn().mockImplementation(async ({ where }: { where: { toolName: { not: string } } }) =>
+          runs.filter((run) => !run.success && run.toolName !== where.toolName.not)),
+      },
+    };
+  }
+
+  it("matches executed and failed approvals for the identical binding", async () => {
+    const fake = replayDb({ id: "env-ok", status: "executed" }, [{ success: true, result: { message: "done" } }]);
+    await expect(findExecutedAuthorityOutcome(BINDING, NOW, fake as never)).resolves.toEqual({ envelopeId: "env-ok", status: "executed", result: { message: "done" } });
+    expect(fake.coworkerActionEnvelope.findFirst.mock.calls[0][0].where.status).toEqual({ in: ["executed", "failed"] });
+  });
+
+  it("returns the failed run's recorded error, not the earlier approval-required row", async () => {
+    const denied = { success: false, error: "workroom_access_denied", message: "You or your assistant are not admitted to this workroom." };
+    const fake = replayDb({ id: "env-failed", status: "failed" }, [
+      { success: false, toolName: "approval_outcome", result: { status: "failed" } },
+      { success: false, toolName: "reassign_workroom_executor", result: denied },
+      { success: false, toolName: "reassign_workroom_executor", result: { success: false, error: "approval_required", data: { envelopeId: "env-failed" } } },
+    ]);
+    await expect(findExecutedAuthorityOutcome(BINDING, NOW, fake as never)).resolves.toEqual({ envelopeId: "env-failed", status: "failed", result: denied });
+  });
+
+  it("still settles a failed approval whose run left no readable error", async () => {
+    const fake = replayDb({ id: "env-failed", status: "failed" }, []);
+    await expect(findExecutedAuthorityOutcome(BINDING, NOW, fake as never)).resolves.toEqual({ envelopeId: "env-failed", status: "failed", result: null });
+  });
+});
+
+// Approval convergence A3 (BI-C8EC05C9, spec D2 S2; AC-BOUNDARY substrate): a
+// propose-boundary envelope is metadata on argsJson, never part of the binding,
+// and neither pause site touches the TaskRun for it — including the reuse-path
+// collision the scheduler's forced fallback makes with the same TaskRun.
+describe("authority approval envelopes — the propose boundary", () => {
+  const NOW = new Date("2026-07-27T11:00:00Z");
+  const request = (over: Record<string, unknown> = {}) => ({
+    binding: BINDING, authorityDecisionId: "AUTH-1", threadId: "THREAD-1",
+    explanation: "Approval is required.", now: NOW, ...over,
+  });
+
+  it("create path: stores the flag (and the chat message) as metadata and does not pause the run", async () => {
+    const mockDb = db();
+    mockDb.coworkerActionEnvelope.findFirst.mockResolvedValue(null);
+    mockDb.coworkerActionEnvelope.create.mockImplementation(async (args: { data: Record<string, unknown> }) => ({
+      id: "ENV-PB", status: "proposed", expiresAt: new Date("2026-08-03T11:00:00Z"), argsJson: args.data.argsJson,
+    }));
+
+    await ensureAuthorityApprovalEnvelope(request({ proposeBoundary: true, chatMessageId: "MSG-1" }), mockDb);
+
+    expect(mockDb.coworkerActionEnvelope.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        argsJson: { approvalBinding: BINDING, proposeBoundary: true },
+        chatMessageId: "MSG-1",
+        approvalBindingFingerprint: expect.any(String),
+      }),
+    });
+    expect(mockDb.taskRun.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("reuse path: an active boundary envelope never pauses the run, even for a call without the flag", async () => {
+    const mockDb = db();
+    mockDb.coworkerActionEnvelope.findFirst.mockResolvedValue({
+      id: "ENV-PB", status: "proposed", expiresAt: new Date("2026-08-03T11:00:00Z"),
+      argsJson: { approvalBinding: BINDING, proposeBoundary: true },
+    });
+
+    const result = await ensureAuthorityApprovalEnvelope(request(), mockDb);
+
+    expect(result.id).toBe("ENV-PB");
+    expect(mockDb.taskRun.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("without the flag both pause sites behave as before", async () => {
+    const reuse = db();
+    reuse.coworkerActionEnvelope.findFirst.mockResolvedValue({
+      id: "ENV-1", status: "proposed", expiresAt: new Date("2026-07-27T11:15:00Z"), argsJson: { approvalBinding: BINDING },
+    });
+    await ensureAuthorityApprovalEnvelope(request(), reuse);
+    expect(reuse.taskRun.updateMany).toHaveBeenCalledTimes(1);
+
+    const create = db();
+    create.coworkerActionEnvelope.findFirst.mockResolvedValue(null);
+    create.coworkerActionEnvelope.create.mockResolvedValue({ id: "ENV-2", status: "proposed", expiresAt: new Date("2026-07-27T11:15:00Z") });
+    await ensureAuthorityApprovalEnvelope(request(), create);
+    expect(create.coworkerActionEnvelope.create.mock.calls[0][0].data.argsJson).toEqual({ approvalBinding: BINDING });
+    expect(create.coworkerActionEnvelope.create.mock.calls[0][0].data).not.toHaveProperty("chatMessageId");
+    expect(create.taskRun.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("an approved boundary envelope reports the flag so the gate does not resume the run", async () => {
+    const mockDb = db();
+    mockDb.coworkerActionEnvelope.findFirst.mockResolvedValue({
+      id: "ENV-PB", status: "approved", expiresAt: new Date("2026-08-03T11:00:00Z"),
+      argsJson: { approvalBinding: BINDING, proposeBoundary: true },
+    });
+    await expect(findApprovedAuthorityEnvelope(BINDING, NOW, mockDb)).resolves.toMatchObject({
+      envelopeId: "ENV-PB", proposeBoundary: true,
+    });
   });
 });

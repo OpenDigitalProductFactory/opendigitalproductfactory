@@ -1,5 +1,17 @@
 {
-  "dropped": [],
+  "dropped": [
+    {
+      "shape": "inquiry-response-watch@1.0.0",
+      "stage": "send",
+      "field": "advance.gate",
+      "value": {
+        "authority": "wwwd",
+        "mode": "enforced",
+        "blocking": true,
+        "resolution": "accountable-human"
+      }
+    }
+  ],
   "governedStages": [
     {
       "shape": "adopter-health-watch@1.0.0",
@@ -191,7 +203,7 @@
       "shape": "inquiry-response-watch@1.0.0",
       "stage": "send",
       "decisionScope": "outbound-customer-communication",
-      "status": "proposed"
+      "status": "ratified"
     },
     {
       "shape": "integrate-stream-orchestration@1.0.0",
@@ -541,12 +553,6 @@
       "shape": "governance-stream-orchestration@1.0.0",
       "stage": "direct",
       "decisionScope": "governance-position",
-      "status": "proposed"
-    },
-    {
-      "shape": "inquiry-response-watch@1.0.0",
-      "stage": "send",
-      "decisionScope": "outbound-customer-communication",
       "status": "proposed"
     },
     {

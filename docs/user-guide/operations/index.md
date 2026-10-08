@@ -22,7 +22,7 @@ Counts describe the Workrooms the page read, not everything in the portfolio. Wh
 
 ## Key Concepts
 
-- **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, done, deferred, or retired.
+- **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, awaiting acceptance, done, deferred, or retired.
 - **Epics** — Groups of related backlog items that together deliver a meaningful outcome. The list shows the item mix by status and calculates progress from items marked done only.
 - **Archetype Scope** — Planning metadata that indicates whether work is platform-wide, common across businesses, or specific to an archetype category or leaf archetype. This helps separate market-specific gaps from common finance, workforce, identity, and platform substrate work.
 - **Priority** — Items are ranked by priority to make the most important work visible. Priorities can be adjusted as circumstances change.
@@ -51,7 +51,17 @@ complete, two remain wanted but parked, three were intentionally closed without
 delivery, and one remains active. Deferred and retired work do not increase the
 done count.
 
-**Active only** is enabled by default. It hides deferred, done, and retired item
+Delivered work that has not yet been accepted is counted on its own, never as
+done: `3 awaiting acceptance (2 over 14 days) · 5 done`. The part in brackets is
+how many have waited 14 days or more since entering awaiting acceptance. It
+reads `up to 2` when some of those items have no recorded entry date, because
+their age is then counted from when they were created and the real figure may
+be lower; hover it for the explanation. The progress bar shows done in one
+colour and awaiting acceptance as a separate segment after it. The workspace
+**Backlog** tile shows the same counts as **Awaiting acceptance** and **Awaiting
+14+ days**, above **Done**.
+
+**Active only** is enabled by default. It hides awaiting-acceptance, deferred, done, and retired item
 rows when you expand an epic, while the row-level status mix stays visible. Turn
 it off to inspect parked and terminal items.
 
@@ -64,6 +74,9 @@ sharing or refreshing.
 - **Triaging** — Waiting for an intake decision.
 - **Open** — Accepted work that has not started.
 - **In progress** — Work is actively underway.
+- **Awaiting acceptance** — Delivered (for example merged) but not yet proven to
+  meet its acceptance criteria. It is not done, and it is not counted in epic
+  progress.
 - **Done** — Completed work; this is the only status counted as done in epic progress.
 - **Deferred** — Parked but still wanted. A deferral records why it is parked,
   what event should resume it, who owns that decision, and when it must be
@@ -99,6 +112,38 @@ Use **Link evidence** to retain a stable source reference. Booking, order,
 subscription, and fulfillment records are evidence only when they really
 exist. The completeness line measures classified, evidence-linked,
 explainably-scored, and funding-decided records; it does not reward clicks.
+
+### What Build Studio starts next
+
+When the governed backlog lane is on, the daily tee-up (and the capacity drain,
+when it is switched on) starts accepted, build-ready work in this order:
+
+1. Items with a demand score come before items without one, highest score
+   first.
+2. If you have set investment-bucket targets, an item whose bucket (Run, Grow
+   or Transform) is below its target in the work already in flight goes ahead
+   of higher-scored work in the same group. The balance is re-checked after
+   each start.
+3. Ties go to work on an active epic, then to the oldest item.
+
+Each started build records why it was picked in its activity, for example
+"Ranked 1 of 12 eligible by demand score 42 (rice)". An item with no score
+says so, so unscored work is never started by age without saying it. To have
+an item considered on value, give it a score in Delivery Flow.
+
+### Proposed scores
+
+Each day the Portfolio Advisor proposes a score for a batch of open and
+in-progress items that have none, starting with items in active epics, items a
+user asked for, and bugs with live evidence. It fills in reach, impact,
+confidence, and effort from what the item already records, and picks an
+investment bucket where the work type makes it clear. A proposed score is marked
+as proposed by an agent and lists the reasons behind each number in the item's
+history. Proposed confidence never goes above 80%.
+
+To change a proposed score, score the item yourself. Your values replace the
+proposal, and the advisor never proposes over them again. If an item has no
+effort size or estimate, the advisor leaves it unscored so a person can size it.
 
 Open **Operations > Delivery Flow** (`/ops/demand`) to review demand shared by
 approved DPF connections. A shared item is an observation from another

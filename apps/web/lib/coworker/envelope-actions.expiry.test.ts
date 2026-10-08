@@ -32,11 +32,19 @@ describe("envelope decisions honour the decision window", () => {
   it("approves inside the window", async () => {
     findUnique.mockResolvedValue(row({ approvalBindingFingerprint: "binding-1", argsJson: { approvalBinding: { toolName: "create_backlog_item" } } }));
     const result = await approveEnvelope("env-1", "user-1");
-    expect(result.ok).toBe(true);
-    expect(update).toHaveBeenCalledOnce();
-    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+    expect(result).toMatchObject({ ok: true, envelope: { status: "approved" } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: "env-1", status: "proposed" }, data: expect.objectContaining({
+      status: "approved",
       argsJson: { approvalBinding: { toolName: "create_backlog_item" }, humanApproval: { userId: "user-1", approvedAt: expect.any(String) } },
-    }) }));
+    }) });
+  });
+
+  // BI-F4EB23C1 — a second press after the card reconciled cannot approve twice.
+  it("records one approval when two decisions overlap", async () => {
+    findUnique.mockResolvedValue(row());
+    updateMany.mockResolvedValueOnce({ count: 0 });
+    const result = await approveEnvelope("env-1", "user-1");
+    expect(result).toMatchObject({ ok: false, httpStatus: 409 });
   });
 
   it.each([
@@ -45,7 +53,7 @@ describe("envelope decisions honour the decision window", () => {
   ])("preserves raw screen-action arguments on approval: %j", async (argsJson) => {
     findUnique.mockResolvedValue(row({ argsJson, approvalBindingFingerprint: null }));
     expect(await approveEnvelope("env-1", "user-1")).toMatchObject({ ok: true });
-    expect(update).toHaveBeenCalledWith({ where: { id: "env-1" }, data: { status: "approved" } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: "env-1", status: "proposed" }, data: { status: "approved" } });
   });
 
   it.each([

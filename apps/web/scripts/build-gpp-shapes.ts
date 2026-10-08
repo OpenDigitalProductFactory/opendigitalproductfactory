@@ -17,8 +17,9 @@
  *      with the real gate ratification table. A document with any error
  *      finding fails the run; nothing half-checked is written.
  *   3. generated/index.generated.ts — GENERATED_WORK_SHAPES and
- *      GENERATED_PRIOR_WORK_SHAPES. Not imported by work-shapes.ts in Phase
- *      3b (plan "Spec refinements" 4).
+ *      GENERATED_PRIOR_WORK_SHAPES. work-shapes.ts reads GENERATED_WORK_SHAPES
+ *      only to check that each compiled shape is registered, by reference, in
+ *      its family file; it never spreads the index (plan "Spec refinements" 4).
  *   4. apps/web/lib/gpp/generated/gate-ratification-report.json —
  *      buildRatificationReport over the registry (property R).
  *

@@ -6,6 +6,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { classifyDiscoveredToolForInventory, resolveDiscoveredToolPolicy } from "@/lib/tak/mcp-tool-policy";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -97,17 +98,25 @@ async function fetchInventoryUncached(): Promise<CapabilityInventoryRow[]> {
 
   for (const tool of mcpTools) {
     const capabilityId = `mcp:${tool.server.serverId}__${tool.toolName}`;
+    // BI-8B7B2FE9: a discovered tool is usable only under DPF-owned policy.
+    // Inventory reports its review class; discovery/connectivity is not authority.
+    const policyRow = { ...tool, server: { serverId: tool.server.serverId, status: tool.server.status } };
+    const review = classifyDiscoveredToolForInventory(policyRow);
+    const resolved = resolveDiscoveredToolPolicy(policyRow);
+    const authorized = resolved.resolved;
     rows.push({
       capabilityId,
       sourceType: "external_mcp",
       integrationId: tool.server.integrationId ?? null,
       displayName: tool.toolName,
       description: tool.description ?? null,
-      enabled: tool.isEnabled && tool.server.status === "active",
-      availabilityStatus: mapMcpStatus(tool.server.status, tool.server.healthStatus, tool.isEnabled),
+      enabled: authorized && tool.isEnabled && tool.server.status === "active",
+      availabilityStatus: authorized
+        ? mapMcpStatus(tool.server.status, tool.server.healthStatus, tool.isEnabled)
+        : "inactive",
       riskClass: null,
       auditClass: null,
-      sideEffect: null,
+      sideEffect: resolved.resolved ? resolved.policy.effect !== "read_only" : null,
       requiresExternalAccess: true, // MCP tools always reach outside the platform
       buildPhases: null,
       integrationDependencies: [tool.server.serverId],
@@ -116,6 +125,8 @@ async function fetchInventoryUncached(): Promise<CapabilityInventoryRow[]> {
         serverId: tool.server.serverId,
         serverName: tool.server.name,
         inputSchema: tool.inputSchema,
+        policyClass: review.policyClass,
+        policyReason: review.reason,
       },
     });
   }

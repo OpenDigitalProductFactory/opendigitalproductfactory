@@ -11,6 +11,7 @@ import {
 } from "./lib/durable-wait-resumer.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import {
+  EXIT_RUNNER_PREREQUISITE_UNAVAILABLE,
   EXIT_CHILD_SIGNAL_DEATH,
   EXIT_CONTROL_PLANE_STARVATION,
   EXIT_SOURCE_DRIFT,
@@ -57,6 +58,7 @@ export const EXIT_QUEUED = 75;
  */
 export const RETRYABLE_EXITS = Object.freeze([
   EXIT_QUEUED,
+  EXIT_RUNNER_PREREQUISITE_UNAVAILABLE,
   EXIT_CONTROL_PLANE_STARVATION,
   EXIT_CHILD_SIGNAL_DEATH,
   130, // 128 + SIGINT, stamped when the parent took the signal (BI-8392DA16)
@@ -192,15 +194,21 @@ export async function resumeUntilAdmitted({
   spawnFn = spawn,
   sleepFn = sleep,
   log = () => {},
+  random = Math.random,
 }) {
   const giveUpAt = now() + deadlineMs;
   let attempts = 0;
   let blockedAttempts = 0;
+  let blockedStreak = 0;
   for (;;) {
+    if (attempts > 0 && now() >= giveUpAt) {
+      return { code: EXIT_QUEUED, attempts, blockedAttempts, outcome: classifyResumeOutcome(EXIT_QUEUED) };
+    }
     attempts += 1;
     const code = await runGateOnce({ gateArgv, env, spawnFn, cwd });
     const blocked = code !== null && code !== EXIT_QUEUED && isRetryableExit(code);
     if (blocked) blockedAttempts += 1;
+    blockedStreak = blocked ? blockedStreak + 1 : 0;
     log("gate-attempt", { attempts, code, ...(blocked ? { blocked: true } : {}) });
     // A real verdict - the gate passed or the product failed - ends the wait.
     // Anything the classifier calls blocked-and-transient does not.
@@ -211,7 +219,12 @@ export async function resumeUntilAdmitted({
     if (now() >= giveUpAt) {
       return { code: EXIT_QUEUED, attempts, blockedAttempts, outcome: classifyResumeOutcome(EXIT_QUEUED) };
     }
-    await sleepFn(blocked ? Math.max(intervalMs, INFRASTRUCTURE_BACKOFF_MS) : intervalMs);
+    // Bounded equal jitter avoids synchronized retry storms, while remaining
+    // below the 120s admitted lease TTL. Queue polling resets the outage streak.
+    const ceilingMs = Math.min(90_000, Math.max(intervalMs, INFRASTRUCTURE_BACKOFF_MS)
+      * 2 ** Math.min(Math.max(0, blockedStreak - 1), 4));
+    const delayMs = blocked ? Math.floor(ceilingMs * (0.5 + 0.5 * random())) : intervalMs;
+    await sleepFn(Math.min(delayMs, Math.max(0, giveUpAt - now())));
   }
 }
 

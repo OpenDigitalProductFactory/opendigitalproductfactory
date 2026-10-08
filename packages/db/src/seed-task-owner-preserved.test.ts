@@ -3,9 +3,11 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { ensureAcceptanceSweepScheduledTask } from "./seed-acceptance-sweep";
 import { ensureBookkeepingCycleScheduledTask } from "./seed-bookkeeping-cycle";
 import { ensureDataModelMirrorScheduledTask } from "./seed-data-model-mirror";
 import { ensureDecisionEngineReviewScheduledTask } from "./seed-decision-engine-review";
+import { ensureDemandScoringStewardScheduledTask } from "./seed-demand-scoring-steward";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage";
 import { ensureSelfOptimizationSweepScheduledTask } from "./seed-self-optimization-sweep";
 import { ensureSysmlProjectionScheduledTask } from "./seed-sysml-projection";
@@ -38,9 +40,11 @@ function fakePrisma() {
 }
 
 const SEEDS: Array<[string, (db: never, now?: Date) => Promise<unknown>]> = [
+  ["acceptance-sweep", ensureAcceptanceSweepScheduledTask],
   ["bookkeeping-cycle", ensureBookkeepingCycleScheduledTask],
   ["data-model-mirror", ensureDataModelMirrorScheduledTask],
   ["decision-engine-review", ensureDecisionEngineReviewScheduledTask],
+  ["demand-scoring-steward", ensureDemandScoringStewardScheduledTask],
   ["discovery-triage", ensureDiscoveryTriageScheduledTask],
   ["self-optimization-sweep", ensureSelfOptimizationSweepScheduledTask],
   ["sysml-projection", ensureSysmlProjectionScheduledTask],

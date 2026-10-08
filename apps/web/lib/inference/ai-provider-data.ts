@@ -395,12 +395,15 @@ export const getToolInventory = cache(
       },
       include: { server: { select: { name: true, serverId: true } } },
     });
+    // BI-8B7B2FE9: discovered tools are default-deny. This inventory shows the
+    // review state only; the authority decision is resolveDiscoveredToolPolicy
+    // (lib/tak/mcp-tool-policy.ts) at listing and call time.
     const mcpItems: ToolInventoryItem[] = mcpTools.map((t) => ({
       name: `${t.server.serverId}__${t.toolName}`,
       source: t.server.name,
       type: "mcp" as const,
-      enabled: t.isEnabled,
-      gating: null,
+      enabled: t.isEnabled && t.policyStatus === "approved",
+      gating: t.policyStatus === "approved" ? t.policyGrantKey : `review: ${t.policyStatus}`,
       originalName: t.toolName,
     }));
 

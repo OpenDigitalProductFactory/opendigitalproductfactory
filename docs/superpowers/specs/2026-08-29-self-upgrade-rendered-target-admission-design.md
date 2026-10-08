@@ -93,6 +93,18 @@ with HMAC-SHA256 and a server-only secret sourced from
 constant-time signature comparison and validates every field after the
 signature is trusted.
 
+Every install path now provisions `DPF_SELF_UPGRADE_TARGET_BINDING_SECRET`
+(BI-231A4BC7): the installers and setup scripts generate it, a self-upgrade
+adds it to an install `.env` that lacks it, and an existing value is never
+rotated. Compose passes it to the portal only, never to the sandbox. Key
+resolution is shared with the other dedicated handle keys in
+`apps/web/lib/auth/dedicated-signing-key.ts`: a blank value counts as unset,
+and a binding the pre-upgrade portal signed with `AUTH_SECRET` still verifies
+until `SESSION_SECRET_GRACE_CUTOFF` (2026-11-09), only if it claims no more
+than the 15-minute TTL and was not issued in the future. Each such use is
+logged. The binding is signed and verified only by the portal; the promoter
+never sees it.
+
 The payload is a proof of what the server rendered, not an authorization. The
 server action still performs ordinary session/permission, support, quiescence,
 override, and newer-run checks. The binding expires after 15 minutes and cannot

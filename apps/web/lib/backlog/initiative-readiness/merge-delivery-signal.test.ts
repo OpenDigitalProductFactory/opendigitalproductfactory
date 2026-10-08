@@ -11,7 +11,7 @@
  * boundary between this module and git, and a mock of that boundary is exactly
  * what hid it.
  */
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -19,7 +19,8 @@ import { promisify } from "node:util";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { resolveMergeSignalFromRefs } from "./backlog-terminal-transition";
+import { refreshMergeSignalTrunk, resolveMergeSignalFromRefs } from "./backlog-terminal-transition";
+import { refreshTrunkRef } from "@/lib/work-capsules/git-scanner";
 
 const execFileAsync = promisify(execFile);
 
@@ -139,6 +140,108 @@ describe("merge-delivery signal against real repositories (BI-043946C5)", () => 
       roots: [repo.root],
     })).resolves.toBe("not-merged");
   });
+
+  // BI-DC2758DE: on the live install the portal runs as root and the workspace
+  // clone belongs to uid 1000, so git refused every command there ("dubious
+  // ownership") and the signal could not answer for any item. Git's own test
+  // hook makes the fixture look foreign-owned. An empty global config keeps a
+  // host-wide `safe.directory = *` from hiding the refusal, so this runs on every
+  // host. (An earlier probe ran in os.tmpdir(), which is not a repository, so it
+  // could never see the refusal and the case was skipped everywhere.)
+  it("answers for a repository owned by another user", async () => {
+    const isolated = await mkdtemp(path.join(tmpdir(), "dpf-git-global-"));
+    const globalConfig = path.join(isolated, "gitconfig");
+    await writeFile(globalConfig, "");
+    const saved = {
+      owner: process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER,
+      global: process.env.GIT_CONFIG_GLOBAL,
+      nosystem: process.env.GIT_CONFIG_NOSYSTEM,
+    };
+    process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = "1";
+    process.env.GIT_CONFIG_GLOBAL = globalConfig;
+    process.env.GIT_CONFIG_NOSYSTEM = "1";
+    try {
+      // The refusal is real here: plain git declines this repository.
+      let refusal = "";
+      try {
+        execFileSync("git", ["-C", repo.root, "rev-parse", "--git-dir"], { stdio: "pipe", windowsHide: true });
+      } catch (error) {
+        refusal = String((error as { stderr?: unknown }).stderr ?? "");
+      }
+      expect(refusal).toMatch(/dubious ownership/);
+
+      await expect(resolveMergeSignalFromRefs({
+        heads: [repo.mergedSha],
+        pullRequests: [],
+        roots: [repo.root],
+      })).resolves.toBe("merged");
+      await expect(resolveMergeSignalFromRefs({
+        heads: [],
+        pullRequests: [4242],
+        roots: [repo.root],
+      })).resolves.toBe("merged");
+    } finally {
+      for (const [key, value] of [
+        ["GIT_TEST_ASSUME_DIFFERENT_OWNER", saved.owner],
+        ["GIT_CONFIG_GLOBAL", saved.global],
+        ["GIT_CONFIG_NOSYSTEM", saved.nosystem],
+      ] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await rm(isolated, { recursive: true, force: true });
+    }
+  });
+
+  // BI-DC2758DE: the clone the signal reads is fetched only when a build starts,
+  // so a merge after that fetch read as "not-merged" with full confidence.
+  it("sees a merge that landed after the clone's last fetch once the trunk is refreshed", async () => {
+    const upstream = await mkdtemp(path.join(tmpdir(), "dpf-merge-upstream-"));
+    const clone = await mkdtemp(path.join(tmpdir(), "dpf-merge-clone-"));
+    try {
+      await git(upstream, "init", "--initial-branch=main");
+      await git(upstream, "config", "user.email", "test@example.invalid");
+      await git(upstream, "config", "user.name", "Test");
+      await git(upstream, "config", "commit.gpgsign", "false");
+      await writeFile(path.join(upstream, "a.txt"), "one\n");
+      await git(upstream, "add", ".");
+      await git(upstream, "commit", "-m", "chore: base (#1)");
+      await execFileAsync("git", ["clone", "--quiet", upstream, clone], { windowsHide: true });
+
+      await writeFile(path.join(upstream, "b.txt"), "two\n");
+      await git(upstream, "add", ".");
+      await git(upstream, "commit", "-m", "fix: the measured reserve (#5708)");
+
+      const ask = () => resolveMergeSignalFromRefs({ heads: [], pullRequests: [5708], roots: [clone] });
+      await expect(ask()).resolves.toBe("not-merged");
+
+      await expect(refreshTrunkRef(clone)).resolves.toEqual({ status: "refreshed" });
+      await expect(ask()).resolves.toBe("merged");
+      // Only the trunk ref moved: the clone's own branch and tree are untouched.
+      expect((await git(clone, "log", "-1", "--format=%s", "HEAD")).stdout.trim()).toBe("chore: base (#1)");
+    } finally {
+      await rm(upstream, { recursive: true, force: true }).catch(() => {});
+      await rm(clone, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it("reports a failed refresh without throwing and leaves the trunk as it was", async () => {
+    const before = (await git(repo.root, "rev-parse", "origin/main")).stdout.trim();
+    const result = await refreshTrunkRef(repo.root, { timeoutMs: 10_000 });
+    expect(result.status).toBe("failed");
+    expect((await git(repo.root, "rev-parse", "origin/main")).stdout.trim()).toBe(before);
+  });
+
+  it("refreshes only the first root that is a real clone, before the signal reads it", async () => {
+    const refreshed: string[] = [];
+    await expect(refreshMergeSignalTrunk([notARepo, repo.root, "/also-a-repo"], async (root) => {
+      refreshed.push(root);
+    })).resolves.toBe(repo.root);
+    expect(refreshed).toEqual([repo.root]);
+    await expect(refreshMergeSignalTrunk([notARepo], async () => {
+      throw new Error("must not be called");
+    })).resolves.toBeNull();
+  });
 });
 
 describe("a negative is only trusted against a current trunk (BI-043946C5)", () => {
@@ -222,4 +325,5 @@ describe("mergeSignalRoots (BI-043946C5)", () => {
       }
     }
   });
+
 });

@@ -18,6 +18,8 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 **Live portal refresh rule.** Normal feature verification and release validation MUST NOT rebuild the main `dpf` portal directly with `docker compose build`, `docker compose up`, `scripts/redeploy-portal.*`, or equivalent host-side image swaps. The main portal update path is `/ops/self-upgrade` (or the same governed self-upgrade runner/promoter path), which owns quiescence, recovery point creation, image rebuild/swap, health evidence, and rollback. Direct compose rebuilds of the main `dpf` `portal`/`portal-init` services are reserved for install/bootstrap/recovery work and must be named as such in the report; they do not count as the normal PR/release verification path. Direct redeploy helpers must refuse to run while any `SelfUpgradeRun` is `queued`, `pending`, `running`, or `completing`; bypass that guard only with `DPF_ALLOW_REDEPLOY_DURING_SELF_UPGRADE=1` for an intentional recovery override. For unmerged feature work, use source-local gates plus the shared local-CI convergence sandbox or contributor preview instead of mutating the live portal.
 
+**Agents request the advance; they do not press the button (BI-2128872C).** An agent advances the live install with the `request_self_upgrade` MCP tool. Outside the maintenance window, or during an operator blackout, that request is deferred: nothing drains now, the answer is `deferred_to_window` with the `runAt` time, and the scheduled upgrade picks it up in the next window. Plan live validation for after that time. Never press **Upgrade now** on `/ops/self-upgrade` in a browser, whether signed in as the operator or as the automation persona. That button is the operator's immediate override; from the automation persona it is deferred like the tool, and from the operator's own session the portal cannot tell an agent from the operator. An urgent or security release is the operator's call.
+
 **Step zero for live-install functional verification.** Before driving any feature's happy path on the live install (gate #3 above for a runtime-bound change), run the preflight — `pnpm verify:preflight [-- --feature-sha <sha>] [-- --portal-url <url>]` — and follow its verdict via the `dpf-verify-on-live-install` skill. The preflight returns one deterministic verdict (`CAN-TEST` / `MUST-ADVANCE` / `BLOCKED`) and one next action, replacing the hand-rolled `git rev-parse` + `curl /api/platform/version` skew check. **The BLOCKED stop-rule is binding:** when the governed advance is blocked by an unrelated defect (e.g. main does not build in Docker), file a BI for that blocker and STOP the verification task — do not let it silently become a multi-hour build-infra fix. Single source of truth: [`docs/superpowers/specs/2026-06-06-procedural-functional-verification-design.md`](../superpowers/specs/2026-06-06-procedural-functional-verification-design.md).
 
 **Waiting for a queued gate: read the verdict before you re-run.** `pregate` exits 75 when the pool queues the claim, and the obvious loop — invoke `pregate`, then read `pregate:status` — is unsafe. Once the gate passes, the next iteration claims a fresh lease and starts a second run of the identical tree, and that run's verdict supersedes the pass. On 2026-09-10 a second run died 7 ms in when the host could not launch `git merge` (exit `0xC0000142`), and a genuine PASS from a minute earlier was replaced by a `failed` record (BI-1669E08A). Read the status first and invoke `pregate` only while no verdict exists. A queued row still needs a live local waiter - its heartbeat only advances while some local process keeps re-claiming - but that waiter is no longer you. On exit 75 the gate hands the claim to a detached resumer and says so: `resumeOwner: "detached-resumer"` means stop polling and read `pregate:status` later, while `resumeOwner: "caller"` (a resumer that could not start, or `DPF_DURABLE_RESUMER=off`) means the old rule applies and the row dies if you walk away (BI-D35B85BF). And read a FAIL before you believe it: a vitest child killed mid-run leaves its stage receipt at `status: "running"` and the gate records `failed with NO recorded reason`, which the exact-tree reuse then replays on every later attempt until the diff changes (BI-ED53E13A). Open the slot log and confirm a named failing test before treating a FAIL as a verdict against the diff; two concurrent gates on one host produce this shape regularly.
@@ -89,6 +91,17 @@ Arming auto-merge (`gh pr merge <n> --squash --auto`) is a promise that fires on
 
 The alarm is GitHub-side only. The in-portal Needs-you inbox does not yet carry it: the contributor PR snapshot (`apps/web/lib/contributor-change-lanes/`) is read from the `/pulls` list endpoint, which returns neither `mergeable_state` nor the checks, and carries no auto-merge field — so an attention source over it would have nothing to read. That extension is a follow-up, not a half-built source.
 
+### The room follows its PR through CI (BI-88341B5D)
+
+Getting a PR merged is the Workroom's duty, not the client's: the same thing happens whether Claude Code, Codex, Grok, Antigravity or Build Studio opened it. Design: `docs/superpowers/specs/2026-10-01-pr-follow-through-workroom-duty-design.md`. The five-minute reconciler (`apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts`) now covers every non-terminal room with a bound PR, not only Build Studio rooms, and keeps one record per room at `workspaceState.prDelivery` (`prDelivery.followThrough` holds the CI classification, the hold and the reused `post-push-ci-failure` budget). On each pass it:
+
+- **arms auto-merge through the merge queue** when the PR is green, and updates a branch that is `BEHIND`. It never merges by hand, force-pushes, dismisses a check or touches required-check configuration;
+- **classifies a red check once per head SHA** (`apps/web/lib/build/pr-follow-through.ts`). `CANCELLED` / `TIMED_OUT` / `STARTUP_FAILURE` / `STALE` / `ERROR` are infrastructure: it re-runs that workflow run's failed jobs once and then raises the platform operator. `FAILURE` is a defect: at a `preauthorized` boundary the room may dispatch a bounded repair (2 per PR); below that, or while no repair worker is wired, it stages the repair packet for a person. Anything else (`ACTION_REQUIRED`) goes to a person unclassified;
+- **records each step on the room** as a `workroom-pr-follow-through` activity, and sends a hold that needs a person to the escalation inbox once per head;
+- **makes liveness read CI**: a room whose PR is red and waiting on a person reads `stalled` (held, never reaped), not `live`.
+
+A quiet room, or one whose boundary is `advise`, is recorded only. The reconciler still runs in `shadow` by default (`DPF_BUILD_PR_DELIVERY_RECONCILER_MODE`), so it proposes rather than acts until the default flips (design §7 slice 6). Webhook intake of `check_suite` / `workflow_run` / `merge_group`, the repair worker itself (design §8 open question) and the client accelerator readback are later slices. Until they land, keep arming auto-merge yourself with `gh pr merge <n> --squash --auto`; the room arming it again is a no-op.
+
 ## A merged pull request is delivered, not discovered (BI-A6E4D205)
 
 The thread that pushes should be able to end at the push. It could not, because nothing told the platform when a pull request merged — it went looking, on a timer.
@@ -141,3 +154,21 @@ The [mandatory build gate](../founder-kernel/wiki/principles/build-gate-mandator
 - **Pre-existing failures: note them and fix if feasible. Do not defer silently.**
 - **Never weaken auth to make a test pass.** Use a seeded persona at its real privilege level; if a check blocks you, that is the finding.
 - **A gate that could not run is not a verdict.** Infrastructure failure — a fenced lease, a killed child, a starved host — is recorded as inconclusive and re-runs on the same SHA. Never a FAIL against the diff. Fail closed on safety; fail open on infrastructure. → [kernel principle](../founder-kernel/wiki/principles/report-only-the-verdict-you-reached.md)
+
+## A refusal carries its own remedy
+
+`pregate:preflight` used to end a failure with a pointer — "see every constraint
+that applies to this diff: `pnpm gate:context`". A pointer costs the reader a
+decision it usually declines: over one session of nine PRs that line appeared on
+every run and `gate:context` was invoked zero times, so every required
+attestation and every stale derived artifact was found by colliding with its
+refusal instead.
+
+The refusal now EMITS the obligations: which attestations this diff requires,
+which of them belong in the PR body rather than a commit trailer (the Seed
+Contribution Fit gate reads the push-event body, so the same text in a trailer
+does not satisfy it), and each stale derived artifact with the command that
+regenerates it. `pnpm land` consumes the same data.
+
+The rule behind it: an obligation an agent has to remember does not survive
+context compaction. Put it in the gate's output, or in code, and it survives.

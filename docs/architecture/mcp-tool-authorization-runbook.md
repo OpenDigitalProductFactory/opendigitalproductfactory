@@ -1,5 +1,29 @@
 # MCP tool authorization runbook
 
+Bound spec-approval reviewers receive the initiative's current authoritative
+classification in their tool contract. A document titled "repair" does not
+make a feature initiative a fix. Dispatch and the receipt writer share the
+monotonic classification projection; the writer rechecks under its transaction
+lock. A classification mismatch names the expected profile and permits bounded
+correction on the same task, preserving the request key, immutable artifact,
+reviewer identity and authority. Missing classification still requires repair
+of the underlying facts; retrying cannot authorize a downgrade.
+
+Task replay preserves a recorded writer rejection's code, explanation and
+same-task recovery action. A rejected packet must not be displayed as a missing
+writer or as a request for another human approval. Terminal tasks remain terminal.
+
+**Review retries after permission vocabulary changes.** A bound independent review
+keeps its original task, request key and saved authority scope. Adding an unrelated
+grant to an OAuth public scope must not make the same immutable review a different
+request. Replay may retain the saved scope only when every saved grant is still
+available, exact tool and backlog boundaries are unchanged, and the original
+request digest matches with that scope. Removed grants, changed artifacts and
+changed intent still refuse replay. Current connection and coworker authorization
+remain mandatory; this reconciliation neither expands task authority nor revives
+canceled work. BI-224E6E82 exposed this when two unrelated read grants were added
+while a design review was waiting for its receipt.
+
 **OAuth identity and continuing authority.** The approval binds the human,
 client, resource and approved assistant role. The server resolves that role
 before the consent screen renders (BI-05E0EA33): it takes the eligible set,
@@ -157,6 +181,7 @@ Codex Desktop can retain a stale top-level model registry even after the server 
 - **Minimal recovery (interactive session).** Run `/mcp`, select `dpf`, choose **reconnect** (current builds also accept `/mcp reconnect dpf`). This reuses the existing config — no token re-entry, no workspace-trust re-prompt. If reconnect still fails, restart the client. **Confirm with a read-only call** (e.g. `get_backlog_item`), not just the `/mcp` status line — a status of `connected` is structural; a successful tool call is functional.
 - **Non-interactive sessions (headless / cron / SDK) cannot run `/mcp`.** There a dropped `dpf` server stays down for the life of the process, and **restarting the process is the only recovery**. Keep unattended runs short, or gate them on a health probe, so a self-upgrade mid-run does not silently strand every governed tool.
 - **Startup advisory.** The `hooks/mcp-health` SessionStart hook (`scripts/hooks/mcp-health.{ps1,sh}`, wired in `.claude/settings.json`) probes the endpoint the plugin connector uses — `DPF_MCP_URL`, then the default in `packages/dpf-skill-pack/claude.mcp.json` — at every session start / resume / `clear` / `compact`, passing `NODE_EXTRA_CA_CERTS` to curl on https, and prints reachability plus the reconnect recipe above, so a strand is loud rather than silent. It probes the **endpoint only** — it cannot see the client's MCP attach state, so treat a healthy probe beside absent `dpf` tools as proof of a client-side drop. Silence with `DPF_SKIP_MCP_HEALTH=1`.
+- **Stale installed copy (BI-16EAAB62).** `mcp-health` reads the repository's descriptor, not the copy a client loaded. The `hooks/plugin-copy-freshness` SessionStart hook (`scripts/hooks/plugin-copy-freshness.{ps1,sh}`, wired in `.claude/settings.json`) covers that: it runs `packages/dpf-skill-pack/scripts/installed_copy_freshness.py`, which walks the copy locations `update_agent_toolchain.installed_plugin_copies()` names — the shared managed copy, the Codex managed copy, and the Claude plugin-cache copy for this checkout or user scope — and compares each with the root clone's pack: version, delivered content at an equal version, and, for the copies Claude reads its connector from, the `dpf` endpoint and auth mode the updater would write for this environment. It prints one `WARN:` line per stale copy naming the path and the repair (rerun `update_agent_toolchain.py` from the root clone, then restart the client). A copy newer than the root clone is not reported. Warn-only, never writes, exits 0. Silence with `DPF_SKIP_PLUGIN_COPY_CHECK=1`.
 - **`localhost` caveat.** The client must target the `127.0.0.1` literal, not `localhost`. On hosts where `localhost` resolves to `::1` and IPv6 is not answering, the client cannot connect even though `127.0.0.1:3000` is healthy; anything that re-resolves `localhost` re-breaks it.
 
 **Operator conformance probe:** after deploying a candidate, run `node scripts/mcp-progressive-disclosure-conformance.mjs --url <nonproduction-MCP-URL>` with `DPF_MCP_BEARER_TOKEN` present only in the environment. The probe never logs the credential. It validates Codex Desktop/CLI and Claude Code full-catalog defaults, the generic-client core default, initialize guidance, exact and intent loading, append-not-swap, notification-aware SSE, notification-blind re-list, same-session use, structured unknown recovery, and authentication-vs-disconnection classification. A protocol-profile pass is not live host acceptance: separately prove a fresh Codex task can find and call a non-core tool from its host registry.
@@ -174,6 +199,48 @@ The paved-road walkthrough is the `dpf-establish-coworker` skill (`packages/dpf-
 
 
 **Schema questions: `describe_committed_model`, no build required.** `describe_model` resolves the caller's active Build Studio build first and returns `"No active build."` to every external CLI session, so it cannot answer schema questions from Claude Code, Codex or Grok. Use `describe_committed_model({ model_name })` instead — it reads the committed Prisma schema (`packages/db/prisma/schema/*.prisma`, split across domain files; there is no monolithic `schema.prisma`) with the `file_read` grant a read-scoped token can hold. Every result names the tree it read — root, branch, HEAD sha — and carries a trust vector that scores an off-default branch down, so a stale checkout is visible rather than silent. A miss is reported as not-found **in the named tree**, and an unreadable schema directory is reported as a read failure, never as an absence.
+
+## Discovered external MCP tools are default-deny (BI-8B7B2FE9)
+
+Tools an operator-registered MCP server reports (`<serverSlug>__<toolName>`)
+reach an in-portal coworker only under a DPF-owned policy on their
+`McpServerTool` row. Discovery, `isEnabled`, server health and remote
+annotations (`readOnlyHint`, `destructiveHint`) never authorize; annotations are
+stored as untrusted `discoveryHints` and never read as policy.
+
+- **States** (`McpToolPolicyStatus`): `quarantined` (default for every new
+  tool and every pre-existing row), `approved`, `denied` (sticky across
+  rediscovery). The six browser-use sidecar tools are covered by the release:
+  their grant comes from `TOOL_TO_GRANTS` and their effect from
+  `BUNDLED_MCP_TOOL_EFFECTS` (`apps/web/lib/tak/mcp-tool-policy.ts`).
+- **Approval** happens on `/platform/tools/services/<server>` (capability
+  `manage_provider_connections`): the reviewer picks one grant from the closed
+  grant vocabulary and says whether the tool only reads or changes things
+  (modes follow: read → advise + act; changes → act only). Approval pins the
+  approved identity, policy version, the text snapshot and
+  `approvedContentDigest` — sha256 of the hidden-Unicode-sanitized
+  description + inputSchema, exactly what a model reads. The approver is the
+  canonical `Principal`; the decision is an `AuthorizationDecisionLog` row
+  (`actionKey: mcp-tool-policy-review`).
+- **Content pinning.** A rediscovery whose digest differs from the approved
+  digest returns the tool to `quarantined`; the approved snapshot is kept so
+  the review page shows approved and newly reported text side by side. The
+  model is served only the sanitized approved snapshot, and the resolver
+  re-hashes both on every listing and call.
+- **One resolver, three checkpoints.** `resolveDiscoveredToolPolicy` +
+  `evaluateDiscoveredToolAccess` decide listing (`getAvailableTools`),
+  governed execution (`governedExecuteTool`, `agentic-loop` source with an
+  acting coworker only — external MCP clients still get `unknown_tool`), and
+  the remote call (`executeMcpServerTool`, which requires an explicit
+  authority and refuses if the approved digest moved). A namespaced call that
+  did not come through the governed executor is refused.
+- **Diagnosing an absent tool.** Read the tool's state on the service page;
+  the reason text names the refusal (`quarantined`, `content-changed`,
+  `identity-mismatch` after a rename, `policy-version-stale`, `unknown-grant`,
+  `incomplete-policy`). Then check the coworker holds the approved grant, the
+  room's surface carries it, and External Access is on. Capability inventory
+  reports `policyClass` per tool. Never restore a permissive fallback; approve
+  the specific tool.
 
 ## Protocol version window (mechanics landed; contract pending ratification)
 
