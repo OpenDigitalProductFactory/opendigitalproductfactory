@@ -30,6 +30,9 @@ import type { QueueTransitionInput } from "@/lib/queue/queue-telemetry";
 
 import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
+import { holdCauseTag } from "./workroom-hold-cause";
+
+export { describeHoldCause, holdCauseTag } from "./workroom-hold-cause";
 
 export const WORKROOM_STAGE_ITEM_KIND = "workroom-stage";
 export const WORKROOM_STAGE_QUEUE_PREFIX = "wr:";
@@ -44,24 +47,6 @@ export type DriveObservation = {
   detail?: string | null;
 };
 
-/**
- * The hold's cause as a stable tag: the drive reason, narrowed by the first
- * conformance deviation when there is one (`conformance_pause:missing_explicit_coordinator`),
- * so a pile of rooms names the actual problem.
- */
-export function holdCauseTag(reason: string | null, detail?: string | null): string | null {
-  if (!reason) return null;
-  return detail ? `${reason}:${detail}` : reason;
-}
-
-/** "missing explicit coordinator (conformance pause)", "waiting on a person", "executor writeback unavailable". */
-export function describeHoldCause(cause: string | null): string {
-  if (!cause) return "blocked";
-  if (cause === "awaiting-person") return "waiting on a person";
-  const [reason, detail] = cause.split(":");
-  const words = (text: string) => text.replaceAll("_", " ");
-  return detail ? `${words(detail)} (${words(reason!)})` : words(reason!);
-}
 
 export type StageTransition = Required<Pick<QueueTransitionInput, "queueKey" | "itemKind" | "itemId" | "transition">> & {
   outcome: QueueOutcome | null;

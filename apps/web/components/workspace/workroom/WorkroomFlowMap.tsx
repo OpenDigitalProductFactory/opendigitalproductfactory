@@ -6,13 +6,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Surface } from "@/components/ui/Surface";
 import { useT } from "@/lib/i18n/use-t";
 import { TRIGGER_GLYPH } from "@/lib/work-management/shape-signature";
-import { describeHoldCause } from "@/lib/work-management/workroom-stage-telemetry";
+import { describeHoldCause } from "@/lib/work-management/workroom-hold-cause";
 import { formatDuration } from "@/lib/datetime";
-import {
-  type FlowMapStage,
-  type FlowMapStageState,
-  type WorkroomFlowMapModel,
-} from "@/lib/work-management/workroom-flow-map";
+import type { FlowMapStage, FlowMapStageState, WorkroomFlowMapModel } from "@/lib/work-management/workroom-flow-map";
 
 // Layout (spec 2026-10-02 §4): three lanes by who does the step, top to bottom
 // Outside → People → AI coworkers; steps left to right; a band underneath
