@@ -56,7 +56,8 @@ The coworker operates within a two-layer authorization model:
 
 - **Your role determines what's possible** — your platform role (e.g., Portfolio Manager, Enterprise Architect) controls which capabilities are available
 - **The agent's grants determine what's offered** — each agent persona has declared tool grants that scope what it can do. The coworker on the Ops page (Scrum Master) has different grants than the one on the Portfolio page (Portfolio Analyst)
-- **Side-effect actions require approval** — when the coworker wants to create, update, or delete something, it proposes the action and waits for your approval before executing
+- **Side-effect actions require approval** — when the coworker wants to create, update, or delete something, it raises an approval request for that exact action and waits. The request appears on the coworker's message, with **Authorize** and **Decline**, and in **Needs you**. Authorize runs the action once, exactly as asked, under your authority; the coworker then continues with the result. A request waits up to seven days (15 minutes for an action that reaches outside the platform). If nobody answers in time it shows as **Expired unanswered**, nothing changes, and **Ask again** puts it back in front of you
+- **Only the person asked decides** — a request lends your authority, so only you can decide it. For a scheduled task, that is the task's owner. An admin can decide on someone's behalf when that person has left or cannot sign in: they open the request's link, choose **Decide on their behalf**, and give a reason. The decision, the admin and the reason are recorded and shown on the request
 - **Every action is recorded** — all tool calls (not just proposals) are logged with your identity and the agent's identity for audit purposes. View the log at `/platform/ai/authority`
 
 On a business Product's **Direction** page, informational cards and links do
@@ -137,6 +138,6 @@ When you need to add an external tool (MCP server, npm package, API), the cowork
 
 - Be specific. "Show me overdue compliance actions" works better than "what's wrong?"
 - The coworker can create backlog items, register products, assign roles, and more — it's not just a chatbot
-- If the coworker proposes an action (like creating a record), you'll see an approval prompt before anything changes
+- If the coworker needs your approval for an action (like creating a record), you'll see **Authorize** and **Decline** on its message before anything changes. The same request is in **Needs you**
 - Each conversation is tied to the page context. If you switch pages, the coworker knows the new context
 - Ask in the words of your business. "Which trucks need restock?" or "Which appointments are missing forms?" is better than guessing the platform's internal module name.

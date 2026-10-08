@@ -67,6 +67,15 @@ safe source, authority, state, and timing detail. Activity routing and
 deliberation detail remain under **Technical diagnostics**. There are no
 separate provider or A2A diagrams to reconcile with this map.
 
+### Confirm a routing override
+
+When the activity routing workbench recommends a different confidence for an
+activity's harness, **Confirm override** applies it. It is your own decision,
+so there is no separate approval step: the platform checks your access, records
+the change in the audit log, and keeps the override until someone confirms a
+different one for the same activity and recipe. Routing uses it from the next
+request. Overrides approved before this change keep applying.
+
 ## Architecture and evidence
 
 - [Model Routing & Lifecycle](../ai-workforce/model-routing-lifecycle.md) — current
