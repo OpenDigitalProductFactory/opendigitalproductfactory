@@ -225,4 +225,13 @@ describe("buildDecisionShadowLedgerEntry", () => {
       subject: { kind: "backlog_item", ref: "BI-1" },
     });
   });
+
+  it("carries a backfilled decision's own time, and leaves a live write to the column default (BI-7D1E43DE)", () => {
+    const made = new Date("2026-09-01T10:00:00.000Z");
+    const backfilled = buildDecisionShadowLedgerEntry(row({ observedAt: made }));
+    const live = buildDecisionShadowLedgerEntry(row());
+    if (!backfilled.built || !live.built) throw new Error("expected both to build");
+    expect(backfilled.entry.observedAt).toEqual(made);
+    expect("observedAt" in live.entry).toBe(false);
+  });
 });

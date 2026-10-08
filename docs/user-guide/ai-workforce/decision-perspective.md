@@ -79,6 +79,18 @@ The gate's confidence is a governed runtime state, not a model-self-reported num
 
 Confidence rises slowly through repeated evidence-backed alignment — a recommendation made, observed in practice, and confirmed by an employee, increases the profile's confidence for that question domain. Confidence drops fast after misses: a contradicted rationale, a stale source, or an overconfident recommendation that turned out wrong pulls the profile back. The point is to make autonomy something the platform earns, not something it claims.
 
+### Measuring How Often a Coworker Agrees With You
+
+Every six hours the platform counts, for each coworker and each kind of decision, how often the coworker's recommendation matched what a person then chose. The decision trust report is the `report_decision_trust_state` tool, available to coworkers and external agents that can read the decision registry.
+
+Read it with three things in mind:
+
+- **Small numbers are hidden on purpose.** A coworker needs at least 10 decisions resolved by a person before the report shows a rate. Below that it says "insufficient samples" and shows the count instead.
+- **Agreement is not correctness.** A high rate means the coworker's recommendation matched what a person chose. It does not mean either choice was right, and a person who approves everything produces a high rate that tells you nothing.
+- **Nothing changes automatically.** Every coworker stays at the most supervised level, *shadow*. The report measures; deciding whether a coworker has earned more autonomy is a separate decision you make.
+
+A coworker's decisions that nobody has resolved yet are shown as unresolved, so a coworker with no resolved decisions still appears in the report.
+
 ### The Inheritance Chain
 
 When the active profile can't answer a question, the gate falls back through a fixed chain:
