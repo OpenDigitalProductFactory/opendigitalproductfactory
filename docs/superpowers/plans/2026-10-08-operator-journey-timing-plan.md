@@ -42,6 +42,12 @@ This plan is atomic. The client queue, the endpoint and the histograms only prod
 8. **Dashboard**: `monitoring/grafana/dashboards/dpf-overview.json` gains a "Portal journeys" row: p75 and p95 per journey, and web-vital p75 with threshold lines.
 9. **Baseline (AC-5)**: after the change is deployed to the dev install, drive each journey on the live portal, read the histogram buckets from `/api/metrics`, compute p75 and p95, and record them on EP-B95469DB.
 
+## Backlog acceptance criteria (quoted from BI-BD0B0DCC)
+
+- "On the dev install, all four journeys report p75 and p95 to Prometheus and appear on a Grafana panel." This is covered by AC-4 (steps 3, 4 and 8) and by AC-5's live read (step 9).
+- "Each journey has a measured baseline written down in the epic. These baselines are the targets the other items in the epic work against." This is covered by AC-5 (step 9).
+- "Telemetry adds no blocking work to the main thread (measured)." This is covered by AC-7 (step 5), plus a measured begin/complete overhead recorded with the step 5 tests.
+
 ## Traceability
 
 | Requirement | Verification | Contract | Flow | Backlog item |
