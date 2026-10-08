@@ -86,6 +86,7 @@ export default async function AdminPlatformDevelopmentPage() {
         <GovernedBacklogSettings
           enabled={config?.governedBacklogEnabled === true}
           dailyCap={config?.backlogTeeUpDailyCap ?? 3}
+          capacityDrainEnabled={config?.capacityDrainEnabled === true}
           playbookMode={getAutonomousPlaybookMode()}
         />
       </div>

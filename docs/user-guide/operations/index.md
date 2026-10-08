@@ -131,6 +131,23 @@ Each started build records why it was picked in its activity, for example
 says so, so unscored work is never started by age without saying it. To have
 an item considered on value, give it a score in Delivery Flow.
 
+#### Use spare weekly AI allowance (capacity drain)
+
+The capacity drain is off until you turn it on. When it is on, the platform
+checks every hour whether the weekly AI allowance is close to resetting with
+allowance left over and free build slots. If so, it starts a few of the
+top-ranked ready items, in the order above, so the allowance is not wasted. It
+stops when the allowance is nearly spent or a provider reports a rate limit,
+and it only acts while the governed backlog lane is on.
+
+To turn it on or off, open **Admin > Platform Development**, find **Let Build
+Studio pick up work on its own**, open **Daily limit and the autopilot
+switches**, tick or clear **Use spare weekly AI allowance**, and select
+**Save**. Changing it needs the platform management permission. An agent can
+make the same change with the `set_backlog_delivery_budget` tool
+(`capacityDrainEnabled`); that tool asks a person to approve the change first,
+and its read shows the current setting.
+
 ### Proposed scores
 
 Each day the Portfolio Advisor proposes a score for a batch of open and

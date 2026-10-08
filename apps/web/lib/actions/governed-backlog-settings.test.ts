@@ -26,7 +26,7 @@ describe("saveGovernedBacklogSettings", () => {
   it("turns the lane on with a cap and revalidates the two surfaces that read it", async () => {
     const { saveGovernedBacklogSettings } = await import("./governed-backlog-settings");
     const result = await saveGovernedBacklogSettings({ enabled: true, dailyCap: 5 });
-    expect(result).toEqual({ ok: true, data: { enabled: true, dailyCap: 5 } });
+    expect(result).toEqual({ ok: true, data: { enabled: true, dailyCap: 5, capacityDrainEnabled: null } });
     const call = mockPrisma.platformDevConfig.upsert.mock.calls[0][0];
     expect(call.where).toEqual({ id: "singleton" });
     expect(call.update).toMatchObject({ governedBacklogEnabled: true, backlogTeeUpDailyCap: 5, configuredById: "u-1" });
@@ -38,10 +38,28 @@ describe("saveGovernedBacklogSettings", () => {
   it("keeps the stored cap when none is supplied and turns the lane off", async () => {
     const { saveGovernedBacklogSettings } = await import("./governed-backlog-settings");
     const result = await saveGovernedBacklogSettings({ enabled: false });
-    expect(result).toEqual({ ok: true, data: { enabled: false, dailyCap: null } });
+    expect(result).toEqual({ ok: true, data: { enabled: false, dailyCap: null, capacityDrainEnabled: null } });
     const call = mockPrisma.platformDevConfig.upsert.mock.calls[0][0];
     expect(call.update).not.toHaveProperty("backlogTeeUpDailyCap");
     expect(call.update.governedBacklogEnabled).toBe(false);
+  });
+
+  // BI-9AC1F99B: the capacity drain switch rides the same card and the same write.
+  it("persists the capacity drain switch alongside the lane and echoes it", async () => {
+    const { saveGovernedBacklogSettings } = await import("./governed-backlog-settings");
+    const result = await saveGovernedBacklogSettings({ enabled: true, capacityDrainEnabled: true });
+    expect(result).toEqual({ ok: true, data: { enabled: true, dailyCap: null, capacityDrainEnabled: true } });
+    const call = mockPrisma.platformDevConfig.upsert.mock.calls[0][0];
+    expect(call.update).toMatchObject({ governedBacklogEnabled: true, capacityDrainEnabled: true });
+    expect(call.create).toMatchObject({ capacityDrainEnabled: true });
+  });
+
+  it("leaves the stored capacity drain switch alone when the caller omits it", async () => {
+    const { saveGovernedBacklogSettings } = await import("./governed-backlog-settings");
+    const result = await saveGovernedBacklogSettings({ enabled: true });
+    expect(result.ok && result.data.capacityDrainEnabled).toBeNull();
+    const call = mockPrisma.platformDevConfig.upsert.mock.calls[0][0];
+    expect(call.update).not.toHaveProperty("capacityDrainEnabled");
   });
 
   it("refuses a cap outside 0..50 or non-integer before writing", async () => {
