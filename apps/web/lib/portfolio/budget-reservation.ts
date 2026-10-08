@@ -13,9 +13,9 @@
 //
 // Spec: docs/superpowers/specs/2026-09-24-portfolio-budget-and-investment-wip-design.md
 
-import { resolveBacklogItemPortfolio, type BacklogPortfolioClient } from "@dpf/db/backlog-portfolio";
-
+import { resolveBudgetPortfolio } from "./budget-attribution";
 import { quarterBounds, resolveInvestmentPoints } from "./investment-points";
+import { loadInvestmentItems } from "./investment-read-model";
 import { loadPortfolioBudgets, type Period } from "./portfolio-budget";
 
 type ReadDb = { $queryRaw: <T>(query: TemplateStringsArray, ...values: unknown[]) => Promise<T> };
@@ -37,7 +37,7 @@ export type ReservationPlan =
   | { kind: "none"; reason: "unsized" | "unallocated" | "already-reserved"; message: string }
   | { kind: "refuse"; code: "over_budget_autonomous" | "over_budget_reason_required"; message: string };
 
-type PlanDb = ReadDb & BacklogPortfolioClient & {
+type PlanDb = ReadDb & {
   portfolio: { findUnique: (args: unknown) => Promise<{ id: string } | null> };
 };
 
@@ -58,13 +58,15 @@ export async function planFundingReservation(db: PlanDb, input: {
   if (points === null) {
     return { kind: "none", reason: "unsized", message: "The item has no size, so no points were reserved. Size it and the next approval reserves them." };
   }
-  const resolution = await resolveBacklogItemPortfolio(input.itemId, { db });
-  const portfolioId = resolution?.portfolioId ?? null;
+  // The one attribution rule the budget proposal and admission use (BI-A0C66062):
+  // platform, common and never-scoped work with no explicit portfolio is Foundational.
+  const period = quarterBounds(input.now);
+  const [links] = await loadInvestmentItems(db, period, { itemId: input.itemId });
+  const portfolioId = links ? resolveBudgetPortfolio(links).portfolioId : null;
   if (!portfolioId || !(await db.portfolio.findUnique({ where: { id: portfolioId }, select: { id: true } }))) {
     return { kind: "none", reason: "unallocated", message: "The item reaches no portfolio, so no budget can carry its points. Attribute it to reserve them." };
   }
 
-  const period = quarterBounds(input.now);
   const budget = (await loadPortfolioBudgets(db, period)).find((b) => b.id === portfolioId)?.budget ?? null;
   const base = { kind: "reserve" as const, backlogItemRowId: item.id, portfolioId, period, points };
   if (!budget) {

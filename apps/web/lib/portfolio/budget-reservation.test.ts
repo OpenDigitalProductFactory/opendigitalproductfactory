@@ -4,13 +4,22 @@ import { isAutonomousCaller, planFundingReservation, settlementFor } from "./bud
 
 const now = new Date("2026-09-25T12:00:00Z");
 
-// Answers the plan's raw queries: the item row, the budget rows, and the committed sum.
-function planDb(options: { item?: Record<string, unknown> | null; open?: boolean; allocated?: number | null; committed?: number; portfolioExists?: boolean }) {
+// The attribution links the shared investment loader selects: by default the
+// item names portfolio p1 directly.
+const explicitLinks = {
+  storedPortfolioId: "p1", storedPortfolioDangling: false, productPortfolioId: null, taxonomyPortfolioId: null,
+  coworkerNeedPortfolioId: null, epicPortfolioId: null, scopeKind: "platform", platformDefaultPortfolioId: "p-foundational",
+};
+
+// Answers the plan's raw queries: the item row, its attribution links, the budget rows, and the committed sum.
+function planDb(options: { item?: Record<string, unknown> | null; links?: Record<string, unknown>; open?: boolean; allocated?: number | null; committed?: number; portfolioExists?: boolean }) {
   const item = options.item === null ? null : { id: "row-1", effortSize: "large", jobSize: null, estimateAgreed: null, open: options.open ?? false, ...options.item };
+  const links = { itemId: "BI-1", status: "open", effortSize: "large", jobSize: null, estimateAgreed: null, ...explicitLinks, ...options.links };
   return {
     $queryRaw: async (parts: TemplateStringsArray) => {
       const sql = parts.join("?");
       if (sql.includes('FROM "BacklogItem" b WHERE b."itemId"')) return item ? [item] : [];
+      if (sql.includes('AS "storedPortfolioId"')) return item ? [links] : [];
       if (sql.includes('FROM "PortfolioBudgetPeriod" b')) {
         return options.allocated == null ? [] : [{ id: "bud", portfolioId: "p1", allocatedPoints: options.allocated, usdPerPoint: null, wipAllowancePoints: null, setById: "u", setByAgentId: null, reason: "r", supersedesId: null, createdAt: now }];
       }
@@ -18,12 +27,7 @@ function planDb(options: { item?: Record<string, unknown> | null; open?: boolean
       if (sql.includes("SUM(r.\"points\")")) return [{ points: options.committed ?? 0 }];
       return [];
     },
-    backlogItem: {
-      findUnique: async () => ({ id: "row-1", portfolioId: "p1" }),
-      findMany: async () => [],
-      update: async () => ({}),
-    },
-    portfolio: { findUnique: async () => (options.portfolioExists === false ? null : { id: "p1" }) },
+    portfolio: { findUnique: async (args: { where: { id: string } }) => (options.portfolioExists === false ? null : { id: args.where.id }) },
   };
 }
 
@@ -70,6 +74,25 @@ describe("planFundingReservation (BI-EF265C9A)", () => {
       .toMatchObject({ kind: "none", reason: "unallocated" });
     expect(await planFundingReservation(planDb({ open: true }) as any, { itemId: "BI-1", now, autonomous: true }))
       .toMatchObject({ kind: "none", reason: "already-reserved" });
+  });
+});
+
+describe("planFundingReservation attributes like the budget proposal (BI-A0C66062)", () => {
+  const noExplicit = { storedPortfolioId: null };
+
+  it.each(["platform", "common", "unknown", null])("reserves %s-scoped work with no explicit portfolio against Foundational (AC-1)", async (scopeKind) => {
+    expect(await planFundingReservation(planDb({ allocated: null, links: { ...noExplicit, scopeKind } }) as any, { itemId: "BI-1", now, autonomous: true }))
+      .toMatchObject({ kind: "reserve", portfolioId: "p-foundational", points: 8 });
+  });
+
+  it("reserves nothing for archetype-scoped work with no explicit portfolio (AC-2)", async () => {
+    expect(await planFundingReservation(planDb({ allocated: null, links: { ...noExplicit, scopeKind: "archetype-leaf" } }) as any, { itemId: "BI-1", now, autonomous: true }))
+      .toMatchObject({ kind: "none", reason: "unallocated" });
+  });
+
+  it("keeps an explicit portfolio ahead of the Foundational rule", async () => {
+    expect(await planFundingReservation(planDb({ allocated: null, links: { storedPortfolioId: null, epicPortfolioId: "p-epic" } }) as any, { itemId: "BI-1", now, autonomous: true }))
+      .toMatchObject({ kind: "reserve", portfolioId: "p-epic" });
   });
 });
 
