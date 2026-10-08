@@ -49,6 +49,11 @@ service you choose: US Census, OpenCage, or your own Nominatim or Photon server.
 It is off by default. The free public Nominatim service is never used for this,
 because its usage policy does not allow bulk lookups.
 
+With one of those services chosen, a site, a business location or the
+business's own address saved without a position is looked up automatically in
+the background, one address at a time at the service's pace. A position a
+person chose is never replaced.
+
 ## Setup Steps
 
 1. Open **Platform → Tools → Built-in Tools** and read the Address validation card.
