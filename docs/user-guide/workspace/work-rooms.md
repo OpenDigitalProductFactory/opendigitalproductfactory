@@ -154,7 +154,7 @@ When a room has a work shape, the **Shape** view opens with a picture of it, abo
 - **Steps** are boxes, left to right. A step's border and mark show its state:
   - **▶** being worked
   - **◷** waiting on a person
-  - **!** blocked, with the reason (for example *conformance pause*)
+  - **!** blocked, with the reason (for example *missing explicit coordinator (conformance pause)*). A room that was stopped before it started any step shows this on its first step.
   - **✓** done
 - **A diamond** after a step means a person decides the way out of it.
 - **Under each step** is how long this room has spent there, next to the shape's **typical** time over the last four weeks. A step well over its typical time is marked **slow**. Until a step has finished at least five times, it says *not enough history yet* instead of showing a number.
