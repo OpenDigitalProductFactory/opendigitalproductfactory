@@ -4,7 +4,8 @@
   "decisionInteractionId": "DI-2AB8ACE3FA97",
   "scope": {
     "files": [
-      "apps/web/components/admin/OfferPositioningFields.tsx"
+      "apps/web/components/admin/OfferPositioningFields.tsx",
+      "apps/web/components/admin/MarketContextFields.tsx"
     ]
   },
   "evidence": {
@@ -24,6 +25,6 @@
       "Single Source of Truth"
     ],
     "whyNotSweepMeasurement": "The section is collapsed by default behind one link, so a sweep of /storefront/settings/business measures the default view with only that link added. The placement was decided among three options instead.",
-    "notes": "Adds one collapsed link beside the existing market-context link. Opened, it shows two plain text areas (what you offer; who it's for, one group per line) and one Save button."
+    "notes": "Nested inside the existing market-context disclosure: the page gains no new control on arrival (the one reveal button is relabelled '+ Add offer & market context', same word count). Opened, it shows two plain text areas (what you offer; who it's for, one group per line) with one Save, above the existing market-context fields. CI sweep on the first revision measured /storefront/settings/business 654 -> 663 words with a separate reveal; this revision removes that."
   }
 }

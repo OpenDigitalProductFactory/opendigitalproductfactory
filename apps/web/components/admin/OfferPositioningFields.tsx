@@ -1,9 +1,10 @@
 "use client";
 // What the business offers and who it is for (BI-C1E83871): the value
-// proposition and customer segments marketing plans from. Self-contained like
-// MarketContextFields — collapsed by default, loads the current answers when
-// opened, and saves through the business-context route.
-import { useState } from "react";
+// proposition and customer segments marketing plans from. Rendered inside the
+// existing market-context disclosure (so the business profile page shows nothing
+// new on arrival), it loads the current answers when shown and saves through the
+// business-context route.
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useT } from "@/lib/i18n/use-t";
 import { CUSTOMER_SEGMENT_MAX, VALUE_PROPOSITION_MAX } from "@/lib/onboarding/offer-positioning";
@@ -13,14 +14,17 @@ const inputClass =
 
 export function OfferPositioningFields() {
   const t = useT("setup");
-  const [open, setOpen] = useState(false);
   const [valueProposition, setValueProposition] = useState("");
   const [segments, setSegments] = useState("");
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  async function reveal() {
-    setOpen(true);
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when shown
+  }, []);
+
+  async function load() {
     try {
       const res = await fetch("/api/business-context/setup");
       const body = (await res.json()) as {
@@ -48,14 +52,6 @@ export function OfferPositioningFields() {
     const body = (await res.json().catch(() => null)) as { message?: string } | null;
     setError(body?.message ?? t("offerPositioning.saveFailed"));
     setStatus("error");
-  }
-
-  if (!open) {
-    return (
-      <Button type="button" variant="ghost" size="sm" className="self-start" onClick={() => void reveal()}>
-        {t("offerPositioning.open")}
-      </Button>
-    );
   }
 
   return (

@@ -13,7 +13,6 @@ import { SubmitButton, FormStatus } from "@/components/ui/form";
 import { BusinessDocumentUpload } from "@/components/admin/BusinessDocumentUpload";
 import { RosterImport } from "@/components/admin/RosterImport";
 import { MarketContextFields } from "@/components/admin/MarketContextFields";
-import { OfferPositioningFields } from "@/components/admin/OfferPositioningFields";
 import {
   COUNTRY_OPTIONS,
   US_STATES,
@@ -421,7 +420,6 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
         </label>
 
         {/* Market & competitive context (optional) */}
-        <OfferPositioningFields />
         <MarketContextFields />
 
         {/* Organization size (stored in the canonical companySize field). */}
