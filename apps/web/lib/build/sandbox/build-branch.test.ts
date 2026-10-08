@@ -459,8 +459,10 @@ describe("getClientIdentity upstream default", () => {
 // commit (60 such resets in the sandbox's last 400 reflog entries), the
 // widest writes on the shared index that concurrent builds collide on.
 describe("sandbox repo-state probe", () => {
+  // The probe is a POSIX command for the Linux sandbox. Hand `sh` a forward-slash
+  // path: a Windows temp dir's backslashes would be read as escapes.
   function probe(dir: string): string {
-    return execFileSync("sh", ["-c", buildSandboxRepoStateProbeCommand(dir)], { encoding: "utf8" });
+    return execFileSync("sh", ["-c", buildSandboxRepoStateProbeCommand(dir.replace(/\\/g, "/"))], { encoding: "utf8" });
   }
 
   function gitIn(dir: string, ...args: string[]): void {
@@ -541,8 +543,9 @@ describe("stale sandbox git lock cleanup", () => {
         execFileSync("touch", ["-t", "202609251353", join(gitDir, f)]);
       }
       writeFileSync(join(gitDir, "packed-refs.lock"), "");
-      execFileSync("sh", ["-c", buildSandboxStaleGitLockCleanupCommand(gitDir)]);
-      const left = execFileSync("sh", ["-c", `cd ${gitDir} && find . -name '*.lock' | sort`], { encoding: "utf8" }).trim();
+      const shellDir = gitDir.replace(/\\/g, "/"); // forward slashes for sh, as above
+      execFileSync("sh", ["-c", buildSandboxStaleGitLockCleanupCommand(shellDir)]);
+      const left = execFileSync("sh", ["-c", `cd ${shellDir} && find . -name '*.lock' | sort`], { encoding: "utf8" }).trim();
       expect(left).toBe("./packed-refs.lock");
     } finally {
       rmSync(gitDir, { recursive: true, force: true });
