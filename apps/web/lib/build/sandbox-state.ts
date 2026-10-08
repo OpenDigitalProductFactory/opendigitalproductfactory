@@ -194,7 +194,10 @@ export function extractExpectedPlanFiles(args: {
       if (!/^\s*-\s*(?:Create|Modify):?/i.test(line)) {
         continue;
       }
-      for (const path of extractFilePaths(line)) {
+      // BI-25C90258: the serialized plan backticks each path; read it whatever
+      // its root, so a docs-only plan does not fall through to the description.
+      const backticked = line.match(/`([^`\s]+\.[A-Za-z0-9]+)`/)?.[1];
+      for (const path of backticked ? [backticked] : extractFilePaths(line)) {
         paths.add(path);
       }
     }
