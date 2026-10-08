@@ -12,7 +12,11 @@ Installer state and live config both say development; live issue_ux_verification
 
 ## Acceptance
 
-undefined
+- AC-1: An authorized profile read exposes declared environment, credential/teardown/peer stances, host source capability, and the same operating guidance used at initialization, including when no acting coworker is bound.
+- AC-2: DEV/test routine authorized exercise and local test credential generation/rotation do not request repeated operator involvement; browser verification names issue_ux_verification_sign_in.
+- AC-3: Production, unknown environment, read-only connections, denied grants, uncaptured backlog and paired production limits remain intact.
+- AC-4: Failed stance composition is explicitly unknown/cautious, never a false DEV assertion; existing identity/grant profile behavior is preserved.
+- AC-5: Focused tests and package typecheck pass, and authenticated live DEV verification uses the existing platform-owned sign-in.
 
 ## Ordered delivery
 
@@ -36,4 +40,3 @@ One atomic deliverable mapped to BI-45DA45A6. Phases are internal sequencing: ex
 ## Risks and rollback
 
 The additive profile field can increase reply size; keep it bounded and secret-free. A failed stance loader must yield unknown/cautious guidance without losing the usable profile. DEV must never imply token grants or permission to mutate paired production. Read-only scope wins over grant names. Revert this one PR to remove the projection and briefing changes; no migration or data rollback.
-
