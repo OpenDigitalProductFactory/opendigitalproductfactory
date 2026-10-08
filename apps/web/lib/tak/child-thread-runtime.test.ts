@@ -47,9 +47,10 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
 }));
 
 import {
+  failInterruptedChildThread,
   prepareChildExecution,
   runChildThreadExecution,
-} from "./agent-thread-dispatcher-runtime";
+} from "./child-thread-runtime";
 import {
   buildProviderReviewPacket,
   formatProviderReviewObjective,
@@ -457,5 +458,45 @@ describe("runChildThreadExecution", () => {
         content: expect.stringMatching(/insufficient-evidence.*References/s),
       }),
     });
+  });
+});
+
+// BI-287E1DD0: the durable job's failure path fails an interrupted child once,
+// tells its parent, and leaves a child that already finished alone.
+describe("failInterruptedChildThread", () => {
+  const ctx = { threadId: "child-1", taskRunId: "TR-CHILD-1", userId: "user-1", agentId: "agent-mkt", routeContext: "/coworker" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.taskRun.update.mockResolvedValue({});
+    mockPrisma.agentThread.update.mockResolvedValue({});
+  });
+
+  it("fails a still-working child with a plain interruption reason", async () => {
+    mockPrisma.taskRun.findUnique.mockResolvedValueOnce({ status: "working" });
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: null });
+
+    await failInterruptedChildThread(ctx, "lease_expired_exhausted");
+
+    expect(mockPrisma.taskRun.update).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-CHILD-1" },
+      data: expect.objectContaining({
+        status: "failed",
+        progressPayload: { error: expect.stringContaining("not re-run automatically") },
+      }),
+    });
+    expect(mockPrisma.agentThread.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "child-1" },
+      data: { terminalError: expect.objectContaining({ message: expect.stringContaining("lease_expired_exhausted") }) },
+    }));
+  });
+
+  it("leaves a child that already reached a terminal state", async () => {
+    mockPrisma.taskRun.findUnique.mockResolvedValueOnce({ status: "completed" });
+
+    await failInterruptedChildThread(ctx, "engine gave up");
+
+    expect(mockPrisma.taskRun.update).not.toHaveBeenCalled();
+    expect(mockPrisma.agentThread.update).not.toHaveBeenCalled();
   });
 });

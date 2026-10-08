@@ -30,6 +30,7 @@ import { buildExecute } from "./build-execute";
 import { preBuildReviewRepair } from "./pre-build-review-repair";
 import { buildResumeAfterUpgradePause } from "./build-resume-after-upgrade-pause";
 import { buildGauntletRepair } from "./build-gauntlet-repair";
+import { agentChildThreadRun } from "./agent-child-thread-run";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -272,6 +273,7 @@ export const eventFunctions = [
   preBuildReviewRepair,
   buildResumeAfterUpgradePause, // BI-E9DAA23F: on platform.quiescence-cleared, resume builds the pause held
   buildGauntletRepair,
+  agentChildThreadRun, // BI-287E1DD0: delegated child threads run as durable jobs
   assuranceBomGenerate,
   assuranceScanRun,
   deliberationRun,
