@@ -147,6 +147,10 @@ unknown author, or a reviewer agent that is the authoring agent, nothing is boun
 registry shape is unchanged. Design: `docs/superpowers/specs/2026-09-02-proactive-review-drive-design.md`
 ("As built — review stages").
 
+The reviewer's receipt is the stage's evidence (BI-80738C08): once every review receipt
+the stage declares has passed for the room's current head, the next tick advances it. A
+failing receipt blocks the stage and shows in the room with its finding count.
+
 A room that never declared one gets a **derived** shape from what it already is
 (`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,
 `launch-readiness` is an approval sign-off, `governance` and `remediation` are consequential

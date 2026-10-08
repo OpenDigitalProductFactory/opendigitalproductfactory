@@ -227,3 +227,83 @@ export const liveReviewerDispatch: ReviewerDispatchEffect = async (input) => {
   if (outcome.outcome === "dispatched" || outcome.outcome === "cooling-down") return { outcome: outcome.outcome };
   return { outcome: "unavailable", detail: outcome.detail ?? outcome.outcome };
 };
+
+// ── review receipts as stage evidence (BI-80738C08) ───────────────────────────
+
+type ReviewEvidenceDb = Pick<import("@dpf/db").PrismaClient, "$queryRaw"> & {
+  workroom: { findMany(args: unknown): Promise<Array<{ capsuleId: string; backlogItemId: string | null; repositoryFullName: string | null; headSha: string | null; scopeClaims: unknown }>> };
+  backlogItem: { findMany(args: unknown): Promise<{ id: string; itemId: string }[]> };
+};
+
+/**
+ * The drive's rooms with their passed (or failed) readiness reviews read as the
+ * review stage's evidence, so a reviewed stage advances on the next tick
+ * instead of waiting on a hand-written copy of the outcome. Fails open to the
+ * rooms unchanged: a stage then waits, which is the pre-existing behaviour.
+ */
+export async function withReviewReceiptEvidence<R extends WorkroomDriveEvidenceRoom>(rooms: R[], db?: ReviewEvidenceDb): Promise<R[]> {
+  if (rooms.length === 0) return rooms;
+  try {
+    const source = db ?? ((await import("@dpf/db")).prisma as unknown as ReviewEvidenceDb);
+    const capsuleIds = rooms.map((room) => room.capsuleId);
+    const bound = await source.workroom.findMany({
+      where: { capsuleId: { in: capsuleIds }, backlogItemId: { not: null } },
+      select: { capsuleId: true, backlogItemId: true, repositoryFullName: true, headSha: true, scopeClaims: true },
+    });
+    if (bound.length === 0) return rooms;
+    const [{ loadWorkroomInitiativeEvidence }, { reviewReceiptStageEvidence, mergeReviewStageEvidence }, { resolveWorkShapeClaim }] = await Promise.all([
+      import("@/lib/work-management/workroom-initiative-evidence"),
+      import("@/lib/work-management/review-receipt-stage-evidence"),
+      import("@/lib/work-management/workroom-shape-claim"),
+    ]);
+    const { receipts } = await loadWorkroomInitiativeEvidence(source, bound);
+    const rowsByRoom = new Map(bound.map((room) => [room.capsuleId, reviewReceiptStageEvidence({
+      receipts: receipts.filter((receipt) => receipt.sourceRef.id === room.capsuleId),
+      stages: resolveWorkShapeClaim(room.scopeClaims)?.stages ?? [],
+    })]));
+    const reviewed = [...rowsByRoom].filter(([, rows]) => rows.length > 0).map(([capsuleId]) => capsuleId);
+    const starts = await loadReviewerAskTimes(reviewed, source);
+    return rooms.map((room) => mergeReviewStageEvidence(room, {
+      rows: rowsByRoom.get(room.capsuleId) ?? [],
+      start: starts.get(room.capsuleId) ?? null,
+    }));
+  } catch {
+    return rooms;
+  }
+}
+
+type WorkroomDriveEvidenceRoom = {
+  capsuleId: string;
+  recordedEvidence?: import("@/lib/work-management/stage-evidence-receipts").RecordedEvidence[];
+  stageDispatchedAt?: Date | null;
+};
+
+/**
+ * When the drive last asked a reviewer role for the room's current stage: the
+ * start of a review stage bound to a role, which is asked and never dispatched.
+ * Scoped like loadStageDispatchTimes' attention branch: the room must still be
+ * waiting on that ask (its stored pendingAttention), and the latest ask bounds
+ * the evidence. role:author is excluded here; that start is already read there.
+ */
+async function loadReviewerAskTimes(
+  capsuleIds: readonly string[],
+  db: Pick<import("@dpf/db").PrismaClient, "$queryRaw">,
+): Promise<Map<string, { stageKey: string; startedAt: Date }>> {
+  if (capsuleIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<Array<{ capsuleId: string; stageKey: string; startedAt: Date }>>`
+    SELECT DISTINCT ON (w."capsuleId") w."capsuleId", a."payload" ->> 'stageKey' AS "stageKey", a."recordedAt" AS "startedAt"
+    FROM "WorkCapsuleActivity" a
+    JOIN "WorkCapsule" w ON w."id" = a."workCapsuleId"
+    WHERE w."capsuleId" = ANY(${[...capsuleIds]}::text[])
+      AND a."kind" = 'workroom-drive-attention'
+      AND a."payload" ->> 'action' = 'attention'
+      AND a."payload" ->> 'reason' = 'role_stage'
+      AND a."payload" ->> 'stageKey' = w."workspaceState" #>> '{workroomDrive,stageKey}'
+      AND w."workspaceState" #>> '{workroomDrive,pendingAttention,stageKey}' = a."payload" ->> 'stageKey'
+      AND w."workspaceState" #>> '{workroomDrive,pendingAttention,reason}' = 'role_stage'
+      AND w."workspaceState" #>> '{workroomDrive,pendingAttention,principalRef}' LIKE 'role:%'
+      AND w."workspaceState" #>> '{workroomDrive,pendingAttention,principalRef}' <> 'role:author'
+    ORDER BY w."capsuleId", a."recordedAt" DESC
+  `;
+  return new Map(rows.map((row) => [row.capsuleId, { stageKey: row.stageKey, startedAt: row.startedAt }]));
+}
