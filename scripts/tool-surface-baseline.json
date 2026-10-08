@@ -3,9 +3,9 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 429,
-      "reason": "BI-926A7E90: read_build_artifact_revision. A Build Studio design is an accepted BuildArtifactRevision, not a repository blob, so the independent reviewer that approves a large-shape build had no immutable reader for the artifact it is asked to judge, and 122 plan-phase builds owed receipts nothing could request. Read-only, page-capped, identity-bound (path/version/expectedBlobId) exactly like read_source_at_version, granted only through file_read, and handed to a reviewer solely by the server-issued binding. Claim to check: revision-bound reviews record receipts whose artifactRef is the revision the reader served.",
-      "recordedAt": "2026-10-02"
+      "value": 430,
+      "reason": "BI-7D1E43DE: report_decision_trust_state. The trust dial's shadow measurement (TrustState per coworker x activity x risk) had no reader, so nobody could see agreement rates before any graduation decision. Read-only, in the existing decision-outcome pack, granted through registry_read like reverify_decision_evidence; renders 'insufficient samples' below 10 and never raises currentLevel. Claim to check: the founder's first graduation decision cites this report's numbers.",
+      "recordedAt": "2026-10-08"
     },
     "registry.packFiles": {
       "value": 105,
