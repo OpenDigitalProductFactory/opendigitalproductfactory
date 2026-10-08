@@ -17,6 +17,7 @@ import { PORTFOLIO_SLUG_BY_ROLE, type PortfolioRoleKey } from "@/lib/portfolio/p
 import type { QueueTelemetryRow } from "@/lib/queue/queue-metrics-rollup";
 
 import { computePortfolioFlow, FLOW_WINDOW_DAYS, type PortfolioFlow } from "./portfolio-flow";
+import { loadRoomAiSpend } from "./room-ai-spend.server";
 import { TERMINAL_WORKROOM_STATUSES } from "./standing-room-nesting";
 import { getWorkShape, getWorkShapeVersion, readDeclaredWorkShapeRef } from "./work-shapes";
 import { buildShapeFlowMap, type WorkroomFlowMapModel } from "./workroom-flow-map";
@@ -33,6 +34,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export type PortfolioFlowWithCost = PortfolioFlow & {
   /** Points from the quarter's investment read model; null for the unplaced bucket. */
   points: { inFlight: number; delivered: number } | null;
+  /** AI spend on this bucket's rooms over the flow window (F6, exact by thread). Null when the read failed. */
+  aiUsd: number | null;
 };
 
 const ROW_SELECT = { queueKey: true, itemKind: true, itemId: true, transition: true, outcome: true, occurredAt: true, laneKey: true } as const;
@@ -58,7 +61,7 @@ async function loadRooms() {
 }
 
 export async function loadPortfolioFlowView(now: Date = new Date()): Promise<PortfolioFlowWithCost[]> {
-  const [rooms, rows, investment, portfolios] = await Promise.all([
+  const [rooms, rows, investment, portfolios, aiByRoom] = await Promise.all([
     loadRooms(),
     prisma.queueTelemetryEvent.findMany({
       where: { itemKind: WORKROOM_STAGE_ITEM_KIND, occurredAt: { gte: new Date(now.getTime() - 2 * FLOW_WINDOW_DAYS * DAY_MS) } },
@@ -66,14 +69,25 @@ export async function loadPortfolioFlowView(now: Date = new Date()): Promise<Por
     }) as Promise<QueueTelemetryRow[]>,
     loadPortfolioInvestment(prisma as never, now).catch(() => null),
     prisma.portfolio.findMany({ select: { id: true, slug: true } }),
+    loadRoomAiSpend({ since: new Date(now.getTime() - FLOW_WINDOW_DAYS * DAY_MS), until: now }).catch(() => null),
   ]);
   const flows = computePortfolioFlow({ rooms, rows, now });
+  const aiByBucket = new Map<string, number>();
+  if (aiByRoom) {
+    for (const room of rooms) {
+      const usd = aiByRoom.get(room.capsuleId);
+      if (!usd) continue;
+      const bucket = room.portfolioRole && flows.some((f) => f.key === room.portfolioRole) ? room.portfolioRole : "unplaced";
+      aiByBucket.set(bucket, (aiByBucket.get(bucket) ?? 0) + usd);
+    }
+  }
+  const aiUsdFor = (key: string) => (aiByRoom ? aiByBucket.get(key) ?? 0 : null);
   const slugById = new Map(portfolios.map((p) => [p.id, p.slug]));
   return flows.map((flow) => {
-    if (flow.key === "unplaced" || !investment) return { ...flow, points: null };
+    if (flow.key === "unplaced" || !investment) return { ...flow, points: null, aiUsd: aiUsdFor(flow.key) };
     const slug = PORTFOLIO_SLUG_BY_ROLE[flow.key as PortfolioRoleKey];
     const row = investment.rows.find((candidate) => candidate.portfolioId && slugById.get(candidate.portfolioId) === slug);
-    return { ...flow, points: row ? { inFlight: row.inFlightPoints, delivered: row.deliveredPoints } : { inFlight: 0, delivered: 0 } };
+    return { ...flow, points: row ? { inFlight: row.inFlightPoints, delivered: row.deliveredPoints } : { inFlight: 0, delivered: 0 }, aiUsd: aiUsdFor(flow.key) };
   });
 }
 

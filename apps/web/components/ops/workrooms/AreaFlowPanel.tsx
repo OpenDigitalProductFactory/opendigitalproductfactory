@@ -94,7 +94,10 @@ export function PortfolioFlowTiles({ flow, areaHref }: { flow: PortfolioFlowWith
           size="sm"
           value={flow.points ? `${flow.points.inFlight} pts` : "—"}
           label="Cost in flight"
-          hint={flow.points ? `${flow.points.delivered} pts delivered this quarter · AI spend not yet attributed to rooms` : "Unplaced rooms carry no portfolio budget"}
+          hint={[
+            flow.points ? `${flow.points.delivered} pts delivered this quarter` : "Unplaced rooms carry no portfolio budget",
+            flow.aiUsd == null ? "AI spend unavailable" : `AI $${flow.aiUsd.toFixed(2)} on these rooms, last ${FLOW_WINDOW_DAYS} days`,
+          ].join(" · ")}
         />
       </div>
       {typed > 0 ? (
@@ -209,6 +212,7 @@ export function PortfolioFlowComparison({ flows, areaHrefByRole }: { flows: Port
     { label: "Flow efficiency", value: (f) => (f.flowEfficiency.value == null ? "—" : pct(f.flowEfficiency.value)) },
     { label: "Finished per week", value: (f) => f.throughput.perWeek.toFixed(1) },
     { label: "Points in flight", value: (f) => (f.points ? String(f.points.inFlight) : "—") },
+    { label: `AI spend (${FLOW_WINDOW_DAYS} days)`, value: (f) => (f.aiUsd == null ? "—" : `$${f.aiUsd.toFixed(2)}`) },
   ];
   return (
     <section aria-labelledby="portfolio-flow-heading" className="my-6 space-y-2">

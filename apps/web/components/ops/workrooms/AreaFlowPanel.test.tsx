@@ -28,6 +28,7 @@ const flow = (key: PortfolioFlowWithCost["key"], overrides: Partial<PortfolioFlo
   distribution: { feature: 4, defect: 2, risk: 1, debt: 0 },
   shapes: [{ shapeKey: "delivery-small", shapeRef: "delivery-small@1.0.0", roomsInFlow: 5, flowTimeP50Ms: 20 * H, runs: 6, bottleneck: { stageKey: "merge", roomsHeld: 3, cause: "awaiting-person" } }],
   points: { inFlight: 34, delivered: 21 },
+  aiUsd: 1.5,
   ...overrides,
 });
 
@@ -40,6 +41,7 @@ describe("PortfolioFlowTiles", () => {
     expect(screen.getByText("12%")).toBeInTheDocument();
     expect(screen.getByText("2.3")).toBeInTheDocument();
     expect(screen.getByText("34 pts")).toBeInTheDocument();
+    expect(screen.getByText(/AI \$1\.50 on these rooms, last 28 days/)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Median flow time per week/ })).toBeInTheDocument();
   });
 
