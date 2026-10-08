@@ -16,8 +16,8 @@ export type AppointCoordinatorDb = {
   workroom: {
     findUnique(args: {
       where: { capsuleId: string };
-      select: { id: true; capsuleId: true };
-    }): Promise<{ id: string; capsuleId: string } | null>;
+      select: { id: true; capsuleId: true; workItemId: true };
+    }): Promise<{ id: string; capsuleId: string; workItemId: string | null } | null>;
   };
   workroomParticipant: {
     findMany(args: {
@@ -39,6 +39,7 @@ export type AppointedCoordinator = {
   capsuleId: string;
   principalRef: string;
   displayName: string;
+  workItemId: string | null;
   /** Incumbent coordinators this appointment hands over FROM. Empty unless
    *  replaceExisting was set. The caller MUST stand these down in the same
    *  transaction as the new assignment — see standDownCoordinators. A handover
@@ -65,7 +66,7 @@ export async function planCoordinatorAppointment(input: {
 }): Promise<AppointCoordinatorResult> {
   const room = await input.db.workroom.findUnique({
     where: { capsuleId: input.capsuleId },
-    select: { id: true, capsuleId: true },
+    select: { id: true, capsuleId: true, workItemId: true },
   });
   if (!room) {
     return err(`workroom_not_found: no Workroom ${input.capsuleId}.`);
@@ -105,6 +106,7 @@ export async function planCoordinatorAppointment(input: {
     capsuleId: room.capsuleId,
     principalRef: input.principalRef,
     displayName: principal.displayName,
+    workItemId: room.workItemId,
     standDown: coordinators
       .filter((p) => p.principalId !== principal.id)
       .map((p) => ({

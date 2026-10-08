@@ -652,13 +652,15 @@ export function createWorkroomDriveEffects(
     notifyDeadline: async (input) => (await import("@/lib/work-management/workroom-deadline-notice")).notifyWorkroomDeadline(input),
     async persist(input) {
       const prisma = await loadDb();
+      const prior: { state: { workspaceState: unknown; capsuleId: string; scopeClaims: unknown } | null } = { state: null }; // set in the transaction
       const activity = await prisma.$transaction(async (tx) => {
         if (!input.observationOnly) {
           const current = await tx.workroom.findUnique({
             where: { id: input.roomId },
-            select: { workspaceState: true, updatedAt: true },
+            select: { workspaceState: true, updatedAt: true, capsuleId: true, scopeClaims: true },
           });
           if (!current) return null;
+          prior.state = current;
           const snapshot = mergeWorkroomDriveSnapshot(current.workspaceState, input.snapshot, { graphShape: input.graphShape });
           const updated = await tx.workroom.updateMany({
             where: {
@@ -685,6 +687,11 @@ export function createWorkroomDriveEffects(
       if (!activity) return;
       const { publishRecordedWorkCapsuleActivity } = await import("@/lib/work-capsules/activity-events");
       publishRecordedWorkCapsuleActivity(input.roomId, activity.id);
+      // EP-B70E718D F2: the trail row just written is a state change, so the stage's queue moves with it.
+      if (prior.state) {
+        const { emitStageTelemetryForDriveWrite } = await import("@/lib/work-management/workroom-stage-telemetry");
+        void emitStageTelemetryForDriveWrite({ room: prior.state, snapshot: input.snapshot, graphShape: input.graphShape, at: clock() });
+      }
     },
     async acquireLease(input) {
       if (input.currentExpiresAt && input.currentExpiresAt.getTime() > input.now.getTime()) {
