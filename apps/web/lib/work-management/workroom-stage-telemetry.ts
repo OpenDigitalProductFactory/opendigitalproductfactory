@@ -28,7 +28,7 @@
 import type { QueueOutcome, QueueTransition } from "@/lib/queue/flow-metrics";
 import type { QueueTransitionInput } from "@/lib/queue/queue-telemetry";
 
-import { readDeclaredWorkShapeRef } from "./work-shapes";
+import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
 
 export const WORKROOM_STAGE_ITEM_KIND = "workroom-stage";
@@ -204,7 +204,7 @@ export function workroomStageLiveCounts(
 ): Map<string, { depth: number; wip: number }> {
   const counts = new Map<string, { depth: number; wip: number }>();
   for (const room of rooms) {
-    const shapeRef = readDeclaredWorkShapeRef(room.scopeClaims);
+    const shapeRef = readWorkShapeClaimRef(room.scopeClaims);
     const located = locate(readDriveObservation(room.workspaceState));
     if (!shapeRef || !located?.stageKey || !IN_FLOW.has(located.state)) continue;
     const key = workroomStageQueueKey(shapeRef, located.stageKey);
@@ -245,7 +245,7 @@ export async function emitStageTelemetryForDriveWrite(input: {
     if (!next) return;
     await emitStageTransitions(planStageTransitions({
       capsuleId: input.room.capsuleId,
-      shapeRef: readDeclaredWorkShapeRef(input.room.scopeClaims),
+      shapeRef: readWorkShapeClaimRef(input.room.scopeClaims),
       prior: readDriveObservation(input.room.workspaceState),
       next,
       at: input.at,

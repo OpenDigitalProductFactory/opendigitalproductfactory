@@ -112,6 +112,12 @@ export function readWorkShapeClaim(scopeClaims: unknown): WorkShapeRef | null {
   return workShapeRefFrom(scopeClaims);
 }
 
+/** The room's declared shape as `key@version`, or null. The one reader every flow surface uses (EP-B70E718D). */
+export function readWorkShapeClaimRef(scopeClaims: unknown): string | null {
+  const ref = readWorkShapeClaim(scopeClaims);
+  return ref ? `${ref.key}@${ref.version}` : null;
+}
+
 export function buildWorkShapeClaim(
   ref: WorkShapeRef | string,
   now: Date = new Date(),

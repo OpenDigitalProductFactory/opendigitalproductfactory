@@ -8,7 +8,8 @@
  */
 import type { QueueTelemetryRow } from "@/lib/queue/queue-metrics-rollup";
 
-import { getWorkShape, getWorkShapeVersion, readDeclaredWorkShapeRef } from "./work-shapes";
+import { getWorkShape, getWorkShapeVersion } from "./work-shapes";
+import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import { buildWorkroomFlowMap, type StageSnapshot, type WorkroomFlowMapModel } from "./workroom-flow-map";
 import { WORKROOM_STAGE_ITEM_KIND, readDriveObservation, workroomStageQueueKey } from "./workroom-stage-telemetry";
 
@@ -39,7 +40,7 @@ export async function loadWorkroomFlowMap(
     select: { capsuleId: true, scopeClaims: true, workspaceState: true },
   });
   if (!room) return null;
-  const ref = readDeclaredWorkShapeRef(room.scopeClaims);
+  const ref = readWorkShapeClaimRef(room.scopeClaims);
   if (!ref) return null;
   const [key, version] = ref.split("@");
   const definition = key ? (version ? getWorkShapeVersion(key, version) : getWorkShape(key)) : null;

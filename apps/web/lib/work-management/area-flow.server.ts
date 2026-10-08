@@ -19,7 +19,8 @@ import type { QueueTelemetryRow } from "@/lib/queue/queue-metrics-rollup";
 import { computePortfolioFlow, FLOW_WINDOW_DAYS, type PortfolioFlow } from "./portfolio-flow";
 import { loadRoomAiSpend } from "./room-ai-spend.server";
 import { TERMINAL_WORKROOM_STATUSES } from "./standing-room-nesting";
-import { getWorkShape, getWorkShapeVersion, readDeclaredWorkShapeRef } from "./work-shapes";
+import { getWorkShape, getWorkShapeVersion } from "./work-shapes";
+import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import { buildShapeFlowMap, type WorkroomFlowMapModel } from "./workroom-flow-map";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
 import {
@@ -51,7 +52,7 @@ async function loadRooms() {
       capsuleId: row.capsuleId,
       title: row.title,
       portfolioRole: row.portfolioRole as string | null,
-      shapeRef: readDeclaredWorkShapeRef(row.scopeClaims),
+      shapeRef: readWorkShapeClaimRef(row.scopeClaims),
       // A finished room still owns its history, but is never "in flow" now.
       current: live ? readDriveObservation(row.workspaceState) : null,
       scopeClaims: row.scopeClaims,
