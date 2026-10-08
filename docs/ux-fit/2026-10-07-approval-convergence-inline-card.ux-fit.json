@@ -1,7 +1,7 @@
 {
   "version": "1",
-  "decidedOption": "converge-on-envelope",
-  "decisionInteractionId": "DI-0E7ACCB50EAC",
+  "decidedOption": "inline-shared-buttons",
+  "decisionInteractionId": "DI-DBEA4B074FC7",
   "scope": {
     "files": [
       "apps/web/components/agent/InlineEnvelopeApprovals.tsx",
@@ -11,12 +11,11 @@
   "evidence": {
     "kind": "propose-n-pick",
     "consideredOptions": [
-      "converge-on-envelope",
-      "bridge-envelope",
-      "route-as-admin",
-      "exempt-allowlist"
+      "inline-shared-buttons",
+      "link-only",
+      "inline-bespoke"
     ]
   },
-  "rationale": "BI-C8EC05C9, spec docs/superpowers/specs/2026-10-07-approval-convergence-on-envelope-design.md D2 S1. The recorded WWMD decision chose converge-on-envelope (11.31 over 10.34, 6.47, 4.07); its chat surface is one decision control for both places a person meets a coworker's request. The Authorize / Decline pair is extracted from the Needs-you card (CoworkerEnvelopeApproval) into EnvelopeDecisionButtons and reused unchanged there, and a chat message lists the requests it raised with the same two verbs, the reason a person is asked, the open-until time and a link to the request in Needs-you. Two choices per request, no new route, no typed input, --dpf-* tokens and catalog copy only. Inert in PR-A: no envelope carries a chatMessageId until PR-B, so nothing new renders.",
+  "rationale": "BI-C8EC05C9, spec docs/superpowers/specs/2026-10-07-approval-convergence-on-envelope-design.md D2 S1 (parent decision DI-0E7ACCB50EAC chose converge-on-envelope). The card-level WWMD decision DI-DBEA4B074FC7 chose inline-shared-buttons over link-only and inline-bespoke: a chat message lists the requests it raised with the same Authorize / Decline pair extracted from the Needs-you card (CoworkerEnvelopeApproval) into EnvelopeDecisionButtons and reused unchanged there, plus the reason a person is asked, the open-until time and a link to the request in Needs-you. Two choices per request, no new route, no typed input, --dpf-* tokens and catalog copy only. Inert in PR-A: no envelope carries a chatMessageId until PR-B, so nothing new renders.",
   "verification": "AgentMessageBubble.test.tsx renders one card per request with Authorize and Decline and none for a message without requests; CoworkerEnvelopeApproval.test.tsx passes unchanged on the extracted buttons. Served-target UX verification not run in this branch; it is owed at PR-B (plan AC-UX), when the card first appears."
 }
