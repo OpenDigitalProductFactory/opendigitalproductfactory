@@ -867,6 +867,19 @@ no owner user for its agent stage concludes as blocked, and clears when an owner
 user is bound. A finished cycle and a lease held by another worker conclude as
 in motion.
 
+### Every stage is a queue
+
+Since EP-B70E718D F2 (BI-4ADFFEDB), the drive reports where each room's time goes. When it writes a state-change row, it also emits queue transitions into the shared flow telemetry, under `wr:<shape>@<version>:<stage>`:
+
+- A room entering a stage is enqueued.
+- Work starting is a start.
+- Waiting on a person, or being blocked, is a hold. The hold carries its cause, for example `conformance_pause`.
+- Leaving the stage finishes it.
+
+The hourly queue rollup turns those transitions into per-stage dwell, touch time, wait, held time, queue depth, throughput and flow efficiency. These are the same numbers every other queue reports, so queue health, Prometheus and the coworker queue tools read stages with no extra wiring.
+
+The drive log from before the change is replayed once, so stage trends start with history.
+
 ## A named governed writer must be attached, not discovered
 
 The chain above — owner, authority, brief, evidence receipt — was complete and

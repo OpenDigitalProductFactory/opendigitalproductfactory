@@ -1,8 +1,29 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import test from "node:test";
 
-import { buildJsonRpcBody, isAllowedMcpEndpoint, mcpCall, mcpPost } from "./mcp-client.mjs";
+import { buildJsonRpcBody, isAllowedMcpEndpoint, mcpCall, mcpPost, quoteForMsysArgv } from "./mcp-client.mjs";
+
+// BI-1B4910B4: Node quotes by MSVC rules, but MSYS sh collapses `\\` inside a
+// quoted argument, so a JSON body with a Windows path reached the injected
+// transport as invalid JSON.
+test("quoteForMsysArgv escapes backslashes and quotes inside one quoted argument", () => {
+  assert.equal(quoteForMsysArgv(String.raw`{"p":"C:\\x"}`), String.raw`"{\"p\":\"C:\\\\x\"}"`);
+  assert.equal(quoteForMsysArgv(""), `""`);
+});
+
+test("quoteForMsysArgv round-trips through MSYS sh byte for byte", {
+  skip: process.platform === "win32" ? false : "the Cygwin command-line parser exists only on Windows",
+}, () => {
+  for (const value of [String.raw`{"worktreePath":"C:\\Users\\x y"}`, String.raw`trail\\`, "$HOME * 'q' `t` %P% & |"]) {
+    const result = spawnSync("sh", ["-c", `printf '%s' "$1"`, "_", value].map(quoteForMsysArgv), {
+      encoding: "utf8",
+      windowsVerbatimArguments: true,
+    });
+    assert.equal(result.stdout, value);
+  }
+});
 
 test("MCP calls abort within the configured transport deadline", async () => {
   const server = createServer((_request, _response) => {

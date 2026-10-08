@@ -13,7 +13,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { buildGateContext } from "./lib/gate-context.mjs";
-import { STEPS, bodyRequiredTrailers, missingBodyAttestations, parseContext, syncAction, parseGateStatus, gateFailureSite } from "./land-branch.mjs";
+import { STEPS, bodyRequiredTrailers, missingBodyAttestations, parseContext, syncAction, parseGateStatus, gateFailureSite, recordedPassAction, publish } from "./land-branch.mjs";
 import { parseArgs as gateLocalArgs } from "./gate-local.mjs";
 import { obligationLines } from "./pregate-preflight.mjs";
 
@@ -116,4 +116,51 @@ test("a refusal before the lease is not reported as a verdict on this SHA", () =
   assert.equal(gateFailureSite(bound, "b"), "verdict");
   assert.equal(gateFailureSite(parseGateStatus("ELIFECYCLE"), "b"), "unknown");
   assert.equal(parseGateStatus(JSON.stringify({ verdict: "PASS" })), null, "below the floor");
+});
+
+test("a PASS already recorded for HEAD is landed, not merged forward and re-gated", () => {
+  // Observed on PR #6029: gate:wait hit its deadline, the durable resumer later
+  // recorded PASS on HEAD, and re-running land would have merged main, minted a
+  // new SHA and queued another gate — the merge queue re-tests against main anyway.
+  const pass = (boundSha, extra = {}) => parseGateStatus(JSON.stringify(
+    { verdict: "PASS", headSha: "head", boundSha, ...extra }));
+  const decide = (status, more = {}) =>
+    recordedPassAction({ status, headSha: "head", dirty: false, mergeable: "MERGEABLE", ...more }).action;
+
+  // PASS + current: straight to push and PR. No PR yet, or GitHub not done computing, is not a conflict.
+  assert.equal(decide(pass("head")), "land-recorded-pass");
+  assert.equal(decide(pass("head"), { mergeable: null }), "land-recorded-pass");
+  assert.equal(decide(pass("head"), { mergeable: "UNKNOWN" }), "land-recorded-pass");
+  // PASS + conflicting: the queue cannot test what does not merge, so merge forward.
+  assert.equal(decide(pass("head"), { mergeable: "CONFLICTING" }), "gate");
+  // No PASS: the gate has not decided, or decided against.
+  assert.equal(decide(parseGateStatus(JSON.stringify({ verdict: "FAIL", headSha: "head", boundSha: "head" }))), "gate");
+  assert.equal(decide(parseGateStatus("ELIFECYCLE")), "gate", "unreadable status is never a PASS");
+  // A PASS bound to an older SHA says nothing about these bytes.
+  assert.equal(decide(pass("older")), "gate");
+  assert.equal(decide(pass("")), "gate");
+  // Nor does a PASS cover uncommitted changes, or a test stub cover anything.
+  assert.equal(decide(pass("head"), { dirty: true }), "gate");
+  assert.equal(decide(pass("head", { testStub: true })), "gate");
+});
+
+test("publish pushes exactly once, and a refused push is reported, never retried", () => {
+  // Plan 2026-10-02 item 9: every `git push` can claim a new gate lease, so a
+  // second push "just to read the refusal" can overwrite a recorded PASS.
+  const calls = [];
+  const exec = (cmd, args) => {
+    calls.push([cmd, ...args].join(" "));
+    return { ok: cmd !== "git", status: cmd === "git" ? 1 : 0, out: "" };
+  };
+  const refusal = publish({ branch: "b", base: "main", title: "t", body: "", dry: false, log: () => {}, runner: exec });
+  assert.equal(refusal?.step, "push");
+  assert.deepEqual(calls, ["git push -u origin b"], "one push, and nothing after a refusal");
+
+  calls.length = 0;
+  const okExec = (cmd, args) => {
+    calls.push([cmd, ...args].join(" "));
+    return { ok: true, status: 0, out: args.includes(".number") ? "" : "url" };
+  };
+  assert.equal(publish({ branch: "b", base: "main", title: "t", body: "x", dry: false, log: () => {}, runner: okExec }), null);
+  assert.equal(calls.filter((c) => c.startsWith("git push")).length, 1);
 });

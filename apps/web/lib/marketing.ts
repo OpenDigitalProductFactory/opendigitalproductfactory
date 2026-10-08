@@ -2,6 +2,7 @@ import { prisma, type Prisma } from "@dpf/db";
 import { getPlaybook, type MarketingPlaybook } from "@/lib/tak/marketing-playbooks";
 import { deriveRevenueModelFromActivationProfile, readActivationProfile } from "@/lib/storefront/archetype-activation";
 import { upsertMarketingStrategyTolerant } from "@/lib/marketing/strategy-bootstrap";
+import { ACTIVE_MARKETING_WORK } from "@/lib/marketing/retire-work";
 import { OWN_OFFER_ITEMS_QUERY, ownOfferFromRecords } from "@/lib/marketing/archetype-fit";
 import {
   cleanText,
@@ -988,16 +989,8 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
     connectedIntegrations,
     inboundRaw,
   ] = await Promise.all([
-    prisma.marketingCampaignBrief.findMany({
-      where: { strategyId: strategy.strategyId },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    }),
-    prisma.marketingAssetTask.findMany({
-      where: { strategyId: strategy.strategyId },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    }),
+    prisma.marketingCampaignBrief.findMany({ where: { strategyId: strategy.strategyId, ...ACTIVE_MARKETING_WORK }, orderBy: { createdAt: "desc" }, take: 5 }),
+    prisma.marketingAssetTask.findMany({ where: { strategyId: strategy.strategyId, ...ACTIVE_MARKETING_WORK }, orderBy: { createdAt: "desc" }, take: 5 }),
     prisma.marketingKpiCheckpoint.findMany({
       where: { strategyId: strategy.strategyId },
       orderBy: { createdAt: "desc" },

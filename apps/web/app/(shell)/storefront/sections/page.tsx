@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { SectionsManager } from "@/components/storefront-admin/SectionsManager";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { loadStorefrontContentFit } from "@/lib/storefront/content-fit.server";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 
 export default async function SectionsPage() {
   const config = await prisma.storefrontConfig.findFirst({
@@ -17,7 +20,7 @@ export default async function SectionsPage() {
   const sections = await prisma.storefrontSection.findMany({
     where: { storefrontId: config.id },
     orderBy: { sortOrder: "asc" },
-    select: { id: true, type: true, title: true, sortOrder: true, isVisible: true },
+    select: { id: true, type: true, title: true, sortOrder: true, isVisible: true, content: true },
   });
 
   const vocabulary = getVocabulary(
@@ -32,13 +35,16 @@ export default async function SectionsPage() {
     sections,
   });
 
+  const locale = await getLocaleContext();
   return (
-    <SectionsManager
-      storefrontId={config.id}
-      sections={sections}
-      vocabulary={vocabulary}
-      isPublished={config.isPublished}
-      residueGroups={fit.groups.filter((g) => g.sectionIds.length > 0)}
-    />
+    <MessagesProvider locale={locale.language} messages={{ storefront: namespaceMessages(locale.language, "storefront") }}>
+      <SectionsManager
+        storefrontId={config.id}
+        sections={sections}
+        vocabulary={vocabulary}
+        isPublished={config.isPublished}
+        residueGroups={fit.groups.filter((g) => g.sectionIds.length > 0)}
+      />
+    </MessagesProvider>
   );
 }

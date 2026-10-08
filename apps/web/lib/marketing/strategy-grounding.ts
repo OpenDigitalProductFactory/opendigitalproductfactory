@@ -28,6 +28,7 @@
 // size-baselined at 1369 lines and may shrink but never grow.
 
 import { prisma } from "@dpf/db";
+import { MARKETING_ROUTE_TO_MARKET, type MarketingRouteToMarket } from "@/lib/marketing/vocabulary";
 import type { Prisma } from "@dpf/db";
 import type {
   MarketingConstraintSummary,
@@ -46,7 +47,17 @@ export type MarketingGroundingInput = {
   proofAssets?: MarketingProofAsset[];
   differentiators?: string[];
   constraints?: MarketingConstraintSummary | null;
+  /**
+   * How the business reaches buyers. Bootstrap infers it once and nothing could
+   * change it, so a plan inferred as direct-sales stayed direct-sales after the
+   * owner said they go to market through partners (BI-FB24DC2C).
+   */
+  routeToMarket?: string | null;
 };
+
+function isRouteToMarket(value: unknown): value is MarketingRouteToMarket {
+  return typeof value === "string" && (MARKETING_ROUTE_TO_MARKET as readonly string[]).includes(value);
+}
 
 /**
  * The three fields the drafter actually reads. A plan missing any of them
@@ -114,7 +125,7 @@ export function assessMarketingGrounding(strategy: AssessableStrategy): Groundin
 export async function recordMarketingGrounding(input: {
   grounding: MarketingGroundingInput;
   strategyId: string;
-}): Promise<{ strategyId: string; updatedFields: string[]; message: string }> {
+}): Promise<{ strategyId: string; updatedFields: string[]; rejectedFields?: string[]; message: string }> {
   const g = input.grounding;
   const data: Prisma.MarketingStrategyUpdateInput = {};
   const updatedFields: string[] = [];
@@ -155,11 +166,26 @@ export async function recordMarketingGrounding(input: {
     updatedFields.push("constraints");
   }
 
+  // A closed axis: an unknown value is refused by name rather than stored.
+  const rejectedFields: string[] = [];
+  if (g.routeToMarket !== undefined && g.routeToMarket !== null && g.routeToMarket.trim() !== "") {
+    if (isRouteToMarket(g.routeToMarket.trim())) {
+      data.routeToMarket = g.routeToMarket.trim();
+      updatedFields.push("routeToMarket");
+    } else {
+      rejectedFields.push(`routeToMarket (must be one of: ${MARKETING_ROUTE_TO_MARKET.join(", ")})`);
+    }
+  }
+
   if (updatedFields.length === 0) {
     return {
       strategyId: input.strategyId,
       updatedFields,
-      message: "No grounding supplied — nothing was changed.",
+      ...(rejectedFields.length > 0 ? { rejectedFields } : {}),
+      message:
+        rejectedFields.length > 0
+          ? `Nothing was changed. Rejected: ${rejectedFields.join("; ")}.`
+          : "No grounding supplied — nothing was changed.",
     };
   }
 
@@ -175,6 +201,9 @@ export async function recordMarketingGrounding(input: {
   return {
     strategyId: input.strategyId,
     updatedFields,
-    message: `Recorded ${updatedFields.length} grounding field${updatedFields.length === 1 ? "" : "s"}: ${updatedFields.join(", ")}.`,
+    ...(rejectedFields.length > 0 ? { rejectedFields } : {}),
+    message:
+      `Recorded ${updatedFields.length} grounding field${updatedFields.length === 1 ? "" : "s"}: ${updatedFields.join(", ")}.` +
+      (rejectedFields.length > 0 ? ` Rejected: ${rejectedFields.join("; ")}.` : ""),
   };
 }

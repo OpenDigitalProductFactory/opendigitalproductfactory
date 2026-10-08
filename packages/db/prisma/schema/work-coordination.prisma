@@ -958,6 +958,9 @@ model QueueMetricSnapshot {
   firstPassYield  Float? // 0..1 — % correct without rework
   slaAttainment   Float? // 0..1 — null when no finished item carried an SLA
   abandonmentRate Float? // 0..1
+  heldP50Ms       Int? // held time (waiting on a person or blocked) of items finished in the window — EP-B70E718D
+  heldP95Ms       Int?
+  processShare    Float? // 0..1 — Σ process ÷ Σ cycle: the queue's flow efficiency
   computedAt      DateTime @default(now())
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

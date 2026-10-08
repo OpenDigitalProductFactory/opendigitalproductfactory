@@ -149,7 +149,7 @@ export async function dispatchCodexTask(params: {
   }
 
   const instructions = buildSpecialistInstructions({ role, buildContext, priorResults });
-  const taskPrompt = buildSpecialistTaskPrompt({ task, instructions });
+  const taskPrompt = buildSpecialistTaskPrompt({ task, instructions, workdir });
 
   const startMs = Date.now();
 

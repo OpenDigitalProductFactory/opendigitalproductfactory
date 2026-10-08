@@ -204,7 +204,9 @@ Claude-only update:
 bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --claude-only
 ```
 
-Use `DPF_MCP_URL` to point at a non-local MCP endpoint. Restart Codex or Claude
+Without `DPF_MCP_URL` the updater connects to the install's canonical address,
+`https://localhost/api/mcp/v1`, and sets the client up for OAuth sign-in. Use
+`DPF_MCP_URL` to point at a different MCP endpoint. Restart Codex or Claude
 Code after the updater finishes because both clients load plugins and skills at
 session start.
 

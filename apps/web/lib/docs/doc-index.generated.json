@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 733,
+  "pageCount": 734,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1111,6 +1111,7 @@
         "jsi-weights-that-learn-the-job",
         "earning-autonomy-from-passive-to-proactive",
         "the-decision-ledger",
+        "governed-decision-trust-state-report-only",
         "the-learning-loop",
         "current-boundaries"
       ]
@@ -2715,6 +2716,7 @@
         "the-brief-and-what-advances-a-stage",
         "failing-closed-is-not-the-same-as-locking",
         "every-reason-the-drive-emits-is-in-its-vocabulary-by-type",
+        "every-stage-is-a-queue",
         "a-named-governed-writer-must-be-attached-not-discovered",
         "a-stage-names-the-tools-it-needs",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
@@ -7534,6 +7536,7 @@
         "heuristic",
         "why",
         "the-expert-trade-off",
+        "how-to-make-the-portal-faster",
         "see-also"
       ]
     },
@@ -9599,6 +9602,23 @@
         "sources"
       ]
     },
+    "docs/security/tool-evaluations/2026-10-07-chatterbox-tts-api.md": {
+      "publicHref": "/security/tool-evaluations/2026-10-07-chatterbox-tts-api/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-travisvnchatterbox-tts-api-v101-dpf-tts-re-pin",
+        "what-is-evaluated",
+        "api-compatibility-source-read-at-upstream-tag-v101",
+        "cosai-security-findings",
+        "compliance",
+        "architecture-fit",
+        "integration-test-results",
+        "conditions",
+        "re-evaluation"
+      ]
+    },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
       "publicHref": "/specs/device-identification-and-portfolio-placement-spec/",
       "portalHref": null,
@@ -11533,6 +11553,7 @@
         "what-decision-perspective-does",
         "consequential-action-alignment",
         "the-confidence-model",
+        "measuring-how-often-a-coworker-agrees-with-you",
         "the-inheritance-chain",
         "profile-kinds",
         "what-onboarding-seeds-for-wwwd",
@@ -12172,6 +12193,7 @@
         "review-and-publish",
         "quarantined-or-imported-content",
         "marketing-to-other-business-types",
+        "correcting-a-plan-that-started-wrong",
         "understand-the-two-funnels",
         "treat-automation-as-a-proposal",
         "a-practical-operating-rhythm",
@@ -12843,6 +12865,7 @@
         "use-this-doc-for",
         "workflow",
         "managing-a-row",
+        "writing-your-section-text",
         "fixing-generated-content-that-doesnt-fit",
         "what-to-watch",
         "purchase-traceability"

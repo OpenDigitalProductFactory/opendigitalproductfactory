@@ -199,7 +199,19 @@ PROJECT_SLUG="$(printf '%s' "$REPO_ROOT" | sed -E 's:[/:]:-:g' | sed -E 's:^-+::
 # shellcheck source=installer/lib/mcp-client-env.sh
 . "$SCRIPT_DIR/installer/lib/mcp-client-env.sh"
 dpf_resolve_mcp_client_env "$REPO_ROOT"
-MCP_ENDPOINT="${DPF_MCP_CLIENT_URL:-http://127.0.0.1:3000/api/mcp/v1}"
+# MCP_ENDPOINT_NAMED is the endpoint the install or operator named (may be
+# empty); only it is forwarded to the updater, whose canonical https/OAuth
+# default governs otherwise (BI-772023BC). The probes and the plan bridge need
+# a concrete URL, so they read that same default from the updater's one line.
+MCP_ENDPOINT_NAMED="${DPF_MCP_CLIENT_URL:-}"
+MCP_ENDPOINT="$MCP_ENDPOINT_NAMED"
+if [ -z "$MCP_ENDPOINT" ]; then
+  MCP_ENDPOINT="$(sed -n 's/^DEFAULT_MCP_URL = "\(.*\)"$/\1/p' "$REPO_ROOT/packages/dpf-skill-pack/scripts/update_agent_toolchain.py" 2>/dev/null || true)"
+fi
+if [ -z "$MCP_ENDPOINT" ]; then
+  fail "Cannot read the default MCP endpoint from packages/dpf-skill-pack/scripts/update_agent_toolchain.py; set DPF_MCP_URL or restore the skill pack."
+  exit 1
+fi
 MCP_TRUST_BUNDLE="$DPF_MCP_CLIENT_CA_BUNDLE"
 if [ -n "$MCP_TRUST_BUNDLE" ]; then
   export NODE_EXTRA_CA_CERTS="$MCP_TRUST_BUNDLE"
@@ -357,8 +369,9 @@ persist_mcp_client_env_posix() {
   # so they do not read the profile; launchd carries the values for this boot.
   dpf_launchd_setenv DPF_MCP_BEARER_TOKEN "$_tok"
   if ! dpf_persist_mcp_client_env; then
-    # A non-default http endpoint the operator named keeps its line.
-    if [ "$MCP_ENDPOINT" != "http://127.0.0.1:3000/api/mcp/v1" ]; then
+    # A non-https endpoint the operator named keeps its line; with none named
+    # the updater's default applies and nothing is persisted.
+    if [ -n "$MCP_ENDPOINT_NAMED" ]; then
       dpf_set_client_env_export DPF_MCP_URL "$MCP_ENDPOINT"
       dpf_launchd_setenv DPF_MCP_URL "$MCP_ENDPOINT"
     fi
@@ -487,7 +500,7 @@ fi
 # On an https endpoint the transport lines (DPF_MCP_URL + NODE_EXTRA_CA_CERTS)
 # are what let a client authorize over OAuth; persist them even when no token
 # was minted this run. Never at dry-run time.
-case "$MCP_ENDPOINT" in https://*) _https_endpoint=1 ;; *) _https_endpoint=0 ;; esac
+case "$MCP_ENDPOINT_NAMED" in https://*) _https_endpoint=1 ;; *) _https_endpoint=0 ;; esac
 if [ "$DRY_RUN" -eq 0 ] && [ "$_https_endpoint" -eq 1 ]; then
   persist_mcp_client_env_posix
   ok "MCP client transport persisted: https endpoint${MCP_TRUST_BUNDLE:+ + organization root bundle (NODE_EXTRA_CA_CERTS)}."
@@ -500,7 +513,8 @@ if [ ! -f "$PLUGIN_UPDATER" ]; then
   fail "Standalone updater missing at $PLUGIN_UPDATER; cannot proceed."
   exit 1
 fi
-plugin_update_args=(--codex-plugin-only --mcp-url "$MCP_ENDPOINT")
+plugin_update_args=(--codex-plugin-only)
+[ -n "$MCP_ENDPOINT_NAMED" ] && plugin_update_args+=(--mcp-url "$MCP_ENDPOINT_NAMED")
 [ "$DRY_RUN" -eq 1 ] && plugin_update_args+=(--dry-run)
 if ! bash "$PLUGIN_UPDATER" "${plugin_update_args[@]}"; then
   fail "Plugin refresh failed; configuration planning stopped."
@@ -544,7 +558,8 @@ trap 'rm -f "$PLAN_TMP"' EXIT
 if ! pnpm "${bridge_args[@]}" > "$PLAN_TMP" 2>&1; then
   warn "compute-plan failed; using standalone skill-pack updater fallback."
   cat "$PLAN_TMP" >&2
-  fallback_args=(--mcp-url "$MCP_ENDPOINT")
+  fallback_args=()
+  [ -n "$MCP_ENDPOINT_NAMED" ] && fallback_args+=(--mcp-url "$MCP_ENDPOINT_NAMED")
   [ "$DRY_RUN" -eq 1 ] && fallback_args+=(--dry-run)
   if ! bash "$PLUGIN_UPDATER" "${fallback_args[@]}"; then
     fail "Standalone updater failed."
