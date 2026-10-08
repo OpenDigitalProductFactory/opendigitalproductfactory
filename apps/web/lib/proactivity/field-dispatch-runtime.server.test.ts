@@ -262,7 +262,7 @@ describe("S4 — field dispatch proposals (characterisation)", () => {
         if (statSync(path).isDirectory()) walk(path);
         else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)
           && readFileSync(path, "utf8").includes("proposeUserAwareFieldDispatchNotifications(")) {
-          callers.push(path.slice(webRoot.length + 1));
+          callers.push(path.slice(webRoot.length + 1).split("\\").join("/"));
         }
       }
     };
