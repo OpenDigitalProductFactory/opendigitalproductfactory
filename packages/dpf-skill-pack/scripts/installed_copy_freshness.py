@@ -72,8 +72,12 @@ def _version_key(version: str) -> Optional[tuple[int, ...]]:
 
 
 def delivered_digest(pack: Path) -> str:
+    # Order by relative path segments, case-sensitive. Sorting Path objects is
+    # case-insensitive on Windows, so the same tree hashed differently there and
+    # on the Linux portal that publishes this digest (BI-52934B3E). The portal's
+    # TypeScript copy is apps/web/lib/agent-toolchain/pack-digest.ts.
     digest = hashlib.sha256()
-    for path in sorted(pack.rglob("*")):
+    for path in sorted(pack.rglob("*"), key=lambda candidate: candidate.relative_to(pack).parts):
         relative = path.relative_to(pack)
         if not path.is_file() or updater.is_build_debris(relative) or relative in _PER_INSTALL:
             continue

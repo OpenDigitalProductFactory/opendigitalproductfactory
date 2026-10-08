@@ -270,6 +270,17 @@ pulls them. Before promoting any to `reconciles-safe-config`, complete:
 Until then, rows stay checklist-only in
 [`docs/architecture/agent-client-capability-parity.md`](../../docs/architecture/agent-client-capability-parity.md).
 
+### One version source, and what each release publishes
+
+`toolchain-version.json` is the only place the pack version is written. Every client manifest (`.claude-plugin`, `.grok-plugin`, `.antigravity-plugin`, the Codex manifest's base version) and both version fields in the root `.claude-plugin/marketplace.json` are generated from it with `node scripts/sync-toolchain-version.mjs`. The Toolchain Version Guard (`--check`) fails CI on any hand edit. To bump the version, edit `toolchain-version.json` and run the script.
+
+Each portal serves the pack its image ships, with no source checkout needed (BI-52934B3E, design `docs/superpowers/specs/2026-10-07-agent-toolchain-release-delivery-design.md` §5.1):
+
+- `GET /api/agent-toolchain/manifest` returns `packVersion`, `packDigest` (the delivered-content identity), `archiveSha256`, `releaseId`, `floor` and the per-client connector shape. It is signed with the installation's Ed25519 identity (`deviceId`, `signingPublicKey`, `signature` over the canonical manifest bytes).
+- `GET /api/agent-toolchain/pack.tar.gz` returns a byte-stable archive of this package whose sha256 is `archiveSha256`.
+
+The delivered digest has one definition in two languages: `delivered_digest()` in `scripts/installed_copy_freshness.py` and `apps/web/lib/agent-toolchain/pack-digest.ts`. Both are pinned to the same fixture. Files are ordered by case-sensitive path segments, so a Windows client and the Linux portal agree.
+
 ### Version bumps propagate automatically
 
 When this package's `.claude-plugin/plugin.json` version bumps (e.g. `0.1.0` → `0.2.0`), the `scripts/dpf-bootstrap-agent-toolchain.{ps1,sh}` adapter reads the new version from the manifest at install time and the planning library at `packages/dpf-bootstrap/` plans an upgrade write for contributors whose installed entry is at the older version. No manual `claude plugin install` is required. Contributors pick up the new skills on the next time the installer (or `install-dpf`, `fresh-install`, `setup`, or a fresh `git worktree add`) runs — and a re-run when nothing has drifted is a true no-op.

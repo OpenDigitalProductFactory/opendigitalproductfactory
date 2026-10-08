@@ -735,6 +735,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/check-no-local-canonical-json.test.mjs"),
       node("scripts/check-no-local-canonical-json.mjs"),
     ]),
+    // One home for the dpf-platform pack version (BI-52934B3E): every client
+    // manifest and the marketplace entry are generated from toolchain-version.json.
+    guard("toolchain-version-guard", "Toolchain Version Guard", [
+      conformanceTest("scripts/sync-toolchain-version.test.mjs"),
+      node("scripts/sync-toolchain-version.mjs", "--check"),
+    ]),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
       // One home for the shared wire types (plan 2026-09-08 §10.5 S9).
