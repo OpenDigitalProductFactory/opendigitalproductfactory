@@ -3,7 +3,7 @@
 // human review still gate what lands.
 import { describe, expect, it, vi } from "vitest";
 
-import { openBuildStudioPrAfterShip } from "./auto-open-build-pr";
+import { createPortalPrForBuild, openBuildStudioPrAfterShip } from "./auto-open-build-pr";
 
 const deps = (overrides = {}) => ({
   phaseOf: vi.fn().mockResolvedValue("ship"),
@@ -34,5 +34,18 @@ describe("openBuildStudioPrAfterShip", () => {
     const d = deps({ createPr: vi.fn().mockResolvedValue({ success: false, message: "Blocked: preflight record missing for tree abc" }) });
     expect(await openBuildStudioPrAfterShip({ buildId: "FB-1", actorUserId: "u1", deps: d })).toBe("blocked");
     expect(d.log).toHaveBeenCalledWith(expect.stringContaining("preflight record missing"));
+  });
+});
+
+describe("createPortalPrForBuild", () => {
+  it("names the build in the tool params, where create_portal_pr reads it", async () => {
+    const executeTool = vi.fn().mockResolvedValue({ success: true, message: "ok" });
+    await createPortalPrForBuild(executeTool as never, "FB-2E891686", "u1");
+    expect(executeTool).toHaveBeenCalledWith(
+      "create_portal_pr",
+      { buildId: "FB-2E891686" },
+      "u1",
+      expect.objectContaining({ featureBuildId: "FB-2E891686" }),
+    );
   });
 });

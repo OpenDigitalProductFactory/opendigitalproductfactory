@@ -32,6 +32,19 @@ export async function openBuildStudioPrAfterShip(input: {
   return "blocked";
 }
 
+type ExecuteTool = (typeof import("@/lib/mcp-tools"))["executeTool"];
+
+/**
+ * Name the build in the tool's params. create_portal_pr resolves its build from
+ * params only; the execution context's featureBuildId never reaches it. With no
+ * buildId the tool falls back to "the owner's only open build" and refuses when
+ * there are several, so FB-2E891686, the first build to reach ship unattended
+ * (2026-10-08), got "No active build" and no PR (BI-1CC992A5's class).
+ */
+export function createPortalPrForBuild(executeTool: ExecuteTool, buildId: string, actorUserId: string) {
+  return executeTool("create_portal_pr", { buildId }, actorUserId, { featureBuildId: buildId, routeContext: "/build" });
+}
+
 async function productionDeps(forBuildId: string): Promise<AutoPrDeps> {
   const { prisma } = await import("@dpf/db");
   return {
@@ -47,7 +60,7 @@ async function productionDeps(forBuildId: string): Promise<AutoPrDeps> {
     },
     createPr: async (buildId, actorUserId) => {
       const { executeTool } = await import("@/lib/mcp-tools");
-      return executeTool("create_portal_pr", {}, actorUserId, { featureBuildId: buildId, routeContext: "/build" });
+      return createPortalPrForBuild(executeTool, buildId, actorUserId);
     },
     log: async (summary) => {
       await prisma.buildActivity.create({ data: { buildId: forBuildId, tool: "auto_open_pr", summary } }).catch(() => {});
