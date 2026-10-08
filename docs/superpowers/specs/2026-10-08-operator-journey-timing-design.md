@@ -63,8 +63,8 @@ Standards followed: Web Vitals thresholds (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS �
 | Journey | Starts | Ends |
 | --- | --- | --- |
 | `shell-ready` | Navigation start (`performance.timeOrigin`) | First frame painted after the shell layout hydrates |
-| `coworker-open` | The click that opens the coworker panel | First frame painted with the panel's thread rendered |
-| `thread-open` | The click that selects an existing thread | First frame painted with that thread's messages |
+| `coworker-open` | The commit that opens the coworker panel (a layout effect, within a frame of the click) | First frame painted with the panel's thread ready |
+| `thread-open` | The start of a thread load (opening the panel, or a route change that switches the coworker's thread context) | First frame painted with that thread ready |
 | `message-ack` | The send action in the composer | First frame painted with the bubble in `sent` state (since BI-DEFA25EE this means the server has stored it) |
 
 "First frame painted" means a `requestAnimationFrame` callback followed by a macrotask (double-rAF). This is the standard way to measure to the frame after commit, not to the commit.
@@ -94,7 +94,7 @@ The vocabulary is a closed `as const` list shared by client and server. An unkno
   - `dpf_web_vital_seconds{metric, section}`, a histogram for LCP, INP, FCP and TTFB.
   - `dpf_web_vital_cls{section}`, a histogram with buckets `0.01 0.025 0.05 0.1 0.15 0.25 0.5 1`.
 - Label cardinality is bounded: 4 journeys × 2 phases, 4 metrics × ~30 sections, and ~30 sections for CLS.
-- The send route (`/api/agent/send`) and the thread snapshot read emit `Server-Timing: app;dur=<ms>`. This gives the coworker journeys their server share.
+- The send route (`/api/agent/send`) emits `Server-Timing: app;dur=<ms>`. This gives `message-ack` its server share. The thread snapshot is read through a server action, which has no response header to carry a timing, so `thread-open` and `coworker-open` report total time only. Their server share comes once those reads move to a route.
 
 ### 4. Visibility
 
@@ -124,7 +124,7 @@ The vocabulary is a closed `as const` list shared by client and server. An unkno
 | ID | Objective | Statement |
 | --- | --- | --- |
 | AC-1 | OBJ-1 | Each of the four journeys emits exactly one sample per completed interaction. Its total is measured from the interaction mark to the first painted frame after render, proven by unit tests with a controlled clock and rAF. |
-| AC-2 | OBJ-1 | `message-ack` and `thread-open` samples carry a `server` phase taken from the serving request's `Server-Timing` `app;dur=` value, and `/api/agent/send` emits that header. |
+| AC-2 | OBJ-1 | `message-ack` samples carry a `server` phase taken from the `/api/agent/send` response's `Server-Timing` `app;dur=` value, and that route emits the header. |
 | AC-3 | OBJ-2 | LCP, INP, CLS, FCP and TTFB are reported for every page through `next/web-vitals`, labelled only by an allowlisted top-level section. No new package is added to the lockfile. |
 | AC-4 | OBJ-3 | `/api/metrics` exposes `dpf_journey_duration_seconds`, `dpf_web_vital_seconds` and `dpf_web_vital_cls` after samples are posted. The Grafana overview carries a "Portal journeys" row with p75 and p95 per journey. |
 | AC-5 | OBJ-3 | On the dev install, all four journeys have a measured p75/p95 baseline recorded on EP-B95469DB. |

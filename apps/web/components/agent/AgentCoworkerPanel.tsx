@@ -44,6 +44,7 @@ import {
 import { useVoiceSynth } from "./hooks/useVoiceSynth";
 import { deriveComposerState, isClearDisabled, type ThreadLoadState } from "./composer-state";
 import { resolvePanelRouteContextLabel } from "@/lib/agent/panel-route-context";
+import { beginJourney, completeJourney } from "@/lib/telemetry/journeys";
 
 type Props = {
   threadId: string | null;
@@ -661,10 +662,10 @@ export function AgentCoworkerPanel({
 
     setIsBusy(true);
     setSendsInFlight((count) => count + 1);
-    // BI-2750EB6F: start the turn watchdog's clock — the server has "just been
-    // heard from" (we're about to POST). If nothing (data or heartbeat) arrives
-    // before the deadline, the watchdog effect surfaces a failure.
+    // BI-2750EB6F: start the turn watchdog's clock (we're about to POST); with no data
+    // or heartbeat before the deadline, the watchdog surfaces a failure.
     lastServerActivityRef.current = Date.now();
+    beginJourney("message-ack"); // BI-BD0B0DCC
 
     const runtimeMode = resolveCoworkerRuntimeMode({
       pathname,
@@ -700,8 +701,8 @@ export function AgentCoworkerPanel({
         );
         setIsBusy(false);
       } else {
-        // Server accepted — mark as sent so user sees delivery confirmation
-        // instead of "Sending..." for the entire duration of agent execution.
+        // Stored and accepted (BI-DEFA25EE): show "sent", not "Sending..." for the whole turn.
+        completeJourney("message-ack", { serverUrl: "/api/agent/send" }); // BI-BD0B0DCC
         setMessages((prev) =>
           prev.map((message) =>
             message.id === optimisticMessage.id ? { ...message, deliveryState: "sent" as const } : message,

@@ -32,7 +32,7 @@ This plan is atomic. The client queue, the endpoint and the histograms only prod
    - `serverMs` is read from `PerformanceResourceTiming.serverTiming` `app`.
    - Flushes with `sendBeacon` on page-hide or at 20 queued samples.
    - Red first: `journeys.test.ts`, with a fake clock, rAF and beacon. It covers one sample per completed journey, a completion with no begin as a no-op, no network call before a flush trigger, and the server phase being attached.
-6. **Server-Timing on coworker requests**: `/api/agent/send` and the thread snapshot read emit `Server-Timing: app;dur=<ms>`.
+6. **Server-Timing on the send request**: `/api/agent/send` emits `Server-Timing: app;dur=<ms>`. The thread snapshot is a server action with no response header, so it reports total time only (see the spec).
    - Extend the existing send `route.test.ts`.
 7. **Hooks into the journeys**:
    - `<PortalVitals />`, a client component using `useReportWebVitals` and `queueWebVital`, mounted in `app/(shell)/layout.tsx`.

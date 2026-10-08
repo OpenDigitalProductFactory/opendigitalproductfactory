@@ -105,6 +105,8 @@ describe("POST /api/agent/send", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ status: "processing", userMessageId: "user-msg-1" });
+    // BI-BD0B0DCC AC-2: the server's share of message-ack, for the browser to read.
+    expect(response.headers.get("Server-Timing")).toMatch(/^app;dur=\d+(\.\d)?$/);
     expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith({
       data: { threadId: "thread-1", role: "user", content: "Build this", routeContext: "/build" },
       select: { id: true },
