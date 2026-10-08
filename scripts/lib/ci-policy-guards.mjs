@@ -887,6 +887,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // nothing about it.
         "scripts/lib/pregate-console.test.mjs",
         "scripts/lib/pregate-status.test.mjs",
+        // BI-A9031FF3: the CLI hands a superseded record its winner's current record.
+        "scripts/pregate-status-superseded.test.mjs",
         // BI-277ECBDB: the pre-claim slot PostgreSQL probe.
         "scripts/lib/local-ci-slot-substrate.test.mjs",
         // Symlink-robust entry guard shared by the pregate script family: a
