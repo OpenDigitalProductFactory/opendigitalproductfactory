@@ -14,6 +14,14 @@ import {
   CONCIERGE_SWEEP_REQUESTED_EVENT,
   CONCIERGE_SWEEP_SCHEDULED_INNGEST_ID,
 } from "@/lib/decision/concierge-sweep-constants";
+import {
+  DECISION_TRUST_RECOMPUTE_CADENCE,
+  DECISION_TRUST_RECOMPUTE_CRON,
+  DECISION_TRUST_RECOMPUTE_JOB_ID,
+  DECISION_TRUST_RECOMPUTE_JOB_NAME,
+  DECISION_TRUST_RECOMPUTE_REQUESTED_EVENT,
+  DECISION_TRUST_RECOMPUTE_SCHEDULED_INNGEST_ID,
+} from "@/lib/decision/decision-trust-recompute-constants";
 
 import type { ScheduledJobCatalogEntry } from "./catalog-types";
 
@@ -30,5 +38,18 @@ export const DECISION_GOVERNANCE_JOBS: readonly ScheduledJobCatalogEntry[] = [
     category: "editable",
     tracksRunData: false,
     runNowEvent: CONCIERGE_SWEEP_REQUESTED_EVENT,
+  },
+  {
+    jobId: DECISION_TRUST_RECOMPUTE_JOB_ID,
+    honorsEnabledGate: true,
+    inngestId: DECISION_TRUST_RECOMPUTE_SCHEDULED_INNGEST_ID,
+    name: DECISION_TRUST_RECOMPUTE_JOB_NAME,
+    purpose:
+      "EP-DECISION-OUTCOME-LOOP (BI-7D1E43DE): brings the shadow ledger level with every governed decision that names a coworker, then recomputes each coworker's TrustState (samples, agreements, rate) from it. Report only: every level stays at shadow and nothing is promoted. If it stops, the decision-trust report goes stale and says so through its last-evaluated time.",
+    cron: DECISION_TRUST_RECOMPUTE_CRON,
+    cadence: DECISION_TRUST_RECOMPUTE_CADENCE,
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: DECISION_TRUST_RECOMPUTE_REQUESTED_EVENT,
   },
 ] as const;

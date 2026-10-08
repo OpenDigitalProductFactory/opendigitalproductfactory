@@ -4,10 +4,14 @@ import { decisionOutcomePack } from "./decision-outcome-pack";
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 
 const recordDecisionOutcome = vi.fn();
+const loadDecisionTrustReport = vi.fn();
 
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 vi.mock("@/lib/decision/decision-outcome-store", () => ({
   recordDecisionOutcome: (input: unknown) => recordDecisionOutcome(input),
+}));
+vi.mock("@/lib/decision/decision-trust-state-store", () => ({
+  loadDecisionTrustReport: (db: unknown) => loadDecisionTrustReport(db),
 }));
 
 function call(params: Record<string, unknown>) {
@@ -142,5 +146,41 @@ describe("record_decision_outcome handler", () => {
     const result = await call({ interactionId: "DI-1", chosenOptionId: 3 });
     expect(result.success).toBe(false);
     expect(recordDecisionOutcome).not.toHaveBeenCalled();
+  });
+});
+
+describe("report_decision_trust_state (BI-7D1E43DE)", () => {
+  const definition = decisionOutcomePack.definitions.find((d) => d.name === "report_decision_trust_state")!;
+
+  it("is a read, granted at the registry_read tier in both places", () => {
+    expect(definition.sideEffect).toBe(false);
+    expect(decisionOutcomePack.grants.report_decision_trust_state).toEqual(["registry_read"]);
+    expect(TOOL_TO_GRANTS.report_decision_trust_state).toEqual(["registry_read"]);
+  });
+
+  it("tells the caller not to estimate a withheld rate, and that agreement is not correctness", () => {
+    expect(definition.description).toContain("insufficient samples");
+    expect(definition.description).toContain("do not estimate");
+    expect(definition.description).toContain("concordance, not correctness");
+  });
+
+  it("narrows to one coworker without dropping that coworker's unmeasured entry", async () => {
+    loadDecisionTrustReport.mockResolvedValueOnce({
+      minSamples: 10,
+      allShadow: true,
+      rows: [
+        { agentId: "AGT-A", agreementRate: null },
+        { agentId: "AGT-B", agreementRate: null },
+      ],
+      unmeasuredCoworkers: [{ agentId: "AGT-A", attributedDecisions: 3, inLedger: 0 }],
+      caveats: ["Agreement is concordance, not correctness."],
+    });
+    const result = await decisionOutcomePack.handlers.report_decision_trust_state!({ agentId: "AGT-A" }, {} as never);
+    expect(result.success).toBe(true);
+    const data = result.data as { rows: Array<{ agentId: string }>; unmeasuredCoworkers: unknown[] };
+    expect(data.rows.map((r) => r.agentId)).toEqual(["AGT-A"]);
+    expect(data.unmeasuredCoworkers).toHaveLength(1);
+    expect(result.message).toContain("Every level is shadow");
+    expect(result.message).toContain("concordance, not correctness");
   });
 });
