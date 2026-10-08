@@ -52,17 +52,7 @@ The only bridge from a release to those copies is `packages/dpf-skill-pack/scrip
   - It lacks `initiative_evidence_write`.
   - Next to a project `.mcp.json`, it produces two `dpf` connectors (BI-5201141C).
 
-The same failure class has been filed one symptom at a time:
-
-| Item | Symptom |
-|---|---|
-| BI-5201141C | Duplicate connectors |
-| BI-16EAAB62 | A stale shared copy blocked sign-in |
-| BI-772023BC | The PowerShell updater defaults to the retired URL |
-| BI-F4BE47B5 | A stale cache re-ran an old Stop guard |
-| BI-B9F359AC | Stale project-scope pins and a duplicate `.mcp.json` |
-
-Each item fixed one copy or one script. None made staleness visible, and none tied delivery to the release.
+The same failure class has been filed one symptom at a time: BI-5201141C (duplicate connectors), BI-16EAAB62 (a stale shared copy blocked sign-in), BI-772023BC (the PowerShell updater defaults to the retired URL), BI-F4BE47B5 (a stale cache re-ran an old Stop guard) and BI-B9F359AC (stale project-scope pins and a duplicate `.mcp.json`). Each item fixed one copy or one script. None made staleness visible, and none tied delivery to the release.
 
 ## 2. What already exists (fuse, do not build)
 
@@ -263,19 +253,7 @@ Where a client fails, its carrier falls back to a static header (`X-DPF-Toolchai
 
 No human command is involved. Each client then either declares the new digest on its next connection (`current`), or is told and recorded as stale on that connection. **That is the "within one session" guarantee.** A client that never reconnects stays visible as behind, ages to stale at 7 days, and is pruned at 30.
 
-**Portal view.** `/ops/self-upgrade` gains a "Connected agent clients" section fed by the paged `getFleetReadiness`. Columns:
-
-- client
-- credential (OAuth client name or token label)
-- host label
-- loaded pack
-- installed pack
-- auth mode
-- verdict
-- last seen
-- last convergence result
-
-It uses theme-aware tokens only (AGENTS.md §9), and gets a UX-fit review at implementation.
+**Portal view.** `/ops/self-upgrade` gains a "Connected agent clients" section fed by the paged `getFleetReadiness`, showing per credential: client, host label, loaded and installed pack, auth mode, verdict, last seen and the last convergence result. It uses theme-aware tokens only (AGENTS.md §9), and gets a UX-fit review at implementation.
 
 **(d) Below the floor, a declared client cannot write.**
 
@@ -554,25 +532,27 @@ Each phase is one PR and one clean revert.
 
 ### Traceability
 
-| Objective | Acceptance | Deliverable (phase) | Verification |
-|---|---|---|---|
-| OBJ-DELIVER | AC-MANIFEST | Build-time archive and manifest; routes; rate limit (P1) | Route tests; archive determinism test; digest check against the served image on the dev install |
-| OBJ-DELIVER | AC-SINGLE-VERSION | Version generator and CI drift check (P1) | Generator test; CI check fails on a seeded drift |
-| OBJ-OBSERVE | AC-VERDICT | `resolveToolchainVerdict` (P3) | Unit fixtures for every verdict, including the plain-http bearer and User-Agent cases |
-| OBJ-OBSERVE | AC-OBSERVE-STORE | `AgentToolchainObservation`, readiness extension, coalesced writes, server-derived key, paging (P3) | Migration applied; repository tests incl. concurrent writers; live rows on the dev install |
-| OBJ-OBSERVE, OBJ-FLOOR | AC-INSTRUCT | `TOOLCHAIN:` section (P3) | Instruction snapshot per verdict; live `initialize` from a stale and a current client |
-| OBJ-OBSERVE | AC-RELEASE-VISIBLE | `announceToolchainReleaseOnBoot`, notification wiring, `/ops/self-upgrade` section (P4) | Self-upgrade on the dev install through `/ops/self-upgrade`; observe the notification and rows with no command run; restart without a release writes nothing |
-| OBJ-FLOOR | AC-FLOOR-READONLY | `isToolAllowedBelowToolchainFloor`, refusal in `tools/call` and `tasks/*`, grace (P6) | Ratchet test for the named tools; live call from a below-floor client after a test floor raise |
-| OBJ-FLOOR | AC-FLOOR-SCOPE | Verdict scoping (P3, P6) | Unit fixtures for undeclared, SDK-style User-Agent, and plain-http bearer |
-| OBJ-CONVERGE | AC-AUTHENTIC | Manifest signing at load (P1), `--expect-installation` + host pin verification in the updater (P2) | Unit tests for sign and verify, wrong key, missing signature and pin mismatch; live run with the agent-supplied device id |
-| OBJ-CONVERGE | AC-CONVERGE-ALL | `--from-portal`, origin check, report; BI-B9F359AC functions (P0, P2) | Updater tests with fixture homes on the Windows host and on Linux and macOS CI runners; one live run on this host |
-| OBJ-CONVERGE, OBJ-OBSERVE | AC-REPORT-VERIFY | Report to `record_surface_readiness`; connection-confirmed `current` (P2, P3) | Live: report recorded, copy flips to current only after reconnect |
-| OBJ-CONVERGE | AC-NO-RETIRED-DEFAULT | Manifest-sourced endpoints; host-writer fix (P2) | CI grep guard; host-writer test |
-| OBJ-GROK, OBJ-FLOOR | AC-GROK | `agent-client` kind, `issue_agent_client_token`, PAT-switch exemption (P5); floor rule (P6) | Token tests; updater test with a fixture Grok home; live Grok connection verdict |
-| OBJ-CAPABILITY | AC-CAPABILITY-SOURCE | `client-capabilities.json`, derived policy, rendered matrix (P8) | Generator and drift-check tests; policy unit tests unchanged in behaviour for today's rows |
-| OBJ-CAPABILITY | AC-CAPABILITY-DRIFT | Unverified-version flag, deduplicated intake, weekly scheduled task (P8) | Unit test on the flag; intake dedupe test; scheduled task registered and its first run's item observed on the dev install |
-| OBJ-CONVERGE | AC-USER-SCOPE-DUPLICATE | User/local-scope retirement and per-project pin in the updater (P2) | Updater test with a fixture `~/.claude.json`; live run on this host retires the 127.0.0.1:3000 user entry |
-| OBJ-BACKSTOP | AC-BACKSTOP | Node wrapper in the plugin `hooks.json` (P7) | Hook test with and without Python; live session in D:\DPF |
+Verification for each row is specified in the plan's Traceability table (single source).
+
+| Objective | Acceptance | Phase |
+|---|---|---|
+| OBJ-DELIVER | AC-MANIFEST | P1 |
+| OBJ-DELIVER | AC-SINGLE-VERSION | P1 |
+| OBJ-OBSERVE | AC-VERDICT | P3 |
+| OBJ-OBSERVE | AC-OBSERVE-STORE | P3 |
+| OBJ-OBSERVE, OBJ-FLOOR | AC-INSTRUCT | P3 |
+| OBJ-OBSERVE | AC-RELEASE-VISIBLE | P4 |
+| OBJ-FLOOR | AC-FLOOR-READONLY | P6 |
+| OBJ-FLOOR | AC-FLOOR-SCOPE | P3, P6 |
+| OBJ-CONVERGE | AC-AUTHENTIC | P1, P2 |
+| OBJ-CONVERGE | AC-CONVERGE-ALL | P0, P2 |
+| OBJ-CONVERGE, OBJ-OBSERVE | AC-REPORT-VERIFY | P2, P3 |
+| OBJ-CONVERGE | AC-NO-RETIRED-DEFAULT | P2 |
+| OBJ-GROK, OBJ-FLOOR | AC-GROK | P5, P6 |
+| OBJ-CAPABILITY | AC-CAPABILITY-SOURCE | P8 |
+| OBJ-CAPABILITY | AC-CAPABILITY-DRIFT | P8 |
+| OBJ-CONVERGE | AC-USER-SCOPE-DUPLICATE | P2 |
+| OBJ-BACKSTOP | AC-BACKSTOP | P7 |
 
 ## 11. Founder decisions
 
@@ -622,20 +602,4 @@ The governed design-spec review (Change Reviewer, AGT-WS-REVIEW) failed the desi
 
 An independent agent ran the advisory review on 2026-10-07 using `dpf-architecture-review`. All 15 findings are folded in:
 
-| # | Severity | Finding | Where folded |
-|---|---|---|---|
-| 1 | blocker | The quiescence write test is not a sound "is mutating" test, and `tasks/submit` bypasses it | §2, §5.2d (new default-deny test, `tasks/*`, ratchet), AC-FLOOR-READONLY |
-| 2 | blocker | `retiredAuthModes` contradicts `mcpClientBearerHeaderRequired`, and a PAT switch already exists | §2, §5.2 verdict, §5.2d/e, AC-FLOOR-SCOPE |
-| 3 | blocker | A per-install declaration is fragile (`DPF_MCP_URL` expansion, pin hook, plugin update) | §5.2 (baked into shipped descriptors; host from credential; pin preserves query; spike scope) |
-| 4 | major | User-Agent cannot identify managed clients | §5.2 verdict (credential provenance; User-Agent display-only) |
-| 5 | major | Row key and verdict storage not normalized; caller-chosen `surfaceKey` | §5.2b (observation model, computed verdict, server-derived key, closed sets) |
-| 6 | major | Attention in the swap runs in the old process | §5.2c (boot of new process, idempotent per digest) |
-| 7 | major | Tree digest vs archive hash contradiction | §5.1 (both fields, deterministic archive at build) |
-| 8 | major | Unauthenticated download then execute; no rate limiter on `/.well-known` | §5.1, §5.3 step 1, §12 |
-| 9 | major | Grok token: capability misuse, minting authority, PAT switch | §5.2e (DI-2399DE85DC6A) |
-| 10 | important | Manifest caching, unbounded `findMany`, per-process coalescing | §5.1, §5.2b |
-| 11 | important | Data stewardship misnamed | §5.2b stewardship bullet |
-| 12 | important | `writeMcpJsonToHost` re-creates the duplicate | §2, §5.3 step 5, AC-NO-RETIRED-DEFAULT |
-| 13 | minor | Overstated retirements; "every client" carrier claim; `invalid_target` | §8, §5.2 spike |
-| 14 | minor | Python-only hook is silent without Python | §5.4, AC-BACKSTOP |
-| 15 | minor | `/reload-plugins` is a user command | §5.2a, §5.3 ("restart the client") |
+Advisory review findings 1–15 (independent agent, 2026-10-07): 3 blockers (the floor's write test, the auth-floor rule contradicting `mcpClientBearerHeaderRequired`, fragile per-install declaration), 6 major (User-Agent identity, row normalization, attention in the old process, digest vs archive hash, unauthenticated download, Grok minting authority), 4 important (caching and paging, data stewardship, the host writer duplicate, plus scale) and 2 minor (overstated retirements, the Python-only hook). Each is resolved in the section it names; the full table is in this file's git history at commit 527bcce3.
