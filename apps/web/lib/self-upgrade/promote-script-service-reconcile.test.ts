@@ -21,7 +21,12 @@ import {
 
 /** What the reconcile step creates on an install that has nothing — derived from
  *  the script itself, so a catalog change moves the fixture and the assertion together. */
+let requiredServices: readonly string[] | undefined;
+
 function discoverRequiredServices(): string[] {
+  // The shipped catalog is immutable within this test module. Discover it once,
+  // while keeping each scenario's mutable array and promotion fixture separate.
+  if (requiredServices) return [...requiredServices];
   const first = makeScratch();
   try {
     const discover = runPromote({
@@ -34,7 +39,8 @@ function discoverRequiredServices(): string[] {
     expect(discover.status).toBe(0);
     const line = /step=service-reconcile-creating target=\S+ services=(\S+)/.exec(discover.stdout);
     expect(line, "expected the reconcile step to report what it creates").not.toBeNull();
-    return line![1].split(",");
+    requiredServices = Object.freeze(line![1].split(","));
+    return [...requiredServices];
   } finally {
     rmSync(first.root, { recursive: true, force: true });
   }

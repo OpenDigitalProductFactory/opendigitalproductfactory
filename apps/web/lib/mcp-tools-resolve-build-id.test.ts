@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Verifies resolveActiveBuildId / extractBuildIdHint semantics through the
 // saveBuildEvidence handler — the lightest-weight handler that exercises the
@@ -78,6 +78,13 @@ function fakeBuild(buildId: string) {
   };
 }
 
+let executeTool: typeof import("./mcp-tools").executeTool;
+
+beforeAll(async () => {
+  // Load the tool graph once; individual cases measure resolver behavior.
+  ({ executeTool } = await import("./mcp-tools"));
+});
+
 describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -104,7 +111,6 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
     // be consulted when the hint resolves.
     mockPrisma.featureBuild.findFirst.mockResolvedValue({ buildId: mostRecentBuildId });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "saveBuildEvidence",
       {
@@ -132,7 +138,6 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
       return Promise.resolve(null);
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "saveBuildEvidence",
       {
@@ -175,7 +180,6 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
     });
     mockPrisma.featureBuild.findFirst.mockResolvedValue({ buildId: ownedBuildId });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "saveBuildEvidence",
       {
@@ -202,7 +206,6 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
       return Promise.resolve(null);
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "saveBuildEvidence",
       {
@@ -264,7 +267,6 @@ describe("start_scout_research build resolution (BI-7FEAFD9A regression)", () =>
       },
     );
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "start_scout_research",
       {},
