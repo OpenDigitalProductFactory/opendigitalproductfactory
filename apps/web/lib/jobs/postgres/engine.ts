@@ -134,6 +134,12 @@ async function invoke(
 /** Execute one claimed run to its next durable state. */
 export async function executeRun(pool: Pool, fn: RegisteredFunction, run: JobRunRow, options: ExecuteOptions): Promise<RunOutcome> {
   const steps = await store.loadSteps(pool, run.id);
+  if (run.attempt >= run.maxAttempts) {
+    // Every attempt was lost to an expired lease (BI-6BB830E4): fail it once, as a final thrown error would.
+    const error = `lease_expired_exhausted: no attempt finished in ${run.maxAttempts} (${store.LEASE_EXPIRED_ERROR})`;
+    if (fn.options.onFailure) await runOnFailure(pool, fn, run, options, new Error(error), steps);
+    return (await store.failRun(pool, run.id, options.owner, error)) ? { kind: "failed", error } : { kind: "lost" };
+  }
   const result = await invoke(
     (step) => fn.handler({ event: run.event, step }),
     (park) => createStepTools({ pool, run, steps, prefix: "", options, park }),

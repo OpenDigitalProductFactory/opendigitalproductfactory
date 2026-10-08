@@ -17,6 +17,10 @@ vi.mock("../../api/auth-middleware.js", () => ({
   authenticateRequest: vi.fn(),
 }));
 
+// The v1 decision route must never execute (A1 characterisation below).
+vi.mock("@/lib/mcp-tools", () => ({ executeTool: vi.fn(), PLATFORM_TOOLS: [] }));
+vi.mock("@/lib/mcp-governed-execute", () => ({ governedExecuteTool: vi.fn() }));
+
 // ---------------------------------------------------------------------------
 // Imports
 // ---------------------------------------------------------------------------
@@ -364,5 +368,54 @@ describe("GET /api/v1/governance/decisions", () => {
 
     const res = await decisionsListHandler(getRequest("/api/v1/governance/decisions"));
     expect(res.status).toBe(401);
+  });
+});
+
+// Approval convergence A1 characterisation (BI-C8EC05C9): the v1 decision
+// route records the decision and executes nothing (FU-2). It stays unchanged.
+describe("POST /api/v1/governance/approvals/:id — convergence characterisation", () => {
+  it("approving a generic tool proposal records approved and runs nothing", async () => {
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const { governedExecuteTool } = await import("@/lib/mcp-governed-execute");
+    (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
+    (prisma.agentActionProposal.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "prop-1", proposalId: "prop-x", actionType: "contribute_to_hive", status: "proposed",
+      parameters: { title: "T" }, thread: { userId: "user-1" },
+    });
+    (prisma.agentActionProposal.update as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "prop-1", status: "approved" });
+
+    const res = await approvalDecideHandler(
+      postRequest("/api/v1/governance/approvals/prop-1", { decision: "approve" }),
+      { params: Promise.resolve({ id: "prop-1" }) },
+    );
+    expect(res.status).toBe(200);
+    expect(executeTool).not.toHaveBeenCalled();
+    expect(governedExecuteTool).not.toHaveBeenCalled();
+  });
+
+  it("rejecting a proactivity change persists a 7-day cooldown fact", async () => {
+    (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
+    (prisma.userFact.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (prisma.userFact.create as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (prisma.agentActionProposal.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "prop-1", proposalId: "AP-PROACTIVE", actionType: "propose_proactivity_change", status: "proposed",
+      parameters: {
+        kind: "proactivity-change", agentId: "dispatcher", activityFamily: "field-dispatch-appointment",
+        currentLevel: "balanced", proposedLevel: "assertive", scope: "activity-family", rationale: "r",
+        evidenceRefs: [{ kind: "dispatch-event", id: "late" }], spendImpact: "s", authorityImpact: "a",
+      },
+      thread: { userId: "user-1" },
+    });
+    (prisma.agentActionProposal.update as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "prop-1", status: "rejected" });
+
+    const res = await approvalDecideHandler(
+      postRequest("/api/v1/governance/approvals/prop-1", { decision: "reject" }),
+      { params: Promise.resolve({ id: "prop-1" }) },
+    );
+    expect(res.status).toBe(200);
+    const value = JSON.parse((prisma.userFact.create as ReturnType<typeof vi.fn>).mock.calls[0][0].data.value) as {
+      dismissedAt: string; cooldownUntil: string;
+    };
+    expect(new Date(value.cooldownUntil).getTime() - new Date(value.dismissedAt).getTime()).toBe(7 * 24 * 60 * 60 * 1000);
   });
 });

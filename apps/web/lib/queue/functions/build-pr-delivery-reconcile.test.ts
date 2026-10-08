@@ -47,6 +47,7 @@ function room(overrides: Record<string, unknown>) {
     repositoryFullName: "o/r",
     pullRequestNumber: 9,
     pullRequestUrl: "https://github.com/o/r/pull/9",
+    headSha: "sha1",
     scopeClaims: [],
     workspaceState: {},
     updatedAt: new Date("2026-10-06T00:00:00Z"),
@@ -112,6 +113,20 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
       dedupeKey: "WC-CODEX:follow-through:repair-propose:sha1",
     }));
     // Nothing was merged, pushed or re-run.
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not let a stale PR observation overwrite or actuate a newly adopted head", async () => {
+    const currentHead = "b".repeat(40);
+    const staleHead = "a".repeat(40);
+    mocks.findMany.mockResolvedValue([room({ id: "re-adopted", headSha: currentHead })]);
+    mocks.observe.mockResolvedValue({ ...observation([], "CLEAN"), headSha: staleHead });
+
+    const result = await runBuildPrDeliveryReconcile();
+
+    expect(mocks.findMany.mock.calls[0]?.[0]?.select).toMatchObject({ headSha: true });
+    expect(result).toMatchObject({ observed: 1, actuated: 0 });
+    expect(mocks.updateMany).not.toHaveBeenCalled();
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 

@@ -53,6 +53,21 @@ const evidenceWriterSchema = {
 };
 
 describe("narrowInitiativeReviewTools", () => {
+  it("binds spec approval to current server classification without changing task identity", () => {
+    const review = { ...binding, gate: "spec-approval", writerToolName: "record_initiative_design_review" };
+    const before = JSON.stringify(review);
+    const writer: ToolDefinition = {
+      name: review.writerToolName, description: "Review", requiredCapability: "manage_backlog",
+      inputSchema: { type: "object", properties: { profile: { type: "string", enum: ["fix", "feature"] } } },
+    };
+    const result = narrowInitiativeReviewTools({ tools: [writer], deferredTools: [],
+      toolsForProvider: [{ type: "function", function: { name: writer.name, parameters: writer.inputSchema } }],
+    }, [writer.name], review, undefined, "feature");
+    expect(result.tools[0]?.inputSchema).toMatchObject({ properties: { profile: { enum: ["feature"] } } });
+    expect(result.toolsForProvider[0]).toMatchObject({ function: { parameters: { properties: { profile: { enum: ["feature"] } } } } });
+    expect(JSON.stringify(review)).toBe(before);
+  });
+
   it("exposes only the complete objective-mapping proposal on the bound evidence writer", () => {
     const reader: ToolDefinition = {
       name: "read_source_at_version",

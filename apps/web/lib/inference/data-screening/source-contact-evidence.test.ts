@@ -8,6 +8,44 @@ function contacts(content: string) {
 }
 
 describe("source quantities and dependency references are not customer contacts", () => {
+  const gitFixture = 'git(["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "fixture"]);';
+
+  it("recognizes synthetic Git configuration in the observed review diff", () => {
+    expect(contacts(gitFixture)).toEqual([]);
+    const result = screenInferencePayload({
+      systemPrompt: "Review the committed source change.",
+      messages: [{ role: "user", content: `const fixture = () => { ${gitFixture} };` }],
+      taskType: "build-review",
+      routeContext: { sensitivity: "internal", allowedProviders: ["openai", "local"] },
+    });
+    expect(result.receipt.classifiedDataClasses).toContain("source-code");
+    expect(result.receipt.classifiedDataClasses).not.toContain("customer-records");
+    expect(result.routeContext.allowedProviders).toContain("openai");
+    expect(result.routeContext.residencyPolicy).not.toBe("local_only");
+  });
+
+  it.each([
+    '"user.email=jane@example.invalid"',
+    '"user.email=test@example.invalid.attacker.com"',
+    '"user.email=test@company.com"',
+    '"customer.email=test@example.invalid"',
+    '"user.email=test@example.invalid+suffix"',
+    '"user.email=test@example.invalid" // customer jane@company.com',
+    '"user.email=test@example.invalid" // call 4155550132',
+    'Customer: test@example.invalid',
+  ])("retains contact evidence outside the synthetic Git fixture span: %s", (line) => {
+    expect(contacts(line)).toHaveLength(1);
+  });
+
+  it("does not widen an explicit local boundary for a Git fixture", () => {
+    const result = screenInferencePayload({
+      systemPrompt: "",
+      messages: [{ role: "user", content: gitFixture }],
+      routeContext: { sensitivity: "internal", residencyPolicy: "local_only" },
+    });
+    expect(result.routeContext.residencyPolicy).toBe("local_only");
+  });
+
   it.each([
     '     "memoryBytes": 17179869184,',
     '+    "admissionReserveBytes": 17179869184,',

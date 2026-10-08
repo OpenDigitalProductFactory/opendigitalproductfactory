@@ -100,3 +100,46 @@ describe("leave decision proposal", () => {
     expect(persistence.createProposalBundle).not.toHaveBeenCalled();
   });
 });
+
+// Approval convergence A1 characterisation (BI-C8EC05C9), creation site S5.
+describe("leave decision proposal — convergence characterisation", () => {
+  function persistence(): LeaveDecisionProposalPersistence {
+    return {
+      findExisting: vi.fn().mockResolvedValue(null),
+      ensureThread: vi.fn().mockResolvedValue({ id: "thread-1" }),
+      createProposalBundle: vi.fn().mockResolvedValue({ proposalId: "x", status: "proposed" }),
+    };
+  }
+
+  it("writes the 'Time-off recommendation' assistant message in the same bundle as the proposal", async () => {
+    const store = persistence();
+    await proposeLeaveDecision({ decision, userId: "user-1", agentId: "time-off-advisor", taskRunId: "TR-1", persistence: store });
+    expect(store.createProposalBundle).toHaveBeenCalledWith({
+      proposalId: "leave-decision:LR-1:DI-1",
+      threadId: "thread-1",
+      taskRunId: "TR-1",
+      agentId: "time-off-advisor",
+      actionType: "leave.decide",
+      parameters: expect.objectContaining({ requestId: "LR-1", recommendation: "approve", interactionId: "DI-1", guardReasons: [] }),
+      messageContent: "Time-off recommendation: approve. Approve under the recorded staffing stance.",
+      status: "proposed",
+      leaveRequestUpdate: { requestId: "LR-1", decisionInteractionId: "DI-1" },
+    });
+  });
+
+  it("a guard-only recommendation has no interaction: keyed by the guard, links nothing", async () => {
+    const store = persistence();
+    const guarded = {
+      ...decision, action: "escalate" as const, interactionId: null, orgProfileSelected: false,
+      operatorMessage: "Escalated to a human approver: Coverage would breach.", guardReasons: ["Coverage would breach."],
+    };
+    await proposeLeaveDecision({ decision: guarded, userId: "user-1", persistence: store });
+    expect(store.findExisting).toHaveBeenCalledWith("leave-decision:LR-1:guard-escalate");
+    expect(store.createProposalBundle).toHaveBeenCalledWith(expect.objectContaining({
+      proposalId: "leave-decision:LR-1:guard-escalate",
+      agentId: "time-off-advisor",
+      parameters: expect.objectContaining({ recommendation: "escalate", interactionId: null, guardReasons: ["Coverage would breach."] }),
+      leaveRequestUpdate: { requestId: "LR-1", decisionInteractionId: null },
+    }));
+  });
+});

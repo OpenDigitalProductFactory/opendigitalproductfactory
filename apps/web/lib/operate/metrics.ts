@@ -486,3 +486,31 @@ export const gateRunDispositionsTotal = new Counter({
   labelNames: ["gate_kind", "disposition", "result_class"] as const,
   registers: [metricsRegistry],
 });
+
+// ─── Operator journey timing (BI-BD0B0DCC, EP-B95469DB) ──────────────────────
+// Fed by POST /api/telemetry/journeys from the browser. Labels come only from
+// the closed vocabulary in lib/telemetry/journey-vocabulary.ts.
+
+export const journeyDurationSeconds = new Histogram({
+  name: "dpf_journey_duration_seconds",
+  help: "Operator journey time from the interaction to the first painted frame (phase=total), and the serving request's share (phase=server)",
+  labelNames: ["journey", "phase"] as const,
+  buckets: [0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2.5, 4, 6, 10, 20],
+  registers: [metricsRegistry],
+});
+
+export const webVitalSeconds = new Histogram({
+  name: "dpf_web_vital_seconds",
+  help: "Core Web Vitals measured in the browser (LCP, INP, FCP, TTFB) by top-level portal section",
+  labelNames: ["metric", "section"] as const,
+  buckets: [0.05, 0.1, 0.2, 0.3, 0.5, 0.8, 1, 1.8, 2.5, 4, 6, 10],
+  registers: [metricsRegistry],
+});
+
+export const webVitalCls = new Histogram({
+  name: "dpf_web_vital_cls",
+  help: "Cumulative Layout Shift per page view by top-level portal section",
+  labelNames: ["section"] as const,
+  buckets: [0.01, 0.025, 0.05, 0.1, 0.15, 0.25, 0.5, 1],
+  registers: [metricsRegistry],
+});

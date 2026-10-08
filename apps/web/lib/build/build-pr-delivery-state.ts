@@ -120,3 +120,13 @@ export function writeBuildPrDeliveryState(
   }
   return root;
 }
+
+/** Retire delivery state when a Workroom advances to a different authored head. */
+export function clearBuildPrDeliveryState(workspaceState: unknown): JsonObject {
+  const { prDelivery: _current, ...root } = asObject(workspaceState);
+  if (root.buildStudio !== undefined) {
+    const { delivery: _legacy, ...buildStudio } = asObject(root.buildStudio);
+    root.buildStudio = buildStudio;
+  }
+  return root;
+}

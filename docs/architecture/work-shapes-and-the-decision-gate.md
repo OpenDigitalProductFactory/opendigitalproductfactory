@@ -129,9 +129,23 @@ normalization rather than stored, because a claim that can never resolve would l
 looking declared and behaving inert — the exact failure this contract exists to end.
 
 The drive never executes a stage whose accountable principal is a `role:` or `person:`
-reference, and never executes a `governed-decision` advance, at any posture. Those become
-attention for the named principal. Sending outward, moving money, rotating a credential,
-merging a change, and changing authority are declared that way in every standing shape.
+reference, at any posture, and executes a `governed-decision` advance only when its
+principal is an `agent:` and the room's action boundary is `preauthorized` (EP-4614F35E).
+Everything else becomes attention for the named principal. Sending outward, moving money,
+rotating a credential, merging a change, and changing authority are declared with `role:`
+principals in every standing shape, so they always reach a person.
+
+**A readiness review stage is bound to its reviewer, never its author (BI-2C8750FC).** A
+delivery stage that leaves a `spec-approval-receipt` or `plan-review-receipt` is where a
+design-spec, spec-approval or plan-review is owed. When the drive stops there, it reads the
+independent reviewer route the readiness recovery issues and rebinds the stage for that
+tick: person-authored work at `preauthorized` gets `agent:<eligible reviewer>` and is
+dispatched as the exact server-issued reviewer packet through the BI-A835D300 runner (no
+generic scheduled task); agent-authored work, or a room below `preauthorized`, gets
+`role:<gate role>`, so attention goes to the reviewer role. With no independent route, an
+unknown author, or a reviewer agent that is the authoring agent, nothing is bound. The
+registry shape is unchanged. Design: `docs/superpowers/specs/2026-09-02-proactive-review-drive-design.md`
+("As built — review stages").
 
 Two bounded exceptions bind a non-governed `role:` stage to an agent; neither ever reaches a
 `governed-decision` advance (`boundStagePrincipal`, `drive-plan-stage.ts`). A room may carry
@@ -877,6 +891,19 @@ executor records evidence or a writeback for the dispatched stage. A room with
 no owner user for its agent stage concludes as blocked, and clears when an owner
 user is bound. A finished cycle and a lease held by another worker conclude as
 in motion.
+
+### Every stage is a queue
+
+Since EP-B70E718D F2 (BI-4ADFFEDB), the drive reports where each room's time goes. When it writes a state-change row, it also emits queue transitions into the shared flow telemetry, under `wr:<shape>@<version>:<stage>`:
+
+- A room entering a stage is enqueued.
+- Work starting is a start.
+- Waiting on a person, or being blocked, is a hold. The hold carries its cause, for example `conformance_pause`.
+- Leaving the stage finishes it.
+
+The hourly queue rollup turns those transitions into per-stage dwell, touch time, wait, held time, queue depth, throughput and flow efficiency. These are the same numbers every other queue reports, so queue health, Prometheus and the coworker queue tools read stages with no extra wiring.
+
+The drive log from before the change is replayed once, so stage trends start with history.
 
 ## A named governed writer must be attached, not discovered
 

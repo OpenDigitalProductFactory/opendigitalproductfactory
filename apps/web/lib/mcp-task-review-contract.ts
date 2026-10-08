@@ -210,6 +210,7 @@ export function narrowInitiativeReviewTools<T extends {
   requiredNames: readonly string[],
   binding: InitiativeReviewBinding | undefined,
   prompt?: string,
+  authoritativeProfile?: string | null,
 ): T {
   if (!binding) return input;
   const exactNames = new Set(requiredNames);
@@ -245,6 +246,9 @@ export function narrowInitiativeReviewTools<T extends {
     const narrowedProperties = Object.fromEntries(
       writerPropertyNames.flatMap((name) => name in properties ? [[name, properties[name]]] : []),
     );
+    if (binding.gate === "spec-approval" && authoritativeProfile) {
+      narrowedProperties["profile"] = { type: "string", enum: [authoritativeProfile] };
+    }
     const objectiveMappings = narrowedProperties["objectiveMappings"];
     const objectiveMappingsSchema = objectiveMappings && typeof objectiveMappings === "object" && !Array.isArray(objectiveMappings)
       ? objectiveMappings as Record<string, unknown>

@@ -1,5 +1,8 @@
 # Host-native Edge Node installation for Windows. Docker Desktop does not
-# expose the Windows host multicast interfaces to Linux containers.
+# expose the Windows host multicast interfaces to Linux containers, and host
+# upkeep (the operator-approved Docker VM restart, BI-28EFE18A) must run
+# outside the VM it restarts. Every install gets the node; -Role host-upkeep
+# keeps it to heartbeat and host upkeep when edge features are not enabled.
 
 function Get-DPFNativeEdgeReleaseUri {
     param([string]$Version, [Parameter(Mandatory)][string]$Asset)
@@ -12,9 +15,12 @@ function Get-DPFNativeEdgeReleaseUri {
 function Install-DPFNativeEdgeNode {
     param(
         [Parameter(Mandatory)][string]$InstallDir,
-        [Parameter(Mandatory)][string]$BootstrapToken,
+        # Empty when the node is already enrolled: its identity lives in its
+        # state directory and no new one-time token is minted.
+        [Parameter(Mandatory)][AllowEmptyString()][string]$BootstrapToken,
         [string]$AuthorityUrl = $env:DPF_LAN_AUTHORITY_URL,
-        [string]$Version = "latest"
+        [string]$Version = "latest",
+        [ValidateSet("full", "host-upkeep")][string]$Role = "full"
     )
 
     if (-not $AuthorityUrl) {
@@ -141,6 +147,7 @@ function Install-DPFNativeEdgeNode {
 `$env:DPF_INSTALL_MODE = 'native'
 `$env:DPF_EDGE_STATE_DIR = '$escapedState'
 `$env:DPF_AUTOSTART_TASK_NAME = 'DPF-AutoStart'
+`$env:DPF_EDGE_ROLE = '$Role'
 $organizationEnvironment
 $actionEnvironment& '$escapedBinary' *>> '$($logDir.Replace("'", "''"))\edge-node.log'
 "@ | Set-Content -LiteralPath $runner -Encoding ASCII

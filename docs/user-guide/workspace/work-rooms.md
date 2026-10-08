@@ -8,6 +8,10 @@ relatedCode:
   - apps/web/components/workspace/WorkCaseAttentionLens.tsx
   - apps/web/components/workspace/WorkCaseDetailView.tsx
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
+  - apps/web/components/workspace/workroom/WorkroomFlowMap.tsx
+  - apps/web/components/ops/workrooms/AreaFlowPanel.tsx
+  - apps/web/components/workspace-home/MainStreamHero.tsx
+  - apps/web/lib/work-management/room-ai-spend.ts
   - apps/web/components/workspace/workroom/WorkroomParticipants.tsx
   - apps/web/lib/work-management/coworker-engagement-case-projection.ts
   - apps/web/lib/work-management/room-channel-continuity.ts
@@ -141,6 +145,65 @@ pauses the affected lifecycle transition before work is persisted. An AI coordin
 the required job-specific qualification and delegated authority. When either is unknown, the room
 asks for attention instead of assuming eligibility. Rooms without a declared activity shape keep
 their legacy behavior and the panel reports oversight as not applicable.
+
+### Reading the flow map
+
+When a room has a work shape, the **Shape** view opens with a picture of it, above the step list:
+
+- **Lanes** show who does each step: AI coworkers, people, and outside touchpoints (a step that talks with a customer or supplier).
+- **Steps** are boxes, left to right. A step's border and mark show its state:
+  - **▶** being worked
+  - **◷** waiting on a person
+  - **!** blocked, with the reason (for example *conformance pause*)
+  - **✓** done
+- **A diamond** after a step means a person decides the way out of it.
+- **Under each step** is how long this room has spent there, next to the shape's **typical** time over the last four weeks. A step well over its typical time is marked **slow**. Until a step has finished at least five times, it says *not enough history yet* instead of showing a number.
+- **The line above the map** describes the same shape in words: what starts it, its steps, who decides, and how it ends.
+
+Choose a step on the map to open the same inspection as the step list. A shape that runs steps in parallel is listed as steps, not drawn as a line, until the map can draw the branches exactly.
+
+### How work flows in each area
+
+Each area's **Work** view opens with the same five measures, so the four portfolios can be compared:
+
+| Measure | What it means |
+|---|---|
+| **In flow now** | Rooms being worked, waiting on a person, or blocked. |
+| **Flow time** | How long a run takes, from its first step to its stop. This is the median over the last four weeks, with the change from the four weeks before and a weekly trend line. |
+| **Flow efficiency** | The share of step time spent working rather than waiting. |
+| **Finished per week** | Runs that reached a success stop. |
+| **Cost** | Points in flight, points delivered this quarter, and the AI spend on this area's rooms over the last four weeks. AI spend is counted only from conversations and dispatched work that name a room, so it is never guessed. |
+
+Below the measures:
+
+- **A bar** shows the mix of work in flow: features, defects, risks and debt.
+- **A table** lists the area's work shapes. For each one it shows how many rooms are in flow and where most of them wait.
+
+Choose a shape to see it drawn across all of its rooms:
+
+- Each step shows how many rooms are there and how many are waiting.
+- A version picker lets you compare the same shape before and after a change.
+- Choose a step to list the rooms at that step, then open any room.
+
+**Products** (`/portfolio`) shows the four portfolios side by side on the same measures. Rooms with no portfolio are shown in their own **Unplaced** column and never counted in another.
+
+### The main value stream on your home page
+
+Below **What needs you**, the home page shows your business's **main value stream**. This is the work of the portfolio your business type puts first. For a repair shop it might be the jobs you deliver; for a software business it is the changes you build and release.
+
+The panel shows four things:
+
+- **One sentence** naming where the most work is held right now, and why. For example: *5 rooms are held at merge in Small change (waiting on a person).*
+- **Four numbers**: in flow now, flow time, flow efficiency, and finished per week.
+- **The busiest work shape**, drawn live.
+
+Choose a step on the map to open that step in the area's Work view, where you can see the rooms waiting there.
+
+### When work keeps piling up
+
+Every morning the platform reviews where rooms are held. When three or more rooms wait at the same step of the same shape, the platform notes the pile as an improvement signal.
+
+A pile that is still there on later reviews is filed once in the backlog, for its owner to fix. The backlog item names the step, the shape and the reason. A pile that clears on its own is never filed. This keeps the backlog to problems that persist.
 
 ## Access and Other Channels
 

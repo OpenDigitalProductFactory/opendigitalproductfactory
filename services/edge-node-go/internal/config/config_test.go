@@ -219,15 +219,27 @@ func TestResolvePlatform_mapsWindowsToWin32(t *testing.T) {
 
 // BI-F8F8C383: only a native Windows agent sits outside the Docker VM it would
 // restart, so only that agent offers the restart.
-func TestDockerVmRestartEnabledOnlyForTheNativeWindowsAgent(t *testing.T) {
+func TestHostUpkeepOnlyRoleIsExplicit(t *testing.T) {
+	if (&Config{EdgeRole: "host-upkeep"}).HostUpkeepOnly() != true {
+		t.Fatal("host-upkeep role must be host-upkeep only")
+	}
+	for _, role := range []string{"", "full", "anything"} {
+		if (&Config{EdgeRole: role}).HostUpkeepOnly() {
+			t.Fatalf("role %q must keep full edge behaviour", role)
+		}
+	}
+}
+
+func TestDockerVmRestartEnabledForEveryNativeAgent(t *testing.T) {
 	cases := []struct {
 		platform, mode string
 		want           bool
 	}{
 		{"win32", "native", true},
+		{"darwin", "native", true},
+		{"linux", "native", true},
 		{"win32", "container-vm", false},
-		{"darwin", "native", false},
-		{"linux", "native", false},
+		{"linux", "container-host", false},
 	}
 	for _, c := range cases {
 		cfg := &Config{Platform: c.platform, InstallMode: c.mode}

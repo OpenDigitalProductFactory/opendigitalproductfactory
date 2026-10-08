@@ -241,3 +241,35 @@ describe("buildUserAwareFieldDispatchNotificationProposals", () => {
     expect(mocks.prisma.agentActionProposal.create).not.toHaveBeenCalled();
   });
 });
+
+// Approval convergence A1 characterisation (BI-C8EC05C9), creation site S4.
+// Nothing in production calls the persistence function, and the action type it
+// writes is not a registered tool, so approving such a row through the generic
+// approveProposal branch returns "Unknown tool" and the row goes to `failed`
+// (that branch is pinned in proposals.characterization.test.ts). PR-B deletes
+// the persistence function and this case with it.
+describe("S4 — field dispatch proposals (characterisation)", () => {
+  it("has no production caller and writes a non-tool action type", async () => {
+    const { readFileSync, readdirSync, statSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const callers: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        if (name === "node_modules" || name.startsWith(".")) continue;
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)
+          && readFileSync(path, "utf8").includes("proposeUserAwareFieldDispatchNotifications(")) {
+          callers.push(path.slice(webRoot.length + 1));
+        }
+      }
+    };
+    for (const root of ["app", "lib", "components"]) walk(join(webRoot, root));
+    expect(callers).toEqual(["lib/proactivity/field-dispatch-runtime.server.ts"]);
+
+    const { FIELD_DISPATCH_CUSTOMER_NOTIFICATION_ACTION } = await import("./field-dispatch-runtime");
+    expect(FIELD_DISPATCH_CUSTOMER_NOTIFICATION_ACTION).toBe("field_dispatch_customer_notification");
+  });
+});

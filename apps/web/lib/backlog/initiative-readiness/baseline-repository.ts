@@ -7,7 +7,7 @@ import { writeDocumentBlob } from "@/lib/documents/blob-storage";
 import { resolveInitiativeArtifact } from "./artifact-resolver";
 import type { InitiativeScopeManifestResult } from "./baseline-manifest";
 import { diffInitiativeScopeManifests, parseInitiativeScopeManifest } from "./baseline-manifest";
-import { deriveAuthoritativeReadinessProfile } from "./profiles";
+import { deriveReviewerProfile } from "./reviewer-profile";
 import type {
   InitiativeArtifactRef,
   InitiativeAuthoritySnapshot,
@@ -363,24 +363,11 @@ export async function recordInitiativeSpecApproval(args: {
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
       select: { payload: true },
     });
-    const recordedProfiles = [...priorRows, ...classificationRows].flatMap(({ payload }) => {
-      if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
-      const row = payload as Record<string, unknown>;
-      const profile = row.profile ?? row.selectedProfile;
-      return (["doc-only", "fix", "feature", "cross-domain", "archetype"] as const).includes(profile as never)
-        ? [profile as ReadinessProfile]
-        : [];
-    });
-    const authoritativeProfile = deriveAuthoritativeReadinessProfile({
-      ...lockedItem,
-      activeBuildKind: lockedItem.activeBuild?.kind,
-      recordedProfiles: [
-        ...recordedProfiles,
-        ...lockedItem.featureBuilds.flatMap((build) => build.kind === "fix" ? ["fix" as const] : build.kind === "feature" ? ["feature" as const] : []),
-      ],
-    });
+    const authoritativeProfile = deriveReviewerProfile(lockedItem, [...priorRows, ...classificationRows]);
     if (!authoritativeProfile || authoritativeProfile !== args.profile) {
-      return { ok: false, code: "CLASSIFICATION_REQUIRED", error: "Requested profile does not match the strongest authoritative classification signal." };
+      return { ok: false, code: "CLASSIFICATION_REQUIRED", error: authoritativeProfile
+        ? `Requested profile does not match the strongest authoritative classification signal. Expected profile: ${authoritativeProfile}. Correct the profile and resume the same review.`
+        : "Authoritative classification is unavailable. Resolve the item's structured classification before resuming this review." };
     }
 
     if (args.expectedCurrentBaselineId) {

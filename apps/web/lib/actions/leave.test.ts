@@ -137,3 +137,56 @@ describe("rejectLeaveRequest — governance audit", () => {
     );
   });
 });
+
+// Approval convergence A1 characterisation (BI-C8EC05C9), creation site S5:
+// the manager's own decision, authority first, then balance, status, settle
+// and audit. PR-B adds the DecisionInteraction resolution; these stay.
+describe("leave decision — convergence characterisation", () => {
+  beforeEach(() => {
+    vi.mocked(authorizeApprovalDecision).mockResolvedValue({ ok: true, approverEmployeeId: "emp-approver" } as never);
+  });
+
+  it("approve: authority, then balance, then status, then settle, then audit — in that order", async () => {
+    await approveLeaveRequest("LR-ABCD1234");
+    const order = [
+      vi.mocked(authorizeApprovalDecision).mock.invocationCallOrder[0],
+      vi.mocked(prisma.leaveBalance.upsert).mock.invocationCallOrder[0],
+      vi.mocked(prisma.leaveRequest.update).mock.invocationCallOrder[0],
+      vi.mocked(prisma.agentActionProposal.updateMany).mock.invocationCallOrder[0],
+      vi.mocked(createAuthorizationDecisionLog).mock.invocationCallOrder[0],
+    ];
+    expect([...order].sort((a, b) => a! - b!)).toEqual(order);
+    expect(authorizeApprovalDecision).toHaveBeenCalledWith("user-approver", "emp-subject", "leave");
+    expect(prisma.leaveBalance.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      update: { used: { increment: 3 } },
+      create: expect.objectContaining({ employeeProfileId: "emp-subject", leaveType: "annual", year: 2026, allocated: 0, used: 3 }),
+    }));
+    expect(prisma.leaveRequest.update).toHaveBeenCalledWith({
+      where: { requestId: "LR-ABCD1234" },
+      data: { status: "approved", approverEmployeeId: "emp-approver", approvedAt: expect.any(Date) },
+    });
+    expect(prisma.agentActionProposal.updateMany).toHaveBeenCalledWith({
+      where: { actionType: "leave.decide", status: "proposed", parameters: { path: ["requestId"], equals: "LR-ABCD1234" } },
+      data: { status: "executed", decidedAt: expect.any(Date), decidedById: "user-approver", executedAt: expect.any(Date), resultEntityId: "LR-ABCD1234" },
+    });
+  });
+
+  it("reject: no balance change; settles the proposal rejected with no execution fields", async () => {
+    await rejectLeaveRequest("LR-ABCD1234", "coverage");
+    expect(prisma.leaveBalance.upsert).not.toHaveBeenCalled();
+    expect(prisma.leaveRequest.update).toHaveBeenCalledWith({
+      where: { requestId: "LR-ABCD1234" },
+      data: { status: "rejected", approverEmployeeId: "emp-approver", rejectionReason: "coverage" },
+    });
+    expect(prisma.agentActionProposal.updateMany).toHaveBeenCalledWith({
+      where: { actionType: "leave.decide", status: "proposed", parameters: { path: ["requestId"], equals: "LR-ABCD1234" } },
+      data: { status: "rejected", decidedAt: expect.any(Date), decidedById: "user-approver" },
+    });
+  });
+
+  it("a decided request is refused before the authority check", async () => {
+    vi.mocked(prisma.leaveRequest.findUnique).mockResolvedValue({ ...pendingRequest, status: "approved" } as never);
+    await expect(approveLeaveRequest("LR-ABCD1234")).resolves.toEqual({ success: false, error: "Request already decided" });
+    expect(authorizeApprovalDecision).not.toHaveBeenCalled();
+  });
+});

@@ -18,7 +18,9 @@ async function requireManagePlatform(): Promise<string> {
 export async function saveGovernedBacklogSettings(input: {
   enabled: boolean;
   dailyCap?: number | null;
-}): Promise<ActionResult<{ enabled: boolean; dailyCap: number | null }>> {
+  /** BI-9AC1F99B: the capacity drain switch. Omitted keeps the stored value. */
+  capacityDrainEnabled?: boolean | null;
+}): Promise<ActionResult<{ enabled: boolean; dailyCap: number | null; capacityDrainEnabled: boolean | null }>> {
   const userId = await requireManagePlatform();
   const enabled = input.enabled === true;
   // The cap column is NOT NULL (default 3): an omitted cap keeps the stored one.
@@ -31,11 +33,14 @@ export async function saveGovernedBacklogSettings(input: {
     dailyCap = parsed;
   }
   const capPatch = dailyCap == null ? {} : { backlogTeeUpDailyCap: dailyCap };
+  const capacityDrainEnabled = typeof input.capacityDrainEnabled === "boolean" ? input.capacityDrainEnabled : null;
+  const drainPatch = capacityDrainEnabled == null ? {} : { capacityDrainEnabled };
   await prisma.platformDevConfig.upsert({
     where: { id: "singleton" },
     update: {
       governedBacklogEnabled: enabled,
       ...capPatch,
+      ...drainPatch,
       configuredAt: new Date(),
       configuredById: userId,
     },
@@ -43,12 +48,13 @@ export async function saveGovernedBacklogSettings(input: {
       id: "singleton",
       governedBacklogEnabled: enabled,
       ...capPatch,
+      ...drainPatch,
       configuredAt: new Date(),
       configuredById: userId,
     },
   });
   revalidatePath("/admin/platform-development");
   revalidatePath("/build");
-  return ok({ enabled, dailyCap });
+  return ok({ enabled, dailyCap, capacityDrainEnabled });
 }
 

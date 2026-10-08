@@ -97,6 +97,11 @@ export type CoworkerAuthorityInput = {
     /** A Work Case may elevate an otherwise ordinary mutation to consequential. */
     workCaseConsequential?: boolean;
     requiresDelegationChain?: boolean;
+    /**
+     * BI-C8EC05C9: server-set propose boundary. Escalation input only, never
+     * part of the approval binding, so no existing approval stops matching.
+     */
+    proposeBoundary?: boolean;
   };
   /**
    * BI-6B3DA9DD: what can decide this action without a person, server-resolved.
@@ -154,6 +159,11 @@ export type CoworkerAuthorityInput = {
      * re-check at execution (approval-lifetime.ts, BI-0012E6CA).
      */
     approvedAt?: Date | null;
+    /**
+     * BI-C8EC05C9: the approved envelope was raised under a propose boundary.
+     * Its TaskRun was never paused, so the gate must not resume it.
+     */
+    proposeBoundary?: boolean;
   } | null;
   now?: Date;
   /**
@@ -341,6 +351,7 @@ function escalationFor(input: CoworkerAuthorityInput): EscalationDecision {
     },
     dataPolicy: { sensitivity: input.dataPolicy.sensitivity },
     steering: input.steering ?? "none",
+    ...(input.action.proposeBoundary === true ? { proposeBoundary: true } : {}),
   });
 }
 

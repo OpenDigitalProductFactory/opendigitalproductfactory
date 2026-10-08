@@ -9,6 +9,8 @@ export const GOVERNED_AUDIT_PARAMETER_KEYS = new Set([
   "_surface",
   "_takAlignment",
   "_takPrecondition",
+  // The platform approval-resume marker (approval-resume-marker.ts, BI-C8EC05C9).
+  "_approvalResume",
 ]);
 
 const KNOWN_DECISIONS = ["pass", "fail", "not-applicable"] as const;

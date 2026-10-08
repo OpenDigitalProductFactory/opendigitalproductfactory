@@ -300,6 +300,35 @@ describe.skipIf(!DATABASE_URL)("Postgres durable-job engine (real database)", ()
     expect(calls).toEqual({ first: 1, second: 2 });
   });
 
+  it("counts a lost lease as an attempt and fails a run that kills every worker, through onFailure (BI-6BB830E4)", async () => {
+    const failures: string[] = [];
+    const fn = define(
+      {
+        id: "worker-killer",
+        retries: 1,
+        triggers: [{ event: "t/kill" }],
+        onFailure: async ({ error }: { error: Error }) => { failures.push(error.message); },
+      } as never,
+      async () => new Promise(() => {}), // never settles: the worker "dies" holding the lease
+    );
+    await send({ name: "t/kill" });
+    await store.fanOutEvents(pool, [{ functionKey: fn.id, maxAttempts: maxAttemptsFor(fn), eventNames: fn.eventNames, cancelOn: [] }]);
+    for (let lost = 1; lost <= maxAttemptsFor(fn); lost++) {
+      const [claimed] = await store.claimRuns(pool, { owner: `dead-${lost}`, leaseMs: 60_000, limit: 1, lanes: () => [], functionIds: [fn.id] });
+      void executeRun(pool, fn, claimed!, { owner: `dead-${lost}`, leaseMs: 60_000 });
+      await new Promise((r) => setTimeout(r, 20));
+      await pool.query(`UPDATE "JobRun" SET "leaseExpiresAt" = now() - interval '1 second' WHERE status = 'running'`);
+      expect(await store.recoverExpiredLeases(pool)).toBe(1);
+      expect((await runRow("worker-killer"))[0]).toMatchObject({ status: "queued", attempt: lost, error: store.LEASE_EXPIRED_ERROR });
+    }
+    await worker([fn]).drain();
+    const [run] = await runRow("worker-killer");
+    expect(run.status).toBe("failed");
+    expect(run.error).toMatch(/^lease_expired_exhausted/);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/^lease_expired_exhausted/);
+  });
+
   it("resumes a run parked mid-sleep or mid-wait under a new worker after a restart (AC-M3-LEASE)", async () => {
     let stepRuns = 0;
     const fn = define({ id: "restart", triggers: [{ event: "t/restart" }] }, async ({ step }: never) => {

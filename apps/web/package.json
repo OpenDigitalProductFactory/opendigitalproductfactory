@@ -63,7 +63,7 @@
     "mailparser": "^3.9.31",
     "maplibre-gl": "6.11.2",
     "markdown-it": "^14.3.2",
-    "next": "^16.3.6",
+    "next": "^16.3.8",
     "next-auth": "5.0.0-beta.32",
     "nodemailer": "^10.0.12",
     "papaparse": "^5.5.4",
@@ -75,7 +75,7 @@
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.8",
     "recharts": "^3.10.1",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "undici": "catalog:",
     "zod": "catalog:"
   },

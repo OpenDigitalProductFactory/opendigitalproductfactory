@@ -53,6 +53,7 @@ async function persistBackgroundFailureMessage(input: {
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
+  const startedAt = performance.now();
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -107,7 +108,11 @@ export async function POST(request: NextRequest): Promise<Response> {
   agentEventBus.markActive(input.threadId);
 
   // Return immediately — agent execution runs in background
-  const response = NextResponse.json({ status: "processing", userMessageId });
+  // BI-BD0B0DCC: the server's share of the message-ack journey (W3C Server-Timing).
+  const response = NextResponse.json(
+    { status: "processing", userMessageId },
+    { headers: { "Server-Timing": `app;dur=${(performance.now() - startedAt).toFixed(1)}` } },
+  );
 
   // Fire-and-forget: run sendMessage in background and emit enriched "done" on completion
   (async () => {

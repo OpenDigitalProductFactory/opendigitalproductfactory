@@ -45,11 +45,11 @@ describe("declareBreakFix (BI-F2FEC1EB)", () => {
     expect(result).toMatchObject({ ok: false, error: "break_fix_declaration_human_only" });
   });
 
-  it("refuses a second break-fix while one is open (WIP 1 per installation)", async () => {
+  it("admits an independent emergency while another break-fix is open", async () => {
     const store = db({ openRooms: [{ capsuleId: "WC-OTHER", backlogItemId: "BI-TWO", scopeClaims: [{ workShape: BREAK_FIX_SHAPE_REF, recordedAt: "x" }] }] });
     const result = await declareBreakFix({ db: store, itemId: "BI-ONE", reason: "x", actor: human, now });
-    expect(result).toMatchObject({ ok: false, error: "break_fix_wip_exceeded", data: { open: [{ capsuleId: "WC-OTHER", backlogItemId: "BI-TWO" }] } });
-    expect(store.workroom.update).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, capsuleId: "WC-ONE" });
+    expect(store.workroom.update).toHaveBeenCalledOnce();
   });
 
   it("refuses when the declarer's earlier break-fix missed its PIR", async () => {

@@ -344,6 +344,64 @@ describe("work capsule branch adoption", () => {
     }));
   });
 
+  it("retires the prior PR delivery binding when re-adoption advances the authored head", async () => {
+    const oldHead = "a".repeat(40);
+    const newHead = "b".repeat(40);
+    const previousPullRequestUrl = "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5990";
+    const existing = {
+      id: "row-recovery",
+      capsuleId: "WC-RECOVERY",
+      status: "blocked",
+      backlogItemId: "BI-RECOVERY",
+      executorRef: "session-1",
+      worktreePath: "D:/DPF-recovery",
+      headSha: oldHead,
+      pullRequestNumber: 5990,
+      pullRequestUrl: previousPullRequestUrl,
+      workspaceState: {
+        keep: "unrelated",
+        prDelivery: { schemaVersion: 1, status: "deployed", prNumber: 5990 },
+        buildStudio: { buildId: "FB-1", delivery: { schemaVersion: 1, prNumber: 5990 } },
+      },
+    };
+    db.workroom.findFirst.mockResolvedValueOnce(existing);
+    db.workroom.update.mockImplementationOnce(async ({ data }) => ({ ...existing, ...data }));
+
+    await adoptWorktreeCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Repair review transport",
+        objective: "Continue the same work on a newly rebased immutable head.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "fix/recovery",
+        headSha: newHead,
+        worktreePath: "D:/DPF-recovery",
+        backlogItemId: "BI-RECOVERY",
+        executorRef: "session-1",
+      },
+      actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
+    });
+
+    expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        headSha: newHead,
+        pullRequestNumber: null,
+        pullRequestUrl: null,
+        workspaceState: { keep: "unrelated", buildStudio: { buildId: "FB-1" } },
+      }),
+    }));
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        kind: "adopted",
+        payload: expect.objectContaining({
+          previousHeadSha: oldHead,
+          previousPullRequestNumber: 5990,
+          previousPullRequestUrl,
+        }),
+      }),
+    }));
+  });
+
   it("reactivates the same abandoned capsule when the BI and branch still match", async () => {
     db.workroom.findFirst.mockResolvedValueOnce({
       id: "row-abandoned",

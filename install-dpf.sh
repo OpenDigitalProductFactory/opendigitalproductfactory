@@ -1271,6 +1271,39 @@ else
   info "Edge Node not bundled (opt-in; pass --with-edge to add a local node). Map a network from another machine via Admin > Platform Development > Edge Nodes (docker-compose.edge-standalone.yml)."
 fi
 
+# Host-upkeep agent (BI-28EFE18A; WWMD DI-93310A596E88). Every install runs the
+# native Edge Node on the host, outside the Docker VM, so the platform can
+# carry host upkeep such as the operator-approved Docker VM restart. With edge
+# features off it runs DPF_EDGE_ROLE=host-upkeep: heartbeat and the action
+# channel only, no network sweep, no discovery. On macOS with edge on, the
+# block above already installed this node in its full role. Linux keeps its
+# edge container for opted-in edge features, and this node (with its own
+# one-time token, so the two never share one) carries host upkeep.
+if [ "$(uname -s 2>/dev/null || true)" = "Darwin" ] && [ "$DPF_INCLUDE_EDGE" = "1" ]; then
+  :
+else
+  step "Host-upkeep agent"
+  HOST_UPKEEP_STATE="${DPF_STATE_DIR:-$HOME/.dpf}/edge-node/state.json"
+  HOST_UPKEEP_TOKEN=""
+  if [ ! -f "$HOST_UPKEEP_STATE" ]; then
+    HOST_UPKEEP_TOKEN_LOG="${TMPDIR:-/tmp}/dpf-host-upkeep-token-$$.log"
+    HOST_UPKEEP_TOKEN="$(docker compose "${DPF_COMPOSE_FILES[@]}" run --rm --no-deps \
+         --entrypoint "" portal-init \
+         sh -c 'cd /workspace/apps/web && /workspace/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' \
+         2>"$HOST_UPKEEP_TOKEN_LOG" | grep -E '^dpfboot_' | tail -1)" || HOST_UPKEEP_TOKEN=""
+  fi
+  if [ -f "$HOST_UPKEEP_STATE" ] || [[ "$HOST_UPKEEP_TOKEN" == dpfboot_* ]]; then
+    if dpf_native_edge_install "$REPO_ROOT" "$HOST_UPKEEP_TOKEN" "${HOSTNAME:-$(hostname -s 2>/dev/null || echo dpf-host)}" host-upkeep; then
+      ok "Host-upkeep agent running on this host"
+      rm -f "${HOST_UPKEEP_TOKEN_LOG:-}" 2>/dev/null || true
+    else
+      warn "Host-upkeep agent did not start; the portal remains usable, and the next install run retries."
+    fi
+  else
+    warn "Host-upkeep agent: bootstrap-token issuance failed (stderr at ${HOST_UPKEEP_TOKEN_LOG:-unknown}); the next install run retries."
+  fi
+fi
+
 # 13. Voice / TTS sidecar (Apple Silicon only).
 #     Spoken output (text-to-speech) needs hardware-accelerated synthesis, but
 #     Docker Desktop on macOS can't reach the Apple Neural Engine — so on Apple

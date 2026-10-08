@@ -67,10 +67,10 @@ describe("human-approved break-fix declaration", () => {
     expect(mocks.envelope).not.toHaveBeenCalled();
   });
 
-  it("keeps the WIP-1 limit after human approval", async () => {
+  it("admits another emergency after human approval", async () => {
     mocks.rooms.mockResolvedValue([{ capsuleId: "WC-OTHER", backlogItemId: "BI-OTHER", scopeClaims: [{ workShape: "delivery-break-fix@1.0.0" }] }]);
-    expect(await declareBreakFixTool(params, "u1", context)).toMatchObject({ success: false, error: "break_fix_wip_exceeded" });
-    expect(mocks.create).not.toHaveBeenCalled();
+    expect(await declareBreakFixTool(params, "u1", context)).toMatchObject({ success: true });
+    expect(mocks.create).toHaveBeenCalledOnce();
   });
 
   it("does not confuse a claimed shape with the audited declaration", async () => {

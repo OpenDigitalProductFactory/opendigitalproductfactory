@@ -1654,7 +1654,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
     totalInputTokens += result.inputTokens;
     totalOutputTokens += result.outputTokens;
-
+    if (params.terminalToolPolicy) await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools }); // BI-2E479619: CLI-native MCP calls are this turn's tool records too.
     // No tool calls — check if agent stalled with intent to continue
     if (!result.toolCalls || result.toolCalls.length === 0) {
       const trimmed = result.content.trim();

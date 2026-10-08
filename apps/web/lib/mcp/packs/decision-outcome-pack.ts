@@ -61,6 +61,27 @@ const definitions: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
   },
+  {
+    name: "report_decision_trust_state",
+    description:
+      "Report how often each coworker's governed decisions agreed with what a human then chose, per coworker x activity type x risk class, read from TrustState. "
+      + "Each row gives the sample count beside the agreement rate. Below the stated minimum sample the rate is WITHHELD and shown as 'insufficient samples' — do not estimate one from the counts. "
+      + "Only human-resolved decisions are samples; a coworker's report on its own decision is counted separately (agentReportedCount) and never pooled into the rate. Decisions with no known resolution appear as unresolvedCount, and a coworker whose decisions have not been measured yet is listed under unmeasuredCoworkers rather than left out. "
+      + "Agreement is concordance, not correctness: say so when you quote a rate. "
+      + "Read-only and report-only: every level is shadow, and nothing here authorizes or recommends autonomy. Figures are as fresh as each row's lastEvaluatedAt (a scheduled recompute every 6 hours). Call once per question; do not poll.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentId: {
+          type: "string",
+          description: "Optional coworker id (e.g. 'AGT-WS-EA') to narrow the report to one coworker.",
+        },
+      },
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
 ];
 
 function summarize(result: {
@@ -131,13 +152,41 @@ async function recordDecisionOutcomeHandler(
   };
 }
 
+async function reportDecisionTrustStateHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const agentFilter = typeof params["agentId"] === "string" ? params["agentId"].trim() : "";
+
+  const { prisma } = await import("@dpf/db");
+  const { loadDecisionTrustReport } = await import("@/lib/decision/decision-trust-state-store");
+
+  const full = await loadDecisionTrustReport(prisma as never);
+  const report = agentFilter
+    ? {
+        ...full,
+        rows: full.rows.filter((row) => row.agentId === agentFilter),
+        unmeasuredCoworkers: full.unmeasuredCoworkers.filter((c) => c.agentId === agentFilter),
+      }
+    : full;
+
+  const coworkers = new Set([...report.rows.map((r) => r.agentId), ...report.unmeasuredCoworkers.map((c) => c.agentId)]);
+  const rated = report.rows.filter((r) => r.agreementRate !== null).length;
+  const message =
+    `Decision trust for ${coworkers.size} coworker(s), ${report.rows.length} trust row(s); `
+    + `${rated} carry a rate (minimum ${report.minSamples} human-resolved samples), the rest show insufficient samples. `
+    + (report.allShadow ? "Every level is shadow. " : "WARNING: a row is not at shadow; this slice never raises a level, so investigate the writer. ")
+    + report.caveats[0];
+
+  return { success: true, message, data: report };
+}
+
 export const decisionOutcomePack: ToolPack = {
   packId: "decision-outcome",
   definitions,
   handlers: {
     record_decision_outcome: (params) => recordDecisionOutcomeHandler(params),
+    report_decision_trust_state: (params) => reportDecisionTrustStateHandler(params),
   },
   grants: {
     record_decision_outcome: ["decision_record_create"],
+    report_decision_trust_state: ["registry_read"],
   },
 };
