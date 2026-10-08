@@ -24,6 +24,7 @@ import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import { buildShapeFlowMap, type WorkroomFlowMapModel } from "./workroom-flow-map";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
 import {
+  entryStageKey,
   holdCauseTag,
   WORKROOM_STAGE_ITEM_KIND,
   WORKROOM_STAGE_QUEUE_PREFIX,
@@ -144,9 +145,12 @@ export async function loadShapeFlowView(input: {
   const roomsAtStep = input.stageKey
     ? inScope.flatMap((room): ShapeRoomAtStep[] => {
         const obs = room.current;
-        if (!obs?.action || !obs.reason || obs.stageKey !== input.stageKey) return [];
+        if (!obs?.action || !obs.reason) return [];
         const classified = classifyDriveSegment({ action: obs.action, reason: obs.reason });
         if (!classified || classified.state === "done" || classified.state === "awaiting-trigger") return [];
+        // A room held before it entered any step waits at the first one.
+        const stageKey = obs.stageKey ?? (classified.state !== "working" ? entryStageKey(shapeRef) : null);
+        if (stageKey !== input.stageKey) return [];
         return [{
           capsuleId: room.capsuleId,
           title: room.title,
