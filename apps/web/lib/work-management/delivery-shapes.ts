@@ -124,13 +124,14 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
     stopConditions: [
       { kind: "success", condition: "PIR receipt recorded within 48 hours of merge.", disposition: "proceed" },
       { kind: "failure", condition: "PIR missed: the item flips to input-required and the declarer's next break-fix declaration is refused.", disposition: "awaiting-person" },
+      { kind: "budget", condition: "The 48-hour post-implementation review window expires without a receipt; escalate this item's overdue review.", disposition: "awaiting-person" },
     ],
     grants: DELIVERY_ACTIVITY_GRANTS,
     measures: [
       { key: "break-fix-share", description: "Share of merged work declared break-fix in a rolling week; above 20% is a finding." },
       { key: "pir-latency-hours", description: "Hours from merge to PIR receipt." },
     ],
-    budgets: [{ kind: "cycles-per-window", limit: 1, unit: "open break-fix per installation" }],
+    budgets: [{ kind: "cycles-per-window", limit: 48, unit: "hours per item before post-implementation review" }],
     reviewPoint: { everyDays: 2, description: "Reviewed at the 48-hour PIR deadline whether or not the receipt landed." },
     collaborationShape: "escalation",
   },
