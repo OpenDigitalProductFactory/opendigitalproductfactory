@@ -75,7 +75,7 @@
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.8",
     "recharts": "^3.10.1",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "undici": "catalog:",
     "zod": "catalog:"
   },

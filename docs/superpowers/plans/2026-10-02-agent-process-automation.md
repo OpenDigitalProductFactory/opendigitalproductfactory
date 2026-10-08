@@ -151,7 +151,14 @@ guards did.
      rather than queueing a rival claim.
    - `land` must push exactly once, and on refusal surface the hook's text from
      the first attempt rather than re-invoking it. Its current implementation
-     pushes once and reports — this is why that matters, and it needs a test.
+     pushes once and reports — this is why that matters. `publish()` in
+     `scripts/land-branch.mjs` now carries that test.
+   - `land` must not merge main forward over a PASS already recorded for HEAD.
+     Observed on PR #6029 (2026-10-06): `gate:wait` hit its deadline with the
+     pool closed, the resumer later recorded PASS on HEAD, and re-running land
+     would have merged main, minted a new SHA and re-gated, though the merge
+     queue re-tests against main anyway. `recordedPassAction()` now skips sync
+     and `gate:wait` for a clean tree whose PR is not CONFLICTING.
 10. ~~**`gate:wait` read an infrastructure exit 1 as a failure.**~~ pregate runs
     with inherited stdio, so `classifyGateExit`'s exit-1 text discriminator never
     saw output in `gate:wait` — every exit 1 was FAIL. On 2026-10-06 the record

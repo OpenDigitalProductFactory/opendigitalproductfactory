@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 671,
+  "routeCount": 673,
   "routes": [
     {
       "routePath": "/",
@@ -533,6 +533,30 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/admin/ops/execute-proposal/route.ts"
+    },
+    {
+      "routePath": "/api/agent-toolchain/manifest",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent-toolchain",
+        "manifest"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/agent-toolchain/manifest/route.ts",
+      "exposure": "public"
+    },
+    {
+      "routePath": "/api/agent-toolchain/pack.tar.gz",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent-toolchain",
+        "pack.tar.gz"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/agent-toolchain/pack.tar.gz/route.ts",
+      "exposure": "public"
     },
     {
       "routePath": "/api/agent/build/advance-phase",

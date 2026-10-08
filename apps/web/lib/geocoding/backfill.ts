@@ -5,6 +5,7 @@
 // lookup pick or a manual pin made meanwhile is never overwritten.
 
 import type { GeocodeInput, GeocodingProvider } from "./providers";
+import { replaceableByProviderWhere } from "./provenance";
 
 /** Addresses handled per pass; the caller repeats passes until none remain. */
 export const BACKFILL_PASS_SIZE = 100;
@@ -37,7 +38,7 @@ export type BackfillPassResult = {
 
 /** Addresses of live customer sites that have no coordinates yet. */
 const MISSING_WHERE = {
-  latitude: null,
+  ...replaceableByProviderWhere(),
   status: "active",
   customerSites: { some: { mergedIntoId: null } },
 };
@@ -108,7 +109,7 @@ export async function runGeocodingBackfillPass(
           continue;
         }
         const written = await db.address.updateMany({
-          where: { id, latitude: null },
+          where: { id, ...replaceableByProviderWhere() },
           data: { latitude: result.latitude, longitude: result.longitude, validatedAt: now, validationSource: provider.id },
         });
         placed += written.count;

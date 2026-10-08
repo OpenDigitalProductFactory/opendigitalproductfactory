@@ -22,6 +22,7 @@ describe("computeFlowDurations", () => {
       waitMs: 5 * 60_000,
       processMs: 15 * 60_000,
       cycleMs: 20 * 60_000,
+      heldMs: null, // a queue that never holds keeps the original definitions
     });
   });
 
@@ -31,7 +32,35 @@ describe("computeFlowDurations", () => {
       waitMs: null,
       processMs: null,
       cycleMs: null,
+      heldMs: null,
     });
+  });
+
+  it("with holds, touch time excludes the holds inside the service span and wait is the rest", () => {
+    const item: QueueItemTimeline = {
+      enqueuedAt: t("2026-07-06T00:00:00Z"),
+      startedAt: t("2026-07-06T00:05:00Z"),
+      finishedAt: t("2026-07-06T01:00:00Z"),
+      heldSpans: [
+        { from: t("2026-07-06T00:10:00Z"), to: t("2026-07-06T00:40:00Z") },
+        { from: t("2026-07-06T00:50:00Z"), to: null }, // open at finish: closes there
+      ],
+    };
+    expect(computeFlowDurations(item)).toEqual({
+      waitMs: 45 * 60_000,
+      processMs: 15 * 60_000,
+      cycleMs: 60 * 60_000,
+      heldMs: 40 * 60_000,
+    });
+  });
+
+  it("with holds, a finished step that was never worked has zero touch time, not unknown", () => {
+    const item: QueueItemTimeline = {
+      enqueuedAt: t("2026-07-06T00:00:00Z"),
+      finishedAt: t("2026-07-06T02:00:00Z"),
+      heldSpans: [{ from: t("2026-07-06T00:00:00Z"), to: t("2026-07-06T02:00:00Z") }],
+    };
+    expect(computeFlowDurations(item)).toMatchObject({ processMs: 0, waitMs: 2 * 3_600_000, cycleMs: 2 * 3_600_000 });
   });
 
   it("uses cancelledAt as the cycle endpoint when not finished", () => {

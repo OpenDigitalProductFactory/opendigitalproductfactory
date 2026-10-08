@@ -4,11 +4,11 @@
 // pure factory returning a ScenarioSpec; `runScenario` plays it on the virtual
 // clock. Geo coordinates are Austin-area; distances drive realistic travel time.
 
-import type { GeoPoint } from "./geo-temporal";
+import type { LatLng } from "./geo-temporal";
 import type { ScenarioSpec } from "./dispatch-sim";
 
-const DEPOT: GeoPoint = { lat: 30.27, lng: -97.74 };
-const near = (dLat: number, dLng: number): GeoPoint => ({ lat: DEPOT.lat + dLat, lng: DEPOT.lng + dLng });
+const DEPOT: LatLng = { lat: 30.27, lng: -97.74 };
+const near = (dLat: number, dLng: number): LatLng => ({ lat: DEPOT.lat + dLat, lng: DEPOT.lng + dLng });
 
 /** Baseline: reachable customers, generous windows — everything goes right. */
 export function normalDay(): ScenarioSpec {

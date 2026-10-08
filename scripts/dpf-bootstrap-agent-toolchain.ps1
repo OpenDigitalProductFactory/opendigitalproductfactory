@@ -71,7 +71,21 @@ $ProjectSlug            = ($RepoRoot -replace '[:\\\/]+', '-').TrimStart('-')
 # when the install names no https origin.
 . (Join-Path $ScriptDir "installer\lib\mcp-client-env.ps1")
 $McpClientEnv           = Resolve-DpfMcpClientEnv -InstallDir $RepoRoot
-$McpEndpoint            = if ($McpClientEnv.McpUrl) { $McpClientEnv.McpUrl } else { "http://127.0.0.1:3000/api/mcp/v1" }
+# $McpEndpointNamed is the endpoint the install or operator named (may be
+# empty); only it is forwarded to the updater, whose canonical https/OAuth
+# default governs otherwise (BI-772023BC). The probes and the plan bridge need
+# a concrete URL, so they read that same default from the updater's one line.
+$McpEndpointNamed       = [string]$McpClientEnv.McpUrl
+$McpEndpoint            = $McpEndpointNamed
+if (-not $McpEndpoint) {
+    $updaterSource = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update_agent_toolchain.py"
+    $defaultLine = if (Test-Path -LiteralPath $updaterSource) { Select-String -LiteralPath $updaterSource -Pattern '^DEFAULT_MCP_URL = "(.*)"$' | Select-Object -First 1 } else { $null }
+    if ($defaultLine) { $McpEndpoint = $defaultLine.Matches[0].Groups[1].Value }
+}
+if (-not $McpEndpoint) {
+    Write-Fail2 "Cannot read the default MCP endpoint from $updaterSource; set DPF_MCP_URL or restore the skill pack."
+    exit 1
+}
 $McpTrustBundle         = $McpClientEnv.CaBundle
 if ($McpTrustBundle) { $env:NODE_EXTRA_CA_CERTS = $McpTrustBundle }
 $SkillPackManifestPath  = Join-Path $RepoRoot "packages\dpf-skill-pack\.claude-plugin\plugin.json"
@@ -277,7 +291,7 @@ if (-not (Test-Path -LiteralPath $PluginUpdater)) {
     exit 1
 }
 try {
-    & $PluginUpdater -CodexPluginOnly -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpoint -DryRun:$DryRun
+    & $PluginUpdater -CodexPluginOnly -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpointNamed -DryRun:$DryRun
 } catch {
     Write-Fail2 "Plugin refresh failed: $($_.Exception.Message)"
     exit 1
@@ -319,7 +333,7 @@ if ($ReconcileStaleEntries.IsPresent) { $nodeArgs += "--reconcile-stale-entries"
 $planJson = & pnpm @nodeArgs 2>$null
 if ($LASTEXITCODE -ne 0 -or -not $planJson) {
     Write-Warn2 "compute-plan failed; using standalone skill-pack updater fallback."
-    & $PluginUpdater -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpoint -DryRun:$DryRun
+    & $PluginUpdater -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpointNamed -DryRun:$DryRun
     exit $LASTEXITCODE
 }
 

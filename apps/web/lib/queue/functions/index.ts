@@ -19,6 +19,7 @@ import { agentTaskDispatch } from "./agent-task-dispatch";
 import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
+import { geocodeOnSave } from "./geocode-on-save";
 import { materialFreshnessDecay } from "./material-freshness-decay";
 import { prSubmitAwaitingAcceptanceReconcile } from "./pr-submit-awaiting-acceptance-reconcile";
 import { budgetReservationSettle } from "./budget-reservation-settle";
@@ -256,6 +257,7 @@ export const eventFunctions = [
   evalBackground,
   probeBackground,
   brandExtract,
+  geocodeOnSave,
   researchExecute,
   buildReviewVerification,
   buildExecute,
