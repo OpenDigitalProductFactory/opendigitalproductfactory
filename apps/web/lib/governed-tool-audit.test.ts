@@ -167,3 +167,67 @@ describe("writeGovernedToolAudit — a tool that never ran has no duration", () 
     expect(row.summary).toBe("query_backlog: failed");
   });
 });
+
+// Approval convergence A3 (BI-C8EC05C9, spec D3): the `_approvalResume`
+// marker. Server-written on the park row only when the caller asked the
+// platform to complete the approval, it carries what the platform runner
+// replays: the original source, the server-set baselines and boundary, the
+// room and build, and the external-access INPUTS (not the resolved boolean).
+describe("writeGovernedToolAudit — the approval resume marker", () => {
+  const parked = { success: false, error: "approval_required", message: "waiting", data: { envelopeId: "ENV-1" } };
+  const sideEffectTool: ToolDefinition = { ...baseTool, name: "run_discovery_triage", sideEffect: true };
+
+  async function write(context: Record<string, unknown>, result: Record<string, unknown> = parked) {
+    const create = vi.fn(async (_row: Record<string, unknown>) => ({ id: "row-1" }));
+    setGovernedToolAuditOverridesForTests({ create });
+    await writeGovernedToolAudit({
+      toolName: sideEffectTool.name, tool: sideEffectTool, rawParams: { trigger: "cadence" },
+      result: result as never, userId: "user-1", source: "agentic-loop", context: context as never, durationMs: null,
+    });
+    return create.mock.calls[0]![0] as { parameters: Record<string, unknown>; envelopeId: string | null };
+  }
+
+  it("writes the marker on a parked call the platform completes", async () => {
+    const row = await write({
+      agentId: "AGT-OPS", threadId: "thread-1", taskRunId: "TR-SCHED-1", routeContext: "/platform/ops",
+      approvalCompletion: "platform", proposeBoundary: true, coworkerReadBaseline: true,
+      coworkerAuthorizedSurfaceBaseline: true, authorizedSurfaceContext: { mode: "background", workroomId: "WC-1" },
+      roomAuthority: { workroomId: "WC-1" }, externalAccessEnabled: true, featureBuildId: "FB-1",
+    });
+    expect(row.envelopeId).toBe("ENV-1");
+    expect(row.parameters).toEqual({
+      trigger: "cadence",
+      _approvalResume: {
+        v: 1,
+        source: "agentic-loop",
+        coworkerReadBaseline: true,
+        coworkerAuthorizedSurfaceBaseline: true,
+        authorizedSurfaceMode: "background",
+        proposeBoundary: true,
+        workroomId: "WC-1",
+        featureBuildId: "FB-1",
+        externalAccess: { workroomId: "WC-1", standingGrantAgentId: "AGT-OPS" },
+      },
+    });
+  });
+
+  it("records no external-access input when the call carried no external-access decision", async () => {
+    const row = await write({ agentId: "AGT-OPS", threadId: "thread-1", approvalCompletion: "platform" });
+    expect(row.parameters._approvalResume).toMatchObject({
+      externalAccess: null, workroomId: null, featureBuildId: null, proposeBoundary: false,
+      coworkerReadBaseline: false, coworkerAuthorizedSurfaceBaseline: false, authorizedSurfaceMode: null,
+    });
+  });
+
+  it("writes nothing new for any other caller or any other result", async () => {
+    expect((await write({ agentId: "AGT-OPS", threadId: "thread-1" })).parameters).toEqual({ trigger: "cadence" });
+    expect((await write({ agentId: "AGT-OPS", approvalCompletion: "platform" }, { success: true, message: "ran" })).parameters)
+      .toEqual({ trigger: "cadence" });
+  });
+
+  it("is never read back as a tool argument", async () => {
+    const { GOVERNED_AUDIT_PARAMETER_KEYS, originalToolParameters } = await import("./attention/coworker-envelope-decision");
+    expect(GOVERNED_AUDIT_PARAMETER_KEYS.has("_approvalResume")).toBe(true);
+    expect(originalToolParameters({ trigger: "cadence", _approvalResume: { v: 1 } })).toEqual({ trigger: "cadence" });
+  });
+});

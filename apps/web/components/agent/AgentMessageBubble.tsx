@@ -16,6 +16,7 @@ import {
 } from "@/lib/tak/decision-block";
 import { LEAVE_DECISION_ACTION } from "@/lib/workforce/leave/leave-decision-proposal-contract";
 import { LeaveDecisionProposalCard } from "./LeaveDecisionProposalCard";
+import { InlineEnvelopeApprovals } from "./InlineEnvelopeApprovals";
 
 /**
  * Format the per-turn provider/model attribution badge shown on assistant
@@ -719,6 +720,9 @@ export function AgentMessageBubble({
       </div>
       {!isUser && decision && onDecision && (
         <DecisionButtons decision={decision} onDecision={onDecision} />
+      )}
+      {!isUser && message.approvalRequests && message.approvalRequests.length > 0 && (
+        <InlineEnvelopeApprovals requests={message.approvalRequests} />
       )}
       {isUser && deliveryState && deliveryState !== "sent" && (
         <div
