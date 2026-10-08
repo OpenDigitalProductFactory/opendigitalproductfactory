@@ -37,6 +37,7 @@ import {
 import type { BacklogBindingReader } from "./adopt-backlog-binding";
 import { adoptWorktree, establishNewRoomOwnership } from "./adopt-worktree-handler";
 import { reassignCapsuleExecutor } from "./reassign-executor-handler";
+import { WorkroomLeaseHeldError } from "./workroom-lease";
 import {
   claimWorkCapsuleScope,
   createWorkCapsule,
@@ -91,11 +92,14 @@ function stringParam(params: Record<string, unknown>, key: string): string | nul
 function workCapsuleDb(): CapsuleDb {
   return prisma as unknown as CapsuleDb;
 }
+// An ordinary write renews the writer's own lease; it never takes another
+// principal's live lease (BI-A7601AED).
 async function renewLeaseAfterCapsuleWrite(capsuleId: string, currentActor: WorkCapsuleActor) {
   return heartbeatWorkCapsule({
     db: workCapsuleDb(),
     capsuleId,
     actor: currentActor,
+    onHeldByOther: "keep",
   });
 }
 
@@ -546,11 +550,22 @@ export async function heartbeatCapsuleTool(
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
 
-  const capsule = await heartbeatWorkCapsule({
-    db: workCapsuleDb(),
-    capsuleId,
-    actor: await actor(userId, context),
-  });
+  let capsule;
+  try {
+    capsule = await heartbeatWorkCapsule({
+      db: workCapsuleDb(),
+      capsuleId,
+      actor: await actor(userId, context),
+    });
+  } catch (error) {
+    if (!(error instanceof WorkroomLeaseHeldError)) throw error;
+    return {
+      success: false,
+      error: error.code,
+      message: error.message,
+      data: { holderPrincipalId: error.holderPrincipalId, leaseExpiresAt: error.leaseExpiresAt.toISOString() },
+    };
+  }
 
   return {
     success: true,

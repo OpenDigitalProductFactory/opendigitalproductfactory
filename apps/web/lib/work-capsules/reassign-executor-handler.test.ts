@@ -48,6 +48,31 @@ describe("reassignCapsuleExecutor", () => {
     }) });
   });
 
+  it("refuses with lease_holder_changed when the caller read a different holder (BI-A7601AED)", async () => {
+    const result = await reassignCapsuleExecutor({
+      params: { ...params, expectedLeaseHolderPrincipalId: "assistant-old" },
+      db: db as unknown as CapsuleDb,
+      resolveActor: async () => oauthActor,
+    });
+    expect(result).toMatchObject({
+      success: false,
+      error: "lease_holder_changed",
+      data: { actualLeaseHolderPrincipalId: "human-alice" },
+    });
+    expect(db.workroom.update).not.toHaveBeenCalled();
+    expect(db.workroomParticipant.create).not.toHaveBeenCalled();
+  });
+
+  it("hands over when the caller names the current holder", async () => {
+    const result = await reassignCapsuleExecutor({
+      params: { ...params, expectedLeaseHolderPrincipalId: "human-alice" },
+      db: db as unknown as CapsuleDb,
+      resolveActor: async () => oauthActor,
+    });
+    expect(result).toMatchObject({ success: true });
+    expect(db.workroom.update).toHaveBeenCalledTimes(1);
+  });
+
   it("never re-admits an assistant that was removed, and leaves an existing member's roles alone", async () => {
     db = fakeDb([{ id: "p1", principalId: "assistant-new", roles: ["contributor"], lifecycle: "removed" }]);
     await expect(reassignCapsuleExecutor({ params, db: db as unknown as CapsuleDb, resolveActor: async () => oauthActor }))
