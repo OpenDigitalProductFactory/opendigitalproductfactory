@@ -7,14 +7,14 @@
  * real, narrow and audited:
  *
  *   - human-only declaring authority (decision 2 at its conservative default);
- *   - WIP 1 per installation — a second declaration while one is open is refused;
+ *   - independent emergencies may be declared concurrently;
  *   - a missed PIR blocks the declarer's next declaration;
  *   - the declaration is recorded on the item (`break_fix_declared`) and the
  *     bound Workroom takes `delivery-break-fix@1.0.0` as its declared shape.
  */
 
 import { DELIVERY_BREAK_FIX_SHAPE_KEY, DELIVERY_SHAPE_VERSION } from "@/lib/work-management/delivery-shapes";
-import { readWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+
 
 export const BREAK_FIX_SHAPE_REF = `${DELIVERY_BREAK_FIX_SHAPE_KEY}@${DELIVERY_SHAPE_VERSION}`;
 export const BREAK_FIX_PIR_WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -51,11 +51,6 @@ export type DeclareBreakFixDb = {
 export type DeclareBreakFixResult =
   | { ok: true; capsuleId: string; itemId: string; activityId: string; pirDueAt: string }
   | { ok: false; error: "break_fix_declaration_human_only" | "not_found" | "workroom_required" | "break_fix_wip_exceeded" | "break_fix_pir_missed" | "already_declared"; message: string; data?: Record<string, unknown> };
-
-function isBreakFixRoom(scopeClaims: unknown): boolean {
-  const ref = readWorkShapeClaim(scopeClaims);
-  return ref?.key === DELIVERY_BREAK_FIX_SHAPE_KEY;
-}
 
 function declaration(payload: unknown): BreakFixDeclaration | null {
   const row = payload && typeof payload === "object" && !Array.isArray(payload) ? payload as Record<string, unknown> : null;
@@ -130,21 +125,6 @@ export async function declareBreakFix(args: {
   if (existingDeclaration) {
     return { ok: false, error: "already_declared", message: `${item.itemId} is already declared break-fix on ${room.capsuleId}.`, data: { capsuleId: room.capsuleId } };
   }
-  // WIP 1 per installation.
-  const openRooms = await args.db.workroom.findMany({
-    where: { archivedAt: null, status: { notIn: TERMINAL_ROOM_STATUSES }, capsuleId: { not: room.capsuleId } },
-    select: { capsuleId: true, backlogItemId: true, scopeClaims: true },
-  });
-  const openBreakFix = openRooms.filter((candidate) => isBreakFixRoom(candidate.scopeClaims));
-  if (openBreakFix.length > 0) {
-    return {
-      ok: false,
-      error: "break_fix_wip_exceeded",
-      message: `A break-fix is already open on this installation (${openBreakFix.map((candidate) => `${candidate.capsuleId} for ${candidate.backlogItemId ?? "?"}`).join(", ")}). The lane is WIP 1: close it with its post-implementation review first.`,
-      data: { open: openBreakFix.map((candidate) => ({ capsuleId: candidate.capsuleId, backlogItemId: candidate.backlogItemId })) },
-    };
-  }
-
   // A missed PIR blocks the declarer's next declaration.
   const history = await args.db.backlogItemActivity.findMany({
     where: { OR: [

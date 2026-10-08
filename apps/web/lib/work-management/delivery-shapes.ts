@@ -124,7 +124,6 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
     stopConditions: [
       { kind: "success", condition: "PIR receipt recorded within 48 hours of merge.", disposition: "proceed" },
       { kind: "failure", condition: "PIR missed: the item flips to input-required and the declarer's next break-fix declaration is refused.", disposition: "awaiting-person" },
-      { kind: "budget", condition: "A second break-fix is declared while one is open on this installation — refused; the lane is WIP 1.", disposition: "refused" },
     ],
     grants: DELIVERY_ACTIVITY_GRANTS,
     measures: [
