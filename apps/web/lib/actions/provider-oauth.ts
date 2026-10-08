@@ -1,17 +1,16 @@
 "use server";
 
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { prisma } from "@dpf/db";
-import { createOAuthFlow } from "@/lib/provider-oauth";
+import { createOAuthFlow, disconnectProviderOAuthInternal } from "@/lib/provider-oauth";
 
 async function requireManageProviders(): Promise<string> {
   return (await requireCapability("manage_provider_connections")).userId;
 }
 
-export async function startProviderOAuth(providerId: string): Promise<{ authorizeUrl: string } | { error: string }> {
+export async function startProviderOAuth(providerId: string, connectionId?: string): Promise<{ authorizeUrl: string } | { error: string }> {
   try {
     await requireManageProviders();
-    return createOAuthFlow(providerId);
+    return connectionId === undefined ? createOAuthFlow(providerId) : createOAuthFlow(providerId, connectionId);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to start OAuth sign-in";
     if (message === "Unauthorized") {
@@ -21,7 +20,7 @@ export async function startProviderOAuth(providerId: string): Promise<{ authoriz
   }
 }
 
-export async function disconnectProviderOAuth(providerId: string): Promise<{ error?: string }> {
+export async function disconnectProviderOAuth(providerId: string, connectionId?: string): Promise<{ error?: string }> {
   try {
     await requireManageProviders();
   } catch (error) {
@@ -31,28 +30,5 @@ export async function disconnectProviderOAuth(providerId: string): Promise<{ err
     }
     return { error: message };
   }
-  await prisma.credentialEntry.upsert({
-    where: { providerId },
-    create: { providerId, status: "unconfigured" },
-    update: {
-      cachedToken: null,
-      refreshToken: null,
-      tokenExpiresAt: null,
-      status: "unconfigured",
-    },
-  });
-
-  // Deactivate linked MCP services when provider disconnects
-  const linkedServers = await prisma.mcpServer.findMany({
-    where: { config: { path: ["linkedProviderId"], equals: providerId } },
-  });
-  for (const server of linkedServers) {
-    await prisma.mcpServer.update({ where: { id: server.id }, data: { status: "inactive" } });
-    await prisma.modelProvider.updateMany({
-      where: { providerId: server.serverId, status: "active" },
-      data: { status: "inactive" },
-    });
-  }
-
-  return {};
+  return disconnectProviderOAuthInternal(providerId, connectionId);
 }

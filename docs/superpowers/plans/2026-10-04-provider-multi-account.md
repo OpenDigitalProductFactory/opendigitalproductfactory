@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Provider multi-account delivery plan
 
 Independent design/spec and architecture approval passed. Live coverage and plan review remain pending; implementation prohibited until those gates pass.

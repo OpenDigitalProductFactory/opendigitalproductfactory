@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Multiple provider accounts and compact provider management
 
 Status: operator-approved direction; independent source review pending. Backlog: BI-71ABBD95. Epic: EP-D38F463C.
