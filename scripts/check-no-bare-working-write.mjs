@@ -48,7 +48,7 @@ const ALLOWLIST = new Set([
   // currentAgentId, AND lastHeartbeatAt. That's the invariant the helper
   // exists to enforce; this file just inlines it because it also needs to
   // set other dispatcher-only fields in the same atomic write.
-  "apps/web/lib/actions/agent-thread-dispatcher-runtime.ts",
+  "apps/web/lib/tak/child-thread-runtime.ts",
   // Creates a server-authorized Workroom TaskRun in the "working" state at
   // birth and sets lastHeartbeatAt in that same atomic create before the
   // provider operation can be admitted or dispatched.

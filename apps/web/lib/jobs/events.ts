@@ -237,6 +237,21 @@ export interface BuildPreBuildReviewRepairEvent {
   };
 }
 
+/**
+ * BI-287E1DD0: run one delegated child thread as a durable job. The payload is
+ * the context `prepareChildExecution` already validated and marked working.
+ */
+export interface AgentChildThreadRunEvent {
+  name: "agent/child-thread.run";
+  data: {
+    threadId: string;
+    taskRunId: string;
+    userId: string;
+    agentId: string;
+    routeContext: string;
+  };
+}
+
 /** BI-B2EEA6DE: hand a build's guard findings back to its coding agent. */
 export interface BuildGauntletRepairEvent {
   name: "build/gauntlet.repair";

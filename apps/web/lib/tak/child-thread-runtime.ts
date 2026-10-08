@@ -401,6 +401,25 @@ async function loadUserContext(userId: string): Promise<AutonomousWorkUserContex
   };
 }
 
+/**
+ * BI-287E1DD0: the durable child job failed terminally (its process died, or
+ * the engine gave up). The agentic loop is process-bound — its tool calls may
+ * already have had effects — so it is not replayed: the child is failed with a
+ * plain reason and its parent is told. A child that already reached a terminal
+ * state keeps it.
+ */
+export async function failInterruptedChildThread(context: ChildRuntimeContext, cause: string): Promise<void> {
+  const taskRun = await prisma.taskRun.findUnique({
+    where: { taskRunId: context.taskRunId },
+    select: { status: true },
+  });
+  if (!taskRun || TERMINAL_STATUSES.has(taskRun.status)) return;
+  await markChildThreadFailed(
+    context,
+    `Interrupted before it finished (${cause}). It was not re-run automatically because its tool calls may already have taken effect; ask for it again to retry.`,
+  );
+}
+
 async function markChildThreadFailed(
   context: ChildRuntimeContext,
   message: string,

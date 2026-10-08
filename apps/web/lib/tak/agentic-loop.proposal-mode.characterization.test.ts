@@ -151,7 +151,7 @@ describe("S1 — a proposal-mode tool in the agentic loop (characterisation)", (
 // the loop-level behaviour they depend on is pinned above.
 const AUTONOMOUS_CALLERS: Array<{ file: string; proposalReads: string[] }> = [
   { file: "lib/actions/agent-task-scheduler.ts", proposalReads: [] },
-  { file: "lib/actions/agent-thread-dispatcher-runtime.ts", proposalReads: [] },
+  { file: "lib/tak/child-thread-runtime.ts", proposalReads: [] },
   { file: "lib/mcp-task-execution.ts", proposalReads: [] },
   { file: "lib/tak/autonomous-work-run.ts", proposalReads: ["if (result.content && !result.proposal) {"] },
   { file: "lib/coworker-lifecycle/certification-runner.ts", proposalReads: [] },
