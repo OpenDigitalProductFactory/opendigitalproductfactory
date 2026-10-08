@@ -197,17 +197,21 @@ add another Codex registration when only the canonical registration exists.
 
 ### Codex procedure
 
+Both wrappers leave the endpoint to `update_agent_toolchain.py`: it uses
+`DPF_MCP_URL` when set, otherwise the install's canonical origin
+`https://localhost/api/mcp/v1`, and configures OAuth sign-in (no bearer
+header). Pass `-McpUrl` (PowerShell) or `--mcp-url` (shell) only to name a
+different endpoint.
+
 Windows:
 
 ```powershell
-$env:DPF_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1"
 .\packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1 -CodexOnly
 ```
 
 macOS / Linux:
 
 ```bash
-export DPF_MCP_URL="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
 bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --codex-only
 ```
 
@@ -219,14 +223,12 @@ loaded at session start.
 Windows:
 
 ```powershell
-$env:DPF_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1"
 .\packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1 -ClaudeOnly
 ```
 
 macOS / Linux:
 
 ```bash
-export DPF_MCP_URL="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
 bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --claude-only
 ```
 
