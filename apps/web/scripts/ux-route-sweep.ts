@@ -430,6 +430,7 @@ async function measureRoute(
     throw new Error(`redirected to ${landed}`);
   }
   phases.navigationAndSettleMs = Math.round(performance.now() - phaseStartedAt);
+  await page.evaluate(BROWSER_EVALUATION_RUNTIME); // the collector's nested callbacks need tsx's __name
   const speedCounters = readSpeedCounters(await page.evaluate(collectSpeedEntries)); // BI-BDB43823, before axe
 
   phaseStartedAt = performance.now();
