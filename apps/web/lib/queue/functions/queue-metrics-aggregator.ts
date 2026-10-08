@@ -22,6 +22,21 @@ export const queueMetricsAggregator = jobs.createFunction(
     const gate = await gateAtEntry(step, "queue/metrics-aggregator");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
+    // EP-B70E718D F2: replay the drive log into Workroom stage telemetry once,
+    // so stage trends start with history. Idempotent; a no-op after first run.
+    await step.run("backfill-workroom-stages", async () => {
+      const { backfillWorkroomStageTelemetry, defaultStageBackfillDeps } = await import(
+        "@/lib/work-management/workroom-stage-backfill"
+      );
+      const result = await backfillWorkroomStageTelemetry(await defaultStageBackfillDeps());
+      if (result.ran) {
+        console.log(
+          `[queue-metrics] replayed ${result.transitions} workroom stage transition(s) over ${result.days} day(s), up to ${result.until}`,
+        );
+      }
+      return result;
+    });
+
     return step.run("aggregate-current-day", async () => {
       const { aggregateQueueMetrics, defaultRollupDeps } = await import(
         "@/lib/queue/queue-metrics-rollup"
