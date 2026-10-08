@@ -22,7 +22,7 @@
 | P5 | Grok `agent-client` token | BI-84C1F526 | P2b, P3 |
 | P6 | Floor enforcement (read-only below floor) | BI-DFC0270C | P3, P5 |
 | P7 | Installed-session freshness advisory | BI-A67B65F4 | P1, P2b |
-| P8 | Client capabilities as one verified profile, drift flag, weekly re-verification | to be filed when the DPF connection is back (MCP was disconnected 2026-10-07 during a self-upgrade) | P3 |
+| P8 | Client capabilities as one verified profile, drift flag, weekly re-verification | BI-64795FD0 | P3 |
 
 ## Phases
 
@@ -168,7 +168,7 @@
 
 **Rollback:** revert. The hook is advisory.
 
-### P8 — Client capabilities stay current (item to be filed)
+### P8 — Client capabilities stay current (BI-64795FD0)
 
 **Files:**
 - `packages/dpf-skill-pack/client-capabilities.json` (new).
@@ -208,8 +208,8 @@
 | OBJ-FLOOR | AC-FLOOR-SCOPE | resolveToolchainVerdict | connection declares toolchain | BI-DFC0270C |
 | OBJ-BACKSTOP | AC-BACKSTOP | hooks/toolchain-freshness.mjs | agent converges host | BI-A67B65F4 |
 | OBJ-CONVERGE | AC-USER-SCOPE-DUPLICATE | update_agent_toolchain.py --from-portal | agent converges host | BI-DE1E6485 |
-| OBJ-CAPABILITY | AC-CAPABILITY-SOURCE | client-capabilities.json | release publishes toolchain | P8 item |
-| OBJ-CAPABILITY | AC-CAPABILITY-DRIFT | client-capabilities.json | connection declares toolchain | P8 item |
+| OBJ-CAPABILITY | AC-CAPABILITY-SOURCE | client-capabilities.json | release publishes toolchain | BI-64795FD0 |
+| OBJ-CAPABILITY | AC-CAPABILITY-DRIFT | client-capabilities.json | connection declares toolchain | BI-64795FD0 |
 
 ## Risks and rollback
 
