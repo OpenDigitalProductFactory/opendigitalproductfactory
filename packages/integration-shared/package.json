@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "node ../../scripts/run-tsc.mjs --noEmit"
   },
   "dependencies": {
     "undici": "catalog:"

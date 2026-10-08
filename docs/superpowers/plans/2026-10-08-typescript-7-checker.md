@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # TypeScript 7 native checker — implementation plan
 
 **Backlog item:** BI-2B8D67A9 (medium, `delivery-medium@1.0.0`), Workroom WC-6B32B406, branch `chore/typescript-7-checker`.
@@ -44,7 +48,7 @@ One entry point, two compilers. `scripts/run-tsc.mjs` already owns the heap, the
 - Measure TS6 vs TS7 wall time and peak memory for both web programs under host-resource admission (VER-2).
 
 ### REQ-4 Gates and sizing (CON-2 resource contract)
-- `apps/web/lib/nonprod/host-resource-profiles.json`: set `typescript.expectedMemoryMiB` from the measured TS7 peak plus headroom (VER-3).
+- `apps/web/lib/nonprod/host-resource-profiles.json`: size `typescript.expectedMemoryMiB` from the measured TS7 peak plus headroom (VER-3). The class wraps only root `pnpm typecheck`, which runs packages, then the web production program, one after another. Measured TS7 peak on the dev host: 5.4 GB (7.4 s). The existing 6144 MiB is that peak plus ~14% headroom, so the value stands. Under TS6 it was an under-estimate of a 7.3 GB heap. The web test program (8.7 GB peak, 12 s on TS7) runs in the local-CI typecheck stage, not under this class.
 - `scripts/sbom/check-typecheck-baseline.mjs`: read the TS7 program report. TS7's `--extendedDiagnostics` prints `Lines:` instead of the `Lines of …` breakdown, and its lib files live under `@typescript/typescript-<platform>/lib`. Classify them as library, and re-measure the baseline if the totals move.
 - `.github/workflows/ci.yml`: Typecheck jobs inherit TS7 through `pnpm typecheck`. Add a non-required `typecheck-ts6-reference` job (`DPF_TSC=6`, `continue-on-error`) as the advisory reference.
 - `packages/dpf-skill-pack/hooks/raw-tool-guard.mjs`: update the "8 GB heap" guidance text.
@@ -69,6 +73,12 @@ One entry point, two compilers. `scripts/run-tsc.mjs` already owns the heap, the
 
 ## Backlog coverage
 
-Decision **atomic**: the steps above are sequencing of one compiler swap behind one entry point. None of them ships value alone; a package switched without the gates would type-check on a compiler CI does not use. Out-of-scope follow-ups (moving the code-graph extractors to the TS7 API, retiring TS6 and the advisory job) are separate future items, not deliverables of this plan.
+- Decision: atomic
+- Parent: BI-2B8D67A9
+- Receipt: cmuywr9648yjn01owxs9sh3a9 (recorded against this plan at commit 64a219b59e0dc402ce3d5cdb061ab5fcdf120669)
+- Rationale: the steps above are sequencing of one compiler swap behind one entry point. None of them ships value alone; a package switched without the gates would type-check on a compiler CI does not use. Out-of-scope follow-ups (moving the code-graph extractors to the TS7 API, retiring TS6 and the advisory job) are separate future items, not deliverables of this plan.
+- Dependencies: none
 
-Receipt: _recorded after commit; see Workroom WC-6B32B406._
+| Deliverable | Live BI | Requirements | Contracts | Flows | Verification | Independently shippable |
+|---|---|---|---|---|---|---|
+| TypeScript 7 as the checker behind run-tsc.mjs, with TS6 kept as library and reference | BI-2B8D67A9 | REQ-1, REQ-2, REQ-3, REQ-4, REQ-5 | CON-1, CON-2 | FLOW-1 | VER-1, VER-2, VER-3, VER-4, VER-5 | No (atomic) |

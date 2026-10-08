@@ -2520,6 +2520,7 @@
       "docs/operations/disaster-recovery.md"
     ],
     "scripts/run-tsc.mjs": [
+      "docs/architecture/contributor-procedure-runbook.md",
       "docs/architecture/dependency-reduction-routine.md"
     ],
     "scripts/safety/transcript-snapshot.ps1": [
@@ -3097,7 +3098,8 @@
       "packages/db/src/agent-identity.test.ts",
       "packages/db/src/agent-identity.ts",
       "scripts/check-override-comments.mjs",
-      "scripts/regen-lockfile.mjs"
+      "scripts/regen-lockfile.mjs",
+      "scripts/run-tsc.mjs"
     ],
     "docs/architecture/customer-zero-and-use-case-zero.md": [
       "apps/web/lib/decision-perspective/weight-inference.ts",
