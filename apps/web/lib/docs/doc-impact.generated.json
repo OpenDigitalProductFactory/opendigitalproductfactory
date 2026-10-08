@@ -2521,7 +2521,8 @@
     ],
     "scripts/run-tsc.mjs": [
       "docs/architecture/contributor-procedure-runbook.md",
-      "docs/architecture/dependency-reduction-routine.md"
+      "docs/architecture/dependency-reduction-routine.md",
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/safety/transcript-snapshot.ps1": [
       "docs/operations/session-transcript-recovery.md"
@@ -3965,6 +3966,7 @@
       "scripts/local-ci-runner.mjs",
       "scripts/pr-health.mjs",
       "scripts/pregate-status.mjs",
+      "scripts/run-tsc.mjs",
       "scripts/set-hooks-path.mjs",
       "tests/release/local-ci-gate-contract.test.mjs"
     ],
