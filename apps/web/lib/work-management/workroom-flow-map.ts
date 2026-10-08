@@ -45,6 +45,8 @@ export type FlowMapStage = {
   room: { dwellMs: number; processMs: number | null; heldMs: number | null; open: boolean } | null;
   typical: { dwellMs: number; exits: number } | null;
   slow: boolean;
+  /** Aggregate view only (F4): rooms at this step now, and how many are not being worked. */
+  queue?: { wip: number; depth: number };
 };
 
 export type WorkroomFlowMapModel = {
@@ -58,6 +60,8 @@ export type WorkroomFlowMapModel = {
   finished: boolean;
   /** The shape declares a flow graph; the line renderer must not draw it. */
   graphFlow: boolean;
+  /** Set for the shape-level view (F4): many rooms, no single room's position. */
+  aggregate?: { roomsInFlow: number };
 };
 
 export type StageSnapshot = { queueKey: string; cycleP50Ms: number | null; throughput: number };
@@ -186,3 +190,27 @@ export function formatDuration(ms: number): string {
   if (hours > 0) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   return `${mins}m`;
 }
+
+/**
+ * The shape-level map (BI-C5CD9EAE, F4): the same picture, read across every
+ * room on the shape version. No step has a single "current" state; instead each
+ * step carries its live queue, and the timing band shows typical times.
+ */
+export function buildShapeFlowMap(input: {
+  definition: Parameters<typeof buildWorkroomFlowMap>[0]["definition"];
+  snapshots: readonly StageSnapshot[];
+  liveCounts: ReadonlyMap<string, { wip: number; depth: number }>;
+  now: Date;
+}): WorkroomFlowMapModel {
+  const base = buildWorkroomFlowMap({ definition: input.definition, current: null, roomRows: [], snapshots: input.snapshots, now: input.now });
+  let roomsInFlow = 0;
+  const stages = base.stages.map((stage) => {
+    const queue = input.liveCounts.get(workroomStageQueueKey(base.shapeRef, stage.key)) ?? { wip: 0, depth: 0 };
+    roomsInFlow += queue.wip;
+    // Across many rooms a step has no single state; the queue numbers carry it.
+    const state: FlowMapStageState = queue.wip > 0 ? "working" : "ahead";
+    return { ...stage, state, queue };
+  });
+  return { ...base, stages, aggregate: { roomsInFlow } };
+}
+

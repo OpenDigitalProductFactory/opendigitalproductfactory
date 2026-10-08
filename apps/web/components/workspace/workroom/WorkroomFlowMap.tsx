@@ -54,6 +54,12 @@ function causeLabel(cause: string | null): string | null {
 
 function timingLines(stage: FlowMapStage): { text: string; tone: "text" | "muted" | "warning" }[] {
   const lines: { text: string; tone: "text" | "muted" | "warning" }[] = [];
+  if (stage.queue) {
+    lines.push({
+      text: stage.queue.wip === 0 ? "no rooms here" : `${stage.queue.wip} here · ${stage.queue.depth} waiting`,
+      tone: stage.queue.depth > 0 && stage.queue.depth === stage.queue.wip ? "warning" : "text",
+    });
+  }
   if (stage.room) {
     lines.push({
       text: `${stage.room.open ? "here for" : "took"} ${formatDuration(stage.room.dwellMs)}`,
@@ -69,17 +75,31 @@ function timingLines(stage: FlowMapStage): { text: string; tone: "text" | "muted
 }
 
 /** The room's work shape as a picture, with this room's time on each step. */
-export function WorkroomFlowMap({ model }: { model: WorkroomFlowMapModel }) {
+export function WorkroomFlowMap({
+  model,
+  selectParam = "processStep",
+  stageHrefBase,
+}: {
+  model: WorkroomFlowMapModel;
+  /** URL parameter a chosen step is written to: the room's inspection (default) or the shape view's room list. */
+  selectParam?: string;
+  /** When set, choosing a step navigates to `${stageHrefBase}&stage=<key>` instead (the home's hero → the area drill-in). */
+  stageHrefBase?: string;
+}) {
   const titleId = useId();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams().toString();
-  const selected = new URLSearchParams(params).get("processStep");
+  const selected = new URLSearchParams(params).get(selectParam);
 
   function select(stageKey: string) {
+    if (stageHrefBase) {
+      router.push(`${stageHrefBase}&stage=${encodeURIComponent(stageKey)}`);
+      return;
+    }
     const search = new URLSearchParams(params);
-    search.set("processStep", stageKey);
-    search.set("processLayout", "map");
+    search.set(selectParam, stageKey);
+    if (selectParam === "processStep") search.set("processLayout", "map");
     router.replace(`${pathname}?${search}${window.location.hash}`, { scroll: false });
   }
 
@@ -173,7 +193,8 @@ export function WorkroomFlowMap({ model }: { model: WorkroomFlowMapModel }) {
             const style = STATE_STYLE[stage.state];
             const isSelected = selected === stage.key;
             const cause = causeLabel(stage.holdCause);
-            const label = `${stage.title}. ${STATE_LABEL[stage.state]}${cause ? `: ${cause}` : ""}.${stage.room ? ` This room ${stage.room.open ? "has been here" : "took"} ${formatDuration(stage.room.dwellMs)}.` : ""}${stage.typical ? ` Typical ${formatDuration(stage.typical.dwellMs)}.` : ""}${stage.governed ? ` A person decides the way out (${stage.principalRef}).` : ""}`;
+            const stateText = stage.queue ? (stage.queue.wip === 0 ? "No rooms here" : `${stage.queue.wip} rooms here, ${stage.queue.depth} waiting`) : STATE_LABEL[stage.state];
+            const label = `${stage.title}. ${stateText}${cause ? `: ${cause}` : ""}.${stage.room ? ` This room ${stage.room.open ? "has been here" : "took"} ${formatDuration(stage.room.dwellMs)}.` : ""}${stage.typical ? ` Typical ${formatDuration(stage.typical.dwellMs)}.` : ""}${stage.governed ? ` A person decides the way out (${stage.principalRef}).` : ""}`;
             return (
               <g
                 key={stage.key}
@@ -213,7 +234,7 @@ export function WorkroomFlowMap({ model }: { model: WorkroomFlowMapModel }) {
                   {stage.title.length > 18 ? `${stage.title.slice(0, 17)}…` : stage.title}
                 </text>
                 <text x={x + 10} y={y + 32} fontSize={10.5} fill="var(--dpf-text-secondary)">
-                  {style.glyph ? `${style.glyph} ` : ""}{cause ?? STATE_LABEL[stage.state]}
+                  {stage.queue ? (stage.queue.wip > 0 ? `${stage.queue.wip} in step` : "—") : `${style.glyph ? `${style.glyph} ` : ""}${cause ?? STATE_LABEL[stage.state]}`}
                 </text>
                 {stage.governed ? (
                   <g aria-hidden="true">
@@ -236,7 +257,7 @@ export function WorkroomFlowMap({ model }: { model: WorkroomFlowMapModel }) {
                     fontWeight={line.tone === "warning" ? 600 : 400}
                     fill={line.tone === "warning" ? "var(--dpf-warning)" : line.tone === "muted" ? "var(--dpf-muted)" : "var(--dpf-text)"}
                   >
-                    {line.text}{line.tone === "warning" ? " · slow" : ""}
+                    {line.text}{line.tone === "warning" && !stage.queue ? " · slow" : ""}
                   </text>
                 ))}
               </g>

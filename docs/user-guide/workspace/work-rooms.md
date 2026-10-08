@@ -9,6 +9,7 @@ relatedCode:
   - apps/web/components/workspace/WorkCaseDetailView.tsx
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
   - apps/web/components/workspace/workroom/WorkroomFlowMap.tsx
+  - apps/web/components/ops/workrooms/AreaFlowPanel.tsx
   - apps/web/components/workspace/workroom/WorkroomParticipants.tsx
   - apps/web/lib/work-management/coworker-engagement-case-projection.ts
   - apps/web/lib/work-management/room-channel-continuity.ts
@@ -158,6 +159,31 @@ When a room has a work shape, the **Shape** view opens with a picture of it, abo
 - **The line above the map** describes the same shape in words: what starts it, its steps, who decides, and how it ends.
 
 Choose a step on the map to open the same inspection as the step list. A shape that runs steps in parallel is listed as steps, not drawn as a line, until the map can draw the branches exactly.
+
+### How work flows in each area
+
+Each area's **Work** view opens with the same five measures, so the four portfolios can be compared:
+
+| Measure | What it means |
+|---|---|
+| **In flow now** | Rooms being worked, waiting on a person, or blocked. |
+| **Flow time** | How long a run takes, from its first step to its stop. This is the median over the last four weeks, with the change from the four weeks before and a weekly trend line. |
+| **Flow efficiency** | The share of step time spent working rather than waiting. |
+| **Finished per week** | Runs that reached a success stop. |
+| **Cost** | Points in flight, and points delivered this quarter. |
+
+Below the measures:
+
+- **A bar** shows the mix of work in flow: features, defects, risks and debt.
+- **A table** lists the area's work shapes. For each one it shows how many rooms are in flow and where most of them wait.
+
+Choose a shape to see it drawn across all of its rooms:
+
+- Each step shows how many rooms are there and how many are waiting.
+- A version picker lets you compare the same shape before and after a change.
+- Choose a step to list the rooms at that step, then open any room.
+
+**Products** (`/portfolio`) shows the four portfolios side by side on the same measures. Rooms with no portfolio are shown in their own **Unplaced** column and never counted in another.
 
 ## Access and Other Channels
 

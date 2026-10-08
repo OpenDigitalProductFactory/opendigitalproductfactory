@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { PortfolioFlowTiles, ShapeFlowDrillIn } from "@/components/ops/workrooms/AreaFlowPanel";
 import { WorkroomActivitySection } from "@/components/ops/workrooms/WorkroomActivitySection";
 import { SectionNav } from "@/components/shell/SectionNav";
 import { Surface } from "@/components/ui/Surface";
@@ -9,6 +10,7 @@ import { auth } from "@/lib/auth";
 import { getAreaSetupEntries } from "@/lib/navigation/portal-navigation-model";
 import { AREA_SECTIONS, areaHref } from "@/lib/navigation/portal-shell-sections";
 import { getT } from "@/lib/i18n/t.server";
+import { loadPortfolioFlowView, loadShapeFlowView } from "@/lib/work-management/area-flow.server";
 import { can, getGrantedCapabilities } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +19,7 @@ type AreaView = "work" | "team" | "setup";
 
 type Props = {
   params: Promise<{ key: string }>;
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; shape?: string; version?: string; stage?: string }>;
 };
 
 const VIEW_LEAD: Record<AreaView, string> = {
@@ -40,7 +42,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
   if (!session?.user) redirect("/login");
   const user = { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser };
 
-  const { view: requested } = await searchParams;
+  const { view: requested, shape, version, stage } = await searchParams;
   const view: AreaView = requested === "team" || requested === "setup" ? requested : "work";
 
   const t = await getT("shell");
@@ -53,6 +55,17 @@ export default async function AreaPage({ params, searchParams }: Props) {
   const work =
     view === "work" && canSeeWork
       ? await WorkroomActivitySection({ portfolioRole: section.portfolioRole, scopeLabel: section.label })
+      : null;
+  // EP-B70E718D F4/F5: how this area's work flows, and one shape drawn across its rooms.
+  // A failed read hides the panel; the room list below still renders.
+  const workHref = `/area/${section.key}?view=work`;
+  const portfolioFlow =
+    view === "work" && canSeeWork && section.portfolioRole && !shape
+      ? await loadPortfolioFlowView().then((flows) => flows.find((flow) => flow.key === section.portfolioRole) ?? null).catch(() => null)
+      : null;
+  const shapeFlow =
+    view === "work" && canSeeWork && shape
+      ? await loadShapeFlowView({ shapeKey: shape, version, portfolioRole: section.portfolioRole, stageKey: stage }).catch(() => null)
       : null;
 
   return (
@@ -77,7 +90,18 @@ export default async function AreaPage({ params, searchParams }: Props) {
 
       {view === "work" &&
         (canSeeWork ? (
-          work
+          <>
+            {shapeFlow ? (
+              <div className="my-6">
+                <ShapeFlowDrillIn view={shapeFlow} backHref={workHref} baseHref={workHref} stageKey={stage ?? null} />
+              </div>
+            ) : portfolioFlow ? (
+              <div className="my-6">
+                <PortfolioFlowTiles flow={portfolioFlow} areaHref={workHref} />
+              </div>
+            ) : null}
+            {work}
+          </>
         ) : (
           <Surface data-dpf-lead className="my-6" rounded="xl">
             <p className="text-sm text-[var(--dpf-text)]">{t("area.workDenied")}</p>

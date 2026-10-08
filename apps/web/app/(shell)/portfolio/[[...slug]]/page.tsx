@@ -5,6 +5,9 @@ import { getFullPortfolioTree, getAgentCounts, getPortfolioBudgets, getPortfolio
 import { resolveNodeFromSlug, getSubtreeIds, buildBreadcrumbs, computeHealth } from "@/lib/portfolio";
 import { getPortfolioBudgetMetric } from "@/lib/portfolio/budget-provenance";
 import { PortfolioOverview } from "@/components/portfolio/PortfolioOverview";
+import { PortfolioFlowComparison } from "@/components/ops/workrooms/AreaFlowPanel";
+import { AREA_SECTIONS } from "@/lib/navigation/portal-shell-sections";
+import { loadPortfolioFlowView } from "@/lib/work-management/area-flow.server";
 import { PortfolioNodeDetail } from "@/components/portfolio/PortfolioNodeDetail";
 import { CompletenessStrip } from "@/components/portfolio/CompletenessStrip";
 import { CoveragePanel } from "@/components/portfolio/CoveragePanel";
@@ -37,6 +40,8 @@ export default async function PortfolioPage({ params, searchParams }: Props) {
   // No single resolved root portfolio at this level -- the overview spans all
   // four portfolio roots. Per Task 7.2 spec, omit the strip silently.
   if (slugs.length === 0) {
+    // EP-B70E718D F5: the four portfolios on the same five flow measures. A failed read hides it.
+    const portfolioFlow = view ? null : await loadPortfolioFlowView().catch(() => null);
     return (
       <>
         <div data-dpf-lead className="mb-dpf-xl">
@@ -50,6 +55,12 @@ export default async function PortfolioPage({ params, searchParams }: Props) {
         </div>
         <BusinessProductPortfolioSection />
         <PlatformGridSection entityType="digital_product" view={view} />
+        {!view && portfolioFlow ? (
+          <PortfolioFlowComparison
+            flows={portfolioFlow}
+            areaHrefByRole={Object.fromEntries(AREA_SECTIONS.filter((s) => s.portfolioRole).map((s) => [s.portfolioRole!, `/area/${s.key}?view=work`]))}
+          />
+        ) : null}
         {!view && (
           <PortfolioOverview roots={roots} agentCounts={agentCounts} budgets={budgets} summary={summary} />
         )}

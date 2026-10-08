@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "decidedOption": "tiles-above-rooms-with-shape-drill-in",
+  "decisionInteractionId": "DI-F7556F9ECD89",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/workrooms/AreaFlowPanel.tsx",
+      "apps/web/app/(shell)/area/[key]/page.tsx",
+      "apps/web/app/(shell)/portfolio/[[...slug]]/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "tiles-above-rooms-with-shape-drill-in",
+      "new-flow-dashboard-route",
+      "charts-only-on-performance-page"
+    ]
+  },
+  "rationale": "EP-B70E718D F4 (BI-C5CD9EAE) and F5 (BI-0FB4A049). The area Work view opens with five fixed flow measures: in flow now, flow time median with trend, flow efficiency, finished per week, and cost. Below them is the mix of work types and a short table of the area's work shapes, each naming where its rooms wait. Choosing a shape opens a drill-in on the same route (?shape=) using the same flow-map component as the room page, with a version picker for before and after. Choosing a step lists its rooms. /portfolio gets one comparison table: the four portfolios plus Unplaced on the same measures. No new route or input. Rejected: a new /flow dashboard route (another home, everything at once) and charts only on /performance (no drill-in to the step or the rooms).",
+  "verification": "AreaFlowPanel.test.tsx (jsdom) covers the five measures with prior-window change, shape links and bottleneck wording, empty and no-history states with dashes instead of invented numbers, the drill-in's queue counts, version picker and rooms at a step, and the four-plus-Unplaced comparison. portfolio-flow.test.ts covers flow time, efficiency (a step that was only waited on counts as zero touch), throughput, prior window, live load, mix, bottleneck and the unplaced bucket."
+}
