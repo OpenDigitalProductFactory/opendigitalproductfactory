@@ -20,6 +20,7 @@ import { loadWorkroomOnlyCaseDetail } from "@/lib/work-management/workroom-only-
 import { loadWorkroomStageDecisionView } from "@/lib/work-management/workroom-stage-decision.server";
 import { loadWorkroomShapeRebindView } from "@/lib/work-management/workroom-shape-rebind.server";
 import { currentUserContext } from "@/lib/govern/current-user-context";
+import { loadWorkroomFlowMap } from "@/lib/work-management/workroom-flow-map.server";
 
 type Props = {
   params: Promise<{ caseKey: string }>;
@@ -95,14 +96,19 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
       callerHasManagePlatform: Boolean(human && can(human, "manage_platform")),
     }).catch(() => null)
     : null;
+  // EP-B70E718D F3: the room's flow map. A failed read hides the map rather
+  // than taking the page down; the step list below it still renders.
+  const flowMap = detailOrRoom.workroomRowId
+    ? await loadWorkroomFlowMap(prisma as never, { roomRowId: detailOrRoom.workroomRowId }).catch(() => null)
+    : null;
   const locale = await getLocaleContext();
 
   return (
     <>
-      {stageDecision || shapeRebind ? (
-        // The decision controls translate with useT("workrooms"); provide it only when rendered.
+      {stageDecision || shapeRebind || flowMap ? (
+        // The decision controls and the flow map translate with useT("workrooms"); provide it only when rendered.
         <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
-          <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} stageDecision={stageDecision} shapeRebind={shapeRebind} navigationContext={query} />
+          <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} stageDecision={stageDecision} shapeRebind={shapeRebind} flowMap={flowMap} navigationContext={query} />
         </MessagesProvider>
       ) : (
         <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} navigationContext={query} />

@@ -9,8 +9,11 @@
  *
  * - Runs inside the platform (the queue aggregator calls it), never as a
  *   hand-run script: platform function does not depend on a client.
- * - Idempotent: replayed rows carry actorId `backfill:drive-log`; when any
- *   exist the replay does nothing.
+ * - Idempotent: replayed rows carry the replay's versioned actorId; when any
+ *   exist the replay does nothing. A new version (the planner learned to see
+ *   something the last replay dropped) first removes the rows an earlier
+ *   version wrote. They are derived from the drive log, which is untouched, so
+ *   replacing them loses nothing.
  * - Never double counts: it replays only rows older than the first live stage
  *   event.
  * - Resolution is the drive tick, and the shape is the room's current claim.
@@ -20,16 +23,25 @@
  */
 import { aggregateQueueMetrics, type QueueTelemetryRow, type RollupDeps } from "@/lib/queue/queue-metrics-rollup";
 
-import { readDeclaredWorkShapeRef } from "./work-shapes";
+import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import {
   WORKROOM_STAGE_ITEM_KIND,
   WORKROOM_STAGE_QUEUE_PREFIX,
+  openStageAfter,
   planStageTransitions,
   readDriveObservation,
   type StageTransition,
 } from "./workroom-stage-telemetry";
 
-export const STAGE_BACKFILL_ACTOR = "backfill:drive-log";
+/**
+ * v2: holds raised before a room entered any stage are placed at the shape's
+ * first stage, and conformance causes are read from the drive ledger. v1
+ * dropped both, so the 2026-09-23 pile of rooms paused on
+ * missing_explicit_coordinator never appeared.
+ */
+export const STAGE_BACKFILL_ACTOR = "backfill:drive-log:v2";
+/** Every replay version, current and superseded. */
+export const STAGE_BACKFILL_ACTOR_PREFIX = "backfill:drive-log";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type DriveLogRoom = {
@@ -43,16 +55,19 @@ export type DriveLogRoom = {
 export function replayDriveLog(rooms: readonly DriveLogRoom[], until: Date): StageTransition[] {
   const out: StageTransition[] = [];
   for (const room of rooms) {
-    const shapeRef = readDeclaredWorkShapeRef(room.scopeClaims);
+    const shapeRef = readWorkShapeClaimRef(room.scopeClaims);
     if (!shapeRef) continue;
     const ordered = [...room.rows]
       .filter((row) => row.recordedAt.getTime() < until.getTime())
       .sort((a, b) => a.recordedAt.getTime() - b.recordedAt.getTime());
     let prior = null as ReturnType<typeof readDriveObservation>;
+    let openStageKey: string | null = null;
     for (const row of ordered) {
       const next = readDriveObservation({ workroomDrive: row.payload });
       if (!next) continue;
-      out.push(...planStageTransitions({ capsuleId: room.capsuleId, shapeRef, prior, next, at: row.recordedAt }));
+      const planned = planStageTransitions({ capsuleId: room.capsuleId, shapeRef, prior, next, at: row.recordedAt, openStageKey });
+      out.push(...planned);
+      openStageKey = openStageAfter(openStageKey, planned);
       prior = next;
     }
   }
@@ -61,6 +76,8 @@ export function replayDriveLog(rooms: readonly DriveLogRoom[], until: Date): Sta
 
 export type StageBackfillDeps = {
   alreadyBackfilled: () => Promise<boolean>;
+  /** Remove rows an earlier replay version wrote; returns the days they covered. */
+  clearSuperseded: () => Promise<string[]>;
   /** Earliest live (non-backfill) stage event, or null when none yet. */
   firstLiveEventAt: () => Promise<Date | null>;
   loadDriveLog: (since: Date, until: Date) => Promise<DriveLogRoom[]>;
@@ -84,9 +101,10 @@ export async function backfillWorkroomStageTelemetry(
   const since = new Date(now.getTime() - (options.lookbackDays ?? 90) * DAY_MS);
   const until = (await deps.firstLiveEventAt()) ?? now;
   const transitions = replayDriveLog(await deps.loadDriveLog(since, until), until);
+  const clearedDays = await deps.clearSuperseded();
   const inserted = await deps.insert(transitions.map((t) => ({ ...t, actorId: STAGE_BACKFILL_ACTOR })));
 
-  const days = new Set(transitions.map((t) => t.occurredAt.toISOString().slice(0, 10)));
+  const days = new Set([...clearedDays, ...transitions.map((t) => t.occurredAt.toISOString().slice(0, 10))]);
   for (const day of [...days].sort()) await deps.aggregateDay(new Date(`${day}T12:00:00.000Z`));
   return { ran: true, transitions: inserted, days: days.size, until: until.toISOString() };
 }
@@ -108,9 +126,18 @@ export async function defaultStageBackfillDeps(): Promise<StageBackfillDeps> {
         where: { itemKind: WORKROOM_STAGE_ITEM_KIND, actorId: STAGE_BACKFILL_ACTOR },
         select: { id: true },
       })) !== null,
+    clearSuperseded: async () => {
+      const where = {
+        itemKind: WORKROOM_STAGE_ITEM_KIND,
+        actorId: { startsWith: STAGE_BACKFILL_ACTOR_PREFIX, not: STAGE_BACKFILL_ACTOR },
+      };
+      const rows = await prisma.queueTelemetryEvent.findMany({ where, select: { occurredAt: true } });
+      await prisma.queueTelemetryEvent.deleteMany({ where });
+      return [...new Set(rows.map((row) => row.occurredAt.toISOString().slice(0, 10)))];
+    },
     firstLiveEventAt: async () =>
       (await prisma.queueTelemetryEvent.findFirst({
-        where: { itemKind: WORKROOM_STAGE_ITEM_KIND, NOT: { actorId: STAGE_BACKFILL_ACTOR } },
+        where: { itemKind: WORKROOM_STAGE_ITEM_KIND, NOT: { actorId: { startsWith: STAGE_BACKFILL_ACTOR_PREFIX } } },
         orderBy: { occurredAt: "asc" },
         select: { occurredAt: true },
       }))?.occurredAt ?? null,

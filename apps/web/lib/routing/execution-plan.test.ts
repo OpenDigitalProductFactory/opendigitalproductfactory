@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import {
   attachHarnessRecipeToPlan,
+  activityBudgetExclusion,
   buildPlanFromRecipe,
   buildDefaultPlan,
   resolveDefaultExecutionAdapter,
@@ -577,5 +578,18 @@ describe("buildDefaultPlan carries situational parameters", () => {
       makeContract({ reasoningDepth: "high" }),
     );
     expect(plan.effortUnexpressed).toBe(true);
+  });
+});
+
+describe("activity fixed thinking admission", () => {
+  it.each(["anthropic", "google"])("rejects %s thinking that consumes the completion allowance", (providerId) => {
+    const endpoint = makeEndpoint({ providerId, maxOutputTokens: 32768, maxContextTokens: 65536,
+      capabilities: { ...EMPTY_CAPABILITIES, thinking: true } });
+    const contract = makeContract({ reasoningDepth: "high", estimatedInputTokens: 20000 });
+    const activity = makeActivity();
+    activity.tokenEnvelope = { maxInputTokens: 24000, maxOutputTokens: 8192, compression: "none" };
+    expect(activityBudgetExclusion(endpoint, contract, activity)).toMatch(/thinking/i);
+    activity.tokenEnvelope.maxOutputTokens = 16384;
+    expect(activityBudgetExclusion(endpoint, contract, activity)).toBeNull();
   });
 });

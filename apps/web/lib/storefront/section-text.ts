@@ -74,15 +74,18 @@ export function applySectionTextPatch(input: {
     input.content && typeof input.content === "object" && !Array.isArray(input.content)
       ? { ...(input.content as Record<string, unknown>) }
       : {};
-  for (const [key, raw] of Object.entries(text)) {
-    const field = allowed.get(key)!;
+  // Write by the allow-listed field definition, never by a caller-supplied key,
+  // so a property name can only ever come from EDITABLE_SECTION_TEXT.
+  for (const field of fields) {
+    if (!Object.prototype.hasOwnProperty.call(text, field.key)) continue;
+    const raw = text[field.key];
     if (typeof raw !== "string") return err(`${field.key} must be text.`);
     const value = raw.trim();
     if (value.length > field.maxLength) {
       return err(`${field.key} is limited to ${field.maxLength} characters.`);
     }
-    if (value.length === 0) delete next[key];
-    else next[key] = value;
+    if (value.length === 0) delete next[field.key];
+    else next[field.key] = value;
   }
   return ok(next);
 }

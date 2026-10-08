@@ -39,6 +39,9 @@ export function classifyRoute(pathname: string): RouteClass {
   // before it will render consent.
   if (pathname.startsWith("/api/oauth/")) return RouteClass.PublicApi;
   if (pathname.startsWith("/api/health")) return RouteClass.PublicApi;
+  // BI-52934B3E: the signed agent-toolchain manifest and pack. A client whose
+  // credential is the stale part must still be able to repair, so no session.
+  if (pathname.startsWith("/api/agent-toolchain/")) return RouteClass.PublicApi;
   if (pathname.startsWith("/api/calendar/")) return RouteClass.PublicApi;
   if (pathname.startsWith("/api/docs")) return RouteClass.PublicApi;
   if (pathname.startsWith("/api/")) return RouteClass.ProtectedApi;

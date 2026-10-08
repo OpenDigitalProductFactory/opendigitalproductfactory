@@ -1,6 +1,7 @@
 import type { prisma as defaultPrisma } from "@dpf/db";
 import type { TileStatus } from "./types";
 import { resolveApplicableRegulationDbIds } from "@/lib/compliance-library";
+import { countPendingApprovalRequests } from "@/lib/coworker/converted-approval-requests";
 
 export type SixCKey =
   | "context"
@@ -397,11 +398,9 @@ export async function loadWorkspaceCommandCenter(
     }),
     prismaClient.taskRun.count({ where: { status: { in: ["input-required", "auth-required"] } } }),
     prismaClient.taskRun.count({ where: { status: "failed", updatedAt: { gte: recentSince } } }),
-    prismaClient.agentActionProposal.count({ where: { status: "proposed" } }),
+    countPendingApprovalRequests(prismaClient, now), // proposals + converted envelopes (BI-C8EC05C9)
     prismaClient.toolExecution.count({ where: { success: false, createdAt: { gte: recentSince } } }),
-    prismaClient.toolExecutionReceipt.count({
-      where: { receiptStatus: "valid", createdAt: { gte: recentSince } },
-    }),
+    prismaClient.toolExecutionReceipt.count({ where: { receiptStatus: "valid", createdAt: { gte: recentSince } } }),
     prismaClient.coworkerCapabilityNeed.count({
       where: { status: { in: ["submitted", "reviewing", "accepted"] } },
     }),

@@ -7,7 +7,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { completeBacklogItemTransition } from "./backlog-terminal-transition";
-import { readBacklogItemCompletion } from "./backlog-completion-evaluation";
+import { evaluateBacklogItemCompletion, readBacklogItemCompletion } from "./backlog-completion-evaluation";
 import type { MergeDeliverySignal } from "./merge-delivery-signal";
 
 const NOW = "2026-10-06T12:00:00.000Z";
@@ -155,5 +155,87 @@ describe("the read projection evaluates completion as the completion gate does (
       db: broken.client as never, dependencies: deps("merged"),
     });
     expect(read).toBeNull();
+  });
+});
+
+// BI-B22E50BC: an operational chore (no code, no PR, no workroom) closes on its
+// manual check. With no bound shape it used to fall onto the v2 fix table,
+// which owes a spec baseline and reconciliation no such chore can produce; the
+// only exit was retiring work that was done. A well-formed operational manifest
+// now closes on the small-shape lane, which is the governance it actually owes.
+describe("an operational close is gated as small work, not as an unshaped fix (BI-B22E50BC)", () => {
+  const OPERATIONAL_GAP = ["OBJECTIVE_BASELINE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED", "PLAN_REQUIRED"];
+
+  async function close(args: {
+    workClass: string;
+    allowed: boolean;
+    workType?: string;
+    itemOverrides?: Record<string, unknown>;
+  }) {
+    const { client, item } = fixture({ status: "in-progress", workType: args.workType ?? "chore", ...args.itemOverrides });
+    const db = { ...client, workroom: { findFirst: vi.fn(async () => null) } };
+    const blockers = args.allowed ? [] : [{
+      code: "missing-dimension", message: "Completion evidence is missing manual", dimension: "manual",
+    }];
+    const workClassBlocker = (args.workType ?? "chore") === "bug" && args.workClass === "operational"
+      ? [{ code: "incompatible-work-class", message: "workType=bug cannot complete as operational", dimension: "manifest" }]
+      : [];
+    return evaluateBacklogItemCompletion({
+      db: db as never,
+      item: item as never,
+      rawManifest: { workClass: args.workClass, evidenceActivityIds: ["ev-1"] },
+      transitionObject: { kind: "backlog-item", id: "BI-1", expectedVersion: "in-progress", targetState: "done" },
+      evaluatedAt: NOW,
+      dependencies: {
+        ...deps("not-merged"),
+        resolveCompletionEvidence: async () => ({
+          kind: "evaluated" as const,
+          item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: args.workType ?? "chore" },
+          verdict: {
+            allowed: args.allowed && workClassBlocker.length === 0,
+            noOp: false,
+            normalizedManifest: { workClass: args.workClass, evidenceActivityIds: ["ev-1"], useActiveBuildEvidence: false },
+            acceptanceEvidenceRefs: args.allowed ? ["ev-1"] : [],
+            blockers: [...blockers, ...workClassBlocker],
+            nextAction: args.allowed ? null : "Record fresh evidence for manual with record_execution_evidence, then retry with those activity IDs.",
+          },
+        }) as never,
+      },
+    });
+  }
+
+  it("an unshaped chore closing as operational on a manual check is allowed", async () => {
+    const result = await close({ workClass: "operational", allowed: true });
+    expect(unmetCodes(result.decision)).toEqual([]);
+    expect(result.decision.verdict).toBe("allowed");
+  });
+
+  it("an operational close missing its manual check names that evidence, not a spec baseline", async () => {
+    const result = await close({ workClass: "operational", allowed: false });
+    expect(result.decision.verdict).not.toBe("allowed");
+    const codes = unmetCodes(result.decision);
+    expect(codes).toContain("DELIVERY_EVIDENCE_REQUIRED");
+    for (const code of OPERATIONAL_GAP) expect(codes).not.toContain(code);
+    const delivery = result.decision.unmet.find((entry) => entry.code === "DELIVERY_EVIDENCE_REQUIRED");
+    expect(delivery?.nextAction).toContain("manual");
+  });
+
+  it("a code-bearing chore (implementation) keeps the unshaped gates", async () => {
+    const result = await close({ workClass: "implementation", allowed: true });
+    expect(unmetCodes(result.decision)).toEqual(expect.arrayContaining(["OBJECTIVE_BASELINE_REQUIRED"]));
+  });
+
+  it("an operational manifest on a work type that cannot close as operational changes nothing", async () => {
+    const result = await close({ workClass: "operational", allowed: true, workType: "bug" });
+    expect(unmetCodes(result.decision)).toEqual(expect.arrayContaining(["OBJECTIVE_BASELINE_REQUIRED"]));
+  });
+
+  it("an item governed by a Build Studio build is not an operational close", async () => {
+    const result = await close({
+      workClass: "operational",
+      allowed: true,
+      itemOverrides: { activeBuild: { kind: "fix", verificationOut: null, uxVerificationStatus: null } },
+    });
+    expect(unmetCodes(result.decision)).toEqual(expect.arrayContaining(["OBJECTIVE_BASELINE_REQUIRED"]));
   });
 });

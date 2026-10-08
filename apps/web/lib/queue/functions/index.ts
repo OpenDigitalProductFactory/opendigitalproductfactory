@@ -30,6 +30,7 @@ import { buildExecute } from "./build-execute";
 import { preBuildReviewRepair } from "./pre-build-review-repair";
 import { buildResumeAfterUpgradePause } from "./build-resume-after-upgrade-pause";
 import { buildGauntletRepair } from "./build-gauntlet-repair";
+import { agentChildThreadRun } from "./agent-child-thread-run";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -52,6 +53,7 @@ import { wikiLint } from "./wiki-lint";
 import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verification";
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
 import { queueMetricsAggregator } from "./queue-metrics-aggregator";
+import { workroomFlowReview } from "./workroom-flow-review";
 import { businessMetricsAggregator } from "./business-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
 import { mcpCallEfficiencyScan } from "./mcp-call-efficiency-scan";
@@ -101,6 +103,10 @@ import {
   decisionConciergeSweepScheduled,
   decisionConciergeSweepRequested,
 } from "./decision-concierge-sweep";
+import {
+  decisionTrustRecomputeScheduled,
+  decisionTrustRecomputeRequested,
+} from "./decision-trust-recompute";
 import {
   catalogEnrichmentSweepScheduled,
   catalogEnrichmentSweepRequested,
@@ -162,6 +168,7 @@ import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 export const scheduledFunctions = [
   decisionConciergeSweepScheduled, // EP-0AF96937: drafts what the owner should do about decisions waiting on them, every 4h
+  decisionTrustRecomputeScheduled, // BI-7D1E43DE: governed-decision TrustState from the shadow ledger, report only, every 6h
   prometheusPoll,
   fullDiscoverySweep,
   modelDiscoveryRefresh,
@@ -185,6 +192,7 @@ export const scheduledFunctions = [
   wikiLint,
   skillMetricsAggregator,
   queueMetricsAggregator, // EP-3516E23D P1: hourly QueueTelemetryEvent → QueueMetricSnapshot rollup
+  workroomFlowReview, // EP-B70E718D F8: daily flow review → ImprovementSignal per sustained bottleneck
   businessMetricsAggregator, // BI-PLAN-005: hourly operational sources → owner/manager BusinessMetricRollup
   skillCurator,
   mcpCallEfficiencyScan, // BI-A08EBAEC: daily ToolExecution thrash/volume/failure findings → PlatformNotification
@@ -247,6 +255,7 @@ export const eventFunctions = [
   pullRequestMergedBinding, // BI-A6E4D205: event-triggered on build/pr-merged.received — NOT a cron
   pullRequestMergedReap, // BI-848360EF: reap the merged branch's worktree, via the janitor's own rules
   decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
+  decisionTrustRecomputeRequested, // BI-7D1E43DE: the same recompute, on demand
   localModelInstall,
   providerCatalogRefresh, // BI-7F2FBDA3: on-demand provider re-discovery after a model refusal — event-triggered, NOT a cron
   rateRecovery,
@@ -264,6 +273,7 @@ export const eventFunctions = [
   preBuildReviewRepair,
   buildResumeAfterUpgradePause, // BI-E9DAA23F: on platform.quiescence-cleared, resume builds the pause held
   buildGauntletRepair,
+  agentChildThreadRun, // BI-287E1DD0: delegated child threads run as durable jobs
   assuranceBomGenerate,
   assuranceScanRun,
   deliberationRun,

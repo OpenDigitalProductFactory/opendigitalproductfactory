@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "card-beside-autonomy-switch",
+  "decisionInteractionId": "DI-85853DF4C460",
+  "scope": {
+    "files": [
+      "apps/web/components/admin/AuthorStagePreauthorisationCard.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "card-beside-autonomy-switch",
+      "dedicated-autonomy-page",
+      "mcp-tool-only"
+    ]
+  }
+}

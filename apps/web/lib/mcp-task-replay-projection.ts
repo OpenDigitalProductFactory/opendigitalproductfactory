@@ -5,6 +5,10 @@ import {
   terminalWriterEscalationMessage,
   terminalWriterEscalationStructuredContent,
   terminalWriterEscalationWaitReason,
+  TERMINAL_WRITER_REJECTED_WAIT_REASON,
+  terminalWriterRejectionMessage,
+  terminalWriterRejectionStructuredContent,
+  type TerminalWriterRejection,
 } from "./mcp-task-terminal-writer-escalation";
 
 export type TerminalWriterWait = {
@@ -20,6 +24,7 @@ export type TerminalWriterWait = {
   /** BI-50B0C471: the wait was caused by a capacity deferral after banked reads,
    * not by the writer; resuming it does not spend a writer attempt. */
   capacityDeferred?: "capacity" | "busy";
+  writerRejection?: TerminalWriterRejection;
 };
 
 type TerminalWriterDispatchFailure = {
@@ -112,6 +117,10 @@ export function projectRemoteTaskReplay(input: {
   }
   const terminalWriterEscalation = recoverTerminalWriterEscalation(input.existing.progressPayload);
   const terminalWriterWait = parseTerminalWriterWait(input.existing.progressPayload);
+  const recordedRejection = terminalWriterWait?.writerRejection;
+  const writerRejection = recordedRejection?.schemaVersion === 1
+    && optionalString(recordedRejection.error) && optionalString(recordedRejection.message)
+    && optionalString(recordedRejection.observedAt) ? recordedRejection : null;
   const terminalWriterDispatchFailure = parseTerminalWriterDispatchFailure(
     input.existing.progressPayload,
     terminalWriterWait,
@@ -138,6 +147,13 @@ export function projectRemoteTaskReplay(input: {
         waitReason: terminalWriterDispatchFailure.code,
         structuredContent: { error: terminalWriterDispatchFailure.code },
         isError: true,
+      } : terminalWriterWait && writerRejection ? {
+        resumable: true,
+        waitReason: TERMINAL_WRITER_REJECTED_WAIT_REASON,
+        content: remoteTaskContent(terminalWriterRejectionMessage(terminalWriterWait.writerToolName, writerRejection)),
+        structuredContent: terminalWriterRejectionStructuredContent(
+          terminalWriterWait.writerToolName, terminalWriterWait.attempt, writerRejection),
+        isError: false,
       } : terminalWriterWait ? {
         resumable: true,
         // BI-50B0C471: a wait the writer never caused replays as the capacity wait it is.

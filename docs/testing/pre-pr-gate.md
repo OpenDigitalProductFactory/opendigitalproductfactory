@@ -377,7 +377,11 @@ writes the latest gate result to Git-local state
 pass on one slot retires any non-passing sibling-slot record for the same
 branch and SHA as `superseded`, and every reader of that state (`pregate:status`,
 the pre-push hook, `pr:health`, the PreToolUse publish guard) consults all
-slots, so an earlier attempt on another slot cannot shadow a real pass. It
+slots, so an earlier attempt on another slot cannot shadow a real pass.
+`pregate:status` re-reads the winner a superseded record names. If that record
+no longer passed the same branch and SHA (a late lease loss can rewrite it
+after the fact), it names the winner's actual status and says no slot holds a
+pass, instead of repeating "passed" (BI-A9031FF3). It
 overwrites stale state with `admitted` and then `running` as soon as it owns the
 sandbox, before the expensive command mutates the runtime. If the child wrapper
 exits before a terminal record is written, `pregate` reads that running state,

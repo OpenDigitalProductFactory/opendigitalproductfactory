@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { OfferPositioningFields } from "@/components/admin/OfferPositioningFields";
 
 // Optional onboarding capture: market & competitive context. Saved as
 // first-party narrative into the org WWWD corpus (draft for review). Independent
@@ -78,7 +79,7 @@ export function MarketContextFields() {
           textAlign: "left",
         }}
       >
-        + Add market &amp; competitive context{" "}
+        + Add offer &amp; market context{" "}
         <span style={{ fontWeight: 400, color: "var(--dpf-muted)" }}>(optional)</span>
       </button>
     );
@@ -86,6 +87,7 @@ export function MarketContextFields() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13 }}>
+      <OfferPositioningFields />
       <div style={{ fontWeight: 600 }}>
         Market &amp; competitive context{" "}
         <span style={{ fontWeight: 400, color: "var(--dpf-muted)" }}>(optional)</span>

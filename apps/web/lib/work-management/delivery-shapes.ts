@@ -54,6 +54,9 @@ export type DeliveryShapeKey = (typeof DELIVERY_SHAPE_KEYS)[number];
 
 export const DELIVERY_SHAPE_VERSION = "1.0.0";
 
+/** The role that answers for the author's stages (`role:author`). */
+export const DELIVERY_AUTHOR_ROLE = "author";
+
 /** `key@version` references a claim may declare. */
 export const DELIVERY_SHAPE_REFS = DELIVERY_SHAPE_KEYS.map((key) => `${key}@${DELIVERY_SHAPE_VERSION}`);
 
@@ -124,14 +127,14 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
     stopConditions: [
       { kind: "success", condition: "PIR receipt recorded within 48 hours of merge.", disposition: "proceed" },
       { kind: "failure", condition: "PIR missed: the item flips to input-required and the declarer's next break-fix declaration is refused.", disposition: "awaiting-person" },
-      { kind: "budget", condition: "A second break-fix is declared while one is open on this installation — refused; the lane is WIP 1.", disposition: "refused" },
+      { kind: "budget", condition: "The 48-hour post-implementation review window expires without a receipt; escalate this item's overdue review.", disposition: "awaiting-person" },
     ],
     grants: DELIVERY_ACTIVITY_GRANTS,
     measures: [
       { key: "break-fix-share", description: "Share of merged work declared break-fix in a rolling week; above 20% is a finding." },
       { key: "pir-latency-hours", description: "Hours from merge to PIR receipt." },
     ],
-    budgets: [{ kind: "cycles-per-window", limit: 1, unit: "open break-fix per installation" }],
+    budgets: [{ kind: "cycles-per-window", limit: 48, unit: "hours per item before post-implementation review" }],
     reviewPoint: { everyDays: 2, description: "Reviewed at the 48-hour PIR deadline whether or not the receipt landed." },
     collaborationShape: "escalation",
   },

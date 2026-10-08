@@ -182,7 +182,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "declare_break_fix",
     description:
-      "Declare the break-fix expedite lane on a claimed backlog item (design 2026-09-02 §4): an operational repair of a live defect that skips pre-authorisation and owes a post-implementation review receipt within 48 hours by someone other than the declarer. Human-only; WIP 1 per installation (a second open break-fix is refused); a declarer whose earlier break-fix missed its PIR is refused. Binds delivery-break-fix@1.0.0 on the item's live Workroom and records break_fix_declared with the PIR deadline.",
+      "Declare the break-fix expedite lane on a claimed backlog item (design 2026-09-02 §4): an operational repair of a live defect that skips pre-authorisation and owes a post-implementation review receipt within 48 hours by someone other than the declarer. Human-only; independent emergencies may be declared concurrently; a declarer whose earlier break-fix missed its PIR is refused. Binds delivery-break-fix@1.0.0 on the item's live Workroom and records break_fix_declared with the PIR deadline.",
     inputSchema: {
       type: "object",
       properties: {
@@ -233,7 +233,8 @@ const definitions: ToolDefinition[] = [
     description:
       "Renew the active lease for a Workroom so other agents can see that work is in flight. " +
       "Heartbeat on a human-scale cadence (between stages / few minutes), not every tool call. " +
-      "If the lease is already expired, re-claim or abandon — do not thrash heartbeat.",
+      "If the lease is already expired, re-claim or abandon — do not thrash heartbeat. " +
+      "Refused with lease_held_by_other while another principal holds a live lease; ask the room's owner to hand it over instead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -367,6 +368,7 @@ const definitions: ToolDefinition[] = [
         toExecutorRef: { type: "string", description: "Optional session/owner id for the receiving executor." },
         reason: { type: "string", description: "Why the handoff is happening." },
         handoffManifest: { type: "object", description: "Optional handoff context: next action, open risks, evidence digest, branch/worktree, suggested receiver." },
+        expectedLeaseHolderPrincipalId: { type: ["string", "null"], description: "The lease holder you read from get_workroom. When given, the handoff is refused with lease_holder_changed if someone else now holds the lease." },
       },
       required: ["capsuleId", "toExecutorKind"],
     },

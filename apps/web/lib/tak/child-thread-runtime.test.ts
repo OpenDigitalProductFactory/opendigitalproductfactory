@@ -29,6 +29,9 @@ const {
     professionCorpusUsageStat: {
       upsert: vi.fn(),
     },
+    delegationChain: {
+      updateMany: vi.fn(),
+    },
   },
   mockResolveAgent: vi.fn(),
   mockResolveTools: vi.fn(),
@@ -44,9 +47,10 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
 }));
 
 import {
+  failInterruptedChildThread,
   prepareChildExecution,
   runChildThreadExecution,
-} from "./agent-thread-dispatcher-runtime";
+} from "./child-thread-runtime";
 import {
   buildProviderReviewPacket,
   formatProviderReviewObjective,
@@ -288,6 +292,37 @@ describe("runChildThreadExecution", () => {
     });
   });
 
+  // BI-A0BFA63E: an accepted handoff's chain link closes with the child's outcome.
+  it.each([
+    ["completed", () => mockExecuteLoop.mockResolvedValue({ content: "Done.", executedTools: [] }),
+      { status: "completed", completedAt: expect.any(Date) }],
+    ["failed", () => mockExecuteLoop.mockRejectedValue(new Error("provider down")),
+      { status: "failed", completedAt: expect.any(Date), reason: "child failed" }],
+  ])("closes the handoff's delegation link when the child %s", async (_outcome, arrange, data) => {
+    arrange();
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: "parent-1" });
+    mockPrisma.taskRun.findUnique.mockResolvedValue({
+      a2aMetadata: {
+        collaboration: {
+          kind: "handoff",
+          fromAgentId: "coo",
+          toAgentId: "agent-mkt",
+          enteredVia: "handoff",
+          tier: 2,
+          delegationLinkId: "link-1",
+        },
+      },
+    });
+    mockPrisma.agentMessage.findMany.mockResolvedValue([{ role: "user", content: "Draft the post." }]);
+
+    await runChildThreadExecution(ctx).catch(() => undefined);
+
+    expect(mockPrisma.delegationChain.updateMany).toHaveBeenCalledWith({
+      where: { id: "link-1", status: "active" },
+      data,
+    });
+  });
+
   it("returns a validated provider advisory to the parent in the COO voice", async () => {
     const specialistReply = JSON.stringify({
       schemaVersion: "provider-compliance-advisory.v1",
@@ -423,5 +458,45 @@ describe("runChildThreadExecution", () => {
         content: expect.stringMatching(/insufficient-evidence.*References/s),
       }),
     });
+  });
+});
+
+// BI-287E1DD0: the durable job's failure path fails an interrupted child once,
+// tells its parent, and leaves a child that already finished alone.
+describe("failInterruptedChildThread", () => {
+  const ctx = { threadId: "child-1", taskRunId: "TR-CHILD-1", userId: "user-1", agentId: "agent-mkt", routeContext: "/coworker" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.taskRun.update.mockResolvedValue({});
+    mockPrisma.agentThread.update.mockResolvedValue({});
+  });
+
+  it("fails a still-working child with a plain interruption reason", async () => {
+    mockPrisma.taskRun.findUnique.mockResolvedValueOnce({ status: "working" });
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: null });
+
+    await failInterruptedChildThread(ctx, "lease_expired_exhausted");
+
+    expect(mockPrisma.taskRun.update).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-CHILD-1" },
+      data: expect.objectContaining({
+        status: "failed",
+        progressPayload: { error: expect.stringContaining("not re-run automatically") },
+      }),
+    });
+    expect(mockPrisma.agentThread.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "child-1" },
+      data: { terminalError: expect.objectContaining({ message: expect.stringContaining("lease_expired_exhausted") }) },
+    }));
+  });
+
+  it("leaves a child that already reached a terminal state", async () => {
+    mockPrisma.taskRun.findUnique.mockResolvedValueOnce({ status: "completed" });
+
+    await failInterruptedChildThread(ctx, "engine gave up");
+
+    expect(mockPrisma.taskRun.update).not.toHaveBeenCalled();
+    expect(mockPrisma.agentThread.update).not.toHaveBeenCalled();
   });
 });

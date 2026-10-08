@@ -129,9 +129,38 @@ normalization rather than stored, because a claim that can never resolve would l
 looking declared and behaving inert — the exact failure this contract exists to end.
 
 The drive never executes a stage whose accountable principal is a `role:` or `person:`
-reference, and never executes a `governed-decision` advance, at any posture. Those become
-attention for the named principal. Sending outward, moving money, rotating a credential,
-merging a change, and changing authority are declared that way in every standing shape.
+reference, at any posture, and executes a `governed-decision` advance only when its
+principal is an `agent:` and the room's action boundary is `preauthorized` (EP-4614F35E).
+Everything else becomes attention for the named principal. Sending outward, moving money,
+rotating a credential, merging a change, and changing authority are declared with `role:`
+principals in every standing shape, so they always reach a person.
+
+**A readiness review stage is bound to its reviewer, never its author (BI-2C8750FC).** A
+delivery stage that leaves a `spec-approval-receipt` or `plan-review-receipt` is where a
+design-spec, spec-approval or plan-review is owed. When the drive stops there, it reads the
+independent reviewer route the readiness recovery issues and rebinds the stage for that
+tick: person-authored work at `preauthorized` gets `agent:<eligible reviewer>` and is
+dispatched as the exact server-issued reviewer packet through the BI-A835D300 runner (no
+generic scheduled task); agent-authored work, or a room below `preauthorized`, gets
+`role:<gate role>`, so attention goes to the reviewer role. With no independent route, an
+unknown author, or a reviewer agent that is the authoring agent, nothing is bound. The
+registry shape is unchanged. Design: `docs/superpowers/specs/2026-09-02-proactive-review-drive-design.md`
+("As built — review stages").
+
+The reviewer's receipt is the stage's evidence (BI-80738C08): once every review receipt
+the stage declares has passed for the room's current head, the next tick advances it. A
+failing receipt blocks the stage and shows in the room with its finding count.
+
+Two bounded exceptions bind a non-governed `role:` stage to an agent; neither ever reaches a
+`governed-decision` advance (`boundStagePrincipal`, `drive-plan-stage.ts`). A room may carry
+its own `workShapeRoleBindings` scope claim naming the agent that holds a role there
+(BI-C1781121). And a delivery shape's `role:author` stages bind to the software-engineer
+coworker for a tick when the operator's recorded pre-authorisation
+(`workroom-drive.author-stage-preauthorisation`, granted and revoked on
+**Admin > Platform Development**, off by default) is in force and the room's item is funded
+within budget: its portfolio has a budget this quarter and its delivered plus in-flight points
+fit it (`author-stage-autonomy.ts`, BI-8A32EBFF). `delivery-xlarge` never binds. When either
+condition fails the stage stays attention and the drive ledger names the missing condition.
 
 A room that never declared one gets a **derived** shape from what it already is
 (`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,

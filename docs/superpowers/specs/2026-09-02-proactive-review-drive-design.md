@@ -101,6 +101,51 @@ for the review stages — reviewer-on-by-default. Lower-trust or customer-facing
 sit at `balanced` (the review is staged as `attention`/`propose` — teed up, one action to
 run) or `quiet` (staged, not driven). The level is the room's, tunable, reversible.
 
+## As built — review stages (BI-2C8750FC)
+
+Step 1 landed as a runtime binding, not a registry change. A shape stage is a review
+stage when it declares the receipt kind of a readiness review gate: `spec-approval-receipt`
+(design-spec and spec-approval) or `plan-review-receipt` (plan-review). The gate→receipt
+kind map lives once, in `apps/web/lib/work-management/readiness-review-stages.ts`, and the
+room's initiative-evidence readout reads the same map.
+
+- When the drive stops on a review stage with `attention`, the tick
+  (`apps/web/lib/queue/functions/workroom-drive-review-stages.ts`) reads the item's
+  implementation decision, narrows it to the design-phase reviews, and asks
+  `resolveTerminalInitiativeRecovery` for the independent routes. At most five rooms per
+  tick pay for that read.
+- The room's author is read the way the BI-A835D300 runner reads it (`loadRoomAuthors`):
+  an authoring assistant means agent-authored, else the requesting person.
+- Person-authored at `preauthorized`: the stage is rebound to `agent:<reviewer>` and the
+  drive returns `dispatch_agent`. Agent-authored, or below `preauthorized`: the stage is
+  rebound to `role:<gate role>` (`design-checklist-reviewer`, `plan-reviewer`), so
+  attention goes to the reviewer and never to the author.
+- Nothing is bound when independence cannot be shown: no independent route, an unknown
+  author, or a reviewing agent that is the authoring agent. The stage then keeps its
+  declared principal.
+- A review stage's `dispatch_agent` does not create a ScheduledAgentTask. It sends the
+  exact server-issued reviewer packet through `dispatchReviewerRequest` (the BI-A835D300
+  runner, idempotent on the request key). A request that cannot be sent concludes as
+  `reviewer_dispatch_unavailable`, a named blockage.
+- `independentEvaluatorPrincipalRef` is fed the bound reviewer, so the Process Overseer
+  can never also be the reviewer. `reviewDue` is **not** fed from readiness: in
+  conformance it is the shape's review point and pauses the drive, which would park the
+  very stage this binds.
+
+A passed review advances its stage (BI-80738C08). The drive tick reads the readiness
+receipts the room's initiative-evidence readout already binds to a stage (same
+repository, the room's current head, one stage declaring the kind) and turns them into
+that stage's evidence (`apps/web/lib/work-management/review-receipt-stage-evidence.ts`):
+
+- The stage completes when every initiative receipt kind it declares has passed, stamped
+  when the last one landed. The `spec-approval` stage of `delivery-large` therefore waits
+  for both spec approval and architecture review, as its condition says.
+- A failing receipt is a blocker and never advances; the room readout shows it with its
+  finding count.
+- A stage bound to a reviewer role is asked, never dispatched. The reviewer ask starts it,
+  and for that stage only the review receipts count, so the author's own writes still
+  cannot satisfy a reviewer's stage. A review of a superseded head binds to no stage.
+
 ## What this reverses, and what it preserves
 
 **Reverses:** "recovery is advisory / never auto-dispatch." At `assertive`/`preauthorized`,
