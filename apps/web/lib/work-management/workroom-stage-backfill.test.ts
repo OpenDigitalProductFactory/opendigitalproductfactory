@@ -43,10 +43,13 @@ describe("replayDriveLog", () => {
     const rooms = Array.from({ length: 200 }, (_, i) => ({
       capsuleId: `WC-${i}`,
       scopeClaims: [{ workShape: SHAPE }],
-      rows: [tick(23, 0, "attention", "role_stage", "reproduce"), tick(23, 1, "pause", "conformance_pause", null)],
+      rows: [
+        tick(23, 0, "attention", "role_stage", "reproduce"),
+        { recordedAt: t(23, 1), payload: { action: "pause", reason: "conformance_pause", stageKey: null, lastCycleKey: null, conformance: { deviations: [{ code: "missing_explicit_coordinator" }] } } },
+      ],
     }));
     // Each room switches hold cause at the same stage: released, then held again with the new cause.
-    const held = replayDriveLog(rooms, t(30)).filter((r) => r.transition === "held" && r.laneKey === "conformance_pause");
+    const held = replayDriveLog(rooms, t(30)).filter((r) => r.transition === "held" && r.laneKey === "conformance_pause:missing_explicit_coordinator");
     expect(held).toHaveLength(200);
     expect(new Set(held.map((r) => r.queueKey))).toEqual(new Set([`wr:${SHAPE}:reproduce`]));
   });

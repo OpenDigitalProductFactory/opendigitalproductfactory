@@ -20,7 +20,7 @@
  */
 import { aggregateQueueMetrics, type QueueTelemetryRow, type RollupDeps } from "@/lib/queue/queue-metrics-rollup";
 
-import { readDeclaredWorkShapeRef } from "./work-shapes";
+import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import {
   WORKROOM_STAGE_ITEM_KIND,
   WORKROOM_STAGE_QUEUE_PREFIX,
@@ -43,7 +43,7 @@ export type DriveLogRoom = {
 export function replayDriveLog(rooms: readonly DriveLogRoom[], until: Date): StageTransition[] {
   const out: StageTransition[] = [];
   for (const room of rooms) {
-    const shapeRef = readDeclaredWorkShapeRef(room.scopeClaims);
+    const shapeRef = readWorkShapeClaimRef(room.scopeClaims);
     if (!shapeRef) continue;
     const ordered = [...room.rows]
       .filter((row) => row.recordedAt.getTime() < until.getTime())

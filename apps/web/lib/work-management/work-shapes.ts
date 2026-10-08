@@ -427,18 +427,11 @@ export function getWorkShapeVersion(key: string, version: string): WorkShapeDefi
  *  what the room declared (BI-97B24FB5).
  */
 export function readDeclaredWorkShapeKey(scopeClaims: unknown): string | null {
-  const ref = readDeclaredWorkShapeRef(scopeClaims);
-  return ref ? ref.split("@")[0] ?? null : null;
-}
-
-/** The room's declared shape as it was claimed, `key@version` (or a bare key if
- *  the claim carried no version). Same claim-reading rule as the key reader. */
-export function readDeclaredWorkShapeRef(scopeClaims: unknown): string | null {
   if (!Array.isArray(scopeClaims)) return null;
   for (const claim of scopeClaims) {
     if (!claim || typeof claim !== "object") continue;
     const ref = (claim as Record<string, unknown>).workShape;
-    if (typeof ref === "string" && ref.length > 0) return ref;
+    if (typeof ref === "string" && ref.length > 0) return ref.split("@")[0] ?? null;
   }
   return null;
 }

@@ -28,8 +28,11 @@
 import type { QueueOutcome, QueueTransition } from "@/lib/queue/flow-metrics";
 import type { QueueTransitionInput } from "@/lib/queue/queue-telemetry";
 
-import { readDeclaredWorkShapeRef } from "./work-shapes";
+import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
+import { holdCauseTag } from "./workroom-hold-cause";
+
+export { describeHoldCause, holdCauseTag } from "./workroom-hold-cause";
 
 export const WORKROOM_STAGE_ITEM_KIND = "workroom-stage";
 export const WORKROOM_STAGE_QUEUE_PREFIX = "wr:";
@@ -40,7 +43,10 @@ export type DriveObservation = {
   reason: string | null;
   stageKey: string | null;
   cycleKey: string | null;
+  /** The first conformance deviation code when the drive paused or escalated on conformance. */
+  detail?: string | null;
 };
+
 
 export type StageTransition = Required<Pick<QueueTransitionInput, "queueKey" | "itemKind" | "itemId" | "transition">> & {
   outcome: QueueOutcome | null;
@@ -65,11 +71,16 @@ export function readDriveObservation(workspaceState: unknown): DriveObservation 
     : null;
   if (!drive) return null;
   const str = (value: unknown) => (typeof value === "string" && value.length > 0 ? value : null);
+  const reason = str(drive.reason);
+  const conformance = drive.conformance && typeof drive.conformance === "object" ? (drive.conformance as Record<string, unknown>) : null;
+  const first = Array.isArray(conformance?.deviations) ? (conformance!.deviations as unknown[])[0] : null;
+  const code = first && typeof first === "object" ? str((first as Record<string, unknown>).code) : null;
   return {
     action: str(drive.action),
-    reason: str(drive.reason),
+    reason,
     stageKey: str(drive.stageKey),
     cycleKey: str(drive.lastCycleKey),
+    detail: reason?.startsWith("conformance_") ? code : null,
   };
 }
 
@@ -81,7 +92,12 @@ function locate(observation: DriveObservation | null): Located | null {
   if (!observation?.action || !observation.reason) return null;
   const classified = classifyDriveSegment({ action: observation.action, reason: observation.reason });
   if (!classified) return null;
-  return { ...classified, stageKey: observation.stageKey, cycleKey: observation.cycleKey };
+  return {
+    ...classified,
+    cause: classified.state === "blocked" ? holdCauseTag(classified.cause, observation.detail) : classified.cause,
+    stageKey: observation.stageKey,
+    cycleKey: observation.cycleKey,
+  };
 }
 
 function holdLane(located: Located): string {
@@ -204,7 +220,7 @@ export function workroomStageLiveCounts(
 ): Map<string, { depth: number; wip: number }> {
   const counts = new Map<string, { depth: number; wip: number }>();
   for (const room of rooms) {
-    const shapeRef = readDeclaredWorkShapeRef(room.scopeClaims);
+    const shapeRef = readWorkShapeClaimRef(room.scopeClaims);
     const located = locate(readDriveObservation(room.workspaceState));
     if (!shapeRef || !located?.stageKey || !IN_FLOW.has(located.state)) continue;
     const key = workroomStageQueueKey(shapeRef, located.stageKey);
@@ -245,7 +261,7 @@ export async function emitStageTelemetryForDriveWrite(input: {
     if (!next) return;
     await emitStageTransitions(planStageTransitions({
       capsuleId: input.room.capsuleId,
-      shapeRef: readDeclaredWorkShapeRef(input.room.scopeClaims),
+      shapeRef: readWorkShapeClaimRef(input.room.scopeClaims),
       prior: readDriveObservation(input.room.workspaceState),
       next,
       at: input.at,
