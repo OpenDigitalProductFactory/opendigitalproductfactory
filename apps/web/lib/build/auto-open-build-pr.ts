@@ -32,6 +32,49 @@ export async function openBuildStudioPrAfterShip(input: {
   return "blocked";
 }
 
+/** How long a refused PR attempt stands before the ship reconciler tries again. */
+export const SHIP_PR_RETRY_MS = 60 * 60 * 1000;
+
+/**
+ * The PR is opened once, at review->ship. A refusal there (a guard, a stale
+ * sandbox, a since-fixed defect) left the build in ship with no PR and nothing
+ * to try again. The ship reconciler calls this for each ship build: it retries
+ * at most once per SHIP_PR_RETRY_MS, and openBuildStudioPrAfterShip itself skips
+ * a build that already has its PR.
+ */
+export async function retryBuildStudioPrForShipBuild(input: {
+  buildId: string;
+  actorUserId: string;
+  lastAttemptAt: Date | null;
+  now?: Date;
+  deps?: AutoPrDeps;
+}): Promise<"opened" | "blocked" | "skipped"> {
+  const now = input.now ?? new Date();
+  if (input.lastAttemptAt && now.getTime() - input.lastAttemptAt.getTime() < SHIP_PR_RETRY_MS) return "skipped";
+  return openBuildStudioPrAfterShip({ buildId: input.buildId, actorUserId: input.actorUserId, deps: input.deps });
+}
+
+/**
+ * The ship reconciler's hook: reads the build's owner and its last PR attempt,
+ * then retries. Never throws; a failure is logged and the next tick tries again.
+ */
+export async function retryPrForShipBuild(buildId: string, logger: Pick<Console, "error">): Promise<void> {
+  try {
+    const { prisma } = await import("@dpf/db");
+    const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { createdById: true } });
+    if (!build?.createdById) return;
+    const lastAttempt = await prisma.buildActivity.findFirst({
+      where: { buildId, tool: "auto_open_pr" },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    await retryBuildStudioPrForShipBuild({ buildId, actorUserId: build.createdById, lastAttemptAt: lastAttempt?.createdAt ?? null });
+  } catch (error) {
+    const { getErrorMessage } = await import("@/lib/shared/get-error-message");
+    logger.error("[auto-complete] PR retry failed for %s: %s", buildId, getErrorMessage(error));
+  }
+}
+
 type ExecuteTool = (typeof import("@/lib/mcp-tools"))["executeTool"];
 
 /**

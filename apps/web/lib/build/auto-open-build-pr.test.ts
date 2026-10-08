@@ -3,7 +3,7 @@
 // human review still gate what lands.
 import { describe, expect, it, vi } from "vitest";
 
-import { createPortalPrForBuild, openBuildStudioPrAfterShip } from "./auto-open-build-pr";
+import { SHIP_PR_RETRY_MS, createPortalPrForBuild, openBuildStudioPrAfterShip, retryBuildStudioPrForShipBuild } from "./auto-open-build-pr";
 
 const deps = (overrides = {}) => ({
   phaseOf: vi.fn().mockResolvedValue("ship"),
@@ -47,5 +47,29 @@ describe("createPortalPrForBuild", () => {
       "u1",
       expect.objectContaining({ featureBuildId: "FB-2E891686" }),
     );
+  });
+});
+
+describe("retryBuildStudioPrForShipBuild", () => {
+  const now = new Date("2026-10-08T02:00:00Z");
+
+  it("retries a ship build whose last PR attempt was refused over an hour ago", async () => {
+    const d = deps();
+    const out = await retryBuildStudioPrForShipBuild({
+      buildId: "FB-1", actorUserId: "u1", now, deps: d,
+      lastAttemptAt: new Date(now.getTime() - SHIP_PR_RETRY_MS - 1),
+    });
+    expect(out).toBe("opened");
+    expect(d.createPr).toHaveBeenCalledWith("FB-1", "u1");
+  });
+
+  it("waits out the retry interval after a recent attempt", async () => {
+    const d = deps();
+    const out = await retryBuildStudioPrForShipBuild({
+      buildId: "FB-1", actorUserId: "u1", now, deps: d,
+      lastAttemptAt: new Date(now.getTime() - 60_000),
+    });
+    expect(out).toBe("skipped");
+    expect(d.createPr).not.toHaveBeenCalled();
   });
 });

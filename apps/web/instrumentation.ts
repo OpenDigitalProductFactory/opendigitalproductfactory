@@ -462,12 +462,12 @@ export async function reconcileDeployedShipBuilds(
       where: { phase: "ship" },
       select: { id: true, buildId: true },
     });
-    const { mayCompleteAutonomousBuild } =
-      await import("@/lib/build/autonomous-build-completion-gate");
+    const { mayCompleteAutonomousBuild } = await import("@/lib/build/autonomous-build-completion-gate");
     let completed = 0;
     for (const build of shipBuilds) {
       try {
         if (!(await isFeatureBuildDeployed(build.buildId))) {
+          await (await import("@/lib/build/auto-open-build-pr")).retryPrForShipBuild(build.buildId, logger); // refused PR, hourly retry
           // A fully-local install treats ProductVersion registration as delivery.
           // Upstream builds no-op here and keep waiting for deployed evidence.
           if (!(await mayCompleteAutonomousBuild({ buildId: build.buildId, logger }))) continue;
