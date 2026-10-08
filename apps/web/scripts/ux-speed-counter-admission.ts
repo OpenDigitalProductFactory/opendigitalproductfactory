@@ -14,7 +14,8 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 
 import { admitCounters, MIN_RHO, type PassSample } from "../lib/ux-budget/speed-counter-admission";
@@ -31,15 +32,25 @@ type ExecutionRoute = {
   speedCounters?: SpeedCounters;
 };
 
+const TSX_CLI = createRequire(join(WEB, "package.json")).resolve("tsx/cli");
+
 function runPass(label: string, args: string[]): PassSample[] {
+  // A pass that writes no fresh execution record must fail loudly. Reusing the
+  // previous pass's file would compare a pass with itself and call every
+  // counter "repeatable" (observed on the first full run: pass B exited 1
+  // without measuring, and A was scored against A).
+  rmSync(EXECUTION, { force: true });
+  const startedAt = Date.now();
   // The sweep exits non-zero on a ratchet regression; admission only needs its
   // per-route execution record, so the exit code is reported, not fatal.
-  const run = spawnSync("pnpm", ["exec", "tsx", "scripts/ux-route-sweep.ts", ...args], {
+  const run = spawnSync(process.execPath, [TSX_CLI, "scripts/ux-route-sweep.ts", ...args], {
     cwd: WEB,
     stdio: "inherit",
-    shell: process.platform === "win32",
   });
   console.error(`[speed-admission] pass ${label} finished with exit ${run.status}`);
+  if (!existsSync(EXECUTION) || statSync(EXECUTION).mtimeMs < startedAt) {
+    throw new Error(`pass ${label} wrote no fresh execution record (exit ${run.status}); admission refuses to score stale data`);
+  }
   copyFileSync(EXECUTION, EXECUTION.replace(/\.json$/, `.pass-${label}.json`));
   const execution = JSON.parse(readFileSync(EXECUTION, "utf8")) as { routes: ExecutionRoute[] };
   return execution.routes
