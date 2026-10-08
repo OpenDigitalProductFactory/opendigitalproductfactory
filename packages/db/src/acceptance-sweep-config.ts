@@ -37,11 +37,16 @@ export const ACCEPTANCE_TREND_DAYS = 30;
 /** Readiness evaluations per run. The whole pool is revisited every ceil(N / page) runs (design §7). */
 export const ACCEPTANCE_SWEEP_PAGE_SIZE = 100;
 
-/** Aged items routed to a coworker per run. Used from phase 3 (BI-C1781121). */
+/** Steward rooms created per run for aged items (phase 3, BI-C1781121). */
 export const ACCEPTANCE_SWEEP_ROUTE_LIMIT = 10;
 
-/** Coworker routing stays off until phase 3 (BI-C1781121) lands and is verified. */
-export const ACCEPTANCE_SWEEP_ROUTING = false;
+/**
+ * Coworker routing (slice 3, BI-C1781121): each run gives up to
+ * ACCEPTANCE_SWEEP_ROUTE_LIMIT aged items one steward Workroom whose drive
+ * dispatches the item's in-platform owner. Rollback is setting this false:
+ * snapshots and run summaries do not depend on it.
+ */
+export const ACCEPTANCE_SWEEP_ROUTING = true;
 
 /**
  * Recorded for the operator reading the schedule, not sent to a model. The
@@ -54,4 +59,6 @@ export const ACCEPTANCE_SWEEP_PROMPT =
   + "and write one run summary to the standing Acceptance room with the pool's age bands, items aged "
   + "over 30 days, closable items and unroutable items by code. Only under a recorded operator "
   + "pre-authorisation (BI-45D3BBF4), close items whose completion gate already allows done, through "
-  + "the governed completion transition, a bounded number per run. Deterministic: no model judgement.";
+  + "the governed completion transition, a bounded number per run. Route aged items that cannot be "
+  + "closed and have a resolved in-platform coworker to one acceptance steward room each, oldest first, "
+  + "a bounded number of new rooms per run (BI-C1781121). Deterministic: no model judgement.";

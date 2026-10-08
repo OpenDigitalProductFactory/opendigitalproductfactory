@@ -7,8 +7,9 @@
 // approval from the Claude Code connection routed to admin@dpf.local, a setup
 // account nobody signs in with, and 193 of them had expired unanswered.
 //
-// Envelopes live fifteen minutes (AUTHORITY_APPROVAL_TTL_MS), so a single
-// envelope is gone long before anyone could notice it. The finding is about the
+// An outward envelope lives fifteen minutes and any other envelope seven days
+// (approval-lifetime.ts, BI-0012E6CA); either way a single envelope routed to an
+// absent account lapses with nobody to notice it. The finding is about the
 // PERSON: one item per delegate who is not using the portal, counting the
 // approvals that went to them unanswered in the lookback. The item informs a
 // superuser and links to where connections are managed; it never offers a

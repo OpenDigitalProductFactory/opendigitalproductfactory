@@ -53,9 +53,11 @@ compose's `dpf-tts:8000` default (never running on macOS) and fires a phantom
 ### Coworker approval envelopes (BI-78D3CF1E)
 
 A `CoworkerActionEnvelope` is a coworker asking one named human to approve one
-side-effecting call. It expires 15 minutes after it is raised, and an envelope
-nobody answers transitions to nothing — no alert, no error, no row anywhere an
-operator looks. Seven lapsed unactioned on a live install before an approval
+side-effecting call. It expires after a lifetime set by the call's declared
+consequence (BI-0012E6CA, `apps/web/lib/coworker/approval-lifetime.ts`):
+15 minutes for an outward or unclassified call, seven days for everything else.
+Before BI-410ACCB8 and BI-0012E6CA, an envelope nobody answered transitioned to
+nothing — no alert, no error, no row anywhere an operator looked. Seven lapsed unactioned on a live install before an approval
 surface existed, and the only way to learn that was to read the table.
 
 `dpf_coworker_envelopes_expired_unactioned` is the one to watch, and it cannot be

@@ -40,6 +40,22 @@ no portfolio.
   "subscription: $0 recorded, N tokens", because a subscription records no cost
   per call. It does not mean the use was free.
 
+## Which portfolio an item counts against
+
+The panel, the budget proposal, funding approval and admission all decide an
+item's portfolio the same way, so a budget and the work that uses it always line
+up:
+
+1. A portfolio the item names directly wins: its own portfolio, its digital
+   product's, its taxonomy node's, its AI coworker's, or its epic's.
+2. Otherwise, platform and common work, and work that was never given a scope,
+   counts as **Foundational**. The item is not changed; the rule is applied each
+   time the figures are read.
+3. Anything else stays **Unallocated** and is shown as such.
+
+The budget proposal shows how much of each portfolio's delivery came from rule 2,
+as `attributedByRule` with the basis `platform-default`.
+
 ## Setting a budget
 
 Choose **Set budget** on a portfolio's row. The proposed figure is the points that
@@ -76,8 +92,10 @@ one at a time.
 ## How budgets steer work
 
 - Approving an item for funding reserves its points against its portfolio's
-  budget. Going over the budget needs a person and a recorded reason; an
-  autonomous approval is refused.
+  budget, decided by the rules above: platform, common and never-scoped work
+  with no portfolio of its own reserves against Foundational. Work that stays
+  Unallocated reserves nothing. Going over the budget needs a person and a
+  recorded reason; an autonomous approval is refused.
 - A portfolio starts new work while its points in flight fit its allowance: two
   weeks of its measured delivery, never less than one large item (8 points).
 - Admission starts in **shadow** mode. Every decision to admit, warn or refuse is

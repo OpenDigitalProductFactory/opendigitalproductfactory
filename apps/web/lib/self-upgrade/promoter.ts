@@ -13,6 +13,7 @@ export {
   validateResolvedPromoterArtifact,
   type ResolvedPromoterArtifact,
 } from "./promoter-artifact";
+import { resolvePromoterTimeoutMs } from "./promoter-timeout";
 
 /**
  * The promoter runs as a SIBLING container, never inside the portal.
@@ -693,13 +694,7 @@ export async function inspectPromoterContainerState(
   });
 }
 
-/** Default hard budget for the promoter subprocess: 25 min (env-overridable). */
-export function resolvePromoterTimeoutMs(params: PromoterTimeoutParams): number {
-  if (typeof params.timeoutMs === "number" && params.timeoutMs > 0) return params.timeoutMs;
-  const env = Number(process.env.DPF_PROMOTER_TIMEOUT_MS);
-  if (Number.isFinite(env) && env > 0) return env;
-  return 25 * 60 * 1000;
-}
+export { resolvePromoterTimeoutMs } from "./promoter-timeout";
 
 /**
  * Force-remove a promoter container by name, and the budgeted spawn the

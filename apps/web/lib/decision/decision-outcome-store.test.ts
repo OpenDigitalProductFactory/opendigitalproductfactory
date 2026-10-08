@@ -5,15 +5,26 @@ import { SEALED_IMMUTABLE_FIELDS } from "./decision-chain";
 
 type UpdateArgs = { where: { interactionId: string }; data: Record<string, unknown> };
 
-function makeDb(row: Record<string, unknown> | null) {
+type LedgerUpsertArgs = {
+  where: { ledgerId: string };
+  create: Record<string, unknown>;
+  update: Record<string, unknown>;
+};
+
+function makeDb(
+  row: Record<string, unknown> | null,
+  ledgerImpl?: (args: LedgerUpsertArgs) => Promise<unknown>,
+) {
   const update = vi.fn(async (_args: UpdateArgs) => ({}));
+  const upsert = vi.fn(ledgerImpl ?? (async (_args: LedgerUpsertArgs) => ({})));
   const db = {
     decisionInteraction: {
       findUnique: vi.fn(async () => row),
       update,
     },
+    decisionShadowLedger: { upsert },
   } as unknown as DecisionOutcomeDb;
-  return { db, update };
+  return { db, update, upsert };
 }
 
 const recommended = {
@@ -43,6 +54,8 @@ describe("recordDecisionOutcome", () => {
       disposition: "overridden",
       agreement: false,
       interactionId: "DI-1",
+      // This fixture names no coworker, so there is no ledger row to complete.
+      shadowLedger: expect.objectContaining({ written: false, reason: "no-agent" }),
     });
     expect(update).toHaveBeenCalledTimes(1);
     const data = update.mock.calls[0]![0].data;
@@ -161,5 +174,89 @@ describe("recordDecisionOutcome", () => {
     });
 
     expect(result).toMatchObject({ recorded: false, reason: "write-failed", detail: "db down" });
+  });
+
+  // BI-6082C235: the outcome half of the decision's shadow-ledger row is
+  // filled from the same resolution slice 1 records, in the same call.
+  describe("shadow ledger", () => {
+    const attributed = {
+      ...recommended,
+      agentId: "AGT-EXT-CODEX",
+      domainClass: "kernel-consult",
+      riskTier: "low",
+      outcomeType: "recommend",
+      rationale: "a is simpler",
+      taskRunId: null,
+      subjectKind: null,
+      subjectRef: null,
+    };
+
+    it("completes the coworker's ledger row with the actual decision and agreement", async () => {
+      const { db, upsert } = makeDb(attributed);
+      const result = await recordDecisionOutcome({
+        db,
+        interactionId: "DI-1",
+        chosenOptionId: "b",
+        resolvedBy: "agent",
+        rationale: "override",
+        now: new Date("2026-10-03T00:00:00.000Z"),
+      });
+
+      expect(result).toMatchObject({
+        recorded: true,
+        shadowLedger: { written: true, ledgerId: "DSL-DI-1", agreement: false },
+      });
+      expect(upsert).toHaveBeenCalledTimes(1);
+      const args = upsert.mock.calls[0]![0];
+      expect(args.where).toEqual({ ledgerId: "DSL-DI-1" });
+      expect(args.update).toMatchObject({
+        actualDecision: { chosenOptionId: "b", disposition: "overridden" },
+        outcome: { disposition: "overridden", resolvedBy: "agent", resolvedAt: "2026-10-03T00:00:00.000Z" },
+        agreement: false,
+      });
+      expect(args.create).toMatchObject({ agentId: "AGT-EXT-CODEX", agreement: false, autonomyLevel: "shadow" });
+    });
+
+    it("keeps agreement null on the ledger for an unresolved report", async () => {
+      const { db, upsert } = makeDb(attributed);
+      await recordDecisionOutcome({
+        db,
+        interactionId: "DI-1",
+        chosenOptionId: null,
+        resolvedBy: "agent",
+        rationale: "dropped",
+      });
+      expect(upsert.mock.calls[0]![0].update).toMatchObject({ agreement: null });
+    });
+
+    it("still records the outcome when the ledger write fails, and says so", async () => {
+      const { db, update } = makeDb(attributed, async () => {
+        throw new Error("ledger down");
+      });
+      const result = await recordDecisionOutcome({
+        db,
+        interactionId: "DI-1",
+        chosenOptionId: "a",
+        resolvedBy: "agent",
+        rationale: "",
+      });
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({
+        recorded: true,
+        shadowLedger: { written: false, reason: "write-failed", detail: "ledger down" },
+      });
+    });
+
+    it("does not touch the ledger when the outcome is refused", async () => {
+      const { db, upsert } = makeDb({ ...attributed, recommendedOptionId: null });
+      await recordDecisionOutcome({
+        db,
+        interactionId: "DI-1",
+        chosenOptionId: "a",
+        resolvedBy: "agent",
+        rationale: "",
+      });
+      expect(upsert).not.toHaveBeenCalled();
+    });
   });
 });

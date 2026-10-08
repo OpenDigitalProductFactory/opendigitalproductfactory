@@ -4,7 +4,7 @@ description: "Use when adding a new business archetype, industry, or vertical th
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: true
 user-invocable: true
-allowed-tools: Read Grep Glob Edit Write Bash mcp__dpf__principle_decide mcp__dpf__query_backlog mcp__dpf__create_backlog_item mcp__dpf__establish_coworker
+allowed-tools: Read Grep Glob Edit Write Bash mcp__dpf__principle_decide mcp__dpf__query_backlog mcp__dpf__create_backlog_item
 
 # DPF fields (Surface B — in-portal seed loader)
 category: governance
@@ -112,7 +112,10 @@ Every archetype gets a recorded coworker decision — one of:
   *why* no new one is needed (e.g. a shared role already covers the value
   stream). This is a legitimate, common outcome.
 - **New coworker**: run `dpf-establish-coworker` end to end (its own enforced
-  `draft → defined → certified → active` lifecycle).
+  `draft → defined → certified → active` lifecycle). Its `establish_coworker`
+  steps change coworker authority and run in the portal only, so this skill's
+  Surface A `allowed-tools` omits that tool (BI-E0F19DBA); from an external CLI,
+  ask the operator to run them.
 
 "No decision recorded" is the failure this dimension exists to prevent.
 

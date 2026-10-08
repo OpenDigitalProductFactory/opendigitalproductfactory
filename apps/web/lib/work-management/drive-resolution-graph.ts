@@ -44,6 +44,28 @@
  * principal; a refuse to a stop ends the cycle with `stop` /
  * `refused_to_stop`, which stays the room's answer until the next cycle.
  *
+ * STAGE DEADLINES (PR-3c-4, design §8). After the plan is built, every token
+ * past its stage's deadline whose `<cycleKey>#<stageKey>#<iteration>` key is
+ * not yet in `marking.deadlines` is raised there with `notifiedAt: null`
+ * (drive-deadlines.ts). Nothing else changes: the deadline never moves work.
+ *
+ * SUB-SHAPES (PR-3c-5, design §9). A marked sub-shape stage never dispatches:
+ * its token plan is `awaiting_sub_shape` while its child room is created,
+ * runs or is completed, and `sub_shape_stopped` (the parent waits for its
+ * owner) when the child stopped any other way. The plan lists the child
+ * effects for the runner (drive-child-rooms.ts): ensure a child for a pass that
+ * has none, complete a child that succeeded, abandon a child whose pass no
+ * token holds. A fresh run carries the concluded run's live children so they
+ * are abandoned rather than orphaned.
+ *
+ * RUNS (BI-086DC167). A marking is one run; its `cycleKey` is the run key (the
+ * calendar key of the day it started) and drives the deadline and child keys.
+ * A run in flight crosses UTC midnight untouched. A fresh run starts only once
+ * the stored run concluded and the calendar key changed. The success sleep and
+ * the refused-to-stop hold key on the calendar day the run concluded
+ * (`priorDrive.cycleKey`), not on the run key, and persist the concluded run.
+ * Receipts the graph earns carry the run key and count only within that run.
+ *
  * A construct-specific branch of the step that PR-3c-1 does not implement
  * throws DriveConstructNotImplementedError; this planner turns it into the
  * same fail-closed pause, so the drive never throws for a room.
@@ -79,6 +101,8 @@ import {
   workroomDriveBranchTaskId,
   workroomDriveTaskId,
 } from "./drive-plan-stage";
+import { raiseDueDeadlines } from "./drive-deadlines";
+import { hasSubShapeEffects, liveSubShapeChildren, subShapeEffects, subShapeTokenState, type SubShapeTokenState } from "./drive-child-rooms";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 import { evaluateWorkroomShapeConformance } from "./workroom-shape-conformance";
@@ -190,7 +214,31 @@ function gatePrincipalRef(stage: WorkShapeDefinitionContract["stages"][number]):
   return gate?.escalation?.role ?? stage.accountablePrincipalRef;
 }
 
+/**
+ * The graph drive's plan, with this tick's stage deadlines raised (PR-3c-4,
+ * design §8). A deadline never changes what the plan does: it adds the overdue
+ * notices to the marking the plan already persists (`notifiedAt: null`), one
+ * ledger line each, and lists them as `deadlinesDue` for the runner's
+ * `workroom-drive-deadline` activity. A plan that carries no readable marking
+ * (the kill-switch and unreadable pauses) raises nothing.
+ */
 export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition: WorkShapeDefinitionContract }): DrivePlan {
+  const plan = withSubShapeEffects(input, planGraphDrive(input));
+  if (!plan.marking || "raw" in plan.marking) return plan;
+  const { marking, raised } = raiseDueDeadlines(input.definition, plan.marking, input.now ?? new Date(0));
+  if (raised.length === 0) return plan;
+  return {
+    ...plan,
+    marking,
+    ledger: [
+      ...plan.ledger,
+      ...raised.map((due) => `Stage ${due.stageKey} is past its deadline (${due.description}; due ${due.dueAt}); it stays where it is and ${due.escalationRef} is told.`),
+    ],
+    deadlinesDue: raised,
+  };
+}
+
+function planGraphDrive(input: DriveResolutionInput & { definition: WorkShapeDefinitionContract }): DrivePlan {
   const definition = input.definition;
   const now = input.now ?? new Date(0);
   const cycle = projectDriveCycle(input, definition);
@@ -219,15 +267,21 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
       marking: { raw: read.raw },
     };
   }
-  const stored = read.data.marking;
+  // BI-086DC167: a run in flight is read as stored whatever the date. A fresh run starts only once the stored run
+  // concluded and the calendar day changed; a child the concluded run left live is carried so it is abandoned, never orphaned.
+  const concluded: DriveMarking | null = read.data.source === "new-run"
+    ? read.data.previous ?? null
+    : read.data.source === "stored" && read.data.marking.tokens.length === 0 ? read.data.marking : null;
+  const stored = read.data.source === "new-run" && concluded ? withCarriedLiveChildren(read.data.marking, concluded) : read.data.marking;
 
-  // A cycle a refuse sent to a stop stays stopped, visibly, until the next cycle starts a fresh marking.
+  // A run a refuse sent to a stop stays stopped, visibly, for the rest of the calendar day it concluded on
+  // (lastTick.cycleKey, as the success sleep below), whatever day the run started. It persists the concluded run.
   const lastTick = input.priorDrive ?? null;
-  if (read.data.source === "stored" && stored.tokens.length === 0
+  if (concluded
     && lastTick?.action === "stop" && lastTick.reason === "refused_to_stop" && lastTick.cycleKey === cycle.cycleKey) {
     return {
       ...emptyPlan(input, "stop", "refused_to_stop", { cycle, ledger: [`Cycle ${cycle.cycleKey} was ended by a refusal routed to a stop; the room starts again next cycle.`] }),
-      marking: stored,
+      marking: concluded,
     };
   }
 
@@ -248,7 +302,7 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
   const marked = markedStageKeys(definition, stepped.marking);
   const delivered = Object.fromEntries(definition.stages.map((stage) => [
     stage.key,
-    input.receipts.some((receipt) => isCompletingWorkroomDriveReceiptAt(receipt, stage.key, iterationOf(stepped.marking, stage.key))),
+    input.receipts.some((receipt) => isCompletingWorkroomDriveReceiptAt(receipt, stage.key, iterationOf(stepped.marking, stage.key), stepped.marking.cycleKey)),
   ]));
   const conformance = evaluateWorkroomShapeConformance({
     roomKey: input.roomId,
@@ -275,15 +329,20 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
     },
   });
 
-  // A tick that does not advance keeps the marking it read (stored, derived or new-cycle).
+  // A tick that does not advance keeps the marking it read (stored, derived or a fresh run).
   const held = (plan: DrivePlan): DrivePlan => ({ ...plan, stageKey: firstMarked(definition, stored), marking: stored });
 
-  if (cycleCompleted(input.priorDrive ?? null, cycle.cycleKey)) {
-    return held(emptyPlan(input, "do_not_wake", "cycle_complete", {
+  // A run that succeeded sleeps for the rest of the calendar day it concluded on (prior.cycleKey). The sleep keeps
+  // the concluded run (BI-086DC167): persisting a fresh one here would start the next run a day early, keyed and
+  // clocked from the sleeping day. A run concluded under today's key sleeps too, whatever the last tick was (a
+  // quiet or paused tick after the stop): a second run never starts under the same calendar key.
+  if (cycleCompleted(input.priorDrive ?? null, cycle.cycleKey) || (read.data.source === "stored" && concluded)) {
+    const sleeping = emptyPlan(input, "do_not_wake", "cycle_complete", {
       conformance,
       cycle,
       ledger: [`Cycle ${cycle.cycleKey} is complete; the room wakes in the next cycle.`],
-    }));
+    });
+    return concluded ? { ...sleeping, stageKey: null, marking: concluded } : held(sleeping);
   }
   if (conformance.disposition === "stop") {
     return held(emptyPlan(input, "stop", "conformance_stop", { conformance, cycle, deviations: conformance.deviations, ledger: ledgerFrom(conformance, []) }));
@@ -324,7 +383,7 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
     const token = stageToken(stepped.marking, stageKey);
     if (!stage || !token) continue;
     const iteration = iterationOf(stepped.marking, stageKey);
-    const planned = planStage({ input, definition, stage, conformance, cycle, prior: latchPriorFor(token, stageKey), iteration });
+    const planned = planStage({ input, definition, stage, conformance, cycle, prior: latchPriorFor(token, stageKey), iteration, runKey: stepped.marking.cycleKey });
     // A gate holding a completed stage (PR-3c-3) waits on a person, never on a re-dispatch:
     // a refuse with no route is `gate_refused`; no verdict, hold or escalate stays a governed decision.
     const gateHold = holds.get(stageKey);
@@ -333,7 +392,8 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
       : gateHold === "awaiting_verdict" && planned.action === "dispatch_agent"
         ? attentionPlan(planned, stage, "governed_decision", `Stage ${stageKey} is complete and waits at its gate for a decision from ${gatePrincipalRef(stage)}.`)
         : null;
-    const decided = gated ?? planned;
+    // A sub-shape stage waits on its child (PR-3c-5); once its receipt is earned and a gate holds it, the gate rules.
+    const decided = gated ?? (gateHold ? null : subShapePlan(planned, stage, subShapeTokenState(definition, stepped.marking, stageKey, input.subShapeChildren))) ?? planned;
     // A dispatch goes through the task id fixed on the token when it entered the stage.
     const plan = decided.action === "dispatch_agent" && token.taskId ? { ...decided, taskId: token.taskId } : decided;
     tokenPlans.push({
@@ -381,12 +441,61 @@ export function resolveGraphDrivePlan(input: DriveResolutionInput & { definition
   };
 }
 
+/**
+ * A sub-shape stage's token plan (PR-3c-5, design §9.2): it never dispatches
+ * an agent. While its child is being created, runs or is being completed, it
+ * is `attention` / `awaiting_sub_shape` (in motion), attributed to the child.
+ * When the child stopped any other way it is `attention` /
+ * `sub_shape_stopped`, holding the parent for its owner with the child's
+ * disposition. A completed child's stage waits for its receipt like any
+ * other, so it keeps `awaiting_sub_shape`. Null for a stage that calls no
+ * sub-shape.
+ */
+function subShapePlan(planned: DrivePlan, stage: WorkShapeDefinitionContract["stages"][number], state: SubShapeTokenState | null): DrivePlan | null {
+  if (!state) return null;
+  const child = "childCapsuleId" in state ? `child room ${state.childCapsuleId}` : "a new child room";
+  if (state.kind === "stopped") {
+    return attentionPlan(planned, stage, "sub_shape_stopped",
+      `Stage ${stage.key}'s sub-shape ${state.ref} (${child}) stopped without success (${state.disposition}); the parent waits for ${stage.accountablePrincipalRef} to decide.`,
+      stage.accountablePrincipalRef);
+  }
+  const doing = state.kind === "creating" ? "is being created" : state.kind === "running" ? "is running" : "succeeded; its completion is being recorded";
+  return attentionPlan(planned, stage, "awaiting_sub_shape", `Stage ${stage.key} runs sub-shape ${state.ref}: ${child} ${doing}.`, stage.accountablePrincipalRef);
+}
+
+/**
+ * A fresh run's marking with the concluded run's live children carried (keys from the concluded run, so they are
+ * abandoned). Applies only to a concluded run (BI-086DC167): a run in flight keeps its children itself.
+ */
+function withCarriedLiveChildren(fresh: DriveMarking, concluded: DriveMarking): DriveMarking {
+  const live = liveSubShapeChildren(concluded);
+  return live.length === 0 ? fresh : { ...fresh, children: { ...Object.fromEntries(live), ...fresh.children } };
+}
+
+/**
+ * The child-room effects of a plan (PR-3c-5): ensure, complete and abandon,
+ * from the marking it persists. Only a plan that planned its tokens creates or
+ * completes a child; a stop (every token consumed) abandons every live child;
+ * any other plan (a pause, a held tick) leaves children as they are.
+ */
+function withSubShapeEffects(input: DriveResolutionInput & { definition: WorkShapeDefinitionContract }, plan: DrivePlan): DrivePlan {
+  if (!plan.marking || "raw" in plan.marking) return plan;
+  if (!plan.tokens && plan.action !== "stop") return plan;
+  const reason = plan.action === "stop"
+    ? `The parent room's cycle ended (${plan.reason}) before the child finished.`
+    : "The parent's token left the stage (a rework started a new pass, or its run concluded) before the child finished.";
+  const effects = subShapeEffects(input.definition, plan.marking, input.roomId, input.subShapeChildren, reason);
+  if (plan.action === "stop") effects.ensure = [];
+  return hasSubShapeEffects(effects) ? { ...plan, subShapes: effects } : plan;
+}
+
 /** A token plan turned into attention at its gate (PR-3c-3). */
 function attentionPlan(
   planned: DrivePlan,
   stage: WorkShapeDefinitionContract["stages"][number],
-  reason: "gate_refused" | "governed_decision",
+  reason: "gate_refused" | "governed_decision" | "awaiting_sub_shape" | "sub_shape_stopped",
   line: string,
+  principalRef: string = gatePrincipalRef(stage),
 ): DrivePlan {
   return {
     ...planned,
@@ -395,7 +504,7 @@ function attentionPlan(
     stageKey: stage.key,
     accountablePrincipalRef: stage.accountablePrincipalRef,
     agentId: null,
-    attentionPrincipalRef: gatePrincipalRef(stage),
+    attentionPrincipalRef: principalRef,
     taskId: null,
     deviations: [],
     ledger: [line],

@@ -71,7 +71,11 @@ export const DAMAGING_SENSITIVITIES: readonly PrincipalSensitivity[] = ["restric
  *    this coworker may write, how often, and with which tool, before any run
  *    existed. Server-resolved from the self-task registry, never asserted by a
  *    model or a client, and scoped to the declared tools alone — a scheduled
- *    task gets no licence for anything it did not declare.
+ *    task gets no licence for anything it did not declare. A Workroom drive
+ *    stage is the same declaration made per room (BI-C1781121): the work
+ *    shape's stage names its writes and the room binds the agent that answers
+ *    for it, so the stage's scheduled run is steered for those writes only
+ *    (work-management/room-stage-mandate.ts).
  *
  *    This is the branch a cadence needs to function at all. A scheduled run
  *    carries no Workroom (the scheduler never sets one), so before this it

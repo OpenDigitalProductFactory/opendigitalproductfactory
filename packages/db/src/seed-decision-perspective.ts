@@ -140,12 +140,16 @@ export function buildDecisionPerspectiveSeed(): DecisionPerspectiveSeed {
       },
       fallbackProfileId: null,
       defaultResolver: { type: "build-studio-owner" },
+      // BI-7FFFBEE3 (operator decision 2026-10-07): platform-development decisions
+      // are arbitrated by the delegated policy up to high risk when the recorded
+      // doctrine gives >= 0.70 confidence; critical risk or weaker grounding
+      // escalates and names this policy.
       autonomyPolicy: {
         allowRecommendation: true,
-        allowArbitration: false,
-        maxRiskForArbitration: "low",
+        allowArbitration: true,
+        maxRiskForArbitration: "high",
         minimumConfidenceForRecommendation: 0.55,
-        minimumConfidenceForArbitration: 0.9,
+        minimumConfidenceForArbitration: 0.7,
       },
       status: "active",
     },

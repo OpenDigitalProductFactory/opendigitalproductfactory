@@ -194,20 +194,45 @@ type ResolvedRecoveryArtifact = Extract<InitiativeRecoveryCanonicalArtifact, { r
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 type RecoveryArtifactInput = DistributiveOmit<ResolvedRecoveryArtifact, "resolved">;
 
-type ReviewerRouteDb = {
-  agentToolGrant?: {
-    findMany(args: unknown): Promise<Array<{
-      grantKey: string;
-      agent: {
-        agentId: string;
-        displayName: string;
-        status: string;
-        archived: boolean;
-        lifecycleStage: string;
-      };
-    }>>;
+export type GrantHolderRow = {
+  grantKey: string;
+  agent: {
+    agentId: string;
+    displayName: string;
+    status: string;
+    archived: boolean;
+    lifecycleStage: string;
   };
 };
+
+export type ReviewerRouteDb = {
+  agentToolGrant?: { findMany(args: unknown): Promise<GrantHolderRow[]> };
+};
+
+/**
+ * The active, production, unarchived holders of any of `grants`, one row per
+ * (agent, grant), in deterministic order (agent id, then grant key). The one
+ * eligibility rule every lane owner is picked by: the reviewer routes below
+ * and the acceptance sweep's execution-evidence lane (BI-7C7E8CAC).
+ */
+export async function loadEligibleGrantHolders(db: ReviewerRouteDb, grants: readonly string[]): Promise<GrantHolderRow[]> {
+  if (!db.agentToolGrant || grants.length === 0) return [];
+  const rows = await db.agentToolGrant.findMany({
+    where: {
+      grantKey: { in: [...grants] },
+      agent: { status: "active", archived: false, lifecycleStage: "production" },
+    },
+    select: {
+      grantKey: true,
+      agent: { select: { agentId: true, displayName: true, status: true, archived: true, lifecycleStage: true } },
+    },
+  });
+  return rows
+    .filter((row) => row.agent.status === "active" && !row.agent.archived && row.agent.lifecycleStage === "production")
+    .sort((left, right) =>
+      left.agent.agentId.localeCompare(right.agent.agentId)
+      || left.grantKey.localeCompare(right.grantKey));
+}
 
 const IMMUTABLE_READER_GRANT = "file_read";
 
@@ -295,31 +320,13 @@ export async function resolveInitiativeReviewerRecovery(input: {
       ? [IMMUTABLE_READER_GRANT]
       : []),
   ])];
-  const rows = input.db.agentToolGrant
-    ? await input.db.agentToolGrant.findMany({
-        where: {
-          grantKey: { in: grants },
-          agent: { status: "active", archived: false, lifecycleStage: "production" },
-        },
-        select: {
-          grantKey: true,
-          agent: { select: { agentId: true, displayName: true, status: true, archived: true, lifecycleStage: true } },
-        },
-      })
-    : [];
-  const activeProductionRows = rows.filter((row) =>
-    row.agent.status === "active"
-    && !row.agent.archived
-    && row.agent.lifecycleStage === "production");
+  const deterministicRows = await loadEligibleGrantHolders(input.db, grants);
   const grantsByAgent = new Map<string, Set<string>>();
-  for (const row of activeProductionRows) {
+  for (const row of deterministicRows) {
     const held = grantsByAgent.get(row.agent.agentId) ?? new Set<string>();
     held.add(row.grantKey);
     grantsByAgent.set(row.agent.agentId, held);
   }
-  const deterministicRows = [...activeProductionRows].sort((left, right) =>
-    left.agent.agentId.localeCompare(right.agent.agentId)
-    || left.grantKey.localeCompare(right.grantKey));
 
   const reviewerRoutes: InitiativeReviewerRecovery["reviewerRoutes"] = [];
   const escalations: InitiativeReviewerRecovery["escalations"] = [];

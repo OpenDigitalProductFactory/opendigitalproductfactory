@@ -12,12 +12,28 @@
  * A failed prebuild fails the run before anything is closed or changed.
  */
 import type { PromoterParams, PromoterResult } from "@/lib/self-upgrade/promoter";
+import { resolvePromoterTimeoutMs } from "@/lib/self-upgrade/promoter-timeout";
 import { ok, err, type ActionResult } from "@/lib/shared/action-result";
+
+/**
+ * The prebuild's budget. It runs while the portal still serves, so nothing waits
+ * on it, and it does the slow part (a cold `next build`). SUR-CD779647 was killed
+ * at the 25-minute swap budget after its build alone took 1326s on a loaded host.
+ * Never less than the swap's own budget; DPF_PROMOTER_PREBUILD_TIMEOUT_MS tunes it.
+ */
+const PREBUILD_TIMEOUT_DEFAULT_MS = 75 * 60 * 1000;
+
+function prebuildTimeoutMs(base: PromoterParams): number {
+  const env = Number(process.env.DPF_PROMOTER_PREBUILD_TIMEOUT_MS);
+  const prebuild = Number.isFinite(env) && env > 0 ? env : PREBUILD_TIMEOUT_DEFAULT_MS;
+  return Math.max(prebuild, resolvePromoterTimeoutMs(base));
+}
 
 export function prebuildPromoterParams(base: PromoterParams, runId: string): PromoterParams {
   return {
     ...base,
     phase: "build",
+    timeoutMs: prebuildTimeoutMs(base),
     // Its own container name, so it never collides with the swap's promoter.
     containerName: `dpf-promoter-${runId}-prebuild`,
     // Its own backup subdirectory: a prebuild keeps nothing there, and it must

@@ -4,6 +4,7 @@ import { access, readFile } from "node:fs/promises";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { staticRelativeImports } from "./check-dockerfile-copied-script-imports.mjs";
 import { readPromoterBuildContextSources } from "./lib/promoter-build-context-sources.mjs";
 
 const root = resolve(dirname(fileURLToPath(new URL(import.meta.url)).replace(/^\/(.:\/)/, "$1")), "..");
@@ -252,7 +253,9 @@ test("every relative import among staged promoter scripts resolves inside the N-
   const knownGap = new Set((released.knownGaps ?? []).map((gap) => `${gap.from} -> ${gap.to}`));
   for (const source of staged.filter((file) => file.endsWith(".mjs"))) {
     const code = await readFile(join(root, source), "utf8");
-    for (const [, spec] of code.matchAll(/^\s*import\s[^'"]*['"](\.{1,2}\/[^'"]+)['"]/gm)) {
+    // The Dockerfile guard's parser, so every image check agrees on what
+    // "statically imported" means (re-exports and multi-line bindings included).
+    for (const spec of staticRelativeImports(code)) {
       const target = posix.normalize(posix.join(posix.dirname(source), spec));
       assert.ok(staged.includes(target), `${source} imports ${target}, which is not a staged promoter source`);
       if (knownGap.has(`${source} -> ${target}`)) continue;

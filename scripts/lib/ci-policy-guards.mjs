@@ -282,6 +282,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-F6929F50: every install path provisions the reach-link and
       // delegation-receipt signing keys and a self-upgrade never rotates them.
       conformanceTest("scripts/installer/dedicated-signing-keys-contract.test.mjs"),
+      // BI-F1C680C7: the Build Studio sandbox, where agent CLIs run unprompted,
+      // never receives the portal's AUTH_SECRET / NEXTAUTH_SECRET.
+      conformanceTest("scripts/installer/sandbox-auth-secret-isolation-contract.test.mjs"),
+      // BI-231A4BC7: the self-upgrade target-binding and delivery task cursor
+      // keys never reach the sandbox either.
+      conformanceTest("scripts/installer/self-upgrade-binding-and-cursor-keys-contract.test.mjs"),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
@@ -729,6 +735,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/check-no-local-canonical-json.test.mjs"),
       node("scripts/check-no-local-canonical-json.mjs"),
     ]),
+    // One home for the dpf-platform pack version (BI-52934B3E): every client
+    // manifest and the marketplace entry are generated from toolchain-version.json.
+    guard("toolchain-version-guard", "Toolchain Version Guard", [
+      conformanceTest("scripts/sync-toolchain-version.test.mjs"),
+      node("scripts/sync-toolchain-version.mjs", "--check"),
+    ]),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
       // One home for the shared wire types (plan 2026-09-08 §10.5 S9).
@@ -828,6 +840,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-1229E42C: the installed plugin descriptor carries a literal URL so
         // the desktop app can start sign-in.
         "scripts/hooks/pin-plugin-mcp-url.test.mjs",
+        // BI-16EAAB62: SessionStart names an installed plugin copy that drifted
+        // from the root clone's pack (version, content, loaded connector).
+        "scripts/hooks/plugin-copy-freshness.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/promoter-compose-mounts.test.mjs",
@@ -872,6 +887,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // nothing about it.
         "scripts/lib/pregate-console.test.mjs",
         "scripts/lib/pregate-status.test.mjs",
+        // BI-277ECBDB: the pre-claim slot PostgreSQL probe.
+        "scripts/lib/local-ci-slot-substrate.test.mjs",
         // Symlink-robust entry guard shared by the pregate script family: a
         // guard that misses makes the gate exit 0 silently (false pass).
         "scripts/lib/entry-module.test.mjs",

@@ -26,6 +26,7 @@ function snapshot(
       tagline: null,
       description: null,
       ctaType: "booking",
+      ownOffer: null,
     },
     strategy: {
       strategyId: "strategy-1",

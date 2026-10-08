@@ -136,6 +136,30 @@ Independently shippable. It changes no behaviour until the sweep calls it.
 - Tests: component and loader unit tests for the counts.
 - UX verification: `dpf-ux-fit-review`, then a check on the running app
   through the shared nonproduction lease (AC-AA-05).
+- The 14-day threshold is `ACCEPTANCE_AGED_DAYS` in
+  `apps/web/lib/backlog/acceptance-sweep/aged-acceptance.ts`; phase 2 imports
+  it rather than defining a second one.
+
+**UX fit review (phase 4, text-only; running-app check still owed)**
+
+- Decision: fits-with-guardrails.
+- Owning area: Workspace (Backlog tile on `/workspace`) and Operations
+  (`/ops` epic list). No new route, tab, card or primitive.
+- Primary persona: founder/operator reading delivery status, who must not
+  mistake merged-but-unproven work for finished work.
+- Navigation layer touched: none. Existing epic status mix, progress bar and
+  workspace tile metric rows gain values.
+- Reuse: the existing `EpicStatusMix` parts list and `TileMetric` rows; colours
+  `--dpf-warning` (awaiting) and `--dpf-error` (aged), per AGENTS.md §9.
+- Source truth: `BacklogItem.status` for counts; entry age from
+  `BacklogItemActivity` `status_change` rows via `acceptanceEnteredAt`,
+  creation as a marked fallback, never `updatedAt`.
+- Empty/failure: zero awaiting shows `0` on the tile and no aged row; on `/ops`
+  a failed age read shows the awaiting count without the aged share.
+- AI boundary: display only; nothing sends a prompt.
+- Guardrails: an aged count that includes creation-based ages reads `up to N`
+  with a tooltip saying why; awaiting acceptance never adds to done or to
+  `Done %`.
 
 ## Phase 2b: close what the gate allows (BI-45D3BBF4), after phase 2 — as built
 

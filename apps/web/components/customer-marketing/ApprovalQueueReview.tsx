@@ -16,11 +16,13 @@ type Props = {
   channelId: string;
   assetType: string;
   category: string | null;
+  /** What this business itself sells; terms naming it are not platform leaks. */
+  ownOffer?: string | null;
 };
 
 type FlashState = { kind: "ok" | "err"; message: string } | null;
 
-export function ApprovalQueueReview({ draftId, initialBody, assetTaskTitle, channelId, assetType, category }: Props) {
+export function ApprovalQueueReview({ draftId, initialBody, assetTaskTitle, channelId, assetType, category, ownOffer = null }: Props) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState(initialBody);
   const [notes, setNotes] = useState("");
@@ -30,7 +32,10 @@ export function ApprovalQueueReview({ draftId, initialBody, assetTaskTitle, chan
   // Live archetype-fit assessment of the (possibly edited) body. A hard block
   // (software-platform / off-archetype content) disables Approve until the
   // operator edits the leak out. The server action enforces the same rule.
-  const fit = useMemo(() => assessArchetypeFit({ text: body, category }), [body, category]);
+  const fit = useMemo(
+    () => assessArchetypeFit({ text: body, category, ownOffer }),
+    [body, category, ownOffer],
+  );
   const approveBlocked = fit.blocked;
 
   function showError(err: string) {

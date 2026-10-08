@@ -14,6 +14,17 @@ import {
   buildProactivityOverrideFact,
   persistProactivityFact,
 } from "@/lib/proactivity/proactivity-override-preferences";
+import {
+  LEAVE_DECISION_ACTION,
+  LEAVE_DECISION_ROUTE,
+  LEAVE_DECISION_VERB_REFUSAL,
+} from "@/lib/workforce/leave/leave-decision-proposal-contract";
+
+// The API verb is "approve" | "reject"; the stored proposal status is the
+// past-tense vocabulary every other writer and reader uses (approveProposal,
+// rejectProposal, the coworker panel). Writing the verb itself left rows in a
+// status nothing recognises (BI-4E192035).
+const DECIDED_STATUS = { approve: "approved", reject: "rejected" } as const;
 
 export async function POST(
   request: Request,
@@ -29,7 +40,7 @@ export async function POST(
       rationale?: string;
     };
 
-    if (!decision || !["approve", "reject"].includes(decision)) {
+    if (decision !== "approve" && decision !== "reject") {
       return NextResponse.json(
         {
           code: "VALIDATION_ERROR",
@@ -47,6 +58,20 @@ export async function POST(
 
     if (!proposal || proposal.thread.userId !== user.id) {
       throw apiError("NOT_FOUND", "Proposal not found", 404);
+    }
+
+    // BI-4E192035: a leave.decide proposal is the advisor's recommendation; the
+    // leave outcome is decided only by the explicit leave actions, never by
+    // approving or rejecting the recommendation here.
+    if (proposal.actionType === LEAVE_DECISION_ACTION) {
+      return NextResponse.json(
+        {
+          code: "LEAVE_DECIDED_EXPLICITLY",
+          message: LEAVE_DECISION_VERB_REFUSAL,
+          decideAt: LEAVE_DECISION_ROUTE,
+        },
+        { status: 409 },
+      );
     }
 
     if (proposal.actionType === PROACTIVITY_CHANGE_ACTION) {
@@ -79,7 +104,7 @@ export async function POST(
     const updated = await prisma.agentActionProposal.update({
       where: { id },
       data: {
-        status: decision,
+        status: DECIDED_STATUS[decision],
         decidedById: user.id,
         decidedAt: new Date(),
         ...(rationale !== undefined && {

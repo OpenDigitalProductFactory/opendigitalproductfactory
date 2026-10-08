@@ -153,3 +153,35 @@ export function resolveCurrentWorkShapeClaim(scopeClaims: unknown): WorkShapeDef
   const shape = getWorkShape(ref.key);
   return shape && shape.version === ref.version ? shape : null;
 }
+
+/**
+ * A room's binding of shape roles to principals (BI-C1781121), carried on the
+ * same scopeClaims array as the shape claim. A shape names the role that
+ * answers for a stage (`role:acceptance-verifier`); a room created for one
+ * piece of work names who holds that role in it (`agent:AGT-...`). The drive
+ * reads it (drive-resolution.ts roleBindings); parseScopeClaims ignores it.
+ */
+export type WorkShapeRoleBindingsClaimEntry = {
+  workShapeRoleBindings: Record<string, string>;
+  recordedAt: string;
+};
+
+export function buildWorkShapeRoleBindingsClaim(
+  bindings: Readonly<Record<string, string>>,
+  now: Date = new Date(),
+): WorkShapeRoleBindingsClaimEntry {
+  return { workShapeRoleBindings: { ...bindings }, recordedAt: now.toISOString() };
+}
+
+/** The room's role bindings, or an empty map. Never throws; non-string values are dropped. */
+export function readWorkShapeRoleBindings(scopeClaims: unknown): Record<string, string> {
+  const entries = Array.isArray(scopeClaims) ? scopeClaims : [scopeClaims];
+  for (const entry of entries) {
+    const bindings = asRecord(asRecord(entry)?.workShapeRoleBindings);
+    if (!bindings) continue;
+    return Object.fromEntries(
+      Object.entries(bindings).filter((pair): pair is [string, string] => typeof pair[1] === "string" && pair[1].length > 0),
+    );
+  }
+  return {};
+}

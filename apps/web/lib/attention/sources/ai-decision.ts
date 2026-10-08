@@ -155,6 +155,19 @@ export function dedupeDecisionRows<T extends Pick<DecisionInteractionRow, "quest
   return [...byKey.values()];
 }
 
+function isShadowVerdict(payload: unknown): boolean {
+  return Boolean(payload && typeof payload === "object" && (payload as { enforcement?: unknown }).enforcement === "shadow");
+}
+
+/** Builds whose plan-gate question is moot: they have left plan, or were abandoned. */
+async function buildsPastPlan(db: Db, rows: Array<{ buildId: string | null; domainClass: string | null }>): Promise<Set<string>> {
+  const buildIds = [...new Set(rows.filter((row) => row.domainClass === "plan-readiness" && row.buildId).map((row) => row.buildId as string))];
+  const featureBuild = (db as { featureBuild?: { findMany?: (args: unknown) => Promise<Array<{ buildId: string; phase: string }>> } }).featureBuild;
+  if (buildIds.length === 0 || !featureBuild?.findMany) return new Set();
+  const builds = await featureBuild.findMany({ where: { buildId: { in: buildIds } }, select: { buildId: true, phase: true } });
+  return new Set(builds.filter((build) => build.phase !== "plan" && build.phase !== "ideate").map((build) => build.buildId));
+}
+
 export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
   const rows = await db.decisionInteraction.findMany({
     // humanOutcome IS NULL == still unresolved residue (Json? → DB NULL).
@@ -192,7 +205,15 @@ export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
   // should not be here cannot become the representative of its group — a
   // retracted row standing in for a live one would hide a real decision behind
   // a question nobody still has.
-  const actionable = rows.filter((row) => isFounderActionable(row) && !retractionOf(row.outcomePayload));
+  // BI-7FFFBEE3 slice B: a verdict that cannot block is audit evidence, not a
+  // question for a person: one recorded in shadow enforcement, or a plan-gate
+  // escalation whose build has already left plan (or was abandoned).
+  const mootBuildIds = await buildsPastPlan(db, rows);
+  const actionable = rows.filter((row) =>
+    isFounderActionable(row)
+    && !retractionOf(row.outcomePayload)
+    && !isShadowVerdict(row.outcomePayload)
+    && !(row.domainClass === "plan-readiness" && row.buildId !== null && mootBuildIds.has(row.buildId)));
   return dedupeDecisionRows(actionable)
     .slice(0, DECISION_RENDER_LIMIT)
     .map(({ row, occurrences }) =>

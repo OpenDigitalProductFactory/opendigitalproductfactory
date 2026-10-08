@@ -1185,6 +1185,7 @@
       "anchors": [
         "build-gate-runbook",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
+        "the-room-follows-its-pr-through-ci-bi-88341b5d",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
         "reaping-the-worktree-when-the-pr-merges-bi-848360ef",
         "task-specific-operating-rules",
@@ -2714,6 +2715,7 @@
         "the-brief-and-what-advances-a-stage",
         "failing-closed-is-not-the-same-as-locking",
         "every-reason-the-drive-emits-is-in-its-vocabulary-by-type",
+        "every-stage-is-a-queue",
         "a-named-governed-writer-must-be-attached-not-discovered",
         "a-stage-names-the-tools-it-needs",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
@@ -5927,6 +5929,8 @@
         "acceptance-sweep-operator-runbook",
         "closing-items-the-gate-already-allows-off-by-default",
         "what-the-summary-tells-you",
+        "who-verifies-an-item-that-is-not-closable",
+        "how-the-portal-knows-work-was-merged",
         "known-limit"
       ]
     },
@@ -6417,6 +6421,7 @@
         "archetype-scoped-marketing-content-bi-cc580161",
         "fit-engine-source-of-truth",
         "enforcement-points-1",
+        "selling-to-other-archetypes",
         "first-viewport-decision",
         "standards-referenced",
         "operator-identity-and-personalization",
@@ -7530,6 +7535,7 @@
         "heuristic",
         "why",
         "the-expert-trade-off",
+        "how-to-make-the-portal-faster",
         "see-also"
       ]
     },
@@ -12167,6 +12173,8 @@
         "build-a-campaign-before-building-assets",
         "review-and-publish",
         "quarantined-or-imported-content",
+        "marketing-to-other-business-types",
+        "correcting-a-plan-that-started-wrong",
         "understand-the-two-funnels",
         "treat-automation-as-a-proposal",
         "a-practical-operating-rhythm",
@@ -12420,6 +12428,7 @@
         "manage-roles-and-account-access",
         "what-is-not-yet-a-people-page-workflow",
         "who-can-approve-leave",
+        "when-a-coworker-recommends-a-leave-decision",
         "evidence-and-recovery-checklist"
       ]
     },
@@ -12547,6 +12556,7 @@
         "use-this-doc-for",
         "overview",
         "reading-the-panel",
+        "which-portfolio-an-item-counts-against",
         "setting-a-budget",
         "choosing-who-answers-for-each-portfolio",
         "confirming-an-epics-portfolio",
@@ -12836,6 +12846,7 @@
         "use-this-doc-for",
         "workflow",
         "managing-a-row",
+        "writing-your-section-text",
         "fixing-generated-content-that-doesnt-fit",
         "what-to-watch",
         "purchase-traceability"
@@ -12939,7 +12950,8 @@
         "overview",
         "key-concepts",
         "what-shows-up-here",
-        "what-you-can-do"
+        "what-you-can-do",
+        "how-long-a-coworkers-request-waits"
       ]
     },
     "docs/user-guide/workspace/documents.md": {

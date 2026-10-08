@@ -256,6 +256,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "local-sandbox-fence.mjs"), join(temp, "scripts", "lib", "local-sandbox-fence.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-queue-observer.mjs"), join(temp, "scripts", "lib", "local-queue-observer.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-manifest.mjs"), join(temp, "scripts", "lib", "local-ci-slot-manifest.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-substrate.mjs"), join(temp, "scripts", "lib", "local-ci-slot-substrate.mjs"));
   // local-ci-slot-manifest.mjs imports the platform-owned worktree base
   // resolver (BI-0B2F0546). Without it the temp tree dies on
   // ERR_MODULE_NOT_FOUND before the stub-refusal path can run — the same

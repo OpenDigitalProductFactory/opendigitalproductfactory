@@ -778,7 +778,11 @@ function Set-DPFEnvFileValue {
 }
 
 function Invoke-DPFEdgeNodeConvergence {
-    param([Parameter(Mandatory)][string]$InstallDir)
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        # host-upkeep: heartbeat and the action channel only (BI-28EFE18A).
+        [ValidateSet("full", "host-upkeep")][string]$Role = "full"
+    )
 
     $edgeModule = Resolve-DPFNativeEdgeModulePath -InstallDir $InstallDir
     . $edgeModule
@@ -836,10 +840,12 @@ function Invoke-DPFEdgeNodeConvergence {
     } else {
         Write-OK "Existing Edge enrollment found; preserving its machine identity"
     }
-    if (Install-DPFNativeEdgeNode -InstallDir $InstallDir -BootstrapToken $edgeToken -Version $Version) {
-        . (Resolve-DPFComposeChainModule -InstallDir $InstallDir)
-        $legacyComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
-        docker compose @legacyComposeArgs stop edge-node 2>&1 | Out-Null
+    if (Install-DPFNativeEdgeNode -InstallDir $InstallDir -BootstrapToken $edgeToken -Version $Version -Role $Role) {
+        if ($Role -eq "full") {
+            . (Resolve-DPFComposeChainModule -InstallDir $InstallDir)
+            $legacyComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
+            docker compose @legacyComposeArgs stop edge-node 2>&1 | Out-Null
+        }
         return $true
     }
     return $false
@@ -1695,9 +1701,10 @@ if ($gppPermitValue.Length -eq 0 -or $gppPermitValue.StartsWith("<")) {
 }
 
 # Signing keys for attention reach links and coworker delegation receipts
-# (BI-F6929F50), so AUTH_SECRET no longer signs them. Same rules as the permit
+# (BI-F6929F50), self-upgrade target bindings and delivery task hub cursors
+# (BI-231A4BC7), so AUTH_SECRET no longer signs them. Same rules as the permit
 # key: added when missing or still a placeholder, never rotated, never printed.
-foreach ($signingKeyName in @("DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET")) {
+foreach ($signingKeyName in @("DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET", "DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", "DPF_DELIVERY_TASK_CURSOR_SECRET")) {
     $signingKeyEnv = Get-Content -Path "$DPF_DIR\.env" -Raw -ErrorAction SilentlyContinue
     if ($null -eq $signingKeyEnv) { $signingKeyEnv = "" }
     $signingKeyMatch = [System.Text.RegularExpressions.Regex]::Match($signingKeyEnv, "(?m)^$signingKeyName=(.*)$")
@@ -2200,14 +2207,18 @@ if ($WithEdge) { $env:DPF_INCLUDE_EDGE = '1' }
 elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
 $dpfEdgeOptIn = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
 Set-DpfStateValue -Key "edge" -Value @{ enabled = $dpfEdgeOptIn; mode = $(if ($dpfEdgeOptIn) { "local" } else { $null }) }
-if ($dpfEdgeOptIn) {
-    if (Invoke-DPFEdgeNodeConvergence -InstallDir $DPF_DIR) {
-        Save-Progress "edge_bootstrap"
-    } else {
-        Write-Warn "Bundled Edge Node convergence did not complete. The portal remains usable."
+# BI-28EFE18A (WWMD DI-93310A596E88): every install runs the native Edge Node
+# on the host as its host-upkeep agent (the operator-approved Docker VM restart
+# must run outside the VM). -WithEdge adds the edge features (network sweep,
+# discovery); without it the node runs the host-upkeep role only.
+$dpfEdgeRole = if ($dpfEdgeOptIn) { "full" } else { "host-upkeep" }
+if (Invoke-DPFEdgeNodeConvergence -InstallDir $DPF_DIR -Role $dpfEdgeRole) {
+    if ($dpfEdgeOptIn) { Save-Progress "edge_bootstrap" }
+    if (-not $dpfEdgeOptIn) {
+        Write-OK "Host-upkeep agent running on this host. Re-run with -WithEdge to add network discovery."
     }
-} elseif (-not $dpfEdgeOptIn) {
-    Write-OK "Edge Node not bundled (opt-in). Re-run with -WithEdge to add a local node, or add a node on another machine from Admin > Platform Development > Edge Nodes."
+} else {
+    Write-Warn "Native Edge Node convergence did not complete. The portal remains usable; the next install run retries."
 }
 
 # --- Step 7: Wait for AI Model -------------------------------------------------

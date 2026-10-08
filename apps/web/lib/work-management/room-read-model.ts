@@ -102,7 +102,9 @@ export interface BuildWorkroomViewInput {
     currentStageKeys?: readonly string[];
     /** Graph rooms only: each marked stage's current iteration (absent means 0). */
     stageIterations?: Readonly<Record<string, number>>;
-    receipts?: readonly { stageKey: string; kind: string; iteration?: number }[];
+    /** Graph rooms only (BI-086DC167): the run the marking belongs to; a run-scoped receipt counts only within it. */
+    runKey?: string;
+    receipts?: readonly { stageKey: string; kind: string; iteration?: number; runKey?: string }[];
     budgetUsage?: readonly { kind: string; used: number }[];
     stopConditionHits?: readonly string[];
     reviewDue?: boolean;
@@ -133,7 +135,7 @@ function graphStageOrder(
   const delivered = Object.fromEntries(shape.stages.map((stage) => [
     stage.key,
     (observation?.receipts ?? []).some((receipt) =>
-      isCompletingWorkroomDriveReceiptAt(receipt, stage.key, observation?.stageIterations?.[stage.key] ?? 0)),
+      isCompletingWorkroomDriveReceiptAt(receipt, stage.key, observation?.stageIterations?.[stage.key] ?? 0, observation?.runKey)),
   ]));
   return { currentStageKeys: keys, flowOrder: { enabled: keys, delivered } };
 }

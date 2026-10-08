@@ -19,6 +19,7 @@ import { agentTaskDispatch } from "./agent-task-dispatch";
 import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
+import { geocodeOnSave } from "./geocode-on-save";
 import { materialFreshnessDecay } from "./material-freshness-decay";
 import { prSubmitAwaitingAcceptanceReconcile } from "./pr-submit-awaiting-acceptance-reconcile";
 import { budgetReservationSettle } from "./budget-reservation-settle";
@@ -63,6 +64,7 @@ import {
   postgresTrialRestoreRequested,
 } from "./postgres-daily-backup";
 import { runtimeTargetJanitor } from "./runtime-target-janitor";
+import { substrateReconciler } from "./substrate-reconciler";
 import { edgeNodeJanitor } from "./edge-node-janitor";
 import { runtimeArtifactJanitor } from "./runtime-artifact-janitor";
 import { worktreeJanitor } from "./worktree-janitor";
@@ -197,6 +199,7 @@ export const scheduledFunctions = [
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
+  substrateReconciler,   // BI-903FB5F9/BI-547B788D: restart stopped required substrate; report a wedged Docker VM, every 5 min
   edgeNodeJanitor, // BI-D4F79CE2: retire an installer enrollment a live one has superseded, hourly
   runtimeArtifactJanitor, // BI-DBF3F426/BI-A55BE432: orphaned CI images + stray compose projects (+ their volumes), daily 05:20; DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED=observe, +DPF_RUNTIME_ARTIFACT_JANITOR_AUTO_REAP=live
   worktreeJanitor, // BI-42FA7DD8: host worktree Tier-A fleet backstop; daily 05:40
@@ -254,6 +257,7 @@ export const eventFunctions = [
   evalBackground,
   probeBackground,
   brandExtract,
+  geocodeOnSave,
   researchExecute,
   buildReviewVerification,
   buildExecute,

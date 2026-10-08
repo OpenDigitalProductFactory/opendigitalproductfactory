@@ -246,3 +246,25 @@ The generalizable lesson: **scoping and epic-sequencing work is normally *though
 **Evidence the gate was load-bearing.** After correction, the three decisions were routed through `principle_decide` (`DI-B4B65B293024`, `DI-5C75BC6ACAFC`, `DI-41949223919C`). On the scope-shape decision the kernel **inverted** the agent's pre-decided answer with high confidence — `fold-into-sam` 17.04 vs the agent's preferred `thin-keystone-epic` 13.55 (margin 2.56, tieMargin 0.2, no commandment conflict), with *Architecture Over Shortcuts*, *Optimize for the Whole* and *Proper Fix Over Quick Fix* the discriminating contributors. The agent's instinct was not merely unverified; it was wrong. Gate A existed to force that consultation and did not fire.
 
 **Residual.** The guard remains a heuristic over natural language and will always have a tail. Layer 3 is the durable part — a structural signal that does not depend on predicting phrasing. A stronger future signal would be semantic (embed the question, compare against the decision-class centroid) rather than lexical; deferred as tuning, not filed as a blocker.
+
+## 15. Post-incident addendum (2026-10-07): the Claude desktop app never invokes Gate A (BI-271B8EEC)
+
+The third failure mode is neither §9's delivery race nor §14's logic gap. The hook is registered and its logic blocks, but **the host never calls it**.
+
+**Incident.** In a Claude desktop app session (Code tab, root clone, session `6a3dec05`), an external coding agent put five platform decisions to the operator via `AskUserQuestion` without consulting the kernel. One was whether to enable `BUILD_EVIDENCE_AUTO_ACCEPT`. Afterwards, `principle_decide` answered it on its own: `enable`, high confidence, verdict `proceed`, `autonomyEligible`, no commandment conflict (`DI-67780CC0CAF5`). The operator asked why WWMD was not consulted, and then what would prevent the omission in future threads.
+
+**Evidence.**
+- **Delivery.** `.claude/settings.json` wires `decision-routing-guard.mjs` on `PreToolUse` matcher `AskUserQuestion`.
+- **Logic.** Replayed through the hook binary with the session's own `cwd`, the recorded questions return `permissionDecision: "deny"`. One was "For platform development work, how far may it run without a person?".
+- **Controlled probe.** The agent asked an `AskUserQuestion` worded to trip three patterns ("implementation", "schema", "migration"). The operator saw it unblocked and confirmed it. Replayed through the binary, the same payload is denied.
+- **Specificity.** Other project hooks fired in the same session, including `PreToolUse` on `Write`/`Edit`/`Bash` and `SessionStart`. The desktop host skips the hook for `AskUserQuestion` specifically; its question UI is rendered by the app rather than routed through the hook pipeline.
+
+**Lesson.** A guard on a client tool is only as live as the host's hook contract for that tool, and the contract differs per host and per tool. §7's surface coverage map recorded Claude Code as "Gate A ✓" from a CLI probe; the desktop app is a separate host. As with Codex (§11) and Grok (§11.1), coverage is a live-probed fact, not a design-level assumption.
+
+**Consequence.** Doctrine alone did not hold. The SessionStart hook had injected the operating contract inline, including `consult-scopes-before-asking`, and the agent still asked first. In the desktop app, nothing mechanical enforces the commandment.
+
+**Remediation (BI-271B8EEC).**
+1. The desktop host is recorded in §7's coverage map and in `docs/install/platform-support-watchlist.md` (D24) as **Gate A not invoked**.
+2. A host-independent accelerator, chosen through `principle_decide`, flags an agent turn that puts options to the operator with no kernel consultation in that turn.
+3. Platform side: every path that puts a decision in front of a person requires a decision record showing the kernel abstained, had low confidence, hit a commandment conflict, or lacked authority (the plane-2 principle, §8). Chat questions never reach the platform, so this complements but cannot replace the client plane. Prose menus remain BI-E4DE3825.
+

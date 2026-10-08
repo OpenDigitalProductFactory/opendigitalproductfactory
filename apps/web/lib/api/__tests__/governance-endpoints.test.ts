@@ -178,7 +178,7 @@ describe("POST /api/v1/governance/approvals/:id", () => {
     });
     (prisma.agentActionProposal.update as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "prop-1",
-      status: "approve",
+      status: "approved",
       decidedById: "user-1",
     });
 
@@ -189,7 +189,11 @@ describe("POST /api/v1/governance/approvals/:id", () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.status).toBe("approve");
+    expect(body.status).toBe("approved");
+    // The stored status is the past-tense vocabulary, never the API verb (BI-4E192035).
+    expect(prisma.agentActionProposal.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "approved" }) }),
+    );
   });
 
   it("persists proactivity overrides when approving a proactivity change proposal", async () => {
@@ -218,7 +222,7 @@ describe("POST /api/v1/governance/approvals/:id", () => {
     });
     (prisma.agentActionProposal.update as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "prop-1",
-      status: "approve",
+      status: "approved",
     });
 
     const res = await approvalDecideHandler(
@@ -256,7 +260,7 @@ describe("POST /api/v1/governance/approvals/:id", () => {
     });
     (prisma.agentActionProposal.update as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "prop-1",
-      status: "reject",
+      status: "rejected",
     });
 
     const res = await approvalDecideHandler(
@@ -265,6 +269,9 @@ describe("POST /api/v1/governance/approvals/:id", () => {
     );
 
     expect(res.status).toBe(200);
+    expect(prisma.agentActionProposal.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "rejected" }) }),
+    );
   });
 
   it("returns 422 for invalid decision", async () => {

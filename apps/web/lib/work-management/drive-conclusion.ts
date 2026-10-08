@@ -67,7 +67,10 @@ export const DRIVE_REASONS_BY_ACTION = Object.freeze({
   pause: ["conformance_pause", "unknown_principal", "executor_writeback_unavailable", "construct_not_executable", "marking_unreadable"],
   // `gate_refused`: a refuse verdict whose route cannot be taken (its bound is
   // spent and the shape has no budget stop); the token stays (PR-3c-3).
-  attention: ["governed_decision", "role_stage", "person_stage", "gate_refused"],
+  // `awaiting_sub_shape`: a sub-shape stage's child room is being created, runs
+  // or is being completed; `sub_shape_stopped`: the child stopped without
+  // success and the parent waits for its owner (PR-3c-5).
+  attention: ["governed_decision", "role_stage", "person_stage", "gate_refused", "awaiting_sub_shape", "sub_shape_stopped"],
   // `lease_held` and `missing_task_owner` are set by the drive job
   // (lib/queue/functions/workroom-drive.ts) when it cannot act on a dispatch plan.
   dispatch_agent: ["agent_stage", "lease_held", "missing_task_owner"],
@@ -157,6 +160,10 @@ const BLOCKAGES: Record<string, { what: string; unblockedBy: string }> = {
     what: "A stage was sent back, but its refuse route cannot be taken any more, so the work waits at that stage rather than being passed.",
     unblockedBy: "a new decision is recorded on the refused stage",
   },
+  sub_shape_stopped: {
+    what: "A stage runs its work in a child room, and that child stopped without reaching its outcome, so the parent waits at that stage rather than carrying on.",
+    unblockedBy: "a decision is recorded on the parent stage, or the child room is completed",
+  },
   refused_to_stop: {
     what: "A stage was sent back to a stop the work shape declares, so this cycle ended without reaching its outcome.",
     unblockedBy: "the room's next cycle starts, or the room is rebound to a shape version that routes the refusal elsewhere",
@@ -176,6 +183,8 @@ const IN_MOTION = new Set([
   "cycle_complete",
   // Another worker holds the stage's lease; the stage stays eligible when it expires.
   "lease_held",
+  // A sub-shape stage's child room is running its own work (GPP Phase 3c PR-3c-5).
+  "awaiting_sub_shape",
 ]);
 
 const OUTCOME_MET = new Set(["success"]);

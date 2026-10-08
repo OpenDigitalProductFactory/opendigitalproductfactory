@@ -64,6 +64,7 @@ type Baseline = {
   supersedesBaselineId: string | null;
   artifactDigest: string;
   profile: InitiativeReadinessFacts["profile"];
+  recordedAt: Date;
 };
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -98,6 +99,7 @@ function parseBaselines(activities: readonly InitiativeReadinessActivity[], item
       supersedesBaselineId: payload.supersedesBaselineId as string | null,
       artifactDigest: payload.artifactDigest,
       profile: profile as Baseline["profile"],
+      recordedAt: row.recordedAt,
     });
   }
   const ids = new Set(parsed.map((entry) => entry.baselineId));
@@ -233,6 +235,29 @@ function projectGateReceipt(
     return { state: "stale", malformed: false, gate };
   }
   return { state: decision as ReadinessEvidenceState, malformed: false, gate };
+}
+
+/**
+ * BI-7531B73C: a design amended after its spec approval. A review that fails
+ * the approved design can only be answered by changing the design, and every
+ * receipt against the changed design reads stale against the baseline's digest.
+ * When a design-bound receipt recorded after the baseline names another design
+ * digest, the approval is owed again: spec approval reads stale, readiness
+ * routes it, and the existing supersession path mints the new baseline.
+ * Plan-review receipts bind the plan, so they never count.
+ */
+function designAmendedAfterBaseline(
+  activities: readonly InitiativeReadinessActivity[],
+  baseline: Baseline | null,
+  planDigest: string | null,
+): boolean {
+  if (!baseline) return false;
+  return activities.some((activity) => {
+    if (activity.kind !== "initiative_gate_receipt" || activity.recordedAt <= baseline.recordedAt) return false;
+    if (normalizeGate(activity.gateKey) === "plan-review") return false;
+    const digest = object(activity.payload)?.artifactDigest;
+    return typeof digest === "string" && digest !== baseline.artifactDigest && digest !== planDigest;
+  });
 }
 
 function latestGateStates(
@@ -538,7 +563,11 @@ export function projectBacklogItemReadiness(args: {
     canonicalDesign: pass(baselineState),
     canonicalDesignAmbiguous: recognizeMerge ? false : baseline.ambiguous,
     research: pass(researchState),
-    specApproval: pass(state(evidence, "spec-approval")),
+    specApproval: pass(
+      !inherited && designAmendedAfterBaseline(args.activities, baseline.current, projectedCoverage.planDigest)
+        ? "stale"
+        : state(evidence, "spec-approval"),
+    ),
     specialistReviews: {
       architecture: pass(state(evidence, "architecture-review")),
       data: state(evidence, "data-review"),
@@ -590,8 +619,14 @@ export function projectBacklogItemReadinessSummary(args: {
   hasSpec: boolean;
   hasPlan: boolean;
   evaluatedAt: string;
+  /**
+   * BI-094B41AC: the completion gate's own evaluation for this item
+   * (readBacklogItemCompletion), when the caller ran it. A persisted terminal
+   * decision still wins; absent both, completion is projected as before.
+   */
+  completionDecision?: InitiativeReadinessDecision | null;
 }) {
-  const terminalCompletion = persistedTerminalCompletionDecision(args.activities, args.item);
+  const terminalCompletion = persistedTerminalCompletionDecision(args.activities, args.item) ?? args.completionDecision ?? null;
   const decisions = Object.fromEntries((["design", "plan", "implementation", "completion"] as const).map((target) => {
     if (target === "completion" && terminalCompletion) return [target, terminalCompletion];
     const projected = projectBacklogItemReadiness({

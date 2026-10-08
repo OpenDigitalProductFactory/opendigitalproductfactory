@@ -195,3 +195,42 @@ describe("projectOwedAcceptance", () => {
     expect(resolveOwner).not.toHaveBeenCalled();
   });
 });
+
+describe("projectOwedAcceptance: the owner's objective-mapping packet (BI-099A0BA3)", () => {
+  it("carries the server-issued objective-mapping packet the resolved owner was routed with", async () => {
+    const owner = route("AGT-WS-ACCEPT");
+    const result = await projectOwedAcceptance({
+      decision: mediumFeature, authorAgentId: "AGT-AUTHOR", resolveOwner: resolverReturning({ reviewerRoutes: [owner] }),
+    });
+    expect(result.objectiveMappingPacket).toEqual(owner.requestCoworker);
+  });
+
+  it("carries no packet issued to the author, nor one for another lane", async () => {
+    const authored = await projectOwedAcceptance({
+      decision: smallFix, authorAgentId: "AGT-AUTHOR", resolveOwner: resolverReturning({ reviewerRoutes: [route("AGT-AUTHOR")] }),
+    });
+    expect(authored.objectiveMappingPacket).toBeUndefined();
+
+    const other = { ...route("AGT-WS-ACCEPT"), gate: "classification" as const };
+    const otherLane = await projectOwedAcceptance({
+      decision: smallFix, authorAgentId: "AGT-AUTHOR", resolveOwner: resolverReturning({ reviewerRoutes: [other] }),
+    });
+    expect(otherLane.objectiveMappingPacket).toBeUndefined();
+  });
+});
+
+describe("projectOwedAcceptance: every delivery actor is excluded (BI-099A0BA3, security review M1)", () => {
+  it("never names an agent that delivered the item in an older room, though a newer room made another agent the author", async () => {
+    const resolveOwner = resolverReturning({ reviewerRoutes: [route("AGT-A-DELIVERED")] });
+
+    const result = await projectOwedAcceptance({
+      decision: smallFix, authorAgentId: "AGT-B-NEWER", excludedAgentIds: ["AGT-A-DELIVERED", "AGT-B-NEWER"], resolveOwner,
+    });
+
+    expect(result.owner).toBeNull();
+    expect(result.objectiveMappingPacket).toBeUndefined();
+    expect(result.unroutable).toEqual([expect.objectContaining({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", reason: "author-excluded" })]);
+    expect(resolveOwner.mock.calls[0]![0].excludedAgentIds).toEqual(["AGT-A-DELIVERED", "AGT-B-NEWER"]);
+    expect(result.excludedAgentIds).toEqual(["AGT-A-DELIVERED", "AGT-B-NEWER"]);
+  });
+});

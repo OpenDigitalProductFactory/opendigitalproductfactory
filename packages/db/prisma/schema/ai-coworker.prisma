@@ -291,6 +291,7 @@ model Agent {
   epicPortfoliosConfirmed EpicPortfolio[]  @relation("EpicPortfolioConfirmedByAgent")
   portfolioBudgetsSet     PortfolioBudgetPeriod[] @relation("PortfolioBudgetSetByAgent")
   budgetReservations      BudgetReservation[]     @relation("BudgetReservationActorAgent")
+  decisionInteractions    DecisionInteraction[]   @relation("DecisionInteractionAgent")
 
   @@index([portfolioId]) // FK-leading (spine): active-agents-per-portfolio groupBy, apps/web/lib/evaluate/portfolio-data.ts:72
 }

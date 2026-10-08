@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [],
+  "migration": {
+    "name": "20261007010000_decision_interaction_agent",
+    "backfill": "adds a nullable agentId to DecisionInteraction with a foreign key onto Agent.agentId (ON DELETE SET NULL), then copies the coworker id each row already recorded in its own outcomePayload.caller.agentId. Only ids that an Agent row carries exactly are copied, so the key never dangles; nothing is derived from task runs or question text. Rows naming no agent, or an agent that no longer exists, stay NULL. Only NULL columns are touched, so re-running reports UPDATE 0. Measured read-only on one operator install: 872 of 2,265 rows carry caller.agentId and all 872 match an existing Agent row (AGT-WS-EA 709, AGT-EXT-CLAUDE 62, external-catalog-scout 38, AGT-WS-REVIEW 27, AGT-WS-BUILD 22, AGT-EXT-CODEX 10, others 4)."
+  },
+  "tests": [
+    "apps/web/lib/decision/decision-shadow-ledger-mapping.test.ts",
+    "apps/web/lib/decision/decision-shadow-ledger-bridge.test.ts",
+    "apps/web/lib/decision/kernel-consult-ledger.test.ts",
+    "apps/web/lib/decision/decision-outcome-store.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:decision-interaction",
+      "prismaModel": "DecisionInteraction",
+      "lifecycleDisposition": "operational",
+      "fields": [
+        {
+          "fieldId": "data:decision-interaction#agentId",
+          "resolution": "inherited",
+          "reason": "the platform identifier of the AI coworker that made a governed decision, already present in the same row's outcomePayload.caller; it names a platform agent, not a person or customer, and carries no personal data. Its absence is why no decision could be attributed to a coworker in the shadow ledger.",
+          "provenance": "manual/platform-architecture"
+        }
+      ]
+    }
+  ]
+}

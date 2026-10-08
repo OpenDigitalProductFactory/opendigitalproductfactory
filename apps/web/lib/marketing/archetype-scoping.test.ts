@@ -34,6 +34,7 @@ function restaurantSnapshot(): MarketingWorkspaceSnapshot {
       tagline: "Seasonal neighbourhood dining",
       description: null,
       ctaType: "booking",
+      ownOffer: null,
     },
     strategy: {
       strategyId: "st-r",

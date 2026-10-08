@@ -27,6 +27,7 @@ PLUGIN_NAME = "dpf-platform"
 CODEX_PLUGIN_ID = f"{PLUGIN_NAME}@personal"
 MARKETPLACE_NAME = "dpf-platform-local"
 CODEX_LEGACY_PLUGIN_IDS = (f"{PLUGIN_NAME}@{MARKETPLACE_NAME}",)
+CLAUDE_PLUGIN_ID = f"{PLUGIN_NAME}@{MARKETPLACE_NAME}"
 TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
 # The install's canonical origin when nothing names another (design 12.4.1):
 # setup persists DPF_MCP_URL = <PUBLIC_URL>/api/mcp/v1?tier=full (12.4.3), and
@@ -114,6 +115,11 @@ def copy_skill_pack(source: Path, destination: Path, dry_run: bool) -> bool:
     return True
 
 
+def is_build_debris(relative: Path) -> bool:
+    """Files no copy of the pack delivers: the copier and digests skip them."""
+    return "__pycache__" in relative.parts or relative.suffix == ".pyc" or relative.name == ".DS_Store"
+
+
 def codex_content_version(skill_pack: Path) -> str:
     """Invalidate Codex's versioned cache when delivered bytes change."""
     manifest_path = skill_pack / ".codex-plugin" / "plugin.json"
@@ -122,7 +128,7 @@ def codex_content_version(skill_pack: Path) -> str:
     digest = hashlib.sha256()
     for path in sorted(skill_pack.rglob("*")):
         relative = path.relative_to(skill_pack)
-        if not path.is_file() or "__pycache__" in relative.parts or path.suffix == ".pyc" or path.name == ".DS_Store":
+        if not path.is_file() or is_build_debris(relative):
             continue
         content = path.read_bytes()
         if path == manifest_path:
@@ -150,6 +156,45 @@ def codex_managed_plugin_path(home: Path) -> Path:
 def shared_managed_plugin_path(home: Path) -> Path:
     """Return the managed copy consumed by Claude, Grok, and global hooks."""
     return home / ".agents" / "plugins" / "plugins" / PLUGIN_NAME
+
+
+def claude_installed_plugins_path(home: Path) -> Path:
+    """Claude Code's record of which cache directory each install loads."""
+    return home / ".claude" / "plugins" / "installed_plugins.json"
+
+
+def installed_plugin_copies(home: Path, project_dir: Optional[Path] = None) -> list[dict[str, Any]]:
+    """Every installed copy of this pack a client on this machine may load.
+
+    The one list of copy locations (BI-16EAAB62): the copier above writes the
+    first two, and Claude Code materializes the third from a marketplace into
+    its plugin cache. `connector` marks the copies whose claude.mcp.json a
+    Claude client reads as its dpf server; Codex reads its connector from
+    config.toml, so its copy's descriptor is never loaded. Of the Claude cache
+    records, only user-scope ones and the one for `project_dir` load in a
+    session opened there; records for other checkouts are theirs.
+    """
+    copies: list[dict[str, Any]] = [
+        {"label": "shared managed copy (Claude desktop, Grok, global hooks)",
+         "path": shared_managed_plugin_path(home), "connector": True},
+        {"label": "Codex managed copy", "path": codex_managed_plugin_path(home), "connector": False},
+    ]
+    wanted = os.path.normcase(os.path.realpath(project_dir)) if project_dir else None
+    seen: set[str] = set()
+    for entry in claude_plugin_records(home):
+        if not isinstance(entry.get("installPath"), str):
+            continue
+        project = entry.get("projectPath")
+        loads_here = entry.get("scope") == "user" or (
+            wanted is not None and isinstance(project, str)
+            and os.path.normcase(os.path.realpath(project)) == wanted
+        )
+        if not loads_here or entry["installPath"] in seen:
+            continue
+        seen.add(entry["installPath"])
+        copies.append({"label": f"Claude plugin cache ({entry.get('scope', 'unknown')} scope)",
+                       "path": Path(entry["installPath"]), "connector": True})
+    return copies
 
 
 # Backward-compatible name for existing hook/install helpers and callers.
@@ -848,6 +893,169 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
         if result.returncode != 0:
             return f"failed: {' '.join(command[:3])} exited {result.returncode}"
     return "installed and refreshed"
+
+
+def claude_plugin_records(home: Path) -> list[dict[str, Any]]:
+    """Every installed_plugins.json record of the dpf-platform plugin."""
+    try:
+        records = json.loads(claude_installed_plugins_path(home).read_text(encoding="utf-8-sig"))
+        entries = records.get("plugins", {}).get(CLAUDE_PLUGIN_ID, [])
+    except (OSError, ValueError, AttributeError):
+        return []
+    return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
+
+
+def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> dict[str, list[str]]:
+    """Update every project-scope record still pinned to an older version.
+
+    `install_claude_plugin` refreshes only the local-scope record. Claude Code
+    keeps one project-scope record per checkout the plugin was ever installed
+    from, and each keeps loading its own cached version: on 2026-10-07 the
+    D:\\DPF record still loaded 0.2.5's bearer descriptor beside the 0.2.8 OAuth
+    one (BI-B9F359AC). `claude plugin update --scope project` acts on the
+    record for its working directory, so it runs once per existing project.
+    A record whose projectPath is gone is reported as prunable and left alone:
+    Claude Code owns the file and drops it on its own uninstall.
+    """
+    result: dict[str, list[str]] = {"updated": [], "current": [], "pruned": [], "failed": []}
+    # Claude Code records the marketplace version without build metadata; the
+    # pack manifest may carry a `+codex.<stamp>` suffix (codex_content_version).
+    version = version.split("+", 1)[0]
+    claude = resolve_claude_binary()
+    for entry in claude_plugin_records(home):
+        project = entry.get("projectPath")
+        if entry.get("scope") != "project" or not isinstance(project, str):
+            continue
+        if not Path(project).is_dir():
+            result["pruned"].append(project)
+            continue
+        if entry.get("version") == version:
+            result["current"].append(project)
+            continue
+        if dry_run:
+            result["updated"].append(project)
+            continue
+        if not claude:
+            result["failed"].append(project)
+            continue
+        command = [claude, "plugin", "update", CLAUDE_PLUGIN_ID, "--scope", "project"]
+        completed = subprocess.run(command, cwd=project, capture_output=True, text=True)
+        result["updated" if completed.returncode == 0 else "failed"].append(project)
+    return result
+
+
+_MCP_URL_TEMPLATE = re.compile(r"^\$\{DPF_MCP_URL:-([^}]+)\}$")
+
+
+def _dpf_endpoint_path(url: object) -> Optional[str]:
+    if not isinstance(url, str):
+        return None
+    match = _MCP_URL_TEMPLATE.match(url)
+    try:
+        return urlsplit(match.group(1) if match else url).path.rstrip("/")
+    except ValueError:
+        return None
+
+
+def retire_duplicate_project_mcp_json(project: Path, dry_run: bool) -> Optional[str]:
+    """Disable a project .mcp.json `dpf` server that duplicates the plugin's.
+
+    The plugin descriptor is the one dpf connector (BI-5201141C); a leftover
+    project .mcp.json naming `dpf` on the same /api/mcp/v1 endpoint loads as a
+    second `dpf` connector (BI-B9F359AC). Disable-not-delete: the original is
+    kept as .mcp.json.legacy-bak. A file with only that server is renamed; a
+    file with other servers keeps them and loses only the duplicate entry.
+    Returns the backup path when it acted (or would act, in dry run).
+    """
+    path = project / ".mcp.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        servers = data["mcpServers"]
+        dpf = servers["dpf"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(dpf, dict) or _dpf_endpoint_path(dpf.get("url")) != "/api/mcp/v1":
+        return None
+    backup = project / ".mcp.json.legacy-bak"
+    suffix = 1
+    while backup.exists():
+        backup = project / f".mcp.json.legacy-bak.{suffix}"
+        suffix += 1
+    if dry_run:
+        return str(backup)
+    remaining = {name: server for name, server in servers.items() if name != "dpf"}
+    if not remaining:
+        path.rename(backup)
+        return str(backup)
+    shutil.copy2(path, backup)
+    path.write_text(json.dumps({**data, "mcpServers": remaining}, indent=2) + "\n", encoding="utf-8")
+    return str(backup)
+
+
+def retire_user_scope_dpf_server(home: Path, dry_run: bool) -> Optional[str]:
+    """Remove a user-scope `dpf` server that duplicates the plugin connector.
+
+    A user-scope server in ~/.claude.json loads in every folder, so a legacy
+    `dpf` entry there (the bearer-header registration the old token rotation
+    wrote) shows beside the plugin's `dpf` in every session (BI-81B0A3BE).
+    Acts only while the plugin connector is installed, and only on a `dpf`
+    server on the /api/mcp/v1 endpoint. Disable-not-delete: the entry is copied
+    to ~/.claude/dpf-user-mcp.legacy-bak.json first; the Claude CLI owns
+    ~/.claude.json, so the removal goes through `claude mcp remove`.
+    Returns None when there is nothing to do, else a status line.
+    """
+    if not claude_plugin_records(home):
+        return None
+    try:
+        server = json.loads((home / ".claude.json").read_text(encoding="utf-8-sig"))["mcpServers"]["dpf"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(server, dict) or _dpf_endpoint_path(server.get("url")) != "/api/mcp/v1":
+        return None
+    backup = home / ".claude" / "dpf-user-mcp.legacy-bak.json"
+    suffix = 1
+    while backup.exists():
+        backup = home / ".claude" / f"dpf-user-mcp.legacy-bak.{suffix}.json"
+        suffix += 1
+    if dry_run:
+        return f"would remove (backup {backup})"
+    claude = resolve_claude_binary()
+    if not claude:
+        return "failed: Claude CLI not found"
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    backup.write_text(json.dumps({"mcpServers": {"dpf": server}}, indent=2) + "\n", encoding="utf-8")
+    completed = subprocess.run(
+        [claude, "mcp", "remove", "dpf", "-s", "user"], cwd=str(home), capture_output=True, text=True
+    )
+    if completed.returncode != 0:
+        return f"failed: claude mcp remove exited {completed.returncode} (backup {backup})"
+    return f"removed (backup {backup})"
+
+
+def converge_claude_project_connectors(home: Path, version: str, dry_run: bool) -> list[str]:
+    """Converge stale project-scope plugin pins and duplicate project connectors."""
+    version = version.split("+", 1)[0]
+    plugins = converge_claude_project_plugins(home, version, dry_run)
+    verb = "would update" if dry_run else "updated"
+    lines = [f"  Claude project scope: {verb} {len(plugins['updated'])}, "
+             f"current {len(plugins['current'])}, failed {len(plugins['failed'])}, "
+             f"prunable {len(plugins['pruned'])}"]
+    lines += [f"    {verb} to {version}: {project}" for project in plugins["updated"]]
+    lines += [f"    FAILED to update: {project}" for project in plugins["failed"]]
+    lines += [f"    prunable (projectPath gone): {project}" for project in plugins["pruned"]]
+    projects = {
+        entry["projectPath"]
+        for entry in claude_plugin_records(home)
+        if entry.get("scope") in ("project", "local") and isinstance(entry.get("projectPath"), str)
+    }
+    for project in sorted(projects):
+        if not Path(project).is_dir():
+            continue
+        backup = retire_duplicate_project_mcp_json(Path(project), dry_run)
+        if backup:
+            action = "would disable" if dry_run else "disabled"
+            lines.append(f"    {action} duplicate dpf connector in {Path(project) / '.mcp.json'} (backup {backup})")
+    return lines
 
 
 def _claude_plugin_matches(installed_id: str, competitive_id: str) -> bool:
@@ -2080,6 +2288,12 @@ def main(argv: list[str]) -> int:
         if not args.skip_claude_cli_install:
             status = install_claude_plugin(home, args.dry_run)
         print(f"  Claude     : marketplace converged; plugin install {status}")
+        if not args.skip_claude_cli_install:
+            for line in converge_claude_project_connectors(home, version, args.dry_run):
+                print(line)
+            user_scope_status = retire_user_scope_dpf_server(home, args.dry_run)
+            if user_scope_status:
+                print(f"  Claude user-scope dpf duplicate: {user_scope_status}")
         claude_competitive_status = "skipped by flag"
         if not args.skip_claude_cli_install:
             claude_competitive_status = disable_competitive_claude_plugins(

@@ -292,7 +292,7 @@ describe("remote task terminal-writer postcondition", () => {
     });
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
       apiTokenId: "PAT-WRITER-DURATION",
-      tokenScope: "write",
+      tokenScope: "write", tokenGrantScopes: parsed.authorityScope, // BI-F8C661D0: bounds nested reads
     }));
   });
 

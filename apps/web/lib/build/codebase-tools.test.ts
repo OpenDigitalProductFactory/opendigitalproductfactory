@@ -129,6 +129,14 @@ describe("isPathAllowed — POSIX portability", () => {
 //   - nested cases now block (the fix)
 //   - directories that merely share a prefix still allow
 //     (`secrets-management/...` — no false positive)
+describe("isPathAllowed — sandbox auth secret (BI-F1C680C7)", () => {
+  it("blocks the sandbox's own auth secret and its temp files", () => {
+    expect(isPathAllowed(".dpf-sandbox-auth-secret")).toBe(false);
+    expect(isPathAllowed(".dpf-sandbox-auth-secret.Ab12Cd")).toBe(false);
+    expect(isPathAllowed(".builds/b1/.dpf-sandbox-auth-secret")).toBe(false);
+  });
+});
+
 describe("isPathAllowed — secrets / credentials path-component matching", () => {
   it("blocks 'secrets' at any path depth", () => {
     expect(isPathAllowed("secrets")).toBe(false);

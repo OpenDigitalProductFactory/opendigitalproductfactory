@@ -15,8 +15,15 @@ import {
   type OutboundBodyFormat,
   type OutboundDraftStatus,
 } from "./execution";
-import { getMarketingWorkspaceSnapshot } from "../marketing";
+import { getMarketingWorkspaceSnapshot, type MarketingWorkspaceSnapshot } from "../marketing";
 import { getPlaybook } from "@/lib/tak/marketing-playbooks";
+import { platformLeakTermsFor } from "./archetype-fit";
+import {
+  PLATFORM_CLAIM_LIMITS,
+  describeBuyerForPrompt,
+  resolveBuyerArchetype,
+  sellsThePlatform,
+} from "./buyer-archetype-value";
 
 export type DraftMarketingAssetResult =
   | {
@@ -65,6 +72,58 @@ function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
+/**
+ * The business voice and audience the drafter writes in.
+ *
+ * Archetype voice: the drafter speaks in THIS business's language, not generic
+ * software-startup voice — the playbook supplies stakeholders, tone and CTAs
+ * (a restaurant markets covers, bookings and menus, never "technical founders").
+ * The terms it must avoid are exactly the ones the fit guard would block, so a
+ * business whose own offer is the platform may name it (BI-E92B6BC9).
+ *
+ * A business that sells the platform markets to OTHER archetypes: when the task
+ * names a buyer archetype ("HVAC contractors"), that buyer's benefits and claim
+ * boundary steer the copy (BI-B4BE6934).
+ */
+export function buildDraftVoice(input: {
+  snapshot: Pick<MarketingWorkspaceSnapshot, "storefront" | "strategy">;
+  taskText: string;
+}): { audience: string; archetypeVoice: string } {
+  const { snapshot } = input;
+  const playbook = getPlaybook(snapshot.storefront.category, snapshot.storefront.ctaType);
+  const bannedTerms = platformLeakTermsFor({
+    category: snapshot.storefront.category,
+    ownOffer: snapshot.storefront.ownOffer,
+  });
+  const buyer = sellsThePlatform(snapshot.storefront.ownOffer)
+    ? resolveBuyerArchetype(input.taskText)
+    : null;
+
+  const audience =
+    buyer?.label
+    ?? snapshot.strategy.targetSegments[0]?.name
+    ?? snapshot.strategy.idealCustomerProfiles[0]?.name
+    ?? "the strategist's chosen buyer segment";
+
+  const lines = [
+    `This business is a ${
+      snapshot.storefront.archetypeName ?? snapshot.storefront.category ?? "local business"
+    }.`,
+    `- Audience: ${buyer ? `${buyer.label} — ${buyer.whoTheyAre}` : playbook.stakeholders}.`,
+    `- Voice: ${playbook.contentTone}.`,
+    `- Speak in this business's own concepts. Preferred calls to action: ${playbook.ctaLanguage.join(", ")}.`,
+    bannedTerms.length > 0
+      ? `- NEVER use these terms — they are not what this business sells: ${bannedTerms.join(", ")}. This is a real business marketing to real customers.`
+      : null,
+    buyer
+      ? `- Write for this buyer, in their terms, about their day — not about the platform's internals:\n${describeBuyerForPrompt(buyer)}`
+      : null,
+    sellsThePlatform(snapshot.storefront.ownOffer) ? `- ${PLATFORM_CLAIM_LIMITS}` : null,
+  ].filter((line): line is string => line !== null);
+
+  return { audience, archetypeVoice: lines.join("\n") };
+}
+
 export async function draftMarketingAsset(input: {
   assetTaskId: string;
   channelOverride?: string;
@@ -102,25 +161,14 @@ export async function draftMarketingAsset(input: {
   const channelId = input.channelOverride ?? task.channel ?? "linkedin";
   const positioning = snapshot.latestReview?.summary
     ?? "No saved strategist review — drafter is operating without a positioning anchor.";
-  const audience =
-    snapshot.strategy.targetSegments[0]?.name
-    ?? snapshot.strategy.idealCustomerProfiles[0]?.name
-    ?? "the strategist's chosen buyer segment";
+  const voice = buildDraftVoice({
+    snapshot,
+    taskText: [task.title, task.brief].filter(Boolean).join("\n"),
+  });
+  const audience = voice.audience;
   const proof =
     snapshot.strategy.proofAssets[0]?.label ?? null;
-
-  // Archetype voice: the drafter must speak in THIS business's language, not
-  // generic software-startup voice. The playbook supplies the stakeholders,
-  // tone, and CTA vocabulary for the active archetype (e.g. a restaurant markets
-  // covers, bookings, menus and seasonal offers — never "technical founders").
-  const playbook = getPlaybook(snapshot.storefront.category, snapshot.storefront.ctaType);
-  const archetypeVoice = `This business is a ${
-    snapshot.storefront.archetypeName ?? snapshot.storefront.category ?? "local business"
-  }.
-- Audience: ${playbook.stakeholders}.
-- Voice: ${playbook.contentTone}.
-- Speak in this business's own concepts. Preferred calls to action: ${playbook.ctaLanguage.join(", ")}.
-- NEVER use software-platform language (Build Studio, technical founders, AI workflow, SaaS, software platform). This is a real business marketing to real customers.`;
+  const archetypeVoice = voice.archetypeVoice;
 
   const systemPrompt = `You are a senior marketing copywriter producing channel-shaped, ready-to-publish copy from a marketing brief.
 

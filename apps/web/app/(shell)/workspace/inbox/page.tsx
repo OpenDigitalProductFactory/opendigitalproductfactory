@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 import { loadAttentionItems, filterAttentionForAudience } from "@/lib/attention/aggregate";
-import { buildOwnerAttentionProjection } from "@/lib/attention/owner-projection";
+import { buildOwnerAttentionProjection, pinOwnerAttentionEntry } from "@/lib/attention/owner-projection";
 import { buildWeeklyDigest } from "@/lib/attention/weekly-digest";
 import { loadWeeklyDigestDisposition } from "@/lib/attention/weekly-digest-preferences";
 import { runEscalationHygiene } from "@/lib/quality/escalation-hygiene-runner";
@@ -15,6 +15,7 @@ import { AttentionInbox } from "@/components/attention/AttentionInbox";
 import { ApprovalOutcomeHistory } from "@/components/attention/ApprovalOutcomeHistory";
 import { loadApprovalOutcomes } from "@/lib/coworker/approval-outcome-store";
 import { loadCoworkerEnvelopeItems } from "@/lib/attention/sources/coworker-envelope";
+import { envelopeAttentionItemId } from "@/lib/coworker/envelope-routes";
 import { getT } from "@/lib/i18n/t.server";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +42,8 @@ export default async function WorkspaceInboxPage({ searchParams }: { searchParam
     readerIsSuperuser: session.user.isSuperuser === true,
   });
   // An exact approval link remains usable even outside the most recent 25.
-  if (approvalId && !items.some((item) => item.id === `coworker-envelope:${approvalId}`)) {
+  const focusItemId = approvalId ? envelopeAttentionItemId(approvalId) : undefined;
+  if (approvalId && !items.some((item) => item.id === focusItemId)) {
     items.push(...await loadCoworkerEnvelopeItems(prisma, session.user.id, Date.now(), approvalId));
   }
   // V1 operator-view; worker scoping (own approvals only) is BI-AS-4.
@@ -51,11 +53,13 @@ export default async function WorkspaceInboxPage({ searchParams }: { searchParam
   // Full the reader asked to see builder and platform tools, so a builder-rail
   // action IS the honest primary action (BI-90B6D8C5).
   const audience = resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value);
-  const projection = buildOwnerAttentionProjection(visible, {
+  // A deep link names one card; pin it into the visible lane even when routing
+  // would have batched it (an expired request waits in the weekly review).
+  const projection = pinOwnerAttentionEntry(buildOwnerAttentionProjection(visible, {
     fallbackLevel: "balanced",
     nowMs,
     audience: audience === "worker" ? "worker" : "operator",
-  });
+  }), focusItemId);
   const digest = buildWeeklyDigest(projection.weeklyDigest, nowMs);
   const digestDisposition =
     digest.status === "ready"
@@ -77,6 +81,7 @@ export default async function WorkspaceInboxPage({ searchParams }: { searchParam
         failedSources={failedSources}
         nowMs={nowMs}
         digestDisposition={digestDisposition}
+        focusItemId={focusItemId}
       />
       {!approvalId ? <ApprovalOutcomeHistory outcomes={outcomes} copy={outcomeCopy} /> : null}
     </main>

@@ -72,4 +72,24 @@ describe("iteration-scoped receipts (Phase 3c)", () => {
     expect(isCompletingWorkroomDriveReceiptAt({ stageKey: "a", kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND, iteration: 1 }, "a", 1)).toBe(false);
     expect(isCompletingWorkroomDriveReceiptAt({ stageKey: "b", kind: "k", iteration: 1 }, "a", 1)).toBe(false);
   });
+
+  // BI-086DC167: a graph receipt carries the run it was earned in.
+  it("a receipt carrying a run key completes a stage only within that run; one without keeps its meaning", () => {
+    const run = "shape@1.0.0:2026-03-02";
+    expect(isCompletingWorkroomDriveReceiptAt({ stageKey: "a", kind: "k", iteration: 0, runKey: run }, "a", 0, run)).toBe(true);
+    expect(isCompletingWorkroomDriveReceiptAt({ stageKey: "a", kind: "k", iteration: 0, runKey: run }, "a", 0, "shape@1.0.0:2026-03-03")).toBe(false);
+    expect(isCompletingWorkroomDriveReceiptAt({ stageKey: "a", kind: "k" }, "a", 0, run)).toBe(true);
+    expect(isCompletingWorkroomDriveReceiptAt({ stageKey: "a", kind: "k", runKey: run }, "a", 0)).toBe(true);
+  });
+
+  it("deduplicates on the run key too, and writes it only when given", () => {
+    const first = appendCompletingWorkroomDriveReceipt([], { stageKey: "a", kind: "k", iteration: 0, runKey: "r1" });
+    expect(first.ok && first.data).toEqual([{ stageKey: "a", kind: "k", iteration: 0, runKey: "r1" }]);
+    const again = appendCompletingWorkroomDriveReceipt(first.ok ? first.data : [], { stageKey: "a", kind: "k", iteration: 0, runKey: "r1" });
+    expect(again.ok && again.data).toHaveLength(1);
+    const next = appendCompletingWorkroomDriveReceipt(first.ok ? first.data : [], { stageKey: "a", kind: "k", iteration: 0, runKey: "r2" });
+    expect(next.ok && next.data.map((receipt) => receipt.runKey)).toEqual(["r1", "r2"]);
+    const legacy = appendCompletingWorkroomDriveReceipt([], { stageKey: "a", kind: "k" });
+    expect(legacy.ok && Object.hasOwn(legacy.data[0]!, "runKey")).toBe(false);
+  });
 });

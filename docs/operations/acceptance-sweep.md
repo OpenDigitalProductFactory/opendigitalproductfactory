@@ -22,14 +22,22 @@ for you, but only after you allow it.
 - **Who it acts as:** the Portfolio Advisor, on your behalf. Each closure
   records you as the person who allowed it, when, and your reason.
 
-**Turn it on.** An operator with both the `manage_platform` and
-`manage_backlog` permissions grants it with a reason
-(`grantAcceptanceSweepCloseAuthorisation`). It is stored as the platform
-setting `acceptance-sweep.close-authorisation`.
+**Where:** Admin > Platform Development, the card **Let the acceptance sweep
+close finished work**. It shows whether closing is on or off, who allowed it
+and when, their reason, the per-run limit, and how many items the last sweep
+closed (or why it closed nothing). Only people with both the
+`manage_platform` and `manage_backlog` permissions see the card.
 
-**Turn it off.** The same operator permissions revoke it with a reason
-(`revokeAcceptanceSweepCloseAuthorisation`). The next run closes nothing. The
-record keeps who allowed it and who stopped it.
+**Turn it on.** On the card, say why (at least 12 characters) and choose
+**Allow closing**. To change the per-run limit, open **Change how many it
+closes per run** first. It is stored as the platform setting
+`acceptance-sweep.close-authorisation`.
+
+**Turn it off.** On the same card, say why and choose **Stop closing**. The
+next run closes nothing. The record keeps who allowed it and who stopped it.
+
+The card calls the server actions `grantAcceptanceSweepCloseAuthorisation` and
+`revokeAcceptanceSweepCloseAuthorisation`, which check both permissions again.
 
 It also switches itself off if the person who allowed it is deactivated or
 loses `manage_backlog`, or if the Portfolio Advisor loses the grant that
@@ -50,6 +58,45 @@ Each run's summary in the Acceptance room has a `closing` section:
 
 The headline ends with either `N closed under operator pre-authorisation` or
 `closing off (<reason>)`.
+
+## Who verifies an item that is not closable
+
+With routing on, an item that has waited past the aged threshold gets its own
+**Acceptance verification** room, bound to one coworker who checks it on the
+live install and records the evidence. The sweep never picks the item's
+author, an agent that runs only outside the platform (such as the external
+Claude, Codex or Grok agents), or a person.
+
+- **Small and break-fix items** are accepted by a runtime check or the
+  failing-to-passing test. The coworker is the first active, in-platform
+  coworker (by agent id) holding the grant for `record_execution_evidence`
+  (`build_evidence`, or `backlog_write`, which includes it). The room brief
+  tells it to record the check with `record_execution_evidence`.
+- **Medium and larger items** go to the coworker holding the acceptance
+  reviewer grant, as before.
+
+When nobody qualifies, the summary lists the item as unroutable with the
+reason: `no-eligible-reviewer` (grant the lane to a coworker other than the
+author) or `no-in-platform-coworker` (only external agents hold it).
+
+## How the portal knows work was merged
+
+Merged platform work closes on the merge signal: the portal checks whether the
+item's branch head, or its linked pull request, is on `origin/main`. On an
+install it reads the Build Studio workspace clone (`/sandbox-workspace`); a
+host with a source checkout can point `DPF_HOST_SOURCE_ROOT` at it instead.
+
+- **Kept current:** the code-graph job fetches `origin/main` into that clone
+  every 15 minutes, and the completion step fetches once more just before it
+  checks. Only the `origin/main` ref moves. The fetch runs as the clone's
+  owner, and a failed fetch changes nothing.
+- **Ownership:** the portal runs as root while the clone belongs to the
+  workspace user, so each check trusts exactly that clone for that one git
+  command (BI-DC2758DE). Nothing is trusted globally.
+- **"The merge-through-gates signal could not run":** no checked location
+  could answer. This means "unknown", never "not merged". Check that the
+  clone exists and has an `origin/main`. The item stays awaiting acceptance
+  with its evidence until the signal can answer.
 
 ## Known limit
 

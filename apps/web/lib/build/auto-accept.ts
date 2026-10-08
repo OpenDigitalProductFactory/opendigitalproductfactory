@@ -69,8 +69,24 @@ export async function writeAcceptanceMet(args: {
  * Never throws: on any error it declines to accept (fail-closed). Idempotent — a
  * build that already carries acceptanceMet is left untouched.
  */
+/**
+ * Runs the platform's own scoped checks in the build's worktree. Injected so
+ * tests need no sandbox.
+ */
+export type MissingVerdictVerifier = (buildId: string) => Promise<{
+  verification: { typecheckPassed: boolean; testsPassed: number; testsFailed: number; source: string; scope: string };
+  changedFiles: string[];
+  output: string;
+}>;
+
+const defaultVerifier: MissingVerdictVerifier = async (buildId) => {
+  const { runDeterministicBuildVerificationFor } = await import("@/lib/build/deterministic-build-verification");
+  return runDeterministicBuildVerificationFor(buildId, []);
+};
+
 export async function autoAcceptBuildOnEvidence(
   buildId: string,
+  deps: { verifyMissingVerdict?: MissingVerdictVerifier } = {},
 ): Promise<{ accepted: boolean; acceptanceMet?: AcceptanceCriterion[]; reason?: string }> {
   try {
     if (!(await isEvidenceAutoAcceptEnabled())) return { accepted: false, reason: "flag-off" };
@@ -112,7 +128,41 @@ export async function autoAcceptBuildOnEvidence(
     // guard — never auto-accept a build whose own UX verification is unresolved or failed
     // (require complete/skipped). A future refinement should gate on the build's SCOPED
     // test delta once that is reliably separable from the repo-wide suite.
-    const v = build.verificationOut as VerificationOutput | null;
+    let v = build.verificationOut as VerificationOutput | null;
+    // BI-1CC992A5: the orchestrator's verdict save was refused for every build
+    // while its owner had several open builds, so builds reached review with no
+    // typecheck verdict at all. A MISSING verdict is not a failing one: run the
+    // platform's own scoped checks once, record them, and judge those. A recorded
+    // `false` is never re-run here, and a check that cannot run declines.
+    if (v?.typecheckPassed === undefined || v?.typecheckPassed === null) {
+      const ran = await (deps.verifyMissingVerdict ?? defaultVerifier)(buildId);
+      const base = build.verificationOut && typeof build.verificationOut === "object" && !Array.isArray(build.verificationOut)
+        ? build.verificationOut as Record<string, unknown>
+        : {};
+      const recorded = {
+        ...base,
+        ...ran.verification,
+        scopedToChangedFiles: ran.changedFiles,
+        fullOutput: ran.output.slice(0, 2000),
+        timestamp: new Date().toISOString(),
+      };
+      await saveBuildArtifactRevision({
+        buildId,
+        field: "verificationOut",
+        savedByUserId: build.createdById,
+        value: recorded,
+      });
+      prisma.buildActivity
+        .create({
+          data: {
+            buildId,
+            tool: "review_verification_backfill",
+            summary: `No typecheck verdict was recorded; ran scoped checks at review: typecheck ${ran.verification.typecheckPassed ? "passed" : "failed"}, tests ${ran.verification.testsFailed === 0 ? "passed" : "failed"} (${ran.verification.scope}).`,
+          },
+        })
+        .catch(() => {});
+      v = recorded as unknown as VerificationOutput;
+    }
     if (v?.typecheckPassed !== true) return { accepted: false, reason: "typecheck-not-clean" };
     const ux = build.uxVerificationStatus;
     if (ux !== "complete" && ux !== "skipped") return { accepted: false, reason: `ux=${ux ?? "null"}` };

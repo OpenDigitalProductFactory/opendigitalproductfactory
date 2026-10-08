@@ -12,7 +12,7 @@ import { runAcceptanceSweep, type AcceptanceSweepPorts, type AcceptanceSweepSumm
 // over-30-day count, closable, unroutable by code and the created-basis count.
 
 const NOW = new Date("2026-10-06T05:00:00.000Z");
-const CONFIG = { pageSize: 3, agedDays: 14, trendDays: 30, routing: false, recordedByAgentId: "AGT-WS-PORTFOLIO" } as const;
+const CONFIG = { pageSize: 3, agedDays: 14, trendDays: 30, routing: false, routeLimit: 10, recordedByAgentId: "AGT-WS-PORTFOLIO" };
 
 function item(id: string): AcceptanceSweepPageItem {
   return { id, itemId: `BI-${id.toUpperCase()}`, claimedByAgentId: null, agentId: null };
@@ -86,6 +86,7 @@ function ports(overrides: Partial<AcceptanceSweepPorts> = {}) {
     // BI-45D3BBF4: closing is off unless an operator pre-authorisation is recorded.
     resolveCloseAuthorisation: async () => ({ state: "disabled", reason: "not-recorded", because: "none recorded" }),
     close: vi.fn(async () => { throw new Error("close must not be called while closing is off"); }),
+    route: vi.fn(async () => []),
     ...overrides,
   };
   return { ports: base, store, runs };
@@ -155,7 +156,7 @@ describe("runAcceptanceSweep", () => {
       readinessUnavailable: [],
     });
     expect(summary.revisit).toEqual({ poolSize: 4, pageSize: 3, runsPerRevisit: 2, exceedsTrendWindow: false });
-    expect(summary.routing).toEqual({ enabled: false, routed: 0 });
+    expect(summary.routing).toMatchObject({ enabled: false, routed: 0, rooms: [] });
     expect(summary.cursor).toBe("c");
     expect(summary.ranAt).toBe(NOW.toISOString());
     expect(summary.headline).toContain("4 awaiting acceptance");
@@ -194,5 +195,7 @@ describe("runAcceptanceSweep", () => {
     const { ports: p } = ports();
     const summary = await runAcceptanceSweep(p, { ...CONFIG, routing: false });
     expect(summary.routing.routed).toBe(0);
+    expect(p.route).not.toHaveBeenCalled();
+    expect(summary.headline).toContain("routing off");
   });
 });

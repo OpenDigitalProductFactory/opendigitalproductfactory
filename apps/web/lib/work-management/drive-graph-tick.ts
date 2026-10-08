@@ -23,11 +23,17 @@
  *   its `stageKey#iteration` list and says whether any token's stage or
  *   iteration changed, which is always news.
  * - earnGraphReceipts: receipts earned per marked stage, each at that stage's
- *   iteration and bounded by that stage's own dispatch time. Only when a
+ *   iteration and in the marking's run (BI-086DC167), and bounded by that
+ *   stage's own dispatch time. Only when a
  *   stored marking is present: a graph room's first tick has none, holds no
- *   dispatch yet, and earns through the ordinary path.
+ *   dispatch yet, and earns through the ordinary path. A sub-shape stage
+ *   (PR-3c-5) earns only from `child-completion` evidence recorded after its
+ *   token entered the stage.
  */
 import type { DrivePlan } from "./drive-resolution";
+
+/** The evidence kind a sub-shape child's success records on its parent stage (PR-3c-5). */
+export const CHILD_COMPLETION_EVIDENCE_KIND = "child-completion";
 import {
   iterationOf,
   markedKeysWithIteration,
@@ -46,6 +52,7 @@ import type { WorkShapeDefinitionContract } from "./work-shapes";
 import {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
   WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
+  receiptInRun,
   type WorkroomDriveReceipt,
 } from "./workroom-drive-receipts";
 
@@ -173,17 +180,22 @@ export function graphTaskEffects(plan: DrivePlan, workspaceState: unknown, roomI
  * writeback latch this tick. Each is scoped to the token's iteration (PR-3c-3),
  * written only when it is not 0 so an iteration-0 receipt keeps its PR-3c-2
  * bytes (absent reads 0): a pass the stage is sent back from never latches the
- * next pass.
+ * next pass. Each also carries the plan's run key (BI-086DC167), so a later
+ * run's pass through the same stage is never latched by this one.
  */
 export function withLatchedBlockedReceipts<R extends WorkroomDriveReceipt>(plan: DrivePlan, receipts: readonly R[]): Array<R | WorkroomDriveReceipt> {
   const out: Array<R | WorkroomDriveReceipt> = [...receipts];
+  const runKey = plan.marking && !("raw" in plan.marking) ? plan.marking.cycleKey : undefined;
   for (const token of plan.tokens ?? []) {
     if (token.reason !== EXECUTOR_WRITEBACK_UNAVAILABLE_REASON) continue;
     if (out.some((receipt) => receipt.stageKey === token.stageKey && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND
-      && (receipt.iteration ?? 0) === token.iteration)) continue;
-    out.push(token.iteration > 0
-      ? { stageKey: token.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND, iteration: token.iteration }
-      : { stageKey: token.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND });
+      && (receipt.iteration ?? 0) === token.iteration && receiptInRun(receipt, runKey))) continue;
+    out.push({
+      stageKey: token.stageKey,
+      kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
+      ...(token.iteration > 0 ? { iteration: token.iteration } : {}),
+      ...(runKey !== undefined ? { runKey } : {}),
+    });
   }
   return out;
 }
@@ -233,13 +245,19 @@ export function earnGraphReceipts(input: {
   if (!read.ok) return input.existing;
   let receipts = input.existing;
   for (const stageKey of markedStageKeys(definition, read.data.marking)) {
+    // A sub-shape stage (PR-3c-5) is completed only by its child: the `child-completion` evidence the runner
+    // records on success, recorded after this pass's token entered the stage (so an earlier pass's never counts).
+    const subShape = definition.stages.find((stage) => stage.key === stageKey)?.subShape !== undefined;
+    const enteredAt = subShape ? stageToken(read.data.marking, stageKey)?.enteredAt : undefined;
     receipts = earnEvidenceReceipts({
       stageKey,
-      declaredKinds: stageEvidenceKinds(definition, stageKey),
+      declaredKinds: subShape ? [CHILD_COMPLETION_EVIDENCE_KIND] : stageEvidenceKinds(definition, stageKey),
       evidence: input.evidence,
-      dispatchedAt: input.dispatchedAtByStage?.get(stageKey) ?? null,
+      dispatchedAt: subShape ? (enteredAt ? new Date(enteredAt) : null) : input.dispatchedAtByStage?.get(stageKey) ?? null,
       existing: receipts,
       iteration: iterationOf(read.data.marking, stageKey),
+      // The run this receipt belongs to (BI-086DC167): the next run never replays it.
+      runKey: read.data.marking.cycleKey,
     });
   }
   return receipts;

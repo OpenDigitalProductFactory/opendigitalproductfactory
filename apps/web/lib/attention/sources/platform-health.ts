@@ -12,6 +12,7 @@
 import type { prisma } from "@dpf/db";
 import { humanizeHealthAlert } from "@/lib/observability/alert-humanize";
 import type { AttentionItem } from "../types";
+import { DOCKER_VM_WEDGED_ISSUE_KEY } from "@/lib/platform-runtime/substrate-reconciler";
 
 type Db = typeof prisma;
 
@@ -55,9 +56,10 @@ export function healthAlertToAttentionItem(issue: OpenHealthAlertIssue): Attenti
       irreversible: false,
     },
     createdAtIso: issue.firstDetectedAt.toISOString(),
-    actions: [
-      { kind: "open-in-context", label: "Open System Health", href: "/ops/health" },
-    ],
+    actions: issue.issueKey === DOCKER_VM_WEDGED_ISSUE_KEY
+      // BI-F8F8C383: only a Docker VM restart clears this, and it needs the operator.
+      ? [{ kind: "open-in-context", label: "Review Docker VM restart", href: "/ops/health#docker-vm-restart" }]
+      : [{ kind: "open-in-context", label: "Open System Health", href: "/ops/health" }],
     deepLink: "/ops/health",
     audience: { operator: true },
   };

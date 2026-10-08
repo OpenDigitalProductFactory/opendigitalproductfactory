@@ -76,7 +76,13 @@ export function resolveProposalBasis(target: Period, options: ProposalBasisOptio
   });
 }
 
-export type PortfolioBudgetProposalRow = PortfolioRow & { deliveredPoints: number; proposedPoints: number; share: number };
+export type PortfolioBudgetProposalRow = PortfolioRow & {
+  deliveredPoints: number;
+  proposedPoints: number;
+  share: number;
+  /** The part of deliveredPoints the platform-default rule attributed (budget-attribution.ts). */
+  attributedByRule: { basis: "platform-default"; deliveredPoints: number; proposedPoints: number };
+};
 
 export type PortfolioBudgetProposal = {
   targetPeriod: Period;
@@ -85,19 +91,23 @@ export type PortfolioBudgetProposal = {
   rows: PortfolioBudgetProposalRow[];
   /** Points delivered in the basis window that reach no portfolio, so no budget can carry them. */
   unallocatedDeliveredPoints: number;
+  /** Delivered points that reach a portfolio only through the platform-default rule. */
+  attributedByRuleDeliveredPoints: number;
   totalDeliveredPoints: number;
 };
 
 /**
  * Pure: each portfolio's proposed points are its delivered points in the basis
  * window times the basis scale, rounded to whole points. The share is of the
- * delivered points that reach a portfolio.
+ * delivered points that reach a portfolio. `byRule` is the part of each
+ * portfolio's delivered points the platform-default rule attributed.
  */
 export function deriveBudgetProposalRows(
   portfolios: PortfolioRow[],
   delivered: ReadonlyMap<string | null, number>,
   scale: number,
-): Pick<PortfolioBudgetProposal, "rows" | "unallocatedDeliveredPoints" | "totalDeliveredPoints"> {
+  byRule: ReadonlyMap<string | null, number> = new Map(),
+): Pick<PortfolioBudgetProposal, "rows" | "unallocatedDeliveredPoints" | "attributedByRuleDeliveredPoints" | "totalDeliveredPoints"> {
   const allocated = portfolios.reduce((sum, p) => sum + (delivered.get(p.id) ?? 0), 0);
   const unallocatedDeliveredPoints = delivered.get(null) ?? 0;
   return {
@@ -108,9 +118,15 @@ export function deriveBudgetProposalRows(
         deliveredPoints,
         proposedPoints: Math.round(deliveredPoints * scale),
         share: allocated > 0 ? Math.round((deliveredPoints / allocated) * 1000) / 1000 : 0,
+        attributedByRule: {
+          basis: "platform-default" as const,
+          deliveredPoints: byRule.get(p.id) ?? 0,
+          proposedPoints: Math.round((byRule.get(p.id) ?? 0) * scale),
+        },
       };
     }),
     unallocatedDeliveredPoints,
+    attributedByRuleDeliveredPoints: portfolios.reduce((sum, p) => sum + (byRule.get(p.id) ?? 0), 0),
     totalDeliveredPoints: allocated + unallocatedDeliveredPoints,
   };
 }
@@ -130,11 +146,12 @@ export async function proposePortfolioBudgets(
   const { period: basisPeriod, kind, days, scale } = resolved.data;
   const summary = summarizePortfolioInvestment(await loadInvestmentItems(db, basisPeriod), basisPeriod.start, basisPeriod);
   const delivered = new Map(summary.rows.map((row) => [row.portfolioId, row.deliveredPoints]));
+  const byRule = new Map(summary.rows.map((row) => [row.portfolioId, row.attributedByRule.deliveredPoints]));
   return {
     targetPeriod: target,
     basisPeriod,
     basis: { kind, days, scale },
-    ...deriveBudgetProposalRows(await loadPortfolios(db), delivered, scale),
+    ...deriveBudgetProposalRows(await loadPortfolios(db), delivered, scale, byRule),
   };
 }
 

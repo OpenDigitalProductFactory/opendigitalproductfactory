@@ -9,3 +9,5 @@ export const WORKROOM_DRIVE_CADENCE = "Every 15 minutes";
 export const WORKROOM_DRIVE_LEASE_MS = 10 * 60 * 1000;
 export const WORKROOM_DRIVE_ACTIVITY_KIND = "workroom-drive";
 export const WORKROOM_DRIVE_ATTENTION_KIND = "workroom-drive-attention";
+/** A graph room's stage passed its deadline (GPP Phase 3c PR-3c-4): written once, when the notice is raised. */
+export const WORKROOM_DRIVE_DEADLINE_KIND = "workroom-drive-deadline";

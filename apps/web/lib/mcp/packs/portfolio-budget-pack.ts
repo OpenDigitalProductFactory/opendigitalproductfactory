@@ -74,7 +74,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "propose_portfolio_budgets",
     description:
-      "Show each portfolio's current budget for a quarter (or 'No budget set', never zero) beside a proposal derived from delivered points per portfolio, including the delivered points no portfolio can carry. The basis is the previous quarter by default; with trailingDays it is the last N days of delivery, scaled to the target quarter's length (use this for a first quarter, e.g. trailingDays 90). The response carries suggestedReason, which labels a trailing-window proposal provisional and revisable. Read-only: the proposal is never applied. A person applies or edits each figure with set_portfolio_budget.",
+      "Show each portfolio's current budget for a quarter (or 'No budget set', never zero) beside a proposal derived from delivered points per portfolio, including the delivered points no portfolio can carry. Platform or common work with no explicit portfolio counts as Foundational; each row's attributedByRule (basis platform-default) shows how much of it came from that rule. The basis is the previous quarter by default; with trailingDays it is the last N days of delivery, scaled to the target quarter's length (use this for a first quarter, e.g. trailingDays 90). The response carries suggestedReason, which labels a trailing-window proposal provisional and revisable. Read-only: the proposal is never applied. A person applies or edits each figure with set_portfolio_budget.",
     inputSchema: {
       type: "object",
       properties: {

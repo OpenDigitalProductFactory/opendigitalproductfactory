@@ -25,6 +25,11 @@ import {
   type ResolutionOutcome,
   type ResolvableDecisionRow,
 } from "./decision-outcome";
+import {
+  syncDecisionShadowLedger,
+  type DecisionShadowLedgerDb,
+  type ShadowLedgerSyncOutcome,
+} from "./decision-shadow-ledger-bridge";
 
 export type DecisionOutcomeDb = {
   decisionInteraction: {
@@ -37,7 +42,7 @@ export type DecisionOutcomeDb = {
       data: Record<string, unknown>;
     }): Promise<unknown>;
   };
-};
+} & DecisionShadowLedgerDb;
 
 export type RecordDecisionOutcomeInput = {
   db: DecisionOutcomeDb;
@@ -50,7 +55,18 @@ export type RecordDecisionOutcomeInput = {
 };
 
 export type RecordDecisionOutcomeResult =
-  | { recorded: true; disposition: string; agreement: boolean | null; interactionId: string }
+  | {
+      recorded: true;
+      disposition: string;
+      agreement: boolean | null;
+      interactionId: string;
+      /**
+       * BI-6082C235: the decision's shadow-ledger row, completed with this
+       * outcome. A refusal (no coworker, unmapped class) or a failed write is
+       * reported here; it never un-records the outcome itself.
+       */
+      shadowLedger: ShadowLedgerSyncOutcome;
+    }
   | { recorded: false; reason: "not-found"; detail: string }
   | { recorded: false; reason: "write-failed"; detail: string }
   | (Extract<ResolutionOutcome, { accepted: false }> extends infer R
@@ -67,7 +83,20 @@ const ROW_SELECT = {
   humanOutcome: true,
   options: true,
   autonomous: true,
+  // Read only to complete the shadow-ledger row (BI-6082C235).
+  agentId: true,
+  domainClass: true,
+  riskTier: true,
+  outcomeType: true,
+  rationale: true,
+  taskRunId: true,
+  subjectKind: true,
+  subjectRef: true,
 } as const;
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
 
 function readOptionIds(value: unknown): string[] {
   // `options` is a Json column defaulting to `[]`. A malformed value yields an
@@ -139,10 +168,30 @@ export async function recordDecisionOutcome(
     };
   }
 
+  // The outcome is recorded; the ledger row is a measurement of it, so this
+  // runs after the write and its failure is reported rather than thrown.
+  const shadowLedger = await syncDecisionShadowLedger(input.db, {
+    interactionId: row.interactionId,
+    agentId: stringOrNull(existing.agentId),
+    domainClass: String(existing.domainClass ?? ""),
+    riskTier: String(existing.riskTier ?? ""),
+    outcomeType: String(existing.outcomeType ?? ""),
+    recommendedOptionId: row.recommendedOptionId,
+    options: row.options,
+    rationale: stringOrNull(existing.rationale),
+    chosenOptionId: plan.chosenOptionId,
+    humanOutcome: resolution,
+    taskRunId: stringOrNull(existing.taskRunId),
+    autonomous: row.autonomous,
+    subjectKind: stringOrNull(existing.subjectKind),
+    subjectRef: stringOrNull(existing.subjectRef),
+  });
+
   return {
     recorded: true,
     disposition: plan.disposition,
     agreement: plan.agreement,
     interactionId: row.interactionId,
+    shadowLedger,
   };
 }

@@ -3,8 +3,8 @@ import type { PriorWorkroomDrive } from "./workroom-drive-receipts";
 
 export type StoredWorkroomDriveState = {
   currentStageKey: string | null;
-  /** `iteration` is present only on graph-shape receipts that carry a valid one (Phase 3c). */
-  receipts: { stageKey: string; kind: string; iteration?: number }[];
+  /** `iteration` and `runKey` are present only on graph-shape receipts that carry a valid one (Phase 3c; BI-086DC167). */
+  receipts: { stageKey: string; kind: string; iteration?: number; runKey?: string }[];
   budgetUsage: { kind: string; used: number }[];
   stopConditionHits: string[];
   reviewDue: boolean;
@@ -31,6 +31,8 @@ export function readStoredWorkroomDriveState(workspaceState: unknown): StoredWor
         // receipt round-trips byte-identically and a malformed one reads as
         // iteration 0 (BI-8875C9DF, Phase 3c).
         ...(Number.isInteger(entry.iteration) && (entry.iteration as number) >= 0 ? { iteration: entry.iteration as number } : {}),
+        // The run a graph receipt belongs to (BI-086DC167); copied only when it is a non-empty string.
+        ...(typeof entry.runKey === "string" && entry.runKey.length > 0 ? { runKey: entry.runKey } : {}),
       }]
       : [])
     : [];
@@ -56,6 +58,21 @@ export function readStoredWorkroomDriveState(workspaceState: unknown): StoredWor
   };
 }
 
+/**
+ * The run a stored drive snapshot belongs to: a graph room's marking
+ * `cycleKey` (BI-086DC167), else a sequential room's `runKey` (BI-853120EE).
+ * Each is the cycle key of the tick the run started on. Null when the
+ * snapshot carries neither (a room driven before run keys existed, or one
+ * whose shape did not resolve). The one reader for both paths: the persist
+ * merge and the sequential run resolution both read the run through it.
+ */
+export function driveRunKeyOf(drive: unknown): string | null {
+  if (!isRecord(drive)) return null;
+  const marking = isRecord(drive.marking) ? drive.marking : null;
+  if (marking && typeof marking.cycleKey === "string" && marking.cycleKey.length > 0) return marking.cycleKey;
+  return typeof drive.runKey === "string" && drive.runKey.length > 0 ? drive.runKey : null;
+}
+
 export function priorDriveFromStored(stored: StoredWorkroomDriveState): PriorWorkroomDrive | null {
   if (!stored.lastAction) return null;
   return {
@@ -73,7 +90,7 @@ export function priorDriveFromStored(stored: StoredWorkroomDriveState): PriorWor
  * marking (every sequential room) or one whose tokens cannot be read; the
  * drive itself validates the marking strictly and pauses on a malformed one.
  */
-function markedStagesOf(drive: Record<string, unknown> | null): { keys: string[]; iterations: Record<string, number> } | null {
+function markedStagesOf(drive: Record<string, unknown> | null): { keys: string[]; iterations: Record<string, number>; runKey?: string } | null {
   const marking = isRecord(drive?.marking) ? drive.marking : null;
   if (!marking || !Array.isArray(marking.tokens)) return null;
   const keys: string[] = [];
@@ -89,7 +106,8 @@ function markedStagesOf(drive: Record<string, unknown> | null): { keys: string[]
       if (Number.isInteger(value) && (value as number) >= 0) iterations[key] = value as number;
     }
   }
-  return { keys, iterations };
+  // The run the marking belongs to (BI-086DC167): a run-scoped receipt is read only within it.
+  return { keys, iterations, ...(typeof marking.cycleKey === "string" ? { runKey: marking.cycleKey } : {}) };
 }
 
 /** One observation contract for anchored and standalone room inspectors. */
@@ -108,6 +126,6 @@ export function projectStoredWorkroomDriveObservation(workspaceState: unknown) {
     receipts: stored.receipts, budgetUsage: stored.budgetUsage,
     stopConditionHits: stored.stopConditionHits, reviewDue: stored.reviewDue, attentionReason,
     // Graph rooms only: several stages can be current at once. Absent means today's single stage.
-    ...(marked ? { currentStageKeys: marked.keys, stageIterations: marked.iterations } : {}),
+    ...(marked ? { currentStageKeys: marked.keys, stageIterations: marked.iterations, ...(marked.runKey !== undefined ? { runKey: marked.runKey } : {}) } : {}),
   };
 }

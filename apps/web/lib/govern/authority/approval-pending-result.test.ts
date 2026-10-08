@@ -21,10 +21,32 @@ describe("settledApprovalResult", () => {
     expect(result.message).toContain("Calling it again returns this same outcome");
     expect(result.data).toMatchObject({ envelopeId: "env-2", recordedError: "workroom_access_denied" });
   });
+
+  // BI-5B34D277: a governed refusal settles the approval before the tool runs.
+  it("does not claim a call refused before it ran ever ran", () => {
+    const result = settledApprovalResult("create_digital_product", {
+      envelopeId: "env-3", status: "failed",
+      result: { success: false, error: "hook_denied", message: "create_digital_product rejected: blocked by hook" },
+    });
+    expect(result).toMatchObject({ success: false, error: "approval_outcome_failed", data: { recordedError: "hook_denied" } });
+    expect(result.message).toContain("was approved by a person (approval request env-3) but refused before it ran (hook_denied).");
+    expect(result.message).not.toContain("already ran");
+    expect(result.message).toContain("Calling it again returns this same outcome");
+  });
 });
 
 describe("approvalPendingResult", () => {
   it("promises the recorded outcome whether the approved run succeeded or failed", () => {
     expect(approvalPendingResult("t", "", { envelopeId: "e" }).message).toContain("returns that recorded outcome, whether it succeeded or failed");
+  });
+
+  // BI-0012E6CA: the person may be away for hours; a pending approval must not
+  // stall unrelated work, and a lapse is visible to the person, not silent.
+  it("tells the coworker to carry on with other work and how an unanswered request comes back", () => {
+    // clock-bomb-guard: allow the expiry is only echoed into the message text; nothing compares it to a clock
+    const message = approvalPendingResult("merge_backlog_items", "", { envelopeId: "e", expiresAt: "2026-10-08T04:00:00.000Z" }).message;
+    expect(message).toContain("carry on with any other work that does not depend on this call");
+    expect(message).toContain("expired unanswered and can ask again");
+    expect(message).toContain("which expires 2026-10-08T04:00:00.000Z");
   });
 });

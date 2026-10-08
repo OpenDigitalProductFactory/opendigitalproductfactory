@@ -556,9 +556,10 @@ Customer marketing surfaces (`/customer/marketing`, `/customer/marketing/strateg
 
 ### Fit engine (source of truth)
 
-`apps/web/lib/marketing/archetype-fit.ts` — `assessArchetypeFit({ text, category })` returns a deterministic `{ severity: "ok" | "warn" | "block", blocked, findings, summary }`:
+`apps/web/lib/marketing/archetype-fit.ts` — `assessArchetypeFit({ text, category, ownOffer })` returns a deterministic `{ severity: "ok" | "warn" | "block", blocked, findings, summary }`:
 
-- **platform-leak → `block`.** Software-platform / DPF-internal terms are foreign to *every* customer archetype and can never be published. Blocked artifacts are badged **"Imported / test data — blocked from publish"** and cannot pass Approve, Send email, or Publish to LinkedIn.
+- **platform-leak → `block`.** Software-platform / DPF-internal terms are foreign to a customer's audience and are not published. Blocked artifacts are badged **"Imported / test data — blocked from publish"** and cannot pass Approve, Send email, or Publish to LinkedIn.
+- **A business may market what it sells.** A leak term is exempt when it names the organization's *own* offer — it appears in its active storefront offers, tagline, description, or business-context value proposition (`buildOwnOfferText`). Software-industry vocabulary (SaaS, software platform, codebase, technical founder, agentic, AI workflow) is the software-platform category's own language. So the platform vendor, and any partner reselling the platform, can market it; a restaurant still cannot leak it. The drafter is told exactly the terms the guard still blocks (`platformLeakTermsFor`).
 - **off-archetype → `warn`.** Vocabulary distinctive to a *different* archetype (e.g. banking "APY", education "enrolment") surfaces a warning to confirm fit before sending; it does not hard-block, because cross-sell copy can be legitimate.
 - The active archetype's own vocabulary never warns.
 
@@ -567,6 +568,10 @@ Customer marketing surfaces (`/customer/marketing`, `/customer/marketing/strateg
 - **Server (authoritative):** `guardDraftArchetypeFit` blocks Approve (`actions.ts`) and `publishApprovedDraft` (`publish.ts`) blocks Publish/Send — client warnings alone are never trusted.
 - **UI:** the approval queue, publish buttons, and saved campaign/asset artifacts (`/campaigns`) render the fit badge/notice and disable release on a hard block.
 - **Drafter:** `draft-builder.ts` derives audience, tone, and CTA vocabulary from the archetype playbook (`lib/tak/marketing-playbooks.ts`) instead of a hardcoded software-founder voice, so generated copy is on-archetype by construction.
+
+### Selling to other archetypes
+
+A business whose own offer is the platform markets to buyers who are themselves archetypes. `apps/web/lib/marketing/buyer-archetype-value.ts` is the product source for each buyer category's benefits, emphasis and claim boundary (test-guarded to cover every category). The drafter resolves the buyer a task names ("HVAC contractors") and writes to that owner's benefit; `suggest_campaign_ideas` gives the coworker the catalog so it plans one campaign per buyer type.
 
 ### First-viewport decision
 

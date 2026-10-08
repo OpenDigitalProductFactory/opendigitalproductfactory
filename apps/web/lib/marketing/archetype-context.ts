@@ -39,6 +39,7 @@ export type MarketingStorefrontSection = {
 
 export type MarketingArchetypeContext = {
   storefrontId: string;
+  organizationId: string;
   archetype: MarketingArchetype;
   playbook: MarketingPlaybook;
   items: MarketingStorefrontItem[];
@@ -84,6 +85,7 @@ export async function resolveMarketingArchetypeContext(options?: {
 
   return {
     storefrontId: config.id,
+    organizationId: config.organizationId,
     archetype: {
       archetypeId: config.archetype.archetypeId,
       name: config.archetype.name,

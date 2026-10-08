@@ -1,9 +1,9 @@
 {
   "format": "gpp-shape/0.1",
-  "key": "drc-e-stage-deadline",
+  "key": "drc-pass-stage-deadline",
   "version": "1.0.0",
-  "title": "DRC fixture drc-e-stage-deadline",
-  "description": "Seeded E-NOT-EXECUTABLE: a stage deadline.",
+  "title": "DRC fixture drc-pass-stage-deadline",
+  "description": "A stage deadline: implemented in GPP Phase 3c PR-3c-4 and executable since BI-086DC167, so it compiles with no finding.",
   "triggers": [
     "claim"
   ],

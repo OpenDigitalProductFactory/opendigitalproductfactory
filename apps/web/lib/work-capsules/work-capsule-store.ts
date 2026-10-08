@@ -144,7 +144,7 @@ export async function createWorkCapsule(args: {
           source: args.input.source,
           executorKind: args.input.executorKind ?? null,
           executorRef: args.input.executorRef ?? null,
-          repositoryFullName: capsuleRepositoryFullName(args.input.source, args.input.repositoryFullName, defaultPlatformRepositoryFullName),
+          repositoryFullName: capsuleRepositoryFullName(args.input.source, args.input.repositoryFullName, defaultPlatformRepositoryFullName, args.input.idempotencyKey),
           backlogItemId: args.input.backlogItemId ?? null,
           epicId: args.input.epicId ?? null,
           featureBuildId: args.input.featureBuildId ?? null,

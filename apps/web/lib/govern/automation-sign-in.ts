@@ -50,6 +50,12 @@ export const AUTOMATION_SIGN_IN_TOKEN_TTL_SECONDS = 10 * 60;
 /** How long the resulting browser session lasts. */
 export const AUTOMATION_SESSION_MAX_AGE_SECONDS = 2 * 60 * 60;
 const TOKEN_PURPOSE = "dpf.automation-sign-in/1";
+/**
+ * Audience of the one-time link token (BI-7B4B5F5D). Other tokens share
+ * AUTH_SECRET, so the exchange requires this audience as well as `purpose`, and
+ * the mobile API verifier refuses this token because it lacks the mobile one.
+ */
+export const AUTOMATION_SIGN_IN_AUDIENCE = "dpf-automation-sign-in";
 const ENVIRONMENT_CLASSES_PERMITTED_BY_DEFAULT = new Set(["development", "test"]);
 
 type PlatformConfigRow = { value: unknown };
@@ -189,6 +195,7 @@ export async function mintAutomationSignIn(
   const token = await new SignJWT({ purpose: TOKEN_PURPOSE, next: nextPath, requestedBy: input.requestedBy })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(persona.userId)
+    .setAudience(AUTOMATION_SIGN_IN_AUDIENCE)
     .setJti(jti)
     .setIssuedAt(Math.floor(now.getTime() / 1000))
     .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
@@ -251,7 +258,11 @@ export async function consumeAutomationSignIn(
 
   let payload: Record<string, unknown>;
   try {
-    const verified = await jwtVerify(token, secretFor(env), { currentDate: now });
+    const verified = await jwtVerify(token, secretFor(env), {
+      currentDate: now,
+      audience: AUTOMATION_SIGN_IN_AUDIENCE,
+      algorithms: ["HS256"],
+    });
     payload = verified.payload as Record<string, unknown>;
   } catch {
     return { accepted: false, reason: "token-invalid-or-expired" };

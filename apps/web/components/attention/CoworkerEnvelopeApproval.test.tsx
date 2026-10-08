@@ -491,3 +491,44 @@ describe("CoworkerEnvelopeApproval — no response", () => {
     expect(screen.queryByText("Authorize")).toBeNull();
   });
 });
+
+// BI-0012E6CA AC-REASK — an expired, unanswered request offers "Ask again" only.
+describe("CoworkerEnvelopeApproval — expired unanswered", () => {
+  const expired = () => approval({
+    status: "expired",
+    actionable: false,
+    expiredUnanswered: true,
+    reraiseHref: "/api/agent/envelope/cmt932fn301el01p7vfb2gas7/reraise",
+  });
+
+  it("says it expired unanswered and offers Ask again without Authorize or Decline", () => {
+    render(<CoworkerEnvelopeApproval approval={expired()} />);
+    expect(screen.queryByRole("button", { name: "Authorize" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Decline" })).toBeNull();
+    expect(screen.getAllByText(/Expired unanswered/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Ask again" })).toBeTruthy();
+  });
+
+  it("posts to the re-raise route and moves to the new request's card", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ envelope: { id: "env-new", status: "proposed" } }), { status: 200 }));
+    render(<CoworkerEnvelopeApproval approval={expired()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ask again" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(
+      "/workspace/inbox?approval=env-new#owner-decision-coworker-envelope-env-new",
+    ));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/agent/envelope/cmt932fn301el01p7vfb2gas7/reraise",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(screen.getByText(/Asked again/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Ask again" })).toBeNull();
+  });
+
+  it("shows the refusal when the request cannot be raised again", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ code: "CONFLICT", message: "Only a request that expired before anyone answered it can be asked again." }), { status: 409 }));
+    render(<CoworkerEnvelopeApproval approval={expired()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ask again" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("can be asked again"));
+    expect(replace).not.toHaveBeenCalled();
+  });
+});

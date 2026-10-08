@@ -587,6 +587,9 @@
       "docs/architecture/contributor-procedure-runbook.md",
       "docs/professions/data-architect/wiki/strongly-typed-string-enums.md"
     ],
+    "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -656,6 +659,9 @@
     "apps/web/lib/build/plan-to-build-transition-core.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
+    "apps/web/lib/build/pr-follow-through.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/build/progress-visibility.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -698,6 +704,9 @@
     ],
     "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "apps/web/lib/coworker/approval-lifetime.ts": [
+      "docs/operations/observability-coverage.md"
     ],
     "apps/web/lib/coworker/approved-request-run-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -952,6 +961,10 @@
     "apps/web/lib/marketing/archetype-fit.ts": [
       "docs/platform-usability-standards.md"
     ],
+    "apps/web/lib/marketing/buyer-archetype-value.ts": [
+      "docs/marketing/archetype-owner-quick-guide.md",
+      "docs/platform-usability-standards.md"
+    ],
     "apps/web/lib/marketing/channels/contracts.ts": [
       "docs/architecture/unified-connector-kernel.md"
     ],
@@ -1133,6 +1146,9 @@
     "apps/web/lib/queue/functions/async-operation-task-hub.ts": [
       "docs/user-guide/build-studio/index.md"
     ],
+    "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/queue/functions/build-review-verification.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -1154,6 +1170,12 @@
     ],
     "apps/web/lib/queue/functions/wiki-lint.ts": [
       "docs/founder-kernel/SCHEMA.md"
+    ],
+    "apps/web/lib/queue/functions/workroom-drive-children.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "apps/web/lib/queue/functions/workroom-drive-deadlines.ts": [
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/queue/functions/workroom-drive.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
@@ -1442,6 +1464,12 @@
     "apps/web/lib/work-management/delivery-shapes.ts": [
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
+    "apps/web/lib/work-management/drive-child-rooms.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "apps/web/lib/work-management/drive-deadlines.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
     "apps/web/lib/work-management/drive-marking.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
@@ -1496,6 +1524,9 @@
     ],
     "apps/web/lib/work-management/worker-rollup.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md"
+    ],
+    "apps/web/lib/work-management/workroom-deadline-notice.ts": [
+      "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/work-management/workspace-case-loader.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -2946,7 +2977,9 @@
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/build/finalize-stage-runner.ts",
       "apps/web/lib/build/gauntlet-repair.ts",
+      "apps/web/lib/build/pr-follow-through.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
+      "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs",
       "pnpm-lock.yaml",
@@ -3169,12 +3202,17 @@
       "apps/web/lib/gpp/shape-language/executable-constructs.ts",
       "apps/web/lib/gpp/shape-language/gate-ratification.ts",
       "apps/web/lib/gpp/stage-permit-revocation.ts",
+      "apps/web/lib/queue/functions/workroom-drive-children.ts",
+      "apps/web/lib/queue/functions/workroom-drive-deadlines.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
+      "apps/web/lib/work-management/drive-child-rooms.ts",
+      "apps/web/lib/work-management/drive-deadlines.ts",
       "apps/web/lib/work-management/drive-marking.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
       "apps/web/lib/work-management/standing-operations-shapes.ts",
       "apps/web/lib/work-management/work-shape-grants-resolve.test.ts",
       "apps/web/lib/work-management/work-shapes.ts",
+      "apps/web/lib/work-management/workroom-deadline-notice.ts",
       "apps/web/scripts/build-gpp-shapes.ts",
       "apps/web/scripts/gpp-critical-interaction-map.ts",
       "packages/db/prisma/schema/ai-coworker.prisma",
@@ -3182,6 +3220,7 @@
       "scripts/installer/install-release-assets.mjs"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
+      "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts",
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
       "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
       "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
@@ -3555,6 +3594,9 @@
       "scripts/pr-health.mjs",
       "scripts/pr-health.test.mjs"
     ],
+    "docs/marketing/archetype-owner-quick-guide.md": [
+      "apps/web/lib/marketing/buyer-archetype-value.ts"
+    ],
     "docs/operations/ai-provider-compliance-source-renewal-runbook.md": [
       "apps/web/lib/routing/provider-suitability/provider-compliance-advisory.ts",
       "apps/web/lib/routing/provider-suitability/source-freshness.ts",
@@ -3589,6 +3631,7 @@
       "apps/mobile/eas.json"
     ],
     "docs/operations/observability-coverage.md": [
+      "apps/web/lib/coworker/approval-lifetime.ts",
       "apps/web/lib/observability/monitor-source-reachability.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",
       "apps/web/lib/voice-synthesis/tts-health-contract.test.ts",
@@ -3633,6 +3676,7 @@
       "apps/web/components/ui/form/SelectField.tsx",
       "apps/web/design/tokens-utilities.test.ts",
       "apps/web/lib/marketing/archetype-fit.ts",
+      "apps/web/lib/marketing/buyer-archetype-value.ts",
       "apps/web/lib/readability/policy.ts",
       "apps/web/lib/shared/use-save-state.test.ts",
       "apps/web/lib/shared/use-save-state.ts",

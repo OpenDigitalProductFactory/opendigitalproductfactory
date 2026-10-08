@@ -1083,14 +1083,14 @@ describe("runAgenticLoop", () => {
       ...baseParams,
       taskRunId: "TR-MCP-TESTRUN",
       apiTokenId: "tok_remote",
-      tokenScope: "write",
+      tokenScope: "write", tokenGrantScopes: ["file_read"],
     });
     expect(governedExecuteTool).toHaveBeenCalledWith(
       expect.objectContaining({
         context: expect.objectContaining({
           taskRunId: "TR-MCP-TESTRUN",
           apiTokenId: "tok_remote",
-          tokenScope: "write",
+          tokenScope: "write", tokenGrantScopes: ["file_read"], // BI-F8C661D0
         }),
       }),
     );

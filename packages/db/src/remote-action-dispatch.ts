@@ -34,9 +34,18 @@ export function isReadonlyDispatchActionType(actionType: string): boolean {
   return (READONLY_DISPATCH_ACTION_TYPES as readonly string[]).includes(actionType);
 }
 
+/**
+ * BI-F8F8C383: restart the Docker Desktop VM (WSL) on the Windows host, to clear
+ * processes stuck in uninterruptible I/O that no container command can remove.
+ * It stops the portal and every container, so it is operator-approved through an
+ * approved ChangeRequest, machine bound, and never dispatched automatically.
+ */
+export const DOCKER_VM_RESTART_ACTION_TYPE = "substrate.docker-vm.restart";
+
 export const PRIVILEGED_DISPATCH_ACTION_TYPES = [
   "organization.join.issue",
   "organization.join.import",
+  DOCKER_VM_RESTART_ACTION_TYPE,
 ] as const;
 
 export function isPrivilegedDispatchActionType(actionType: string): boolean {
@@ -85,6 +94,19 @@ export function canTransitionDispatch(
  * read-only diagnostics collect should finish in seconds; 10 min is generous.
  */
 export const DEFAULT_CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
+
+/**
+ * A Docker VM restart takes the portal down with it: the node can only report
+ * once the VM, Docker and the portal are back. Give it room for that, so a slow
+ * but successful restart is not recorded as timed out.
+ */
+export const DOCKER_VM_RESTART_CLAIM_TIMEOUT_MS = 30 * 60 * 1000;
+
+export function claimTimeoutMsForActionType(actionType: string): number {
+  return actionType === DOCKER_VM_RESTART_ACTION_TYPE
+    ? DOCKER_VM_RESTART_CLAIM_TIMEOUT_MS
+    : DEFAULT_CLAIM_TIMEOUT_MS;
+}
 
 // ── Claim eligibility ─────────────────────────────────────────────────────────
 
@@ -158,9 +180,11 @@ export function isClaimableByNode(action: DispatchableActionView, node: Claiming
     if (action.riskClass !== "high") return { claimable: false, reason: "privileged-action-risk-class-invalid" };
     if (!action.edgeNodeId) return { claimable: false, reason: "privileged-action-must-be-machine-bound" };
     if (!action.changeRequestApproved) return { claimable: false, reason: "approved-change-request-required" };
-    const requiredRole = action.actionType === "organization.join.issue" ? "authority" : "member";
-    if (node.organizationTrustRole !== requiredRole) {
-      return { claimable: false, reason: "wrong-organization-trust-role" };
+    if (action.actionType !== DOCKER_VM_RESTART_ACTION_TYPE) {
+      const requiredRole = action.actionType === "organization.join.issue" ? "authority" : "member";
+      if (node.organizationTrustRole !== requiredRole) {
+        return { claimable: false, reason: "wrong-organization-trust-role" };
+      }
     }
   } else {
     return { claimable: false, reason: `actionType-not-in-dispatch-allowlist (${action.actionType})` };

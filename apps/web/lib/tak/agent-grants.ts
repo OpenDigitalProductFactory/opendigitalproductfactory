@@ -719,6 +719,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_marketing_campaign_brief: ["marketing_write"],
   create_marketing_asset_task:   ["marketing_write"],
   record_marketing_grounding:    ["marketing_write"],
+  retire_marketing_work:         ["marketing_write"],
   record_marketing_kpi_checkpoint: ["marketing_write"],
   create_marketing_automation_candidate: ["marketing_write"],
   draft_marketing_asset:         ["marketing_write"],

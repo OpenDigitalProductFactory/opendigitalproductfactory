@@ -381,9 +381,29 @@ A coworker can act faster over time, but the organization can always reconstruct
 
 The shadow ledger and trust states described above are a second, parallel record: they are how "this coworker has earned autopilot on invoice matching but is still proposing on refunds" is a queryable fact rather than a feeling.
 
+A decision reaches the shadow ledger only when it names the coworker that made it. `DecisionInteraction.agentId` is a foreign key onto the coworker record; it is null for decisions no coworker made, such as the hourly triage drain or an operator's review. A decision that names a coworker gets exactly one ledger row, keyed by its interaction id. The row is written at `shadow` when the decision is recorded. When `record_decision_outcome` reports what was actually done, the same row receives the actual decision, the outcome and the agreement. Agreement stays null until that report arrives, and stays null for a report of "left unresolved". The two vocabularies are mapped by one explicit table, and a value missing from it is refused rather than placed in a nearby bucket:
+
+| Decision `domainClass` | Ledger `activityType` |
+|---|---|
+| `plan-readiness` | `governed_decision_plan_readiness` |
+| `architecture-tradeoff` | `governed_decision_architecture_tradeoff` |
+| `risk-assessment` | `governed_decision_risk_assessment` |
+| `professional-practice` | `governed_decision_professional_practice` |
+| `kernel-consult` | `governed_decision_kernel_consult` |
+
+| Decision `riskTier` | Ledger `riskClass` |
+|---|---|
+| `low` | `internal-reversible` |
+| `medium` | `internal-irreversible` |
+| `high` | `outbound-or-floor` |
+| `critical` | `outbound-or-floor` |
+
+The risk mapping matches the funding gate's mapping on the three tiers both share. The ledger records evidence and authorizes nothing: no code path reads a bridged row back to raise a trust level.
+
 Code references:
 
 - [`DecisionInteraction`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/packages/db/prisma/schema.prisma), [`persistDecisionInteraction`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision-perspective/persistence.ts)
+- [`decision-shadow-ledger-mapping.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/decision-shadow-ledger-mapping.ts), [`decision-shadow-ledger-bridge.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/decision-shadow-ledger-bridge.ts)
 
 ## The learning loop
 

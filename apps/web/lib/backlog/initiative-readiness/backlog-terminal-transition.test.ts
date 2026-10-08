@@ -108,6 +108,8 @@ describe("completeBacklogItemTransition", () => {
           evidenceRefs: [],
           requiredStatementIds: [],
         }),
+        // Never let a unit test reach the real clone or the network.
+        resolveMergeDelivery: async () => "signal-unavailable",
       },
     });
 

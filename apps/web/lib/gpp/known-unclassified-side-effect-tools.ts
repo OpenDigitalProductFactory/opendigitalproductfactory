@@ -143,6 +143,8 @@ export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
   "rerun_scheduled_agent_task",
   "resolve_portfolio_quality_issue",
   "resume_scheduled_agent_task",
+  // Internal, reversible archive of marketing briefs and tasks (BI-FB24DC2C): nothing outward, nothing deleted.
+  "retire_marketing_work",
   "retry_semantic_review",
   "review_product_objective",
   "review_semantic_change",

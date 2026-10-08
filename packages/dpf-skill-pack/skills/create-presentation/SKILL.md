@@ -4,7 +4,7 @@ description: "Produce and revise branded presentations."
 # Agent Skills standard fields (Surface A: Claude Code)
 disable-model-invocation: false
 user-invocable: true
-allowed-tools: mcp__dpf__get_marketing_summary mcp__dpf__get_campaign_plan mcp__dpf__create_presentation mcp__dpf__doc_load mcp__dpf__doc_version_list
+allowed-tools: mcp__dpf__create_presentation mcp__dpf__doc_load mcp__dpf__doc_version_list
 
 # DPF fields (Surface B: in-portal seed loader)
 category: customer
@@ -40,7 +40,11 @@ record) and produces the files. You never write or edit the file itself.
 1. **Load the context before asking anything.** Call `get_marketing_summary`
    for the business type, audience vocabulary, playbook and live campaigns.
    When the deck is about one campaign, call `get_campaign_plan` for its
-   objective, audience, offer, proof and KPIs.
+   objective, audience, offer, proof and KPIs. Both reads are in-portal only:
+   they need the marketing workspace grant, which the external Claude Code,
+   Codex and Grok coworkers do not hold, so this skill's Surface A
+   `allowed-tools` omits them (BI-E0F19DBA). From an external CLI, ask the
+   person for the audience, the goal and every figure the deck uses.
 2. **Ask at most one round of questions**, and only for what the context cannot
    answer: usually the audience, the decision you want from them, and the slide
    count. If something is still missing, choose a sensible default and say so

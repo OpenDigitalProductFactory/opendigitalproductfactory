@@ -126,6 +126,7 @@ async function recordDecisionOutcomeHandler(
       interactionId: result.interactionId,
       disposition: result.disposition,
       agreement: result.agreement,
+      shadowLedger: result.shadowLedger,
     },
   };
 }

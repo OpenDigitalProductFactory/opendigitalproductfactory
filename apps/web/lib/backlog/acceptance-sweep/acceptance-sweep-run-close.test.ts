@@ -11,7 +11,7 @@ import type { CloseAuthorisation } from "./close-authorisation";
 // pre-authorisation, and at most `limit` per run (AC-1..AC-4).
 
 const NOW = new Date("2026-10-06T05:00:00.000Z");
-const CONFIG = { pageSize: 10, agedDays: 14, trendDays: 30, routing: false, recordedByAgentId: "AGT-WS-PORTFOLIO" } as const;
+const CONFIG = { pageSize: 10, agedDays: 14, trendDays: 30, routing: false, routeLimit: 10, recordedByAgentId: "AGT-WS-PORTFOLIO" };
 
 const ENABLED: CloseAuthorisation = {
   state: "enabled",
@@ -62,6 +62,7 @@ function ports(
     recordRun: async () => ({ activityId: "run-1" }),
     resolveCloseAuthorisation: async () => ENABLED,
     close: vi.fn(async () => ({ outcome: "closed" as const, authorityDecisionId: "DI-1" })),
+    route: vi.fn(async () => []),
     ...overrides,
   };
 }

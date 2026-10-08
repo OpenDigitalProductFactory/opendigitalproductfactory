@@ -125,7 +125,35 @@ describe("authority approval envelopes", () => {
       status: "approved",
       expiresAt: new Date("2026-07-27T11:15:00Z"),
       binding: BINDING,
+      approvedAt: null,
     });
+  });
+
+  // BI-0012E6CA: the approval time feeds the staleness re-check at execution.
+  it("reports when the person approved, falling back to when the row was written", async () => {
+    const mockDb = db();
+    mockDb.coworkerActionEnvelope.findFirst.mockResolvedValueOnce({
+      id: "ENV-APPROVED",
+      status: "approved",
+      expiresAt: new Date("2026-08-03T11:00:00Z"),
+      createdAt: new Date("2026-07-27T09:00:00Z"),
+      argsJson: {
+        approvalBinding: BINDING,
+        humanApproval: { userId: "user-1", approvedAt: "2026-07-27T10:30:00.000Z" },
+      },
+    });
+    await expect(findApprovedAuthorityEnvelope(BINDING, new Date("2026-07-27T11:00:00Z"), mockDb))
+      .resolves.toMatchObject({ approvedAt: new Date("2026-07-27T10:30:00.000Z") });
+
+    mockDb.coworkerActionEnvelope.findFirst.mockResolvedValueOnce({
+      id: "ENV-PROJECTED",
+      status: "approved",
+      expiresAt: new Date("2026-08-03T11:00:00Z"),
+      createdAt: new Date("2026-07-27T09:00:00Z"),
+      argsJson: { approvalBinding: BINDING },
+    });
+    await expect(findApprovedAuthorityEnvelope(BINDING, new Date("2026-07-27T11:00:00Z"), mockDb))
+      .resolves.toMatchObject({ approvedAt: new Date("2026-07-27T09:00:00Z") });
   });
 
   it("resumes only the task bound to the approved envelope", async () => {

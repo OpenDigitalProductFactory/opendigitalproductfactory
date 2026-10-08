@@ -25,6 +25,7 @@
 //   it is exhaustively unit-testable.
 
 import { WORK_CAPSULE_IDLE_STALE_MS } from "@/lib/work-capsules";
+import type { PrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 
 /** Capsule statuses that mean the work is already closed out. */
 const TERMINAL_STATUSES = new Set(["complete", "abandoned", "archived"]);
@@ -44,6 +45,10 @@ const TERMINAL_TASK_RUN_STATUSES = new Set([
 export type WorkCapsuleLiveness =
   /** Demonstrably live: valid lease, open PR, or recent real activity. */
   | "live"
+  /** The room's PR is open and red, no repair is in flight and the repair
+   *  budget is spent or withheld: it waits on a person (BI-88341B5D §3.7).
+   *  Held (never reaped while the PR is open) but not working. */
+  | "stalled"
   /** Work is DELIVERED: its branch head is reachable from the trunk (merged).
    *  The session need not resume; the room is closed out as delivered, not
    *  abandoned. Detected procedurally from local git reachability — no LLM, no
@@ -148,6 +153,13 @@ export type CapsuleLivenessInput = {
    * LLM. When `merged` is true the room is closed out regardless of lease state.
    */
   deliveredSignal?: { merged: boolean } | null;
+  /**
+   * The room's PR follow-through status and when the reconciler last read it
+   * from the provider (BI-88341B5D §3.7). An open PR counts as live only while
+   * follow-through is watching, repairing or queued; awaiting a person reads
+   * `stalled`. Absent for callers that have not loaded it.
+   */
+  prFollowThrough?: { status: PrFollowThroughStatus; observedAt: Date } | null;
 };
 
 export type CapsuleLivenessVerdict = {
@@ -171,6 +183,13 @@ export type CapsuleLivenessVerdict = {
    */
   trueLivenessAt: Date | null;
 };
+
+function freshFollowThrough(input: CapsuleLivenessInput, now: Date): PrFollowThroughStatus | null {
+  const followThrough = input.prFollowThrough;
+  if (!followThrough) return null;
+  const age = now.getTime() - followThrough.observedAt.getTime();
+  return age >= -PROVIDER_CLOCK_SKEW_MS && age <= WORK_CAPSULE_OPEN_PR_FRESHNESS_MS ? followThrough.status : null;
+}
 
 function hasOpenPr(input: CapsuleLivenessInput, now: Date): boolean {
   if (
@@ -243,6 +262,7 @@ export function classifyWorkCapsuleLiveness(
     // question; the two were one field and that was the defect (BI-7271460C).
     isLive:
       liveness === "live" ||
+      liveness === "stalled" ||
       liveness === "durable-wait" ||
       liveness === "no-signal" ||
       liveness === "leased-idle" ||
@@ -274,11 +294,28 @@ export function classifyWorkCapsuleLiveness(
 
   // An open PR is the live artifact even if the authoring session's lease has
   // since lapsed — the work is in review / the merge queue, not abandoned.
-  if (hasOpenPr(input, now)) {
-    const label = input.pullRequestNumber ? `PR #${input.pullRequestNumber}` : "an open PR";
+  // Liveness reads CI (BI-88341B5D §3.7): an open PR is live only while its
+  // follow-through is moving it; a red PR waiting on a person is stalled.
+  const followThrough = freshFollowThrough(input, now);
+  const prLabel = input.pullRequestNumber ? `PR #${input.pullRequestNumber}` : "an open PR";
+  if (followThrough === "awaiting-person") {
+    return verdict(
+      "stalled",
+      `${prLabel} is red with no repair in flight; it waits on a person (see the room's PR follow-through activity).`,
+      input.prFollowThrough?.observedAt ?? null,
+    );
+  }
+  if (followThrough === "watching" || followThrough === "repairing" || followThrough === "queued") {
     return verdict(
       "live",
-      `Parked in review as ${label} (verified provider observation).`,
+      `${prLabel} is open; follow-through is ${followThrough} (verified provider observation).`,
+      input.prFollowThrough?.observedAt ?? null,
+    );
+  }
+  if (hasOpenPr(input, now)) {
+    return verdict(
+      "live",
+      `Parked in review as ${prLabel} (verified provider observation).`,
       input.pullRequestObservation?.observedAt ?? null,
     );
   }

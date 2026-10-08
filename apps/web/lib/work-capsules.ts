@@ -66,9 +66,23 @@ export function capsuleRepositoryFullName(
   source: string,
   provided: string | null | undefined,
   platformDefault: () => string,
+  idempotencyKey?: string,
 ): string | null {
-  return provided?.trim() || (BUSINESS_WORK_CAPSULE_SOURCES.has(source) ? null : platformDefault());
+  if (provided?.trim()) return provided.trim();
+  if (BUSINESS_WORK_CAPSULE_SOURCES.has(source)) return null;
+  return idempotencyKey?.startsWith(SUB_SHAPE_ROOM_KEY_PREFIX) ? null : platformDefault();
 }
+
+/**
+ * The idempotency-key namespace of a sub-shape child room (GPP Phase 3c
+ * PR-3c-5, design §9.2): `sub-shape:<parent>:<cycle>:<stage>:<iteration>`. The
+ * work-shape drive creates such a room to run a stage's child shape. It
+ * coordinates process work, not a change to this repository, so it records
+ * no repository: with one, the publication boundary
+ * (assertWorkroomPublishable) would refuse to complete it for want of a
+ * reviewed head it can never have.
+ */
+export const SUB_SHAPE_ROOM_KEY_PREFIX = "sub-shape:";
 
 export type WorkCapsuleSource = (typeof WORK_CAPSULE_SOURCES)[number];
 

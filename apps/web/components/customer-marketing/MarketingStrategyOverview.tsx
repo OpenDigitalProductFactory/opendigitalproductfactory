@@ -47,6 +47,7 @@ export function MarketingStrategyOverview({
   const isDetail = mode === "detail";
   const strategy = snapshot.strategy;
   const category = snapshot.storefront.category;
+  const ownOffer = snapshot.storefront.ownOffer;
   const territory =
     strategy.geographicScope ?? snapshot.organization.addressSummary ?? "Market territory still needs a decision";
   const constraintNotes = strategy.constraints
@@ -129,7 +130,7 @@ export function MarketingStrategyOverview({
                     {formatMarketingLabel(asset.type)}
                   </span>
                   <ArchetypeFitBadge
-                    assessment={assessArchetypeFit({ text: asset.label, category })}
+                    assessment={assessArchetypeFit({ text: asset.label, category, ownOffer })}
                   />
                 </li>
               ))}
@@ -264,6 +265,7 @@ export function MarketingStrategyOverview({
                             .filter(Boolean)
                             .join("\n"),
                           category,
+                          ownOffer,
                         })}
                       />
                     </div>
@@ -296,6 +298,7 @@ export function MarketingStrategyOverview({
                         assessment={assessArchetypeFit({
                           text: [task.title, task.brief].filter(Boolean).join("\n"),
                           category,
+                          ownOffer,
                         })}
                       />
                     </div>

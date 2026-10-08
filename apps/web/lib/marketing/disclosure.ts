@@ -53,12 +53,13 @@ export function buildMarketingDisclosure(
   snapshot: MarketingWorkspaceSnapshot,
 ): MarketingDisclosure {
   const category = snapshot.storefront.category;
+  const ownOffer = snapshot.storefront.ownOffer;
 
   const briefFits = snapshot.workProducts.campaignBriefs.map((brief) =>
-    assessArchetypeFit({ text: campaignBriefText(brief), category }),
+    assessArchetypeFit({ text: campaignBriefText(brief), category, ownOffer }),
   );
   const draftFits = [...snapshot.pendingDrafts, ...snapshot.approvedDrafts].map((draft) =>
-    assessArchetypeFit({ text: draft.body, category }),
+    assessArchetypeFit({ text: draft.body, category, ownOffer }),
   );
 
   const hasArchetypeFitCampaign = briefFits.some((fit) => fit.severity === "ok");

@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
+import { prisma } from "@dpf/db";
 import { namespaceMessages } from "@dpf/i18n";
 
+import { AcceptanceSweepCloseAuthorisationCard } from "@/components/admin/AcceptanceSweepCloseAuthorisationCard";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
@@ -9,6 +11,9 @@ import { McpTokenManager } from "@/components/admin/McpTokenManager";
 import { GovernedBacklogSettings } from "@/components/admin/GovernedBacklogSettings";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
 import { getAutonomousPlaybookMode } from "@/lib/build/build-studio-config";
+import { auth } from "@/lib/auth";
+import { mayManageCloseAuthorisation } from "@/lib/backlog/acceptance-sweep/close-authorisation-access";
+import { loadCloseAuthorisationView, type CloseAuthorisationViewDb } from "@/lib/backlog/acceptance-sweep/close-authorisation-view";
 import { PrivatePathsEditor } from "@/components/admin/PrivatePathsEditor";
 import TokenExpiryBanner from "@/components/admin/TokenExpiryBanner";
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
@@ -50,6 +55,12 @@ export default async function AdminPlatformDevelopmentPage() {
   const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "localhost:3000";
   const baseUrl = `${proto}://${host}`;
   const { language } = await getLocaleContext();
+  // BI-C2467A2E: the acceptance sweep's close switch, only for people who may change it.
+  const session = await auth();
+  const closeAuthorisationView = session?.user
+    && mayManageCloseAuthorisation({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser })
+    ? await loadCloseAuthorisationView(prisma as unknown as CloseAuthorisationViewDb)
+    : null;
 
   return (
     <div>
@@ -78,6 +89,13 @@ export default async function AdminPlatformDevelopmentPage() {
           playbookMode={getAutonomousPlaybookMode()}
         />
       </div>
+      {closeAuthorisationView && (
+        <div className="mb-6">
+          <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+            <AcceptanceSweepCloseAuthorisationCard view={closeAuthorisationView} />
+          </MessagesProvider>
+        </div>
+      )}
       <PlatformDevelopmentForm
         policyState={policyState}
         currentMode={policyState === "policy_pending" ? null : policyState}

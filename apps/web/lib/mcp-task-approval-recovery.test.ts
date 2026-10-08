@@ -8,6 +8,10 @@ import { recoverStaleApprovedRemoteTask } from "./mcp-task-approval-recovery";
 import type { RecoverableTaskRun } from "./mcp-task-approval-recovery-contract";
 
 const NOW = new Date("2026-08-28T13:45:30.000Z");
+// BI-0012E6CA: the replacement's lifetime follows the stored call's current
+// classification. record_initiative_evidence declares no consequence, so it is
+// durable; the stub keeps this suite off the full tool registry.
+const classifyStub = vi.fn(async () => null);
 const TASK_RUN_ID = "TR-MCP-BI47-96433C11CA61";
 const REQUEST_DIGEST = "10ae1afed510cded84185015a76806dc09702a693100e3b7dfe6e8281d831df5";
 
@@ -196,7 +200,7 @@ function recover(db: ReturnType<typeof fakeDb>["db"]) {
     agentId: binding.actingAgentId,
     writerToolName: binding.toolName,
     now: NOW,
-  }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>);
+  }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>, classifyStub);
 }
 
 describe("same-TaskRun approval recovery", () => {
@@ -222,7 +226,7 @@ describe("same-TaskRun approval recovery", () => {
         status: "approved",
         expiresAt: { lte: NOW },
       },
-      data: { status: "cancelled", resolvedAt: NOW },
+      data: { status: "expired", resolvedAt: NOW },
     });
     expect(tx.coworkerActionEnvelope.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -231,11 +235,15 @@ describe("same-TaskRun approval recovery", () => {
         manifestActionId: "record_initiative_evidence",
         argsJson: { approvalBinding: binding },
         approvalBindingFingerprint: fingerprintCoworkerApprovalBinding(binding),
-        expiresAt: new Date("2026-08-28T14:00:30.000Z"),
+        expiresAt: new Date(NOW.getTime() + 7 * 24 * 60 * 60 * 1000),
         resolvedAt: null,
       }),
       select: { id: true },
     });
+    expect(classifyStub).toHaveBeenCalledWith(expect.objectContaining({
+      toolName: "record_initiative_evidence",
+      userId: "user-1",
+    }));
     expect(tx.toolExecution.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         taskRunId: TASK_RUN_ID,
@@ -328,7 +336,7 @@ describe("same-TaskRun approval recovery", () => {
         status: "proposed",
         expiresAt: { lte: NOW },
       },
-      data: { status: "cancelled", resolvedAt: NOW },
+      data: { status: "expired", resolvedAt: NOW },
     });
     expect(tx.coworkerActionEnvelope.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
@@ -418,7 +426,7 @@ describe("same-TaskRun approval recovery", () => {
       agentId: failedBinding.actingAgentId,
       writerToolName: failedBinding.toolName,
       now: NOW,
-    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>);
+    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>, classifyStub);
 
     expect(result).toEqual({ kind: "approved-resume-ready", envelopeId: envelope.id });
     expect(tx.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -469,7 +477,7 @@ describe("same-TaskRun approval recovery", () => {
       agentId: failedBinding.actingAgentId,
       writerToolName: failedBinding.toolName,
       now: NOW,
-    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>);
+    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>, classifyStub);
 
     expect(result).toEqual({
       kind: "fresh-approval-required",
@@ -520,7 +528,7 @@ describe("same-TaskRun approval recovery", () => {
       agentId: failedBinding.actingAgentId,
       writerToolName: failedBinding.toolName,
       now: NOW,
-    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>)).resolves.toBeNull();
+    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>, classifyStub)).resolves.toBeNull();
 
     expect(tx.coworkerActionEnvelope.updateMany).not.toHaveBeenCalled();
     expect(tx.coworkerActionEnvelope.create).not.toHaveBeenCalled();
@@ -537,7 +545,7 @@ describe("same-TaskRun approval recovery", () => {
       agentId: failedBinding.actingAgentId,
       writerToolName: failedBinding.toolName,
       now: NOW,
-    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>)).resolves.toBeNull();
+    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>, classifyStub)).resolves.toBeNull();
 
     expect(tx.coworkerActionEnvelope.findFirst).not.toHaveBeenCalled();
     expect(tx.taskRun.updateMany).not.toHaveBeenCalled();
@@ -555,7 +563,7 @@ describe("same-TaskRun approval recovery", () => {
       agentId: failedBinding.actingAgentId,
       writerToolName: failedBinding.toolName,
       now: NOW,
-    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>)).resolves.toBeNull();
+    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>, classifyStub)).resolves.toBeNull();
 
     expect(tx.taskRun.updateMany).not.toHaveBeenCalled();
   });
@@ -575,7 +583,7 @@ describe("same-TaskRun approval recovery", () => {
       agentId: failedBinding.actingAgentId,
       writerToolName: failedBinding.toolName,
       now: NOW,
-    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>)).resolves.toBeNull();
+    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>, classifyStub)).resolves.toBeNull();
 
     expect(tx.workroom.findMany).not.toHaveBeenCalled();
     expect(tx.coworkerActionEnvelope.findFirst).not.toHaveBeenCalled();

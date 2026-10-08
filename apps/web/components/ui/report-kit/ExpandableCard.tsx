@@ -3,7 +3,8 @@
 import type { ReactNode } from "react";
 
 export interface ExpandableCardProps {
-  /** Stable, page-unique id used to associate the trigger and panel. */
+  /** Stable, page-unique id. It is the record's own DOM id — so a link can
+   *  address the record with `#<id>` — and it associates the trigger and panel. */
   id: string;
   /** Controlled expanded state. A parent can enforce single-open accordion behavior. */
   open: boolean;
@@ -47,6 +48,7 @@ export function ExpandableCard({
 
   return (
     <article
+      id={id}
       data-open={open ? "true" : "false"}
       // Makes this countable as a disclosure region by lib/ux-budget without being
       // excised from the measured scope — the summary above stays visible on arrival

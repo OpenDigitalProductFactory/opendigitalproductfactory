@@ -1,10 +1,9 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { getPlaybook, type MarketingPlaybook } from "@/lib/tak/marketing-playbooks";
-import {
-  deriveRevenueModelFromActivationProfile,
-  readActivationProfile,
-} from "@/lib/storefront/archetype-activation";
+import { deriveRevenueModelFromActivationProfile, readActivationProfile } from "@/lib/storefront/archetype-activation";
 import { upsertMarketingStrategyTolerant } from "@/lib/marketing/strategy-bootstrap";
+import { ACTIVE_MARKETING_WORK } from "@/lib/marketing/retire-work";
+import { OWN_OFFER_ITEMS_QUERY, ownOfferFromRecords } from "@/lib/marketing/archetype-fit";
 import {
   cleanText,
   dedupeStrings,
@@ -196,6 +195,7 @@ export type MarketingWorkspaceSnapshot = {
     tagline: string | null;
     description: string | null;
     ctaType: string | null;
+    ownOffer: string | null; // what this business sells — never a platform leak (BI-E92B6BC9)
   };
   strategy: {
     strategyId: string;
@@ -287,7 +287,6 @@ export type OutboundDraftRow = {
 function parseJsonArray<T>(value: Prisma.JsonValue | null | undefined): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
-
 
 function addDays(date: Date, days: number): Date {
   const next = new Date(date);
@@ -874,6 +873,7 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
               activationProfile: true,
             },
           },
+          items: OWN_OFFER_ITEMS_QUERY,
         },
       },
     },
@@ -989,16 +989,8 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
     connectedIntegrations,
     inboundRaw,
   ] = await Promise.all([
-    prisma.marketingCampaignBrief.findMany({
-      where: { strategyId: strategy.strategyId },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    }),
-    prisma.marketingAssetTask.findMany({
-      where: { strategyId: strategy.strategyId },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    }),
+    prisma.marketingCampaignBrief.findMany({ where: { strategyId: strategy.strategyId, ...ACTIVE_MARKETING_WORK }, orderBy: { createdAt: "desc" }, take: 5 }),
+    prisma.marketingAssetTask.findMany({ where: { strategyId: strategy.strategyId, ...ACTIVE_MARKETING_WORK }, orderBy: { createdAt: "desc" }, take: 5 }),
     prisma.marketingKpiCheckpoint.findMany({
       where: { strategyId: strategy.strategyId },
       orderBy: { createdAt: "desc" },
@@ -1086,6 +1078,7 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
       tagline: cleanText(organization.storefrontConfig?.tagline),
       description: cleanText(organization.storefrontConfig?.description),
       ctaType: cleanText(organization.storefrontConfig?.archetype?.ctaType),
+      ownOffer: ownOfferFromRecords(organization.storefrontConfig, organization.businessContext),
     },
     strategy: {
       strategyId: strategy.strategyId,

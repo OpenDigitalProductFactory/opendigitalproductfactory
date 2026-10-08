@@ -73,6 +73,12 @@ const FLOW_STATE_BY_ACTION_AND_REASON: FlowStateTable = {
     // Sent back with its rework route spent: the work is stuck at the stage, which
     // is waste with a cause, not routine waiting on a decision (GPP Phase 3c).
     gate_refused: "blocked",
+    // A sub-shape stage's child room is running: the work is being done, in the
+    // child (GPP Phase 3c PR-3c-5).
+    awaiting_sub_shape: "working",
+    // The child stopped without success and the parent holds for its owner:
+    // stuck with a cause, like gate_refused (drive-conclusion blocks it too).
+    sub_shape_stopped: "blocked",
   },
   dispatch_agent: {
     agent_stage: "working",

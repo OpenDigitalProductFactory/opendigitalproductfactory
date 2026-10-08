@@ -217,6 +217,17 @@ next drive and the operator read the same evidence. Missing or unresolvable evid
 shaped room; the runtime does not infer conformance from the absence of an error. AI coordinators
 must have eligible JSI qualification and TAK authority inputs, and an unknown input fails closed.
 
+**Stage receipts belong to one run** ⟦runtime: 2026-10-06, `BI-853120EE`⟧. A run starts on the
+first drive tick after the previous run concluded (success, or sleeping on a concluded run) on a
+later cycle key, and lasts until it concludes; it does not end at UTC midnight. Its key is the
+cycle key of the tick it started on: a graph room's marking `cycleKey`, a sequential room's
+snapshot `runKey`, both read through `driveRunKeyOf` (`workroom-drive-state.ts`). Receipts carry
+that `runKey`; a new run starts with none, so every stage and every governed decision is earned
+again (`drive-sequential-run.ts`). Only a shape that declares the `cadence` trigger starts a new
+run (`workShapeRecurs`, WWMD DI-8DCB9A4B566C): a claim-triggered room's successful run is final.
+The persist merge compares run keys, so a same-run receipt landed during the tick that crosses
+midnight is kept.
+
 The Workroom surface makes this control legible in **Details → Process Overseer**: coordinator
 identity, explicit versus derived assignment, conformance status, current and expected next stage,
 unresolved deviations, last check, intervention reason, and reconciliation key. Presence remains
@@ -855,6 +866,19 @@ executor records evidence or a writeback for the dispatched stage. A room with
 no owner user for its agent stage concludes as blocked, and clears when an owner
 user is bound. A finished cycle and a lease held by another worker conclude as
 in motion.
+
+### Every stage is a queue
+
+Since EP-B70E718D F2 (BI-4ADFFEDB), the drive reports where each room's time goes. When it writes a state-change row, it also emits queue transitions into the shared flow telemetry, under `wr:<shape>@<version>:<stage>`:
+
+- A room entering a stage is enqueued.
+- Work starting is a start.
+- Waiting on a person, or being blocked, is a hold. The hold carries its cause, for example `conformance_pause`.
+- Leaving the stage finishes it.
+
+The hourly queue rollup turns those transitions into per-stage dwell, touch time, wait, held time, queue depth, throughput and flow efficiency. These are the same numbers every other queue reports, so queue health, Prometheus and the coworker queue tools read stages with no extra wiring.
+
+The drive log from before the change is replayed once, so stage trends start with history.
 
 ## A named governed writer must be attached, not discovered
 

@@ -1,4 +1,12 @@
 import type { GithubPrReadiness } from "@/lib/build/github-pr-readiness";
+import { createPrFollowThrough, readPrFollowThrough, type PrFollowThroughV1 } from "./pr-follow-through";
+
+/**
+ * The room's PR delivery record. One shape for every room, whichever client
+ * opened the PR (BI-88341B5D §3.2): it lives at `workspaceState.prDelivery`.
+ * Rows written before that read from the legacy `buildStudio.delivery` key and
+ * move on their next write, so no migration is needed.
+ */
 
 export const BUILD_PR_DELIVERY_STATUSES = [
   "created",
@@ -27,6 +35,8 @@ export type BuildPrDeliveryStateV1 = {
   lastObservedAt: string | null;
   escalationKey: string | null;
   lastError: string | null;
+  /** CI follow-through: classification, holds and the reused recovery budget. */
+  followThrough: PrFollowThroughV1;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -54,13 +64,15 @@ export function createBuildPrDeliveryState(input: {
     lastObservedAt: null,
     escalationKey: null,
     lastError: null,
+    followThrough: createPrFollowThrough(),
   };
 }
 
 export function readBuildPrDeliveryState(workspaceState: unknown): BuildPrDeliveryStateV1 | null {
   const root = asObject(workspaceState);
-  const buildStudio = asObject(root.buildStudio);
-  const value = asObject(buildStudio.delivery);
+  const value = root.prDelivery !== undefined
+    ? asObject(root.prDelivery)
+    : asObject(asObject(root.buildStudio).delivery);
   if (value.schemaVersion !== 1) return null;
   if (
     typeof value.status !== "string" ||
@@ -93,6 +105,7 @@ export function readBuildPrDeliveryState(workspaceState: unknown): BuildPrDelive
     lastObservedAt: typeof value.lastObservedAt === "string" ? value.lastObservedAt : null,
     escalationKey: typeof value.escalationKey === "string" ? value.escalationKey : null,
     lastError: typeof value.lastError === "string" ? value.lastError : null,
+    followThrough: readPrFollowThrough(value.followThrough),
   };
 }
 
@@ -100,7 +113,10 @@ export function writeBuildPrDeliveryState(
   workspaceState: unknown,
   delivery: BuildPrDeliveryStateV1,
 ): JsonObject {
-  const root = { ...asObject(workspaceState) };
-  root.buildStudio = { ...asObject(root.buildStudio), delivery };
+  const root: JsonObject = { ...asObject(workspaceState), prDelivery: delivery };
+  if (root.buildStudio !== undefined) {
+    const { delivery: _legacy, ...buildStudio } = asObject(root.buildStudio);
+    root.buildStudio = buildStudio;
+  }
   return root;
 }

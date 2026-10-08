@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "inline-status-segment",
+  "decisionInteractionId": "DI-ADCD99EDEFD7",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/EpicCard.tsx",
+      "apps/web/components/ops/OpsClient.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-status-segment",
+      "separate-acceptance-panel",
+      "fold-into-done-with-badge"
+    ]
+  }
+}

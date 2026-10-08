@@ -163,6 +163,11 @@ describe("buildSandboxStageCommand", () => {
     expect(command).toContain(":!packages/db/generated/**");
   });
 
+  it("never stages or lists the sandbox's own auth secret (BI-F1C680C7)", () => {
+    expect(buildSandboxStageCommand()).toContain("':!.dpf-sandbox-auth-secret*'");
+    expect(buildSandboxListReleasableFilesCommand()).toContain("':(exclude).dpf-sandbox-auth-secret*'");
+  });
+
   it("does not use git add -A which exits 1 when gitignored directories are present in the working tree", () => {
     // git add -A errors (exit code 1) on gitignored untracked paths such as
     // .pnpm-store, node_modules, and packages/db/generated even when those paths
@@ -292,13 +297,39 @@ describe("sandbox workspace initialization helpers", () => {
   it("builds a best-effort dev-server stop command that frees the turbopack process", () => {
     const command = buildSandboxDevServerStopCommand();
 
-    expect(command).toContain("pkill -f 'next dev'");
-    expect(command).toContain("pkill -f next-server");
+    expect(command).toContain("pkill -f '[n]ext dev'");
+    expect(command).toContain("pkill -f '[n]ext-server'");
     expect(command).toContain("sleep 1");
     // Every stanza tolerates "no such process" so a clean sandbox is a no-op.
     expect(command).toContain("|| true");
     // Must not hard-quote in a way that breaks the JSON.stringify exec sites.
     expect(command).not.toContain('"');
+  });
+
+  // FB-2F24555E (2026-10-07) died at sandbox_created: `pkill -f 'next dev'`
+  // matched the `sh -c` running the stop command (its own text contains the
+  // pattern), killed it with SIGTERM (exit 143) before the cleanup's rm ran,
+  // and the step reported "Command failed" with no stderr. Proven live in
+  // dpf-sandbox-1. A bracket pattern still matches the target process but not
+  // its own literal text.
+  it("never matches its own command line, so the stop cannot kill the shell running it", () => {
+    const command = buildSandboxDevServerStopCommand();
+    const patterns = [...command.matchAll(/pkill -f '([^']+)'/g)].map((match) => match[1]!);
+    expect(patterns.length).toBeGreaterThanOrEqual(3);
+    for (const pattern of patterns) {
+      expect(new RegExp(pattern).test(command)).toBe(false);
+    }
+    const targets = ["node .../next dev --port 3000", "next-server (v16)", "pnpm --filter web dev"];
+    for (const target of targets) {
+      expect(patterns.some((pattern) => new RegExp(pattern).test(target))).toBe(true);
+    }
+  });
+
+  it("survives when run in a real shell", { skip: process.platform === "win32" }, async () => {
+    const { spawnSync } = await import("node:child_process");
+    const result = spawnSync("sh", ["-c", `${buildSandboxDevServerStopCommand()}; echo SURVIVED`], { encoding: "utf8", timeout: 10_000 });
+    expect(result.stdout).toContain("SURVIVED");
+    expect(result.status).toBe(0);
   });
 
   it("copies root scripts so workspace postinstall hooks can run in the sandbox", () => {

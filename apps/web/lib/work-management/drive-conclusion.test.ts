@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { EffectiveHumanAccountability } from "./human-accountability";
 import {
+  driveOutcomeNeedsOwner,
   everyDriveOutcome,
   resolveDriveConclusion,
   type DriveConclusionInput,
@@ -297,6 +298,45 @@ describe("the Phase 3c refuse outcomes conclude (AC-3C-CONCLUDED)", () => {
     for (const { action, reason } of OUTCOMES) {
       const decision = resolveDriveConclusion(input({ action, reason, attentionPrincipalRef: action === "attention" ? "role:owner" : null, accountability: UNOWNED }));
       expect(decision.blockage?.ownerSetupRequired).toBe(UNOWNED_MESSAGE);
+    }
+  });
+});
+
+// AC-3C-CONCLUDED, completed (GPP Phase 3c PR-3c-5, BI-8875C9DF; design §5 table): the sub-shape outcomes are
+// registered, so no reason the phase introduced concludes `unconcluded`. A stage deadline adds no reason: it never
+// changes a plan's action or reason (PR-3c-4).
+describe("the Phase 3c sub-shape outcomes conclude (AC-3C-CONCLUDED)", () => {
+  it("both are listed under attention", () => {
+    expect(everyDriveOutcome()).toContainEqual({ action: "attention", reason: "awaiting_sub_shape" });
+    expect(everyDriveOutcome()).toContainEqual({ action: "attention", reason: "sub_shape_stopped" });
+  });
+
+  it("awaiting_sub_shape is in motion (the child room is running) and needs no owner walk", () => {
+    const decision = resolveDriveConclusion(input({ action: "attention", reason: "awaiting_sub_shape", attentionPrincipalRef: "agent:graph-worker" }));
+    expect(decision.kind).toBe("in-motion");
+    expect(driveOutcomeNeedsOwner({ action: "attention", reason: "awaiting_sub_shape", attentionPrincipalRef: "agent:graph-worker" })).toBe(false);
+  });
+
+  it("sub_shape_stopped is a blockage the parent's owner clears by a decision on the parent stage", () => {
+    const decision = resolveDriveConclusion(input({ action: "attention", reason: "sub_shape_stopped", attentionPrincipalRef: "role:owner" }));
+    expect(decision.kind).toBe("blocked");
+    expect(decision.blockage?.ownerPrincipalId).toBe("PRN-OWNER");
+    expect(decision.blockage?.unblockedBy).toContain("decision is recorded on the parent stage");
+    const unowned = resolveDriveConclusion(input({ action: "attention", reason: "sub_shape_stopped", attentionPrincipalRef: "role:owner", accountability: UNOWNED }));
+    expect(unowned.blockage?.ownerSetupRequired).toBe(UNOWNED_MESSAGE);
+  });
+
+  it("every reason Phase 3c introduced concludes something other than unconcluded", () => {
+    const phase3c = [
+      { action: "pause", reason: "construct_not_executable" },
+      { action: "pause", reason: "marking_unreadable" },
+      { action: "attention", reason: "gate_refused" },
+      { action: "stop", reason: "refused_to_stop" },
+      { action: "attention", reason: "awaiting_sub_shape" },
+      { action: "attention", reason: "sub_shape_stopped" },
+    ];
+    for (const { action, reason } of phase3c) {
+      expect(resolveDriveConclusion(input({ action, reason, attentionPrincipalRef: action === "attention" ? "role:owner" : null })).kind, reason).not.toBe("unconcluded");
     }
   });
 });

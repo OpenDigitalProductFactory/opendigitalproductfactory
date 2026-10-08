@@ -93,13 +93,21 @@ describe("record_decision_outcome handler", () => {
       disposition: "overridden",
       agreement: false,
       interactionId: "DI-7",
+      shadowLedger: { written: true, ledgerId: "DSL-DI-7", agreement: false },
     });
 
     const result = await call({ interactionId: "DI-7", chosenOptionId: "b", resolvedBy: "human" });
 
     expect(result.success).toBe(true);
     expect(result.message).toContain("OVERRIDE");
-    expect(result.data).toEqual({ interactionId: "DI-7", disposition: "overridden", agreement: false });
+    // BI-6082C235: whether the coworker's shadow-ledger row was completed is
+    // part of the answer, so a skipped measurement is visible to the caller.
+    expect(result.data).toEqual({
+      interactionId: "DI-7",
+      disposition: "overridden",
+      agreement: false,
+      shadowLedger: { written: true, ledgerId: "DSL-DI-7", agreement: false },
+    });
   });
 
   it("surfaces a refusal with its reason so the caller can tell it from an outage", async () => {

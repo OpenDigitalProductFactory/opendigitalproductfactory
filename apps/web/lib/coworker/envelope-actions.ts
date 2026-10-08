@@ -166,7 +166,9 @@ export async function approveEnvelope(
   // resume itself (approved-task-run.ts, BI-9FD11E5E), taking that same CAS, so
   // it and a client replay of the immutable packet cannot both run the writer.
   // If an approval appears not to take effect, check the envelope's
-  // `expiresAt` first: the window is 15 minutes.
+  // `expiresAt` first: outward requests close after 15 minutes, everything
+  // else after seven days (approval-lifetime.ts, BI-0012E6CA), and execution
+  // re-checks freshness against the call's current classification.
   return { ok: true, envelope: updated as EnvelopeRow };
 }
 

@@ -197,17 +197,21 @@ add another Codex registration when only the canonical registration exists.
 
 ### Codex procedure
 
+Both wrappers leave the endpoint to `update_agent_toolchain.py`: it uses
+`DPF_MCP_URL` when set, otherwise the install's canonical origin
+`https://localhost/api/mcp/v1`, and configures OAuth sign-in (no bearer
+header). Pass `-McpUrl` (PowerShell) or `--mcp-url` (shell) only to name a
+different endpoint.
+
 Windows:
 
 ```powershell
-$env:DPF_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1"
 .\packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1 -CodexOnly
 ```
 
 macOS / Linux:
 
 ```bash
-export DPF_MCP_URL="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
 bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --codex-only
 ```
 
@@ -219,14 +223,12 @@ loaded at session start.
 Windows:
 
 ```powershell
-$env:DPF_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1"
 .\packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1 -ClaudeOnly
 ```
 
 macOS / Linux:
 
 ```bash
-export DPF_MCP_URL="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
 bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --claude-only
 ```
 
@@ -269,6 +271,17 @@ pulls them. Before promoting any to `reconciles-safe-config`, complete:
 
 Until then, rows stay checklist-only in
 [`docs/architecture/agent-client-capability-parity.md`](../../docs/architecture/agent-client-capability-parity.md).
+
+### One version source, and what each release publishes
+
+`toolchain-version.json` is the only place the pack version is written. Every client manifest (`.claude-plugin`, `.grok-plugin`, `.antigravity-plugin`, the Codex manifest's base version) and both version fields in the root `.claude-plugin/marketplace.json` are generated from it with `node scripts/sync-toolchain-version.mjs`. The Toolchain Version Guard (`--check`) fails CI on any hand edit. To bump the version, edit `toolchain-version.json` and run the script.
+
+Each portal serves the pack its image ships, with no source checkout needed (BI-52934B3E, design `docs/superpowers/specs/2026-10-07-agent-toolchain-release-delivery-design.md` §5.1):
+
+- `GET /api/agent-toolchain/manifest` returns `packVersion`, `packDigest` (the delivered-content identity), `archiveSha256`, `releaseId`, `floor` and the per-client connector shape. It is signed with the installation's Ed25519 identity (`deviceId`, `signingPublicKey`, `signature` over the canonical manifest bytes).
+- `GET /api/agent-toolchain/pack.tar.gz` returns a byte-stable archive of this package whose sha256 is `archiveSha256`.
+
+The delivered digest has one definition in two languages: `delivered_digest()` in `scripts/installed_copy_freshness.py` and `apps/web/lib/agent-toolchain/pack-digest.ts`. Both are pinned to the same fixture. Files are ordered by case-sensitive path segments, so a Windows client and the Linux portal agree.
 
 ### Version bumps propagate automatically
 

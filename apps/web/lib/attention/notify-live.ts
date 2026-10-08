@@ -45,6 +45,17 @@ export async function notifyAttentionLive(input: NotifyAttentionInput): Promise<
 }
 
 /**
+ * Production notify for a producer that RETRIES (GPP Phase 3c PR-3c-4, the
+ * stage-deadline notice): the same write as notifyAttentionLive, but a failure
+ * is thrown rather than swallowed, so the caller can leave its notice unsent
+ * and try again on its next tick instead of recording a send that never
+ * happened. Deduplicated per (user, source, itemKey) like every notify.
+ */
+export async function notifyAttentionLiveOrThrow(input: NotifyAttentionInput): Promise<{ created: boolean }> {
+  return notifyAttention(liveDeps, input);
+}
+
+/**
  * The recipient for operator-facing attention items (escalations, AI-decision
  * residue, agent proposals): the bootstrap install owner. Paused-AI items use the
  * owning `TaskRun.userId` directly instead. Returns null if no owner resolves, in

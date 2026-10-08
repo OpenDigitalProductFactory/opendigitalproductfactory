@@ -20,6 +20,7 @@ function restaurantSnapshot(
       tagline: "Seasonal neighbourhood dining",
       description: null,
       ctaType: "booking",
+      ownOffer: null,
     },
     strategy: {
       strategyId: "st-r",

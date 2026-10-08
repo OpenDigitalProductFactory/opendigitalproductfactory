@@ -33,14 +33,17 @@ export function createOwedAcceptanceOwnerResolver(context: {
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: readonly string[];
 }): (...args: Parameters<OwedAcceptanceOwnerResolver>) => Promise<InitiativeReviewerRecovery> {
-  return ({ decision, authorAgentId }) => resolveInitiativeReviewerRecovery({
+  return ({ decision, authorAgentId, excludedAgentIds }) => {
+    // BI-099A0BA3 (M1): the author and every other delivery actor leave the roster.
+    const excluded = new Set([...(authorAgentId ? [authorAgentId] : []), ...(excludedAgentIds ?? [])]);
+    return resolveInitiativeReviewerRecovery({
     decision,
     currentAgentId: authorAgentId,
     db: {
       agentToolGrant: {
         findMany: async (args) => {
           const rows = await context.db.agentToolGrant.findMany(args);
-          return authorAgentId ? rows.filter((row) => row.agent.agentId !== authorAgentId) : rows;
+          return rows.filter((row) => !excluded.has(row.agent.agentId));
         },
       },
     },
@@ -49,5 +52,6 @@ export function createOwedAcceptanceOwnerResolver(context: {
     ...(context.planArtifact !== undefined ? { planArtifact: context.planArtifact } : {}),
     expectedCurrentBaselineId: context.expectedCurrentBaselineId ?? null,
     ...(context.eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds: context.eligibleEvidenceActivityIds } : {}),
-  });
+    });
+  };
 }

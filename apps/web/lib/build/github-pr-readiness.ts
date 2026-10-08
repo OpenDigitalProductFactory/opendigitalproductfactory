@@ -2,8 +2,9 @@
  * Shared GitHub pull-request readiness and merge-queue actuation.
  *
  * Read decisions are exact-head and fail closed. Mutations are intentionally
- * limited to update-branch (compare-and-swap) and enable-auto-merge; this module
- * has no direct merge or force-push operation.
+ * limited to update-branch (compare-and-swap), enable-auto-merge and re-running
+ * a workflow run's failed jobs (BI-88341B5D); this module has no direct merge,
+ * force-push or check-dismissal operation.
  */
 
 const GITHUB_GRAPHQL_URL = "https://api.github.com/graphql";
@@ -13,6 +14,10 @@ export type GithubCheckObservation = {
   name: string;
   status: string;
   conclusion: string | null;
+  /** The check run's page (the failing run's log), when GitHub reports one. */
+  detailsUrl?: string | null;
+  /** The Actions workflow run behind a check run, so its failed jobs can be re-run. */
+  workflowRunId?: number | null;
 };
 
 export type GithubPrObservation = {
@@ -116,8 +121,8 @@ query DpfPullRequestReadiness($owner:String!,$name:String!,$number:Int!){
             statusCheckRollup {
               contexts(first:100) {
                 nodes {
-                  ... on CheckRun { name status conclusion }
-                  ... on StatusContext { context state }
+                  ... on CheckRun { name status conclusion detailsUrl checkSuite { workflowRun { databaseId } } }
+                  ... on StatusContext { context state targetUrl }
                 }
                 pageInfo { hasNextPage }
               }
@@ -156,6 +161,9 @@ type ObservationQueryData = {
                   conclusion?: string | null;
                   context?: string;
                   state?: string;
+                  detailsUrl?: string | null;
+                  targetUrl?: string | null;
+                  checkSuite?: { workflowRun?: { databaseId?: number | null } | null } | null;
                 } | null>;
                 pageInfo?: { hasNextPage?: boolean };
               };
@@ -194,9 +202,17 @@ export async function observeGithubPullRequest(input: {
         name: node.context,
         status: state === "PENDING" || state === "EXPECTED" ? "IN_PROGRESS" : "COMPLETED",
         conclusion: state === "SUCCESS" ? "SUCCESS" : state,
+        detailsUrl: node.targetUrl ?? null,
+        workflowRunId: null,
       }];
     }
-    return [{ name: node.name ?? "unnamed-check", status: node.status ?? "UNKNOWN", conclusion: node.conclusion ?? null }];
+    return [{
+      name: node.name ?? "unnamed-check",
+      status: node.status ?? "UNKNOWN",
+      conclusion: node.conclusion ?? null,
+      detailsUrl: node.detailsUrl ?? null,
+      workflowRunId: node.checkSuite?.workflowRun?.databaseId ?? null,
+    }];
   });
 
   return {
@@ -289,4 +305,38 @@ export async function updatePullRequestBranch(input: {
   if (response.status === 202) return "accepted";
   if (response.status === 422) return "head-changed";
   throw new Error(`GitHub update-branch HTTP ${response.status}`);
+}
+
+export type RerunFailedJobsResult = "accepted" | "not-rerunnable";
+
+/**
+ * Re-run only the failed jobs of one workflow run (BI-88341B5D §3.4): the
+ * single infrastructure re-run. It changes no code and no check configuration.
+ * GitHub answers 201 when the re-run is created; 403/409/422 mean the run
+ * cannot be re-run (in progress, too old, or not permitted), which the caller
+ * escalates instead of retrying.
+ */
+export async function rerunFailedWorkflowJobs(input: {
+  owner: string;
+  repo: string;
+  workflowRunId: number;
+  token: string;
+  fetchImpl?: typeof fetch;
+}): Promise<RerunFailedJobsResult> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const response = await fetchImpl(
+    `https://api.github.com/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/actions/runs/${input.workflowRunId}/rerun-failed-jobs`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${input.token}`,
+        "User-Agent": "dpf-github-pr-readiness",
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
+      },
+    },
+  );
+  if (response.status === 201) return "accepted";
+  if (response.status === 403 || response.status === 409 || response.status === 422) return "not-rerunnable";
+  throw new Error(`GitHub rerun-failed-jobs HTTP ${response.status}`);
 }
