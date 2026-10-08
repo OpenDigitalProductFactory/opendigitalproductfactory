@@ -51,7 +51,8 @@ vi.mock("@/lib/shared/lazy-node", () => ({
   lazyUtil: () => ({ promisify: (fn: Function) => fn }),
 }));
 
-import { writeSandboxFile, dockerExecWriteStdin } from "./agent-cli-runtime";
+import { writeSandboxFile, dockerExecWriteStdin, buildSpecialistTaskPrompt } from "./agent-cli-runtime";
+import type { AssignedTask } from "../task-dependency-graph";
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -252,5 +253,29 @@ describe("dockerExecWriteStdin", () => {
     proc.emit("close", 0);
 
     await expect(p).rejects.toThrow(/timed out/);
+  });
+});
+
+// BI-C36D23B9: the build agent runs inside the build's own clone, whose `.git` is
+// a directory. The repo's shared-clone hook took that for the root clone and told
+// the agent to "take your own worktree"; it did, and the build saw no change.
+describe("buildSpecialistTaskPrompt — the build's own checkout (BI-C36D23B9)", () => {
+  const task = {
+    taskIndex: 0,
+    title: "Fix typo",
+    specialist: "documentation-specialist",
+    files: [{ path: "docs/a.md", action: "modify", purpose: "typo" }],
+    task: { title: "Fix typo", implement: "edit docs/a.md", testFirst: "", verify: "" },
+  } as unknown as AssignedTask;
+
+  it("names the build's real working directory, not the shared /workspace", () => {
+    const prompt = buildSpecialistTaskPrompt({ task, instructions: "x", workdir: "/workspace/.builds/FB-1" });
+    expect(prompt).toContain("Working directory is /workspace/.builds/FB-1");
+  });
+
+  it("tells the agent to edit in place and never take another worktree or branch", () => {
+    const prompt = buildSpecialistTaskPrompt({ task, instructions: "x", workdir: "/workspace/.builds/FB-1" });
+    expect(prompt).toMatch(/this build's own checkout/i);
+    expect(prompt).toMatch(/do not create another git worktree, clone, or branch/i);
   });
 });

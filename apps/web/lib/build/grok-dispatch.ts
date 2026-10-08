@@ -230,7 +230,7 @@ export async function dispatchGrokTask(params: {
   }
 
   const instructions = buildGrokInstructions(role, buildContext, priorResults);
-  const taskPrompt = buildSpecialistTaskPrompt({ task, instructions });
+  const taskPrompt = buildSpecialistTaskPrompt({ task, instructions, workdir });
 
   const startMs = Date.now();
 
