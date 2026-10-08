@@ -466,3 +466,33 @@ describe("AgentMessageBubble — system-prompt prefix strip (BI-253ADC70 D5/D9)"
     expect(html).toContain("[Setup step:");
   });
 });
+
+// Approval convergence A3 (BI-C8EC05C9, spec D2 S1): an assistant message lists
+// the approval requests raised for it, each with the shared Authorize/Decline
+// surface. Nothing renders for a message without them.
+describe("AgentMessageBubble — inline approval requests", () => {
+  const message = {
+    id: "m-1", role: "assistant" as const, content: "I'd like to share this finding.",
+    agentId: "AGT-COWORKER", routeContext: "/workspace", createdAt: "2026-10-07T00:00:00.000Z",
+  };
+  const request = (envelopeId: string) => ({
+    envelopeId, toolName: "contribute_to_hive", status: "proposed",
+    expiresAt: "2026-10-07T00:15:00.000Z", rationale: "This action is defined as a proposal, so a person decides it.",
+  });
+
+  it("renders one decision card per request, with Authorize and Decline", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageBubble message={{ ...message, approvalRequests: [request("ENV-1"), request("ENV-2")] }} showAgentLabel agentName="Coworker" />,
+    );
+    expect(html.match(/data-testid="inline-approval-request"/g)).toHaveLength(2);
+    expect(html.match(/>Authorize</g)).toHaveLength(2);
+    expect(html.match(/>Decline</g)).toHaveLength(2);
+    expect(html).toContain("contribute to hive");
+    expect(html).not.toMatch(/#[0-9a-fA-F]{3,6}\b/);
+  });
+
+  it("renders no approval surface for a message without requests", () => {
+    const html = renderToStaticMarkup(<AgentMessageBubble message={message} showAgentLabel agentName="Coworker" />);
+    expect(html).not.toContain("inline-approval-request");
+  });
+});

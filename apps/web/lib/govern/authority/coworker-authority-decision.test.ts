@@ -464,3 +464,36 @@ describe("room authority (EP-WORK-POSTURE 8.2, BI-F114354D)", () => {
     expect(decision.reasonCode).toBe("room-authority-denied");
   });
 });
+
+// Approval convergence A3 (BI-C8EC05C9): the evaluator hands the server-set
+// propose boundary to the escalation gate. It is NOT part of the binding, so
+// no approval granted before it existed stops matching.
+describe("evaluateCoworkerAuthority — the propose boundary", () => {
+  const boundary = (proposeBoundary: boolean) => base({
+    action: { ...base().action, approvalPolicy: "none", proposeBoundary },
+    steering: "scheduled-mandate",
+  });
+
+  it("asks a person for a call a graduated, steered coworker would otherwise make alone", () => {
+    expect(evaluateCoworkerAuthority(boundary(false))).toMatchObject({ outcome: "allow" });
+    const decision = evaluateCoworkerAuthority(boundary(true));
+    expect(decision.outcome).toBe("require-approval");
+    expect("escalation" in decision && decision.escalation?.reasonCode).toBe("propose-boundary");
+  });
+
+  it("leaves the approval binding unchanged", () => {
+    expect(buildCoworkerApprovalBinding(boundary(true))).toEqual(buildCoworkerApprovalBinding(boundary(false)));
+  });
+
+  it("honours an approved envelope for the identical binding (AC-NOPARK at the evaluator)", () => {
+    const input = boundary(true);
+    const decision = evaluateCoworkerAuthority({
+      ...input,
+      approval: {
+        envelopeId: "ENV-1", status: "approved", expiresAt: new Date(Date.now() + 60_000),
+        binding: buildCoworkerApprovalBinding(input),
+      },
+    });
+    expect(decision.outcome).toBe("allow");
+  });
+});

@@ -118,3 +118,23 @@ describe("selectVisibleTelemetry", () => {
     expect([...out.keys()].sort()).toEqual(["msg-race", "msg-shadow"]);
   });
 });
+
+// Approval convergence A3 (BI-C8EC05C9, spec D2 S1): the message carries the
+// LIST of approval requests raised for it (by chatMessageId). No envelope has a
+// chatMessageId yet, so every message serialises exactly as before.
+describe("serializeMessage — inline approval requests", () => {
+  const request = {
+    envelopeId: "ENV-1", toolName: "contribute_to_hive", status: "proposed",
+    expiresAt: "2026-07-12T00:15:00.000Z", rationale: "This action is defined as a proposal, so a person decides it.",
+  };
+
+  it("attaches every request raised for the message, in order", () => {
+    const row = serializeMessage(assistantMsg, null, undefined, [request, { ...request, envelopeId: "ENV-2" }]);
+    expect(row.approvalRequests?.map((r) => r.envelopeId)).toEqual(["ENV-1", "ENV-2"]);
+  });
+
+  it("adds nothing when there are none (parity with today)", () => {
+    expect(serializeMessage(assistantMsg, null, undefined, [])).toEqual(serializeMessage(assistantMsg, null));
+    expect(serializeMessage(assistantMsg, null)).not.toHaveProperty("approvalRequests");
+  });
+});

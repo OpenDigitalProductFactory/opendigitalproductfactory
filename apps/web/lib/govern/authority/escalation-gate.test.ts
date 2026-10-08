@@ -286,3 +286,45 @@ describe("connection-delegation steering (BI-12E5DD91)", () => {
     expect(escalationReasonSentence("steered-by-connection-delegation")).toBeNull();
   });
 });
+
+// Approval convergence A3 (BI-C8EC05C9, spec D2 S2): a propose boundary is a
+// branch of the gate, right after a declared proposal. It is tighten-only: it
+// reproduces the diversion propose-interception makes today, before the
+// monitor, for every side-effecting call — and nothing else.
+describe("resolveEscalation — the propose boundary", () => {
+  const ALL_STEERING: EscalationSteering[] = [...STEERINGS, "scheduled-mandate", "connection-delegation", "none"];
+
+  it("puts a side-effecting call under a propose boundary in front of a person, whatever could steer it", () => {
+    for (const steering of ALL_STEERING) {
+      for (const operatorRequiresApproval of [true, false]) {
+        const decision = resolveEscalation({ ...input({ steering, operatorRequiresApproval }), proposeBoundary: true });
+        expect(decision.verdict).toBe("human");
+        expect(decision.reasonCode).toBe("propose-boundary");
+      }
+    }
+  });
+
+  it("ranks after a declared proposal and before everything else", () => {
+    expect(resolveEscalation({ ...input({ executionMode: "proposal" }), proposeBoundary: true }).reasonCode).toBe("declared-proposal");
+    expect(resolveEscalation({ ...input({ consequence: "outward" }), proposeBoundary: true }).reasonCode).toBe("propose-boundary");
+  });
+
+  it("never touches a read, which propose-interception never diverted", () => {
+    const decision = resolveEscalation({ ...input({ sideEffect: false }), proposeBoundary: true });
+    expect(decision).toMatchObject({ verdict: "automated", reasonCode: "routine-read" });
+  });
+
+  it("is absent unless the server set it", () => {
+    expect(resolveEscalation({ ...input({ steering: "wwmd" }) }).reasonCode).toBe("steered-by-wwmd");
+    expect(resolveEscalation({ ...input({ steering: "wwmd" }), proposeBoundary: false }).reasonCode).toBe("steered-by-wwmd");
+  });
+
+  it("states why a person is asked, and the rule says it", () => {
+    expect(escalationReasonSentence("propose-boundary")).toBe(
+      "This coworker is set to propose, not act, so a person decides each change it makes.",
+    );
+    expect(describeEscalationRule()).toContain(
+      "A coworker set to propose, not act, puts every change it attempts to a person, and no recorded policy decides it on that person's behalf.",
+    );
+  });
+});
