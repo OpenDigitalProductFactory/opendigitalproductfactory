@@ -34,6 +34,13 @@ import type { UxBudgetMetrics } from "./measure";
 import type { UxShell } from "./budgets";
 import type { ExemptCheck } from "./route-shells";
 import type { RouteAudience } from "../navigation/route-audience";
+import type { SpeedCounters } from "./speed-counters";
+import {
+  admittedSpeedCounters,
+  freezeSpeedCounters,
+  speedCounterRegressions,
+  type SpeedCounterBaseline,
+} from "./speed-counter-ratchet";
 
 /** What the sweep measured for one route. */
 export type RouteMeasurement = {
@@ -47,6 +54,8 @@ export type RouteMeasurement = {
   exemptChecks?: readonly ExemptCheck[];
   /** Route audience — sets the reading tier for operator surfaces (BI-1DE6F69E). */
   audience?: RouteAudience;
+  /** Deterministic speed counters (BI-BDB43823); gate only when admitted. */
+  speedCounters?: SpeedCounters;
 };
 
 /** The frozen per-route baseline a changed route is measured against. */
@@ -60,6 +69,7 @@ export type RouteBaseline = {
   buriedPrimaryAction: number;
   axeViolations: number;
   ariaSnapshot: string;
+  speedCounters?: SpeedCounterBaseline;
 };
 
 export type BaselineFile = {
@@ -199,6 +209,7 @@ export function verdictForRoute(
         regressions.push(`${AXIS_LABEL[axis]}: ${was} → ${now}`);
       }
     }
+    regressions.push(...speedCounterRegressions(measurement.speedCounters, baseline.speedCounters, admittedSpeedCounters()));
     // Whitespace-only reformatting of the YAML projection is not a hierarchy change.
     structureChanged = normaliseSnapshot(measurement.ariaSnapshot) !== normaliseSnapshot(baseline.ariaSnapshot);
     if (structureChanged) {
@@ -602,9 +613,15 @@ export function evaluateSweep(
 }
 
 /** Freeze the current measurements as the new baseline. */
-export function freezeBaseline(measurements: RouteMeasurement[], generator: string): BaselineFile {
+export function freezeBaseline(
+  measurements: RouteMeasurement[],
+  generator: string,
+  previous?: BaselineFile,
+): BaselineFile {
   const routes: Record<string, RouteBaseline> = {};
+  const admitted = admittedSpeedCounters();
   for (const m of [...measurements].sort((a, b) => (a.routePath < b.routePath ? -1 : 1))) {
+    const speedCounters = freezeSpeedCounters(m.speedCounters, previous?.routes[m.routePath]?.speedCounters, admitted);
     routes[m.routePath] = {
       defaultVisibleWords: m.metrics.defaultVisibleWords,
       leadBandWords: m.metrics.leadBandWords,
@@ -615,6 +632,7 @@ export function freezeBaseline(measurements: RouteMeasurement[], generator: stri
       buriedPrimaryAction: m.metrics.buriedPrimaryAction,
       axeViolations: m.axeViolations,
       ariaSnapshot: normaliseSnapshot(m.ariaSnapshot),
+      ...(speedCounters ? { speedCounters } : {}),
     };
   }
   return { bootstrapped: true, generator, routes };

@@ -1,0 +1,6 @@
+{
+  "generator": "apps/web/scripts/ux-speed-counter-admission.ts",
+  "note": "Placeholder until the first two-pass admission run; nothing is admitted, so no speed counter gates.",
+  "minRho": 0.5,
+  "counters": []
+}
