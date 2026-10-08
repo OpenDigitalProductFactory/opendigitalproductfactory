@@ -203,7 +203,29 @@ describe("work capsule MCP tools", () => {
     expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
   });
 
+  it("heartbeat_workroom refuses while another principal holds a live lease (BI-A7601AED)", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-1",
+      leaseHolderPrincipalId: "principal-someone-else",
+      leaseExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("heartbeat_workroom", { capsuleId: "WC-1" }, "user-1", {
+      agentId: "codex",
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "lease_held_by_other",
+      data: { holderPrincipalId: "principal-someone-else" },
+    });
+    expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
+  });
+
   it("heartbeat_workroom renews a lease", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-1", leaseHolderPrincipalId: null });
     mockPrisma.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-1" });
     mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 

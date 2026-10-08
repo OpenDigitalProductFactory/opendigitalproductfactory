@@ -132,9 +132,19 @@ room's initiative-evidence readout reads the same map.
   conformance it is the shape's review point and pauses the drive, which would park the
   very stage this binds.
 
-Still open: an independent review receipt is not yet written back as the stage's
-workroom evidence, so a reviewed stage advances only once its evidence is recorded
-(see the epic's remaining items).
+A passed review advances its stage (BI-80738C08). The drive tick reads the readiness
+receipts the room's initiative-evidence readout already binds to a stage (same
+repository, the room's current head, one stage declaring the kind) and turns them into
+that stage's evidence (`apps/web/lib/work-management/review-receipt-stage-evidence.ts`):
+
+- The stage completes when every initiative receipt kind it declares has passed, stamped
+  when the last one landed. The `spec-approval` stage of `delivery-large` therefore waits
+  for both spec approval and architecture review, as its condition says.
+- A failing receipt is a blocker and never advances; the room readout shows it with its
+  finding count.
+- A stage bound to a reviewer role is asked, never dispatched. The reviewer ask starts it,
+  and for that stage only the review receipts count, so the author's own writes still
+  cannot satisfy a reviewer's stage. A review of a superseded head binds to no stage.
 
 ## What this reverses, and what it preserves
 

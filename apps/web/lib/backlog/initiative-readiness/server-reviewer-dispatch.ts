@@ -48,9 +48,10 @@ type RoomAuthor = {
 /**
  * Which readiness decision a candidate owes its reviews on. Delivered items
  * owe the completion decision; a Build Studio build in plan owes its
- * implementation decision (BI-926A7E90).
+ * implementation decision (BI-926A7E90); an item still in design or delivery
+ * owes its design-stage reviews from its implementation decision (BI-3A462B04).
  */
-type CandidateTarget = "completion" | "implementation";
+type CandidateTarget = "completion" | "implementation" | "design";
 
 type Candidate = { itemId: string; room: RoomAuthor; target: CandidateTarget };
 
@@ -120,8 +121,11 @@ export async function loadRoomAuthors(where: { capsuleId?: string; backlogItemId
 }
 
 /**
- * Delivered items that still owe acceptance, each with its most recently active
- * room that an assistant authored for a person. A room a person opened with a
+ * Items with an assistant-authored room, each with its most recently active
+ * such room: delivered items that still owe acceptance (their completion
+ * reviews), and items still open or in progress (their design-stage reviews,
+ * BI-3A462B04: until then only the author's own client could request those, so
+ * a lost connection blocked them). A room a person opened with a
  * personal token names no assistant, so it cannot be the author's connection;
  * an item often has one newer than the room its assistant worked in
  * (BI-D35B85BF on 2026-09-24). Shuffled, so a bounded tick does not re-check
@@ -131,16 +135,16 @@ async function loadAwaitingCandidates(): Promise<Candidate[]> {
   const rooms = await loadRoomAuthors({ backlogItemId: { not: null } });
   const itemIds = [...new Set(rooms.flatMap((room) => (room.itemId ? [room.itemId] : [])))];
   if (itemIds.length === 0) return [];
-  const awaiting = new Set((await prisma.backlogItem.findMany({
-    where: { itemId: { in: itemIds }, status: "awaiting-acceptance" },
-    select: { itemId: true },
-  })).map((item) => item.itemId));
+  const targetByItem = new Map((await prisma.backlogItem.findMany({
+    where: { itemId: { in: itemIds }, status: { in: ["awaiting-acceptance", "open", "in-progress"] } },
+    select: { itemId: true, status: true },
+  })).map((item) => [item.itemId, item.status === "awaiting-acceptance" ? "completion" as const : "design" as const]));
   const newestByItem = new Map<string, RoomAuthor>();
   for (const room of rooms) {
-    if (!room.itemId || !awaiting.has(room.itemId) || !room.userId || !room.agentId) continue;
+    if (!room.itemId || !targetByItem.has(room.itemId) || !room.userId || !room.agentId) continue;
     if (!newestByItem.has(room.itemId)) newestByItem.set(room.itemId, room);
   }
-  return [...newestByItem.entries()].map(([itemId, room]) => ({ itemId, room, target: "completion" as const }));
+  return [...newestByItem.entries()].map(([itemId, room]) => ({ itemId, room, target: targetByItem.get(itemId)! }));
 }
 
 /**
@@ -204,6 +208,10 @@ async function defaultOwedRoutes(itemId: string, authorAgentId: string, candidat
     const result = await buildStudioOwedRoutes({ itemId, capsuleId: candidate.room.capsuleId, authorAgentId });
     return result.routed ? result.routes : null;
   }
+  if (candidate?.target === "design") {
+    const routes = await designPhaseOwedRecoveryRoutes(itemId, authorAgentId);
+    return routes && routes.map((route) => ({ workroomId: route.workroomId, requestCoworker: route.requestCoworker as unknown as Record<string, unknown> }));
+  }
   const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
   const item = await getBacklogItem({ itemId }, authorAgentId);
   const decision = (item.data?.readiness as { decisions?: { completion?: unknown } } | undefined)?.decisions?.completion as
@@ -225,6 +233,18 @@ async function defaultOwedRoutes(itemId: string, authorAgentId: string, candidat
  * could not be read; empty when nothing independent is owed.
  */
 export async function loadDesignPhaseOwedReviewRoutes(itemId: string, authorAgentId: string | null): Promise<ReadinessReviewRoute[] | null> {
+  const routes = await designPhaseOwedRecoveryRoutes(itemId, authorAgentId);
+  return routes && routes.map((route) => ({
+    gate: route.gate,
+    accountableRole: route.accountableRole,
+    targetAgentId: route.targetAgentId,
+    independent: route.independent,
+    requestCoworker: route.requestCoworker as unknown as Record<string, unknown>,
+  }));
+}
+
+/** The independent design-phase reviewer routes the implementation recovery issues now. */
+async function designPhaseOwedRecoveryRoutes(itemId: string, authorAgentId: string | null) {
   const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
   const item = await getBacklogItem({ itemId }, authorAgentId);
   const decision = (item.data?.readiness as { decisions?: { implementation?: unknown } } | undefined)?.decisions?.implementation as
@@ -237,15 +257,7 @@ export async function loadDesignPhaseOwedReviewRoutes(itemId: string, authorAgen
   if (!designPhase) return [];
   const { resolveTerminalInitiativeRecovery } = await import("./terminal-recovery");
   const recovery = await resolveTerminalInitiativeRecovery({ decision: designPhase, currentAgentId: authorAgentId, refusedWorkroomId: null });
-  return recovery.reviewerRoutes
-    .filter((route) => route.independent)
-    .map((route) => ({
-      gate: route.gate,
-      accountableRole: route.accountableRole,
-      targetAgentId: route.targetAgentId,
-      independent: route.independent,
-      requestCoworker: route.requestCoworker as unknown as Record<string, unknown>,
-    }));
+  return recovery.reviewerRoutes.filter((route) => route.independent);
 }
 
 async function recentlyDispatched(roomId: string, requestKey: string, now: Date): Promise<boolean> {
@@ -341,7 +353,8 @@ export async function dispatchReviewerRequest(args: {
 }
 
 /**
- * Route every independent review a delivered item owes, bounded per call.
+ * Route every independent review a delivered item owes, and every design-stage
+ * review an open item owes (BI-3A462B04), bounded per call.
  * Runs from mcp/task-run-dispatch-reconciliation; safe to run repeatedly.
  */
 export async function dispatchOwedIndependentReviews(deps: Deps = {}): Promise<RouteOutcome[]> {

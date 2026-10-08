@@ -60,7 +60,7 @@ status: active
 | Snapshots for `wr:` keys | `aggregateQueueMetrics` writes them. |
 | `/api/metrics` | `recordQueueTransition` mirrors every transition into the existing `dpf_queue_*` series. |
 | Coworker queue pack | The queue-awareness pack reads `QueueMetricSnapshot` and picks up the new rows with no change. |
-| 23 September replay | The hold cause carries the conformance deviation: `conformance_pause:missing_explicit_coordinator`, added in the views PR. `workroom-stage-backfill.test.ts` replays that pile. |
+| 23 September replay | The hold cause carries the conformance deviation: `conformance_pause:missing_explicit_coordinator`. The live drive writes the code in its `ledger`, and those rooms never entered a stage, so a stage-less hold sits at the shape's first stage. The first replay (`backfill:drive-log`) dropped both. Replay v2 (`backfill:drive-log:v2`) replaces it. Against the live 22–25 September log, v2 holds 64 rooms at delivery-medium `design-note`, 57 at delivery-small `reproduce` and 48 at delivery-large `spec` by the end of 23 September. That is the pile at each shape's first stage, rather than at one stage overall. `workroom-stage-backfill.test.ts` replays the rows as the drive wrote them. |
 
 ## Recorded limitations
 

@@ -29,6 +29,9 @@ const {
     professionCorpusUsageStat: {
       upsert: vi.fn(),
     },
+    delegationChain: {
+      updateMany: vi.fn(),
+    },
   },
   mockResolveAgent: vi.fn(),
   mockResolveTools: vi.fn(),
@@ -285,6 +288,37 @@ describe("runChildThreadExecution", () => {
     expect(mockPrisma.taskRun.update).toHaveBeenCalledWith({
       where: { taskRunId: "TR-CHILD-1" },
       data: expect.objectContaining({ status: "completed" }),
+    });
+  });
+
+  // BI-A0BFA63E: an accepted handoff's chain link closes with the child's outcome.
+  it.each([
+    ["completed", () => mockExecuteLoop.mockResolvedValue({ content: "Done.", executedTools: [] }),
+      { status: "completed", completedAt: expect.any(Date) }],
+    ["failed", () => mockExecuteLoop.mockRejectedValue(new Error("provider down")),
+      { status: "failed", completedAt: expect.any(Date), reason: "child failed" }],
+  ])("closes the handoff's delegation link when the child %s", async (_outcome, arrange, data) => {
+    arrange();
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: "parent-1" });
+    mockPrisma.taskRun.findUnique.mockResolvedValue({
+      a2aMetadata: {
+        collaboration: {
+          kind: "handoff",
+          fromAgentId: "coo",
+          toAgentId: "agent-mkt",
+          enteredVia: "handoff",
+          tier: 2,
+          delegationLinkId: "link-1",
+        },
+      },
+    });
+    mockPrisma.agentMessage.findMany.mockResolvedValue([{ role: "user", content: "Draft the post." }]);
+
+    await runChildThreadExecution(ctx).catch(() => undefined);
+
+    expect(mockPrisma.delegationChain.updateMany).toHaveBeenCalledWith({
+      where: { id: "link-1", status: "active" },
+      data,
     });
   });
 

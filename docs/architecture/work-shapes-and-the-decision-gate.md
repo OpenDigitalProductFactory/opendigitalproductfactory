@@ -147,6 +147,10 @@ unknown author, or a reviewer agent that is the authoring agent, nothing is boun
 registry shape is unchanged. Design: `docs/superpowers/specs/2026-09-02-proactive-review-drive-design.md`
 ("As built — review stages").
 
+The reviewer's receipt is the stage's evidence (BI-80738C08): once every review receipt
+the stage declares has passed for the room's current head, the next tick advances it. A
+failing receipt blocks the stage and shows in the room with its finding count.
+
 Two bounded exceptions bind a non-governed `role:` stage to an agent; neither ever reaches a
 `governed-decision` advance (`boundStagePrincipal`, `drive-plan-stage.ts`). A room may carry
 its own `workShapeRoleBindings` scope claim naming the agent that holds a role there

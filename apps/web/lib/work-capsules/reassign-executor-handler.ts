@@ -4,6 +4,7 @@ import { WORK_CAPSULE_EXECUTOR_KINDS, isWorkCapsuleExecutorKind } from "@/lib/wo
 
 import { admitRoomAssistant } from "./room-ownership";
 import { reassignWorkCapsuleExecutor } from "./work-capsule-store";
+import { WorkroomLeaseHolderChangedError } from "./workroom-lease";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
 /**
@@ -42,6 +43,11 @@ export async function reassignCapsuleExecutor(args: {
   const handoffManifest = rawManifest && typeof rawManifest === "object" && !Array.isArray(rawManifest)
     ? (rawManifest as Record<string, unknown>)
     : undefined;
+  // Present → compare-and-set against the holder the caller read (BI-A7601AED).
+  const rawExpected = args.params["expectedLeaseHolderPrincipalId"];
+  const expectedLeaseHolderPrincipalId = rawExpected === null
+    ? null
+    : typeof rawExpected === "string" && rawExpected.trim() ? rawExpected.trim() : undefined;
 
   try {
     const actor = await args.resolveActor();
@@ -53,6 +59,7 @@ export async function reassignCapsuleExecutor(args: {
         toExecutorRef: text("toExecutorRef") ?? undefined,
         reason: text("reason") ?? undefined,
         handoffManifest,
+        expectedLeaseHolderPrincipalId,
         actor,
       });
       const assistant = actor.agentPrincipalId;
@@ -83,6 +90,14 @@ export async function reassignCapsuleExecutor(args: {
       data: { capsule, assistantAdmitted: admitted },
     };
   } catch (error) {
+    if (error instanceof WorkroomLeaseHolderChangedError) {
+      return {
+        success: false,
+        error: error.code,
+        message: error.message,
+        data: { actualLeaseHolderPrincipalId: error.actualHolderPrincipalId },
+      };
+    }
     return { success: false, error: "reassign_failed", message: getErrorMessage(error) };
   }
 }

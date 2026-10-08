@@ -17,6 +17,12 @@ export type InitiativeEvidenceClient = Partial<InitiativeGateQueryDb> & {
 // to advance a stage. Other gates remain in the evidence lane.
 const REQUIREMENT_KIND = INITIATIVE_GATE_STAGE_EVIDENCE_KIND;
 
+// A failing review names how many blocking findings it raised, so the room shows them (BI-80738C08).
+function findingNote(refs: unknown): string {
+  const count = Array.isArray(refs) ? refs.length : 0;
+  return count > 0 ? `, ${count} finding${count === 1 ? "" : "s"}` : "";
+}
+
 export async function loadWorkroomInitiativeEvidence(
   db: InitiativeEvidenceClient, rooms: readonly InitiativeEvidenceRoom[],
 ): Promise<{ receipts: ReceiptEnvelope[]; partial: boolean }> {
@@ -56,7 +62,7 @@ export async function loadWorkroomInitiativeEvidence(
           receiptId: row.id, receiptKind: row.gateKey, enforcementMode: "observed-event",
           sourceRef: { kind: "work-capsule", id: room.capsuleId, status: String(payload.decision) },
           actionType: row.gateKey, status: "observed",
-          summary: `${row.gateKey}: ${payload.decision} (${currentSource ? "current source" : "historical or unresolved source"}${typeof artifact?.commitSha === "string" ? ` ${artifact.commitSha.slice(0, 12)}` : ""}). ${String(payload.reason).slice(0, 240)}`,
+          summary: `${row.gateKey}: ${payload.decision}${findingNote(payload.findingRefs)} (${currentSource ? "current source" : "historical or unresolved source"}${typeof artifact?.commitSha === "string" ? ` ${artifact.commitSha.slice(0, 12)}` : ""}). ${String(payload.reason).slice(0, 240)}`,
           occurredAt: row.recordedAt.toISOString(), actorRef: { actorKind: "agent", actorId: String(payload.reviewerAgentId) },
           inputDigest: String(payload.artifactDigest), outputDigest: { artifactRef: artifact, decision: payload.decision },
           policyRefs: [String(payload.policyVersion)], rawRef: { table: "BacklogItemActivity", id: row.id },
