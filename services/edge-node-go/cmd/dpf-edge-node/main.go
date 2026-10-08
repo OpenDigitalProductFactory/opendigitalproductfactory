@@ -174,8 +174,14 @@ func run() error {
 	// node_revoked; sweep currently runs until ctx is cancelled.
 	errCh := make(chan error, 4)
 	go func() { errCh <- runHeartbeat(ctx, cfg, client, st) }()
-	go func() { errCh <- runSweep(ctx, cfg, client, st) }()
-	go func() { errCh <- runFederationDiscovery(ctx, cfg, client, st) }()
+	// BI-28EFE18A: a host-upkeep node sweeps no network and runs no discovery;
+	// those stay opt-in edge features.
+	if cfg.HostUpkeepOnly() {
+		slog.Info("Host-upkeep role: network sweep and federation discovery are off")
+	} else {
+		go func() { errCh <- runSweep(ctx, cfg, client, st) }()
+		go func() { errCh <- runFederationDiscovery(ctx, cfg, client, st) }()
+	}
 	if actionClient != nil {
 		publicKey, err := action.LoadPublicKey(cfg.EdgeActionSigningPublicKeyFile)
 		if err != nil {
@@ -320,7 +326,16 @@ func federationCapabilityReports() []api.CapabilityReport {
 	}}
 }
 
-func capabilityReports(actionConfigured, organizationJoinEnabled bool, organizationTrustRole string) []api.CapabilityReport {
+// hostUpkeepReport is what the agent tells the portal about host upkeep
+// (BI-28EFE18A): whether it can run the Docker VM restart, and which Docker
+// runtime it found, so the portal can say "only a reboot clears this" on a
+// native Linux Engine instead of offering a restart that cannot work.
+type hostUpkeepReport struct {
+	dockerVmRestart bool
+	dockerRuntime   string
+}
+
+func capabilityReports(actionConfigured, organizationJoinEnabled bool, organizationTrustRole string, hostUpkeep hostUpkeepReport) []api.CapabilityReport {
 	reports := federationCapabilityReports()
 	if !actionConfigured {
 		return reports
@@ -340,14 +355,19 @@ func capabilityReports(actionConfigured, organizationJoinEnabled bool, organizat
 			actionTypes = append(actionTypes, "organization.join.import")
 		}
 	}
+	evidence := map[string]any{
+		"transport":             "mutual-tls-pull",
+		"actionTypes":           actionTypes,
+		"organizationTrustRole": organizationTrustRole,
+	}
+	if hostUpkeep.dockerVmRestart {
+		evidence["actionTypes"] = append(actionTypes, action.DockerVmRestartActionType)
+		evidence["dockerRuntime"] = hostUpkeep.dockerRuntime
+	}
 	return append(reports, api.CapabilityReport{
 		Capability: "action.execute",
 		Status:     status,
-		Evidence: map[string]any{
-			"transport":             "mutual-tls-pull",
-			"actionTypes":           actionTypes,
-			"organizationTrustRole": organizationTrustRole,
-		},
+		Evidence:   evidence,
 	})
 }
 
@@ -464,7 +484,7 @@ func runHeartbeat(ctx context.Context, cfg *config.Config, client *api.Client, s
 		}
 
 		resp, err := client.Heartbeat(ctx, st.NodeToken, api.HeartbeatRequest{
-			CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole),
+			CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole, currentHostUpkeep(cfg)),
 		})
 		if err != nil {
 			if api.IsRevoked(err) {
@@ -541,7 +561,7 @@ func verifyOrganizationJoin(
 	}
 	evidence["portalHealth"] = true
 	if _, err := client.Heartbeat(ctx, st.NodeToken, api.HeartbeatRequest{
-		CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole),
+		CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole, currentHostUpkeep(cfg)),
 	}); err != nil {
 		return evidence, err
 	}

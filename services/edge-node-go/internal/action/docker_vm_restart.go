@@ -40,19 +40,74 @@ var (
 	ErrDockerStartFailed     = errors.New("docker desktop could not be started")
 	ErrDockerNotReady        = errors.New("docker engine did not become ready")
 	ErrHostCommandNotAllowed = errors.New("host command is not in the docker vm restart allowlist")
+	// ErrHostRebootRequired: native Docker Engine on Linux has no VM; a process
+	// stuck in the host kernel is cleared only by a host reboot, which this
+	// agent never performs.
+	ErrHostRebootRequired = errors.New("only a host reboot clears this, and the agent never reboots the host")
 )
 
-var dockerVmRestartCommands = map[string]bool{
-	"taskkill": true,
-	"wsl.exe":  true,
-	"docker":   true,
-	"schtasks": true,
+// Docker runtimes the restart can tell apart (BI-28EFE18A).
+const (
+	DockerRuntimeDesktop = "desktop"
+	DockerRuntimeEngine  = "engine"
+	DockerRuntimeUnknown = "unknown"
+)
+
+// allowedHostCommand is the whole of what the restart may run on each host.
+// It checks the arguments too, not just the program: systemctl and launchctl
+// can reboot a machine, so only their exact start forms pass. Nothing here can
+// reboot or shut down the host on any platform.
+func allowedHostCommand(platform, name string, args []string) bool {
+	exactly := func(want ...string) bool {
+		if len(args) != len(want) {
+			return false
+		}
+		for i := range want {
+			if want[i] != "*" && args[i] != want[i] {
+				return false
+			}
+		}
+		return true
+	}
+	dockerCommand := func() bool {
+		return exactly("info", "--format", "*") || exactly("desktop", "status") || exactly("desktop", "restart")
+	}
+	switch platform {
+	case "win32":
+		switch name {
+		case "taskkill":
+			return exactly("/IM", "*", "/T", "/F")
+		case "wsl.exe":
+			return exactly("--shutdown")
+		case "docker":
+			return dockerCommand()
+		case "schtasks":
+			return exactly("/Run", "/TN", "*")
+		}
+	case "darwin":
+		switch name {
+		case "docker":
+			return dockerCommand()
+		case "launchctl":
+			return exactly("start", "*")
+		}
+	case "linux":
+		switch name {
+		case "docker":
+			return dockerCommand()
+		case "systemctl":
+			return exactly("--user", "start", "*")
+		}
+	}
+	return false
 }
 
 // CommandRunner runs one host command and returns its combined output.
 type CommandRunner func(ctx context.Context, name string, args ...string) (string, error)
 
 type DockerVmRestartConfig struct {
+	// Platform is the host OS in the agent's vocabulary: win32 | darwin | linux.
+	Platform           string
 	DockerDesktopExe   string
 	LocalAppData       string
 	AutostartTaskName  string
@@ -78,11 +133,44 @@ type restartStep struct {
 	Detail  string `json:"detail,omitempty"`
 }
 
+func (h *DockerVmRestartHandler) platform() string {
+	if h.Config.Platform == "" {
+		return "win32"
+	}
+	return h.Config.Platform
+}
+
 func (h *DockerVmRestartHandler) run(ctx context.Context, name string, args ...string) (string, error) {
-	if !dockerVmRestartCommands[name] {
-		return "", fmt.Errorf("%w: %s", ErrHostCommandNotAllowed, name)
+	if !allowedHostCommand(h.platform(), name, args) {
+		return "", fmt.Errorf("%w: %s %s", ErrHostCommandNotAllowed, name, strings.Join(args, " "))
 	}
 	return h.Run(ctx, name, args...)
+}
+
+// DetectDockerRuntime reports whether the host's Docker runs inside Docker
+// Desktop's VM or directly on the host kernel. Windows always runs Docker in
+// a VM. Elsewhere Docker Desktop names itself in `docker info`, and its CLI
+// answers `docker desktop status`; a native Linux Engine does neither.
+func DetectDockerRuntime(ctx context.Context, platform string, run CommandRunner) string {
+	if platform == "win32" {
+		return DockerRuntimeDesktop
+	}
+	guarded := func(name string, args ...string) (string, error) {
+		if !allowedHostCommand(platform, name, args) {
+			return "", ErrHostCommandNotAllowed
+		}
+		return run(ctx, name, args...)
+	}
+	if out, err := guarded("docker", "info", "--format", "{{.OperatingSystem}}"); err == nil && strings.Contains(out, "Docker Desktop") {
+		return DockerRuntimeDesktop
+	}
+	if _, err := guarded("docker", "desktop", "status"); err == nil {
+		return DockerRuntimeDesktop
+	}
+	if platform == "linux" {
+		return DockerRuntimeEngine
+	}
+	return DockerRuntimeUnknown
 }
 
 func validDockerVmRestartParameters(raw json.RawMessage) bool {
@@ -119,6 +207,10 @@ func (h *DockerVmRestartHandler) Execute(ctx context.Context, parameters json.Ra
 			"startedAt":  startedAt.Format(time.RFC3339Nano),
 			"finishedAt": now().Format(time.RFC3339Nano),
 		}}
+	}
+
+	if h.platform() != "win32" {
+		return h.restartDockerDesktop(ctx, steps, output, now)
 	}
 
 	for _, image := range []string{"Docker Desktop.exe", "com.docker.backend.exe"} {
@@ -160,6 +252,44 @@ func (h *DockerVmRestartHandler) Execute(ctx context.Context, parameters json.Ra
 	}
 	steps = append(steps, restartStep{Step: "start Docker Desktop", Outcome: "started"})
 
+	return h.finishRestart(ctx, &steps, output, now)
+}
+
+// restartDockerDesktop is the macOS and Linux procedure. Docker Desktop's own
+// CLI restarts its VM on both; native Linux Engine has no VM to restart.
+func (h *DockerVmRestartHandler) restartDockerDesktop(
+	ctx context.Context,
+	steps []restartStep,
+	output func() ExecutionOutput,
+	now func() time.Time,
+) (ExecutionOutput, error) {
+	runtime := DetectDockerRuntime(ctx, h.platform(), h.Run)
+	steps = append(steps, restartStep{Step: "detect Docker runtime", Outcome: runtime})
+	withSteps := func() ExecutionOutput {
+		result := output()
+		result.Evidence["steps"] = steps
+		return result
+	}
+	if runtime != DockerRuntimeDesktop {
+		steps = append(steps, restartStep{Step: "restart Docker VM", Outcome: "refused", Detail: ErrHostRebootRequired.Error()})
+		return withSteps(), ErrHostRebootRequired
+	}
+	if detail, err := h.run(ctx, "docker", "desktop", "restart"); err != nil {
+		steps = append(steps, restartStep{Step: "docker desktop restart", Outcome: "failed", Detail: trimDetail(detail + " " + err.Error())})
+		return withSteps(), ErrDockerStartFailed
+	}
+	steps = append(steps, restartStep{Step: "docker desktop restart", Outcome: "done"})
+	return h.finishRestart(ctx, &steps, withSteps, now)
+}
+
+// finishRestart waits for the engine, then brings the DPF stack back through
+// the platform's own autostart: the logon task, LaunchAgent or user service.
+func (h *DockerVmRestartHandler) finishRestart(
+	ctx context.Context,
+	steps *[]restartStep,
+	output func() ExecutionOutput,
+	now func() time.Time,
+) (ExecutionOutput, error) {
 	deadline := now().Add(h.Config.DockerReadyTimeout)
 	ready := false
 	serverVersion := ""
@@ -177,18 +307,27 @@ func (h *DockerVmRestartHandler) Execute(ctx context.Context, parameters json.Ra
 		h.Sleep(h.Config.PollInterval)
 	}
 	if !ready {
-		steps = append(steps, restartStep{Step: "wait for Docker engine", Outcome: "timed out"})
+		*steps = append(*steps, restartStep{Step: "wait for Docker engine", Outcome: "timed out"})
 		return output(), ErrDockerNotReady
 	}
-	steps = append(steps, restartStep{Step: "wait for Docker engine", Outcome: "ready", Detail: serverVersion})
+	*steps = append(*steps, restartStep{Step: "wait for Docker engine", Outcome: "ready", Detail: serverVersion})
 
 	if h.Config.AutostartTaskName != "" {
-		detail, err := h.run(ctx, "schtasks", "/Run", "/TN", h.Config.AutostartTaskName)
+		var detail string
+		var err error
+		switch h.platform() {
+		case "darwin":
+			detail, err = h.run(ctx, "launchctl", "start", h.Config.AutostartTaskName)
+		case "linux":
+			detail, err = h.run(ctx, "systemctl", "--user", "start", h.Config.AutostartTaskName)
+		default:
+			detail, err = h.run(ctx, "schtasks", "/Run", "/TN", h.Config.AutostartTaskName)
+		}
 		outcome := "started"
 		if err != nil {
 			outcome = "failed"
 		}
-		steps = append(steps, restartStep{Step: "run " + h.Config.AutostartTaskName, Outcome: outcome, Detail: trimDetail(detail)})
+		*steps = append(*steps, restartStep{Step: "run " + h.Config.AutostartTaskName, Outcome: outcome, Detail: trimDetail(detail)})
 	}
 
 	result := output()

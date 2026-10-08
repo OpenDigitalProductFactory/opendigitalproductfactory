@@ -276,6 +276,13 @@ persist_organization_trust() {
     printf 'DPF_PKI_DIR=%s\n' "$OUT_DIR"
     printf 'DPF_ORGANIZATION_CA_URL=%s\n' "${CA_URL:-https://$HOSTNAME_VALUE:9000}"
     if [ "$EDGE_ACTION_CONFIGURED" = "1" ]; then
+      # BI-28EFE18A: with the trust bundle in place, turn the action channel on
+      # so the install's own node can carry host upkeep. Execution still needs a
+      # trusted node, its enabled capability, an allowlisted type and, for the VM
+      # restart, an approved ChangeRequest. An operator's explicit value is kept.
+      if ! grep -q '^DPF_REMOTE_ACTION_DISPATCH_ENABLED=' "$env_tmp" 2>/dev/null; then
+        printf 'DPF_REMOTE_ACTION_DISPATCH_ENABLED=1\n'
+      fi
       printf 'DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n'
       printf 'DPF_EDGE_ACTION_URL=https://%s:8443\n' "$HOSTNAME_VALUE"
       printf 'DPF_EDGE_ACTION_CA_FILE=%s\n' "$ROOT_CERT"
