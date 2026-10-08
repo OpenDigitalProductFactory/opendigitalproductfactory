@@ -19,7 +19,7 @@ The following was inspected on 2026-10-07 with `docker buildx imagetools inspect
 
 No GPU build carries a version tag. The upstream publish workflow (`.github/workflows/docker-hub.yml` at `v1.0.1`) tags the CUDA build only `latest` and `gpu`, and tags the CPU build `cpu` plus the semver tags.
 
-**Chosen pin:** `travisvn/chatterbox-tts-api:gpu@sha256:8c0b3791…` (the tag names the variant and the digest carries identity). The compose service keeps its NVIDIA device reservation, and both installers start `dpf-tts` only after detecting an NVIDIA GPU with at least 6 GB of VRAM (`install-dpf.sh` step 10b, `install-dpf.ps1`). The default therefore has to be the CUDA build. The CPU build, pinned as `1.0.1@sha256:900e5ae1…`, is the documented Tier 1 override, and an operator using it must also drop the reservation.
+**Chosen pin:** `travisvn/chatterbox-tts-api:gpu`, by tag only. Shipped compose never pins a third-party image by digest (BI-F7E9A541, enforced by `tests/release/installer-release-contract.test.mjs`): a pruned digest freezes every install, and the release manifest guard already refuses a release whose tag stops resolving. The digests in the table above record what was evaluated. The compose service keeps its NVIDIA device reservation, and both installers start `dpf-tts` only after detecting an NVIDIA GPU with at least 6 GB of VRAM (`install-dpf.sh` step 10b, `install-dpf.ps1`). The default therefore has to be the CUDA build. The CPU build, tagged `1.0.1`, is the documented Tier 1 override, and an operator using it must also drop the reservation.
 
 ## API compatibility (source read at upstream tag `v1.0.1`)
 

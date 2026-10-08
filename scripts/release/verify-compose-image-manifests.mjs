@@ -17,7 +17,7 @@ const VALID_ONLY = new Set(["all", "digest-pinned", "third-party"]);
  */
 export const KNOWN_UNRESOLVABLE = new Map([
   // Empty. BI-E2763038 re-pinned dpf-tts (travisvn/chatterbox-tts-api:v0.1.0 was
-  // deleted upstream) by tag AND digest, which retired the only entry.
+  // deleted upstream) to a published tag, which retired the only entry.
 ]);
 
 /**
