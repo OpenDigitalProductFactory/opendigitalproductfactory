@@ -264,10 +264,18 @@ const AUTHOR_RESEARCH_NEXT_ACTION =
 const SMALL_FIX_RESEARCH_NEXT_ACTION =
   "Research for a small fix is its reproduction, recorded as execution evidence: call record_execution_evidence on this item with kind \"source_verified\" (the defect on a named ref, with its URL) and kind \"test_pass\" (the failing-to-passing test), then claim again. record_initiative_evidence(gate: \"research\") also satisfies it where that grant is held. No canonical design is required, so do not commit a spec to obtain a reviewer route.";
 
+// BI-77C600B2: the research receipt cites a commit on a LIVE workroom, and an
+// implementation claim refused here binds none. Without this step the receipt is
+// refused ("claim or adopt the branch first") and the claim it points back to is
+// refused again at this gate. A design claim owes no research, so it binds the
+// room the receipt needs.
+const RESEARCH_RECEIPT_ORDER =
+  " The receipt cites a commit on a live workroom, and this refused claim bound none: first claim with workIntent \"design\" (it does not owe research), then record the receipt, then claim with workIntent \"implementation\" again.";
+
 function authorResearchNextAction(decision: InitiativeReadinessDecision): string {
-  return decision.shapeDecision?.effective === "small" && decision.profile === "fix"
+  return (decision.shapeDecision?.effective === "small" && decision.profile === "fix"
     ? SMALL_FIX_RESEARCH_NEXT_ACTION
-    : AUTHOR_RESEARCH_NEXT_ACTION;
+    : AUTHOR_RESEARCH_NEXT_ACTION) + RESEARCH_RECEIPT_ORDER;
 }
 
 /** Resolve actionable, exact-grant reviewer routes without changing readiness. */
