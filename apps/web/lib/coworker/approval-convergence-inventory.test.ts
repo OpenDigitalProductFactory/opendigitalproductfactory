@@ -11,10 +11,10 @@
 //     (auditClass is not metrics_only, or retainAuditParameters);
 //   - the overlap with policy-projectable actions, which a propose boundary
 //     neutralises by setting policyProjectionAllowed: false.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
-import { shouldProposeToolCall } from "@/lib/proactivity/propose-interception";
+import { interceptToolCallAsProposal, shouldProposeToolCall, toolTakesSecretInput } from "@/lib/proactivity/propose-interception";
 import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
 import { classifyConsequentialTool } from "@/lib/tak/consequential-tool-policy";
 import { deriveAuditClassForTool } from "@/lib/tool-audit-helpers";
@@ -85,6 +85,23 @@ describe("approval convergence inventory — the live registry", () => {
       PROPOSAL_REACHABLE.filter((tool) => hasWriteOnlyInput(tool.inputSchema)).map((tool) => tool.name).sort(),
     ).toEqual(["configure_and_test_discovery_connection", "configure_gateway_scan"]);
   });
+
+  // PR-B (BI-7BCC87BB, waiver W5): both secret-taking tools are refused under
+  // a propose boundary, never queued, and the executor is never called.
+  it.each(["configure_and_test_discovery_connection", "configure_gateway_scan"])(
+    "W5: %s is refused under a propose boundary",
+    async (name) => {
+      const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === name)!;
+      expect(toolTakesSecretInput(tool)).toBe(true);
+      const execute = vi.fn();
+      const result = await interceptToolCallAsProposal(
+        { toolDef: tool, proposeSideEffects: true, toolName: name, args: {}, agentId: "AGT-X", threadId: "t", routeContext: "/", taskRunId: null, execute },
+        { persistence: { createAssistantMessage: vi.fn() }, resolveMandatedTools: async () => [] },
+      );
+      expect(result).toMatchObject({ success: false, error: "propose_secret_refused" });
+      expect(execute).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps the arguments of every reachable tool on its audit row", () => {
     const unprovable = PROPOSAL_REACHABLE.filter(

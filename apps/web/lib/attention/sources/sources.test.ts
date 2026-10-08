@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { escalationToAttentionItem } from "./escalation";
 import {
   aiDecisionToAttentionItem,
@@ -6,7 +6,7 @@ import {
   type DecisionInteractionRow,
 } from "./ai-decision";
 import { pausedAiToAttentionItem, type TaskRunRow } from "./paused-ai";
-import { agentProposalToAttentionItem, type AgentActionProposalRow } from "./agent-proposal";
+import { agentProposalToAttentionItem, loadAgentProposalItems, type AgentActionProposalRow } from "./agent-proposal";
 import { loadScheduledTaskItems, scheduledTaskToAttentionItem, type ScheduledTaskAttentionRow } from "./scheduled-task";
 import type { OpenEscalation } from "@/lib/quality/escalation-attention";
 
@@ -242,28 +242,17 @@ describe("agentProposalToAttentionItem", () => {
     expect(item.deepLink).toBe("/platform/ai/operations-map");
   });
 
-  it("routes a leave recommendation to the human-owned time-off decision surface", () => {
-    const item = agentProposalToAttentionItem({
-      proposalId: "AP-LEAVE",
-      actionType: "leave.decide",
-      agentId: "time-off-advisor",
-      parameters: {
-        requestId: "LR-1",
-        recommendation: "escalate",
-        rationale: "Coverage would fall below the recorded cushion.",
-        guardReasons: ["Coverage needs human review."],
-      },
-      proposedAt: new Date("2026-08-12T07:00:00.000Z"),
-    });
-
-    expect(item.title).toBe("Review time-off recommendation");
-    expect(item.context).toBe("Coverage would fall below the recorded cushion.");
-    expect(item.deepLink).toBe("/employee?view=timeoff");
-    expect(item.actions).toContainEqual({
-      kind: "open-in-context",
-      label: "Review time off",
-      href: "/employee?view=timeoff",
-    });
+  // PR-B (BI-7BCC87BB): a time-off decision is a business approval now, one
+  // item per pending request (business-approvals.ts). A legacy leave.decide
+  // proposal would duplicate it, so the proposal source leaves it out.
+  it("leaves a legacy leave recommendation to the business-approval item", async () => {
+    const findMany = vi.fn(async () => [
+      { proposalId: "AP-LEAVE", actionType: "leave.decide", agentId: "time-off-advisor", proposedAt: new Date("2026-08-12T07:00:00.000Z"),
+        parameters: { requestId: "LR-1", recommendation: "escalate", rationale: "x", guardReasons: [] } },
+      { proposalId: "AP-OTHER", actionType: "run_discovery_triage", agentId: "AGT-OPS", proposedAt: new Date("2026-08-12T07:00:00.000Z"), parameters: {} },
+    ]);
+    const items = await loadAgentProposalItems({ agentActionProposal: { findMany } } as never);
+    expect(items.map((item) => item.id)).toEqual(["agent-proposal:AP-OTHER"]);
   });
 
   it("projects a proactivity change proposal with why-now context and a bounded review action", () => {

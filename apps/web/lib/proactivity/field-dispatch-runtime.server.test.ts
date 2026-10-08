@@ -22,10 +22,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import {
-  buildUserAwareFieldDispatchNotificationProposals,
-  proposeUserAwareFieldDispatchNotifications,
-} from "./field-dispatch-runtime.server";
+import { buildUserAwareFieldDispatchNotificationProposals } from "./field-dispatch-runtime.server";
 
 describe("buildUserAwareFieldDispatchNotificationProposals", () => {
   beforeEach(() => {
@@ -149,127 +146,14 @@ describe("buildUserAwareFieldDispatchNotificationProposals", () => {
       id: "cooldown-dispatch",
     });
   });
-
-  it("persists field-dispatch notification proposals into the Attention Surface proposal substrate", async () => {
-    const actions = planDepartureActions({
-      jobId: "JOB-1",
-      arrivalEtaIso: "2026-06-30T19:15:00.000Z",
-      windowEndIso: "2026-06-30T19:00:00.000Z",
-      notificationVars: { company: "Acme HVAC", etaText: "2:15 PM" },
-    });
-
-    const result = await proposeUserAwareFieldDispatchNotifications({
-      userId: "user-1",
-      actions,
-      agentId: "dispatcher",
-      routeContext: "/storefront",
-      archetype: {
-        archetypeId: "hvac-services",
-        demandSignature: "emergency-reactive",
-        capacityUnit: "slot-hours",
-      },
-    });
-
-    expect(result).toContainEqual({
-      proposalId: "field-dispatch-notification:JOB-1:running-late",
-      status: "proposed",
-    });
-    expect(mocks.prisma.agentThread.upsert).toHaveBeenCalledWith({
-      where: { userId_contextKey: { userId: "user-1", contextKey: "field-dispatch:customer-notifications" } },
-      create: { userId: "user-1", contextKey: "field-dispatch:customer-notifications" },
-      update: {},
-      select: { id: true },
-    });
-    expect(mocks.prisma.agentMessage.create).toHaveBeenCalledWith({
-      data: {
-        threadId: "thread-dispatch",
-        role: "assistant",
-        content: expect.stringMatching(/^A customer update is ready to review\. Why now:/),
-        agentId: "dispatcher",
-        routeContext: "/storefront",
-        taskType: "field-dispatch-customer-notification",
-      },
-      select: { id: true },
-    });
-    for (const call of mocks.prisma.agentMessage.create.mock.calls) {
-      expect(call[0].data.content).not.toContain("JOB-1");
-    }
-    expect(mocks.prisma.agentActionProposal.create).toHaveBeenCalledWith({
-      data: {
-        proposalId: "field-dispatch-notification:JOB-1:running-late",
-        threadId: "thread-dispatch",
-        messageId: "message-dispatch",
-        agentId: "dispatcher",
-        actionType: "field_dispatch_customer_notification",
-        parameters: expect.objectContaining({
-          kind: "field-dispatch-customer-notification",
-          jobId: "JOB-1",
-          recommendedAction: "Send running-late customer update",
-          proactivity: expect.objectContaining({ resolvedLevel: "assertive" }),
-        }),
-        status: "proposed",
-      },
-      select: { proposalId: true, status: true },
-    });
-  });
-
-  it("returns existing field-dispatch proposals instead of duplicating attention items", async () => {
-    mocks.prisma.agentActionProposal.findUnique.mockResolvedValue({
-      proposalId: "field-dispatch-notification:JOB-2:on-my-way",
-      status: "proposed",
-    });
-    const actions = planDepartureActions({
-      jobId: "JOB-2",
-      arrivalEtaIso: "2026-06-30T18:30:00.000Z",
-      windowEndIso: "2026-06-30T19:00:00.000Z",
-      notificationVars: { company: "Acme HVAC", etaText: "1:30 PM" },
-    });
-
-    const result = await proposeUserAwareFieldDispatchNotifications({
-      userId: "user-1",
-      actions,
-    });
-
-    expect(result).toEqual([
-      {
-        proposalId: "field-dispatch-notification:JOB-2:on-my-way",
-        status: "proposed",
-        existing: true,
-      },
-    ]);
-    expect(mocks.prisma.agentMessage.create).not.toHaveBeenCalled();
-    expect(mocks.prisma.agentActionProposal.create).not.toHaveBeenCalled();
-  });
 });
 
-// Approval convergence A1 characterisation (BI-C8EC05C9), creation site S4.
-// Nothing in production calls the persistence function, and the action type it
-// writes is not a registered tool, so approving such a row through the generic
-// approveProposal branch returns "Unknown tool" and the row goes to `failed`
-// (that branch is pinned in proposals.characterization.test.ts). PR-B deletes
-// the persistence function and this case with it.
-describe("S4 — field dispatch proposals (characterisation)", () => {
-  it("has no production caller and writes a non-tool action type", async () => {
-    const { readFileSync, readdirSync, statSync } = await import("node:fs");
-    const { join, dirname } = await import("node:path");
-    const { fileURLToPath } = await import("node:url");
-    const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-    const callers: string[] = [];
-    const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
-        if (name === "node_modules" || name.startsWith(".")) continue;
-        const path = join(dir, name);
-        if (statSync(path).isDirectory()) walk(path);
-        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)
-          && readFileSync(path, "utf8").includes("proposeUserAwareFieldDispatchNotifications(")) {
-          callers.push(path.slice(webRoot.length + 1));
-        }
-      }
-    };
-    for (const root of ["app", "lib", "components"]) walk(join(webRoot, root));
-    expect(callers).toEqual(["lib/proactivity/field-dispatch-runtime.server.ts"]);
-
-    const { FIELD_DISPATCH_CUSTOMER_NOTIFICATION_ACTION } = await import("./field-dispatch-runtime");
-    expect(FIELD_DISPATCH_CUSTOMER_NOTIFICATION_ACTION).toBe("field_dispatch_customer_notification");
+// PR-B (BI-7BCC87BB; spec D2 S4): the uncalled persistence function, which
+// wrote an action type that is not a registered tool, is deleted. The pure
+// draft builder above stays.
+describe("S4 — field dispatch proposals are gone", () => {
+  it("the server module no longer exports a proposal writer", async () => {
+    const mod = await import("./field-dispatch-runtime.server");
+    expect("proposeUserAwareFieldDispatchNotifications" in mod).toBe(false);
   });
 });

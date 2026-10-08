@@ -10,7 +10,7 @@
 //     with the SAME TaskRun, through the governed executor — the collision PR-A's
 //     no-pause rule exists for.
 // PR-B's only named delta here: a grant/identity refusal under the boundary
-// becomes `success: false` and so counts toward `partial`.
+// becomes `success: false` and so counts toward `partial` (covered below).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -209,6 +209,23 @@ describe("S2 in the scheduler — the playbook verdict for a diverted call (char
       where: { taskId: PLAYBOOK_TASK.taskId },
       data: expect.objectContaining({ lastStatus: "partial" }),
     }));
+  });
+});
+
+// PR-B named delta (a) (BI-7BCC87BB; spec D2 S2): a grant or identity refusal
+// under the boundary is a not-run success: false, so it now counts toward
+// `partial`, exactly as a failed divert did.
+describe("S2 in the scheduler — a refusal under the boundary (PR-B delta)", () => {
+  it("a monitor refusal is not run and makes the playbook run partial", async () => {
+    arrangePlaybook({ success: false, error: "authority_denied", message: "update_roadmap_item rejected: no grant. It was not run." });
+    await executeScheduledAgentTask(PLAYBOOK_TASK.taskId);
+    expect(playbookOutcome()).toBe("partial");
+  });
+
+  it("an approval request raised for the call is a success: completed", async () => {
+    arrangePlaybook(buildProposalToolResult("update_roadmap_item", "env-1", "2026-10-14T08:00:00.000Z") as unknown as Record<string, unknown>);
+    await executeScheduledAgentTask(PLAYBOOK_TASK.taskId);
+    expect(playbookOutcome()).toBe("completed");
   });
 });
 

@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
+  leaveApprovalToAttentionItem,
+  loadLeaveApprovalItems,
   outboundToAttentionItem,
   billToAttentionItem,
   expenseToAttentionItem,
@@ -114,5 +116,44 @@ describe("the no-deadline business approvals", () => {
     expect(item.source).toBe("research-proposal");
     expect(item.riskClass).toBe("read");
     expect(item.title).toBe("Approve research: competitive-landscape");
+  });
+});
+
+// PR-B (BI-7BCC87BB; spec D2 S5, AC-LEAVE): a time-off decision is the
+// manager's own business approval, so its Needs-you item lives here, one per
+// pending request (keyed by requestId), not on the proposal source. Audience
+// unchanged (operator view; FU-8 records the scoping gap).
+describe("leaveApprovalToAttentionItem", () => {
+  const row = {
+    requestId: "LR-1",
+    leaveType: "vacation",
+    days: 2,
+    startDate: new Date("2026-08-20T00:00:00.000Z"),
+    createdAt: new Date("2026-08-12T00:00:00.000Z"),
+    decisionInteractionId: "DI-1" as string | null,
+    employeeName: "Ada Lovelace",
+  };
+
+  it("one item per pending request, linking to the time-off page", () => {
+    const item = leaveApprovalToAttentionItem(row);
+    expect(item.id).toBe("approval-leave:LR-1");
+    expect(item.source).toBe("approval-leave");
+    expect(item.title).toBe("Decide time off for Ada Lovelace");
+    expect(item.context).toBe("2 day(s) of vacation from 2026-08-20. The time-off advisor has a recommendation.");
+    expect(item.deepLink).toBe("/employee?view=timeoff");
+    expect(item.actions).toEqual([{ kind: "open-in-context", label: "Review time off", href: "/employee?view=timeoff" }]);
+    expect(item.audience).toEqual({ operator: true });
+    expect(item.triage.residueReason).toBe("policy-approval");
+  });
+
+  it("says nothing about a recommendation when none was recorded", () => {
+    expect(leaveApprovalToAttentionItem({ ...row, decisionInteractionId: null }).context).toBe("2 day(s) of vacation from 2026-08-20.");
+  });
+
+  it("loads pending requests only", async () => {
+    const findMany = vi.fn(async () => [{ ...row, employeeProfile: { displayName: "Ada Lovelace" } }]);
+    const items = await loadLeaveApprovalItems({ leaveRequest: { findMany } } as never);
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { status: "pending" } }));
+    expect(items.map((item) => item.id)).toEqual(["approval-leave:LR-1"]);
   });
 });

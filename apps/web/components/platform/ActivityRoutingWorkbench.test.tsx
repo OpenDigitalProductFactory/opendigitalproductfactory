@@ -106,8 +106,8 @@ describe("ActivityRoutingWorkbench", () => {
     expect(source).toContain("tuningRationale");
     expect(source).toContain("actionProposalSummary");
     expect(source).toContain("actionProposalRecommendedConfidence");
-    expect(source).toContain("proposeActivityHarnessOverrideAction");
-    expect(source).toContain("Queue approval");
+    expect(source).toContain("confirmActivityHarnessOverrideAction");
+    expect(source).not.toContain("proposeActivityHarnessOverrideAction");
     expect(source).toContain("approvedConfidenceOverrideId");
     expect(source).toContain("Approved override");
     expect(source).toContain("successSignal");
@@ -270,9 +270,9 @@ describe("ActivityRoutingWorkbench", () => {
     const buildLink = within(failedRow!).getByRole("link", { name: "Open originating build" });
     expect(buildLink.getAttribute("href")).toBe("/build?buildId=FB-QUEUE");
 
-    // Attention row (proposal present) offers a governed queue-approval action.
+    // Attention row (tuning action present) offers the operator's own confirm (BI-7BCC87BB).
     const attentionRow = rows.find((row) => within(row).queryByText("Draft release notes"));
-    expect(within(attentionRow!).getByRole("button", { name: "Queue approval" })).toBeTruthy();
+    expect(within(attentionRow!).getByRole("button", { name: "Confirm override" })).toBeTruthy();
 
     // Healthy activity is never listed.
     expect(within(queue).queryByText("Summarize call")).toBeNull();

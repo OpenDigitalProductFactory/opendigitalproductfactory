@@ -41,4 +41,11 @@ describe("approval receipt owner and assistant isolation", () => {
     await expect(recordApprovalOutcome("e1", "u2", { status: "executed", message: "Done" }, db as never)).rejects.toThrow();
     expect(db.toolExecution.create).not.toHaveBeenCalled();
   });
+  // BI-7BCC87BB (AC-OVERRIDE): an admin decided on the owner's behalf. The
+  // receipt still belongs to the owner's request; the admin is its actor.
+  it("records an on-behalf outcome on the owner's request with the admin as the actor", async () => {
+    const db = fixture();
+    await recordApprovalOutcome("e1", "u1", { status: "executed", message: "Done" }, db as never, "admin-1");
+    expect(db.toolExecution.create.mock.calls[0][0]).toMatchObject({ data: { userId: "admin-1", delegatingUserId: "u1", envelopeId: "e1" } });
+  });
 });

@@ -26,7 +26,7 @@ describe("leaveDecisionPack", () => {
       request: { requestId: "LR-1" },
       inputs: { organizationId: "org-1" },
     });
-    mocks.propose.mockResolvedValue({ proposalId: "leave-decision:LR-1:DI-1", status: "proposed" });
+    mocks.propose.mockResolvedValue({ recommendationId: "leave-decision:LR-1:DI-1", status: "proposed" });
   });
 
   it("declares a propose-only coworker artifact with the mirrored existing grants", () => {
@@ -44,7 +44,7 @@ describe("leaveDecisionPack", () => {
     ]);
   });
 
-  it("runs WWWD + guards, then persists a proposed action without deciding leave", async () => {
+  it("runs WWWD + guards, then records the recommendation without deciding leave", async () => {
     const handler = leaveDecisionPack.handlers.propose_leave_decision;
     const result = await handler(
       { requestId: "LR-1", organizationId: "org-1", minCoverageCushion: 1 },
@@ -67,6 +67,7 @@ describe("leaveDecisionPack", () => {
       success: true,
       entityId: "leave-decision:LR-1:DI-1",
       data: {
+        recommendationId: "leave-decision:LR-1:DI-1",
         status: "proposed",
         recommendation: "approve",
         interactionId: "DI-1",

@@ -1,10 +1,8 @@
 // Approval convergence A1 characterisation (BI-C8EC05C9), creation site S1,
 // chat persistence. What sendMessage writes TODAY when the loop returns a
-// proposal-mode call (agent-coworker.ts, the `agenticResult.proposal` branch):
-// one assistant message at the pre-allocated id, one `AP-` AgentActionProposal
-// linked to it, and the serialized message carries the proposal for the
-// inline card. PR-B changes exactly this (named delta: the proposal row becomes
-// an envelope list); the loop-level cases live in
+// proposal-mode call. Before PR-B it wrote one `AP-` AgentActionProposal;
+// PR-B changes exactly this (named delta: the proposal row becomes an
+// envelope list on the message); the loop-level cases live in
 // lib/tak/agentic-loop.proposal-mode.characterization.test.ts.
 //
 // The mock harness mirrors agent-coworker-external.test.ts (vitest mock
@@ -199,6 +197,9 @@ vi.mock("@dpf/db", () => ({
     agentActionProposal: {
       create: vi.fn(),
     },
+    coworkerActionEnvelope: {
+      findMany: vi.fn(),
+    },
     agentModelConfig: {
       findUnique: vi.fn(),
     },
@@ -276,40 +277,40 @@ beforeEach(() => {
   } as never);
 });
 
-describe("S1 — chat persists a proposal-mode call as an AP- proposal (characterisation)", () => {
-  it("writes the assistant message at the pre-allocated id and an AP- proposal linked to it", async () => {
+// PR-B named delta (BI-7BCC87BB; spec D2 S1, AC-RAISE): the proposal row
+// becomes the approval request(s) the governed executor raised, shown inline
+// on the assistant message by its pre-allocated id. No proposal is written.
+describe("S1 — chat ends a proposal-mode call on the approval request it raised", () => {
+  it("writes the assistant message at the pre-allocated id, no proposal, and lists the raised requests on it", async () => {
+    vi.mocked(governedExecuteTool).mockResolvedValue({
+      success: false, error: "approval_required", message: "contribute_to_hive is waiting for a person to approve it.",
+      data: { envelopeId: "env-1", expiresAt: "2026-10-07T00:15:00.000Z" }, governance: { rejected: "approval_required" },
+    } as never);
+    mockPrisma.coworkerActionEnvelope.findMany.mockImplementation(async ({ where }: { where: { chatMessageId: { in: string[] } } }) => [{
+      id: "env-1", chatMessageId: where.chatMessageId.in[0], manifestActionId: "contribute_to_hive", status: "proposed",
+      expiresAt: new Date("2026-10-07T00:15:00.000Z"), rationale: "This action is defined as a proposal, so a person decides it.",
+    }]);
+
     const result = await sendMessage({ threadId: "thread-1", content: "Share it", routeContext: "/admin" });
 
-    expect(governedExecuteTool).not.toHaveBeenCalled();
     const messageWrite = mockPrisma.agentMessage.create.mock.calls[1][0].data;
     expect(messageWrite).toMatchObject({
       threadId: "thread-1", role: "assistant", taskRunId: "run-123",
       content: "I'd like to share this finding.", agentId: "admin-assistant", routeContext: "/admin",
     });
-    expect(typeof messageWrite.id).toBe("string");
-
-    expect(mockPrisma.agentActionProposal.create).toHaveBeenCalledTimes(1);
-    const proposalWrite = mockPrisma.agentActionProposal.create.mock.calls[0][0].data;
-    expect(proposalWrite).toEqual({
-      proposalId: expect.stringMatching(/^AP-[A-Z0-9]{1,5}$/),
-      threadId: "thread-1",
-      messageId: messageWrite.id,
-      taskRunId: "run-123",
-      agentId: "admin-assistant",
-      actionType: "contribute_to_hive",
-      parameters: { title: "Finding", body: "Details" },
-      status: "proposed",
-    });
-
+    expect(governedExecuteTool).toHaveBeenCalledWith(expect.objectContaining({
+      toolName: "contribute_to_hive",
+      context: expect.objectContaining({ approvalCompletion: "platform", chatMessageId: messageWrite.id }),
+    }));
+    expect(mockPrisma.agentActionProposal.create).not.toHaveBeenCalled();
     expect("agentMessage" in result && result.agentMessage).toMatchObject({
       id: messageWrite.id,
       role: "assistant",
-      proposal: {
-        proposalId: proposalWrite.proposalId,
-        actionType: "contribute_to_hive",
-        parameters: { title: "Finding", body: "Details" },
-        status: "proposed",
-      },
+      approvalRequests: [{
+        envelopeId: "env-1", toolName: "contribute_to_hive", status: "proposed",
+        expiresAt: "2026-10-07T00:15:00.000Z", rationale: "This action is defined as a proposal, so a person decides it.",
+      }],
     });
+    expect("agentMessage" in result && result.agentMessage.proposal).toBeUndefined();
   });
 });

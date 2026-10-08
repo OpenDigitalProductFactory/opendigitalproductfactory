@@ -11,6 +11,7 @@ vi.mock("@/lib/routes", () => ({ ROUTES: { employee: "/employee" } }));
 vi.mock("@/lib/governance-data", () => ({ createAuthorizationDecisionLog: vi.fn() }));
 vi.mock("@/lib/workforce/approval-authority", () => ({ authorizeApprovalDecision: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/decision/decision-outcome-store", () => ({ recordDecisionOutcome: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: {
     leaveRequest: { findUnique: vi.fn(), update: vi.fn() },
@@ -23,6 +24,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { createAuthorizationDecisionLog } from "@/lib/governance-data";
 import { authorizeApprovalDecision } from "@/lib/workforce/approval-authority";
+import { recordDecisionOutcome } from "@/lib/decision/decision-outcome-store";
 import { approveLeaveRequest, rejectLeaveRequest } from "./leave";
 
 const authMock = auth as unknown as { mockResolvedValue: (value: unknown) => void };
@@ -188,5 +190,50 @@ describe("leave decision — convergence characterisation", () => {
     vi.mocked(prisma.leaveRequest.findUnique).mockResolvedValue({ ...pendingRequest, status: "approved" } as never);
     await expect(approveLeaveRequest("LR-ABCD1234")).resolves.toEqual({ success: false, error: "Request already decided" });
     expect(authorizeApprovalDecision).not.toHaveBeenCalled();
+  });
+});
+
+// PR-B (BI-7BCC87BB; spec D2 S5, AC-LEAVE): the manager's decision resolves the
+// recommendation's DecisionInteraction. No envelope is minted; the legacy
+// proposal settle stays for rows written before the change.
+describe("leave decision — the manager's decision resolves the recommendation", () => {
+  beforeEach(() => {
+    vi.mocked(authorizeApprovalDecision).mockResolvedValue({ ok: true, approverEmployeeId: "emp-approver" } as never);
+    vi.mocked(recordDecisionOutcome).mockResolvedValue({ recorded: true } as never);
+  });
+
+  it("approve records 'approve' as the human's choice on the request's interaction", async () => {
+    vi.mocked(prisma.leaveRequest.findUnique).mockResolvedValue({ ...pendingRequest, decisionInteractionId: "DI-1" } as never);
+    expect((await approveLeaveRequest("LR-ABCD1234")).success).toBe(true);
+    expect(recordDecisionOutcome).toHaveBeenCalledWith(expect.objectContaining({
+      interactionId: "DI-1", chosenOptionId: "approve", resolvedBy: "human",
+    }));
+  });
+
+  it("reject records 'deny' with the manager's reason", async () => {
+    vi.mocked(prisma.leaveRequest.findUnique).mockResolvedValue({ ...pendingRequest, decisionInteractionId: "DI-2" } as never);
+    expect((await rejectLeaveRequest("LR-ABCD1234", "Coverage is short that week.")).success).toBe(true);
+    expect(recordDecisionOutcome).toHaveBeenCalledWith(expect.objectContaining({
+      interactionId: "DI-2", chosenOptionId: "deny", resolvedBy: "human", rationale: "Coverage is short that week.",
+    }));
+  });
+
+  it("records nothing when the request has no interaction (guard-only or no recommendation)", async () => {
+    await approveLeaveRequest("LR-ABCD1234");
+    expect(recordDecisionOutcome).not.toHaveBeenCalled();
+  });
+
+  it("a failure to record the outcome never undoes the manager's decision", async () => {
+    vi.mocked(prisma.leaveRequest.findUnique).mockResolvedValue({ ...pendingRequest, decisionInteractionId: "DI-1" } as never);
+    vi.mocked(recordDecisionOutcome).mockRejectedValue(new Error("ledger down"));
+    expect((await approveLeaveRequest("LR-ABCD1234")).success).toBe(true);
+    expect(prisma.leaveRequest.update).toHaveBeenCalled();
+  });
+
+  it("is refused by authority before anything is recorded", async () => {
+    vi.mocked(prisma.leaveRequest.findUnique).mockResolvedValue({ ...pendingRequest, decisionInteractionId: "DI-1" } as never);
+    vi.mocked(authorizeApprovalDecision).mockResolvedValue({ ok: false, error: "not the approver" } as never);
+    await approveLeaveRequest("LR-ABCD1234");
+    expect(recordDecisionOutcome).not.toHaveBeenCalled();
   });
 });
