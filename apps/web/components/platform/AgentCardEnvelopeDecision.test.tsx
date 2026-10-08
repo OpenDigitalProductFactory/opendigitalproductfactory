@@ -22,7 +22,7 @@ const ENVELOPE = {
   actionLabel: "run discovery triage",
   rationale: "This coworker is set to propose, not act.",
   proposedAt: "2026-10-07T09:00:00.000Z",
-  expiresAt: "2099-01-01T00:00:00.000Z",
+  expiresAt: "2099-01-01T00:00:00.000Z", // clock-bomb-guard: allow pass-through fixture; the code under test never compares it to the clock
   approveHref: "/api/agent/envelope/env-1/approve",
   declineHref: "/api/agent/envelope/env-1/deny",
 };

@@ -31,7 +31,7 @@ const PROPOSAL = {
 const ENVELOPE = {
   id: "env-1", coworkerAgentId: "AGT-OPS", delegatingUserId: "owner-1", manifestActionId: "run_discovery_triage",
   rationale: "This coworker is set to propose, not act.", createdAt: new Date("2026-10-07T09:00:00.000Z"),
-  expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+  expiresAt: new Date("2099-01-01T00:00:00.000Z"), // clock-bomb-guard: allow pass-through fixture; the code under test never compares it to the clock
 };
 
 beforeEach(() => {
@@ -64,7 +64,7 @@ describe("agent card — latest pending proposal or envelope", () => {
       actionLabel: "run discovery triage",
       rationale: "This coworker is set to propose, not act.",
       proposedAt: "2026-10-07T09:00:00.000Z",
-      expiresAt: "2099-01-01T00:00:00.000Z",
+      expiresAt: "2099-01-01T00:00:00.000Z", // clock-bomb-guard: allow pass-through fixture; the code under test never compares it to the clock
       approveHref: "/api/agent/envelope/env-1/approve",
       declineHref: "/api/agent/envelope/env-1/deny",
     });

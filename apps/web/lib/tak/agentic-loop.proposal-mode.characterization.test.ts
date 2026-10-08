@@ -191,7 +191,7 @@ describe("S1 — a proposal-mode tool in chat raises an approval request", () =>
       success: false,
       error: "approval_required",
       message: "contribute_to_hive is waiting for a person to approve it.",
-      data: { envelopeId, expiresAt: "2026-10-07T12:15:00.000Z" },
+      data: { envelopeId, expiresAt: "2026-10-07T12:15:00.000Z" }, // clock-bomb-guard: allow pass-through fixture; the code under test never compares it to the clock
       governance: { rejected: "approval_required" },
     };
   }
@@ -269,7 +269,7 @@ describe("S2 — the loop sends a propose-boundary call through the monitor", ()
       .mockResolvedValueOnce(inference("Proposed the triage run.") as never);
     vi.mocked(governedExecuteTool).mockResolvedValueOnce({
       success: false, error: "approval_required", message: "waiting",
-      data: { envelopeId: "env-9", expiresAt: "2026-10-14T08:00:00.000Z" }, governance: { rejected: "approval_required" },
+      data: { envelopeId: "env-9", expiresAt: "2026-10-14T08:00:00.000Z" }, governance: { rejected: "approval_required" }, // clock-bomb-guard: allow pass-through fixture; the code under test never compares it to the clock
     } as never);
 
     const result = await runAgenticLoop({

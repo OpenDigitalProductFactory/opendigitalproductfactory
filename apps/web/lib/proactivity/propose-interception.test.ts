@@ -40,7 +40,7 @@ const PENDING = {
   success: false,
   error: "approval_required",
   message: "run_discovery_triage is waiting for a person to approve it.",
-  data: { envelopeId: "env-1", expiresAt: "2026-10-14T08:00:00.000Z" },
+  data: { envelopeId: "env-1", expiresAt: "2026-10-14T08:00:00.000Z" }, // clock-bomb-guard: allow pass-through fixture; the code under test never compares it to the clock
   governance: { rejected: "approval_required" },
 } as const;
 
@@ -59,7 +59,7 @@ describe("buildProposalToolResult", () => {
     expect(result.message).toContain("approval request env-1");
     expect(result.message).toContain("2026-10-14T08:00:00.000Z");
     expect(result.message).toMatch(/expired unanswered and can be asked again/);
-    expect(result.data).toEqual({ envelopeId: "env-1", expiresAt: "2026-10-14T08:00:00.000Z", status: "proposed" });
+    expect(result.data).toEqual({ envelopeId: "env-1", expiresAt: "2026-10-14T08:00:00.000Z", status: "proposed" }); // clock-bomb-guard: allow pass-through fixture; the code under test never compares it to the clock
   });
 });
 

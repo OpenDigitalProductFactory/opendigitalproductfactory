@@ -14,7 +14,7 @@ const REQUEST = {
   envelopeId: "env-1",
   toolName: "contribute_to_hive",
   status: "proposed",
-  expiresAt: "2099-01-01T00:15:00.000Z",
+  expiresAt: "2099-01-01T00:15:00.000Z", // clock-bomb-guard: allow pass-through fixture; the code under test never compares it to the clock
   rationale: "This action is defined as a proposal, so a person decides it.",
 };
 

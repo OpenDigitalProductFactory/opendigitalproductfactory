@@ -284,11 +284,11 @@ describe("S1 — chat ends a proposal-mode call on the approval request it raise
   it("writes the assistant message at the pre-allocated id, no proposal, and lists the raised requests on it", async () => {
     vi.mocked(governedExecuteTool).mockResolvedValue({
       success: false, error: "approval_required", message: "contribute_to_hive is waiting for a person to approve it.",
-      data: { envelopeId: "env-1", expiresAt: "2026-10-07T00:15:00.000Z" }, governance: { rejected: "approval_required" },
+      data: { envelopeId: "env-1", expiresAt: "2026-10-07T00:15:00.000Z" }, governance: { rejected: "approval_required" }, // clock-bomb-guard: allow pass-through fixture; the code under test never compares it to the clock
     } as never);
     mockPrisma.coworkerActionEnvelope.findMany.mockImplementation(async ({ where }: { where: { chatMessageId: { in: string[] } } }) => [{
       id: "env-1", chatMessageId: where.chatMessageId.in[0], manifestActionId: "contribute_to_hive", status: "proposed",
-      expiresAt: new Date("2026-10-07T00:15:00.000Z"), rationale: "This action is defined as a proposal, so a person decides it.",
+      expiresAt: new Date("2026-10-07T00:15:00.000Z"), rationale: "This action is defined as a proposal, so a person decides it.", // clock-bomb-guard: allow pass-through fixture; the code under test never compares it to the clock
     }]);
 
     const result = await sendMessage({ threadId: "thread-1", content: "Share it", routeContext: "/admin" });
@@ -308,7 +308,7 @@ describe("S1 — chat ends a proposal-mode call on the approval request it raise
       role: "assistant",
       approvalRequests: [{
         envelopeId: "env-1", toolName: "contribute_to_hive", status: "proposed",
-        expiresAt: "2026-10-07T00:15:00.000Z", rationale: "This action is defined as a proposal, so a person decides it.",
+        expiresAt: "2026-10-07T00:15:00.000Z", rationale: "This action is defined as a proposal, so a person decides it.", // clock-bomb-guard: allow pass-through fixture; the code under test never compares it to the clock
       }],
     });
     expect("agentMessage" in result && result.agentMessage.proposal).toBeUndefined();
