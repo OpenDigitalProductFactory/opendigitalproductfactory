@@ -26,6 +26,7 @@ import {
   type WorkShapeTriggerClass,
 } from "./work-shapes";
 import type { WorkroomShapeConformance } from "./workroom-shape-conformance";
+import { DELIVERY_AUTHOR_ROLE } from "./delivery-shapes";
 import { writebackLatchHolds, type PriorDriveForLatch } from "./writeback-latch";
 import {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
@@ -197,6 +198,8 @@ export function planStage(args: {
   if ((governed || humanStage) && !agentDrivesGovernedReview) {
     const reason: DriveReasonFor<"attention"> =
       governed ? "governed_decision" : parsed.kind === "role" ? "role_stage" : "person_stage";
+    // BI-8A32EBFF: an author stage an agent may not run names the missing condition.
+    const withheld = reason === "role_stage" && parsed.value === DELIVERY_AUTHOR_ROLE ? input.authorStageWithheldBecause : null;
     return {
       action: "attention",
       reason,
@@ -212,7 +215,10 @@ export function planStage(args: {
       conformance,
       cycle,
       deviations: [],
-      ledger: [`Stage ${stage.key} becomes attention (${reason}); the runner does not execute it.`],
+      ledger: [
+        `Stage ${stage.key} becomes attention (${reason}); the runner does not execute it.`,
+        ...(withheld ? [`An agent may not run it: ${withheld}`] : []),
+      ],
     };
   }
 

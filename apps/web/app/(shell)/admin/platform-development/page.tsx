@@ -4,6 +4,7 @@ import { namespaceMessages } from "@dpf/i18n";
 
 import { AcceptanceSweepCloseAuthorisationCard } from "@/components/admin/AcceptanceSweepCloseAuthorisationCard";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
+import { AuthorStagePreauthorisationCard } from "@/components/admin/AuthorStagePreauthorisationCard";
 import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
 import { McpOAuthClientManager } from "@/components/admin/McpOAuthClientManager";
@@ -14,6 +15,11 @@ import { getAutonomousPlaybookMode } from "@/lib/build/build-studio-config";
 import { auth } from "@/lib/auth";
 import { mayManageCloseAuthorisation } from "@/lib/backlog/acceptance-sweep/close-authorisation-access";
 import { loadCloseAuthorisationView, type CloseAuthorisationViewDb } from "@/lib/backlog/acceptance-sweep/close-authorisation-view";
+import {
+  loadAuthorStagePreauthorisationView,
+  mayManageAuthorStagePreauthorisation,
+  type AuthorStagePreauthorisationViewDb,
+} from "@/lib/work-management/author-stage-preauthorisation-view";
 import { PrivatePathsEditor } from "@/components/admin/PrivatePathsEditor";
 import TokenExpiryBanner from "@/components/admin/TokenExpiryBanner";
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
@@ -61,6 +67,11 @@ export default async function AdminPlatformDevelopmentPage() {
     && mayManageCloseAuthorisation({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser })
     ? await loadCloseAuthorisationView(prisma as unknown as CloseAuthorisationViewDb)
     : null;
+  // BI-8A32EBFF: the drive's author-stage pre-authorisation, only for people who may change it.
+  const authorStageView = session?.user
+    && mayManageAuthorStagePreauthorisation({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser })
+    ? await loadAuthorStagePreauthorisationView(prisma as unknown as AuthorStagePreauthorisationViewDb)
+    : null;
 
   return (
     <div>
@@ -93,6 +104,13 @@ export default async function AdminPlatformDevelopmentPage() {
         <div className="mb-6">
           <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
             <AcceptanceSweepCloseAuthorisationCard view={closeAuthorisationView} />
+          </MessagesProvider>
+        </div>
+      )}
+      {authorStageView && (
+        <div className="mb-6">
+          <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+            <AuthorStagePreauthorisationCard view={authorStageView} />
           </MessagesProvider>
         </div>
       )}

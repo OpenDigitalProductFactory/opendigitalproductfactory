@@ -133,6 +133,17 @@ reference, and never executes a `governed-decision` advance, at any posture. Tho
 attention for the named principal. Sending outward, moving money, rotating a credential,
 merging a change, and changing authority are declared that way in every standing shape.
 
+Two bounded exceptions bind a non-governed `role:` stage to an agent; neither ever reaches a
+`governed-decision` advance (`boundStagePrincipal`, `drive-plan-stage.ts`). A room may carry
+its own `workShapeRoleBindings` scope claim naming the agent that holds a role there
+(BI-C1781121). And a delivery shape's `role:author` stages bind to the software-engineer
+coworker for a tick when the operator's recorded pre-authorisation
+(`workroom-drive.author-stage-preauthorisation`, granted and revoked on
+**Admin > Platform Development**, off by default) is in force and the room's item is funded
+within budget: its portfolio has a budget this quarter and its delivered plus in-flight points
+fit it (`author-stage-autonomy.ts`, BI-8A32EBFF). `delivery-xlarge` never binds. When either
+condition fails the stage stays attention and the drive ledger names the missing condition.
+
 A room that never declared one gets a **derived** shape from what it already is
 (`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,
 `launch-readiness` is an approval sign-off, `governance` and `remediation` are consequential

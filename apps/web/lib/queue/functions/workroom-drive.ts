@@ -61,6 +61,7 @@ import {
 import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
 import { readWorkShapeRoleBindings, resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { loadAuthorStageAutonomy, NO_AUTHOR_STAGE_AUTONOMY, type AuthorStageAutonomyFor } from "@/lib/work-management/author-stage-autonomy-live";
 import {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
   resolveDrivePlan,
@@ -80,6 +81,8 @@ import { repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } 
 export type WorkroomDriveRoom = {
   id: string;
   capsuleId: string;
+  /** BI-8A32EBFF: the item the room delivers, for the author-stage budget check. */
+  backlogItemId?: string | null;
   scopeClaims: unknown;
   workspaceState: unknown;
   leaseExpiresAt: Date | null;
@@ -418,6 +421,7 @@ export async function runWorkroomDriveJob(
     effects?: WorkroomDriveEffects;
     reconcileNotifications?: () => Promise<void>;
     reconcileNesting?: () => Promise<number>;
+    authorStageAutonomy?: (rooms: WorkroomDriveRoom[], now: Date) => Promise<AuthorStageAutonomyFor>;
   },
 ): Promise<WorkroomDriveResult> {
   // Materialize the declared nesting before driving. The tree is declared in
@@ -457,6 +461,8 @@ export async function runWorkroomDriveJob(
     })));
   }
   const effects = deps?.effects ?? createWorkroomDriveEffects();
+  // BI-8A32EBFF: an agent runs role:author delivery stages only under the operator pre-authorisation, within budget.
+  const authorStage = await (deps?.authorStageAutonomy ?? (deps?.listRooms ? async () => NO_AUTHOR_STAGE_AUTONOMY : loadAuthorStageAutonomy))(rooms, now);
   const plans: WorkroomDriveResult["plans"] = [];
   let dispatched = 0;
   let attention = 0;
@@ -465,6 +471,7 @@ export async function runWorkroomDriveJob(
 
   for (const room of rooms) {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
+    const author = authorStage(room, shape?.key ?? null);
     const stored = readStoredWorkroomDriveState(room.workspaceState);
     const existing = room.receipts.length > 0 ? room.receipts : stored.receipts;
     // BI-853120EE: a sequential room's receipts belong to its run; a new run starts with none.
@@ -503,7 +510,8 @@ export async function runWorkroomDriveJob(
       workspaceState: room.workspaceState,
       recordedEvidence: room.recordedEvidence ?? [],
       ...(room.subShapeChildren ? { subShapeChildren: room.subShapeChildren } : {}),
-      roleBindings: readWorkShapeRoleBindings(room.scopeClaims),
+      roleBindings: { ...author.roleBindings, ...readWorkShapeRoleBindings(room.scopeClaims) },
+      authorStageWithheldBecause: author.withheldBecause,
     });
     plans.push({
       roomId: room.capsuleId,
@@ -587,6 +595,7 @@ async function loadStandingRooms(
     return [{
       id: row.id,
       capsuleId: row.capsuleId,
+      backlogItemId: row.backlogItemId,
       coordinatorEligibility: resolveCoordinatorEligibility({
         shapeKey,
         bindings: (shapeKey ? coordinationBindings?.get(shapeKey) : undefined) ?? [],
