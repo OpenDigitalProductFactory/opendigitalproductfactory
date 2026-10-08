@@ -14,6 +14,8 @@ import {
   type DriveReasonFor,
 } from "@/lib/work-management/drive-conclusion";
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
+
+import { NOT_ASKED_ACCOUNTABILITY, resolveAccountabilityForConclusion } from "./workroom-drive-accountability";
 import type { Prisma, PrismaClient } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
 import {
@@ -191,45 +193,6 @@ function postureLevelOf(scopeClaims: unknown): ProactivityLevel | null {
   return "balanced";
 }
 
-/**
- * The answer when nobody was asked, because the tick did not need an owner.
- * Never reaches a recorded blockage: driveOutcomeNeedsOwner gates the call.
- */
-const NOT_ASKED_ACCOUNTABILITY: EffectiveHumanAccountability = {
-  state: "setup-required",
-  reason: "no-organization-owner-recorded",
-  message: "Accountability was not resolved because this tick needed no owner.",
-  atWorkroomId: null,
-};
-
-async function resolveAccountabilityForConclusion(
-  roomId: string,
-  effects: WorkroomDriveEffects,
-): Promise<EffectiveHumanAccountability> {
-  if (!effects.resolveAccountability) {
-    return {
-      state: "setup-required",
-      reason: "no-organization-owner-recorded",
-      message:
-        "This drive was composed without an accountability resolver, so no owner could be named. "
-        + "Wire resolveAccountability into the drive's effects.",
-      atWorkroomId: roomId,
-    };
-  }
-  try {
-    return await effects.resolveAccountability(roomId);
-  } catch (error) {
-    // A failed lookup must not swallow the blockage. Record that the owner is
-    // unknown and why, which is still louder than stopping silently.
-    return {
-      state: "setup-required",
-      reason: "no-organization-owner-recorded",
-      message: `Accountability could not be read: ${error instanceof Error ? error.message : String(error)}`,
-      atWorkroomId: roomId,
-    };
-  }
-}
-
 export async function applyDrivePlan(input: {
   room: WorkroomDriveRoom;
   plan: DrivePlan;
@@ -264,7 +227,7 @@ export async function applyDrivePlan(input: {
     attentionPrincipalRef: plan.attentionPrincipalRef,
   });
   const accountability: EffectiveHumanAccountability = needsOwner
-    ? await resolveAccountabilityForConclusion(room.id, effects)
+    ? await resolveAccountabilityForConclusion(room.id, effects.resolveAccountability)
     : NOT_ASKED_ACCOUNTABILITY;
   const conclusion = resolveDriveConclusion({
     action: plan.action,
