@@ -690,6 +690,59 @@ test("a superseded slot record is INCONCLUSIVE and names the winning slot", () =
   assert.match(result.reason, /slot-1/);
 });
 
+// BI-A9031FF3: the winner is re-read, not trusted. Observed 2026-10-08: slot-0
+// said "slot-1 passed this SHA" while slot-1's own record had since become
+// blocked_control_plane_starvation — no slot held a pass, yet the reason said one did.
+const SUPERSEDED_BY_SLOT_1 = {
+  branch: "feat/x",
+  sha: HEAD,
+  gatePassed: false,
+  status: "superseded",
+  supersededStatus: "queued",
+  supersededBy: { slotKey: "slot-1", at: "2026-10-08T02:50:00.000Z" },
+};
+
+test("a superseded record whose winner no longer holds a pass does not claim one", () => {
+  const result = classifySlotRecord({
+    state: SUPERSEDED_BY_SLOT_1,
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+    supersedingWinner: { branch: "feat/x", sha: HEAD, gatePassed: false, status: "blocked_control_plane_starvation" },
+  });
+  assert.equal(result.verdict, "INCONCLUSIVE");
+  assert.doesNotMatch(result.reason, /passed/);
+  assert.match(result.reason, /slot-1/);
+  assert.match(result.reason, /blocked_control_plane_starvation/);
+  assert.match(result.reason, /re-run pregate/i);
+});
+
+test("a superseded record whose winner record is gone says so instead of claiming a pass", () => {
+  const result = classifySlotRecord({
+    state: SUPERSEDED_BY_SLOT_1,
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+    supersedingWinner: null,
+  });
+  assert.doesNotMatch(result.reason, /passed/);
+  assert.match(result.reason, /no record/);
+});
+
+test("a superseded record whose winner still passed this SHA keeps the passed wording", () => {
+  const result = classifySlotRecord({
+    state: SUPERSEDED_BY_SLOT_1,
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+    supersedingWinner: { branch: "feat/x", sha: HEAD, gatePassed: true, status: "passed" },
+  });
+  assert.match(result.reason, /slot-1 passed this SHA/);
+});
+
 test("reconciliation still prefers the PASS over a superseded sibling", () => {
   const passed = {
     slotKey: "slot-1",
