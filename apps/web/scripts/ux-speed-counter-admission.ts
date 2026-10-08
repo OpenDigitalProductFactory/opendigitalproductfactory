@@ -10,7 +10,7 @@
  * marked "admitted" there are ever gated (speed-counter-ratchet.ts).
  *
  * Usage (against a running portal, same flags as ux:sweep):
- *   pnpm --filter web ux:speed-admission -- --base-url http://localhost:3000 [--routes a,b] [--workers 1]
+ *   pnpm --filter web exec tsx scripts/ux-speed-counter-admission.ts --base-url http://localhost:3000 [--routes a,b] [--workers 1]
  */
 
 import { spawnSync } from "node:child_process";

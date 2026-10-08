@@ -21,7 +21,6 @@
     "build:route-audience": "tsx scripts/build-route-audience.ts",
     "check:route-audience": "tsx scripts/build-route-audience.ts --check",
     "ux:sweep": "tsx scripts/ux-route-sweep.ts",
-    "ux:speed-admission": "tsx scripts/ux-speed-counter-admission.ts",
     "ux:sweep-merge-baselines": "tsx scripts/merge-ux-route-baselines.ts",
     "ux:sweep-fixture": "tsx scripts/ux-sweep-fixture.ts",
     "build:route-shells": "tsx scripts/build-route-shells.ts",
