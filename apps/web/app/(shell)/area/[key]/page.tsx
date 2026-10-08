@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { namespaceMessages } from "@dpf/i18n";
 import { notFound, redirect } from "next/navigation";
 
 import { PortfolioFlowTiles, ShapeFlowDrillIn } from "@/components/ops/workrooms/AreaFlowPanel";
 import { WorkroomActivitySection } from "@/components/ops/workrooms/WorkroomActivitySection";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { SectionNav } from "@/components/shell/SectionNav";
 import { Surface } from "@/components/ui/Surface";
 import { loadAreaTeam } from "@/lib/areas/area-team.server";
@@ -10,6 +12,7 @@ import { auth } from "@/lib/auth";
 import { getAreaSetupEntries } from "@/lib/navigation/portal-navigation-model";
 import { AREA_SECTIONS, areaHref } from "@/lib/navigation/portal-shell-sections";
 import { getT } from "@/lib/i18n/t.server";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { loadPortfolioFlowView, loadShapeFlowView } from "@/lib/work-management/area-flow.server";
 import { can, getGrantedCapabilities } from "@/lib/permissions";
 
@@ -47,6 +50,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
 
   const t = await getT("shell");
   const tFlow = await getT("workrooms");
+  const locale = await getLocaleContext();
   const granted = new Set<string>(getGrantedCapabilities(user));
   const setupEntries = getAreaSetupEntries(section.key).filter(
     (entry) => entry.capabilityKey === null || granted.has(entry.capabilityKey),
@@ -94,7 +98,9 @@ export default async function AreaPage({ params, searchParams }: Props) {
           <>
             {shapeFlow ? (
               <div className="my-6">
-                <ShapeFlowDrillIn view={shapeFlow} backHref={workHref} baseHref={workHref} stageKey={stage ?? null} t={tFlow} />
+                <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
+                  <ShapeFlowDrillIn view={shapeFlow} backHref={workHref} baseHref={workHref} stageKey={stage ?? null} t={tFlow} />
+                </MessagesProvider>
               </div>
             ) : portfolioFlow ? (
               <div className="my-6">

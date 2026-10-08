@@ -3,6 +3,8 @@
 import { useId } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { Surface } from "@/components/ui/Surface";
+import { useT } from "@/lib/i18n/use-t";
 import { TRIGGER_GLYPH } from "@/lib/work-management/shape-signature";
 import { describeHoldCause } from "@/lib/work-management/workroom-stage-telemetry";
 import { formatDuration } from "@/lib/datetime";
@@ -15,11 +17,7 @@ import {
 // Layout (spec 2026-10-02 §4): three lanes by who does the step, top to bottom
 // Outside → People → AI coworkers; steps left to right; a band underneath
 // carries this room's time on each step against the shape's typical time.
-const LANES = [
-  { key: "outside", label: "Outside" },
-  { key: "people", label: "People" },
-  { key: "ai", label: "AI coworkers" },
-] as const;
+const LANES = ["outside", "people", "ai"] as const;
 const LANE_H = 64;
 const TOP = 8;
 const LABEL_W = 92;
@@ -27,14 +25,6 @@ const COL_W = 200;
 const BOX_W = 132;
 const BOX_H = 40;
 const TIMING_H = 52;
-
-const STATE_LABEL: Record<FlowMapStageState, string> = {
-  done: "Done",
-  working: "Being worked",
-  "awaiting-person": "Waiting on a person",
-  blocked: "Blocked",
-  ahead: "Not reached",
-};
 
 // State is carried by form as well as colour: border weight, dash and a glyph.
 const STATE_STYLE: Record<FlowMapStageState, { stroke: string; width: number; dash?: string; glyph: string }> = {
@@ -52,24 +42,25 @@ function causeLabel(cause: string | null): string | null {
   return cause ? describeHoldCause(cause) : null;
 }
 
-function timingLines(stage: FlowMapStage): { text: string; tone: "text" | "muted" | "warning" }[] {
+type MapT = ReturnType<typeof useT<"workrooms">>;
+
+function timingLines(stage: FlowMapStage, t: MapT): { text: string; tone: "text" | "muted" | "warning" }[] {
   const lines: { text: string; tone: "text" | "muted" | "warning" }[] = [];
   if (stage.queue) {
     lines.push({
-      text: stage.queue.wip === 0 ? "no rooms here" : `${stage.queue.wip} here · ${stage.queue.depth} waiting`,
+      text: stage.queue.wip === 0 ? t("flow.map.noRooms") : t("flow.map.queue", { wip: stage.queue.wip, depth: stage.queue.depth }),
       tone: stage.queue.depth > 0 && stage.queue.depth === stage.queue.wip ? "warning" : "text",
     });
   }
   if (stage.room) {
-    lines.push({
-      text: `${stage.room.open ? "here for" : "took"} ${formatDuration(stage.room.dwellMs)}`,
-      tone: stage.slow ? "warning" : "text",
-    });
+    const duration = formatDuration(stage.room.dwellMs);
+    const text = stage.room.open ? t("flow.map.hereFor", { duration }) : t("flow.map.took", { duration });
+    lines.push({ text: stage.slow ? `${text} · ${t("flow.map.slow")}` : text, tone: stage.slow ? "warning" : "text" });
   }
   lines.push(
     stage.typical
-      ? { text: `typical ${formatDuration(stage.typical.dwellMs)} · ${stage.typical.exits} runs`, tone: "muted" }
-      : { text: "not enough history yet", tone: "muted" },
+      ? { text: t("flow.map.typical", { duration: formatDuration(stage.typical.dwellMs), runs: stage.typical.exits }), tone: "muted" }
+      : { text: t("flow.map.notEnough"), tone: "muted" },
   );
   return lines;
 }
@@ -87,6 +78,8 @@ export function WorkroomFlowMap({
   stageHrefBase?: string;
 }) {
   const titleId = useId();
+  const t = useT("workrooms");
+  const stateLabel = (state: FlowMapStageState) => t(`flow.map.states.${state}`);
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams().toString();
@@ -106,11 +99,9 @@ export function WorkroomFlowMap({
   if (model.graphFlow) {
     return (
       <section aria-labelledby={titleId} className="space-y-2 text-sm text-[var(--dpf-text)]">
-        <h3 id={titleId} className="font-medium">Flow</h3>
+        <h3 id={titleId} className="font-medium">{t("flow.map.title")}</h3>
         <p className="font-mono text-xs text-[var(--dpf-text-secondary)] break-words">{model.signature}</p>
-        <p className="text-[var(--dpf-muted)]">
-          This shape runs some steps in parallel. The steps are listed below; the drawn map shows parallel branches once it can draw them exactly.
-        </p>
+        <p className="text-[var(--dpf-muted)]">{t("flow.map.parallel")}</p>
       </section>
     );
   }
@@ -125,27 +116,27 @@ export function WorkroomFlowMap({
   const trigger = model.triggers[0];
 
   const summary = stages
-    .map((stage) => `${stage.title}: ${STATE_LABEL[stage.state]}${stage.room ? `, ${formatDuration(stage.room.dwellMs)}` : ""}`)
+    .map((stage) => `${stage.title}: ${stateLabel(stage.state)}${stage.room ? `, ${formatDuration(stage.room.dwellMs)}` : ""}`)
     .join("; ");
 
   return (
     <section aria-labelledby={titleId} className="space-y-2 text-sm text-[var(--dpf-text)]">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 id={titleId} className="font-medium">Flow</h3>
+        <h3 id={titleId} className="font-medium">{t("flow.map.title")}</h3>
         <p className="text-xs text-[var(--dpf-muted)]">{model.shapeRef}</p>
       </div>
       <p className="font-mono text-xs text-[var(--dpf-text-secondary)] break-words">{model.signature}</p>
-      <div className="overflow-x-auto rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+      <Surface padding="none" rounded="lg" className="overflow-x-auto">
         <svg
           role="group"
-          aria-label={`Flow map. ${summary}`}
+          aria-label={t("flow.map.aria", { summary })}
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}
           className="block"
         >
           {LANES.map((lane, index) => (
-            <g key={lane.key}>
+            <g key={lane}>
               <rect
                 x={0}
                 y={TOP + index * LANE_H}
@@ -154,7 +145,7 @@ export function WorkroomFlowMap({
                 fill={index % 2 === 0 ? "var(--dpf-surface-2)" : "var(--dpf-surface-1)"}
               />
               <text x={12} y={TOP + index * LANE_H + 20} fontSize={11} fontWeight={600} fill="var(--dpf-muted)">
-                {lane.label}
+                {t(`flow.map.lanes.${lane}`)}
               </text>
             </g>
           ))}
@@ -193,8 +184,15 @@ export function WorkroomFlowMap({
             const style = STATE_STYLE[stage.state];
             const isSelected = selected === stage.key;
             const cause = causeLabel(stage.holdCause);
-            const stateText = stage.queue ? (stage.queue.wip === 0 ? "No rooms here" : `${stage.queue.wip} rooms here, ${stage.queue.depth} waiting`) : STATE_LABEL[stage.state];
-            const label = `${stage.title}. ${stateText}${cause ? `: ${cause}` : ""}.${stage.room ? ` This room ${stage.room.open ? "has been here" : "took"} ${formatDuration(stage.room.dwellMs)}.` : ""}${stage.typical ? ` Typical ${formatDuration(stage.typical.dwellMs)}.` : ""}${stage.governed ? ` A person decides the way out (${stage.principalRef}).` : ""}`;
+            const stateText = stage.queue
+              ? (stage.queue.wip === 0 ? t("flow.map.noRooms") : t("flow.map.stepQueue", { wip: stage.queue.wip, depth: stage.queue.depth }))
+              : stateLabel(stage.state);
+            const label = [
+              `${stage.title}. ${stateText}${cause ? `: ${cause}` : ""}.`,
+              stage.room ? t("flow.map.stepRoomTime", { verb: stage.room.open ? t("flow.map.verbHere") : t("flow.map.verbTook"), duration: formatDuration(stage.room.dwellMs) }) : null,
+              stage.typical ? t("flow.map.stepTypical", { duration: formatDuration(stage.typical.dwellMs) }) : null,
+              stage.governed ? t("flow.map.stepDecides", { principal: stage.principalRef }) : null,
+            ].filter(Boolean).join(" ");
             return (
               <g
                 key={stage.key}
@@ -215,7 +213,7 @@ export function WorkroomFlowMap({
                   <g aria-hidden="true">
                     <path d={`M${x + BOX_W / 2} ${y} V${TOP + LANE_H - 18}`} stroke="var(--dpf-accent)" strokeDasharray="3 3" fill="none" />
                     <rect x={x + BOX_W / 2 - 44} y={TOP + LANE_H - 40} width={88} height={22} rx={11} fill="var(--dpf-surface-1)" stroke="var(--dpf-accent)" />
-                    <text x={x + BOX_W / 2} y={TOP + LANE_H - 25} fontSize={11} textAnchor="middle" fill="var(--dpf-text)">touchpoint</text>
+                    <text x={x + BOX_W / 2} y={TOP + LANE_H - 25} fontSize={11} textAnchor="middle" fill="var(--dpf-text)">{t("flow.map.touchpoint")}</text>
                   </g>
                 ) : null}
                 <rect
@@ -234,7 +232,7 @@ export function WorkroomFlowMap({
                   {stage.title.length > 18 ? `${stage.title.slice(0, 17)}…` : stage.title}
                 </text>
                 <text x={x + 10} y={y + 32} fontSize={10.5} fill="var(--dpf-text-secondary)">
-                  {stage.queue ? (stage.queue.wip > 0 ? `${stage.queue.wip} in step` : "—") : `${style.glyph ? `${style.glyph} ` : ""}${cause ?? STATE_LABEL[stage.state]}`}
+                  {stage.queue ? (stage.queue.wip > 0 ? t("flow.map.inStep", { count: stage.queue.wip }) : "—") : `${style.glyph ? `${style.glyph} ` : ""}${cause ?? stateLabel(stage.state)}`}
                 </text>
                 {stage.governed ? (
                   <g aria-hidden="true">
@@ -248,7 +246,7 @@ export function WorkroomFlowMap({
                     <text x={x + BOX_W + 26} y={y + BOX_H / 2 + 4} fontSize={10} textAnchor="middle" fill="var(--dpf-text)">◇</text>
                   </g>
                 ) : null}
-                {timingLines(stage).map((line, lineIndex) => (
+                {timingLines(stage, t).map((line, lineIndex) => (
                   <text
                     key={line.text}
                     x={x}
@@ -257,7 +255,7 @@ export function WorkroomFlowMap({
                     fontWeight={line.tone === "warning" ? 600 : 400}
                     fill={line.tone === "warning" ? "var(--dpf-warning)" : line.tone === "muted" ? "var(--dpf-muted)" : "var(--dpf-text)"}
                   >
-                    {line.text}{line.tone === "warning" && !stage.queue ? " · slow" : ""}
+                    {line.text}
                   </text>
                 ))}
               </g>
@@ -287,9 +285,9 @@ export function WorkroomFlowMap({
             </marker>
           </defs>
         </svg>
-      </div>
+      </Surface>
       <p className="text-xs text-[var(--dpf-muted)]">
-        ▶ being worked · ◷ waiting on a person · ! blocked · ✓ done · ◇ a person decides · ● done · ⊗ declared failure. Times are this room's latest pass; typical is the shape&apos;s last four weeks.
+        {t("flow.map.legend")} {model.aggregate ? t("flow.map.legendAggregate") : t("flow.map.legendRoom")}
       </p>
     </section>
   );

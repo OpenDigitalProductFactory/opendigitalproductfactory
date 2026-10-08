@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { namespaceMessages } from "@dpf/i18n";
 import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { Surface } from "@/components/ui/Surface";
 import { WorkroomFlowMap } from "@/components/workspace/workroom/WorkroomFlowMap";
 import { AREA_SECTIONS } from "@/lib/navigation/portal-shell-sections";
@@ -9,6 +11,7 @@ import { bottleneckSentence, heroShape, resolveHeroPortfolio, type PortfolioDeco
 import { getWorkShape } from "@/lib/work-management/work-shapes";
 import { formatDuration } from "@/lib/datetime";
 import { getT } from "@/lib/i18n/t.server";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 
 /**
  * L0 of the workroom flow view (EP-B70E718D F7): the archetype's main
@@ -29,6 +32,7 @@ export async function MainStreamHero({ archetypeId }: { archetypeId: string | nu
   const view = shape ? await loadShapeFlowView({ shapeKey: shape.shapeKey, portfolioRole: role }).catch(() => null) : null;
   const sentence = bottleneckSentence(flow, (key) => getWorkShape(key)?.title ?? key);
   const t = await getT("workrooms");
+  const locale = await getLocaleContext();
 
   return (
     <Surface as="section" aria-labelledby="main-stream-heading" className="my-6 space-y-3" rounded="xl">
@@ -48,7 +52,9 @@ export async function MainStreamHero({ archetypeId }: { archetypeId: string | nu
         <div><dt className="text-xs text-[var(--dpf-muted)]">{t("flow.perWeek")}</dt><dd className="font-semibold tabular-nums text-[var(--dpf-text)]">{flow.throughput.perWeek.toFixed(1)}</dd></div>
       </dl>
       {view ? (
-        <WorkroomFlowMap model={view.model} stageHrefBase={`${workHref}&shape=${encodeURIComponent(view.model.shapeRef.split("@")[0]!)}`} />
+        <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
+          <WorkroomFlowMap model={view.model} stageHrefBase={`${workHref}&shape=${encodeURIComponent(view.model.shapeRef.split("@")[0]!)}`} />
+        </MessagesProvider>
       ) : null}
     </Surface>
   );

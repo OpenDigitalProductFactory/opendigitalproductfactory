@@ -5,8 +5,7 @@
   "scope": {
     "files": [
       "apps/web/components/ops/workrooms/AreaFlowPanel.tsx",
-      "apps/web/app/(shell)/area/[key]/page.tsx",
-      "apps/web/app/(shell)/portfolio/[[...slug]]/page.tsx"
+      "apps/web/components/ops/workrooms/AreaFlowTables.tsx"
     ]
   },
   "evidence": {

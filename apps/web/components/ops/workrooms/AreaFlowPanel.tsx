@@ -4,6 +4,8 @@ import type { MessageArgs, MessageKey } from "@dpf/i18n";
 
 import { KpiCard } from "@/components/ui/report-kit/KpiCard";
 import { WorkroomFlowMap } from "@/components/workspace/workroom/WorkroomFlowMap";
+
+import { PortfolioComparisonTable, ShapeFlowTable } from "./AreaFlowTables";
 import type { PortfolioFlowWithCost, ShapeFlowView } from "@/lib/work-management/area-flow.server";
 import { FLOW_ITEM_TYPES, FLOW_WINDOW_DAYS, type FlowItemType } from "@/lib/work-management/portfolio-flow";
 import { getWorkShape } from "@/lib/work-management/work-shapes";
@@ -119,37 +121,20 @@ export function PortfolioFlowTiles({ flow, areaHref, t }: { flow: PortfolioFlowW
         </div>
       ) : null}
       {flow.shapes.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[36rem] text-start text-sm text-[var(--dpf-text)]">
-            <caption className="sr-only">{t("flow.shapesCaption")}</caption>
-            <thead className="text-xs text-[var(--dpf-muted)]">
-              <tr>
-                <th scope="col" className="py-2 pe-3 font-medium">{t("flow.colShape")}</th>
-                <th scope="col" className="py-2 pe-3 font-medium">{t("flow.colInFlow")}</th>
-                <th scope="col" className="py-2 pe-3 font-medium">{t("flow.colFlowTime")}</th>
-                <th scope="col" className="py-2 font-medium">{t("flow.colWaits")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--dpf-border)]">
-              {flow.shapes.map((shape) => (
-                <tr key={shape.shapeRef}>
-                  <td className="py-2 pe-3">
-                    <Link className="text-[var(--dpf-accent)] hover:underline" href={`${areaHref}&shape=${encodeURIComponent(shape.shapeKey)}`}>
-                      {getWorkShape(shape.shapeKey)?.title ?? shape.shapeKey}
-                    </Link>
-                  </td>
-                  <td className="py-2 pe-3 tabular-nums">{shape.roomsInFlow}</td>
-                  <td className="py-2 pe-3 tabular-nums">{shape.flowTimeP50Ms == null ? "—" : formatDuration(shape.flowTimeP50Ms)}</td>
-                  <td className="py-2 text-[var(--dpf-text-secondary)]">
-                    {shape.bottleneck
-                      ? t("flow.bottleneck", { count: shape.bottleneck.roomsHeld, stage: shape.bottleneck.stageKey, cause: describeHoldCause(shape.bottleneck.cause) })
-                      : t("flow.nothingWaiting")}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ShapeFlowTable
+          ariaLabel={t("flow.shapesCaption")}
+          headers={{ shape: t("flow.colShape"), inFlow: t("flow.colInFlow"), flowTime: t("flow.colFlowTime"), waits: t("flow.colWaits") }}
+          rows={flow.shapes.map((shape) => ({
+            key: shape.shapeRef,
+            href: `${areaHref}&shape=${encodeURIComponent(shape.shapeKey)}`,
+            title: getWorkShape(shape.shapeKey)?.title ?? shape.shapeKey,
+            inFlow: shape.roomsInFlow,
+            flowTime: shape.flowTimeP50Ms == null ? "—" : formatDuration(shape.flowTimeP50Ms),
+            waits: shape.bottleneck
+              ? t("flow.bottleneck", { count: shape.bottleneck.roomsHeld, stage: shape.bottleneck.stageKey, cause: describeHoldCause(shape.bottleneck.cause) })
+              : t("flow.nothingWaiting"),
+          }))}
+        />
       ) : (
         <p className="text-sm text-[var(--dpf-muted)]">{t("flow.noneInFlowArea")}</p>
       )}
@@ -217,30 +202,12 @@ export function PortfolioFlowComparison({ flows, areaHrefByRole, t }: { flows: P
     <section aria-labelledby="portfolio-flow-heading" className="my-6 space-y-2">
       <h2 id="portfolio-flow-heading" className="text-base font-semibold text-[var(--dpf-text)]">{t("flow.comparisonHeading")}</h2>
       <p className="text-xs text-[var(--dpf-muted)]">{t("flow.comparisonNote", { days: FLOW_WINDOW_DAYS })}</p>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[40rem] text-start text-sm text-[var(--dpf-text)]">
-          <thead>
-            <tr className="text-xs text-[var(--dpf-muted)]">
-              <th scope="col" className="py-2 pe-3 font-medium"><span className="sr-only">{t("flow.measure")}</span></th>
-              {flows.map((f) => (
-                <th key={f.key} scope="col" className="py-2 pe-3 font-medium">
-                  {areaHrefByRole[f.key]
-                    ? <Link className="text-[var(--dpf-accent)] hover:underline" href={areaHrefByRole[f.key]!}>{t(`flow.portfolios.${f.key}`)}</Link>
-                    : t(`flow.portfolios.${f.key}`)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--dpf-border)]">
-            {rows.map((row) => (
-              <tr key={row.label}>
-                <th scope="row" className="py-2 pe-3 font-normal text-[var(--dpf-text-secondary)]">{row.label}</th>
-                {flows.map((f) => <td key={f.key} className="py-2 pe-3 tabular-nums">{row.value(f)}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <PortfolioComparisonTable
+        ariaLabel={t("flow.comparisonHeading")}
+        measureHeader={t("flow.measure")}
+        portfolios={flows.map((f) => ({ key: f.key, label: t(`flow.portfolios.${f.key}`), href: areaHrefByRole[f.key] ?? null }))}
+        rows={rows.map((row) => ({ key: row.label, measure: row.label, values: flows.map((f) => row.value(f)) }))}
+      />
     </section>
   );
 }

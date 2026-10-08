@@ -4,8 +4,7 @@
   "decisionInteractionId": "DI-10A2E3AC2DF9",
   "scope": {
     "files": [
-      "apps/web/components/workspace-home/MainStreamHero.tsx",
-      "apps/web/app/(shell)/workspace/page.tsx"
+      "apps/web/components/workspace-home/MainStreamHero.tsx"
     ]
   },
   "evidence": {

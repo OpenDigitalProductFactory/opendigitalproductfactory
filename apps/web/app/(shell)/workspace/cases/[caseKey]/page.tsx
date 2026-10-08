@@ -105,13 +105,13 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
 
   return (
     <>
-      {stageDecision || shapeRebind ? (
-        // The decision controls translate with useT("workrooms"); provide it only when rendered.
+      {stageDecision || shapeRebind || flowMap ? (
+        // The decision controls and the flow map translate with useT("workrooms"); provide it only when rendered.
         <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
           <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} stageDecision={stageDecision} shapeRebind={shapeRebind} flowMap={flowMap} navigationContext={query} />
         </MessagesProvider>
       ) : (
-        <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} flowMap={flowMap} navigationContext={query} />
+        <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} navigationContext={query} />
       )}
       {workforce ? (
         <div className="mt-4">

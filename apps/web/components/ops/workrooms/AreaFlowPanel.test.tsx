@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { cleanup, render as rtlRender, screen, within } from "@testing-library/react";
 
 import type { PortfolioFlowWithCost, ShapeFlowView } from "@/lib/work-management/area-flow.server";
 import { getWorkShape } from "@/lib/work-management/work-shapes";
@@ -12,6 +14,9 @@ import { translate } from "@dpf/i18n";
 import { PortfolioFlowComparison, PortfolioFlowTiles, ShapeFlowDrillIn, type FlowT } from "./AreaFlowPanel";
 
 const t: FlowT = (key, args) => translate("en-US", "workrooms", key, args);
+
+const render = (ui: React.ReactElement) =>
+  rtlRender(<MessagesProvider locale="en-US" messages={{ workrooms: namespaceMessages("en-US", "workrooms") }}>{ui}</MessagesProvider>);
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams("view=work&shape=delivery-small"),

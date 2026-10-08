@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { cleanup, render as rtlRender, fireEvent, screen } from "@testing-library/react";
 
 import { getWorkShape } from "@/lib/work-management/work-shapes";
 import { buildWorkroomFlowMap } from "@/lib/work-management/workroom-flow-map";
@@ -9,6 +11,9 @@ import { buildWorkroomFlowMap } from "@/lib/work-management/workroom-flow-map";
 import { WorkroomFlowMap } from "./WorkroomFlowMap";
 
 const replace = vi.fn();
+const render = (ui: React.ReactElement) =>
+  rtlRender(<MessagesProvider locale="en-US" messages={{ workrooms: namespaceMessages("en-US", "workrooms") }}>{ui}</MessagesProvider>);
+
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams("processLayout=map"),
   usePathname: () => "/workspace/cases/WC-1",

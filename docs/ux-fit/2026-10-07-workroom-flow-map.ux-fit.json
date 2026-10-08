@@ -4,8 +4,7 @@
   "decisionInteractionId": "DI-D4299F91D3A0",
   "scope": {
     "files": [
-      "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx",
-      "apps/web/components/workspace/workroom/WorkroomShapeSection.tsx"
+      "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx"
     ]
   },
   "evidence": {

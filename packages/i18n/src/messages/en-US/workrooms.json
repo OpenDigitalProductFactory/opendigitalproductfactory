@@ -119,6 +119,41 @@
     "heroHeading": "Main value stream · {$area}",
     "heroOpen": "Open {$area}",
     "heroNothingWaiting": "Nothing is waiting right now.",
-    "heroNoneInFlow": "No work is in flow here right now."
+    "heroNoneInFlow": "No work is in flow here right now.",
+    "map": {
+      "title": "Flow",
+      "lanes": {
+        "outside": "Outside",
+        "people": "People",
+        "ai": "AI coworkers"
+      },
+      "states": {
+        "done": "Done",
+        "working": "Being worked",
+        "awaiting-person": "Waiting on a person",
+        "blocked": "Blocked",
+        "ahead": "Not reached"
+      },
+      "parallel": "This shape runs some steps in parallel. The steps are listed below; the drawn map will show branches once it can draw them exactly.",
+      "touchpoint": "touchpoint",
+      "hereFor": "here for {$duration}",
+      "took": "took {$duration}",
+      "typical": "typical {$duration} · {$runs} runs",
+      "notEnough": "not enough history yet",
+      "slow": "slow",
+      "queue": "{$wip} here · {$depth} waiting",
+      "noRooms": "no rooms here",
+      "inStep": "{$count} in step",
+      "aria": "Flow map. {$summary}",
+      "stepRoomTime": "This room {$verb} {$duration}.",
+      "verbHere": "has been here",
+      "verbTook": "took",
+      "stepTypical": "Typical {$duration}.",
+      "stepDecides": "A person decides the way out ({$principal}).",
+      "stepQueue": "{$wip} rooms here, {$depth} waiting",
+      "legend": "▶ being worked · ◷ waiting on a person · ! blocked · ✓ done · ◇ a person decides · ● done · ⊗ declared failure.",
+      "legendRoom": "Times are this room's latest pass; typical is the shape's last four weeks.",
+      "legendAggregate": "Counts are rooms at each step now; typical is the shape version's last four weeks."
+    }
   }
 }

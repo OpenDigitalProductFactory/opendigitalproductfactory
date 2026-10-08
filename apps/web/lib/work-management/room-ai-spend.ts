@@ -7,7 +7,7 @@
  * the platform that created them:
  *
  *   scheduled:workroom-<capsuleId>-<shapeKey>          the drive's dispatched stage work
- *   coworker:/workspace/cases/work-capsule%3A<capsuleId>  the room's own conversation
+ *   coworker:/workspace/cases/<the room's case key>        the room's own conversation
  *
  * Every inference on those threads is already costed in AdapterRunTelemetry
  * (the per-thread ledger, BI-CCF1ACBB). Joining the two attributes spend to a
