@@ -87,7 +87,7 @@ Unifying local audio onto the chat path remains attractive and is filed separate
 
 ### Out of scope, deliberately
 
-- **The `dpf-tts` sidecar stays.** It is pinned by version tag (`travisvn/chatterbox-tts-api:v0.1.0`), not a mutable index digest, so it does not participate in this failure mode. Local zero-shot voice cloning is a differentiated capability no hosted provider replaces cheaply. Only its enablement signal is touched.
+- **The `dpf-tts` sidecar stays.** It is pinned by version tag (`travisvn/chatterbox-tts-api:v0.1.0`), not a mutable index digest, so it does not participate in this failure mode. *(Later correction: the publisher deleted that tag too; BI-E2763038 re-pinned it by tag and digest.)* Local zero-shot voice cloning is a differentiated capability no hosted provider replaces cheaply. Only its enablement signal is touched.
 - Gemini transcription adapter.
 - Unifying local audio onto the chat-completions path.
 - Streaming partial transcripts.

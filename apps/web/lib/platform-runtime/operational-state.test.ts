@@ -65,6 +65,30 @@ describe("createOperationalCapabilityState", () => {
     expect(degraded.serviceStates["browser-use"]).toBe("optional_degraded");
   });
 
+  // BI-E2763038: the catalog declares dpf-tts for linux/windows only (macOS speaks
+  // through the host-native Chatterbox service), and the promoter filters by the
+  // install-state platform. The portal projection must agree, or a macOS install
+  // reports a Docker service it never runs as degraded and owes it a backup.
+  it("projects services for the install's own host platform", () => {
+    const enabled = ["runtime:core", "runtime:local-speech"];
+    const onHost = (platform: string) => createOperationalCapabilityState({
+      installSnapshot: { ...snapshot(enabled), platform },
+      capabilityStates: catalogStates(enabled),
+      observedServices: {},
+      observedProviders: {},
+    });
+
+    const macos = onHost("darwin");
+    expect(macos.serviceRequirements.map((item) => item.service)).not.toContain("dpf-tts");
+    expect(macos.backupServices).not.toContain("dpf-tts");
+    expect(macos.serviceStates["dpf-tts"]).toBe("optional_inactive");
+
+    const linux = onHost("linux");
+    expect(linux.serviceRequirements.map((item) => item.service)).toContain("dpf-tts");
+    expect(linux.serviceStates["dpf-tts"]).toBe("optional_degraded");
+    expect(onHost("win32").backupServices).toContain("dpf-tts");
+  });
+
   it("loads live capability state and the persisted install snapshot", async () => {
     const state = await loadOperationalCapabilityState({
       observedServices: {},
