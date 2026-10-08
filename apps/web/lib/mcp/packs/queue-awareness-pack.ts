@@ -64,8 +64,11 @@ async function getQueueStatusHandler(params: Record<string, unknown>): Promise<T
   const queueKey = typeof params["queueKey"] === "string" ? params["queueKey"].trim() : undefined;
   const limit = typeof params["limit"] === "number" ? params["limit"] : undefined;
   const snapshots = await readQueueSnapshots({ queueKey: queueKey || undefined, limit });
+  // BI-BC5C47D4: work a bounded retry gave up on, alongside the flow metrics.
+  const { readDeadLetters } = await import("@/lib/queue/dead-letters");
+  const deadLetters = (await readDeadLetters().catch(() => [])).filter((d) => d.count > 0);
 
-  if (snapshots.length === 0) {
+  if (snapshots.length === 0 && deadLetters.length === 0) {
     return {
       success: true,
       message: queueKey
@@ -96,22 +99,32 @@ async function getQueueStatusHandler(params: Record<string, unknown>): Promise<T
     };
   });
 
-  const summary = queueKey
+  const summary = queueKey && queues.length
     ? `Queue ${queueKey}: ${queues[0]!.health}, depth ${queues[0]!.depth}, p95 wait ${queues[0]!.waitP95}, throughput ${queues[0]!.throughput}, first-pass yield ${queues[0]!.firstPassYield}.`
     : `${queues.length} queue(s) with activity today. ${
         queues.filter((q) => q.health === "at-risk").length
       } at-risk.`;
 
-  return { success: true, message: summary, data: { queues } };
+  const deadLetterNote = deadLetters.length
+    ? ` Dead letters: ${deadLetters.map((d) => `${d.count} ${d.label.toLowerCase()}`).join("; ")}.`
+    : "";
+  return { success: true, message: `${summary}${deadLetterNote}`, data: { queues, deadLetters } };
 }
 
 async function listAtRiskQueuesHandler(): Promise<ToolResult> {
   const { readAtRiskQueues } = await import("@/lib/queue/queue-snapshot-service");
   const atRisk = await readAtRiskQueues();
-  if (atRisk.length === 0) {
+  const { readDeadLetters } = await import("@/lib/queue/dead-letters");
+  const deadLetters = (await readDeadLetters().catch(() => [])).filter((d) => d.count > 0);
+  const deadLetterQueues = deadLetters.map((d) => ({
+    queueKey: d.queueKey,
+    reasons: [`dead letters: ${d.count} ${d.label.toLowerCase()}`],
+    latest: d.latest,
+  }));
+  if (atRisk.length === 0 && deadLetterQueues.length === 0) {
     return { success: true, message: "No queues are at-risk right now.", data: { queues: [] } };
   }
-  const queues = atRisk.map(({ snapshot, assessment }) => ({
+  const flowQueues = atRisk.map(({ snapshot, assessment }) => ({
     queueKey: snapshot.queueKey,
     reasons: assessment.reasons,
     depth: snapshot.depth,
@@ -119,6 +132,7 @@ async function listAtRiskQueuesHandler(): Promise<ToolResult> {
     firstPassYield: pct(snapshot.firstPassYield),
     slaAttainment: pct(snapshot.slaAttainment),
   }));
+  const queues = [...flowQueues, ...deadLetterQueues];
   return {
     success: true,
     message: `${queues.length} at-risk queue(s): ${queues.map((q) => q.queueKey).join(", ")}.`,
