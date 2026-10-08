@@ -23,6 +23,7 @@ import {
   buildWorkCapsuleScopeClaims,
 } from "@/lib/work-capsules";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
+import { clearBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
 import { assertWorkroomPublishable } from "./publication-refusal";
 import { assertScopeClaimLease } from "./scope-claim-lease";
@@ -76,8 +77,6 @@ type CapsuleCreateInput = {
   // the creating actor. Optional.
   requestedByPrincipalId?: string | null;
 };
-
-
 type ScopeClaimInput = Pick<ScopeClaim, "kind" | "value" | "intent">;
 type ScopeReleaseInput = Pick<ScopeClaim, "kind" | "value">;
 
@@ -236,7 +235,8 @@ export async function adoptWorktreeCapsule(args: {
               : {}),
             ...(worktreeMoved ? { worktreePath: args.input.worktreePath } : {}),
             ...(repoBound ? { repositoryFullName: args.input.repositoryFullName } : {}),
-            ...(headSynced ? { headSha: args.input.headSha } : {}),
+            ...(headSynced ? { headSha: args.input.headSha, pullRequestNumber: null, pullRequestUrl: null,
+              workspaceState: clearBuildPrDeliveryState(existing.workspaceState) } : {}),
             ...(baseSynced ? { baseSha: args.input.baseSha } : {}),
             ...(headSynced || baseSynced ? { lastSyncedAt: now } : {}),
           },
@@ -252,7 +252,8 @@ export async function adoptWorktreeCapsule(args: {
             ...(lateBind ? { backlogItemId: args.input.backlogItemId, lateBind: true } : {}),
             ...(repoBound ? { repositoryFullName: args.input.repositoryFullName, repositoryLateBind: true } : {}),
             ...(worktreeMoved ? { worktreePath: args.input.worktreePath, previousWorktreePath: existing.worktreePath ?? null } : {}),
-            ...(headSynced ? { headSha: args.input.headSha, previousHeadSha: existing.headSha ?? null } : {}),
+            ...(headSynced ? { headSha: args.input.headSha, previousHeadSha: existing.headSha ?? null,
+              previousPullRequestNumber: existing.pullRequestNumber ?? null, previousPullRequestUrl: existing.pullRequestUrl ?? null } : {}),
             ...(baseSynced ? { baseSha: args.input.baseSha, previousBaseSha: existing.baseSha ?? null } : {}),
           },
           actor: args.actor,
