@@ -440,7 +440,7 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
   // This can take 3-5 minutes on a cold cache. Use generous timeout.
   console.log("[sandbox-init] starting pnpm install...");
   await exec(
-    `docker exec ${containerId} sh -c "cd /workspace && pnpm install --frozen-lockfile 2>&1 || pnpm install 2>&1"`,
+    `docker exec ${containerId} sh -c "cd /workspace && { CI=true pnpm install --frozen-lockfile 2>&1 || CI=true pnpm install 2>&1; }"`,
     { timeout: 300_000 },
   );
   console.log("[sandbox-init] pnpm install complete");
