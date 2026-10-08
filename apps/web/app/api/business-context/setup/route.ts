@@ -8,6 +8,8 @@ import { isRiskPosture } from "@/lib/govern/risk-posture";
 import { applyRiskEnvelopeToOrgProfile } from "@/lib/onboarding/apply-risk-envelope-to-profile";
 import { isDataHandlingPredicate } from "@dpf/db/regulation-applicability";
 import { applyOrgCountry } from "@/lib/actions/currency";
+import { sanitizeOfferPositioning } from "@/lib/onboarding/offer-positioning";
+import { apiErrorResponse } from "@/lib/api/error";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -34,6 +36,8 @@ export async function POST(req: NextRequest) {
     listingStatus,
     riskPosture,
     address,
+    valueProposition,
+    customerSegments,
   } = (await req.json()) as {
     description?: string;
     mission?: string;
@@ -53,7 +57,13 @@ export async function POST(req: NextRequest) {
     listingStatus?: string | null;
     riskPosture?: string;
     address?: unknown;
+    valueProposition?: unknown;
+    customerSegments?: unknown;
   };
+
+  // Offer positioning (BI-C1E83871): validated in one shared place; absent = no change.
+  const offer = sanitizeOfferPositioning({ valueProposition, customerSegments });
+  if (!offer.ok) return apiErrorResponse("INVALID_OFFER_POSITIONING", offer.error, 400);
 
   // Compliance scope is captured as a unit: when any dimension is present in the
   // payload, persist the whole profile and stamp the capture time. Sanitize to
@@ -156,7 +166,8 @@ export async function POST(req: NextRequest) {
       companySize: companySize ?? null,
       geographicScope: geographicScope ?? null,
       revenueModel: revenueModel ?? null,
-      customerSegments: [],
+      valueProposition: offer.data.valueProposition ?? null,
+      customerSegments: offer.data.customerSegments ?? [],
       ...(addressStateCode ? { stateCode: addressStateCode } : {}),
       ...complianceScope,
       ...riskPostureUpdate,
@@ -169,6 +180,8 @@ export async function POST(req: NextRequest) {
       ...(companySize !== undefined && { companySize }),
       ...(geographicScope !== undefined && { geographicScope }),
       ...(revenueModel !== undefined && { revenueModel }),
+      ...(offer.data.valueProposition !== undefined && { valueProposition: offer.data.valueProposition }),
+      ...(offer.data.customerSegments !== undefined && { customerSegments: offer.data.customerSegments }),
       ...(addressStateCode ? { stateCode: addressStateCode } : {}),
       ...complianceScope,
       ...riskPostureUpdate,
