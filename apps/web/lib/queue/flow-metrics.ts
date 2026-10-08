@@ -21,6 +21,13 @@
  *  - finished:  served to a terminal outcome (process ends, cycle ends)
  *  - cancelled: abandoned/expired while queued or in progress (balk/renege)
  *  - requeued:  returned to the queue for rework — breaks first-pass yield
+ *  - held:      the item stopped moving for a reason outside the worker — it
+ *               waits on a person or is blocked (the lane key carries why)
+ *  - released:  the hold ended
+ *
+ * `held` / `released` exist for items whose time interleaves work and waiting,
+ * such as a Workroom stage (EP-B70E718D F2). A queue that never emits them is
+ * measured exactly as before.
  */
 export const QUEUE_TRANSITIONS = [
   "enqueued",
@@ -28,6 +35,8 @@ export const QUEUE_TRANSITIONS = [
   "finished",
   "cancelled",
   "requeued",
+  "held",
+  "released",
 ] as const;
 export type QueueTransition = (typeof QUEUE_TRANSITIONS)[number];
 
@@ -82,12 +91,20 @@ export interface QueueItemTimeline {
   requeueCount?: number;
   /** SLA deadline for this item, if the queue sets one. */
   slaDueAt?: Date | null;
+  /**
+   * Spans the item spent held (waiting on a person, or blocked). Present only
+   * for items that emit `held` / `released`. An open span has `to: null` and is
+   * closed at the item's terminal time when it has one.
+   */
+  heldSpans?: readonly { from: Date; to: Date | null }[];
 }
 
 export interface FlowDurations {
   waitMs: number | null;
   processMs: number | null;
   cycleMs: number | null;
+  /** Total held time within the item's life. Null for items with no hold spans. */
+  heldMs: number | null;
 }
 
 function diffMs(later: Date | null | undefined, earlier: Date | null | undefined): number | null {
@@ -97,13 +114,51 @@ function diffMs(later: Date | null | undefined, earlier: Date | null | undefined
   return Number.isFinite(ms) && ms >= 0 ? ms : null;
 }
 
-/** Wait / process / cycle for one item. Pure; null where endpoints are absent. */
+function overlapMs(span: { from: Date; to: Date | null }, start: Date, end: Date): number {
+  const from = Math.max(span.from.getTime(), start.getTime());
+  const to = Math.min((span.to ?? end).getTime(), end.getTime());
+  return to > from ? to - from : 0;
+}
+
+/**
+ * Wait / process / cycle for one item. Pure; null where endpoints are absent.
+ *
+ * For an item that records holds, time is not one wait followed by one
+ * service: work and waiting interleave. Process (touch) time is then the
+ * started→finished span minus the time held inside it, and wait is everything
+ * else in the cycle — the value-stream reading of "wait" (spec 2026-10-02
+ * §5.2). Items without holds keep the original definitions.
+ */
 export function computeFlowDurations(t: QueueItemTimeline): FlowDurations {
   const terminal = t.finishedAt ?? t.cancelledAt ?? null;
+  const cycleMs = diffMs(terminal, t.enqueuedAt);
+  if (!t.heldSpans) {
+    return {
+      waitMs: diffMs(t.startedAt, t.enqueuedAt),
+      processMs: diffMs(t.finishedAt, t.startedAt),
+      cycleMs,
+      heldMs: null,
+    };
+  }
+  const end = terminal;
+  const heldMs = t.enqueuedAt && end
+    ? t.heldSpans.reduce((sum, span) => sum + overlapMs(span, t.enqueuedAt!, end), 0)
+    : null;
+  const serviceMs = diffMs(t.finishedAt, t.startedAt);
+  const heldInServiceMs = t.startedAt && t.finishedAt
+    ? t.heldSpans.reduce((sum, span) => sum + overlapMs(span, t.startedAt!, t.finishedAt!), 0)
+    : 0;
+  // A finished step that was only ever held (a person's decision, a blockage)
+  // had no touch time: zero, not unknown — otherwise it drops out of flow
+  // efficiency and makes the stream look more efficient than it is.
+  const processMs = serviceMs == null
+    ? (t.finishedAt && !t.startedAt ? 0 : null)
+    : Math.max(0, serviceMs - heldInServiceMs);
   return {
-    waitMs: diffMs(t.startedAt, t.enqueuedAt),
-    processMs: diffMs(t.finishedAt, t.startedAt),
-    cycleMs: diffMs(terminal, t.enqueuedAt),
+    waitMs: cycleMs != null && processMs != null ? Math.max(0, cycleMs - processMs) : diffMs(t.startedAt, t.enqueuedAt),
+    processMs,
+    cycleMs,
+    heldMs,
   };
 }
 
@@ -150,6 +205,20 @@ export interface QueueSnapshotSummary {
   slaAttainment: number | null;
   /** 0..1, null when nothing arrived in the window. */
   abandonmentRate: number | null;
+  /** Held time of items finished in the window; null when none recorded holds. */
+  heldP50Ms: number | null;
+  heldP95Ms: number | null;
+  /**
+   * Σ process ÷ Σ cycle over items finished in the window with both — the
+   * queue's flow efficiency (value-add ratio). Null when not computable.
+   */
+  processShare: number | null;
+}
+
+/** Half-open window [start, end) the summary counts events in. */
+export interface QueueWindow {
+  start: Date;
+  end: Date;
 }
 
 /**
@@ -166,10 +235,22 @@ export interface QueueSnapshotSummary {
  *  - slaAttainment  = metSla ÷ finished-in-window-with-SLA
  *  - abandonmentRate = cancelled-in-window ÷ arrivals
  */
-export function summarizeQueueWindow(items: readonly QueueItemTimeline[]): QueueSnapshotSummary {
+export function summarizeQueueWindow(
+  items: readonly QueueItemTimeline[],
+  window?: QueueWindow,
+): QueueSnapshotSummary {
   const waits: number[] = [];
   const processes: number[] = [];
   const cycles: number[] = [];
+  const helds: number[] = [];
+  let processSum = 0;
+  let cycleSum = 0;
+
+  // Items may carry history from before the window (a multi-day stage), so an
+  // event counts only when it happened inside the window. Without a window the
+  // caller has already filtered, as before.
+  const inWindow = (at: Date | null | undefined): boolean =>
+    !!at && (!window || (at.getTime() >= window.start.getTime() && at.getTime() < window.end.getTime()));
 
   let arrivals = 0;
   let finished = 0;
@@ -179,16 +260,26 @@ export function summarizeQueueWindow(items: readonly QueueItemTimeline[]): Queue
   let slaMet = 0;
 
   for (const it of items) {
-    if (it.enqueuedAt) arrivals += 1;
-    if (it.cancelledAt) cancelled += 1;
+    if (inWindow(it.enqueuedAt)) arrivals += 1;
+    if (inWindow(it.cancelledAt)) cancelled += 1;
 
     const d = computeFlowDurations(it);
-    if (d.waitMs != null) waits.push(d.waitMs);
-    if (d.processMs != null) processes.push(d.processMs);
+    const finishedHere = inWindow(it.finishedAt);
+    // Holds make wait/process meaningful only once the item has left the
+    // stage; plain queues keep their original per-event counting.
+    if (!it.heldSpans || finishedHere) {
+      if (d.waitMs != null) waits.push(d.waitMs);
+      if (d.processMs != null) processes.push(d.processMs);
+    }
 
-    if (it.finishedAt) {
+    if (finishedHere) {
       finished += 1;
       if (d.cycleMs != null) cycles.push(d.cycleMs);
+      if (d.heldMs != null) helds.push(d.heldMs);
+      if (d.cycleMs != null && d.processMs != null) {
+        processSum += d.processMs;
+        cycleSum += d.cycleMs;
+      }
       if (isFirstPassSuccess(it)) firstPass += 1;
       const sla = metSla(it);
       if (sla != null) {
@@ -210,6 +301,9 @@ export function summarizeQueueWindow(items: readonly QueueItemTimeline[]): Queue
     firstPassYield: finished > 0 ? firstPass / finished : null,
     slaAttainment: slaEligible > 0 ? slaMet / slaEligible : null,
     abandonmentRate: arrivals > 0 ? cancelled / arrivals : null,
+    heldP50Ms: percentile(helds, 0.5),
+    heldP95Ms: percentile(helds, 0.95),
+    processShare: cycleSum > 0 ? processSum / cycleSum : null,
   };
 }
 

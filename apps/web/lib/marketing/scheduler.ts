@@ -11,6 +11,7 @@
 // each schedule's failure goes to status=failed with the error message.
 
 import { prisma } from "@dpf/db";
+import { ACTIVE_MARKETING_WORK } from "./retire-work";
 import {
   isAllowedScheduledTransition,
   type ScheduledActionKind,
@@ -176,7 +177,7 @@ export async function planUpcomingForAssetTasks(input: {
   }
 
   const tasks = await prisma.marketingAssetTask.findMany({
-    where: { organizationId: input.organizationId },
+    where: { organizationId: input.organizationId, ...ACTIVE_MARKETING_WORK },
     orderBy: { createdAt: "desc" },
     take: 50,
   });

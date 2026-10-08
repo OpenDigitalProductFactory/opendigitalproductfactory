@@ -27,6 +27,7 @@ import {
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { planUpcomingMarketingDraftsHandler } from "../marketing-cadence-handler";
 import { recordMarketingGroundingDefinition, recordMarketingGroundingHandler } from "../marketing-grounding-tool";
+import { retireMarketingWorkDefinition, retireMarketingWorkHandler } from "../marketing-retire-tool";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -275,6 +276,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: false,
   },
   recordMarketingGroundingDefinition,
+  retireMarketingWorkDefinition,
 ];
 
 async function getMarketingSummaryHandler(params: Record<string, unknown>): Promise<ToolResult> {
@@ -329,9 +331,7 @@ async function getMarketingSummaryHandler(params: Record<string, unknown>): Prom
 }
 
 async function suggestCampaignIdeasHandler(): Promise<ToolResult> {
-  const { resolveMarketingArchetypeContext, MARKETING_NO_STOREFRONT_MESSAGE } = await import(
-    "@/lib/marketing/archetype-context"
-  );
+  const { resolveMarketingArchetypeContext, MARKETING_NO_STOREFRONT_MESSAGE } = await import("@/lib/marketing/archetype-context");
 
   const context = await resolveMarketingArchetypeContext({ includeItems: true, itemLimit: 10 });
   if (!context) {
@@ -352,15 +352,33 @@ async function suggestCampaignIdeasHandler(): Promise<ToolResult> {
     take: 10,
   });
 
+  // A business whose own offer is the platform sells to OTHER archetypes: give
+  // the coworker each buyer type's benefits so it plans one campaign per buyer
+  // instead of one generic message (BI-B4BE6934).
+  const { resolveOrgMarketingFitContext } = await import("@/lib/marketing/fit-guard");
+  const { sellsThePlatform, listBuyerArchetypeValues, PLATFORM_CLAIM_LIMITS } = await import("@/lib/marketing/buyer-archetype-value");
+  const { ownOffer } = await resolveOrgMarketingFitContext(context.organizationId);
+  const buyerTargeting = sellsThePlatform(ownOffer)
+    ? {
+        guidance:
+          "This business sells the platform. Plan campaigns per buyer archetype below — name the buyer in the brief's audience and speak to that owner's benefit. Partners (MSPs, IT providers) are a separate audience.",
+        buyerArchetypes: listBuyerArchetypeValues(),
+        claimLimits: PLATFORM_CLAIM_LIMITS,
+      }
+    : null;
+
   return {
     success: true,
-    message: `Campaign context for ${config.archetype.name}`,
+    message: buyerTargeting
+      ? `Campaign context for ${config.archetype.name} — selling to ${buyerTargeting.buyerArchetypes.length} buyer archetypes`
+      : `Campaign context for ${config.archetype.name}`,
     data: {
       archetype: { name: config.archetype.name, category: config.archetype.category, ctaType: config.archetype.ctaType },
       playbook,
       season,
       currentMonth: new Date().toLocaleString("en-GB", { month: "long", year: "numeric" }),
       activeItems: items.map((i) => ({ name: i.name, priceType: i.priceType, ctaType: i.ctaType })),
+      ...(buyerTargeting ? { buyerTargeting } : {}),
     },
   };
 }
@@ -750,6 +768,7 @@ const handlers: Record<string, ToolPackHandler> = {
   create_marketing_automation_candidate: (params, userId, context) => createMarketingAutomationCandidateHandler(params, userId, context),
   analyze_seo_opportunity: () => analyzeSeoOpportunityHandler(),
   record_marketing_grounding: (params) => recordMarketingGroundingHandler(params),
+  retire_marketing_work: (params) => retireMarketingWorkHandler(params),
 };
 
 export const marketingOpsPack: ToolPack = {
@@ -763,6 +782,7 @@ export const marketingOpsPack: ToolPack = {
     create_marketing_campaign_brief: ["marketing_write"],
     create_marketing_asset_task: ["marketing_write"],
     record_marketing_grounding: ["marketing_write"],
+    retire_marketing_work: ["marketing_write"],
     publish_to_linkedin: ["marketing_write"],
     send_marketing_email: ["marketing_write"],
     place_linkedin_ad: ["marketing_write"],

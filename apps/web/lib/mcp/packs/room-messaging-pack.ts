@@ -238,10 +238,68 @@ async function inviteRoomParticipantHandler(
     await heartbeatAgentWorkItemPresence({ workItemId: item.id, agentPrincipalId: inviteePrincipalId, label: inviteeLabel });
   }
 
+  if (inviteeAgentId) {
+    const rooms = await prisma.workroom.findMany({
+      where: { workItemId: item.id },
+      select: { id: true, capsuleId: true },
+    });
+    const requested = canAct ? "action" as const : "content" as const;
+    const blockedWorkrooms: Array<{ capsuleId: string; reason: string }> = [];
+    const { resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
+    for (const room of rooms) {
+      const { decision } = await resolveAgentWorkroomAccess({
+        userId,
+        agentId: inviteeAgentId,
+        workroomId: room.id,
+        requested,
+      });
+      if (decision.level !== requested) {
+        blockedWorkrooms.push({ capsuleId: room.capsuleId, reason: decision.reason });
+      }
+    }
+    if (blockedWorkrooms.length > 0) {
+      const human = await syncUserPrincipal(userId);
+      const needsDataAccess = blockedWorkrooms.some((room) => room.reason === "insufficient-clearance");
+      return {
+        success: false,
+        error: "workroom_effective_admission_incomplete",
+        message: needsDataAccess
+          ? `Recorded ${inviteeLabel}'s membership, but the acting person and coworker still lack the required data access in ${blockedWorkrooms.map((room) => room.capsuleId).join(", ")}. Review AI Coworker Identity before continuing.`
+          : `Recorded ${inviteeLabel}'s membership, but the acting person and coworker are still not both admitted to ${blockedWorkrooms.map((room) => room.capsuleId).join(", ")}. A platform manager must appoint the acting person as that room's Process Overseer before work can continue.`,
+        data: {
+          caseKey,
+          principalRef: inviteePrincipalId,
+          canAct,
+          membershipRecorded: true,
+          effectiveAdmission: false,
+          blockedWorkrooms,
+          recovery: needsDataAccess
+            ? { action: "review_data_access", recoveryUrl: "/platform/identity/agents" }
+            : {
+                tool: "appoint_room_coordinator",
+                principalRef: human?.principalId ?? null,
+                requests: blockedWorkrooms.map((room) => ({
+                  capsuleId: room.capsuleId,
+                  principalRef: human?.principalId ?? null,
+                  replaceExisting: true,
+                  reason: "Recover effective paired admission for the room's active owner.",
+                })),
+              },
+        },
+      };
+    }
+  }
+
   return {
     success: true,
     message: `Invited ${inviteeLabel} into ${caseKey}${canAct ? "" : " (read-only)"}.`,
-    data: { caseKey, principalRef: inviteePrincipalId, canAct },
+    data: {
+      caseKey,
+      principalRef: inviteePrincipalId,
+      canAct,
+      membershipRecorded: true,
+      effectiveAdmission: inviteeAgentId ? true : "not-applicable",
+    },
   };
 }
 
@@ -291,7 +349,8 @@ async function applyAccountHandoverHandler(params: Record<string, unknown>, user
 
 async function appointRoomCoordinatorHandler(
   params: Record<string, unknown>,
-  _userId: string,
+  userId: string,
+  context?: PackContext,
 ): Promise<ToolResult> {
   const capsuleId = str(params, "capsuleId");
   const principalRef = str(params, "principalRef");
@@ -302,6 +361,15 @@ async function appointRoomCoordinatorHandler(
       message: "capsuleId and principalRef are required.",
     };
   }
+  const { coordinatorAppointmentAccessRefusal } = await import(
+    "@/lib/work-capsules/oauth-workroom-ownership"
+  );
+  const refusal = await coordinatorAppointmentAccessRefusal({
+    capsuleId,
+    userId,
+    agentId: context?.agentId,
+  });
+  if (refusal) return refusal;
   const { executeCoordinatorAppointment } = await import(
     "@/lib/work-management/execute-coordinator-appointment.server"
   );
@@ -472,7 +540,7 @@ export const roomMessagingPack: ToolPack = {
     post_room_message: (params, userId, context) => postRoomMessageHandler(params, userId, context),
     read_room_messages: (params, userId, context) => readRoomMessagesHandler(params, userId, context),
     invite_room_participant: (params, userId, context) => inviteRoomParticipantHandler(params, userId, context),
-    appoint_room_coordinator: (params, userId) => appointRoomCoordinatorHandler(params, userId),
+    appoint_room_coordinator: (params, userId, context) => appointRoomCoordinatorHandler(params, userId, context),
     plan_account_handover: (params, userId) => planAccountHandoverHandler(params, userId),
     apply_account_handover: (params, userId) => applyAccountHandoverHandler(params, userId),
     get_coworker_room_engagement: (params, userId, context) => getCoworkerRoomEngagementHandler(params, userId, context),

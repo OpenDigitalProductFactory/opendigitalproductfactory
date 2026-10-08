@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "decidedOption": "edit-text-in-existing-manage-menu",
+  "decisionInteractionId": "DI-4AC6525B7844",
+  "scope": {
+    "files": [
+      "apps/web/components/storefront-admin/SectionsManager.tsx",
+      "apps/web/components/storefront-admin/SectionTextDialog.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "edit-text-in-existing-manage-menu",
+      "dedicated-section-editor-page",
+      "coworker-only"
+    ],
+    "recordedVia": "principle_decide (callingPopulation: external_coding_agent, decisionDomain: platform-development, consumerContexts: [ui], stakes: routine)",
+    "composite": 6.387,
+    "margin": 2.508,
+    "confidence": "high",
+    "autonomyEligible": true,
+    "topContributors": [
+      "No Hardcoded Colors",
+      "Ground New Work In Existing Platform"
+    ],
+    "whyNotSweepMeasurement": "The control lives inside a per-row Manage menu and a dialog that only opens on demand, so a sweep of /storefront/sections measures the default view, which is unchanged. The placement was decided among three options instead.",
+    "notes": "Adds one menu item, 'Edit <section> text', only on sections that render owner text (about, hero), opening a dialog with just the fields that section shows (1 for about, 2 for hero). The default list view gains no new controls."
+  }
+}

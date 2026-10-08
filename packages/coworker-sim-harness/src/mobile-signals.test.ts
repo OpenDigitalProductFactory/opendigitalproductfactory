@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { GeoPoint } from "./geo-temporal";
+import type { LatLng } from "./geo-temporal";
 import { type MobileFieldSignal, isRunningLate, planDrive } from "./mobile-signals";
 import { HOUR } from "./virtual-clock";
 
-const DEPOT: GeoPoint = { lat: 30.27, lng: -97.74 }; // Austin-ish
-const SITE: GeoPoint = { lat: 30.4, lng: -97.7 };
+const DEPOT: LatLng = { lat: 30.27, lng: -97.74 }; // Austin-ish
+const SITE: LatLng = { lat: 30.4, lng: -97.7 };
 
 describe("planDrive", () => {
   it("emits departed → eta → arrived as one ordered signal stream", () => {

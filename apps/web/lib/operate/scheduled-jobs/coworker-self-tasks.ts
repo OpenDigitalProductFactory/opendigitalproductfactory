@@ -73,26 +73,43 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
   ...COWORKER_STANDING_SELF_TASKS,
 
   "marketing-specialist": {
-    title: "Refresh the acquisition campaign brief",
+    title: "Review the marketing plan and advance the current campaign",
+    // BI-DB179A8D. The scheduler treats every side-effect tool this prompt
+    // NAMES as a write the run must make (classifyScheduledRequiredTools). So
+    // the prompt names exactly one: save_marketing_review, the decision record
+    // every run owes. Creating a brief, adding asset tasks and drafting are
+    // conditional and are described by intent, not by tool name — naming them
+    // turned a correct "keep the current brief" run into a daily failure and
+    // piled up 16 duplicate draft briefs on the reference install.
     prompt: [
       "You are running as a scheduled, autonomous task — no human is watching this",
       "turn, so finish the work rather than asking questions.",
       "",
-      "Goal: keep a current acquisition campaign brief on the Campaigns page so the",
-      "marketing surface is never empty. Steps:",
-      "1. Review the saved acquisition assumptions / ICP / positioning available to you",
-      "   (org context, prior campaigns, product catalog).",
-      "2. If there is NO active or recent campaign brief, create one with",
-      "   create_marketing_campaign_brief: a focused brief for the most promising",
-      "   segment, with objective, audience, channels, core message, and 3–5 concrete",
-      "   next actions.",
-      "3. If a recent brief already exists, do NOT duplicate it — instead refresh it",
-      "   only if assumptions have changed, otherwise stop.",
-      "Keep it grounded in real saved context; do not invent customers or numbers.",
+      "Goal: keep one current, grounded campaign moving toward published work.",
+      "1. Review the saved strategy, target segments, campaigns, asset tasks and",
+      "   drafts (get_marketing_summary). If this business sells the platform,",
+      "   campaign ideas list its buyer archetypes — aim each brief at one buyer type.",
+      "2. Decide ONE of:",
+      "   a. No current brief: create one focused campaign brief for the most",
+      "      promising segment, with 3–5 asset tasks.",
+      "   b. A current brief exists: do not create another. Advance it — draft the",
+      "      next asset task that has no draft yet (LinkedIn post or email), for the",
+      "      human to review.",
+      "   c. The saved assumptions are wrong or stale: say what changed and what",
+      "      should replace them; do not create new work on a wrong premise.",
+      "3. Always record the decision with save_marketing_review: which of a/b/c, why,",
+      "   and the next action. Keeping the current brief is a valid decision.",
+      "Keep it grounded in real saved context; do not invent customers, proof or numbers.",
     ].join("\n"),
     routeContext: "/customer/marketing",
-    // The two writes step 2 of the prompt asks for (BI-6B3DA9DD).
-    mandatedTools: ["create_marketing_campaign_brief", "create_marketing_asset_task"],
+    // Exactly the writes the steps above ask for (BI-6B3DA9DD, BI-DB179A8D).
+    // Drafts land as pending-review OutboundDrafts; publishing stays a human act.
+    mandatedTools: [
+      "save_marketing_review",
+      "create_marketing_campaign_brief",
+      "create_marketing_asset_task",
+      "draft_marketing_asset",
+    ],
     cadence: {
       // Weekly Monday and daily, both at 14:07 UTC — an off-peak minute the
       // allocator is unlikely to collide, and deconflictCron shifts it if it does.

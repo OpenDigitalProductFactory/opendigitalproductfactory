@@ -1,6 +1,7 @@
 param(
     [string]$SkillPackPath = (Resolve-Path (Join-Path $PSScriptRoot "..\packages\dpf-skill-pack")).Path,
-    [string]$McpUrl = $(if ($env:DPF_MCP_URL) { $env:DPF_MCP_URL } else { "http://127.0.0.1:3000/api/mcp/v1" }),
+    # Empty means "not named here"; the pack updater owns the default endpoint.
+    [string]$McpUrl = "",
     [switch]$CodexOnly,
     [switch]$ClaudeOnly,
     [switch]$SkipClaudeCliInstall,

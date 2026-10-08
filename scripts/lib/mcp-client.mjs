@@ -272,12 +272,18 @@ async function callInjectedCurlTransport({
     "--data",
     body,
   ];
-  const executable = process.platform === "win32" ? "sh" : command;
-  const executableArgs = process.platform === "win32" ? [command, ...args] : args;
+  const win32 = process.platform === "win32";
+  const executable = win32 ? "sh" : command;
+  // MSYS/Git Bash `sh` splits its command line by Cygwin rules, where `\\`
+  // inside a quoted argument collapses to `\`. Node quotes by MSVC rules, so a
+  // JSON body carrying a Windows path arrived at the stub as invalid JSON
+  // (BI-1B4910B4). Quote every argument for sh and pass the line verbatim.
+  const executableArgs = win32 ? [command, ...args].map(quoteForMsysArgv) : args;
   return new Promise((resolve, reject) => {
     const child = spawn(executable, executableArgs, {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
+      windowsVerbatimArguments: win32,
     });
     let stdout = "";
     let stderr = "";
@@ -292,6 +298,11 @@ async function callInjectedCurlTransport({
       resolve(stdout);
     });
   });
+}
+
+/** Quote one argument so MSYS `sh` reads it back byte for byte (Cygwin rules). */
+export function quoteForMsysArgv(arg) {
+  return `"${String(arg).replace(/[\\"]/g, (c) => `\\${c}`)}"`;
 }
 
 export function extractToolResult(payload) {

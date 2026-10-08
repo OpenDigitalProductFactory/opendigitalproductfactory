@@ -27,6 +27,7 @@ function snapshot(
       tagline: "Proof-led growth",
       description: "Operational advice",
       ctaType: "inquiry",
+      ownOffer: null,
     },
     strategy: {
       strategyId: "strategy-1",
@@ -170,6 +171,7 @@ describe("marketing subroute view models", () => {
         tagline: "Seasonal dining",
         description: "Neighbourhood restaurant",
         ctaType: "booking",
+        ownOffer: null,
       },
       workProducts: {
         campaignBriefs: [

@@ -79,7 +79,8 @@ export async function saveGeocodingConfig(value: unknown): Promise<GeocodingConf
   return config;
 }
 
-async function activeProvider(): Promise<GeocodingProvider> {
+/** The administrator's provider, with its key when it needs one. `enabled` is false for `none`. */
+export async function activeProvider(): Promise<GeocodingProvider> {
   const { config } = await readGeocodingSettings();
   const opencageKey = config.provider === "opencage" ? (await getDecryptedCredential("opencage"))?.secretRef ?? undefined : undefined;
   return resolveGeocodingProvider(config, { opencageKey });

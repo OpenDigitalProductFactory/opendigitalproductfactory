@@ -47,6 +47,16 @@ and post-change verification declarations.
 All of those conditions are checked again when an action is claimed. Enabling
 the environment switch alone grants no execution authority.
 
+**Host upkeep (BI-28EFE18A).** Every install now runs the native Edge Node on
+its host as a host-upkeep agent, and the organization PKI bootstrap sets
+`DPF_REMOTE_ACTION_DISPATCH_ENABLED=1` when it writes the trust bundle, unless
+`.env` already carries an explicit value. The substrate job then enables
+`action.execute` on this installation's own trusted, installer-managed node and
+adds only `substrate.docker-vm.restart` to its allowlist, once, recording that
+in `scopePolicy.hostUpkeep`; an operator who later disables it is not
+overridden. Without `-WithEdge` the node runs `DPF_EDGE_ROLE=host-upkeep`:
+heartbeat and the action channel, with no network sweep and no discovery.
+
 ## Request and evidence flow
 
 1. The native Edge Node connects to the dedicated HTTPS action URL using its

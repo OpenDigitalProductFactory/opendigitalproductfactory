@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -888,6 +889,20 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
         )
         self.assertEqual(run.call_args[1]["cwd"], str(stale))
 
+    def test_build_metadata_on_the_pack_version_does_not_mark_current_records_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            current = self._project(root, "current")
+            home = self._home(root, [{"scope": "project", "projectPath": str(current), "version": "0.2.8"}])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run"
+            ) as run:
+                lines = updater.converge_claude_project_connectors(
+                    home, "0.2.8+codex.20260726032301", dry_run=False
+                )
+        run.assert_not_called()
+        self.assertIn("current 1", lines[0])
+
     def test_records_for_missing_projects_are_reported_not_touched(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -975,6 +990,102 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
             (project / ".mcp.json").write_text(content)
             self.assertIsNone(updater.retire_duplicate_project_mcp_json(project, dry_run=False))
             self.assertEqual((project / ".mcp.json").read_text(), content)
+
+
+class ClaudeUserScopeDpfServerTest(unittest.TestCase):
+    """BI-81B0A3BE: a user-scope dpf server duplicates the plugin connector everywhere."""
+
+    class _Result:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    LEGACY = {
+        "type": "http",
+        "url": "http://127.0.0.1:3000/api/mcp/v1?tier=full",
+        "headers": {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"},
+    }
+
+    def _home(self, root: Path, servers: dict, plugin_installed: bool = True) -> Path:
+        home = root / "home"
+        home.mkdir()
+        (home / ".claude.json").write_text(json.dumps({"mcpServers": servers, "projects": {}}))
+        if plugin_installed:
+            path = updater.claude_installed_plugins_path(home)
+            path.parent.mkdir(parents=True)
+            path.write_text(json.dumps({"plugins": {updater.CLAUDE_PLUGIN_ID: [
+                {"scope": "local", "projectPath": str(root), "version": "0.2.8"},
+            ]}}))
+        return home
+
+    def _retire(self, home: Path, dry_run: bool = False, result: Any = None):
+        with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+            "subprocess.run", return_value=result or self._Result()
+        ) as run:
+            status = updater.retire_user_scope_dpf_server(home, dry_run)
+        return status, run
+
+    def test_duplicate_is_backed_up_then_removed_through_the_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            status, run = self._retire(home)
+            backup = home / ".claude" / "dpf-user-mcp.legacy-bak.json"
+            self.assertEqual(json.loads(backup.read_text()), {"mcpServers": {"dpf": self.LEGACY}})
+        self.assertEqual(status, f"removed (backup {backup})")
+        self.assertEqual(run.call_args[0][0], ["/fake/claude", "mcp", "remove", "dpf", "-s", "user"])
+
+    def test_dry_run_reports_without_backup_or_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            status, run = self._retire(home, dry_run=True)
+            self.assertFalse((home / ".claude" / "dpf-user-mcp.legacy-bak.json").exists())
+        run.assert_not_called()
+        self.assertTrue(status.startswith("would remove"))
+
+    def test_existing_backup_is_never_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            older = home / ".claude" / "dpf-user-mcp.legacy-bak.json"
+            older.write_text("older")
+            self._retire(home)
+            self.assertEqual(older.read_text(), "older")
+            self.assertTrue((home / ".claude" / "dpf-user-mcp.legacy-bak.1.json").exists())
+
+    def test_left_alone_without_the_plugin_connector(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY}, plugin_installed=False)
+            status, run = self._retire(home)
+        self.assertIsNone(status)
+        run.assert_not_called()
+
+    def test_unrelated_user_servers_are_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {
+                "dpf": {"type": "http", "url": "https://example.com/other"},
+                "other": {"type": "http", "url": "https://localhost/api/mcp/v1"},
+            })
+            status, run = self._retire(home)
+        self.assertIsNone(status)
+        run.assert_not_called()
+
+    def test_failed_cli_removal_is_reported(self) -> None:
+        failed = self._Result()
+        failed.returncode = 1
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            status, _ = self._retire(home, result=failed)
+        self.assertTrue(status.startswith("failed:"))
+
+    def test_missing_cli_is_reported_and_nothing_is_written(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            with patch.object(updater, "resolve_claude_binary", return_value=None), patch(
+                "subprocess.run"
+            ) as run:
+                status = updater.retire_user_scope_dpf_server(home, dry_run=False)
+            self.assertFalse((home / ".claude" / "dpf-user-mcp.legacy-bak.json").exists())
+        run.assert_not_called()
+        self.assertEqual(status, "failed: Claude CLI not found")
 
 
 class AntigravityMcpConfigTest(unittest.TestCase):
@@ -1634,6 +1745,91 @@ class OAuthDefaultTest(unittest.TestCase):
             updater.ensure_codex_config(home, "http://127.0.0.1:3000/api/mcp/v1", False)
             self.assertEqual(first, path.read_text())
 
+class WrapperEndpointParityTest(unittest.TestCase):
+    """BI-772023BC: the shell and PowerShell wrappers are twins of the Python
+    updater. The default endpoint and auth mode have one source, the Python
+    updater (DEFAULT_MCP_URL, DPF_MCP_URL, DPF_MCP_AUTH_MODE); a wrapper only
+    forwards an endpoint the operator named. The .ps1 is parsed as text so the
+    check runs without pwsh."""
+
+    SCRIPTS = Path(__file__).resolve().parent
+    URL_LITERAL = re.compile(r"""https?://[^\s"'$]+/api/mcp""")
+
+    def wrappers(self):
+        repo = Path(__file__).resolve().parents[3]
+        found = {
+            "pack.ps1": self.SCRIPTS / "update-agent-toolchain.ps1",
+            "pack.sh": self.SCRIPTS / "update-agent-toolchain.sh",
+        }
+        repo_ps1 = repo / "scripts/update-dpf-agent-toolchain.ps1"
+        if repo_ps1.exists():
+            found["repo.ps1"] = repo_ps1
+        return {name: path.read_text() for name, path in found.items()}
+
+    def test_wrappers_hard_code_no_endpoint_or_auth_mode(self):
+        for name, text in self.wrappers().items():
+            with self.subTest(wrapper=name):
+                self.assertIsNone(self.URL_LITERAL.search(text), "hard-coded MCP endpoint")
+                self.assertNotIn("--auth-mode", text)
+                self.assertNotIn(updater.TOKEN_ENV_VAR, text)
+
+    def test_ps1_forwards_endpoint_only_when_named(self):
+        text = self.wrappers()["pack.ps1"]
+        self.assertRegex(text, r'\[string\]\$McpUrl\s*=\s*""')
+        self.assertRegex(text, r'if \(\$McpUrl\) \{ \$argsList \+= @\("--mcp-url", \$McpUrl\) \}')
+        self.assertNotRegex(text, r'"--mcp-url", \$McpUrl\s*\n\s*\)')
+
+    def test_sh_forwards_no_default_endpoint(self):
+        code = [line for line in self.wrappers()["pack.sh"].splitlines() if not line.lstrip().startswith("#")]
+        self.assertNotIn("--mcp-url", "\n".join(code))
+
+    # The bootstrap twins need a concrete endpoint for their probes and the
+    # plan bridge. When the operator names none they read the updater's own
+    # DEFAULT_MCP_URL line, so there is still one home for the default.
+    SH_DEFAULT_READ = """sed -n 's/^DEFAULT_MCP_URL = "\\(.*\\)"$/\\1/p'"""
+    PS1_DEFAULT_READ = """'^DEFAULT_MCP_URL = "(.*)"$'"""
+
+    def bootstraps(self):
+        repo = Path(__file__).resolve().parents[3]
+        sh = repo / "scripts/dpf-bootstrap-agent-toolchain.sh"
+        ps1 = repo / "scripts/dpf-bootstrap-agent-toolchain.ps1"
+        if not sh.exists():
+            self.skipTest("Repository bootstraps are not shipped in standalone packs")
+        return sh.read_text(), ps1.read_text()
+
+    def test_bootstraps_hard_code_no_endpoint(self):
+        for name, text in zip(("bootstrap.sh", "bootstrap.ps1"), self.bootstraps()):
+            with self.subTest(bootstrap=name):
+                self.assertIsNone(self.URL_LITERAL.search(text), "hard-coded MCP endpoint")
+
+    def test_bootstraps_fall_back_to_the_updater_default(self):
+        sh, ps1 = self.bootstraps()
+        self.assertIn(self.SH_DEFAULT_READ, sh)
+        self.assertIn(self.PS1_DEFAULT_READ, ps1)
+        source = self.SCRIPTS / "update_agent_toolchain.py"
+        read = subprocess.run(["sh", "-c", self.SH_DEFAULT_READ + ' "$1"', "sh", str(source)],
+                              capture_output=True, text=True, check=True)
+        self.assertEqual(read.stdout.strip(), updater.DEFAULT_MCP_URL)
+        match = [m.group(1) for m in map(re.compile(self.PS1_DEFAULT_READ.strip("'")).match, source.read_text().splitlines()) if m]
+        self.assertEqual(match, [updater.DEFAULT_MCP_URL])
+
+    def test_bootstraps_forward_only_the_named_endpoint_to_the_updater(self):
+        sh, ps1 = self.bootstraps()
+        self.assertNotIn('--mcp-url "$MCP_ENDPOINT"', sh)
+        self.assertIn('--mcp-url "$MCP_ENDPOINT_NAMED"', sh)
+        self.assertNotRegex(ps1, r"-McpUrl \$McpEndpoint\b(?!Named)")
+        self.assertIn("-McpUrl $McpEndpointNamed", ps1)
+        # Persisting a non-https endpoint keys on the operator naming one, not
+        # on a comparison with a hard-coded default.
+        self.assertIn('if [ -n "$MCP_ENDPOINT_NAMED" ]; then', sh)
+
+    def test_python_default_is_canonical_https_oauth(self):
+        self.assertEqual(updater.DEFAULT_MCP_URL, "https://localhost/api/mcp/v1")
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("DPF_MCP_AUTH_MODE", None)
+            self.assertFalse(updater.mcp_client_bearer_header_required(updater.DEFAULT_MCP_URL))
+
+
 class CodexRegistrationConvergenceTest(unittest.TestCase):
     def fixture(self, home, canonical=True, legacy=True):
         config = updater.codex_config_path(home)
@@ -1784,16 +1980,20 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
             stub = Path(tmp) / "packages/dpf-skill-pack/scripts/update-agent-toolchain.sh"
             stub.parent.mkdir(parents=True)
             stub.write_text('printf "%s\\n" "$@"\nexit "$DPF_TEST_EXIT"\n')
-            for exit_code in (0, 7):
+            for exit_code, named in ((0, "https://example.invalid/api/mcp/v1"), (7, "https://example.invalid/api/mcp/v1"), (0, "")):
                 result = subprocess.run(
                     ["bash", "-c", 'fail() { printf "%s\\n" "$1"; }\n' + block + '\nprintf "PLAN_REACHED\\n"'],
-                    env={**os.environ, "REPO_ROOT": tmp, "MCP_ENDPOINT": "https://example.invalid/api/mcp/v1",
-                         "DRY_RUN": "1", "DPF_TEST_EXIT": str(exit_code)},
+                    env={**os.environ, "REPO_ROOT": tmp, "MCP_ENDPOINT": "https://localhost/api/mcp/v1",
+                         "MCP_ENDPOINT_NAMED": named, "DRY_RUN": "1", "DPF_TEST_EXIT": str(exit_code)},
                     capture_output=True, text=True,
                 )
                 self.assertIn("--dry-run", result.stdout)
                 self.assertIn("--codex-plugin-only", result.stdout)
-                self.assertIn("https://example.invalid/api/mcp/v1", result.stdout)
+                # Only an endpoint the operator named reaches the updater.
+                if named:
+                    self.assertIn(named, result.stdout)
+                else:
+                    self.assertNotIn("--mcp-url", result.stdout)
                 self.assertEqual(result.returncode, 0 if exit_code == 0 else 1)
                 self.assertEqual("PLAN_REACHED" in result.stdout, exit_code == 0)
 

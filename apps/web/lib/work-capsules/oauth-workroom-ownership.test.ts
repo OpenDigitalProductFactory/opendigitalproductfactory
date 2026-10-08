@@ -1,8 +1,13 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ room: vi.fn(), workItem: vi.fn(), actor: vi.fn(), access: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  room: vi.fn(), workItem: vi.fn(), actor: vi.fn(), access: vi.fn(),
+  currentUser: vi.fn(), can: vi.fn(),
+}));
 vi.mock("@dpf/db", () => ({ prisma: { workroom: { findUnique: mocks.room }, workItem: { findUnique: mocks.workItem } } }));
 vi.mock("./handler-actor", () => ({ workCapsuleActor: mocks.actor }));
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveAgentWorkroomAccess: mocks.access }));
+vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: mocks.currentUser }));
+vi.mock("@/lib/govern/permissions", () => ({ can: mocks.can }));
 import { authorizeOAuthCapsuleTarget, workroomTargetAccessRefusal } from "./oauth-workroom-ownership";
 const input = { params: { capsuleId: "WC-ONE" }, userId: "alice", agentId: "claude", authSource: "oauth", action: true };
 beforeEach(() => {
@@ -10,6 +15,8 @@ beforeEach(() => {
   mocks.actor.mockResolvedValue({ userId: "alice", agentId: "claude", principalId: "human-alice", agentPrincipalId: "assistant" });
   mocks.room.mockResolvedValue({ leaseHolderPrincipalId: "human-alice", requestedByPrincipalId: "human-alice", createdByPrincipalId: "assistant", workItemId: null });
   mocks.access.mockResolvedValue({ decision: { level: "none" } });
+  mocks.currentUser.mockResolvedValue({ userId: "alice" });
+  mocks.can.mockReturnValue(false);
 });
 it("authorizes each separately created room without a new login", async () => {
   mocks.access.mockResolvedValue({ decision: { level: "action" } });
@@ -79,4 +86,34 @@ it.each([
     expect(refusal?.message).toMatch(message);
     expect(refusal?.message).not.toMatch(/invite_room_participant|self/);
   }
+});
+
+it("lets a platform manager reach the governed coordinator recovery when room admission is the defect", async () => {
+  mocks.can.mockReturnValue(true);
+  expect(await workroomTargetAccessRefusal({ ...input, toolName: "appoint_room_coordinator" })).toBeNull();
+  expect(mocks.currentUser).toHaveBeenCalledWith("alice");
+  expect(mocks.can).toHaveBeenCalledWith(expect.anything(), "manage_platform");
+});
+
+it("does not turn coordinator recovery into an arbitrary takeover path", async () => {
+  expect(await workroomTargetAccessRefusal({ ...input, toolName: "appoint_room_coordinator" })).toMatchObject({
+    success: false,
+    error: "workroom_access_denied",
+  });
+});
+
+it("preserves admitted appointment access without granting global platform authority", async () => {
+  mocks.access.mockResolvedValue({ decision: { level: "action", reason: "authorized" } });
+  expect(await workroomTargetAccessRefusal({ ...input, toolName: "appoint_room_coordinator" })).toBeNull();
+  expect(mocks.currentUser).not.toHaveBeenCalled();
+  expect(mocks.can).not.toHaveBeenCalled();
+});
+
+it("does not let platform recovery bypass the pair's data clearance", async () => {
+  mocks.can.mockReturnValue(true);
+  mocks.access.mockResolvedValue({ decision: { level: "discover", reason: "insufficient-clearance" } });
+  expect(await workroomTargetAccessRefusal({ ...input, toolName: "appoint_room_coordinator" })).toMatchObject({
+    success: false, error: "workroom_data_access_required",
+  });
+  expect(mocks.can).not.toHaveBeenCalled();
 });

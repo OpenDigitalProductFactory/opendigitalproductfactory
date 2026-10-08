@@ -16,7 +16,9 @@
 #   .\scripts\sync-mcp-worktrees.ps1 -Token dpfmcp_XXXX
 #   Rewrites the root .mcp.json and the user-scope registration with the new
 #   token. This is the legacy compatibility path; on https the plugin connector
-#   authorizes by OAuth and needs no token.
+#   authorizes by OAuth and needs no token. Skipped while the dpf-platform
+#   plugin is installed: both writes would add a second dpf connector
+#   (BI-81B0A3BE).
 
 param(
     [string]$Token = "",
@@ -204,6 +206,18 @@ $mcpJsonPath = Join-Path $RepoRoot ".mcp.json"
 $vscodeMcpPath = Join-Path $RepoRoot ".vscode\mcp.json"
 
 # -- Step 1: Legacy token rotation (explicit -Token only) ---------------------
+
+# While the dpf-platform plugin is installed its connector is THE dpf server
+# (BI-5201141C); a token-bearing root .mcp.json or user-scope registration loads
+# beside it as a second dpf connector in every session (BI-81B0A3BE). Rotation
+# then writes neither.
+$installedPluginsPath = Join-Path $HOME ".claude\plugins\installed_plugins.json"
+$pluginConnectorInstalled = (Test-Path -LiteralPath $installedPluginsPath) -and
+    ((Get-Content -LiteralPath $installedPluginsPath -Raw) -match '"dpf-platform@dpf-platform-local"')
+if ($rotating -and $pluginConnectorInstalled) {
+    Write-Warn "dpf-platform plugin connector installed; skipped legacy token rotation (it would add a second dpf connector)"
+    $rotating = $false
+}
 
 if ($rotating) {
     if (-not $Token) {

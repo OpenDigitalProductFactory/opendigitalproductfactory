@@ -54,7 +54,7 @@ function restartDeps(): DockerVmRestartDeps {
         trustState: true,
         customerAccountId: true,
         scopePolicy: true,
-        capabilityRows: { where: { capability: "action.execute" }, select: { capability: true, mode: true } },
+        capabilityRows: { where: { capability: "action.execute" }, select: { capability: true, mode: true, evidence: true } },
       },
     }),
     countRunningGates: () => prisma.nonProductionEnvironmentLease.count({

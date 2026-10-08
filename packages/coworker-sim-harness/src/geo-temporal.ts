@@ -13,7 +13,7 @@
 import type { Instant } from "./virtual-clock";
 import { MINUTE } from "./virtual-clock";
 
-export interface GeoPoint {
+export interface LatLng {
   lat: number;
   lng: number;
 }
@@ -22,7 +22,7 @@ const EARTH_RADIUS_KM = 6371;
 const toRad = (deg: number): number => (deg * Math.PI) / 180;
 
 /** Great-circle (haversine) distance between two points, in kilometres. */
-export function geoDistanceKm(a: GeoPoint, b: GeoPoint): number {
+export function geoDistanceKm(a: LatLng, b: LatLng): number {
   const dLat = toRad(b.lat - a.lat);
   const dLng = toRad(b.lng - a.lng);
   const lat1 = toRad(a.lat);
@@ -42,7 +42,7 @@ export interface TravelOptions {
 const DEFAULT_SPEED_KMH = 40;
 
 /** Deterministic travel time in minutes for a trip, traffic-adjusted. */
-export function travelTimeMinutes(from: GeoPoint, to: GeoPoint, opts?: TravelOptions): number {
+export function travelTimeMinutes(from: LatLng, to: LatLng, opts?: TravelOptions): number {
   const speed = opts?.speedKmh ?? DEFAULT_SPEED_KMH;
   const traffic = Math.max(1, opts?.trafficFactor ?? 1);
   if (speed <= 0) throw new Error("travelTimeMinutes: speedKmh must be > 0");
@@ -51,12 +51,12 @@ export function travelTimeMinutes(from: GeoPoint, to: GeoPoint, opts?: TravelOpt
 }
 
 /** Arrival instant if departing `from` at `departAt`. */
-export function etaAt(departAt: Instant, from: GeoPoint, to: GeoPoint, opts?: TravelOptions): Instant {
+export function etaAt(departAt: Instant, from: LatLng, to: LatLng, opts?: TravelOptions): Instant {
   return departAt + Math.round(travelTimeMinutes(from, to, opts) * MINUTE);
 }
 
 export interface PositionSample {
-  pos: GeoPoint;
+  pos: LatLng;
   /** 0 at departure, 1 on arrival. */
   fractionTraveled: number;
   arrived: boolean;
@@ -69,8 +69,8 @@ export interface PositionSample {
  * monotone progress and a defensible ETA).
  */
 export function positionAt(
-  from: GeoPoint,
-  to: GeoPoint,
+  from: LatLng,
+  to: LatLng,
   departAt: Instant,
   t: Instant,
   opts?: TravelOptions,
@@ -89,7 +89,7 @@ export function positionAt(
 }
 
 /** True when `pos` is within `radiusMeters` of `site` (geofence arrival/exit detection). */
-export function withinGeofence(pos: GeoPoint, site: GeoPoint, radiusMeters: number): boolean {
+export function withinGeofence(pos: LatLng, site: LatLng, radiusMeters: number): boolean {
   return geoDistanceKm(pos, site) * 1000 <= radiusMeters;
 }
 

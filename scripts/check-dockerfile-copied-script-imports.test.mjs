@@ -12,6 +12,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  MIN_DOCKERFILE_COPIED_SCRIPTS,
   findMissingCopiedImports,
   findMissingCopiedImportsInRepo,
   logicalLines,
@@ -139,5 +140,27 @@ test("every root-context Dockerfile satisfies the invariant, service images incl
   assert.deepEqual(
     violations.map((v) => `${v.dockerfile} ${v.stage}: ${v.importer} -> ${v.missing}`),
     [],
+  );
+});
+
+test("counts each copied script it reads, so the floor can refuse an empty parse", () => {
+  const stats = { checked: 0 };
+  findMissingCopiedImports(
+    "FROM node AS deps\nWORKDIR /app\nCOPY scripts/a.mjs scripts/b.mjs ./scripts/\nCOPY scripts/gone.mjs ./scripts/\nCOPY package.json ./\n",
+    (src) => (src === "scripts/gone.mjs" ? null : "export const x = 1;\n"),
+    stats,
+  );
+  assert.equal(stats.checked, 2);
+  const empty = { checked: 0 };
+  findMissingCopiedImports("FROM node AS deps\nRUN true\n", () => "", empty);
+  assert.equal(empty.checked, 0);
+});
+
+test("the checked-in Dockerfiles clear the floor", () => {
+  const stats = { checked: 0 };
+  findMissingCopiedImportsInRepo(REPO_ROOT, stats);
+  assert.ok(
+    stats.checked >= MIN_DOCKERFILE_COPIED_SCRIPTS,
+    `read ${stats.checked} Dockerfile-copied scripts, floor ${MIN_DOCKERFILE_COPIED_SCRIPTS}`,
   );
 });

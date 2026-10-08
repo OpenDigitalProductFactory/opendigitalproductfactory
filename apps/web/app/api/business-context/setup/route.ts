@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma, type Prisma } from "@dpf/db";
 import { parseOrgAddress, sanitizeOrgAddressInput, serializeOrgAddress } from "@/lib/shared/org-address";
+import { extractOrgLatLng } from "@/lib/api/nearby-geo";
+import { requestOrganizationGeocode } from "@/lib/geocoding/request.server";
 import { isRiskPosture } from "@/lib/govern/risk-posture";
 import { applyRiskEnvelopeToOrgProfile } from "@/lib/onboarding/apply-risk-envelope-to-profile";
 import { isDataHandlingPredicate } from "@dpf/db/regulation-applicability";
@@ -137,6 +139,10 @@ export async function POST(req: NextRequest) {
       ...(addressJson !== undefined && { address: addressJson as unknown as Prisma.InputJsonValue }),
     },
   });
+
+  // Put the business itself on the map, and give the walk-up front door's
+  // nearby discovery its centre (BI-C318C227 §2.1, §2.4).
+  if (addressJson && !extractOrgLatLng(addressJson)) await requestOrganizationGeocode(org.id);
 
   // Upsert BusinessContext — the canonical source of truth for business strategy
   const businessContext = await prisma.businessContext.upsert({

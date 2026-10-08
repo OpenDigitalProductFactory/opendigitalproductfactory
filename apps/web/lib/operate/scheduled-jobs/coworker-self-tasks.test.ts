@@ -130,7 +130,10 @@ describe("reconcileCoworkerSelfTask", () => {
   it("registers the Marketing Strategist seed self-task", () => {
     expect(COWORKER_SELF_TASKS[MKT]).toBeDefined();
     expect(COWORKER_SELF_TASKS[MKT]!.routeContext).toBe("/customer/marketing");
-    expect(COWORKER_SELF_TASKS[MKT]!.prompt).toMatch(/create_marketing_campaign_brief/);
+    // The decision record is the one write every run owes; naming the
+    // conditional brief tool made "keep the current brief" a failure (BI-DB179A8D).
+    expect(COWORKER_SELF_TASKS[MKT]!.prompt).toMatch(/save_marketing_review/);
+    expect(COWORKER_SELF_TASKS[MKT]!.prompt).not.toMatch(/create_marketing_campaign_brief/);
   });
 });
 

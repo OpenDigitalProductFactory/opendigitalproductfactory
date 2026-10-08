@@ -17,14 +17,14 @@ import {
 } from "./appoint-room-coordinator";
 
 function db(opts: {
-  room?: { id: string; capsuleId: string } | null;
+  room?: { id: string; capsuleId: string; workItemId: string | null } | null;
   principal?: { id: string; displayName: string } | null;
   participants?: Array<{ id?: string; principalId: string; roles: string[] }>;
 }): AppointCoordinatorDb {
   return {
     workroom: {
       findUnique: async () =>
-        opts.room === undefined ? { id: "room-1", capsuleId: "WC-TEST" } : opts.room,
+      opts.room === undefined ? { id: "room-1", capsuleId: "WC-TEST", workItemId: null } : opts.room,
     },
     principal: {
       findFirst: async () =>

@@ -15,9 +15,11 @@
 // has already classified is returned untouched, because the whole value of the
 // feature collapses the first time automation silently overwrites a person.
 
+import type { GeoPoint } from "@dpf/types";
+
 export type TripClassification = "unclassified" | "business" | "personal" | "commute";
 
-export type GeoPoint = { latitude: number; longitude: number };
+export type { GeoPoint };
 
 export type ClassifiableTrip = {
   startedAt: Date;

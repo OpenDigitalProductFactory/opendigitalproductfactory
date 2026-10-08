@@ -10436,7 +10436,7 @@
           "level": 3,
           "directSkills": 10,
           "wildcardSkills": 10,
-          "reachableTools": 74,
+          "reachableTools": 75,
           "heldGrants": [
             "marketing_read",
             "marketing_write",
@@ -10446,7 +10446,7 @@
           ],
           "services": 4,
           "unbackedSkillIds": [],
-          "detail": "10 skill(s), 74 tool(s), all service backings resolve",
+          "detail": "10 skill(s), 75 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -10859,7 +10859,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 141,
+          "reachableTools": 142,
           "heldGrants": [
             "consumer_read",
             "registry_read",
@@ -10873,7 +10873,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 141 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 142 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true

@@ -225,3 +225,37 @@ test("the native Windows agent is told the DPF autostart task it runs after a Do
   assert.ok(declared, "install-dpf.ps1 declares the autostart task name");
   assert.match(hostInstaller, new RegExp(`DPF_AUTOSTART_TASK_NAME = '${declared}'`));
 });
+
+// BI-28EFE18A (WWMD DI-93310A596E88): every install runs the native Edge Node
+// as its host-upkeep agent; edge features stay opt-in.
+test("Windows installs the native node on every install, host-upkeep role unless -WithEdge", async () => {
+  const installer = await read("install-dpf.ps1");
+  const hostInstaller = await read("scripts/installer/native-edge-host.ps1");
+  assert.match(installer, /\$dpfEdgeRole = if \(\$dpfEdgeOptIn\) \{ "full" \} else \{ "host-upkeep" \}/);
+  assert.match(installer, /Invoke-DPFEdgeNodeConvergence -InstallDir \$DPF_DIR -Role \$dpfEdgeRole/);
+  assert.doesNotMatch(installer, /if \(\$dpfEdgeOptIn\) \{\s*if \(Invoke-DPFEdgeNodeConvergence/);
+  assert.match(hostInstaller, /\[ValidateSet\("full", "host-upkeep"\)\]\[string\]\$Role = "full"/);
+  assert.match(hostInstaller, /DPF_EDGE_ROLE = '\$Role'/);
+  assert.match(hostInstaller, /\[AllowEmptyString\(\)\]\[string\]\$BootstrapToken/);
+});
+
+test("macOS and Linux install the host-upkeep node; Linux runs it under a systemd user unit", async () => {
+  const installer = await read("install-dpf.sh");
+  const hostInstaller = await read("scripts/installer/native-edge-host.sh");
+  assert.match(installer, /dpf_native_edge_install "\$REPO_ROOT" "\$HOST_UPKEEP_TOKEN" "[^"]+" host-upkeep/);
+  assert.match(hostInstaller, /dpf_native_edge_install_linux\(\)/);
+  assert.match(hostInstaller, /systemctl --user enable --now dpf-edge-node\.service/);
+  assert.match(hostInstaller, /DPF_EDGE_ROLE=%s/);
+  assert.match(hostInstaller, /DPF_AUTOSTART_TASK_NAME=%s\\n' "dpf\.service"/);
+  assert.match(hostInstaller, /DPF_AUTOSTART_TASK_NAME=%s\\n' "local\.dpf-autostart"/);
+  assert.match(hostInstaller, /sha256sum -c/);
+});
+
+test("the PKI bootstrap turns the action channel on but keeps an operator's explicit value", async () => {
+  const ps1 = await read("scripts/bootstrap-organization-pki.ps1");
+  const sh = await read("scripts/bootstrap-organization-pki.sh");
+  assert.match(ps1, /-not \(\$content \| Where-Object \{ \$_ -match '\^DPF_REMOTE_ACTION_DISPATCH_ENABLED=' \}\)/);
+  assert.match(ps1, /"DPF_REMOTE_ACTION_DISPATCH_ENABLED=1"/);
+  assert.match(sh, /if ! grep -q '\^DPF_REMOTE_ACTION_DISPATCH_ENABLED=' "\$env_tmp"/);
+  assert.match(sh, /printf 'DPF_REMOTE_ACTION_DISPATCH_ENABLED=1\\n'/);
+});

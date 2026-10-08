@@ -376,8 +376,8 @@ share) survive `docker kill`; only a Docker VM restart clears them. Do not run
 wedged" condition, and the portal's Health tab offers **Restart Docker VM**. It
 drains the platform, then the native Edge agent on this machine stops Docker
 Desktop, shuts the VM down, clears Docker's stale socket folders, and starts
-Docker and DPF again. It never reboots Windows. The control needs the native Edge
-agent (`install-dpf.ps1 -WithEdge`) with remote actions enabled.
+Docker and DPF again. It never reboots Windows. Every install runs that agent
+for host upkeep; `-WithEdge` only adds network discovery (BI-28EFE18A).
 
 **`/api/health` returns 500.**
 The database migrations may not have completed. Tail the portal-init
