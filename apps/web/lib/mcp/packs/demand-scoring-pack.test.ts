@@ -66,6 +66,7 @@ describe("set_backlog_delivery_budget", () => {
       activeBuilds: 1,
       sandboxPoolSize: sandboxPoolSize(),
       wipAdmissionMode: "shadow",
+      capacityDrainEnabled: false,
     });
     expect(result.message).toMatch(/^Backlog delivery budget is 7\/day/);
   });
@@ -109,6 +110,45 @@ describe("set_backlog_delivery_budget", () => {
       update: { governedBacklogEnabled: false },
       create: { id: "singleton", governedBacklogEnabled: false },
     });
+  });
+
+  // BI-9AC1F99B: capacity drain (DI-5FED0D945EBB, opt-in) had no writer, so the
+  // operator could only turn it on by editing the database.
+  it("turns capacity drain on, leaving the other fields untouched, and echoes it", async () => {
+    db.platformDevConfigFindUnique.mockResolvedValue({
+      backlogTeeUpDailyCap: 3,
+      governedBacklogEnabled: true,
+      capacityDrainEnabled: true,
+    });
+
+    const result = await setBudget({ capacityDrainEnabled: true }, "user-1", undefined);
+
+    expect(db.platformDevConfigUpsert).toHaveBeenCalledWith({
+      where: { id: "singleton" },
+      update: { capacityDrainEnabled: true },
+      create: { id: "singleton", capacityDrainEnabled: true },
+    });
+    expect(result.data).toMatchObject({ capacityDrainEnabled: true });
+    expect(result.message).toMatch(/capacity drain on/);
+  });
+
+  it("turns capacity drain off, and ignores a non-boolean value", async () => {
+    db.platformDevConfigFindUnique.mockResolvedValue({ backlogTeeUpDailyCap: 3, governedBacklogEnabled: true, capacityDrainEnabled: false });
+    await setBudget({ capacityDrainEnabled: false }, "user-1", undefined);
+    expect(db.platformDevConfigUpsert).toHaveBeenCalledWith(expect.objectContaining({ update: { capacityDrainEnabled: false } }));
+
+    db.platformDevConfigUpsert.mockClear();
+    const ignored = await setBudget({ capacityDrainEnabled: "yes" }, "user-1", undefined);
+    expect(db.platformDevConfigUpsert).not.toHaveBeenCalled();
+    expect(ignored.data).toMatchObject({ capacityDrainEnabled: false });
+  });
+
+  it("declares capacityDrainEnabled in its schema and stays an authority-consequence tool", () => {
+    const def = demandScoringPack.definitions.find((d) => d.name === "set_backlog_delivery_budget");
+    const props = (def?.inputSchema as { properties: Record<string, { type: string }> }).properties;
+    expect(props.capacityDrainEnabled?.type).toBe("boolean");
+    expect((def as { consequence?: string }).consequence).toBe("authority");
+    expect(def?.sideEffect).toBe(true);
   });
 
   it("rejects a dailyBudget outside 0-50 without writing", async () => {

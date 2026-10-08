@@ -104,7 +104,12 @@ const MAX_BACKLOG_DELIVERY_BUDGET = 50;
  * ideate/plan/review; it does not raise execution parallelism.
  */
 export async function setBacklogDeliveryBudgetHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const data: { backlogTeeUpDailyCap?: number; governedBacklogEnabled?: boolean; wipAdmissionMode?: "shadow" | "enforce" } = {};
+  const data: {
+    backlogTeeUpDailyCap?: number;
+    governedBacklogEnabled?: boolean;
+    wipAdmissionMode?: "shadow" | "enforce";
+    capacityDrainEnabled?: boolean;
+  } = {};
 
   const rawBudget = params["dailyBudget"];
   if (typeof rawBudget === "number" && Number.isFinite(rawBudget)) {
@@ -121,6 +126,14 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
   const rawEnabled = params["enabled"];
   if (typeof rawEnabled === "boolean") {
     data.governedBacklogEnabled = rawEnabled;
+  }
+
+  // BI-9AC1F99B: the use-it-or-lose-it capacity drain (DI-5FED0D945EBB) is
+  // opt-in, and this is its operator writer. Same approval and audit as the rest
+  // of the delivery config; a non-boolean value leaves the stored switch alone.
+  const rawDrain = params["capacityDrainEnabled"];
+  if (typeof rawDrain === "boolean") {
+    data.capacityDrainEnabled = rawDrain;
   }
 
   const rawMode = params["wipAdmissionMode"];
@@ -141,7 +154,7 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
 
   const fresh = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
-    select: { backlogTeeUpDailyCap: true, governedBacklogEnabled: true, wipAdmissionMode: true },
+    select: { backlogTeeUpDailyCap: true, governedBacklogEnabled: true, wipAdmissionMode: true, capacityDrainEnabled: true },
   });
 
   const { sandboxPoolSize, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
@@ -151,6 +164,7 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
 
   const dailyBudget = fresh?.backlogTeeUpDailyCap ?? 3;
   const enabled = fresh?.governedBacklogEnabled === true;
+  const capacityDrainEnabled = fresh?.capacityDrainEnabled === true;
   // Intake budget, admission and execution are three different limits: this
   // budget sets intake per day; each start is admitted by its portfolio's points
   // in flight (BI-3430B3A4); the sandbox pool is the physical execution limit.
@@ -166,9 +180,9 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
     entityId: "singleton",
     message:
       Object.keys(data).length > 0
-        ? `Backlog delivery budget set to ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}).${parallelismNote}`
-        : `Backlog delivery budget is ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}).${parallelismNote}`,
-    data: { dailyBudget, enabled, activeBuilds, sandboxPoolSize: poolSize, wipAdmissionMode: admissionMode },
+        ? `Backlog delivery budget set to ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}, capacity drain ${capacityDrainEnabled ? "on" : "off"}).${parallelismNote}`
+        : `Backlog delivery budget is ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}, capacity drain ${capacityDrainEnabled ? "on" : "off"}).${parallelismNote}`,
+    data: { dailyBudget, enabled, activeBuilds, sandboxPoolSize: poolSize, wipAdmissionMode: admissionMode, capacityDrainEnabled },
   };
 }
 
