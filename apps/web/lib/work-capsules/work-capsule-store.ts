@@ -32,7 +32,6 @@ import {
   CapsuleBranchOccupiedError,
   isReusableLiveCapsule,
   isTerminalCapsuleStatus,
-  leaseUntil,
   planTerminalCapsuleResume,
   readBranchIdentityCapsule,
   TERMINAL_CAPSULE_STATUSES,
@@ -57,6 +56,7 @@ export {
 } from "./work-capsule-terminal-status";
 export { recordWorkCapsuleEvidence } from "./work-capsule-activity-store";
 export { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
+export { heartbeatWorkCapsule, reassignWorkCapsuleExecutor } from "./workroom-lease";
 
 type CapsuleCreateInput = {
   title: string;
@@ -570,97 +570,6 @@ export async function planCapsuleWorkspace(args: {
   });
 }
 
-export async function heartbeatWorkCapsule(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  actor: WorkCapsuleActor;
-  now?: Date;
-}) {
-  const nextLease = leaseUntil(args.now ?? new Date());
-  return inTransaction(args.db, async (tx) => {
-    const capsule = await tx.workroom.update({
-      where: { capsuleId: args.capsuleId },
-      data: {
-        leaseHolderPrincipalId: args.actor.principalId,
-        leaseExpiresAt: nextLease,
-      },
-    });
-    await recordActivity(tx, {
-      workCapsuleId: capsule.id,
-      kind: "lease-renewed",
-      summary: `Lease renewed until ${nextLease.toISOString()}`,
-      actor: args.actor,
-    });
-    return capsule;
-  });
-}
-
-/**
- * Cross-agent handoff (EP-WORK-CONVERGENCE / BI-A443B9CC): change the capsule's
- * executor, transfer the lease to the receiving principal, and record an
- * `executor-changed` activity carrying the full provenance + handoff manifest
- * (from/to executor, lease transfer, reason, next action / open risks / evidence
- * digest). This is the writer for the `executor-changed` activity kind, which
- * previously had zero writers. Renders as "Claude started this; Grok is
- * finishing it" — a plain status event, not raw agent plumbing.
- */
-export async function reassignWorkCapsuleExecutor(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  toExecutorKind: WorkCapsuleExecutorKind;
-  toExecutorRef?: string | null;
-  /** The receiving/acting principal — becomes the new lease holder. */
-  actor: WorkCapsuleActor;
-  reason?: string;
-  /** next action, open risks, evidence digest, branch/worktree, suggested receiver. */
-  handoffManifest?: Record<string, unknown>;
-  now?: Date;
-}) {
-  if (!isWorkCapsuleExecutorKind(args.toExecutorKind)) {
-    throw new Error("Invalid executor kind");
-  }
-  const nextLease = leaseUntil(args.now ?? new Date());
-  return inTransaction(args.db, async (tx) => {
-    const current = await tx.workroom.findUnique({
-      where: { capsuleId: args.capsuleId },
-      select: {
-        id: true,
-        executorKind: true,
-        executorRef: true,
-        leaseHolderPrincipalId: true,
-      },
-    });
-    if (!current) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-
-    const updated = await tx.workroom.update({
-      where: { capsuleId: args.capsuleId },
-      data: {
-        executorKind: args.toExecutorKind,
-        executorRef: args.toExecutorRef ?? null,
-        leaseHolderPrincipalId: args.actor.principalId,
-        leaseExpiresAt: nextLease,
-      },
-    });
-
-    await recordActivity(tx, {
-      workCapsuleId: updated.id,
-      kind: "executor-changed",
-      summary: `Executor changed ${current.executorKind ?? "none"} → ${args.toExecutorKind}${args.reason ? `: ${args.reason}` : ""}`,
-      payload: {
-        fromExecutorKind: current.executorKind ?? null,
-        fromExecutorRef: current.executorRef ?? null,
-        toExecutorKind: args.toExecutorKind,
-        toExecutorRef: args.toExecutorRef ?? null,
-        fromLeaseHolderPrincipalId: current.leaseHolderPrincipalId ?? null,
-        toLeaseHolderPrincipalId: args.actor.principalId,
-        reason: args.reason ?? null,
-        handoffManifest: args.handoffManifest ?? null,
-      },
-      actor: args.actor,
-    });
-    return updated;
-  });
-}
 
 
 /**
