@@ -47,7 +47,8 @@ async function productionDeps(forBuildId: string): Promise<AutoPrDeps> {
     },
     createPr: async (buildId, actorUserId) => {
       const { executeTool } = await import("@/lib/mcp-tools");
-      return executeTool("create_portal_pr", {}, actorUserId, { featureBuildId: buildId, routeContext: "/build" });
+      // Name the build in params: context.featureBuildId is read as a row cuid, so an FB- id there sets no hint.
+      return executeTool("create_portal_pr", { buildId }, actorUserId, { featureBuildId: buildId, routeContext: "/build" });
     },
     log: async (summary) => {
       await prisma.buildActivity.create({ data: { buildId: forBuildId, tool: "auto_open_pr", summary } }).catch(() => {});

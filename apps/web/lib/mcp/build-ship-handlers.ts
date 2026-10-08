@@ -345,7 +345,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     select: {
       id: true, title: true, diffPatch: true, buildBranch: true, sandboxId: true,
       description: true, gitCommitHashes: true, updatedAt: true, buildExecState: true,
-      verificationOut: true, acceptanceMet: true, phase: true,
+      verificationOut: true, acceptanceMet: true, phase: true, kind: true, plan: true,
       designDoc: true, buildPlan: true,
       disposition: true, dispositionSuggestionReason: true, dispositionSource: true,
       productVersions: {
@@ -554,6 +554,10 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     testsFailed,
     acceptanceMet: acMet,
     acceptanceTotal: acTotal,
+    // BI-D9287821: ask for acceptance only where the build's own policy does.
+    acceptanceRequired: (await import("@/lib/explore/build-process-matrix"))
+      .getProcessPolicy(build.kind, (build.plan as { processSize?: string } | null)?.processSize)
+      .gates["review->ship"]?.includes("acceptance-evaluated") ?? true,
   });
   // BI-0700B79C: the guard gauntlet's result only has force if publishing
   // depends on it. On the external path `git push` is refused without a gate

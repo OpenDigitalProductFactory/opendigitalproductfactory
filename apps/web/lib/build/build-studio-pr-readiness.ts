@@ -3,6 +3,8 @@ export interface BuildVerificationReadinessInput {
   testsFailed: number;
   acceptanceMet: number;
   acceptanceTotal: number;
+  /** False when the build's review→ship policy drops acceptance (doc builds). */
+  acceptanceRequired?: boolean;
 }
 
 export interface ReadinessVerdict {
@@ -28,6 +30,7 @@ export function evaluateBuildVerificationReadiness(
   if (!input.typecheckPassed) blockers.push("TypeCheck did not pass.");
   if (input.testsFailed > 0) blockers.push(`${input.testsFailed} test(s) failed.`);
   if (input.acceptanceTotal < 1) {
+    if (input.acceptanceRequired === false) return { ready: blockers.length === 0, blockers };
     blockers.push("No acceptance criteria were recorded as verification evidence.");
   } else if (input.acceptanceMet < input.acceptanceTotal) {
     blockers.push(

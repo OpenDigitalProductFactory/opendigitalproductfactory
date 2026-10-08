@@ -29,6 +29,28 @@ describe("Build Studio PR readiness", () => {
     }).ready).toBe(false);
   });
 
+  // BI-D9287821: a doc build's process policy drops acceptance, so nothing ever
+  // records it; publishing must not demand what the policy never asked for.
+  it("does not demand acceptance when the build's policy does not require it", () => {
+    expect(evaluateBuildVerificationReadiness({
+      typecheckPassed: true,
+      testsFailed: 0,
+      acceptanceMet: 0,
+      acceptanceTotal: 0,
+      acceptanceRequired: false,
+    })).toEqual({ ready: true, blockers: [] });
+  });
+
+  it("still blocks recorded criteria that are unmet when acceptance is not required", () => {
+    expect(evaluateBuildVerificationReadiness({
+      typecheckPassed: true,
+      testsFailed: 0,
+      acceptanceMet: 0,
+      acceptanceTotal: 1,
+      acceptanceRequired: false,
+    }).ready).toBe(false);
+  });
+
   it("builds an exact published-ref command without embedding the PR body", () => {
     const command = buildPublishedReadinessCommand({
       branchName: "build/FB-123",
