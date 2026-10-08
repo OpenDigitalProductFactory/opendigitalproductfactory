@@ -152,8 +152,8 @@ export function loadCommandments(dir = PRINCIPLES_DIR, professionsDir = PROFESSI
   );
 }
 
-function defaultGit(args) {
-  return gitText(args, { cwd: join(HERE, ".."), trim: false, maxBuffer: 32 * 1024 * 1024 });
+function defaultGit(args, opts = {}) {
+  return gitText(args, { cwd: join(HERE, ".."), trim: false, maxBuffer: 64 * 1024 * 1024, ...opts });
 }
 
 /**
@@ -169,25 +169,92 @@ export function resolveMergeTree(ref, { git = defaultGit } = {}) {
   return tree;
 }
 
-/** Read the decision corpus straight from a Git tree without materializing it. */
-export function loadCommandmentsFromGitTree(tree, { git = defaultGit } = {}) {
-  const prefix = "docs/";
-  const paths = String(git(["ls-tree", "-r", "--name-only", tree, "--", prefix]) ?? "")
-    .split(/\r?\n/)
-    .map((path) => path.trim())
-    .filter((path) =>
-      path.startsWith("docs/founder-kernel/wiki/principles/") && path.endsWith(".md")
-      || /^docs\/professions\/[^/]+\/wiki\/[^/]+\.md$/.test(path),
-    );
+const CORPUS_PATH = (path) =>
+  path.startsWith("docs/founder-kernel/wiki/principles/") && path.endsWith(".md")
+  || /^docs\/professions\/[^/]+\/wiki\/[^/]+\.md$/.test(path);
 
-  return parseCommandmentFiles(paths.map((path) => {
-    const kernelPrefix = "docs/founder-kernel/wiki/principles/";
-    const professionMatch = path.match(/^docs\/professions\/([^/]+)\/wiki\/(.+)\.md$/);
-    const slug = path.startsWith(kernelPrefix)
-      ? path.slice(kernelPrefix.length, -3)
-      : `professions/${professionMatch[1]}/${professionMatch[2]}`;
-    return { slug, raw: String(git(["show", `${tree}:${path}`]) ?? "") };
-  }));
+function corpusSlug(path) {
+  const kernelPrefix = "docs/founder-kernel/wiki/principles/";
+  if (path.startsWith(kernelPrefix)) return path.slice(kernelPrefix.length, -3);
+  const professionMatch = path.match(/^docs\/professions\/([^/]+)\/wiki\/(.+)\.md$/);
+  return `professions/${professionMatch[1]}/${professionMatch[2]}`;
+}
+
+/**
+ * Raised when the merge tree names blobs this clone does not hold and origin
+ * would not supply them. It is an environment gap, not a decision regression
+ * (BI-1D04A29F), so the CLI reports it as such with the exact remedy.
+ */
+export class CorpusBlobsUnavailableError extends Error {
+  constructor(missing, cause) {
+    super(
+      `${missing.length} decision-corpus blob(s) of the merge tree are not in this clone and could not be fetched `
+      + `(${cause}). This is an environment gap, not a decision regression. Remedy: git fetch --no-tags origin `
+      + `${missing.slice(0, 5).join(" ")}${missing.length > 5 ? " …" : ""}`,
+    );
+    this.name = "CorpusBlobsUnavailableError";
+    this.missing = missing;
+  }
+}
+
+/** Parse `git cat-file --batch` output (a Buffer) into sha -> utf8 content. */
+export function parseCatFileBatch(buffer) {
+  const out = new Map();
+  let offset = 0;
+  while (offset < buffer.length) {
+    const headerEnd = buffer.indexOf(0x0a, offset);
+    if (headerEnd < 0) break;
+    const [sha, type, size] = buffer.subarray(offset, headerEnd).toString("utf8").split(" ");
+    if (type === "missing" || size === undefined) {
+      offset = headerEnd + 1;
+      continue;
+    }
+    const length = Number(size);
+    out.set(sha, buffer.subarray(headerEnd + 1, headerEnd + 1 + length).toString("utf8"));
+    offset = headerEnd + 1 + length + 1; // each object's content is followed by one LF
+  }
+  return out;
+}
+
+/**
+ * Read the decision corpus straight from a Git tree without materializing it.
+ *
+ * BI-1D04A29F: one `git show` per page cost ~0.8 s each on Windows (337 pages,
+ * about 280 s), and in this blob:none partial clone each one lazy-fetched its
+ * blob alone, so a single unreachable blob failed the whole guard as if a
+ * decision had regressed. Now: list the tree once, find missing blobs without
+ * lazy fetching, fetch them in one request, and read every blob in one batch.
+ */
+export function loadCommandmentsFromGitTree(tree, { git = defaultGit } = {}) {
+  const entries = String(git(["ls-tree", "-r", tree, "--", "docs/"]) ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.match(/^\d+ blob ([0-9a-f]{40,64})\t(.+)$/i))
+    .filter(Boolean)
+    .map(([, sha, path]) => ({ sha, path: path.trim() }))
+    .filter(({ path }) => CORPUS_PATH(path));
+  if (entries.length === 0) return parseCommandmentFiles([]);
+
+  const shaList = `${[...new Set(entries.map((e) => e.sha))].join("\n")}\n`;
+  const missing = String(
+    git(["cat-file", "--batch-check=%(objectname) %(objecttype)"], {
+      input: shaList,
+      env: { ...process.env, GIT_NO_LAZY_FETCH: "1" },
+    }) ?? "",
+  )
+    .split(/\r?\n/)
+    .filter((line) => / missing$/.test(line))
+    .map((line) => line.split(" ")[0]);
+  if (missing.length > 0) {
+    try {
+      git(["fetch", "--no-tags", "--quiet", "origin", ...missing]);
+    } catch (error) {
+      const cause = error instanceof Error ? error.message.split("\n")[0] : String(error);
+      throw new CorpusBlobsUnavailableError(missing, cause);
+    }
+  }
+
+  const blobs = parseCatFileBatch(git(["cat-file", "--batch"], { input: shaList, binary: true }));
+  return parseCommandmentFiles(entries.map(({ sha, path }) => ({ slug: corpusSlug(path), raw: blobs.get(sha) ?? "" })));
 }
 
 // ─── Scoring (mirrors option-scoring.ts) ─────────────────────────────────────
@@ -226,9 +293,14 @@ if (invokedDirectly) {
   if (mergeWithGiven && !mergeWith) {
     throw new Error("--merge-with requires a Git ref");
   }
-  const commandments = mergeWith
-    ? loadCommandmentsFromGitTree(resolveMergeTree(mergeWith))
-    : undefined;
+  let commandments;
+  try {
+    commandments = mergeWith ? loadCommandmentsFromGitTree(resolveMergeTree(mergeWith)) : undefined;
+  } catch (error) {
+    if (!(error instanceof CorpusBlobsUnavailableError)) throw error;
+    console.error(`[golden-decisions] ENVIRONMENT-UNAVAILABLE: ${error.message}`);
+    process.exit(3);
+  }
   const { commandmentCount, results, ok } = runCheck(PRINCIPLES_DIR, { commandments });
   console.log(`[golden-decisions] scored ${results.length} canonical decisions against ${commandmentCount} commandments`);
   for (const r of results) {
