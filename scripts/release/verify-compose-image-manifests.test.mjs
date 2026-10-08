@@ -71,3 +71,13 @@ test("every known exception names its backlog item", () => {
     assert.match(item, /^BI-[0-9A-F]{8}$/, image);
   }
 });
+
+// BI-E2763038: a tag alone is not identity — the publisher deleted v0.1.0 and every
+// install lost dpf-tts. The default stays pinned by tag (names the variant) AND digest.
+test("dpf-tts defaults to a tag-and-digest pin, with no exception carried for it", async () => {
+  const compose = await readFile(new URL("../../docker-compose.yml", import.meta.url), "utf8");
+  const match = compose.match(/image: \$\{DPF_TTS_IMAGE:-([^}]+)\}/);
+  assert.ok(match, "dpf-tts image default not found");
+  assert.match(match[1], /^travisvn\/chatterbox-tts-api:[\w.-]+@sha256:[0-9a-f]{64}$/);
+  assert.equal([...KNOWN_UNRESOLVABLE.keys()].some((image) => image.startsWith("travisvn/chatterbox-tts-api")), false);
+});

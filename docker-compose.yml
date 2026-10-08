@@ -1102,10 +1102,22 @@ services:
   # Principle: prefer-self-hosted-infrastructure
   # Spec: docs/superpowers/specs/2026-05-21-chatterbox-tts-self-hosted.md
   #
+  # Image (BI-E2763038): travisvn/chatterbox-tts-api (AGPL-3.0 API wrapper, run
+  # unmodified as a separate container; the Chatterbox model itself is MIT).
+  # Pinned by tag AND digest — the publisher deleted v0.1.0 once, so the tag
+  # names the variant and the digest carries identity. Every published variant
+  # is built from upstream tag v1.0.1 (revision 13611fd, 2025-06-03). Evaluation:
+  # docs/security/tool-evaluations/2026-10-07-chatterbox-tts-api.md
+  #
   # Hardware tiers:
-  #   Tier 1 (CPU):   DPF_TTS_IMAGE=travisvn/chatterbox-tts-api:latest + unset NVIDIA deploy
+  #   Tier 1 (CPU):   DPF_TTS_IMAGE=travisvn/chatterbox-tts-api:1.0.1@sha256:900e5ae19e69e8dcce9e1f97b2f047b6a6e9190cd653c1c3c907de2113d8c494
+  #                   (the `cpu` build; linux/amd64 + linux/arm64, ~1.3 GB) and
+  #                   drop the NVIDIA deploy reservation below.
   #                   ~10–30x slower but requires no GPU. Good for testing.
-  #   Tier 2 (CUDA):  Default. Requires NVIDIA GPU ≥ 6 GB VRAM (Turbo model).
+  #   Tier 2 (CUDA):  Default — the `gpu` build (== `latest`; linux/amd64 only,
+  #                   CUDA 12.4, ~8.3 GB compressed; no versioned GPU tag exists).
+  #                   Requires an NVIDIA GPU ≥ 6 GB VRAM; the installers start
+  #                   dpf-tts only when they detect one.
   #                   Speech-to-text no longer runs as a shipped sidecar
   #                   (BI-F7E9A541), so this is the only local speech service
   #                   competing for VRAM. An operator running their own STT
@@ -1120,7 +1132,7 @@ services:
       dpf.recreate-class: stateless
     # BI-A0A0568F: profile-gated only (never always-on). See
     # docs/architecture/2026-08-09-tts-idle-process-elimination.md.
-    image: ${DPF_TTS_IMAGE:-travisvn/chatterbox-tts-api:v0.1.0}
+    image: ${DPF_TTS_IMAGE:-travisvn/chatterbox-tts-api:gpu@sha256:8c0b379172d48b49d59d8f29a35fa23c0dc27955dba4d3ab41a77b2d71b4711f}
     profiles: ["runtime-local-speech", "tts"]
     restart: unless-stopped
     logging: *default-logging
@@ -1128,9 +1140,8 @@ services:
       # travisvn/chatterbox-tts-api defaults to port 5123; force 8000 so the
       # Docker-network DNS address (dpf-tts:8000) matches DPF_TTS_URL.
       PORT: "8000"
-      # turbo = 350M params, ~5-6 GB VRAM, fastest inference.
-      # Override to `original` (500M, ~7 GB) or `multilingual` (550M, 23 langs).
-      TTS_MODEL: ${TTS_CHATTERBOX_MODEL:-turbo}
+      # No model selector: v1.0.1 always loads the original 500M Chatterbox model
+      # (app/core/tts_model.py) and reads no TTS_MODEL variable, so none is set.
     deploy:
       resources:
         limits:

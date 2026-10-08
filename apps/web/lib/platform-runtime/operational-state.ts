@@ -1,4 +1,5 @@
 import {
+  capabilityHostPlatformFor,
   projectCapabilityServices,
   type CapabilityServiceRequirement,
   type ExternalRuntimeRequirement,
@@ -28,6 +29,8 @@ export interface ObservedProviderState {
 }
 export interface PersistedInstallSnapshot {
   enabledRuntimeCapabilities: string[];
+  /** Installer-written host (darwin / win32 / linux); scopes host-specific services. */
+  platform?: string;
   capabilityCatalogHash?: string;
   capabilityStateVersion?: string;
 }
@@ -69,6 +72,7 @@ export function createOperationalCapabilityState(input: {
     projection = projectCapabilityServices({
       enabledRuntimeCapabilities: input.installSnapshot.enabledRuntimeCapabilities,
       capabilityStates: input.capabilityStates,
+      hostPlatform: capabilityHostPlatformFor(input.installSnapshot.platform),
     });
   } catch (error) {
     if (!isCapabilityStateStaleError(error)) throw error;

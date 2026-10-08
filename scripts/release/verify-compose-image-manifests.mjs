@@ -16,8 +16,8 @@ const VALID_ONLY = new Set(["all", "digest-pinned", "third-party"]);
  * renders, fails the guard until it is removed, so an exception cannot outlive its pin.
  */
 export const KNOWN_UNRESOLVABLE = new Map([
-  // Docker Hub deleted the v0.1.0 tag; only 1.0.1/latest remain (BI-E2763038).
-  ["travisvn/chatterbox-tts-api:v0.1.0", "BI-E2763038"],
+  // Empty. BI-E2763038 re-pinned dpf-tts (travisvn/chatterbox-tts-api:v0.1.0 was
+  // deleted upstream) by tag AND digest, which retired the only entry.
 ]);
 
 /**

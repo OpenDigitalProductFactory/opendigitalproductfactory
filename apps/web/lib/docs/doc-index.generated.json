@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 733,
+  "pageCount": 734,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -9597,6 +9597,23 @@
         "integration-evidence",
         "conditions",
         "sources"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-10-07-chatterbox-tts-api.md": {
+      "publicHref": "/security/tool-evaluations/2026-10-07-chatterbox-tts-api/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-travisvnchatterbox-tts-api-v101-dpf-tts-re-pin",
+        "what-is-evaluated",
+        "api-compatibility-source-read-at-upstream-tag-v101",
+        "cosai-security-findings",
+        "compliance",
+        "architecture-fit",
+        "integration-test-results",
+        "conditions",
+        "re-evaluation"
       ]
     },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {

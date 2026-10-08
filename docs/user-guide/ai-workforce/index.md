@@ -133,7 +133,7 @@ The drift detail, along with route-level skills, observability, and the curator 
 
 ## Reading Runtime Health
 
-Runtime Health explains infrastructure in terms of enabled capabilities. **Required — unavailable** needs attention because an enabled capability depends on that local service. **Optional — inactive** is expected when its capability is disabled and does not make the platform unhealthy. **Optional — degraded** means the capability is enabled but its local service is unavailable. **External — provider managed** reports reconciled provider evidence rather than pretending the provider is a local container. Each state includes text and an action; color is supplementary.
+Runtime Health explains infrastructure in terms of enabled capabilities. **Required — unavailable** needs attention because an enabled capability depends on that local service. **Optional — inactive** is expected when its capability is disabled and does not make the platform unhealthy. **Optional — degraded** means the capability is enabled but its local service is unavailable. **External — provider managed** reports reconciled provider evidence rather than pretending the provider is a local container. Each state includes text and an action; color is supplementary. Services that only run on some host systems are judged against your install's own host: on a Mac, the `dpf-tts` voice container (Linux and Windows only, because macOS speaks through the host-native Chatterbox service) shows as optional and inactive, not degraded.
 
 ### Coworker routing
 
