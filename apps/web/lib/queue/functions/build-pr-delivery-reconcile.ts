@@ -64,6 +64,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       capsuleId: true,
       featureBuildId: true,
       repositoryFullName: true,
+      headSha: true,
       pullRequestNumber: true,
       pullRequestUrl: true,
       scopeClaims: true,
@@ -158,6 +159,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       }
       const observation = await observeGithubPullRequest({ owner, repo, prNumber, token });
       observed += 1;
+      if (capsule.headSha && observation.headSha.toLowerCase() !== capsule.headSha.toLowerCase()) continue;
       const readiness = projectGithubPrReadiness(observation);
       const posture = resolvePrFollowThroughPosture({
         scopeClaims: capsule.scopeClaims,
