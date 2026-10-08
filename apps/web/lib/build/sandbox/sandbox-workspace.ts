@@ -7,7 +7,8 @@ import { getSourceStrategy } from "@/lib/sandbox-source-strategy";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const INSTALL_COMMANDS = [
-  "cd /workspace && pnpm install",
+  // CI=true: without a TTY pnpm refuses to purge a stale modules dir (BI-CF281F4D).
+  "cd /workspace && CI=true pnpm install",
   "cd /workspace && pnpm --filter @dpf/db exec prisma generate",
 ];
 
