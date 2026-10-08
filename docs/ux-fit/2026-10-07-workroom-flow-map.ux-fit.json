@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "decidedOption": "map-above-steps",
+  "decisionInteractionId": "DI-D4299F91D3A0",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx",
+      "apps/web/components/workspace/workroom/WorkroomShapeSection.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "map-above-steps",
+      "map-replaces-steps",
+      "map-behind-third-toggle"
+    ]
+  },
+  "rationale": "BI-FC0F4BD6 (EP-B70E718D F3). A room's work shape becomes a picture at the top of the existing Shape view. It shows lanes (AI coworkers, people, outside touchpoints), each step's state (state is carried by border weight, dash and a glyph as well as theme-token colour), the hold cause, and this room's time on each step against the shape's typical time. The step list and inspection panel stay below as the detail layer. Choosing a step on the map opens the same inspection through the shared ?processStep URL state. No new toggle, route or input. Rejected: map-replaces-steps removes the list layout that keyboard and search users rely on. map-behind-third-toggle adds a choice to every room view.",
+  "verification": "WorkroomFlowMap.test.tsx (jsdom) covers step names with state and hold cause, the deciding person, click and keyboard selection through the shared URL state, 'not enough history yet' instead of a number, a parallel shape declined rather than drawn as a line, and token-only colour. workroom-flow-map.test.ts covers lanes, states, times and the typical-time threshold."
+}

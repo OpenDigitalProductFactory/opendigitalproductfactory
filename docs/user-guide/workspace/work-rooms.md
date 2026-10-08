@@ -8,6 +8,7 @@ relatedCode:
   - apps/web/components/workspace/WorkCaseAttentionLens.tsx
   - apps/web/components/workspace/WorkCaseDetailView.tsx
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
+  - apps/web/components/workspace/workroom/WorkroomFlowMap.tsx
   - apps/web/components/workspace/workroom/WorkroomParticipants.tsx
   - apps/web/lib/work-management/coworker-engagement-case-projection.ts
   - apps/web/lib/work-management/room-channel-continuity.ts
@@ -141,6 +142,22 @@ pauses the affected lifecycle transition before work is persisted. An AI coordin
 the required job-specific qualification and delegated authority. When either is unknown, the room
 asks for attention instead of assuming eligibility. Rooms without a declared activity shape keep
 their legacy behavior and the panel reports oversight as not applicable.
+
+### Reading the flow map
+
+When a room has a work shape, the **Shape** view opens with a picture of it, above the step list:
+
+- **Lanes** show who does each step: AI coworkers, people, and outside touchpoints (a step that talks with a customer or supplier).
+- **Steps** are boxes, left to right. A step's border and mark show its state:
+  - **▶** being worked
+  - **◷** waiting on a person
+  - **!** blocked, with the reason (for example *conformance pause*)
+  - **✓** done
+- **A diamond** after a step means a person decides the way out of it.
+- **Under each step** is how long this room has spent there, next to the shape's **typical** time over the last four weeks. A step well over its typical time is marked **slow**. Until a step has finished at least five times, it says *not enough history yet* instead of showing a number.
+- **The line above the map** describes the same shape in words: what starts it, its steps, who decides, and how it ends.
+
+Choose a step on the map to open the same inspection as the step list. A shape that runs steps in parallel is listed as steps, not drawn as a line, until the map can draw the branches exactly.
 
 ## Access and Other Channels
 

@@ -10,6 +10,7 @@ import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspac
 import type { RoomWorkforce } from "@/lib/work-management/room-workforce.server";
 import type { WorkroomStageDecisionView } from "@/lib/work-management/workroom-stage-decision";
 import type { WorkroomShapeRebindView } from "@/lib/work-management/workroom-shape-rebind";
+import type { WorkroomFlowMapModel } from "@/lib/work-management/workroom-flow-map";
 
 type Props = {
   detail: WorkspaceWorkCaseDetailView;
@@ -17,9 +18,10 @@ type Props = {
   workforce?: Pick<RoomWorkforce, "accountability" | "accountableDisplayName"> | null;
   stageDecision?: WorkroomStageDecisionView | null;
   shapeRebind?: WorkroomShapeRebindView | null;
+  flowMap?: WorkroomFlowMapModel | null;
 };
 
-export function WorkCaseDetailView({ detail, workforce, stageDecision, shapeRebind, navigationContext = {} }: Props) {
+export function WorkCaseDetailView({ detail, workforce, stageDecision, shapeRebind, flowMap, navigationContext = {} }: Props) {
   if (detail.roomChoices?.length) {
     return (
       <Surface as="section" className="space-y-4 text-[var(--dpf-text)]" aria-labelledby="room-choice-title">
@@ -71,7 +73,7 @@ export function WorkCaseDetailView({ detail, workforce, stageDecision, shapeRebi
   return (
     <div className="space-y-5 text-[var(--dpf-text)]">
       <WorkroomHeader room={detail.room} summary={detail.summary} workforce={workforce} stageDecision={stageDecision} shapeRebind={shapeRebind} />
-      <WorkroomBody detail={detail} room={detail.room} />
+      <WorkroomBody detail={detail} room={detail.room} flowMap={flowMap} />
     </div>
   );
 }

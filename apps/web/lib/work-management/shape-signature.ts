@@ -35,7 +35,7 @@ import type {
 
 export type ShapeLane = "AI" | "Person" | "Unknown";
 
-const TRIGGER_GLYPH: Record<WorkShapeTriggerClass, string> = {
+export const TRIGGER_GLYPH: Record<WorkShapeTriggerClass, string> = {
   claim: "✋",
   cadence: "⏱",
   "deadline-horizon": "📅",

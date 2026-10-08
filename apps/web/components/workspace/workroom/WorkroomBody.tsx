@@ -26,6 +26,7 @@ import { WorkroomCycles } from "./WorkroomCycles";
 import { WorkroomShapeSection } from "./WorkroomShapeSection";
 import { WorkroomParticipants } from "./WorkroomParticipants";
 import { WorkroomPosture } from "./WorkroomPosture";
+import type { WorkroomFlowMapModel } from "@/lib/work-management/workroom-flow-map";
 import { WorkroomProcessOverseer } from "./WorkroomProcessOverseer";
 import { WorkroomBoundaryControl } from "./WorkroomBoundaryControl";
 import {
@@ -36,6 +37,8 @@ import {
 type Props = {
   detail: WorkspaceWorkCaseDetailView;
   room: WorkroomView;
+  /** EP-B70E718D F3: the room's flow map, when its shape resolves. */
+  flowMap?: WorkroomFlowMapModel | null;
 };
 
 const BOUNDARY_GAP_LABEL: Record<WorkroomBoundaryGap, string> = {
@@ -340,6 +343,7 @@ function WorkroomDetailsContent({ detail, room }: Props) {
 export function WorkroomBodyContent({
   detail,
   room,
+  flowMap,
   mode,
   onModeChange,
 }: Props & {
@@ -353,6 +357,7 @@ export function WorkroomBodyContent({
       <WorkroomShapeSection
         graph={projectRoomShape(room)}
         room={room}
+        flowMap={flowMap ?? null}
         mode={mode}
         onModeChange={onModeChange}
       />
@@ -364,12 +369,13 @@ export function WorkroomBodyContent({
   );
 }
 
-export function WorkroomBody({ detail, room }: Props) {
+export function WorkroomBody({ detail, room, flowMap }: Props) {
   const [mode, setMode] = useWorkroomViewMode();
   return (
     <WorkroomBodyContent
       detail={detail}
       room={room}
+      flowMap={flowMap}
       mode={mode}
       onModeChange={setMode}
     />
