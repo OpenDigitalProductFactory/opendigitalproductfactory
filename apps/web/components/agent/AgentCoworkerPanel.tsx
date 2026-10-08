@@ -662,8 +662,7 @@ export function AgentCoworkerPanel({
 
     setIsBusy(true);
     setSendsInFlight((count) => count + 1);
-    // BI-2750EB6F: start the turn watchdog's clock (we're about to POST); with no data
-    // or heartbeat before the deadline, the watchdog surfaces a failure.
+    // BI-2750EB6F: start the turn watchdog's clock; no data/heartbeat by the deadline = failure.
     lastServerActivityRef.current = Date.now();
     beginJourney("message-ack"); // BI-BD0B0DCC
 

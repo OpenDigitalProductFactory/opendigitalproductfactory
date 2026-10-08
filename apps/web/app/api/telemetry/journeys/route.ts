@@ -1,3 +1,4 @@
+// @exposure authenticated — session required unconditionally (auth() → 401).
 // Browser journey and web-vital samples (BI-BD0B0DCC). The portal measures
 // operator journeys from interaction to first painted frame and posts them
 // here in batches via navigator.sendBeacon; this route validates each sample

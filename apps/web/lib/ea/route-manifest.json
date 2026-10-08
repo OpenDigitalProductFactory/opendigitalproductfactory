@@ -2105,7 +2105,8 @@
         "journeys"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/api/telemetry/journeys/route.ts"
+      "file": "apps/web/app/api/telemetry/journeys/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/transcribe",
