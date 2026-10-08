@@ -39,14 +39,32 @@ describe("runDeterministicBuildVerification", () => {
 });
 
 describe("resolveQaVerification", () => {
-  it("keeps a readable QA verdict and runs nothing", async () => {
-    const run = vi.fn();
+  // BI-E0931D5C (live, 2026-10-08): FB-91774D92's QA reply was "`pnpm exec tsc --noEmit`
+  // in `apps/web` finished with no errors". The parser's /tsc.*error/ matched the
+  // negation and returned typecheckPassed=false at HIGH confidence, so no check ran
+  // and the build->review gate held a clean build. Prose never decides the verdict.
+  it("decides a readable QA verdict by the platform's own checks, not the prose", async () => {
+    const run = vi.fn().mockResolvedValue({
+      verification: { typecheckPassed: true, testsPassed: 1, testsFailed: 0, parseConfidence: "high", source: "deterministic-scoped", scope: "scoped" },
+      changedFiles: ["apps/web/lib/routing/anthropic-cache.ts"], output: "Deterministic scoped verification",
+    });
+    const out = await resolveQaVerification({
+      parsed: { typecheckPassed: false, testsPassed: 0, testsFailed: 0, parseConfidence: "high" },
+      qaContent: "- **Typecheck:** `pnpm exec tsc --noEmit` in `apps/web` finished with no errors.",
+      changedFiles: [], runDeterministic: run,
+    });
+    expect(run).toHaveBeenCalledWith([]);
+    expect(out.verification).toMatchObject({ typecheckPassed: true, source: "deterministic-scoped" });
+    expect(out.content).toContain("QA specialist said:");
+  });
+
+  it("falls back to a readable QA verdict only when the platform's checks cannot run", async () => {
     const out = await resolveQaVerification({
       parsed: { typecheckPassed: true, testsPassed: 12, testsFailed: 0, parseConfidence: "high" },
-      qaContent: "12 tests passed, typecheck passed", changedFiles: ["a.ts"], runDeterministic: run,
+      qaContent: "12 tests passed, typecheck passed", changedFiles: ["a.ts"],
+      runDeterministic: vi.fn().mockRejectedValue(new Error("sandbox down")),
     });
-    expect(run).not.toHaveBeenCalled();
-    expect(out.verification.testsPassed).toBe(12);
+    expect(out.verification).toMatchObject({ typecheckPassed: true, testsPassed: 12, parseConfidence: "high" });
   });
 
   it("replaces an unreadable verdict with the deterministic checks and their files", async () => {
