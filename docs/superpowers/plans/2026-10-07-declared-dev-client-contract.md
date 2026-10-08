@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Declared DEV client contract
 
 Backlog: BI-45DA45A6. Workroom: WC-4C79454C. Branch: fix/declared-dev-client-contract.
