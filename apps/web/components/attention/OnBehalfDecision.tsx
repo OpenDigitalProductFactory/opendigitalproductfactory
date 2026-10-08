@@ -64,7 +64,7 @@ export function OnBehalfDecision({
   );
 }
 
-/** "Decided by <admin> on behalf of <owner>: <reason>" for the settled card. */
+/** "Decided by ADMIN on behalf of OWNER: REASON" for the settled card. */
 export function decidedOnBehalfText(record: { by: string; onBehalfOf: string; reason: string }): string {
   return formatSource(DEFAULT_LOCALE, COPY.decidedOnBehalf, { by: record.by, owner: record.onBehalfOf, reason: record.reason });
 }

@@ -6,7 +6,7 @@ import { SOURCE_CATALOG } from "@dpf/i18n";
 type Copy = Record<"result" | "recent" | "unavailable" | "details" | "open", string>;
 
 /** Read-only history; these are not fresh decisions and do not enter the queue. */
-/** `onBehalfText`: "Decided by <admin> on behalf of <owner>: <reason>", formatted by the page (BI-7BCC87BB). */
+/** `onBehalfText`: "Decided by ADMIN on behalf of OWNER: REASON", formatted by the page (BI-7BCC87BB). */
 export function ApprovalOutcomeHistory({ outcomes, exact = false, copy = SOURCE_CATALOG.approvals }: { outcomes: Array<ApprovalOutcome & { onBehalfText?: string }>; exact?: boolean; copy?: Copy }) {
   if (!outcomes.length && !exact) return null;
   return (
