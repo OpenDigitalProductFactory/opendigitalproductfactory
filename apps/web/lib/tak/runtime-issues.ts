@@ -17,6 +17,8 @@ export type ExecutedToolRecord = {
   name: string;
   args?: Record<string, unknown>;
   result: { success: boolean; error?: string; message?: string };
+  /** Set on calls a CLI ran natively (BI-2E479619); the loop never dispatched them. */
+  nativeExecutionId?: string;
 };
 
 export type RepeatedToolIssue = {
@@ -60,7 +62,10 @@ function collectSignatureStats(
   window: number,
 ): Map<string, SigStats> {
   const stats = new Map<string, SigStats>();
-  const slice = executedTools.slice(-window);
+  // Natively executed CLI calls are audit records, not loop dispatches, and
+  // metrics_only rows carry no result to fingerprint, so they would read as
+  // identical no-progress repeats. The guard only polices what the loop sends.
+  const slice = executedTools.filter((t) => !t.nativeExecutionId).slice(-window);
   for (const t of slice) {
     const sig = `${t.name}:${stableArgsHash(t.args)}`;
     const fp = toolResultFingerprint(t.result);
