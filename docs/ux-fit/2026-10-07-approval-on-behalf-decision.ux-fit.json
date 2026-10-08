@@ -5,8 +5,7 @@
   "scope": {
     "files": [
       "apps/web/components/attention/OnBehalfDecision.tsx",
-      "apps/web/components/attention/EnvelopeDecisionButtons.tsx",
-      "apps/web/components/attention/ApprovalOutcomeHistory.tsx"
+      "apps/web/components/attention/EnvelopeDecisionButtons.tsx"
     ]
   },
   "evidence": {
