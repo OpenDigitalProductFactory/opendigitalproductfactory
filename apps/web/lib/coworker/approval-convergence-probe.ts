@@ -15,6 +15,7 @@ import type { CoworkerAuthorityDecision, CoworkerAuthorityInput } from "@/lib/go
 import type { GovernedExecuteArgs, GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import type { UserContext } from "@/lib/permissions";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type PendingProposalRow = {
   proposalId: string;
@@ -55,10 +56,6 @@ export type ProbeRowResult = {
   alignmentRequired: boolean | null;
   detail: string | null;
 };
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 function asParams(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -101,7 +98,7 @@ export async function probePendingProposal(row: PendingProposalRow, deps: ProbeD
   );
   const hookOutcome = await deps.preToolHooks(execution).then(
     (rejection) => ({ hook: (rejection ? "deny" : "allow") as "deny" | "allow", detail: rejection?.message ?? null }),
-    (error: unknown) => ({ hook: "error" as const, detail: message(error) }),
+    (error: unknown) => ({ hook: "error" as const, detail: getErrorMessage(error) }),
   );
 
   let decision: CoworkerAuthorityDecision | null = null;
@@ -110,7 +107,7 @@ export async function probePendingProposal(row: PendingProposalRow, deps: ProbeD
     const grantAllowed = await deps.agentGrantAllowed(row.agentId, row.actionType);
     decision = deps.evaluate(await deps.resolveAuthorityInput({ execution, tool, agentGrantAllowed: grantAllowed }));
   } catch (error) {
-    resolverError = message(error);
+    resolverError = getErrorMessage(error);
   }
 
   const common = {

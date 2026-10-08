@@ -13,13 +13,13 @@
 // It is server-written only, never a tool argument: its key is one of
 // GOVERNED_AUDIT_PARAMETER_KEYS, which the readers strip. Pure and type-only
 // imports, so the audit writer, the runner and the readers share one shape.
-import type { AuthorizedSurfaceContext } from "@/lib/coworker/authorized-surface-execution-types";
+import type { SurfaceMode } from "@dpf/types";
+
 import type { GovernedExecuteContext, GovernedExecuteSource } from "@/lib/mcp-governed-execute-types";
 
 export const APPROVAL_RESUME_MARKER_KEY = "_approvalResume";
 
 const SOURCES: readonly GovernedExecuteSource[] = ["rest", "jsonrpc", "external-jsonrpc", "internal-mcp-session", "agentic-loop"];
-type SurfaceMode = NonNullable<AuthorizedSurfaceContext["mode"]>;
 const SURFACE_MODES: readonly SurfaceMode[] = ["browser", "headless", "workroom", "scheduled", "background", "external", "mobile"];
 
 export type ApprovalResumeMarker = {
