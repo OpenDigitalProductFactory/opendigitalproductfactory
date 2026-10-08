@@ -302,6 +302,144 @@
         },
         "overrides": []
       }
+    },
+    {
+      "type": "row",
+      "title": "Portal journeys (BI-BD0B0DCC)",
+      "id": 1,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Operator journeys (p75 / p95)",
+      "datasource": null,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 43
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.75, sum by (le, journey) (rate(dpf_journey_duration_seconds_bucket{phase=\"total\"}[15m])))",
+          "legendFormat": "p75 {{journey}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, journey) (rate(dpf_journey_duration_seconds_bucket{phase=\"total\"}[15m])))",
+          "legendFormat": "p95 {{journey}}",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.75, sum by (le, journey) (rate(dpf_journey_duration_seconds_bucket{phase=\"server\"}[15m])))",
+          "legendFormat": "p75 server {{journey}}",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Web vitals p75 (LCP budget 2.5 s, INP budget 0.2 s)",
+      "datasource": null,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.2
+              },
+              {
+                "color": "red",
+                "value": 2.5
+              }
+            ]
+          },
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.75, sum by (le, metric) (rate(dpf_web_vital_seconds_bucket[15m])))",
+          "legendFormat": "p75 {{metric}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Layout shift p75 (CLS budget 0.1)",
+      "datasource": null,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 51
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.75, sum by (le) (rate(dpf_web_vital_cls_bucket[15m])))",
+          "legendFormat": "p75 CLS",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "schemaVersion": 39,
