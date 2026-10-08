@@ -40,7 +40,28 @@ export type DriveObservation = {
   reason: string | null;
   stageKey: string | null;
   cycleKey: string | null;
+  /** The first conformance deviation code when the drive paused or escalated on conformance. */
+  detail?: string | null;
 };
+
+/**
+ * The hold's cause as a stable tag: the drive reason, narrowed by the first
+ * conformance deviation when there is one (`conformance_pause:missing_explicit_coordinator`),
+ * so a pile of rooms names the actual problem.
+ */
+export function holdCauseTag(reason: string | null, detail?: string | null): string | null {
+  if (!reason) return null;
+  return detail ? `${reason}:${detail}` : reason;
+}
+
+/** "missing explicit coordinator (conformance pause)", "waiting on a person", "executor writeback unavailable". */
+export function describeHoldCause(cause: string | null): string {
+  if (!cause) return "blocked";
+  if (cause === "awaiting-person") return "waiting on a person";
+  const [reason, detail] = cause.split(":");
+  const words = (text: string) => text.replaceAll("_", " ");
+  return detail ? `${words(detail)} (${words(reason!)})` : words(reason!);
+}
 
 export type StageTransition = Required<Pick<QueueTransitionInput, "queueKey" | "itemKind" | "itemId" | "transition">> & {
   outcome: QueueOutcome | null;
@@ -65,11 +86,16 @@ export function readDriveObservation(workspaceState: unknown): DriveObservation 
     : null;
   if (!drive) return null;
   const str = (value: unknown) => (typeof value === "string" && value.length > 0 ? value : null);
+  const reason = str(drive.reason);
+  const conformance = drive.conformance && typeof drive.conformance === "object" ? (drive.conformance as Record<string, unknown>) : null;
+  const first = Array.isArray(conformance?.deviations) ? (conformance!.deviations as unknown[])[0] : null;
+  const code = first && typeof first === "object" ? str((first as Record<string, unknown>).code) : null;
   return {
     action: str(drive.action),
-    reason: str(drive.reason),
+    reason,
     stageKey: str(drive.stageKey),
     cycleKey: str(drive.lastCycleKey),
+    detail: reason?.startsWith("conformance_") ? code : null,
   };
 }
 
@@ -81,7 +107,12 @@ function locate(observation: DriveObservation | null): Located | null {
   if (!observation?.action || !observation.reason) return null;
   const classified = classifyDriveSegment({ action: observation.action, reason: observation.reason });
   if (!classified) return null;
-  return { ...classified, stageKey: observation.stageKey, cycleKey: observation.cycleKey };
+  return {
+    ...classified,
+    cause: classified.state === "blocked" ? holdCauseTag(classified.cause, observation.detail) : classified.cause,
+    stageKey: observation.stageKey,
+    cycleKey: observation.cycleKey,
+  };
 }
 
 function holdLane(located: Located): string {

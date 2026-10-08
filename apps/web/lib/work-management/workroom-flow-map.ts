@@ -23,7 +23,7 @@ import { reconstructTimelines, type QueueTelemetryRow } from "@/lib/queue/queue-
 import { shapeLane, shapeSignature, touchesOutside, type ShapeLane } from "./shape-signature";
 import type { WorkShapeDefinition, WorkShapeTriggerClass } from "./work-shapes";
 import { classifyDriveSegment } from "./workroom-flow-state";
-import { workroomStageQueueKey, type DriveObservation } from "./workroom-stage-telemetry";
+import { holdCauseTag, workroomStageQueueKey, type DriveObservation } from "./workroom-stage-telemetry";
 
 export const MIN_BASELINE_EXITS = 5;
 /** A step is flagged slow when this room has spent this many times the typical time on it. */
@@ -156,7 +156,7 @@ export function buildWorkroomFlowMap(input: {
       governed: stage.advance.kind === "governed-decision",
       principalRef: stage.accountablePrincipalRef,
       state,
-      holdCause: state === "blocked" ? classified?.cause ?? null : null,
+      holdCause: state === "blocked" ? holdCauseTag(classified?.cause ?? null, current?.detail) : null,
       room: times,
       typical: usual,
       slow: Boolean(times && usual && times.dwellMs > usual.dwellMs * SLOW_FACTOR),

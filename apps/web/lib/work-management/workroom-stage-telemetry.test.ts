@@ -150,7 +150,7 @@ describe("workroomStageLiveCounts", () => {
 describe("readDriveObservation", () => {
   it("reads the persisted drive snapshot and tolerates its absence", () => {
     expect(readDriveObservation({ workroomDrive: { action: "pause", reason: "conformance_pause", stageKey: null, lastCycleKey: "c" } }))
-      .toEqual({ action: "pause", reason: "conformance_pause", stageKey: null, cycleKey: "c" });
+      .toEqual({ action: "pause", reason: "conformance_pause", stageKey: null, cycleKey: "c", detail: null });
     expect(readDriveObservation({})).toBeNull();
     expect(readDriveObservation(null)).toBeNull();
   });
@@ -167,3 +167,28 @@ describe("emitStageTelemetryForDriveWrite", () => {
     })).resolves.toBeUndefined();
   });
 });
+
+describe("a conformance hold names its deviation", () => {
+  it("narrows the cause to the first deviation code and describes it in plain words", async () => {
+    const { readDriveObservation, describeHoldCause } = await import("./workroom-stage-telemetry");
+    const obs = readDriveObservation({ workroomDrive: {
+      action: "pause", reason: "conformance_pause", stageKey: "reproduce", lastCycleKey: null,
+      conformance: { deviations: [{ code: "missing_explicit_coordinator", summary: "No coordinator" }] },
+    } });
+    expect(obs?.detail).toBe("missing_explicit_coordinator");
+    const out = planStageTransitions({ capsuleId: "WC-1", shapeRef: SHAPE, prior: obs!, next: { ...obs!, stageKey: "reproduce" }, at: at(0) });
+    expect(out).toEqual([]); // unchanged hold
+    const entered = planStageTransitions({ capsuleId: "WC-1", shapeRef: SHAPE, prior: null, next: obs!, at: at(0) });
+    expect(entered.at(-1)!.laneKey).toBe("conformance_pause:missing_explicit_coordinator");
+    expect(describeHoldCause("conformance_pause:missing_explicit_coordinator")).toBe("missing explicit coordinator (conformance pause)");
+    expect(describeHoldCause("awaiting-person")).toBe("waiting on a person");
+    expect(describeHoldCause("executor_writeback_unavailable")).toBe("executor writeback unavailable");
+  });
+
+  it("ignores deviation codes on holds that are not conformance holds", async () => {
+    const { readDriveObservation } = await import("./workroom-stage-telemetry");
+    const obs = readDriveObservation({ workroomDrive: { action: "pause", reason: "executor_writeback_unavailable", conformance: { deviations: [{ code: "x" }] } } });
+    expect(obs?.detail).toBeNull();
+  });
+});
+

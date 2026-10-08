@@ -49,7 +49,7 @@ describe("PortfolioFlowTiles", () => {
     render(<PortfolioFlowTiles flow={flow("manufactureAndDeliver")} areaHref="/area/delivery?view=work" />);
     const link = screen.getByRole("link", { name: getWorkShape("delivery-small")!.title });
     expect(link).toHaveAttribute("href", "/area/delivery?view=work&shape=delivery-small");
-    expect(screen.getByText("3 at merge · awaiting-person")).toBeInTheDocument();
+    expect(screen.getByText("3 at merge · waiting on a person")).toBeInTheDocument();
   });
 
   it("says so when nothing is in flow, and shows dashes instead of invented numbers", () => {
@@ -79,7 +79,7 @@ describe("ShapeFlowDrillIn", () => {
     const versions = screen.getByRole("navigation", { name: "Shape version" });
     expect(within(versions).getByRole("link", { name: `v${definition.version}` })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Fix login" })).toBeInTheDocument();
-    expect(screen.getByText("Blocked: conformance pause")).toBeInTheDocument();
+    expect(screen.getByText("Blocked: conformance pause")).toBeInTheDocument(); // no deviation recorded on this room
   });
 });
 

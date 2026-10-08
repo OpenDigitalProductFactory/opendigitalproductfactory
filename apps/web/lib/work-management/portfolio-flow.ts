@@ -22,7 +22,7 @@ import { reconstructTimelines, type QueueTelemetryRow } from "@/lib/queue/queue-
 import { PORTFOLIO_ROLES, isPortfolioRole, type PortfolioRoleKey } from "@/lib/portfolio/portfolio-role";
 
 import { classifyDriveSegment } from "./workroom-flow-state";
-import type { DriveObservation } from "./workroom-stage-telemetry";
+import { holdCauseTag, type DriveObservation } from "./workroom-stage-telemetry";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const FLOW_WINDOW_DAYS = 28;
@@ -150,7 +150,7 @@ export function computePortfolioFlow(input: {
     if (classified.state !== "working" && room.current?.stageKey) {
       const stage = acc.held.get(room.current.stageKey) ?? { n: 0, causes: new Map() };
       stage.n += 1;
-      const cause = classified.state === "awaiting-person" ? "awaiting-person" : (classified.cause ?? "blocked");
+      const cause = classified.state === "awaiting-person" ? "awaiting-person" : (holdCauseTag(classified.cause, room.current?.detail) ?? "blocked");
       stage.causes.set(cause, (stage.causes.get(cause) ?? 0) + 1);
       acc.held.set(room.current.stageKey, stage);
     }

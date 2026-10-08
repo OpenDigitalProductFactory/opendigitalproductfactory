@@ -13,6 +13,7 @@
 import { PORTFOLIO_ROLES, type PortfolioRoleKey } from "@/lib/portfolio/portfolio-role";
 
 import type { PortfolioFlow, ShapeFlowRow } from "./portfolio-flow";
+import { describeHoldCause } from "./workroom-stage-telemetry";
 
 export type PortfolioDecompositionLike = Partial<Record<PortfolioRoleKey, { scope?: string } | undefined>> | null | undefined;
 
@@ -39,6 +40,6 @@ export function bottleneckSentence(flow: Pick<PortfolioFlow, "shapes">, titleOf:
   }
   if (!worst?.bottleneck) return null;
   const { roomsHeld, stageKey, cause } = worst.bottleneck;
-  const why = cause === "awaiting-person" ? "waiting on a person" : `blocked: ${cause.replaceAll("_", " ")}`;
+  const why = cause === "awaiting-person" ? describeHoldCause(cause) : `blocked: ${describeHoldCause(cause)}`;
   return `${roomsHeld} ${roomsHeld === 1 ? "room is" : "rooms are"} held at ${stageKey} in ${titleOf(worst.shapeKey)} (${why}).`;
 }

@@ -24,6 +24,7 @@ import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import { buildShapeFlowMap, type WorkroomFlowMapModel } from "./workroom-flow-map";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
 import {
+  holdCauseTag,
   WORKROOM_STAGE_ITEM_KIND,
   WORKROOM_STAGE_QUEUE_PREFIX,
   readDriveObservation,
@@ -151,7 +152,7 @@ export async function loadShapeFlowView(input: {
           title: room.title,
           href: `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: room.capsuleId })}`,
           state: classified.state,
-          cause: classified.cause,
+          cause: classified.state === "blocked" ? holdCauseTag(classified.cause, obs.detail) : classified.cause,
         }];
       })
     : null;

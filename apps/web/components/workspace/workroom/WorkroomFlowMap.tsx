@@ -4,6 +4,7 @@ import { useId } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { TRIGGER_GLYPH } from "@/lib/work-management/shape-signature";
+import { describeHoldCause } from "@/lib/work-management/workroom-stage-telemetry";
 import {
   formatDuration,
   type FlowMapStage,
@@ -48,8 +49,7 @@ const laneY = (lane: FlowMapStage["lane"]) => TOP + (lane === "AI" ? 2 : 1) * LA
 const colX = (index: number) => LABEL_W + 56 + index * COL_W;
 
 function causeLabel(cause: string | null): string | null {
-  if (!cause) return null;
-  return cause.replaceAll("_", " ");
+  return cause ? describeHoldCause(cause) : null;
 }
 
 function timingLines(stage: FlowMapStage): { text: string; tone: "text" | "muted" | "warning" }[] {

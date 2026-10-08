@@ -17,7 +17,7 @@
 import type { CreateOrTouchImprovementSignalInput } from "@/lib/improvement-flywheel/signals";
 
 import type { PortfolioFlow } from "./portfolio-flow";
-import { workroomStageQueueKey } from "./workroom-stage-telemetry";
+import { describeHoldCause, workroomStageQueueKey } from "./workroom-stage-telemetry";
 
 export const FLOW_BOTTLENECK_SOURCE = "workroom-flow-bottleneck";
 /** A step needs this many rooms held at once before it is worth a signal. */
@@ -51,7 +51,7 @@ export function findFlowBottlenecks(flows: readonly Pick<PortfolioFlow, "key" | 
 }
 
 export function bottleneckSignal(finding: FlowBottleneckFinding, shapeTitle: string): CreateOrTouchImprovementSignalInput {
-  const why = finding.cause === "awaiting-person" ? "waiting on a person" : `blocked: ${finding.cause.replaceAll("_", " ")}`;
+  const why = finding.cause === "awaiting-person" ? describeHoldCause(finding.cause) : `blocked: ${describeHoldCause(finding.cause)}`;
   return {
     sourceType: FLOW_BOTTLENECK_SOURCE,
     sourceId: `${finding.queueKey}|${finding.cause}`,

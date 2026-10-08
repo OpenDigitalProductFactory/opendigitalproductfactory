@@ -6,6 +6,7 @@ import type { PortfolioFlowWithCost, ShapeFlowView } from "@/lib/work-management
 import { FLOW_ITEM_TYPES, FLOW_WINDOW_DAYS, type FlowItemType } from "@/lib/work-management/portfolio-flow";
 import { getWorkShape } from "@/lib/work-management/work-shapes";
 import { formatDuration } from "@/lib/work-management/workroom-flow-map";
+import { describeHoldCause } from "@/lib/work-management/workroom-stage-telemetry";
 
 const ITEM_TYPE: Record<FlowItemType, { label: string; color: string }> = {
   feature: { label: "Feature", color: "var(--dpf-accent)" },
@@ -136,7 +137,7 @@ export function PortfolioFlowTiles({ flow, areaHref }: { flow: PortfolioFlowWith
                   <td className="py-2 pe-3 tabular-nums">{shape.roomsInFlow}</td>
                   <td className="py-2 pe-3 tabular-nums">{shape.flowTimeP50Ms == null ? "—" : formatDuration(shape.flowTimeP50Ms)}</td>
                   <td className="py-2 text-[var(--dpf-text-secondary)]">
-                    {shape.bottleneck ? `${shape.bottleneck.roomsHeld} at ${shape.bottleneck.stageKey} · ${shape.bottleneck.cause.replaceAll("_", " ")}` : "Nothing waiting"}
+                    {shape.bottleneck ? `${shape.bottleneck.roomsHeld} at ${shape.bottleneck.stageKey} · ${describeHoldCause(shape.bottleneck.cause)}` : "Nothing waiting"}
                   </td>
                 </tr>
               ))}
@@ -184,7 +185,7 @@ export function ShapeFlowDrillIn({ view, backHref, baseHref, stageKey }: { view:
                 <li key={room.capsuleId} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
                   <Link href={room.href} className="text-[var(--dpf-accent)] hover:underline">{room.title}</Link>
                   <span className="text-xs text-[var(--dpf-text-secondary)]">
-                    {room.state === "working" ? "Being worked" : room.state === "awaiting-person" ? "Waiting on a person" : `Blocked: ${(room.cause ?? "").replaceAll("_", " ")}`}
+                    {room.state === "working" ? "Being worked" : room.state === "awaiting-person" ? "Waiting on a person" : `Blocked: ${describeHoldCause(room.cause)}`}
                   </span>
                 </li>
               ))}
