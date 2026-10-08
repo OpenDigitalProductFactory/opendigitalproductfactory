@@ -326,3 +326,21 @@ describe("resolveTrustedInitiativeItemId (BI-099A0BA3, security review L1)", () 
     expect(loadStewardItemId).not.toHaveBeenCalled();
   });
 });
+
+// Approval convergence A3 (BI-C8EC05C9, spec D2 S2): under a propose boundary
+// no policy projection may approve on a person's behalf. The flag is
+// server-only context; nothing a caller sends can set it.
+describe("proposeBoundaryAuthority", () => {
+  it("passes the boundary through and forbids policy projection under it", async () => {
+    const { proposeBoundaryAuthority } = await import("./resolve-coworker-tool-authority");
+    expect(proposeBoundaryAuthority({ proposeBoundary: true }, "side-effects")).toEqual({ proposeBoundary: true, policyProjectionAllowed: false });
+    expect(proposeBoundaryAuthority({ proposeBoundary: true }, "always")).toEqual({ proposeBoundary: true, policyProjectionAllowed: false });
+  });
+
+  it("changes nothing without it", async () => {
+    const { proposeBoundaryAuthority } = await import("./resolve-coworker-tool-authority");
+    expect(proposeBoundaryAuthority(undefined, "side-effects")).toEqual({ policyProjectionAllowed: true });
+    expect(proposeBoundaryAuthority({}, " Always ")).toEqual({ policyProjectionAllowed: false });
+    expect(proposeBoundaryAuthority({ proposeBoundary: false }, null)).toEqual({ policyProjectionAllowed: true });
+  });
+});

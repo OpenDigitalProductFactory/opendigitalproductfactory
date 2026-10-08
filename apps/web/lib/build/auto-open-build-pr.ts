@@ -38,9 +38,10 @@ export const SHIP_PR_RETRY_MS = 60 * 60 * 1000;
 /**
  * The PR is opened once, at review->ship. A refusal there (a guard, a stale
  * sandbox, a since-fixed defect) left the build in ship with no PR and nothing
- * to try again. The ship reconciler calls this for each ship build: it retries
- * at most once per SHIP_PR_RETRY_MS, and openBuildStudioPrAfterShip itself skips
- * a build that already has its PR.
+ * to try again: FB-2E891686, the first build to reach ship unattended
+ * (2026-10-08), was refused "No active build" and never retried. The ship
+ * reconciler calls this for each ship build: it retries at most once per
+ * SHIP_PR_RETRY_MS, and openBuildStudioPrAfterShip skips a build with its PR.
  */
 export async function retryBuildStudioPrForShipBuild(input: {
   buildId: string;
@@ -75,19 +76,6 @@ export async function retryPrForShipBuild(buildId: string, logger: Pick<Console,
   }
 }
 
-type ExecuteTool = (typeof import("@/lib/mcp-tools"))["executeTool"];
-
-/**
- * Name the build in the tool's params. create_portal_pr resolves its build from
- * params only; the execution context's featureBuildId never reaches it. With no
- * buildId the tool falls back to "the owner's only open build" and refuses when
- * there are several, so FB-2E891686, the first build to reach ship unattended
- * (2026-10-08), got "No active build" and no PR (BI-1CC992A5's class).
- */
-export function createPortalPrForBuild(executeTool: ExecuteTool, buildId: string, actorUserId: string) {
-  return executeTool("create_portal_pr", { buildId }, actorUserId, { featureBuildId: buildId, routeContext: "/build" });
-}
-
 async function productionDeps(forBuildId: string): Promise<AutoPrDeps> {
   const { prisma } = await import("@dpf/db");
   return {
@@ -103,7 +91,8 @@ async function productionDeps(forBuildId: string): Promise<AutoPrDeps> {
     },
     createPr: async (buildId, actorUserId) => {
       const { executeTool } = await import("@/lib/mcp-tools");
-      return createPortalPrForBuild(executeTool, buildId, actorUserId);
+      // Name the build in params: context.featureBuildId is read as a row cuid, so an FB- id there sets no hint.
+      return executeTool("create_portal_pr", { buildId }, actorUserId, { featureBuildId: buildId, routeContext: "/build" });
     },
     log: async (summary) => {
       await prisma.buildActivity.create({ data: { buildId: forBuildId, tool: "auto_open_pr", summary } }).catch(() => {});

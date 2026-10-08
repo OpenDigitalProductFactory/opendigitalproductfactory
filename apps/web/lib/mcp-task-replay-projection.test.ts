@@ -25,6 +25,24 @@ function project(progressPayload: Record<string, unknown>) {
 }
 
 describe("projectRemoteTaskReplay required terminal writer dispatch", () => {
+  it("preserves the writer's actual rejection and same-task recovery on replay", () => {
+    const writerRejection = { schemaVersion: 1, error: "CLASSIFICATION_REQUIRED",
+      message: "Expected profile: feature.", observedAt: terminalWriterWait.observedAt };
+    expect(project({ terminalWriterWait: { ...terminalWriterWait, writerRejection } })).toMatchObject({
+      result: { requiresApproval: false, resumable: true, waitReason: "terminal-writer-rejected",
+        structuredContent: { error: "terminal_writer_rejected", writerToolName: terminalWriterWait.writerToolName,
+          writerRejection: { error: "CLASSIFICATION_REQUIRED", message: "Expected profile: feature." },
+          action: "fix-packet-and-resume" } },
+    });
+  });
+
+  it.each([null, {}, { schemaVersion: 1, error: "CLASSIFICATION_REQUIRED" }])(
+    "does not project an incomplete rejection as an actionable writer error", writerRejection => {
+      expect(project({ terminalWriterWait: { ...terminalWriterWait, writerRejection } })).toMatchObject({
+        result: { waitReason: "missing-terminal-writer" },
+      });
+    });
+
   it.each(["failed", "canceled", "rejected", "archived"])("never projects stale capacity as resumable for %s", status => {
     const result = projectRemoteTaskReplay({ requestMatches: true, existing: {
       taskRunId: "task", status, a2aMetadata: {}, progressPayload: {

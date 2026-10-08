@@ -3,7 +3,7 @@
 // human review still gate what lands.
 import { describe, expect, it, vi } from "vitest";
 
-import { SHIP_PR_RETRY_MS, createPortalPrForBuild, openBuildStudioPrAfterShip, retryBuildStudioPrForShipBuild } from "./auto-open-build-pr";
+import { SHIP_PR_RETRY_MS, openBuildStudioPrAfterShip, retryBuildStudioPrForShipBuild } from "./auto-open-build-pr";
 
 const deps = (overrides = {}) => ({
   phaseOf: vi.fn().mockResolvedValue("ship"),
@@ -37,16 +37,24 @@ describe("openBuildStudioPrAfterShip", () => {
   });
 });
 
-describe("createPortalPrForBuild", () => {
-  it("names the build in the tool params, where create_portal_pr reads it", async () => {
-    const executeTool = vi.fn().mockResolvedValue({ success: true, message: "ok" });
-    await createPortalPrForBuild(executeTool as never, "FB-2E891686", "u1");
-    expect(executeTool).toHaveBeenCalledWith(
-      "create_portal_pr",
-      { buildId: "FB-2E891686" },
-      "u1",
-      expect.objectContaining({ featureBuildId: "FB-2E891686" }),
-    );
+// BI-D9287821: mcp-tools reads context.featureBuildId as a row cuid, so an FB- id
+// there set no build hint and create_portal_pr fell back to "the owner's only
+// active build" — none, or the wrong one, for an owner with several builds.
+describe("production create_portal_pr call", () => {
+  it("names the build explicitly by its FB- id", async () => {
+    vi.resetModules();
+    const executeTool = vi.fn().mockResolvedValue({ success: true, message: "Opened" });
+    vi.doMock("@/lib/mcp-tools", () => ({ executeTool }));
+    vi.doMock("@dpf/db", () => ({
+      prisma: {
+        featureBuild: { findUnique: vi.fn().mockResolvedValue({ phase: "ship", id: "row1" }) },
+        workroom: { findFirst: vi.fn().mockResolvedValue(null) },
+        buildActivity: { create: vi.fn().mockResolvedValue({}) },
+      },
+    }));
+    const { openBuildStudioPrAfterShip: open } = await import("./auto-open-build-pr");
+    await expect(open({ buildId: "FB-1", actorUserId: "u1" })).resolves.toBe("opened");
+    expect(executeTool).toHaveBeenCalledWith("create_portal_pr", { buildId: "FB-1" }, "u1", expect.anything());
   });
 });
 

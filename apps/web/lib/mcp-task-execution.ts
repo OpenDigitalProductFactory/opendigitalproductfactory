@@ -5,6 +5,7 @@ import { remoteTaskConversation } from "./mcp-task-conversation";
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { loadPirEvidenceContext } from "./pir-evidence-context";
 import { remoteReviewSensitivity } from "./mcp-task-review-sensitivity";
+import { loadReviewerProfile } from "./backlog/initiative-readiness/reviewer-profile";
 import { prisma, type Prisma } from "@dpf/db";
 import { terminalWriterDispatchContractForProvider } from "@/lib/routing/execution-plan";
 import type { RequestContract } from "@/lib/routing/request-contract";
@@ -176,11 +177,14 @@ export async function executeRemoteTaskAttempt(input: {
     intentQuery: parsed.prompt,
     requiredToolNames: exactRequiredToolNames,
   });
+  const reviewProfile = parsed.initiativeReviewBinding?.gate === "spec-approval"
+    ? await loadReviewerProfile(prisma, parsed.initiativeReviewBinding.itemId) : null;
   const tools = narrowInitiativeReviewTools(
     resolvedTools,
     exactRequiredToolNames,
     parsed.initiativeReviewBinding,
     parsed.prompt,
+    reviewProfile,
   );
   const effortWarrant = requiresInitiativeReviewEffort(exactRequiredToolNames)
     ? deriveEffortWarrant({
