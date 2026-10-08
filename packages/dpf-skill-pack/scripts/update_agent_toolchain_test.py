@@ -991,6 +991,102 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
             self.assertEqual((project / ".mcp.json").read_text(), content)
 
 
+class ClaudeUserScopeDpfServerTest(unittest.TestCase):
+    """BI-81B0A3BE: a user-scope dpf server duplicates the plugin connector everywhere."""
+
+    class _Result:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    LEGACY = {
+        "type": "http",
+        "url": "http://127.0.0.1:3000/api/mcp/v1?tier=full",
+        "headers": {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"},
+    }
+
+    def _home(self, root: Path, servers: dict, plugin_installed: bool = True) -> Path:
+        home = root / "home"
+        home.mkdir()
+        (home / ".claude.json").write_text(json.dumps({"mcpServers": servers, "projects": {}}))
+        if plugin_installed:
+            path = updater.claude_installed_plugins_path(home)
+            path.parent.mkdir(parents=True)
+            path.write_text(json.dumps({"plugins": {updater.CLAUDE_PLUGIN_ID: [
+                {"scope": "local", "projectPath": str(root), "version": "0.2.8"},
+            ]}}))
+        return home
+
+    def _retire(self, home: Path, dry_run: bool = False, result: Any = None):
+        with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+            "subprocess.run", return_value=result or self._Result()
+        ) as run:
+            status = updater.retire_user_scope_dpf_server(home, dry_run)
+        return status, run
+
+    def test_duplicate_is_backed_up_then_removed_through_the_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            status, run = self._retire(home)
+            backup = home / ".claude" / "dpf-user-mcp.legacy-bak.json"
+            self.assertEqual(json.loads(backup.read_text()), {"mcpServers": {"dpf": self.LEGACY}})
+        self.assertEqual(status, f"removed (backup {backup})")
+        self.assertEqual(run.call_args[0][0], ["/fake/claude", "mcp", "remove", "dpf", "-s", "user"])
+
+    def test_dry_run_reports_without_backup_or_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            status, run = self._retire(home, dry_run=True)
+            self.assertFalse((home / ".claude" / "dpf-user-mcp.legacy-bak.json").exists())
+        run.assert_not_called()
+        self.assertTrue(status.startswith("would remove"))
+
+    def test_existing_backup_is_never_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            older = home / ".claude" / "dpf-user-mcp.legacy-bak.json"
+            older.write_text("older")
+            self._retire(home)
+            self.assertEqual(older.read_text(), "older")
+            self.assertTrue((home / ".claude" / "dpf-user-mcp.legacy-bak.1.json").exists())
+
+    def test_left_alone_without_the_plugin_connector(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY}, plugin_installed=False)
+            status, run = self._retire(home)
+        self.assertIsNone(status)
+        run.assert_not_called()
+
+    def test_unrelated_user_servers_are_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {
+                "dpf": {"type": "http", "url": "https://example.com/other"},
+                "other": {"type": "http", "url": "https://localhost/api/mcp/v1"},
+            })
+            status, run = self._retire(home)
+        self.assertIsNone(status)
+        run.assert_not_called()
+
+    def test_failed_cli_removal_is_reported(self) -> None:
+        failed = self._Result()
+        failed.returncode = 1
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            status, _ = self._retire(home, result=failed)
+        self.assertTrue(status.startswith("failed:"))
+
+    def test_missing_cli_is_reported_and_nothing_is_written(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            with patch.object(updater, "resolve_claude_binary", return_value=None), patch(
+                "subprocess.run"
+            ) as run:
+                status = updater.retire_user_scope_dpf_server(home, dry_run=False)
+            self.assertFalse((home / ".claude" / "dpf-user-mcp.legacy-bak.json").exists())
+        run.assert_not_called()
+        self.assertEqual(status, "failed: Claude CLI not found")
+
+
 class AntigravityMcpConfigTest(unittest.TestCase):
     def test_skipped_when_agy_absent(self) -> None:
         with patch.object(updater, "resolve_antigravity_binary", return_value=None):
