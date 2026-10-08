@@ -73,7 +73,9 @@ export const DRIVE_REASONS_BY_ACTION = Object.freeze({
   attention: ["governed_decision", "role_stage", "person_stage", "gate_refused", "awaiting_sub_shape", "sub_shape_stopped"],
   // `lease_held` and `missing_task_owner` are set by the drive job
   // (lib/queue/functions/workroom-drive.ts) when it cannot act on a dispatch plan.
-  dispatch_agent: ["agent_stage", "lease_held", "missing_task_owner"],
+  // `reviewer_dispatch_unavailable`: a review stage's reviewer packet could not
+  // be sent (BI-2C8750FC, workroom-drive-review-stages.ts).
+  dispatch_agent: ["agent_stage", "lease_held", "missing_task_owner", "reviewer_dispatch_unavailable"],
 } as const);
 
 export type DriveReasonsByAction = typeof DRIVE_REASONS_BY_ACTION;
@@ -147,6 +149,10 @@ const BLOCKAGES: Record<string, { what: string; unblockedBy: string }> = {
   missing_task_owner: {
     what: "An agent stage is ready but the room has no owner user to run its scheduled task under.",
     unblockedBy: "an owner user is bound to the room",
+  },
+  reviewer_dispatch_unavailable: {
+    what: "A review stage is due and its independent reviewer is named, but the platform could not send the reviewer request: no live authorized connection on the author's side, or the request was refused.",
+    unblockedBy: "the author reconnects an assistant the platform may send on, or the refusal recorded on the room is resolved",
   },
   construct_not_executable: {
     what: "The room's work shape uses a construct the drive does not execute yet, so the room is paused where it stands rather than run some other way.",
