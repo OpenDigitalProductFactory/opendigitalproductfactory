@@ -94,6 +94,7 @@ const EXPECTED_LEGACY_JOBS = [
   "test-clock-bomb-guard",
   "test-cwd-independence-guard",
   "tool-surface-guard",
+  "toolchain-version-guard",
   "unattributable-deferral",
   "ux-fit-gate",
   "ux-primitive-adoption-guard",

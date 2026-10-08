@@ -191,5 +191,31 @@ class InstalledCopyFreshnessTest(unittest.TestCase):
         )
 
 
+class DeliveredDigestParityTest(unittest.TestCase):
+    """BI-52934B3E: the portal publishes this digest, so both homes must agree."""
+
+    FIXTURE = Path(__file__).resolve().parents[3] / "apps" / "web" / "lib" / "agent-toolchain" / "__fixtures__" / "pack-digest"
+    # Same constant as apps/web/lib/agent-toolchain/toolchain-manifest.test.ts.
+    FIXTURE_DIGEST = "ca4afe3a58a8f22b62ae1f6e5be4e5ad976ed59a5abd0a89c0460519af10c28f"
+
+    def test_matches_the_portal_typescript_digest(self):
+        self.assertEqual(freshness.delivered_digest(self.FIXTURE), self.FIXTURE_DIGEST)
+
+    def test_order_is_case_sensitive_by_segment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "README.md").write_bytes(b"r")
+            (root / "assets").mkdir()
+            (root / "assets" / "a.txt").write_bytes(b"a")
+            forward = freshness.delivered_digest(root)
+        # Hash the two files explicitly in case-sensitive order and compare.
+        import hashlib
+        expected = hashlib.sha256()
+        for rel, data in (("README.md", b"r"), ("assets/a.txt", b"a")):
+            expected.update(rel.encode() + b"\x00")
+            expected.update(hashlib.sha256(data).digest())
+        self.assertEqual(forward, expected.hexdigest())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,5 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { executeTool } from "./mcp-tools";
 
 // Verifies resolveActiveBuildId / extractBuildIdHint semantics through the
 // saveBuildEvidence handler — the lightest-weight handler that exercises the
@@ -6,7 +7,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 // BI-E9CD1B92 (2026-05-13) bug where reviewBuildPlan({ buildId: "FB-1D69766D" })
 // returned a review of a different build.
 
-const mockPrisma = {
+// Hoist mock state so the tool graph loads during module collection, before
+// timed behavior cases run, without accessing uninitialized mock bindings.
+const mockPrisma = vi.hoisted(() => ({
   featureBuild: {
     findFirst: vi.fn(),
     findUnique: vi.fn(),
@@ -15,9 +18,9 @@ const mockPrisma = {
   buildActivity: {
     create: vi.fn(),
   },
-};
+}));
 
-const mockSaveBuildArtifactRevision = vi.fn(async (args: { buildId: string; field: string; value: unknown }) => {
+const mockSaveBuildArtifactRevision = vi.hoisted(() => vi.fn(async (args: { buildId: string; field: string; value: unknown }) => {
   await mockPrisma.featureBuild.update({
     where: { buildId: args.buildId },
     data: { [args.field]: args.value },
@@ -30,7 +33,7 @@ const mockSaveBuildArtifactRevision = vi.fn(async (args: { buildId: string; fiel
     errors: [],
     receiptIds: [],
   };
-});
+}));
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
@@ -77,13 +80,6 @@ function fakeBuild(buildId: string) {
     acceptanceMet: null,
   };
 }
-
-let executeTool: typeof import("./mcp-tools").executeTool;
-
-beforeAll(async () => {
-  // Load the tool graph once; individual cases measure resolver behavior.
-  ({ executeTool } = await import("./mcp-tools"));
-});
 
 describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
   beforeEach(() => {

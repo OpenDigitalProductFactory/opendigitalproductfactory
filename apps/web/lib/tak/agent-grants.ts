@@ -308,11 +308,11 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // it reports gaps and never changes authority.
   get_capability_completeness: ["registry_read"],
 
-  // Independent re-verification of a recorded decision's cited evidence
-  // (BI-8192557E phase 2b). Same `registry_read` tier as its siblings: auditing
-  // the evidence behind a decision must not need a higher grant than making the
-  // decision did, or the check is less reachable than the thing it checks.
+  // Re-verifying a decision's cited evidence (BI-8192557E) and reading the report-only
+  // decision trust measurement (BI-7D1E43DE): `registry_read`, as their siblings —
+  // auditing a decision must not need a higher grant than making it did.
   reverify_decision_evidence: ["registry_read"],
+  report_decision_trust_state: ["registry_read"],
   // BI-F302B80E: appends what the caller did with a kernel recommendation.
   // Same grant as propose_improvement — it records, it never re-decides.
   record_decision_outcome: ["decision_record_create"],
