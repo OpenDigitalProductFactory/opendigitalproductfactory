@@ -125,7 +125,9 @@ const liveCliLoopResult = () => ({
 let seq = 0;
 const row = (toolName: string, result: Record<string, unknown>, success: boolean): Row => ({
   id: `te-${++seq}`, taskRunId: TASK_RUN_ID, toolName, result, success,
-  executionMode: "internal-mcp-session", createdAt: new Date(Date.now() + seq),
+  // Dated after the attempt starts: the executor folds rows created since then, and the
+  // milliseconds between building a fixture and starting the run must not drop one.
+  executionMode: "internal-mcp-session", createdAt: new Date(Date.now() + 60_000 + seq),
 });
 const nativeRead = () => row("read_source_at_version", {}, true);
 const nativeWriterSuccess = () => row(writerToolName, {
