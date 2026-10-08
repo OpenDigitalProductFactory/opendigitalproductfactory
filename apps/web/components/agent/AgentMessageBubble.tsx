@@ -680,6 +680,7 @@ export function AgentMessageBubble({
             <MarkdownHtml
               source={message.role === "assistant" ? stripSystemPromptPrefix(cleanedContent) : cleanedContent}
               options={MARKDOWN_OPTIONS}
+              memoize
             />
             {managedDocumentIds.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
