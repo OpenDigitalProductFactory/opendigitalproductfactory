@@ -1,6 +1,4 @@
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
-import type { ToolPackHandler } from "../tool-pack";
-import type { ActionResult } from "@/lib/shared/action-result";
 
 export const providerAccountDefinitions: ToolDefinition[] = [
   {
