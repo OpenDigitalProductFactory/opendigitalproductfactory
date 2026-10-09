@@ -14,9 +14,19 @@
       "aliases": [
         "CVE-2026-53550"
       ],
-      "package": "js-yaml@3.14.2",
+      "package": "js-yaml@3.15.2",
       "severity": "moderate",
-      "reason": "Trusted-input-only. js-yaml 3.14.2 is a transitive dep of gray-matter, used for build-time frontmatter parsing of our own repo-controlled .md files — never attacker-supplied YAML, so the quadratic-complexity DoS is not reachable. The fix is in js-yaml 4.x, a breaking major gray-matter does not support (consistent with the prior tolerable_risk dismissal, Dependabot #74). Re-evaluate if gray-matter adopts js-yaml 4 or a 3.x patch ships.",
+      "reason": "Trusted-input-only on the remaining copy. Platform gray-matter was removed in BI-99D7C104, so the platform lockfile no longer parses docs with js-yaml 3. apps/mobile still resolves js-yaml 3.15.2 through @istanbuljs/load-nyc-config 1.1.0, which loads coverage config and is already the latest release. It does not parse request input. js-yaml 4 fixes the quadratic-complexity DoS, and this loader does not support that major. Re-evaluate when a patched 3.x ships or the coverage loader moves to js-yaml 4.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-hp3w-g68c-fv3c",
+      "aliases": [
+        "CVE-2026-97058"
+      ],
+      "package": "sprintf-js@1.0.3",
+      "severity": "medium",
+      "reason": "No patched release exists (npm latest is 1.1.3; GitHub first_patched_version is null, checked 2026-10-08). The platform copy left with gray-matter (Dependabot #222, BI-99D7C104). The remaining copy is apps/mobile only (Dependabot #219): @istanbuljs/load-nyc-config 1.1.0, already latest, loads coverage config through js-yaml 3 and argparse 1. It is not application code and does not format attacker-controlled strings. Re-evaluate when sprintf-js publishes a fix or the coverage loader drops the js-yaml 3 chain.",
       "expires": "2026-12-31"
     },
     {

@@ -250,19 +250,27 @@ describe("buildUserAwareFieldDispatchNotificationProposals", () => {
 // the persistence function and this case with it.
 describe("S4 — field dispatch proposals (characterisation)", () => {
   it("has no production caller and writes a non-tool action type", async () => {
-    const { readFileSync, readdirSync, statSync } = await import("node:fs");
+    const { closeSync, openSync, readFileSync, readdirSync } = await import("node:fs");
     const { join, dirname } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
     const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
     const callers: string[] = [];
     const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
-        if (name === "node_modules" || name.startsWith(".")) continue;
-        const path = join(dir, name);
-        if (statSync(path).isDirectory()) walk(path);
-        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)
-          && readFileSync(path, "utf8").includes("proposeUserAwareFieldDispatchNotifications(")) {
-          callers.push(path.slice(webRoot.length + 1).split("\\").join("/"));
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(path);
+          continue;
+        }
+        if (!entry.isFile() || !/\.tsx?$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name)) continue;
+        const fd = openSync(path, "r");
+        try {
+          if (readFileSync(fd, "utf8").includes("proposeUserAwareFieldDispatchNotifications(")) {
+            callers.push(path.slice(webRoot.length + 1).split("\\").join("/"));
+          }
+        } finally {
+          closeSync(fd);
         }
       }
     };

@@ -32,6 +32,10 @@ catalog:
   undici: ^8.10.0
   vite: ^8.2.0
   vitest: ^5.0.1
+  # yaml is the platform frontmatter parser (apps/web user guide and the
+  # integration-test harness). One catalog range so the two declarations
+  # cannot drift (plan 2026-09-08 S11).
+  yaml: ^2.9.1
   zod: ^4.6.5
 overrides:
   # One React for the platform tree. apps/web declares ^19.2.8; the Prisma CLI's
@@ -76,6 +80,10 @@ overrides:
   # Percent-encoded host octets normalize to a different case than the raw host.
   # ajv@8.20.0 resolved 3.1.7. Stay on the 3.x line; 4.x is a separate major.
   'fast-uri@>=3.0.0 <3.1.8': '3.1.8'
+  # source-map-js >= 1.0.0 < 1.2.2: GHSA-68fv-2mgg-jv7q / CVE-2026-93749
+  # (Dependabot #221, high). Indexed source-map section offsets can stall the
+  # event loop. css-tree and @tailwindcss/node resolve 1.2.1. Patch floor.
+  'source-map-js@<1.2.2': '1.2.2'
   # @floating-ui/* exact pins. Introduced with the diagram-stack pin set
   # (BI-72E0A27B); the mermaid/zenuml members left with the workspace's
   # mermaid-cli dependency (BI-DBDB8C6D — rendering now runs from the pinned

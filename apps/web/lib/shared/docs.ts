@@ -5,7 +5,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import matter from "gray-matter";
+import { parse as parseYaml } from "yaml";
 import { slugifyHeading } from "../docs/doc-link-resolver.mjs";
 
 // Re-export everything from docs-types so server code can import from one place
@@ -52,8 +52,21 @@ export function buildDocSearchText(markdown: string, limit = 2_000): string {
   return markdownToPlainText(markdown).slice(0, limit).trimEnd();
 }
 
+/** Split a leading YAML frontmatter fence. Repo user-guide pages only. */
+function readFrontmatter(raw: string): { data: Record<string, unknown>; content: string } {
+  const text = raw.replace(/^\uFEFF/, "");
+  const match = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(text);
+  if (!match) return { data: {}, content: text };
+  const parsed = parseYaml(match[1] ?? "");
+  const data =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  return { data, content: text.slice(match[0].length) };
+}
+
 export function parseDocFrontmatter(raw: string): DocPage {
-  const { data, content } = matter(raw);
+  const { data, content } = readFrontmatter(raw);
   const normalizedContent = content.trim();
   const authoredDescription =
     typeof data.description === "string" ? data.description.trim() : "";
