@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "yaml": "^2.9.1"
+    "yaml": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

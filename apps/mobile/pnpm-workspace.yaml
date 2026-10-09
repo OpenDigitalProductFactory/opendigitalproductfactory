@@ -52,6 +52,24 @@ overrides:
   lodash: '4.18.0'
   postcss: '^8.5.18'
   uuid: '^14.0.0'
+  # source-map-js >= 1.0.0 < 1.2.2: GHSA-68fv-2mgg-jv7q / CVE-2026-93749
+  # (Dependabot #218, high). Indexed source-map section offsets can stall the
+  # event loop. postcss 8.5.28 resolves 1.2.1. The root floor does not reach
+  # this workspace. Patch floor.
+  'source-map-js@<1.2.2': '1.2.2'
+  # shell-quote >= 1.8.4 < 1.11.0: GHSA-pqg4-j6r4-53mv / CVE-2026-102422
+  # (Dependabot #220, critical). quote() injects a command when a line
+  # terminator follows a { comment } token. react-devtools-core resolves 1.9.0.
+  'shell-quote@>=1.8.4 <1.11.0': '1.11.0'
+  # compression < 1.8.2: GHSA-vc2v-76pw-4v95 / CVE-2026-87776
+  # (Dependabot #217, high). A client that closes the response early leaks
+  # memory. @react-native/dev-middleware resolves 1.8.1.
+  'compression@<1.8.2': '1.8.2'
+  # postcss-selector-parser < 7.1.6: GHSA-rj75-hqrm-r3gf / CVE-2026-104844
+  # (Dependabot #216, medium). Flat selector parsing is quadratic. tailwindcss
+  # 3.4.19 and postcss-nested 6.2.0 resolve 6.1.4. 7.0.0's only breaking change
+  # is making insertions during iteration safe; 6.x has no patched release.
+  'postcss-selector-parser@<7.1.6': '7.1.6'
   # --- jest 30 unification (apps/mobile) ---
   # Force the ENTIRE jest family to a single major (30) so apps/mobile runs a
   # unified jest 30 install. jest-expo@~56 (Expo SDK 55/56) still *declares* jest
