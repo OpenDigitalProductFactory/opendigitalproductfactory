@@ -327,7 +327,10 @@ readiness issues now, and an independent reviewer. The request key makes client
 and server dispatch one TaskRun. A route is not sent again within 30 minutes,
 and each attempt, refusal, or missing connection is recorded on the room as a
 `reviewer-dispatch` activity. An author does not need a working client for its
-delivered work to be reviewed.
+delivered work to be reviewed. The same sweep also covers items still open or in
+progress (BI-3A462B04): it sends the design-stage reviews they owe (design-spec,
+spec approval, architecture review, plan review), read from the implementation
+decision, on the same author connection and with the same checks.
 
 `objective-mapping` is an evidence proposal for terminal evaluation, not an
 initiative approval receipt. The acceptance reviewer records it through

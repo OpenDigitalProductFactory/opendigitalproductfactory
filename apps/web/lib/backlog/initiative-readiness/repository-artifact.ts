@@ -370,7 +370,9 @@ export async function resolveRepositoryArtifact(args: {
       ok: false,
       code: "CANONICAL_DESIGN_AMBIGUOUS",
       error: candidates.length === 0
-        ? `No live workroom for this subject is bound to ${args.locator.repositoryFullName}. Claim or adopt the branch first (claim_backlog_item_for_work or adopt_worktree), then retry.`
+        // BI-77C600B2: a plain implementation claim can be refused at the very
+        // research gate this receipt satisfies; a design-intent claim cannot.
+        ? `No live workroom for this subject is bound to ${args.locator.repositoryFullName}. Bind one first: claim_backlog_item_for_work with workIntent "design" (it does not owe research), or adopt_worktree; then retry.`
         : `No live workroom for this subject records head ${args.locator.commitSha}: ${
           candidates.map(describeCapsuleHead).join("; ")
         }${candidates.length === CAPSULE_CANDIDATE_LIMIT ? ` (first ${CAPSULE_CANDIDATE_LIMIT} shown)` : ""}. Sync the branch head with adopt_worktree(headBranch, headSha=${args.locator.commitSha}) — an amend, rebase, or squash after adoption rewrites the sha — then retry.`,

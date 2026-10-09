@@ -15,6 +15,7 @@ import { AgentFAB } from "./AgentFAB";
 import { AgentCoworkerPanel } from "./AgentCoworkerPanel";
 import type { ThreadLoadState } from "./composer-state";
 import type { ProviderReviewPacket } from "@/lib/routing/provider-suitability/provider-review-packet";
+import { useCoworkerJourneys } from "./use-coworker-journeys";
 import {
   planAutoMessage,
   queuedAutoMessageIsForThread,
@@ -165,6 +166,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
   // (seen when a stale tab's server actions 404 after a self-upgrade swap).
   const [threadLoadState, setThreadLoadState] = useState<ThreadLoadState>("loading");
   const [threadLoadRetryToken, setThreadLoadRetryToken] = useState(0);
+  useCoworkerJourneys(isOpen, threadLoadState); // BI-BD0B0DCC
   const threadAutoRetryUsedRef = useRef(false);
   const prevThreadContextRef = useRef<string | null>(null);
   const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);

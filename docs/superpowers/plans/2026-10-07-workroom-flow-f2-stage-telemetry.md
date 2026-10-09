@@ -46,6 +46,22 @@ status: active
 - **AC-F2-3:** live depth and WIP per stage come from the rooms currently in it.
 - **AC-F2-4:** replaying the 23 September drive log names the missing-coordinator hold at its stage for every room in the pile. The replay is idempotent and stops at the first live event.
 
+### Acceptance as filed on BI-4ADFFEDB
+
+- Snapshots exist for `wr:` keys.
+- `/api/metrics` exposes them.
+- The coworker queue pack reads them.
+- Replaying the drive log for 2026-09-23 shows about 200 rooms held at one stage with the cause `missing_explicit_coordinator`.
+
+**How each one is met**
+
+| Criterion | How it is met |
+|---|---|
+| Snapshots for `wr:` keys | `aggregateQueueMetrics` writes them. |
+| `/api/metrics` | `recordQueueTransition` mirrors every transition into the existing `dpf_queue_*` series. |
+| Coworker queue pack | The queue-awareness pack reads `QueueMetricSnapshot` and picks up the new rows with no change. |
+| 23 September replay | The hold cause carries the conformance deviation: `conformance_pause:missing_explicit_coordinator`. The live drive writes the code in its `ledger`, and those rooms never entered a stage, so a stage-less hold sits at the shape's first stage. The first replay (`backfill:drive-log`) dropped both. Replay v2 (`backfill:drive-log:v2`) replaces it. Against the live 22–25 September log, v2 holds 64 rooms at delivery-medium `design-note`, 57 at delivery-small `reproduce` and 48 at delivery-large `spec` by the end of 23 September. That is the pile at each shape's first stage, rather than at one stage overall. `workroom-stage-backfill.test.ts` replays the rows as the drive wrote them. |
+
 ## Recorded limitations
 
 - **Graph rooms are not measured yet.** Parallel branches are deferred until a graph shape is live.

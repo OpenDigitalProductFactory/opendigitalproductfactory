@@ -233,7 +233,8 @@ const definitions: ToolDefinition[] = [
     description:
       "Renew the active lease for a Workroom so other agents can see that work is in flight. " +
       "Heartbeat on a human-scale cadence (between stages / few minutes), not every tool call. " +
-      "If the lease is already expired, re-claim or abandon — do not thrash heartbeat.",
+      "If the lease is already expired, re-claim or abandon — do not thrash heartbeat. " +
+      "Refused with lease_held_by_other while another principal holds a live lease; ask the room's owner to hand it over instead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -367,6 +368,7 @@ const definitions: ToolDefinition[] = [
         toExecutorRef: { type: "string", description: "Optional session/owner id for the receiving executor." },
         reason: { type: "string", description: "Why the handoff is happening." },
         handoffManifest: { type: "object", description: "Optional handoff context: next action, open risks, evidence digest, branch/worktree, suggested receiver." },
+        expectedLeaseHolderPrincipalId: { type: ["string", "null"], description: "The lease holder you read from get_workroom. When given, the handoff is refused with lease_holder_changed if someone else now holds the lease." },
       },
       required: ["capsuleId", "toExecutorKind"],
     },

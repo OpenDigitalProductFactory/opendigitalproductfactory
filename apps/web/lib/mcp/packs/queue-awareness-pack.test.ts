@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const readQueueSnapshots = vi.fn();
 const readAtRiskQueues = vi.fn();
+const readDeadLetters = vi.fn();
 const { assessQueueHealth } = await vi.importActual<
   typeof import("@/lib/queue/queue-snapshot-service")
 >("@/lib/queue/queue-snapshot-service");
@@ -10,6 +11,10 @@ vi.mock("@/lib/queue/queue-snapshot-service", () => ({
   readQueueSnapshots: (...a: unknown[]) => readQueueSnapshots(...a),
   readAtRiskQueues: (...a: unknown[]) => readAtRiskQueues(...a),
   assessQueueHealth: (s: unknown) => assessQueueHealth(s as never),
+}));
+
+vi.mock("@/lib/queue/dead-letters", () => ({
+  readDeadLetters: (...a: unknown[]) => readDeadLetters(...a),
 }));
 
 import { queueAwarenessPack } from "./queue-awareness-pack";
@@ -37,6 +42,8 @@ function snap(over: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  readDeadLetters.mockReset();
+  readDeadLetters.mockResolvedValue([]);
   readQueueSnapshots.mockReset();
   readAtRiskQueues.mockReset();
 });
@@ -84,5 +91,39 @@ describe("queueAwarenessPack", () => {
     expect(res.success).toBe(true);
     const queues = res.data!.queues as Array<Record<string, unknown>>;
     expect(queues[0]!.reasons).toEqual(["20 items waiting"]);
+  });
+});
+
+// BI-BC5C47D4: work a bounded retry gave up on shows on queue health.
+describe("dead letters on queue health", () => {
+  const exhausted = {
+    queueKey: "dead-letter:job-engine",
+    label: "Job runs that lost their lease on every attempt",
+    count: 2,
+    latest: { at: "2026-10-08T04:00:00.000Z", reason: "agent/child-thread-run", detail: "lease_expired_exhausted: no attempt finished in 1" },
+  };
+
+  it("get_queue_status reports dead letters beside the flow metrics", async () => {
+    readQueueSnapshots.mockResolvedValue([snap()]);
+    readDeadLetters.mockResolvedValue([exhausted, { ...exhausted, queueKey: "dead-letter:async-operation-outbox", count: 0, latest: null }]);
+    const result = await queueAwarenessPack.handlers.get_queue_status!({}, "user-1", undefined as never);
+    expect(result.data).toMatchObject({ deadLetters: [exhausted] });
+    expect(result.message).toContain("Dead letters: 2 job runs that lost their lease on every attempt");
+  });
+
+  it("list_at_risk_queues lists a dead-letter source with its reason", async () => {
+    readAtRiskQueues.mockResolvedValue([]);
+    readDeadLetters.mockResolvedValue([exhausted]);
+    const result = await queueAwarenessPack.handlers.list_at_risk_queues!({}, "user-1", undefined as never);
+    expect(result.data).toMatchObject({
+      queues: [{ queueKey: "dead-letter:job-engine", reasons: [expect.stringContaining("dead letters: 2")], latest: exhausted.latest }],
+    });
+  });
+
+  it("a failed dead-letter read never breaks queue health", async () => {
+    readAtRiskQueues.mockResolvedValue([]);
+    readDeadLetters.mockRejectedValue(new Error("db down"));
+    const result = await queueAwarenessPack.handlers.list_at_risk_queues!({}, "user-1", undefined as never);
+    expect(result).toMatchObject({ success: true, message: "No queues are at-risk right now." });
   });
 });
