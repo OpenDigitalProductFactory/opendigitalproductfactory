@@ -31,6 +31,7 @@ import {
 import AxeBuilder from "@axe-core/playwright";
 
 import { measureUxBudget } from "../lib/ux-budget/measure";
+import { collectSpeedEntries, readSpeedCounters } from "../lib/ux-budget/speed-counters";
 import { MEASUREMENT_NOW_ENV } from "../lib/runtime/measurement-runtime";
 import { recordVisibleText } from "./ux-sweep-visible-text";
 import { confirmBlockingRoutes } from "./ux-sweep-reproducibility";
@@ -412,8 +413,7 @@ async function measureRoute(
     waitUntil: "domcontentloaded",
     timeout: 30_000,
   });
-  // Give client components a beat to hydrate; the whole point is the served DOM.
-  await page.waitForLoadState("load", { timeout: 15_000 }).catch(() => {});
+  await page.waitForLoadState("load", { timeout: 15_000 }).catch(() => {}); // let client components hydrate
   await waitForRouteDomToSettle(page);
 
   // A route that errors or redirects to auth is not a surface to budget; recording a
@@ -430,6 +430,8 @@ async function measureRoute(
     throw new Error(`redirected to ${landed}`);
   }
   phases.navigationAndSettleMs = Math.round(performance.now() - phaseStartedAt);
+  await page.evaluate(BROWSER_EVALUATION_RUNTIME); // the collector's nested callbacks need tsx's __name
+  const speedCounters = readSpeedCounters(await page.evaluate(collectSpeedEntries)); // BI-BDB43823, before axe
 
   phaseStartedAt = performance.now();
   const html = await page.evaluate(pruneInvisible);
@@ -481,6 +483,7 @@ async function measureRoute(
     ariaSnapshot,
     axeViolations,
     exemptChecks: row.exemptChecks,
+    speedCounters,
   };
   phases.budgetMeasurementMs = Math.round(performance.now() - phaseStartedAt);
   recordVisibleText(ROOT, row.routePath, normalisedHtml);
@@ -541,6 +544,7 @@ export function executionOutcome(
   durationMs: number;
   phases?: RoutePhaseTimings;
   axeViolations?: number;
+  speedCounters?: RouteMeasurement["speedCounters"];
   reason?: string;
 } {
   return outcome.status === "measured"
@@ -550,6 +554,7 @@ export function executionOutcome(
         durationMs: outcome.durationMs,
         phases: outcome.value.phases,
         axeViolations: outcome.value.measurement.axeViolations,
+        speedCounters: outcome.value.measurement.speedCounters,
       }
     : {
         routePath: outcome.routePath,
@@ -677,11 +682,7 @@ async function main(): Promise<void> {
   };
   const executionPath = join(ROOT, EXECUTION_REL);
   mkdirSync(dirname(executionPath), { recursive: true });
-  writeFileSync(
-    executionPath,
-    `${JSON.stringify(executionReport, null, 2)}\n`,
-    "utf8",
-  );
+  writeFileSync(executionPath, `${JSON.stringify(executionReport, null, 2)}\n`, "utf8");
 
   console.error(
     `[ux-sweep] measured ${measurements.length}/${rows.length} eligible routes with ${workerCount} worker(s); ${excluded.length} explicitly excluded from this fixture context`,
@@ -720,7 +721,6 @@ async function main(): Promise<void> {
     // ratchets for routes the sweep failed to measure (timeout, error, auth).
     // Read once (no existsSync→write TOCTOU; CodeQL js/file-system-race).
     const baselinePath = join(ROOT, BASELINE_REL);
-    const frozen = freezeBaseline(measurements, GENERATOR);
     let committed: BaselineFile | null = null;
     try {
       committed = JSON.parse(readFileSync(baselinePath, "utf8")) as BaselineFile;
@@ -728,6 +728,7 @@ async function main(): Promise<void> {
       const code = err && typeof err === "object" && "code" in err ? String((err as { code?: unknown }).code) : "";
       if (code !== "ENOENT") throw err;
     }
+    const frozen = freezeBaseline(measurements, GENERATOR, committed ?? undefined); // speed ceilings only fall
     if (committed) {
       const dropped = findDroppedBaselineRoutes(committed, frozen);
       if (dropped.length > 0) {
