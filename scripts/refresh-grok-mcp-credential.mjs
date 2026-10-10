@@ -9,6 +9,7 @@
 // to cross this pipe. This file never prints it.
 
 import { readFileSync } from "node:fs";
+import { parseArgs as utilParseArgs } from "node:util";
 
 import { exchangeClientCredentials } from "./lib/mcp-credential.mjs";
 import {
@@ -17,40 +18,59 @@ import {
   refreshGrokCredential,
   writeGrokClientFile,
 } from "./lib/grok-credential.mjs";
+import { scriptArgv } from "./lib/script-argv.mjs";
 
-function arg(name) {
-  const index = process.argv.indexOf(name);
-  const value = index === -1 ? undefined : process.argv[index + 1];
-  if (!value || value.startsWith("--")) {
-    console.error(`refresh-grok-mcp-credential: ${name} requires a value`);
-    process.exit(2);
+function die(message, code) {
+  console.error(message);
+  process.exit(code);
+}
+
+let parsed;
+try {
+  parsed = utilParseArgs({
+    args: scriptArgv(),
+    strict: true,
+    allowPositionals: true,
+    options: {
+      "mcp-url": { type: "string" },
+      config: { type: "string" },
+    },
+  });
+} catch (err) {
+  die(err instanceof Error ? err.message : String(err), 2);
+}
+
+const { values, positionals } = parsed;
+const command = positionals[0];
+if (positionals.length !== 1 || (command !== "refresh" && command !== "write-client")) {
+  die("refresh-grok-mcp-credential: expected refresh or write-client", 2);
+}
+
+function requireValue(name) {
+  const value = values[name];
+  if (typeof value !== "string" || value.length === 0) {
+    die(`refresh-grok-mcp-credential: --${name} requires a value`, 2);
   }
   return value;
 }
 
-const command = process.argv[2];
-if (command !== "refresh" && command !== "write-client") {
-  console.error("refresh-grok-mcp-credential: expected refresh or write-client");
-  process.exit(2);
-}
-
 try {
   if (command === "write-client") {
-    const config = arg("--config");
+    const config = requireValue("config");
     const payload = JSON.parse(readFileSync(0, "utf8"));
     const stored = await writeGrokClientFile(config, payload);
     console.log(stored.revoked ? "stopped" : "stored");
   } else {
+    const config = requireValue("config");
     const result = await refreshGrokCredential({
-      tokenPath: grokBearerTokenFilePath(arg("--config")),
-      clientPath: grokClientFilePath(arg("--config")),
-      mcpUrl: arg("--mcp-url"),
+      tokenPath: grokBearerTokenFilePath(config),
+      clientPath: grokClientFilePath(config),
+      mcpUrl: requireValue("mcp-url"),
       exchange: exchangeClientCredentials,
     });
     console.log(result.action);
   }
 } catch (err) {
   const code = err && err.code === "GROK_CLIENT_MISSING" ? 3 : 1;
-  console.error(err instanceof Error ? err.message : String(err));
-  process.exit(code);
+  die(err instanceof Error ? err.message : String(err), code);
 }
