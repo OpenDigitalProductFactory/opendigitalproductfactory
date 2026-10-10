@@ -581,7 +581,8 @@ separate machine on the network must also work.
   issuer stays `http://127.0.0.1:3000` (BI-6DC1CD5B).
 - **Claude refuses OAuth over http, loopback included.** Measured on PROD
   2026-09-16/17 (BI-46B636B0): "must be https". Codex accepts loopback http
-  (section 11). Grok has no OAuth client at all.
+  (section 11). The same read found no OAuth client in the Grok setup DPF
+  ships. That client fact was re-measured on 2026-10-10 (12.2.1).
 - **The origin setting exists but is never written.** `PUBLIC_URL` and
   `PUBLIC_URL_ALIASES` already drive the OAuth issuer and resource
   (`oauth-metadata.ts:71-84`), cookies (`govern/auth.ts:116-137`) and the
@@ -598,6 +599,34 @@ separate machine on the network must also work.
   the assistant server-side and reuses prior consent; reconnect and refresh
   need no click.
 
+### 12.2.1 Grok re-measured 2026-10-10
+
+The September sentence described the setup DPF ships. The Grok application on
+the operator Mac can open a browser OAuth flow. Slice S6 still uses
+`client_credentials` (12.4.7). BI-5BCDB07C's acceptance is unchanged.
+
+- Grok's user guide (MCP OAuth) opens a browser authorization flow and stores
+  the grant in `~/.grok/mcp_credentials.json`. Its config schema includes
+  `oauth`, `oauth_client_id`, `oauth_client_secret_env_var`, and
+  `oauth_scopes` (a string array). That field is separate from Claude's
+  `oauth.scopes`. DPF's scope pin still returns a value only for Claude
+  (`mcpClientOAuthScopePin` in
+  `packages/integration-shared/src/mcp-client-credential-policy.ts`).
+- The only stored `dpf` grant on that Mac is
+  `dpf:http://127.0.0.1:3000/api/mcp/v1?tier=full`, received
+  2026-09-18T23:57:57Z from issuer `http://127.0.0.1:3000`, scope `dpf.read`,
+  with a refresh token. No stored grant exists for `https://localhost`.
+- The working connector in `~/.grok/config.toml` is
+  `https://localhost/api/mcp/v1?tier=full` with `bearer_token_env_var`.
+  The checked-in `packages/dpf-skill-pack/grok.mcp.json` is still the
+  loopback http URL plus that same variable.
+  `mcpClientBearerHeaderRequired` returns true for `client === "grok"`, and
+  `planGrokConfig` writes the variable because OAuth support was unverified.
+- The same guide says `bearer_token_file` is re-read on every request, is
+  replaced atomically, and skips OAuth discovery. It does not say
+  `bearer_token_env_var` is re-read. The working connector presents a bearer
+  from the environment. The https origin has no stored browser grant.
+
 ### 12.3 Research and benchmarking
 
 | System | Canonical address | Client trust | DPF adopts or rejects |
@@ -607,11 +636,12 @@ separate machine on the network must also work.
 | smallstep `step ca bootstrap --ca-url --fingerprint` | CA URL plus root fingerprint | Fetch the root, verify the fingerprint, install into trust stores | Adopt for remote agent machines (S5): the standard trust-on-first-use-with-pin pattern. |
 | Hosted MCP connectors (Linear, Notion, Sentry, GitHub) | URL-only connector entry | Public WebPKI | Adopt the connector shape: URL only, OAuth by RFC 9728 discovery, no token in config. |
 | Kubernetes / k3s join (`--token`, CA hash) | Server URL plus CA hash | Pinned CA hash | Confirms URL plus fingerprint as the common join contract. |
+| Grok `bearer_token_file` | A helper writes a short-lived token file; the client re-reads it on each request | The helper's own client credential | Adopt for the S6 refresher (12.4.7). Reject rotating `bearer_token_env_var`, which is the process environment. Reject the browser `oauth_scopes` path for this slice (12.2.1). |
 
 Standards: RFC 9728 (protected resource metadata), RFC 8707 (resource
 indicators), RFC 8252 sections 7.3 and 8.3 (loopback redirects; prefer IP
 literals over `localhost` for redirect listeners), OAuth 2.1 (PKCE; https
-except loopback).
+except loopback). S6 follows RFC 6749 section 4.4 (`client_credentials`).
 
 ### 12.4 Decisions
 
@@ -659,8 +689,18 @@ except loopback).
    `DPF_MCP_URL` and installs the plugin. The first client call opens one
    Connect click.
 7. **Grok gets its credential without a paste (S6).** Setup creates a
-   `client_credentials` client inside the portal container, and a refresher
-   rewrites Grok's bearer before expiry. No PAT is minted.
+   `client_credentials` client (RFC 6749 section 4.4) inside the portal
+   container for the installing operator, with scopes `dpf.read`, `dpf.work`
+   and `dpf.build`, and no UI step. A refresher exchanges that grant and
+   rewrites the credential before expiry. No personal access token is minted.
+   The rewrite target is Grok's `bearer_token_file`: the client re-reads that
+   file on each request, and the writer replaces it by writing a temporary
+   file in the same directory and renaming it. Rotating
+   `bearer_token_env_var` is rejected because that value is the running
+   process environment. The browser `oauth_scopes` path is rejected for this
+   slice (12.2.1). Revoking the client in Admin stops the refresher, and the
+   next request is refused. Writers are exercised in a temporary home, never
+   in the operator's real Grok config.
 8. **Consent keeps its one click.** Pre-authorising clients to skip consent
    entirely is rejected. The kernel floor ("human in the loop at phase
    boundaries", "show the consequence before the confirm") is one explicit
