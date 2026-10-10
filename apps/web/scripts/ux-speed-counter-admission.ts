@@ -14,7 +14,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 
@@ -48,11 +48,29 @@ function runPass(label: string, args: string[]): PassSample[] {
     stdio: "inherit",
   });
   console.error(`[speed-admission] pass ${label} finished with exit ${run.status}`);
-  if (!existsSync(EXECUTION) || statSync(EXECUTION).mtimeMs < startedAt) {
+  // Open once, then fstat and read that descriptor. A path exists/stat before
+  // the read is a check-then-use race (CodeQL js/file-system-race): the name
+  // can point at a different file between the two calls.
+  let fd: number;
+  try {
+    fd = openSync(EXECUTION, "r");
+  } catch {
     throw new Error(`pass ${label} wrote no fresh execution record (exit ${run.status}); admission refuses to score stale data`);
   }
-  copyFileSync(EXECUTION, EXECUTION.replace(/\.json$/, `.pass-${label}.json`));
-  const execution = JSON.parse(readFileSync(EXECUTION, "utf8")) as { routes: ExecutionRoute[] };
+  let execution: { routes: ExecutionRoute[] };
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.mtimeMs < startedAt) {
+      throw new Error(`pass ${label} wrote no fresh execution record (exit ${run.status}); admission refuses to score stale data`);
+    }
+    const buf = Buffer.alloc(stat.size);
+    const n = readSync(fd, buf, 0, stat.size, 0);
+    const text = buf.subarray(0, n).toString("utf8");
+    writeFileSync(EXECUTION.replace(/\.json$/, `.pass-${label}.json`), text, "utf8");
+    execution = JSON.parse(text) as { routes: ExecutionRoute[] };
+  } finally {
+    closeSync(fd);
+  }
   return execution.routes
     .filter((r) => r.status === "measured" && r.speedCounters && r.phases)
     .map((r) => ({
