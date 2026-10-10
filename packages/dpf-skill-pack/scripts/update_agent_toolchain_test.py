@@ -1681,7 +1681,7 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
     loads beside any other connector instead of replacing it. Every shipped
     descriptor is therefore URL-only on the canonical loopback https origin,
     authenticates by OAuth (no bearer header), and Claude keeps its scope pin.
-    Grok keeps its compatibility bearer until S6 (it has no OAuth client).
+    Grok names bearer_token_file (design 12.4.7). It does not use a pasted env var.
     """
 
     PACK = Path(__file__).resolve().parents[1]
@@ -1717,9 +1717,10 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
             server = json.loads((pack / "antigravity.mcp.json").read_text())["mcpServers"]["dpf"]
         self.assertEqual(server["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN:-}")
 
-    def test_grok_descriptor_keeps_its_compatibility_bearer_until_s6(self) -> None:
+    def test_grok_descriptor_names_the_refreshed_bearer_file(self) -> None:
         server = self._read("grok.mcp.json")["mcp_servers"]["dpf"]
-        self.assertEqual(server["bearer_token_env_var"], "DPF_MCP_BEARER_TOKEN")
+        self.assertEqual(server["bearer_token_file"], "~/.grok/dpf-mcp-token")
+        self.assertNotIn("bearer_token_env_var", server)
 
 
 
