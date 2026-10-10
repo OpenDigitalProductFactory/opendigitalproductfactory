@@ -36,11 +36,11 @@
     "mobile": {
       "lockfile": "apps/mobile/pnpm-lock.yaml",
       "totals": {
-        "resolvedComponents": 951,
-        "uniqueNames": 848,
-        "duplicatedNames": 87,
-        "excessInstances": 103,
-        "multiMajorNames": 47,
+        "resolvedComponents": 949,
+        "uniqueNames": 847,
+        "duplicatedNames": 86,
+        "excessInstances": 102,
+        "multiMajorNames": 46,
         "firstPartyDivergentNames": 0,
         "directButTransitiveNames": 0,
         "dedupeCandidateNames": 40,
@@ -49,10 +49,10 @@
         "workspaces": 1
       },
       "budgets": {
-        "resolvedComponents": 951,
-        "duplicatedNames": 87,
-        "excessInstances": 103,
-        "multiMajorNames": 47
+        "resolvedComponents": 949,
+        "duplicatedNames": 86,
+        "excessInstances": 102,
+        "multiMajorNames": 46
       }
     }
   }
