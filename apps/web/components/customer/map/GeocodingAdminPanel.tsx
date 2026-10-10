@@ -13,16 +13,20 @@ import { Surface } from "@/components/ui/Surface";
 import { saveGeocodingProviderAction, startGeocodingBackfillAction } from "@/lib/actions/customer-map";
 import type { GeocodingConfig } from "@/lib/geocoding/providers";
 import type { GeocodingBackfillStatus } from "@/lib/geocoding/backfill.server";
+import type { RegionRecommendation } from "@/lib/twin/map-region-recommendation";
 import { useT } from "@/lib/i18n/use-t";
 
 export function GeocodingAdminPanel({
   config,
   opencageKeyConfigured,
   status,
+  regions = null,
 }: {
   config: GeocodingConfig;
   opencageKeyConfigured: boolean;
   status: GeocodingBackfillStatus;
+  /** Street-map regions the placed locations need (BI-C318C227 §2.3). */
+  regions?: RegionRecommendation | null;
 }) {
   const t = useT("customerMap");
   const router = useRouter();
@@ -99,6 +103,26 @@ export function GeocodingAdminPanel({
         success={message?.kind === "success" ? message.text : undefined}
         error={message?.kind === "error" ? message.text : undefined}
       />
+      {regions ? (
+        <div className="space-y-1">
+          <h4 className="font-semibold">{t("admin.streetMapsHeading")}</h4>
+          {regions.status === "no-locations" ? (
+            <p className="text-[var(--dpf-muted)]">{t("admin.streetMapsNone")}</p>
+          ) : (
+            <ul className="space-y-1">
+              {regions.groups.map((group) => (
+                <li key={group.label} className={group.coveredBy ? "text-[var(--dpf-muted)]" : undefined}>
+                  {group.coveredBy
+                    ? t("admin.streetMapsCovered", { region: group.label, pack: group.coveredBy, count: group.pointCount })
+                    : group.suggestedPackId
+                      ? t("admin.streetMapsMissing", { region: group.label, pack: group.suggestedPackId, count: group.pointCount })
+                      : t("admin.streetMapsNoCountry", { region: group.label, count: group.pointCount })}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
     </Surface>
   );
 }

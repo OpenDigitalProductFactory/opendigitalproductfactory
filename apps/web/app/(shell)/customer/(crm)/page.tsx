@@ -30,6 +30,7 @@ import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { auth } from "@/lib/auth";
 import { loadCustomerMap } from "@/lib/crm/customer-map.server";
 import { readGeocodingSettings } from "@/lib/geocoding/backfill.server";
+import { loadMapRegionRecommendation } from "@/lib/twin/map-region-recommendation.server";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { getT } from "@/lib/i18n/t.server";
 import { can } from "@/lib/permissions";
@@ -232,9 +233,13 @@ export default async function CustomerPage({
   const user = session?.user;
   const allowed = (capability: Parameters<typeof can>[1]) =>
     user ? can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, capability) : false;
-  const [customerMap, geocoding] = mapView
-    ? await Promise.all([loadCustomerMap(), allowed("manage_platform") ? readGeocodingSettings() : null])
-    : [null, null];
+  const [customerMap, geocoding, mapRegions] = mapView
+    ? await Promise.all([
+        loadCustomerMap(),
+        allowed("manage_platform") ? readGeocodingSettings() : null,
+        allowed("manage_platform") ? loadMapRegionRecommendation() : null,
+      ])
+    : [null, null, null];
 
   return (
     <div>
@@ -279,6 +284,7 @@ export default async function CustomerPage({
                 config={geocoding.config}
                 opencageKeyConfigured={geocoding.opencageKeyConfigured}
                 status={geocoding.status}
+                regions={mapRegions}
               />
             ) : null}
           </div>
