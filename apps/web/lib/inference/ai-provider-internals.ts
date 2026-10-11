@@ -22,6 +22,7 @@ import { recordDiscoveredAuthEligibility } from "@/lib/routing/model-auth-eligib
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { findProviderCredential, resolveCredentialProviderId } from "./provider-account-credentials";
 export { resolveCredentialProviderId } from "./provider-account-credentials";
+import { supportsTextGeneration } from "@/lib/routing/model-classifier";
 
 /**
  * Resolve the `supportsToolUse` value a metadata-sync should persist for a model,
@@ -224,10 +225,10 @@ export function extractTokenUsage(data: Record<string, unknown>): TokenUsage {
 
 export function buildAutoDiscoveryEvalEvents(
   providerId: string,
-  models: Array<{ id?: string; modelId: string }>,
+  models: Array<{ id?: string; modelId: string; modelClass?: string | null; outputModalities?: unknown }>,
   userId = "system",
 ) {
-  return models.map((model) => ({
+  return models.filter(supportsTextGeneration).map((model) => ({
     name: "ai/eval.run" as const,
     data: {
       endpointId: providerId,
@@ -1069,12 +1070,13 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
       const { jobs } = await import("@/lib/jobs");
       const models = await prisma.modelProfile.findMany({
         where: { providerId, modelStatus: "active" },
-        select: { modelId: true, id: true },
+        select: { modelId: true, id: true, modelClass: true, outputModalities: true },
       });
-      for (const event of buildAutoDiscoveryEvalEvents(providerId, models)) {
+      const events = buildAutoDiscoveryEvalEvents(providerId, models);
+      for (const event of events) {
         await jobs.send(event);
       }
-      console.log(`[auto-discover] Queued background evals for ${models.length} model(s) on ${JSON.stringify(providerId)}`);
+      if (events.length) console.log(`[auto-discover] Queued background evals for ${events.length} compatible model(s) on ${JSON.stringify(providerId)}`);
     } catch (err) {
       // Non-fatal — catalog scores are usable even without live eval.
       // CodeQL #48 (js/tainted-format-string) + js/log-injection: constant
@@ -1123,21 +1125,21 @@ export async function queueUncalibratedModelEvals(providerId: string): Promise<n
 
   const models = await prisma.modelProfile.findMany({
     where: { providerId, modelStatus: "active", profileSource: "seed", evalCount: 0 },
-    select: { modelId: true, id: true },
+    select: { modelId: true, id: true, modelClass: true, outputModalities: true },
   });
-  if (models.length === 0) return 0;
-
+  const eligible = models.filter(supportsTextGeneration);
+  if (!eligible.length) return 0;
   try {
     const { jobs } = await import("@/lib/jobs");
-    for (const event of buildAutoDiscoveryEvalEvents(providerId, models)) {
+    for (const event of buildAutoDiscoveryEvalEvents(providerId, eligible)) {
       await jobs.send(event);
     }
-    console.log(`[auto-eval] Queued calibration evals for ${models.length} un-calibrated model(s) on ${JSON.stringify(providerId)}`);
+    console.log(`[auto-eval] Queued calibration evals for ${eligible.length} un-calibrated model(s) on ${JSON.stringify(providerId)}`);
   } catch (err) {
     // Non-fatal — seed priors remain usable until the eval runs.
     console.warn("[auto-eval] Failed to queue calibration evals for %s: %s",
       JSON.stringify(providerId),
       err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
   }
-  return models.length;
+  return eligible.length;
 }

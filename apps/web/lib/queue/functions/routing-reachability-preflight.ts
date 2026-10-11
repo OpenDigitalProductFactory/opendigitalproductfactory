@@ -56,6 +56,7 @@ export const routingReachabilityPreflight = jobs.createFunction(
         return {
           checked: result.checked,
           blocked: result.blocked.map((b) => b.agentId),
+          escalationBlocked: result.escalationBlocked.map((b) => b.agentId),
         };
       });
       await step.run("record-success", () => recordRun("ok"));

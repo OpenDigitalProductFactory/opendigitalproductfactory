@@ -316,11 +316,11 @@ export async function generateNormalizedPlan(args: {
 }
 
 /** Read the persisted planReview decision + issues after a reviewBuildPlan run. */
-async function readPlanReview(buildId: string): Promise<{ decision: string; issues: PlanReviewIssue[] } | null> {
+async function readPlanReview(buildId: string): Promise<{ decision: string; issues: PlanReviewIssue[]; reviewIncomplete?: boolean } | null> {
   const row = await prisma.featureBuild.findUnique({ where: { buildId }, select: { planReview: true } }).catch(() => null);
-  const pr = row?.planReview as { decision?: string; issues?: PlanReviewIssue[] } | null;
+  const pr = row?.planReview as { decision?: string; issues?: PlanReviewIssue[]; reviewIncomplete?: boolean } | null;
   if (!pr || typeof pr.decision !== "string") return null;
-  return { decision: pr.decision, issues: Array.isArray(pr.issues) ? pr.issues : [] };
+  return { decision: pr.decision, issues: Array.isArray(pr.issues) ? pr.issues : [], reviewIncomplete: pr.reviewIncomplete === true };
 }
 
 /** Run reviewBuildPlan (dual reviewers + gate + auto-advance-on-pass) for a build. */
@@ -564,17 +564,20 @@ async function dispatchPlanForApprovedBuildInner(params: {
     );
     const fixOutcome = resolveReviewFixOutcome({
       reviewFailed: review?.decision === "fail",
+      reviewIncomplete: review?.reviewIncomplete,
       regenerated,
     });
 
     if (outcomeKeepsBuildRecoverable(fixOutcome)) {
       await log(
-        `Plan repair could not generate a plan in ${round} round(s) — no endpoint produced one. `
+        (fixOutcome === "blocked-review-incomplete"
+          ? "Plan review could not complete; the plan has not been rejected. "
+          : `Plan repair could not generate a plan in ${round} round(s) — no endpoint produced one. `)
         + "Leaving the build recoverable; the existing plan and review are kept.",
       );
       return {
         kind: "dispatched-failure",
-        error: "blocked-no-regeneration",
+        error: fixOutcome,
         durationMs: Date.now() - t0,
       };
     }

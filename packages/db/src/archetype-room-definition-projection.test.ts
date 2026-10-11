@@ -5,7 +5,35 @@ import { ALL_ARCHETYPES, deriveOperationalValueStream } from "@dpf/storefront-te
 import {
   buildArchetypeRoomDefinitions,
   projectArchetypeRoomDefinitions,
+  withArchetypeProjectionTransaction,
 } from "./archetype-room-definition-projection";
+
+it("reuses a caller transaction even when Prisma exposes nested transactions", async () => {
+  const tx = {
+    $queryRawUnsafe: async () => [],
+    $transaction: async () => { throw new Error("unexpected nested transaction"); },
+  };
+  await withArchetypeProjectionTransaction(tx, "org-test", async (sameTx) => {
+    expect(Object.is(sameTx, tx)).toBe(true);
+  });
+});
+
+it("opens one transaction for a root client and locks inside it", async () => {
+  const calls: string[] = [];
+  const tx = { $queryRawUnsafe: async () => { calls.push("lock"); } };
+  const db = {
+    $connect: async () => {},
+    $transaction: async (work: (value: unknown) => Promise<unknown>) => {
+      calls.push("transaction");
+      return work(tx);
+    },
+  };
+  await withArchetypeProjectionTransaction(db, "org-test", async (sameTx) => {
+    expect(Object.is(sameTx, tx)).toBe(true);
+    calls.push("work");
+  });
+  expect(calls).toEqual(["transaction", "lock", "work"]);
+});
 
 function ovsmFor(archetypeId: string) {
   const archetype = ALL_ARCHETYPES.find((a) => a.archetypeId === archetypeId);
@@ -18,7 +46,8 @@ function ovsmFor(archetypeId: string) {
  * same way the projection is, so idempotence and pruning are observable.
  */
 function fakeDb() {
-  const rows = new Map<string, { id: string; name: string; properties: Record<string, unknown> }>();
+  const rows = new Map<string, { id: string; name: string; properties: Record<string, unknown>; lifecycleStage: string; lifecycleStatus: string }>();
+  const events: unknown[] = [];
   let seq = 0;
 
   const stageKeyOf = (properties: Record<string, unknown>): string =>
@@ -40,6 +69,9 @@ function fakeDb() {
 
   return {
     rows,
+    events,
+    $queryRawUnsafe: async () => [],
+    lifecycleEvent: { create: async (args: unknown) => { events.push(args); return { id: `event-${events.length}` }; } },
     eaNotation: { findUnique: async () => ({ id: "notation-1" }) },
     eaElementType: { findUnique: async () => ({ id: "stage-type-1" }) },
     eaElement: {
@@ -56,13 +88,13 @@ function fakeDb() {
         const { orgId } = matchPath(args);
         return [...rows.values()]
           .filter((row) => orgIdOf(row.properties) === orgId)
-          .map((row) => ({ id: row.id }));
+          .map((row) => ({ ...row }));
       },
       create: async (args: unknown) => {
         const data = (args as { data: { name: string; properties: Record<string, unknown> } }).data;
         seq += 1;
         const id = `el-${seq}`;
-        rows.set(id, { id, name: data.name, properties: data.properties });
+        rows.set(id, { id, name: data.name, properties: data.properties, lifecycleStage: "design", lifecycleStatus: "draft" });
         return { id };
       },
       update: async (args: unknown) => {
@@ -70,7 +102,7 @@ function fakeDb() {
           where: { id: string };
           data: { name: string; properties: Record<string, unknown> };
         };
-        rows.set(where.id, { id: where.id, name: data.name, properties: data.properties });
+        rows.set(where.id, { ...rows.get(where.id)!, ...data });
         return { id: where.id };
       },
       deleteMany: async (args: unknown) => {
@@ -86,6 +118,13 @@ function fakeDb() {
 }
 
 describe("buildArchetypeRoomDefinitions", () => {
+  it("inherits the stream role when the stage has no override", () => {
+    const ovsm = ovsmFor("pet-rescue");
+    const stage = { ...ovsm.stages[0]!, responsibleRole: null };
+    const stream = ovsm.streams.find((s) => s.key === stage.streamKey)!;
+    const result = buildArchetypeRoomDefinitions({ ...ovsm, stages: [stage] });
+    expect(result.definitions[0]!.requiredParticipantRole).toBe(stream.responsibleRole);
+  });
   it("maps every stage to exactly one room definition", () => {
     const ovsm = ovsmFor("pet-rescue");
     const set = buildArchetypeRoomDefinitions(ovsm);
@@ -137,6 +176,42 @@ describe("buildArchetypeRoomDefinitions", () => {
 });
 
 describe("projectArchetypeRoomDefinitions", () => {
+  it("does not send notationId to EaElement (it belongs to EaElementType)", async () => {
+    const db = fakeDb();
+    const create = db.eaElement.create;
+    db.eaElement.create = async (args: unknown) => {
+      expect((args as { data: object }).data).not.toHaveProperty("notationId");
+      return create(args);
+    };
+    await projectArchetypeRoomDefinitions({ db, orgId: "org-1", ovsm: ovsmFor("pet-rescue") });
+  });
+
+  it("preserves unrelated metadata during reconciliation", async () => {
+    const db = fakeDb();
+    const ovsm = ovsmFor("pet-rescue");
+    await projectArchetypeRoomDefinitions({ db, orgId: "org-1", ovsm });
+    const first = [...db.rows.values()][0]!;
+    first.properties.operatorNote = "Keep this history";
+    await projectArchetypeRoomDefinitions({ db, orgId: "org-1", ovsm });
+    expect(db.rows.get(first.id)!.properties.operatorNote).toBe("Keep this history");
+  });
+
+  it("retains dropped rows and reuses their identities when the stage returns", async () => {
+    const db = fakeDb();
+    const ovsm = ovsmFor("pet-rescue");
+    await projectArchetypeRoomDefinitions({ db, orgId: "org-1", ovsm });
+    const ids = [...db.rows.keys()];
+    await projectArchetypeRoomDefinitions({ db, orgId: "org-1", ovsm: { ...ovsm, stages: [] } });
+    expect([...db.rows.keys()]).toEqual(ids);
+    expect([...db.rows.values()].every((row) => row.lifecycleStatus === "inactive")).toBe(true);
+    expect(db.events).toHaveLength(ids.length);
+    await projectArchetypeRoomDefinitions({ db, orgId: "org-1", ovsm: { ...ovsm, stages: [] } });
+    expect(db.events).toHaveLength(ids.length);
+    await projectArchetypeRoomDefinitions({ db, orgId: "org-1", ovsm });
+    expect([...db.rows.keys()]).toEqual(ids);
+    expect([...db.rows.values()].every((row) => row.lifecycleStatus === "active")).toBe(true);
+    expect(db.events).toHaveLength(ids.length * 2);
+  });
   it("creates one row per stage on first projection", async () => {
     const db = fakeDb();
     const ovsm = ovsmFor("pet-rescue");
@@ -161,7 +236,7 @@ describe("projectArchetypeRoomDefinitions", () => {
     expect(db.rows.size).toBe(sizeAfterFirst);
   });
 
-  it("prunes rooms the archetype no longer declares", async () => {
+  it("withdraws rooms the archetype no longer declares without deleting history", async () => {
     const db = fakeDb();
     const rescue = ovsmFor("pet-rescue");
     await projectArchetypeRoomDefinitions({ db, orgId: "org-1", ovsm: rescue });
@@ -171,8 +246,7 @@ describe("projectArchetypeRoomDefinitions", () => {
     const result = await projectArchetypeRoomDefinitions({ db, orgId: "org-1", ovsm: shelter });
 
     expect(result.removed).toBeGreaterThan(0);
-    expect(db.rows.size).toBe(shelter.stages.length);
-    const stageKeys = [...db.rows.values()].map(
+    const stageKeys = [...db.rows.values()].filter((row) => row.lifecycleStatus !== "inactive").map(
       (row) => (row.properties.projection as { stageKey: string }).stageKey,
     );
     expect(stageKeys.sort()).toEqual(shelter.stages.map((s) => s.key).sort());
