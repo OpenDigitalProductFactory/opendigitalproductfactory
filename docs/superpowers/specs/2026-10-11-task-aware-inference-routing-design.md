@@ -13,8 +13,9 @@ preserve explicit local-only and governed-data boundaries. Prevent pointless
 dispatch before optimizing model selection.
 
 The operator requested research and a design on October 11, 2026. This is a
-source-grounded proposal, not a ratified platform decision or an implementation
-receipt. The native DPF tool catalog is absent in this client; bootstrap previously
+source-grounded proposal, not a ratified platform decision. The bounded source
+implementation record is in section 10; it is not a deployment receipt.
+The native DPF tool catalog is absent in this client; bootstrap previously
 reported authorization pending. Live backlog, kernel decisions, account facts,
 current policy settings, and execution traces cannot be reconciled here. The
 checked-in [recovery procedure](../../../packages/dpf-skill-pack/skills/dpf-systematic-debugging/references/recovery-routing.md)
@@ -394,12 +395,12 @@ references are ownership leads, not claims of current status or coverage.
 | Slice | Work and likely existing owner | Completion evidence |
 | --- | --- | --- |
 | 0. Reconcile and deliver existing repair | Background trust repair; producer defects independent of router work | Exact source head, review/build gates, canonical deployed identity, embedding exclusion and panel single-flight verified live |
-| 1. Capture representative traces | Routing explainability BI-3FA17F95, evidence BI-758722A7; routing dead-end BI-E2CCFAC1 | Authorized traces for public chat, private case, utility, calibration, review, build; constraint lineage and connection/pool facts; no raw content in committed evidence |
+| 1. Capture representative traces | Existing routing explanation/evidence surfaces; routing dead-end BI-E2CCFAC1; live owner reconciliation pending | Authorized traces for public chat, private case, utility, calibration, review, build; constraint lineage and connection/pool facts; no raw content in committed evidence |
 | 2. Fail early; compose the right review | Existing initiative-readiness/artifact resolver and prompt assembler; provenance lead BI-2D698C7B | Missing author/writer/immutable binding stops before model dispatch; valid independent review gets its matching receipt; page-only blocks absent from internal task prompt |
 | 3. Refactor explanation and objective | Extend request-contract builder, suitability binding, pipeline-v2, cost-ranking, explain/audit serialization | Behavior characterization, additive provenance, capability-confidence consistency, deterministic preview, saved posture and pin semantics retained |
 | 4. Connect capacity to selection/admission | EP-056D2A5E; existing provider capacity/weekly quota program | Correct locality and shared pool scopes; atomic bounded admission; deadlines/cancellation; no leaked slots or duplicate durable task |
 | 5. Enable proposed cloud behavior gradually | Provider suitability BI-AIPS-002/003/007/008 and existing provider readiness | Public eligible canary completes through matching authorized cloud connection; private/local-only fixture never egresses; unsupported custom tools remain excluded |
-| 6. Extend owner projection | BI-52C015D8 / BI-7378E34C / BI-C8BC9DD1 and existing Operations Map | Source owner, routing cause, wait age and verified receipt visible; cross-surface authorization parity; measured UX-fit on served target |
+| 6. Extend owner projection | Existing Operations Map; live owner reconciliation pending | Source owner, routing cause, wait age and verified receipt visible; cross-surface authorization parity; measured UX-fit on served target |
 | 7. Tune and close | Existing local context reconciliation and allocation design BI-7AE90091, as applicable | Before/after workload measurements; no private-work starvation; repair/run outcomes linked to actual capacity use; docs and live obligations reconciled |
 
 Reserve roughly 20% of implementation effort for refactoring, following the
@@ -450,7 +451,39 @@ additive migration. Do not log raw payloads to diagnose a rollout.
 
 ## 10. Current delivery state
 
-Research and source architecture proposal recorded. Live policy cause, backlog
+Research and source architecture proposal recorded. The operator subsequently
+authorized execution, emphasizing server-owned monitoring and regulation.
+The topic was refreshed to main before these source changes:
+
+| Existing mechanism | Source repair | Evidence |
+| --- | --- | --- |
+| Model evaluation reservation | First-row unique collision loses the reservation; other storage errors stop inference | Failing behavior tests before repair, then passing slot tests |
+| Inference admission | Background evaluation/probe callbacks bind autonomous origin; canonical locality also governs Ollama admission | Async origin and locality regression tests |
+| Scheduled routing reachability | Detects sensitive-ceiling failures separately from ordinary-route failures; reuses deduplicated health issues and operator attention | Scheduled-monitor tests cover detection, distinct severity, recovery and storage failure |
+| Readiness capacity projection | Carries the observation timestamp already used by live routing, allowing temporary exclusions to age out under existing rules | Stale-limit recovery test failed first, then passed; auth failure remains blocked |
+
+The health issue lifecycle was refactored into one helper shared by the two
+conditions, and admission reuses the canonical locality primitive. No second
+monitor, scheduler, policy authority or data model was introduced. Existing
+automatic provider recovery remains the recovery owner for automatic disables;
+the new warning does not authorize credential changes or widening allowlists.
+Conditional route failure is detected, not automatically repaired by this patch.
+
+Verification: the combined regression run passed 251 tests in 17 suites,
+covering these changes, the earlier producer repair, and existing provider
+recovery/capacity exclusion behavior. Both production and
+test-program typechecks passed. Runtime build, live probes, independent governed
+review and deployment remain unrun. The routing monitor keeps its existing
+six-hour schedule; this patch does not prove incident detection latency on the
+live install. Source-local evidence cannot demonstrate client-independent live
+recovery or the eligible-cloud canary required by slices 0 and 5.
+
+The source-local preflight's live-reference check found five stale research
+backlog identifiers; they were removed from the delivery table. This draft does
+not assert backlog coverage for the trace and owner-projection slices until the
+native coordination tools can reconcile it.
+
+Live policy cause, backlog
 coverage, scope decisions, independent review and served UX measurements remain
 unverified because native coordination is unavailable. The next agent action
 after reconnection is to read the install contract and live trace/backlog/kernel
