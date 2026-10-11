@@ -11,7 +11,6 @@ import {
 import { encryptSecret } from "@/lib/credential-crypto";
 import {
   autoDiscoverAndProfile,
-  discoverModelsInternal,
   profileModelsInternal,
   getDecryptedCredential,
   backfillModelCards,
@@ -351,19 +350,11 @@ export async function toggleProviderStatus(
 
 export async function discoverModels(
   providerId: string,
-): Promise<{ discovered: number; newCount: number; error?: string; warning?: string }> {
+): Promise<{ discovered: number; newCount: number; profiled: number; error?: string; warning?: string }> {
   await requireManageProviders();
-  if (KNOWN_PROVIDER_MODELS[providerId]) {
-    const signal = await collectProviderCatalogSignals(providerId);
-    const seeded = await autoDiscoverAndProfile(providerId);
-    return {
-      discovered: seeded.discovered,
-      newCount: seeded.discovered,
-      error: seeded.error,
-      warning: signal.warning,
-    };
-  }
-  return discoverModelsInternal(providerId);
+  const signal = KNOWN_PROVIDER_MODELS[providerId] ? await collectProviderCatalogSignals(providerId) : undefined;
+  const refreshed = await autoDiscoverAndProfile(providerId, false);
+  return { ...refreshed, newCount: refreshed.newCount ?? 0, warning: signal?.warning };
 }
 
 const PROVIDER_CATALOG_RECONCILIATION_JOB_ID = "provider-catalog-reconciliation";

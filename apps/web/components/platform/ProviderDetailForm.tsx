@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useId } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
-import { configureProvider, testProviderAuth, discoverModels, profileModels } from "@/lib/actions/ai-providers";
+import { configureProvider, testProviderAuth, discoverModels } from "@/lib/actions/ai-providers";
 import { startProviderOAuth, disconnectProviderOAuth } from "@/lib/actions/provider-oauth";
 import { ConnectGrokCard } from "./ConnectGrokCard";
 import type { ProviderWithCredential, DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
@@ -145,10 +145,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       try {
         const discovery = await discoverModels(provider.providerId);
         setDiscoveryResult(discovery);
-        if (discovery.discovered > 0) {
-          setPipelineStatus("Syncing routing profiles...");
-          setProfilingResult(await profileModels(provider.providerId));
-        }
+        setProfilingResult(discovery.discovered > 0 ? { profiled: discovery.profiled, failed: 0, error: discovery.error } : null);
       } catch {
         setTestResult({ ok: false, message: "Refresh failed. Retry." });
       } finally {
@@ -165,8 +162,10 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     || secretRef;
   const readinessState = testResult?.ok === false
     ? { label: "Failed", tone: "var(--dpf-warning)", detail: "Review the error and retry." }
+    : testResult?.ok === true
+    ? { label: "Connection verified", tone: "var(--dpf-success)", detail: "Workload rules still apply when work runs." }
     : provider.status === "active" && hasProfiles && hasCredential
-    ? { label: "Ready", tone: "var(--dpf-success)", detail: "Models are prepared." }
+    ? { label: "Configured", tone: "var(--dpf-text)", detail: "Saved profiles do not confirm current access." }
     : hasCredential
       ? { label: "Needs readiness check", tone: "var(--dpf-warning)", detail: "Save to verify and prepare models." }
       : { label: "Needs credentials", tone: "var(--dpf-muted)", detail: "Connect your account to continue." };
@@ -193,7 +192,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       <div style={{ maxWidth: 560 }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ color: "var(--dpf-muted)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-          Technical readiness
+          Connection
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{
@@ -598,7 +597,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             disabled={isPending}
             style={{ padding: "8px 16px", background: "var(--dpf-surface-2)", border: "1px solid var(--dpf-accent)", color: "var(--dpf-accent)", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
           >
-            {isPending ? "Preparing..." : "Save & ready provider"}
+            {isPending ? "Preparing..." : "Save & verify connection"}
           </button>
           {saveMessage && <span style={{ fontSize: 12, color: saveMessage.startsWith("Error") ? "var(--dpf-error)" : "var(--dpf-success)" }}>{saveMessage}</span>}
           {testResult && (
@@ -617,6 +616,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       <div style={{ marginTop: 12 }}>
         <button
           type="button"
+          aria-expanded={showDiagnostics}
           onClick={() => setShowDiagnostics((value) => !value)}
           style={{ background: "transparent", border: "1px solid var(--dpf-border)", color: "var(--dpf-muted)", fontSize: 12, padding: "6px 10px", borderRadius: 4, cursor: "pointer" }}
         >
@@ -662,13 +662,13 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
       {models.length > 0 && (
         <p style={{ color: "var(--dpf-muted)", fontSize: 12, marginTop: 8 }}>
-          {models.length} model{models.length !== 1 ? "s" : ""} discovered
+          {profiles.length} saved model profile{profiles.length !== 1 ? "s" : ""}. Access checked during work.
         </p>
       )}
 
       </div>{/* end max-width form wrapper */}
 
-      {models.length > 0 && (
+      {showDiagnostics && models.length > 0 && (
         <div style={{ marginTop: 24 }}>
           <div style={{ color: "var(--dpf-accent)", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
             Discovered Models

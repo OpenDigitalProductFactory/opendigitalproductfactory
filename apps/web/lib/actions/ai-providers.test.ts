@@ -614,22 +614,22 @@ describe("discoverModels", () => {
     mockCan.mockReturnValue(true);
   });
 
-  it("uses known-model seeding for Codex instead of raw live discovery", async () => {
-    mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 2, profiled: 2 });
+  it("returns the actual new count from a serving-catalog refresh", async () => {
+    mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 2, newCount: 0, profiled: 2 });
 
     const result = await discoverModels("codex");
 
-    expect(result).toEqual(expect.objectContaining({ discovered: 2, newCount: 2, error: undefined }));
-    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
+    expect(result).toEqual(expect.objectContaining({ discovered: 2, newCount: 0, profiled: 2 }));
+    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex", false);
   });
 
-  it("uses known-model seeding for xAI/Grok so OAuth-only Build Studio sync does not hit /v1/models", async () => {
-    mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 2, profiled: 2 });
+  it("does not count a bootstrap fallback as a successful refresh", async () => {
+    mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 0, profiled: 0, error: "HTTP 503" });
 
     const result = await discoverModels("xai");
 
-    expect(result).toEqual(expect.objectContaining({ discovered: 2, newCount: 2, error: undefined }));
-    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("xai");
+    expect(result).toEqual(expect.objectContaining({ discovered: 0, newCount: 0, error: "HTTP 503" }));
+    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("xai", false);
   });
 });
 

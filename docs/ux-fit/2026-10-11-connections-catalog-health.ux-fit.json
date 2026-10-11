@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "summary-disclosure",
+  "decisionInteractionId": "DI-1DA5991121A5",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/ProviderDetailForm.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "summary-disclosure",
+      "all-cards"
+    ]
+  }
+}

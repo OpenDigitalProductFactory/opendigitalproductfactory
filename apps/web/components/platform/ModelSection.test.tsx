@@ -95,7 +95,8 @@ describe("ModelSection", () => {
       />,
     );
 
-    expect(html).toContain("2 models ready");
+    expect(html).toContain("2 saved model profiles");
+    expect(html).not.toContain("models ready");
     expect(html).not.toContain("Search models");
     expect(html).not.toContain("Run Eval");
     expect(html).not.toContain("Override Tier");
