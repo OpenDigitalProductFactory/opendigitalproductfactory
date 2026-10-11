@@ -676,6 +676,9 @@ export async function resumePreBuildPhase(params: {
         const outcome = await dispatchPlanForApprovedBuild({ buildId, userId });
         return { kind: "resumed", phase, via: "dispatchPlanForApprovedBuild", detail: outcome.kind };
       }
+      if ((build.planReview as { reviewIncomplete?: boolean } | null)?.reviewIncomplete) {
+        return { kind: "skipped", phase, reason: "Plan review incomplete; preserve the plan and retry review after reviewer execution recovers." };
+      }
       // Plan exists. If its last review FAILED, REGENERATE via the fix loop —
       // re-reviewing the same bad plan just re-fails forever (the live jam: a plan
       // that "points at files that do not exist" stays stuck every resume). The

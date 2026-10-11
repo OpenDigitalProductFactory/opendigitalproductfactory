@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 736,
+  "pageCount": 737,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2339,6 +2339,18 @@
         "fleet-safe-evolution",
         "derived-roadmap-boundary",
         "product-management-playbook-boundary"
+      ]
+    },
+    "docs/architecture/provider-accounts.md": {
+      "publicHref": "/architecture/provider-accounts/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "provider-account-identity",
+        "governed-controls",
+        "provider-ui-preservation-contract",
+        "migration-and-verification"
       ]
     },
     "docs/architecture/section-navigation.md": {
@@ -12676,6 +12688,7 @@
         "workflow",
         "read-the-routing-picture",
         "architecture-and-evidence",
+        "understanding-background-inference",
         "when-a-coworker-says-it-used-the-backup-model",
         "what-to-watch",
         "defaults-for-work-rooms"

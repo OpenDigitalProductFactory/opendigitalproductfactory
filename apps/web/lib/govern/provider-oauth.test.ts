@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockPrisma, mockAutoDiscoverAndProfile } = vi.hoisted(() => ({
   mockPrisma: {
+    aiProviderConnection: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    complianceEvidence: { updateMany: vi.fn() },
+    $transaction: vi.fn(),
     oAuthPendingFlow: {
       findUnique: vi.fn(),
       delete: vi.fn(),
@@ -92,6 +95,15 @@ describe("createOAuthFlow", () => {
     expect(url.searchParams.get("scope")).toBe("openid profile email offline_access");
   });
 
+  it("binds concurrent same-provider sign-ins to their own account identities", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockImplementation(async ({ where }) => ({ providerId: "codex", credentialEntry: { id: where.connectionId } }));
+    await createOAuthFlow("codex", "account-a");
+    await createOAuthFlow("codex", "account-b");
+    const flows = mockPrisma.oAuthPendingFlow.create.mock.calls.map(([args]) => args.data);
+    expect(flows.map((flow) => flow.connectionId)).toEqual(["account-a", "account-b"]);
+    expect(flows[0].state).not.toBe(flows[1].state);
+  });
+
   it("requests offline_access by default for ChatGPT OAuth flows", async () => {
     const result = await createOAuthFlow("chatgpt");
 
@@ -159,6 +171,8 @@ describe("exchangeOAuthCode", () => {
       createdAt: new Date(),
     });
     mockPrisma.oAuthPendingFlow.delete.mockResolvedValue({});
+    mockPrisma.oAuthPendingFlow.deleteMany.mockResolvedValue({ count: 1 });
+    mockPrisma.$transaction.mockImplementation((fn) => fn(mockPrisma));
     mockPrisma.modelProvider.update.mockResolvedValue({});
     mockPrisma.modelProvider.updateMany.mockResolvedValue({ count: 1 });
     mockPrisma.credentialEntry.upsert.mockResolvedValue({});
@@ -206,6 +220,26 @@ describe("exchangeOAuthCode", () => {
     expect(result).toEqual({ providerId: "codex" });
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("chatgpt");
+  });
+
+  it("exchanges an additional account without copying credentials to the default or sibling", async () => {
+    mockPrisma.oAuthPendingFlow.findUnique.mockResolvedValue({ id: "flow-b", providerId: "codex", connectionId: "account-b", codeVerifier: "verifier-b", createdAt: new Date() });
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ id: "connection-b", providerId: "codex", credentialEntryId: "credential-b", credentialEntry: { id: "credential-b" } });
+    const result = await exchangeOAuthCode("state-b", "code-b");
+    expect(result).toEqual({ providerId: "codex", connectionId: "account-b" });
+    expect(mockPrisma.credentialEntry.upsert).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.credentialEntry.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "credential-b" } }));
+    expect(mockPrisma.aiProviderConnection.update).toHaveBeenCalledWith(expect.objectContaining({ where: { connectionId: "account-b" }, data: expect.objectContaining({ authMethod: "oauth", evidenceStatus: "unreviewed", accessibleModelIds: [] }) }));
+    expect(mockPrisma.aiProviderConnection.updateMany).toHaveBeenCalledWith({ where: { connectionId: "account-b", status: { not: "disabled" } }, data: { status: "active" } });
+    expect(mockPrisma.complianceEvidence.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ providerConnectionId: "connection-b" }) }));
+    expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
+  });
+
+  it("consumes a callback state once when two requests race", async () => {
+    mockPrisma.oAuthPendingFlow.deleteMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+    const outcomes = await Promise.all([exchangeOAuthCode("state-1", "code-1"), exchangeOAuthCode("state-1", "code-1")]);
+    expect(outcomes.filter((outcome) => "error" in outcome)).toEqual([{ error: "invalid_state" }]);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the stored refresh token when the token response carries none", async () => {
@@ -314,6 +348,13 @@ describe("refreshOAuthToken", () => {
 
     expect(result).toEqual({ error: "Re-authentication required" });
     expect(mockPrisma.credentialEntry.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("expires only the selected additional account when it cannot refresh", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ providerId: "codex", credentialEntry: { id: "credential-b", refreshToken: null, tokenExpiresAt: new Date(Date.now() - 60_000) } });
+    await refreshOAuthToken("codex", "account-b");
+    expect(mockPrisma.credentialEntry.updateMany).toHaveBeenCalledWith({ where: { id: "credential-b" }, data: { status: "expired" } });
+    expect(mockPrisma.credentialEntry.findUnique).not.toHaveBeenCalled();
   });
 });
 

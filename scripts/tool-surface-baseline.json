@@ -3,14 +3,14 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 430,
-      "reason": "BI-7D1E43DE: report_decision_trust_state. The trust dial's shadow measurement (TrustState per coworker x activity x risk) had no reader, so nobody could see agreement rates before any graduation decision. Read-only, in the existing decision-outcome pack, granted through registry_read like reverify_decision_evidence; renders 'insufficient samples' below 10 and never raises currentLevel. Claim to check: the founder's first graduation decision cites this report's numbers.",
+      "value": 432,
+      "reason": "BI-1914A351: get_provider_accounts and manage_provider_account give external coworkers the same scoped account controls as portal server actions. A bounded masked reader and one operation-based writer cover account setup, authentication, model discovery and lifecycle without adding a tool per action. Existing provider controls cannot select an additional account, so omitting these tools would orphan that functionality for agent surfaces. Claim to check: two accounts are managed independently through governed tools with no default credential fallback.",
       "recordedAt": "2026-10-08"
     },
     "registry.packFiles": {
-      "value": 105,
-      "reason": "BI-EBF0F6EE: contributor-inventory-pack.ts and payables-pack.ts. Contributor inventory had a sync trigger but no reader and no pack of its own; payables/supplier reads are a finance-operations domain distinct from banking and reporting packs, granted to a narrower key (payables_read) than financial_read.",
-      "recordedAt": "2026-10-01"
+      "value": 106,
+      "reason": "BI-1914A351: provider-account-tools.ts holds the two account tool definitions composed into the existing model-provider pack. Handlers remain in that pack and delegate to shared account services, avoiding a larger import cycle. This is an account contract module, not a second tool registration path. Claim to check: model-provider pack tests prove one registration and matching grants for each account control.",
+      "recordedAt": "2026-10-08"
     },
     "tier.coreToolNames": {
       "value": 35,

@@ -17,6 +17,8 @@
 
 import type { PanelResult, TriageSubject } from "./triage-conductor";
 import type { StaffingPlan } from "./triage-staffing";
+import { buildPanelBrief } from "./triage-panel-brief";
+export { buildPanelBrief } from "./triage-panel-brief";
 
 /** Risk tier → the assurance the panel runs at. High stakes buy more diversity. */
 function strategyFor(riskTier: string | null): "balanced" | "high-assurance" {
@@ -47,44 +49,6 @@ export function parseVerdictText(text: string | null | undefined): unknown {
     }
   }
   return null;
-}
-
-/**
- * The instruction the panel is convened on. Carries the decision, the options,
- * and — honestly — which professions are seated and which could not be, so the
- * adjudicator cannot claim expertise the roster does not have.
- */
-export function buildPanelBrief(input: {
-  subject: TriageSubject;
-  plan: StaffingPlan;
-  optionIds: string[];
-}): string {
-  const { subject, plan, optionIds } = input;
-  const seated = plan.families.length
-    ? plan.families.map((f) => f.label).join(", ")
-    : "none — no profession applied, so weigh this on general platform doctrine and say so";
-
-  return [
-    `A governed decision reached a human instead of being settled. Draft what the owner should do.`,
-    ``,
-    `Question: ${subject.question}`,
-    `Options: ${optionIds.length ? optionIds.join(", ") : "none recorded"}`,
-    `Why it came here: outcome ${subject.outcomeType}, risk ${subject.riskTier ?? "unrecorded"}.`,
-    `Professions seated: ${seated}.`,
-    `Staffing basis: ${plan.basis}`,
-    ``,
-    `Return ONLY a JSON object with these keys:`,
-    `  recommendedAction: "answer_gap" | "adopt_option" | "no_change"`,
-    `  draft: { answer } for answer_gap, { optionId } for adopt_option, { reason } for no_change`,
-    `  summary: one line naming what the owner is being asked to accept`,
-    `  consequences: [{ optionId, text }] — one line per option`,
-    `  dissent: [{ role, position, because }] — empty only if the panel truly agreed`,
-    `  confidence: 0..1`,
-    ``,
-    `If the panel cannot ground a recommendation, return {"recommendedAction":"no_change","draft":{"reason":"..."},...}`,
-    `only when changing nothing is genuinely the right call. Otherwise say so in the run's consensus state`,
-    `rather than drafting something nobody can support.`,
-  ].join("\n");
 }
 
 /**
@@ -125,7 +89,7 @@ export async function runGovernanceTriagePanel(input: {
   userId: string;
   optionIds: string[];
 }): Promise<PanelResult | null> {
-  const { prisma } = await import("@dpf/db");
+  const { prisma, Prisma } = await import("@dpf/db");
   const { orchestrateDeliberation } = await import("@/lib/deliberation/orchestrator");
 
   let deliberationRunId: string;
@@ -165,6 +129,30 @@ export async function runGovernanceTriagePanel(input: {
     return null;
   }
 
+  // Reserve the case before dispatch. A concurrent pass must not start a second
+  // panel for the same snapshot; unfinished runs remain visible for recovery.
+  const reserved = await prisma.decisionInteraction.updateMany({
+    where: {
+      id: input.subject.interactionRowId,
+      deliberationRunId: input.subject.previousPanel?.id ?? null,
+      ...(input.subject.updatedAt ? { updatedAt: input.subject.updatedAt } : {}),
+      humanOutcome: { equals: Prisma.DbNull },
+      resolutionProposals: { none: { status: "proposed", lifecycle: "active" } },
+    },
+    data: { deliberationRunId },
+  });
+  if (reserved.count !== 1) {
+    await prisma.deliberationRun.update({
+      where: { id: deliberationRunId },
+      data: { consensusState: "insufficient-evidence", completedAt: new Date() },
+    });
+    await prisma.taskRun.update({
+      where: { id: panelTaskRunId },
+      data: { status: "canceled", completedAt: new Date(), progressPayload: { reason: "Decision changed or another panel reserved it before dispatch." } },
+    });
+    return null;
+  }
+
   // Orchestration only PERSISTS the graph; the runner executes it. Without
   // this event the run sits at `pending` with queued nodes forever — which is
   // exactly what happened on the live install: ten governance-triage runs
@@ -186,18 +174,12 @@ export async function runGovernanceTriagePanel(input: {
   // Deliberation is asynchronous, so the outcome does not exist the moment the
   // graph does. Wait for it, bounded: a pass that hangs on one panel starves
   // every other decision behind it. On timeout the caller records "not
-  // drafted" and the next pass retries — nothing partial is written.
+  // drafted" and leaves the pending run attached for recovery. No duplicate is
+  // dispatched while that run is unfinished.
   const outcome = await awaitOutcome(
     prisma as unknown as Parameters<typeof awaitOutcome>[0],
     deliberationRunId,
   );
-
-  // Bind the decision to the run that considered it, so the record can show
-  // who weighed in even if the verdict itself is refused.
-  await prisma.decisionInteraction.updateMany({
-    where: { id: input.subject.interactionRowId, deliberationRunId: null },
-    data: { deliberationRunId },
-  });
 
   return {
     deliberationRunId,
