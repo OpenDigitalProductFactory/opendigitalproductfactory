@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { createDatabaseClient, prisma } from "@dpf/db";
 import { mintAutomationSignIn, type AutomationSignInDb } from "./automation-sign-in";
 import { syncUserPrincipal } from "@/lib/identity/principal-linking";
+import { isTerminalCapsuleStatus } from "@/lib/work-capsules/work-capsule-branch-identity";
 import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
 
 const exec = promisify(execFile);
@@ -33,6 +34,23 @@ export function assertPreviewIssuerContainer(container: {
       || !container.Config?.Env?.includes("DPF_ENVIRONMENT_CLASS=development")) throw new Error("preview_issuer_binding_mismatch");
 }
 
+async function previewSourceForVerifier(lease: PreviewAdmission, ownerSessionId: string, principalId: string) {
+  const verifier = await prisma.workroom.findFirst({ where: {
+    executorRef: ownerSessionId, leaseHolderPrincipalId: principalId,
+    leaseExpiresAt: { gt: new Date() }, archivedAt: null,
+  }, select: { repositoryFullName: true, status: true } });
+  if (!verifier?.repositoryFullName || isTerminalCapsuleStatus(verifier.status)) throw new Error("preview_verification_workroom_unverified");
+  // A paused source remains an immutable verification target. The active
+  // verifier proves current authority; it does not take the source's session.
+  const source = await prisma.workroom.findFirst({ where: {
+    worktreePath: lease.worktreePath, headBranch: lease.branchName,
+    leaseHolderPrincipalId: principalId, repositoryFullName: verifier.repositoryFullName,
+    archivedAt: null,
+  }, select: { headSha: true } });
+  if (!source?.headSha || !/^[a-f0-9]{40}$/.test(source.headSha)) throw new Error("preview_source_workroom_unverified");
+  return { headSha: source.headSha };
+}
+
 export async function issuePreviewAutomationSignIn(input: {
   leaseId: string; ownerSessionId: string; nextPath?: string; userId: string;
   context?: { agentId?: string; authSource?: string };
@@ -41,14 +59,9 @@ export async function issuePreviewAutomationSignIn(input: {
   assertPreviewAdmission(lease, input.ownerSessionId, new Date());
   const actor = await workCapsuleActor(input.userId, input.context);
   if (!actor.principalId) throw new Error("preview_principal_unverified");
-  // A session string alone grants nothing. The authenticated principal must
-  // own the source Workroom, at its recorded commit and executor session.
-  const room = await prisma.workroom.findFirst({ where: {
-    worktreePath: lease.worktreePath, headBranch: lease.branchName,
-    executorRef: input.ownerSessionId, leaseHolderPrincipalId: actor.principalId,
-    leaseExpiresAt: { gt: new Date() }, archivedAt: null,
-  }, select: { headSha: true } });
-  if (!room?.headSha || !/^[a-f0-9]{40}$/.test(room.headSha)) throw new Error("preview_source_workroom_unverified");
+  // A session string alone grants nothing: both source and current verifier
+  // must belong to the authenticated principal in the same repository.
+  const room = await previewSourceForVerifier(lease, input.ownerSessionId, actor.principalId);
   const listed = await exec("docker", ["ps", "-q", "--filter", `label=dpf.preview.lease=${lease.leaseId}`, "--filter", "label=com.docker.compose.service=dev-portal"], { timeout: 10000 });
   const ids = listed.stdout.trim().split(/\s+/).filter(Boolean);
   if (ids.length !== 1 || !/^[a-f0-9]{12,64}$/.test(ids[0]!)) throw new Error("preview_issuer_unavailable");
@@ -77,6 +90,7 @@ export async function issuePreviewAutomationSignIn(input: {
     });
   } finally { await db.$disconnect(); }
   assertPreviewAdmission(await prisma.nonProductionEnvironmentLease.findUnique({ where: { leaseId: input.leaseId } }), input.ownerSessionId, new Date());
+  if ((await previewSourceForVerifier(lease, input.ownerSessionId, actor.principalId)).headSha !== room.headSha) throw new Error("preview_source_changed_during_issuance");
   if (!result.issued || new URL(result.url).origin !== new URL(lease.url).origin) throw new Error("preview_sign_in_not_issued");
   return { ...result, previewIdentity: { sourceSha: room.headSha, leaseId: lease.leaseId, baseUrl: lease.url } };
 }

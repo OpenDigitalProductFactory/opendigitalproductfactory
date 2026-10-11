@@ -46,7 +46,7 @@ describe("canonical preview session issuance", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.lease.mockResolvedValue(admitted);
-    mocks.room.mockResolvedValue({ headSha: sha });
+    mocks.room.mockImplementation(async ({ where }) => where.executorRef ? { repositoryFullName: "owner/repo", status: "working" } : { headSha: sha, repositoryFullName: "owner/repo" });
     mocks.actor.mockResolvedValue({ principalId: "owning-principal" });
     mocks.createDb.mockReturnValue(db);
     mocks.execute.mockImplementation(async (_bin, args) => ({ stdout: args[0] === "ps" ? "abc123def456" : JSON.stringify([container()]), stderr: "" }));
@@ -56,16 +56,37 @@ describe("canonical preview session issuance", () => {
     const issued = await issuePreviewAutomationSignIn({ leaseId: "NPEL-1", ownerSessionId: "session", userId: "actor", nextPath: "/workspace" });
     expect(issued.previewIdentity.sourceSha).toBe(sha);
     expect(mocks.room).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ executorRef: "session", leaseHolderPrincipalId: "owning-principal" }) }));
+    const sourceWhere = mocks.room.mock.calls.find(([arg]) => arg.where.worktreePath)?.[0].where;
+    expect(sourceWhere).toMatchObject({ worktreePath: "/feature", headBranch: "codex/feature", leaseHolderPrincipalId: "owning-principal", repositoryFullName: "owner/repo" });
+    expect(sourceWhere).not.toHaveProperty("executorRef");
+    expect(sourceWhere).not.toHaveProperty("leaseExpiresAt");
     expect(mocks.createDb).toHaveBeenCalledWith("postgresql://dpf:dpf_dev@dev-postgres:5432/dpf");
     expect(mocks.mint).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: admitted.url }), expect.objectContaining({ db, env: expect.objectContaining({ DPF_ENVIRONMENT_CLASS: "development", AUTH_SECRET: "preview-only-secret".repeat(4) }) }));
     expect(mocks.disconnect).toHaveBeenCalledOnce();
     expect(mocks.execute.mock.calls.some(([, args]) => args[0] === "exec")).toBe(false);
   });
   it("refuses an unowned source room before Docker or preview DB access", async () => {
-    mocks.room.mockResolvedValue(null);
+    mocks.room.mockImplementation(async ({ where }) => where.executorRef ? { repositoryFullName: "owner/repo", status: "working" } : null);
     await expect(issuePreviewAutomationSignIn({ leaseId: "NPEL-1", ownerSessionId: "session", userId: "foreign" })).rejects.toThrow(/workroom_unverified/);
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.createDb).not.toHaveBeenCalled();
+  });
+  it("refuses a changed source after minting rather than returning stale identity", async () => {
+    let sourceReads = 0;
+    mocks.room.mockImplementation(async ({ where }) => where.executorRef ? { repositoryFullName: "owner/repo", status: "working" }
+      : { headSha: ++sourceReads === 1 ? sha : "b".repeat(40) });
+    await expect(issuePreviewAutomationSignIn({ leaseId: "NPEL-1", ownerSessionId: "session", userId: "actor" })).rejects.toThrow(/source_changed/);
+    expect(mocks.disconnect).toHaveBeenCalledOnce();
+  });
+  it("refuses an expired or foreign verification Workroom before Docker access", async () => {
+    mocks.room.mockImplementation(async ({ where }) => where.executorRef ? null : { headSha: sha, repositoryFullName: "owner/repo" });
+    await expect(issuePreviewAutomationSignIn({ leaseId: "NPEL-1", ownerSessionId: "session", userId: "actor" })).rejects.toThrow(/verification_workroom_unverified/);
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+  it("refuses a terminal verifier even with a remaining lease timestamp", async () => {
+    mocks.room.mockResolvedValue({ repositoryFullName: "owner/repo", status: "complete" });
+    await expect(issuePreviewAutomationSignIn({ leaseId: "NPEL-1", ownerSessionId: "session", userId: "actor" })).rejects.toThrow(/verification_workroom_unverified/);
+    expect(mocks.execute).not.toHaveBeenCalled();
   });
   it("does not return a sign-in if the reservation expires during issuance", async () => {
     mocks.lease.mockResolvedValueOnce(admitted).mockResolvedValueOnce({ ...admitted, status: "expired" });

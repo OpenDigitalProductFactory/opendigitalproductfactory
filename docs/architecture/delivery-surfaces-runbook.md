@@ -69,8 +69,12 @@ requests using the envelope state machine. It does not silently approve or repla
 them. Restricted connections never receive grants from the client.
 
 Preview browser authentication uses `issue_ux_verification_sign_in` with the
-admitted preview lease and owning Workroom session. The platform verifies its
-principal/source/container binding and issues in the preview database with its
+admitted preview lease and active verification Workroom session. The source
+Workroom may remain paused under its original session: WWMD DI-FBEC4720D1DA
+requires the same authenticated principal and repository for both rooms, an
+active verifier lease, and the source room’s exact recorded SHA. The platform
+checks those identities again before returning the session and issues in the
+preview database with its
 own signing key. The sweep consumes that one-time link and saves its own browser
 storage state. Production cookies and operator passwords are not preview inputs.
 
