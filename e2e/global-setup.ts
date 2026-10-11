@@ -9,6 +9,7 @@ import { dirname } from "node:path";
  */
 export default async function globalSetup(_config: FullConfig) {
   const login = resolveE2eLoginConfig();
+  const preview = assertPreviewAuthenticationContext();
   // A previous run cannot supply source evidence for a new session.
   rmSync("e2e/.auth/preview-identity.json", { force: true });
   rmSync("e2e/.auth/state.json", { force: true });
@@ -17,7 +18,7 @@ export default async function globalSetup(_config: FullConfig) {
   const page = await context.newPage();
 
   try {
-    if (login.password && !process.env.DPF_DEV_PORTAL_LEASE_ID) {
+    if (login.password && !preview) {
       // Explicit test credentials remain available for credential-form tests.
       await page.goto(`${login.baseUrl}/login`);
       await page.waitForSelector('input[name="email"]', { timeout: 15_000 });
@@ -68,11 +69,23 @@ export function resolveE2eLoginConfig(env: NodeJS.ProcessEnv = process.env): {
   email: string;
   password: string;
 } {
+  const baseUrl = (env.E2E_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
   return {
-    baseUrl: (env.E2E_BASE_URL || "http://localhost:3000").replace(/\/+$/, ""),
+    baseUrl,
     email: env.E2E_USER_EMAIL || "admin@dpf.local",
-    password: env.E2E_USER_PASSWORD || env.ADMIN_PASSWORD || "",
+    password: new URL(baseUrl).port === "3001" || env.DPF_DEV_PORTAL_LEASE_ID ? "" : env.E2E_USER_PASSWORD || "",
   };
+}
+
+export function assertPreviewAuthenticationContext(env: NodeJS.ProcessEnv = process.env): boolean {
+  const url = new URL(resolveE2eLoginConfig(env).baseUrl);
+  const requested = url.port === "3001" || Boolean(env.DPF_DEV_PORTAL_LEASE_ID);
+  if (requested && (!env.DPF_DEV_PORTAL_LEASE_ID || !env.DPF_DEV_PORTAL_OWNER_SESSION_ID
+      || url.protocol !== "http:" || !["localhost", "127.0.0.1"].includes(url.hostname)
+      || url.port !== "3001" || url.username || url.password || url.pathname !== "/" || url.search || url.hash)) {
+    throw new Error("Passwordless authentication requires the admitted preview origin, lease and owning session");
+  }
+  return requested;
 }
 
 export function assertAutomationSignInOrigin(signInUrl: string | undefined, baseUrl: string) {
