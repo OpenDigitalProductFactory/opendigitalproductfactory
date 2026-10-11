@@ -57,8 +57,19 @@ import {
   autoDiscoverAndProfile,
   clearStaleCodexPins,
   profileModelsInternal,
+  discoverChatGptBackendModels,
 } from "./ai-provider-internals";
 import { persistDiscoveredInventory } from "./discovered-model-inventory";
+
+describe("ChatGPT inventory validation", () => {
+  it("rejects a partly malformed response instead of treating a partial list as authoritative", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ models: [{ slug: "future-model" }, {}] }))) as typeof fetch;
+    try {
+      expect(await discoverChatGptBackendModels("chatgpt", {})).toMatchObject({ models: [], error: expect.stringContaining("Malformed") });
+    } finally { globalThis.fetch = realFetch; }
+  });
+});
 
 describe("Codex authoritative discovery", () => {
   beforeEach(() => {

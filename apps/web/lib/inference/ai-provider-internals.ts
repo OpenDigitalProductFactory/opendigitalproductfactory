@@ -340,11 +340,6 @@ interface ChatGptModelEntry {
 
 interface ChatGptModelsResponse {
   models?: ChatGptModelEntry[];
-  categories?: Array<{
-    category?: string;
-    human_category_name?: string;
-    default_model?: string;
-  }>;
 }
 
 export async function discoverChatGptBackendModels(
@@ -366,6 +361,9 @@ export async function discoverChatGptBackendModels(
 
     const json = await res.json() as ChatGptModelsResponse;
     const entries = json.models ?? [];
+    if (!Array.isArray(entries) || entries.some((m) => !m || typeof m.slug !== "string" || !m.slug.trim())) {
+      return { models: [], error: "Malformed ChatGPT model inventory; previous inventory retained" };
+    }
 
     const models = entries
       .filter((m) => typeof m.slug === "string" && m.slug.length > 0)
@@ -1029,7 +1027,6 @@ export async function autoDiscoverAndProfile(providerId: string, allowKnownFallb
         error: profiling.error,
       };
     } else {
-      // Codex inventory is account-specific; a static catalog must never impersonate success.
       // Codex inventory is account-specific (chatgpt rides the same account): never impersonate success.
       const knownModels = !allowKnownFallback || providerId === "codex" || providerId === "chatgpt" ? undefined : KNOWN_PROVIDER_MODELS[providerId];
       if (knownModels) {
