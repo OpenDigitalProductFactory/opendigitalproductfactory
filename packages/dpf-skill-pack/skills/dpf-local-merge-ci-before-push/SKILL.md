@@ -52,7 +52,7 @@ If a gate cannot run in the worktree because pnpm/corepack is missing, workspace
 
 ## Steps
 
-0. **Front door: `pnpm run pregate`.** Produce exact-tree gate evidence before semantic review; that reviewer resolves the gate record as its failure-analysis evidence. It does this whole skill mechanically — pushes the branch, claims the `local-integration-ci` lease, runs the checked-in non-mutating runner (`scripts/local-ci-runner.sh` → the local-integration plan in a dedicated scratch worktree; `DPF_LOCAL_CI_COMMAND` overrides), records the MCP evidence, releases the lease, and writes the gate record the default-on pre-push hook checks. Only fall through to the manual steps below when pregate itself cannot run.
+0. **Front door: `pnpm run pregate`.** Produce exact-tree gate evidence before semantic review; that reviewer resolves the gate record as its failure-analysis evidence. It does this whole skill mechanically — claims the `local-integration-ci` lease, runs the checked-in non-mutating runner (`scripts/local-ci-runner.sh` → the local-integration plan in a dedicated scratch worktree; `DPF_LOCAL_CI_COMMAND` overrides), records the MCP evidence, releases the lease, and writes the gate record the default-on pre-push hook checks. Only fall through to the manual steps below when pregate itself cannot run.
 1. Confirm the branch is not `main` and is not detached.
 2. Fetch current `origin/main`.
 3. Run the local integration CI script or its current equivalent in an isolated merge path.
@@ -61,9 +61,9 @@ If a gate cannot run in the worktree because pnpm/corepack is missing, workspace
 6. Record the local integration result through MCP — `passed`, `failed`, `conflict`, or `blocked_sandbox_drift` (stale sandbox; carries the freshness verdict and resolved `next`/`react`/`react-dom` versions in evidence).
 7. In normal delivery, push only when the merged-code gate is green. For a verified infrastructure outage, use only the checked-in recovery route above and report the gate unrun. If it is red, report the failure and next fix; if it is blocked on sandbox drift, converge and re-run — do not report a product failure.
 
-## Reading a pregate result — a queued run can exit 0
+## Reading a pregate result and resuming queued work
 
-`pregate` first waits for admission to the shared `local-integration-ci` lease. While it waits it prints `local-CI admission queued at position N`. **A run that never gets admitted can still terminate with exit code 0**, so the exit status alone does not distinguish "gate passed" from "gate never ran".
+`pregate` first waits for admission to the shared `local-integration-ci` lease. While it waits it prints `local-CI admission queued at position N`. The current wrapper returns exit code 7 for abandoned admission or a zero runner exit without a corroborating PASS at HEAD. A queued claim is pending evidence; resume its durable task rather than making repeated claims.
 
 Confirm a real pass by the artifacts, not the exit code:
 
@@ -73,9 +73,10 @@ Confirm a real pass by the artifacts, not the exit code:
 
 Then push normally: with a valid record for the head SHA the pre-push hook admits the push, and `DPF_SKIP_PREPUSH_GATE` is **not** needed.
 
-- **Never wrap `pregate` in `timeout`.** Killing it mid-queue is what produces the false green above. Run it in the foreground, unpiped; use `pnpm gate:wait` for bounded observation without mistaking a queued exit for a verdict.
+- **Never wrap `pregate` in `timeout`.** Interrupting it can abandon the local observer while its durable claim remains pending. Run it in the foreground, unpiped; use `pnpm gate:wait` for bounded observation without mistaking a queued exit for a verdict.
 - Queue contention is not a reason to override the gate. Waiting is correct; `DPF_SKIP_PREPUSH_GATE` is for a verified-clean push the gate structurally cannot cover, and it is recorded either way.
-- Cancelling a pregate can leave a stale queued lease pinned to the **old** SHA — release it before re-running, or the next run queues behind your own abandoned entry.
+- Resume a queued claim through its recorded taskRunId and owner identity. Terminal claims stop: do not scan old claim keys or retry a terminal claim. An explicitly new attempt follows reconciliation of the previous request and uses a distinct attempt identity.
+- Owner cleanup uses the exact lease and owner session. Surface any authority approval with the exact requested action; reconcile expired requests through the canonical recovery path. Never force release or self-approve.
 
 ## Who the gate records, and keeping it out of the PR
 
