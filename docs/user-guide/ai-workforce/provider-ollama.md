@@ -18,6 +18,12 @@ Docker Desktop 4.40+ includes a built-in Model Runner that provides an OpenAI-co
 
 The local provider is pre-configured and activates automatically when Docker Model Runner is reachable. No API key or sign-in is required.
 
+### Pausing local AI
+
+Disable the local provider in Providers & Routing to stop new local-model requests. The choice persists when you refresh the page and when the runner answers a health check. Enable it explicitly when you are ready to use it again. Requests already running may finish; disabling prevents new dispatches, including requests selected before the change that have not started yet.
+
+A temporary runner outage can still recover automatically when you have left the provider enabled. Work that requires local processing remains blocked while local AI is disabled; other work can use an eligible connected provider.
+
 ### Pulling Models
 
 Models must be pulled before they can be used:

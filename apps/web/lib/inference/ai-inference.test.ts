@@ -1,15 +1,23 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 
+vi.mock("@dpf/db", () => ({ prisma: {
+  modelProvider: { findUnique: vi.fn() },
+  aiProviderConnection: { findUnique: vi.fn() },
+} }));
+
 vi.mock("@/lib/routing/local-provider-capacity", () => ({
   assertProviderDispatchCapacity: vi.fn(),
 }));
 
 import { callProvider, classifyHttpError, InferenceError } from "./ai-inference";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
+import { prisma } from "@dpf/db";
 
 beforeEach(() => {
   vi.mocked(assertProviderDispatchCapacity).mockReset();
   vi.mocked(assertProviderDispatchCapacity).mockResolvedValue(undefined);
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active" } as any);
+  vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "active" } as any);
 });
 
 describe("InferenceError", () => {
@@ -38,6 +46,19 @@ describe("InferenceError", () => {
 });
 
 describe("callProvider host-capacity boundary", () => {
+  it.each(["inactive", "disabled"])("rejects a stale local selection when the connection is %s before capacity wait", async (status) => {
+    vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status } as any);
+    await expect(callProvider("local", "qwen", [{ role: "user", content: "triage" }], "system"))
+      .rejects.toMatchObject({ code: "provider_error", message: "Local provider is not enabled for routing" });
+    expect(assertProviderDispatchCapacity).not.toHaveBeenCalled();
+  });
+
+  it("rejects a disabled local provider even if its connection still appears active", async () => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "inactive" } as any);
+    await expect(callProvider("local", "qwen", [{ role: "user", content: "triage" }], "system"))
+      .rejects.toMatchObject({ code: "provider_error" });
+    expect(assertProviderDispatchCapacity).not.toHaveBeenCalled();
+  });
   it("stops before provider setup when local capacity is reserved", async () => {
     const deferred = Object.assign(new Error("local capacity reserved"), {
       name: "LocalProviderCapacityDeferredError",
