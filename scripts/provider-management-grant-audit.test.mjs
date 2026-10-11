@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 test("grant audit recognizes provider controls composed into the authorization map", () => {
   const root = fileURLToPath(new URL("../", import.meta.url));
-  const require = createRequire(new URL("../package.json", import.meta.url));
   const result = spawnSync(process.execPath, [
-    require.resolve("tsx/cli"),
     "apps/web/scripts/audit-coworker-tool-grants.ts",
     "--baseline", "docs/superpowers/audits/2026-04-27-coworker-tool-grant-audit.json",
   ], { cwd: root, encoding: "utf8", timeout: 30_000 });
