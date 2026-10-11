@@ -98,6 +98,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // because git normalises on commit, so only a test pins it.
       node("--test", "scripts/render-doc-diagrams.test.mjs"),
     ]),
+    guard("semantic-review-artifact-contract", "Semantic Review Artifact Contract", [
+      node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs"),
+    ]),
     // BI-40230C6F: the gate must stop waiting on an executor that is gone, and must
     // NOT read an unreachable control plane as proof of death. Registered here rather
     // than added to ci-policy-test-inventory-allowlist.txt, where it would never run.
