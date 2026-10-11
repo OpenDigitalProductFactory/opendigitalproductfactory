@@ -212,6 +212,18 @@ only reconciliation would retain misleading readiness claims.
 
 ### Objective and acceptance
 
+The live BI acceptance criteria, quoted for medium delivery coverage:
+
+- AC-1: Every successful authoritative subscription inventory uses shared persistence, presence reconciliation and auth-eligibility admission; errors and empty/malformed inventories preserve last-known-good state and do not claim freshness.
+- AC-2: Only models present in the authoritative run are profiled, so absent/retired rows are not resurrected; two confirmed absences and runtime-refusal retirement remain intact.
+- AC-3: Presence timestamps change only on actual sightings, not missed-discovery bookkeeping; existing lifecycle fields are reused unless steward proves a migration necessary.
+- AC-4: Connections separates connection, inventory freshness and workload restrictions; model count never equates historical profiles with usable models; technical inventory is disclosed under existing UX design.
+- AC-5: Tests cover new model arrival without source edits, removals/relisting, failure/empty response, stale pins, auth admission, pricing/metadata preservation and prior readiness behavior; served verification uses canonical runtime.
+
+AC-2 describes the intended preservation contract. Inspection confirmed repeated
+historical profiling, not resurrection of retired status; test status preservation
+without treating that unproven symptom as an observed defect.
+
 OBJ-CATALOG-TRUTH: automatic discovery tracks the serving connection's returned
 models without turning catalog history into availability claims.
 
