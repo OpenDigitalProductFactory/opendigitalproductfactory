@@ -39,7 +39,7 @@ type DmrConfigureEntry = {
 export type ServedContextResult = {
   /** The served context window in tokens, or null when DMR doesn't report one. */
   contextTokens: number | null;
-  /** False only when the configure endpoint isn't reachable/supported. */
+  /** False when configuration is unreachable, unsupported, or invalid. */
   supported: boolean;
   /** Human-readable detail when supported === false. */
   reason: string | null;
@@ -81,7 +81,10 @@ export async function getServedContextTokens(
     const entries = Array.isArray(body) ? body : [body];
     for (const entry of entries) {
       const size = entry?.Config?.["context-size"];
-      if (typeof size === "number" && size > 0) {
+      if (entry?.Config && Object.hasOwn(entry.Config, "context-size")) {
+        if (typeof size !== "number" || !Number.isSafeInteger(size) || size <= 0) {
+          return { contextTokens: null, supported: false, reason: "Configure endpoint returned invalid context capacity." };
+        }
         return { contextTokens: size, supported: true, reason: null };
       }
     }

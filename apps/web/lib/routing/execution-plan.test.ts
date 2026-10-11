@@ -582,6 +582,26 @@ describe("buildDefaultPlan carries situational parameters", () => {
 });
 
 describe("activity fixed thinking admission", () => {
+  it.each([null, 0, -1, NaN, Infinity, 40960.5])("reports unknown output capacity for %s", (maxOutputTokens) => {
+    expect(activityBudgetExclusion(makeEndpoint({ maxOutputTokens }), makeContract(), makeActivity()))
+      .toBe("Activity completion capacity is unknown; refresh endpoint capacity evidence");
+  });
+
+  it.each([null, 0, -1, NaN, Infinity, 40960.5])("reports unknown context capacity for %s", (maxContextTokens) => {
+    expect(activityBudgetExclusion(makeEndpoint({ maxContextTokens, maxOutputTokens: 40960 }), makeContract(), makeActivity()))
+      .toBe("Activity context capacity is unknown; refresh endpoint capacity evidence");
+  });
+
+  it("admits a local shared window only when input plus completion fits", () => {
+    const endpoint = makeEndpoint({ providerId: "local", maxContextTokens: 40960, maxOutputTokens: 40960 });
+    const activity = makeActivity({ tokenEnvelope: { maxInputTokens: 30000, maxOutputTokens: 16384, compression: "none" } });
+    expect(activityBudgetExclusion(endpoint, makeContract({ estimatedInputTokens: 20000 }), activity)).toBeNull();
+    expect(activityBudgetExclusion(endpoint, makeContract({ estimatedInputTokens: 26000 }), activity))
+      .toBe("Activity input and completion allowance exceeds known model context capacity");
+    expect(activityBudgetExclusion({ ...endpoint, maxOutputTokens: 8192 }, makeContract(), activity))
+      .toBe("Activity completion allowance exceeds known model output capacity");
+  });
+
   it.each(["anthropic", "google"])("rejects %s thinking that consumes the completion allowance", (providerId) => {
     const endpoint = makeEndpoint({ providerId, maxOutputTokens: 32768, maxContextTokens: 65536,
       capabilities: { ...EMPTY_CAPABILITIES, thinking: true } });

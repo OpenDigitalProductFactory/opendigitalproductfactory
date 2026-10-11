@@ -7,6 +7,46 @@ import { prisma } from "@dpf/db";
 import { encryptSecret, decryptSecret } from "@/lib/credential-crypto";
 import { activateProvider } from "@/lib/govern/activate-provider";
 import { getStablePortalUrl } from "@/lib/portal-url";
+import { findProviderCredential } from "@/lib/inference/provider-account-credentials";
+import { ACCOUNT_ACCESS_RESET, invalidateProviderAccountProofs } from "@/lib/inference/provider-account-management";
+
+/** Called only by capability-checked actions or the governed tool executor. */
+export async function disconnectProviderOAuthInternal(providerId: string, connectionId?: string): Promise<{ error?: string }> {
+  if (connectionId !== undefined) {
+    const connection = await prisma.aiProviderConnection.findUnique({ where: { connectionId } });
+    if (!connection || connection.providerId !== providerId || !connection.credentialEntryId) return { error: "Provider account not found" };
+    await prisma.$transaction(async (tx) => {
+      await tx.credentialEntry.update({ where: { id: connection.credentialEntryId! }, data: { cachedToken: null, refreshToken: null, tokenExpiresAt: null, status: "unconfigured" } });
+      await tx.aiProviderConnection.update({ where: { connectionId }, data: { status: "disconnected" } });
+      await tx.oAuthPendingFlow.deleteMany({ where: { connectionId } });
+    });
+    return {};
+  }
+  await prisma.credentialEntry.upsert({
+    where: { providerId },
+    create: { providerId, status: "unconfigured" },
+    update: {
+      cachedToken: null,
+      refreshToken: null,
+      tokenExpiresAt: null,
+      status: "unconfigured",
+    },
+  });
+
+  // Deactivate linked MCP services when provider disconnects
+  const linkedServers = await prisma.mcpServer.findMany({
+    where: { config: { path: ["linkedProviderId"], equals: providerId } },
+  });
+  for (const server of linkedServers) {
+    await prisma.mcpServer.update({ where: { id: server.id }, data: { status: "inactive" } });
+    await prisma.modelProvider.updateMany({
+      where: { providerId: server.serverId, status: "active" },
+      data: { status: "inactive" },
+    });
+  }
+
+  return {};
+}
 
 // ─── Host-match helper ────────────────────────────────────────────────────────
 // CodeQL alerts #64-#67 (js/incomplete-url-substring-sanitization): the
@@ -84,12 +124,14 @@ function getOAuthRedirectUri(provider: { oauthRedirectUri?: string | null; autho
   return `${appUrl}/api/v1/auth/provider-oauth/callback`;
 }
 
-export async function createOAuthFlow(providerId: string): Promise<{ authorizeUrl: string } | { error: string }> {
+export async function createOAuthFlow(providerId: string, connectionId?: string): Promise<{ authorizeUrl: string } | { error: string }> {
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { error: "Provider not found" };
   if (!provider.authorizeUrl || !provider.oauthClientId) {
     return { error: "Provider does not support OAuth sign-in (missing authorizeUrl or oauthClientId)" };
   }
+  const cred = await findProviderCredential(providerId, connectionId);
+  if (connectionId && !cred) return { error: "Account credential not found" };
 
   // Clean up expired flows
   await prisma.oAuthPendingFlow.deleteMany({
@@ -100,7 +142,7 @@ export async function createOAuthFlow(providerId: string): Promise<{ authorizeUr
   const state = crypto.randomUUID();
 
   await prisma.oAuthPendingFlow.create({
-    data: { state, codeVerifier, providerId },
+    data: { state, codeVerifier, providerId, ...(connectionId ? { connectionId } : {}) },
   });
 
   const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
@@ -114,7 +156,6 @@ export async function createOAuthFlow(providerId: string): Promise<{ authorizeUr
     state,
   });
 
-  const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
   const scope = cred?.scope || defaultOAuthScope(provider.authorizeUrl);
   if (scope) params.set("scope", scope);
 
@@ -124,23 +165,26 @@ export async function createOAuthFlow(providerId: string): Promise<{ authorizeUr
 export async function findPendingOAuthProviderId(
   state: string | null | undefined,
 ): Promise<string | null> {
-  if (!state) return null;
+  return (await findPendingOAuthContext(state))?.providerId ?? null;
+}
 
+export async function findPendingOAuthContext(state: string | null | undefined): Promise<{ providerId: string; connectionId: string | null } | null> {
+  if (!state) return null;
   const flow = await prisma.oAuthPendingFlow.findUnique({
     where: { state },
-    select: { providerId: true },
+    select: { providerId: true, connectionId: true },
   });
-
-  return flow?.providerId ?? null;
+  return flow ? { providerId: flow.providerId, connectionId: flow.connectionId ?? null } : null;
 }
 
 export function buildProviderOAuthErrorPath(
   providerId: string | null | undefined,
   reason: string,
+  connectionId?: string | null,
 ): string {
   const encodedReason = encodeURIComponent(reason);
   return providerId
-    ? `/platform/ai/providers/${providerId}?oauth=error&reason=${encodedReason}`
+    ? `/platform/ai/providers/${providerId}?oauth=error&reason=${encodedReason}${connectionId ? `&account=${encodeURIComponent(connectionId)}` : ""}`
     : `/platform/ai?oauth=error&reason=${encodedReason}`;
 }
 
@@ -149,18 +193,21 @@ export function buildProviderOAuthErrorPath(
 export async function exchangeOAuthCode(
   state: string,
   code: string,
-): Promise<{ providerId: string } | { error: string }> {
+): Promise<{ providerId: string; connectionId?: string } | { error: string }> {
   const flow = await prisma.oAuthPendingFlow.findUnique({ where: { state } });
   if (!flow) return { error: "invalid_state" };
+  // Claim the single-use state before an upstream request; concurrent callbacks cannot both exchange it.
+  const consumed = await prisma.oAuthPendingFlow.deleteMany({ where: { id: flow.id, state } });
+  if (consumed.count !== 1) return { error: "invalid_state" };
+  const accountCredential = flow.connectionId ? await findProviderCredential(flow.providerId, flow.connectionId) : null;
+  if (flow.connectionId && !accountCredential) return { error: "account_credential_missing" };
 
   if (Date.now() - flow.createdAt.getTime() > FLOW_TTL_MS) {
-    await prisma.oAuthPendingFlow.delete({ where: { id: flow.id } });
     return { error: "flow_expired" };
   }
 
   const provider = await prisma.modelProvider.findUnique({ where: { providerId: flow.providerId } });
   if (!provider?.tokenUrl || !provider.oauthClientId) {
-    await prisma.oAuthPendingFlow.delete({ where: { id: flow.id } });
     return { error: "provider_misconfigured" };
   }
 
@@ -192,17 +239,14 @@ export async function exchangeOAuthCode(
       const errBody = await res.text().catch(() => "");
       console.error(`[oauth] Token exchange failed: HTTP ${res.status} ${errBody.slice(0, 500)}`);
       console.error(`[oauth] Request: POST ${provider.tokenUrl} | redirect_uri=${redirectUri} | client_id=${provider.oauthClientId?.substring(0, 8)}...`);
-      await prisma.oAuthPendingFlow.delete({ where: { id: flow.id } });
       return { error: "token_exchange_failed" };
     }
     tokenResponse = await res.json() as typeof tokenResponse;
   } catch {
-    await prisma.oAuthPendingFlow.delete({ where: { id: flow.id } });
     return { error: "token_exchange_failed" };
   }
 
   if (!tokenResponse.access_token) {
-    await prisma.oAuthPendingFlow.delete({ where: { id: flow.id } });
     return { error: "no_token" };
   }
 
@@ -215,7 +259,20 @@ export async function exchangeOAuthCode(
     tokenExpiresAt: expiresAt,
     status: "ok",
   };
-  await prisma.credentialEntry.upsert({
+  if (flow.connectionId && accountCredential) {
+    const connectionId = flow.connectionId;
+    const written = await prisma.$transaction(async (tx) => {
+      const connection = await tx.aiProviderConnection.findUnique({ where: { connectionId } });
+      if (!connection || connection.credentialEntryId !== accountCredential.id) return false;
+      await invalidateProviderAccountProofs(tx, connection.id);
+      await tx.credentialEntry.upsert({ where: { id: accountCredential.id }, create: { id: accountCredential.id, providerId: null, ...credentialUpdate }, update: credentialUpdate });
+      await tx.aiProviderConnection.update({ where: { connectionId }, data: { ...ACCOUNT_ACCESS_RESET, authMethod: "oauth" } });
+      // A callback finishing after Disable must not enable the account again.
+      await tx.aiProviderConnection.updateMany({ where: { connectionId, status: { not: "disabled" } }, data: { status: "active" } });
+      return true;
+    });
+    if (!written) return { error: "account_changed" };
+  } else await prisma.credentialEntry.upsert({
     where: { providerId: flow.providerId },
     create: {
       providerId: flow.providerId,
@@ -230,7 +287,7 @@ export async function exchangeOAuthCode(
   // Activate the provider: set status/clearance/authMethod, run model discovery,
   // activate linked MCP services, and sync the codex↔chatgpt sibling.
   // Replaces ad-hoc mutations — see PROVIDER-ACTIVATION-AUDIT.md §5 (F-01, F-03).
-  await activateProvider(flow.providerId, {
+  if (!flow.connectionId) await activateProvider(flow.providerId, {
     trigger: "oauth_exchange",
     authMethod: "oauth2_authorization_code",
     activateLinked: true,
@@ -239,7 +296,7 @@ export async function exchangeOAuthCode(
   // Bidirectional credential sync: codex and chatgpt share the same OpenAI OAuth
   // token. The credential upsert stays here because activateProvider doesn't
   // handle credential storage (that's the caller's responsibility).
-  const sibling = OPENAI_PAIR[flow.providerId];
+  const sibling = !flow.connectionId && OPENAI_PAIR[flow.providerId];
   if (sibling) {
     const siblingProvider = await prisma.modelProvider.findUnique({ where: { providerId: sibling } });
     if (siblingProvider) {
@@ -258,21 +315,22 @@ export async function exchangeOAuthCode(
     }
   }
 
-  await prisma.oAuthPendingFlow.delete({ where: { id: flow.id } });
-  return { providerId: flow.providerId };
+  return { providerId: flow.providerId, ...(flow.connectionId ? { connectionId: flow.connectionId } : {}) };
 }
 
 // ─── Token refresh ────────────────────────────────────────────────────────────
 
 export async function refreshOAuthToken(
   providerId: string,
+  connectionId?: string,
 ): Promise<{ token: string } | { error: string }> {
-  const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
+  const provider = await prisma.modelProvider.findUnique({ where: { providerId: connectionId && providerId === "chatgpt" ? "codex" : providerId } });
   if (!provider?.tokenUrl || !provider.oauthClientId) {
     return { error: "Provider missing tokenUrl or oauthClientId" };
   }
 
-  const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
+  const cred = await findProviderCredential(providerId, connectionId);
+  const credentialWhere = connectionId && cred ? { id: cred.id } : { providerId };
   if (!cred?.refreshToken) {
     // Nothing can renew this token. Once it is past expiry, say so on the row
     // (and its codex/chatgpt sibling, which holds the same token) instead of
@@ -280,7 +338,7 @@ export async function refreshOAuthToken(
     if (cred?.tokenExpiresAt && cred.tokenExpiresAt.getTime() <= Date.now()) {
       const sibling = OPENAI_PAIR[providerId];
       await prisma.credentialEntry.updateMany({
-        where: { providerId: { in: sibling ? [providerId, sibling] : [providerId] } },
+        where: connectionId ? { id: cred.id } : { providerId: { in: sibling ? [providerId, sibling] : [providerId] } },
         data: { status: "expired" },
       });
     }
@@ -309,7 +367,7 @@ export async function refreshOAuthToken(
 
     if (!res.ok) {
       await prisma.credentialEntry.update({
-        where: { providerId },
+        where: credentialWhere,
         data: { status: "expired" },
       });
       return { error: "OAuth token expired — admin must re-authenticate" };
@@ -319,10 +377,10 @@ export async function refreshOAuthToken(
     const expiresAt = new Date(Date.now() + body.expires_in * 1000);
 
     // Optimistic concurrency: only write if refreshToken hasn't changed
-    const currentCred = await prisma.credentialEntry.findUnique({ where: { providerId } });
+    const currentCred = await prisma.credentialEntry.findUnique({ where: credentialWhere });
     if (currentCred?.refreshToken === cred.refreshToken) {
       await prisma.credentialEntry.update({
-        where: { providerId },
+        where: credentialWhere,
         data: {
           cachedToken: encryptSecret(body.access_token),
           refreshToken: body.refresh_token ? encryptSecret(body.refresh_token) : cred.refreshToken,
@@ -333,7 +391,7 @@ export async function refreshOAuthToken(
     }
 
     // Sync refreshed token to chatgpt provider (shares Codex OAuth)
-    if (providerId === "codex") {
+    if (!connectionId && providerId === "codex") {
       const chatgptCred = await prisma.credentialEntry.findUnique({ where: { providerId: "chatgpt" } });
       if (chatgptCred) {
         await prisma.credentialEntry.update({
