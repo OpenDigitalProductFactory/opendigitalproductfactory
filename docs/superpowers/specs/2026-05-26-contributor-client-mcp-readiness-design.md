@@ -1,6 +1,6 @@
 ---
 title: Contributor Client MCP Readiness for Build Studio
-status: revised-for-implementation
+status: active
 author: Codex
 reviewers:
   - Claude (chief architect + UX review, 2026-05-26)
@@ -26,6 +26,32 @@ the current install is ready for external contributor clients to use
 governed fix. The target architecture is stricter: peer access is gated by the
 human operator's RBAC, the non-human peer identity's GAID posture, and the MCP
 token's enforced access controls.
+
+## Current delivery contract (BI-9FA87F90, 2026-10-11)
+
+This section supersedes the historical tools/list threshold below. The canonical
+workflow inventory is `packages/dpf-bootstrap/src/agent-toolchain/delivery-readiness-contract.ts`.
+Bootstrap and portal probes use read-only `load_tools` discovery for every stage,
+including authoring, evidence, leases, preview authentication, UX collaboration,
+local verification and independent semantic review. Each tool must exist and be
+callable with both token and acting-coworker grants. A count or registry-only
+probe establishes neither complete delivery access nor coworker authority.
+
+The portal reads persisted coworker authority, including revocations; an unbound
+identity is incomplete. The approved external Claude/Codex/Grok defaults add only
+`coworker_catalog_read` and `coworker_engagement_write`. Existing platform-owned
+install/upgrade seeding provisions these defaults and honors durable revocation
+tombstones. Existing token-template reconciliation follows only sanctioned
+Development prefixes. Custom, read-only and OAuth connections retain their
+restrictions. Clients neither grant themselves authority nor copy production
+credentials into worktrees; token rotation cannot cure a coworker grant denial.
+
+Readiness distinguishes the denied layer. Both shell adapters persist bounded
+workflow proof through supported install-state schemas. Historical tools/list
+success without current proof requires refresh. Diagnostics contain tool names
+and permission results, never bearer credentials. Publication and independent
+live acceptance remain required; source checks alone do not establish installed
+readiness.
 
 ## Review summary (2026-05-26, chief architect + UX)
 

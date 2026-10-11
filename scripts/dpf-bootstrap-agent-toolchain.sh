@@ -856,7 +856,7 @@ fi
 # --- Compute final readiness from applied facts + probe results ------------
 
 # Mirrors computeReadinessState() in @dpf/bootstrap/readiness-state.ts.
-MCP_OK="$(printf '%s' "$MCP_READINESS" | python3 -c 'import json,sys; print(json.load(sys.stdin)["ok"])')"
+MCP_OK="$(printf '%s' "$MCP_READINESS" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["ok"] and d.get("delivery", {}).get("ready") is True)')"
 MCP_REASON="$(printf '%s' "$MCP_READINESS" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("reason",""))')"
 SMOKE_RESULT="$(printf '%s' "$SMOKE_TEST" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"])')"
 
@@ -918,6 +918,10 @@ case "$FINAL_STATE" in
   needs_refresh) BANNER_MSG="A token exists, but the running client has not picked it up yet.";                  BANNER_ACTION="Refresh client binding" ;;
   failed_smoke)  BANNER_MSG="The agent is installed but did not apply a DPF kernel principle.";                  BANNER_ACTION="View evidence" ;;
 esac
+if [ "$MCP_REASON" = "coworker_grants_insufficient" ]; then
+  BANNER_MSG="The acting coworker lacks approved delivery permissions. Platform install or upgrade must reconcile them."
+  BANNER_ACTION="Open readiness"
+fi
 
 printf '\n'
 printf '================================================================\n'
