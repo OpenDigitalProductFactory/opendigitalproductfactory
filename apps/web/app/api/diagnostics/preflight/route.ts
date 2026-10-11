@@ -7,6 +7,7 @@
  *
  * Requires admin auth. Returns structured diagnostic report.
  */
+import { resolveLocalServedContextTokens } from "@/lib/inference/local-model-context-reconcile";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
@@ -206,7 +207,7 @@ export async function GET(): Promise<Response> {
     const { inferContract } = await import("@/lib/routing/request-contract");
     const { routeEndpointV2 } = await import("@/lib/routing/pipeline-v2");
 
-    const manifests = await loadEndpointManifests();
+    const manifests = await loadEndpointManifests(Date.now(), resolveLocalServedContextTokens);
     if (manifests.length === 0) {
       return { status: "fail", message: "No endpoint manifests loaded — routing has nothing to select from." };
     }
@@ -249,7 +250,7 @@ export async function GET(): Promise<Response> {
     const { inferContract } = await import("@/lib/routing/request-contract");
     const { routeEndpointV2 } = await import("@/lib/routing/pipeline-v2");
 
-    const manifests = await loadEndpointManifests();
+    const manifests = await loadEndpointManifests(Date.now(), resolveLocalServedContextTokens);
     const policies = await loadPolicyRules();
     const overrides = await loadOverrides("chat");
 

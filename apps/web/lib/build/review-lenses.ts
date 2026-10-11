@@ -13,6 +13,7 @@
 // No DB imports, no side effects — fully unit-testable in the node environment.
 
 import type { FeatureBuildRow, ReviewResult, ReviewerVerdict } from "@/lib/feature-build-types";
+import { isReviewExecutionIncomplete } from "./review-execution-state";
 
 export type ReviewLensState = "pass" | "fail" | "advisory" | "partial" | "pending";
 
@@ -57,7 +58,7 @@ function reviewerLenses(review: ReviewResult | null): ReviewLens[] | null {
   if (!reviewers || reviewers.length === 0) return null;
   return reviewers.map((v): ReviewLens => {
     const key = `reviewer:${v.source}`;
-    if (v.parseError) {
+    if (isReviewExecutionIncomplete(v)) {
       return { key, label: v.label, state: "pending", detail: "review unavailable" };
     }
     if (v.role === "architect") {
@@ -93,6 +94,9 @@ function checklistLens(review: ReviewResult | null): ReviewLens {
       state: "pending",
       detail: review?.parseError ? "review unavailable" : "not yet reviewed",
     };
+  }
+  if (isReviewExecutionIncomplete(review)) {
+    return { key: "checklist", label: "Checklist review", state: "pending", detail: "review incomplete" };
   }
   const issues = summarizeIssues(review.issues);
   if (review.decision === "fail") {
@@ -204,8 +208,10 @@ export function deriveReviewLenses(build: FeatureBuildRow): ReviewLens[] {
   // Graduation: when per-reviewer verdicts are persisted, expand the merged
   // checklist + architecture chips into one chip per named reviewer. Older rows
   // (no reviewers[]) fall back to the merged checklist + architecture lenses.
-  const head: Array<ReviewLens | null> =
-    reviewerLenses(checklistReview) ?? [
+  const reviewers = reviewerLenses(checklistReview);
+  const head: Array<ReviewLens | null> = reviewers
+    ? [...(isReviewExecutionIncomplete(checklistReview) ? [checklistLens(checklistReview)] : []), ...reviewers]
+    : [
       checklistLens(checklistReview),
       architectureLens(checklistReview),
     ];

@@ -209,6 +209,12 @@ Local models are automatically discovered and profiled. They are assigned the `b
 
 ## Troubleshooting
 
+**Independent review reports unknown or insufficient model capacity:**
+- Unknown completion/context capacity means routing lacks usable capacity evidence; it is an infrastructure admission problem, not a failed code review or an active inference.
+- For the default local Docker Model Runner provider, routing reads the exact selected model's configured context. Input and completion share that window, and any lower explicit output limit still applies. Another installed model's capacity or advertised catalog maximum cannot substitute for an unavailable runtime read. Routing inputs refresh within 30 seconds and on explicit cache invalidation.
+- A known insufficient limit means the immutable review input plus its completion allowance does not fit. Have the authorized platform operator inspect the selected model and its serving configuration. Do not seed the requested allowance as model capacity or reduce the review payload to manufacture admission.
+- After repairing capacity, use the saved review's supported recovery action. Preserve completed evidence and the request identity; do not start parallel reviews or reuse an expired verdict. Only a completed independent verdict supplies review evidence. A separate authorization refusal requires its named grant and is not repaired by waiting for capacity.
+
 **All coworker responses say "I wasn't able to help":**
 - Check portal logs: `docker logs dpf-portal-1 | grep quality-gate`
 - If you see `Response too short (0 chars)`, the selected model is returning empty responses

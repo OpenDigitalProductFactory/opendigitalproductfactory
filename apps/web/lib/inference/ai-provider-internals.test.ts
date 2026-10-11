@@ -268,6 +268,12 @@ describe("extractTokenUsage", () => {
 });
 
 describe("buildAutoDiscoveryEvalEvents", () => {
+  it("never queues chat evaluations for an embedding model", () => {
+    expect(buildAutoDiscoveryEvalEvents("local", [
+      { modelId: "nomic-embed-text-v1.5", modelClass: "embedding", outputModalities: ["embeddings"] },
+      { modelId: "qwen", modelClass: "reasoning", outputModalities: ["text"] },
+    ]).map((e) => e.data.modelId)).toEqual(["qwen"]);
+  });
   it("uses the provider id as endpointId, not the ModelProfile row id", () => {
     const events = buildAutoDiscoveryEvalEvents("anthropic-sub", [
       { id: "cmogs56yp00018xqagh6iq4px", modelId: "claude-sonnet-4-6" },
