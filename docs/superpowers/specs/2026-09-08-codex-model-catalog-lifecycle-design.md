@@ -143,3 +143,82 @@ This design is the durable operator/developer contract. No user guide change is
 needed: the visible Providers page keeps the same layout and wording, but its
 date becomes truthful. No principle, route map, schema, migration, or
 AI-coworker prompt changes.
+
+## October 11 repair: inventory truth and Connections disclosure
+
+BI-59E37E39 extends this design and the delivered BI-7F2FBDA3 eligibility
+repair. It does not replace the approved, unfinished BI-71ABBD95 multi-account
+design or its BI-7AA4EB6B compact-UX child. That design remains in the
+`provider-multi-account` worktree and is not yet on main. Preserve the bounded
+Responses inference verification in BI-F1C8F5A8 (awaiting acceptance).
+
+### Observed defects and limits
+
+At source revision `4bf3422a1daf24eb0a0dfe93380966b1ba36f22a`, successful
+ChatGPT-backend discovery upserts models without returning their IDs or running
+presence reconciliation and restricted-model readmission. Empty backend results
+do not try the existing CLI fallback. New tests against that actual module
+produce two failures and two passes before repair.
+
+A DEV refresh returned six discovered, six new, and twelve profiled models;
+the reloaded page still called all twelve profiles ready. The action assigns
+`newCount = discovered`, while auto-discovery and the UI each profile historical
+rows. Profile updates preserve model status; resurrection of retired rows has
+not been established. Absent-row counter updates advance `lastSeenAt` because
+the column uses `@updatedAt`, so future absence updates must explicitly preserve
+the previous sighting timestamp. Historical timestamps cannot be reconstructed.
+
+The running sandbox uses Codex CLI 0.157.0. Its direct, initialized `model/list`
+returned GPT-6 Astra/Sol/Luna and GPT-5.6 Sol/Terra/Luna, with no next page and no
+GPT-6.1 Sol. The desktop client therefore is not evidence of entitlement through
+this sandbox connection. The cause of that upstream difference is unresolved;
+do not insert model IDs or upgrade the shared sandbox to manufacture parity.
+
+OpenAI's [app-server contract](https://learn.chatgpt.com/docs/app-server)
+describes account/client-specific model availability; use the returned catalog.
+Local installed inventories retain their existing non-retirement exception
+([Ollama tags](https://docs.ollama.com/api/tags)). No new persistence is needed.
+
+### Repair scope and ordered implementation
+
+The working [Connections prototype](../mockups/2026-10-11-connections-catalog-health.html)
+extends the approved account-summary/disclosure direction. The bounded delivery
+changes the current single-provider detail surface; multi-account creation,
+schema, routing, billing and migration remain owned by the existing initiative.
+
+1. Preserve reproduction tests and research evidence before implementation.
+2. Refactor successful inventory persistence into one helper used by every
+   discovery path. Only nonempty successful inventories reconcile absence and
+   readmit restricted models. Empty, malformed, authentication and transport
+   failures preserve the last good catalog and report an error.
+3. Preserve absent models' sighting timestamps, two-confirmed-miss retirement,
+   permanent refusal reasons, local-provider exceptions and existing pin rules.
+4. Profile only IDs returned by that refresh; return actual insert counts and
+   profiling counts from the same operation. Remove duplicate UI profiling.
+   Preserve existing pricing and evaluated capability metadata.
+5. Describe profile counts as profiles, not usable or ready models. Keep
+   connection verification distinct from inventory freshness. Place model cards
+   and technical details behind the existing diagnostics disclosure; keep
+   actionable connection failures visible.
+6. Run focused lifecycle, pricing, pin, authentication and readiness regression
+   tests, package typecheck, shared CI, and served theme/viewport UX verification.
+
+Around twenty percent of this repair's implementation effort is allocated to
+consolidating discovery completion and removing duplicate work. Rollback is one
+PR revert; no schema or credential migration and no install advance are included.
+The inventory result and its UI projection are one atomic delivery: shipping
+only the projection would conceal inconsistent refresh behavior, while shipping
+only reconciliation would retain misleading readiness claims.
+
+### Objective and acceptance
+
+OBJ-CATALOG-TRUTH: automatic discovery tracks the serving connection's returned
+models without turning catalog history into availability claims.
+
+| Requirement | Flow/contract | Verification |
+| --- | --- | --- |
+| AC-REPAIR-1: all successful subscription discovery paths reconcile and return IDs | discover → persist → reconcile → readmit | actual-module backend and CLI fallback tests |
+| AC-REPAIR-2: failed/empty inventory preserves last good state | refresh failure contract | empty, authentication, malformed and transport tests |
+| AC-REPAIR-3: misses preserve sighting time and established retirement policies | inventory lifecycle | two misses, permanent refusal, local exception, pin regression tests |
+| AC-REPAIR-4: refresh counts and profiling describe this refresh | discovery action/result → UI | existing/new count, fresh-ID-only and pricing tests |
+| AC-REPAIR-5: overview hides technical catalog and avoids availability claims | provider overview → diagnostics | UI regressions and measured served UX evidence |
