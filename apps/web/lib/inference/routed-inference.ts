@@ -8,6 +8,7 @@
  * champion/challenger, rate tracking, and outcome telemetry.
  */
 
+import { resolveLocalServedContextTokens } from "@/lib/inference/local-model-context-reconcile";
 import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
 import type {
   RouteDecision,
@@ -255,7 +256,7 @@ async function prepareRoute(
   });
 
   const [manifests, policies, overrides] = await Promise.all([
-    loadEndpointManifests(),
+    loadEndpointManifests(Date.now(), resolveLocalServedContextTokens),
     loadPolicyRules(),
     loadOverrides(taskType),
   ]);

@@ -299,10 +299,16 @@ export function activityBudgetExclusion(
   if (resolvePlanEffort(contract, endpoint).extraMaxTokens >= maxOutputTokens) {
     return "Activity completion allowance leaves no room beyond fixed thinking budget";
   }
-  if (endpoint.maxOutputTokens === null || endpoint.maxOutputTokens < maxOutputTokens) {
+  if (endpoint.maxOutputTokens === null || !Number.isSafeInteger(endpoint.maxOutputTokens) || endpoint.maxOutputTokens <= 0) {
+    return "Activity completion capacity is unknown; refresh endpoint capacity evidence";
+  }
+  if (endpoint.maxOutputTokens < maxOutputTokens) {
     return "Activity completion allowance exceeds known model output capacity";
   }
-  if (endpoint.maxContextTokens === null || endpoint.maxContextTokens <
+  if (endpoint.maxContextTokens === null || !Number.isSafeInteger(endpoint.maxContextTokens) || endpoint.maxContextTokens <= 0) {
+    return "Activity context capacity is unknown; refresh endpoint capacity evidence";
+  }
+  if (endpoint.maxContextTokens <
       Math.max(contract.minContextTokens ?? 0, contract.estimatedInputTokens + maxOutputTokens)) {
     return "Activity input and completion allowance exceeds known model context capacity";
   }
