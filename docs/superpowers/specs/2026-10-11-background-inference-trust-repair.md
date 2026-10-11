@@ -85,6 +85,12 @@ not be read because the posture tool truncates its unfiltered response.
 
 ## Operator-authorized follow-through
 
+The subsequent architecture investigation and staged router proposal are recorded
+in [Task-aware inference routing](2026-10-11-task-aware-inference-routing-design.md).
+That draft extends the current activity/request pipeline and includes the later
+operator-supplied review export; it does not replace this bounded repair or its
+verification evidence.
+
 The operator authorized proceeding with each finding on October 11. This is a
 recovery work packet, not a live backlog claim or a completed deployment receipt.
 The connector dry run still reports `authorization_pending`, and this chat's
