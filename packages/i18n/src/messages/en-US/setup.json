@@ -48,5 +48,19 @@
   },
   "accountBootstrap": {
     "accountableOwnerNote": "You'll be the organization's accountable owner (change it in Admin › Settings)."
+  },
+  "offerPositioning": {
+    "open": "+ Add what you offer and who it's for",
+    "heading": "What you offer and who it's for",
+    "valueProposition": "What you offer",
+    "valuePropositionHint": "One or two sentences on what customers get from you.",
+    "segments": "Who it's for",
+    "segmentsHint": "One customer group per line.",
+    "note": "Your marketing coworker plans campaigns from this.",
+    "save": "Save",
+    "saving": "Saving...",
+    "saved": "Saved.",
+    "loadFailed": "Couldn't load your current answers.",
+    "saveFailed": "Couldn't save. Try again."
   }
 }

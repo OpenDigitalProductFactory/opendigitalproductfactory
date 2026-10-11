@@ -7,7 +7,7 @@ import type { ProfessionCorpusContext } from "@/lib/decision-perspective/profess
 //
 // The interactive chat path (agent-coworker.ts) already resolves the corpus and
 // injects it into its own prompt assembly. Every autonomous caller — spawned
-// child threads (agent-thread-dispatcher-runtime), scheduled self-tasks
+// child threads (child-thread-runtime), scheduled self-tasks
 // (agent-task-scheduler), remote MCP task submission — flows through
 // executeAutonomousAgenticLoop with a PRE-ASSEMBLED systemPrompt that never
 // carried the corpus. So a build-lane coworker was bound to a profession family

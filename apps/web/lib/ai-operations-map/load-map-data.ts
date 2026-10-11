@@ -14,7 +14,7 @@ import { projectLoadedRoutingEvidence } from "./routing-evidence-loader-projecti
 import { resolveModelSelectionByPhase } from "@/lib/inference/phase-model-resolution";
 import { projectActivityRoutingFromLiveState } from "./activity-routing-live-state";
 import {
-  ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
+  loadApprovedActivityHarnessOverrides,
 } from "@/lib/routing/activity-harness-approval-source";
 import {
   projectA2aInteractions,
@@ -139,7 +139,7 @@ export async function loadOperationsMapData(
     phaseHandoffs,
     a2aTaskRuns,
     deliberationRuns,
-    activityHarnessApprovalProposals,
+    approvedActivityHarnessOverrides,
     phaseModelSelection,
     evidenceRange,
   ] = await Promise.all([
@@ -531,22 +531,8 @@ export async function loadOperationsMapData(
         },
       },
     }),
-    prisma.agentActionProposal.findMany({
-      where: {
-        actionType: ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
-        status: { in: ["approve", "approved", "executed"] },
-      },
-      orderBy: { decidedAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
-      select: {
-        proposalId: true,
-        actionType: true,
-        parameters: true,
-        status: true,
-        decidedById: true,
-        decidedAt: true,
-      },
-    }),
+    // Facts and legacy approved proposals (dual read, BI-C8EC05C9).
+    loadApprovedActivityHarnessOverrides(prisma, { take: RECENT_TOOL_LIMIT }),
     resolveModelSelectionByPhase(),
     // Global evidence bounds (window-independent): anchors the client
     // timeline's base range so windowed refetches can't shrink the scrubber,
@@ -773,7 +759,7 @@ export async function loadOperationsMapData(
         routeDecisions: routeDecisionRows,
         tokenUsage,
         routeOutcomes,
-        activityHarnessApprovalProposals,
+        approvedConfidenceOverrides: approvedActivityHarnessOverrides,
         phaseModelSelection,
       }),
       coworkers: mergedCoworkers,

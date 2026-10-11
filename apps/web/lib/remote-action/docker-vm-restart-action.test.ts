@@ -47,7 +47,7 @@ describe("checkDockerVmRestart (BI-F8F8C383)", () => {
   it("says plainly when no host executor can run it, and how to get one", async () => {
     const result = await checkDockerVmRestart(deps({ findHostExecutors: async () => [] }));
     expect(result).toMatchObject({ offered: false, reason: "no-host-executor" });
-    if (!result.offered) expect(result.message).toMatch(/native Edge agent/);
+    if (!result.offered) expect(result.message).toMatch(/edge node on the host/);
   });
 
   it("ignores nodes that are untrusted, capability-disabled, not allowlisted or customer-scoped", async () => {
@@ -60,6 +60,27 @@ describe("checkDockerVmRestart (BI-F8F8C383)", () => {
       ],
     }));
     expect(result).toMatchObject({ offered: false, reason: "no-host-executor" });
+  });
+
+  it("on a native Linux Engine says only a reboot clears it, instead of offering a restart that cannot work (BI-28EFE18A)", async () => {
+    const result = await checkDockerVmRestart(deps({
+      findHostExecutors: async () => [{
+        ...hostNode,
+        capabilityRows: [{ capability: "action.execute", mode: "enabled", evidence: { dockerRuntime: "engine" } }],
+      }],
+    }));
+    expect(result).toMatchObject({ offered: false, reason: "host-reboot-required" });
+    if (!result.offered) expect(result.message).toMatch(/rebooting the host/);
+  });
+
+  it("offers the restart on Docker Desktop on any platform", async () => {
+    const result = await checkDockerVmRestart(deps({
+      findHostExecutors: async () => [{
+        ...hostNode,
+        capabilityRows: [{ capability: "action.execute", mode: "enabled", evidence: { dockerRuntime: "desktop" } }],
+      }],
+    }));
+    expect(result.offered).toBe(true);
   });
 
   it("names the impact, including running gates, and that it is not a host reboot", async () => {

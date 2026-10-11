@@ -42,8 +42,9 @@ no portfolio.
 
 ## Which portfolio an item counts against
 
-The panel, the budget proposal and admission all decide an item's portfolio the
-same way, so a budget and the work that uses it always line up:
+The panel, the budget proposal, funding approval and admission all decide an
+item's portfolio the same way, so a budget and the work that uses it always line
+up:
 
 1. A portfolio the item names directly wins: its own portfolio, its digital
    product's, its taxonomy node's, its AI coworker's, or its epic's.
@@ -91,8 +92,10 @@ one at a time.
 ## How budgets steer work
 
 - Approving an item for funding reserves its points against its portfolio's
-  budget. Going over the budget needs a person and a recorded reason; an
-  autonomous approval is refused.
+  budget, decided by the rules above: platform, common and never-scoped work
+  with no portfolio of its own reserves against Foundational. Work that stays
+  Unallocated reserves nothing. Going over the budget needs a person and a
+  recorded reason; an autonomous approval is refused.
 - A portfolio starts new work while its points in flight fit its allowance: two
   weeks of its measured delivery, never less than one large item (8 points).
 - Admission starts in **shadow** mode. Every decision to admit, warn or refuse is
