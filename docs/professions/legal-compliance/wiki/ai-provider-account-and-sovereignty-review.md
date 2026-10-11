@@ -39,6 +39,14 @@ Until those facts are evidenced, a personal, consumer, individual, or unknown ho
 5. Local processing reduces external egress but is not automatically compliant. Verify capability, access control, retention, security, lawful basis, and sector requirements.
 6. When evidence is missing or the question requires legal interpretation, abstain and route to qualified privacy, legal, security, or procurement review.
 
+## Re-evaluation and continuity
+
+Reassess the connected account when ownership, terms, subprocessors, processing regions, support access, or model distribution changes. An announced acquisition agreement is distinct from a completed transaction; record the evidenced status and review date. Preserve the organization's accepted dependency and exit decision in its owning scope.
+
+Include analysis artifacts and derived evidence in the data-flow review. A locally executed analysis tool can still expose company information through hosted inference, telemetry, logs, or support channels. Verify export/restore, retention after session closure, key and update control, and permitted fallback behavior for the chosen deployment.
+
+Treat CADA and similar jurisdiction developments according to their current legal status and applicability. A proposed framework is a planning input, not a blanket obligation across EMEA. Hardware ownership or open-source licensing does not independently establish compliance. See the [dated REA and inference strategy](../../../strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md) for research evidence requiring deployment-specific qualification.
+
 ## Provider examples
 
 OpenAI and Anthropic publish different data-treatment statements for commercial and consumer offerings. Use those statements only for the named service class and current terms. Never generalize a commercial-product statement to a personal subscription, or infer that a connected credential has enterprise options such as special retention or regional processing.
