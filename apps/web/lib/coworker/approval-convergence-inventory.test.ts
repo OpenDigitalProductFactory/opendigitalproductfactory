@@ -83,7 +83,7 @@ describe("approval convergence inventory — the live registry", () => {
   it("knows exactly which reachable tools take a secret (writeOnly) input", () => {
     expect(
       PROPOSAL_REACHABLE.filter((tool) => hasWriteOnlyInput(tool.inputSchema)).map((tool) => tool.name).sort(),
-    ).toEqual(["configure_and_test_discovery_connection", "configure_gateway_scan"]);
+    ).toEqual(["configure_and_test_discovery_connection", "configure_gateway_scan", "manage_provider_account"]);
   });
 
   it("keeps the arguments of every reachable tool on its audit row", () => {

@@ -13,10 +13,12 @@ on:
       - "packages/db/data/grant_catalog.json"
       - "skills/**"
       - "apps/web/lib/tak/agent-grants.ts"
+      - "apps/web/lib/tak/*tool-grants.ts"
       - "apps/web/lib/mcp-tools.ts"
       - "prompts/route-persona/**"
       - "prompts/specialist/**"
       - "apps/web/scripts/audit-coworker-tool-grants.ts"
+      - "scripts/provider-management-grant-audit.test.mjs"
       - "docs/superpowers/audits/2026-04-27-coworker-tool-grant-audit.json"
       - ".github/workflows/audit-coworker-tool-grants.yml"
   push:
@@ -57,6 +59,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify provider grant composition
+        run: node --test scripts/provider-management-grant-audit.test.mjs
 
       - name: Run coworker tool-grant audit (with baseline)
         run: |

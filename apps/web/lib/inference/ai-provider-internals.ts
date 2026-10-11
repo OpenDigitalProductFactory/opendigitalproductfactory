@@ -20,6 +20,9 @@ import {
 import { seedKnownModels } from "@/lib/inference/known-model-seeding";
 import { recordDiscoveredAuthEligibility } from "@/lib/routing/model-auth-eligibility";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { findProviderCredential, resolveCredentialProviderId } from "./provider-account-credentials";
+export { resolveCredentialProviderId } from "./provider-account-credentials";
+import { supportsTextGeneration } from "@/lib/routing/model-classifier";
 
 /**
  * Resolve the `supportsToolUse` value a metadata-sync should persist for a model,
@@ -82,20 +85,11 @@ export function resolveSyncedToolUse(input: {
 
 // ─── Shared helpers (exported for use by ai-providers.ts server actions) ─────
 
-const CREDENTIAL_PARENT_BY_PROVIDER_ID: Record<string, string> = {
-  "zai-coding": "zai",
-};
-
-export function resolveCredentialProviderId(providerId: string): string {
-  return CREDENTIAL_PARENT_BY_PROVIDER_ID[providerId] ?? providerId;
-}
-
 /** Decrypt the API key / client secret for a provider (server-only).
  *  Returns null when the credential row is missing OR when decryption fails
  *  (e.g. the encryption key was rotated after these credentials were stored). */
-export async function getDecryptedCredential(providerId: string) {
-  const credentialProviderId = resolveCredentialProviderId(providerId);
-  const cred = await prisma.credentialEntry.findUnique({ where: { providerId: credentialProviderId } });
+export async function getDecryptedCredential(providerId: string, connectionId?: string) {
+  const cred = await findProviderCredential(providerId, connectionId);
   if (!cred) {
     // CodeQL js/log-injection: providerId is user-influenced. JSON.stringify
     // is a CodeQL-recognised sanitiser — escapes CR/LF, quotes the value.
@@ -125,7 +119,7 @@ export async function getDecryptedCredential(providerId: string) {
     // PROVIDER-ACTIVATION-AUDIT.md F-16.
     if (cred.status !== "key_rotated") {
       prisma.credentialEntry
-        .update({ where: { providerId }, data: { status: "key_rotated" } })
+        .update({ where: { id: cred.id }, data: { status: "key_rotated" } })
         // CodeQL #47 (js/tainted-format-string) + js/log-injection:
         // providerId is user-influenced. JSON.stringify is the recognised
         // sanitiser; the format string is constant so %s can't be hijacked.
@@ -231,10 +225,10 @@ export function extractTokenUsage(data: Record<string, unknown>): TokenUsage {
 
 export function buildAutoDiscoveryEvalEvents(
   providerId: string,
-  models: Array<{ id?: string; modelId: string }>,
+  models: Array<{ id?: string; modelId: string; modelClass?: string | null; outputModalities?: unknown }>,
   userId = "system",
 ) {
-  return models.map((model) => ({
+  return models.filter(supportsTextGeneration).map((model) => ({
     name: "ai/eval.run" as const,
     data: {
       endpointId: providerId,
@@ -248,13 +242,15 @@ export function buildAutoDiscoveryEvalEvents(
  *  Dispatches by authMethod: oauth2_authorization_code uses refreshOAuthToken,
  *  oauth2_client_credentials uses the client_credentials grant.
  */
-export async function getProviderBearerToken(providerId: string): Promise<{ token: string } | { error: string }> {
+export async function getProviderBearerToken(providerId: string, connectionId?: string): Promise<{ token: string } | { error: string }> {
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { error: "Provider not found" };
 
-  if (provider.authMethod === "oauth2_authorization_code") {
+  const connection = connectionId ? await prisma.aiProviderConnection.findUnique({ where: { connectionId } }) : null;
+  if (connectionId && (!connection || connection.providerId !== providerId)) return { error: "Provider connection not found" };
+  if (["oauth", "oauth2_authorization_code"].includes(connection?.authMethod ?? provider.authMethod)) {
     const { refreshOAuthToken } = await import("@/lib/provider-oauth");
-    const credential = await getDecryptedCredential(providerId);
+    const credential = await getDecryptedCredential(providerId, connectionId);
     if (!credential) return { error: "No credential configured" };
 
     if (credential.cachedToken && credential.tokenExpiresAt) {
@@ -264,12 +260,12 @@ export async function getProviderBearerToken(providerId: string): Promise<{ toke
       }
     }
     // chatgpt shares Codex OAuth — refresh via codex provider (has tokenUrl/clientId)
-    const refreshProviderId = providerId === "chatgpt" ? "codex" : providerId;
-    return refreshOAuthToken(refreshProviderId);
+    const refreshProviderId = !connectionId && providerId === "chatgpt" ? "codex" : providerId;
+    return refreshOAuthToken(refreshProviderId, connectionId);
   }
 
   // Existing client_credentials flow
-  const credential = await getDecryptedCredential(providerId);
+  const credential = await getDecryptedCredential(providerId, connectionId);
   if (!credential) return { error: "No credential configured" };
   if (!credential.clientId || !credential.clientSecret || !credential.tokenEndpoint) {
     return { error: "OAuth credentials incomplete — need client ID, secret, and token endpoint" };
@@ -304,7 +300,7 @@ export async function getProviderBearerToken(providerId: string): Promise<{ toke
     const expiresAt = new Date(Date.now() + body.expires_in * 1000);
 
     await prisma.credentialEntry.update({
-      where: { providerId },
+      where: { id: credential.id },
       data: {
         cachedToken: encryptSecret(body.access_token),
         tokenExpiresAt: expiresAt,
@@ -1074,12 +1070,13 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
       const { jobs } = await import("@/lib/jobs");
       const models = await prisma.modelProfile.findMany({
         where: { providerId, modelStatus: "active" },
-        select: { modelId: true, id: true },
+        select: { modelId: true, id: true, modelClass: true, outputModalities: true },
       });
-      for (const event of buildAutoDiscoveryEvalEvents(providerId, models)) {
+      const events = buildAutoDiscoveryEvalEvents(providerId, models);
+      for (const event of events) {
         await jobs.send(event);
       }
-      console.log(`[auto-discover] Queued background evals for ${models.length} model(s) on ${JSON.stringify(providerId)}`);
+      if (events.length) console.log(`[auto-discover] Queued background evals for ${events.length} compatible model(s) on ${JSON.stringify(providerId)}`);
     } catch (err) {
       // Non-fatal — catalog scores are usable even without live eval.
       // CodeQL #48 (js/tainted-format-string) + js/log-injection: constant
@@ -1128,21 +1125,21 @@ export async function queueUncalibratedModelEvals(providerId: string): Promise<n
 
   const models = await prisma.modelProfile.findMany({
     where: { providerId, modelStatus: "active", profileSource: "seed", evalCount: 0 },
-    select: { modelId: true, id: true },
+    select: { modelId: true, id: true, modelClass: true, outputModalities: true },
   });
-  if (models.length === 0) return 0;
-
+  const eligible = models.filter(supportsTextGeneration);
+  if (!eligible.length) return 0;
   try {
     const { jobs } = await import("@/lib/jobs");
-    for (const event of buildAutoDiscoveryEvalEvents(providerId, models)) {
+    for (const event of buildAutoDiscoveryEvalEvents(providerId, eligible)) {
       await jobs.send(event);
     }
-    console.log(`[auto-eval] Queued calibration evals for ${models.length} un-calibrated model(s) on ${JSON.stringify(providerId)}`);
+    console.log(`[auto-eval] Queued calibration evals for ${eligible.length} un-calibrated model(s) on ${JSON.stringify(providerId)}`);
   } catch (err) {
     // Non-fatal — seed priors remain usable until the eval runs.
     console.warn("[auto-eval] Failed to queue calibration evals for %s: %s",
       JSON.stringify(providerId),
       err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
   }
-  return models.length;
+  return eligible.length;
 }
