@@ -1343,6 +1343,7 @@
         "7-subagent-dispatch-discipline",
         "14-release-testing",
         "15-communication",
+        "ending-an-unfinished-thread",
         "8a-advise-safe-tools-server-action-exports-coworker-coordination-pointers",
         "task-specific-operating-rules"
       ]
@@ -2351,7 +2352,8 @@
         "existing-substrate-and-plan",
         "conflicting-and-overlapping-work",
         "evidence-and-recovery-boundary",
-        "connection-and-integration-correction-2026-10-11"
+        "connection-and-integration-correction-2026-10-11",
+        "explicit-stop-reasons-2026-10-11"
       ]
     },
     "docs/architecture/section-navigation.md": {

@@ -104,3 +104,22 @@ instead of adding another unscoped ratio. Existing active execution-acceptance,
 OAuth and tool-loop-repair chats own adjacent work; their source and runtime work
 must be inspected before extending this slice. Do not start duplicate recovery
 tasks merely because this chat cannot see their native tools.
+
+### Explicit stop reasons, 2026-10-11
+
+Founder direction requires every unfinished thread handoff to explain its
+stop reason and the concrete question, owner action or external condition
+needed to resume. The always-on rule lives in `AGENTS.md` section 10; the
+[contributor procedure](contributor-procedure-runbook.md#ending-an-unfinished-thread)
+defines the handoff procedure. This extends the existing governed-scope and
+escalation principles instead of adding another decision store.
+
+The review gate at source `3b364d6dc495` passed (evidence
+`cmv48okve7nqz01p61pjije5r`, 4,216 tests passed, 14 skipped, 5 todo).
+Both overlapping scope owners released their stale claims, and the native
+full-scope claim succeeded. Independent review
+`TR-GATE-7DCB905432CE2E5374C41A88` then parked without a verdict: canonical
+portal logs reported no eligible confidential `build-review` endpoint.
+Those facts do not establish publication or completion. This later guidance
+edit changes the committed review identity; the prior gate must not be
+represented as verification of the updated tree.

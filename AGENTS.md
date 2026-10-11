@@ -95,7 +95,7 @@ Before changing this surface, read [theme aware styling runbook](docs/architectu
 
 ## 10. Communication
 
-Report outcomes and verification faithfully. Name failing, skipped and unrun checks; never claim incomplete work is done. Run commands for the user, and keep coordination details backstage.
+Report results faithfully; name failed, skipped and unrun checks. Never claim incomplete work is done. Before stopping, state why, what remains and who must do what to resume; ask any required question after consulting WWMD/WWWD/WSID. Continue authorized work while waiting. Run commands for the user; keep coordination backstage.
 
 Procedure and domain rules: [contributor procedure runbook](docs/architecture/contributor-procedure-runbook.md). Read before this phase.
 
