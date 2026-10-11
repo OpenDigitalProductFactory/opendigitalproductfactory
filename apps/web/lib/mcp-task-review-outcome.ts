@@ -9,17 +9,21 @@ function record(value: unknown): Record<string, unknown> | null {
     ? value as Record<string, unknown> : null;
 }
 
-export async function reconcilePersistedReviewStatus(
-  taskRunId: string, progressPayload: unknown,
-  outcome: NonNullable<Awaited<ReturnType<typeof loadInitiativeReviewOutcome>>>,
-) {
+type PersistedReviewOutcome = NonNullable<Awaited<ReturnType<typeof loadInitiativeReviewOutcome>>>;
+
+/** The completed-TaskRun write a verified receipt settles a review to; waits and stale approvals are dropped. */
+export function persistedReviewCompletionData(progressPayload: unknown, outcome: PersistedReviewOutcome) {
   const progress = { ...record(progressPayload) };
   for (const key of ["terminalWriterWait", "terminalWriterDispatchFailure", "terminalWriterEscalation", "terminalWriterContextFailure", "resourceWait", "approvalEnvelopeId"])
     delete progress[key];
-  await prisma.taskRun.update({ where: { taskRunId }, data: {
+  return {
     status: "completed", completedAt: new Date(),
     progressPayload: { ...progress, summary: outcome.summary, reviewOutcome: outcome, requiresApproval: false } as Prisma.InputJsonValue,
-  } });
+  };
+}
+
+export async function reconcilePersistedReviewStatus(taskRunId: string, progressPayload: unknown, outcome: PersistedReviewOutcome) {
+  await prisma.taskRun.update({ where: { taskRunId }, data: persistedReviewCompletionData(progressPayload, outcome) });
 }
 
 export async function loadTaskInitiativeReviewOutcome(taskRunId: string, binding: InitiativeReviewBinding) {

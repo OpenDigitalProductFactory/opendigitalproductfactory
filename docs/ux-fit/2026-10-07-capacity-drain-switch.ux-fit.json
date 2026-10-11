@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "autopilot-disclosure-switch",
+  "decisionInteractionId": "DI-040AB24E3BAB",
+  "scope": {
+    "files": [
+      "apps/web/components/admin/GovernedBacklogSettings.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-040AB24E3BAB",
+    "consideredOptions": [
+      "autopilot-disclosure-switch",
+      "top-level-card-toggle",
+      "new-capacity-settings-card"
+    ]
+  },
+  "notes": {
+    "decision": "Fits with guardrails. The capacity drain switch is one checkbox inside the existing 'Daily limit and the autopilot switches' disclosure of the 'Let Build Studio pick up work on its own' card, saved by the card's existing Save. The card's default view is unchanged: measured with measureUxBudget on the rendered card, before and after both read 64 default-visible words, 1 visible field, 1 disclosure region (pinned in GovernedBacklogSettings.test.tsx). No new route, card or navigation.",
+    "persona": "The platform operator decides whether spare weekly AI allowance should start ranked ready work near the reset, without a database edit, and sees that it only works while the governed backlog lane is on.",
+    "reuse": "The existing GovernedBacklogSettings card and its saveGovernedBacklogSettings server action (manage_platform), the ui/Button primitive, theme tokens only.",
+    "sourceTruth": "PlatformDevConfig.capacityDrainEnabled, read by evaluateAndDrainCapacity (apps/web/lib/capacity/evaluate-capacity-drain.ts) and the hourly build/capacity-drain-scheduled job; also writable through set_backlog_delivery_budget."
+  }
+}

@@ -539,6 +539,22 @@ describe("resolveRepositoryArtifact", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  // BI-77C600B2: the plain claim this used to advise is refused at the same
+  // research gate the receipt is meant to satisfy; a design-intent claim binds
+  // the workroom without owing research.
+  it("names the design-intent claim when no live workroom is bound at all", async () => {
+    const result = await resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: db({ capsules: [] }) as never,
+      fetchImpl: vi.fn() as typeof fetch,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    if (!("error" in result)) throw new Error("expected an error result");
+    expect(result.error).toContain("workIntent \"design\"");
+  });
+
   it("names the unset head when the capsule was claimed but never synced", async () => {
     const result = await resolveRepositoryArtifact({
       locator,

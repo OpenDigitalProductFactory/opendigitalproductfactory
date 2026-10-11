@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { reconstructTimelines, buildSnapshotRow } from "@/lib/queue/queue-metrics-rollup";
 
 import {
+  entryStageKey,
   planStageTransitions,
   readDriveObservation,
   workroomStageLiveCounts,
@@ -90,7 +91,38 @@ describe("planStageTransitions — a stage is a queue", () => {
   it("refuses to guess: no shape, an unknown reason, or no stage to name means no transition", () => {
     expect(planStageTransitions({ capsuleId: "WC-1", shapeRef: null, prior: null, next: obs("dispatch_agent", "agent_stage", "sweep"), at: at(0) })).toEqual([]);
     expect(plan(null, obs("pause", "not_a_reason", "sweep"))).toEqual([]);
-    expect(plan(null, obs("pause", "conformance_pause", null))).toEqual([]);
+    expect(plan(null, obs("dispatch_agent", "agent_stage", null))).toEqual([]);
+  });
+
+  it("holds a room that never entered a stage at the shape's first stage, with the cause from the drive ledger", () => {
+    // The live drive row shape of the 2026-09-23 pile: no stage, the deviation only in the ledger.
+    const paused = readDriveObservation({
+      workroomDrive: {
+        action: "pause",
+        reason: "conformance_pause",
+        stageKey: null,
+        ledger: ["missing_explicit_coordinator: An executable room requires exactly one explicit Process Overseer."],
+      },
+    })!;
+    expect(entryStageKey(SHAPE)).toBe("sweep");
+    expect(compact(plan(null, paused))).toEqual([
+      ["sweep", "enqueued", null],
+      ["sweep", "held", "conformance_pause:missing_explicit_coordinator"],
+    ]);
+    // Ticking on in the same hold changes nothing.
+    expect(plan(paused, paused)).toEqual([]);
+  });
+
+  it("keeps a run of stage-less holds on the stage the room was really in when the caller knows it", () => {
+    const paused = obs("pause", "conformance_pause", null);
+    const tick = (prior: DriveObservation, next: DriveObservation) =>
+      planStageTransitions({ capsuleId: "WC-1", shapeRef: SHAPE, prior, next, at: at(0), openStageKey: "raise" });
+    expect(tick(paused, paused)).toEqual([]);
+    // Resuming the stage it was held in is a release, not a second entry.
+    expect(compact(tick(paused, obs("dispatch_agent", "agent_stage", "raise")))).toEqual([
+      ["raise", "released", null],
+      ["raise", "started", null],
+    ]);
   });
 });
 
@@ -138,11 +170,15 @@ describe("workroomStageLiveCounts", () => {
       room("attention", "role_stage", "decide"),
       room("do_not_wake", "cycle_complete", null),
       room("stop", "success", "decide"),
+      room("pause", "conformance_pause", null),
+      room("dispatch_agent", "agent_stage", null),
       { scopeClaims: [], workspaceState: { workroomDrive: { action: "dispatch_agent", reason: "agent_stage", stageKey: "x" } } },
     ]);
     expect(Object.fromEntries(counts)).toEqual({
       [workroomStageQueueKey(SHAPE, "raise")]: { depth: 1, wip: 2 },
       [workroomStageQueueKey(SHAPE, "decide")]: { depth: 1, wip: 1 },
+      // Held before entering any stage: waiting at the first one.
+      [workroomStageQueueKey(SHAPE, "sweep")]: { depth: 1, wip: 1 },
     });
   });
 });
@@ -150,9 +186,18 @@ describe("workroomStageLiveCounts", () => {
 describe("readDriveObservation", () => {
   it("reads the persisted drive snapshot and tolerates its absence", () => {
     expect(readDriveObservation({ workroomDrive: { action: "pause", reason: "conformance_pause", stageKey: null, lastCycleKey: "c" } }))
-      .toEqual({ action: "pause", reason: "conformance_pause", stageKey: null, cycleKey: "c" });
+      .toEqual({ action: "pause", reason: "conformance_pause", stageKey: null, cycleKey: "c", detail: null });
     expect(readDriveObservation({})).toBeNull();
     expect(readDriveObservation(null)).toBeNull();
+  });
+});
+
+describe("openStageAfter", () => {
+  it("follows the last enqueue and clears on a finish", async () => {
+    const { openStageAfter } = await import("./workroom-stage-telemetry");
+    expect(openStageAfter(null, plan(null, obs("dispatch_agent", "agent_stage", "raise")))).toBe("raise");
+    expect(openStageAfter("raise", plan(obs("dispatch_agent", "agent_stage", "raise"), obs("stop", "success", null)))).toBeNull();
+    expect(openStageAfter("raise", [])).toBe("raise");
   });
 });
 
@@ -166,4 +211,45 @@ describe("emitStageTelemetryForDriveWrite", () => {
       at: at(0),
     })).resolves.toBeUndefined();
   });
+
+  it("asks where the room's item is open, so a stage-less hold stays on that stage", async () => {
+    const { emitStageTelemetryForDriveWrite } = await import("./workroom-stage-telemetry");
+    const asked: string[] = [];
+    // A failing writer must not surface: the hook never throws.
+    await expect(emitStageTelemetryForDriveWrite({
+      room: { capsuleId: "WC-1", scopeClaims: [{ workShape: SHAPE }], workspaceState: { workroomDrive: { action: "pause", reason: "conformance_pause", stageKey: null } } },
+      snapshot: { action: "dispatch_agent", reason: "agent_stage", stageKey: "raise" },
+      at: at(0),
+      readOpenStage: async (id) => {
+        asked.push(id);
+        throw new Error("db down");
+      },
+    })).resolves.toBeUndefined();
+    expect(asked).toEqual(["WC-1"]);
+  });
 });
+
+describe("a conformance hold names its deviation", () => {
+  it("narrows the cause to the first deviation code and describes it in plain words", async () => {
+    const { readDriveObservation, describeHoldCause } = await import("./workroom-stage-telemetry");
+    const obs = readDriveObservation({ workroomDrive: {
+      action: "pause", reason: "conformance_pause", stageKey: "reproduce", lastCycleKey: null,
+      conformance: { deviations: [{ code: "missing_explicit_coordinator", summary: "No coordinator" }] },
+    } });
+    expect(obs?.detail).toBe("missing_explicit_coordinator");
+    const out = planStageTransitions({ capsuleId: "WC-1", shapeRef: SHAPE, prior: obs!, next: { ...obs!, stageKey: "reproduce" }, at: at(0) });
+    expect(out).toEqual([]); // unchanged hold
+    const entered = planStageTransitions({ capsuleId: "WC-1", shapeRef: SHAPE, prior: null, next: obs!, at: at(0) });
+    expect(entered.at(-1)!.laneKey).toBe("conformance_pause:missing_explicit_coordinator");
+    expect(describeHoldCause("conformance_pause:missing_explicit_coordinator")).toBe("missing explicit coordinator (conformance pause)");
+    expect(describeHoldCause("awaiting-person")).toBe("waiting on a person");
+    expect(describeHoldCause("executor_writeback_unavailable")).toBe("executor writeback unavailable");
+  });
+
+  it("ignores deviation codes on holds that are not conformance holds", async () => {
+    const { readDriveObservation } = await import("./workroom-stage-telemetry");
+    const obs = readDriveObservation({ workroomDrive: { action: "pause", reason: "executor_writeback_unavailable", conformance: { deviations: [{ code: "x" }] } } });
+    expect(obs?.detail).toBeNull();
+  });
+});
+

@@ -16,6 +16,7 @@ import {
   type QueueOutcome,
   type QueueWindow,
 } from "./flow-metrics";
+import { WORKROOM_STAGE_ITEM_KIND, WORKROOM_STAGE_QUEUE_PREFIX } from "@/lib/work-management/workroom-stage-telemetry";
 
 /** Minimal shape of a telemetry row this rollup consumes. */
 export interface QueueTelemetryRow {
@@ -166,6 +167,11 @@ export interface RollupDeps {
    * Earlier rows (before `before`) for the given items, so an item that entered
    * on an earlier day is measured over its whole life, not just today's part.
    * Optional: without it, an item's earlier events are invisible, as before.
+   *
+   * Only Workroom stage items are asked for (BI-927FF076): their time spans
+   * days and interleaves holds. Other queues are measured from the window, as
+   * they were before stage telemetry; reading their history pulled millions
+   * of rows into memory.
    */
   fetchItemHistory?: (items: readonly { itemKind: string; itemId: string }[], before: Date) => Promise<QueueTelemetryRow[]>;
   /** Point-in-time depth/WIP per queueKey (queued vs queued+in-progress). */
@@ -205,19 +211,26 @@ export async function aggregateQueueMetrics(
     deps.fetchLiveCounts(),
   ]);
 
-  // Bring in each windowed item's earlier events. Counting stays window-scoped
-  // (summarizeQueueWindow), so history only completes durations.
-  const itemKeys = new Map<string, { itemKind: string; itemId: string }>();
-  for (const e of events) itemKeys.set(`${e.itemKind}\x00${e.itemId}`, { itemKind: e.itemKind, itemId: e.itemId });
-  const history = deps.fetchItemHistory && itemKeys.size > 0
-    ? await deps.fetchItemHistory([...itemKeys.values()], start)
-    : [];
-
   const byQueue = new Map<string, QueueTelemetryRow[]>();
-  for (const e of [...history, ...events]) {
-    const arr = byQueue.get(e.queueKey) ?? [];
-    arr.push(e);
-    byQueue.set(e.queueKey, arr);
+  const append = (e: QueueTelemetryRow) => {
+    const arr = byQueue.get(e.queueKey);
+    if (arr) arr.push(e);
+    else byQueue.set(e.queueKey, [e]);
+  };
+  for (const e of events) append(e);
+
+  // Bring in each windowed Workroom stage item's earlier events (BI-927FF076:
+  // stage items only). Counting stays window-scoped (summarizeQueueWindow), so
+  // history only completes durations; timelines are rebuilt in time order.
+  const stageItems = new Map<string, { itemKind: string; itemId: string }>();
+  for (const e of events) {
+    if (!isWorkroomStageRow(e)) continue;
+    stageItems.set(e.itemId, { itemKind: e.itemKind, itemId: e.itemId });
+  }
+  if (deps.fetchItemHistory && stageItems.size > 0) {
+    for (const e of await deps.fetchItemHistory([...stageItems.values()], start)) {
+      if (isWorkroomStageRow(e)) append(e);
+    }
   }
   // Include queues that have live depth but produced no events in the window.
   for (const queueKey of liveCounts.keys()) {
@@ -233,6 +246,10 @@ export async function aggregateQueueMetrics(
   }
 
   return { period, queues: byQueue.size, upserted };
+}
+
+function isWorkroomStageRow(e: { queueKey: string; itemKind: string }): boolean {
+  return e.itemKind === WORKROOM_STAGE_ITEM_KIND && e.queueKey.startsWith(WORKROOM_STAGE_QUEUE_PREFIX);
 }
 
 /** Default deps bound to the live Prisma client. */
@@ -255,19 +272,22 @@ export async function defaultRollupDeps(): Promise<RollupDeps> {
       return rows as QueueTelemetryRow[];
     },
     fetchItemHistory: async (items, before) => {
-      // Bounded by the event retention window (90 days) the sweep enforces.
+      // Workroom stage items only, scoped in the query itself (BI-927FF076),
+      // and bounded by the event retention window (90 days) the sweep enforces.
       const since = new Date(before.getTime() - 90 * 24 * 60 * 60 * 1000);
-      const byKind = new Map<string, string[]>();
-      for (const item of items) byKind.set(item.itemKind, [...(byKind.get(item.itemKind) ?? []), item.itemId]);
+      const itemIds = [...new Set(items.filter((item) => item.itemKind === WORKROOM_STAGE_ITEM_KIND).map((item) => item.itemId))];
       const rows: QueueTelemetryRow[] = [];
-      for (const [itemKind, itemIds] of byKind) {
-        for (let i = 0; i < itemIds.length; i += 500) {
-          const found = await prisma.queueTelemetryEvent.findMany({
-            where: { itemKind, itemId: { in: itemIds.slice(i, i + 500) }, occurredAt: { gte: since, lt: before } },
-            select: { queueKey: true, itemKind: true, itemId: true, transition: true, outcome: true, occurredAt: true, laneKey: true },
-          });
-          rows.push(...(found as QueueTelemetryRow[]));
-        }
+      for (let i = 0; i < itemIds.length; i += 500) {
+        const found = await prisma.queueTelemetryEvent.findMany({
+          where: {
+            itemKind: WORKROOM_STAGE_ITEM_KIND,
+            queueKey: { startsWith: WORKROOM_STAGE_QUEUE_PREFIX },
+            itemId: { in: itemIds.slice(i, i + 500) },
+            occurredAt: { gte: since, lt: before },
+          },
+          select: { queueKey: true, itemKind: true, itemId: true, transition: true, outcome: true, occurredAt: true, laneKey: true },
+        });
+        for (const row of found) rows.push(row as QueueTelemetryRow);
       }
       return rows;
     },

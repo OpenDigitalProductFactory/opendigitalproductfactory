@@ -28,8 +28,12 @@
 import type { QueueOutcome, QueueTransition } from "@/lib/queue/flow-metrics";
 import type { QueueTransitionInput } from "@/lib/queue/queue-telemetry";
 
-import { readDeclaredWorkShapeRef } from "./work-shapes";
+import { getWorkShapeVersion } from "./work-shapes";
+import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
+import { holdCauseTag } from "./workroom-hold-cause";
+
+export { describeHoldCause, holdCauseTag } from "./workroom-hold-cause";
 
 export const WORKROOM_STAGE_ITEM_KIND = "workroom-stage";
 export const WORKROOM_STAGE_QUEUE_PREFIX = "wr:";
@@ -40,7 +44,14 @@ export type DriveObservation = {
   reason: string | null;
   stageKey: string | null;
   cycleKey: string | null;
+  /**
+   * The first conformance deviation code when the drive paused or escalated on
+   * conformance: from `conformance.deviations`, or else the `<code>: <text>`
+   * prefix of the drive's ledger, which is where the live drive writes it.
+   */
+  detail?: string | null;
 };
+
 
 export type StageTransition = Required<Pick<QueueTransitionInput, "queueKey" | "itemKind" | "itemId" | "transition">> & {
   outcome: QueueOutcome | null;
@@ -65,23 +76,53 @@ export function readDriveObservation(workspaceState: unknown): DriveObservation 
     : null;
   if (!drive) return null;
   const str = (value: unknown) => (typeof value === "string" && value.length > 0 ? value : null);
+  const reason = str(drive.reason);
+  const conformance = drive.conformance && typeof drive.conformance === "object" ? (drive.conformance as Record<string, unknown>) : null;
+  const first = Array.isArray(conformance?.deviations) ? (conformance!.deviations as unknown[])[0] : null;
+  const ledgerCode = Array.isArray(drive.ledger)
+    ? (drive.ledger as unknown[]).map((line) => (typeof line === "string" ? /^([a-z][a-z0-9_]*):/.exec(line)?.[1] : undefined)).find(Boolean) ?? null
+    : null;
+  const code = (first && typeof first === "object" ? str((first as Record<string, unknown>).code) : null) ?? ledgerCode;
   return {
     action: str(drive.action),
-    reason: str(drive.reason),
+    reason,
     stageKey: str(drive.stageKey),
     cycleKey: str(drive.lastCycleKey),
+    detail: reason?.startsWith("conformance_") ? code : null,
   };
+}
+
+/**
+ * The first stage of a shape version. A room the drive holds before any stage
+ * has run (a conformance pause on a room that never started) is waiting at
+ * this door, so its hold is measured here rather than dropped.
+ */
+export function entryStageKey(shapeRef: string | null): string | null {
+  const at = shapeRef ? shapeRef.lastIndexOf("@") : -1;
+  if (!shapeRef || at <= 0) return null;
+  return getWorkShapeVersion(shapeRef.slice(0, at), shapeRef.slice(at + 1))?.stages[0]?.key ?? null;
 }
 
 const IN_FLOW: ReadonlySet<WorkroomFlowState> = new Set(["working", "awaiting-person", "blocked"]);
 
 type Located = { state: WorkroomFlowState; cause: string | null; stageKey: string | null; cycleKey: string | null };
 
-function locate(observation: DriveObservation | null): Located | null {
+/**
+ * Classify a snapshot and name its stage. A hold the drive raised without
+ * naming a stage sits at the stage the room is known to be in (`knownStage`),
+ * or, when it has not entered one, at the shape's first stage.
+ */
+function locate(observation: DriveObservation | null, shapeRef: string | null, knownStage?: string | null): Located | null {
   if (!observation?.action || !observation.reason) return null;
   const classified = classifyDriveSegment({ action: observation.action, reason: observation.reason });
   if (!classified) return null;
-  return { ...classified, stageKey: observation.stageKey, cycleKey: observation.cycleKey };
+  const held = classified.state === "awaiting-person" || classified.state === "blocked";
+  return {
+    ...classified,
+    cause: classified.state === "blocked" ? holdCauseTag(classified.cause, observation.detail) : classified.cause,
+    stageKey: observation.stageKey ?? (held ? knownStage ?? entryStageKey(shapeRef) : null),
+    cycleKey: observation.cycleKey,
+  };
 }
 
 function holdLane(located: Located): string {
@@ -108,18 +149,23 @@ export function planStageTransitions(input: {
   prior: DriveObservation | null;
   next: DriveObservation;
   at: Date;
+  /**
+   * The stage the room's measured item is open at, when the caller knows it
+   * (the replay tracks it; the live hook reads the newest stage event). Lets a
+   * run of stage-less holds stay on the stage the room was really in.
+   */
+  openStageKey?: string | null;
 }): StageTransition[] {
   const { capsuleId, shapeRef, at } = input;
   if (!shapeRef) return [];
-  const before = locate(input.prior);
-  const after = locate(input.next);
-  if (!after) return [];
-
+  const before = locate(input.prior, shapeRef, input.openStageKey);
   const priorOpen = before && IN_FLOW.has(before.state) && before.stageKey ? before : null;
   // A hold the drive raised without naming a stage (a conformance pause) holds
-  // the stage the room was already in.
-  const nextStage = after.stageKey
-    ?? (priorOpen && priorOpen.cycleKey === after.cycleKey ? priorOpen.stageKey : null);
+  // the stage the room was already in, or, when it has not entered one, the
+  // shape's first stage.
+  const after = locate(input.next, shapeRef, priorOpen && priorOpen.cycleKey === input.next.cycleKey ? priorOpen.stageKey : null);
+  if (!after) return [];
+  const nextStage = after.stageKey;
 
   const out: StageTransition[] = [];
   const emit = (
@@ -204,8 +250,8 @@ export function workroomStageLiveCounts(
 ): Map<string, { depth: number; wip: number }> {
   const counts = new Map<string, { depth: number; wip: number }>();
   for (const room of rooms) {
-    const shapeRef = readDeclaredWorkShapeRef(room.scopeClaims);
-    const located = locate(readDriveObservation(room.workspaceState));
+    const shapeRef = readWorkShapeClaimRef(room.scopeClaims);
+    const located = locate(readDriveObservation(room.workspaceState), shapeRef);
     if (!shapeRef || !located?.stageKey || !IN_FLOW.has(located.state)) continue;
     const key = workroomStageQueueKey(shapeRef, located.stageKey);
     const entry = counts.get(key) ?? { depth: 0, wip: 0 };
@@ -214,6 +260,20 @@ export function workroomStageLiveCounts(
     counts.set(key, entry);
   }
   return counts;
+}
+
+/**
+ * The stage a run of transitions leaves the room's item open at: the stage of
+ * the last enqueue not followed by a finish, or `open` unchanged when the run
+ * neither opens nor closes an item.
+ */
+export function openStageAfter(open: string | null, transitions: readonly StageTransition[]): string | null {
+  let current = open;
+  for (const t of transitions) {
+    if (t.transition === "enqueued") current = t.queueKey.slice(t.queueKey.lastIndexOf(":") + 1);
+    else if (t.transition === "finished" || t.transition === "cancelled") current = null;
+  }
+  return current;
 }
 
 /** Hand a plan to the fire-and-forget writer. Never throws. */
@@ -238,20 +298,36 @@ export async function emitStageTelemetryForDriveWrite(input: {
   snapshot: Record<string, unknown>;
   graphShape?: boolean;
   at: Date;
+  /** Reads the stage the room's item is open at; defaults to the newest stage event. */
+  readOpenStage?: (capsuleId: string) => Promise<string | null>;
 }): Promise<void> {
   try {
     if (input.graphShape) return;
     const next = readDriveObservation({ workroomDrive: input.snapshot });
     if (!next) return;
+    const readOpenStage = input.readOpenStage ?? readOpenStageFromTelemetry;
     await emitStageTransitions(planStageTransitions({
       capsuleId: input.room.capsuleId,
-      shapeRef: readDeclaredWorkShapeRef(input.room.scopeClaims),
+      shapeRef: readWorkShapeClaimRef(input.room.scopeClaims),
       prior: readDriveObservation(input.room.workspaceState),
       next,
       at: input.at,
+      openStageKey: await readOpenStage(input.room.capsuleId),
     }));
   } catch {
     // Observability must never break the work it observes.
   }
 }
 
+
+/** The stage of the room's newest stage event, unless that event closed the item. */
+async function readOpenStageFromTelemetry(capsuleId: string): Promise<string | null> {
+  const { prisma } = await import("@dpf/db");
+  const latest = await prisma.queueTelemetryEvent.findFirst({
+    where: { itemKind: WORKROOM_STAGE_ITEM_KIND, itemId: { startsWith: `${capsuleId}:` } },
+    orderBy: { occurredAt: "desc" },
+    select: { queueKey: true, transition: true },
+  });
+  if (!latest || latest.transition === "finished" || latest.transition === "cancelled") return null;
+  return latest.queueKey.slice(latest.queueKey.lastIndexOf(":") + 1);
+}

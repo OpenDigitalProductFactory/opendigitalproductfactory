@@ -20,6 +20,7 @@ const commit = (cwd: string, file: string, msg: string) => {
 
 let root: string;
 let repo: string;
+// Run the POSIX sandbox command from the fixture directory with a relative path.
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "dpf-commit-list-"));

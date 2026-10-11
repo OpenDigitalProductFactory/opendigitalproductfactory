@@ -11,7 +11,7 @@ const prismaMock = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => ({ prisma: prismaMock }));
 
-import { dispatchOwedIndependentReviews, REVIEW_DISPATCH_ACTIVITY_KIND } from "./server-reviewer-dispatch";
+import { dispatchOwedIndependentReviews, dispatchReviewerRequest, REVIEW_DISPATCH_ACTIVITY_KIND } from "./server-reviewer-dispatch";
 
 const NOW = new Date("2026-09-24T02:00:00.000Z");
 const alias = (kind: string, value: string) => ({ kind, aliases: [{ aliasValue: value }] });
@@ -47,7 +47,7 @@ function roomsByQuery(authorRooms: unknown[], buildStudioRooms: unknown[] = []) 
 beforeEach(() => {
   for (const model of Object.values(prismaMock)) for (const fn of Object.values(model)) fn.mockReset();
   roomsByQuery([room()]);
-  prismaMock.backlogItem.findMany.mockResolvedValue([{ itemId: "BI-1" }]);
+  prismaMock.backlogItem.findMany.mockResolvedValue([{ itemId: "BI-1", status: "awaiting-acceptance" }]);
   prismaMock.workroomActivity.findFirst.mockResolvedValue(null);
   prismaMock.workroomActivity.create.mockResolvedValue({ id: "act" });
 });
@@ -127,13 +127,45 @@ describe("dispatchOwedIndependentReviews", () => {
     expect(d.owedRoutes).toHaveBeenCalledWith("BI-1", "AGT-EXT-CODEX", expect.objectContaining({ target: "completion" }));
   });
 
-  it("only considers items still awaiting acceptance", async () => {
+  it("only considers items awaiting acceptance or still in design and delivery", async () => {
     prismaMock.backlogItem.findMany.mockResolvedValue([]);
     const d = deps();
     await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([]);
     expect(prismaMock.backlogItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { itemId: { in: ["BI-1"] }, status: "awaiting-acceptance" },
+      where: { itemId: { in: ["BI-1"] }, status: { in: ["awaiting-acceptance", "open", "in-progress"] } },
     }));
+  });
+});
+
+// BI-3A462B04: owed design-stage reviews no longer wait on the author's client.
+describe("dispatchOwedIndependentReviews — design-stage reviews of open items (BI-3A462B04)", () => {
+  const designPacket = { ...packet, requestKey: "initiative-readiness:BI-1:spec-approval:def" };
+
+  it("sends an open item's owed design review on the author's live connection", async () => {
+    prismaMock.backlogItem.findMany.mockResolvedValue([{ itemId: "BI-1", status: "open" }]);
+    const d = deps({ owedRoutes: vi.fn(async () => [{ workroomId: "WC-1", requestCoworker: designPacket }]) });
+    await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([
+      expect.objectContaining({ itemId: "BI-1", outcome: "dispatched", requestKey: designPacket.requestKey }),
+    ]);
+    expect(d.owedRoutes).toHaveBeenCalledWith("BI-1", "AGT-EXT-CODEX", expect.objectContaining({ target: "design" }));
+    // The author's own consent-bound connection carries it, never another person's.
+    expect(d.findConnection).toHaveBeenCalledWith("user-1", "AGT-EXT-CODEX");
+    expect(d.findUserConnection).not.toHaveBeenCalled();
+    expect(d.execute).toHaveBeenCalledWith(expect.objectContaining({ toolName: "request_coworker", rawParams: designPacket }));
+  });
+
+  it("records why, and leaves it for the author, when the author has no live connection", async () => {
+    prismaMock.backlogItem.findMany.mockResolvedValue([{ itemId: "BI-1", status: "in-progress" }]);
+    const d = deps({ findConnection: vi.fn(async () => null), owedRoutes: vi.fn(async () => [{ workroomId: "WC-1", requestCoworker: designPacket }]) });
+    await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([expect.objectContaining({ outcome: "no-author-connection" })]);
+    expect(d.execute).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for an open item whose design reviews are not owed", async () => {
+    prismaMock.backlogItem.findMany.mockResolvedValue([{ itemId: "BI-1", status: "open" }]);
+    const d = deps({ owedRoutes: vi.fn(async () => []) });
+    await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([expect.objectContaining({ outcome: "nothing-owed" })]);
+    expect(d.execute).not.toHaveBeenCalled();
   });
 });
 
@@ -202,5 +234,37 @@ describe("dispatchOwedIndependentReviews — Build Studio builds in plan (BI-926
     const d = deps();
     await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([]);
     expect(d.owedRoutes).not.toHaveBeenCalled();
+  });
+});
+
+// BI-2C8750FC: the room drive's review stage sends one packet through the same runner.
+describe("dispatchReviewerRequest (the drive's review-stage dispatch)", () => {
+  const personRoom = { roomId: "row-1", capsuleId: "WC-1", userId: "user-1", agentId: null };
+
+  it("carries person-authored work on the person's own live connection", async () => {
+    const d = deps({ findUserConnection: vi.fn(async () => connection as never) });
+    const outcome = await dispatchReviewerRequest({ room: personRoom, itemId: "BI-1", requestCoworker: packet, carrier: "requesting-user", now: NOW, deps: d });
+    expect(outcome).toMatchObject({ outcome: "dispatched", requestKey: packet.requestKey, capsuleId: "WC-1" });
+    expect(d.findUserConnection).toHaveBeenCalledWith("user-1");
+    expect(d.findConnection).not.toHaveBeenCalled();
+    expect(d.execute).toHaveBeenCalledWith(expect.objectContaining({ toolName: "request_coworker", rawParams: packet }));
+  });
+
+  it("is idempotent on the request key within the cooldown", async () => {
+    prismaMock.workroomActivity.findFirst.mockResolvedValue({ id: "recent" });
+    const d = deps({ findUserConnection: vi.fn(async () => connection as never) });
+    const outcome = await dispatchReviewerRequest({ room: personRoom, itemId: "BI-1", requestCoworker: packet, carrier: "requesting-user", now: NOW, deps: d });
+    expect(outcome.outcome).toBe("cooling-down");
+    expect(d.execute).not.toHaveBeenCalled();
+  });
+
+  it("refuses a packet with no request key and records why it could not send without a connection", async () => {
+    const d = deps();
+    expect((await dispatchReviewerRequest({ room: personRoom, itemId: "BI-1", requestCoworker: { targetAgent: "AGT-WS-REVIEW" }, carrier: "requesting-user", now: NOW, deps: d })).outcome)
+      .toBe("refused");
+    const outcome = await dispatchReviewerRequest({ room: personRoom, itemId: "BI-1", requestCoworker: packet, carrier: "requesting-user", now: NOW, deps: d });
+    expect(outcome.outcome).toBe("no-author-connection");
+    expect(prismaMock.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({ summary: expect.stringContaining("no live authorized connection") }) });
+    expect(d.execute).not.toHaveBeenCalled();
   });
 });

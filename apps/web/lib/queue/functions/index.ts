@@ -30,6 +30,7 @@ import { buildExecute } from "./build-execute";
 import { preBuildReviewRepair } from "./pre-build-review-repair";
 import { buildResumeAfterUpgradePause } from "./build-resume-after-upgrade-pause";
 import { buildGauntletRepair } from "./build-gauntlet-repair";
+import { agentChildThreadRun } from "./agent-child-thread-run";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -52,6 +53,7 @@ import { wikiLint } from "./wiki-lint";
 import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verification";
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
 import { queueMetricsAggregator } from "./queue-metrics-aggregator";
+import { workroomFlowReview } from "./workroom-flow-review";
 import { businessMetricsAggregator } from "./business-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
 import { mcpCallEfficiencyScan } from "./mcp-call-efficiency-scan";
@@ -190,6 +192,7 @@ export const scheduledFunctions = [
   wikiLint,
   skillMetricsAggregator,
   queueMetricsAggregator, // EP-3516E23D P1: hourly QueueTelemetryEvent → QueueMetricSnapshot rollup
+  workroomFlowReview, // EP-B70E718D F8: daily flow review → ImprovementSignal per sustained bottleneck
   businessMetricsAggregator, // BI-PLAN-005: hourly operational sources → owner/manager BusinessMetricRollup
   skillCurator,
   mcpCallEfficiencyScan, // BI-A08EBAEC: daily ToolExecution thrash/volume/failure findings → PlatformNotification
@@ -270,6 +273,7 @@ export const eventFunctions = [
   preBuildReviewRepair,
   buildResumeAfterUpgradePause, // BI-E9DAA23F: on platform.quiescence-cleared, resume builds the pause held
   buildGauntletRepair,
+  agentChildThreadRun, // BI-287E1DD0: delegated child threads run as durable jobs
   assuranceBomGenerate,
   assuranceScanRun,
   deliberationRun,

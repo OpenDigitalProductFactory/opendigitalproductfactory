@@ -31,7 +31,37 @@ export interface GeoLocationState {
   refresh: () => Promise<void>;
 }
 
-export function useGeolocation(): GeoLocationState {
+export type OneFixResult =
+  | { status: "fix"; latitude: number; longitude: number; accuracyMeters: number }
+  | { status: "denied" }
+  | { status: "unavailable"; message: string };
+
+/**
+ * One foreground position fix, asking for permission only now (BI-C318C227
+ * §2.2). Called from a person's tap, never on mount; no watch and no
+ * background location.
+ */
+export async function takeOneFix(): Promise<OneFixResult> {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") return { status: "denied" };
+    const position = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+    });
+    return {
+      status: "fix",
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracyMeters: position.coords.accuracy ?? Number.POSITIVE_INFINITY,
+    };
+  } catch (err) {
+    console.warn("[takeOneFix] location unavailable", err);
+    return { status: "unavailable", message: LOCATION_UNAVAILABLE_MESSAGE };
+  }
+}
+
+export function useGeolocation(options: { auto?: boolean } = {}): GeoLocationState {
+  const auto = options.auto ?? true;
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [permission, setPermission] = useState<GeoLocationState["permission"]>(
@@ -68,8 +98,8 @@ export function useGeolocation(): GeoLocationState {
   // re-request if they revoked the permission in iOS Settings between
   // launches.
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (auto) void refresh();
+  }, [auto, refresh]);
 
   return {
     latitude,

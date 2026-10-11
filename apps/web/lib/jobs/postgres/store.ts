@@ -353,12 +353,21 @@ export function releaseRun(pool: Pool, runId: string, owner: string): Promise<bo
 
 // ─── Maintenance ───────────────────────────────────────────────────────────
 
-/** A run whose lease expired goes back to the queue; its slots are freed. */
+export const LEASE_EXPIRED_ERROR = "lease_expired: the worker stopped renewing its lease";
+
+/**
+ * A run whose lease expired goes back to the queue; its slots are freed. The
+ * lost attempt COUNTS (BI-6BB830E4): a run that kills its worker every time
+ * would otherwise requeue forever. The next claim of a run with no attempts
+ * left fails it through onFailure (`executeRun`).
+ */
 export async function recoverExpiredLeases(pool: Pool): Promise<number> {
   return withTransaction(pool, async (client) => {
     const { rows } = await client.query<{ id: string }>(
-      `UPDATE "JobRun" SET status = 'queued', "runAfter" = now(), "leaseOwner" = NULL, "leaseExpiresAt" = NULL, "updatedAt" = now()
+      `UPDATE "JobRun" SET status = 'queued', "runAfter" = now(), attempt = attempt + 1, error = $1,
+         "leaseOwner" = NULL, "leaseExpiresAt" = NULL, "updatedAt" = now()
        WHERE status = 'running' AND "leaseExpiresAt" < now() RETURNING id`,
+      [LEASE_EXPIRED_ERROR],
     );
     await releaseRunResources(client, rows.map((row) => row.id));
     return rows.length;

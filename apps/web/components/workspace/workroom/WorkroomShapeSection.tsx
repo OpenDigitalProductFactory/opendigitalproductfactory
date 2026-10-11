@@ -3,7 +3,10 @@
 import type { ShapeGraph } from "@/lib/work-management/shape-projection";
 import type { WorkroomView } from "@/lib/work-management/room-types";
 
+import type { WorkroomFlowMapModel } from "@/lib/work-management/workroom-flow-map";
+
 import { ShapeViewToggle, type WorkroomViewMode } from "./ShapeViewToggle";
+import { WorkroomFlowMap } from "./WorkroomFlowMap";
 import { WorkroomShape } from "./WorkroomShape";
 
 /**
@@ -12,11 +15,14 @@ import { WorkroomShape } from "./WorkroomShape";
 export function WorkroomShapeSection({
   graph,
   room,
+  flowMap = null,
   mode,
   onModeChange,
 }: {
   graph: ShapeGraph;
   room: WorkroomView;
+  /** EP-B70E718D F3: drawn above the step list when the room's shape resolves. */
+  flowMap?: WorkroomFlowMapModel | null;
   mode: WorkroomViewMode;
   onModeChange: (next: WorkroomViewMode) => void;
 }) {
@@ -39,6 +45,7 @@ export function WorkroomShapeSection({
         </div>
         <ShapeViewToggle mode={mode} onChange={onModeChange} />
       </div>
+      {mode === "shape" && flowMap ? <div className="mt-4"><WorkroomFlowMap model={flowMap} /></div> : null}
       {mode === "shape" ? <WorkroomShape graph={graph} /> : null}
     </div>
   );

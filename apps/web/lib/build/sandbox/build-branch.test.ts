@@ -459,6 +459,8 @@ describe("getClientIdentity upstream default", () => {
 // commit (60 such resets in the sandbox's last 400 reflog entries), the
 // widest writes on the shared index that concurrent builds collide on.
 describe("sandbox repo-state probe", () => {
+  // The probe is a POSIX command for the Linux sandbox. Run `sh` in the fixture working directory; a
+  // relative path avoids Windows backslashes being read as shell escapes.
   function probe(dir: string): string {
     return execFileSync("sh", ["-c", buildSandboxRepoStateProbeCommand(".")], { cwd: dir, encoding: "utf8" });
   }

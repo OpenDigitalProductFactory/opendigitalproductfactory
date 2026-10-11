@@ -39,16 +39,30 @@ describe("replayDriveLog", () => {
     ]);
   });
 
-  it("reproduces the 23 September pile: rooms held at one stage with the missing-coordinator cause", () => {
+  it("reproduces the 23 September pile from the drive rows as written: held at the first stage, missing coordinator", () => {
+    // The live rows: the rooms never entered a stage, and the drive wrote the
+    // deviation into its ledger, not into conformance.deviations.
+    const paused = (hour: number) => ({
+      recordedAt: t(23, hour),
+      payload: {
+        action: "pause",
+        reason: "conformance_pause",
+        stageKey: null,
+        lastCycleKey: null,
+        ledger: ["missing_explicit_coordinator: An executable room requires exactly one explicit Process Overseer."],
+      },
+    });
     const rooms = Array.from({ length: 200 }, (_, i) => ({
       capsuleId: `WC-${i}`,
       scopeClaims: [{ workShape: SHAPE }],
-      rows: [tick(23, 0, "attention", "role_stage", "reproduce"), tick(23, 1, "pause", "conformance_pause", null)],
+      rows: [paused(5), paused(6), paused(7)],
     }));
-    // Each room switches hold cause at the same stage: released, then held again with the new cause.
-    const held = replayDriveLog(rooms, t(30)).filter((r) => r.transition === "held" && r.laneKey === "conformance_pause");
+    const out = replayDriveLog(rooms, t(30));
+    const held = out.filter((r) => r.transition === "held");
     expect(held).toHaveLength(200);
+    expect(new Set(held.map((r) => r.laneKey))).toEqual(new Set(["conformance_pause:missing_explicit_coordinator"]));
     expect(new Set(held.map((r) => r.queueKey))).toEqual(new Set([`wr:${SHAPE}:reproduce`]));
+    expect(out).toHaveLength(400);
   });
 
   it("skips rooms with no declared shape and rows at or after the cut-off", () => {
@@ -63,6 +77,7 @@ describe("backfillWorkroomStageTelemetry", () => {
     const days: string[] = [];
     const d: StageBackfillDeps = {
       alreadyBackfilled: async () => false,
+      clearSuperseded: async () => [],
       firstLiveEventAt: async () => t(26),
       loadDriveLog: async () => [
         {
@@ -96,5 +111,23 @@ describe("backfillWorkroomStageTelemetry", () => {
     expect(result).toMatchObject({ ran: true, transitions: 3, days: 2, until: t(26).toISOString() });
     expect(inserted.every((row) => (row as { actorId: string }).actorId === STAGE_BACKFILL_ACTOR)).toBe(true);
     expect(days).toEqual(["2026-09-23", "2026-09-24"]);
+  });
+
+  it("a new replay version clears the rows an earlier one wrote and re-aggregates the days they covered", async () => {
+    const order: string[] = [];
+    const { d, days } = deps({
+      clearSuperseded: async () => {
+        order.push("clear");
+        return ["2026-09-20"];
+      },
+      insert: async (rows) => {
+        order.push("insert");
+        return rows.length;
+      },
+    });
+    await backfillWorkroomStageTelemetry(d);
+    expect(order).toEqual(["clear", "insert"]);
+    expect(days).toEqual(["2026-09-20", "2026-09-23", "2026-09-24"]);
+    expect(STAGE_BACKFILL_ACTOR).toBe("backfill:drive-log:v2");
   });
 });

@@ -14,7 +14,9 @@ import type { RecipeRow, RoutedExecutionPlan } from "./recipe-types";
 import { resolveSamplingProfile, type ResolvedSampling } from "./sampling-profile";
 import { effectiveSampling } from "./vendor-sampling-catalog";
 import { expressEffort, resolveEffort, type ReasoningDepth } from "./effort-expression";
-import type { HarnessRecipe } from "./harness-recipe";
+import { applyHarnessConfidenceOverride, bindHarnessRecipeForActivity, type HarnessRecipe, type HarnessBindingHint } from "./harness-recipe";
+import type { ActivityHarnessConfidenceOverride } from "./activity-harness-governance";
+import type { ActivityContract } from "./activity-contract";
 import { usesResponsesApi, usesCliAdapter, usesCodexCli } from "./provider-utils";
 import {
   compileOpenRouterExecutionPolicy,
@@ -80,6 +82,21 @@ export type ParameterizationContext = Pick<
  * lived in the champion-recipe maintenance job, so any dispatch that did not
  * match a recipe row went out with `providerSettings: {}` — provider defaults.
  */
+function resolvePlanEffort(contract: RequestContract, ctx: ParameterizationContext) {
+  const effort = resolveEffort({
+    reasoningDepth: contract.reasoningDepth as ReasoningDepth,
+    estimatedInputTokens: contract.estimatedInputTokens,
+    maxOutputTokens: ctx.maxOutputTokens,
+    capabilities: ctx.capabilities,
+  });
+
+  return expressEffort(ctx.providerId, effort, ctx.capabilities, {
+    modelClass: ctx.modelClass,
+    isLocalNative: isLocalNativeProvider(ctx.providerId),
+  });
+
+}
+
 function applySituationalParameters(
   plan: RoutedExecutionPlan,
   contract: RequestContract,
@@ -88,17 +105,7 @@ function applySituationalParameters(
 ): RoutedExecutionPlan {
   if (!ctx) return plan;
 
-  const effort = resolveEffort({
-    reasoningDepth: contract.reasoningDepth as ReasoningDepth,
-    estimatedInputTokens: contract.estimatedInputTokens,
-    maxOutputTokens: ctx.maxOutputTokens,
-    capabilities: ctx.capabilities,
-  });
-
-  const expression = expressEffort(ctx.providerId, effort, ctx.capabilities, {
-    modelClass: ctx.modelClass,
-    isLocalNative: isLocalNativeProvider(ctx.providerId),
-  });
+  const expression = resolvePlanEffort(contract, ctx);
 
   const sampling: ResolvedSampling = resolveSamplingProfile({
     sampling: effectiveSampling(ctx),
@@ -277,6 +284,31 @@ export function buildDefaultPlan(
 
 // ── attachHarnessRecipeToPlan ───────────────────────────────────────────────
 
+/** An explicit activity allowance is a total completion budget, including thinking. */
+export function activityBudgetExclusion(
+  endpoint: EndpointManifest,
+  contract: RequestContract,
+  activity?: ActivityContract,
+): string | null {
+  if (!activity) return null;
+  const { maxInputTokens, maxOutputTokens } = activity.tokenEnvelope;
+  if (![maxInputTokens, maxOutputTokens].every(n => Number.isSafeInteger(n) && n > 0)) {
+    return "Invalid activity token envelope";
+  }
+  if (contract.estimatedInputTokens > maxInputTokens) return "Activity input allowance exceeded";
+  if (resolvePlanEffort(contract, endpoint).extraMaxTokens >= maxOutputTokens) {
+    return "Activity completion allowance leaves no room beyond fixed thinking budget";
+  }
+  if (endpoint.maxOutputTokens === null || endpoint.maxOutputTokens < maxOutputTokens) {
+    return "Activity completion allowance exceeds known model output capacity";
+  }
+  if (endpoint.maxContextTokens === null || endpoint.maxContextTokens <
+      Math.max(contract.minContextTokens ?? 0, contract.estimatedInputTokens + maxOutputTokens)) {
+    return "Activity input and completion allowance exceeds known model context capacity";
+  }
+  return null;
+}
+
 export function attachHarnessRecipeToPlan(
   plan: RoutedExecutionPlan,
   harnessRecipe: HarnessRecipe,
@@ -297,4 +329,20 @@ export function attachHarnessRecipeToPlan(
       executionAdapterHint: harnessRecipe.executionAdapterHint,
     },
   };
+}
+
+/** Bind admitted activity execution settings and its governed harness together. */
+export function bindActivityExecutionPlan(
+  plan: RoutedExecutionPlan,
+  activity: ActivityContract,
+  hint: HarnessBindingHint,
+  overrides?: ActivityHarnessConfidenceOverride[],
+): RoutedExecutionPlan {
+  const harness = applyHarnessConfidenceOverride(
+    bindHarnessRecipeForActivity(activity, hint), hint, overrides,
+  );
+  return attachHarnessRecipeToPlan({
+    ...plan,
+    maxTokens: activity.tokenEnvelope.maxOutputTokens,
+  }, harness);
 }
