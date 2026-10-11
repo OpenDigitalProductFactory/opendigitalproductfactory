@@ -96,9 +96,9 @@ export async function dispatchRoutedSemanticReview(
     const response = await routeAndCall(
       [{ role: "user", content: prompt }],
       branch.systemPrompt,
-      // Ordinary platform development is internal. The shared screener still
-      // classifies the full payload and enforces export/clearance obligations.
-      "internal",
+      // Public platform source uses the existing development route. The shared
+      // screener still raises sensitivity for protected data in the full payload.
+      "development",
       {
         taskType: "build-review",
         budgetClass: context.strategyProfile === "economy" ? "balanced" : "quality_first",

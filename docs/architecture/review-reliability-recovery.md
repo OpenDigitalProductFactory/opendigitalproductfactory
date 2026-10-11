@@ -123,3 +123,24 @@ portal logs reported no eligible confidential `build-review` endpoint.
 Those facts do not establish publication or completion. This later guidance
 edit changes the committed review identity; the prior gate must not be
 represented as verification of the updated tree.
+
+### Public development routing, 2026-10-11
+
+The founder confirmed that ordinary development of this public repository can
+use public provider accounts. Account business terms are not a prerequisite
+for public source-only development. Confidential work, including employee and
+tax records, secrets and explicitly protected source, retains its protections.
+
+The shared inference screener already implements this distinction through the
+`development` route: source-only payloads can remain public, while protected
+data and governed classification hints raise sensitivity. Semantic review was
+instead declaring `internal`; the same source-only packet then became
+`confidential` and excluded public accounts. Correct the review caller, rather
+than weakening provider clearance or globally reclassifying source code.
+
+The first-failing regression reproduces that caller mismatch. After correction,
+32 tests pass across routed semantic review and shared payload screening,
+including all review branches, secrets, employee records and financial
+identifiers. The latter still require local-only routing. These source-local
+results do not establish native review or verification of the final committed
+tree; publication still requires its exact-head gates.

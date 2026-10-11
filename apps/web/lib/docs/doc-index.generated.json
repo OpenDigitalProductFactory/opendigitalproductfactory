@@ -2353,7 +2353,8 @@
         "conflicting-and-overlapping-work",
         "evidence-and-recovery-boundary",
         "connection-and-integration-correction-2026-10-11",
-        "explicit-stop-reasons-2026-10-11"
+        "explicit-stop-reasons-2026-10-11",
+        "public-development-routing-2026-10-11"
       ]
     },
     "docs/architecture/section-navigation.md": {
