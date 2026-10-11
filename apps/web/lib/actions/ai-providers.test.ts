@@ -26,6 +26,7 @@ const {
     credentialEntry: {
       findUnique: vi.fn(),
       upsert: vi.fn(),
+      update: vi.fn(),
     },
     platformConfig: {
       findUnique: vi.fn(),
@@ -35,6 +36,7 @@ const {
     aiProviderConnection: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
   mockAutoDiscoverAndProfile: vi.fn(),
@@ -105,8 +107,24 @@ describe("updateProviderConnectionPosture", () => {
     mockCan.mockReturnValue(true);
   });
 
+  it("attests the selected account without activating or changing the default account", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ id: "connection-b", providerId: "anthropic", entitlements: {}, evidenceStatus: "unreviewed" });
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ status: "active" });
+    expect(await updateProviderConnectionPosture({ providerId: "anthropic", connectionId: "account-b", accountClass: "business-team", noTraining: true })).toEqual({});
+    expect(mockPrisma.aiProviderConnection.update).toHaveBeenCalledWith(expect.objectContaining({ where: { connectionId: "account-b" } }));
+    expect(mockRecordProviderTrustEvidence).toHaveBeenCalledWith(expect.objectContaining({ providerConnectionDbId: "connection-b" }));
+    expect(mockActivateProvider).not.toHaveBeenCalled();
+  });
+
+  it("rejects evidence changes to an account belonging to another provider", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ id: "wrong", providerId: "openai" });
+    expect(await updateProviderConnectionPosture({ providerId: "anthropic", connectionId: "wrong", accountClass: "enterprise", noTraining: true })).toHaveProperty("error");
+    expect(mockPrisma.aiProviderConnection.update).not.toHaveBeenCalled();
+  });
+
   it("records an operator attestation without promoting it to contract proof", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      providerId: "anthropic",
       id: "connection-db-1",
       entitlements: { adminAuditControls: true },
       evidenceStatus: "unreviewed",
@@ -148,6 +166,7 @@ describe("updateProviderConnectionPosture", () => {
 
   it("supersedes prior operator evidence when the declaration returns to unknown", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      providerId: "anthropic",
       id: "connection-db-1",
       entitlements: {},
       evidenceStatus: "operator-attested",
@@ -174,6 +193,7 @@ describe("updateProviderConnectionPosture", () => {
 
   it("preserves region entitlement and evidence when the current setup has no region requirement", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      providerId: "zai",
       id: "connection-db-1",
       entitlements: { enabledRegions: ["us"], regionalProcessing: true },
       evidenceStatus: "operator-attested",
@@ -198,6 +218,7 @@ describe("updateProviderConnectionPosture", () => {
 
   it("records a normalized direct-provider region guarantee on the exact connection", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      providerId: "zai",
       id: "connection-db-1",
       entitlements: {},
       evidenceStatus: "unreviewed",
@@ -232,6 +253,7 @@ describe("updateProviderConnectionPosture", () => {
 
   it("records OpenRouter controls on the exact connection without creating enterprise proof", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      providerId: "openrouter",
       entitlements: {},
       evidenceStatus: "unreviewed",
     });
@@ -302,6 +324,23 @@ describe("testProviderAuth", () => {
         text: async () => 'data: {"type":"response.completed","response":{"status":"completed"}}\n',
       }),
     );
+  });
+
+  it("authenticates only the selected account and preserves a concurrent disable", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "openai", baseUrl: "https://api.openai.com/v1", authMethod: "api_key", authHeader: "Authorization", families: [], enabledFamilies: [], supportedAuthMethods: ["api_key"] });
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ providerId: "openai", connectionId: "account-b", credentialEntryId: "credential-b", authMethod: "api-key", status: "active", updatedAt: new Date("2026-10-01") });
+    mockPrisma.aiProviderConnection.updateMany.mockResolvedValue({ count: 1 });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "key-b" });
+    Object.assign(mockPrisma, { $transaction: async (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma) });
+    expect(await testProviderAuth("openai", false, "account-b")).toMatchObject({ ok: true });
+    expect(fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ headers: { Authorization: "Bearer key-b" } }));
+    expect(mockPrisma.credentialEntry.update).toHaveBeenCalledWith({ where: { id: "credential-b" }, data: { status: "ok" } });
+    expect(mockPrisma.aiProviderConnection.updateMany).toHaveBeenCalledWith({ where: { connectionId: "account-b", credentialEntryId: "credential-b", updatedAt: new Date("2026-10-01"), status: { not: "disabled" } }, data: { status: "active" } });
+    expect(mockActivateProvider).not.toHaveBeenCalled();
+    mockPrisma.aiProviderConnection.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.credentialEntry.update.mockClear();
+    expect(await testProviderAuth("openai", false, "account-b")).toMatchObject({ ok: false, message: expect.stringContaining("Account changed") });
+    expect(mockPrisma.credentialEntry.update).not.toHaveBeenCalled();
   });
 
   it("triggers reconciliation for OAuth subscription-style providers", async () => {
