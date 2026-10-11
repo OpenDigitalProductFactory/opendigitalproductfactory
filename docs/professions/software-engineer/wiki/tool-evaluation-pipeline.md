@@ -35,6 +35,18 @@ In-platform coworkers proposing tool additions, external coding agents writing d
 
 Before adding a dependency, run `/project:tool-evaluation` (slash command for the pipeline) or open the eval flow at the platform UI. The six agents (security, architecture, compliance, integration, and two cross-checks) produce a signed evidence bundle; approval pins the version in the approved-tools registry with a re-eval schedule. When an existing dependency needs an update, re-run the pipeline against the new version — the previous approval covers the previous version only.
 
+## Analysis tools and inference providers
+
+Evaluate selected operations against a named business job before expanding a tool catalog. Prefer documented APIs, exports, and supplied source when they answer the question. Pin evaluated release bytes, target identity, and engine versions; identical package version strings do not establish identical code.
+
+For ecosystem analysis, distinguish static inspection from navigation, interaction, network capture, or executing a target. Verify target authorization, containment, supported host, bounded effects, resource limits, cancellation/cleanup, and retention. Export evidence needed beyond an analysis session. Upstream MCP availability and annotations never replace DPF's tool approval, grant intersection, effect classification, or digest checks.
+
+Use fixtures with known behavior and intentionally unknown cases. Findings must trace to retained evidence; an inference or repeated model agreement is not an independent behavioral test. Keep confirmed coverage assessments intact and deduplicate gaps through existing intake.
+
+For fast inference, qualify correctness and tool behavior as well as end-to-end latency. Measure retrieval, input preparation, generation, tool execution, validation, and concurrent workload behavior. Protocol compatibility and tokens per second alone do not qualify a provider. Record model-update constraints, power/support costs, deployment availability, and continuity on provider withdrawal.
+
+Extend existing assessment, governance, routing, and evidence contracts before adding substrate. The [REA strategy](../../../strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md) supplies the dated candidate evidence and fixture-first proposal; it is not an approved-tool entry or runtime test receipt.
+
 ## Decision Dimensions
 
 - `governance_compliance: 0.8` — the pipeline is the platform's primary dependency-governance gate.
