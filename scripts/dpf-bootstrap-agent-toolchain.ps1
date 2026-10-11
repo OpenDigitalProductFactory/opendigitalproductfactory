@@ -578,7 +578,7 @@ if (-not $claudeWired -and -not $codexWired -and -not $grokWired -and -not $agyW
     $state.readinessState = "missing_cli"
 } elseif ($AuthMode -eq "oauth") {
     $state.readinessState = "authorization_pending"
-} elseif (-not $mcpReadiness.ok) {
+} elseif ((-not $mcpReadiness.ok -or -not $mcpReadiness.delivery -or -not $mcpReadiness.delivery.ready)) {
     if ($mcpReadiness.reason -in @("no_token", "scope_insufficient")) {
         $state.readinessState = "missing_token"
     } elseif ($mcpReadiness.reason -in @("endpoint_unreachable", "unexpected_shape")) {
@@ -610,6 +610,9 @@ $copyTable = @{
     "failed_smoke"   = @{ message = "The agent is installed but did not apply a DPF kernel principle.";                  primaryAction = "View evidence" }
 }
 $copy = $copyTable[$state.readinessState]
+if ($mcpReadiness.reason -eq "coworker_grants_insufficient") {
+    $copy = @{ message = "The acting coworker lacks approved delivery permissions. Platform install or upgrade must reconcile them."; primaryAction = "Open readiness" }
+}
 
 $upstreamAdvisory = $null
 if ($plan.upstreamDrift -and $plan.upstreamDrift.advisory) {

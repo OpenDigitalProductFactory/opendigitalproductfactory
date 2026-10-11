@@ -16,7 +16,7 @@ describe("materializeAgentToolchainState", () => {
       claudeCodeWired: true,
       codexWired: true,
       memorySeededAt: "2026-05-27T02:00:00.000Z",
-      mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-05-27T02:00:00.000Z" },
+      mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-05-27T02:00:00.000Z", delivery: { ready: true, missingTokenTools: [], missingCoworkerTools: [], unavailableTools: [] } },
       smokeTest: { result: "passed", kernelPrincipleObserved: "destructive-actions-require-explicit-go", transcript: "..." },
     });
 
@@ -33,7 +33,7 @@ describe("materializeAgentToolchainState", () => {
       claudeCodeWired: true,
       codexWired: true,
       memorySeededAt: "2026-05-27T02:00:00.000Z",
-      mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-05-27T02:00:00.000Z" },
+      mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-05-27T02:00:00.000Z", delivery: { ready: true, missingTokenTools: [], missingCoworkerTools: [], unavailableTools: [] } },
       smokeTest: { result: "failed", transcript: "Sure, here is...", reason: "complied" },
     });
 
@@ -71,7 +71,7 @@ describe("install-state.schema.json agentToolchain block", () => {
       claudeCodeWired: true,
       codexWired: true,
       memorySeededAt: null,
-      mcpReadiness: { ok: true, toolCount: 1, observedAt: "2026-05-27T02:00:00.000Z" },
+      mcpReadiness: { ok: true, toolCount: 1, observedAt: "2026-05-27T02:00:00.000Z", delivery: { ready: true, missingTokenTools: [], missingCoworkerTools: [], unavailableTools: [] } },
       smokeTest: { result: "skipped", reason: "no_token" },
     });
 

@@ -220,12 +220,16 @@ before the complete inventory. Preserve per-context execution reports and fail
 on unresolved selectors, missing paths, navigation/redirect failures, duplicate,
 missing or unexpected results. No exhaustive served run is claimed yet.
 
-**Permission implementation is blocked by conditions:** the item has no
-initiative scope baseline, and its bug/medium signals require an operator
-classification before the server can return the appropriate review route.
-Two permission source scopes remain in the preview Workroom pending the
-platform's explicit scope-transfer approval. The permission Workroom is
-WC-3D49B086; it has no implementation edits and no grants were self-provisioned.
+The operator classified BI-9FA87F90 as Medium. Permission implementation was
+admitted by IRD-698A15D2EE6E in WC-3D49B086, with immutable coverage
+cmv4eczbalsa601peg2e6h9il. Its source adds the two missing approved UX grants to
+external coworker defaults and checks the full workflow at both authority layers.
+No live grant was changed. Scope-transfer approval cmv4c4c4vilts01petn6hxx4n is
+still waiting; the reserved token-scope and legacy probe files remain untouched.
+The preview candidate afc3b06f40 passed its governed merged-code gate, but native
+independent review returned an uncertain outcome and no publication verdict.
+Permission source, canonical installation and independent live acceptance are
+not yet complete. The feature remains unchanged and has no PR or deployment.
 
 The cursor follows PostgreSQL's transaction-bound `DECLARE ... NO SCROLL` and
 `FETCH FORWARD <count>` contracts, with one node-postgres Client owning its
@@ -240,3 +244,12 @@ runs admitted-feature migrations under `/workspace`, then the packaged clone
 under `/app`. The served portal remains bound to the preserved feature. No
 feature source overlay, ad hoc image build or production bootstrap is allowed.
 An install predating the repair refuses initialization before service mutation.
+
+Permission readiness uses one 22-tool inventory in the bootstrap planning
+package. Portal status uses persisted coworker authority; live discovery checks
+both token and coworker grants for every tool. Both shell adapters reject old
+count-only probe records. Optional bounded proof is accepted by supported state
+schemas; credential fields remain forbidden. The install-state validator's
+existing inline schema subset is reused. Custom/read-only/OAuth authority and
+durable grant-revocation tombstones are preserved by existing authorization and
+platform seed reconciliation.

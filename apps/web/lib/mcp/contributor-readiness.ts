@@ -1,3 +1,5 @@
+import { DELIVERY_WORKFLOW_TOOLS, deliveryReadinessFromDiscovery, type DeliveryReadinessReport } from "../../../../packages/dpf-bootstrap/src/agent-toolchain/delivery-readiness-contract";
+import { getAgentToolGrantsAsync, isToolAllowedByGrants, TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 import {
   copyMcpApiTokenPlaintext,
   listMcpApiTokens,
@@ -26,7 +28,7 @@ export type ContributorMcpRecommendedAction =
 export type ContributorMcpProbe =
   | { status: "not_run" }
   | { status: "success"; checkedAt: string; toolCount: number }
-  | { status: "failed"; checkedAt: string; message: string }
+  | { status: "failed"; checkedAt: string; message: string; delivery?: DeliveryReadinessReport }
   | { status: "unavailable"; message: string };
 
 export type ContributorMcpTokenRow = Awaited<ReturnType<typeof listMcpApiTokens>>[number];
@@ -46,6 +48,9 @@ export type ContributorMcpReadiness = {
     expiresAt: string | null;
   };
   missingGrants: string[];
+  missingTokenTools?: string[];
+  missingCoworkerTools?: string[];
+  permissionLayer?: "token" | "coworker";
   requiredGrants: string[];
   recommendedScopes: string[];
   probe: ContributorMcpProbe;
@@ -155,7 +160,7 @@ async function runProbe(
         "content-type": "application/json",
         authorization: `Bearer ${copied.plaintext}`,
       },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "load_tools", arguments: { names: DELIVERY_WORKFLOW_TOOLS } } }),
     });
     if (!response.ok) {
       return cacheProbe(token.id, opts.now.getTime(), {
@@ -164,23 +169,11 @@ async function runProbe(
         message: `HTTP ${response.status}`,
       });
     }
-    const payload = (await response.json()) as {
-      result?: { tools?: unknown[] };
-      error?: { message?: string };
-    };
-    const tools = payload.result?.tools;
-    if (!Array.isArray(tools) || tools.length === 0) {
-      return cacheProbe(token.id, opts.now.getTime(), {
-        status: "failed",
-        checkedAt,
-        message: payload.error?.message ?? "tools/list returned no tools",
-      });
-    }
-    const probe: ContributorMcpProbe = {
-      status: "success",
-      checkedAt,
-      toolCount: tools.length,
-    };
+    const delivery = deliveryReadinessFromDiscovery(await response.json());
+    const probe: ContributorMcpProbe = delivery.ready ? {
+      status: "success", checkedAt, toolCount: DELIVERY_WORKFLOW_TOOLS.length,
+    } : { status: "failed", checkedAt, delivery,
+      message: `Delivery authority incomplete: token ${delivery.missingTokenTools.join(",")}; coworker ${delivery.missingCoworkerTools.join(",")}; unavailable ${delivery.unavailableTools.join(",")}` };
     return cacheProbe(token.id, opts.now.getTime(), probe);
   } catch (err) {
     return cacheProbe(token.id, opts.now.getTime(), {
@@ -220,11 +213,35 @@ export async function getContributorMcpReadiness(
     return baseResult("needs_grants", token, missingRequiredGrants(token));
   }
 
-  const result = baseResult("ready", readyToken, []);
+  if (!readyToken.agentId) return baseResult("needs_identity_binding", readyToken, []);
+  const missingTokenTools = DELIVERY_WORKFLOW_TOOLS.filter(name => !isToolAllowedByGrants(name, readyToken.scopes));
+  const coworkerGrants = await getAgentToolGrantsAsync(readyToken.agentId);
+  const missingCoworkerTools = DELIVERY_WORKFLOW_TOOLS.filter(name => !isToolAllowedByGrants(name, coworkerGrants));
+  const layer = missingTokenTools.length ? "token" : missingCoworkerTools.length ? "coworker" : undefined;
+  const missing = [...new Set((layer === "token" ? missingTokenTools : missingCoworkerTools)
+    .flatMap(name => TOOL_TO_GRANTS[name] ?? []).filter(grant => !(layer === "token" ? readyToken.scopes : coworkerGrants).includes(grant)))];
+  const result = baseResult(layer ? "needs_grants" : "ready", readyToken, missing);
+  result.identityBinding = "bound";
+  result.missingTokenTools = missingTokenTools;
+  result.missingCoworkerTools = missingCoworkerTools;
+  result.permissionLayer = layer;
+  if (layer === "coworker") result.recommendedAction = "none";
   if (opts.probe) {
-    result.probe = await runProbe(readyToken, {
-      now,
-    });
+    result.probe = await runProbe(readyToken, { now });
+    if (result.probe.status !== "success" && result.status === "ready") {
+      const report = result.probe.status === "failed" ? result.probe.delivery : undefined;
+      if (report?.missingTokenTools.length || report?.missingCoworkerTools.length) {
+        result.status = "needs_grants";
+        result.permissionLayer = report.missingTokenTools.length ? "token" : "coworker";
+        result.missingTokenTools = report.missingTokenTools;
+        result.missingCoworkerTools = report.missingCoworkerTools;
+        result.missingGrants = [...new Set((result.permissionLayer === "coworker" ? report.missingCoworkerTools : report.missingTokenTools).flatMap(name => TOOL_TO_GRANTS[name] ?? []))];
+        result.recommendedAction = result.permissionLayer === "coworker" ? "none" : "rotate_development_token";
+      } else {
+        result.status = "needs_identity_binding";
+        result.recommendedAction = "test_connection";
+      }
+    }
   }
   return result;
 }
