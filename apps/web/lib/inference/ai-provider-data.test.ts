@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // Use vi.hoisted so mockPrisma is available when vi.mock factory runs
 const mockPrisma = vi.hoisted(() => ({
+  aiProviderConnection: { findMany: vi.fn() },
   tokenUsage: {
     groupBy: vi.fn(),
   },
@@ -37,6 +38,7 @@ vi.mock("react", () => ({ cache: (fn: any) => fn }));
 
 import {
   getProviders,
+  getProviderAccounts,
   getProviderModelSummaries,
   getRecipesForProvider,
   getActivatedMcpServers,
@@ -45,6 +47,21 @@ import {
 } from "./ai-provider-data";
 
 beforeEach(() => { vi.clearAllMocks(); });
+
+describe("getProviderAccounts", () => {
+  it("returns separate account identities without raw secrets or tokens", async () => {
+    mockPrisma.aiProviderConnection.findMany.mockResolvedValue(["a", "b"].map((suffix) => ({
+      connectionId: `account-${suffix}`, providerId: "anthropic", label: `Account ${suffix}`,
+      createdAt: new Date("2026-10-08"), updatedAt: new Date("2026-10-08"), lastReviewedAt: null,
+      credentialEntry: { providerId: null, secretRef: `enc:secret-${suffix}`, cachedToken: `enc:access-${suffix}`, refreshToken: `enc:refresh-${suffix}`, clientId: null, clientSecret: null, tokenEndpoint: null, scope: null, status: "ok" },
+    })));
+    const accounts = await getProviderAccounts("anthropic");
+    expect(accounts.map((account) => account.connectionId)).toEqual(["account-a", "account-b"]);
+    expect(accounts[0].credential).toMatchObject({ providerId: "anthropic", secretHint: "••••••••", hasRefreshToken: true });
+    expect(JSON.stringify(accounts)).not.toMatch(/enc:|secret-a|access-a|refresh-a/);
+    expect(accounts[0]).not.toHaveProperty("credentialEntry");
+  });
+});
 
 describe("getProviders", () => {
   it("distinguishes an empty credential row from usable dispatch material", async () => {

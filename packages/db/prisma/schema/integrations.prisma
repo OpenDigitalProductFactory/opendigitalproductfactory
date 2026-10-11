@@ -97,7 +97,8 @@ model McpServerTool {
 
 model CredentialEntry {
   id                 String                @id @default(cuid())
-  providerId         String                @unique
+  /// Legacy default lookup. Additional accounts are owned by their connection.
+  providerId         String?               @unique
   secretRef          String?
   status             String                @default("unconfigured")
   updatedAt          DateTime              @updatedAt
@@ -319,7 +320,10 @@ model OAuthPendingFlow {
   state        String   @unique
   codeVerifier String
   providerId   String
+  connectionId String?
+  connection   AiProviderConnection? @relation(fields: [connectionId], references: [connectionId], onDelete: Cascade)
   createdAt    DateTime @default(now())
+  @@index([connectionId])
 }
 
 // Transient store for OAuth Device Flow (RFC 8628) sessions in flight.
