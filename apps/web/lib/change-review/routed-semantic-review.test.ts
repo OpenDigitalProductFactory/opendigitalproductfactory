@@ -19,20 +19,20 @@ beforeEach(() => {
 });
 
 describe("routed semantic review", () => {
-  it("keeps public development diffs eligible for public-account review in every branch", async () => {
+  it.each(["external", "build-studio"] as const)("protects ordinary source without authoritative classification on %s", async (surface) => {
     vi.mocked(routeAndCall).mockResolvedValue({
       content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),
     } as never);
     await dispatchRoutedSemanticReview("export function normalizePaths(paths: string[]) { return paths.filter(Boolean); }", {
-      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface: "external",
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface,
     });
     expect(routeAndCall).toHaveBeenCalledTimes(2);
     for (const [messages, systemPrompt, sensitivity] of vi.mocked(routeAndCall).mock.calls) {
       const screened = screenInferencePayload({ messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity } });
       expect(screened.receipt.classifiedDataClasses).toContain("source-code");
-      expect(screened.routeContext.sensitivity).toBe("development");
-      expect(screened.receipt.measuredSensitivity).toBe("public");
-      expect(screened.receipt.routeEffect).toBe("allow");
+      expect(sensitivity).toBe("internal");
+      expect(screened.routeContext.sensitivity).toBe("confidential");
+      expect(screened.receipt.measuredSensitivity).toBe("confidential");
     }
   });
 
@@ -161,7 +161,7 @@ describe("routed semantic review", () => {
 
     expect(routeAndCall).toHaveBeenCalledTimes(2);
     for (const call of vi.mocked(routeAndCall).mock.calls) {
-      expect(call[2]).toBe("development");
+      expect(call[2]).toBe("internal");
     }
     expect(result.decision).toBe("pass");
   });

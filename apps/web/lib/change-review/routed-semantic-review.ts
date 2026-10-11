@@ -96,9 +96,9 @@ export async function dispatchRoutedSemanticReview(
     const response = await routeAndCall(
       [{ role: "user", content: prompt }],
       branch.systemPrompt,
-      // Public platform source uses the existing development route. The shared
-      // screener still raises sensitivity for protected data in the full payload.
-      "development",
+      // This context has no authoritative source classification. Ordinary
+      // private code may contain no sensitive patterns, so retain the floor.
+      "internal",
       {
         taskType: "build-review",
         budgetClass: context.strategyProfile === "economy" ? "balanced" : "quality_first",
