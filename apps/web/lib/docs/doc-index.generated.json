@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 734,
+  "pageCount": 735,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2338,6 +2338,19 @@
         "fleet-safe-evolution",
         "derived-roadmap-boundary",
         "product-management-playbook-boundary"
+      ]
+    },
+    "docs/architecture/review-reliability-recovery.md": {
+      "publicHref": "/architecture/review-reliability-recovery/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "review-reliability-and-aligned-execution",
+        "objective-and-authority",
+        "existing-substrate-and-plan",
+        "conflicting-and-overlapping-work",
+        "evidence-and-recovery-boundary"
       ]
     },
     "docs/architecture/section-navigation.md": {

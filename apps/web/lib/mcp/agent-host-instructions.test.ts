@@ -33,6 +33,15 @@ describe("resolveAgentAuthorityTier", () => {
 });
 
 describe("buildAgentHostInstructions", () => {
+  it("carries scoped investment and conflict guidance on both host surfaces", () => {
+    for (const host of [CONSUMER, SOURCE]) {
+      const copy = buildAgentHostInstructions(host, { scope: "admin", scopes: [] });
+      expect(copy).toContain("80% refactoring");
+      expect(copy).toContain("default 20% refactoring, 80% new capability");
+      expect(copy).toContain("never infer them from the installation");
+      expect(copy).toContain("record the superseded guidance and overlapping work");
+    }
+  });
   it("makes a consumer runtime safe for a development agent", () => {
     const copy = buildAgentHostInstructions(CONSUMER, {
       scope: "write",
