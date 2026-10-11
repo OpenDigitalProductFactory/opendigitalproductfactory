@@ -82,3 +82,41 @@ need separately governed reconciliation; this patch must not revive a manually
 disabled model. Inference UI work remains dependent on an available served target
 and should reuse the existing trace projection. Complete routing exclusions could
 not be read because the posture tool truncates its unfiltered response.
+
+## Operator-authorized follow-through
+
+The operator authorized proceeding with each finding on October 11. This is a
+recovery work packet, not a live backlog claim or a completed deployment receipt.
+The connector dry run still reports `authorization_pending`, and this chat's
+attached tool registry has no DPF calls. A client reconnect/fresh session is the
+first dependency; repeated bootstrap writes cannot refresh the current registry.
+
+Proceed in this order, reusing the existing DPF substrates and recorded evidence:
+
+| Step | Work | Completion evidence |
+| --- | --- | --- |
+| 1 | Restore the native DPF connector and read its installation contract; reconcile this packet into the live backlog/workroom. | Callable governed tools, authorized scope and recorded work ownership. |
+| 2 | Refresh the topic branch against current main, obtain required review and build evidence, and deliver the calibration/concierge repair through the normal PR and self-upgrade paths. | Required checks and review pass, deployed image identity includes the repair, live probes reject incompatible calibration and repeat panels. |
+| 3 | Read the saved ChatGPT/Codex connection facts, request-scoped policy receipts and routing traces. Identify the exact rule producing each exclusion before altering it. | One representative blocked request correlated with its allowlist/suitability explanation and connection identity. |
+| 4 | Correct unintended exclusions or stale connection facts through their owning governed configuration. Prefer healthy ChatGPT/Codex routes for eligible work, retaining local-only data boundaries. | An eligible request completes on the connected ChatGPT/Codex account; a local-only request remains local; an exhausted cloud route falls back without repeated quota retries. |
+| 5 | Measure local memory, queue delay, prompt/output tokens and latency under a representative authorized workload. Compare the existing context pin with the resource-aware serving default, then retain the setting that improves service while fitting required local-only prompts. | Before/after latency and memory evidence, no context truncation, no new concurrent local inference, explicit rollback setting. |
+| 6 | Verify the existing AI Operations evidence view names request origin, selected provider and binding exclusion reason. Extend the existing trace projection only if those facts remain inaccessible. | The operator can explain a representative local request from its record, including whether it is calibration, a panel or a fallback. |
+
+New read-only hardware evidence: on the observed 24 GB GPU, 23,587 of 24,564 MiB
+were allocated, while utilization was 1 percent at the sampling instant. The
+resident model was the 27B Q4 chat model; approximately 9.4 GiB of host RAM was
+free. This proves little memory headroom at that instant, not sustained GPU
+saturation or a measured benefit from reducing context. The previous runtime
+warning reports a 40,960-token pin versus an estimated 24,576-token ceiling;
+neither is a benchmark result. Do not reduce context solely from that warning.
+
+Source tracing confirms request allowlists are hard filters and can be produced
+by data screening and connection-specific provider suitability. Cloud preference
+is already ranked above bundled local routes among eligible providers. Available
+subscription allowance cannot override an exclusion or prove the install's
+credentials work. No live policy, serving setting or provider grant was changed.
+
+Before further implementation, refresh main: four upstream commits arrived after
+the prior repair was committed. Preserve the 208-test/typecheck evidence as
+source-local evidence, re-running affected checks when the refreshed diff warrants
+it. Runtime build, governed review and deployment remain pending.
