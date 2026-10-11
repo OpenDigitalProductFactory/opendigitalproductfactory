@@ -1,6 +1,10 @@
+---
+status: active
+---
+
 # Repair archetype room projection persistence and lifecycle
 
-Status: proposed; independent review pending. Backlog: BI-224E6E82.
+Status: approved at immutable revision `c99fe7e96bcffd8d746d74dfb3e5a6b70872ed45`; runtime acceptance pending. Backlog: BI-224E6E82.
 Workroom: WC-0829A222. Date: 2026-09-27.
 
 ## Existing direction and evidence

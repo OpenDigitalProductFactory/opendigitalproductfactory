@@ -1,6 +1,10 @@
+---
+status: active
+---
+
 # Archetype room projection repair plan
 
-Status: proposed; coverage receipt and independent review pending.
+Status: implementation admitted; delivery and runtime acceptance pending.
 Backlog: BI-224E6E82. Workroom: WC-0829A222.
 Design: [repair contract](../specs/2026-09-27-archetype-room-projection-repair-design.md).
 
@@ -13,8 +17,35 @@ does not authorize implementation before its readiness decision allows it.
 Proposed decision: atomic. All phases map to existing BI-224E6E82. Typed writes
 without a caller do not deliver the feature; a caller without history-safe writes
 violates acceptance. Tests and live verification are part of that same repair.
-No phase is independently shippable. Live coverage receipt: pending; this section
-does not substitute for `record_plan_backlog_coverage` or independent plan review.
+No phase is independently shippable. Coverage receipt `cmv0d8dpq0lxb01nwca20ypim`
+and plan-review PASS `initiative-e4b4d354-8161-4e77-9ce9-1e7da0d890d3`
+bind the reviewed plan at `c99fe7e96bcffd8d746d74dfb3e5a6b70872ed45`.
+Implementation was readmitted after the source rebase by `IRD-599B98471429`.
+
+### Implementation notes (2026-10-11)
+
+The room projector uses generated Prisma argument types while retaining a narrow
+delegate boundary to avoid the existing full-client type-instantiation cost.
+One org-scoped PostgreSQL transaction lock serializes both projections; caller
+transactions remain owned by the caller. Missing definitions become `inactive`
+at their existing stage, with append-only `LifecycleEvent` records. The canonical
+`retirement` stage is terminal, so reversible withdrawal must use the status axis.
+The compatible `removed` result counts withdrawals, not deleted rows. Returning
+stages reactivate the same IDs; unrelated JSON metadata and references survive.
+The existing [lifecycle backbone design](../specs/2026-06-07-unified-lifecycle-backbone-design.md)
+already prescribes inactive logical definitions with an audit reason. The stage
+type seed is aligned with that rule on both create and upsert; it does not allow
+the terminal retirement stage or alter other element types.
+
+The existing boot reconciler now considers EA-only organizations. A source sweep
+found no operational reader of persisted `archetype-room-definition` rows; future
+active readers must exclude `lifecycleStatus: inactive`. Historical readers retain
+access. There is no new model, migration, scheduler, or UI interaction.
+
+Observed first-failing regressions covered invalid Prisma fields, missing inherited
+roles, lost metadata, deleted history, missing atomic orchestration and skipped
+EA-only reconciliation. Targeted unit tests pass. PostgreSQL, shared gate, semantic
+review, protected PR, release and live acceptance evidence remain required.
 
 ### Explicit traceability for the atomic deliverable
 
