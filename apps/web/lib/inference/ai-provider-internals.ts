@@ -20,6 +20,7 @@ import {
 import { seedKnownModels } from "@/lib/inference/known-model-seeding";
 import { recordDiscoveredAuthEligibility } from "@/lib/routing/model-auth-eligibility";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { persistDiscoveredInventory } from "./discovered-model-inventory";
 
 /**
  * Resolve the `supportsToolUse` value a metadata-sync should persist for a model,
@@ -449,10 +450,11 @@ export async function upsertDiscoveredModels(
 
   const newRows = [...newRowByModelId.values()];
   if (newRows.length > 0) {
-    await prisma.discoveredModel.createMany({ data: newRows, skipDuplicates: true });
+    const inserted = await prisma.discoveredModel.createMany({ data: newRows, skipDuplicates: true });
+    return inserted.count;
   }
 
-  return newRows.length;
+  return 0;
 }
 
 // BI-7F2FBDA3: what a provider lists under THIS account is the truth about what
@@ -489,10 +491,7 @@ export async function discoverModelsInternal(
     try {
       const { discoverCodexCliModels } = await import("@/lib/routing/codex-cli-model-catalog");
       const models = await discoverCodexCliModels(providerId);
-      const newCount = await upsertDiscoveredModels(providerId, models);
-      await reconcileDiscoveredModelPresence(providerId, new Set(models.map((model) => model.modelId)));
-      await readmitListedModels(providerId, provider.authMethod, models.map((model) => model.modelId));
-      return { discovered: models.length, newCount, modelIds: models.map((model) => model.modelId) };
+      return await persistDiscoveredInventory(providerId, provider.authMethod, models);
     } catch (err) {
       return { discovered: 0, newCount: 0, error: err instanceof Error ? err.message : "Codex CLI discovery failed" };
     }
@@ -550,13 +549,7 @@ export async function discoverModelsInternal(
 
   const models = parseModelsResponse(providerId, json);
 
-  const freshModelIds = new Set(models.map((m) => m.modelId));
-
-  const newCount = await upsertDiscoveredModels(providerId, models);
-
-  await reconcileDiscoveredModelPresence(providerId, freshModelIds);
-
-  return { discovered: models.length, newCount };
+  return persistDiscoveredInventory(providerId, provider.authMethod, models);
 }
 
 // Provider-confirmed retirement survives cloud relisting; local serving lists heal it.
@@ -573,7 +566,7 @@ export async function reconcileDiscoveredModelPresence(
   const isLocalProvider = providerId === "local" || providerId === "ollama";
   const allKnown = await prisma.discoveredModel.findMany({
     where: { providerId },
-    select: { id: true, modelId: true, missedDiscoveryCount: true },
+    select: { id: true, modelId: true, missedDiscoveryCount: true, lastSeenAt: true },
   });
 
   const present = allKnown.filter((known) => freshModelIds.has(known.modelId));
@@ -611,12 +604,14 @@ export async function reconcileDiscoveredModelPresence(
     const newMissedCount = known.missedDiscoveryCount + 1;
     await prisma.discoveredModel.update({
       where: { id: known.id },
-      data: { missedDiscoveryCount: newMissedCount },
+      data: { missedDiscoveryCount: newMissedCount, lastSeenAt: known.lastSeenAt },
     });
 
     if (newMissedCount >= 2) {
       await prisma.modelProfile.updateMany({
-        where: { providerId, modelId: known.modelId },
+        where: { providerId, modelId: known.modelId, OR: [
+          { retiredReason: null }, { retiredReason: { notIn: PERMANENT_RETIRE_REASONS } },
+        ] },
         data: {
           modelStatus: "retired",
           retiredAt: new Date(),
@@ -1007,12 +1002,13 @@ export async function profileModelsInternal(
 export { backfillModelCards, seedAllRecipes } from "./model-card-maintenance";
 
 /** Discover and profile after activation; failures never break activation. */
-export async function autoDiscoverAndProfile(providerId: string): Promise<{
+export async function autoDiscoverAndProfile(providerId: string, allowKnownFallback = true): Promise<{
   discovered: number;
+  newCount?: number;
   profiled: number;
   error?: string;
 }> {
-  let result: { discovered: number; profiled: number; error?: string };
+  let result: { discovered: number; newCount?: number; profiled: number; error?: string };
 
   try {
     // 1. Try dynamic discovery (works for all providers including codex/chatgpt)
@@ -1020,17 +1016,22 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
 
     if (discovery.discovered > 0) {
       // Dynamic discovery succeeded — profile the discovered models
-      const profiling = await profileModelsInternal(providerId);
+      const profiling = await profileModelsInternal(providerId, discovery.modelIds);
+      if (profiling.profiled > 0 && discovery.modelIds?.length) {
+        const provider = await prisma.modelProvider.findUnique({ where: { providerId }, select: { authMethod: true } });
+        if (provider) await readmitListedModels(providerId, provider.authMethod, discovery.modelIds);
+      }
       if (providerId === "codex") await clearStaleCodexPins(discovery.modelIds ?? []);
       result = {
         discovered: discovery.discovered,
+        newCount: discovery.newCount,
         profiled: profiling.profiled,
         error: profiling.error,
       };
     } else {
       // Codex inventory is account-specific; a static catalog must never impersonate success.
       // Codex inventory is account-specific (chatgpt rides the same account): never impersonate success.
-      const knownModels = providerId === "codex" || providerId === "chatgpt" ? undefined : KNOWN_PROVIDER_MODELS[providerId];
+      const knownModels = !allowKnownFallback || providerId === "codex" || providerId === "chatgpt" ? undefined : KNOWN_PROVIDER_MODELS[providerId];
       if (knownModels) {
         console.log(
           `[auto-discover] Dynamic discovery returned 0 for ${JSON.stringify(providerId)}` +

@@ -17,6 +17,12 @@ Authentication proves only that a connection works. Before using company or cust
 
 ## Authentication Methods
 
+On a provider's detail page, **Configured** means settings and model profiles
+are saved. **Save & verify connection** runs a connection check; a successful
+check shows **Connection verified**. Neither label grants access to every saved
+model or overrides workload rules. Open **Advanced diagnostics** to inspect model
+history or refresh the catalog. Routine discovery runs automatically.
+
 ### API Key
 
 The standard method for providers with pay-per-token billing. Obtain a key from the provider's developer console and paste it into the provider detail page. The platform uses the key for every inference request.

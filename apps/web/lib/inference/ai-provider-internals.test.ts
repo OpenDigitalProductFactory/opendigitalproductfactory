@@ -15,12 +15,16 @@ const discoveredModelMock = vi.hoisted(() => ({
 }));
 const modelProfileMock = vi.hoisted(() => ({
   findMany: vi.fn(),
+  findUnique: vi.fn(),
+  upsert: vi.fn(),
   updateMany: vi.fn<(args: Record<string, any>) => Promise<{ count: number }>>(async () => ({ count: 0 })),
 }));
 const modelProviderMock = vi.hoisted(() => ({ findUnique: vi.fn() }));
 const agentModelConfigMock = vi.hoisted(() => ({ updateMany: vi.fn() }));
 const seedKnownModelsMock = vi.hoisted(() => vi.fn());
 const discoverCodexCliModelsMock = vi.hoisted(() => vi.fn());
+const authEligibilityMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@/lib/routing/model-auth-eligibility", () => ({ recordDiscoveredAuthEligibility: authEligibilityMock }));
 vi.mock("@dpf/db", () => ({
   prisma: {
     credentialEntry: {
@@ -52,7 +56,9 @@ import {
   PERMANENT_RETIRE_REASONS,
   autoDiscoverAndProfile,
   clearStaleCodexPins,
+  profileModelsInternal,
 } from "./ai-provider-internals";
+import { persistDiscoveredInventory } from "./discovered-model-inventory";
 
 describe("Codex authoritative discovery", () => {
   beforeEach(() => {
@@ -78,6 +84,56 @@ describe("Codex authoritative discovery", () => {
     });
     expect(seedKnownModelsMock).not.toHaveBeenCalled();
     expect(discoveredModelMock.createMany).not.toHaveBeenCalled();
+  });
+
+  it("preserves the last good inventory when the CLI returns an empty or malformed inventory", async () => {
+    discoveredModelMock.update.mockClear();
+    discoveredModelMock.createMany.mockClear();
+    authEligibilityMock.mockClear();
+    discoverCodexCliModelsMock.mockResolvedValue([]);
+    expect(await autoDiscoverAndProfile("codex")).toMatchObject({ discovered: 0, error: expect.stringContaining("retained") });
+    discoverCodexCliModelsMock.mockRejectedValue(new Error("Malformed Codex model/list response"));
+    expect(await autoDiscoverAndProfile("codex")).toMatchObject({ discovered: 0, error: expect.stringContaining("Malformed") });
+    expect(discoveredModelMock.update).not.toHaveBeenCalled();
+    expect(discoveredModelMock.createMany).not.toHaveBeenCalled();
+    expect(authEligibilityMock).not.toHaveBeenCalled();
+  });
+
+  it("admits an unknown model and profiles only the returned IDs, preserving history", async () => {
+    authEligibilityMock.mockClear();
+    discoveredModelMock.findMany.mockReset();
+    discoveredModelMock.createMany.mockResolvedValue({ count: 1 });
+    discoveredModelMock.update.mockResolvedValue({});
+    modelProfileMock.updateMany.mockResolvedValue({ count: 0 });
+    modelProfileMock.findMany.mockResolvedValue([]);
+    modelProfileMock.findUnique.mockResolvedValue(null);
+    modelProfileMock.upsert.mockResolvedValue({});
+    const lastSeenAt = new Date("2026-09-01T00:00:00Z");
+    discoveredModelMock.findMany.mockImplementation(async (args) => args.select?.modelId && !args.select?.id
+      ? [] : args.where.modelId
+      ? [{ id: "new-model", modelId: "future-model-without-code-change", rawMetadata: {} }]
+      : [{ id: "history", modelId: "historical-model", missedDiscoveryCount: 0, lastSeenAt }]);
+    discoverCodexCliModelsMock.mockResolvedValue([{ modelId: "future-model-without-code-change", rawMetadata: {} }]);
+    expect(await autoDiscoverAndProfile("codex")).toMatchObject({ discovered: 1, newCount: 1, profiled: 1 });
+    expect(authEligibilityMock).toHaveBeenCalledWith(expect.anything(), { providerId: "codex", authMethod: "oauth2_authorization_code", modelIds: ["future-model-without-code-change"] });
+    expect(discoveredModelMock.findMany).toHaveBeenCalledWith({ where: { providerId: "codex", modelId: { in: ["future-model-without-code-change"] } } });
+    expect(discoveredModelMock.update).toHaveBeenCalledWith({ where: { id: "history" }, data: { missedDiscoveryCount: 1, lastSeenAt } });
+    expect(authEligibilityMock.mock.invocationCallOrder.at(-1)).toBeGreaterThan(modelProfileMock.upsert.mock.invocationCallOrder.at(-1)!);
+  });
+
+  it("preserves evaluated scores and retirement state while refreshing known pricing metadata", async () => {
+    discoveredModelMock.findMany.mockResolvedValue([{ modelId: "gpt-5.6-sol", rawMetadata: {} }]);
+    modelProfileMock.findUnique.mockResolvedValue({ rawMetadataHash: null, profileSource: "evaluated", qualityTierSource: "admin", supportsToolUse: true, capabilityOverrides: {} });
+    modelProfileMock.upsert.mockClear();
+    modelProfileMock.upsert.mockResolvedValue({});
+    expect(await profileModelsInternal("codex", ["gpt-5.6-sol"])).toMatchObject({ profiled: 1 });
+    const update = modelProfileMock.upsert.mock.calls[0][0].update;
+    expect(update.inputPricePerMToken).toBe(4);
+    expect(update.outputPricePerMToken).toBe(20);
+    expect(update.reasoning).toBeUndefined();
+    expect(update.profileSource).toBeUndefined();
+    expect(update.qualityTier).toBeUndefined();
+    expect(update.modelStatus).toBeUndefined();
   });
 });
 
@@ -381,7 +437,7 @@ describe("upsertDiscoveredModels (model-discovery N+1 batching — BI-OPT-DB-HOT
     discoveredModelMock.createMany.mockReset();
     discoveredModelMock.findMany.mockResolvedValue([]);
     discoveredModelMock.update.mockResolvedValue({});
-    discoveredModelMock.createMany.mockResolvedValue({ count: 0 });
+    discoveredModelMock.createMany.mockImplementation(async (args) => ({ count: args.data.length }));
   });
 
   it("reads existing models with ONE findMany keyed on providerId + modelId IN [...]", async () => {
@@ -437,6 +493,17 @@ describe("upsertDiscoveredModels (model-discovery N+1 batching — BI-OPT-DB-HOT
     expect(newCount).toBe(0);
     expect(discoveredModelMock.findMany).not.toHaveBeenCalled();
     expect(discoveredModelMock.createMany).not.toHaveBeenCalled();
+    expect(discoveredModelMock.update).not.toHaveBeenCalled();
+  });
+
+  it("reports actual inserts when a concurrent discovery already created a model", async () => {
+    discoveredModelMock.createMany.mockResolvedValue({ count: 0 });
+    expect(await upsertDiscoveredModels("p", [{ modelId: "arrived-concurrently", rawMetadata: {} }])).toBe(0);
+  });
+
+  it("does not reconcile an empty serving inventory", async () => {
+    expect(await persistDiscoveredInventory("codex", "oauth2_authorization_code", [])).toMatchObject({ discovered: 0, error: expect.stringContaining("retained") });
+    expect(discoveredModelMock.findMany).not.toHaveBeenCalled();
     expect(discoveredModelMock.update).not.toHaveBeenCalled();
   });
 });
@@ -506,19 +573,20 @@ describe("reconcileDiscoveredModelPresence (retire-forever trap — BI-B6B8C1F9)
 
   it("cloud: absent model increments the missed counter and retires after 2 misses", async () => {
     discoveredModelMock.findMany.mockResolvedValue([
-      { id: "dm1", modelId: "gone-model", missedDiscoveryCount: 1 },
+      { id: "dm1", modelId: "gone-model", missedDiscoveryCount: 1, lastSeenAt: new Date("2026-09-01T00:00:00Z") },
     ]);
 
     await reconcileDiscoveredModelPresence("anthropic-sub", new Set(["other-model"]));
 
     expect(discoveredModelMock.update).toHaveBeenCalledWith({
       where: { id: "dm1" },
-      data: { missedDiscoveryCount: 2 },
+      data: { missedDiscoveryCount: 2, lastSeenAt: new Date("2026-09-01T00:00:00Z") },
     });
     const retireCall = modelProfileMock.updateMany.mock.calls.find(
       (c) => c[0]?.data?.modelStatus === "retired",
     );
     expect(retireCall).toBeDefined();
+    expect(retireCall?.[0].where.OR).toEqual([{ retiredReason: null }, { retiredReason: { notIn: PERMANENT_RETIRE_REASONS } }]);
   });
 
   it("local: absent model is NOT counted or retired (an engine hiccup must not strand the bundled fallback)", async () => {

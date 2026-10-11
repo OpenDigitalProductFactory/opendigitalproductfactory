@@ -74,6 +74,11 @@ describe("parseCodexModelListPage", () => {
       nextCursor: null,
     });
   });
+
+  it("rejects a partly malformed inventory or cursor rather than retiring omitted history", () => {
+    expect(() => parseCodexModelListPage({ data: [{ model: "new-valid-model" }, {}], nextCursor: null })).toThrow("Malformed");
+    expect(() => parseCodexModelListPage({ data: [{ model: "new-valid-model" }], nextCursor: 4 })).toThrow("Malformed");
+  });
 });
 
 describe("discoverCodexCliModels", () => {
