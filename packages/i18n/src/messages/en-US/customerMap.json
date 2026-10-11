@@ -28,7 +28,12 @@
     "status": "Last run: {$placed} placed, {$notFound} not found, {$remaining} still missing.",
     "running": "Finding locations…",
     "failed": "The last run stopped early. Try again later.",
-    "notStarted": "Choose a service and save it first."
+    "notStarted": "Choose a service and save it first.",
+    "streetMapsHeading": "Street maps",
+    "streetMapsNone": "No locations are placed yet, so no street map is needed.",
+    "streetMapsCovered": "{$region}: covered by the installed street map {$pack}. Placed locations: {$count}.",
+    "streetMapsMissing": "{$region}: no street map installed yet. Placed locations: {$count}. Recommended map: {$pack}.",
+    "streetMapsNoCountry": "{$region}: {$count} placed. Add a country to these addresses so a street map can be recommended."
   },
   "showMap": "Show customers on the map",
   "hideMap": "Hide the map",

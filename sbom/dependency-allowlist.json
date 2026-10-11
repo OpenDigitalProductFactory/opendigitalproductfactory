@@ -610,16 +610,7 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
-    "gray-matter": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "apps/web"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
+
     "i18n-iso-countries": {
       "added": "2026-06-21",
       "workspaces": [
@@ -1119,12 +1110,13 @@
     "yaml": {
       "added": "2026-09-25",
       "workspaces": [
+        "apps/web",
         "services/integration-test-harness"
       ],
       "kinds": [
         "prod"
       ],
-      "note": "Vetted 2026-09-25 as the YAML parser for the harness-owned OpenAPI contract runtime that replaced Stoplight Prism (plan 2026-09-08 M4). ISC, zero dependencies, 2.9.0 already resolved in the lockfile before adoption (vite, postcss-load-config), so it adds no package. ~150M weekly downloads, published since 2011. OSV: no advisories for 2.9.0. Risks recorded: single maintainer (eemeli) and no npm provenance attestation on 2.9.0. Parses only repo-committed vendor specs, never untrusted input."
+      "note": "Vetted 2026-09-25 as the YAML parser for the harness-owned OpenAPI contract runtime that replaced Stoplight Prism (plan 2026-09-08 M4). ISC, zero dependencies, 2.9.0 already resolved in the lockfile before adoption (vite, postcss-load-config), so it adds no package. ~150M weekly downloads, published since 2011. OSV: no advisories for 2.9.0. Risks recorded: single maintainer (eemeli) and no npm provenance attestation on 2.9.0. Parses only repo-committed vendor specs, never untrusted input. apps/web adopted the same 2.9.1 copy on 2026-10-09 (BI-99D7C104) to parse user-guide frontmatter and drop gray-matter, whose js-yaml 3 chain pulled unpatched sprintf-js."
     },
     "zod": {
       "added": "2026-06-21",
@@ -1206,6 +1198,10 @@
     "@types/nodemailer": {
       "retired": "2026-09-29",
       "reason": "nodemailer 10 is written in TypeScript and ships its own declarations (dist/cjs/nodemailer.d.ts, keeping the @types layout); plan 2026-09-08 M7."
+    },
+    "gray-matter": {
+      "retired": "2026-10-09",
+      "reason": "User-guide frontmatter is parsed by the yaml package already in the platform lockfile (apps/web/lib/shared/docs.ts). gray-matter 4 kept js-yaml 3, argparse 1, and unpatched sprintf-js (GHSA-hp3w-g68c-fv3c, Dependabot #222). BI-99D7C104."
     }
   }
 }
