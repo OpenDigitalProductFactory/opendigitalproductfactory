@@ -307,6 +307,39 @@ describe("applyDrivePlan lease expiry", () => {
     }) }));
   });
 
+  it.each(["matching", "missing", "foreign-agent", "changed-stage"])("reconciles a %s task after snapshot loss without reactivating it", async (caseName) => {
+    const fx = persistedLease();
+    const now = new Date("2026-09-01T00:00:00.000Z");
+    let workspace: Record<string, unknown> = {};
+    let task: Record<string, unknown> | null = null;
+    driveDb.workroom.findUnique.mockImplementation(async () => ({ workspaceState: workspace }));
+    driveDb.workroom.update.mockImplementation(async ({ data }) => {
+      if (data.workspaceState) workspace = data.workspaceState;
+      return {};
+    });
+    driveDb.scheduledAgentTask.upsert.mockImplementation(async ({ create }) => {
+      task = create;
+      return {};
+    });
+    driveDb.scheduledAgentTask.findUnique.mockImplementation(async () => task);
+    fx.persist.mockRejectedValueOnce(new Error("controller lost"));
+    await expect(runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx })).rejects.toThrow("controller lost");
+    const confirmed = structuredClone(workspace.workroomDispatchCheckpoint);
+    // A replacement reconstructs from durable state; the original snapshot is absent.
+    // The task may already have executed and become inactive. Do not touch it.
+    fx.state.expiresAt = null;
+    driveDb.workroomActivity.create.mockClear();
+    if (caseName === "missing") task = null;
+    if (caseName === "foreign-agent") task = Object.assign({}, task, { agentId: "replacement-agent" });
+    if (caseName === "changed-stage") task = Object.assign({}, task, { taskConfig: { workroomStage: { shapeKey: "other", shapeVersion: "1", stageKey: "other", tools: [] } } });
+    const replay = runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx });
+    if (caseName === "matching") await replay;
+    else await expect(replay).rejects.toThrow(/identity reconciliation/);
+    expect(driveDb.scheduledAgentTask.upsert).toHaveBeenCalledTimes(1);
+    expect(workspace.workroomDispatchCheckpoint).toEqual(confirmed);
+    expect(driveDb.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
   it("fences scheduling when ownership changes after acquisition", async () => {
     const fx = persistedLease();
     const acquire = fx.acquireLease;

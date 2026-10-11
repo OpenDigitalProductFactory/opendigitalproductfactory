@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
-import { withWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
-import { buildDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
+import { readWorkroomStageTaskConfig, withWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
+import { buildDispatchCheckpoint, readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import { WORKROOM_DRIVE_CRON } from "@/lib/work-management/workroom-drive-constants";
 import type { WorkroomDriveEffects } from "./workroom-drive";
@@ -35,7 +35,22 @@ export async function scheduleWorkroomAgentTask(
       holderPrincipalId: input.lease.holderPrincipalId, leaseExpiresAt: input.lease.expiresAt.toISOString(),
     });
     // Merge, never replace: taskConfig is shared JSON; only workroomStage is this writer's.
-    const current = await tx.scheduledAgentTask.findUnique({ where: { taskId: input.taskId }, select: { taskConfig: true } });
+    const current = await tx.scheduledAgentTask.findUnique({ where: { taskId: input.taskId }, select: { taskConfig: true, agentId: true, ownerUserId: true } });
+    const prior = readDispatchCheckpoint(workspace.workroomDispatchCheckpoint);
+    if (prior?.confirmedEffect.taskId === input.taskId) {
+      const recordedStage = readWorkroomStageTaskConfig(current?.taskConfig);
+      const sameStage = (stage: typeof recordedStage) => stage !== null
+        && stage.shapeKey === input.stage.shapeKey && stage.shapeVersion === input.stage.shapeVersion
+        && stage.stageKey === input.stage.stageKey
+        && JSON.stringify([...new Set(stage.tools)].sort()) === JSON.stringify([...new Set(input.stage.tools)].sort());
+      if (!current || current.agentId !== input.agentId || current.ownerUserId !== input.ownerUserId
+        || !sameStage(recordedStage) || !sameStage(prior.stage)) {
+        throw new Error("Recorded dispatch requires task identity reconciliation before replay");
+      }
+      // Enqueue already committed. Preserve its receipt and the task's execution
+      // state; the caller can repair the missing drive snapshot without rearming it.
+      return true;
+    }
     const taskConfig = withWorkroomStageTaskConfig(current?.taskConfig ?? null, input.stage) as Prisma.InputJsonValue;
     await tx.scheduledAgentTask.upsert({
       where: { taskId: input.taskId },
