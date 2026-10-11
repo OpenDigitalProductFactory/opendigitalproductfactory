@@ -5,7 +5,35 @@ import { ALL_ARCHETYPES, deriveOperationalValueStream } from "@dpf/storefront-te
 import {
   buildArchetypeRoomDefinitions,
   projectArchetypeRoomDefinitions,
+  withArchetypeProjectionTransaction,
 } from "./archetype-room-definition-projection";
+
+it("reuses a caller transaction even when Prisma exposes nested transactions", async () => {
+  const tx = {
+    $queryRawUnsafe: async () => [],
+    $transaction: async () => { throw new Error("unexpected nested transaction"); },
+  };
+  await withArchetypeProjectionTransaction(tx, "org-test", async (sameTx) => {
+    expect(Object.is(sameTx, tx)).toBe(true);
+  });
+});
+
+it("opens one transaction for a root client and locks inside it", async () => {
+  const calls: string[] = [];
+  const tx = { $queryRawUnsafe: async () => { calls.push("lock"); } };
+  const db = {
+    $connect: async () => {},
+    $transaction: async (work: (value: unknown) => Promise<unknown>) => {
+      calls.push("transaction");
+      return work(tx);
+    },
+  };
+  await withArchetypeProjectionTransaction(db, "org-test", async (sameTx) => {
+    expect(Object.is(sameTx, tx)).toBe(true);
+    calls.push("work");
+  });
+  expect(calls).toEqual(["transaction", "lock", "work"]);
+});
 
 function ovsmFor(archetypeId: string) {
   const archetype = ALL_ARCHETYPES.find((a) => a.archetypeId === archetypeId);

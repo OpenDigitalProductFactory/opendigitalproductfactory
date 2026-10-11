@@ -80,7 +80,9 @@ describeDatabase("archetype room projection with generated Prisma and PostgreSQL
   it("rolls back projection with its caller and does not open a nested transaction", async () => {
     await expect(db.$transaction(async (tx) => {
       await withArchetypeProjectionTransaction(tx, orgIds[2]!, async (sameTx) => {
-        expect(sameTx).toBe(tx);
+        // Compare identity without asking the assertion formatter to traverse
+        // Prisma's recursive client proxy if this contract regresses.
+        expect(Object.is(sameTx, tx)).toBe(true);
         await projectArchetypeRoomDefinitions({ db: sameTx, orgId: orgIds[2]!, ovsm });
         throw new Error("caller rollback");
       });

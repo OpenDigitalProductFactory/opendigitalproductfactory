@@ -41,11 +41,13 @@ interface RoomDefinitionDb {
   };
   lifecycleEvent: { create(args: Prisma.LifecycleEventCreateArgs): Promise<IdRow> };
   $queryRawUnsafe(query: string, ...values: unknown[]): Promise<unknown>;
+  $connect?: () => Promise<void>;
   $transaction?: <T>(work: (tx: RoomDefinitionDb) => Promise<T>, options: { timeout: number }) => Promise<T>;
 }
 
-/** Serialize both projections by org inside one transaction. A supplied Prisma
- * transaction has no $transaction method and is reused without nesting. */
+/** Serialize both projections by org inside one transaction. Prisma transaction
+ * clients can expose $transaction for savepoints, but omit root connection
+ * management. Reuse those clients so the caller retains transaction ownership. */
 export async function withArchetypeProjectionTransaction<T>(
   inputDb: unknown, orgId: string, work: (tx: RoomDefinitionDb) => Promise<T>,
 ): Promise<T> {
@@ -59,7 +61,8 @@ export async function withArchetypeProjectionTransaction<T>(
     );
     return work(tx);
   };
-  return db.$transaction ? db.$transaction(run, { timeout: 30_000 }) : run(db);
+  return typeof db.$connect === "function" && db.$transaction
+    ? db.$transaction(run, { timeout: 30_000 }) : run(db);
 }
 
 /** A room a coworker can hold, derived from one value-stream stage. */

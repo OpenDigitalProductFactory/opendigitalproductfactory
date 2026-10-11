@@ -47,6 +47,14 @@ roles, lost metadata, deleted history, missing atomic orchestration and skipped
 EA-only reconciliation. Targeted unit tests pass. PostgreSQL, shared gate, semantic
 review, protected PR, release and live acceptance evidence remain required.
 
+The first shared PostgreSQL gate passed 89 tests and failed caller-transaction
+identity: Prisma now exposes nested `$transaction` on transaction clients. The
+helper's previous method-presence check opened a savepoint rather than reusing
+the caller. A focused regression first failed on that behavior, then passed after
+root detection switched to connection-management capability (`$connect`). The
+database assertion compares identity as a boolean to avoid recursively formatting
+Prisma proxies on failure. The corrected PostgreSQL gate remains pending.
+
 ### Explicit traceability for the atomic deliverable
 
 Deliverable key: `room-projection-repair`. All rows belong to BI-224E6E82;
@@ -112,6 +120,7 @@ image; never delete retained room data as rollback. No migration is currently
 planned. A newly discovered schema change requires design amendment and migration
 verification before delivery.
 
-The current documentation scope impact contract has no testImpact or guardObligation
-entries and identifies doc-index regeneration. Recompute impact for source scopes.
-No tests or acceptance are claimed by this plan.
+The source impact contract covers the projector, orchestration, backfill and stage
+seed. Targeted tests, typechecks, style checks and derived-document checks were
+executed before the initial shared gate. Release and live acceptance are not yet
+claimed; retain the failing gate evidence when recording its replacement.
