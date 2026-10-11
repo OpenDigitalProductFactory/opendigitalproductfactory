@@ -42,7 +42,7 @@ test("terminal keys are stopped instead of scanned or replaced", () => {
   assert.match(script, /terminal lease claim; stop/);
 });
 
-import { protectedServiceIdentity, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, previewOverride, runPreviewLifecycle } from './dev-preview-runtime.mjs';
+import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, previewOverride, runPreviewLifecycle } from './dev-preview-runtime.mjs';
 const identity = { worktree: '/feature/worktree', sha: 'a'.repeat(40), leaseId: 'NPEL-MINE' };
 const config = () => {
   const result = previewOverride(identity);
@@ -90,13 +90,17 @@ test('changed worktree is refused before any runtime mutation', async () => {
     compose: async () => assert.fail('runtime mutation'), active: {} }), /source_changed/);
 });
 
-test('tool discovery alone cannot pass either missing authority layer', () => {
+test('startup checks the whole shared delivery contract and both permission layers', () => {
   const granted = name => ({ name, serverHasTool: true, tokenGranted: true, agentGranted: true, callableByName: true });
-  assertToolReadiness({ status: [granted('ux')] }, ['ux']);
-  for (const bad of [{ ...granted('ux'), agentGranted: false }, { ...granted('ux'), tokenGranted: false }]) {
-    assert.throws(() => assertToolReadiness({ count: 100, status: [bad] }, ['ux']), /permissions_incomplete/);
+  const rows = REQUIRED_PREVIEW_DELIVERY_TOOLS.map(granted);
+  assertToolReadiness({ status: rows });
+  assert.ok(REQUIRED_PREVIEW_DELIVERY_TOOLS.includes('review_semantic_change'));
+  for (const bad of [{ ...rows[0], agentGranted: false }, { ...rows[0], tokenGranted: false }, { ...rows[0], agentGranted: null }]) {
+    assert.throws(() => assertToolReadiness({ count: 100, status: [bad, ...rows.slice(1)] }), /permissions_incomplete/);
   }
-  assert.throws(() => assertToolReadiness({ loadedToolNames: ['ux'] }, ['ux']), /permissions_incomplete/);
+  assert.throws(() => assertToolReadiness({ status: [...rows, rows[0]] }), /permissions_incomplete/);
+  assert.throws(() => assertToolReadiness({ status: rows.filter(row => row.name !== 'review_semantic_change') }), /permissions_incomplete/);
+  assert.throws(() => assertToolReadiness({ loadedToolNames: REQUIRED_PREVIEW_DELIVERY_TOOLS }), /permissions_incomplete/);
 });
 
 test('protected live-service identity detects recreation, restart or volume substitution', () => {

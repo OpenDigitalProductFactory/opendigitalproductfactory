@@ -1,3 +1,8 @@
+import { tsImport } from "tsx/esm/api";
+const { DELIVERY_WORKFLOW_TOOLS, deliveryReadinessFromDiscovery } = await tsImport(
+  new URL("../../packages/dpf-bootstrap/src/agent-toolchain/delivery-readiness-contract.ts", import.meta.url).href, import.meta.url,
+);
+export const REQUIRED_PREVIEW_DELIVERY_TOOLS = DELIVERY_WORKFLOW_TOOLS;
 import { gitText } from './git.mjs';
 import { spawn } from 'node:child_process';
 import { readFile, writeFile, mkdir, rm, realpath } from 'node:fs/promises';
@@ -12,19 +17,10 @@ import { mcpCall } from './mcp-client.mjs';
 import { superviseLeaseRun, admittedLeaseTtlMs } from './lease-supervisor.mjs';
 import { sampleLocalCiHostPressure } from './local-ci-host-pressure.mjs';
 
-export const REQUIRED_PREVIEW_DELIVERY_TOOLS = [
-  'wiki_query', 'principle_decide', 'get_backlog_item', 'claim_backlog_item_for_work',
-  'claim_workroom_scope', 'record_plan_backlog_coverage', 'record_initiative_evidence',
-  'find_related_tests', 'write_sandbox_file', 'run_sandbox_command', 'request_coworker',
-  'list_nonprod_environment_leases', 'claim_nonprod_environment_lease', 'renew_nonprod_environment_lease', 'release_nonprod_environment_lease',
-  'issue_ux_verification_sign_in', 'list_coworker_offers', 'request_coworker_engagement', 'record_workroom_evidence',
-];
-export function assertToolReadiness(response, required = REQUIRED_PREVIEW_DELIVERY_TOOLS) {
-  const denied = required.filter(name => {
-    const status = response?.status?.find(row => row.name === name);
-    return !status?.serverHasTool || !status.tokenGranted || !status.agentGranted || !status.callableByName;
-  });
-  if (denied.length) throw new Error(`preview_delivery_permissions_incomplete:${denied.join(',')}; platform administrator must reconcile approved permissions; client cannot self-grant`);
+export function assertToolReadiness(response) {
+  const report = deliveryReadinessFromDiscovery(response);
+  const denied = [...new Set([...report.missingTokenTools, ...report.missingCoworkerTools, ...report.unavailableTools])];
+  if (!report.ready) throw new Error(`preview_delivery_permissions_incomplete:${denied.join(',')}; platform administrator must reconcile approved permissions; client cannot self-grant`);
 }
 
 export function previewOverride({ worktree, sha, leaseId, cloneImage }) {
