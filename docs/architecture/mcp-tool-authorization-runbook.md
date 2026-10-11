@@ -1,5 +1,17 @@
 # MCP tool authorization runbook
 
+Design and plan review handlers preserve the last completed semantic round when
+their two-reviewer panel cannot complete. `reviewIncomplete` and
+`usableReviewerCount` distinguish that condition from a document rejection.
+Infrastructure errors are not prior design findings, and incomplete attempts do
+not increment the revision round or trigger document regeneration. The handler
+returns `retry_review`; repeat the review only after reviewer execution recovers.
+Plan auto-resume preserves the saved plan while this condition remains unresolved.
+The review panel and readiness strip show incomplete execution as a wait, not
+approval or changes requested. A completed individual review stays visible beside
+the incomplete panel; historical outage findings and inflated rounds are excluded
+from the current recovery guidance. Original records remain intact.
+
 Bound spec-approval reviewers receive the initiative's current authoritative
 classification in their tool contract. A document titled "repair" does not
 make a feature initiative a fix. Dispatch and the receipt writer share the

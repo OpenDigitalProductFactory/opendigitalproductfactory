@@ -75,6 +75,18 @@ import {
 } from "./resume-pre-build-phase";
 
 describe("resumePreBuildPhase (BI-9257CF19)", () => {
+  it("preserves a saved plan when reviewer execution was incomplete", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 },
+      buildPlan: { tasks: [{ title: "Implement callback" }] },
+      planReview: { decision: "fail", reviewIncomplete: true, issues: [] },
+    });
+    const result = await resumePreBuildPhase({ buildId: "FB-INCOMPLETE", phase: "plan", userId: "u" });
+    expect(result).toMatchObject({ kind: "skipped" });
+    expect(dispatchPlanMock).not.toHaveBeenCalled();
+    expect(performPlanToBuildTransitionMock).not.toHaveBeenCalled();
+    expect(executeToolMock).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     findUniqueMock.mockReset();
     queueBuildReviewVerificationMock.mockReset().mockResolvedValue(undefined);
