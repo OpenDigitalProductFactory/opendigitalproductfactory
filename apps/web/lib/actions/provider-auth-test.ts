@@ -97,7 +97,7 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
     const tokenResult = await getProviderBearerToken(providerId, connectionId);
     if ("error" in tokenResult) return { ok: false, message: tokenResult.error };
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
-    if (isAnthropicProvider(providerId)) {
+    if (isAnthropicProvider(provider.providerId)) {
       headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
     }
   }
@@ -109,7 +109,7 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
     // Agent providers (e.g. Codex) and ChatGPT subscription use the Responses
     // API, so verify the actual execution path instead of /models.
     if (provider.authMethod === "oauth2_authorization_code" &&
-        (provider.category === "agent" || providerId === "chatgpt")) {
+        (provider.category === "agent" || provider.providerId === "chatgpt")) {
       const cred = await findProviderCredential(providerId, connectionId);
       if (!cred?.status || !cred.cachedToken) {
         return { ok: false, message: "OAuth token not found — sign in again" };
@@ -154,7 +154,7 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
     }
 
     // Anthropic subscription tokens (OAuth) can't access /models — test with a minimal /messages call instead
-    if (isAnthropicProvider(providerId) && provider.authMethod === "oauth2_authorization_code") {
+    if (isAnthropicProvider(provider.providerId) && provider.authMethod === "oauth2_authorization_code") {
       const baseUrl = provider.baseUrl ?? provider.endpoint ?? "";
       const messagesUrl = `${baseUrl}/messages`;
       attemptedUrl = messagesUrl;

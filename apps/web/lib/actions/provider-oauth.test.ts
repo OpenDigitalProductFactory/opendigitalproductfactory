@@ -98,12 +98,19 @@ describe("provider-oauth actions", () => {
     expect(result).toEqual({
       authorizeUrl: "https://auth.example.com/oauth/authorize?state=abc",
     });
-    expect(mockCreateOAuthFlow).toHaveBeenCalledWith("codex");
+    expect(mockCreateOAuthFlow).toHaveBeenCalledWith("codex", undefined);
   });
 
   it("starts sign-in for the selected account", async () => {
     await startProviderOAuth("codex", "account-b");
     expect(mockCreateOAuthFlow).toHaveBeenCalledWith("codex", "account-b");
+  });
+
+  it.each([undefined, "account-b"])("refuses sign-in without provider management rights for account %s", async (connectionId) => {
+    mockCan.mockReturnValue(false);
+    const result = await startProviderOAuth("codex", connectionId);
+    expect(result).toHaveProperty("error");
+    expect(mockCreateOAuthFlow).not.toHaveBeenCalled();
   });
 
   it("disconnects only the selected account without deactivating provider-wide services", async () => {

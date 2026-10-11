@@ -10,7 +10,7 @@ async function requireManageProviders(): Promise<string> {
 export async function startProviderOAuth(providerId: string, connectionId?: string): Promise<{ authorizeUrl: string } | { error: string }> {
   try {
     await requireManageProviders();
-    return connectionId === undefined ? createOAuthFlow(providerId) : createOAuthFlow(providerId, connectionId);
+    return createOAuthFlow(providerId, connectionId);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to start OAuth sign-in";
     if (message === "Unauthorized") {
