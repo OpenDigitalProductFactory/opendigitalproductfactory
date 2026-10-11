@@ -144,3 +144,10 @@ including all review branches, secrets, employee records and financial
 identifiers. The latter still require local-only routing. These source-local
 results do not establish native review or verification of the final committed
 tree; publication still requires its exact-head gates.
+
+The provider-suitability compiler contained the same overbroad restriction:
+it required business-account evidence for every source-code profile, including
+explicitly public profiles. Its existing requirement now applies only to
+non-public source. Mixed workloads retain the stricter profile. The
+[account-review guidance](../professions/legal-compliance/wiki/ai-provider-account-and-sovereignty-review.md)
+now states this public-development distinction explicitly.
