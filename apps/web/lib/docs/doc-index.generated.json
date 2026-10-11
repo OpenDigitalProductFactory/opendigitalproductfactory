@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 735,
+  "pageCount": 736,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -9781,6 +9781,23 @@
         "51-parties-plausibly-interested-to-qualify-not-claims-of-interest",
         "52-caveats-dont-overclaim",
         "6-recommended-next-steps"
+      ]
+    },
+    "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md": {
+      "publicHref": "/strategy/2026-10-11-company-led-capability-consolidation-handoff/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "company-led-capability-consolidation-workroom-and-standards-handoff",
+        "outcome-and-scope",
+        "existing-design-and-implementation",
+        "apply-the-candidate-standards-through-their-existing-owners",
+        "proposed-business-journey-within-existing-workroom-contracts",
+        "delivery-sequence-and-acceptance-evidence",
+        "ui-refinement",
+        "measurement-sovereignty-and-rollback",
+        "promotion-to-governed-implementation-after-recovery"
       ]
     },
     "docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md": {
