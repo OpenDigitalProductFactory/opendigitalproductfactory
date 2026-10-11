@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Complete external-client verification repair
 
 Backlog: BI-10AC904B and BI-9FA87F90. Workroom: WC-1916B51E.
@@ -179,8 +183,8 @@ and measured UX-fit manifest remain feature-thread duties after repaired access.
 
 ## Impact contract, risks and rollback
 
-Workroom impact is resolved for the 12 claimed paths. Resolve find_related_tests
-for the seven TypeScript entries before Red; run colocated and graph-linked tests.
+Workroom impact is resolved for the claimed delivery paths. Resolve
+find_related_tests for changed source entries; run colocated and graph-linked tests.
 Run style-drift guard, generated capability-completeness check, Design Grounding
 and Convergence-Impact attestations, pregate preflight, exact-tree pregate and
 PR health. Missing graph advice expands verification rather than waiving it.
@@ -198,3 +202,41 @@ Decision: decomposed. Permissions maps to BI-9FA87F90; complete preview delivery
 maps to BI-10AC904B and depends on permissions. Preview internals cannot establish
 the complete acceptance contract independently. Live immutable coverage receipt
 must be recorded before implementation; this document alone is not a receipt.
+
+Coverage receipt cmv4bk2gqht0601pee3tfbxrn was recorded against d51569ff08c2e9a29172256c10251ec560fdcb25.
+It maps permissions to BI-9FA87F90 and preview to BI-10AC904B with the dependency above.
+Implementation admission IRD-4745C55FA2D0 was allowed at effective medium sensitivity.
+
+## Current verified state (2026-10-11)
+
+The preserved feature is still exactly `7cba454af18d0d25f0d96c8a06ac6d0fed1cf488`.
+Its dry inventory recomputes to **331 affected routes: 261 static, 70 dynamic**.
+The current canonical fixture resolves only `/workspace/cases/[caseKey]`;
+all other affected dynamic routes require explicit fixtures in the admitted
+preview map. Their absence blocks exhaustive acceptance rather than lowering
+its denominator. The map records source SHA, lease, base URL and concrete paths.
+Run representative desktop/mobile, normal/Simple, light/dark and persona states
+before the complete inventory. Preserve per-context execution reports and fail
+on unresolved selectors, missing paths, navigation/redirect failures, duplicate,
+missing or unexpected results. No exhaustive served run is claimed yet.
+
+**Permission implementation is blocked by conditions:** the item has no
+initiative scope baseline, and its bug/medium signals require an operator
+classification before the server can return the appropriate review route.
+Two permission source scopes remain in the preview Workroom pending the
+platform's explicit scope-transfer approval. The permission Workroom is
+WC-3D49B086; it has no implementation edits and no grants were self-provisioned.
+
+The cursor follows PostgreSQL's transaction-bound `DECLARE ... NO SCROLL` and
+`FETCH FORWARD <count>` contracts, with one node-postgres Client owning its
+snapshot: [PostgreSQL DECLARE](https://www.postgresql.org/docs/16/sql-declare.html),
+[PostgreSQL FETCH](https://www.postgresql.org/docs/16/sql-fetch.html), and
+[node-postgres transactions](https://node-postgres.com/features/transactions).
+
+The preserved feature predates the bounded clone. Initialization therefore pins
+its clone implementation to the running canonical portal image by image digest;
+its packaged bounded-cursor module is a prerequisite. The same init container
+runs admitted-feature migrations under `/workspace`, then the packaged clone
+under `/app`. The served portal remains bound to the preserved feature. No
+feature source overlay, ad hoc image build or production bootstrap is allowed.
+An install predating the repair refuses initialization before service mutation.

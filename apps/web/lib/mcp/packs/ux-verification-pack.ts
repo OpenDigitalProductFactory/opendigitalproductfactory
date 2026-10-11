@@ -18,6 +18,8 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        previewLeaseId: { type: "string", description: "Exact admitted preview lease; issues using that preview database and signing identity." },
+        ownerSessionId: { type: "string", description: "Owning Workroom executor session, required for preview sign-in." },
         nextPath: {
           type: "string",
           description: "Portal path to land on after sign-in, e.g. /platform/federation-links. Defaults to /.",
@@ -37,14 +39,21 @@ const definitions: ToolDefinition[] = [
 
 async function issueUxVerificationSignInTool(
   params: Record<string, unknown>,
-  _userId: string,
-  context?: { agentId?: string },
+  userId: string,
+  context?: { agentId?: string; authSource?: string },
 ): Promise<ToolResult> {
   const { mintAutomationSignIn } = await import("@/lib/govern/automation-sign-in");
   const { resolveAppBaseUrl } = await import("@/lib/app-url");
   const reason = typeof params["reason"] === "string" ? params["reason"].trim().slice(0, 80) : "";
   const requestedBy = `mcp:${context?.agentId?.trim() || "agent"}${reason ? `:${reason}` : ""}`;
-  const result = await mintAutomationSignIn({
+  const previewLeaseId = typeof params["previewLeaseId"] === "string" ? params["previewLeaseId"].trim() : "";
+  const result = previewLeaseId
+    ? await (await import("@/lib/govern/preview-automation-sign-in")).issuePreviewAutomationSignIn({
+        leaseId: previewLeaseId,
+        ownerSessionId: typeof params["ownerSessionId"] === "string" ? params["ownerSessionId"] : "",
+        nextPath: typeof params["nextPath"] === "string" ? params["nextPath"] : undefined, userId, context,
+      })
+    : await mintAutomationSignIn({
     nextPath: typeof params["nextPath"] === "string" ? params["nextPath"] : undefined,
     baseUrl: resolveAppBaseUrl() ?? "http://localhost:3000",
     requestedBy,
@@ -61,6 +70,7 @@ async function issueUxVerificationSignInTool(
       expiresAt: result.expiresAt,
       persona: result.persona,
       permittedBecause: result.because,
+      ...("previewIdentity" in result ? { previewIdentity: result.previewIdentity } : {}),
     },
   };
 }

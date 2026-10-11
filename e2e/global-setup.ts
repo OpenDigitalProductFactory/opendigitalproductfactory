@@ -1,7 +1,7 @@
 import { chromium, FullConfig } from "@playwright/test";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+
+import { dirname } from "node:path";
 
 /**
  * Runs once before all tests. Logs in and saves auth storage state
@@ -9,30 +9,58 @@ import { dirname, resolve } from "node:path";
  */
 export default async function globalSetup(_config: FullConfig) {
   const login = resolveE2eLoginConfig();
+  // A previous run cannot supply source evidence for a new session.
+  rmSync("e2e/.auth/preview-identity.json", { force: true });
+  rmSync("e2e/.auth/state.json", { force: true });
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await page.goto(`${login.baseUrl}/login`);
-  // Wait for Next.js to hydrate the form
-  await page.waitForSelector('input[name="email"]', { timeout: 15_000 });
-
-  await page.fill('input[name="email"]', login.email);
-  await page.fill('input[name="password"]', login.password);
-
-  // Click the Sign in button and wait for navigation away from /login
-  await Promise.all([
-    page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 20_000 }),
-    page.click('button[type="submit"]'),
-  ]);
-
+  try {
+    if (login.password && !process.env.DPF_DEV_PORTAL_LEASE_ID) {
+      // Explicit test credentials remain available for credential-form tests.
+      await page.goto(`${login.baseUrl}/login`);
+      await page.waitForSelector('input[name="email"]', { timeout: 15_000 });
+      await page.fill('input[name="email"]', login.email);
+      await page.fill('input[name="password"]', login.password);
+      await Promise.all([
+        page.waitForURL(url => !url.pathname.includes("/login"), { timeout: 20_000 }),
+        page.click('button[type="submit"]'),
+      ]);
+    } else {
+      let signInUrl = process.env.DPF_AUTOMATION_SIGN_IN_URL;
+      let previewIdentity: unknown;
+      if (!signInUrl) {
+        const { mcpCall } = await import("../scripts/lib/mcp-client.mjs");
+        const { resolveMcpCredential } = await import("../scripts/lib/mcp-credential.mjs");
+        const mcpUrl = process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1";
+        const result = await mcpCall("issue_ux_verification_sign_in", {
+          nextPath: "/", reason: "UX route sweep", previewLeaseId: process.env.DPF_DEV_PORTAL_LEASE_ID,
+          ownerSessionId: process.env.DPF_DEV_PORTAL_OWNER_SESSION_ID,
+        }, { mcpUrl, bearerToken: resolveMcpCredential({ mcpUrl }).bearer });
+        if (!result.success) throw new Error("Platform automation sign-in was refused");
+        signInUrl = result.data?.url;
+        previewIdentity = result.data?.previewIdentity;
+      }
+      assertAutomationSignInOrigin(signInUrl, login.baseUrl);
+      await page.goto(signInUrl!);
+      await page.waitForURL(url => url.origin === new URL(login.baseUrl).origin
+        && !url.pathname.includes("/login") && !url.pathname.includes("/api/automation/sign-in"), { timeout: 20_000 });
+      const session = await page.request.get(`${login.baseUrl}/api/auth/session`);
+      const sessionBody = await session.json();
+      if (!session.ok() || sessionBody?.user?.email !== "automation@dpf.local") throw new Error("Preview automation session was not established");
+      if (previewIdentity) {
+        mkdirSync("e2e/.auth", { recursive: true });
+        writeFileSync("e2e/.auth/preview-identity.json", JSON.stringify(previewIdentity));
+      }
+    }
   console.log("[global-setup] Login successful, auth state saved");
   // e2e/.auth/ is gitignored (not committed — Playwright regenerates it on every
   // run), so a fresh clone won't have the directory yet. Create it before writing.
   const authStatePath = "e2e/.auth/state.json";
   mkdirSync(dirname(authStatePath), { recursive: true });
   await context.storageState({ path: authStatePath });
-  await browser.close();
+  } finally { await browser.close(); }
 }
 
 export function resolveE2eLoginConfig(env: NodeJS.ProcessEnv = process.env): {
@@ -43,39 +71,13 @@ export function resolveE2eLoginConfig(env: NodeJS.ProcessEnv = process.env): {
   return {
     baseUrl: (env.E2E_BASE_URL || "http://localhost:3000").replace(/\/+$/, ""),
     email: env.E2E_USER_EMAIL || "admin@dpf.local",
-    password: env.E2E_USER_PASSWORD || resolveAdminPassword(env),
+    password: env.E2E_USER_PASSWORD || env.ADMIN_PASSWORD || "",
   };
 }
 
-function resolveAdminPassword(env: NodeJS.ProcessEnv): string {
-  return (
-    env.ADMIN_PASSWORD ||
-    readRootEnvValue("ADMIN_PASSWORD") ||
-    env.DPF_ADMIN_PASSWORD ||
-    "changeme123"
-  );
-}
-
-function readRootEnvValue(key: string): string | null {
-  const envPath = findRootEnvPath();
-  if (!existsSync(envPath)) return null;
-
-  const prefix = `${key}=`;
-  const line = readFileSync(envPath, "utf8")
-    .split(/\r?\n/)
-    .find((entry) => entry.startsWith(prefix));
-
-  if (!line) return null;
-  return line.slice(prefix.length).trim().replace(/^["']|["']$/g, "") || null;
-}
-
-function findRootEnvPath(): string {
-  const candidates = [
-    resolve(process.cwd(), ".env"),
-    process.env.DPF_ROOT ? resolve(process.env.DPF_ROOT, ".env") : null,
-    process.platform === "win32" ? "D:\\DPF\\.env" : null,
-    resolve(homedir(), "dpf", ".env"),
-  ].filter((entry): entry is string => Boolean(entry));
-
-  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
+export function assertAutomationSignInOrigin(signInUrl: string | undefined, baseUrl: string) {
+  if (!signInUrl || new URL(signInUrl).origin !== new URL(baseUrl).origin
+      || new URL(signInUrl).pathname !== "/api/automation/sign-in") {
+    throw new Error("Automation session does not belong to the served preview");
+  }
 }

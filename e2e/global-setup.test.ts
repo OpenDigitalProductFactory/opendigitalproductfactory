@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { resolveE2eLoginConfig } from "./global-setup";
+import { assertAutomationSignInOrigin, resolveE2eLoginConfig } from "./global-setup";
 
 test("preview login configuration honors explicit E2E overrides", () => {
   assert.deepEqual(
@@ -24,4 +24,10 @@ test("default login configuration preserves the existing local workflow", () => 
   assert.equal(config.baseUrl, "http://localhost:3000");
   assert.equal(config.email, "admin@dpf.local");
   assert.equal(config.password, "local-admin");
+});
+
+test("automation sign-in cannot import a production session into preview", () => {
+  assertAutomationSignInOrigin("http://localhost:3001/api/automation/sign-in?token=one-use", "http://localhost:3001");
+  assert.throws(() => assertAutomationSignInOrigin("http://localhost:3000/api/automation/sign-in?token=one-use", "http://localhost:3001"), /does not belong/);
+  assert.equal(resolveE2eLoginConfig({}).password, "");
 });
