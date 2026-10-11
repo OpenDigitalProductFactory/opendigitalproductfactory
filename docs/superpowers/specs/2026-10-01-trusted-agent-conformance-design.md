@@ -9,6 +9,12 @@ status: draft
 **Date:** 2026-10-01 (America/Los_Angeles).
 **State:** proposed design; independent review and implementation admission pending.
 
+**Resumed 2026-10-11 (America/Chicago):** coordinator recovery and the approved
+executor transfer restored this room to the current Mark/Codex pair. The preserved
+draft is refreshed against `4bf3422a1daf24eb0a0dfe93380966b1ba36f22a`; this is source
+inspection, not assessment execution or independent approval. The recovery's
+invisible approval handoff is tracked in BI-06AE037F, not repaired by this runner.
+
 ## Outcome and scope
 
 Turn the existing TAK, GAID, TAK-JSI and GPP requirements into a reproducible
@@ -90,7 +96,14 @@ digests. For the design's inspected revision the source blobs are:
 | `docs/architecture/trusted-ai-kernel.md` | `2fc0b7ae2790a11193bfeba6d79765052abd4fb2` |
 | `docs/architecture/GAID.md` | `f0b60a4dfa7d3f18518c5c65d6e1d32291f6d536` |
 | `docs/architecture/job-specific-intelligence.md` | `c10f170920efb5f51c10959cbb375108ce7c5210` |
-| `docs/architecture/gated-permissions-process.md` | `1dbddf761a0b0a52544cf7048b194dcdc6580e03` |
+| `docs/architecture/gated-permissions-process.md` | `84c3bb15d6d3d338e61ddea4be60981f8d5f93be` |
+
+The 2026-10-11 refresh updates GPP to working draft 0.17. Its informative
+implementation annex now records document-compiled shapes, executable graph
+constructs and cross-day run identity. Those observations do not promote a
+binding or satisfy a runtime assertion. The frozen inventory must distinguish
+normative requirements from this changing implementation commentary; source drift
+still invalidates a manifest even when its requirement denominator is unchanged.
 
 A source inventory finds candidate MUST/MUST NOT statements in normative sections.
 Each candidate receives a reviewed include/exclude disposition with a reason and
