@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 export const LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION = "semantic-change-review-local-gate.v1";
+export const ROLE_BOUND_LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION = "semantic-change-review-local-gate.v2";
 export const SEMANTIC_DIFF_MAX_BUFFER = 256 * 1024 * 1024;
 
 export function readGitDiffDigest(mergeBase, spawn = spawnSync, cwd) {
@@ -38,6 +39,7 @@ export function readFailureEvidenceBinding(sha, cwd, spawn = spawnSync) {
 }
 
 const IDENTITY_FIELDS = [
+  "artifactType",
   "branch",
   "sha",
   "capsuleId",
@@ -54,7 +56,8 @@ function normalizedIds(value) {
 
 /** Deterministic local adapter: no model, portal, database, or network access. */
 export function validateLocalSemanticReviewGate(state, current, nowMs = Date.now()) {
-  if (!state || state.schemaVersion !== LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION) {
+  const expectedVersion = current.artifactType ? ROLE_BOUND_LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION : LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION;
+  if (!state || state.schemaVersion !== expectedVersion) {
     return { valid: false, reason: "missing-receipt" };
   }
   if (state.receiptDecision === "inconclusive") {

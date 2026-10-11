@@ -47,6 +47,16 @@ const state = {
   evidenceId: "cms-evidence-1",
 };
 
+test("role-bound sidecars cannot authorize another role or a legacy contract", () => {
+  const roleCurrent = { ...current, artifactType: "spec" };
+  const roleState = { ...state, ...roleCurrent, schemaVersion: "semantic-change-review-local-gate.v2" };
+  const now = Date.parse("2026-08-01T16:30:00Z");
+  assert.equal(validateLocalSemanticReviewGate(roleState, roleCurrent, now).valid, true);
+  assert.equal(validateLocalSemanticReviewGate(roleState, { ...roleCurrent, artifactType: "plan" }, now).valid, false);
+  assert.equal(validateLocalSemanticReviewGate(state, roleCurrent, now).valid, false);
+  assert.equal(validateLocalSemanticReviewGate(roleState, current, now).valid, false);
+});
+
 test("accepts an exact, unexpired completed receipt without network access", () => {
   assert.deepEqual(validateLocalSemanticReviewGate(state, current, Date.parse("2026-08-01T16:30:00Z")), {
     valid: true,

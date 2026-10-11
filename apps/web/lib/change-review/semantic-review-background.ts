@@ -358,7 +358,9 @@ export async function executePersistedSemanticReview(taskRunId: string) {
   if (!owned) return { taskRunId, status: "duplicate" };
   return withHeartbeatTicker(taskRunId, async () => {
     let branchFailure: ReturnType<typeof safeBranchFailure> | undefined;
-    const outcome = await withInferenceOrigin("autonomous", () => runSemanticChangeReview(packet.input, { dispatch: (prompt, context) =>
+    const outcome = await withInferenceOrigin("autonomous", () => runSemanticChangeReview(packet.input, {
+      legacyContract: packet.schemaVersion === 1,
+      dispatch: (prompt, context) =>
       dispatchRoutedSemanticReview(prompt, context, async (agentId, execute) => {
         let phase: BranchPhase = "checkpoint-read";
         try { return await checkpointBranch(row, packet, generation, agentId, execute, value => { phase = value; }); }

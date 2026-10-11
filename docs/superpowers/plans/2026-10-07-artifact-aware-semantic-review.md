@@ -35,7 +35,7 @@ Historical receipts remain unchanged and become stale when unsupported.
 - Persisted request artifact type and identity must agree; mismatches fail closed.
 - Historical receipts remain intact, and the legacy Build Studio code prompt remains compatible.
 
-REQ-ARTIFACT-1: all acceptance criteria above bind this atomic repair.
+REQ-ARTIFACT-1: all acceptance criteria above bind the complete repair across both delivery stages.
 CON-ARTIFACT-1: the existing semantic-review request, receipt and gate key share
 one explicit artifact type; no filename inference or mutation of old evidence.
 FLOW-ARTIFACT-1: input role -> coordination identity -> persisted packet -> routed
@@ -70,9 +70,12 @@ their parser requires equality. New receipts require role and a new schema/revie
 version. New gate keys include role, so different roles never join one execution.
 Old receipts remain readable for audit and are stale for new publication.
 
-There is no backfill of inferred roles and no reset of in-flight tasks. Migrate
-consumers in this atomic repair: request reader/writer, operation, prompt, gate
-identity and CLI policy/sidecar. Test legacy packet execution separately from
+There is no backfill of inferred roles and no reset of in-flight tasks. Stage one
+adds compatible readers, opt-in role-bound operation and prompt, gate identity,
+and local sidecar validation. Production request writers and publication policy
+remain on their legacy contracts until stage two. Stage two activates writers
+and binds an independently supplied expected role in both CLI and server
+publication validation after canonical compatibility deployment. Test legacy packet execution separately from
 new receipt freshness. Contract only after the old deadline/budget window drains;
 removing historical read support is outside this repair. Rollback must continue
 reading both envelope versions or leave new tasks explicitly unsupported without
@@ -93,8 +96,30 @@ dispatch; reverting may not reinterpret a new receipt under old semantics.
    PR through protections and merge queue, then verify the canonical deployed
    unpublished-document review. Infrastructure failures remain inconclusive.
 
-Steps are internal sequencing, not independently shippable deliverables: a prompt
-without identity binding or an identity unsupported by consumers is incomplete.
+## Deployment boundaries
+
+ARTIFACT-COMPAT is independently shippable under BI-AEEEFA15. It expands readers
+and validates the complete opt-in contract with tests while leaving production
+writers and publication expectations unchanged. The current branch delivers this
+stage only. Its publication does not satisfy the complete acceptance criteria.
+
+ARTIFACT-ACTIVATE is independently shippable under BI-9D6355DF and depends on
+canonical deployment of ARTIFACT-COMPAT. It changes the writer default and CLI
+policy together with server publication validation. The expected role must come
+from the publication request, never from the receipt being validated. Activation
+requires a live unpublished-document verdict and exact-role publication evidence.
+Legacy read support removal remains outside both stages.
+
+This sequencing addresses the independent plan review's mixed-version rollout
+finding (receipt cmuyjo9y30yyf01qp96x1sgll). No new writer activates in this branch.
+
+REQ-ACTIVATE-1: complete the acceptance criteria above on the canonical runtime.
+CON-ACTIVATE-1: explicitly requested role matches the role-bound receipt at every
+publication adapter; old receipts cannot satisfy the new contract.
+FLOW-ACTIVATE-1: deployed compatible readers -> new writer -> role-bound review
+-> independently bound publication expectation -> live verdict.
+VER-ACTIVATE-1: mixed-version execution, cross-role publication rejection and a
+real immutable unpublished-document review on the canonical runtime.
 
 ## Risks and rollback
 
@@ -120,5 +145,11 @@ unwritten implementation. No hypothetical test is recorded as passed.
 
 ## Backlog coverage
 
-Atomic deliverable ARTIFACT-REVIEW maps to BI-AEEEFA15 with no new child item.
-Live immutable plan coverage is pending; this file alone grants no admission.
+ARTIFACT-COMPAT maps to BI-AEEEFA15, with REQ-ARTIFACT-1, CON-ARTIFACT-1,
+FLOW-ARTIFACT-1 and VER-ARTIFACT-1. ARTIFACT-ACTIVATE maps to BI-9D6355DF,
+with REQ-ACTIVATE-1, CON-ACTIVATE-1, FLOW-ACTIVATE-1 and VER-ACTIVATE-1;
+it depends on ARTIFACT-COMPAT.
+
+Prior atomic coverage cmuyjquau0zde01qpgccodn74 binds plan commit d8ddc5205b1ed6cfe73bf961a1869ac5c21319f7.
+Revised decomposed coverage must bind this revised immutable plan before activation.
+Neither stage closes the larger document-lifecycle outcome by itself.
