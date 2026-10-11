@@ -63,6 +63,16 @@ async function findActiveEnvelope(
   });
 }
 
+/**
+ * BI-C8EC05C9 (spec D2 S2, "No pause"): a request raised under a propose
+ * boundary is metadata on argsJson, never part of the binding. The run that
+ * raised it carries on and finishes; it is not parked in input-required.
+ */
+function raisedUnderProposeBoundary(envelope: { argsJson?: unknown } | null): boolean {
+  const args = envelope?.argsJson;
+  return Boolean(args && typeof args === "object" && (args as Record<string, unknown>).proposeBoundary === true);
+}
+
 async function pauseBoundTask(
   taskRunId: string | null,
   db: AuthorityApprovalDb,
@@ -133,6 +143,10 @@ export async function ensureAuthorityApprovalEnvelope(
      * caller could not classify the call, and the short window stands.
      */
     consequence?: ApprovalClassification;
+    /** BI-C8EC05C9: raised under a propose boundary (metadata, not binding). */
+    proposeBoundary?: boolean;
+    /** BI-C8EC05C9: the chat message this request belongs to, for the inline card. */
+    chatMessageId?: string | null;
     now?: Date;
   },
   db: AuthorityApprovalDb = prisma as unknown as AuthorityApprovalDb,
@@ -159,7 +173,9 @@ export async function ensureAuthorityApprovalEnvelope(
     db,
   );
   if (existing) {
-    await pauseBoundTask(input.binding.taskRunId, db);
+    // The forced fallback re-calls the same tool on the same TaskRun, so its
+    // binding collides with a boundary request here; that must not pause it.
+    if (!raisedUnderProposeBoundary(existing)) await pauseBoundTask(input.binding.taskRunId, db);
     return existing;
   }
 
@@ -177,7 +193,11 @@ export async function ensureAuthorityApprovalEnvelope(
         // Never persist raw tool arguments in the universal authority
         // envelope. The exact-call fingerprint and bounded binding are enough
         // to prove what the human approved.
-        argsJson: { approvalBinding: input.binding },
+        argsJson: {
+          approvalBinding: input.binding,
+          ...(input.proposeBoundary === true ? { proposeBoundary: true } : {}),
+        },
+        ...(input.chatMessageId ? { chatMessageId: input.chatMessageId } : {}),
         rationale: input.explanation,
         taskRunId: input.binding.taskRunId,
         delegationChainId: input.binding.chainId,
@@ -199,7 +219,7 @@ export async function ensureAuthorityApprovalEnvelope(
     created = winner;
   }
 
-  await pauseBoundTask(input.binding.taskRunId, db);
+  if (!raisedUnderProposeBoundary(created)) await pauseBoundTask(input.binding.taskRunId, db);
   return created;
 }
 
@@ -214,6 +234,8 @@ export async function findApprovedAuthorityEnvelope(
   binding: CoworkerApprovalBinding;
   /** When it was approved, for the staleness re-check at execution. */
   approvedAt: Date | null;
+  /** Raised under a propose boundary: its TaskRun was never paused (BI-C8EC05C9). */
+  proposeBoundary?: true;
 } | null> {
   const approvalBindingFingerprint =
     fingerprintCoworkerApprovalBinding(binding);
@@ -249,6 +271,7 @@ export async function findApprovedAuthorityEnvelope(
     expiresAt: row.expiresAt,
     binding,
     approvedAt: approvalTime(args, row.createdAt),
+    ...(raisedUnderProposeBoundary(row) ? { proposeBoundary: true as const } : {}),
   };
 }
 
@@ -341,5 +364,24 @@ export async function finalizeAuthorityApprovalEnvelope(
       status: success ? "executed" : "failed",
       resolvedAt: new Date(),
     },
+  });
+}
+
+/**
+ * BI-5B34D277: hand back a reservation this run took but never spent. Called
+ * only when the call was refused before the tool ran for a reason that is not
+ * a settled no (inconclusive, awaiting input, awaiting a person), so the
+ * person's approval still stands and a retry may spend it. The compare-and-set
+ * on this run's own `resolvedAt` means a run can only release its own claim,
+ * and never touches an envelope another run already settled.
+ */
+export async function releaseAuthorityApprovalReservation(
+  envelopeId: string,
+  reservedAt: Date,
+  db: AuthorityApprovalDb = prisma as unknown as AuthorityApprovalDb,
+): Promise<void> {
+  await db.coworkerActionEnvelope.updateMany({
+    where: { id: envelopeId, status: "approved", resolvedAt: reservedAt },
+    data: { resolvedAt: null },
   });
 }

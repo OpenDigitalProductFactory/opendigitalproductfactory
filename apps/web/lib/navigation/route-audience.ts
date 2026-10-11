@@ -127,8 +127,38 @@ const FIRST_SEGMENT_AUDIENCE: Record<string, RouteAudience> = {
 const SETTINGS_SEGMENTS = new Set(["settings", "configuration", "config", "preferences"]);
 /** Trailing segments that mark a create/edit/wizard workflow step. */
 const WORKFLOW_SEGMENTS = new Set(["new", "create", "edit", "add", "wizard", "onboarding"]);
-/** First segments whose deep pages are technical/diagnostic by default. */
-const ADVANCED_FIRST_SEGMENTS = new Set(["platform", "admin", "ops", "ea", "governance", "wiki"]);
+/**
+ * The diagnostic surfaces (BI-E8D91AF6). A deep page is advanced-diagnostic only when
+ * it is named here: tools for looking inside the platform, not pages where its work
+ * is done or set up. Every other deep admin page is a detail. This list feeds
+ * progressive disclosure, so a section nav puts these behind "More tools".
+ */
+export const DIAGNOSTIC_ROUTE_PATHS: ReadonlySet<string> = new Set([
+  "/admin/cockpit",
+  "/admin/graph-explorer",
+  "/admin/twin-gallery",
+  "/admin/twin-kit",
+  "/admin/wiki/lint",
+  "/ea/data-model",
+  "/ops/dev-loop",
+  "/ops/teardown",
+  "/platform/ai/capacity-continuity",
+  "/platform/ai/memory",
+  "/platform/ai/operations-map",
+  "/platform/ai/priority/outcomes",
+  "/platform/ai/right-now",
+  "/platform/ai/runtime-health",
+  "/platform/archetype-readiness",
+  "/platform/audit/authority",
+  "/platform/audit/journal",
+  "/platform/audit/ledger",
+  "/platform/audit/metrics",
+  "/platform/audit/operations",
+  "/platform/audit/routes",
+  "/platform/tools/built-ins",
+  "/platform/tools/catalog/sync",
+  "/platform/tools/discovery/promotion-audit",
+]);
 
 /**
  * Explicit overrides — the pin registry. Add an entry here when the heuristic gets a
@@ -188,11 +218,8 @@ function destinationKindOf(route: ClassifiableRoute): RouteDestinationKind {
   // A top-level section root (one static segment) is a durable section home.
   if (route.segments.length === 1) return "section-home";
 
-  // Deep pages under a technical first segment are diagnostic/advanced.
-  const first = route.segments[0];
-  if (first && ADVANCED_FIRST_SEGMENTS.has(first) && route.segments.length >= 2) {
-    return "advanced-diagnostic";
-  }
+  // Only a named diagnostic surface is advanced (BI-E8D91AF6).
+  if (DIAGNOSTIC_ROUTE_PATHS.has(route.routePath)) return "advanced-diagnostic";
 
   // A deep static page under a business domain — best-effort detail.
   return "detail";
@@ -227,14 +254,17 @@ export function classifyRoute(route: ClassifiableRoute): RouteClassification {
 
 // ─── Registry query helpers (for nav + progressive-disclosure consumers) ─────
 
-/** True when a route is a technical/diagnostic or admin/builder surface that should
- *  sit behind a progressive-disclosure boundary for owner/worker audiences (BI-1D718FCA). */
-export function isAdvancedRoute(c: Pick<RouteClassification, "audience" | "destinationKind">): boolean {
-  return (
-    c.destinationKind === "advanced-diagnostic" ||
-    c.audience === "admin" ||
-    c.audience === "builder"
-  );
+/** True when a route is a named diagnostic surface that belongs behind the
+ *  section nav's "More tools" disclosure (BI-E8D91AF6). */
+export function isAdvancedRoute(c: Pick<RouteClassification, "destinationKind">): boolean {
+  // Audience is not a signal: admins set things up on admin pages every day
+  // (BI-E8D91AF6). Only a named diagnostic surface is advanced.
+  return c.destinationKind === "advanced-diagnostic";
+}
+
+/** True when a nav href (query and hash ignored) opens a named diagnostic surface. */
+export function isDiagnosticHref(href: string): boolean {
+  return DIAGNOSTIC_ROUTE_PATHS.has(href.split(/[?#]/)[0]!);
 }
 
 /** True when a route is a durable section home eligible for global/section navigation. */

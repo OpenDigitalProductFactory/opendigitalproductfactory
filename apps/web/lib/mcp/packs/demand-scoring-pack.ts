@@ -162,7 +162,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "set_backlog_delivery_budget",
     description:
-      "View or set the operator-owned backlog delivery budget: how many backlog items the governed daily tee-up (and on-demand process_backlog_for_build_studio) is funded to promote into Build Studio per day, plus whether governed promotion is enabled at all. Called with no fields, it's a read: returns the current budget alongside live parallelism context. A bigger budget only affects INTAKE: each start is still admitted by its portfolio's points in flight, and the Build Studio sandbox pool is the separate physical limit on builds executing at once (see sandboxPoolSize/activeBuilds in the response). Every change is audited.",
+      "View or set the operator-owned backlog delivery budget: how many backlog items the governed daily tee-up (and on-demand process_backlog_for_build_studio) is funded to promote into Build Studio per day, plus whether governed promotion is enabled at all and whether the capacity drain is switched on. Called with no fields, it's a read: returns the current budget alongside live parallelism context. A bigger budget only affects INTAKE: each start is still admitted by its portfolio's points in flight, and the Build Studio sandbox pool is the separate physical limit on builds executing at once (see sandboxPoolSize/activeBuilds in the response). Every change is audited.",
     inputSchema: {
       type: "object",
       properties: {
@@ -174,6 +174,10 @@ const definitions: ToolDefinition[] = [
         enabled: {
           type: "boolean",
           description: "Turn governed backlog promotion on/off entirely (governedBacklogEnabled). Omit to leave unchanged.",
+        },
+        capacityDrainEnabled: {
+          type: "boolean",
+          description: "Turn the use-it-or-lose-it capacity drain on/off (capacityDrainEnabled; opt-in, kernel decision DI-5FED0D945EBB): near the weekly LLM allocation reset it starts the top demand-ranked ready work so unspent allocation is used. Omit to leave unchanged.",
         },
       },
       required: [],

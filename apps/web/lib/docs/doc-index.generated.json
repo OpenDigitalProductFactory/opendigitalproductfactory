@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 733,
+  "pageCount": 736,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1111,6 +1111,7 @@
         "jsi-weights-that-learn-the-job",
         "earning-autonomy-from-passive-to-proactive",
         "the-decision-ledger",
+        "governed-decision-trust-state-report-only",
         "the-learning-loop",
         "current-boundaries"
       ]
@@ -2715,6 +2716,7 @@
         "the-brief-and-what-advances-a-stage",
         "failing-closed-is-not-the-same-as-locking",
         "every-reason-the-drive-emits-is-in-its-vocabulary-by-type",
+        "every-stage-is-a-queue",
         "a-named-governed-writer-must-be-attached-not-discovered",
         "a-stage-names-the-tools-it-needs",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
@@ -3683,6 +3685,7 @@
         "rule",
         "why",
         "how-to-apply",
+        "evidence-led-ecosystem-absorption",
         "related"
       ]
     },
@@ -3992,6 +3995,7 @@
         "why",
         "applies-to",
         "how-to-apply",
+        "continuity-and-replaceable-inference",
         "reference-implementations",
         "decision-dimensions",
         "examples"
@@ -6420,6 +6424,7 @@
         "archetype-scoped-marketing-content-bi-cc580161",
         "fit-engine-source-of-truth",
         "enforcement-points-1",
+        "selling-to-other-archetypes",
         "first-viewport-decision",
         "standards-referenced",
         "operator-identity-and-personalization",
@@ -7533,6 +7538,7 @@
         "heuristic",
         "why",
         "the-expert-trade-off",
+        "how-to-make-the-portal-faster",
         "see-also"
       ]
     },
@@ -7703,6 +7709,7 @@
       "anchors": [
         "rule",
         "how-to-apply",
+        "re-evaluation-and-continuity",
         "provider-examples",
         "see-also"
       ]
@@ -8985,6 +8992,7 @@
         "why",
         "applies-to",
         "how-to-apply",
+        "analysis-tools-and-inference-providers",
         "decision-dimensions",
         "examples",
         "sources"
@@ -9598,6 +9606,23 @@
         "sources"
       ]
     },
+    "docs/security/tool-evaluations/2026-10-07-chatterbox-tts-api.md": {
+      "publicHref": "/security/tool-evaluations/2026-10-07-chatterbox-tts-api/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-travisvnchatterbox-tts-api-v101-dpf-tts-re-pin",
+        "what-is-evaluated",
+        "api-compatibility-source-read-at-upstream-tag-v101",
+        "cosai-security-findings",
+        "compliance",
+        "architecture-fit",
+        "integration-test-results",
+        "conditions",
+        "re-evaluation"
+      ]
+    },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
       "publicHref": "/specs/device-identification-and-portfolio-placement-spec/",
       "portalHref": null,
@@ -9756,6 +9781,48 @@
         "51-parties-plausibly-interested-to-qualify-not-claims-of-interest",
         "52-caveats-dont-overclaim",
         "6-recommended-next-steps"
+      ]
+    },
+    "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md": {
+      "publicHref": "/strategy/2026-10-11-company-led-capability-consolidation-handoff/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "company-led-capability-consolidation-workroom-and-standards-handoff",
+        "outcome-and-scope",
+        "existing-design-and-implementation",
+        "apply-the-candidate-standards-through-their-existing-owners",
+        "proposed-business-journey-within-existing-workroom-contracts",
+        "delivery-sequence-and-acceptance-evidence",
+        "ui-refinement",
+        "measurement-sovereignty-and-rollback",
+        "promotion-to-governed-implementation-after-recovery"
+      ]
+    },
+    "docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md": {
+      "publicHref": "/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rea-absorption-and-hardware-neutral-business-ai",
+        "verified-upstream-project",
+        "how-dpf-arrived-here",
+        "existing-architecture-to-extend",
+        "proposed-investigation-and-absorption-flow",
+        "business-interaction-and-ui-design",
+        "phased-delivery-proposal",
+        "refactoring-allocation-and-dependency-control",
+        "future-expansion-across-customer-ecosystems",
+        "organizational-control-and-trusted-business-ai",
+        "cada-and-the-existing-sovereignty-programme",
+        "hardware-access-and-operating-economics",
+        "preparing-dpf-for-fast-capable-inference",
+        "bottlenecks-after-inference-becomes-fast",
+        "continuity-under-ownership-and-jurisdiction-changes",
+        "competitive-framing",
+        "evidence-and-next-delivery-boundary"
       ]
     },
     "docs/testing/archetype-audit-plan.md": {
@@ -11532,6 +11599,7 @@
         "what-decision-perspective-does",
         "consequential-action-alignment",
         "the-confidence-model",
+        "measuring-how-often-a-coworker-agrees-with-you",
         "the-inheritance-chain",
         "profile-kinds",
         "what-onboarding-seeds-for-wwwd",
@@ -12116,6 +12184,7 @@
         "open-the-map",
         "sites-that-are-not-on-the-map",
         "find-locations-automatically",
+        "confirm-a-sites-location-from-the-phone",
         "service-areas",
         "draw-an-area",
         "read-the-coverage",
@@ -12170,6 +12239,8 @@
         "build-a-campaign-before-building-assets",
         "review-and-publish",
         "quarantined-or-imported-content",
+        "marketing-to-other-business-types",
+        "correcting-a-plan-that-started-wrong",
         "understand-the-two-funnels",
         "treat-automation-as-a-proposal",
         "a-practical-operating-rhythm",
@@ -12506,6 +12577,7 @@
         "shared-demand",
         "activate-local-demand",
         "what-build-studio-starts-next",
+        "use-spare-weekly-ai-allowance-capacity-drain",
         "proposed-scores",
         "founder-shared-portfolio",
         "promotions",
@@ -12707,6 +12779,7 @@
         "why-it-matters",
         "what-works-without-a-map-pack",
         "what-a-map-pack-adds",
+        "which-map-pack-you-need",
         "attribution",
         "privacy"
       ]
@@ -12841,6 +12914,7 @@
         "use-this-doc-for",
         "workflow",
         "managing-a-row",
+        "writing-your-section-text",
         "fixing-generated-content-that-doesnt-fit",
         "what-to-watch",
         "purchase-traceability"
@@ -13010,6 +13084,10 @@
         "what-you-see-first",
         "activity-and-participants",
         "inspecting-the-process",
+        "reading-the-flow-map",
+        "how-work-flows-in-each-area",
+        "the-main-value-stream-on-your-home-page",
+        "when-work-keeps-piling-up",
         "access-and-other-channels",
         "finite-and-standing-rooms",
         "defining-the-room",

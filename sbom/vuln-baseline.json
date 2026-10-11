@@ -14,9 +14,9 @@
       "aliases": [
         "CVE-2026-53550"
       ],
-      "package": "js-yaml@3.14.2",
+      "package": "js-yaml@3.15.2",
       "severity": "moderate",
-      "reason": "Trusted-input-only. js-yaml 3.14.2 is a transitive dep of gray-matter, used for build-time frontmatter parsing of our own repo-controlled .md files — never attacker-supplied YAML, so the quadratic-complexity DoS is not reachable. The fix is in js-yaml 4.x, a breaking major gray-matter does not support (consistent with the prior tolerable_risk dismissal, Dependabot #74). Re-evaluate if gray-matter adopts js-yaml 4 or a 3.x patch ships.",
+      "reason": "Trusted-input-only on the remaining copy. Platform gray-matter was removed in BI-99D7C104, so the platform lockfile no longer parses docs with js-yaml 3. apps/mobile still resolves js-yaml 3.15.2 through @istanbuljs/load-nyc-config 1.1.0, which loads coverage config and is already the latest release. It does not parse request input. The unused js-yaml 3 CLI edge to argparse, and with it sprintf-js, was removed in BI-5454A9E6; this acceptance is the js-yaml 3 parser only. js-yaml 4 fixes the quadratic-complexity DoS, and this loader does not support that major. Re-evaluate when a patched 3.x ships or the coverage loader moves to js-yaml 4.",
       "expires": "2026-12-31"
     },
     {

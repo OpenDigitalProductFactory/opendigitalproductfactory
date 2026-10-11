@@ -143,3 +143,37 @@ describe("runAcceptanceSweep — routing aged items (BI-C1781121)", () => {
     expect(summary.routing).toMatchObject({ enabled: true, candidates: 0, routed: 0 });
   });
 });
+
+describe("runAcceptanceSweep — objective-mapping packets issued to routed rooms (BI-099A0BA3)", () => {
+  it("counts each room's packet outcome and names the issued count in the headline", async () => {
+    const outcomes = ["issued", "current", "not-issuable"] as const;
+    const p = ports({
+      loadPoolAges: async () => new Map([["old", age("old", 90)], ["mid", age("mid", 40)], ["young", age("young", 20)]]),
+      route: vi.fn(async (candidates: readonly AgedSweepCandidate[]) => candidates.map((candidate, index) => ({
+        itemId: candidate.item.itemId, ageDays: candidate.ageDays, outcome: "already-routed" as const,
+        capsuleId: `WC-ACC-${candidate.item.id.toUpperCase()}`, ownerAgentId: "AGT-WS-BUILD", reason: null,
+        objectiveMapping: outcomes[index] ?? null,
+      }))),
+    });
+    const summary = await runAcceptanceSweep(p, CONFIG);
+
+    expect(summary.routing.objectiveMapping).toEqual({ issued: 1, current: 1, withdrawn: 0, shapeOutdated: 0, noLiveRoom: 0, notIssuable: 1, failed: 0 });
+    expect(summary.routing.rooms.map((room) => room.objectiveMapping)).toEqual(["issued", "current", "not-issuable"]);
+    expect(summary.headline).toContain("1 objective-mapping packet issued");
+  });
+});
+
+describe("runAcceptanceSweep — withdrawn and outdated packets (BI-099A0BA3)", () => {
+  it("counts withdrawn packets and rooms still on the outdated shape", async () => {
+    const outcomes = ["withdrawn", "shape-outdated"] as const;
+    const p = ports({
+      route: vi.fn(async (candidates: readonly AgedSweepCandidate[]) => candidates.map((candidate, index) => ({
+        itemId: candidate.item.itemId, ageDays: candidate.ageDays, outcome: "already-routed" as const,
+        capsuleId: `WC-ACC-${candidate.item.id.toUpperCase()}`, ownerAgentId: null, reason: null,
+        objectiveMapping: outcomes[index] ?? null,
+      }))),
+    });
+    const summary = await runAcceptanceSweep(p, CONFIG);
+    expect(summary.routing.objectiveMapping).toMatchObject({ withdrawn: 1, shapeOutdated: 1, issued: 0 });
+  });
+});

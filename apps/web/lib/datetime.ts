@@ -89,3 +89,15 @@ export function formatTimestamp(value: string | null | undefined, empty = "—")
   if (!value) return empty;
   return new Date(value).toLocaleString();
 }
+
+/** A compact elapsed time: "3d 4h", "2h 10m", "45m", "<1m". Used by the workroom flow surfaces (EP-B70E718D). */
+export function formatDuration(ms: number): string {
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return "<1m";
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const mins = minutes % 60;
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  if (hours > 0) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  return `${mins}m`;
+}

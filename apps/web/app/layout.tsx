@@ -48,6 +48,8 @@ const BOOT_JSON = JSON.stringify({ version: BOOT_VERSION, bundleHash: BOOT_BUNDL
 const GLOBAL_NAMESPACES = (language: string) => ({
   errors: namespaceMessages(language, "errors"),
   setup: namespaceMessages(language, "setup"),
+  // BI-E8D91AF6: section navs (server and client) read "More tools" from the shell catalog.
+  shell: namespaceMessages(language, "shell"),
 });
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

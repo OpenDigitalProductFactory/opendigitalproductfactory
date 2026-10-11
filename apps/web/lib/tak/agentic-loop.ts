@@ -1024,7 +1024,7 @@ export type RunAgenticLoopParams = {
    * call records the same token id in ToolExecution audit rows.
    */
   apiTokenId?: string | null;
-  tokenScope?: "read" | "write" | "admin";
+  tokenScope?: "read" | "write" | "admin"; tokenGrantScopes?: string[]; // nested governed dispatch is authorized against these (BI-F8C661D0)
   /**
    * Governed Hermes learning Slice 1: active coworker skill for this run.
    * When set, every governed tool call records the same skillId in
@@ -1654,7 +1654,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
     totalInputTokens += result.inputTokens;
     totalOutputTokens += result.outputTokens;
-
+    if (params.terminalToolPolicy) await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools }); // BI-2E479619: CLI-native MCP calls are this turn's tool records too.
     // No tool calls — check if agent stalled with intent to continue
     if (!result.toolCalls || result.toolCalls.length === 0) {
       const trimmed = result.content.trim();
@@ -2423,7 +2423,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             threadId,
             taskRunId: taskRunId ?? undefined,
             apiTokenId: apiTokenId ?? undefined,
-            tokenScope: params.tokenScope,
+            tokenScope: params.tokenScope, tokenGrantScopes: params.tokenGrantScopes,
             skillId: tracker.activeSkillId ?? undefined,
             // In-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS
             // to the tool surface (actions/agent-coworker.ts). Flag the turn so

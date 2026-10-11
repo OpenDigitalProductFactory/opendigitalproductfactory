@@ -61,7 +61,7 @@ describe("the five delivery shapes (BI-B90F7CBB, design §3.0)", () => {
     expect(stageKeys("delivery-medium")).toEqual(["design-note", "implement", "merge", "accept"]);
     expect(stageKeys("delivery-large")).toEqual(["spec", "spec-approval", "plan", "implement", "merge", "deploy", "accept"]);
     expect(stageKeys("delivery-xlarge")).toEqual(["hypothesis", "decompose", "children", "reconcile"]);
-    expect(DELIVERY_SHAPES["delivery-break-fix"].budgets).toEqual([{ kind: "cycles-per-window", limit: 1, unit: "open break-fix per installation" }]);
+    expect(DELIVERY_SHAPES["delivery-break-fix"].budgets).toEqual([{ kind: "cycles-per-window", limit: 48, unit: "hours per item before post-implementation review" }]);
     expect(DELIVERY_SHAPES["delivery-break-fix"].collaborationShape).toBe("escalation");
     expect(DELIVERY_SHAPES["delivery-small"].collaborationShape).toBeNull();
     expect(DELIVERY_SHAPES["delivery-medium"].collaborationShape).toBe("outward-review");

@@ -205,6 +205,14 @@ function Set-DpfOrganizationTrustEnvironment {
         "DPF_ORGANIZATION_CA_URL=$organizationCaUrl"
     )
     if ($EdgeActionConfigured) {
+        # BI-28EFE18A: with the trust bundle in place, turn the action channel
+        # on so the install's own node can carry host upkeep. Execution still
+        # needs a trusted node, its enabled capability, an allowlisted type and,
+        # for the VM restart, an approved ChangeRequest. An operator's explicit
+        # value, including 0, is kept.
+        if (-not ($content | Where-Object { $_ -match '^DPF_REMOTE_ACTION_DISPATCH_ENABLED=' })) {
+            $content += "DPF_REMOTE_ACTION_DISPATCH_ENABLED=1"
+        }
         $content += @(
             "DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1",
             "DPF_EDGE_ACTION_URL=https://$Hostname`:8443",

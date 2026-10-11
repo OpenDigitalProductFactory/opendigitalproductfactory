@@ -101,3 +101,29 @@ describe("POST /api/admin/ops/execute-proposal — characterization", () => {
     expect(mocks.executeTool).not.toHaveBeenCalled();
   });
 });
+
+// Approval convergence A1 (BI-C8EC05C9): the facts PR-C keeps (spec D5, plan
+// C2): this route writes no system message and no decision log of its own,
+// keeps its { ok, result } shape, and refuses a decided proposal with 409.
+describe("POST /api/admin/ops/execute-proposal — convergence characterisation", () => {
+  it("writes only the two status updates: no system message, no decision log", async () => {
+    const res = await POST(request({ proposalId: "AP-1" }));
+    expect(res.status).toBe(200);
+    // The mocked client has no agentMessage or authorizationDecisionLog model:
+    // a write to either would have thrown and failed the request.
+    expect(Object.keys(mocks.prisma).sort()).toEqual(["agentActionProposal", "featureBuild", "user"]);
+    expect(mocks.prisma.agentActionProposal.update).toHaveBeenCalledTimes(2);
+    expect(mocks.prisma.agentActionProposal.update.mock.calls[0][0]).toEqual({
+      where: { proposalId: "AP-1" },
+      data: { status: "approved", decidedAt: expect.any(Date), decidedById: "user-su" },
+    });
+  });
+
+  it("refuses an already-decided proposal with 409 before anything runs", async () => {
+    mocks.prisma.agentActionProposal.findUnique.mockResolvedValue({ ...proposal, status: "executed" });
+    const res = await POST(request({ proposalId: "AP-1" }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "Proposal already executed" });
+    expect(mocks.executeTool).not.toHaveBeenCalled();
+  });
+});

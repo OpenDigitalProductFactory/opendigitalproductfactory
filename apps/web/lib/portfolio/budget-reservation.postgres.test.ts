@@ -5,7 +5,7 @@ import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { quarterBounds } from "./investment-points";
-import { loadReservationTotals, settleBudgetReservations } from "./budget-reservation";
+import { loadReservationTotals, planFundingReservation, settleBudgetReservations } from "./budget-reservation";
 
 // Explicit opt-in to a governed PostgreSQL target. Everything runs in one
 // transaction that always rolls back; this branch's migrations are applied
@@ -85,5 +85,31 @@ databaseSuite("budget reservations on PostgreSQL (BI-EF265C9A)", () => {
     const t = await totals();
     expect(t).toMatchObject({ reserved: 20, consumed: 8, released: 3 });
     expect(t.reserved + t.consumed).toBe(await rowSum(["reserved", "consumed"]));
+  });
+
+  it("funding reserves platform and never-scoped work against Foundational and archetype work against nothing (BI-A0C66062)", async () => {
+    const found = await client.query<{ id: string }>(`SELECT "id" FROM "Portfolio" WHERE "slug" = 'foundational'`);
+    const foundationalId = found.rows[0]?.id ?? (await client.query<{ id: string }>(
+      `INSERT INTO "Portfolio" ("id","slug","name","updatedAt") VALUES ('p-foundational-test','foundational','Foundational',now()) RETURNING "id"`)).rows[0]!.id;
+    const item = async (itemId: string, scopeKind: string | null) => {
+      await client.query(
+        `INSERT INTO "BacklogItem" ("id","itemId","title","status","type","effortSize","scopeKind","updatedAt")
+         VALUES ($1,$1,'funding attribution test','open','product','large',$2,now())`, [itemId, scopeKind]);
+      return itemId;
+    };
+    const planDb = {
+      ...db,
+      portfolio: {
+        findUnique: async (args: unknown) => {
+          const { where } = args as { where: { id: string } };
+          return (await client.query<{ id: string }>(`SELECT "id" FROM "Portfolio" WHERE "id" = $1`, [where.id])).rows[0] ?? null;
+        },
+      },
+    };
+    const plan = (itemId: string) => planFundingReservation(planDb, { itemId, now: new Date("2099-02-01T00:00:00Z"), autonomous: false, overrideReason: "test" });
+
+    expect(await plan(await item("BI-TEST-FUND-PLATFORM", "platform"))).toMatchObject({ kind: "reserve", portfolioId: foundationalId, points: 8 });
+    expect(await plan(await item("BI-TEST-FUND-UNSCOPED", null))).toMatchObject({ kind: "reserve", portfolioId: foundationalId });
+    expect(await plan(await item("BI-TEST-FUND-ARCHETYPE", "archetype-leaf"))).toMatchObject({ kind: "none", reason: "unallocated" });
   });
 });

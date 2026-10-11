@@ -149,6 +149,18 @@ export interface AiProbeRunEvent {
   data: { endpointId?: string; modelId?: string; probesOnly: boolean; userId: string };
 }
 
+/** A customer site or business location address was saved without coordinates (BI-C318C227 §2.1). */
+export interface GeocodeAddressRequestedEvent {
+  name: "geocode/address.requested";
+  data: { addressId: string };
+}
+
+/** The organization's own address was saved without coordinates (BI-C318C227 §2.1). */
+export interface GeocodeOrganizationRequestedEvent {
+  name: "geocode/organization.requested";
+  data: { organizationId: string };
+}
+
 export interface BrandExtractRunEvent {
   name: "brand/extract.run";
   data: {
@@ -222,6 +234,21 @@ export interface BuildPreBuildReviewRepairEvent {
     buildId: string;
     userId: string;
     kind: "design" | "plan";
+  };
+}
+
+/**
+ * BI-287E1DD0: run one delegated child thread as a durable job. The payload is
+ * the context `prepareChildExecution` already validated and marked working.
+ */
+export interface AgentChildThreadRunEvent {
+  name: "agent/child-thread.run";
+  data: {
+    threadId: string;
+    taskRunId: string;
+    userId: string;
+    agentId: string;
+    routeContext: string;
   };
 }
 

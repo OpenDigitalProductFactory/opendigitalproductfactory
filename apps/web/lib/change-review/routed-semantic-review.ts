@@ -1,7 +1,7 @@
 import { routeAndCall } from "@/lib/inference/routed-inference";
 import { CHANGE_REVIEWER_ROUTE_AGENT } from "@/lib/tak/change-reviewer-route";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
-import { semanticReviewMinimumContextTokens } from "./semantic-review-context-floor";
+import { semanticReviewMinimumContextTokens, SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS } from "./semantic-review-context-floor";
 import type { SemanticChangeReviewDispatchContext } from "./semantic-change-review-operation";
 import {
   describeSpecialistCraftContexts,
@@ -90,6 +90,9 @@ export async function dispatchRoutedSemanticReview(
   ];
 
   const settled = await Promise.allSettled(branches.map((branch) => runBranch(branch.agentId, async () => {
+    const minimumContext = semanticReviewMinimumContextTokens({
+      systemPrompt: branch.systemPrompt, userPrompt: prompt,
+    });
     const response = await routeAndCall(
       [{ role: "user", content: prompt }],
       branch.systemPrompt,
@@ -107,10 +110,24 @@ export async function dispatchRoutedSemanticReview(
         // tool-bearing review is unaffected. The context floor is likewise
         // derived from the request actually sent rather than an unrelated flat
         // 32,000, which excluded the local 24,576-token reviewer.
-        agentMinimumContextTokens: semanticReviewMinimumContextTokens({
-          systemPrompt: branch.systemPrompt,
-          userPrompt: prompt,
-        }),
+        agentMinimumContextTokens: minimumContext,
+        activityContract: {
+          activityId: `semantic-review:${branch.agentId}`,
+          parentRef: {},
+          activityClass: "critique",
+          title: "Review committed change",
+          distributionShape: "edge",
+          riskClass: "high",
+          successShape: "decision",
+          contextPolicy: "work-case-packet",
+          tokenEnvelope: {
+            maxInputTokens: minimumContext - SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS,
+            maxOutputTokens: SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS,
+            compression: "none",
+          },
+          evaluationPolicy: { evaluator: "review", minimumSignal: "review-passed" },
+          requestContractHints: { taskType: "build-review" },
+        },
         agentId: branch.agentId,
         agentDisplayName: branch.displayName,
         effort: context.strategyProfile === "document-authority" ? "max" : "high",

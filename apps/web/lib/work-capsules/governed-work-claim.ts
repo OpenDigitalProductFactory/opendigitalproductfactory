@@ -388,6 +388,23 @@ function exactReadback(args: {
   };
 }
 
+/**
+ * The activity kinds the claim's readiness projection reads.
+ *
+ * `evidence` is here because a small fix's research at claim is its recorded
+ * reproduction (BI-6EB2DBBB): `source_verified` plus `test_pass`, written by
+ * record_execution_evidence. The refusal advises exactly that remedy, so the
+ * claim must load what the remedy writes, or the advice can never be satisfied
+ * (BI-5C992261).
+ */
+export const CLAIM_READINESS_ACTIVITY_KINDS = [
+  "initiative_gate_receipt",
+  "initiative_scope_baseline",
+  "plan_backlog_coverage",
+  "break_fix_declared",
+  "evidence",
+] as const;
+
 export async function claimGovernedBacklogWorkspace(args: {
   db: CapsuleDb;
   input: ClaimInput;
@@ -432,7 +449,7 @@ export async function claimGovernedBacklogWorkspace(args: {
       if (!item) throw new Error(`BacklogItem ${args.input.backlogItemId} not found`);
       backlogItemRowId = item.id;
       const activities = await tx.backlogItemActivity.findMany({
-        where: { backlogItemId: item.id, kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage", "break_fix_declared"] } },
+        where: { backlogItemId: item.id, kind: { in: [...CLAIM_READINESS_ACTIVITY_KINDS] } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
       }) as InitiativeReadinessActivity[];

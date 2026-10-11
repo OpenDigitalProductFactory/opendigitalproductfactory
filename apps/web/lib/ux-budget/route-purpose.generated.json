@@ -24,7 +24,7 @@
       "routePath": "/admin/archetypes",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -36,7 +36,7 @@
       "routePath": "/admin/backups",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": false,
@@ -49,7 +49,7 @@
       "routePath": "/admin/branding",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -61,7 +61,7 @@
       "routePath": "/admin/build-studio/stall-thresholds",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -73,7 +73,7 @@
       "routePath": "/admin/business-models",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -97,7 +97,7 @@
       "routePath": "/admin/data-stewardship",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -109,7 +109,7 @@
       "routePath": "/admin/diagnostics",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -288,7 +288,7 @@
       "routePath": "/admin/hive",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -300,7 +300,7 @@
       "routePath": "/admin/issue-reports",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -312,7 +312,7 @@
       "routePath": "/admin/platform-development",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -324,7 +324,7 @@
       "routePath": "/admin/reference-data",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -336,7 +336,7 @@
       "routePath": "/admin/research",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -348,7 +348,7 @@
       "routePath": "/admin/scheduled-jobs",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": false,
@@ -373,7 +373,7 @@
       "routePath": "/admin/storefront/preset",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -1463,7 +1463,7 @@
       "routePath": "/ea/capabilities",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -1487,7 +1487,7 @@
       "routePath": "/ea/models",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -1512,7 +1512,7 @@
       "routePath": "/ea/value-streams",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -1524,7 +1524,7 @@
       "routePath": "/ea/views",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -1549,7 +1549,7 @@
       "routePath": "/ea/workrooms",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -2678,7 +2678,7 @@
       "routePath": "/governance/records-requests",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": false,
@@ -2790,7 +2790,7 @@
       "routePath": "/ops/changes",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -2802,7 +2802,7 @@
       "routePath": "/ops/demand",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -2826,7 +2826,7 @@
       "routePath": "/ops/installation",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3000,7 +3000,7 @@
       "routePath": "/ops/journeys",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3012,7 +3012,7 @@
       "routePath": "/ops/patches",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3024,7 +3024,7 @@
       "routePath": "/ops/promotions",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3036,7 +3036,7 @@
       "routePath": "/ops/security",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3048,7 +3048,7 @@
       "routePath": "/ops/self-upgrade",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": false,
@@ -3238,7 +3238,7 @@
       "routePath": "/ops/workrooms",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3408,7 +3408,7 @@
       "routePath": "/platform/ai/assignments",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3420,7 +3420,7 @@
       "routePath": "/platform/ai/browser-sessions",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3432,7 +3432,7 @@
       "routePath": "/platform/ai/browser-sessions/setup",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3444,7 +3444,7 @@
       "routePath": "/platform/ai/build-studio",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3468,7 +3468,7 @@
       "routePath": "/platform/ai/catalog",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3493,7 +3493,7 @@
       "routePath": "/platform/ai/founder-review",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3530,7 +3530,7 @@
       "routePath": "/platform/ai/overview",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3554,7 +3554,7 @@
       "routePath": "/platform/ai/prompts",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3566,7 +3566,7 @@
       "routePath": "/platform/ai/providers",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3591,7 +3591,7 @@
       "routePath": "/platform/ai/readiness",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3751,7 +3751,7 @@
       "routePath": "/platform/ai/skills",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3907,7 +3907,7 @@
       "routePath": "/platform/audit",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -3991,7 +3991,7 @@
       "routePath": "/platform/development/change-lanes",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": false,
@@ -4004,7 +4004,7 @@
       "routePath": "/platform/device-catalog",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4016,7 +4016,7 @@
       "routePath": "/platform/edge-nodes",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4028,7 +4028,7 @@
       "routePath": "/platform/federation-links",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4040,7 +4040,7 @@
       "routePath": "/platform/federation-proposals",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4052,7 +4052,7 @@
       "routePath": "/platform/identity",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4064,7 +4064,7 @@
       "routePath": "/platform/identity/agents",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4076,7 +4076,7 @@
       "routePath": "/platform/identity/applications",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4088,7 +4088,7 @@
       "routePath": "/platform/identity/authorization",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4100,7 +4100,7 @@
       "routePath": "/platform/identity/directory",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4112,7 +4112,7 @@
       "routePath": "/platform/identity/federation",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4124,7 +4124,7 @@
       "routePath": "/platform/identity/groups",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4136,7 +4136,7 @@
       "routePath": "/platform/identity/principals",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4148,7 +4148,7 @@
       "routePath": "/platform/schedule",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": false,
@@ -4161,7 +4161,7 @@
       "routePath": "/platform/service-desk",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4173,7 +4173,7 @@
       "routePath": "/platform/tools",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4197,7 +4197,7 @@
       "routePath": "/platform/tools/catalog",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4221,7 +4221,7 @@
       "routePath": "/platform/tools/discovery",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4245,7 +4245,7 @@
       "routePath": "/platform/tools/integrations",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4257,7 +4257,7 @@
       "routePath": "/platform/tools/integrations/adp",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4269,7 +4269,7 @@
       "routePath": "/platform/tools/integrations/communications",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4281,7 +4281,7 @@
       "routePath": "/platform/tools/integrations/email-postmark",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4293,7 +4293,7 @@
       "routePath": "/platform/tools/integrations/facebook-lead-ads",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4305,7 +4305,7 @@
       "routePath": "/platform/tools/integrations/facebook-pages",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4317,7 +4317,7 @@
       "routePath": "/platform/tools/integrations/google-business-profile",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4329,7 +4329,7 @@
       "routePath": "/platform/tools/integrations/google-marketing-intelligence",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4341,7 +4341,7 @@
       "routePath": "/platform/tools/integrations/hubspot",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4353,7 +4353,7 @@
       "routePath": "/platform/tools/integrations/instagram-business",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4365,7 +4365,7 @@
       "routePath": "/platform/tools/integrations/linkedin-personal-social",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4377,7 +4377,7 @@
       "routePath": "/platform/tools/integrations/mailchimp",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4389,7 +4389,7 @@
       "routePath": "/platform/tools/integrations/microsoft365-communications",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4401,7 +4401,7 @@
       "routePath": "/platform/tools/integrations/quickbooks",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4413,7 +4413,7 @@
       "routePath": "/platform/tools/integrations/stripe",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4425,7 +4425,7 @@
       "routePath": "/platform/tools/integrations/whatsapp-business",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4437,7 +4437,7 @@
       "routePath": "/platform/tools/integrations/wordpress",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4628,7 +4628,7 @@
       "routePath": "/platform/tools/inventory",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4640,7 +4640,7 @@
       "routePath": "/platform/tools/services",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
@@ -4665,7 +4665,7 @@
       "routePath": "/platform/tools/services/activate",
       "derived": {
         "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
+        "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true

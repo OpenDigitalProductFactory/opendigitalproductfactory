@@ -539,6 +539,19 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "workroom-flow-review",
+    inngestId: "workroom/flow-review",
+    honorsEnabledGate: true,
+    name: "Workroom flow review",
+    purpose:
+      "Once a day, turns every place where Workrooms pile up (three or more held at one step) into an improvement signal. A pile that persists across reviews is filed once as a backlog item through the improvement facility; one that clears on its own never reaches the backlog (EP-B70E718D F8).",
+    cron: "23 6 * * *",
+    cadence: "Daily at 06:23",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "business-metrics-aggregator",
     inngestId: "business/metrics-aggregator",
     honorsEnabledGate: true,

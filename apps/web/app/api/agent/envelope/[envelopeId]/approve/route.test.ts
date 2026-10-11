@@ -25,6 +25,9 @@ vi.mock("@/lib/coworker/envelope-actions", () => ({
 
 vi.mock("@/lib/coworker/approved-request-run", () => ({
   runApprovedExternalRequest: (...args: unknown[]) => runApprovedMock(...args),
+  // BI-C8EC05C9: no existing envelope carries the platform marker, so the
+  // platform runner always falls through to the external path here.
+  runApprovedPlatformRequest: async () => null,
 }));
 
 beforeEach(() => {

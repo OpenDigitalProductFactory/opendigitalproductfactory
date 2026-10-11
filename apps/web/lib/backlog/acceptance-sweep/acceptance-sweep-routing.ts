@@ -32,7 +32,23 @@ export type AcceptanceSweepRouting = {
   /** Aged and routable, but past this run's route limit: a later run takes them. */
   deferred: number;
   unroutableByReason: Record<string, number>;
-  rooms: Array<Pick<RouteOutcome, "itemId" | "outcome" | "capsuleId" | "ownerAgentId" | "ageDays" | "reason">>;
+  /**
+   * BI-099A0BA3: objective-mapping packets the run issued to steward rooms
+   * (issue-objective-mapping-packet.ts), so the room's own coworker records
+   * the mapping. `current` rooms already held this packet.
+   */
+  objectiveMapping: {
+    issued: number;
+    current: number;
+    /** A packet withdrawn because its coworker delivered the item (security review M1). */
+    withdrawn: number;
+    /** Rooms still pinned to acceptance-verification 1.0.0, whose stage cannot write the mapping until rebound. */
+    shapeOutdated: number;
+    noLiveRoom: number;
+    notIssuable: number;
+    failed: number;
+  };
+  rooms: Array<Pick<RouteOutcome, "itemId" | "outcome" | "capsuleId" | "ownerAgentId" | "ageDays" | "reason" | "objectiveMapping">>;
   /** Set when the routing step itself failed; the rest of the run still recorded. */
   error: string | null;
 };
@@ -48,6 +64,7 @@ export function emptyRouting(enabled: boolean, routeLimit: number): AcceptanceSw
     unroutable: 0,
     deferred: 0,
     unroutableByReason: {},
+    objectiveMapping: { issued: 0, current: 0, withdrawn: 0, shapeOutdated: 0, noLiveRoom: 0, notIssuable: 0, failed: 0 },
     rooms: [],
     error: null,
   };
@@ -66,9 +83,20 @@ const COUNTER = {
   deferred: "deferred",
 } as const;
 
+const PACKET_COUNTER = {
+  issued: "issued",
+  current: "current",
+  withdrawn: "withdrawn",
+  "shape-outdated": "shapeOutdated",
+  "no-live-room": "noLiveRoom",
+  "not-issuable": "notIssuable",
+  failed: "failed",
+} as const;
+
 export function foldRouteOutcomes(routing: AcceptanceSweepRouting, outcomes: readonly RouteOutcome[]): void {
   for (const outcome of outcomes) {
     routing[COUNTER[outcome.outcome]] += 1;
+    if (outcome.objectiveMapping) routing.objectiveMapping[PACKET_COUNTER[outcome.objectiveMapping]] += 1;
     if (outcome.outcome === "unroutable" && outcome.reason) {
       for (const reason of outcome.reason.split(",").map((part) => part.trim()).filter(Boolean)) {
         routing.unroutableByReason[reason] = (routing.unroutableByReason[reason] ?? 0) + 1;
@@ -81,6 +109,7 @@ export function foldRouteOutcomes(routing: AcceptanceSweepRouting, outcomes: rea
       ownerAgentId: outcome.ownerAgentId,
       ageDays: outcome.ageDays,
       reason: outcome.reason,
+      objectiveMapping: outcome.objectiveMapping ?? null,
     });
   }
 }
@@ -90,5 +119,6 @@ export function routingHeadline(routing: AcceptanceSweepRouting): string {
   if (routing.error) return `routing failed (${routing.error.slice(0, 80)})`;
   return `routing: ${routing.routed} routed, ${routing.alreadyRouted} already routed, `
     + `${routing.routedUnresolved} routed-unresolved, ${routing.unroutable} unroutable, `
-    + `${routing.deferred} deferred past the limit of ${routing.routeLimit}`;
+    + `${routing.deferred} deferred past the limit of ${routing.routeLimit}, `
+    + `${routing.objectiveMapping.issued} objective-mapping packet${routing.objectiveMapping.issued === 1 ? "" : "s"} issued`;
 }

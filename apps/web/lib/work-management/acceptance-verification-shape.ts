@@ -20,7 +20,10 @@
 import type { WorkShapeDefinition } from "./work-shapes";
 
 export const ACCEPTANCE_VERIFICATION_SHAPE_KEY = "acceptance-verification";
-export const ACCEPTANCE_VERIFICATION_SHAPE_VERSION = "1.0.0";
+// 1.1.0 (BI-099A0BA3): the verify stage also writes the objective mapping the
+// platform issues the room. 1.0.0 stays resolvable for pinned rooms
+// (work-shape-prior-versions.ts).
+export const ACCEPTANCE_VERIFICATION_SHAPE_VERSION = "1.1.0";
 export const ACCEPTANCE_VERIFICATION_SHAPE_REF =
   `${ACCEPTANCE_VERIFICATION_SHAPE_KEY}@${ACCEPTANCE_VERIFICATION_SHAPE_VERSION}`;
 
@@ -28,17 +31,29 @@ export const ACCEPTANCE_VERIFICATION_SHAPE_REF =
 export const ACCEPTANCE_VERIFIER_ROLE = "acceptance-verifier";
 
 /**
- * The writes the verify stage declares, and the only ones its scheduled run is
- * steered for (room-stage-mandate.ts). The route prompt names exactly these.
- * record_initiative_evidence is deliberately absent: its objective-mapping
- * operation accepts only an external-MCP TaskRun carrying a server-issued
- * review packet (objective-mapping-repository.ts), which a scheduled room run
- * never is, so the call is refused whatever steers it.
+ * The evidence writes the verify stage declares for what the coworker
+ * observed on the live install.
  */
-export const ACCEPTANCE_VERIFIER_WRITES: readonly string[] = ["record_execution_evidence", "record_workroom_evidence"];
+export const ACCEPTANCE_VERIFIER_EVIDENCE_WRITES: readonly string[] = ["record_execution_evidence", "record_workroom_evidence"];
+
+/**
+ * The acceptance-reviewer lane's writer (BI-099A0BA3). Its objective-mapping
+ * operation accepts a run only when it carries an exact server-issued packet.
+ * For a steward room, the daily sweep issues that packet to the room and the
+ * repository verifies it server-side (acceptance-sweep/
+ * steward-objective-mapping-authority.ts); with no current packet the handler
+ * refuses the call, and in a steward room it refuses every other operation.
+ */
+export const ACCEPTANCE_OBJECTIVE_MAPPING_WRITER = "record_initiative_evidence";
+
+/**
+ * The writes the verify stage declares, and the only ones its scheduled run is
+ * steered for (room-stage-mandate.ts).
+ */
+export const ACCEPTANCE_VERIFIER_WRITES: readonly string[] = [...ACCEPTANCE_VERIFIER_EVIDENCE_WRITES, ACCEPTANCE_OBJECTIVE_MAPPING_WRITER];
 
 /** The grants ACCEPTANCE_VERIFIER_WRITES require: the room's write ceiling, nothing wider. */
-export const ACCEPTANCE_VERIFIER_WRITE_GRANTS: readonly string[] = ["build_evidence", "workroom_evidence_write"];
+export const ACCEPTANCE_VERIFIER_WRITE_GRANTS: readonly string[] = ["build_evidence", "workroom_evidence_write", "initiative_evidence_write"];
 
 export const ACCEPTANCE_VERIFICATION_SHAPES: Record<string, WorkShapeDefinition> = {
   [ACCEPTANCE_VERIFICATION_SHAPE_KEY]: {
@@ -75,7 +90,8 @@ export const ACCEPTANCE_VERIFICATION_SHAPES: Record<string, WorkShapeDefinition>
     ],
     // The read baseline plus exactly the grants the declared writes require
     // (TOOL_TO_GRANTS: record_execution_evidence -> build_evidence,
-    // record_workroom_evidence -> workroom_evidence_write); the shape test
+    // record_workroom_evidence -> workroom_evidence_write,
+    // record_initiative_evidence -> initiative_evidence_write); the shape test
     // holds the two equal.
     grants: ["tool:read", ...ACCEPTANCE_VERIFIER_WRITE_GRANTS],
     measures: [
