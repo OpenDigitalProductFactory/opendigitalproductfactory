@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # Implement operator provider pause
 
 BI-56F2AB99; Workroom WC-62930005. Design: `docs/superpowers/specs/2026-10-11-provider-pause-design.md`. Medium atomic deliverable. Status: planning; immutable backlog coverage pending, no runtime implementation authorized by this plan until the receipt succeeds.

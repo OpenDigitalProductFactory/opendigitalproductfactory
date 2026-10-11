@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # Operator provider pause
 
 Status: proposed; BI-56F2AB99, EP-75B31C95. Depends on BI-734C1534.
