@@ -99,6 +99,15 @@ A version bump is then one line in `pnpm-workspace.yaml`. Dependabot updates
 catalog entries in place. A brand-new package still goes through the New
 Dependency Gate (Axis 3) first.
 
+The root npm entry in `.github/dependabot.yml` owns the platform's coupled
+dependency exclusions and groups compatible minor and patch updates. The
+marketing-media probe and mobile workspace have separate entries; policies on
+those entries do not govern the platform. Floating UI stays on the versions
+checked by the Diagram Dependency Pin Guard. Move that family only with a
+review of its pins. Mailparser and ImapFlow also pin shared MIME dependencies
+exactly, so update them together when a parser bump would retain both versions.
+Check the resulting graph against the existing SBOM budgets before publication.
+
 The catalog is safe for the service images because every image that installs from
 this workspace copies `pnpm-workspace.yaml` beside the lockfile before
 `pnpm install --frozen-lockfile` (root `Dockerfile`, `services/adp`,

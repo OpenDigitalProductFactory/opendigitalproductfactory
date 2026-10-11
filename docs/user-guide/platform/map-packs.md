@@ -30,6 +30,21 @@ A map pack adds the street layer: roads, water, parks and names. Each pack is a 
 
 A map screen tells you when it has no pack for the area you are looking at. It does not show a blank grey box.
 
+## Which Map Pack You Need
+
+You do not have to work out which region to install. Administrators see a
+**Street maps** list on the customer map, under **Find locations automatically**.
+It groups your placed locations (customer sites, your business locations and
+your business's own address) by state or province, and for each one says either:
+
+- that an installed pack already covers it, naming the pack; or
+- that no pack covers it yet, how many locations are there, and the pack to
+  install, such as `us-kansas`.
+
+The same answer, with the exact area each pack should cover, is available to
+installation tooling at `/api/map-assets/recommendation` (administrators only).
+Fetching and installing the pack itself is not automatic yet.
+
 ## Attribution
 
 Street data in map packs comes from OpenStreetMap contributors under the ODbL. Each map shows the attribution recorded in its pack's manifest. Do not hide it.

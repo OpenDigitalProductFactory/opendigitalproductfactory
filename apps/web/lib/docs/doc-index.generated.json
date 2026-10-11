@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 735,
+  "pageCount": 737,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3697,6 +3697,7 @@
         "rule",
         "why",
         "how-to-apply",
+        "evidence-led-ecosystem-absorption",
         "related"
       ]
     },
@@ -4006,6 +4007,7 @@
         "why",
         "applies-to",
         "how-to-apply",
+        "continuity-and-replaceable-inference",
         "reference-implementations",
         "decision-dimensions",
         "examples"
@@ -7719,6 +7721,7 @@
       "anchors": [
         "rule",
         "how-to-apply",
+        "re-evaluation-and-continuity",
         "provider-examples",
         "see-also"
       ]
@@ -9001,6 +9004,7 @@
         "why",
         "applies-to",
         "how-to-apply",
+        "analysis-tools-and-inference-providers",
         "decision-dimensions",
         "examples",
         "sources"
@@ -9789,6 +9793,48 @@
         "51-parties-plausibly-interested-to-qualify-not-claims-of-interest",
         "52-caveats-dont-overclaim",
         "6-recommended-next-steps"
+      ]
+    },
+    "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md": {
+      "publicHref": "/strategy/2026-10-11-company-led-capability-consolidation-handoff/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "company-led-capability-consolidation-workroom-and-standards-handoff",
+        "outcome-and-scope",
+        "existing-design-and-implementation",
+        "apply-the-candidate-standards-through-their-existing-owners",
+        "proposed-business-journey-within-existing-workroom-contracts",
+        "delivery-sequence-and-acceptance-evidence",
+        "ui-refinement",
+        "measurement-sovereignty-and-rollback",
+        "promotion-to-governed-implementation-after-recovery"
+      ]
+    },
+    "docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md": {
+      "publicHref": "/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rea-absorption-and-hardware-neutral-business-ai",
+        "verified-upstream-project",
+        "how-dpf-arrived-here",
+        "existing-architecture-to-extend",
+        "proposed-investigation-and-absorption-flow",
+        "business-interaction-and-ui-design",
+        "phased-delivery-proposal",
+        "refactoring-allocation-and-dependency-control",
+        "future-expansion-across-customer-ecosystems",
+        "organizational-control-and-trusted-business-ai",
+        "cada-and-the-existing-sovereignty-programme",
+        "hardware-access-and-operating-economics",
+        "preparing-dpf-for-fast-capable-inference",
+        "bottlenecks-after-inference-becomes-fast",
+        "continuity-under-ownership-and-jurisdiction-changes",
+        "competitive-framing",
+        "evidence-and-next-delivery-boundary"
       ]
     },
     "docs/testing/archetype-audit-plan.md": {
@@ -12150,6 +12196,7 @@
         "open-the-map",
         "sites-that-are-not-on-the-map",
         "find-locations-automatically",
+        "confirm-a-sites-location-from-the-phone",
         "service-areas",
         "draw-an-area",
         "read-the-coverage",
@@ -12744,6 +12791,7 @@
         "why-it-matters",
         "what-works-without-a-map-pack",
         "what-a-map-pack-adds",
+        "which-map-pack-you-need",
         "attribution",
         "privacy"
       ]
