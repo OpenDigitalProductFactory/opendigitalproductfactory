@@ -4,22 +4,15 @@
  */
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
-import { callProvider, InferenceError } from "@/lib/ai-inference";
 import { providerHasConfiguredCredential } from "@/lib/inference/ai-provider-internals";
 import type { BuiltinDimension } from "./types";
 import { BUILTIN_DIMENSIONS } from "./types";
-import { getTestsForDimension, type GoldenTest, type ScoringMethod } from "./golden-tests";
-import {
-  scoreExact,
-  scorePartial,
-  scoreSchema,
-  scoreToolCall,
-  scoreStructural,
-  scoreRetrieval,
-  scoreDimension,
-} from "./eval-scoring";
+import { getTestsForDimension } from "./golden-tests";
+import { scoreDimension } from "./eval-scoring";
 import { BACKGROUND_EVAL_ENDPOINT_TYPES } from "./provider-eligibility";
 import { sensitivityClassesLeftUncoveredByRetiring } from "./endpoint-retirement-guard";
+import { supportsTextGeneration } from "./model-classifier";
+import { runGoldenTest, type TestResult } from "./eval-golden-test";
 
 // ── Infrastructure Error Classifier (BI-INST-008 circuit breaker) ──────────
 //
@@ -137,102 +130,6 @@ export function detectDrift(rawEvalScore: number, previousScore: number): DriftR
 }
 
 // ── Test Execution ───────────────────────────────────────────────────────────
-
-interface TestResult {
-  testId: string;
-  version: number;
-  scoring: ScoringMethod;
-  score: number;       // 0-10
-  response: string;
-  error?: string;
-}
-
-/** Score a single response using the appropriate scoring method. */
-function scoreResponse(
-  test: GoldenTest,
-  content: string,
-  toolCalls: Array<{ name: string; arguments: Record<string, unknown> }>,
-): number {
-  switch (test.scoring) {
-    case "exact":
-      return scoreExact(content, test.expectedOutput ?? "");
-    case "partial":
-      return scorePartial(content, test.expectedOutput ?? "");
-    case "schema":
-      return scoreSchema(content, test.expectedSchema ?? {});
-    case "tool_call":
-      return scoreToolCall(toolCalls, test.expectedOutput ?? "");
-    case "structural":
-      return scoreStructural(content, test.expectedOutput ?? "");
-    case "retrieval":
-      return scoreRetrieval(content, test.expectedOutput ?? "");
-    case "orchestrator":
-      // KNOWN GAP: Orchestrator scoring requires a separate grading call to a different
-      // endpoint (to avoid self-evaluation). This is not implemented in Phase 6 — the
-      // conversational dimension will score neutral (5/10 = 50/100) until orchestrator
-      // grading is added. This is acceptable because:
-      // 1. Conversational quality is the least routing-critical dimension
-      // 2. Production observations will nudge the score over time
-      // 3. The infrastructure for cross-endpoint grading needs the eval runner itself to be stable first
-      return 5;
-    default:
-      return 0;
-  }
-}
-
-/** Run a single golden test against an endpoint, with one rate-limit retry. */
-async function runGoldenTest(
-  endpointId: string,
-  modelId: string,
-  test: GoldenTest,
-): Promise<TestResult> {
-  const attempt = async (): Promise<TestResult> => {
-    const messages = [{ role: "user" as const, content: test.prompt }];
-    const result = await callProvider(
-      endpointId,
-      modelId,
-      messages,
-      test.systemPrompt ?? "You are a helpful assistant.",
-      test.tools,
-    );
-    const score = scoreResponse(test, result.content, result.toolCalls ?? []);
-    return {
-      testId: test.id,
-      version: test.version,
-      scoring: test.scoring,
-      score,
-      response: result.content.slice(0, 500),
-    };
-  };
-
-  try {
-    return await attempt();
-  } catch (e) {
-    // Single retry for rate limits — wait 10 s then try once more
-    if (e instanceof InferenceError && e.code === "rate_limit") {
-      console.warn(`[eval-runner] rate limited on ${endpointId}/${modelId} (test ${test.id}), retrying in 10 s`);
-      await new Promise((r) => setTimeout(r, 10_000));
-      try {
-        return await attempt();
-      } catch (e2) {
-        const msg = e2 instanceof Error ? e2.message : String(e2);
-        console.error(`[eval-runner] test ${test.id} failed after retry on ${endpointId}/${modelId}: ${msg}`);
-        return { testId: test.id, version: test.version, scoring: test.scoring, score: 0, response: "", error: msg || "unknown error" };
-      }
-    }
-
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    console.error(`[eval-runner] test ${test.id} failed on ${endpointId}/${modelId} (model: ${modelId}): ${errorMessage}`);
-    return {
-      testId: test.id,
-      version: test.version,
-      scoring: test.scoring,
-      score: 0,
-      response: "",
-      error: errorMessage || "unknown error",
-    };
-  }
-}
 
 // ── Dimension Eval Orchestration ─────────────────────────────────────────────
 
@@ -416,6 +313,21 @@ export async function runDimensionEval(
   });
 
   if (!modelProfile) throw new Error(`ModelProfile ${providerId}/${modelId} not found`);
+
+  // Recheck at execution: stale queued events and forced runs must not send
+  // chat probes to embedding/image/audio models or retire them for refusing.
+  if (!supportsTextGeneration(modelProfile)) {
+    return {
+      endpointId: providerId,
+      modelId,
+      dimensions: [],
+      testRunId: "",
+      hasDrift: false,
+      hasSevereDrift: false,
+      firstError: "Skipped: model does not generate text; chat calibration is incompatible",
+      skipped: true,
+    };
+  }
 
   // Don't eval retired or disabled models — they can't be called
   if (modelProfile.modelStatus === "retired" || modelProfile.modelStatus === "disabled") {
@@ -744,6 +656,8 @@ export async function runAllDimensionEvals(triggeredBy: string): Promise<EvalRun
     select: {
       providerId: true,
       modelId: true,
+      modelClass: true,
+      outputModalities: true,
       provider: { select: { authMethod: true } },
     },
   });
@@ -756,6 +670,7 @@ export async function runAllDimensionEvals(triggeredBy: string): Promise<EvalRun
   const credentialOk = new Map<string, boolean>();
   const eligible: typeof models = [];
   for (const m of models) {
+    if (!supportsTextGeneration(m)) continue;
     let ok = credentialOk.get(m.providerId);
     if (ok === undefined) {
       ok = await providerHasConfiguredCredential(

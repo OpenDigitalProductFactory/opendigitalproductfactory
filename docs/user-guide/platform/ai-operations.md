@@ -85,6 +85,19 @@ separate provider or A2A diagrams to reconcile with this map.
   with the related design stage focused. Mode and focus remain in the URL so
   the exact explanatory view can be shared or revisited.
 
+## Understanding background inference
+
+Simple prompts about colors, JSON or greetings can be model calibration probes.
+They measure the model named in the request, so routing them to another provider
+would measure the wrong model. Chat probes run only on text-generating models and
+use bounded output limits; embedding models are excluded.
+
+Decision Concierge panels originate from unresolved decision records. Its standing
+governance room reports cases skipped because the question lacks context, a panel
+is unfinished or the case has not changed since the previous panel. A changed
+question, options or evidence can make a completed case eligible again. Skipping
+a panel leaves the decision unresolved and preserves its evidence.
+
 ## When a coworker says it used the backup model
 
 A reply can carry a note that the turn ran on the bundled local model instead of
