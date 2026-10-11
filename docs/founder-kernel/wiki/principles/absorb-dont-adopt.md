@@ -52,6 +52,16 @@ A third-party stack beside the platform is an appendage. The failure this preven
 - Update the stated allocation in design docs rather than carrying an older ratio forward silently.
 - Federation and interoperability stay. The rule governs where functionality lives. It does not mean refusing to interoperate.
 
+## Evidence-led ecosystem absorption
+
+Analysis tools can help recover the business behavior an organization needs from existing software. Treat their findings as evidence for the existing intake, coverage assessment, and delivery process. Observed behavior, inferred behavior, and verified DPF coverage remain distinct. Discovery does not authorize migration or establish product coverage.
+
+Apply the owner-scoped investment allocation above to canonical identity, evidence, governed execution, inference, and shared human/coworker surfaces. Absorb selected implementation behind replaceable platform contracts; qualify underlying engines separately. A fast model or a broad tool catalog does not justify a parallel business model, duplicate assessor, or permanent adjacent stack.
+
+WWMD sets platform direction. The organization decides adoption and accepted dependencies in WWWD; profession standards and qualification belong to WSID. Customer artifacts stay within the organization's data boundary. Share only permitted, sanitized requirements and verified reusable methods.
+
+The [REA research and phased proposal](../../../strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md) applies this direction to ecosystem analysis and future inference hardware. Its pilot slices require live reconciliation and qualification before implementation.
+
 ## Related
 
 `prefer-self-hosted-infrastructure` · `architecture-over-shortcuts` · `verify-substrate-before-proposing-new` · `substrate-cleanup-before-substrate-addition` · `one-home-per-capability` · `single-source-of-truth`

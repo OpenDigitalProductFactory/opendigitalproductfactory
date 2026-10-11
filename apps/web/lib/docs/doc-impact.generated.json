@@ -740,8 +740,14 @@
       "docs/architecture/decision-vectors.md",
       "docs/architecture/vector-decisioning-and-jsi.md"
     ],
+    "apps/web/lib/decision-perspective/org-business-gate.ts": [
+      "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
+    ],
     "apps/web/lib/decision-perspective/planned-file-paths.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/decision-perspective/profession-corpus.ts": [
+      "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
     ],
     "apps/web/lib/decision-perspective/stance-promotion.ts": [
       "docs/architecture/vector-decisioning-and-jsi.md"
@@ -931,6 +937,10 @@
     "apps/web/lib/identity/principal-linking.ts": [
       "docs/architecture/ai-agent-meta-model.md"
     ],
+    "apps/web/lib/incumbent/coverage-ai.ts": [
+      "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md",
+      "docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md"
+    ],
     "apps/web/lib/inference/data-screening/evaluate-inference-policy.ts": [
       "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md"
     ],
@@ -1079,6 +1089,9 @@
     ],
     "apps/web/lib/observability/monitor-source-reachability.ts": [
       "docs/operations/observability-coverage.md"
+    ],
+    "apps/web/lib/onboarding/setup-completion-seeds.ts": [
+      "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
     ],
     "apps/web/lib/operate/db-continuity.ts": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -1451,6 +1464,9 @@
     "apps/web/lib/voice-synthesis/tts-health-contract.test.ts": [
       "docs/operations/observability-coverage.md"
     ],
+    "apps/web/lib/wiki/enrich-org-corpus.ts": [
+      "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
+    ],
     "apps/web/lib/wiki/principle-lint-detectors.ts": [
       "docs/operations/runtime-kernel-commandments.md"
     ],
@@ -1532,7 +1548,8 @@
     ],
     "apps/web/lib/work-management/work-shapes.ts": [
       "docs/architecture/gated-permissions-process.md",
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
     ],
     "apps/web/lib/work-management/work-unit.ts": [
       "docs/founder-kernel/wiki/principles/universal-work-formula.md"
@@ -3819,6 +3836,17 @@
       "apps/web/lib/govern/auth.ts",
       "apps/web/lib/routing/provider-suitability/openrouter-policy.ts",
       "docker-compose.linux.yml"
+    ],
+    "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md": [
+      "apps/web/lib/decision-perspective/org-business-gate.ts",
+      "apps/web/lib/decision-perspective/profession-corpus.ts",
+      "apps/web/lib/incumbent/coverage-ai.ts",
+      "apps/web/lib/onboarding/setup-completion-seeds.ts",
+      "apps/web/lib/wiki/enrich-org-corpus.ts",
+      "apps/web/lib/work-management/work-shapes.ts"
+    ],
+    "docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md": [
+      "apps/web/lib/incumbent/coverage-ai.ts"
     ],
     "docs/testing/archetype-audit-plan.md": [
       "packages/storefront-templates/src/archetypes/index.ts",

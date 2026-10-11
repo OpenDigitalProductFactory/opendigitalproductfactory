@@ -80,3 +80,27 @@ BI-06AE6833, BI-31159978 and BI-0ACB97B5, claim the live workroom, attach the so
 and test evidence, execute the remaining gates and obtain the exact-tree review
 receipt before opening a ready PR. No backlog status is asserted from offline
 source evidence.
+
+### Connection and integration correction, 2026-10-11
+
+The later availability check used the currently configured
+`http://127.0.0.1:3000/api/mcp/v1?tier=full` origin. Its platform version endpoint
+returned HTTP 200. The earlier `https://localhost` timeout proves that obsolete
+endpoint was unreachable, not that the whole platform remains down. This chat's
+tool catalog still exposes no native DPF tools; portal health does not prove
+authenticated coordination, review or lease access. Subsequent use of the
+repository's configured governed MCP transport returned the server's development
+authority instructions and successfully loaded the independent-review tool.
+The supported lease probe queued and released its temporary claim, proving gate
+infrastructure is available; the outage bypass no longer applies. The combined
+source passes 128 focused tests and both web TypeScript programs.
+Do not substitute another
+principal's credential or manufacture admission to get past that boundary.
+
+Current-main integration found a generated doc-index conflict. Regenerating the
+index from the merged source preserves both reliability and newer strategy work.
+The newer absorption paragraph now refers to the owning investment allocation
+instead of adding another unscoped ratio. Existing active execution-acceptance,
+OAuth and tool-loop-repair chats own adjacent work; their source and runtime work
+must be inspected before extending this slice. Do not start duplicate recovery
+tasks merely because this chat cannot see their native tools.
