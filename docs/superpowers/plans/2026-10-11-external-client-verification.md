@@ -57,6 +57,17 @@ refinement only after verifying authenticated principal AND exact session for
 the reservation. Foreign, unknown, forced or destructive cleanup retains
 authority approval. This advisory is not a runtime grant.
 
+## Acceptance criteria (BI-10AC904B, verbatim)
+
+- AC-PREVIEW-1: Startup verifies the admitted worktree mount and served SHA and does not recreate live services.
+- AC-PREVIEW-2: Install settings and development-only prerequisites are provisioned before runtime mutation without operator credential entry or production secret copies.
+- AC-PREVIEW-3: Sanitized clone uses bounded read/transform/write batches verified with large JSON/vector data and a failed clone cannot be served.
+- AC-PREVIEW-4: Both token and coworker authority are checked across the approved delivery workflow; restricted connections and no self-granting remain enforced.
+- AC-PREVIEW-5: Scripts, hooks and instructions use durable queued resume and terminal-stop lease semantics.
+- AC-PREVIEW-6: Verified owner cleanup follows WWMD and justified approvals show exact actions with automatic expiry/cancellation reconciliation.
+- AC-PREVIEW-7: The admitted preview has the correct environment class and a platform-issued automation browser session consumed by the UX sweep.
+- AC-PREVIEW-8: Representative desktop/mobile/Simple-mode checks and exhaustive affected-route coverage with dynamic fixtures are planned and executed before completion.
+
 ## Requirements
 
 - R1: Bind the admitted worktree and SHA, verify the actual container mount and
