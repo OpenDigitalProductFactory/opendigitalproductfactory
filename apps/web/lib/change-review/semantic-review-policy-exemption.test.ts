@@ -82,7 +82,7 @@ describe("audited DEV review exceptions", () => {
     m.envelope.mockResolvedValue({ status: "cancelled" });
     expect(await resolveWorkroomReviewExemption("WC-room", "room", head)).toBeNull();
   });
-  it.each([{ sourceHeadSha: "e".repeat(40) }, { expiresAt: "2000-01-01T00:00:00Z" }, { diffDigest: "bad" }])("refuses invalid source or expiry", async patch => {
+  it.each([{ sourceHeadSha: "e".repeat(40) }, { expiresAt: new Date(Date.now() - 60_000).toISOString() }, { diffDigest: "bad" }])("refuses invalid source or expiry", async patch => {
     expect((await recordSemanticReviewExemption({ ...params, ...patch }, "operator", context)).success).toBe(false);
   });
 });
