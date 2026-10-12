@@ -135,10 +135,10 @@ function evaluateConnection(
       return deny(facts, "financial-oversight-unproven", "Financial records require a linked contract, reviewed customer-information controls, and no-training entitlement.");
     }
   }
-  if (classes.has("source-code")) {
+  if (profiles.some((profile) => profile.workloadClass === "source-code" && profile.sensitivity !== "public")) {
     const approvedAccount = facts.accountClass === "business-team" || facts.accountClass === "enterprise";
     if (!approvedAccount || !hasCurrentEvidence(facts) || !hasNoTraining(facts)) {
-      return deny(facts, "business-account-unproven", "Source code requires a business or enterprise connection with proven no-training treatment.");
+      return deny(facts, "business-account-unproven", "Non-public source code requires a business or enterprise connection with proven no-training treatment.");
     }
   }
 

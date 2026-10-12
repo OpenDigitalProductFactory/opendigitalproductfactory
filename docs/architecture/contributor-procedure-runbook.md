@@ -105,6 +105,38 @@ Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 pha
 
 ## 15. Communication
 
+### Ending an unfinished thread
+
+Before handing the thread back, determine whether its objective is complete,
+the user explicitly paused it, or an observed dependency prevents further
+authorized progress. A recoverable tool failure, completed intermediate phase,
+or unexamined configuration error is not by itself a reason to stop. Continue
+useful authorized work that does not depend on a pending answer.
+
+For a decision that needs direction, consult the recorded WWMD platform,
+WWWD organization and WSID profession context, reuse valid decisions, and
+identify the owning scope. Record which applicable scopes were inconclusive
+or silent and the specific unresolved fact or authority. Do not substitute
+another scope's doctrine for the owner's decision. See
+[Consult the Governed Scopes Before Asking a Human](../founder-kernel/wiki/principles/consult-scopes-before-asking.md)
+and [Escalation Is a Gate, Not a Trust Tier](../founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md).
+
+An unfinished handoff must state:
+
+- The remaining objective and the observed reason progress stopped.
+- The recovery or recorded direction checked, and why it did not resolve the dependency.
+- Who owns the next action and exactly what action or evidence permits resumption.
+- A direct, answerable question when human input is needed, with the missing fact or authority explained.
+
+If an external dependency is the owner, say that no user action is required
+and name the observable condition needed to resume. Do not imply monitoring
+or automatic resumption unless it has actually been arranged. If the user
+paused the work, identify what remains without inventing another approval.
+Avoid vague endings such as "blocked", "waiting for review", or "ready for
+the next phase" without that actionable explanation. A blocker report is
+not a completion claim, and the user must never have to ask whether the work
+is done or what the agent needs from them.
+
 - If uncommitted changes exist, mention them before starting new work. → [kernel principle](../founder-kernel/wiki/principles/mention-uncommitted-changes.md)
 - When committing, list what's included.
 - State results and decisions directly. No running commentary on internal deliberation. → [kernel principle](../founder-kernel/wiki/principles/state-results-directly.md)
