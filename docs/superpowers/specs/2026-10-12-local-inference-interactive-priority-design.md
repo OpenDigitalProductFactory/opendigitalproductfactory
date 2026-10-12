@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: active
 backlog_item: BI-285EF102
 workroom: WC-1EBA9720
 decision: DI-3329D0A9F402

@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Plan — Engine-aware inference admission budget
 
 Date: 2026-07-07. Epic: EP-B9DD37C7 (coworker trust/transparency) · relates to
