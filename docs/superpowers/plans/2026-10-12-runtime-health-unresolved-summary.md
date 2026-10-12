@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 date: 2026-10-12
 backlog: BI-449F5F0F
 ---
@@ -12,7 +12,7 @@ The existing routing explainability design, `docs/superpowers/specs/2026-07-26-a
 
 On DEV recovery.4, only two of five phases resolve, while the banner says all phases route to cloud. Three phases fail because completion capacity is unknown. Capability authority is unavailable and all 130 coworkers are blocked. These are observed states, not proof that installed models cannot infer.
 
-The page repair computes availability from existing `PhaseResolution.isLocal` values, where null means unresolved. A local/cloud verdict describes resolved locations and cannot establish availability. Derive one banner presentation once and reuse its title, summary and tone throughout the existing banner. Keep its landmark shape, controls and frozen arrival word budget. Shorten surrounding copy to compensate for accurate counts.
+The page repair computes availability from existing `PhaseResolution.isLocal` values, where null means unresolved. A local/cloud verdict describes resolved locations and cannot establish availability. Derive one banner presentation once and reuse its title, summary and tone throughout the existing banner. Keep its landmark shape, controls and frozen arrival word budget. Shorten surrounding copy to compensate for accurate counts. New copy lives in the existing `admin` message namespace (`packages/i18n/src/messages/en-US/admin.json`), loaded with the shared server translator alongside health reads; existing legacy copy is unchanged.
 
 No persistence, authority, routing eligibility, model-capacity assumption, provider activation, inference probe, migration, or runtime deployment is part of this page change. Missing evidence remains unknown. The shared shell's infrastructure health signal needs a separate scope assessment; this change cannot claim to fix it.
 
@@ -44,4 +44,4 @@ Live acceptance follows canonical release inclusion and preflight CAN-TEST. Veri
 
 ## Backlog coverage
 
-Coverage is pending until this immutable plan is published and the native decomposed receipt maps RH-UI to BI-449F5F0F and RH-PROJECTION to existing BI-59E37E39. Do not claim implementation admission or complete capture without that receipt.
+Native decomposed receipt `cmv5v820y1pca01pg7ds5q22o` binds immutable plan commit `5040f8704c2b128e207c96e64935258a80677f4a`, blob `f1af2f1d6d3872073d47c78705be7c262d0d75dc`. RH-UI maps to BI-449F5F0F and RH-PROJECTION maps to existing BI-59E37E39. Both mappings validated. Page-only implementation was admitted as `IRD-E142A139F53A`; native projection and broader acceptance remain separately owed.
