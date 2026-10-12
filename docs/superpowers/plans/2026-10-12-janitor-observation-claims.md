@@ -63,3 +63,28 @@ separate facts under the existing contract. Do not turn pending checks into
 passes, or treat archived history as active WIP. The UI should present the next
 action, owner, waiting reason and closure basis, with technical evidence in
 details; UI implementation belongs to its existing Workroom surface work.
+
+## Authoring closeout and current admission
+
+The live kernel already publishes
+[Submitting Work Is Not Accepting It](../../founder-kernel/wiki/principles/submitting-work-is-not-accepting-it.md):
+an author ends the thread after opening the evidenced PR and naming what remains
+unproven. Do not retain the authoring chat to watch merge, deployment or acceptance,
+or create a per-author watcher. Pending acceptance belongs on the backlog.
+BI-E3B918C2 owns native release acceptance; it was raised to priority 0 and the
+operator's October 12 clarification was recorded as activity
+`cmv5lzs8raz8p01mwsqz0n168`. Its implementation is still unfinished. Ending the
+authoring thread does not assert that the outcome passed acceptance.
+
+For this repair, the current connection refused `record_initiative_evidence`
+with `AUTHORIZATION_DENIED`. Implementation admission `IRD-807F4A1379BF`
+therefore refused `RESEARCH_REQUIRED`. Its alternative requires named-source
+verification plus a passing failing-to-passing test before implementation;
+no passing repair evidence exists yet. The refusal and this timing problem
+were recorded on existing BI-6EB2DBBB as `cmv5m400xazfn01mw26kz2rpf`.
+Resolve the supported research authority/admission before editing runtime code;
+do not manufacture a passing result or reclassify the repair to escape the gate.
+
+No runtime code, installation assets, worktrees or branches were deleted or
+modified by this review. The full fleet dry run was stopped after its ownership
+read had already failed; no complete safe-removal classification is claimed.
