@@ -33,7 +33,18 @@ const secondaryButtonStyle = {
   color: "var(--dpf-text)", cursor: "pointer", fontSize: 11, padding: "5px 10px",
 } as const;
 
-export function OllamaManagement({ canWrite, vramGb }: Props) {
+export function OllamaManagement(props: Props) {
+  if (!props.canWrite) {
+    return (
+      <p role="status" style={{ ...panelStyle, color: "var(--dpf-muted)", fontSize: 12 }}>
+        Provider management access required.
+      </p>
+    );
+  }
+  return <ManagedLocalModels {...props} />;
+}
+
+function ManagedLocalModels({ canWrite, vramGb }: Props) {
   const observer = useBackgroundOperationObserver<LocalModelStatusSnapshot>({
     endpoint: "/api/platform/ai/local-models/status",
     eventType: "system:local-model",
@@ -41,6 +52,8 @@ export function OllamaManagement({ canWrite, vramGb }: Props) {
     isActive: (snapshot) => snapshot.operations.some(isActiveOperation),
   });
   const { models, operations } = observer.snapshot;
+  const hasInventory = observer.snapshot.observedAt !== "";
+  const currentInventory = hasInventory && observer.error === null;
   const [category, setCategory] = useState<Category>("coworkers");
   const [removeReference, setRemoveReference] = useState<string | null>(null);
   const [busyReference, setBusyReference] = useState<string | null>(null);
@@ -88,7 +101,8 @@ export function OllamaManagement({ canWrite, vramGb }: Props) {
           <div>
             <h2 style={{ color: "var(--dpf-text)", fontSize: 15, margin: 0 }}>Installed models</h2>
             <p style={{ color: "var(--dpf-muted)", fontSize: 11, margin: "4px 0 0" }}>
-              {models.length} installed
+              {hasInventory ? <>{observer.error ? "Last known inventory · " : ""}{models.length} installed</>
+                : observer.error ? "Inventory unavailable" : "Checking inventory…"}
               {knownBytes > 0 ? ` · ${formatModelBytes(knownBytes)} on disk` : ""}
               {unknownSizeCount > 0 ? ` · ${unknownSizeCount} size unavailable` : ""}
             </p>
@@ -100,7 +114,7 @@ export function OllamaManagement({ canWrite, vramGb }: Props) {
 
         {(observer.error || actionMessage) && (
           <p role="status" style={{ color: observer.error ? "var(--dpf-error)" : "var(--dpf-muted)", fontSize: 11 }}>
-            {observer.error ? "The installed model list could not be refreshed." : actionMessage}
+            {observer.error ? "Refresh failed." : actionMessage}
           </p>
         )}
 
@@ -118,9 +132,9 @@ export function OllamaManagement({ canWrite, vramGb }: Props) {
           </p>
         ))}
 
-        {models.length === 0 && !observer.pending ? (
+        {models.length === 0 && currentInventory ? (
           <p style={{ color: "var(--dpf-muted)", fontSize: 12, margin: "18px 0 2px" }}>
-            No models are installed. Choose one below.
+            No models installed.
           </p>
         ) : (
           <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
@@ -145,14 +159,14 @@ export function OllamaManagement({ canWrite, vramGb }: Props) {
                         {model.name}
                       </div>
                     </div>
-                    {canWrite && !confirming && (
+                    {canWrite && currentInventory && !confirming && (
                       <button type="button" aria-label={`Remove ${displayName}`} onClick={() => setRemoveReference(model.name)}
                         disabled={busyReference !== null} style={{ ...secondaryButtonStyle, color: "var(--dpf-error)", flexShrink: 0 }}>
                         Remove
                       </button>
                     )}
                   </div>
-                  {confirming && (
+                  {confirming && currentInventory && (
                     <div role="alert" style={{ background: "color-mix(in srgb, var(--dpf-error) 7%, transparent)", border: "1px solid color-mix(in srgb, var(--dpf-error) 30%, var(--dpf-border))", borderRadius: 6, marginTop: 10, padding: 10 }}>
                       <div style={{ color: "var(--dpf-text)", fontSize: 11 }}>
                         {isNomic
@@ -180,7 +194,7 @@ export function OllamaManagement({ canWrite, vramGb }: Props) {
       <div style={panelStyle}>
         <h2 style={{ color: "var(--dpf-text)", fontSize: 15, margin: 0 }}>Add a local model</h2>
         <p style={{ color: "var(--dpf-muted)", fontSize: 11, margin: "4px 0 12px" }}>
-          DPF downloads, verifies, and adds the model to routing.
+          Downloads are verified before routing.
           {vramGb ? ` This system reports ${vramGb} GB graphics memory.` : ""}
         </p>
         <div role="tablist" aria-label="Model categories" style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
@@ -198,13 +212,13 @@ export function OllamaManagement({ canWrite, vramGb }: Props) {
             <CatalogRow key={model.id} model={model}
               installed={installedKeys.has(localModelComparisonKey(model.id))}
               operation={activeByKey.get(localModelComparisonKey(model.id))}
-              canWrite={canWrite} busy={busyReference === model.id}
+              canWrite={canWrite && currentInventory} busy={busyReference === model.id}
               hardwareFit={vramGb ? model.vramGb <= vramGb : true}
               onInstall={() => void install(model.id)} />
           ))}
         </div>
 
-        {canWrite && (
+        {canWrite && currentInventory && (
           <details style={{ marginTop: 14 }}>
             <summary style={{ color: "var(--dpf-muted)", cursor: "pointer", fontSize: 11 }}>Advanced model reference</summary>
             <div style={{ display: "flex", gap: 7, marginTop: 9 }}>
