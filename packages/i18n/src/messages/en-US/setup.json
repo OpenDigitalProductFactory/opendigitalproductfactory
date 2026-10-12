@@ -57,7 +57,7 @@
     "disabled": "Disabled",
     "unavailable": "Unavailable",
     "notSetUp": "Not set up",
-    "active": "Active",
+    "active": "Traffic enabled",
     "degraded": "Degraded",
     "changePause": "Change pause",
     "setResumeTime": "Set resume time",
@@ -78,6 +78,8 @@
   },
   "providerRouting": {
     "heading": "Routing right now",
+    "hostReserved": "Local capacity is reserved for platform verification.",
+    "hostUnavailable": "Local capacity ownership could not be checked.",
     "pauseEnds": "Pause ends",
     "nextAttempt": "Next attempt after",
     "indefinite": "Until you enable it.",

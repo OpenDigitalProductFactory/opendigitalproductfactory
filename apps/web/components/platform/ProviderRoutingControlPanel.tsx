@@ -16,7 +16,7 @@ export function ProviderRoutingControlPanel({ pw, view, canWrite }: { pw: Provid
   return <Surface as="section" aria-labelledby="provider-routing-heading" className="mb-5">
     <div className="mb-3 flex flex-wrap items-center gap-3">
       <h2 id="provider-routing-heading" className="text-base font-semibold text-[var(--dpf-text)]">{t("providerRouting.heading")}</h2>
-      <StatusBadge domain="routingEligibility" status={view.eligibility.state} label={view.eligibility.label} uppercase={false} />
+      <StatusBadge size="md" domain="routingEligibility" status={view.eligibility.state} label={view.eligibility.label} uppercase={false} />
     </div>
     <p className="text-sm text-[var(--dpf-muted)]">{view.eligibility.reason}</p>
     {view.restrictions.length > 0 && <ul className="my-3 space-y-2 text-sm text-[var(--dpf-text)]">{view.restrictions.map(r => <li key={r.key}>

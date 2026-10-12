@@ -1,3 +1,6 @@
+import { getT } from "@/lib/i18n/t.server";
+import { inspectLocalProviderCapacity } from "@/lib/routing/local-provider-capacity";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { prisma } from "@dpf/db";
 import type { ProviderWithCredential } from "./ai-provider-types";
 import { getLocalOnlyInference } from "./local-only";
@@ -11,11 +14,13 @@ import { readRecoveryState, providerRecoveryJobId } from "@/lib/routing/provider
 /** Shared catalog/detail read model; no status mutation or page-driven recovery. */
 export async function loadProviderRoutingControls(providers: ProviderWithCredential[], modelCounts: ReadonlyMap<string, number>, now = new Date()) {
   const ids = providers.map(p => p.provider.providerId);
-  const [health, pools, localOnly, capacities, recoveries] = await Promise.all([
+  const [health, pools, localOnly, capacities, recoveries, hostCapacity, t] = await Promise.all([
     loadProviderHealthBatch(ids, { now: now.getTime(), runtimeState: getEndpointRuntimeState }),
     getAllCliPoolStatuses(), getLocalOnlyInference(),
     prisma.providerCapacityStatus.findMany({ where: { providerId: { in: ids } } }),
     prisma.scheduledJob.findMany({ where: { jobId: { in: ids.flatMap(id => [providerRecoveryJobId(id), `provider-reenable-${id}`]) }, lastStatus: "scheduled", schedule: { not: "disabled" } } }),
+    ids.some(isLocalProviderId) ? inspectLocalProviderCapacity() : Promise.resolve(null),
+    getT("setup"),
   ]);
   const capacityById = new Map(capacities.map(c => [c.providerId, c]));
   const recoveryById = new Map(recoveries.map(j => [j.jobId, j]));
@@ -33,6 +38,7 @@ export async function loadProviderRoutingControls(providers: ProviderWithCredent
       capacity: capacity ? { state: capacity.state, retryAtMs: capacity.retryAt?.getTime(), observedAtMs: capacity.lastObservedAt?.getTime(), safeSummary: capacity.safeSummary } : undefined,
       recovery: recovery && state && pw.provider.status === "disabled" ? { summary: `Automatic recovery after an ${state.cause === "auth" ? "authentication" : "account billing"} error.`, nextRunAt: recovery.nextRunAt?.toISOString() ?? null } : undefined,
       quotaRecovery: quotaJob ? { nextRunAt: quotaJob.nextRunAt?.toISOString() ?? null } : undefined,
+      hostRestriction: isLocalProviderId(id) && hostCapacity && !hostCapacity.available ? t(hostCapacity.reason === "local-ci-capacity-reservation-unavailable" ? "providerRouting.hostUnavailable" : "providerRouting.hostReserved") : null,
       weeklyHint: pool ? formatWeeklyAllocationHint(pool, now) : null,
     })] as const;
   }));

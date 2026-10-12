@@ -23,6 +23,7 @@ export function projectProviderRoutingControl(input: {
   };
   modelCount: number; now: number; localOnly: boolean;
   health?: ProviderHealth; pool?: CliPoolState;
+  hostRestriction?: string | null;
   capacity?: CapacitySnapshot & { safeSummary: string };
   recovery?: { summary: string; nextRunAt: string | null };
   quotaRecovery?: { nextRunAt: string | null };
@@ -36,6 +37,7 @@ export function projectProviderRoutingControl(input: {
   if (input.localOnly && !["local", "ollama"].includes(p.providerId)) add("local-only", "Local-only inference is enabled. Cloud traffic is blocked.");
   if (input.pool?.isExhausted) add("quota", "The shared subscription pool has reached a usage limit.", input.pool.resetAt?.toISOString() ?? null);
   if (capacityRoutingExclusionReason(input.capacity, input.now)) add("capacity", input.capacity!.safeSummary, input.capacity?.retryAtMs ? new Date(input.capacity.retryAtMs).toISOString() : null);
+  if (input.hostRestriction) add("host-capacity", input.hostRestriction);
   if (input.recovery) add("recovery", input.recovery.summary, input.recovery.nextRunAt);
   if (input.quotaRecovery) add("quota-recovery", "Quota recovery is scheduled.", input.quotaRecovery.nextRunAt);
   if (input.health && ["needs_reauth", "billing", "cooling_down", "rate_limited", "degraded"].includes(input.health.status) && !restrictions.some(r => r.summary === input.health!.safeSummary)) {

@@ -23,6 +23,11 @@ describe("provider routing controls", () => {
     expect(result.eligibility.eligible).toBe(false);
     expect(result.restrictions.map(r => r.key)).toEqual(["capacity"]);
   });
+  it("keeps a host reservation visible after an operator pause ends", () => {
+    const result = projectProviderRoutingControl({ ...input(), hostRestriction: "Host reserved for verification." });
+    expect(result.eligibility.eligible).toBe(false);
+    expect(result.restrictions).toEqual([{ key: "host-capacity", summary: "Host reserved for verification.", until: null }]);
+  });
   it("uses the canonical temporary-capacity expiry rules", () => {
     const result = projectProviderRoutingControl({ ...input(), capacity: { state: "rate_limited", retryAtMs: now - 1, safeSummary: "Old limit." } });
     expect(result.eligibility.eligible).toBe(true);

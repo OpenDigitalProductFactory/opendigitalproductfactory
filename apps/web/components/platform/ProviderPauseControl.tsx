@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { fieldControlClass, fieldOptionClass } from "@/components/ui/form/styles";
 import { useT } from "@/lib/i18n/use-t";
@@ -84,9 +85,9 @@ export function ProviderPauseControl({ providerId, initialStatus, initialPause, 
   return (
     <div className="flex flex-col items-start gap-2 text-xs" aria-busy={isPending}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className={stopped ? "text-[var(--dpf-warning)]" : "text-[var(--dpf-success)]"}>
-          {pause || connectionStatus === "paused" ? t("providerPause.paused") : stopped ? t("providerPause.disabled") : unavailable ? t("providerPause.unavailable") : status === "unconfigured" ? t("providerPause.notSetUp") : status === "degraded" ? t("providerPause.degraded") : t("providerPause.active")}
-        </span>
+        <StatusBadge size="md" variant="soft" uppercase={false}
+          intent={stopped || unavailable || status === "degraded" ? "warning" : status === "unconfigured" ? "neutral" : "success"}
+          label={pause || connectionStatus === "paused" ? t("providerPause.paused") : stopped ? t("providerPause.disabled") : unavailable ? t("providerPause.unavailable") : status === "unconfigured" ? t("providerPause.notSetUp") : status === "degraded" ? t("providerPause.degraded") : t("providerPause.active")} />
         <Button size="sm" variant="secondary" disabled={isPending || (!stopped && status === "unconfigured")} onClick={stopped ? resumeNow : pauseNow}>
           {isPending ? t("providerPause.updating") : stopped ? t("providerPause.resumeNow") : t("providerPause.pauseNow")}
         </Button>
