@@ -123,6 +123,46 @@ Steps:
 
 **Observable:** a stalled sub-room escalates to its parent's owner and then to a named human.
 
+### 2026-10-12 implementation continuation — BI-06AE6833 / WC-1D447592
+
+The case workforce panel now projects the recorded delegation and recovery route from
+the existing `contains` / `spawned-from` responsibility edges, active coordinators,
+agent `escalatesTo` registry fields and active human role holders. It shares the bounded
+ancestor walk and responsibility-parent resolver with workforce and human accountability.
+Every ancestor must pass the requesting human or coworker's existing content access
+check before its participants are read. Missing ownership, inaccessible ancestors,
+conflicting parents or role holders, and cycles show setup guidance rather than an
+invented owner. Dependency edges do not transfer responsibility or authority.
+
+The inline disclosure was selected by owning-scope decision DI-C5920F911E59 over an
+always-visible chain and another hierarchy route. It keeps the case and stage context;
+the activity timeline remains the evidence of actual notifications and decisions.
+Existing explanatory prose and setup detail move behind the same disclosure, keeping
+the recovery summary visible without adding a wall of text to the case. Copy uses the
+existing `workrooms` message catalog and request-bound locale; indentation is logical
+so the list follows the viewer's text direction.
+The display projection does not send an escalation, grant access, approve work or close
+a room. The existing stall notifier now resolves its recipient through that same route
+under the drive's internal authority, binds the terminal person to one active user,
+rechecks any named role, and uses the existing throwing attention notifier. Missing
+recipient admission or clearance also keeps private child-room details unsent; the
+recipient passes the same human content-access check as a browser read. No invitation
+or permission is added by escalation. Missing
+bindings and failed writes keep the drive's notice unsent for retry; the stable stuck-spell
+identity and unread-notice deduplication are retained. This does not start another agent
+or alter the parent's stage. Actual stalled-child dispatch, named-human delivery and nested closure remain live
+acceptance obligations; this source slice does not declare Phase D complete.
+
+Focused projection, access, workforce and UI tests have passed, including a first-failing
+stale-role membership regression. Both web TypeScript programs and the theme/style guard
+passed. The exact-source publication gates remain pending.
+Both the current MCP getter and its compatibility alias forward the authenticated
+actor context, ignoring caller-supplied identity for access checks. The pack path was
+claimed normally after the installation returned to normal; no force override was used. Native UX
+engagement CE-90C620F0 is requested; no completed specialist critique or served UI
+acceptance is claimed. The working sample prototype is retained in the execution
+visibility evidence directory and is not runtime evidence.
+
 ## Phase E — the COO surface
 
 Deliverable: one view answers "is everything progressing, and where is it stuck".
