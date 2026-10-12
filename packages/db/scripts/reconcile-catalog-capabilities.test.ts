@@ -3,6 +3,7 @@ import { buildCatalogHash, diffExcludingOverrides, catalogEntryToProfileFields, 
 import type { KnownModel } from "../../../apps/web/lib/routing/known-provider-models";
 import { KNOWN_PROVIDER_MODELS } from "../../../apps/web/lib/routing/known-provider-models";
 import { EMPTY_CAPABILITIES } from "../../../apps/web/lib/routing/model-card-types";
+import type { Prisma } from "../generated/client/client";
 
 const db = vi.hoisted(() => ({
   modelProfile: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
@@ -57,14 +58,17 @@ describe("startup reconciliation", () => {
 
   it.each(["active", "degraded", "retired", "disabled"])(
     "preserves existing %s lifecycle while repairing capabilities", async modelStatus => {
-      const retiredAt = new Date("2026-10-11T12:00:00Z");
-      Object.assign(row!, { modelStatus, retiredAt, retirementReason: "Provider refusal", supportsToolUse: false });
+      const retirement = {
+        retiredAt: new Date("2026-10-11T12:00:00Z"),
+        retiredReason: "Provider refusal",
+      } satisfies Pick<Prisma.ModelProfileUncheckedCreateInput, "retiredAt" | "retiredReason">;
+      Object.assign(row!, { modelStatus, ...retirement, supportsToolUse: false });
       await reconcile(catalog);
-      expect(row).toMatchObject({ modelStatus, retiredAt, retirementReason: "Provider refusal", supportsToolUse: true });
+      expect(row).toMatchObject({ modelStatus, ...retirement, supportsToolUse: true });
       for (const [call] of db.modelProfile.updateMany.mock.calls) {
         expect(call.data).not.toHaveProperty("modelStatus");
         expect(call.data).not.toHaveProperty("retiredAt");
-        expect(call.data).not.toHaveProperty("retirementReason");
+        expect(call.data).not.toHaveProperty("retiredReason");
       }
     },
   );
