@@ -49,6 +49,33 @@
   "accountBootstrap": {
     "accountableOwnerNote": "You'll be the organization's accountable owner (change it in Admin › Settings)."
   },
+  "providerPause": {
+    "pauseNow": "Pause now",
+    "resumeNow": "Resume now",
+    "updating": "Updating…",
+    "paused": "Paused",
+    "disabled": "Disabled",
+    "unavailable": "Unavailable",
+    "notSetUp": "Not set up",
+    "active": "Active",
+    "degraded": "Degraded",
+    "changePause": "Change pause",
+    "setResumeTime": "Set resume time",
+    "resumes": "Resumes",
+    "indefinite": "Until you resume it",
+    "duration": "Pause duration",
+    "unit": "Duration unit",
+    "hours": "Hours",
+    "days": "Days",
+    "save": "Save resume time",
+    "keepPaused": "Until I resume it",
+    "cancel": "Cancel",
+    "loadFailed": "Pause details unavailable. Refresh.",
+    "updateFailed": "Update failed. Try again.",
+    "pauseChanged": "Pause changed. Refresh.",
+    "stillUnavailable": "Provider remains unavailable.",
+    "positiveDuration": "Enter a positive duration."
+  },
   "offerPositioning": {
     "open": "+ Add what you offer and who it's for",
     "heading": "What you offer and who it's for",

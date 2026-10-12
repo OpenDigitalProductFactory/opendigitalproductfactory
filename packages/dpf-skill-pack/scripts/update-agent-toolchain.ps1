@@ -5,6 +5,7 @@ param(
     [string]$McpUrl = "",
     [switch]$CodexOnly,
     [switch]$CodexPluginOnly,
+    [switch]$PrintExistingCodexMcpUrl,
     [switch]$ClaudeOnly,
     [switch]$SkipClaudeCliInstall,
     [switch]$DryRun
@@ -27,6 +28,7 @@ $argsList = @(
 if ($McpUrl) { $argsList += @("--mcp-url", $McpUrl) }
 if ($CodexOnly) { $argsList += "--codex-only" }
 if ($CodexPluginOnly) { $argsList += "--codex-plugin-only" }
+if ($PrintExistingCodexMcpUrl) { $argsList += "--print-existing-codex-mcp-url" }
 if ($ClaudeOnly) { $argsList += "--claude-only" }
 if ($SkipClaudeCliInstall) { $argsList += "--skip-claude-cli-install" }
 if ($DryRun) { $argsList += "--dry-run" }

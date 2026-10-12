@@ -937,6 +937,9 @@
     "apps/web/lib/identity/principal-linking.ts": [
       "docs/architecture/ai-agent-meta-model.md"
     ],
+    "apps/web/lib/improvement-flywheel/signals.ts": [
+      "docs/architecture/improvement-signal-intake.md"
+    ],
     "apps/web/lib/incumbent/coverage-ai.ts": [
       "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md",
       "docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md"
@@ -2379,6 +2382,9 @@
     "scripts/lib/git-changed-files.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "scripts/lib/guard-bash.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/lib/hooks-dir.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
@@ -3258,6 +3264,9 @@
       "scripts/installer/gpp-permit-secret-contract.test.mjs",
       "scripts/installer/install-release-assets.mjs"
     ],
+    "docs/architecture/improvement-signal-intake.md": [
+      "apps/web/lib/improvement-flywheel/signals.ts"
+    ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts",
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
@@ -3586,6 +3595,7 @@
       "scripts/installer/lib/platform.sh",
       "scripts/lib/dockerfile-portal-build.test.mjs",
       "scripts/lib/entry-module.mjs",
+      "scripts/lib/guard-bash.mjs",
       "scripts/lib/host-available-memory.mjs",
       "scripts/publish-host-gpu.ps1",
       "scripts/setup.ps1",

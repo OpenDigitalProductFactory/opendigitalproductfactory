@@ -18,6 +18,7 @@ import { runArchitectureParitySteward } from "@/lib/ea/architecture-parity-stewa
 import { runConsolidationParitySteward } from "@/lib/ea/consolidation-parity-steward";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
+import { formatScheduledTurnPrompt } from "./scheduled-turn-prompt";
 import {
   classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
   createTaskRunForScheduledTask,
@@ -417,13 +418,13 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       update: {},
       create: { userId: task.ownerUserId, contextKey },
     });
-
+    const scheduledPrompt = formatScheduledTurnPrompt(task.title, executionPrompt);
     // Persist the user prompt as a message
     await prisma.agentMessage.create({
       data: {
         threadId: thread.id,
         role: "user",
-        content: `[Scheduled task: ${task.title}]\n\n${executionPrompt}`,
+        content: scheduledPrompt,
         agentId: task.agentId,
         routeContext: task.routeContext,
       },
@@ -467,7 +468,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskRunRecordId: taskRunRef.id,
       contextId: taskRunRef.contextId,
       role: "user",
-      content: `[Scheduled task: ${task.title}]\n\n${executionPrompt}`,
+      content: scheduledPrompt,
       metadata: {
         source: "scheduled",
         taskId: task.taskId,
@@ -492,7 +493,6 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       userContext,
     });
 
-    const scheduledPrompt = `[Scheduled task: ${task.title}]\n\n${executionPrompt}`;
     const chatHistory = [
       {
         role: "user" as const,

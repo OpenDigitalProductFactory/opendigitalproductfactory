@@ -19,8 +19,22 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
-    // destroys state → consult-gated (TAK §8.4.1).
+    // Execution retains its controls; a delegated DEV agent may request admission.
     consequence: "irreversible",
+    consequenceForCall: async ({ params }) => {
+      if (Object.keys(params).some((key) => key !== "reason") ||
+          (params["reason"] !== undefined && typeof params["reason"] !== "string")) {
+        return { consequence: "irreversible", reason: "non-routine-upgrade-request" };
+      }
+      const [{ prisma }, { loadInstanceStance, prismaInstanceStanceStore }] = await Promise.all([
+        import("@dpf/db"),
+        import("@/lib/install/instance-stance"),
+      ]);
+      const stance = await loadInstanceStance(prismaInstanceStanceStore(prisma));
+      return stance.environmentClass === "development" && stance.primaryPurpose === "evolve-dpf"
+        ? { consequence: null, reason: "governed-development-upgrade-request" }
+        : { consequence: "irreversible", reason: "upgrade-request-outside-development" };
+    },
   },
   {
     name: "repair_promoter_image",

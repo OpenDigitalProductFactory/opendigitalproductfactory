@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { encode } from "next-auth/jwt";
+import { decode, encode } from "next-auth/jwt";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SESSION_COOKIE_NAME } from "@/lib/govern/auth";
@@ -29,6 +29,23 @@ function requestWith(cookie?: string): NextRequest {
 }
 
 describe("GET /api/automation/sign-in", () => {
+  it("refuses a fixture whose lifetime ends before cookie issuance", async () => {
+    consumeAutomationSignIn.mockResolvedValue({ accepted: true, nextPath: "/", maxAge: 0,
+      claims: { sub: PERSONA_USER_ID, id: PERSONA_USER_ID } });
+    const response = await GET(requestWith());
+    expect(response.status).toBe(401);
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+  it("caps both the cookie and signed session at the fixture lifetime", async () => {
+    consumeAutomationSignIn.mockResolvedValue({ accepted: true, nextPath: "/", maxAge: 90,
+      claims: { sub: PERSONA_USER_ID, id: PERSONA_USER_ID, isSuperuser: false } });
+    const response = await GET(requestWith());
+    const cookie = response.headers.get("set-cookie")!;
+    expect(cookie).toContain("Max-Age=90");
+    const token = cookie.split(";")[0].slice(SESSION_COOKIE_NAME.length + 1);
+    const claims = await decode({ token, secret: SECRET, salt: SESSION_COOKIE_NAME });
+    expect(claims!.exp! - claims!.iat!).toBe(90);
+  });
   beforeEach(() => {
     consumeAutomationSignIn.mockReset();
     process.env.AUTH_SECRET = SECRET;
