@@ -128,6 +128,20 @@ The resolver normalizes `../`, rejects ambiguous `index` suffixes, handles ancho
 
 ### 5.2 The link checker (executable, CI-gated)
 
+**Concurrent index generation (BI-42E56738).** The committed index stores the
+page map and its anchors; diagnostic counts derive from that map. It has no
+persisted `pageCount`. Two branches can each add a different page and merge
+both entries while retaining one branch's scalar count. Removing that redundant
+aggregate keeps one source of truth and avoids another regeneration cycle.
+
+The bounded repair first reproduces this with the real generator and Git's
+merge-file operation, then removes the aggregate and updates its diagnostic
+reader atomically. Regenerate the index and enroll the regression in the
+existing Docs Link Integrity guard. Deletion, rename and heading-change controls
+must still fail byte-strict freshness checks, including the registered artifact
+gate in merge-queue context. This changes neither generation ownership nor gate
+requirements. Ordinary overlapping page edits still require conflict resolution.
+
 Add `scripts/check-doc-links.mjs` and `scripts/check-doc-links.test.mjs`. The checker walks `docs/user-guide/**/*.md` plus allowed cross-tree targets and, for every inline link/image/anchor, asserts:
 
 - `resolveDocLink` resolves to an existing source page or allowed external URL.

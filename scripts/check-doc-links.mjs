@@ -161,7 +161,7 @@ function main() {
     for (const f of findings) byCat[f.category] = (byCat[f.category] || 0) + 1;
     console.log("Docs Link Integrity");
     console.log("===================");
-    console.log(`Scanned ${walkMd(USER_GUIDE_DIR).length} user-guide pages against ${index.pageCount} indexed pages.`);
+    console.log(`Scanned ${walkMd(USER_GUIDE_DIR).length} user-guide pages against ${Object.keys(index.pages).length} indexed pages.`);
     console.log("");
     for (const [cat, n] of Object.entries(byCat).sort((a, b) => b[1] - a[1])) {
       console.log(`  ${ERROR_CATEGORIES.has(cat) ? "ERROR" : "warn "}  ${String(n).padStart(4)}  ${cat}`);
