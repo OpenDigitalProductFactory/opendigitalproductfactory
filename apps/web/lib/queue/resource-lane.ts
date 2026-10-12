@@ -10,11 +10,11 @@
 //   2. flow telemetry — enqueued/started/finished transitions into the shared
 //      spine, so lane wait time and throughput are finally measurable.
 //
-// DEFAULT BEHAVIOR IS UNCHANGED: with no maxQueueDepth configured the lane is an
-// unbounded FIFO serializer — byte-for-byte the semantics of the promise chain it
-// replaces (each call gets the full resource; one failure never wedges the rest).
-// Bounded admission is strictly opt-in, mirroring the config-gated build-pipeline
-// lane in admission.ts. Spec §4.3.
+// DEFAULT BEHAVIOR IS UNCHANGED: with no priority supplied, every entry is
+// interactive and the lane remains an unbounded FIFO serializer. Explicit local
+// producers may label autonomous work; interactive waiters then go first until
+// bounded aging promotes the oldest autonomous waiter. Each call still gets the
+// full resource, and one failure never wedges the rest. Spec §4.3.
 
 import type { QueueTransitionInput } from "./queue-telemetry";
 
@@ -39,6 +39,10 @@ export interface ResourceLaneRunOptions {
   maxQueueDepth?: number | null;
   /** Correlation id for the telemetry rows; defaults to a per-lane sequence. */
   itemId?: string;
+  /** Interactive work normally runs before autonomous/background work. */
+  priority?: "interactive" | "autonomous";
+  /** Promote an autonomous waiter after this many milliseconds. */
+  autonomousAgingMs?: number | null;
 }
 
 export interface ResourceLaneDeps {
@@ -49,12 +53,22 @@ export interface ResourceLaneDeps {
 }
 
 /**
- * A single-slot, FIFO admission lane for a scarce in-process resource.
+ * A single-slot admission lane for a scarce in-process resource.
  * Instances are keyed by `laneKey` via `getResourceLane` so every caller sharing
  * a resource shares one lane (and one aggregate queue depth).
  */
 export class ResourceLane {
-  private chain: Promise<unknown> = Promise.resolve();
+  private queue: Array<{
+    fn: () => Promise<unknown>;
+    resolve: (value: unknown) => void;
+    reject: (reason: unknown) => void;
+    itemId: string;
+    enqueuedAt: number;
+    priority: "interactive" | "autonomous";
+    autonomousAgingMs: number | null;
+  }> = [];
+  private active = false;
+  private pumpScheduled = false;
   private waiting = 0;
   private seq = 0;
   private readonly record: (input: QueueTransitionInput) => void;
@@ -84,49 +98,92 @@ export class ResourceLane {
       throw new LaneBusyError(this.laneKey, this.waiting);
     }
 
-    const itemId = opts.itemId ?? `${this.laneKey}#${++this.seq}`;
+    const priority = opts.priority ?? "interactive";
+    const itemId = opts.itemId ?? `${this.laneKey}:${priority}#${++this.seq}`;
     const enqueuedAt = this.now();
     this.waiting += 1;
     this.emit({ itemId, transition: "enqueued", occurredAt: new Date(enqueuedAt), depth: this.waiting });
 
-    // Run the body whether the previous link resolved OR rejected (mirrors the
-    // original `chain.then(fn, fn)`), so one failure never wedges the lane.
-    const body = async (): Promise<T> => {
-      this.waiting -= 1;
-      const startedAt = this.now();
-      this.emit({
+    const run = new Promise<T>((resolve, reject) => {
+      this.queue.push({
+        fn,
+        resolve: resolve as (value: unknown) => void,
+        reject,
         itemId,
-        transition: "started",
-        occurredAt: new Date(startedAt),
-        durations: { waitMs: startedAt - enqueuedAt },
-        depth: this.waiting,
+        enqueuedAt,
+        priority,
+        autonomousAgingMs: normalizeAgingMs(opts.autonomousAgingMs),
       });
-      try {
-        const value = await fn();
+      this.schedulePump();
+    });
+    return run;
+  }
+
+  private schedulePump(): void {
+    if (this.active || this.pumpScheduled) return;
+    this.pumpScheduled = true;
+    void Promise.resolve().then(() => {
+      this.pumpScheduled = false;
+      this.pump();
+    });
+  }
+
+  private pump(): void {
+    if (this.active || this.queue.length === 0) return;
+    this.active = true;
+    const index = this.selectNextIndex();
+    const entry = this.queue.splice(index, 1)[0]!;
+    this.waiting -= 1;
+    const startedAt = this.now();
+    this.emit({
+      itemId: entry.itemId,
+      transition: "started",
+      occurredAt: new Date(startedAt),
+      durations: { waitMs: startedAt - entry.enqueuedAt },
+      depth: this.waiting,
+    });
+
+    let execution: Promise<unknown>;
+    try {
+      execution = entry.fn();
+    } catch (err) {
+      execution = Promise.reject(err);
+    }
+    void execution.then(
+      (value) => {
+        entry.resolve(value);
         this.emit({
-          itemId,
+          itemId: entry.itemId,
           transition: "finished",
           outcome: "success",
-          durations: { processMs: this.now() - startedAt, waitMs: startedAt - enqueuedAt },
+          durations: { processMs: this.now() - startedAt, waitMs: startedAt - entry.enqueuedAt },
         });
-        return value;
-      } catch (err) {
+      },
+      (err) => {
+        entry.reject(err);
         this.emit({
-          itemId,
+          itemId: entry.itemId,
           transition: "finished",
           outcome: "failed",
           durations: { processMs: this.now() - startedAt },
         });
-        throw err;
-      }
-    };
+      },
+    ).finally(() => {
+      this.active = false;
+      this.pump();
+    });
+  }
 
-    const run = this.chain.then(body, body);
-    this.chain = run.then(
-      () => undefined,
-      () => undefined,
+  private selectNextIndex(): number {
+    const now = this.now();
+    const agedAutonomous = this.queue.findIndex((entry) =>
+      entry.priority === "autonomous"
+      && entry.autonomousAgingMs != null
+      && now - entry.enqueuedAt >= entry.autonomousAgingMs,
     );
-    return run;
+    if (agedAutonomous >= 0) return agedAutonomous;
+    const interactive = this.queue.findIndex((entry) => entry.priority === "interactive");
+    return interactive >= 0 ? interactive : 0;
   }
 
   private emit(
@@ -170,10 +227,22 @@ export const LOCAL_INFERENCE_LANE_KEY = "compute:local-inference";
 
 /** Bounded-depth config for the local-inference lane (opt-in; unset ⇒ unbounded). */
 export function localInferenceMaxQueueDepth(): number | null {
-  const raw = process.env.DPF_LOCAL_INFERENCE_MAX_QUEUE_DEPTH;
+  return parsePositiveInteger(process.env.DPF_LOCAL_INFERENCE_MAX_QUEUE_DEPTH);
+}
+
+/** Maximum time an autonomous local request may be overtaken by interactive work. */
+export function localInferenceAutonomousAgingMs(): number {
+  return parsePositiveInteger(process.env.DPF_LOCAL_INFERENCE_AUTONOMOUS_AGING_MS) ?? 120_000;
+}
+
+function parsePositiveInteger(raw: string | undefined): number | null {
   if (raw == null || raw === "") return null;
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function normalizeAgingMs(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 // The single local GPU (Docker Model Runner / Ollama) serves ONE request at a
@@ -199,22 +268,25 @@ const localInferenceLane = getResourceLane(LOCAL_INFERENCE_LANE_KEY, {
  *  local-inference caller (chat + build) must acquire so the single GPU is
  *  never double-subscribed (BI-98572A51).
  *
- *  The lane only sees this process. Before taking it, ask whether the card is
- *  free at all (another process, another app, a game). Unit tests skip that
- *  import: it reaches the lease registry, and the suite must not touch the GPU. */
+ *  The lane only sees this process. After taking it, ask whether the card is
+ *  free at all (another process, another app, a game). This ordering lets DPF's
+ *  own callers queue instead of misclassifying each other as external owners. */
 export function withLocalInferenceLock<T>(
   fn: () => Promise<T>,
-  options?: { modelId?: string | null },
+  options?: { modelId?: string | null; origin?: "interactive" | "autonomous" },
 ): Promise<T> {
-  const vitest = process.env.VITEST === "true" || process.env.VITEST === "1";
-  if (vitest) {
-    return localInferenceLane.run(fn, { maxQueueDepth: localInferenceMaxQueueDepth() });
-  }
-  return admitLocalGpuThenRun(fn, options?.modelId ?? null);
+  return localInferenceLane.run(
+    () => probeLocalGpuThenRun(fn, options?.modelId ?? null),
+    {
+      maxQueueDepth: localInferenceMaxQueueDepth(),
+      priority: options?.origin ?? "interactive",
+      autonomousAgingMs: localInferenceAutonomousAgingMs(),
+    },
+  );
 }
 
-async function admitLocalGpuThenRun<T>(fn: () => Promise<T>, modelId: string | null): Promise<T> {
+async function probeLocalGpuThenRun<T>(fn: () => Promise<T>, modelId: string | null): Promise<T> {
   const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
   await assertLocalGpuFree({ modelId });
-  return localInferenceLane.run(fn, { maxQueueDepth: localInferenceMaxQueueDepth() });
+  return fn();
 }

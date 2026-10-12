@@ -50,6 +50,7 @@ import {
 } from "./inference-admission";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
+import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { providerInferenceFetch } from "./provider-inference-transport";
 import { InferenceError } from "../routing/inference-error";
 
@@ -224,11 +225,6 @@ export async function callProvider(
   // Revalidate an older routing selection before waiting for or using local capacity.
   const localProvider = await readEnabledLocalProvider(providerId);
   await assertProviderDispatchCapacity(providerId);
-  // Lease ownership is routing policy. Whether the card is free is an inference
-  // fact, so it stays in this layer (routing may not import inference).
-  const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
-  await assertLocalGpuFree({ providerId, modelId });
-
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has
   // consumed ≥100% of its registry limit today, throw a billing error so the
@@ -327,34 +323,40 @@ export async function callProvider(
     selector !== null
       ? selector.kind
       : `legacy:${typeof executionAdapterRaw === "string" ? executionAdapterRaw : "unknown"}`;
-  // Admission gate: bound concurrent inference per engine so a fleet of
-  // autonomous coworkers can't overload a scarce backend (local model ≈ 1-2
-  // concurrent before latency collapses; remote = provider rate limit / cost).
-  // Interactive turns take priority over autonomous/background work, so a human
-  // waiting on a reply never queues behind a scheduled brief. Held only across
-  // the actual inference call, released in `finally`. See inference-admission.ts.
-  const engineKey = engineKeyForProvider(providerId);
-  const releaseInferenceSlot = await acquireInferenceSlot(engineKey, currentInferenceOrigin(), {
-    providerId,
-    modelId,
-  });
+  // Local HTTP and sandbox inference share the one compute:local-inference
+  // ResourceLane. Remote providers retain the multi-slot provider semaphore.
+  // Keeping these paths disjoint prevents local HTTP from holding one admission
+  // slot while it waits on another queue.
+  const origin = currentInferenceOrigin();
+  let releaseInferenceSlot: (() => void) | null = null;
   let result;
   try {
-    // Queued work has not started inference yet. A disable during admission
-    // invalidates its earlier selection; finally still releases the slot.
-    await readEnabledLocalProvider(providerId);
-    result = await adapter.execute({
-      providerId,
-      modelId,
-      plan: effectivePlan,
-      provider: { baseUrl, headers },
-      fetchImpl: providerInferenceFetch,
-      messages,
-      systemPrompt,
-      tools,
-      previousResponseId,
-      mcpSession,
-    });
+    const execute = async () => {
+      // Queued work has not started inference yet. A disable during admission
+      // invalidates its earlier selection before any provider bytes are sent.
+      await readEnabledLocalProvider(providerId);
+      return adapter.execute({
+        providerId,
+        modelId,
+        plan: effectivePlan,
+        provider: { baseUrl, headers },
+        fetchImpl: providerInferenceFetch,
+        messages,
+        systemPrompt,
+        tools,
+        previousResponseId,
+        mcpSession,
+      });
+    };
+    if (isLocalProviderId(providerId)) {
+      result = await withLocalInferenceLock(execute, { modelId, origin });
+    } else {
+      releaseInferenceSlot = await acquireInferenceSlot(engineKeyForProvider(providerId), origin, {
+        providerId,
+        modelId,
+      });
+      result = await execute();
+    }
     endTimer();
   } catch (err) {
     endTimer();
@@ -397,7 +399,7 @@ export async function callProvider(
     }
     throw err;
   } finally {
-    releaseInferenceSlot();
+    releaseInferenceSlot?.();
   }
 
   void clearProviderCapacityStatus({ providerId, source: "api" }).catch((capacityErr) => {

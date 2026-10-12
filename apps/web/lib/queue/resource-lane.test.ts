@@ -1,9 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+import { assertLocalGpuFree } from "@/lib/inference/host-gpu-admission";
+
+vi.mock("@/lib/inference/host-gpu-admission", () => ({ assertLocalGpuFree: vi.fn() }));
 import {
   ResourceLane,
   LaneBusyError,
   getResourceLane,
   localInferenceMaxQueueDepth,
+  localInferenceAutonomousAgingMs,
   withLocalInferenceLock,
   LOCAL_INFERENCE_LANE_KEY,
 } from "./resource-lane";
@@ -58,6 +62,57 @@ describe("ResourceLane serialization", () => {
   it("returns the fn's resolved value", async () => {
     const lane = new ResourceLane("compute:test", { record: () => {} });
     await expect(lane.run(async () => "ok")).resolves.toBe("ok");
+  });
+
+  it("serves an interactive waiter before an older autonomous waiter", async () => {
+    const lane = new ResourceLane("compute:test", { record: () => {} });
+    const holderGate = deferred<void>();
+    const order: string[] = [];
+
+    const holder = lane.run(async () => {
+      order.push("holder");
+      await holderGate.promise;
+    }, { priority: "autonomous", autonomousAgingMs: 1_000 });
+    await Promise.resolve();
+
+    const autonomous = lane.run(async () => {
+      order.push("autonomous");
+    }, { priority: "autonomous", autonomousAgingMs: 1_000 });
+    const interactive = lane.run(async () => {
+      order.push("interactive");
+    }, { priority: "interactive", autonomousAgingMs: 1_000 });
+
+    holderGate.resolve();
+    await Promise.all([holder, autonomous, interactive]);
+
+    expect(order).toEqual(["holder", "interactive", "autonomous"]);
+  });
+
+  it("promotes an aged autonomous waiter ahead of newer interactive work", async () => {
+    let clock = 0;
+    const lane = new ResourceLane("compute:test", { record: () => {}, now: () => clock });
+    const holderGate = deferred<void>();
+    const order: string[] = [];
+
+    const holder = lane.run(async () => {
+      order.push("holder");
+      await holderGate.promise;
+    }, { priority: "autonomous", autonomousAgingMs: 100 });
+    await Promise.resolve();
+
+    clock = 10;
+    const autonomous = lane.run(async () => {
+      order.push("autonomous");
+    }, { priority: "autonomous", autonomousAgingMs: 100 });
+    clock = 150;
+    const interactive = lane.run(async () => {
+      order.push("interactive");
+    }, { priority: "interactive", autonomousAgingMs: 100 });
+
+    holderGate.resolve();
+    await Promise.all([holder, autonomous, interactive]);
+
+    expect(order).toEqual(["holder", "autonomous", "interactive"]);
   });
 });
 
@@ -164,7 +219,26 @@ describe("localInferenceMaxQueueDepth", () => {
   });
 });
 
+describe("localInferenceAutonomousAgingMs", () => {
+  const KEY = "DPF_LOCAL_INFERENCE_AUTONOMOUS_AGING_MS";
+  it("defaults to the interactive admission budget", () => {
+    delete process.env[KEY];
+    expect(localInferenceAutonomousAgingMs()).toBe(120_000);
+  });
+  it("accepts a positive operator override and rejects invalid values", () => {
+    process.env[KEY] = "45000";
+    expect(localInferenceAutonomousAgingMs()).toBe(45_000);
+    process.env[KEY] = "0";
+    expect(localInferenceAutonomousAgingMs()).toBe(120_000);
+    delete process.env[KEY];
+  });
+});
+
 describe("withLocalInferenceLock — the ONE local-GPU admission gate (BI-98572A51)", () => {
+  beforeEach(() => {
+    vi.mocked(assertLocalGpuFree).mockReset().mockResolvedValue(undefined);
+  });
+
   it("serializes concurrent local-inference callers strictly one at a time", async () => {
     // Simulates chat and a build specialist both wanting the single GPU: only
     // one runs at a time, the other waits — never double-subscribed.
@@ -182,8 +256,7 @@ describe("withLocalInferenceLock — the ONE local-GPU admission gate (BI-98572A
     const a = run(); // "chat"
     const b = run(); // "build specialist"
     // Both scheduled, but only one may be inside the lane.
-    await Promise.resolve();
-    expect(maxActive).toBe(1);
+    await expect.poll(() => maxActive).toBe(1);
     gate.resolve();
     await expect(a).resolves.toBe("ok");
     await expect(b).resolves.toBe("ok");
@@ -194,5 +267,26 @@ describe("withLocalInferenceLock — the ONE local-GPU admission gate (BI-98572A
     // getResourceLane is one-lane-per-key, so every caller of withLocalInferenceLock —
     // chat-adapter and opencode-dispatch alike — operates the same instance.
     expect(getResourceLane(LOCAL_INFERENCE_LANE_KEY)).toBe(getResourceLane(LOCAL_INFERENCE_LANE_KEY));
+  });
+
+  it("does not probe host occupancy until a queued caller owns the lane", async () => {
+    const holderGate = deferred<void>();
+    const holder = withLocalInferenceLock(async () => holderGate.promise, {
+      modelId: "qwen",
+      origin: "autonomous",
+    });
+    await expect.poll(() => vi.mocked(assertLocalGpuFree).mock.calls.length).toBe(1);
+
+    const interactive = withLocalInferenceLock(async () => "interactive", {
+      modelId: "qwen",
+      origin: "interactive",
+    });
+    await Promise.resolve();
+    expect(assertLocalGpuFree).toHaveBeenCalledTimes(1);
+
+    holderGate.resolve();
+    await holder;
+    await expect(interactive).resolves.toBe("interactive");
+    expect(assertLocalGpuFree).toHaveBeenCalledTimes(2);
   });
 });
