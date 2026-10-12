@@ -713,8 +713,11 @@ def existing_codex_mcp_endpoint(text: str) -> Optional[str]:
         try:
             endpoint = json.loads(quoted) if quoted.startswith('"') else quoted[1:-1]
             parsed = urlsplit(endpoint)
+            credential_keys = {"access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
+                               "authorization", "client_secret", "clientsecret", "secret", "password"}
             if (parsed.scheme not in ("http", "https") or not parsed.hostname
-                    or parsed.username or parsed.password or any(char.isspace() for char in endpoint)):
+                    or parsed.username or parsed.password or any(char.isspace() for char in endpoint)
+                    or any(key.lower().replace("-", "_") in credential_keys for key, _ in parse_qsl(parsed.query))):
                 raise ValueError("Saved URL is not a credential-free HTTP endpoint")
             return endpoint
         except ValueError as error:

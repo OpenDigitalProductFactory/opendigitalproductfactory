@@ -28,7 +28,7 @@ beforeEach(() => {
     mcpApiToken: { findUnique: vi.fn(async () => ({ userId: "owner", agentId: "agent" })), updateMany: vi.fn() },
     oAuthRefreshToken: { updateMany: vi.fn() }, authorityBinding: { updateMany: vi.fn() }, principal: { updateMany: vi.fn() },
     principalAlias: { findMany: vi.fn(async () => [{ principalId: "fixture-principal" }]) },
-    runtimeVerification: { findFirst: vi.fn(async () => run), findUnique: vi.fn(async () => run), create: vi.fn(async ({ data }) => run = { id: "run-row", ...data }),
+    runtimeVerification: { findFirst: vi.fn(async () => run), findUnique: vi.fn(async () => run), create: vi.fn(async ({ data }) => run = { id: "run-row", updatedAt: new Date(), ...data }),
       update: vi.fn(async ({ data }) => run = { ...run, ...data }) },
     platformRole: { findMany: vi.fn(async () => [{ id: "developer-role", roleId: "HR-200" }]) },
     user: { findUnique: vi.fn(async ({ where }) => where.id === "owner"
@@ -42,9 +42,44 @@ beforeEach(() => {
 });
 
 describe("isolated verification provisioning", () => {
+  it("does not overwrite a UX verdict recorded while cleanup is in progress", async () => {
+    const first = await prepareFixture(request, actor, "http://portal:3000");
+    mocks.db.authorityBinding.updateMany.mockImplementationOnce(async () => {
+      run = { ...run, status: "passed", updatedAt: new Date(run.updatedAt.getTime() + 1000), result: { ...run.result, uxOutcome: { passed: 7 } } };
+    });
+    mocks.db.runtimeVerification.update.mockImplementation(async ({ where, data }: { where: { updatedAt?: Date }; data: Record<string, unknown> }) => {
+      if (where.updatedAt && where.updatedAt.getTime() !== run.updatedAt.getTime()) throw new Error("verification changed");
+      run = { ...run, ...data };
+      return run;
+    });
+    await expect(retireFixtureRun(first.runId, actor)).rejects.toThrow("verification changed");
+    expect(run.status).toBe("passed");
+    expect(run.result.uxOutcome).toEqual({ passed: 7 });
+    expect(run.result.fixtureCleanup).toBeUndefined();
+  });
+  it("does not turn fixture issuance and retirement into a passing UX verification", async () => {
+    const first = await prepareFixture(request, actor, "http://portal:3000");
+    await retireFixtureRun(first.runId, actor);
+    expect(run.status).not.toBe("passed");
+    expect(run.result.fixtureCleanup).toMatchObject({ status: "retired" });
+    expect(run.result.fixture.userId).toBe(actor.userId);
+  });
+  it("retires fixture authority after a genuinely passed UX verification without replacing its outcome", async () => {
+    const first = await prepareFixture(request, actor, "http://portal:3000");
+    const completedAt = new Date("2026-09-28T01:00:00Z");
+    run = { ...run, status: "passed", completedAt, result: { ...run.result, uxOutcome: { passed: 7 } } };
+    await retireFixtureRun(first.runId, actor);
+    expect(mocks.db.user.updateMany).toHaveBeenCalledTimes(1);
+    expect(mocks.db.mcpApiToken.updateMany).toHaveBeenCalledTimes(1);
+    expect(mocks.db.oAuthRefreshToken.updateMany).toHaveBeenCalledTimes(1);
+    expect(run.status).toBe("passed");
+    expect(run.completedAt).toBe(completedAt);
+    expect(run.result.uxOutcome).toEqual({ passed: 7 });
+    expect(run.result.fixtureCleanup).toMatchObject({ status: "retired" });
+  });
   it("does not provision after retirement wins the run lock", async () => {
     const first = await prepareFixture(request, actor, "http://portal:3000");
-    mocks.db.$executeRaw.mockImplementationOnce(async () => { run = { ...run, status: "passed" }; });
+    mocks.db.$executeRaw.mockImplementationOnce(async () => { run = { ...run, result: { ...run.result, fixtureCleanup: { status: "retired" } } }; });
     await expect(prepareFixture({ runId: first.runId, profile: "developer", slot: 1 }, actor, "http://portal:3000")).rejects.toThrow("closed");
     expect(mocks.db.user.create).toHaveBeenCalledTimes(1);
   });

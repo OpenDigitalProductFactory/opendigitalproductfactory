@@ -1725,6 +1725,20 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
 
 class OAuthDefaultTest(unittest.TestCase):
+    def test_saved_endpoint_read_mode_does_not_echo_query_credentials(self):
+        for key in ("access_token", "api_key", "API-Key", "client_secret"):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                path.parent.mkdir(parents=True)
+                original = f'[mcp_servers.dpf]\nurl="https://example.test/api/mcp/v1?{key}=synthetic-secret&tier=full"\n'
+                path.write_text(original)
+                with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch("builtins.print") as output:
+                    with self.assertRaisesRegex(ValueError, "explicit.*endpoint"):
+                        updater.main(["--print-existing-codex-mcp-url"])
+                output.assert_not_called()
+                self.assertEqual(path.read_text(), original)
+
     def test_saved_endpoint_reader_refuses_credentials_and_non_urls(self):
         for endpoint in ("not an endpoint", "https://u:p@example.test/api/mcp/v1"):
             with self.subTest(endpoint=endpoint):
@@ -1746,7 +1760,7 @@ class OAuthDefaultTest(unittest.TestCase):
             self.assertFalse(updater.codex_managed_plugin_path(home).exists())
 
     def test_saved_endpoint_read_mode_changes_nothing(self):
-        for existing in (None, "http://127.0.0.1:3000/api/mcp/v1?tier=full"):
+        for existing in (None, "http://127.0.0.1:3000/api/mcp/v1?tier=full", "https://example.test/api/mcp/v1?tenant=demo&tier=full"):
             with self.subTest(existing=existing), tempfile.TemporaryDirectory() as tmp:
                 home = Path(tmp)
                 path = updater.codex_config_path(home)

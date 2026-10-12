@@ -23,6 +23,11 @@ retention sweep provides bounded expiry cleanup. Retire fixtures before rolling
 back code that enforces their expiry. The legacy shared persona remains the
 default when `fixture` is omitted.
 
+Fixture retirement records its own completion in the run's result; it never
+earns a passing UX verdict. A running run without a completed verdict closes
+as skipped. Existing verification outcomes remain intact, and a passed run
+still revokes its fixture users and credentials before cleanup is complete.
+
 ## Semantic review publication and infrastructure recovery
 
 The publication adapter reads [semantic-review-policy.json](../../scripts/semantic-review-policy.json).

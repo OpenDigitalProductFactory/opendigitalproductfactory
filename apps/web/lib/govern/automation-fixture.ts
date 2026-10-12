@@ -74,6 +74,10 @@ function readAuthority(value: unknown): RunAuthority {
   return v as RunAuthority;
 }
 
+function isFixtureRetired(result: unknown): boolean {
+  return isRecord(result) && isRecord(result.fixtureCleanup) && result.fixtureCleanup.status === "retired";
+}
+
 async function requireLease(leaseId: string, room: { executorRef: string | null; headBranch: string | null; leaseExpiresAt: Date | null }, baseUrl: string, db: Prisma.TransactionClient) {
   const lease = await db.nonProductionEnvironmentLease.findUnique({ where: { leaseId } });
   if (!lease || lease.status !== "active" || lease.ownerSessionId !== room.executorRef || lease.branchName !== room.headBranch
@@ -95,7 +99,7 @@ export async function prepareFixture(request: FixtureRequest, actor: FixtureActo
     await requireFixtureEnvironment(db);
     if (request.runId) await lockFixtureRun(db, request.runId);
     let run = request.runId ? await db.runtimeVerification.findUnique({ where: { verificationId: request.runId } }) : null;
-    if (request.runId && (!run || run.kind !== RUN_KIND || run.status !== "running")) throw new Error("This verification run is closed or unavailable. Start a new run.");
+    if (request.runId && (!run || run.kind !== RUN_KIND || run.status !== "running" || isFixtureRetired(run.result))) throw new Error("This verification run is closed or unavailable. Start a new run.");
     const room = await db.workroom.findUnique({ where: run?.workCapsuleId ? { id: run.workCapsuleId } : { capsuleId: request.capsuleId! } });
     if (!room) throw new Error("The verification workroom is unavailable.");
     await requireActor(actor, room.id, db);
@@ -143,7 +147,7 @@ export async function validateFixtureExchange(userId: string, binding: { runId: 
     await lockFixtureRun(db, binding.runId);
     const user = await db.user.findUnique({ where: { id: userId }, include: { automationVerification: true } });
     const run = user?.automationVerification;
-    if (!user || !run || run.kind !== RUN_KIND || run.status !== "running" || run.verificationId !== binding.runId
+    if (!user || !run || run.kind !== RUN_KIND || run.status !== "running" || isFixtureRetired(run.result) || run.verificationId !== binding.runId
       || user.automationProfile !== binding.profile || user.automationSlot !== binding.slot || !isCurrentUserActive(user) || user.isSuperuser) {
       throw new Error("This verification sign-in has ended. Start a new authorized run.");
     }
@@ -170,7 +174,7 @@ export async function retireFixtureRun(runId: string, actor?: FixtureActor) {
     } else if (new Date(owner.expiresAt) > new Date()) {
       throw new Error("Automatic cleanup cannot retire an unexpired run.");
     }
-    if (run.status === "passed") return { retired: true, alreadyRetired: true, pendingTaskIds: [] as string[] };
+    if (isFixtureRetired(run.result)) return { retired: true, alreadyRetired: true, pendingTaskIds: [] as string[] };
     const users = await db.user.findMany({ where: { automationVerificationId: run.id }, select: { id: true } });
     const ids = users.map(user => user.id);
     const tasks = await db.taskRun.findMany({ where: { userId: { in: ids }, status: { notIn: ["completed", "failed", "canceled", "rejected", "archived"] } },
@@ -194,7 +198,13 @@ export async function retireFixtureRun(runId: string, actor?: FixtureActor) {
     await db.user.updateMany({ where: { id: { in: ids }, automationVerificationId: run.id }, data: { isActive: false } });
     await db.principal.updateMany({ where: { id: { in: principalIds } }, data: { status: "inactive" } });
     await audit(db, owner, runId, run.workCapsuleId, null, "cleanup-complete");
-    await db.runtimeVerification.update({ where: { id: run.id }, data: { status: "passed", completedAt: now } });
+    // Cleanup is not a UX verdict. Keep real outcomes and use the existing
+    // result for lifecycle idempotence. A concurrent verifier changes updatedAt
+    // and rolls this transaction back rather than losing its result.
+    await db.runtimeVerification.update({ where: { id: run.id, updatedAt: run.updatedAt }, data: {
+      ...(run.status === "running" ? { status: "skipped", completedAt: now } : {}),
+      result: { ...(isRecord(run.result) ? run.result : {}), fixtureCleanup: { status: "retired", retiredAt: now.toISOString() } } as Prisma.InputJsonObject,
+    } });
     return { retired: true, alreadyRetired: false, pendingTaskIds: [] as string[] };
   });
 }
