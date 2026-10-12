@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+const humanAccess = vi.hoisted(() => vi.fn());
+vi.mock("./workroom-agent-access.server", () => ({ resolveHumanWorkroomAccess: humanAccess }));
+beforeEach(() => humanAccess.mockReset().mockResolvedValue({ decision: { level: "content" } }));
 import { loadNestedRoomCoordination, resolveNestedRoomStallRecipient } from "./nested-room-coordination.server";
 
 const database = () => ({
@@ -16,6 +19,13 @@ const database = () => ({
 });
 
 describe("internal drive recipient binding", () => {
+  it.each(["removed-private-child", "insufficient-clearance"])("does not disclose child details to a recipient denied for %s", async reason => {
+    const db = { ...database(), principalAlias: { findMany: vi.fn().mockResolvedValue([{ aliasValue: "recorded-user" }]) } };
+    db.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] });
+    humanAccess.mockResolvedValue({ decision: { level: "none", reason } });
+    expect(await resolveNestedRoomStallRecipient(db, { roomId: "child" })).toBeNull();
+    expect(humanAccess).toHaveBeenCalledWith({ userId: "recorded-user", workroomId: "child", requested: "content" }, db);
+  });
   it("uses the terminal person's unique current user binding", async () => {
     const db = { ...database(), principalAlias: { findMany: vi.fn().mockResolvedValue([{ aliasValue: "recorded-user" }]) } };
     db.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false, groups: [] });

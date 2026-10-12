@@ -145,6 +145,9 @@ The display projection does not send an escalation, grant access, approve work o
 a room. The existing stall notifier now resolves its recipient through that same route
 under the drive's internal authority, binds the terminal person to one active user,
 rechecks any named role, and uses the existing throwing attention notifier. Missing
+recipient admission or clearance also keeps private child-room details unsent; the
+recipient passes the same human content-access check as a browser read. No invitation
+or permission is added by escalation. Missing
 bindings and failed writes keep the drive's notice unsent for retry; the stable stuck-spell
 identity and unread-notice deduplication are retained. This does not start another agent
 or alter the parent's stage. Actual stalled-child dispatch, named-human delivery and nested closure remain live

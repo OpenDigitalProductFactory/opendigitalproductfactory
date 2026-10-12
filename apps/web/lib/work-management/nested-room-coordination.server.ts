@@ -1,5 +1,6 @@
 import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 import { currentUserContext } from "@/lib/govern/current-user-context";
+import { resolveHumanWorkroomAccess } from "./workroom-agent-access.server";
 import { loadAncestorClosure, type RoomWorkforceDb } from "./room-workforce.server";
 import { projectNestedRoomCoordination, type CoordinationActor, type NestedRoomCoordination } from "./nested-room-coordination";
 
@@ -90,5 +91,7 @@ export async function resolveNestedRoomStallRecipient(db: RoomCoordinationDb & {
   if (!user) return null;
   const role = coordination.escalation.steps.filter(step => step.kind === "human-role").at(-1);
   if (role && !user.platformRoles?.includes(role.ref)) return null;
+  const access = await resolveHumanWorkroomAccess({ userId, workroomId: input.roomId, requested: "content" }, db as never);
+  if (access.decision.level !== "content") return null;
   return userId;
 }
