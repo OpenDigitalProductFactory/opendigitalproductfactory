@@ -42,6 +42,13 @@ describe("buildAgentHostInstructions", () => {
       expect(copy).toContain("record the superseded guidance and overlapping work");
     }
   });
+  it("distinguishes delegated routine administration from retained approval boundaries", () => {
+    const copy = buildAgentHostInstructions(CONSUMER, { scope: "admin", scopes: ["admin_write"] });
+    expect(copy).toContain("Reuse current delegation");
+    expect(copy).toContain("do not request fresh approval solely because an action administers this install");
+    expect(copy).toContain("Credential or authority changes, destructive actions and restricted data retain their required gates");
+    expect(copy).toContain("A development label never grants additional authority");
+  });
   it("makes a consumer runtime safe for a development agent", () => {
     const copy = buildAgentHostInstructions(CONSUMER, {
       scope: "write",

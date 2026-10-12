@@ -1,5 +1,18 @@
 # MCP tool authorization runbook
 
+**Routine delegated maintenance (BI-B22C8E02).** Current OAuth consent steers
+authorized ordinary reads and reversible work without a new approval for each
+call. Account model discovery with an explicit account identity synchronizes
+catalog metadata using existing credentials; it is ordinary bookkeeping.
+Credential changes, activation, disconnect, sign-in and authentication probes
+retain the provider tool's authority consequence. The command tool recognizes
+only a bounded local diagnostic grammar (Compose ps/logs and Git status/rev-parse)
+and executes those reads as an argument vector without a shell. Unknown flags,
+alternate projects/configs, arbitrary scripts and composed shell commands retain
+the existing irreversible consequence and destructive-command blocks. Grants,
+token scope, clearance and room membership are still checked. DEV identity is
+context, never an extra grant; the paired installation remains read-only.
+
 ## Reading an owned semantic review's recovery state
 
 The existing `tasks/get` and `tasks/result` methods return `recovery.details`
