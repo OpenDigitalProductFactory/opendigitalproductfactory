@@ -1725,6 +1725,41 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
 
 class OAuthDefaultTest(unittest.TestCase):
+    def test_saved_endpoint_reader_refuses_credentials_and_non_urls(self):
+        for endpoint in ("not an endpoint", "https://u:p@example.test/api/mcp/v1"):
+            with self.subTest(endpoint=endpoint):
+                with self.assertRaisesRegex(ValueError, "explicit.*endpoint"):
+                    updater.existing_codex_mcp_endpoint(f'[mcp_servers.dpf]\nurl="{endpoint}"\n')
+
+    def test_saved_endpoint_read_mode_refuses_unreadable_url_without_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            path = updater.codex_config_path(home)
+            path.parent.mkdir(parents=True)
+            original = '[mcp_servers.dpf]\nurl="""https://operator.example/api/mcp/v1"""\n'
+            path.write_text(original)
+            with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch("builtins.print") as output:
+                with self.assertRaisesRegex(ValueError, "explicit.*endpoint"):
+                    updater.main(["--print-existing-codex-mcp-url"])
+            output.assert_not_called()
+            self.assertEqual(path.read_text(), original)
+            self.assertFalse(updater.codex_managed_plugin_path(home).exists())
+
+    def test_saved_endpoint_read_mode_changes_nothing(self):
+        for existing in (None, "http://127.0.0.1:3000/api/mcp/v1?tier=full"):
+            with self.subTest(existing=existing), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                original = f'[mcp_servers.dpf]\nurl="{existing}"\n' if existing else None
+                if original:
+                    path.parent.mkdir(parents=True)
+                    path.write_text(original)
+                with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch("builtins.print") as output:
+                    self.assertEqual(updater.main(["--print-existing-codex-mcp-url"]), 0)
+                output.assert_called_once_with(existing or "")
+                self.assertFalse(updater.codex_managed_plugin_path(home).exists())
+                self.assertEqual(path.read_text() if path.exists() else None, original)
+
     def test_codex_unreadable_saved_endpoint_requires_explicit_repair(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)

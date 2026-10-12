@@ -694,13 +694,41 @@ def disable_competitive_codex_plugins(text: str, plugin_ids: list[str]) -> str:
     return text
 
 
+def existing_codex_mcp_endpoint(text: str) -> Optional[str]:
+    """Read only the first DPF URL; an unreadable choice is never a default."""
+    active = False
+    for line in text.splitlines():
+        if _is_table_boundary(line):
+            if active:
+                return None
+            active = canonical_toml_table_header(line) == "mcp_servers.dpf"
+            continue
+        key, separator, value = line.partition("=")
+        if not active or not separator or key.strip() != "url":
+            continue
+        match = re.fullmatch(r'''\s*("(?:[^"\\]|\\.)*"|'[^']*')\s*(?:#.*)?''', value)
+        if not match:
+            raise ValueError("Cannot preserve saved Codex URL; select an explicit MCP endpoint to repair it")
+        quoted = match.group(1)
+        try:
+            endpoint = json.loads(quoted) if quoted.startswith('"') else quoted[1:-1]
+            parsed = urlsplit(endpoint)
+            if (parsed.scheme not in ("http", "https") or not parsed.hostname
+                    or parsed.username or parsed.password or any(char.isspace() for char in endpoint)):
+                raise ValueError("Saved URL is not a credential-free HTTP endpoint")
+            return endpoint
+        except ValueError as error:
+            raise ValueError("Cannot preserve saved Codex URL; select an explicit MCP endpoint to repair it") from error
+    return None
+
+
 def codex_mcp_body(text: str, endpoint: Optional[str]) -> list[str]:
     """Change managed keys only; retain operator-owned options and credentials."""
     retained: list[str] = []
     active = False
     seen = False
     custom_bearer = False
-    existing_endpoint = None
+    existing_endpoint = existing_codex_mcp_endpoint(text) if not endpoint else None
     for line in text.splitlines():
         if _is_table_boundary(line):
             active = not seen and canonical_toml_table_header(line) == "mcp_servers.dpf"
@@ -710,15 +738,6 @@ def codex_mcp_body(text: str, endpoint: Optional[str]) -> list[str]:
         if not active:
             continue
         key, separator, value = line.partition("=")
-        if not endpoint and separator and key.strip() == "url":
-            match = re.fullmatch(r'''\s*("(?:[^"\\]|\\.)*"|'[^']*')\s*(?:#.*)?''', value)
-            if not match:
-                raise ValueError("Cannot preserve saved Codex URL; select an explicit MCP endpoint to repair it")
-            quoted = match.group(1)
-            try:
-                existing_endpoint = json.loads(quoted) if quoted.startswith('"') else quoted[1:-1]
-            except ValueError as error:
-                raise ValueError("Cannot preserve saved Codex URL; select an explicit MCP endpoint to repair it") from error
         if separator and key.strip() in ("url", "enabled"):
             continue
         if separator and key.strip() == "bearer_token_env_var":
@@ -2157,6 +2176,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--codex-only", action="store_true")
     parser.add_argument("--codex-plugin-only", action="store_true",
                         help="Refresh only Codex plugin files and registration; the repository planner owns connector configuration.")
+    parser.add_argument("--print-existing-codex-mcp-url", action="store_true",
+                        help="Read the saved Codex DPF endpoint without changing configuration or plugins.")
     parser.add_argument("--claude-only", action="store_true")
     parser.add_argument("--skip-codex-cli-install", action="store_true")
     parser.add_argument("--skip-claude-cli-install", action="store_true")
@@ -2176,6 +2197,11 @@ def main(argv: list[str]) -> int:
     reference_mode.add_argument("--write-hook-reference", action="store_true")
     reference_mode.add_argument("--check-hook-reference", action="store_true")
     args = parser.parse_args(argv)
+    if args.print_existing_codex_mcp_url:
+        path = codex_config_path(home_dir())
+        text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
+        print(existing_codex_mcp_endpoint(text) or "")
+        return 0
     mcp_url = args.mcp_url or DEFAULT_MCP_URL
     os.environ["DPF_MCP_AUTH_MODE"] = args.auth_mode
 

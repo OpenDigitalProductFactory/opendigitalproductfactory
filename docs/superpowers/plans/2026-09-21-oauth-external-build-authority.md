@@ -30,6 +30,11 @@ resolver's preference for PUBLIC_URL over an explicit DPF_MCP_URL.
    Explicit CLI or environment endpoint selection still replaces the saved URL.
 3. Give the explicit process endpoint precedence in the shared installer twins.
    Preserve install-origin and saved-user fallbacks, CA selection and credentials.
+   Bootstrap must also select the saved Codex endpoint before those defaults
+   when no process endpoint is named. Reuse the updater's read-only URL reader
+   so probes, persistence and the existing planner receive the same choice.
+   Verify both real adapter blocks in temporary homes, including fresh setup
+   and explicit replacement; unreadable saved configuration must fail safely.
 4. Verify isolated-home updater reruns and both real shell resolvers, document
    recovery, then renew exact-source gate and independent review before release.
 5. Verify canonical delivery and the complete OAuth acceptance matrix. A config

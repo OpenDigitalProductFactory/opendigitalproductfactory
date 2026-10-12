@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -254,6 +254,63 @@ function powershell(script) {
 }
 
 const q = (value) => value.replaceAll("'", "''");
+
+function writeEndpointReaderFixture(install, extension) {
+  const scripts = join(install, "packages/dpf-skill-pack/scripts");
+  mkdirSync(scripts, { recursive: true });
+  const reader = posix(join(root, `packages/dpf-skill-pack/scripts/update-agent-toolchain.${extension}`));
+  const file = join(scripts, `update-agent-toolchain.${extension}`);
+  writeFileSync(file, extension === "sh"
+    ? `#!/bin/sh\n[ "$1" = "--print-existing-codex-mcp-url" ] || exit 79\nexec bash '${reader}' "$@"\n`
+    : `param([switch]$PrintExistingCodexMcpUrl)\nif (-not $PrintExistingCodexMcpUrl) { exit 79 }\n& '${q(reader)}' -PrintExistingCodexMcpUrl\nexit $LASTEXITCODE\n`);
+  return file;
+}
+
+for (const adapter of ["sh", "ps1"]) {
+  test(`${adapter}: bootstrap selects saved operator endpoint before install defaults and keeps explicit selection`, adapter === "sh" ? NEEDS_BASH : NEEDS_POWERSHELL, () => {
+    withHome(({ home, install }) => {
+      writeFileSync(join(install, ".env"), "PUBLIC_URL=https://desk.lan\n");
+      writeEndpointReaderFixture(install, adapter);
+      // Windows' python3 Store alias can install/update instead of running Python.
+      // Keep the real shell wrapper, but bind its interpreter inside this fixture.
+      const bin = join(home, "bin");
+      mkdirSync(bin);
+      const python = spawnSync(process.platform === "win32" ? "python" : "python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" });
+      assert.equal(python.status, 0, python.stderr);
+      writeFileSync(join(bin, "python3"), `#!/bin/sh\nexec '${posix(python.stdout.trim()).replaceAll("'", "'\\''")}' "$@"\n`);
+      chmodSync(join(bin, "python3"), 0o755);
+      const config = join(home, ".codex/config.toml");
+      mkdirSync(dirname(config), { recursive: true });
+      const source = readFileSync(join(root, `scripts/dpf-bootstrap-agent-toolchain.${adapter}`), "utf8");
+      const start = source.indexOf("# BI-2D545A0C (design 12.4.3):");
+      const end = source.indexOf(adapter === "sh" ? "SKILL_PACK_MANIFEST=" : "$SkillPackManifestPath", start);
+      const block = source.slice(start, end).replace("Resolve-DpfMcpClientEnv -InstallDir $RepoRoot",
+        `Resolve-DpfMcpClientEnv -InstallDir $RepoRoot -HomeDir '${q(home)}' -GetUserEnv { param($n) '' }`);
+      const run = (explicit = "") => {
+        if (adapter === "sh") {
+          const out = bash(`fail() { echo "$1" >&2; }; ${block}\nprintf '%s|%s' "$MCP_ENDPOINT" "$MCP_TRUST_BUNDLE"`, { home, env: {
+            SCRIPT_DIR: posix(join(root, "scripts")), REPO_ROOT: posix(install), CODEX_CONFIG_PATH: posix(config),
+            DPF_AGENT_TOOLCHAIN_HOME: posix(home), DPF_MCP_URL: explicit,
+            PATH: `${bin}${delimiter}${process.env.PATH}`,
+          } });
+          assert.equal(out.status, 0, out.stderr);
+          return out.stdout;
+        }
+        return powershell(`function Write-Fail2 { param($text) throw $text }
+          $ScriptDir = '${q(join(root, "scripts"))}'; $RepoRoot = '${q(install)}'; $CodexConfigPath = '${q(config)}'
+          $env:DPF_AGENT_TOOLCHAIN_HOME = '${q(home)}'; $env:DPF_MCP_URL = '${q(explicit)}'
+          $env:DPF_PKI_TRUST_BUNDLE = ''; $env:NODE_EXTRA_CA_CERTS = ''
+          ${block}
+          "$McpEndpoint|$McpTrustBundle"`);
+      };
+      assert.equal(run(), "https://desk.lan/api/mcp/v1?tier=full|");
+      writeFileSync(config, '[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1?tier=full"\n');
+      assert.equal(run(), "http://127.0.0.1:3000/api/mcp/v1?tier=full|");
+      assert.equal(run("https://explicit.lan/api/mcp/v1"), "https://explicit.lan/api/mcp/v1|");
+      assert.equal(readFileSync(config, "utf8"), '[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1?tier=full"\n');
+    });
+  });
+}
 
 test("Windows: DPF_MCP_URL and NODE_EXTRA_CA_CERTS go to the User env once; a rerun writes nothing", NEEDS_POWERSHELL, () => {
   withHome(({ home, install }) => {
