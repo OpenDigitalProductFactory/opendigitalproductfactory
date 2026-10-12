@@ -1,8 +1,15 @@
-import { describe, it, expect } from "vitest";
-import { buildCatalogHash, diffExcludingOverrides, catalogEntryToProfileFields, resolveKnownProviderModelsPath } from "./reconcile-catalog-capabilities";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { buildCatalogHash, diffExcludingOverrides, catalogEntryToProfileFields, resolveKnownProviderModelsPath, reconcile } from "./reconcile-catalog-capabilities";
 import type { KnownModel } from "../../../apps/web/lib/routing/known-provider-models";
 import { KNOWN_PROVIDER_MODELS } from "../../../apps/web/lib/routing/known-provider-models";
 import { EMPTY_CAPABILITIES } from "../../../apps/web/lib/routing/model-card-types";
+
+const db = vi.hoisted(() => ({
+  modelProfile: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
+  discoveredModel: { upsert: vi.fn() },
+  modelCapabilityChangeLog: { deleteMany: vi.fn(), createMany: vi.fn() },
+}));
+vi.mock("../src/client", () => ({ prisma: db }));
 
 const sampleModel: KnownModel = {
   modelId: "gpt-5.3-codex",
@@ -23,6 +30,95 @@ const sampleModel: KnownModel = {
   defaultStatus: "active",
   scores: { reasoning: 80, codegen: 80, toolFidelity: 80, instructionFollowingScore: 75, structuredOutputScore: 75, conversational: 70, contextRetention: 70 },
 };
+
+describe("startup reconciliation", () => {
+  let row: Record<string, unknown> | null;
+  const catalog = { codex: [sampleModel] };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    row = {
+      ...catalogEntryToProfileFields(sampleModel),
+      profileSource: "catalog", catalogHash: buildCatalogHash(sampleModel),
+      capabilityOverrides: null,
+    };
+    // Respect Prisma's select so incomplete reads cannot hide duplicate writes.
+    db.modelProfile.findFirst.mockImplementation(async ({ select }) => row &&
+      Object.fromEntries(Object.keys(select).map(key => [key, row![key]])));
+    db.modelProfile.updateMany.mockImplementation(async ({ data }) => {
+      Object.assign(row!, data);
+      return { count: 1 };
+    });
+    db.modelProfile.create.mockResolvedValue({});
+    db.discoveredModel.upsert.mockResolvedValue({});
+    db.modelCapabilityChangeLog.deleteMany.mockResolvedValue({ count: 0 });
+    db.modelCapabilityChangeLog.createMany.mockResolvedValue({ count: 1 });
+  });
+
+  it.each(["active", "degraded", "retired", "disabled"])(
+    "preserves existing %s lifecycle while repairing capabilities", async modelStatus => {
+      const retiredAt = new Date("2026-10-11T12:00:00Z");
+      Object.assign(row!, { modelStatus, retiredAt, retirementReason: "Provider refusal", supportsToolUse: false });
+      await reconcile(catalog);
+      expect(row).toMatchObject({ modelStatus, retiredAt, retirementReason: "Provider refusal", supportsToolUse: true });
+      for (const [call] of db.modelProfile.updateMany.mock.calls) {
+        expect(call.data).not.toHaveProperty("modelStatus");
+        expect(call.data).not.toHaveProperty("retiredAt");
+        expect(call.data).not.toHaveProperty("retirementReason");
+      }
+    },
+  );
+
+  it("writes nothing to a stable profile on repeated boots", async () => {
+    await reconcile(catalog);
+    await reconcile(catalog);
+    expect(db.modelProfile.updateMany).not.toHaveBeenCalled();
+    expect(db.modelCapabilityChangeLog.createMany).not.toHaveBeenCalled();
+  });
+
+  it("records the actual old metadata once and is stable on the next boot", async () => {
+    Object.assign(row!, { maxOutputTokens: 4096 });
+    await reconcile(catalog);
+    await reconcile(catalog);
+    expect(db.modelProfile.updateMany).toHaveBeenCalledTimes(1);
+    expect(db.modelCapabilityChangeLog.createMany).toHaveBeenCalledTimes(1);
+    expect(db.modelCapabilityChangeLog.createMany.mock.calls[0][0].data).toEqual([
+      expect.objectContaining({ field: "maxOutputTokens", oldValue: 4096, newValue: 8192 }),
+    ]);
+  });
+
+  it.each(["auto-discover", "evaluated", "admin"])("preserves %s ownership", async profileSource => {
+    Object.assign(row!, { profileSource, supportsToolUse: false });
+    await reconcile(catalog);
+    expect(db.modelProfile.updateMany).not.toHaveBeenCalled();
+    expect(db.modelCapabilityChangeLog.createMany).not.toHaveBeenCalled();
+  });
+
+  it("preserves pinned fields while repairing other capability drift", async () => {
+    Object.assign(row!, { capabilityOverrides: { maxOutputTokens: 4096 }, maxOutputTokens: 4096, supportsToolUse: false });
+    await reconcile(catalog);
+    expect(row).toMatchObject({ maxOutputTokens: 4096, supportsToolUse: true });
+    expect(db.modelProfile.updateMany.mock.calls[0][0].data).not.toHaveProperty("maxOutputTokens");
+  });
+
+  it("does not retire an existing active model from static catalog defaults", async () => {
+    await reconcile({ codex: [{ ...sampleModel, defaultStatus: "retired" }] });
+    expect(row!.modelStatus).toBe("active");
+    expect(db.modelProfile.updateMany.mock.calls[0][0].data).toEqual({
+      catalogHash: buildCatalogHash({ ...sampleModel, defaultStatus: "retired" }),
+    });
+    expect(db.modelCapabilityChangeLog.createMany).not.toHaveBeenCalled();
+    db.modelProfile.updateMany.mockClear();
+    await reconcile({ codex: [{ ...sampleModel, defaultStatus: "retired" }] });
+    expect(db.modelProfile.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each(["active", "retired", "disabled"] as const)("uses %s catalog defaults when creating a missing profile", async defaultStatus => {
+    row = null;
+    await reconcile({ codex: [{ ...sampleModel, defaultStatus }] });
+    expect(db.modelProfile.create).toHaveBeenCalledWith({ data: expect.objectContaining({ modelStatus: defaultStatus, profileSource: "catalog" }) });
+  });
+});
 
 describe("buildCatalogHash", () => {
   it("produces consistent hash for same input", () => {
