@@ -153,8 +153,9 @@ acceptance obligations; this source slice does not declare Phase D complete.
 Focused projection, access, workforce and UI tests have passed, including a first-failing
 stale-role membership regression. Both web TypeScript programs and the theme/style guard
 passed. The exact-source publication gates remain pending.
-The MCP getter accepts authenticated context, but forwarding through the existing
-work-capsules pack awaits release of its other owner's frozen path claim. Native UX
+Both the current MCP getter and its compatibility alias forward the authenticated
+actor context, ignoring caller-supplied identity for access checks. The pack path was
+claimed normally after the installation returned to normal; no force override was used. Native UX
 engagement CE-90C620F0 is requested; no completed specialist critique or served UI
 acceptance is claimed. The working sample prototype is retained in the execution
 visibility evidence directory and is not runtime evidence.
