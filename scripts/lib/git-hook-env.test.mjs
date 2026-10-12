@@ -2,7 +2,7 @@
 // hook must never operate on the real repository.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,7 +42,7 @@ test("scrubbed env lets a temp-dir `git add -A` see the temp dir, not the inheri
     };
     const git = (cwd, args, env) => execFileSync("git", args, { cwd, encoding: "utf8", env: { ...env, ...identity } }).trim();
     git(root, ["init", "-q", real]);
-    execFileSync("sh", ["-c", "echo keep > tracked.txt"], { cwd: real });
+    writeFileSync(join(real, "tracked.txt"), "keep\n");
     git(real, ["add", "-A"], process.env);
     git(real, ["commit", "-q", "-m", "real base"], process.env);
     const head = git(real, ["rev-parse", "HEAD"], process.env);
@@ -51,7 +51,7 @@ test("scrubbed env lets a temp-dir `git add -A` see the temp dir, not the inheri
     const hookEnv = { ...process.env, GIT_DIR: join(real, ".git") };
 
     git(root, ["init", "-q", fixture], scrubGitRepoLocationEnv(hookEnv));
-    execFileSync("sh", ["-c", "echo fixture > f.txt"], { cwd: fixture });
+    writeFileSync(join(fixture, "f.txt"), "fixture\n");
     git(fixture, ["add", "-A"], scrubGitRepoLocationEnv(hookEnv));
     git(fixture, ["commit", "-q", "-m", "base"], scrubGitRepoLocationEnv(hookEnv));
 
@@ -76,7 +76,7 @@ test("the janitor freshness fixture no longer commits to a GIT_DIR it inherited 
     };
     const git = (args) => execFileSync("git", args, { cwd: real, encoding: "utf8", env: { ...process.env, ...identity } }).trim();
     execFileSync("git", ["init", "-q", real], { env: process.env });
-    execFileSync("sh", ["-c", "echo keep > tracked.txt"], { cwd: real });
+    writeFileSync(join(real, "tracked.txt"), "keep\n");
     git(["add", "-A"]);
     git(["commit", "-q", "-m", "real base"]);
     const head = git(["rev-parse", "HEAD"]);

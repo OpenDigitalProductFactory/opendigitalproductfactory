@@ -497,6 +497,30 @@ predecessor. Deployment uses its canonical recovery point and rollback checks.
 There is no alternate route around independent review if this repair's own
 review cannot execute; use only a checked-in, authorized recovery procedure.
 
+### Provider transport remediation found during acceptance
+
+The original workflow's two network failures occurred approximately five
+minutes after dispatch. Source inspection on `1a8a1f57bf` found that the
+off-threadpool Undici transport retained its 300-second headers and body
+defaults even though the governed Qwen reviewer has a 600-second caller
+deadline. Real-socket failure injection reproduces both premature cutoffs.
+The historical errors discarded their transport cause, so timing alone does
+not establish that every original failure had this cause.
+
+Complete the existing infrastructure-remediation step by passing the canonical
+local timeout ceiling to the process-lived provider transport. Generic fetch
+users retain their defaults. Shorter caller signals, DNS isolation, finite
+transport limits, review deadlines, attempts and admission remain intact.
+Verify delayed headers and bodies beyond the old cutoff, caller cancellation,
+and the finite backstop before the shared gate and independent review. Deploy
+through the same governed path, then refresh real health and settlement
+evidence before the original bounded successor. A probe's unrun cases remain
+unrun; transport health is not an independent review verdict.
+
+Coverage refresh: `cmut5p46zbh2c01jz92q7uyn8`, BI-8ECEC429, atomic recovery
+outcome; this remediation completes the acceptance workflow, not a new review
+identity or an expansion of its authority or budget.
+
 ## Non-goals
 
 - Replacing GitHub review.

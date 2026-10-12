@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { guardShellEnv } from "./guard-bash.mjs";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 
 /**
@@ -402,6 +403,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // first, PAT until retirement, actionable refusal) against a loopback
       // stub authorization server.
       node("--test", "scripts/lib/mcp-credential.test.mjs"),
+      // BI-5BCDB07C: the Grok refresher writes bearer_token_file and stops
+      // when the credentials client is refused. Listed here so CI runs it.
+      node("--test", "scripts/lib/grok-credential.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -811,6 +815,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // GIT_DIR; runs the janitor freshness fixture under one, against the live
       // tree, and proves the inherited repository is untouched.
       conformanceTest("scripts/lib/git-hook-env.test.mjs"),
+      conformanceTest("scripts/lib/guard-bash.test.mjs"),
       node(
         "--test",
         "scripts/lib/runtime-artifact-janitor.test.mjs",
@@ -1145,18 +1150,18 @@ export function formatRunSummary(profile, result) {
 
 export async function runPolicyProfile({
   entries,
-  execute = (command, args) => {
-    const invocation = resolvePolicyGuardInvocation(command, args);
-    return spawnSync(invocation.command, invocation.args, {
-      cwd: process.cwd(),
-      env: process.env,
-      stdio: "inherit",
-      shell: false,
-    }).status ?? 1;
-  },
+  execute,
   logger = () => {},
   now = () => Date.now(),
 }) {
+  let env;
+  const run = execute ?? ((command, args) => {
+    env ??= guardShellEnv();
+    const invocation = resolvePolicyGuardInvocation(command, args, { env });
+    return spawnSync(invocation.command, invocation.args, {
+      cwd: process.cwd(), env, stdio: "inherit", shell: false,
+    }).status ?? 1;
+  });
   const results = [];
 
   for (const entry of entries) {
@@ -1166,7 +1171,7 @@ export async function runPolicyProfile({
     logger({ type: "start", entry });
 
     for (const [command, args] of entry.commands) {
-      const exitCode = execute(command, args);
+      const exitCode = run(command, args);
       if (exitCode !== 0) {
         status = "failed";
         failedCommand = [command, ...args].join(" ");

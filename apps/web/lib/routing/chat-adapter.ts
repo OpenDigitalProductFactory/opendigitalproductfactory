@@ -29,6 +29,7 @@ import { captureAnthropicWeeklyQuota } from "./cli-pool-status";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
 import { toWireSampling } from "./sampling-profile";
+import { localToolThinkingKwargs } from "./local-tool-thinking";
 // BI-98572A51: the single-GPU admission lane is canonical in resource-lane.ts so
 // chat AND the local build engine share ONE gate. Re-exported below for callers
 // (and tests) that import it from here.
@@ -464,6 +465,12 @@ export const chatAdapter: ExecutionAdapterHandler = {
           }
           return t;
         });
+        // A local tool turn that opens <think> spends the answer budget before
+        // the tool call. The template only skips that when the request says so.
+        const thinkingKwargs = localToolThinkingKwargs(providerId, tools.length);
+        if (thinkingKwargs) {
+          (body as Record<string, unknown>).chat_template_kwargs = thinkingKwargs;
+        }
       }
     }
 

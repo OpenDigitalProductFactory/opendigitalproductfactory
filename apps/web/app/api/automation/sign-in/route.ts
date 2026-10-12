@@ -70,11 +70,15 @@ export async function GET(request: NextRequest): Promise<Response> {
     return apiErrorResponse(status === 403 ? "FORBIDDEN" : "UNAUTHORIZED", outcome.reason, status);
   }
 
+  const maxAge = outcome.maxAge ?? AUTOMATION_SESSION_MAX_AGE_SECONDS;
+  if (!Number.isFinite(maxAge) || maxAge <= 0) {
+    return apiErrorResponse("UNAUTHORIZED", "This verification sign-in has expired. Start a new authorized run.", 401);
+  }
   const sessionToken = await encode({
     token: { ...outcome.claims },
     secret,
     salt: SESSION_COOKIE_NAME,
-    maxAge: AUTOMATION_SESSION_MAX_AGE_SECONDS,
+    maxAge,
   });
 
   // Redirect back to the origin the browser used, not `request.nextUrl.origin`:
@@ -88,7 +92,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     sameSite: "lax",
     path: "/",
     secure: SESSION_COOKIE_SECURE,
-    maxAge: AUTOMATION_SESSION_MAX_AGE_SECONDS,
+    maxAge,
   });
   response.headers.set("Cache-Control", "no-store, max-age=0");
   return response;

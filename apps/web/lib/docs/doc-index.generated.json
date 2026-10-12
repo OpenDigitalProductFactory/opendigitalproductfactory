@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 739,
+  "pageCount": 741,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1186,6 +1186,7 @@
       "anchors": [
         "build-gate-runbook",
         "recovering-an-interrupted-gate-publication",
+        "isolated-verification-users",
         "semantic-review-publication-and-infrastructure-recovery",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
         "the-room-follows-its-pr-through-ci-bi-88341b5d",
@@ -1990,6 +1991,18 @@
         "revision-history"
       ]
     },
+    "docs/architecture/improvement-signal-intake.md": {
+      "publicHref": "/architecture/improvement-signal-intake/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "improvement-signal-intake",
+        "source-identity-and-recurrence",
+        "concurrent-delivery-and-failure",
+        "remaining-learning-qualification"
+      ]
+    },
     "docs/architecture/initiative-readiness-runbook.md": {
       "publicHref": "/architecture/initiative-readiness-runbook/",
       "portalHref": null,
@@ -2780,6 +2793,18 @@
         "existing-persistence-and-bounded-reads",
         "recovery-integration-still-required",
         "verification-and-rollback-boundary"
+      ]
+    },
+    "docs/architecture/workroom-review-profile-contract.md": {
+      "publicHref": "/architecture/workroom-review-profile-contract/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-review-profile-read-contract",
+        "common-requirements-and-extensions",
+        "coverage-and-representative-domains",
+        "verification-and-recovery"
       ]
     },
     "docs/architecture/workroom-vocabulary-boundary.md": {
@@ -5666,6 +5691,7 @@
       "publishedPortal": false,
       "anchors": [
         "platform-support-watch-list-living-document",
+        "windows-host-guard-interpreters-bi-ba5f777a",
         "target-environments",
         "how-to-use-this-file",
         "1-monitoring-telemetry",

@@ -81,6 +81,28 @@ export function isReusableLiveCapsule(
   return existingSession == null || incomingSession == null || existingSession === incomingSession;
 }
 
+/** Independent missing bindings: a pre-bound backlog must not prevent session binding. */
+export function planLiveCapsuleBinding(existing: Pick<BranchCapsuleRecord, "backlogItemId" | "executorRef" | "epicId">, input: CapsuleAdoptionInput) {
+  const backlogBound = Boolean(input.backlogItemId) && existing.backlogItemId == null;
+  const sessionBound = Boolean(input.executorRef) && existing.executorRef == null;
+  return {
+    changed: backlogBound || sessionBound,
+    backlogBound,
+    // A concurrent session assignment must refuse rather than be overwritten.
+    where: sessionBound ? { executorRef: null } : {},
+    data: {
+      ...(backlogBound ? { backlogItemId: input.backlogItemId,
+        ...(input.epicId && existing.epicId == null ? { epicId: input.epicId } : {}),
+      } : {}),
+      ...(sessionBound ? { executorRef: input.executorRef } : {}),
+    },
+    evidence: {
+      ...(backlogBound ? { backlogItemId: input.backlogItemId, lateBind: true } : {}),
+      ...(sessionBound ? { executorRef: input.executorRef, sessionLateBind: true } : {}),
+    },
+  };
+}
+
 /**
  * The remedy for an occupied branch, which depends on what is occupying it.
  *

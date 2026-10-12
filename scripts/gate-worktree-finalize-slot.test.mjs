@@ -176,7 +176,7 @@ for (const exitCode of [0, 2]) {
       assert.equal(calls, 1);
       // A different caller cannot replay the original owner's retained packet.
       pending.recordArgs.externalSessionId = "other-session";
-      writeFileSync(slot.evidence.pending, JSON.stringify(pending));
+      writeFileSync(slot.evidence.pending, JSON.stringify(pending), { flag: "wx" });
       const refused = await run();
       assert.notEqual(refused.code, 0);
       assert.match(refused.output, /publication-identity-mismatch/);

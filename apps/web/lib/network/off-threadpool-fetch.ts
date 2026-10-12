@@ -20,7 +20,10 @@ type LookupDependencies = Readonly<{
   timeoutMs?: number;
 }>;
 
-type FetchTransportDependencies = LookupDependencies;
+type FetchTransportDependencies = LookupDependencies & Readonly<{
+  headersTimeoutMs?: number;
+  bodyTimeoutMs?: number;
+}>;
 
 function resolutionError(
   code: "EAI_ADDRFAMILY" | "ENOTFOUND" | "ETIMEOUT",
@@ -184,6 +187,8 @@ export function createOffThreadpoolFetchTransport(
   dependencies: FetchTransportDependencies = {},
 ): OffThreadpoolFetchTransport {
   const dispatcher = new Agent({
+    headersTimeout: dependencies.headersTimeoutMs,
+    bodyTimeout: dependencies.bodyTimeoutMs,
     connect: {
       lookup: createOffThreadpoolLookup(dependencies),
     },
