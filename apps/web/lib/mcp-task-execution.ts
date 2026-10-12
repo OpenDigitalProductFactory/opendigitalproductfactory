@@ -9,7 +9,7 @@ import { loadReviewerProfile } from "./backlog/initiative-readiness/reviewer-pro
 import { prisma, type Prisma } from "@dpf/db";
 import { terminalWriterDispatchContractForProvider } from "@/lib/routing/execution-plan";
 import type { RequestContract } from "@/lib/routing/request-contract";
-import { loadInitiativeReviewOutcome, loadTaskInitiativeReviewOutcome } from "./mcp-task-review-outcome";
+import { loadInitiativeReviewOutcome, loadTaskInitiativeReviewOutcome, persistedReviewCompletionData } from "./mcp-task-review-outcome";
 import { foldNativeMcpExecutions } from "@/lib/tak/native-mcp-executions";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import {
@@ -108,6 +108,22 @@ export async function executeRemoteTaskAttempt(input: {
   }
   const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
     settleRemoteTask(args, reservation, dispatchClaim);
+  // A lost acknowledgement is recovery work, not another independent assessment.
+  // Keep the same bound receipt and let the fenced settlement preserve cancellation.
+  const priorReview = parsed.initiativeReviewBinding
+    ? await loadTaskInitiativeReviewOutcome(run.taskRunId, parsed.initiativeReviewBinding)
+    : null;
+  if (priorReview) {
+    const displaced = await settle({
+      where: { taskRunId: run.taskRunId },
+      data: persistedReviewCompletionData(admittedRun.progressPayload, priorReview),
+    });
+    return displaced ?? { kind: "result", result: {
+      taskRunId: run.taskRunId, status: "completed", idempotentReplay: true,
+      requiresApproval: false, resumable: false, content: remoteTaskContent(priorReview.summary),
+      structuredContent: priorReview, isError: false,
+    } };
+  }
   const agent = await resolveAutonomousWorkAgent({
     agentId: parsed.agentId,
     routeContext: parsed.routeContext,

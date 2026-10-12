@@ -78,17 +78,25 @@ export async function activateProviderWithDefaultConnection(
   prisma: PrismaClient,
   input: { providerId: string; sensitivityClearance: string[] },
 ): Promise<void> {
+  await setProviderStatusWithDefaultConnection(prisma, { ...input, status: "active" });
+}
+
+/** Operator eligibility is separate from automatic provider health. */
+export async function setProviderStatusWithDefaultConnection(
+  prisma: PrismaClient,
+  input: { providerId: string; status: "active" | "inactive"; sensitivityClearance?: string[] },
+): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await tx.modelProvider.update({
       where: { providerId: input.providerId },
       data: {
-        status: "active",
-        sensitivityClearance: input.sensitivityClearance,
+        status: input.status,
+        ...(input.sensitivityClearance && { sensitivityClearance: input.sensitivityClearance }),
       },
     });
     await tx.aiProviderConnection.update({
       where: { connectionId: `provider-default-${input.providerId}` },
-      data: { status: "active" },
+      data: { status: input.status },
     });
   });
 }

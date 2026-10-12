@@ -11,6 +11,7 @@ import { routeAndCall } from "@/lib/inference/routed-inference";
 import { buildEffectiveRequestContract, buildInitialRouteContext } from "@/lib/inference/route-contract-builder";
 import { inspectLocalProviderCapacity } from "@/lib/routing/local-provider-capacity";
 import { dispatchRoutedSemanticReview } from "./routed-semantic-review";
+import { screenInferencePayload } from "@/lib/inference/data-screening/screen-inference-payload";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -18,6 +19,50 @@ beforeEach(() => {
 });
 
 describe("routed semantic review", () => {
+  it.each(["external", "build-studio"] as const)("protects ordinary source without authoritative classification on %s", async (surface) => {
+    vi.mocked(routeAndCall).mockResolvedValue({
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),
+    } as never);
+    await dispatchRoutedSemanticReview("export function normalizePaths(paths: string[]) { return paths.filter(Boolean); }", {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface,
+    });
+    expect(routeAndCall).toHaveBeenCalledTimes(2);
+    for (const [messages, systemPrompt, sensitivity] of vi.mocked(routeAndCall).mock.calls) {
+      const screened = screenInferencePayload({ messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity } });
+      expect(screened.receipt.classifiedDataClasses).toContain("source-code");
+      expect(sensitivity).toBe("internal");
+      expect(screened.routeContext.sensitivity).toBe("confidential");
+      expect(screened.receipt.measuredSensitivity).toBe("confidential");
+    }
+  });
+
+  it.each([
+    'const apiKey = "sk-ant-api03-REDACTEDLOOKINGSECRETVALUE";',
+    'export const employeeRecord = { salary: 92000, ssn: "123-45-6789" };',
+  ])("retains protected-data screening inside a development diff: %s", async (artifact) => {
+    vi.mocked(routeAndCall).mockResolvedValue({
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Screening fixture." }),
+    } as never);
+    await dispatchRoutedSemanticReview(artifact, {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: [], surface: "external",
+    });
+    const [messages, systemPrompt, sensitivity] = vi.mocked(routeAndCall).mock.calls[0]!;
+    const screened = screenInferencePayload({ messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity } });
+    expect(screened.routeContext).toMatchObject({ sensitivity: "restricted", residencyPolicy: "local_only" });
+  });
+
+  it("keeps financial identifiers in development fixtures local-only", async () => {
+    vi.mocked(routeAndCall).mockResolvedValue({
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Screening fixture." }),
+    } as never);
+    await dispatchRoutedSemanticReview('export const taxPayment = { routingNumber: "021000021", accountNumber: "5512338891" };', {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: [], surface: "external",
+    });
+    const [messages, systemPrompt, sensitivity] = vi.mocked(routeAndCall).mock.calls[0]!;
+    const screened = screenInferencePayload({ messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity } });
+    expect(screened.routeContext).toMatchObject({ sensitivity: "confidential", residencyPolicy: "local_only" });
+  });
+
   it("does not accept a parseable verdict from a provider-truncated response", async () => {
     vi.mocked(routeAndCall).mockResolvedValue({ truncated: true,
       content: JSON.stringify({ decision: "pass", issues: [], summary: "Incomplete private response." }),
