@@ -1,5 +1,12 @@
 # Durable Long-Running Agentic Processes — architecture assessment
 
+**Operator provider pauses:** optional expiry runs through the existing jobs
+facade, with `ScheduledJob` holding the operation identity and resume time.
+A five-minute reconciliation job repairs overdue timers after restart or event
+delivery failure. A matching timer checks health and the current operation
+inside the serialized resume path; it cannot lift a newer or indefinite pause.
+See the [provider control guide](../user-guide/ai-workforce/provider-ollama.md).
+
 **Current authority implementation:** durable process reconnects read tool grants
 from the canonical coworker Agent row on each request, with revocation tombstones
 taking precedence. Known alias rows are not an alternate authority source.

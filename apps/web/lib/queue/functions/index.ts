@@ -4,6 +4,7 @@ import { routingReachabilityPreflight } from "./routing-reachability-preflight";
 import { infraPrune } from "./infra-prune";
 import { rateRecovery } from "./rate-recovery";
 import { providerRecovery } from "./provider-recovery";
+import { providerPauseExpiry, providerPauseReconcile } from "./provider-operator-pause";
 import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
@@ -167,6 +168,7 @@ import {
 import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 export const scheduledFunctions = [
+  providerPauseReconcile,
   decisionConciergeSweepScheduled, // EP-0AF96937: drafts what the owner should do about decisions waiting on them, every 4h
   decisionTrustRecomputeScheduled, // BI-7D1E43DE: governed-decision TrustState from the shadow ledger, report only, every 6h
   prometheusPoll,
@@ -260,6 +262,7 @@ export const eventFunctions = [
   providerCatalogRefresh, // BI-7F2FBDA3: on-demand provider re-discovery after a model refusal — event-triggered, NOT a cron
   rateRecovery,
   providerRecovery,
+  providerPauseExpiry,
   mcpCatalogSync,
   codeGraphReconcileEvent,
   routeWorkItem,
