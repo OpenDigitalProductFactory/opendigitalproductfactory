@@ -3,6 +3,19 @@ import { describe, expect, it, vi } from "vitest";
 import { resolveInitiativeArtifact, type InitiativeArtifactResolverDb } from "./initiative-readiness";
 
 describe("resolveInitiativeArtifact", () => {
+  it("preserves a human author's unknown agent only in the explicit non-independent research path", async () => {
+    const db: InitiativeArtifactResolverDb = {
+      buildArtifactRevision: { findUnique: vi.fn(async () => ({ id: "rev-1", valueDigest: "server", value: "Canonical design",
+        field: "designDoc", status: "accepted", savedByUserId: "user-author", savedByAgentId: null,
+        build: { originator: { itemId: "BI-1" }, originatingBacklogItemId: "row-1", abandonedAt: null, artifactRevisions: [{ id: "rev-1" }] } })) },
+      documentVersion: { findUnique: vi.fn() },
+      principalAlias: { findMany: vi.fn(async () => [{ principal: { principalId: "principal-author" } }]) },
+    };
+    const args = { locator: { kind: "feature-build-revision" as const, revisionId: "rev-1" }, subject: { kind: "backlog-item" as const, id: "BI-1" }, db };
+    expect(await resolveInitiativeArtifact(args)).toMatchObject({ ok: false, code: "ARTIFACT_AUTHOR_REQUIRED" });
+    expect(await resolveInitiativeArtifact({ ...args, allowHumanResearchAuthor: true })).toMatchObject({ ok: true,
+      artifact: { authorPrincipalId: "principal-author", authorAgentId: null } });
+  });
   it("uses the stored BuildArtifactRevision digest and author for the matching subject", async () => {
     const db: InitiativeArtifactResolverDb = {
       buildArtifactRevision: { findUnique: vi.fn(async () => ({
