@@ -308,6 +308,16 @@ server/candidate closure, never caller-provided policy claims. The existing
 owned-container timeout/fencing runner remains required when this discovery is
 wired into admission. Source tests do not establish that runtime wiring.
 
+The actuator now accepts version 2 ordinary transitions with an explicit
+`mode: transition`, preserving the existing consistent-baseline precondition.
+Its receipts recursively authenticate observed health; source fixtures exercise
+replay and every existing durable crash boundary in both versions. A signed
+`mode: reconciliation` still refuses before any journal or install-state write.
+The packaged probe therefore advertises apply versions 1 and 2, and no
+reconciliation support. The server coordinator still issues version 1 until
+trusted packaged-probe admission is wired. These source prerequisites do not
+qualify dual-baseline application, legacy health evidence or a live transition.
+
 ## Safe operating rules
 
 - Change physical service facts in the substrate manifest and regenerate the catalog; do not hand-edit the generated catalog.

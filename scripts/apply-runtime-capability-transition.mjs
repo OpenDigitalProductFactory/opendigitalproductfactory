@@ -22,7 +22,7 @@ if (flags["runtime-capability-protocol-info"]) {
   process.stdout.write(JSON.stringify({
     schemaVersion: 1,
     sourceSha: process.env.DPF_CANDIDATE_SOURCE_SHA ?? "unknown",
-    signingVersions: [1, 2], applyVersions: [1], reconciliationVersions: [],
+    signingVersions: [1, 2], applyVersions: [1, 2], reconciliationVersions: [],
     actuatorSha256: digest(new URL(import.meta.url)),
     signerSha256: digest(new URL("./lib/transition-signing.mjs", import.meta.url)),
   }) + "\n");
@@ -77,7 +77,8 @@ try { envelope = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
 const expected = sign(envelope, secret);
 if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) await fail("tampered_envelope");
 const issued = Date.parse(envelope.issuedAt), expires = Date.parse(envelope.expiresAt), now = Date.now();
-if (envelope.version !== 1 || argvId !== envelope.transitionId || !/^RCT-[A-Za-z0-9-]{1,48}$/.test(envelope.transitionId) || !Number.isFinite(issued) || !Number.isFinite(expires) || issued > now + 30_000 || expires < now || expires - issued > 600_000) await fail("expired_or_invalid_envelope");
+if (envelope.version === 2 && envelope.mode !== "transition") await fail("unsupported_runtime_transition_mode");
+if (![1, 2].includes(envelope.version) || argvId !== envelope.transitionId || !/^RCT-[A-Za-z0-9-]{1,48}$/.test(envelope.transitionId) || !Number.isFinite(issued) || !Number.isFinite(expires) || issued > now + 30_000 || expires < now || expires - issued > 600_000) await fail("expired_or_invalid_envelope");
 for (const k of ["catalogHash", "previousStateHash", "desiredStateHash"]) if (!/^[a-f0-9]{64}$/.test(envelope[k])) await fail("invalid_envelope_hash");
 for (const k of ["previousKeys", "desiredKeys", "previousProfiles", "desiredProfiles", "previousServices", "desiredServices"]) if (!Array.isArray(envelope[k]) || JSON.stringify(envelope[k]) !== JSON.stringify([...new Set(envelope[k])].sort()) || envelope[k].some((x) => typeof x !== "string" || (k.endsWith("Keys") ? !/^runtime:[a-z0-9-]+$/.test(x) : !/^[a-z0-9][a-z0-9-]*$/.test(x)))) await fail("invalid_envelope_projection");
 

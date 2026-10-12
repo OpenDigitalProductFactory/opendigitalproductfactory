@@ -28,6 +28,21 @@ describe("runtime capability protocol discovery", () => {
 });
 
 describe("runtime transition receipt verification", () => {
+  it("authenticates nested health in a version 2 ordinary transition without changing legacy parsing", () => {
+    const v2: RuntimeTransitionEnvelope = { ...envelope, version: 2, kind: "runtime-capability-transition", mode: "transition" };
+    const unsigned = { ...v2, status: "applied" as const, observedServices: ["portal"], observedHealth: { portal: "healthy" as const }, completedAt: new Date(2_000).toISOString(), beforeHash: v2.previousStateHash, afterHash: v2.desiredStateHash };
+    const receipt = { ...unsigned, signature: signTransitionPayload(unsigned, secret) };
+    expect(verifyTransitionReceipt(receipt, secret, v2, 2_000)).toBe("applied");
+    expect(() => verifyTransitionReceipt({ ...receipt, observedHealth: { portal: "unhealthy" } }, secret, v2, 2_000)).toThrow("tampered");
+    expect(() => verifyHistoricalTransitionReceipt({ ...receipt, observedHealth: { portal: "unhealthy" } }, secret, v2)).toThrow("tampered");
+  });
+  it("refuses an unsupported signed version 2 reconciliation receipt", () => {
+    const v2 = { ...envelope, version: 2, kind: "runtime-capability-transition", mode: "reconciliation" } as unknown as RuntimeTransitionEnvelope;
+    const unsigned = { ...v2, status: "applied" as const, observedServices: ["portal"], completedAt: new Date(2_000).toISOString(), beforeHash: v2.previousStateHash, afterHash: v2.desiredStateHash };
+    const receipt = { ...unsigned, signature: signTransitionPayload(unsigned, secret) };
+    expect(() => verifyTransitionReceipt(receipt, secret, v2, 2_000)).toThrow("unsupported_runtime_transition_mode");
+    expect(() => verifyHistoricalTransitionReceipt(receipt, secret, v2)).toThrow("unsupported_runtime_transition_mode");
+  });
   it("refuses malformed version 2 receipts instead of accepting legacy unsigned nested health", () => {
     const malformed = { ...envelope, version: 2 } as unknown as RuntimeTransitionEnvelope;
     const unsigned = { ...malformed, status: "applied" as const, observedServices: ["portal"], observedHealth: { portal: "unhealthy" as const }, completedAt: new Date(2_000).toISOString(), beforeHash: malformed.previousStateHash, afterHash: malformed.desiredStateHash };

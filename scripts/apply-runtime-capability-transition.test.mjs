@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { createHash, createHmac } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { signTransitionPayload, verifyTransitionSignature } from "./lib/transition-signing.mjs";
 
 const script = fileURLToPath(new URL("./apply-runtime-capability-transition.mjs", import.meta.url)).replace(/^\/(.:\/)/, "$1");
 const canonical = (v) => JSON.stringify(v, Object.keys(v).sort());
@@ -24,7 +25,7 @@ test("protocol probe reports packaged support without reading secrets or creatin
   assert.equal(info.schemaVersion, 1);
   assert.equal(info.sourceSha, "probe-fixture-source");
   assert.deepEqual(info.signingVersions, [1, 2]);
-  assert.deepEqual(info.applyVersions, [1]);
+  assert.deepEqual(info.applyVersions, [1, 2]);
   assert.deepEqual(info.reconciliationVersions, []);
   assert.match(info.actuatorSha256, /^[a-f0-9]{64}$/);
   assert.match(info.signerSha256, /^[a-f0-9]{64}$/);
@@ -44,7 +45,7 @@ test("a protocol probe cannot be combined with a state-changing invocation", asy
   }
 });
 
-async function validTransition(dir, health = "healthy") {
+async function validTransition(dir, health = "healthy", version = 1) {
   const catalogPath = new URL("./capability-service-catalog.generated.json", import.meta.url);
   const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
   const project = (requested) => {
@@ -61,8 +62,8 @@ async function validTransition(dir, health = "healthy") {
   const optional = catalog.capabilities.find((capability) => capability.activationPolicy !== "always");
   assert.ok(optional, "fixture needs an optional runtime capability");
   const desired = project([optional.capabilityId]);
-  const value = { ...envelope(), catalogHash: catalog.catalogHash, previousStateHash: previous.hash, desiredStateHash: desired.hash, previousKeys: previous.keys, desiredKeys: desired.keys, previousProfiles: previous.profiles, desiredProfiles: desired.profiles, previousServices: previous.required, desiredServices: desired.required };
-  const signature = createHmac("sha256", secret).update(canonical(value)).digest("hex");
+  const value = { ...envelope(), version, ...(version === 2 ? { kind: "runtime-capability-transition", mode: "transition" } : {}), catalogHash: catalog.catalogHash, previousStateHash: previous.hash, desiredStateHash: desired.hash, previousKeys: previous.keys, desiredKeys: desired.keys, previousProfiles: previous.profiles, desiredProfiles: desired.profiles, previousServices: previous.required, desiredServices: desired.required };
+  const signature = signTransitionPayload(value, secret);
   await writeFile(join(dir, "install-state.json"), JSON.stringify({ schemaVersion: 1, installerVersion: "test", platform: "linux", arch: "amd64", enabledRuntimeCapabilities: previous.keys, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion: previous.hash }));
   const fakeDocker = join(dir, "fake-docker.mjs");
   const psRows = desired.required.map((Service) => ({ Service, State: "running", Health: health }));
@@ -70,9 +71,37 @@ async function validTransition(dir, health = "healthy") {
   return { value, signature, catalogPath: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), desired, env: { DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_PROMOTER_STATE_DIR: dir, DPF_CAPABILITY_CATALOG_PATH: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), PROMOTE_COMPOSE_PROJECT: "dpf", DPF_DOCKER_BIN: process.execPath, DPF_DOCKER_PREFIX_ARGS: JSON.stringify([fakeDocker]) } };
 }
 
-for (const [crashPoint, durablePhase] of [["prepared", "prepared"], ["install-state-renamed-before-journal", "prepared"], ["state-written", "state-written"], ["runtime-mutated", "state-written"], ["runtime-reconciled", "runtime-reconciled"]]) test(`recovers atomically from a crash after ${crashPoint}`, async () => {
+test("version 2 ordinary apply recursively authenticates health and preserves replay identity", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-v2-"));
+  const fixture = await validTransition(dir, "healthy", 2);
+  const applied = run(fixture.env);
+  assert.equal(applied.status, 0, applied.stderr);
+  const receipt = JSON.parse(applied.stdout);
+  const { signature, ...unsigned } = receipt;
+  verifyTransitionSignature(unsigned, signature, secret);
+  const changed = { ...unsigned, observedHealth: { ...unsigned.observedHealth, [fixture.desired.required[0]]: "unhealthy" } };
+  assert.throws(() => verifyTransitionSignature(changed, signature, secret), /tampered/);
+  const replay = run(fixture.env);
+  assert.equal(replay.status, 0, replay.stderr);
+  assert.deepEqual(JSON.parse(replay.stdout), receipt);
+});
+
+test("version 2 reconciliation cannot enter the ordinary actuator before its protocol is implemented", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-v2-mode-"));
+  const fixture = await validTransition(dir, "healthy", 2);
+  const value = { ...fixture.value, mode: "reconciliation" };
+  const before = await readFile(join(dir, "install-state.json"), "utf8");
+  const result = run({ ...fixture.env, DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signTransitionPayload(value, secret) });
+  assert.equal(result.status, 78, result.stderr);
+  assert.match(result.stderr, /unsupported_runtime_transition_mode/);
+  assert.equal(await readFile(join(dir, "install-state.json"), "utf8"), before);
+  const files = await readdir(join(dir, "runtime-capability-transitions"));
+  assert.ok(files.every(file => !file.endsWith(".journal.json") && !file.endsWith(".claim")));
+});
+
+for (const version of [1, 2]) for (const [crashPoint, durablePhase] of [["prepared", "prepared"], ["install-state-renamed-before-journal", "prepared"], ["state-written", "state-written"], ["runtime-mutated", "state-written"], ["runtime-reconciled", "runtime-reconciled"]]) test(`version ${version} recovers atomically from a crash after ${crashPoint}`, async () => {
     const dir = await mkdtemp(join(tmpdir(), "dpf-transition-crash-"));
-    const fixture = await validTransition(dir);
+    const fixture = await validTransition(dir, "healthy", version);
     const crashed = run({ ...fixture.env, DPF_TEST_CRASH_AFTER_PHASE: crashPoint });
     assert.equal(crashed.status, 86, crashed.stderr);
     const journalPath = join(dir, "runtime-capability-transitions", "RCT-test.journal.json");

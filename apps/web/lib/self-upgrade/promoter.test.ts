@@ -51,7 +51,7 @@ describe("runtime capability protocol probe", () => {
       encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir, DPF_CANDIDATE_SOURCE_SHA: artifact.sourceSha, DPF_RUNTIME_TRANSITION_SECRET_FILE: join(dir, "absent-secret") },
     });
     expect(result.status, result.stderr).toBe(0);
-    expect(JSON.parse(result.stdout)).toMatchObject({ sourceSha: artifact.sourceSha, signingVersions: [1, 2], applyVersions: [1], reconciliationVersions: [] });
+    expect(JSON.parse(result.stdout)).toMatchObject({ sourceSha: artifact.sourceSha, signingVersions: [1, 2], applyVersions: [1, 2], reconciliationVersions: [] });
     expect(readdirSync(dir)).toEqual([]);
     const mixed = spawnSync(testBash, [join(root, "scripts/promote.sh"), "--runtime-capability-transition", "RCT-test", "--runtime-capability-protocol-info"], { encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir } });
     expect(mixed.status, mixed.stderr).toBe(64);

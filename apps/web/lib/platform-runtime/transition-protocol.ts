@@ -33,13 +33,18 @@ export function validateRuntimeCapabilityProtocolInfo(value: unknown, expected: 
   return { schemaVersion: 1, ...expected, signingVersions: [...signing], applyVersions: [...applying], reconciliationVersions: [...reconciliation] };
 }
 
-export type RuntimeTransitionEnvelope = {
-  version: 1; transitionId: string; issuedAt: string; expiresAt: string;
+type RuntimeTransitionEnvelopeFields = {
+  transitionId: string; issuedAt: string; expiresAt: string;
   catalogHash: string; previousStateHash: string; desiredStateHash: string;
   previousKeys: string[]; desiredKeys: string[];
   previousProfiles: string[]; desiredProfiles: string[];
   previousServices: string[]; desiredServices: string[];
 };
+
+export type RuntimeTransitionEnvelope = RuntimeTransitionEnvelopeFields & (
+  | { version: 1 }
+  | { version: 2; kind: "runtime-capability-transition"; mode: "transition" }
+);
 
 export type RuntimeTransitionReceipt = RuntimeTransitionEnvelope & {
   status: "applied" | "failed" | "rolled_back" | "rollback_failed"; observedServices: string[]; completedAt: string;
@@ -53,6 +58,10 @@ function verifySignedReceipt(receipt: RuntimeTransitionReceipt, secret: string, 
   const { signature, ...unsigned } = receipt;
   const expected = signTransitionPayload(unsigned, secret);
   if (!/^[a-f0-9]{64}$/.test(signature) || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) throw new Error("runtime_transition_receipt_tampered");
+  if (envelope.version === 2 && envelope.mode !== "transition") throw new Error("unsupported_runtime_transition_mode");
+  if (envelope.version === 2 && (receipt.version !== 2 || receipt.kind !== envelope.kind || receipt.mode !== envelope.mode)) {
+    throw new Error("runtime_transition_receipt_mismatch");
+  }
   for (const key of ["version", "transitionId", "issuedAt", "expiresAt", "catalogHash", "previousStateHash", "desiredStateHash", "previousKeys", "desiredKeys", "previousProfiles", "desiredProfiles", "previousServices", "desiredServices"] as const) {
     if (JSON.stringify(receipt[key]) !== JSON.stringify(envelope[key])) throw new Error("runtime_transition_receipt_mismatch");
   }
