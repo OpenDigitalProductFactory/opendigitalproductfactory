@@ -370,12 +370,17 @@ async function adminRunCommand(params: Record<string, unknown>, userId: string):
       ? await promisify(execFileCb)(diagnostic.file, diagnostic.args, options)
       : await execAsync(command + " 2>&1", options);
     const output = (stdout + "\n" + stderr).trim();
-    return { success: true, message: `Command completed.`, data: { command, output: output.slice(0, 15000) } };
+    return { success: true, message: `Command completed.`, data: { command, output: output.slice(0, 15000), exitCode: 0 } };
   } catch (err) {
-    const execErr = err as { stdout?: string; stderr?: string; message?: string };
+    const execErr = err as { stdout?: string; stderr?: string; message?: string; code?: unknown; signal?: unknown };
     const output = ((execErr.stdout ?? "") + "\n" + (execErr.stderr ?? "")).trim();
-    if (output) return { success: true, message: "Command exited with error.", data: { command, output: output.slice(0, 15000) } };
-    return { success: false, error: (execErr.message ?? "Command failed").slice(0, 1000), message: `Failed: ${command.slice(0, 80)}` };
+    const data = {
+      command, output: output.slice(0, 15000),
+      exitCode: typeof execErr.code === "number" && Number.isFinite(execErr.code) ? execErr.code : null,
+      ...(typeof execErr.signal === "string" ? { signal: execErr.signal } : {}),
+    };
+    if (output) return { success: false, error: "command_failed", message: "Command exited with error.", data };
+    return { success: false, error: (execErr.message ?? "Command failed").slice(0, 1000), message: `Failed: ${command.slice(0, 80)}`, data };
   }
 }
 

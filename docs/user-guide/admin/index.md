@@ -10,6 +10,8 @@ The Admin area is the control centre for platform configuration. It is where adm
 
 ## Key Concepts
 
+**Diagnostic outcomes.** A command can run and still fail. Your coworker's result keeps its diagnostic output and reports failure when the command exits with an error. A successful command reports its exit status; an unavailable status stays unknown. Approval gives permission to attempt an action, rather than proof that it worked. Checking a recent approved request returns the actual action's recorded outcome and does not repeat the action. If no execution evidence is available, the outcome remains unconfirmed.
+
 - **User Management** — Creating, editing, and deactivating user accounts. Each user has a role, optional superuser status, and profile information.
 - **Role & Capability Matrix** — The mapping of roles to capabilities. Admins can review the full matrix and understand what each role can and cannot do.
 - **Branding Configuration** — The organization's name, logo, colours, and display preferences. Applied across the internal shell and the customer-facing storefront.
