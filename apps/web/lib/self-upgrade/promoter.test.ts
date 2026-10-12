@@ -65,6 +65,15 @@ describe("runtime capability protocol probe", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it("binds expected bytes before awaiting the image rather than following a changed caller object", async () => {
+    const callerIdentity = { ...expected };
+    const execute = vi.fn().mockImplementation(async () => {
+      callerIdentity.signerSha256 = "f".repeat(64);
+      return probeResult(JSON.stringify({ ...info, signerSha256: callerIdentity.signerSha256 }));
+    });
+    await expect(runRuntimeCapabilityProtocolProbe({ artifact, expected: callerIdentity, containerName: "dpf-runtime-protocol-test" }, execute)).rejects.toThrow("runtime_protocol_probe_identity_mismatch");
+  });
+
   it("uses the verified immutable image without mounts, credentials, socket or network", () => {
     const command = buildRuntimeCapabilityProtocolProbeCommand(artifact, "dpf-runtime-protocol-test");
     expect(command).toEqual({ command: "docker", args: ["run", "--rm", "--name", "dpf-runtime-protocol-test", "--read-only", "--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "128m", "--cpus", "1", "--pids-limit", "64", "--pull", "never", artifact.digest, "--runtime-capability-protocol-info"] });

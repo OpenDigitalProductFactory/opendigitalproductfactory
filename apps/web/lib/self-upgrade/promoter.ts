@@ -108,13 +108,14 @@ export async function runRuntimeCapabilityProtocolProbe(
   params: { artifact: ResolvedPromoterArtifact; expected: RuntimeCapabilityProtocolIdentity; containerName: string },
   execute: typeof runProcessWithBudget = runProcessWithBudget,
 ): Promise<RuntimeCapabilityProtocolInfo> {
-  if (params.expected.sourceSha !== params.artifact.sourceSha) throw new Error("runtime_protocol_probe_identity_mismatch");
+  const expected = { ...params.expected };
+  if (expected.sourceSha !== params.artifact.sourceSha) throw new Error("runtime_protocol_probe_identity_mismatch");
   const { command, args } = buildRuntimeCapabilityProtocolProbeCommand(params.artifact, params.containerName);
   const result = await execute(command, args, { timeoutMs: 60_000, containerName: params.containerName, maxStdoutBytes: 4096 });
   if (result.exitCode !== 0 || result.outputLimitExceeded) throw new Error("runtime_protocol_probe_execution_failed");
   let value: unknown;
   try { value = JSON.parse(result.stdout); } catch { throw new Error("runtime_protocol_probe_invalid_json"); }
-  return validateRuntimeCapabilityProtocolInfo(value, params.expected);
+  return validateRuntimeCapabilityProtocolInfo(value, expected);
 }
 
 export type VerifiedReleaseIdentity = {
