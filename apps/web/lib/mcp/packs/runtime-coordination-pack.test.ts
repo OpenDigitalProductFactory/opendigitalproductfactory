@@ -49,7 +49,7 @@ describe("runtime coordination MCP tools", () => {
   it("exposes bounded projection verification without business identity parameters", async () => {
     const { runtimeCoordinationPack } = await import("./runtime-coordination-pack");
     const tool = runtimeCoordinationPack.definitions.find(row => row.name === "verify_archetype_projection");
-    expect(tool).toMatchObject({ requiredCapability: "manage_platform", sideEffect: true,
+    expect(tool).toMatchObject({ requiredCapability: "manage_platform", sideEffect: false,
       inputSchema: { properties: {}, additionalProperties: false } });
     expect(runtimeCoordinationPack.grants.verify_archetype_projection).toEqual(["sandbox_execute"]);
   });

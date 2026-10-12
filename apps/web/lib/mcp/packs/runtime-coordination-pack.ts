@@ -16,11 +16,14 @@ const ENUMS = runtimeCoordinationToolEnums();
 const definitions: ToolDefinition[] = [
   {
     name: "verify_archetype_projection",
+    title: "Verify archetype room lifecycle",
     description: "Verify the deployed archetype room lifecycle in a transaction-owned fixture on DEV/test only. Checks bindings, repeat, withdrawal, restoration and retained history, then rolls back all fixture data. No existing organization can be selected.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     requiredCapability: "manage_platform",
     executionMode: "immediate",
-    sideEffect: true,
+    // Like isolated sandbox validation: observations only, no committed writes.
+    // The handler owns a rollback-only fixture and rejects business identities.
+    sideEffect: false,
   },
   {
     name: "register_runtime_target",

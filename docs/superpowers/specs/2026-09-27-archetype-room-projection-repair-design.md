@@ -171,3 +171,8 @@ existing acceptance Workroom. A passing result requires `fixtureRolledBack`
 and the lifecycle checks; returned IDs identify observations inside the rolled-back
 transaction, not durable business records. A timeout or failed assertion is not
 acceptance. Repeated calls use disjoint fixtures and never select a business org.
+
+Like existing isolated sandbox validation, the tool is classified as an
+observation (`sideEffect: false`): it commits no changes and cannot address
+business records. Platform permission, the sandbox grant and DEV/test checks
+still apply. Stage counts follow the current template, not a historical count.
