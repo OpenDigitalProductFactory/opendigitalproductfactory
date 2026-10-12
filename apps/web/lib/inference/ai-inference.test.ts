@@ -52,6 +52,32 @@ it("rechecks setup removal after a cloud selection waits for admission", async (
   expect(release).toHaveBeenCalledOnce();
 });
 
+it.each(["disabled", "inactive", "unconfigured"])("blocks a %s cloud provider even when its connection is active", async status => {
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status, baseUrl: "https://provider.example/v1", authMethod: "none" } as any);
+  await expect(callProvider("openai", "model-test", [], "system")).rejects.toThrow("not enabled for routing");
+  expect(executeAdapter).not.toHaveBeenCalled();
+  expect(acquireInferenceSlot).not.toHaveBeenCalled();
+});
+
+it.each(["active", "degraded"])("preserves %s legacy cloud dispatch without a default account", async status => {
+  vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue(null);
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status, baseUrl: "https://provider.example/v1", authMethod: "none" } as any);
+  await expect(callProvider("openai", "model-test", [], "system")).resolves.toMatchObject({ content: "done" });
+  expect(executeAdapter).toHaveBeenCalledOnce();
+});
+
+it.each(["disabled", "inactive", "unconfigured"])("blocks a cloud provider that becomes %s during admission and releases its slot", async status => {
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "https://provider.example/v1", authMethod: "none" } as any);
+  const release = vi.fn();
+  vi.mocked(acquireInferenceSlot).mockImplementationOnce(async () => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status } as any);
+    return release;
+  });
+  await expect(callProvider("openai", "model-test", [], "system")).rejects.toThrow("not enabled for routing");
+  expect(executeAdapter).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
+});
+
 describe("InferenceError", () => {
   it("has correct code and providerId", () => {
     const err = new InferenceError("test", "network", "ollama");

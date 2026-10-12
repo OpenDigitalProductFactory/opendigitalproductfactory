@@ -99,6 +99,7 @@ describe("callProvider", () => {
   it("omits async-operation metadata for a synchronous adapter result", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "openai",
+      status: "active",
       authMethod: "api_key",
       authHeader: "Authorization",
       baseUrl: "https://api.openai.com/v1",
@@ -124,6 +125,7 @@ describe("callProvider", () => {
       if (where.providerId === "codex") {
         return Promise.resolve({
           providerId: "codex",
+          status: "active",
           authMethod: "oauth2_authorization_code",
           authHeader: "Authorization",
           baseUrl: "https://api.openai.com/v1",
@@ -177,6 +179,7 @@ describe("callProvider", () => {
   it("projects typed async-operation start metadata from the adapter", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "gemini",
+      status: "active",
       authMethod: "api_key",
       authHeader: "x-goog-api-key",
       baseUrl: "https://generativelanguage.googleapis.com/v1beta",
@@ -227,6 +230,7 @@ describe("callProvider", () => {
     // call sites (success + error).
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "anthropic",
+      status: "active",
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
       baseUrl: "https://api.anthropic.com",
@@ -265,6 +269,7 @@ describe("callProvider", () => {
   it("fails closed when a CLI adapter cannot enforce required tool choice", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "anthropic-sub",
+      status: "active",
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
       baseUrl: null,
@@ -306,6 +311,7 @@ describe("callProvider", () => {
   ) => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId,
+      status: "active",
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
       baseUrl: providerId === "codex" ? "https://api.openai.com/v1" : null,
@@ -355,6 +361,7 @@ describe("callProvider", () => {
   it("keeps a sole required writer available to a provider-native HTTP adapter", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "openai",
+      status: "active",
       authMethod: "api_key",
       authHeader: "Authorization",
       baseUrl: "https://api.openai.com/v1",
@@ -393,6 +400,7 @@ describe("callProvider", () => {
   it("rejects a terminal-writer marker when more than one tool is attached", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "codex",
+      status: "active",
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
       baseUrl: "https://api.openai.com/v1",
@@ -428,6 +436,7 @@ describe("callProvider", () => {
   it("rejects a terminal-writer marker that does not exactly match the sole tool", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "anthropic-sub",
+      status: "active",
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
       baseUrl: null,
@@ -458,6 +467,7 @@ describe("callProvider", () => {
   it("rejects a matching terminal-writer marker without a governed MCP session", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "anthropic-sub",
+      status: "active",
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
       baseUrl: null,

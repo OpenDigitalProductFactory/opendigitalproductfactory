@@ -136,18 +136,19 @@ async function resolveExecutionBaseUrl(
 
 async function readEnabledRoutingProvider(providerId: string) {
   if (!isLocalProviderId(providerId)) {
-    const connection = await prisma.aiProviderConnection.findUnique({
-      where: { connectionId: `provider-default-${providerId}` }, select: { status: true },
-    });
+    const [connection, lifecycle] = await Promise.all([
+      prisma.aiProviderConnection.findUnique({
+        where: { connectionId: `provider-default-${providerId}` }, select: { status: true },
+      }),
+      prisma.modelProvider.findUnique({ where: { providerId }, select: { status: true } }),
+    ]);
     // Legacy direct callers can predate the default account. An existing account
-    // is authoritative, including when this selection waited in admission.
-    let effectiveStatus = connection?.status;
-    if (connection?.status === "unconfigured") {
-      // Legacy activation stays usable; a later setup/credential removal does not.
-      const lifecycle = await prisma.modelProvider.findUnique({ where: { providerId }, select: { status: true } });
-      effectiveStatus = lifecycle ? resolveRuntimeConnectionStatus(lifecycle.status, connection.status) : connection.status;
-    }
-    if (connection && !["active", "degraded"].includes(effectiveStatus ?? "")) {
+    // and provider lifecycle both remain authoritative after admission. Resuming
+    // an operator pause must not clear an independent automatic provider hold.
+    const effectiveStatus = lifecycle
+      ? connection ? resolveRuntimeConnectionStatus(lifecycle.status, connection.status) : lifecycle.status
+      : connection?.status;
+    if ((connection || lifecycle) && !["active", "degraded"].includes(effectiveStatus ?? "")) {
       throw new InferenceError("Provider account is not enabled for routing", "provider_error", providerId);
     }
     return null;
