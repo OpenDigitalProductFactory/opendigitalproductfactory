@@ -73,3 +73,22 @@ export async function loadNestedRoomCoordination(db: RoomCoordinationDb, input: 
   return projectNestedRoomCoordination({ ...context, humanRoles: [{ roleId: String(role.roleId),
     displayName: String(role.name), holders: humans.flatMap(row => { const actor = actorFrom(row); return actor ? [actor] : []; }) }] });
 }
+
+/** Internal drive effect over its existing database authority; never an external access resolver. */
+export async function resolveNestedRoomStallRecipient(db: RoomCoordinationDb & { principalAlias: Reader },
+  input: { roomId: string },
+): Promise<string | null> {
+  const coordination = await loadNestedRoomCoordination(db, { roomId: input.roomId, canReadRoom: async () => true });
+  if (coordination.escalation.state !== "resolved") return null;
+  const terminal = coordination.escalation.steps.at(-1);
+  if (terminal?.kind !== "human") return null;
+  const aliases = await db.principalAlias.findMany({ where: { principalId: terminal.ref, aliasType: "user", issuer: "",
+    principal: { kind: "human", status: "active" } }, select: { aliasValue: true }, take: 2 });
+  if (aliases.length !== 1 || typeof aliases[0]?.aliasValue !== "string") return null;
+  const userId = aliases[0].aliasValue;
+  const user = await currentUserContext(userId, db as never);
+  if (!user) return null;
+  const role = coordination.escalation.steps.filter(step => step.kind === "human-role").at(-1);
+  if (role && !user.platformRoles?.includes(role.ref)) return null;
+  return userId;
+}

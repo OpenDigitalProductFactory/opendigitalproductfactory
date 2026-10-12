@@ -141,8 +141,13 @@ Existing explanatory prose and setup detail move behind the same disclosure, kee
 the recovery summary visible without adding a wall of text to the case. Copy uses the
 existing `workrooms` message catalog and request-bound locale; indentation is logical
 so the list follows the viewer's text direction.
-The projection does not send an escalation, grant access, approve work or close a room.
-Actual stalled-child dispatch, named-human delivery and nested closure remain live
+The display projection does not send an escalation, grant access, approve work or close
+a room. The existing stall notifier now resolves its recipient through that same route
+under the drive's internal authority, binds the terminal person to one active user,
+rechecks any named role, and uses the existing throwing attention notifier. Missing
+bindings and failed writes keep the drive's notice unsent for retry; the stable stuck-spell
+identity and unread-notice deduplication are retained. This does not start another agent
+or alter the parent's stage. Actual stalled-child dispatch, named-human delivery and nested closure remain live
 acceptance obligations; this source slice does not declare Phase D complete.
 
 Focused projection, access, workforce and UI tests have passed, including a first-failing

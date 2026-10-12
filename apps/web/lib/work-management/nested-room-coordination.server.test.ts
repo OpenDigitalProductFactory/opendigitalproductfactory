@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { loadNestedRoomCoordination } from "./nested-room-coordination.server";
+import { loadNestedRoomCoordination, resolveNestedRoomStallRecipient } from "./nested-room-coordination.server";
 
 const database = () => ({
   workroomRelation: { findMany: vi.fn().mockImplementation(async ({ where }) =>
@@ -13,6 +13,26 @@ const database = () => ({
   principal: { findMany: vi.fn().mockResolvedValue([]) },
   platformRole: { findMany: vi.fn().mockResolvedValue([]) },
   user: { findUnique: vi.fn().mockResolvedValue(null) },
+});
+
+describe("internal drive recipient binding", () => {
+  it("uses the terminal person's unique current user binding", async () => {
+    const db = { ...database(), principalAlias: { findMany: vi.fn().mockResolvedValue([{ aliasValue: "recorded-user" }]) } };
+    db.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false, groups: [] });
+    expect(await resolveNestedRoomStallRecipient(db, { roomId: "child" })).toBe("recorded-user");
+    expect(db.principalAlias.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ principalId: "p-human", aliasType: "user", issuer: "" }), take: 2,
+    }));
+  });
+  it.each([{ aliases: [] }, { aliases: [{ aliasValue: "one" }, { aliasValue: "two" }] }])("does not guess a missing or ambiguous user binding", async ({ aliases }) => {
+    const db = { ...database(), principalAlias: { findMany: vi.fn().mockResolvedValue(aliases) } };
+    expect(await resolveNestedRoomStallRecipient(db, { roomId: "child" })).toBeNull();
+    expect(db.user.findUnique).not.toHaveBeenCalled();
+  });
+  it("does not deliver to a deactivated user", async () => {
+    const db = { ...database(), principalAlias: { findMany: vi.fn().mockResolvedValue([{ aliasValue: "former-user" }]) } };
+    expect(await resolveNestedRoomStallRecipient(db, { roomId: "child" })).toBeNull();
+  });
 });
 
 describe("authorized nested room projection", () => {
