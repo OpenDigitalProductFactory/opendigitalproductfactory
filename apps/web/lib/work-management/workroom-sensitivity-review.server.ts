@@ -58,7 +58,10 @@ export async function correctWorkroomSensitivityTool(params: Record<string, unkn
     const original = entries[index] as { workroomBoundary: Record<string, unknown> };
     const next = [...entries];
     next[index] = { ...original, workroomBoundary: { ...original.workroomBoundary, sensitivityCeiling: sensitivity } };
-    const changed = await db.workroom.updateMany({ where: { id: room.id, updatedAt: room.updatedAt }, data: { scopeClaims: next as Prisma.InputJsonValue } });
+    const changed = await db.workroom.updateMany({
+      where: { id: room.id, updatedAt: room.updatedAt, scopeClaims: { equals: room.scopeClaims as Prisma.InputJsonValue } },
+      data: { scopeClaims: next as Prisma.InputJsonValue },
+    });
     if (changed.count !== 1) return refusal("classification_changed", "The room changed; review its classification again.");
     const payload = await offloadEvidenceOutput({ originalDeclarationJson: JSON.stringify(original), sensitivity,
       expectedDigest, classificationReviewed: true, rationale: rationale.trim(),

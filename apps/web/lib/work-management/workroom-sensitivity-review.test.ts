@@ -35,6 +35,16 @@ describe("exact-room classification recovery", () => {
     expect(m.audit.mock.calls[0][0].data.payload.approvedAuthorityEnvelopeId).toBe("AE-TEST");
   });
   it("refuses a concurrent update and writes no audit", async () => { m.update.mockResolvedValue({ count: 0 }); const r = await correctWorkroomSensitivityTool(await args(), "admin"); expect(r.success).toBe(false); expect(m.audit).not.toHaveBeenCalled(); });
+  it("refuses a concurrent declaration change even when its timestamp is identical", async () => {
+    const reviewed = await args();
+    const concurrentClaims = [{ workroomBoundary: { sensitivityCeiling: "restricted" } }];
+    m.update.mockImplementation(async ({ where }: { where: { scopeClaims?: { equals: unknown } } }) => ({
+      count: where.scopeClaims && JSON.stringify(where.scopeClaims.equals) !== JSON.stringify(concurrentClaims) ? 0 : 1,
+    }));
+    const result = await correctWorkroomSensitivityTool(reviewed, "admin");
+    expect(result.error).toBe("classification_changed");
+    expect(m.audit).not.toHaveBeenCalled();
+  });
   it("rechecks administrator authority before correction", async () => { const a=await args(); m.allowed.mockReturnValue(false); const r=await correctWorkroomSensitivityTool(a,"admin"); expect(r.success).toBe(false); expect(m.update).not.toHaveBeenCalled(); });
   it("does not report success when its transactional audit fails", async () => { const a=await args(); m.audit.mockRejectedValueOnce(new Error("audit unavailable")); await expect(correctWorkroomSensitivityTool(a,"admin")).rejects.toThrow("audit unavailable"); });
 });

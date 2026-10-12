@@ -219,6 +219,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Work Capsule control harness (spec 2026-05-14)
   list_workrooms: ["work_capsule_read"],
   get_workroom: ["work_capsule_read"],
+  review_workroom_sensitivity: ["admin_read"],
+  correct_workroom_sensitivity: ["admin_write"],
   // EP-WORKROOM-COMMS (BI-3F21C4D5): read/post a Work Room's message feed. Room
   // admission is enforced separately (room-agent-access); these are the coarse caps.
   read_room_messages: ["work_room_read"],
