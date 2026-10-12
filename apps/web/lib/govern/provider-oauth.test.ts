@@ -179,6 +179,7 @@ describe("exchangeOAuthCode", () => {
     mockPrisma.modelProvider.updateMany.mockResolvedValue({ count: 1 });
     mockPrisma.credentialEntry.upsert.mockResolvedValue({});
     mockPrisma.aiProviderConnection.update.mockResolvedValue({});
+    mockPrisma.complianceEvidence.updateMany.mockResolvedValue({ count: 0 });
     mockPrisma.credentialEntry.findUnique.mockResolvedValue(null);
     mockPrisma.aiProviderConnection.findUnique.mockImplementation(async ({ where }) => ({
       id: `db-${where.connectionId}`, connectionId: where.connectionId,
@@ -274,13 +275,37 @@ describe("exchangeOAuthCode", () => {
     mockPrisma.credentialEntry.upsert.mockImplementation(async ({ where, update }) => {
       const expectedOwner = where.AND?.providerConnection?.is;
       if (where.AND && (expectedOwner === null ? owner !== null : expectedOwner?.connectionId !== owner)) {
-        throw new Error("Credential owner changed");
+        throw Object.assign(new Error("Credential owner changed"), { code: "P2025" });
       }
       cachedToken = update.cachedToken;
       return {};
     });
-    await expect(exchangeOAuthCode("state-1", "code-1")).rejects.toThrow("Credential owner changed");
+    expect(await exchangeOAuthCode("state-1", "code-1")).toEqual({ error: "account_changed" });
     expect(cachedToken).toBe("original-token");
+    expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
+  });
+
+  it.each([{ target: ["providerId"] }, { target: "CredentialEntry_providerId_key" }])("returns account_changed for the conditional alias-create conflict %j", async ({ target }) => {
+    mockPrisma.credentialEntry.upsert.mockRejectedValue(Object.assign(new Error("Concurrent alias claim"), { code: "P2002", meta: { target } }));
+    expect(await exchangeOAuthCode("state-1", "code-1")).toEqual({ error: "account_changed" });
+    expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    Object.assign(new Error("Unavailable database"), { code: "P1001" }),
+    Object.assign(new Error("Unrelated unique conflict"), { code: "P2002", meta: { target: ["differentField"] } }),
+    new Error("Unexpected failure"),
+  ])("preserves unrelated database failures", async (failure) => {
+    mockPrisma.credentialEntry.upsert.mockRejectedValue(failure);
+    await expect(exchangeOAuthCode("state-1", "code-1")).rejects.toBe(failure);
+    expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
+  });
+
+  it("does not misreport a proof-history database failure as an ownership change", async () => {
+    const failure = Object.assign(new Error("Proof history unavailable"), { code: "P2025" });
+    mockPrisma.complianceEvidence.updateMany.mockRejectedValue(failure);
+    await expect(exchangeOAuthCode("state-1", "code-1")).rejects.toBe(failure);
+    expect(mockPrisma.credentialEntry.upsert).not.toHaveBeenCalled();
     expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
   });
 

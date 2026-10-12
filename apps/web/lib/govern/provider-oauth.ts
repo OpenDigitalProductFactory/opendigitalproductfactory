@@ -88,6 +88,18 @@ function defaultOAuthScope(authorizeUrl: string): string | null {
 // codex and chatgpt share one OpenAI OAuth token.
 const OPENAI_PAIR: Record<string, string> = { codex: "chatgpt", chatgpt: "codex" };
 
+class DefaultAccountOwnerConflict extends Error {}
+
+/** Translate only a conditional owner write's expected conflicts; other DB failures stay failures. */
+function rethrowDefaultAccountOwnerConflict(error: unknown): never {
+  const failure = error as { code?: unknown; meta?: { target?: unknown } } | null;
+  const target = failure?.meta?.target;
+  const aliasConflict = failure?.code === "P2002" &&
+    (Array.isArray(target) ? target.length === 1 && target[0] === "providerId" : target === "CredentialEntry_providerId_key");
+  if (failure?.code === "P2025" || aliasConflict) throw new DefaultAccountOwnerConflict();
+  throw error;
+}
+
 // ─── PKCE ─────────────────────────────────────────────────────────────────────
 
 function base64url(buffer: Buffer): string {
@@ -296,7 +308,7 @@ export async function exchangeOAuthCode(
           await tx.aiProviderConnection.update({
             where: { connectionId, providerId, AND: { credentialEntryId: connection.credentialEntryId } },
             data: ACCOUNT_ACCESS_RESET,
-          });
+          }).catch(rethrowDefaultAccountOwnerConflict);
         }
         await tx.credentialEntry.upsert({
           where: {
@@ -305,9 +317,12 @@ export async function exchangeOAuthCode(
           },
           create: { providerId, ...credentialUpdate, refreshToken: newRefreshToken },
           update: credentialUpdate,
-        });
+        }).catch(rethrowDefaultAccountOwnerConflict);
       }
       return true;
+    }).catch((error: unknown) => {
+      if (error instanceof DefaultAccountOwnerConflict) return false;
+      throw error;
     });
     if (!written) return { error: "account_changed" };
   }
