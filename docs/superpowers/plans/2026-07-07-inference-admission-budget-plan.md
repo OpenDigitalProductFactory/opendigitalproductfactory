@@ -101,3 +101,18 @@ interactive/autonomous priority plus bounded aging, makes it the one local
 execution admission boundary, and moves host probing inside admission. Remote
 provider admission remains here unchanged. A PostgreSQL distributed queue stays
 deferred until multi-replica portal execution is a supported topology.
+
+### Atomic coverage and traceability
+
+The follow-up is one atomic safety boundary: the admission authority, scheduler,
+probe ordering, producer migration and observability cannot ship independently
+without leaving contradictory local-GPU paths. It remains owned by
+`BI-285EF102` and covers these immutable objectives and acceptance statements:
+
+| Criterion | Objective | Acceptance statement | Verification |
+| --- | --- | --- | --- |
+| AC-LIP-1 | OBJ-LIP-1 | Portal HTTP inference and the local sandbox build engine use one `compute:local-inference` admission authority; no local provider semaphore holds a slot while waiting on that lane. | Local-provider dispatch tests plus the shared-lane integration test. |
+| AC-LIP-2 | OBJ-LIP-2 | An admitted interactive waiter starts before newer autonomous work, while bounded aging eventually advances an older autonomous waiter. | Deterministic priority and aging unit tests. |
+| AC-LIP-3 | OBJ-LIP-3 | Host GPU and Docker Model Runner probes run after local-lane admission, so internal contention queues while true external occupancy remains an honest typed busy result. | Probe-order composition test and host-busy regression test. |
+| AC-LIP-4 | OBJ-LIP-4 | Queue depth, cleanup, release and single-GPU serialization remain observable and tested, with remote-provider admission unchanged. | ResourceLane telemetry, bounded-depth, failure and remote-admission regression tests. |
+| AC-LIP-5 | OBJ-LIP-4 | On the canonical live install, an interactive coworker request completes and executes a governed DPF tool while autonomous local inference is active or queued. | Protected delivery, exact-live identity and browser/runtime evidence. |
