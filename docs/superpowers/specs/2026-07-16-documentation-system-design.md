@@ -1,6 +1,6 @@
 ---
 title: Documentation System — one link-resolution source of truth, rich-content rendering, an enforced documentation step, an activated docs coworker, and a doc-impact graph
-status: proposed
+status: draft
 date: 2026-07-16
 owner: platform
 epic: EP-DOCS-SYSTEM

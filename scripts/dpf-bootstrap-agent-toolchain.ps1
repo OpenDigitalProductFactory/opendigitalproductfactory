@@ -64,13 +64,22 @@ $GrokConfigPath         = Join-Path $HOME ".grok\config.toml"  # platform-specif
 $KernelPrinciplesDir    = Join-Path $RepoRoot "docs\founder-kernel\wiki\principles"
 $ContributorMemoryDir   = Join-Path $HOME ".claude\projects"
 $ProjectSlug            = ($RepoRoot -replace '[:\\\/]+', '-').TrimStart('-')
-# BI-2D545A0C (design 12.4.3): the endpoint is the install's canonical origin,
-# read from PUBLIC_URL in the install's .env, and on https Node clients trust
-# the organization's own CA (BI-FA2C46D7). One rule, shared with the installer:
-# scripts\installer\lib\mcp-client-env.ps1. An explicit DPF_MCP_URL stands only
-# when the install names no https origin.
+# BI-2D545A0C (design 12.4.3): an explicit process DPF_MCP_URL
+# selects the endpoint before the saved Codex choice and install defaults.
+# On HTTPS, Node clients trust the organization CA (BI-FA2C46D7).
+# The shared installer/lib/mcp-client-env module owns resolution.
 . (Join-Path $ScriptDir "installer\lib\mcp-client-env.ps1")
-$McpClientEnv           = Resolve-DpfMcpClientEnv -InstallDir $RepoRoot
+$SelectedMcpUrl = $env:DPF_MCP_URL
+if (-not $SelectedMcpUrl -and (Test-Path -LiteralPath $CodexConfigPath)) {
+    $endpointReader = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1"
+    $SelectedMcpUrl = & $endpointReader -PrintExistingCodexMcpUrl
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail2 "Cannot read the saved Codex endpoint. Set DPF_MCP_URL explicitly to repair it."
+        exit 1
+    }
+    $SelectedMcpUrl = [string]$SelectedMcpUrl
+}
+$McpClientEnv           = Resolve-DpfMcpClientEnv -InstallDir $RepoRoot -ExplicitUrl $SelectedMcpUrl
 # $McpEndpointNamed is the endpoint the install or operator named (may be
 # empty); only it is forwarded to the updater, whose canonical https/OAuth
 # default governs otherwise (BI-772023BC). The probes and the plan bridge need

@@ -35,6 +35,11 @@ export const dataRetentionSweepScheduled = jobs.createFunction(
     const gate = await gateAtEntry(step, DATA_RETENTION_SCHEDULED_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
+    await step.run("retire-expired-verification-users", async () => {
+      const { retireExpiredFixtures } = await import("@/lib/govern/automation-fixture");
+      return retireExpiredFixtures();
+    });
+
     return step.run("data-retention-sweep", async () => {
       const { executeScheduledRetentionSweep } = await import(
         "@/lib/operate/retention/run"

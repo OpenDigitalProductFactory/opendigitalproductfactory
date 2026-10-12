@@ -1184,6 +1184,7 @@
       "publishedPortal": false,
       "anchors": [
         "build-gate-runbook",
+        "isolated-verification-users",
         "semantic-review-publication-and-infrastructure-recovery",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
         "the-room-follows-its-pr-through-ci-bi-88341b5d",
@@ -1986,6 +1987,18 @@
         "c3-what-modeling-it-revealed",
         "c4-path-to-conformance",
         "revision-history"
+      ]
+    },
+    "docs/architecture/improvement-signal-intake.md": {
+      "publicHref": "/architecture/improvement-signal-intake/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "improvement-signal-intake",
+        "source-identity-and-recurrence",
+        "concurrent-delivery-and-failure",
+        "remaining-learning-qualification"
       ]
     },
     "docs/architecture/initiative-readiness-runbook.md": {

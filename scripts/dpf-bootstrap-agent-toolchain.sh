@@ -191,14 +191,20 @@ GROK_CONFIG_PATH="$HOME/.grok/config.toml"
 KERNEL_PRINCIPLES_DIR="$REPO_ROOT/docs/founder-kernel/wiki/principles"
 CONTRIBUTOR_MEMORY_DIR="$HOME/.claude/projects"
 PROJECT_SLUG="$(printf '%s' "$REPO_ROOT" | sed -E 's:[/:]:-:g' | sed -E 's:^-+::')"
-# BI-2D545A0C (design 12.4.3): the endpoint is the install's canonical origin,
-# read from PUBLIC_URL in the install's .env, and on https Node clients trust
-# the organization's own CA (BI-FA2C46D7). One rule, shared with the installer:
-# installer/lib/mcp-client-env.sh. An explicit DPF_MCP_URL stands only when the
-# install names no https origin.
+# BI-2D545A0C (design 12.4.3): an explicit process DPF_MCP_URL
+# selects the endpoint before the saved Codex choice and install defaults.
+# On HTTPS, Node clients trust the organization CA (BI-FA2C46D7).
+# The shared installer/lib/mcp-client-env module owns resolution.
 # shellcheck source=installer/lib/mcp-client-env.sh
 . "$SCRIPT_DIR/installer/lib/mcp-client-env.sh"
-dpf_resolve_mcp_client_env "$REPO_ROOT"
+SELECTED_MCP_URL="${DPF_MCP_URL:-}"
+if [ -z "$SELECTED_MCP_URL" ] && [ -f "$CODEX_CONFIG_PATH" ]; then
+  if ! SELECTED_MCP_URL="$(bash "$REPO_ROOT/packages/dpf-skill-pack/scripts/update-agent-toolchain.sh" --print-existing-codex-mcp-url)"; then
+    fail "Cannot read the saved Codex endpoint. Set DPF_MCP_URL explicitly to repair it."
+    exit 1
+  fi
+fi
+DPF_MCP_URL="$SELECTED_MCP_URL" dpf_resolve_mcp_client_env "$REPO_ROOT"
 # MCP_ENDPOINT_NAMED is the endpoint the install or operator named (may be
 # empty); only it is forwarded to the updater, whose canonical https/OAuth
 # default governs otherwise (BI-772023BC). The probes and the plan bridge need

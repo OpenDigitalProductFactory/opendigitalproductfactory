@@ -31,7 +31,14 @@ type FakeState = {
 };
 
 function fakeDb(state: FakeState): AutomationSignInDb & { state: FakeState } {
-  return {
+  let tail: Promise<unknown> = Promise.resolve();
+  const db: AutomationSignInDb & { state: FakeState } = {
+    $transaction: body => {
+      const next = tail.then(() => body(db));
+      tail = next.catch(() => undefined);
+      return next;
+    },
+    $executeRaw: async () => 0,
     state,
     user: {
       findUnique: async (args: unknown) => {
@@ -70,6 +77,7 @@ function fakeDb(state: FakeState): AutomationSignInDb & { state: FakeState } {
       },
     },
   };
+  return db;
 }
 
 function installState(environmentClass: string) {
@@ -184,6 +192,27 @@ describe("mint + consume", () => {
     const token = decodeURIComponent(minted.path.split("token=")[1]!);
     await expect(consumeAutomationSignIn(token, deps)).resolves.toMatchObject({ accepted: true });
     await expect(consumeAutomationSignIn(token, deps)).resolves.toMatchObject({ accepted: false, reason: "token-already-used" });
+  });
+  it("accepts at most one of two concurrent exchanges", async () => {
+    const db = fakeDb(state);
+    const read = db.platformConfig.findUnique;
+    let reads = 0;
+    let release!: () => void;
+    const bothReading = new Promise<void>(resolve => { release = resolve; });
+    db.platformConfig.findUnique = async args => {
+      const row = await read(args);
+      if ((args as { where: { key: string } }).where.key === AUTOMATION_SIGN_IN_CONSUMED_KEY) {
+        if (++reads === 2) release();
+        await Promise.race([bothReading, new Promise(resolve => setTimeout(resolve, 30))]);
+      }
+      return row;
+    };
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, deps);
+    if (!minted.issued) throw new Error("expected a link");
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+    const results = await Promise.all([consumeAutomationSignIn(token, deps), consumeAutomationSignIn(token, deps)]);
+    expect(results.filter(result => result.accepted)).toHaveLength(1);
   });
 
   it("tells the caller which session an already-used link belongs to, so the redirect can be replayed", async () => {
