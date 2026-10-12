@@ -1,7 +1,6 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 741,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1543,7 +1542,8 @@
       "publishedPortal": false,
       "anchors": [
         "design-research-runbook",
-        "task-specific-operating-rules"
+        "task-specific-operating-rules",
+        "research-receipt-recovery"
       ]
     },
     "docs/architecture/document-generation-facility.md": {
@@ -13154,6 +13154,7 @@
         "overview",
         "what-you-see-first",
         "activity-and-participants",
+        "delegation-and-recovery",
         "inspecting-the-process",
         "reading-the-flow-map",
         "how-work-flows-in-each-area",

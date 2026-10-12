@@ -172,9 +172,10 @@ for (const exitCode of [0, 2]) {
       assert.equal(state.status, metadata.execution.status);
       assert.equal(state.evidenceRecordId, "already-published");
       assert.equal(state.evidenceValidity.issuedAt, completedAt);
-      assert.equal(existsSync(slot.evidence.pending), false);
       assert.equal(calls, 1);
-      // A different caller cannot replay the original owner's retained packet.
+      // Exclusive creation atomically proves publication removed the packet;
+      // EEXIST fails the test without a separate absence check/use race.
+      // A different caller still cannot replay after the original publication.
       pending.recordArgs.externalSessionId = "other-session";
       writeFileSync(slot.evidence.pending, JSON.stringify(pending), { flag: "wx" });
       const refused = await run();

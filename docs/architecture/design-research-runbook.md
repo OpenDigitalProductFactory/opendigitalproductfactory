@@ -30,6 +30,12 @@ It is the leader in DPF's own category, and no DPF spec cited it before [`2026-0
 
 ## Task-specific operating rules
 
+### Research receipt recovery
+
+Build Studio records research against the latest accepted design-document revision through the governed evidence writer. The attester reads the authoring person's current active membership and the selected actor's persisted grants; neither a coworker role label nor an old permission establishes current authority. Missing or revoked writer authority returns a held outcome before dispatch. The full governor still judges an allowed dispatch.
+
+The boot resumer retries the plan-to-build transition only after a receipt was actually recorded. An unchanged hold retains one attestation activity entry; later authority or outcome changes produce a new entry. Every wake rechecks current authority, so recovery needs no duplicate task or grant bypass. Actual caller thread/task attribution is preserved, with the recorded build thread as fallback; missing task identity remains absent.
+
 Read these when this domain is touched. These statements are relocated from AGENTS.md; its invariant core still applies.
 
 - **Absorb, don't adopt; the dependency surface only shrinks.** An added package, image, service or subscription must retire more than it adds. **Commandment tier.** → [kernel principle](../founder-kernel/wiki/principles/absorb-dont-adopt.md)

@@ -271,6 +271,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_surface_readiness: ["work_capsule_write"],
   get_fleet_readiness: ["work_capsule_read"],
   register_runtime_target: ["work_capsule_write"],
+  verify_archetype_projection: ["sandbox_execute"],
   heartbeat_runtime_target: ["work_capsule_write"],
   release_runtime_target: ["work_capsule_write"],
   record_runtime_verification: ["work_capsule_write"],

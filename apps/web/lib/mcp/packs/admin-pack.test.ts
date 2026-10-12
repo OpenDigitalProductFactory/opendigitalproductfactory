@@ -182,6 +182,32 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
     expect(res.error).toContain("Destructive command blocked");
   });
 
+  it("admin_run_command reports a nonzero command failure while retaining its output", async () => {
+    execution.exec.mockRejectedValue({ code: 1, stderr: 'service "web" is not running', message: "Command failed" });
+    const res = await adminPack.handlers.admin_run_command({ command: "docker compose exec -T web printenv PUBLIC_URL" }, "u1");
+    expect(res).toMatchObject({ success: false, data: { output: 'service "web" is not running', exitCode: 1 } });
+  });
+
+  it("admin_run_command keeps stdout and stderr bounded for a failed safe diagnostic", async () => {
+    execution.execFile.mockRejectedValue({ code: 2, stdout: "x".repeat(16000), stderr: "diagnostic error" });
+    const res = await adminPack.handlers.admin_run_command({ command: "docker compose ps --format json" }, "u1");
+    expect(res.success).toBe(false);
+    expect(res.data).toMatchObject({ exitCode: 2 });
+    expect((res.data?.output as string).length).toBe(15000);
+  });
+
+  it("admin_run_command preserves a successful diagnostic with stderr warnings", async () => {
+    execution.execFile.mockResolvedValue({ stdout: "output", stderr: "warning" });
+    const res = await adminPack.handlers.admin_run_command({ command: "docker compose ps" }, "u1");
+    expect(res).toMatchObject({ success: true, data: { output: "output\nwarning", exitCode: 0 } });
+  });
+
+  it("admin_run_command does not invent an exit code for an execution exception", async () => {
+    execution.execFile.mockRejectedValue({ code: "ETIMEDOUT", message: "deadline elapsed", signal: "SIGTERM" });
+    const res = await adminPack.handlers.admin_run_command({ command: "docker compose ps" }, "u1");
+    expect(res).toMatchObject({ success: false, data: { output: "", exitCode: null, signal: "SIGTERM" } });
+  });
+
   it("admin_read_file rejects a missing path without touching the filesystem", async () => {
     const res = await adminPack.handlers.admin_read_file({}, "u1");
     expect(res.success).toBe(false);

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockPrisma, mockAutoDiscoverAndProfile } = vi.hoisted(() => ({
+const { mockPrisma, mockAutoDiscoverAndProfile, mockRefreshDefaultOwners } = vi.hoisted(() => ({
   mockPrisma: {
     aiProviderConnection: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     complianceEvidence: { updateMany: vi.fn() },
@@ -28,10 +28,12 @@ const { mockPrisma, mockAutoDiscoverAndProfile } = vi.hoisted(() => ({
     },
   },
   mockAutoDiscoverAndProfile: vi.fn(),
+  mockRefreshDefaultOwners: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
+  refreshDefaultProviderConnectionOwners: mockRefreshDefaultOwners,
 }));
 
 vi.mock("@/lib/credential-crypto", () => ({
@@ -220,6 +222,8 @@ describe("exchangeOAuthCode", () => {
     expect(result).toEqual({ providerId: "codex" });
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("chatgpt");
+    expect(mockRefreshDefaultOwners).toHaveBeenCalledWith(mockPrisma, "codex", { credentialReplaced: true });
+    expect(mockRefreshDefaultOwners).toHaveBeenCalledWith(mockPrisma, "chatgpt", { credentialReplaced: true });
   });
 
   it("exchanges an additional account without copying credentials to the default or sibling", async () => {
@@ -233,6 +237,7 @@ describe("exchangeOAuthCode", () => {
     expect(mockPrisma.aiProviderConnection.updateMany).toHaveBeenCalledWith({ where: { connectionId: "account-b", status: { not: "disabled" } }, data: { status: "active" } });
     expect(mockPrisma.complianceEvidence.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ providerConnectionId: "connection-b" }) }));
     expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
+    expect(mockRefreshDefaultOwners).not.toHaveBeenCalled();
   });
 
   it("consumes a callback state once when two requests race", async () => {

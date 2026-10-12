@@ -70,7 +70,7 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
           await triggerDesignReviewAutoRepair(buildId, userId, context);
           return { success: true, message: `Fix review FAILED. ${review.issues[0]?.description ?? review.summary}`, data: { review, blocked: true, action: "revise_and_resubmit" } };
         }
-        await attestIdeateResearch(buildId, build.designDoc, userId, context?.agentId ?? null);
+        await attestIdeateResearch(buildId, build.designDoc, userId, context?.agentId ?? null, context);
         let fixPhaseGateBlocker: string | null = null;
         try {
           const fixPlan = (build.plan as Record<string, unknown> | null);
@@ -595,7 +595,7 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
             }
           }
 
-          await attestIdeateResearch(buildId, build.designDoc, userId, context?.agentId ?? null);
+          await attestIdeateResearch(buildId, build.designDoc, userId, context?.agentId ?? null, context);
           const idpPlan = (updatedBuild.plan as Record<string, unknown> | null);
           const gate = await checkBuildPhaseGate({
             buildId,

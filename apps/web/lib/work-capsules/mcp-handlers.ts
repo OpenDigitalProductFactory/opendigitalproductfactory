@@ -188,7 +188,7 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>, user
   return listWorkroomObservation(prisma as never, { ...params, status, decisionScope, portfolioRole }, userId, context);
 }
 
-export async function getWorkCapsuleTool(params: Record<string, unknown>): Promise<ToolResult> {
+export async function getWorkCapsuleTool(params: Record<string, unknown>, userId?: string, context?: ToolContext): Promise<ToolResult> {
   const capsuleId = stringParam(params, "capsuleId");
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
@@ -212,11 +212,19 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>): Promi
     };
   }
   const { projectWorkroomRecovery } = await import("./workroom-recovery-projection");
+  const nestedCoordination = userId && context?.agentId
+    ? await (await import("@/lib/work-management/nested-room-coordination.server")).loadNestedRoomCoordination(prisma as never, {
+      roomId: capsule.id,
+      canReadRoom: async workroomId => (await (await import("@/lib/work-management/workroom-agent-access.server"))
+        .resolveAgentWorkroomAccess({ userId, agentId: context.agentId!, workroomId, requested: "content" })).decision.level === "content",
+    }).catch(() => ({ delegations: [], escalation: {
+      state: "setup-required" as const, reason: "coordination-read-unavailable", steps: [],
+    } })) : null;
   return {
     success: true,
     entityId: capsule.capsuleId,
     message: `Loaded ${capsule.capsuleId}.`,
-    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule) } },
+    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule), nestedCoordination } },
   };
 }
 
