@@ -33,6 +33,7 @@ import {
   isReusableLiveCapsule,
   isTerminalCapsuleStatus,
   planTerminalCapsuleResume,
+  planLiveCapsuleBinding,
   readBranchIdentityCapsule,
   TERMINAL_CAPSULE_STATUSES,
   defaultPlatformRepositoryFullName,
@@ -211,7 +212,7 @@ export async function adoptWorktreeCapsule(args: {
 
   if (existing && isReusableLiveCapsule(existing, args.input)) {
     // Re-adoption advances supplied identity fields and preserves omitted scope.
-    const lateBind = Boolean(args.input.backlogItemId) && existing.backlogItemId == null;
+    const binding = planLiveCapsuleBinding(existing, args.input);
     const repoBound = repositoryUnbound;
     const headSynced = Boolean(args.input.headSha) && args.input.headSha !== existing.headSha;
     const baseSynced = Boolean(args.input.baseSha) && args.input.baseSha !== existing.baseSha;
@@ -220,19 +221,13 @@ export async function adoptWorktreeCapsule(args: {
     if (Object.keys(scopePatch).length && existing.executorRef && existing.executorRef !== args.input.executorRef) {
       throw new CapsuleBranchOccupiedError(existing);
     }
-    if (lateBind || headSynced || baseSynced || repoBound || worktreeMoved || Object.keys(scopePatch).length) {
+    if (binding.changed || headSynced || baseSynced || repoBound || worktreeMoved || Object.keys(scopePatch).length) {
       const bound = await inTransaction(args.db, async (tx) => {
         const updated = await tx.workroom.update({
-          where: scopeWriteWhere(existing),
+          where: { ...scopeWriteWhere(existing), ...binding.where },
           data: {
             ...scopePatch,
-            ...(lateBind
-              ? {
-                backlogItemId: args.input.backlogItemId,
-                ...(args.input.epicId && existing.epicId == null ? { epicId: args.input.epicId } : {}),
-                ...(args.input.executorRef && existing.executorRef == null ? { executorRef: args.input.executorRef } : {}),
-              }
-              : {}),
+            ...binding.data,
             ...(worktreeMoved ? { worktreePath: args.input.worktreePath } : {}),
             ...(repoBound ? { repositoryFullName: args.input.repositoryFullName } : {}),
             ...(headSynced ? { headSha: args.input.headSha, pullRequestNumber: null, pullRequestUrl: null,
@@ -244,12 +239,12 @@ export async function adoptWorktreeCapsule(args: {
         await recordActivity(tx, {
           workCapsuleId: existing.id,
           kind: "adopted",
-          summary: lateBind ? `Late-bound ${existing.capsuleId} to ${args.input.backlogItemId}`
+          summary: binding.backlogBound ? `Late-bound ${existing.capsuleId} to ${args.input.backlogItemId}`
             : repoBound ? `Bound ${existing.capsuleId} to ${args.input.repositoryFullName} for ${args.input.headBranch}`
             : `Synced ${existing.capsuleId} branch state for ${args.input.headBranch}`,
           payload: {
             scopeChanges: scopeChangeEvidence(existing, updated),
-            ...(lateBind ? { backlogItemId: args.input.backlogItemId, lateBind: true } : {}),
+            ...binding.evidence,
             ...(repoBound ? { repositoryFullName: args.input.repositoryFullName, repositoryLateBind: true } : {}),
             ...(worktreeMoved ? { worktreePath: args.input.worktreePath, previousWorktreePath: existing.worktreePath ?? null } : {}),
             ...(headSynced ? { headSha: args.input.headSha, previousHeadSha: existing.headSha ?? null,

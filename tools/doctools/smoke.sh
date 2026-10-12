@@ -232,7 +232,23 @@ printf '{"content":{"family":"deck"},"formats":["xlsx"]}' > "$WORK/bad-format.js
 render "$WORK/bad-format.json" "$WORK/bad-format.tar"; expect_exit "render refuses a format the family cannot make" 2 $?
 render /dev/null "$WORK/empty.tar"; expect_exit "render refuses an empty request" 4 $?
 render "$FIXTURES/render-deck.json" "$WORK/big.tar" -e DPF_RENDER_MAX_BYTES=64; expect_exit "render input over DPF_RENDER_MAX_BYTES" 4 $?
-render "$FIXTURES/render-deck.json" "$WORK/slow.tar" -e DPF_RENDER_TIMEOUT_SECONDS=1; expect_exit "render timeout" 124 $?
+# Exercise the installed renderer's actual alarm and registered-child cleanup.
+# The test-only callback blocks deterministically; a fast normal render stays OK.
+"${RUN[@]}" --entrypoint python3 "$IMAGE" - < "$HERE/timeout-probe.py" > "$WORK/timeout.out" 2> "$WORK/timeout.err"
+timeout_rc=$?
+if [ "$timeout_rc" -eq 124 ] && grep -q 'real deadline, child kill and workspace cleanup verified' "$WORK/timeout.err"; then
+  pass "render timeout (exit 124, child killed and workspace removed)"
+else
+  fail "render timeout: expected verified exit 124, got $timeout_rc: $(tail -3 "$WORK/timeout.err")"
+fi
+# Negative controls prove this fixture refuses a broken deadline or cleanup.
+tar -cf - -C "$HERE" timeout-probe.py timeout-probe.test.py | \
+  "${RUN[@]}" --entrypoint bash "$IMAGE" -c 'tar -xf - -C /tmp && python3 /tmp/timeout-probe.test.py' > "$WORK/timeout-tests.out" 2> "$WORK/timeout-tests.err"
+if [ "$?" -eq 0 ]; then
+  pass "render timeout proof rejects missing alarm, ignored budget and missing child cleanup"
+else
+  fail "render timeout negative controls: $(tail -6 "$WORK/timeout-tests.err")"
+fi
 
 # 6. The trusted document path (BI-BFF142A1). A flat ODS that embeds a chart:
 #    dpf-convert, the path for customer files, must refuse it (its profile keeps
