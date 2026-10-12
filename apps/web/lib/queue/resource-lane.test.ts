@@ -163,6 +163,38 @@ describe("ResourceLane bounded admission", () => {
     }
     gate.resolve();
   });
+
+  it("expires and removes a queued waiter without ever executing it", async () => {
+    vi.useFakeTimers();
+    try {
+      const lane = new ResourceLane("compute:gpu", { record: () => {} });
+      const holderGate = deferred<void>();
+      const holder = lane.run(() => holderGate.promise);
+      await Promise.resolve();
+
+      const expiredFn = vi.fn(async () => "must-not-run");
+      const timeout = Object.assign(new Error("admission expired"), {
+        code: "INFERENCE_ADMISSION_TIMEOUT",
+      });
+      const waiting = lane.run(expiredFn, {
+        waitTimeoutMs: 1_000,
+        waitTimeoutError: () => timeout,
+      });
+      const rejected = expect(waiting).rejects.toBe(timeout);
+      expect(lane.depth()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await rejected;
+      expect(lane.depth()).toBe(0);
+
+      holderGate.resolve();
+      await holder;
+      expect(expiredFn).not.toHaveBeenCalled();
+      await expect(lane.run(async () => "next")).resolves.toBe("next");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("ResourceLane telemetry", () => {
@@ -288,5 +320,37 @@ describe("withLocalInferenceLock — the ONE local-GPU admission gate (BI-98572A
     await holder;
     await expect(interactive).resolves.toBe("interactive");
     expect(assertLocalGpuFree).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves the interactive admission budget and never dispatches an expired waiter", async () => {
+    const key = "DPF_INFERENCE_ADMISSION_TIMEOUT_MS";
+    process.env[key] = "1000";
+    vi.useFakeTimers();
+    try {
+      const holderGate = deferred<void>();
+      const holder = withLocalInferenceLock(() => holderGate.promise, {
+        modelId: "qwen",
+        origin: "autonomous",
+      });
+      await Promise.resolve();
+
+      const expiredFn = vi.fn(async () => "must-not-run");
+      const waiting = withLocalInferenceLock(expiredFn, {
+        modelId: "qwen",
+        origin: "interactive",
+      });
+      const rejected = expect(waiting).rejects.toMatchObject({
+        code: "INFERENCE_ADMISSION_TIMEOUT",
+      });
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await rejected;
+      holderGate.resolve();
+      await holder;
+      expect(expiredFn).not.toHaveBeenCalled();
+    } finally {
+      delete process.env[key];
+      vi.useRealTimers();
+    }
   });
 });

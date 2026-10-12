@@ -17,6 +17,10 @@
 // full resource, and one failure never wedges the rest. Spec §4.3.
 
 import type { QueueTransitionInput } from "./queue-telemetry";
+import {
+  createInferenceAdmissionTimeoutError,
+  resolveAcquireTimeoutMs,
+} from "@/lib/inference/inference-admission";
 
 /** Thrown by `run` when the lane's bounded queue is full. */
 export class LaneBusyError extends Error {
@@ -43,6 +47,10 @@ export interface ResourceLaneRunOptions {
   priority?: "interactive" | "autonomous";
   /** Promote an autonomous waiter after this many milliseconds. */
   autonomousAgingMs?: number | null;
+  /** Reject and remove a waiter that has not started within this budget. */
+  waitTimeoutMs?: number | null;
+  /** Optional domain-specific timeout error factory. */
+  waitTimeoutError?: () => Error;
 }
 
 export interface ResourceLaneDeps {
@@ -66,6 +74,7 @@ export class ResourceLane {
     enqueuedAt: number;
     priority: "interactive" | "autonomous";
     autonomousAgingMs: number | null;
+    waitTimer: ReturnType<typeof setTimeout> | null;
   }> = [];
   private active = false;
   private pumpScheduled = false;
@@ -105,7 +114,7 @@ export class ResourceLane {
     this.emit({ itemId, transition: "enqueued", occurredAt: new Date(enqueuedAt), depth: this.waiting });
 
     const run = new Promise<T>((resolve, reject) => {
-      this.queue.push({
+      const entry = {
         fn,
         resolve: resolve as (value: unknown) => void,
         reject,
@@ -113,7 +122,31 @@ export class ResourceLane {
         enqueuedAt,
         priority,
         autonomousAgingMs: normalizeAgingMs(opts.autonomousAgingMs),
-      });
+        waitTimer: null as ReturnType<typeof setTimeout> | null,
+      };
+      this.queue.push(entry);
+      const waitTimeoutMs = normalizeWaitTimeoutMs(opts.waitTimeoutMs);
+      if (waitTimeoutMs != null) {
+        entry.waitTimer = setTimeout(() => {
+          const index = this.queue.indexOf(entry);
+          if (index < 0) return;
+          this.queue.splice(index, 1);
+          this.waiting -= 1;
+          const waitedMs = this.now() - enqueuedAt;
+          entry.reject(opts.waitTimeoutError?.() ?? new Error(
+            `Resource lane ${this.laneKey} wait timed out after ${waitTimeoutMs}ms.`,
+          ));
+          this.emit({
+            itemId,
+            transition: "finished",
+            outcome: "failed",
+            occurredAt: new Date(this.now()),
+            durations: { waitMs: waitedMs },
+            depth: this.waiting,
+          });
+          this.schedulePump();
+        }, waitTimeoutMs);
+      }
       this.schedulePump();
     });
     return run;
@@ -133,6 +166,7 @@ export class ResourceLane {
     this.active = true;
     const index = this.selectNextIndex();
     const entry = this.queue.splice(index, 1)[0]!;
+    if (entry.waitTimer) clearTimeout(entry.waitTimer);
     this.waiting -= 1;
     const startedAt = this.now();
     this.emit({
@@ -245,6 +279,10 @@ function normalizeAgingMs(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+function normalizeWaitTimeoutMs(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
 // The single local GPU (Docker Model Runner / Ollama) serves ONE request at a
 // time. BI-98572A51: chat inference and the local (opencode) build engine each
 // hit that one GPU, and both admission points run in the PORTAL process (chat
@@ -275,12 +313,18 @@ export function withLocalInferenceLock<T>(
   fn: () => Promise<T>,
   options?: { modelId?: string | null; origin?: "interactive" | "autonomous" },
 ): Promise<T> {
+  const origin = options?.origin ?? "interactive";
+  const waitTimeoutMs = resolveAcquireTimeoutMs(origin);
   return localInferenceLane.run(
     () => probeLocalGpuThenRun(fn, options?.modelId ?? null),
     {
       maxQueueDepth: localInferenceMaxQueueDepth(),
-      priority: options?.origin ?? "interactive",
+      priority: origin,
       autonomousAgingMs: localInferenceAutonomousAgingMs(),
+      waitTimeoutMs,
+      waitTimeoutError: () => createInferenceAdmissionTimeoutError("local", origin, waitTimeoutMs, {
+        providerId: "local",
+      }),
     },
   );
 }
