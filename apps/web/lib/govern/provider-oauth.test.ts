@@ -178,6 +178,11 @@ describe("exchangeOAuthCode", () => {
     mockPrisma.modelProvider.update.mockResolvedValue({});
     mockPrisma.modelProvider.updateMany.mockResolvedValue({ count: 1 });
     mockPrisma.credentialEntry.upsert.mockResolvedValue({});
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue(null);
+    mockPrisma.aiProviderConnection.findUnique.mockImplementation(async ({ where }) => ({
+      id: `db-${where.connectionId}`, connectionId: where.connectionId,
+      providerId: where.connectionId.replace("provider-default-", ""), credentialEntryId: null,
+    }));
     mockPrisma.mcpServer.findMany.mockResolvedValue([]);
     mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 2, profiled: 2 });
 
@@ -224,6 +229,50 @@ describe("exchangeOAuthCode", () => {
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("chatgpt");
     expect(mockRefreshDefaultOwners).toHaveBeenCalledWith(mockPrisma, "codex", { credentialReplaced: true });
     expect(mockRefreshDefaultOwners).toHaveBeenCalledWith(mockPrisma, "chatgpt", { credentialReplaced: true });
+  });
+
+  it("clears both default accounts' old trust before fresh credentials are activated", async () => {
+    await exchangeOAuthCode("state-1", "code-1");
+    for (const providerId of ["codex", "chatgpt"]) {
+      expect(mockPrisma.aiProviderConnection.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ connectionId: `provider-default-${providerId}` }),
+        data: expect.objectContaining({ accountClass: "unknown", evidenceStatus: "unreviewed", entitlements: {}, modelsVerifiedAt: null, accessibleModelIds: [] }),
+      }));
+      expect(mockPrisma.complianceEvidence.updateMany).toHaveBeenCalledWith({
+        where: { providerConnectionId: `db-provider-default-${providerId}`, claimKey: { not: null }, status: "active" },
+        data: { status: "superseded" },
+      });
+    }
+    expect(Math.max(...mockPrisma.aiProviderConnection.update.mock.invocationCallOrder))
+      .toBeLessThan(Math.min(...mockPrisma.modelProvider.update.mock.invocationCallOrder));
+    expect(Math.max(...mockPrisma.credentialEntry.upsert.mock.invocationCallOrder))
+      .toBeLessThan(Math.min(...mockAutoDiscoverAndProfile.mock.invocationCallOrder));
+  });
+
+  it("refuses a default flow whose legacy credential belongs to an additional account", async () => {
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({ id: "credential-b", providerConnection: { connectionId: "account-b" } });
+    expect(await exchangeOAuthCode("state-1", "code-1")).toEqual({ error: "account_changed" });
+    expect(mockPrisma.credentialEntry.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.aiProviderConnection.update).not.toHaveBeenCalled();
+    expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
+  });
+
+  it("validates the sibling owner before changing either shared default account", async () => {
+    mockPrisma.credentialEntry.findUnique.mockImplementation(async ({ where }) => where.providerId === "chatgpt"
+      ? { id: "foreign", providerConnection: { connectionId: "account-b" } } : null);
+    expect(await exchangeOAuthCode("state-1", "code-1")).toEqual({ error: "account_changed" });
+    expect(mockPrisma.credentialEntry.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.complianceEvidence.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not activate a disabled default account while clearing its obsolete claims", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockImplementation(async ({ where }) => ({
+      id: `db-${where.connectionId}`, providerId: where.connectionId.replace("provider-default-", ""),
+      credentialEntryId: null, status: "disabled",
+    }));
+    await exchangeOAuthCode("state-1", "code-1");
+    for (const [args] of mockPrisma.aiProviderConnection.update.mock.calls) expect(args.data).not.toHaveProperty("status");
+    for (const [args] of mockPrisma.aiProviderConnection.updateMany.mock.calls) expect(args.where.status).toBe("unconfigured");
   });
 
   it("exchanges an additional account without copying credentials to the default or sibling", async () => {
@@ -353,6 +402,14 @@ describe("refreshOAuthToken", () => {
 
     expect(result).toEqual({ error: "Re-authentication required" });
     expect(mockPrisma.credentialEntry.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("preserves account trust and model proofs during routine token refresh", async () => {
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({ id: "default-credential", refreshToken: "enc:refresh", status: "ok" });
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ access_token: "renewed", expires_in: 3600 }) } as Response);
+    expect(await refreshOAuthToken("codex")).toEqual({ token: "renewed" });
+    expect(mockPrisma.aiProviderConnection.update).not.toHaveBeenCalled();
+    expect(mockPrisma.complianceEvidence.updateMany).not.toHaveBeenCalled();
   });
 
   it("expires only the selected additional account when it cannot refresh", async () => {
