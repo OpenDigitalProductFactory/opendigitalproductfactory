@@ -101,6 +101,55 @@ describe("admin pack — registration", () => {
 });
 
 describe("admin pack — handler behavior (delegation preserved)", () => {
+  it.each([
+    "SELECT '--format' AS value",
+    "SELECT '/* literal */' AS value",
+    "SELECT 'it''s -- literal' AS value",
+    'SELECT 1 AS "a""--/*b*/"',
+    String.raw`SELECT E'it\'s -- /* literal */' AS value`,
+    "SELECT $$-- /* literal */ ' $$ AS value",
+    "SELECT $tag$-- /* literal */ $other$$tag$ AS value",
+    "SELECT $é$-- literal$é$ AS value",
+    String.raw`SELECT 'backslash\' AS value`,
+    "SELECT E'a'\n" + String.raw`'b\'--literal' AS value`,
+  ])("admin_query_db preserves quoted SQL: %s", async (sql) => {
+    db.queryRawUnsafe.mockResolvedValue([]);
+    const res = await adminPack.handlers.admin_query_db({ sql }, "u1");
+    expect(res.success).toBe(true);
+    expect(db.queryRawUnsafe).toHaveBeenCalledWith(`${sql} LIMIT 1000`);
+  });
+
+  it.each([
+    ["/* leading */ SELECT/**/1 -- tail", "SELECT 1"],
+    ["SELECT 1 /* outer /* nested */ still comment */", "SELECT 1"],
+    ["SELECT 1 -- comment\r\nLIMIT 30;", "SELECT 1  \r\nLIMIT 30"],
+    ["SELECT 'a'/* newline\n*/'b'", "SELECT 'a' \n'b'"],
+    ["SELECT 1 --" + "x".repeat(10001), "SELECT 1"],
+  ])("admin_query_db removes actual comments without token joining", async (sql, expected) => {
+    db.queryRawUnsafe.mockResolvedValue([]);
+    const res = await adminPack.handlers.admin_query_db({ sql }, "u1");
+    expect(res.success).toBe(true);
+    expect(db.queryRawUnsafe).toHaveBeenCalledWith(expected.endsWith("30") ? expected : `${expected} LIMIT 1000`);
+  });
+
+  it.each([
+    "SELECT 'unterminated",
+    'SELECT 1 AS "unterminated',
+    "SELECT $$unterminated",
+    "SELECT $tag$wrong$TAG$",
+    "SELECT 1 /* unfinished",
+    "SELECT 1 /* outer /* nested */",
+    "SELECT '" + "x".repeat(100000) + "'",
+    "SEL/**/ECT 1",
+    "WITH a AS (DELETE FROM users RETURNING *) SELECT * FROM a",
+    "SELECT 'DROP' AS value",
+  ])("admin_query_db refuses unsafe or incomplete input", async (sql) => {
+    const res = await adminPack.handlers.admin_query_db({ sql }, "u1");
+    expect(res.success).toBe(false);
+    expect(db.queryRawUnsafe).not.toHaveBeenCalled();
+    expect(db.adminActivityCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ result: "blocked" }) }));
+  });
+
   it("executes the admitted diagnostic argv without invoking a shell", async () => {
     execution.execFile.mockResolvedValue({ stdout: "[]", stderr: "" });
     const res = await adminPack.handlers.admin_run_command({ command: "docker compose ps --format json" }, "u1");
