@@ -35,3 +35,19 @@ The original parent BI acceptance criteria remain open and are quoted here for s
 - Metrics capture PR-open-to-ready, ready-to-merge, follow-up commits, findings per kLOC, takeover count, and human touches.
 
 This scoped follow-up reduces unnecessary author-research human touches in the existing review tail; it does not complete the parent's controller, interruption, metrics or live acceptance obligations. Coverage receipt remains pending on the immutable plan. Rollback is the bounded author-binding eligibility and non-independent research resolver support; preserve existing judgments/audit rows and restore ordinary approval for future calls without deleting history.
+
+### Existing parent coverage dependencies
+
+Retain approved parent baseline 524959f8-8508-4c5a-afbf-8bc285f77587 and the existing provider-admission/root plan coverage. The parent contract is docs/superpowers/specs/2026-09-03-local-first-agentic-delivery-throughput-design.md, sections 7, 8, 9, 10, 11, 13 and 15.1. The original parent plan and its recorded owners retain these verification dependencies; listing them here is traceability, not assignment, implementation or acceptance by this slice.
+
+| Parent objective | Parent acceptance dependency | Existing owner/carrier and status |
+| --- | --- | --- |
+| OBJ-DELIVERY-VISIBILITY | AC-DELIVERY-VISIBILITY | BI-9DC43E17; parent runtime UX verification remains required |
+| OBJ-DELIVERY-CAMPAIGN | AC-DELIVERY-CAMPAIGN | BI-1CB9D97B; parent campaign terminal-delivery verification remains required |
+| OBJ-DELIVERY-PLACEMENT | AC-DELIVERY-PLACEMENT | BI-8D56F777; paired-placement verification remains required |
+| OBJ-DELIVERY-CONVERGENCE | AC-DELIVERY-CONVERGENCE | BI-06AE6833/root release lane; full review-tail closeout remains required |
+| OBJ-DELIVERY-CONVERGENCE | AC-DELIVERY-ADMISSION | BI-06AE6833; this author-fact contribution does not prove independent review completion |
+| OBJ-DELIVERY-MEASUREMENT | AC-DELIVERY-MEASUREMENT | BI-69803ACC and BI-A472354E; this slice supplies bounded before/after human-touch observations only |
+| OBJ-DELIVERY-REFACTOR | AC-DELIVERY-REFACTOR | Existing campaign/root owner; this slice consolidates author-fact policy on existing substrate |
+
+Parent-context flow refs: parent-delivery-convergence; parent-placement-and-campaign; parent-runtime-and-outcome-verification. The author implementation depends on preserving these unaccepted parent obligations. Its acceptance contribution is limited to admission continuity, refactoring and measured author-research human touches. The historical baseline's twenty-percent sentence is not a new investment decision; current shared-platform direction is eighty percent refactoring/reliability and twenty percent new work until maturity review.
