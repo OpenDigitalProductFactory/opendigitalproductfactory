@@ -3,7 +3,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { validateFailureAnalysis } from "./failure-analysis";
 import { resolveFailureAnalysisEvidence } from "./failure-analysis-evidence";
 import { CHANGE_REVIEW_POLICY_VERSION, CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION } from "./semantic-change-review";
-import { resolveWorkroomReviewExemption } from "./semantic-review-policy-exemption";
+import { findCurrentSemanticFailure, resolveWorkroomReviewExemption } from "./semantic-review-policy-exemption";
 
 /**
  * Why publication is refused. `workroom_identity_incomplete` is repairable by
@@ -32,8 +32,11 @@ export async function checkWorkroomFailureReadiness(capsuleId: string): Promise<
       reason: `Workroom source identity is missing: ${missing.join(", ")} not set. Re-sync the Workroom with adopt_worktree (repositoryFullName, headBranch, worktreePath, baseSha, headSha), then retry.`,
     };
   }
+  if (await findCurrentSemanticFailure(room.id, room.headSha)) {
+    return { mayPublish: false, code: "failure_review_required", reason: "A failed current review requires repair; a publication exception cannot override it." };
+  }
   const rows = await prisma.externalEvidenceRecord.findMany({
-    where: { workCapsuleId: room.id, operationType: "semantic-change-review.receipt" },
+    where: { workCapsuleId: room.id, operationType: "semantic-change-review.receipt", details: { path: ["sourceHeadSha"], equals: room.headSha } },
     orderBy: { createdAt: "desc" }, take: 20, select: { id: true, details: true },
   });
   if (rows.some(row => isRecord(row.details) && row.details.sourceHeadSha === room.headSha
@@ -58,6 +61,6 @@ export async function checkWorkroomFailureReadiness(capsuleId: string): Promise<
       : { mayPublish: false, code: "failure_review_required", reason: "Failure-analysis evidence is missing, stale, or changed; refresh it and request internal review." };
   }
   const exemption = await resolveWorkroomReviewExemption(capsuleId, room.id, room.headSha);
-  if (exemption) return { mayPublish: true, reason: "Operator-authorized DEV publication exception; native failure review UNRUN.", ...exemption };
+  if (exemption) return { mayPublish: true, reason: "Operator-authorized DEV publication exception; native failure review UNRUN and client assessment independence UNVERIFIED.", ...exemption };
   return { mayPublish: false, code: "failure_review_required", reason: "No failure-analysis review exists for this final change." };
 }
