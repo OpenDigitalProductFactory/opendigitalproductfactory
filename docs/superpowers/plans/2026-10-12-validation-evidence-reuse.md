@@ -131,3 +131,31 @@ Both cache-hit paths now re-read identity before returning a reused result;
 the regression failed before this correction and passes after it. The runbook
 owner released the exact documentation claim through the native tool, and this
 Workroom claimed it before editing; no force/co-claim was used.
+
+## Publication attestation follow-up
+
+CT-PUBLICATION / FLOW-CORRECTION / VC-PUBLICATION: PRs #6235 and #6236
+omitted local-CI trailers after readiness reported READY. Their bodies have
+since been repaired without repeating executed validation. Extend the existing
+readiness command to reject missing publication attestation for non-docs changes.
+An evidence trailer must match a qualified, current-head result from the existing
+slot reader (`collectSlotVerdicts` and `classifySlotRecord`), not an arbitrary ID
+or an admission. Reuse the existing override classifier; an allowed override
+remains explicitly UNRUN, never PASS. Do not introduce a new gate or ledger.
+
+Sequence: reproduce missing attestation with a failing readiness test; add tests
+for failed, expired, foreign-head/branch, pending and skipped evidence, plus a
+qualified matching result and a truthful permitted override; wire the existing
+read-only gate reader into readiness; update contributor documentation. Keep
+metadata checks outside reusable guard execution. A docs-only change retains
+the existing evidence-policy exemption. Report unavailable proof as unresolved,
+not an instruction to repeat the entire gate. Existing protected CI remains
+authoritative. This is a continuation of the same atomic publication contract;
+the broader refresh/delegation requirements above remain open.
+
+Touched source: `scripts/pr-readiness.mjs`, `scripts/pr-readiness/core.mjs`,
+`scripts/pr-readiness.test.mjs`; documentation: `docs/testing/pr-health.md`.
+The native impact contract has no testImpact or guardObligation entries; run
+the readiness, pregate-status, PR-health, override and receipt regression suites
+and affected source guards. Rollback is a signed revert of this bounded adapter
+change. No runtime, schema, grant or UI changes are included.
