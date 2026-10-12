@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 738,
+  "pageCount": 739,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2765,6 +2765,18 @@
         "decision-rules",
         "links-to-live-work",
         "maintenance"
+      ]
+    },
+    "docs/architecture/workroom-cycle-continuity.md": {
+      "publicHref": "/architecture/workroom-cycle-continuity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-cycle-continuity",
+        "existing-persistence-and-bounded-reads",
+        "recovery-integration-still-required",
+        "verification-and-rollback-boundary"
       ]
     },
     "docs/architecture/workroom-vocabulary-boundary.md": {
