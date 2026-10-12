@@ -258,7 +258,7 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 
 #### Grok
 
-- **CLI only — no GUI client yet.** Reads the DPF MCP server block from `~/.grok/config.toml` (HTTP transport, same `${DPF_MCP_BEARER_TOKEN}` pattern); the plugin installs from `.grok-plugin/plugin.json`.
+- **CLI only — no GUI client yet.** Reads the DPF MCP server block from `~/.grok/config.toml`. Setup creates a client_credentials client and refreshes `~/.grok/dpf-mcp-token` before it expires; Grok re-reads that file. No pasted token. The plugin installs from `.grok-plugin/plugin.json`.
 - **Authentication to xAI** is separate from the DPF MCP token. Preferred path is the OAuth **device-code** flow — `grok login --device-auth` opens `accounts.x.ai/oauth2/device`; you sign in with Google / X / Apple and the credential lands in `~/.grok/auth.json`. An `XAI_API_KEY` is the fallback. (Build Studio's containerized Grok dispatch uses the same credential model — see the [Grok device-code OAuth spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-07-grok-device-code-oauth-design.md).)
 
 #### Antigravity

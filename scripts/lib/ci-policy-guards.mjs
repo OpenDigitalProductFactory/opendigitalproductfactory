@@ -400,6 +400,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // first, PAT until retirement, actionable refusal) against a loopback
       // stub authorization server.
       node("--test", "scripts/lib/mcp-credential.test.mjs"),
+      // BI-5BCDB07C: the Grok refresher writes bearer_token_file and stops
+      // when the credentials client is refused. Listed here so CI runs it.
+      node("--test", "scripts/lib/grok-credential.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),

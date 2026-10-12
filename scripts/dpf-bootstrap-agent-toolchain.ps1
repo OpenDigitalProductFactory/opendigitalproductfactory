@@ -283,6 +283,68 @@ if (-not $DryRun) {
     }
 }
 
+# Grok credential (BI-5BCDB07C). Independent of the legacy PAT mint above.
+# ASCII only. Does not mint a personal access token.
+if ($GrokPresent) {
+    if ($DryRun.IsPresent) {
+        Write-Info "DRY-RUN: would create the Grok credentials client and refresh its bearer file."
+    } elseif ($null -eq (Get-Command node -ErrorAction SilentlyContinue)) {
+        Write-Warn2 "node not found; cannot refresh the Grok credential."
+    } elseif ($null -eq (Get-Command docker -ErrorAction SilentlyContinue)) {
+        Write-Warn2 "docker not found; cannot create the Grok credentials client."
+    } else {
+        $portal = Resolve-PortalContainer
+        $running = (& docker inspect -f '{{.State.Running}}' $portal 2>$null)
+        if ("$running".Trim() -ne 'true') {
+            Write-Warn2 "Portal container '$portal' is not running; Grok credential was not created."
+        } else {
+            $grokErr = [System.IO.Path]::GetTempFileName()
+            try {
+                $linkScript = Join-Path $RepoRoot "scripts\link-web-src-workspace.sh"
+                if (Test-Path -LiteralPath $linkScript) {
+                    $linkBody = (Get-Content -LiteralPath $linkScript -Raw) -replace "`r`n", "`n"
+                    $linkOut = ($linkBody | & docker exec -i $portal sh -s 2>&1)
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Warn2 "Could not link workspace packages into web-src; trying the Grok client issuer anyway. ($linkOut)"
+                    }
+                }
+                $grokIssuer = @'
+cd /app/apps/web-src || exit 2
+for t in /app/node_modules/.bin/tsx /app/packages/db/node_modules/.bin/tsx; do
+  if [ -x "$t" ]; then exec "$t" scripts/issue-grok-credentials-client.ts "$@"; fi
+done
+if node -e "require.resolve(\"tsx\")" >/dev/null 2>&1; then exec node --import tsx scripts/issue-grok-credentials-client.ts "$@"; fi
+echo "issue-grok-credentials-client: no tsx runtime found in the portal image" >&2
+exit 127
+'@ -replace "`r`n", "`n"
+                $clientOut = & docker exec $portal sh -c $grokIssuer issuer 2>$grokErr
+                if ($LASTEXITCODE -eq 0) {
+                    $clientOut | & node (Join-Path $RepoRoot "scripts\refresh-grok-mcp-credential.mjs") write-client --config $GrokConfigPath
+                    if ($LASTEXITCODE -eq 0) {
+                        & node (Join-Path $RepoRoot "scripts\refresh-grok-mcp-credential.mjs") refresh --mcp-url $McpEndpoint --config $GrokConfigPath
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Ok "Grok credential refreshed into bearer_token_file."
+                        } else {
+                            Write-Warn2 "Grok credential refresh did not complete."
+                        }
+                    } else {
+                        Write-Warn2 "Grok credentials client was not stored."
+                    }
+                } else {
+                    Write-Warn2 "Grok credentials client was not created (exit $LASTEXITCODE)."
+                    if (Test-Path -LiteralPath $grokErr) {
+                        Get-Content -LiteralPath $grokErr -TotalCount 40 | ForEach-Object { Write-Host "    $_" }
+                    }
+                }
+            } catch {
+                Write-Warn2 "Grok credential setup failed: $($_.Exception.Message)"
+            } finally {
+                Remove-Item -LiteralPath $grokErr -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
 # Refresh native plugin registrations before the config plan reads preferences.
 # The standalone updater owns this migration on every bootstrap path.
 $PluginUpdater = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1"
