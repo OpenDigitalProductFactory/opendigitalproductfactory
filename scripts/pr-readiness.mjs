@@ -20,6 +20,17 @@ import { isEnvironmentFailureOutput } from "./lib/pregate-preflight.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { GitCommandError, runGit } from "./lib/git.mjs";
 import { guardReceiptDirectory, identifyGuardExecution, runWithGuardReceipt } from "./lib/pregate-preflight-receipt.mjs";
+import { resolveWorktreeContext } from "./pregate-status.mjs";
+import { LOCAL_CI_SLOT_KEYS, createLocalCiSlotManifest } from "./lib/local-ci-slot-manifest.mjs";
+import { readLocalCiGateState } from "./lib/local-ci-gate-state.mjs";
+
+export function readPublicationGateRecords(context = resolveWorktreeContext(), read = readLocalCiGateState) {
+  if (!context) return [];
+  return LOCAL_CI_SLOT_KEYS.map(slotKey => {
+    const manifest = createLocalCiSlotManifest({ slotKey, ...context });
+    return { state: read(manifest.evidence.state), metadata: read(manifest.evidence.metadata) };
+  });
+}
 
 function git(args, { allowFail = false } = {}) {
   const result = runGit(args, { cwd: process.cwd(), maxBuffer: 32 * 1024 * 1024 });
@@ -117,6 +128,7 @@ function readRepoState(publishedRef = null) {
 
   return {
     branch,
+    headSha,
     isDetached: branch === "HEAD",
     isShallow: isShallowRepository((args) => git(args)),
     mergeBases,
@@ -194,7 +206,11 @@ async function main() {
     changedFiles: repo.changedFileEntries,
     addedLinesByFile: repo.addedLinesByFile,
   });
-  const verdict = evaluateReadiness({ repo, gateResults, prBody: args.prBody, gateContext });
+  // Read proof outside guard receipt reuse; publication metadata is always fresh.
+  repo.publicationIdentityChanged = git(["rev-parse", "HEAD"]).trim() !== repo.headSha
+    || git(["rev-parse", "--abbrev-ref", "HEAD"]).trim() !== repo.branch;
+  repo.statusPorcelain = git(["status", "--porcelain"]);
+  const verdict = evaluateReadiness({ repo, gateResults, prBody: args.prBody, gateContext, localCiRecords: readPublicationGateRecords() });
   if (execution.reused) verdict.notes.push(`Local guard results reused from ${execution.executedAt}; no guard scripts rerun. Repository and PR metadata inspected now. Protected GitHub checks remain the integration authority.`);
   process.stdout.write(formatReadinessReport(verdict));
   if (args.json) {

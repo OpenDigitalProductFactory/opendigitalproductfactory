@@ -134,12 +134,16 @@ Workroom claimed it before editing; no force/co-claim was used.
 
 ## Publication attestation follow-up
 
+Coverage receipt: `cmv5vj5t3211201pg2kczysxk`, binding the follow-up plan at
+`8b0c959f4766cfa916e9c2a6495622e5e8400737`. Research receipt:
+`initiative-661f9726-3ee9-4a8f-b57c-117ba86bf315`.
+
 CT-PUBLICATION / FLOW-CORRECTION / VC-PUBLICATION: PRs #6235 and #6236
 omitted local-CI trailers after readiness reported READY. Their bodies have
 since been repaired without repeating executed validation. Extend the existing
 readiness command to reject missing publication attestation for non-docs changes.
 An evidence trailer must match a qualified, current-head result from the existing
-slot reader (`collectSlotVerdicts` and `classifySlotRecord`), not an arbitrary ID
+slot manifests and `classifySlotRecord`, not an arbitrary ID
 or an admission. Reuse the existing override classifier; an allowed override
 remains explicitly UNRUN, never PASS. Do not introduce a new gate or ledger.
 

@@ -6,6 +6,10 @@ import {
 } from "../lib/ci-policy-guards.mjs";
 import { formatGateContextMarkdown } from "../lib/gate-context.mjs";
 import { isSignedOff } from "../lib/dco-signoff.mjs";
+import { isDocsOnlyFileSet } from "../pr-health.mjs";
+import { classifySlotRecord } from "../lib/pregate-status.mjs";
+import { hasBoundDocumentationEvidence } from "../lib/local-ci-gate-state.mjs";
+import { classifyLocalCiOverride, classifyGateInfrastructureEvidence, GATE_INFRASTRUCTURE_UNAVAILABLE_CODE } from "../../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs";
 import {
   PR_TRAILER_NAMES,
   SUPPORTED_PR_TRAILERS,
@@ -126,7 +130,42 @@ export function validatePrBodyTrailers(prBody = "") {
   return { ok: blockers.length === 0, blockers, warnings, trailers };
 }
 
-export function evaluateReadiness({ repo, gateResults = [], prBody = "", gateContext = null } = {}) {
+function publicationAttestation({ repo, trailers, records, now }) {
+  const blockers = [], notes = [];
+  if (!repo || isDocsOnlyFileSet(repo.changedFiles)) return { blockers, notes };
+  const evidence = trailers.find(t => t.name === PR_TRAILER_NAMES.localCiEvidence);
+  const override = trailers.find(t => t.name === PR_TRAILER_NAMES.localCiOverride);
+  if (!evidence && !override) {
+    blockers.push("Publication requires Local-CI-Evidence or Local-CI-Override in the PR body. Carry existing qualified evidence; a metadata omission does not require a full gate rerun.");
+  } else if (evidence) {
+    const evidenceId = evidence.value.split(/\s+/)[0];
+    const qualified = records.some(({ state, metadata }) => {
+      if (!repo.headSha || state?.sha !== repo.headSha || state?.branch !== repo.branch
+        || state.status !== "passed" || state.skipped || state.evidenceRecordId !== evidenceId
+        || !(Date.parse(state.expiresAt) > now)) return false;
+      const verdict = classifySlotRecord({ state, metadata, headSha: repo.headSha, headBranch: repo.branch, now });
+      const producerBound = hasBoundDocumentationEvidence(state) || (
+        metadata?.candidateSha === repo.headSha && metadata?.execution?.status === "passed"
+        && Boolean(state.leaseId) && metadata.runLeaseId === state.leaseId
+      );
+      return verdict.verdict === "PASS" && producerBound;
+    });
+    if (qualified) notes.push(`Local-CI evidence ${evidenceId} qualified for this exact branch and HEAD; no gate rerun.`);
+    else blockers.push(`Local-CI-Evidence ${evidenceId} has no qualified current-head record in this worktree. Reconcile existing evidence/provenance or use an authorized truthful override; the identifier alone is not proof.`);
+  } else {
+    const classified = classifyLocalCiOverride(override.value);
+    if (!classified.ok) blockers.push(classified.reason);
+    else if (classified.code === GATE_INFRASTRUCTURE_UNAVAILABLE_CODE && !records.some(({ state }) =>
+      state?.sha === repo.headSha && state?.branch === repo.branch && state.skipped === true
+      && state.gatePassed === false && state.skipReason === override.value
+      && classifyGateInfrastructureEvidence(state.infrastructureEvidence).ok
+    )) blockers.push("Local-CI-Override gate-infrastructure-unavailable requires the matching push-time machine evidence; prose alone is not evidence.");
+    else notes.push(`Local-CI UNRUN under ${classified.code}; this override is not a passing gate. Protected GitHub checks remain required.`);
+  }
+  return { blockers, notes };
+}
+
+export function evaluateReadiness({ repo, gateResults = [], prBody = "", gateContext = null, localCiRecords = [], now = Date.now() } = {}) {
   const blockers = [];
   const warnings = [];
   const notes = [];
@@ -136,6 +175,7 @@ export function evaluateReadiness({ repo, gateResults = [], prBody = "", gateCon
   if (!repo) {
     blockers.push("Repository state could not be read.");
   } else {
+    if (repo.publicationIdentityChanged) blockers.push("Repository identity changed during readiness; no current-head publication verdict was reached.");
     const exactPublishedHead = Boolean(repo.publishedRef) && repo.publishedRefMatchesHead === true;
     if (repo.publishedRef && !exactPublishedHead) {
       blockers.push(`HEAD does not equal published ref ${repo.publishedRef}; refuse to validate a different tree.`);
@@ -172,6 +212,9 @@ export function evaluateReadiness({ repo, gateResults = [], prBody = "", gateCon
   const trailerVerdict = validatePrBodyTrailers(prBody);
   blockers.push(...trailerVerdict.blockers);
   warnings.push(...trailerVerdict.warnings);
+  const attestation = publicationAttestation({ repo, trailers: trailerVerdict.trailers, records: localCiRecords, now });
+  blockers.push(...attestation.blockers);
+  notes.push(...attestation.notes);
 
   for (const gate of gateResults) {
     if (gate.skippedEnvironment) {
