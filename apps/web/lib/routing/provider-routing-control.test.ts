@@ -55,6 +55,12 @@ describe("provider routing controls", () => {
     expect(result.eligibility.eligible).toBe(true);
     expect(result.restrictions).toEqual([]);
   });
+  it("preserves canonical legacy activation in the routing display", () => {
+    const data = input(); data.pw.provider.defaultConnectionStatus = "unconfigured";
+    const result = projectProviderRoutingControl(data);
+    expect(result.eligibility.eligible).toBe(true);
+    expect(result.restrictions).toEqual([]);
+  });
   it("retains a disabled connection even with a healthy provider lifecycle", () => {
     const data = input(); data.pw.provider.defaultConnectionStatus = "disabled";
     const result = projectProviderRoutingControl(data);

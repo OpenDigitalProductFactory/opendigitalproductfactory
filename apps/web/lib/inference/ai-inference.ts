@@ -21,6 +21,7 @@ import {
 } from "@/lib/ai-provider-internals";
 import type { RoutedExecutionPlan } from "../routing/recipe-types";
 import type { ChatMessage, ToolCallEntry } from "../routing/chat-message-types";
+import { resolveRuntimeConnectionStatus } from "../routing/provider-suitability/onboarding-recommendation";
 import { resolveDefaultExecutionAdapter } from "../routing/execution-plan";
 import { getExecutionAdapter } from "../routing/execution-adapter-registry";
 import { resolveExecutionAdapter } from "../routing/resolve-execution-adapter";
@@ -140,7 +141,13 @@ async function readEnabledRoutingProvider(providerId: string) {
     });
     // Legacy direct callers can predate the default account. An existing account
     // is authoritative, including when this selection waited in admission.
-    if (connection && !["active", "degraded"].includes(connection.status)) {
+    let effectiveStatus = connection?.status;
+    if (connection?.status === "unconfigured") {
+      // Legacy activation stays usable; a later setup/credential removal does not.
+      const lifecycle = await prisma.modelProvider.findUnique({ where: { providerId }, select: { status: true } });
+      effectiveStatus = lifecycle ? resolveRuntimeConnectionStatus(lifecycle.status, connection.status) : connection.status;
+    }
+    if (connection && !["active", "degraded"].includes(effectiveStatus ?? "")) {
       throw new InferenceError("Provider account is not enabled for routing", "provider_error", providerId);
     }
     return null;

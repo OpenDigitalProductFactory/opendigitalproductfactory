@@ -31,10 +31,12 @@ export function projectProviderRoutingControl(input: {
   weeklyHint?: string | null;
 }): ProviderRoutingControlView {
   const { provider: p, credential } = input.pw;
+  const effectiveStatus = p.defaultConnectionStatus ? resolveRuntimeConnectionStatus(p.status, p.defaultConnectionStatus) : p.status;
+  const legacyActivation = p.defaultConnectionStatus === "unconfigured" && ["active", "degraded"].includes(effectiveStatus);
   const restrictions: RoutingRestriction[] = [];
   const add = (key: string, summary: string, until: string | null = null) => restrictions.push({ key, summary, until });
   if (p.operatorPause || p.defaultConnectionStatus === "paused") add("operator", "Paused by an operator.", p.operatorPause?.resumeAt ?? null);
-  else if (p.defaultConnectionStatus && !["active", "degraded"].includes(p.defaultConnectionStatus)) add("connection", "The connected account is disabled or unavailable.");
+  else if (p.defaultConnectionStatus && !legacyActivation && !["active", "degraded"].includes(p.defaultConnectionStatus)) add("connection", "The connected account is disabled or unavailable.");
   if (input.localOnly && isModelRoutingProvider(p) && !["local", "ollama"].includes(p.providerId)) add("local-only", "Local-only inference is enabled. Cloud traffic is blocked.");
   if (input.pool?.isExhausted) add("quota", "The shared subscription pool has reached a usage limit.", input.pool.resetAt?.toISOString() ?? null);
   if (capacityRoutingExclusionReason(input.capacity, input.now)) add("capacity", input.capacity!.safeSummary, input.capacity?.retryAtMs ? new Date(input.capacity.retryAtMs).toISOString() : null);
@@ -48,7 +50,7 @@ export function projectProviderRoutingControl(input: {
     add("health", input.health.safeSummary, input.health.cooldownUntil ? new Date(input.health.cooldownUntil).toISOString() : null);
   }
   const eligibility = deriveRoutingEligibility({
-    status: p.defaultConnectionStatus ? resolveRuntimeConnectionStatus(p.status, p.defaultConnectionStatus) : p.status,
+    status: effectiveStatus,
     endpointType: p.endpointType, category: p.category, serviceKind: p.serviceKind,
     authMethod: p.authMethod, hasCredential: credential?.hasUsableMaterial ?? false,
     credentialExpired: Boolean(credential?.tokenExpiresAt && Date.parse(credential.tokenExpiresAt) < input.now),

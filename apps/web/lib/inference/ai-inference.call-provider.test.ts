@@ -77,6 +77,19 @@ describe("callProvider", () => {
     });
   });
 
+  it.each(["active", "degraded"])("preserves %s legacy activation while its default account is unconfigured", async status => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "unconfigured" });
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "openai", status, authMethod: "api_key", authHeader: "Authorization", baseUrl: "https://api.openai.com/v1", endpoint: null });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "test-key" });
+    await expect(callProvider("openai", "model-under-test", [], "system")).resolves.toMatchObject({ content: "ok" });
+    expect(mockAdapterExecute).toHaveBeenCalledOnce();
+  });
+  it("keeps an unconfigured provider blocked when its default account is unconfigured", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "unconfigured" });
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ status: "unconfigured" });
+    await expect(callProvider("openai", "model-under-test", [], "system")).rejects.toThrow("not enabled for routing");
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
   it("does not dispatch a cloud provider while its account is paused", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "paused" });
     await expect(callProvider("chatgpt", "model-under-test", [], "system")).rejects.toThrow("not enabled for routing");

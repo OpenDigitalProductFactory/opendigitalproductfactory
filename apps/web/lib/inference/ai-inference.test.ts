@@ -39,6 +39,19 @@ beforeEach(() => {
   executeAdapter.mockReset().mockResolvedValue({ text: "done", toolCalls: [], inferenceMs: 1, usage: { inputTokens: 1, outputTokens: 1 } });
 });
 
+it("rechecks setup removal after a cloud selection waits for admission", async () => {
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "http://provider.test/v1", authMethod: "none" } as any);
+  const release = vi.fn();
+  vi.mocked(acquireInferenceSlot).mockImplementationOnce(async () => {
+    vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "unconfigured" } as any);
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "unconfigured" } as any);
+    return release;
+  });
+  await expect(callProvider("openai", "model-test", [], "system")).rejects.toThrow("not enabled for routing");
+  expect(executeAdapter).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
+});
+
 describe("InferenceError", () => {
   it("has correct code and providerId", () => {
     const err = new InferenceError("test", "network", "ollama");
