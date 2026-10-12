@@ -3,7 +3,7 @@ status: draft
 ---
 # Implement operator provider pause
 
-BI-56F2AB99; Workroom WC-62930005. Design: `docs/superpowers/specs/2026-10-11-provider-pause-design.md`. Medium atomic deliverable. Status: planning; immutable backlog coverage pending, no runtime implementation authorized by this plan until the receipt succeeds.
+BI-56F2AB99; Workroom WC-62930005. Design: `docs/superpowers/specs/2026-10-11-provider-pause-design.md`. Medium atomic deliverable. Status: implementation. Research receipt `initiative-08ebca09-f856-4ed2-8f3b-e7806a7fe242` and immutable atomic plan coverage `cmv4lfat92ydo01odi8u398gi` were accepted against published commit `26473872a6b670f9050cfdb44ca4a29788e2b47e` before runtime implementation.
 
 ## Acceptance criteria from the item body
 
@@ -31,7 +31,7 @@ The phases are internal sequencing of one capability: a timer without a routing 
 
 ## Backlog coverage
 
-Atomic BI-56F2AB99 maps AC-PAUSE, AC-TIME, AC-RACE, AC-HEALTH to connection-authority, provider-control-contract, durable-expiry-flow, verification-pause-suite. Receipt pending at immutable publication; do not claim coverage before the server validates it.
+Atomic BI-56F2AB99 maps AC-PAUSE, AC-TIME, AC-RACE, AC-HEALTH to connection-authority, provider-control-contract, durable-expiry-flow, verification-pause-suite. Receipt `cmv4lfat92ydo01odi8u398gi` resolves the original immutable plan at `26473872a6b670f9050cfdb44ca4a29788e2b47e`, blob `4db957eb7afa21a0d4cfaeb72833a411818986cb`. Phases are internal sequencing, not independent deliveries.
 
 ## Risks and rollback
 

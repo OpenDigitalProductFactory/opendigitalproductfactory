@@ -305,6 +305,8 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
           <ProviderStatusToggle
             providerId={provider.providerId}
             initialStatus={provider.status}
+            initialPause={provider.operatorPause}
+            initialConnectionStatus={provider.defaultConnectionStatus}
           />
         </span>
       </div>
