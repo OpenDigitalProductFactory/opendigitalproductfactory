@@ -163,3 +163,11 @@ Verification must cover authority/environment rejection, rollback on exceptions,
 the actual lifecycle assertions, and execution on the canonical deployed image.
 Existing AC-1 through AC-6 remain unchanged. No acceptance is claimed by this
 design amendment.
+
+The operation is `verify_archetype_projection`, with no arguments. On the
+canonical deployed DEV/test image, a platform manager with `sandbox_execute`
+can invoke it through MCP and record its returned observations against the
+existing acceptance Workroom. A passing result requires `fixtureRolledBack`
+and the lifecycle checks; returned IDs identify observations inside the rolled-back
+transaction, not durable business records. A timeout or failed assertion is not
+acceptance. Repeated calls use disjoint fixtures and never select a business org.

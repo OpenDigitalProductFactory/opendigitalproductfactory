@@ -3,9 +3,9 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 432,
-      "reason": "BI-1914A351: get_provider_accounts and manage_provider_account give external coworkers the same scoped account controls as portal server actions. A bounded masked reader and one operation-based writer cover account setup, authentication, model discovery and lifecycle without adding a tool per action. Existing provider controls cannot select an additional account, so omitting these tools would orphan that functionality for agent surfaces. Claim to check: two accounts are managed independently through governed tools with no default credential fallback.",
-      "recordedAt": "2026-10-08"
+      "value": 433,
+      "reason": "BI-CAP-E7AE57C2: verify_archetype_projection supplies the missing deployed lifecycle acceptance operation. Existing setup/reset targets business organizations and source tests cannot verify the served image. One no-argument DEV/test-only operation owns and rolls back its fixture, using the production reconciliation seam. Claim to check: repeat identity, reversible withdrawal, references and history are verified without changing existing organizations or leaving fixture rows.",
+      "recordedAt": "2026-10-12"
     },
     "registry.packFiles": {
       "value": 106,
