@@ -282,6 +282,93 @@ Verification writes through the existing governed service. UI statuses are proje
 second lifecycle. Query-critical fields/indexes may require a canonical-model migration after
 query-plan review; do not promise zero migrations before that review.
 
+### Ingestion ordering implementation direction (2026-10-12)
+
+BI-BF20F828 / WC-D7F044F1 retains this section's acceptance requirements. At
+source `33a345a51be247db1f38a4672203ffb2c9e7eb5b`, `WorkroomActivity` maps to
+`WorkCapsuleActivity` and contains a cuid and `recordedAt`, but no ingestion
+sequence. The source inventory finds 22 production `create`/`createMany` call
+sites; changing the shared activity helper alone would leave other writers out.
+The existing cycle adapter serializes through `WorkItem FOR UPDATE`.
+
+Decision `DI-D6F136AEAF94` selects database-owned ordering within these existing
+models over consolidating every application writer before enforcing ordering.
+The recorded platform consult is usable, high confidence and autonomy eligible,
+with no commandment conflict. Standards alignment, a durable shared fix and
+existing-model grounding contribute most. This selects a design direction; it
+does not approve a migration or establish concurrency, performance or acceptance.
+
+Extend the owning Workroom with a transactional ingestion counter and its
+activity rows with an immutable per-room sequence. A database-owned insert
+boundary must allocate and persist the counter and row in one transaction,
+including direct inserts and bulk writers. Do not use a bare PostgreSQL sequence
+as a commit-order watermark. PostgreSQL documents that sequence allocation is
+not rolled back; row locks instead remain held through transaction completion.
+References: [sequence functions](https://www.postgresql.org/docs/current/functions-sequence.html)
+and [explicit locking](https://www.postgresql.org/docs/current/explicit-locking.html),
+consulted 2026-10-12. DPF already uses PostgreSQL triggers for existing-model
+invariants; this direction introduces no ledger, scheduler or consumer service.
+
+Before schema implementation, enumerate all writer lock orders, including
+Workroom-first updates, WorkItem-first dispatch and multi-room `createMany`.
+The sequence boundary must not introduce the reverse of an existing lock order.
+Readers freeze committed highwater separately from the cycle output transaction;
+they must not hold a WorkItem lock while waiting on an activity writer that can
+need that same WorkItem. Serialize review output and cursor advancement under
+the existing cycle lock and compare the expected checkpoint revision. The
+frozen boundary is immutable across replacement. Missing durable parent binding
+is an explicit refusal, never a fabricated coordinator or work item.
+
+Capture committed highwater and eligible rows under one documented, compatible
+MVCC snapshot protocol. With READ COMMITTED, each read must remain bounded by
+the persisted highwater; with a fixed snapshot, the counter and rows must both
+be visible in that snapshot. A pre-existing REPEATABLE READ snapshot must never
+acknowledge a counter whose rows it cannot see. A replacement reuses the frozen
+boundary rather than sampling a newer counter.
+
+The checkpoint preserves the per-room highwater vector, each room's last
+consumed position, and deterministic sparse-room rotation. Per-room sequence
+numbers are not a global cursor. Reaching a 200-row page or 1,000-row cycle cap
+must retain every unseen eligible row for continuation without advancing its
+room cursor. Qualify reader and replacement behavior at both caps with a delayed
+writer and unequal room activity rates.
+
+The initial source audit confirms room-first scheduling and PR binding writers
+(`workroom-drive-scheduling`, `pull-request-binding-runtime`, and
+`pull-request-merged-binding`), and room-first terminal transitions and shape
+rebinding. The employment actuator also calls the shared activity helper inside
+its caller's employment-event transaction; that outer transaction belongs in
+the lock-order audit. The canonical cycle adapter locks `WorkItem`, not
+`Workroom`. These observations are not an exhaustive proof of safe ordering.
+The current async-operation writer uses one-row `createMany` with
+`skipDuplicates`; a replay must not be mistaken for a new source event. Test
+the counter and cursor semantics after a duplicate conflict explicitly. Never
+assume consecutive allocated integers prove absence of retention or input gaps.
+Opposing multi-room insert order must either be serialized consistently or fail
+and retry the whole owning transaction with a bounded, documented policy; a
+partial replay of just the activity insert would lose the caller's atomicity.
+
+The forward-only migration must preserve every existing payload and reference,
+label any deterministic historical ordering as migration ordering rather than
+recovered chronology, and prevent an old writer from supplying an arbitrary
+sequence. Inspect live population and query plans before choosing backfill and
+index operations. Existing retention may delete expired rows: a cursor gap or
+denied/deleted source must remain visible and cannot count as reviewed evidence.
+Corrections append with original/supersedes identity and a new ingestion sequence.
+
+Required database qualification uses concurrent real PostgreSQL transactions:
+one delayed writer, a second writer, a highwater reader, rollback, multi-room
+bulk inserts in opposing orders, and concurrent reviewer replacements. Prove
+late commits remain eligible in the next cycle, failed output cannot advance
+the cursor, replay returns the same output identity, and stale revisions fail.
+Exercise the declared 200/page and 1,000/cycle limits, sparse-source rotation,
+10,000-room/100,000-event workload, tenant boundaries and retention gaps. No
+source fixture, decision score or merged PR substitutes for those results.
+
+At least 20% of this slice consolidates the shared activity projection, cursor
+validation and cycle/output transaction rather than adding per-caller state.
+The approved delivery plan's Phase 2 and AC-04/05/06/10/11/12 still govern.
+
 Use a fixed ingestion high-water mark per cycle and stable composite keyset cursors per source.
 Late-arriving events enter a later cycle by ingestion sequence; corrections append with supersedes
 references. Persist output identity and cursor advancement transactionally, or with the existing
