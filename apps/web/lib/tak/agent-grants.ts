@@ -221,12 +221,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_workroom: ["work_capsule_read"],
   review_workroom_sensitivity: ["admin_read"],
   correct_workroom_sensitivity: ["admin_write"],
-  // EP-WORKROOM-COMMS (BI-3F21C4D5): read/post a Work Room's message feed. Room
-  // admission is enforced separately (room-agent-access); these are the coarse caps.
+  // Room admission and coordinator rights are checked separately from these
+  // communication grants (EP-WORKROOM-COMMS, BI-3F21C4D5).
   read_room_messages: ["work_room_read"],
   post_room_message: ["work_room_write"],
-  // EP-WORKROOM-COMMS: invite a participant on demand (write); 360 coworker
-  // room-engagement (read). Room admission/coordinator right enforced separately.
   invite_room_participant: ["work_room_write"],
   appoint_room_coordinator: ["work_room_write"],
   plan_account_handover: ["work_room_write"],
