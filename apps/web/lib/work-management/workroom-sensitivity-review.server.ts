@@ -8,6 +8,7 @@ import { offloadEvidenceOutput } from "@/lib/evidence/bounded-evidence-output";
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
 import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { readWorkroomBoundaryClaim } from "./workroom-boundary-claim";
+import { workroomBoundaryWriteWhere } from "./workroom-boundary-write.server";
 
 const select = { id: true, capsuleId: true, scopeClaims: true, updatedAt: true } as const;
 type Room = { id: string; capsuleId: string; scopeClaims: unknown; updatedAt: Date };
@@ -59,7 +60,7 @@ export async function correctWorkroomSensitivityTool(params: Record<string, unkn
     const next = [...entries];
     next[index] = { ...original, workroomBoundary: { ...original.workroomBoundary, sensitivityCeiling: sensitivity } };
     const changed = await db.workroom.updateMany({
-      where: { id: room.id, updatedAt: room.updatedAt, scopeClaims: { equals: room.scopeClaims as Prisma.InputJsonValue } },
+      where: workroomBoundaryWriteWhere(room),
       data: { scopeClaims: next as Prisma.InputJsonValue },
     });
     if (changed.count !== 1) return refusal("classification_changed", "The room changed; review its classification again.");

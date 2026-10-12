@@ -26,6 +26,7 @@ import { Prisma, prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { can } from "@/lib/permissions";
+import { workroomBoundaryWriteWhere } from "@/lib/work-management/workroom-boundary-write.server";
 import {
   withWorkroomBoundaryClaim,
   type WorkroomBoundaryInput,
@@ -55,17 +56,18 @@ export async function saveWorkroomBoundary(
   try {
     const room = await prisma.workroom.findUnique({
       where: { id: roomRowId },
-      select: { scopeClaims: true },
+      select: { id: true, scopeClaims: true, updatedAt: true },
     });
     if (!room) return err("That room could not be found.");
 
     let next: unknown[];
     try { next = withWorkroomBoundaryClaim(room.scopeClaims, boundary); }
     catch { return err("Choose a valid classification; historical labels need administrator review."); }
-    await prisma.workroom.update({
-      where: { id: roomRowId },
+    const changed = await prisma.workroom.updateMany({
+      where: workroomBoundaryWriteWhere(room),
       data: { scopeClaims: next as Prisma.InputJsonValue },
     });
+    if (changed.count !== 1) return err("The room changed. Reopen it before saving.");
 
     revalidatePath(`/workspace/cases/${caseKey}`);
     revalidatePath("/workspace/my-queue");
