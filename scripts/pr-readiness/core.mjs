@@ -136,7 +136,14 @@ function publicationAttestation({ repo, trailers, records, now }) {
   const evidence = trailers.find(t => t.name === PR_TRAILER_NAMES.localCiEvidence);
   const override = trailers.find(t => t.name === PR_TRAILER_NAMES.localCiOverride);
   if (!evidence && !override) {
-    blockers.push("Publication requires Local-CI-Evidence or Local-CI-Override in the PR body. Carry existing qualified evidence; a metadata omission does not require a full gate rerun.");
+    if (repo.isDetached && repo.publishedRef && repo.publishedRefMatchesHead === true) {
+      // Build Studio's caller already owns canonical preflight qualification.
+      // This selects existing published-tree mechanics, never authority or a
+      // PASS for a private/remapped tree. Supplied proof still qualifies below.
+      notes.push("Published-tree mechanical checks only: local proof UNPROVEN; canonical verification remains server-owned. This flag grants no publication authority and attests no local integration PASS.");
+    } else {
+      blockers.push("Publication requires Local-CI-Evidence or Local-CI-Override in the PR body. Carry existing qualified evidence; a metadata omission does not require a full gate rerun.");
+    }
   } else if (evidence) {
     const evidenceId = evidence.value.split(/\s+/)[0];
     const qualified = records.some(({ state, metadata }) => {

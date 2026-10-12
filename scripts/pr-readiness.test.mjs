@@ -12,6 +12,7 @@ import {
 } from "./pr-readiness/core.mjs";
 import { PR_TRAILER_NAMES } from "./lib/pr-trailer-contract.mjs";
 import { runGate, readPublicationGateRecords } from "./pr-readiness.mjs";
+import { buildPublishedReadinessCommand } from "../apps/web/lib/build/build-studio-pr-readiness.ts";
 
 test("PR readiness supplies a working shell to nested fixtures", () => {
   const result = runGate({ name: "nested shell", env: {}, command: [process.execPath,
@@ -94,6 +95,37 @@ test("publication scans existing slot records without executing the gate", () =>
   assert.ok(paths.some(path => path.includes("worktrees")));
   assert.equal(evaluateReadiness({ repo: cleanRepo, prBody: proofBody, localCiRecords: records, now: proofNow }).ready, true);
   assert.deepEqual(readPublicationGateRecords(null), []);
+});
+
+test("Build Studio published-tree mechanics retain server-owned proof without inventing local PASS", () => {
+  const command = buildPublishedReadinessCommand({
+    branchName: "build/FB-123", commitSha: cleanRepo.headSha, restoreBranch: "build/FB-123",
+    prBodyBase64: Buffer.from("Verified by Build Studio server").toString("base64"),
+    repositoryOwner: "OpenDigitalProductFactory", repositoryName: "opendigitalproductfactory",
+  });
+  const publishedRef = command.match(/--published-ref '([^']+)'/)?.[1];
+  assert.equal(publishedRef, "refs/remotes/origin/build/FB-123");
+  const repo = { ...cleanRepo, branch: "HEAD", isDetached: true, publishedRef, publishedRefMatchesHead: true };
+  const result = evaluateReadiness({ repo });
+  assert.equal(result.ready, true);
+  assert.match(result.notes.join("\n"), /local proof UNPROVEN.*server-owned/);
+  assert.equal(evaluateReadiness({ repo: { ...repo, publishedRefMatchesHead: false } }).ready, false);
+  assert.equal(evaluateReadiness({ repo: { ...repo, publicationIdentityChanged: true } }).ready, false);
+  for (const prBody of ["Local-CI-Evidence:", proofBody, "Local-CI-Override: unapproved-text"]) {
+    assert.equal(evaluateReadiness({ repo, prBody }).ready, false, prBody);
+  }
+  for (const state of [{ gatePassed: false }, { sha: "b".repeat(40) }, { expiresAt: "2026-10-12T21:00:00Z" }]) {
+    assert.equal(evaluateReadiness({ repo, prBody: proofBody, localCiRecords: publicationProof(state), now: proofNow }).ready, false);
+  }
+  // Keep the actual caller's server check before publication; the CLI flag is
+  // mechanics, not authority and not a substitute for this existing contract.
+  const caller = readFileSync(new URL("../apps/web/lib/mcp/build-ship-handlers.ts", import.meta.url), "utf8");
+  const prerequisite = caller.indexOf("const preflightRequirement = await requireInPlatformPreflightRecord(");
+  const publish = caller.indexOf("const published = await publishBranchCommit(");
+  assert.ok(prerequisite > 0 && prerequisite < publish);
+  assert.match(caller.slice(prerequisite, publish), /\.\.\.preflightRequirement\.blockers/);
+  assert.match(caller.slice(prerequisite, publish), /if \(prePublishBlockers\.length > 0\)[\s\S]*return \{/);
+  assert.match(caller, /const result = evaluatePreflightRequirement\(\{[\s\S]*treeSha: identity\.treeSha,[\s\S]*records,/);
 });
 
 test("buildGatePlan derives runnable checks from the canonical policy profiles", () => {

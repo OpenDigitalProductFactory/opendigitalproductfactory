@@ -218,6 +218,7 @@ async function main() {
       ready: verdict.ready,
       blockers: verdict.blockers,
       warnings: verdict.warnings,
+      notes: verdict.notes,
       branch: verdict.branch,
       changedFiles: verdict.changedFiles,
       localGuards: {

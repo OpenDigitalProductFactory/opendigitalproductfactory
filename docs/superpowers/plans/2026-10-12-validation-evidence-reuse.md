@@ -163,3 +163,13 @@ The native impact contract has no testImpact or guardObligation entries; run
 the readiness, pregate-status, PR-health, override and receipt regression suites
 and affected source guards. Rollback is a signed revert of this bounded adapter
 change. No runtime, schema, grant or UI changes are included.
+
+Compatibility boundary confirmed by the coordinator: ordinary external readiness
+requires local-CI attestation. Build Studio retains its existing server-owned
+`requireInPlatformPreflightRecord` before publication and detached exact-ref
+mechanical checks afterward. Absent external slot files do not block that path;
+text and JSON state local proof UNPROVEN, with no authority or PASS inferred
+from the flag. Supplied malformed or unqualified proof still blocks. Exercise
+the actual `buildPublishedReadinessCommand` and guard the caller's existing
+server preflight ordering. Broader projected-tree proof transport stays open;
+never rebind a private-tree PASS onto the remapped published tree.
