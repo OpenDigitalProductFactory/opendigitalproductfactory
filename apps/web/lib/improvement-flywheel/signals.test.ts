@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { upsert, ingestBacklogItem } = vi.hoisted(() => ({
+const { upsert, update, ingestBacklogItem } = vi.hoisted(() => ({
   upsert: vi.fn(),
+  update: vi.fn(),
   ingestBacklogItem: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({ prisma: { improvementSignal: { upsert } } }));
+vi.mock("@dpf/db", () => ({ prisma: { improvementSignal: { upsert, update } } }));
 vi.mock("@/lib/operate/backlog-ingest", () => ({ ingestBacklogItem }));
 
 import { createOrTouchImprovementSignal } from "./signals";
@@ -22,18 +23,68 @@ function memoryStore(seed?: Row) {
     const key = JSON.stringify([where.sourceType_sourceId.sourceType, where.sourceType_sourceId.sourceId]);
     const prior = rows.get(key);
     if (prior) {
-      Object.assign(prior, update);
+      const count = prior.recurrenceCount + (update.recurrenceCount?.increment ?? 0);
+      Object.assign(prior, update, { recurrenceCount: count });
       return { ...prior };
     }
     const row = { recurrenceCount: 1, backlogItemId: null, ...create } as Row;
     rows.set(key, row);
     return { ...row };
   });
+  update.mockImplementation(async ({ where, data }) => {
+    const key = JSON.stringify([where.sourceType_sourceId.sourceType, where.sourceType_sourceId.sourceId]);
+    const row = rows.get(key);
+    if (!row) throw new Error("missing signal");
+    const count = row.recurrenceCount + (data.recurrenceCount?.increment ?? 0);
+    Object.assign(row, data, { recurrenceCount: count });
+    return { ...row };
+  });
   return rows;
 }
 
 describe("createOrTouchImprovementSignal", () => {
-  beforeEach(() => { upsert.mockReset(); ingestBacklogItem.mockReset(); });
+  beforeEach(() => { upsert.mockReset(); update.mockReset(); ingestBacklogItem.mockReset(); });
+
+  it.each(["workroom-flow-bottleneck", "curator-finding"])("preserves existing persistent-observer intake for %s", async (sourceType) => {
+    const rows = memoryStore();
+    ingestBacklogItem.mockResolvedValue({ itemId: "BI-PERSISTENT" });
+    const observation = { ...input, sourceType };
+    await createOrTouchImprovementSignal(observation);
+    await createOrTouchImprovementSignal(observation);
+    expect(ingestBacklogItem).not.toHaveBeenCalled();
+    expect(await createOrTouchImprovementSignal(observation)).toMatchObject({ backlogItemId: "BI-PERSISTENT", isNew: false });
+    await createOrTouchImprovementSignal(observation);
+    expect(ingestBacklogItem).toHaveBeenCalledTimes(1);
+    expect([...rows.values()][0]?.recurrenceCount).toBe(4);
+  });
+
+  it("recovers one unique-key collision using the same source identity", async () => {
+    memoryStore({ signalId: "IS-WINNER", recurrenceCount: 1, backlogItemId: null, evidence: {}, title: input.title });
+    upsert.mockRejectedValueOnce(Object.assign(new Error("unique collision"), { code: "P2002" }));
+    expect(await createOrTouchImprovementSignal(input)).toEqual({ signalId: "IS-WINNER", isNew: false });
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { lastSeenAt: expect.any(Date) } }));
+  });
+
+  it("does not claim collision recovery when the exact source winner is absent", async () => {
+    memoryStore();
+    upsert.mockRejectedValueOnce(Object.assign(new Error("unique collision"), { code: "P2002" }));
+    await expect(createOrTouchImprovementSignal(input)).rejects.toThrow("missing signal");
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(ingestBacklogItem).not.toHaveBeenCalled();
+  });
+
+  it("keeps failed observer intake available for a later projection", async () => {
+    memoryStore();
+    const fileBacklogItem = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ itemId: "BI-RECOVERED" });
+    const observation = { ...input, sourceType: "workroom-flow-bottleneck" };
+    for (let n = 0; n < 3; n += 1) await createOrTouchImprovementSignal(observation, { fileBacklogItem });
+    expect(fileBacklogItem).toHaveBeenCalledTimes(1);
+    expect(await createOrTouchImprovementSignal(observation, { fileBacklogItem })).toMatchObject({ backlogItemId: "BI-RECOVERED" });
+    await createOrTouchImprovementSignal(observation, { fileBacklogItem });
+    expect(fileBacklogItem).toHaveBeenCalledTimes(2);
+  });
 
   it("does not turn ten deliveries of one source into independent recurrence or backlog work", async () => {
     const rows = memoryStore({ signalId: "IS-REPLAY", recurrenceCount: 1, backlogItemId: null, evidence: {}, title: input.title });
@@ -67,7 +118,7 @@ describe("createOrTouchImprovementSignal", () => {
     expect(ingestBacklogItem).not.toHaveBeenCalled();
   });
 
-  it("concurrent deliveries converge on one identity and one new result", async () => {
+  it("adapter-simulated concurrent deliveries converge on one identity and one new result", async () => {
     const rows = memoryStore();
     const results = await Promise.all(Array.from({ length: 10 }, () => createOrTouchImprovementSignal(input)));
     expect(rows.size).toBe(1);

@@ -937,6 +937,9 @@
     "apps/web/lib/identity/principal-linking.ts": [
       "docs/architecture/ai-agent-meta-model.md"
     ],
+    "apps/web/lib/improvement-flywheel/signals.ts": [
+      "docs/architecture/improvement-signal-intake.md"
+    ],
     "apps/web/lib/incumbent/coverage-ai.ts": [
       "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md",
       "docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md"
@@ -3253,6 +3256,9 @@
       "packages/db/prisma/schema/ai-coworker.prisma",
       "scripts/installer/gpp-permit-secret-contract.test.mjs",
       "scripts/installer/install-release-assets.mjs"
+    ],
+    "docs/architecture/improvement-signal-intake.md": [
+      "apps/web/lib/improvement-flywheel/signals.ts"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts",

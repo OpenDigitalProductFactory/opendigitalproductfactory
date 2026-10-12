@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 738,
+  "pageCount": 739,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1985,6 +1985,18 @@
         "c3-what-modeling-it-revealed",
         "c4-path-to-conformance",
         "revision-history"
+      ]
+    },
+    "docs/architecture/improvement-signal-intake.md": {
+      "publicHref": "/architecture/improvement-signal-intake/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "improvement-signal-intake",
+        "source-identity-and-recurrence",
+        "concurrent-delivery-and-failure",
+        "remaining-learning-qualification"
       ]
     },
     "docs/architecture/initiative-readiness-runbook.md": {
