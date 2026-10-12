@@ -293,7 +293,10 @@ test("canonical gate heartbeats during a long command and releases once", async 
       },
     });
 
-    assert.ok([0, 3].includes(result.code), result.output);
+    // This timing-only command writes no execution metadata. It must renew and
+    // release, but cannot produce a product verdict from its zero exit alone.
+    assert.equal(result.code, 5, result.output);
+    assert.match(result.output, /completion checkpoint missing or invalid/);
     assert.ok(calls.includes("renew_nonprod_environment_lease"), `${calls.join(", ")}\n${result.output}`);
     assert.equal(calls.filter((tool) => tool === "release_nonprod_environment_lease").length, 1);
     assert.ok(calls.indexOf("renew_nonprod_environment_lease") < calls.indexOf("release_nonprod_environment_lease"));
@@ -1477,7 +1480,8 @@ test("admitted gate writes running state before starting the expensive command",
       },
     });
 
-    assert.ok([0, 3].includes(result.code), result.output);
+    assert.equal(result.code, 5, result.output);
+    assert.match(result.output, /completion checkpoint missing or invalid/);
     const state = JSON.parse(await readFile(observedState, "utf8"));
     assert.equal(state.branch, "fix/local-ci-descendant-fence");
     assert.equal(state.leaseId, "NPEL-RUNNING-STATE");
@@ -2069,7 +2073,8 @@ test("POSIX gate heartbeats and releases through its injectable transport", asyn
       },
     });
 
-    assert.ok([0, 3].includes(result.code), result.output);
+    assert.equal(result.code, 5, result.output);
+    assert.match(result.output, /completion checkpoint missing or invalid/);
     assert.ok(calls.includes("renew_nonprod_environment_lease"), `${calls.join(", ")}\n${result.output}`);
     assert.equal(calls.filter((tool) => tool === "release_nonprod_environment_lease").length, 1);
   } finally {

@@ -11,7 +11,7 @@
 
 import { randomBytes } from "node:crypto";
 import { ancestorPids, ownedDescendants, sameProcessIdentity } from "./lib/process-identity.mjs";
-import { writeExecutionCheckpoint, writeDurableJson, validatePendingPublication, appendTerminationDecision } from "./lib/gate-execution-checkpoint.mjs";
+import { writeExecutionCheckpoint, writeDurableJson, validateExecutionCheckpoint, validatePendingPublication, appendTerminationDecision } from "./lib/gate-execution-checkpoint.mjs";
 import { parseArgs as utilParseArgs } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawn, spawnSync } from "node:child_process";
@@ -835,20 +835,41 @@ export function createProcessTreeTracker({
   let rootRetired = false;
   let lastRows = [];
   let observationRevision = 0;
+  let observationUncertain = false;
+  const markUncertain = (reason, revision) => {
+    if (revision !== observationRevision) return;
+    observationUncertain = true;
+    onEvent({ type: "cleanup-observation-unproven", reason });
+  };
 
   const remember = (rows, revision) => {
     // A late async scan must never replace the newer cleanup observation.
     if (revision !== observationRevision) return [];
     lastRows = Array.isArray(rows) ? rows : [];
+    if (lastRows.length === 0) markUncertain("process-list-unreadable", revision);
     for (const pid of ancestorPids(supervisorPid, lastRows)) excluded.add(pid);
     const observedRoot = lastRows.find((row) => row.pid === root);
-    if (!rootIsRunning()) rootRetired = true;
-    if (rootIdentity && observedRoot && !sameProcessIdentity(rootIdentity, observedRoot)) {
+    if (!rootIsRunning()) {
+      rootRetired = true;
+      if (!rootIdentity) markUncertain("root-never-observed", revision);
+    }
+    if (rootIdentity && sameProcessIdentity(observedRoot, observedRoot) && !sameProcessIdentity(rootIdentity, observedRoot)) {
       rootRetired = true;
     }
-    if (rootRetired || !observedRoot?.birthTime) return [];
+    if (rootRetired) return [];
+    if (!observedRoot && rootIdentity) return [];
+    if (!sameProcessIdentity(observedRoot, observedRoot)) {
+      markUncertain("root-identity-unreadable", revision);
+      return [];
+    }
     rootIdentity ??= { ...observedRoot };
     const descendants = ownedDescendants(root, lastRows, excluded);
+    const ownedParents = new Set([root, ...descendants.map((row) => row.pid)]);
+    if (lastRows.some((row) => ownedParents.has(row.parentPid) && !excluded.has(row.pid)
+      && !sameProcessIdentity(row, row))) {
+      // Remember the proof gap, never the unknown PID as cleanup authority.
+      markUncertain("descendant-identity-unreadable", revision);
+    }
     for (const row of descendants) {
       if (!remembered.has(row.pid)) remembered.set(row.pid, { ...row });
     }
@@ -858,6 +879,10 @@ export function createProcessTreeTracker({
   const stillOurs = (pid) => {
     const row = lastRows.find((entry) => entry.pid === pid);
     if (excluded.has(pid) || !row) return false;
+    if (!sameProcessIdentity(row, row)) {
+      markUncertain("remembered-identity-unreadable", observationRevision);
+      return false;
+    }
     const same = sameProcessIdentity(row, remembered.get(pid));
     if (!same) {
       remembered.delete(pid);
@@ -868,7 +893,8 @@ export function createProcessTreeTracker({
 
   const sample = () => {
     const revision = ++observationRevision;
-    return remember(listProcessRows(), revision);
+    try { return remember(listProcessRows(), revision); }
+    catch (error) { markUncertain("process-list-failed", revision); throw error; }
   };
 
   /**
@@ -881,13 +907,15 @@ export function createProcessTreeTracker({
    */
   const sampleAsync = async () => {
     const revision = ++observationRevision;
-    const rows = listProcessRowsAsync ? await listProcessRowsAsync() : await listProcessRows();
-    return remember(rows, revision);
+    try {
+      const rows = listProcessRowsAsync ? await listProcessRowsAsync() : await listProcessRows();
+      return remember(rows, revision);
+    } catch (error) { markUncertain("process-list-failed", revision); throw error; }
   };
 
   const liveRememberedDescendants = () =>
     [...remembered.keys()].filter((pid) => pid !== root && processAlive(pid) && stillOurs(pid));
-  const cleanupUncertain = () => [...remembered.entries()].some(([pid, identity]) => {
+  const cleanupUncertain = () => observationUncertain || [...remembered.entries()].some(([pid, identity]) => {
     if (excluded.has(pid) || !processAlive(pid)) return false;
     const row = lastRows.find((entry) => entry.pid === pid);
     return !row || sameProcessIdentity(row, identity);
@@ -951,7 +979,9 @@ export async function fenceProcessTree({
   }
 }
 
-function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile, checkpointContext }) {
+export function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile, checkpointContext,
+  trackerFactory = (options) => process.platform === "win32" ? null : createProcessTreeTracker(options),
+}) {
   if (!commandSpec) {
     if (!allowStub) throw new Error("runGateCommand called with no command and no stub allowed");
     const stubOutput = "sandbox checkout/build stub: gate passed (DPF_ALLOW_LOCAL_CI_STUB=1)\n";
@@ -994,6 +1024,7 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile, chec
   };
   return {
     run: () => new Promise((resolve, reject) => {
+      const commandStartedAt = Date.now();
       const common = {
         cwd,
         env,
@@ -1022,7 +1053,7 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile, chec
       }
       // Windows job membership is the ownership proof. Do not supplement it
       // with a later process-table guess that could adopt a recycled root PID.
-      tracker = process.platform === "win32" ? null : createProcessTreeTracker({
+      tracker = trackerFactory({
         rootPid: child.pid,
         rootIsRunning: () => child.exitCode === null && child.signalCode === null,
         onEvent: (event) => appendTerminationDecision(`${checkpointContext.path}.termination.jsonl`, {
@@ -1063,12 +1094,22 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile, chec
       child.once("close", async (code, signal) => {
         let infrastructureReason = "";
         try {
-          // The Windows job wrapper persisted before closing its owned job.
+          // A Windows wrapper can fail before launching the command or writing
+          // anything. Its process exit code alone is not a product verdict.
           // POSIX descendants remain owned until the cleanup below.
           if (process.platform !== "win32") writeExecutionCheckpoint(checkpointContext, code ?? 143);
+          {
+            const packet = JSON.parse(readFileSync(checkpointContext.path, "utf8"));
+            const validation = validateExecutionCheckpoint(packet, checkpointContext);
+            if (!validation.valid || packet.exitCode !== code
+              || Date.parse(packet.completedAt) < commandStartedAt
+              || Date.parse(packet.metadata?.completedAt) < commandStartedAt) {
+              throw new Error(`invalid completion checkpoint: ${validation.reasons.join(", ") || "command outcome or start boundary mismatch"}`);
+            }
+          }
         } catch (error) {
           append(`gate-worktree: execution checkpoint failed: ${error.message}\n`);
-          infrastructureReason = "execution checkpoint could not be persisted";
+          infrastructureReason = "completion checkpoint missing or invalid";
           code = 75;
         }
         scanStopped = true;

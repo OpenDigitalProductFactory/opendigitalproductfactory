@@ -81,6 +81,29 @@ test("a missing birth identity never authorizes cleanup", async () => {
   const f = fixture([row(100, 90, "1000"), row(200, 100, undefined)]);
   await f.tracker.waitForQuiescence({ graceMs: 0 });
   assert.deepEqual(f.terminated, []);
+  assert.equal(f.tracker.cleanupUncertain(), true);
+});
+
+test("a remembered descendant with unreadable birth is unknown, not proven PID reuse", async () => {
+  const f = fixture([row(100, 90, "1000"), row(200, 100, "2000")]);
+  f.replace([row(200, 1, undefined)]);
+  await f.tracker.waitForQuiescence({ graceMs: 0 });
+  assert.deepEqual(f.terminated, []);
+  assert.equal(f.tracker.cleanupUncertain(), true);
+});
+
+test("an initially unreadable process snapshot cannot establish clean completion", async () => {
+  const f = fixture([]);
+  await f.tracker.waitForQuiescence({ graceMs: 0 });
+  assert.deepEqual(f.terminated, []);
+  assert.equal(f.tracker.cleanupUncertain(), true);
+});
+
+test("a rejected asynchronous scan retains uncertainty without authorizing a kill", async () => {
+  const tracker = createProcessTreeTracker({ rootPid: 100, listProcessRowsAsync: async () => { throw new Error('unreadable'); } });
+  await assert.rejects(tracker.sampleAsync(), /unreadable/);
+  assert.equal(tracker.cleanupUncertain(), true);
+  assert.deepEqual(tracker.rememberedPids(), []);
 });
 
 test("invalid birth values and sub-number-precision impossible parentage are excluded", async () => {

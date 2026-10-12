@@ -39,6 +39,17 @@ start times on those hosts cannot prove same-second PID reuse impossible.
 Unreadable or inconsistent ownership never authorizes individual termination.
 These protections do not establish the cause of historical executor losses.
 
+Completion requires a validated packet from the current command, not merely a
+wrapper exit code. A missing executable, wrapper startup failure, missing or
+invalid packet, or unreadable cleanup identity produces an infrastructure
+inconclusive result. An unknown process is never killed to obtain a clean result.
+
+The server admits gate client revision 2 or newer. After the canonical release
+deploys this floor, refresh the governed source checkout before starting a new
+gate; a revision refusal names that refresh, not a permission override. Preserve
+older completed material and pending requests. Refreshing a client does not
+extend an expired lease or convert old unqualified material into a pass.
+
 ## Semantic review publication and infrastructure recovery
 
 The publication adapter reads [semantic-review-policy.json](../../scripts/semantic-review-policy.json).
