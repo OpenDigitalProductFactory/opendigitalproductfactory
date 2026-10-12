@@ -5,7 +5,7 @@
 //
 // See: PROVIDER-ACTIVATION-AUDIT.md §5 — consolidates F-01, F-03.
 
-import { prisma } from "@dpf/db";
+import { prisma, refreshDefaultProviderConnectionOwners } from "@dpf/db";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 import type { SensitivityLevel } from "@/lib/routing/types";
 
@@ -132,15 +132,14 @@ export async function activateProvider(
 
   // 0. Bring the default connection along with the provider. Routing
   // eligibility filters on AiProviderConnection.status — not provider.status —
-  // so an activation that leaves the default connection disabled produces a
-  // provider that reads "active" on every surface yet can never route
-  // (BI-04E4F111). Runs before clearance derivation so the healed
-  // connection's evidence counts toward clearance.
+  // so bring an unconfigured default along. A disabled account is an
+  // operator choice; successful authentication must not enable it.
+  // Runs before clearance derivation so current connection evidence counts.
   if (typeof prisma.aiProviderConnection?.updateMany === "function") {
     await prisma.aiProviderConnection.updateMany({
       where: {
         connectionId: `provider-default-${providerId}`,
-        status: { in: ["unconfigured", "disabled"] },
+        status: "unconfigured",
       },
       data: { status: "active" },
     });
@@ -170,6 +169,9 @@ export async function activateProvider(
       ...(opts.authMethod ? { authMethod: opts.authMethod } : {}),
     },
   });
+  // Legacy OAuth callbacks configure ModelProvider rather than an explicit
+  // account. Reconcile only its default before any model discovery dispatch.
+  await refreshDefaultProviderConnectionOwners(prisma, providerId);
 
   // 3. Activate linked MCP services that depend on this provider
   try {

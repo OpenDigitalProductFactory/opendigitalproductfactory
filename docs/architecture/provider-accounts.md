@@ -43,6 +43,13 @@ The foundation provides account identity and controls. Routing and provider-page
 integration follow the approved [multi-account delivery plan](../superpowers/plans/2026-10-04-provider-multi-account.md).
 Creating an account alone does not route work to it.
 
+The legacy default connection mirrors authentication and execution channel from
+the persisted provider configuration. Registry refresh and owner reconciliation
+repair stale defaults without inspecting token contents, enabling disabled
+accounts, changing reviewed posture, or reassigning a credential already owned
+by another account. Legacy OAuth activation reconciles this default before model
+discovery. Explicit account callbacks continue to update only their own account.
+
 ## Provider UI preservation contract
 
 The compact provider UI must preserve these existing controls when integrating

@@ -56,14 +56,23 @@ export async function ensureDefaultProviderConnection(
   entry: DefaultProviderConnectionSource,
   status?: string,
 ): Promise<void> {
-  const connection = buildDefaultProviderConnection(entry, status);
+  const persisted = await loadDefaultProviderConnectionSource(prisma, entry.providerId);
+  const connection = buildDefaultProviderConnection(persisted ?? entry, status);
   if (!connection) return;
   await prisma.aiProviderConnection.upsert({
     where: { connectionId: connection.connectionId },
-    update: { label: connection.label },
+    update: { label: connection.label, authMethod: connection.authMethod, executionChannel: connection.executionChannel },
     create: connection,
   });
   await refreshDefaultProviderConnectionOwners(prisma, entry.providerId);
+}
+
+/** Configuration is authoritative; token shape and catalog defaults are not auth evidence. */
+async function loadDefaultProviderConnectionSource(prisma: PrismaClient, providerId: string) {
+  return prisma.modelProvider.findUnique({
+    where: { providerId },
+    select: { providerId: true, name: true, category: true, authMethod: true, endpointType: true },
+  });
 }
 
 /**
@@ -106,7 +115,7 @@ export async function refreshDefaultProviderConnectionOwners(
   providerId: string,
 ): Promise<void> {
   const connectionId = `provider-default-${providerId}`;
-  const [credential, financeProfile, capacityStatus] = await Promise.all([
+  const [credential, financeProfile, capacityStatus, provider] = await Promise.all([
     prisma.credentialEntry.findUnique({
       where: { providerId },
       select: { id: true, providerConnection: { select: { connectionId: true } } },
@@ -116,10 +125,13 @@ export async function refreshDefaultProviderConnectionOwners(
       where: { providerId },
       select: { id: true, providerConnection: { select: { connectionId: true } } },
     }),
+    loadDefaultProviderConnectionSource(prisma, providerId),
   ]);
+  const projection = provider ? buildDefaultProviderConnection(provider) : undefined;
   await prisma.aiProviderConnection.updateMany({
     where: { connectionId },
     data: {
+      ...(projection ? { authMethod: projection.authMethod, executionChannel: projection.executionChannel } : {}),
       financeProfileId: financeProfile?.id ?? null,
       ...(!credential?.providerConnection || credential.providerConnection.connectionId === connectionId
         ? { credentialEntryId: credential?.id ?? null }

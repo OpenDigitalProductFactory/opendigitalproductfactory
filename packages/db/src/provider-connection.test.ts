@@ -1,7 +1,44 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "../generated/client/client";
 
-import { activateProviderWithDefaultConnection, setProviderStatusWithDefaultConnection } from "./provider-connection";
+import { activateProviderWithDefaultConnection, ensureDefaultProviderConnection, refreshDefaultProviderConnectionOwners, setProviderStatusWithDefaultConnection } from "./provider-connection";
+
+describe("default account authentication convergence", () => {
+  const provider = { providerId: "codex", name: "Codex", category: "direct", authMethod: "oauth2_authorization_code", endpointType: "responses" };
+  function fixture(owner: string | null = null) {
+    return {
+      modelProvider: { findUnique: vi.fn().mockResolvedValue(provider) },
+      credentialEntry: { findUnique: vi.fn().mockResolvedValue({ id: "credential", providerConnection: owner ? { connectionId: owner } : null }) },
+      aiProviderFinanceProfile: { findUnique: vi.fn().mockResolvedValue(null) },
+      providerCapacityStatus: { findUnique: vi.fn().mockResolvedValue(null) },
+      aiProviderConnection: { upsert: vi.fn().mockResolvedValue({}), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    };
+  }
+  it("creates the default from persisted OAuth configuration rather than the registry API-key default", async () => {
+    const db = fixture();
+    await ensureDefaultProviderConnection(db as unknown as PrismaClient, { ...provider, authMethod: "api_key" }, "disabled");
+    expect(db.aiProviderConnection.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ authMethod: "oauth", executionChannel: "subscription-cli", status: "disabled" }),
+      update: { label: "Codex", authMethod: "oauth", executionChannel: "subscription-cli" },
+    }));
+  });
+  it("repairs stale default auth/channel while leaving status and reviewed posture intact", async () => {
+    const db = fixture();
+    await refreshDefaultProviderConnectionOwners(db as unknown as PrismaClient, "codex");
+    expect(db.aiProviderConnection.updateMany).toHaveBeenCalledWith({
+      where: { connectionId: "provider-default-codex" },
+      data: { authMethod: "oauth", executionChannel: "subscription-cli", financeProfileId: null, credentialEntryId: "credential", capacityStatusId: null },
+    });
+  });
+  it("does not reassign a legacy credential already owned by an additional account", async () => {
+    const db = fixture("provider-account-other");
+    await refreshDefaultProviderConnectionOwners(db as unknown as PrismaClient, "codex");
+    const { where, data } = db.aiProviderConnection.updateMany.mock.calls[0]![0];
+    expect(where).toEqual({ connectionId: "provider-default-codex" });
+    expect(data).not.toHaveProperty("credentialEntryId");
+    expect(data).toMatchObject({ authMethod: "oauth", executionChannel: "subscription-cli" });
+  });
+});
 
 describe("operator routing status", () => {
   it("disables both halves atomically and surfaces failure for rollback", async () => {
