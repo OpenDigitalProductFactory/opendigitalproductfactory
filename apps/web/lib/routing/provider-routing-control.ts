@@ -1,3 +1,4 @@
+import { isModelRoutingProvider } from "./provider-eligibility";
 import type { ProviderHealth } from "./provider-health";
 import type { CliPoolState } from "./cli-pool-status";
 import { capacityRoutingExclusionReason, type CapacitySnapshot } from "./capacity-routing-exclude";
@@ -34,13 +35,16 @@ export function projectProviderRoutingControl(input: {
   const add = (key: string, summary: string, until: string | null = null) => restrictions.push({ key, summary, until });
   if (p.operatorPause || p.defaultConnectionStatus === "paused") add("operator", "Paused by an operator.", p.operatorPause?.resumeAt ?? null);
   else if (p.defaultConnectionStatus && !["active", "degraded"].includes(p.defaultConnectionStatus)) add("connection", "The connected account is disabled or unavailable.");
-  if (input.localOnly && !["local", "ollama"].includes(p.providerId)) add("local-only", "Local-only inference is enabled. Cloud traffic is blocked.");
+  if (input.localOnly && isModelRoutingProvider(p) && !["local", "ollama"].includes(p.providerId)) add("local-only", "Local-only inference is enabled. Cloud traffic is blocked.");
   if (input.pool?.isExhausted) add("quota", "The shared subscription pool has reached a usage limit.", input.pool.resetAt?.toISOString() ?? null);
   if (capacityRoutingExclusionReason(input.capacity, input.now)) add("capacity", input.capacity!.safeSummary, input.capacity?.retryAtMs ? new Date(input.capacity.retryAtMs).toISOString() : null);
   if (input.hostRestriction) add("host-capacity", input.hostRestriction);
   if (input.recovery) add("recovery", input.recovery.summary, input.recovery.nextRunAt);
   if (input.quotaRecovery) add("quota-recovery", "Quota recovery is scheduled.", input.quotaRecovery.nextRunAt);
-  if (input.health && ["needs_reauth", "billing", "cooling_down", "rate_limited", "degraded"].includes(input.health.status) && !restrictions.some(r => r.summary === input.health!.safeSummary)) {
+  // Recent failures are observations. Only a current lifecycle/circuit hold vetoes routing.
+  const healthRestricted = (p.status === "disabled" && !["inactive", "disabled"].includes(p.defaultConnectionStatus ?? ""))
+    || Boolean(input.health?.cooldownUntil && input.health.cooldownUntil > input.now);
+  if (healthRestricted && input.health && ["needs_reauth", "billing", "cooling_down", "rate_limited", "degraded"].includes(input.health.status) && !restrictions.some(r => r.summary === input.health!.safeSummary)) {
     add("health", input.health.safeSummary, input.health.cooldownUntil ? new Date(input.health.cooldownUntil).toISOString() : null);
   }
   const eligibility = deriveRoutingEligibility({
@@ -50,10 +54,10 @@ export function projectProviderRoutingControl(input: {
     credentialExpired: Boolean(credential?.tokenExpiresAt && Date.parse(credential.tokenExpiresAt) < input.now),
     discoveredModelCount: input.modelCount, cliPoolExhausted: input.pool?.isExhausted,
   });
-  if (!eligibility.eligible && !restrictions.some(r => r.key === "operator" || r.key === "connection") && eligibility.state !== "rate_limited") add("setup", eligibility.reason);
+  if (!eligibility.eligible && !restrictions.some(r => r.key === "operator" || r.key === "connection") && eligibility.state !== "rate_limited" && (eligibility.state !== "disabled" || !restrictions.length)) add("setup", eligibility.state === "disabled" ? "Provider unavailable. Review its account and health details." : eligibility.reason);
   const effectiveEligibility = p.operatorPause || p.defaultConnectionStatus === "paused"
       ? { ...eligibility, eligible: false, recommendedAction: null, label: "Paused", reason: "Paused by an operator; other restrictions may also apply." }
-      : restrictions.length && eligibility.eligible
+      : restrictions.length && (eligibility.eligible || eligibility.state === "disabled")
         ? { ...eligibility, eligible: false, recommendedAction: null, state: "disabled" as const, label: "Routing restricted", reason: restrictions[0]!.summary }
       : eligibility;
   return { eligibility: effectiveEligibility, restrictions, weeklyHint: input.weeklyHint ?? null, healthSummary: input.health?.safeSummary ?? "No recent health observation." };

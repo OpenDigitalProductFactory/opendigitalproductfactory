@@ -14,6 +14,7 @@ import registry from "../../../../packages/db/data/providers-registry.json";
 
 it("keeps the ChatGPT routing provider visible in the canonical registry", () => {
   expect(registry.find(p => p.providerId === "chatgpt")?.catalogVisibility).toBe("visible");
+  expect(registry.find(p => p.providerId === "zai-coding")?.catalogVisibility).toBe("visible");
   expect(registry.find(p => p.providerId === "chatgpt")?.consoleUrl).toBe("https://chatgpt.com");
 });
 

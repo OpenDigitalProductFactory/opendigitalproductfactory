@@ -4,7 +4,7 @@ import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { prisma } from "@dpf/db";
 import type { ProviderWithCredential } from "./ai-provider-types";
 import { getLocalOnlyInference } from "./local-only";
-import { projectProviderRoutingControl } from "@/lib/routing/provider-routing-control";
+import { projectProviderRoutingControl, type ProviderRoutingControlView } from "@/lib/routing/provider-routing-control";
 import { loadProviderHealthBatch } from "@/lib/routing/provider-health-loader";
 import { getEndpointRuntimeState } from "@/lib/routing/rate-tracker";
 import { cliAdapterTypeForProvider } from "@/lib/routing/provider-routing-eligibility";
@@ -14,6 +14,7 @@ import { readRecoveryState, providerRecoveryJobId } from "@/lib/routing/provider
 /** Shared catalog/detail read model; no status mutation or page-driven recovery. */
 export async function loadProviderRoutingControls(providers: ProviderWithCredential[], modelCounts: ReadonlyMap<string, number>, now = new Date()) {
   const ids = providers.map(p => p.provider.providerId);
+  if (!ids.length) return new Map<string, ProviderRoutingControlView>();
   const [health, pools, localOnly, capacities, recoveries, hostCapacity, t] = await Promise.all([
     loadProviderHealthBatch(ids, { now: now.getTime(), runtimeState: getEndpointRuntimeState }),
     getAllCliPoolStatuses(), getLocalOnlyInference(),

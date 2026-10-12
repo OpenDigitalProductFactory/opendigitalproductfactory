@@ -28,6 +28,28 @@ describe("provider routing controls", () => {
     expect(result.eligibility.eligible).toBe(false);
     expect(result.restrictions).toEqual([{ key: "host-capacity", summary: "Host reserved for verification.", until: null }]);
   });
+  it("uses the automatic recovery reason instead of claiming an administrator disabled it", () => {
+    const data = input(); data.pw.provider.status = "disabled";
+    const result = projectProviderRoutingControl({ ...data, recovery: { summary: "Automatic recovery after an account error.", nextRunAt: null } });
+    expect(result.eligibility.reason).toBe("Automatic recovery after an account error.");
+    expect(result.restrictions.map(r => r.key)).toEqual(["recovery"]);
+  });
+  it("shows recent failures as observations without inventing an active routing hold", () => {
+    const result = projectProviderRoutingControl({ ...input(), health: { status: "degraded", remediationKind: "provider_settings", safeSummary: "Recent requests failed." } });
+    expect(result.eligibility.eligible).toBe(true);
+    expect(result.healthSummary).toBe("Recent requests failed.");
+    expect(result.restrictions).toEqual([]);
+  });
+  it("retains a current runtime cooldown", () => {
+    const result = projectProviderRoutingControl({ ...input(), health: { status: "cooling_down", remediationKind: "wait", safeSummary: "Retrying after a temporary error.", cooldownUntil: now + 60_000 } });
+    expect(result.eligibility.eligible).toBe(false);
+    expect(result.restrictions[0].until).toBe(new Date(now + 60_000).toISOString());
+  });
+  it.each(["service", "transcription"])("does not apply model-only inference policy to %s endpoints", endpointType => {
+    const data = input(); data.pw.provider.endpointType = endpointType;
+    const result = projectProviderRoutingControl({ ...data, localOnly: true });
+    expect(result.restrictions.some(r => r.key === "local-only")).toBe(false);
+  });
   it("uses the canonical temporary-capacity expiry rules", () => {
     const result = projectProviderRoutingControl({ ...input(), capacity: { state: "rate_limited", retryAtMs: now - 1, safeSummary: "Old limit." } });
     expect(result.eligibility.eligible).toBe(true);

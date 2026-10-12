@@ -15,6 +15,8 @@ The platform connects to external AI providers to run inference for your AI work
 
 ### Routing status and temporary pauses
 
+Z.ai GLM Coding is also listed separately so you can manage its coding endpoint and traffic. It inherits the main Z.ai key unless you configure an override.
+
 Each provider's **Routing right now** panel shows its operator pause alongside current usage limits, retry times, account or health restrictions, the platform's local-only policy, and local capacity reserved for platform verification. Times display in your browser's timezone. Open **More routing details** for recent health and subscription allocation observations. Workload and model requirements are checked separately for each request.
 
 Choose **Pause now** to stop new model requests immediately. The pause lasts until you resume it. Choose **Set resume time** to add a duration in hours or days. A scheduled pause persists across refreshes and restarts. You can change the time, keep it paused indefinitely, or choose **Resume now** early. Work already running may finish.

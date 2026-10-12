@@ -213,7 +213,7 @@
     "consoleUrl": "https://chat.z.ai",
     "billingLabel": "Uses Z.ai account key",
     "costPerformanceNotes": "Uses the Z.ai GLM Coding OpenAI-compatible endpoint for OpenCode. Inherits the main Z.ai API key by default; use an override only if Z.ai issues a separate coding-plan key for the account.",
-    "catalogVisibility": "hidden",
+    "catalogVisibility": "visible",
     "userFacing": {
       "plainDescription": "Z.ai's OpenCode-compatible GLM coding endpoint for Build Studio code-writing tasks.",
       "authExplained": "Uses the main Z.ai API key by default. Configure a separate key only if Z.ai requires a distinct GLM Coding Plan key for your account.",
