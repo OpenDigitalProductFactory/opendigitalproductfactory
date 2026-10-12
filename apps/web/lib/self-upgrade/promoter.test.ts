@@ -9,6 +9,7 @@ import { PROMOTER_BUILD_CONTEXT_FILES, PROMOTER_BUILD_CONTEXT_SOURCES } from "./
 import {
   buildPromoterCommand,
   buildRuntimeCapabilityProtocolProbeCommand,
+  runRuntimeCapabilityProtocolProbe,
   buildCandidatePromoterImage,
   buildPromoterReadinessCommand,
   decidePromoterEnsureAction,
@@ -36,6 +37,33 @@ const BASE = {
 
 describe("runtime capability protocol probe", () => {
   const artifact = { digest: `sha256:${"a".repeat(64)}` as const, sourceSha: "b".repeat(40), contractSchema: 1 as const, contractDigest: `sha256:${"c".repeat(64)}` as const, callerProtocol: { min: 1, max: 1 } };
+  const expected = { sourceSha: artifact.sourceSha, actuatorSha256: "d".repeat(64), signerSha256: "e".repeat(64) };
+  const info = { schemaVersion: 1, ...expected, signingVersions: [1, 2], applyVersions: [1, 2], reconciliationVersions: [] };
+  const probeResult = (stdout = JSON.stringify(info), exitCode = 0, outputLimitExceeded = false) => ({ exitCode, stdout, stderr: "", stdoutBytes: Buffer.from(stdout), outputLimitExceeded });
+
+  it("executes discovery with the existing owned-container budget and validates its bytes", async () => {
+    const execute = vi.fn().mockResolvedValue(probeResult());
+    expect(await runRuntimeCapabilityProtocolProbe({ artifact, expected, containerName: "dpf-runtime-protocol-test" }, execute)).toEqual(info);
+    expect(execute).toHaveBeenCalledWith("docker", buildRuntimeCapabilityProtocolProbeCommand(artifact, "dpf-runtime-protocol-test").args,
+      { timeoutMs: 60_000, containerName: "dpf-runtime-protocol-test", maxStdoutBytes: 4096 });
+  });
+
+  it.each([
+    ["failed execution", probeResult("", 1)],
+    ["budget expiry", probeResult("", 124)],
+    ["output overrun", probeResult(JSON.stringify(info), 0, true)],
+    ["invalid JSON", probeResult("not-json")],
+    ["changed packaged signer", probeResult(JSON.stringify({ ...info, signerSha256: "f".repeat(64) }))],
+    ["contradictory support", probeResult(JSON.stringify({ ...info, applyVersions: [1, 2], signingVersions: [1] }))],
+  ])("refuses %s without accepting protocol evidence", async (_name, result) => {
+    await expect(runRuntimeCapabilityProtocolProbe({ artifact, expected, containerName: "dpf-runtime-protocol-test" }, vi.fn().mockResolvedValue(result))).rejects.toThrow();
+  });
+
+  it("refuses a different server source identity before executing discovery", async () => {
+    const execute = vi.fn().mockResolvedValue(probeResult());
+    await expect(runRuntimeCapabilityProtocolProbe({ artifact, expected: { ...expected, sourceSha: "f".repeat(40) }, containerName: "dpf-runtime-protocol-test" }, execute)).rejects.toThrow("runtime_protocol_probe_identity_mismatch");
+    expect(execute).not.toHaveBeenCalled();
+  });
 
   it("uses the verified immutable image without mounts, credentials, socket or network", () => {
     const command = buildRuntimeCapabilityProtocolProbeCommand(artifact, "dpf-runtime-protocol-test");

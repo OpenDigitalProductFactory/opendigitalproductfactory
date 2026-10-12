@@ -318,6 +318,16 @@ reconciliation support. The server coordinator still issues version 1 until
 trusted packaged-probe admission is wired. These source prerequisites do not
 qualify dual-baseline application, legacy health evidence or a live transition.
 
+The packaged discovery runner now uses the existing owned-container process
+budget, with a 60-second limit and 4 KiB stdout ceiling. It checks server/image
+source agreement before execution, then validates the reported source and byte
+digests through the shared protocol reader. Failed execution, timeout, output
+overrun, malformed output or contradictory support cannot supply evidence.
+Eight new source regressions failed before this runner existed, then all 198
+related promoter, protocol, coordinator and upgrade tests passed. The caller must
+still obtain expected digests from the trusted server closure and wire discovery
+before reconciliation admission; no actual image probe or live apply is claimed.
+
 ## Safe operating rules
 
 - Change physical service facts in the substrate manifest and regenerate the catalog; do not hand-edit the generated catalog.

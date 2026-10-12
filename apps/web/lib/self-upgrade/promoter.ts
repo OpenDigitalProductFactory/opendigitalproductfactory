@@ -14,6 +14,7 @@ export {
   type ResolvedPromoterArtifact,
 } from "./promoter-artifact";
 import { resolvePromoterTimeoutMs } from "./promoter-timeout";
+import { validateRuntimeCapabilityProtocolInfo, type RuntimeCapabilityProtocolIdentity, type RuntimeCapabilityProtocolInfo } from "@/lib/platform-runtime/transition-protocol";
 
 /**
  * The promoter runs as a SIBLING container, never inside the portal.
@@ -99,6 +100,21 @@ export function buildRuntimeCapabilityProtocolProbeCommand(
     throw new Error("runtime_protocol_probe_identity_invalid");
   }
   return { command: "docker", args: ["run", "--rm", "--name", containerName, "--read-only", "--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "128m", "--cpus", "1", "--pids-limit", "64", "--pull", "never", artifact.digest, "--runtime-capability-protocol-info"] };
+}
+
+/** Expected byte identities must come from the trusted server closure.
+ * This read-only operation neither reserves transition authority nor applies it. */
+export async function runRuntimeCapabilityProtocolProbe(
+  params: { artifact: ResolvedPromoterArtifact; expected: RuntimeCapabilityProtocolIdentity; containerName: string },
+  execute: typeof runProcessWithBudget = runProcessWithBudget,
+): Promise<RuntimeCapabilityProtocolInfo> {
+  if (params.expected.sourceSha !== params.artifact.sourceSha) throw new Error("runtime_protocol_probe_identity_mismatch");
+  const { command, args } = buildRuntimeCapabilityProtocolProbeCommand(params.artifact, params.containerName);
+  const result = await execute(command, args, { timeoutMs: 60_000, containerName: params.containerName, maxStdoutBytes: 4096 });
+  if (result.exitCode !== 0 || result.outputLimitExceeded) throw new Error("runtime_protocol_probe_execution_failed");
+  let value: unknown;
+  try { value = JSON.parse(result.stdout); } catch { throw new Error("runtime_protocol_probe_invalid_json"); }
+  return validateRuntimeCapabilityProtocolInfo(value, params.expected);
 }
 
 export type VerifiedReleaseIdentity = {
