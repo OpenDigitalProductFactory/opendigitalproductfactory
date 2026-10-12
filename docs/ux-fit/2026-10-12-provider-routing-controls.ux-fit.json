@@ -4,14 +4,10 @@
   "decisionInteractionId": "DI-41A3E45ADBFE",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/platform/ai/providers/page.tsx",
       "apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx",
       "apps/web/components/platform/ProviderRoutingControlPanel.tsx",
       "apps/web/components/platform/ServiceRow.tsx",
-      "apps/web/components/platform/ProviderStatusToggle.tsx",
-      "apps/web/components/platform/LocalProviderPauseControl.tsx",
-      "apps/web/components/platform/ProviderPauseControl.tsx",
-      "apps/web/components/platform/ProviderDetailForm.tsx"
+      "apps/web/components/platform/ProviderPauseControl.tsx"
     ]
   },
   "evidence": {

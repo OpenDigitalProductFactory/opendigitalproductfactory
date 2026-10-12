@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { projectProviderRoutingControl } from "./provider-routing-control";
 import type { ProviderWithCredential } from "@/lib/ai-provider-types";
 const now = Date.parse("2026-10-12T12:00:00Z");
@@ -6,6 +6,8 @@ function input() {
   return { pw: { provider: { providerId: "chatgpt", status: "active", endpointType: "responses", category: "direct", authMethod: "oauth2_authorization_code", defaultConnectionStatus: "active", operatorPause: null }, credential: { hasUsableMaterial: true, tokenExpiresAt: null } } as unknown as ProviderWithCredential, modelCount: 8, now, localOnly: false };
 }
 describe("provider routing controls", () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(now); });
+  afterEach(() => { vi.useRealTimers(); });
   it("shows simultaneous operator, quota and policy restrictions", () => {
     const data = input();
     data.pw.provider.defaultConnectionStatus = "paused";
