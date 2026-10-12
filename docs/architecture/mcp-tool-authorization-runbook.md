@@ -1,5 +1,35 @@
 # MCP tool authorization runbook
 
+**Routine delegated maintenance (BI-B22C8E02).** Current OAuth consent steers
+authorized ordinary reads and reversible work without a new approval for each
+call. Account model discovery with an explicit account identity synchronizes
+catalog metadata using existing credentials; it is ordinary bookkeeping.
+Credential changes, activation, disconnect, sign-in and authentication probes
+retain the provider tool's authority consequence. The command tool recognizes
+only a bounded local diagnostic grammar (Compose ps/logs and Git status/rev-parse)
+and executes those reads as an argument vector without a shell. Unknown flags,
+alternate projects/configs, arbitrary scripts and composed shell commands retain
+the existing irreversible consequence and destructive-command blocks. Grants,
+token scope, clearance and room membership are still checked. DEV identity is
+context, never an extra grant; the paired installation remains read-only.
+
+## Reading an owned semantic review's recovery state
+
+The existing `tasks/get` and `tasks/result` methods return `recovery.details`
+for semantic reviews after checking the authenticated task owner. This includes
+at most 100 task node IDs, recorded status, digest binding and current scoped
+remediation verification identity. It excludes raw provider output and diagnostic
+text. A truncated node list cannot establish complete execution settlement.
+
+Failed or inactive tasks do not prove their provider executions have settled.
+`executionSettled` requires a fresh recorded health verification bound to this
+task, request digest and Workroom, covering every unresolved node. Readback uses
+the same evidence predicate as successor admission. `retryAuthorized` remains
+false: only `retry_semantic_review` rechecks current authority, immutable
+checkpoints, lineage and recovery budget before any dispatch. Missing evidence
+requires actual execution reconciliation; reading this packet neither creates
+a health receipt nor records a passing review.
+
 Design and plan review handlers preserve the last completed semantic round when
 their two-reviewer panel cannot complete. `reviewIncomplete` and
 `usableReviewerCount` distinguish that condition from a document rejection.

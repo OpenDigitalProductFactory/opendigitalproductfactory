@@ -11,6 +11,13 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
+const execution = vi.hoisted(() => ({ exec: vi.fn(), execFile: vi.fn() }));
+vi.mock("@/lib/shared/lazy-node", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  lazyChildProcess: () => execution,
+  lazyUtil: () => ({ promisify: (fn: unknown) => fn }),
+}));
+
 import { adminPack, composeCwd } from "./admin-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
@@ -94,6 +101,15 @@ describe("admin pack — registration", () => {
 });
 
 describe("admin pack — handler behavior (delegation preserved)", () => {
+  it("executes the admitted diagnostic argv without invoking a shell", async () => {
+    execution.execFile.mockResolvedValue({ stdout: "[]", stderr: "" });
+    const res = await adminPack.handlers.admin_run_command({ command: "docker compose ps --format json" }, "u1");
+    expect(res).toMatchObject({ success: true, data: { output: "[]" } });
+    expect(execution.execFile).toHaveBeenCalledWith("docker", ["compose", "ps", "--format", "json"], expect.objectContaining({ cwd: composeCwd() }));
+    expect(execution.exec).not.toHaveBeenCalled();
+    expect(db.adminActivityCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ tier: 1 }) }));
+  });
+
   it("admin_view_logs rejects an unknown service without shelling out", async () => {
     const res = await adminPack.handlers.admin_view_logs({ service: "not-a-service" }, "u1");
     expect(res.success).toBe(false);

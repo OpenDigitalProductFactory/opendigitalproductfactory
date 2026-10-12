@@ -547,6 +547,9 @@ describe("stage-declared tools reach the dispatched task", () => {
     const expected = {
       trigger: { kind: "time", recordedAt: "2026-08-01T00:00:00.000Z" },
       workroomStage: stage,
+      workroomDispatchCheckpoint: expect.objectContaining({
+        roomId: "row-1", confirmedEffect: expect.objectContaining({ taskId: "task-1" }),
+      }),
     };
     expect(args?.create?.taskConfig).toEqual(expected);
     expect(args?.update?.taskConfig).toEqual(expected);

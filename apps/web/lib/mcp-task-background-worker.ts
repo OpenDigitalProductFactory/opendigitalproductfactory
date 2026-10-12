@@ -27,7 +27,7 @@ import {
 import { admitDurableInferenceTask } from "./mcp-task-durable-inference-runtime";
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
-import { automaticReviewerRecoveryWait } from "./mcp-task-background-dispatch";
+import { automaticReviewerRecoveryWait, healParkedReviewFromReceipt } from "./mcp-task-background-dispatch";
 import type { RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
@@ -423,6 +423,10 @@ export async function executePersistedRemoteTask(input: {
 
   const progress = record(row.progressPayload) ?? {};
   const dispatch = record(progress["dispatch"]) ?? {};
+  if (await healParkedReviewFromReceipt(row)) {
+    await publishMcpTaskStatus(row.taskRunId, reconstructed.data.token.tokenId);
+    return { taskRunId: row.taskRunId, status: "completed", idempotentReplay: true };
+  }
   if (await automaticReviewerRecoveryWait(row)) {
     // The existing replay path owns request matching, generation CAS, bounded
     // attempts, immutable reader evidence and the terminal writer's authority.
