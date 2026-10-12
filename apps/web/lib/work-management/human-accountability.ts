@@ -71,7 +71,7 @@ export type EffectiveHumanAccountability =
       atWorkroomId: string | null;
     };
 
-function parentsOf(edges: readonly AccountabilityEdge[], childId: string): string[] {
+export function responsibilityParentsOf(edges: readonly AccountabilityEdge[], childId: string): string[] {
   const parents = edges
     .filter((edge) => isResponsibilityRelation(edge.relation) && edge.toWorkroomId === childId)
     .map((edge) => edge.fromWorkroomId);
@@ -142,7 +142,7 @@ export function resolveEffectiveHumanAccountability(input: {
         message: `Responsibility above ${current} was not read. Inspect the lineage before assigning an owner.`,
         atWorkroomId: current };
     }
-    const parents = parentsOf(input.edges, current);
+    const parents = responsibilityParentsOf(input.edges, current);
     if (parents.length > 1) {
       return { state: "setup-required", reason: "conflicting-responsibility-parents",
         message: `${current} has multiple responsibility parents. Correct the lineage or record an explicit accountable human.`,

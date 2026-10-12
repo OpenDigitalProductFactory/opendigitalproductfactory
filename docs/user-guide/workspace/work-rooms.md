@@ -58,6 +58,24 @@ the work.
 
 ## Activity and Participants
 
+### Delegation and recovery
+
+The workforce panel's **Delegation and recovery** disclosure shows recorded parent
+and child responsibility links, their coordinators, and the route to a named person.
+Opening it keeps you in the selected room. The route does not grant access, approve
+work or establish that someone received a notification; check the activity timeline
+for actual events and decisions.
+
+**Recovery path needs attention** means the route cannot be resolved. Open it for
+the missing assignment, conflicting links or access guidance. A parent's contents
+remain private unless you are admitted with sufficient clearance. Dependency links
+do not make another room responsible for this one.
+
+A room held for an hour uses the recorded recovery route for its stall notice.
+Missing recipient bindings or a failed notification write leave the notice unsent
+for retry. A recorded notice does not mean the blockage is resolved or the room
+has completed; the room keeps its existing stage and closure rules.
+
 ### Inspecting the process
 
 The process view separates the versioned **Intended process** from **Observed

@@ -2,11 +2,27 @@ import { beforeEach, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ human: vi.fn(), alias: vi.fn(), agent: vi.fn(), room: vi.fn(), item: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { principalAlias: { findFirst: m.alias }, agent: { findUnique: m.agent }, workroom: { findUnique: m.room }, backlogItem: { findFirst: m.item } } }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: m.human }));
-import { resolveAgentWorkroomAccess } from "./workroom-agent-access.server";
+import { resolveAgentWorkroomAccess, resolveHumanWorkroomAccess } from "./workroom-agent-access.server";
 const human = { id: "human-row", principalId: "PRN-human", kind: "human", status: "active", sensitivityClearance: ["internal"] };
 const agent = { id: "agent-row", principalId: "PRN-agent", kind: "agent", status: "active", sensitivityClearance: ["internal"] };
 const room = () => ({ id: "selected", requestedByPrincipalId: human.id, createdByPrincipalId: agent.id, leaseHolderPrincipalId: human.id, scopeClaims: [], participants: [], workItem: null });
 const input = { userId: "alice", agentId: "codex", workroomId: "selected", requested: "action" as const };
+it("a portal person reads only a room they are admitted to, without borrowing an assistant", async () => {
+  expect((await resolveHumanWorkroomAccess({ userId: "alice", workroomId: "selected", requested: "content" })).decision.level).toBe("content");
+  expect(m.agent).not.toHaveBeenCalled();
+  expect(m.alias.mock.calls).toHaveLength(1);
+  m.room.mockResolvedValue({ ...room(), requestedByPrincipalId: "bob", leaseHolderPrincipalId: "bob" });
+  expect((await resolveHumanWorkroomAccess({ userId: "alice", workroomId: "parent", requested: "content" })).decision.level).toBe("none");
+});
+it("a portal person's removal and clearance still fail closed, regardless of administrator context", async () => {
+  m.room.mockResolvedValue({ ...room(), participants: [{ principalId: human.id, lifecycle: "removed", roles: ["coordinator"] }] });
+  expect((await resolveHumanWorkroomAccess({ userId: "alice", workroomId: "parent", requested: "content" })).decision.level).toBe("none");
+  m.room.mockResolvedValue({ ...room(), scopeClaims: [{ workroomBoundary: { sensitivityCeiling: "restricted" } }] });
+  expect((await resolveHumanWorkroomAccess({ userId: "alice", workroomId: "parent", requested: "content" })).decision).toMatchObject({ level: "discover", reason: "insufficient-clearance" });
+});
+it("an empty assistant identity cannot use the human-only browser path", async () => {
+  expect((await resolveAgentWorkroomAccess({ ...input, agentId: "" })).decision.level).toBe("none");
+});
 beforeEach(() => {
   vi.resetAllMocks();
   m.human.mockResolvedValue({ userId: "alice", isSuperuser: true });
