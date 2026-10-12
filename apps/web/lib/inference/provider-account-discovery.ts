@@ -4,7 +4,7 @@ import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { getDecryptedCredential, getProviderBearerToken, getProviderExtraHeaders, profileModelsInternal, upsertDiscoveredModels } from "./ai-provider-internals";
-import { discoverCodexCliModels } from "@/lib/routing/codex-cli-model-catalog";
+import { discoverCodexCliModels } from "./codex-cli-catalog-auth";
 
 /** Account availability is independent of the shared vendor model catalog. No absence here retires another account's models. */
 export async function discoverProviderAccountModels(connectionId: string): Promise<ActionResult<{ modelIds: string[] }>> {

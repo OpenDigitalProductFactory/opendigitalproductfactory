@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => ({ prisma: mocks.db }));
 vi.mock("./ai-provider-internals", () => ({ getDecryptedCredential: mocks.credential, getProviderBearerToken: mocks.bearer, upsertDiscoveredModels: mocks.upsert, profileModelsInternal: mocks.profile, getProviderExtraHeaders: () => ({}), discoverChatGptBackendModels: mocks.backend }));
-vi.mock("@/lib/routing/codex-cli-model-catalog", () => ({ discoverCodexCliModels: mocks.cli }));
+vi.mock("./codex-cli-catalog-auth", () => ({ discoverCodexCliModels: mocks.cli }));
 import { discoverProviderAccountModels } from "./provider-account-discovery";
 
 describe("account model discovery", () => {

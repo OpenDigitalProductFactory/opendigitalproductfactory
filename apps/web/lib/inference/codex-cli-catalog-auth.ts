@@ -1,9 +1,6 @@
 import { prisma } from "@dpf/db";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
-
-export type CodexCatalogLogin =
-  | { type: "apiKey"; apiKey: string }
-  | { type: "chatgptAuthTokens"; accessToken: string; chatgptAccountId: string; chatgptPlanType?: string };
+import { discoverCodexCliModels as readCodexCliCatalog, type CodexCatalogLogin } from "@/lib/routing/codex-cli-model-catalog";
 
 /** Token claims identify the already selected credential; they never grant data clearance. */
 function externalLogin(token: string): CodexCatalogLogin {
@@ -50,21 +47,7 @@ export async function resolveCodexCatalogAuth(providerId: string, connectionId?:
   return login;
 }
 
-/** Runs inside the existing sandbox. Each child has private state and memory-only auth.
- * The container-side watchdog owns termination even if the Docker client disconnects. */
-export const CODEX_CATALOG_RUNNER = `
-const fs = require('node:fs');
-const cp = require('node:child_process');
-const home = fs.mkdtempSync('/tmp/dpf-codex-catalog-');
-fs.chmodSync(home, 0o700);
-const env = { ...process.env, CODEX_HOME: home };
-delete env.OPENAI_API_KEY; delete env.CODEX_API_KEY;
-const child = cp.spawn('codex', ['-c', 'cli_auth_credentials_store="ephemeral"', 'app-server', '--stdio'], { cwd: home, env, stdio: 'inherit' });
-let hardStop;
-const stop = () => { child.kill('SIGTERM'); hardStop ??= setTimeout(() => child.kill('SIGKILL'), 5000); };
-const watchdog = setTimeout(stop, 35000);
-process.on('SIGTERM', stop); process.on('SIGINT', stop);
-const cleanup = (code) => { clearTimeout(watchdog); clearTimeout(hardStop); fs.rmSync(home, { recursive: true, force: true }); process.exitCode = code; };
-child.on('error', () => cleanup(1));
-child.on('exit', (code) => cleanup(code ?? 1));
-`;
+/** Inference owns selected credentials; the inner catalog transport accepts only prepared auth. */
+export async function discoverCodexCliModels(providerId = "codex", connectionId?: string) {
+  return readCodexCliCatalog(await resolveCodexCatalogAuth(providerId, connectionId));
+}

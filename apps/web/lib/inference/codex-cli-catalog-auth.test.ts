@@ -5,7 +5,9 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ connection: vi.fn(), credential: vi.fn(), bearer: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { aiProviderConnection: { findUnique: mocks.connection } } }));
 vi.mock("@/lib/inference/ai-provider-internals", () => ({ getDecryptedCredential: mocks.credential, getProviderBearerToken: mocks.bearer }));
-import { CODEX_CATALOG_RUNNER, resolveCodexCatalogAuth } from "./codex-cli-catalog-auth";
+import { discoverCodexCliModels, resolveCodexCatalogAuth } from "./codex-cli-catalog-auth";
+import { CODEX_CATALOG_RUNNER } from "@/lib/routing/codex-cli-model-catalog";
+import * as catalog from "@/lib/routing/codex-cli-model-catalog";
 
 const connection = { connectionId: "account-b", providerId: "codex", status: "active", authMethod: "oauth", credentialEntryId: "credential-b", updatedAt: new Date("2026-10-01") };
 const token = (auth: unknown) => `header.${Buffer.from(JSON.stringify({ "https://api.openai.com/auth": auth })).toString("base64url")}.signature`;
@@ -16,13 +18,19 @@ beforeEach(() => {
   mocks.credential.mockResolvedValue({ id: "credential-b", cachedToken: "stored", secretRef: null });
   mocks.bearer.mockResolvedValue({ token: token({ chatgpt_account_id: "upstream-b", chatgpt_plan_type: "business" }) });
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe("selected Codex catalog authentication", () => {
   it("uses only the selected credential and its actual upstream identity", async () => {
     expect(await resolveCodexCatalogAuth("codex", "account-b")).toEqual({ type: "chatgptAuthTokens", accessToken: token({ chatgpt_account_id: "upstream-b", chatgpt_plan_type: "business" }), chatgptAccountId: "upstream-b", chatgptPlanType: "business" });
     expect(mocks.credential).toHaveBeenCalledWith("codex", "account-b");
     expect(mocks.bearer).toHaveBeenCalledWith("codex", "account-b");
+  });
+  it("passes the selected account login to the isolated transport without a provider-default lookup", async () => {
+    const read = vi.spyOn(catalog, "discoverCodexCliModels").mockResolvedValue([{ modelId: "selected-model", rawMetadata: {} }]);
+    expect(await discoverCodexCliModels("codex", "account-b")).toEqual([{ modelId: "selected-model", rawMetadata: {} }]);
+    expect(read).toHaveBeenCalledWith(expect.objectContaining({ type: "chatgptAuthTokens", chatgptAccountId: "upstream-b" }));
+    expect(mocks.credential).toHaveBeenCalledWith("codex", "account-b");
   });
   it("resolves the legacy default through the same explicit boundary", async () => {
     await resolveCodexCatalogAuth("codex");

@@ -1,10 +1,31 @@
 import { lazyChildProcess } from "@/lib/shared/lazy-node";
-import { CODEX_CATALOG_RUNNER, resolveCodexCatalogAuth } from "./codex-cli-catalog-auth";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const MODEL_LIST_TIMEOUT_MS = 30_000;
 
 type DiscoveredModel = { modelId: string; rawMetadata: Record<string, unknown> };
+
+export type CodexCatalogLogin =
+  | { type: "apiKey"; apiKey: string }
+  | { type: "chatgptAuthTokens"; accessToken: string; chatgptAccountId: string; chatgptPlanType?: string };
+
+/** Container-owned lifetime and state; the outer inference layer supplies auth. */
+export const CODEX_CATALOG_RUNNER = `
+const fs = require('node:fs');
+const cp = require('node:child_process');
+const home = fs.mkdtempSync('/tmp/dpf-codex-catalog-');
+fs.chmodSync(home, 0o700);
+const env = { ...process.env, CODEX_HOME: home };
+delete env.OPENAI_API_KEY; delete env.CODEX_API_KEY;
+const child = cp.spawn('codex', ['-c', 'cli_auth_credentials_store="ephemeral"', 'app-server', '--stdio'], { cwd: home, env, stdio: 'inherit' });
+let hardStop;
+const stop = () => { child.kill('SIGTERM'); hardStop ??= setTimeout(() => child.kill('SIGKILL'), 5000); };
+const watchdog = setTimeout(stop, 35000);
+process.on('SIGTERM', stop); process.on('SIGINT', stop);
+const cleanup = (code) => { clearTimeout(watchdog); clearTimeout(hardStop); fs.rmSync(home, { recursive: true, force: true }); process.exitCode = code; };
+child.on('error', () => cleanup(1));
+child.on('exit', (code) => cleanup(code ?? 1));
+`;
 
 export function parseCodexModelListPage(value: unknown): {
   models: DiscoveredModel[];
@@ -33,8 +54,7 @@ export function parseCodexModelListPage(value: unknown): {
   };
 }
 
-export async function discoverCodexCliModels(providerId = "codex", connectionId?: string): Promise<DiscoveredModel[]> {
-  const login = await resolveCodexCatalogAuth(providerId, connectionId);
+export async function discoverCodexCliModels(login: CodexCatalogLogin): Promise<DiscoveredModel[]> {
   const args = ["exec", "-i", "-e", "OPENAI_API_KEY=", "-e", "CODEX_API_KEY=", SANDBOX_CONTAINER, "node", "-e", CODEX_CATALOG_RUNNER];
   const childEnv = { ...process.env };
   delete childEnv.OPENAI_API_KEY;
@@ -48,6 +68,7 @@ export async function discoverCodexCliModels(providerId = "codex", connectionId?
     let buffer = "";
     let settled = false;
     let nextId = 3;
+    let expectedResponseId = 1;
     let receivedBytes = 0;
     const cursors = new Set<string>();
     const models: DiscoveredModel[] = [];
@@ -84,12 +105,16 @@ export async function discoverCodexCliModels(providerId = "codex", connectionId?
           send({ id: message.id, error: { code: -32000, message: "Selected account must be re-authenticated" } });
           return finish(new Error("Selected account needs authentication — retry its discovery"));
         }
+        if (message.id == null) continue;
+        if (message.id !== expectedResponseId) return finish(new Error("Unexpected Codex catalog response before the current request completed"));
         if (message.id === 1) {
           if (message.error || !message.result || typeof message.result !== "object") return finish(new Error("Codex app-server initialization failed"));
           send({ method: "initialized", params: {} });
+          expectedResponseId = 2;
           send({ method: "account/login/start", id: 2, params: login });
         } else if (message.id === 2) {
           if (message.error || !message.result || (message.result as { type?: unknown }).type !== login.type) return finish(new Error("Selected account Codex login failed"));
+          expectedResponseId = nextId;
           send({ method: "model/list", id: nextId, params: { cursor: null, limit: 100 } });
         } else if (message.id === nextId) {
           if (message.error) return finish(new Error("Selected account Codex model/list failed"));
@@ -101,6 +126,7 @@ export async function discoverCodexCliModels(providerId = "codex", connectionId?
               if (cursors.has(page.nextCursor)) return finish(new Error("Codex model/list repeated a cursor"));
               cursors.add(page.nextCursor);
               nextId += 1;
+              expectedResponseId = nextId;
               send({ method: "model/list", id: nextId, params: { cursor: page.nextCursor, limit: 100 } });
             } else {
               finish();
