@@ -65,13 +65,18 @@ export function resolveInferenceRuntimePolicy(
     if (!Number.isFinite(remaining) || remaining <= 0 || remaining > 2_147_483_647) {
       throw new Error("inference-parent-deadline-exhausted-or-invalid");
     }
-    if (providerId === "local") return {
-      effectiveTimeoutMs: remaining,
-      timeoutCeilingMs: remaining,
-      source: "governed-activity-deadline",
-      role: modelComparisonKey(modelId) === modelComparisonKey(GOVERNED_LOCAL_REVIEWER.modelId)
-        ? "high-trust-reviewer" : "general-local",
-    };
+    if (providerId === "local") {
+      const base = resolveInferenceRuntimePolicy(providerId, modelId, configuration);
+      const effectiveTimeoutMs = base.role === "high-trust-reviewer"
+        ? remaining : Math.min(base.effectiveTimeoutMs, remaining);
+      return {
+        ...base,
+        effectiveTimeoutMs,
+        timeoutCeilingMs: base.role === "high-trust-reviewer" ? remaining
+          : Math.min(LOCAL_INFERENCE_TIMEOUT_CEILING_MS, remaining),
+        source: effectiveTimeoutMs === base.effectiveTimeoutMs ? base.source : "governed-activity-deadline",
+      };
+    }
   }
   if (
     providerId === "local"
