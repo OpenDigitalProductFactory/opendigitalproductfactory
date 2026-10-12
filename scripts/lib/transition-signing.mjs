@@ -1,8 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-/** Canonical top-level serialization retained byte-for-byte for compatibility. */
+/** Version 1 bytes remain readable; version 2 binds every nested member. */
 export function canonicalTransitionPayload(value) {
   if (value?.kind === "install-state-migration") return recursiveCanonicalJson(value);
+  if (value?.kind === "runtime-capability-transition") {
+    if (value.version !== 1 && value.version !== 2) throw new Error("unsupported_runtime_transition_version");
+    if (value.version === 2) return recursiveCanonicalJson(value);
+  }
   return JSON.stringify(value, Object.keys(value).sort());
 }
 

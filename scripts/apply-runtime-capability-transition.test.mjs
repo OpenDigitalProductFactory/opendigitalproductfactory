@@ -98,7 +98,7 @@ test("rejects a tampered transition envelope before reading state", async () => 
 
 test("rejects expired signed envelopes", async () => {
   const value = envelope(0); const signature = createHmac("sha256", secret).update(canonical(value)).digest("hex");
-  const dir = await mkdtemp(join(tmpdir(), "dpf-secret-")); const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature });
+  const dir = await mkdtemp(join(tmpdir(), "dpf-secret-")); const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_PROMOTER_STATE_DIR: dir });
   assert.equal(result.status, 78); assert.match(result.stderr, /expired_or_invalid_envelope/);
 });
 

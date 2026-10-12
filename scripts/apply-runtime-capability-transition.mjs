@@ -6,12 +6,13 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { validateInstallState } from "./installer/validate-install-state.mjs";
+import { canonicalTransitionPayload, signTransitionPayload } from "./lib/transition-signing.mjs";
 
 const stable = (v) => Array.isArray(v) ? v.map(stable) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])])) : v;
-const canonical = (v) => JSON.stringify(v, Object.keys(v).sort());
+const canonical = canonicalTransitionPayload;
 const catalogBytes = (v) => `${JSON.stringify(stable(v), null, 2)}\n`;
 const sha = (v) => createHash("sha256").update(v).digest("hex");
-const sign = (v, secret) => createHmac("sha256", secret).update(canonical(v)).digest("hex");
+const sign = signTransitionPayload;
 // strict: false keeps the old tolerance: flags this script does not read are ignored.
 const { values: flags } = utilParseArgs({ args: process.argv.slice(2), strict: false, allowPositionals: true, options: { "state-dir": { type: "string" } } });
 const stateDir = flags["state-dir"] === undefined ? (process.env.DPF_PROMOTER_STATE_DIR ?? "/dpf-state") : typeof flags["state-dir"] === "string" ? flags["state-dir"] : undefined;
