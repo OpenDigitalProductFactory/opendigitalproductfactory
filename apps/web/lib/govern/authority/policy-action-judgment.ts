@@ -3,7 +3,7 @@ import "server-only";
 import type { ToolPackHandler } from "@/lib/mcp/tool-pack";
 import type { KernelConsultPolicyProjection } from "@/lib/decision/kernel-consult-ledger";
 import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
-import { isExactAuthorResearchParams } from "@/lib/build/author-research-policy-binding";
+import { isExactAuthorResearchParams } from "./coworker-authority-decision";
 import type { PolicyAuthorityProjectionAttempt } from "./coworker-tool-authority-gate";
 
 type JudgmentInput = Parameters<PolicyAuthorityProjectionAttempt>[0];

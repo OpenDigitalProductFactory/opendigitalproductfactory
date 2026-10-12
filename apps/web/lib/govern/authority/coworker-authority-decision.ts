@@ -6,8 +6,6 @@ import { effectiveApprovalExpiry } from "@/lib/coworker/approval-lifetime";
 
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
-import type { AuthorResearchPolicyBinding } from "@/lib/build/author-research-policy-binding";
-
 import {
   canAccessAuthoritySubject,
   type AuthoritySubject,
@@ -17,6 +15,30 @@ import {
   type EscalationDecision,
   type EscalationSteering,
 } from "./escalation-gate";
+
+/** Canonical author fact, not approval to start work or an independent verdict. */
+export type AuthorResearchPolicyBinding = {
+  itemId: string; buildId: string; revisionId: string;
+  valueDigest: string; contentDigest: string;
+  authorUserId: string; authorPrincipalId: string; authorAgentId: string | null;
+  workroomId: string; reason: string;
+  authorityVersion: string | null;
+  roomPolicyDigest: string;
+};
+
+/** Pure argument boundary; eligibility must not import the server evidence loader. */
+export function isExactAuthorResearchParams(params: Record<string, unknown>): boolean {
+  const ref = params.artifactRef;
+  return params.gate === "research" && params.decision === "pass"
+    && typeof params.itemId === "string" && typeof params.reason === "string"
+    && Array.isArray(params.findings) && params.findings.length === 0
+    && Array.isArray(params.resolvedFindingRefs) && params.resolvedFindingRefs.length === 0
+    && Object.keys(params).every((key) => ["itemId", "gate", "decision", "artifactRef", "reason", "findings", "resolvedFindingRefs"].includes(key))
+    && !!ref && typeof ref === "object" && !Array.isArray(ref)
+    && (ref as Record<string, unknown>).kind === "feature-build-revision"
+    && typeof (ref as Record<string, unknown>).revisionId === "string"
+    && Object.keys(ref).every((key) => ["kind", "revisionId"].includes(key));
+}
 
 export const COWORKER_AUTHORITY_OUTCOMES = [
   "allow",

@@ -10,29 +10,8 @@ import { digestBuildArtifactValue } from "./build-artifact-provenance";
 import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
 import { deriveRoomTurnAuthority, roomAuthorizesTool } from "@/lib/work-management/room-turn-authority";
 import { getWorkShape, readDeclaredWorkShapeKey } from "@/lib/work-management/work-shapes";
-
-/** Canonical author fact, not approval to start work or an independent verdict. */
-export type AuthorResearchPolicyBinding = {
-  itemId: string; buildId: string; revisionId: string;
-  valueDigest: string; contentDigest: string;
-  authorUserId: string; authorPrincipalId: string; authorAgentId: string | null;
-  workroomId: string; reason: string;
-  authorityVersion: string | null;
-  roomPolicyDigest: string;
-};
-
-export function isExactAuthorResearchParams(params: Record<string, unknown>): boolean {
-  const ref = params.artifactRef;
-  return params.gate === "research" && params.decision === "pass"
-    && typeof params.itemId === "string" && typeof params.reason === "string"
-    && Array.isArray(params.findings) && params.findings.length === 0
-    && Array.isArray(params.resolvedFindingRefs) && params.resolvedFindingRefs.length === 0
-    && Object.keys(params).every((key) => ["itemId", "gate", "decision", "artifactRef", "reason", "findings", "resolvedFindingRefs"].includes(key))
-    && !!ref && typeof ref === "object" && !Array.isArray(ref)
-    && (ref as Record<string, unknown>).kind === "feature-build-revision"
-    && typeof (ref as Record<string, unknown>).revisionId === "string"
-    && Object.keys(ref).every((key) => ["kind", "revisionId"].includes(key));
-}
+import { isExactAuthorResearchParams, type AuthorResearchPolicyBinding } from "@/lib/govern/authority/coworker-authority-decision";
+export type { AuthorResearchPolicyBinding } from "@/lib/govern/authority/coworker-authority-decision";
 
 /** Resolve afresh at judgment and publication; unreadable authority proves nothing. */
 export async function resolveAuthorResearchPolicyBinding(args: {

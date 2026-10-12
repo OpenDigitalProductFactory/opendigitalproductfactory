@@ -12,7 +12,6 @@ import {
 } from "./receipt-schema";
 import type { ReadinessProfile } from "./types";
 import { resolveReviewerIdentity } from "./reviewer-identity";
-import { resolveAuthorResearchPolicyBinding } from "@/lib/build/author-research-policy-binding";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 
 type ReceiptHistoryRow = { payload: unknown };
@@ -165,7 +164,7 @@ export async function recordInitiativeGateReceipt(args: {
         })
         && authority.humanContextRef === args.reviewerUserId && authority.agentContextRef === args.reviewerAgentId
         && authority.objectRef === `backlog-item:${item.itemId}`
-        ? await resolveAuthorResearchPolicyBinding({ toolName: args.actionKey, params: args.authorizationParams,
+        ? await (await import("@/lib/build/author-research-policy-binding")).resolveAuthorResearchPolicyBinding({ toolName: args.actionKey, params: args.authorizationParams,
             userId: args.reviewerUserId, agentId: args.reviewerAgentId!, itemId: item.itemId,
             routeContext: authority.routeContext }, tx)
         : null;
