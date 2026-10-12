@@ -322,6 +322,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/check-doc-links.test.mjs",
+        "scripts/gen-doc-index.test.mjs",
         "scripts/public-docs-rendering.test.mjs",
       ),
       node("scripts/check-doc-links.mjs"),
