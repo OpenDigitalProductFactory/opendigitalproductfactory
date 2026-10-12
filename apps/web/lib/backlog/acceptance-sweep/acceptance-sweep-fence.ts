@@ -11,6 +11,21 @@ export type SweepFenceDb<T extends SweepFenceClient> = {
 
 export type LockedSweepTask = { taskConfig: unknown; isActive: boolean; schedule: string; attempts: number };
 
+function field(value: unknown, key: string): unknown {
+  return value !== null && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined;
+}
+
+function isRolledBackConflict(error: unknown): boolean {
+  const code = field(error, "code");
+  if (code === "P2034" || code === "40001" || code === "40P01") return true;
+  if (code !== "P2010") return false;
+  // Prisma's driver adapter wraps raw-query SQLSTATEs rather than exposing
+  // P2034. Only serialization/deadlock confirms rollback; never retry a generic
+  // raw error, a connection loss, or text that happens to mention a SQLSTATE.
+  const originalCode = field(field(field(field(error, "meta"), "driverAdapterError"), "cause"), "originalCode");
+  return originalCode === "40001" || originalCode === "40P01";
+}
+
 /** Retry only database-confirmed rolled-back serialization/deadlock conflicts. */
 export async function sweepTransaction<T extends SweepFenceClient, R>(db: SweepFenceDb<T>, work: (tx: T) => Promise<R>): Promise<R> {
   for (let attempt = 0; ; attempt++) {
@@ -20,8 +35,7 @@ export async function sweepTransaction<T extends SweepFenceClient, R>(db: SweepF
         return work(tx);
       }, { isolationLevel: "Serializable", maxWait: 5_000, timeout: 10_000 });
     } catch (error) {
-      const code = error && typeof error === "object" && "code" in error ? error.code : null;
-      if (attempt >= 2 || !["P2034", "40001", "40P01"].includes(String(code))) throw error;
+      if (attempt >= 2 || !isRolledBackConflict(error)) throw error;
     }
   }
 }

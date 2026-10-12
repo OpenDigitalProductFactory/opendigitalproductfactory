@@ -1,9 +1,35 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
 
 import { claimSweep, emptySweepCheckpoint, type SweepCheckpoint } from "./acceptance-sweep-checkpoint";
-import { withAcceptanceSweepWrite, type SweepFenceClient } from "./acceptance-sweep-fence";
+import { sweepTransaction, withAcceptanceSweepWrite, type SweepFenceClient } from "./acceptance-sweep-fence";
 
 const start = Date.parse("2026-10-12T18:00:00Z");
+
+describe("acceptance transaction conflict classification", () => {
+  const wrapped = (originalCode: unknown) => new PrismaClientKnownRequestError("raw query failed", {
+    code: "P2010", clientVersion: "test", meta: { driverAdapterError: { cause: { originalCode } } },
+  });
+  it.each(["40001", "40P01"])("retries rolled-back adapter SQLSTATE %s", async code => {
+    const tx = { $queryRawUnsafe: vi.fn().mockResolvedValue([]) };
+    const $transaction = vi.fn().mockRejectedValueOnce(wrapped(code)).mockImplementation(async work => work(tx));
+    expect(await sweepTransaction({ $transaction }, async () => "ok")).toBe("ok");
+    expect($transaction).toHaveBeenCalledTimes(2);
+  });
+  it.each([wrapped("23505"), wrapped("08006"), wrapped(undefined), { code: "P2010", meta: { message: "40001" } }, new Error("40001")])(
+    "does not retry unrelated or uncertain failures", async error => {
+      const $transaction = vi.fn().mockRejectedValue(error);
+      await expect(sweepTransaction({ $transaction }, async () => "unexpected")).rejects.toBe(error);
+      expect($transaction).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("bounds adapter serialization retries to three attempts", async () => {
+    const error = wrapped("40001");
+    const $transaction = vi.fn().mockRejectedValue(error);
+    await expect(sweepTransaction({ $transaction }, async () => "unexpected")).rejects.toBe(error);
+    expect($transaction).toHaveBeenCalledTimes(3);
+  });
+});
 function database(checkpoint: SweepCheckpoint) {
   let state = checkpoint;
   let clock = start;

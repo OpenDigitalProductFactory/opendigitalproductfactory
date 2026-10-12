@@ -319,3 +319,13 @@ record preserves the evidence until canonical recording is authorized.
 The final source audit reproduced a page/evaluation race: an item closed after
 page selection could project as closable. Evaluation now also honors the current
 decision's done-state binding and retains its unresolved acceptance obligation.
+
+Independent source review requested two corrections on `15aa77661ed`. Raw-query
+Prisma adapter conflicts now inspect only the wrapped SQLSTATE for serialization
+or deadlock; unrelated and uncertain failures are not retried, and the three-try
+bound remains. Real Prisma error-class fixtures reproduced the missing retries.
+The production close adapter now has regression coverage through the real
+terminal CAS-conflict audit retry, with simulated transaction rollback and
+expiry/takeover between attempts. Removing ownership checks made both stale
+retry tests fail; restoring them made the tests pass. This source-local
+coverage does not replace the still-unrun PostgreSQL qualification.
