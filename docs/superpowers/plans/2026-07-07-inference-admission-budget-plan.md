@@ -85,3 +85,19 @@ Integration (two seams, minimal):
   rate limit.
 - Adaptive sizing from observed engine latency, and a runtime-health surface tile
   for live admission depth.
+
+## 2026-10-12 follow-up — local interactive priority
+
+Live operation proved that local HTTP inference and the sandbox build engine
+were not actually governed by one ordering contract: the host-busy probe ran
+before both queues, and local HTTP calls crossed both the inference semaphore and
+the FIFO ResourceLane. An internal autonomous request therefore looked like an
+external busy runner and an interactive turn failed before it could queue.
+
+The canonical follow-up design is
+[`2026-10-12-local-inference-interactive-priority-design.md`](../specs/2026-10-12-local-inference-interactive-priority-design.md).
+Its atomic delivery extends the existing local ResourceLane with explicit
+interactive/autonomous priority plus bounded aging, makes it the one local
+execution admission boundary, and moves host probing inside admission. Remote
+provider admission remains here unchanged. A PostgreSQL distributed queue stays
+deferred until multi-replica portal execution is a supported topology.
