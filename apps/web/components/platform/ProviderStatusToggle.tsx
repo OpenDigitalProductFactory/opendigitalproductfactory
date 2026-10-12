@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toggleProviderStatus } from "@/lib/actions/ai-providers";
 import { useRouter } from "next/navigation";
+import { LocalProviderPauseControl } from "./LocalProviderPauseControl";
 
 const STATUS_COLOURS: Record<string, string> = {
   active: "var(--dpf-success)",
@@ -13,9 +14,17 @@ const STATUS_COLOURS: Record<string, string> = {
 type Props = {
   providerId: string;
   initialStatus: string;
+  initialPause?: { resumeAt: string | null; pausedAt?: string } | null;
+  initialConnectionStatus?: string | null;
 };
 
-export function ProviderStatusToggle({ providerId, initialStatus }: Props) {
+export function ProviderStatusToggle(props: Props) {
+  return props.providerId === "local" || props.providerId === "ollama"
+    ? <LocalProviderPauseControl key={props.providerId} {...props} />
+    : <ProviderStatusControl {...props} />;
+}
+
+function ProviderStatusControl({ providerId, initialStatus }: Props) {
   const [status, setStatus] = useState(initialStatus);
   const [isPending, startTransition] = useTransition();
   // EP-AGENT-CAP-002: surface capability gap warning after activation

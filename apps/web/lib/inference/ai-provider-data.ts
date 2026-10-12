@@ -21,6 +21,16 @@ import { getProviderDisplayNameForSpend } from "./ai-provider-cost-view";
 import { rollUpProviderModels, type ProfileForRollup } from "./provider-routing-rollup";
 import { resolveCredentialProviderId } from "./ai-provider-internals";
 import { parseAsyncInferenceOperationStatus } from "./async-operation-contract";
+import { getLocalProviderControlState } from "./provider-operator-pause";
+
+const getOperatorControls = cache(async (providerId: string) => {
+  if (providerId !== "local" && providerId !== "ollama") return {};
+  const state = await getLocalProviderControlState(providerId);
+  return {
+    defaultConnectionStatus: state.connectionStatus,
+    operatorPause: state.pause ? { resumeAt: state.pause.resumeAt, pausedAt: state.pause.pausedAt } : null,
+  };
+});
 
 /** Mask a secret to `••••••1234` (last 4 chars visible). */
 function maskSecret(value: string | null): string | null {
@@ -71,11 +81,12 @@ export const getProviders = cache(async (opts?: { includeHidden?: boolean }): Pr
     },
   });
   const credMap = new Map(credentials.map((c) => [c.providerId, c]));
-  return providers.map((p) => {
+  return Promise.all(providers.map(async (p) => {
     const raw = credMap.get(p.providerId) ?? credMap.get(resolveCredentialProviderId(p.providerId));
     return {
       provider: {
         ...p,
+        ...await getOperatorControls(p.providerId),
         families:             p.families as string[],
         enabledFamilies:      p.enabledFamilies as string[],
         supportedAuthMethods: p.supportedAuthMethods as string[],
@@ -96,7 +107,7 @@ export const getProviders = cache(async (opts?: { includeHidden?: boolean }): Pr
       } satisfies ProviderRow,
       credential: raw ? maskCredential(raw, p.providerId) : null,
     };
-  });
+  }));
 });
 
 export const getProviderById = cache(async (providerId: string): Promise<ProviderWithCredential | null> => {
@@ -108,6 +119,7 @@ export const getProviderById = cache(async (providerId: string): Promise<Provide
   return {
     provider: {
       ...provider,
+      ...await getOperatorControls(providerId),
       families:             provider.families as string[],
       enabledFamilies:      provider.enabledFamilies as string[],
       supportedAuthMethods: provider.supportedAuthMethods as string[],

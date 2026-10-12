@@ -17,6 +17,8 @@ export type BuildEngineCandidate = {
   registered: boolean;
   present: boolean;
   providerStatus: string;
+  /** Default local account veto remains authoritative during provider recovery. */
+  providerConnectionStatus?: string;
   authMethod: string;
   credentialStatus: string | null;
   credentialExpiresAt: number | null;
@@ -124,6 +126,9 @@ function rejectionForCandidate(args: {
   }
   if (candidate.providerStatus !== "active") {
     return reject("provider-disabled", "The provider is not enabled for routing.");
+  }
+  if (["paused", "inactive", "disabled"].includes(candidate.providerConnectionStatus ?? "")) {
+    return reject("provider-disabled", "The local provider account is paused or disabled.");
   }
 
   const requiresCredential = candidate.authMethod.toLowerCase() !== "none";
