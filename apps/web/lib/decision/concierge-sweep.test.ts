@@ -59,6 +59,22 @@ describe("orderCandidates", () => {
 });
 
 describe("runConciergeSweep", () => {
+  it("reports skipped repeats without spending the cap or starving a fresh case", async () => {
+    const d = deps({
+      candidates: async () => [subject("DI-1", "high"), subject("DI-2", "high"), subject("DI-3", "high")],
+      conduct: async (s) => s.interactionId === "DI-1"
+        ? { status: "panel-pending", detail: "unfinished" }
+        : s.interactionId === "DI-2"
+          ? { status: "case-unchanged", detail: "same case" }
+          : { status: "proposed", proposalId: "p", verdict: {} as never, uncovered: false },
+    });
+    const summary = await runConciergeSweep(d, { maxPanels: 1 });
+    expect(summary.panelled).toBe(1);
+    expect(summary.proposed).toBe(1);
+    expect(summary.deferredToNextPass).toBe(0);
+    expect(summary.skipped).toEqual({ "panel-pending": 1, "case-unchanged": 1 });
+    expect(summary.headline).toContain("No new panel for:");
+  });
   it("retires stale drafts before deciding what still needs a panel", async () => {
     const order: string[] = [];
     const d = deps({

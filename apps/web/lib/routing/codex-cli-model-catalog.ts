@@ -14,13 +14,17 @@ export function parseCodexModelListPage(value: unknown): {
     throw new Error("Malformed Codex model/list response");
   }
   const page = value as { data: unknown[]; nextCursor?: unknown };
+  if (page.nextCursor != null && typeof page.nextCursor !== "string") {
+    throw new Error("Malformed Codex model/list cursor");
+  }
   const models = page.data.flatMap((entry): DiscoveredModel[] => {
-    if (!entry || typeof entry !== "object") return [];
+    if (!entry || typeof entry !== "object") throw new Error("Malformed Codex model/list entry");
     const metadata = entry as Record<string, unknown>;
     const modelId = typeof metadata.model === "string"
       ? metadata.model
       : typeof metadata.id === "string" ? metadata.id : null;
-    if (!modelId || metadata.hidden === true) return [];
+    if (!modelId?.trim()) throw new Error("Malformed Codex model/list model ID");
+    if (metadata.hidden === true) return [];
     return [{ modelId, rawMetadata: { ...metadata, source: "codex_cli_model_list" } }];
   });
   return {

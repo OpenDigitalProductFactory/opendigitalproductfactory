@@ -7,8 +7,12 @@
  * structure, conventions, or where things live.
  */
 
+import { DEVELOPMENT_INVESTMENT_GUIDANCE } from "../platform-dev-policy";
+
 export const PROJECT_CONTEXT = `
 --- Project Knowledge (equivalent to CLAUDE.md) ---
+
+${DEVELOPMENT_INVESTMENT_GUIDANCE}
 
 ARCHITECTURE:
 - Next.js 16 monorepo with pnpm workspaces

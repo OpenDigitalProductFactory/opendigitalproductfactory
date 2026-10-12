@@ -175,8 +175,10 @@ describe("BI-2E479619 executor recognises a natively executed terminal writer", 
   });
 
   it("AC-2: a native writer that persisted a passing receipt completes the run; executedToolCount counts the native calls", async () => {
-    db.executions.push(nativeRead(), nativeRead(), nativeRead(), nativeWriterSuccess());
-    autonomous.execute.mockResolvedValue(liveCliLoopResult());
+    autonomous.execute.mockImplementation(async () => {
+      db.executions.push(nativeRead(), nativeRead(), nativeRead(), nativeWriterSuccess());
+      return liveCliLoopResult();
+    });
 
     const outcome = await run();
 
@@ -200,6 +202,7 @@ describe("BI-2E479619 executor recognises a natively executed terminal writer", 
     const outcome = await run();
 
     expect(loadTaskInitiativeReviewOutcome).toHaveBeenCalledWith(TASK_RUN_ID, binding);
+    expect(autonomous.execute, "a verified earlier assessment must not run inference again").not.toHaveBeenCalled();
     const text = JSON.stringify(outcome);
     expect(text).not.toContain("No receipt was created");
     expect(text).not.toContain("prose-without-required-writer");

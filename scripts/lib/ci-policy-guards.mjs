@@ -642,7 +642,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // Plane 4 — the standing TOOL registry, same soft shape and reusing plane 3's claim
     // review. Dispatch-time caps are governed elsewhere; this is the part that accretes.
     guard("tool-surface-guard", "Tool Surface Guard", [
-      node("--test", "scripts/check-tool-surface.test.mjs"),
+      node("--test", "scripts/check-tool-surface.test.mjs", "scripts/provider-management-grant-audit.test.mjs"),
       node("scripts/check-tool-surface.mjs"),
     ], { inputs: ["code"] }),
     // A coworker's standing rhythm is declared twice on purpose — the registry

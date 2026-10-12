@@ -1,5 +1,34 @@
 # MCP tool authorization runbook
 
+## Reading an owned semantic review's recovery state
+
+The existing `tasks/get` and `tasks/result` methods return `recovery.details`
+for semantic reviews after checking the authenticated task owner. This includes
+at most 100 task node IDs, recorded status, digest binding and current scoped
+remediation verification identity. It excludes raw provider output and diagnostic
+text. A truncated node list cannot establish complete execution settlement.
+
+Failed or inactive tasks do not prove their provider executions have settled.
+`executionSettled` requires a fresh recorded health verification bound to this
+task, request digest and Workroom, covering every unresolved node. Readback uses
+the same evidence predicate as successor admission. `retryAuthorized` remains
+false: only `retry_semantic_review` rechecks current authority, immutable
+checkpoints, lineage and recovery budget before any dispatch. Missing evidence
+requires actual execution reconciliation; reading this packet neither creates
+a health receipt nor records a passing review.
+
+Design and plan review handlers preserve the last completed semantic round when
+their two-reviewer panel cannot complete. `reviewIncomplete` and
+`usableReviewerCount` distinguish that condition from a document rejection.
+Infrastructure errors are not prior design findings, and incomplete attempts do
+not increment the revision round or trigger document regeneration. The handler
+returns `retry_review`; repeat the review only after reviewer execution recovers.
+Plan auto-resume preserves the saved plan while this condition remains unresolved.
+The review panel and readiness strip show incomplete execution as a wait, not
+approval or changes requested. A completed individual review stays visible beside
+the incomplete panel; historical outage findings and inflated rounds are excluded
+from the current recovery guidance. Original records remain intact.
+
 Bound spec-approval reviewers receive the initiative's current authoritative
 classification in their tool contract. A document titled "repair" does not
 make a feature initiative a fix. Dispatch and the receipt writer share the

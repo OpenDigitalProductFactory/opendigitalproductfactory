@@ -12,6 +12,7 @@
  * Usage inside the portal container:
  *   pnpm --filter web exec tsx scripts/probe-tier-contract.ts
  */
+import { resolveLocalServedContextTokens } from "@/lib/inference/local-model-context-reconcile";
 import { loadEndpointManifests, loadPolicyRules, loadOverrides } from "@/lib/routing/loader";
 import { routeEndpointV2 } from "@/lib/routing/pipeline-v2";
 import { inferContract } from "@/lib/routing/request-contract";
@@ -59,7 +60,7 @@ type CheckResult = {
 
 async function runProbe(): Promise<void> {
   const [manifests, policies, overrides] = await Promise.all([
-    loadEndpointManifests(),
+    loadEndpointManifests(Date.now(), resolveLocalServedContextTokens),
     loadPolicyRules(),
     loadOverrides("default"),
   ]);

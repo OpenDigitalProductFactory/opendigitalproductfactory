@@ -19,6 +19,7 @@ const PROVIDER_ACCOUNT_CLASSES = ["regular", "business-team", "enterprise", "unk
  */
 export async function updateProviderConnectionPosture(input: {
   providerId: string;
+  connectionId?: string;
   accountClass: (typeof PROVIDER_ACCOUNT_CLASSES)[number];
   noTraining: boolean | null;
   enabledRegions?: string[];
@@ -30,12 +31,13 @@ export async function updateProviderConnectionPosture(input: {
   if (!PROVIDER_ACCOUNT_CLASSES.includes(input.accountClass)) {
     return { error: "Choose a valid account type" };
   }
-  const connectionId = `provider-default-${input.providerId}`;
+  const connectionId = input.connectionId ?? `provider-default-${input.providerId}`;
   const connection = await prisma.aiProviderConnection.findUnique({
     where: { connectionId },
-    select: { id: true, entitlements: true, evidenceStatus: true },
+    select: { id: true, providerId: true, entitlements: true, evidenceStatus: true },
   });
   if (!connection) return { error: "Provider connection not found" };
+  if (connection.providerId !== input.providerId) return { error: "Connection belongs to a different provider" };
   const existingEntitlements = connection.entitlements && typeof connection.entitlements === "object" && !Array.isArray(connection.entitlements)
     ? connection.entitlements as Record<string, unknown>
     : {};
@@ -99,7 +101,7 @@ export async function updateProviderConnectionPosture(input: {
     where: { providerId: input.providerId },
     select: { status: true },
   });
-  if (provider?.status === "active") {
+  if (provider?.status === "active" && connectionId === `provider-default-${input.providerId}`) {
     await activateProvider(input.providerId, { trigger: "test_auth", skipDiscovery: true });
   }
   return {};
