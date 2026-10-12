@@ -38,7 +38,10 @@ export function isCredentialRefusal(error) {
 }
 
 function siblingPath(configPath, name) {
-  const normalized = String(configPath).replace(/[/\\]+$/, "");
+  const text = String(configPath);
+  let end = text.length;
+  while (end > 0 && (text[end - 1] === "/" || text[end - 1] === "\\")) end -= 1;
+  const normalized = text.slice(0, end);
   const cut = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
   const sep = cut >= 0 && normalized[cut] === "\\" ? "\\" : "/";
   const dir = cut >= 0 ? normalized.slice(0, cut) : ".";

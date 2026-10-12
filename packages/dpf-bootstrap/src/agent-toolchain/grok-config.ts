@@ -24,7 +24,9 @@ const GROK_BEARER_FILE_NAME = "dpf-mcp-token";
 
 /** Sibling of the config file. Matches scripts/lib/grok-credential.mjs. */
 export function grokBearerTokenFilePath(configPath: string): string {
-  const normalized = configPath.replace(/[/\\]+$/, "");
+  let end = configPath.length;
+  while (end > 0 && (configPath[end - 1] === "/" || configPath[end - 1] === "\\")) end -= 1;
+  const normalized = configPath.slice(0, end);
   const cut = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
   const sep = cut >= 0 && normalized[cut] === "\\" ? "\\" : "/";
   const dir = cut >= 0 ? normalized.slice(0, cut) : ".";
