@@ -1,4 +1,6 @@
 import { prisma } from "./client";
+import type { Prisma } from "../generated/client/client";
+import { isRecord } from "@dpf/validators";
 import type { OperationalValueStream } from "@dpf/storefront-templates";
 
 /**
@@ -20,26 +22,47 @@ import type { OperationalValueStream } from "@dpf/storefront-templates";
  *
  * No new Prisma model: definitions persist as EaElement rows under their own
  * `archetype-room-definition` source, on the same (source, orgId, stageKey)
- * identity the EA projection uses, so re-projecting updates in place and prunes
- * what the archetype no longer declares.
+ * identity the EA projection uses. Reconciliation withdraws missing definitions
+ * without deleting their rows, references, or lifecycle history.
  */
 
 const ARCHETYPE_ROOM_SOURCE = "archetype-room-definition";
 
 type IdRow = { id: string };
+type RoomRow = IdRow & { properties: Prisma.JsonValue; lifecycleStage: string; lifecycleStatus: string };
 
 interface RoomDefinitionDb {
-  eaNotation: { findUnique(args: unknown): Promise<IdRow | null> };
-  eaElementType: { findUnique(args: unknown): Promise<IdRow | null> };
+  eaNotation: { findUnique(args: Prisma.EaNotationFindUniqueArgs): Promise<IdRow | null> };
+  eaElementType: { findUnique(args: Prisma.EaElementTypeFindUniqueArgs): Promise<IdRow | null> };
   eaElement: {
-    findFirst(args: unknown): Promise<IdRow | null>;
-    findMany(args: unknown): Promise<IdRow[]>;
-    create(args: unknown): Promise<IdRow>;
-    update(args: unknown): Promise<IdRow>;
-    deleteMany(args: unknown): Promise<{ count: number }>;
+    findMany(args: Prisma.EaElementFindManyArgs): Promise<RoomRow[]>;
+    create(args: Prisma.EaElementCreateArgs): Promise<IdRow>;
+    update(args: Prisma.EaElementUpdateArgs): Promise<IdRow>;
   };
-  eaViewElement: { deleteMany(args: unknown): Promise<{ count: number }> };
-  eaRelationship: { deleteMany(args: unknown): Promise<{ count: number }> };
+  lifecycleEvent: { create(args: Prisma.LifecycleEventCreateArgs): Promise<IdRow> };
+  $queryRawUnsafe(query: string, ...values: unknown[]): Promise<unknown>;
+  $connect?: () => Promise<void>;
+  $transaction?: <T>(work: (tx: RoomDefinitionDb) => Promise<T>, options: { timeout: number }) => Promise<T>;
+}
+
+/** Serialize both projections by org inside one transaction. Prisma transaction
+ * clients can expose $transaction for savepoints, but omit root connection
+ * management. Reuse those clients so the caller retains transaction ownership. */
+export async function withArchetypeProjectionTransaction<T>(
+  inputDb: unknown, orgId: string, work: (tx: RoomDefinitionDb) => Promise<T>,
+): Promise<T> {
+  const db = (inputDb ?? prisma) as RoomDefinitionDb;
+  const run = async (tx: RoomDefinitionDb) => {
+    // Project a scalar, not PostgreSQL's void lock result (Prisma cannot decode
+    // void). The materialized CTE follows the inventory projection convention.
+    await tx.$queryRawUnsafe(
+      "WITH acquired AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))) SELECT 1 AS locked FROM acquired",
+      `archetype-projection:${orgId}`,
+    );
+    return work(tx);
+  };
+  return typeof db.$connect === "function" && db.$transaction
+    ? db.$transaction(run, { timeout: 30_000 }) : run(db);
 }
 
 /** A room a coworker can hold, derived from one value-stream stage. */
@@ -78,6 +101,7 @@ export interface ArchetypeRoomDefinitionSet {
 export function buildArchetypeRoomDefinitions(
   ovsm: OperationalValueStream,
 ): ArchetypeRoomDefinitionSet {
+  const roles = new Map(ovsm.streams.map((stream) => [stream.key, stream.responsibleRole]));
   const definitions = ovsm.stages.map((stage): ArchetypeRoomDefinition => ({
     definitionId: `archetype-room:${ovsm.archetypeId}:${stage.key}`,
     sourceKey: stage.key,
@@ -87,7 +111,7 @@ export function buildArchetypeRoomDefinitions(
     mode: stage.loadBearing ? "standing" : "finite",
     trigger: stage.input,
     outcome: stage.output,
-    requiredParticipantRole: stage.responsibleRole,
+    requiredParticipantRole: stage.responsibleRole?.trim() || roles.get(stage.streamKey)?.trim() || null,
     gateBindings: [...stage.trustGateKeys],
     measureBindings: [...stage.metricBindings],
   }));
@@ -111,6 +135,7 @@ export interface ProjectArchetypeRoomDefinitionsInput {
 export interface ProjectArchetypeRoomDefinitionsResult {
   created: number;
   updated: number;
+  /** Definitions withdrawn from active use; rows and references are retained. */
   removed: number;
   definitionCount: number;
 }
@@ -119,7 +144,7 @@ function roomMetadata(
   orgId: string,
   set: ArchetypeRoomDefinitionSet,
   definition: ArchetypeRoomDefinition,
-): Record<string, unknown> {
+): Prisma.InputJsonObject {
   return {
     projection: {
       layoutRole: "room_definition",
@@ -147,13 +172,16 @@ function roomMetadata(
 
 /**
  * Persist the org's room definitions. Idempotent on (source, orgId, stageKey);
- * a definition the archetype no longer declares is pruned, so changing archetype
- * cannot leave behind a room nothing produces.
+ * definitions no longer declared become inactive. Existing readers must filter
+ * lifecycleStatus != inactive; history readers can still follow every old ID.
  */
 export async function projectArchetypeRoomDefinitions(
   input: ProjectArchetypeRoomDefinitionsInput,
 ): Promise<ProjectArchetypeRoomDefinitionsResult> {
-  const db = (input.db ?? prisma) as unknown as RoomDefinitionDb;
+  return withArchetypeProjectionTransaction(input.db, input.orgId, (db) => projectRooms(db, input));
+}
+
+async function projectRooms(db: RoomDefinitionDb, input: ProjectArchetypeRoomDefinitionsInput) {
   const { orgId, ovsm } = input;
   const set = buildArchetypeRoomDefinitions(ovsm);
 
@@ -176,44 +204,46 @@ export async function projectArchetypeRoomDefinitions(
         { properties: { path: ["projection", "orgId"], equals: orgId } },
       ],
     },
-    select: { id: true },
+    select: { id: true, properties: true, lifecycleStage: true, lifecycleStatus: true },
   });
+  const byStage = new Map(existing.map((row) => {
+    const properties = isRecord(row.properties) ? row.properties : {};
+    const projection = isRecord(properties.projection) ? properties.projection : {};
+    return [projection.stageKey, row];
+  }));
 
   let created = 0;
   let updated = 0;
   const currentIds = new Set<string>();
 
   for (const definition of set.definitions) {
-    const properties = roomMetadata(orgId, set, definition);
+    const found = byStage.get(definition.sourceKey);
+    const previous = isRecord(found?.properties) ? found.properties : {};
+    const metadata = roomMetadata(orgId, set, definition);
+    const properties = { ...previous, ...metadata,
+      projection: { ...(isRecord(previous.projection) ? previous.projection : {}), ...metadata.projection as Prisma.InputJsonObject },
+      roomDefinition: { ...(isRecord(previous.roomDefinition) ? previous.roomDefinition : {}), ...metadata.roomDefinition as Prisma.InputJsonObject },
+    } as Prisma.InputJsonObject;
     const description =
       definition.trigger && definition.outcome
         ? `${definition.trigger} -> ${definition.outcome}`
         : `Room for ${definition.label}`;
 
-    const found = await db.eaElement.findFirst({
-      where: {
-        elementTypeId: stageType.id,
-        AND: [
-          { properties: { path: ["projection", "source"], equals: ARCHETYPE_ROOM_SOURCE } },
-          { properties: { path: ["projection", "orgId"], equals: orgId } },
-          { properties: { path: ["projection", "stageKey"], equals: definition.sourceKey } },
-        ],
-      },
-      select: { id: true },
-    });
-
     if (found) {
+      // These logical definitions are withdrawn reversibly, not moved to the
+      // terminal retirement stage. Restoring a declaration preserves its ID.
+      const reactivating = found.lifecycleStatus === "inactive" && found.lifecycleStage !== "retirement";
       const row = await db.eaElement.update({
         where: { id: found.id },
-        data: { name: definition.label, description, properties },
+        data: { name: definition.label, description, properties, ...(reactivating ? { lifecycleStatus: "active" } : {}) },
         select: { id: true },
       });
+      if (reactivating) await recordRoomStatus(db, found, "active", "Archetype stage restored");
       currentIds.add(row.id);
       updated += 1;
     } else {
       const row = await db.eaElement.create({
         data: {
-          notationId: notation.id,
           elementTypeId: stageType.id,
           name: definition.label,
           description,
@@ -228,15 +258,24 @@ export async function projectArchetypeRoomDefinitions(
     }
   }
 
-  const orphanIds = existing.map((row) => row.id).filter((id) => !currentIds.has(id));
+  const orphans = existing.filter((row) => !currentIds.has(row.id) && row.lifecycleStatus !== "inactive");
   let removed = 0;
-  if (orphanIds.length > 0) {
-    await db.eaRelationship.deleteMany({
-      where: { OR: [{ sourceId: { in: orphanIds } }, { targetId: { in: orphanIds } }] },
+  for (const row of orphans) {
+    await db.eaElement.update({
+      where: { id: row.id }, data: { lifecycleStatus: "inactive" }, select: { id: true },
     });
-    await db.eaViewElement.deleteMany({ where: { elementId: { in: orphanIds } } });
-    removed = (await db.eaElement.deleteMany({ where: { id: { in: orphanIds } } })).count;
+    await recordRoomStatus(db, row, "inactive", "Archetype no longer declares this stage");
+    removed++;
   }
 
   return { created, updated, removed, definitionCount: set.definitions.length };
+}
+
+async function recordRoomStatus(db: RoomDefinitionDb, row: RoomRow, toStatus: "active" | "inactive", reason: string) {
+  await db.lifecycleEvent.create({
+    data: { governedThingKind: "EaElement", governedThingId: row.id,
+      fromStage: row.lifecycleStage, toStage: row.lifecycleStage,
+      fromStatus: row.lifecycleStatus, toStatus, reason },
+    select: { id: true },
+  });
 }

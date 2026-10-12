@@ -12,6 +12,9 @@ const evalState = vi.hoisted(() => ({
   reapedCount: 0,
   // BI-C8164664: recency-cooldown fixture
   lastEvalAt: null as Date | null,
+  modelClass: "chat",
+  outputModalities: ["text"] as string[],
+  executionPlans: [] as Array<unknown>,
   // BI-32426CA0: last-endpoint-standing guard fixtures
   selfClearance: ["public", "internal", "confidential", "restricted"] as string[],
   peerClearances: [] as string[][],
@@ -27,8 +30,9 @@ vi.mock("@/lib/ai-inference", () => {
   }
   return {
     InferenceError,
-    callProvider: vi.fn(async () => {
+    callProvider: vi.fn(async (...args: unknown[]) => {
       evalState.callCount++;
+      evalState.executionPlans.push(args[5]);
       throw new InferenceError(evalState.errorMessage, "network");
     }),
   };
@@ -42,6 +46,8 @@ vi.mock("@dpf/db", () => ({
         evalCount: 0,
         modelStatus: "active",
         lastEvalAt: evalState.lastEvalAt,
+        modelClass: evalState.modelClass,
+        outputModalities: evalState.outputModalities,
         // Clearance of the profile under test, for the last-endpoint-standing
         // guard (BI-32426CA0). Extra keys are ignored by the other suites.
         provider: { sensitivityClearance: evalState.selfClearance },
@@ -332,6 +338,33 @@ describe("runDimensionEval — whole-endpoint short-circuit", () => {
     evalState.createCount = 0;
     evalState.reapedCount = 0;
     evalState.lastEvalAt = null;
+    evalState.modelClass = "chat";
+    evalState.outputModalities = ["text"];
+    evalState.executionPlans.length = 0;
+  });
+
+  it("skips stale and forced embedding evaluations without writes or inference", async () => {
+    evalState.modelClass = "embedding";
+    evalState.outputModalities = ["embeddings"];
+    try {
+      const result = await runDimensionEval("local", "nomic-embed-text-v1.5", "test", { force: true });
+      expect(result.skipped).toBe(true);
+      expect(evalState.callCount).toBe(0);
+      expect(evalState.createCount).toBe(0);
+      expect(evalState.profileUpdates).toEqual([]);
+    } finally {
+      evalState.modelClass = "chat";
+      evalState.outputModalities = ["text"];
+    }
+  });
+
+  it("passes the declared golden-test budget to the inference adapter", async () => {
+    await runDimensionEval("local", "qwen", "test");
+    expect(evalState.executionPlans[0]).toMatchObject({
+      maxTokens: 100,
+      contractFamily: "model-calibration.dimension",
+      providerId: "local",
+    });
   });
 
   it("stops after the first timed-out probe instead of grinding every test", async () => {

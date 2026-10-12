@@ -9,6 +9,7 @@ import {
   type JobDefinitionConvergence,
 } from "./converge-job-definitions";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { projectArchetypeRoomDefinitions, withArchetypeProjectionTransaction } from "@dpf/db/archetype-room-definition-projection";
 
 type Db = ProjectArchetypeValueStreamInput["db"];
 
@@ -40,10 +41,11 @@ export async function projectOperationalValueStreamForArchetype(input: {
     throw new Error(`Template archetype ${input.archetypeId} not found in ALL_ARCHETYPES`);
   }
   const ovsm = deriveOperationalValueStream(template);
-  const projected = await projectArchetypeValueStream({
-    db: input.db,
-    orgId: input.organizationId,
-    ovsm,
+  const projected = await withArchetypeProjectionTransaction(input.db, input.organizationId, async (db) => {
+    const projectionInput = { db, orgId: input.organizationId, ovsm };
+    const diagram = await projectArchetypeValueStream(projectionInput);
+    const roomDefinitions = await projectArchetypeRoomDefinitions(projectionInput);
+    return { ...diagram, roomDefinitions };
   });
 
   // Derive-on-read, never stored (kernel: job-definition-convergence, composite

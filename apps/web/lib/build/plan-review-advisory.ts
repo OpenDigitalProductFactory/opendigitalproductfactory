@@ -19,9 +19,9 @@ export function planNamesNoFiles(plan: unknown): boolean {
 }
 
 /** Revise a rejected plan only while the build is still in plan. */
-export function shouldReviseRejectedPlan<T extends { decision?: string }>(
+export function shouldReviseRejectedPlan<T extends { decision?: string; reviewIncomplete?: boolean }>(
   review: T | null | undefined,
   phase: string | null | undefined,
 ): review is T {
-  return review?.decision === "fail" && phase === "plan";
+  return review?.decision === "fail" && !review.reviewIncomplete && phase === "plan";
 }

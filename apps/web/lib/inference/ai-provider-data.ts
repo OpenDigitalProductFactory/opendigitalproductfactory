@@ -33,7 +33,7 @@ function maskSecret(value: string | null): string | null {
 
 /** Strip secrets before sending credential data to the client. */
 function maskCredential(cred: {
-  providerId: string;
+  providerId: string | null;
   secretRef: string | null;
   clientId: string | null;
   clientSecret: string | null;
@@ -43,9 +43,9 @@ function maskCredential(cred: {
   status: string;
   tokenExpiresAt?: Date | null;
   refreshToken?: string | null;
-}): CredentialRow {
+}, providerId: string): CredentialRow {
   return {
-    providerId:       cred.providerId,
+    providerId,
     secretHint:       maskSecret(cred.secretRef),
     clientId:         cred.clientId,
     clientSecretHint: maskSecret(cred.clientSecret),
@@ -94,7 +94,7 @@ export const getProviders = cache(async (opts?: { includeHidden?: boolean }): Pr
         oauthClientId:        p.oauthClientId,
         oauthRedirectUri:     p.oauthRedirectUri,
       } satisfies ProviderRow,
-      credential: raw ? maskCredential(raw) : null,
+      credential: raw ? maskCredential(raw, p.providerId) : null,
     };
   });
 });
@@ -126,9 +126,30 @@ export const getProviderById = cache(async (providerId: string): Promise<Provide
       oauthClientId:        provider.oauthClientId,
       oauthRedirectUri:     provider.oauthRedirectUri,
     } satisfies ProviderRow,
-    credential: credential ? maskCredential(credential) : null,
+    credential: credential ? maskCredential(credential, providerId) : null,
   };
 });
+
+/** Account read model uses the same masking boundary as legacy provider reads. */
+export const getProviderAccounts = cache(async (providerId?: string, page?: { limit: number; cursor?: string }) => {
+  const connections = await prisma.aiProviderConnection.findMany({
+    where: providerId === undefined ? {} : { providerId },
+    include: { credentialEntry: true },
+    orderBy: [{ providerId: "asc" }, { createdAt: "asc" }, { connectionId: "asc" }],
+    ...(page ? { take: Math.min(101, Math.max(1, page.limit)), ...(page.cursor ? { cursor: { connectionId: page.cursor }, skip: 1 } : {}) } : {}),
+  });
+  return connections.map(({ credentialEntry, ...connection }) => ({
+    ...connection,
+    createdAt: connection.createdAt.toISOString(),
+    updatedAt: connection.updatedAt.toISOString(),
+    lastReviewedAt: connection.lastReviewedAt?.toISOString() ?? null,
+    modelsVerifiedAt: connection.modelsVerifiedAt?.toISOString() ?? null,
+    credential: credentialEntry ? maskCredential(credentialEntry, connection.providerId) : null,
+    isDefault: connection.connectionId === `provider-default-${connection.providerId}`,
+  }));
+});
+
+export type ProviderAccountRow = Awaited<ReturnType<typeof getProviderAccounts>>[number];
 
 function monthRange(month: { year: number; month: number }): { gte: Date; lt: Date } {
   const gte = new Date(Date.UTC(month.year, month.month - 1, 1));
