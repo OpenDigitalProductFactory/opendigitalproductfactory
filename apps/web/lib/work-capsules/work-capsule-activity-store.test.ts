@@ -5,6 +5,18 @@ import { publishRecordedWorkCapsuleActivity } from "./activity-events";
 import { recordWorkCapsuleActivity, recordWorkCapsuleEvidence } from "./work-capsule-activity-store";
 
 describe("transactional Workroom activity", () => {
+  it("keeps the locked parent identity when caller input changes during the await", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "activity-1", workCapsuleId: "row-1" });
+    const findUnique = vi.fn().mockResolvedValue({ id: "row-1", capsuleId: "WC-ONE" });
+    const input: Parameters<typeof recordWorkCapsuleEvidence>[0] = {
+      db: { $queryRaw: vi.fn(async () => { input.capsuleId = "WC-TWO"; }),
+        workroom: { findUnique }, workroomActivity: { create } } as never,
+      capsuleId: "WC-ONE", evidence: { kind: "pr-gate", stageKey: "implement", outcome: "completed", summary: "Observed" },
+      actor: { userId: "user-1", agentId: null, principalId: null }, deferPublication: true,
+    };
+    await recordWorkCapsuleEvidence(input);
+    expect(findUnique).toHaveBeenCalledWith({ where: { capsuleId: "WC-ONE" } });
+  });
   it("locks the parent before reading source and publishes only after its transaction commits", async () => {
     const order: string[] = [];
     const tx = { $queryRaw: vi.fn(async () => { order.push("lock"); }),

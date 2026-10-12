@@ -64,15 +64,16 @@ export async function recordWorkCapsuleEvidence(args: {
   // Snapshot the caller's flat stage identity before the first await. Reserved
   // source context is always replaced, even for callers using an untyped input.
   const evidence = { ...args.evidence };
+  const capsuleId = args.capsuleId;
   const write = async (tx: CapsuleDb) => {
     // Unscoped notes (including semantic-review transactions) need no new
     // parent lock. Only stage-scoped source snapshots require serialization.
     if (evidence.stageKey && tx.$queryRaw) {
-      await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${args.capsuleId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${capsuleId} FOR UPDATE`;
     }
-    const capsule = await tx.workroom.findUnique({ where: { capsuleId: args.capsuleId } });
-    if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-    const sourceBinding = buildStageEvidenceBinding({ ...capsule, capsuleId: args.capsuleId }, evidence);
+    const capsule = await tx.workroom.findUnique({ where: { capsuleId } });
+    if (!capsule) throw new Error(`Work Capsule ${capsuleId} not found`);
+    const sourceBinding = buildStageEvidenceBinding({ ...capsule, capsuleId }, evidence);
     return recordWorkCapsuleActivity(tx, {
       workCapsuleId: capsule.id, kind: "evidence-recorded", summary: evidence.summary,
       payload: { ...evidence, sourceBinding }, actor: args.actor,
