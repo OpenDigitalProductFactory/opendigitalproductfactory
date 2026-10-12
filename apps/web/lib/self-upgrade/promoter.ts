@@ -90,6 +90,17 @@ export async function runPromoterReadiness(
   });
 }
 
+/** Probe the verified packaged actuator without any host authority or mounts. */
+export function buildRuntimeCapabilityProtocolProbeCommand(
+  artifact: ResolvedPromoterArtifact,
+  containerName: string,
+): { command: string; args: string[] } {
+  if (!/^sha256:[a-f0-9]{64}$/.test(artifact.digest) || !/^[a-f0-9]{40}$/.test(artifact.sourceSha) || !/^dpf-runtime-protocol-[a-z0-9-]{1,64}$/.test(containerName)) {
+    throw new Error("runtime_protocol_probe_identity_invalid");
+  }
+  return { command: "docker", args: ["run", "--rm", "--name", containerName, "--read-only", "--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "128m", "--cpus", "1", artifact.digest, "--runtime-capability-protocol-info"] };
+}
+
 export type VerifiedReleaseIdentity = {
   tag: string;
   ghcrOwner: string;

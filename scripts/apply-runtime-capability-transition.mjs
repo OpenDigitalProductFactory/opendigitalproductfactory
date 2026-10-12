@@ -8,13 +8,32 @@ import { spawnSync } from "node:child_process";
 import { validateInstallState } from "./installer/validate-install-state.mjs";
 import { canonicalTransitionPayload, signTransitionPayload } from "./lib/transition-signing.mjs";
 
+// strict: false keeps the old tolerance for flags this script does not read.
+const { values: flags } = utilParseArgs({ args: process.argv.slice(2), strict: false, allowPositionals: true, options: { "state-dir": { type: "string" }, "runtime-capability-protocol-info": { type: "boolean" } } });
+
+// Packaged-actuator discovery must precede locks, secret reads and journals.
+// Signing v2 support does not imply v2 apply or reconciliation support.
+if (flags["runtime-capability-protocol-info"]) {
+  if (process.argv.length !== 3) {
+    process.stderr.write("invalid_runtime_protocol_probe_arguments\n");
+    process.exit(64);
+  }
+  const digest = (url) => createHash("sha256").update(readFileSync(url)).digest("hex");
+  process.stdout.write(JSON.stringify({
+    schemaVersion: 1,
+    sourceSha: process.env.DPF_CANDIDATE_SOURCE_SHA ?? "unknown",
+    signingVersions: [1, 2], applyVersions: [1], reconciliationVersions: [],
+    actuatorSha256: digest(new URL(import.meta.url)),
+    signerSha256: digest(new URL("./lib/transition-signing.mjs", import.meta.url)),
+  }) + "\n");
+  process.exit(0);
+}
+
 const stable = (v) => Array.isArray(v) ? v.map(stable) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])])) : v;
 const canonical = canonicalTransitionPayload;
 const catalogBytes = (v) => `${JSON.stringify(stable(v), null, 2)}\n`;
 const sha = (v) => createHash("sha256").update(v).digest("hex");
 const sign = signTransitionPayload;
-// strict: false keeps the old tolerance: flags this script does not read are ignored.
-const { values: flags } = utilParseArgs({ args: process.argv.slice(2), strict: false, allowPositionals: true, options: { "state-dir": { type: "string" } } });
 const stateDir = flags["state-dir"] === undefined ? (process.env.DPF_PROMOTER_STATE_DIR ?? "/dpf-state") : typeof flags["state-dir"] === "string" ? flags["state-dir"] : undefined;
 const receiptDir = join(stateDir, "runtime-capability-transitions");
 const applyLock = join(stateDir, ".runtime-transition-apply.lock");

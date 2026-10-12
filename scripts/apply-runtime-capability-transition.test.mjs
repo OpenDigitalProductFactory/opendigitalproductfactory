@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, createHmac } from "node:crypto";
@@ -13,6 +13,36 @@ const secret = "s".repeat(32);
 function envelope(now = Date.now()) { return { version: 1, transitionId: "RCT-test", issuedAt: new Date(now - 100).toISOString(), expiresAt: new Date(now + 60_000).toISOString(), catalogHash: "a".repeat(64), previousStateHash: "b".repeat(64), desiredStateHash: "c".repeat(64), previousKeys: ["runtime:core"], desiredKeys: ["runtime:build", "runtime:core"], previousProfiles: [], desiredProfiles: ["build"], previousServices: ["portal", "postgres"], desiredServices: ["build", "portal", "postgres"] }; }
 function run(env, id = "RCT-test") { return spawnSync(process.execPath, [script, "--runtime-capability-transition", id], { env: { ...process.env, ...env }, encoding: "utf8" }); }
 async function secretFile(dir) { const path = join(dir, "secret"); await writeFile(path, secret, { mode: 0o600 }); return path; }
+
+test("protocol probe reports packaged support without reading secrets or creating host state", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-probe-"));
+  const result = spawnSync(process.execPath, [script, "--runtime-capability-protocol-info"], {
+    env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir, DPF_RUNTIME_TRANSITION_SECRET_FILE: join(dir, "absent-secret"), DPF_CANDIDATE_SOURCE_SHA: "probe-fixture-source" }, encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const info = JSON.parse(result.stdout);
+  assert.equal(info.schemaVersion, 1);
+  assert.equal(info.sourceSha, "probe-fixture-source");
+  assert.deepEqual(info.signingVersions, [1, 2]);
+  assert.deepEqual(info.applyVersions, [1]);
+  assert.deepEqual(info.reconciliationVersions, []);
+  assert.match(info.actuatorSha256, /^[a-f0-9]{64}$/);
+  assert.match(info.signerSha256, /^[a-f0-9]{64}$/);
+  assert.deepEqual(await readdir(dir), []);
+});
+
+test("a protocol probe cannot be combined with a state-changing invocation", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-probe-mixed-"));
+  for (const args of [
+    ["--runtime-capability-protocol-info", "--runtime-capability-transition", "RCT-test"],
+    ["--runtime-capability-transition", "RCT-test", "--runtime-capability-protocol-info"],
+  ]) {
+    const result = spawnSync(process.execPath, [script, ...args], { encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir, DPF_RUNTIME_TRANSITION_SECRET_FILE: join(dir, "absent-secret") } });
+    assert.equal(result.status, 64, result.stderr);
+    assert.match(result.stderr, /invalid_runtime_protocol_probe_arguments/);
+    assert.deepEqual(await readdir(dir), []);
+  }
+});
 
 async function validTransition(dir, health = "healthy") {
   const catalogPath = new URL("./capability-service-catalog.generated.json", import.meta.url);

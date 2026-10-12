@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -7,6 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { PROMOTER_BUILD_CONTEXT_FILES, PROMOTER_BUILD_CONTEXT_SOURCES } from "./promoter-build-context";
 import {
   buildPromoterCommand,
+  buildRuntimeCapabilityProtocolProbeCommand,
   buildCandidatePromoterImage,
   buildPromoterReadinessCommand,
   decidePromoterEnsureAction,
@@ -31,6 +33,32 @@ const BASE = {
   backupPath: "/backups/self-upgrade/run-1",
   healthUrl: "http://localhost:3000/api/health",
 };
+
+describe("runtime capability protocol probe", () => {
+  const artifact = { digest: `sha256:${"a".repeat(64)}` as const, sourceSha: "b".repeat(40), contractSchema: 1 as const, contractDigest: `sha256:${"c".repeat(64)}` as const, callerProtocol: { min: 1, max: 1 } };
+
+  it("uses the verified immutable image without mounts, credentials, socket or network", () => {
+    const command = buildRuntimeCapabilityProtocolProbeCommand(artifact, "dpf-runtime-protocol-test");
+    expect(command).toEqual({ command: "docker", args: ["run", "--rm", "--name", "dpf-runtime-protocol-test", "--read-only", "--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "128m", "--cpus", "1", artifact.digest, "--runtime-capability-protocol-info"] });
+    expect(() => buildRuntimeCapabilityProtocolProbeCommand({ ...artifact, digest: "latest" as never }, "dpf-runtime-protocol-test")).toThrow("runtime_protocol_probe_identity_invalid");
+    expect(() => buildRuntimeCapabilityProtocolProbeCommand(artifact, "another-owner")).toThrow("runtime_protocol_probe_identity_invalid");
+  });
+
+  it("the packaged entrypoint returns support without installing or applying", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "dpf-protocol-entrypoint-"));
+    const root = resolve(__dirname, "../../../..");
+    const result = spawnSync(testBash, [join(root, "scripts/promote.sh"), "--runtime-capability-protocol-info"], {
+      encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir, DPF_CANDIDATE_SOURCE_SHA: artifact.sourceSha, DPF_RUNTIME_TRANSITION_SECRET_FILE: join(dir, "absent-secret") },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ sourceSha: artifact.sourceSha, signingVersions: [1, 2], applyVersions: [1], reconciliationVersions: [] });
+    expect(readdirSync(dir)).toEqual([]);
+    const mixed = spawnSync(testBash, [join(root, "scripts/promote.sh"), "--runtime-capability-transition", "RCT-test", "--runtime-capability-protocol-info"], { encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir } });
+    expect(mixed.status, mixed.stderr).toBe(64);
+    expect(mixed.stderr).toContain("invalid_runtime_protocol_probe_arguments");
+    expect(readdirSync(dir)).toEqual([]);
+  });
+});
 
 it("mechanically closes every staged promoter input through portal baking and JIT staging", () => {
   // Keyed on the staged closure, not on Dockerfile.promoter's COPY lines:

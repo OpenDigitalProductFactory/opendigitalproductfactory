@@ -217,11 +217,13 @@ value through the shared signing implementation. The standalone host must use
 that same implementation. Reconciliation requires BOTH server and host to support
 version 2. Unknown or older versions refuse BEFORE authority reservation, journal
 creation or state mutation; there is no fallback to version 1. Deliver the shared
-host verifier and actuator through the existing canonical release/installer asset
-convergence, then run a read-only host protocol/version probe and compare its
-source identity with the server before enabling reconciliation. Do not assume a
-portal image swap updated a host script. A missing delivery path is a source
-blocker to repair, never permission for an ad hoc installed-file copy.
+verifier and actuator in the verified canonical promoter image closure:
+`promote.sh` executes its packaged actuator and signing module, rather than the
+host install's script copy. Run a read-only protocol/version probe on that exact
+immutable image and compare its source identity with the server before enabling
+reconciliation. Installer-owned client assets still converge through their normal
+release path; a portal image swap does not prove those files changed. A missing
+delivery path is a source blocker, never permission for an ad hoc installed copy.
 
 Preserve historical legacy parsing with an explicit
 unverified-health disposition; an old signature cannot establish newly verified
@@ -286,6 +288,16 @@ receipt verification regressions failed before correction. Version 2 now refuses
 a missing or wrong kind before serialization; the corrected shared/host suite
 passes 24 tests and the related protocol suite passes 55. This review finding
 does not establish a live exploit or qualify version 2 application.
+
+The read-only packaged probe now reports signing, apply and reconciliation
+support separately, alongside its source label and actuator/signer byte hashes.
+Its command uses the validated immutable image without host mounts, secrets,
+Docker socket or network, and bounds memory/CPU. The actual shell entrypoint and
+direct actuator tests verify that a probe leaves its state directory empty and
+refuses mixed probe/apply arguments. The probe advertises apply version 1 and no
+reconciliation support until implementation qualifies them. All 26 shared/host
+tests and 205 related promoter/protocol/coordinator/upgrade tests pass. No live
+image probe, admission integration, full gate or reconciliation is claimed.
 
 ## Safe operating rules
 
