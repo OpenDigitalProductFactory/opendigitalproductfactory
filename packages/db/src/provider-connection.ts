@@ -61,7 +61,7 @@ export async function ensureDefaultProviderConnection(
   if (!connection) return;
   await prisma.aiProviderConnection.upsert({
     where: { connectionId: connection.connectionId },
-    update: { label: connection.label, authMethod: connection.authMethod, executionChannel: connection.executionChannel },
+    update: { label: connection.label },
     create: connection,
   });
   await refreshDefaultProviderConnectionOwners(prisma, entry.providerId);
@@ -73,6 +73,14 @@ async function loadDefaultProviderConnectionSource(prisma: PrismaClient, provide
     where: { providerId },
     select: { providerId: true, name: true, category: true, authMethod: true, endpointType: true },
   });
+}
+
+type DefaultAuthenticationBasis = { authMethod: string; executionChannel: string; credentialEntryId: string | null };
+
+function modelAccessReset(current: DefaultAuthenticationBasis | null, next: Partial<DefaultAuthenticationBasis>, replaced: boolean) {
+  const changed = current && (["authMethod", "executionChannel", "credentialEntryId"] as const)
+    .some((key) => key in next && current[key] !== next[key]);
+  return changed || replaced ? { accessibleModelIds: [] as string[], modelsVerifiedAt: null } : {};
 }
 
 /**
@@ -113,9 +121,10 @@ export async function setProviderStatusWithDefaultConnection(
 export async function refreshDefaultProviderConnectionOwners(
   prisma: PrismaClient,
   providerId: string,
+  options: { credentialReplaced?: boolean } = {},
 ): Promise<void> {
   const connectionId = `provider-default-${providerId}`;
-  const [credential, financeProfile, capacityStatus, provider] = await Promise.all([
+  const [credential, financeProfile, capacityStatus, provider, current] = await Promise.all([
     prisma.credentialEntry.findUnique({
       where: { providerId },
       select: { id: true, providerConnection: { select: { connectionId: true } } },
@@ -126,11 +135,12 @@ export async function refreshDefaultProviderConnectionOwners(
       select: { id: true, providerConnection: { select: { connectionId: true } } },
     }),
     loadDefaultProviderConnectionSource(prisma, providerId),
+    prisma.aiProviderConnection.findUnique({
+      where: { connectionId }, select: { authMethod: true, executionChannel: true, credentialEntryId: true },
+    }),
   ]);
   const projection = provider ? buildDefaultProviderConnection(provider) : undefined;
-  await prisma.aiProviderConnection.updateMany({
-    where: { connectionId },
-    data: {
+  const data = {
       ...(projection ? { authMethod: projection.authMethod, executionChannel: projection.executionChannel } : {}),
       financeProfileId: financeProfile?.id ?? null,
       ...(!credential?.providerConnection || credential.providerConnection.connectionId === connectionId
@@ -139,7 +149,15 @@ export async function refreshDefaultProviderConnectionOwners(
       ...(!capacityStatus?.providerConnection || capacityStatus.providerConnection.connectionId === connectionId
         ? { capacityStatusId: capacityStatus?.id ?? null }
         : {}),
+  };
+  const written = await prisma.aiProviderConnection.updateMany({
+    where: {
+      connectionId,
+      ...(current ? { authMethod: current.authMethod, executionChannel: current.executionChannel, credentialEntryId: current.credentialEntryId } : {}),
+      ...(provider ? { provider: { authMethod: provider.authMethod, category: provider.category, endpointType: provider.endpointType } } : {}),
     },
+    data: { ...data, ...modelAccessReset(current, data, options.credentialReplaced === true) },
   });
+  if (current && written.count === 0) throw new Error("Default provider configuration changed during reconciliation; retry the operation.");
 }
 import type { PrismaClient } from "../generated/client/client";

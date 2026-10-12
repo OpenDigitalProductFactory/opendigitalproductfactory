@@ -171,7 +171,7 @@ export async function activateProvider(
   });
   // Legacy OAuth callbacks configure ModelProvider rather than an explicit
   // account. Reconcile only its default before any model discovery dispatch.
-  await refreshDefaultProviderConnectionOwners(prisma, providerId);
+  await refreshDefaultProviderConnectionOwners(prisma, providerId, { credentialReplaced: opts.trigger === "oauth_exchange" });
 
   // 3. Activate linked MCP services that depend on this provider
   try {

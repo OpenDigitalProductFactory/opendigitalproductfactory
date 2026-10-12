@@ -11,7 +11,10 @@ describe("default account authentication convergence", () => {
       credentialEntry: { findUnique: vi.fn().mockResolvedValue({ id: "credential", providerConnection: owner ? { connectionId: owner } : null }) },
       aiProviderFinanceProfile: { findUnique: vi.fn().mockResolvedValue(null) },
       providerCapacityStatus: { findUnique: vi.fn().mockResolvedValue(null) },
-      aiProviderConnection: { upsert: vi.fn().mockResolvedValue({}), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      aiProviderConnection: {
+        findUnique: vi.fn().mockResolvedValue({ authMethod: "api-key", executionChannel: "direct-api", credentialEntryId: "credential", accessibleModelIds: ["api-model"], modelsVerifiedAt: new Date() }),
+        upsert: vi.fn().mockResolvedValue({}), updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
     };
   }
   it("creates the default from persisted OAuth configuration rather than the registry API-key default", async () => {
@@ -19,22 +22,56 @@ describe("default account authentication convergence", () => {
     await ensureDefaultProviderConnection(db as unknown as PrismaClient, { ...provider, authMethod: "api_key" }, "disabled");
     expect(db.aiProviderConnection.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({ authMethod: "oauth", executionChannel: "subscription-cli", status: "disabled" }),
-      update: { label: "Codex", authMethod: "oauth", executionChannel: "subscription-cli" },
+      update: { label: "Codex" },
     }));
   });
   it("repairs stale default auth/channel while leaving status and reviewed posture intact", async () => {
     const db = fixture();
     await refreshDefaultProviderConnectionOwners(db as unknown as PrismaClient, "codex");
     expect(db.aiProviderConnection.updateMany).toHaveBeenCalledWith({
-      where: { connectionId: "provider-default-codex" },
-      data: { authMethod: "oauth", executionChannel: "subscription-cli", financeProfileId: null, credentialEntryId: "credential", capacityStatusId: null },
+      where: { connectionId: "provider-default-codex", authMethod: "api-key", executionChannel: "direct-api", credentialEntryId: "credential", provider: { authMethod: provider.authMethod, category: provider.category, endpointType: provider.endpointType } },
+      data: { authMethod: "oauth", executionChannel: "subscription-cli", financeProfileId: null, credentialEntryId: "credential", capacityStatusId: null, accessibleModelIds: [], modelsVerifiedAt: null },
+    });
+  });
+  it("keeps verified model access on unchanged OAuth configuration", async () => {
+    const db = fixture();
+    db.aiProviderConnection.findUnique.mockResolvedValue({ authMethod: "oauth", executionChannel: "subscription-cli", credentialEntryId: "credential", accessibleModelIds: ["oauth-model"], modelsVerifiedAt: new Date() });
+    await ensureDefaultProviderConnection(db as unknown as PrismaClient, provider);
+    const update = db.aiProviderConnection.upsert.mock.calls[0]![0].update;
+    const data = db.aiProviderConnection.updateMany.mock.calls[0]![0].data;
+    for (const value of [update, data]) {
+      expect(value).not.toHaveProperty("accessibleModelIds");
+      expect(value).not.toHaveProperty("modelsVerifiedAt");
+      expect(value).not.toHaveProperty("status");
+      expect(value).not.toHaveProperty("evidenceStatus");
+    }
+  });
+  it("clears model proof when the owned credential identity changes even if auth/channel agree", async () => {
+    const db = fixture();
+    db.aiProviderConnection.findUnique.mockResolvedValue({ authMethod: "oauth", executionChannel: "subscription-cli", credentialEntryId: "old-credential", accessibleModelIds: ["old-model"], modelsVerifiedAt: new Date() });
+    await refreshDefaultProviderConnectionOwners(db as unknown as PrismaClient, "codex");
+    expect(db.aiProviderConnection.updateMany.mock.calls[0]![0].data).toMatchObject({ credentialEntryId: "credential", accessibleModelIds: [], modelsVerifiedAt: null });
+  });
+  it("invalidates model proof after a fresh sign-in even when the credential row and auth mode agree", async () => {
+    const db = fixture();
+    db.aiProviderConnection.findUnique.mockResolvedValue({ authMethod: "oauth", executionChannel: "subscription-cli", credentialEntryId: "credential", accessibleModelIds: ["old-model"], modelsVerifiedAt: new Date() });
+    await refreshDefaultProviderConnectionOwners(db as unknown as PrismaClient, "codex", { credentialReplaced: true });
+    expect(db.aiProviderConnection.updateMany.mock.calls[0]![0].data).toMatchObject({ accessibleModelIds: [], modelsVerifiedAt: null });
+  });
+  it("refuses a concurrent configuration change rather than restoring stale auth and model proof", async () => {
+    const db = fixture();
+    db.aiProviderConnection.updateMany.mockResolvedValue({ count: 0 });
+    await expect(refreshDefaultProviderConnectionOwners(db as unknown as PrismaClient, "codex")).rejects.toThrow("configuration changed");
+    expect(db.aiProviderConnection.updateMany.mock.calls[0]![0].where).toMatchObject({
+      connectionId: "provider-default-codex", authMethod: "api-key", executionChannel: "direct-api", credentialEntryId: "credential",
+      provider: { authMethod: "oauth2_authorization_code" },
     });
   });
   it("does not reassign a legacy credential already owned by an additional account", async () => {
     const db = fixture("provider-account-other");
     await refreshDefaultProviderConnectionOwners(db as unknown as PrismaClient, "codex");
     const { where, data } = db.aiProviderConnection.updateMany.mock.calls[0]![0];
-    expect(where).toEqual({ connectionId: "provider-default-codex" });
+    expect(where).toMatchObject({ connectionId: "provider-default-codex" });
     expect(data).not.toHaveProperty("credentialEntryId");
     expect(data).toMatchObject({ authMethod: "oauth", executionChannel: "subscription-cli" });
   });

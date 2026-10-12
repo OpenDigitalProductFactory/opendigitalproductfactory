@@ -49,6 +49,10 @@ repair stale defaults without inspecting token contents, enabling disabled
 accounts, changing reviewed posture, or reassigning a credential already owned
 by another account. Legacy OAuth activation reconciles this default before model
 discovery. Explicit account callbacks continue to update only their own account.
+Model availability proof is cleared when auth, channel, or the owned credential
+changes, and after a fresh legacy OAuth exchange. An unchanged configuration
+refresh preserves that proof. A concurrent configuration change refuses the
+stale reconciliation rather than restoring old auth with newer model claims.
 
 ## Provider UI preservation contract
 

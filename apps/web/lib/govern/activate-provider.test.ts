@@ -243,7 +243,7 @@ describe("activateProvider", () => {
   it("reconciles default authentication after persisting OAuth mode and before discovery", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "codex", category: "direct", endpointType: "responses", status: "active" });
     await activateProvider("codex", { trigger: "oauth_exchange", authMethod: "oauth2_authorization_code" });
-    expect(mockRefreshDefaultOwners).toHaveBeenCalledWith(mockPrisma, "codex");
+    expect(mockRefreshDefaultOwners).toHaveBeenCalledWith(mockPrisma, "codex", { credentialReplaced: true });
     expect(mockPrisma.modelProvider.update.mock.invocationCallOrder[0]).toBeLessThan(mockRefreshDefaultOwners.mock.invocationCallOrder[0]!);
     expect(mockRefreshDefaultOwners.mock.invocationCallOrder[0]).toBeLessThan(mockAutoDiscoverAndProfile.mock.invocationCallOrder[0]!);
   });

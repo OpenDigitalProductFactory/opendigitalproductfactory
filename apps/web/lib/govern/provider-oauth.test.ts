@@ -222,8 +222,8 @@ describe("exchangeOAuthCode", () => {
     expect(result).toEqual({ providerId: "codex" });
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("chatgpt");
-    expect(mockRefreshDefaultOwners).toHaveBeenCalledWith(mockPrisma, "codex");
-    expect(mockRefreshDefaultOwners).toHaveBeenCalledWith(mockPrisma, "chatgpt");
+    expect(mockRefreshDefaultOwners).toHaveBeenCalledWith(mockPrisma, "codex", { credentialReplaced: true });
+    expect(mockRefreshDefaultOwners).toHaveBeenCalledWith(mockPrisma, "chatgpt", { credentialReplaced: true });
   });
 
   it("exchanges an additional account without copying credentials to the default or sibling", async () => {
