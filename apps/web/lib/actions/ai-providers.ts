@@ -3,6 +3,7 @@
 import { getLinkedActivationOptions, testProviderAuthInternal } from "./provider-auth-test";
 import { lazyFs, lazyPath, lazyFsPromises } from "@/lib/shared/lazy-node";
 import { ensureDefaultProviderConnection, prisma, refreshDefaultProviderConnectionOwners } from "@dpf/db";
+import { toggleProviderStatus as toggleRoutingStatus } from "./provider-routing-status";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import {
   buildProviderCatalogEntry, computeNextRunAt,
@@ -300,50 +301,8 @@ export async function testProviderAuth(providerId: string, refreshCatalog = true
 
 // ─── Enable / Disable provider ───────────────────────────────────────────────
 
-export async function toggleProviderStatus(
-  providerId: string,
-): Promise<{ status: string; warning: string | null }> {
-  await requireManageProviders();
-
-  const provider = await prisma.modelProvider.findUnique({
-    where: { providerId },
-    select: { status: true },
-  });
-  if (!provider) throw new Error("Provider not found");
-
-  const newStatus = provider.status === "active" ? "inactive" : "active";
-  await prisma.modelProvider.update({
-    where: { providerId },
-    data: { status: newStatus },
-  });
-
-  // EP-AGENT-CAP-002: Warn if activated provider has no models with active capabilities
-  let warning: string | null = null;
-  if (newStatus === "active") {
-    const activeModels = await prisma.modelProfile.findMany({
-      where: { providerId, modelStatus: { in: ["active", "degraded"] } },
-      select: { capabilities: true },
-    });
-
-    const hasActiveCapability = activeModels.some((m) => {
-      const caps = m.capabilities as Record<string, unknown> | null;
-      return (
-        caps?.toolUse === true ||
-        caps?.imageInput === true ||
-        caps?.pdfInput === true ||
-        caps?.codeExecution === true
-      );
-    });
-
-    if (!hasActiveCapability) {
-      warning =
-        "This provider's models have no active capabilities (toolUse, imageInput, pdfInput, codeExecution). " +
-        "It will not be eligible for routing to any registered coworker. " +
-        "It may still be used for passive chat workflows.";
-    }
-  }
-
-  return { status: newStatus, warning };
+export async function toggleProviderStatus(providerId: string): Promise<{ status: string; warning: string | null }> {
+  return toggleRoutingStatus(providerId);
 }
 
 // ─── Model discovery ─────────────────────────────────────────────────────────
