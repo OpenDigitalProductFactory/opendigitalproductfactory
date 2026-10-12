@@ -55,7 +55,7 @@ The DPF unified connector kernel is adjacent but not the ownership boundary: DMR
 - **R12 — Measured fit:** the exact route is verified in dark and light themes at desktop and narrow widths, with a measured UX-fit artifact.
 - **R13 — Safe HTTP failures:** the net-new JSON status route returns bounded `application/problem+json` failures with a stable DPF problem type and request correlation ID.
 - **R14 — Governed reviewer:** Qwen3.8 27B remains the governed high-trust local reviewer. The catalog names that role explicitly; a low-memory catalog choice cannot override it through a generic recommendation flag.
-- **R15 — Bounded reviewer latency:** the governed reviewer receives an effective 600,000 ms inference window. Generic local overrides remain capped at that value, while unrelated provider timeouts retain their existing behavior.
+- **R15 — Bounded reviewer latency:** the governed reviewer defaults to 600,000 ms. An authorized autonomous activity with a persisted immutable parent deadline may use only the time remaining before that deadline, including queue wait and fallback. Generic local overrides remain capped at 600,000 ms. Autonomous origin alone never grants a longer window. See the BI-03AC2FD9 repair sequence below; that exception remains proposed until implemented and verified.
 - **R16 — Observable runtime:** the authenticated status projection exposes the reviewer model, effective timeout, timeout source, ceiling, and live served-context facts without exposing environment values.
 
 ## Architecture
@@ -87,7 +87,7 @@ The operation states are a closed TypeScript union—`queued`, `running`, `compl
 - **C6 — Honest view model:** byte counts remain nullable end to end and unknown data is named, never converted to zero.
 - **C7 — UX and route projection:** the existing provider route owns the workflow; generated route/doc projections and measured UX-fit evidence change with it.
 - **C8 — Separate policy questions:** the installer selects a broadly compatible initial model; the reviewer-runtime policy identifies the trusted reviewer and its latency budget. Neither is projected as the other's recommendation.
-- **C9 — One timeout resolver:** chat dispatch and diagnostics consume the same pure runtime-policy resolver, so the displayed effective timeout cannot drift from the abort signal.
+- **C9 — One timeout resolver:** chat dispatch and diagnostics consume the same pure runtime-policy resolver. Diagnostics distinguish the default model timeout from an activity-specific deadline. The server executor binds the latter to persisted authority and its current generation; callers cannot confer it through a request duration. Queue admission and provider dispatch recompute remaining time, and cancellation or generation loss prevents further dispatch and stale writes.
 
 ### F1 — Read flow
 
@@ -184,3 +184,121 @@ DMR's local policy permits one generation model plus small supporting models, an
 - Ollama pull API: <https://docs.ollama.com/api/pull>
 - Ollama delete API: <https://docs.ollama.com/api/delete>
 - LM Studio native REST API: <https://lmstudio.ai/docs/developer/rest>
+
+## BI-03AC2FD9 — Parent-bounded inference repair
+
+**Status:** implementation design; no runtime change or acceptance claimed.
+**Implementation owner:** BI-03AC2FD9 / WC-183763CA.
+**Decision:** WWMD DI-5DE30BBD52CC, adopted `parent-bounded-activity-deadline`.
+
+### Reproduction and scope
+
+On served commit `007eef1a3bc035a5f7906cf92cd2432819695534`, review
+`TR-GATE-1474B7FFECA18DB8138EFDDB` lost its AGT-181 branch exactly 600 seconds
+after dispatch while its immutable parent deadline still had time. Docker Model
+Runner generated 6,786 tokens before the abort. Activity
+`cmv5l9yk0fwbp01nses8ka87y` records this execution. The other required reviewer
+completed a genuine PASS in a single 491-second request. That checkpoint must
+survive recovery. This rules out the old 300-second transport ceiling for this
+execution; it does not establish that every timeout has the same cause.
+
+Current source at `f6ee7a5b1f505e3aa829027eb7d6ed6b8e91f0fe` retains the same
+runtime-policy blob `1cff51ab0dc390456bcbbbe98d360e62e7a9c2a9`. Both the local
+reviewer policy and the provider transport backstop are 600,000 ms. The review
+executor already owns a persisted deadline, request digest, generation fence,
+checkpoints and recovery counters. Extend those contracts without a new table,
+request identity, recovery attempt, model selection or token/cost allowance.
+
+Original BI acceptance, retained verbatim:
+
+- Decide (WWMD) whether autonomous build phases on the local engine may exceed the chat ceiling, or whether ideate must be split into bounded local completions (outline, then sections) that each fit the ceiling.
+- Implement the chosen path with a failing-to-passing test.
+- Live proof: an ideate completes on the bundled local model with no cloud engine available.
+
+Review recovery is the first caller with an existing immutable deadline. Ideate
+must establish an authoritative persisted phase deadline before consuming this
+exception. Its current origin tag and caller-supplied duration are insufficient.
+The original ideate acceptance remains owed; a completed review cannot close it.
+
+### Ordered fix sequence
+
+This is one atomic deadline contract, delivered under BI-03AC2FD9. The steps are
+internal sequencing; a timeout extension without admission, cancellation and
+fencing is not independently shippable. Quota routing is separately delivered by
+BI-EDF1BD54. Local admission priority is owned by BI-285EF102; coordinate its
+source before touching shared admission files.
+
+1. **D1 — Bind authority (R15, C9, F5, V6).** Add an execution-local deadline
+   scope populated only by the server executor after validating the saved
+   request, authority and generation. Reject malformed/expired scopes; do not
+   expose an MCP/API option that can mint deadline authority. Start with the
+   existing semantic-review executor and preserve immutable request fields.
+2. **D2 — Enforce the remaining window (R15, C9, F5, V6).** Extend the existing
+   runtime resolver and provider transport. Recompute remaining time after
+   admission and before each dispatch/fallback. Compose the parent cancellation
+   signal with per-call policy. Keep generic defaults and remote policy intact;
+   use a finite transport backstop for the authorized local window. Do not
+   increase output reserves, monetary budgets or privacy/provider authority.
+3. **D3 — Cancel and fence (R15, C9, F5, V6).** Bind parent expiry, cancellation,
+   current authority and generation loss to in-flight abort and queued waiter
+   removal. A lost executor remains outcome-uncertain until real reconciliation.
+   Late provider results never cross a fence. Completed reviewer checkpoints
+   remain reusable only under their bound immutable identity. No automatic paid
+   retry or new successor admission is introduced.
+4. **D4 — Verify and deliver (R15, C9, F5, V6).** Run failure-injection tests,
+   affected unit suites and source/test typechecks, then the exact-tree canonical
+   shared gate. Obtain exact-commit independent review; use DCO PR, protected
+   checks, merge queue and canonical self-upgrade. Record unavailable gates as
+   unrun. After deployment reconcile real provider settlement, execute the
+   supported recovery once, and retain the genuine independent verdict. The
+   ideate phase deadline integration and original local-only ideate acceptance
+   must also be proved before BI closure; do not manufacture a passing receipt.
+
+### F5 — Governed call flow
+
+Persisted parent request → authority and generation validation → execution-local
+deadline scope → existing provider/privacy/budget routing → bounded admission →
+remaining-time check → provider call → fenced checkpoint → genuine review receipt.
+Each fallback traverses the same checks. The clock is absolute and never restarts
+when a waiter enters the GPU lane. Generic chat has no such scope.
+
+### V6 — Failure injection and acceptance
+
+- Prove the current 600-second abort before changing it; prove a governed call
+  can complete after 600 seconds but before its parent deadline after the fix.
+- Prove unchanged generic defaults/clamping, rejection of malformed or expired
+  authority, and no dispatch after queue wait exhausts the parent window.
+- Cancel queued and running work; simulate generation loss and authority
+  revocation; prove no late checkpoint, no fallback charge, and no duplicate
+  provider call. Release queue listeners and timers exactly once.
+- Replay expired/stale requests and duplicate recovery; reuse completed evidence
+  only under its original binding and preserve all budget/deadline counters.
+- Exercise the actual HTTP transport, not merely a mocked timeout resolver.
+- Reuse valid prior evidence, run affected suites and package typechecks, resolve
+  `gate:context` impact obligations, regenerate/check the doc index, and complete
+  the canonical merged-code gate. Current workroom impact resolution names the
+  doc-index guard; runtime scope claims must refresh impact before source edits.
+- Live acceptance requires the affected native review's genuine verdict and the
+  original local-only ideate completion. Infrastructure refusal is inconclusive.
+
+### Risks and rollback
+
+A longer local call occupies scarce GPU capacity longer; retain the canonical
+single-flight lane and its interactive priority. Expiry must remove queued work,
+not only suppress a stale result. Scope propagation could accidentally authorize
+ordinary chat; fail closed without a verified server-owned scope. Canceling a
+local request does not prove a remote paid request settled. Preserve uncertainty
+and require runtime evidence. Roll back through a DCO revert and canonical
+release, restoring the default timeout without rewriting requests or receipts.
+
+### Standards and backlog coverage
+
+Node's [AbortSignal API](https://nodejs.org/docs/latest/api/globals.html#class-abortsignal)
+provides composed cancellation and pre-dispatch checks. Undici's
+[Dispatcher contract](https://undici.nodejs.org/api/Dispatcher) distinguishes
+header/body inactivity backstops from a whole-operation deadline. Consulted
+2026-10-12. Neither mechanism supplies execution authority.
+
+Research receipt: `initiative-2484c98c-a4f6-4773-8fd1-542c97876fb4`.
+Plan coverage is pending immutable publication of this design and the governed
+coverage write. No implementation readiness or completion is inferred here.
