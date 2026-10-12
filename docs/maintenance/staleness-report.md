@@ -7,151 +7,201 @@
 > whether the doc's wording actually needs updating (BI-AA5DFEA2). It does NOT
 > mean the doc is definitely wrong.
 
-**143** stale-candidate doc(s).
+**193** stale-candidate doc(s).
 
 | Doc | Drift | Most-recently-changed reference(s) |
 | --- | ----- | ---------------------------------- |
-| `docs/install/edge-node-air-gapped-verification-report.md` | 82d | `scripts/verify-edge-node-air-gap.sh` (+82d)<br>`docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` (+2d) |
-| `docs/install/edge-node-air-gapped.md` | 82d | `scripts/verify-edge-node-air-gap.sh` (+82d)<br>`docs/install/edge-node-multi-host.md` (+36d)<br>`docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` (+2d) |
+| `docs/edge-node/macvlan-deployment.md` | 139d | `docker-compose.edge.macvlan.yml` (+139d) |
+| `docs/personas/README.md` | 139d | `AGENTS.md` (+139d)<br>`docs/user-guide/market-archetypes.md` (+129d)<br>`docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md` (+68d)<br>…+2 more |
+| `docs/dogfood/2026-05-23-dale-hvac-build-studio.md` | 133d | `packages/db/src/seed.ts` (+133d) |
+| `docs/architecture/2026-06-09-dap-experience-layer-design.md` | 124d | `docs/architecture/2026-06-09-long-running-agentic-process-architecture.md` (+124d)<br>`docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+104d)<br>`docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md` (+62d) |
+| `docs/founder-kernel/wiki/principles/evidence-before-diagnosis.md` | 121d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+121d)<br>`docs/founder-kernel/wiki/principles/never-fabricate.md` (+78d)<br>`docs/founder-kernel/wiki/principles/check-tool-signals-first.md` (+21d) |
+| `docs/user-guide/ai-workforce/ai-cost-governance.md` | 115d | `docs/user-guide/ai-workforce/model-routing-lifecycle.md` (+115d)<br>`docs/user-guide/finance/ai-spend.md` (+38d) |
+| `docs/architecture/section-navigation.md` | 104d | `apps/web/components/shell/SectionNav.tsx` (+104d)<br>`apps/web/lib/navigation/section-nav-model.ts` (+0d) |
+| `docs/install/edge-node-air-gapped-verification-report.md` | 104d | `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` (+104d)<br>`scripts/verify-edge-node-air-gap.sh` (+82d) |
+| `docs/architecture/ui-token-styling.md` | 93d | `scripts/style-drift-baseline.json` (+93d)<br>`scripts/check-style-drift.mjs` (+54d) |
+| `docs/architecture/2026-06-19-cada-cloud-sovereignty-architecture-note.md` | 86d | `docs/founder-kernel/wiki/principles/data-sovereignty-follows-control.md` (+86d) |
+| `docs/operations/antigravity-cli-onboarding.md` | 86d | `AGENTS.md` (+86d) |
+| `docs/design/golden-triangle-slice0-substrate-audit.md` | 85d | `docs/design/golden-triangle-design.md` (+85d) |
+| `docs/founder-kernel/SCHEMA.md` | 84d | `packages/db/src/wiki-taxonomy.ts` (+84d)<br>`docs/superpowers/specs/2026-05-12-principles-as-wiki-kind-design.md` (+62d) |
+| `docs/architecture/platform-substrate-boundaries.md` | 81d | `docs/architecture/capability-driven-runtime-profiles.md` (+81d)<br>`scripts/platform-substrate-baseline.json` (+80d)<br>`scripts/platform-substrate-manifest.json` (+76d)<br>…+2 more |
+| `docs/founder-kernel/raw-sources/articles/why-we-ended-up-proposing-two-standards-for-ai-agents.md` | 81d | `docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md` (+81d)<br>`docs/architecture/GAID.md` (+77d)<br>`docs/architecture/trusted-ai-kernel.md` (+77d) |
 | `docs/founder-kernel/wiki/entities/it4it.md` | 81d | `docs/founder-kernel/raw-sources/frameworks/it4it-v3.md` (+81d) |
 | `docs/founder-kernel/wiki/entities/value-stream.md` | 81d | `docs/founder-kernel/raw-sources/frameworks/it4it-v3.md` (+81d) |
-| `docs/founder-kernel/SCHEMA.md` | 79d | `packages/db/src/wiki-taxonomy.ts` (+79d)<br>`docs/superpowers/specs/2026-05-12-principles-as-wiki-kind-design.md` (+62d) |
-| `docs/personas/README.md` | 77d | `AGENTS.md` (+77d)<br>`docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md` (+68d)<br>`docs/user-guide/market-archetypes.md` (+68d)<br>…+2 more |
-| `docs/security/2026-05-24-shift-left-rollout.md` | 77d | `.github/workflows/ci.yml` (+77d)<br>`docs/testing/pre-pr-gate.md` (+77d)<br>`.github/workflows/codeql.yml` (+72d)<br>…+2 more |
-| `docs/dogfood/2026-05-23-dale-hvac-build-studio.md` | 72d | `packages/db/src/seed.ts` (+72d) |
+| `docs/marketing/archetype-persona-creative-narratives.md` | 81d | `docs/marketing/archetype-owner-quick-guide.md` (+81d)<br>`docs/architecture/archetype-owner-positioning.md` (+14d) |
+| `docs/marketing/archetype-visual-asset-pack.md` | 81d | `docs/marketing/archetype-owner-quick-guide.md` (+81d)<br>`docs/architecture/archetype-owner-positioning.md` (+14d) |
+| `docs/founder-kernel/wiki/principles/make-silent-failures-observable.md` | 79d | `docs/founder-kernel/wiki/principles/fail-fast-explain-clearly.md` (+79d)<br>`docs/superpowers/specs/2026-05-24-founder-kernel-evolution-discipline-design.md` (+60d)<br>`docs/superpowers/plans/2026-05-23-governed-platform-upgrade-phase-0-and-1.md` (+53d)<br>…+3 more |
+| `docs/founder-kernel/wiki/principles/one-common-process-three-surfaces.md` | 79d | `AGENTS.md` (+79d)<br>`docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md` (+79d)<br>`docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md` (+49d)<br>…+2 more |
+| `docs/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md` | 79d | `docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md` (+79d)<br>`docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+60d)<br>`docs/founder-kernel/wiki/principles/single-source-of-truth.md` (+18d) |
+| `docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md` | 79d | `AGENTS.md` (+79d)<br>`docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+60d)<br>`docs/founder-kernel/wiki/principles/build-gate-mandatory.md` (+17d)<br>…+1 more |
+| `docs/founder-kernel/wiki/principles/research-before-implementing.md` | 78d | `docs/founder-kernel/wiki/principles/research-and-use-standards.md` (+78d)<br>`docs/founder-kernel/wiki/principles/check-tool-signals-first.md` (+21d) |
+| `docs/operations/customer-zero-preinstall-readiness.md` | 77d | `docs/index.html` (+77d)<br>`docs/user-guide/getting-started/index.md` (+75d)<br>`docs/user-guide/market-archetypes.md` (+75d)<br>…+1 more |
+| `docs/user-guide/build-studio/sandbox.md` | 75d | `docs/user-guide/development-workspace.md` (+75d) |
+| `docs/edge-node/security-and-sovereignty.md` | 74d | `docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+74d)<br>`docs/edge-node/deployment-topology.md` (+70d)<br>`docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` (+67d)<br>…+1 more |
 | `docs/security/secrets-scan.md` | 72d | `.github/workflows/codeql.yml` (+72d)<br>`.github/workflows/security-inflow-gate.yml` (+72d) |
-| `docs/install/cloud-single-vm.md` | 68d | `docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+68d)<br>`docs/superpowers/plans/2026-05-23-governed-platform-upgrade-phase-0-and-1.md` (+52d)<br>`docs/install/edge-node-multi-host.md` (+24d)<br>…+2 more |
+| `docs/architecture/field-service-work-item.md` | 71d | `packages/validators/src/field-dispatch.ts` (+71d) |
+| `docs/personas/marisol-retail.md` | 70d | `docs/edge-node/deployment-topology.md` (+70d)<br>`docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md` (+42d)<br>`docs/superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md` (+0d) |
+| `docs/strategy/2026-09-cada-architects-forum-deck.md` | 70d | `docs/founder-kernel/wiki/principles/data-sovereignty-follows-control.md` (+70d)<br>`apps/web/lib/routing/pipeline-v2.ts` (+67d)<br>`apps/web/lib/inference/local-only.ts` (+34d)<br>…+3 more |
 | `docs/personas/dale-hvac.md` | 68d | `docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md` (+68d)<br>`docs/dogfood/2026-05-23-dale-hvac-build-studio.md` (+1d) |
 | `docs/personas/linda-clinic.md` | 68d | `docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md` (+68d) |
-| `docs/founder-kernel/wiki/principles/evidence-before-diagnosis.md` | 61d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+61d)<br>`docs/founder-kernel/wiki/principles/check-tool-signals-first.md` (+21d)<br>`docs/founder-kernel/wiki/principles/never-fabricate.md` (+21d) |
-| `docs/architecture/2026-06-09-dap-experience-layer-design.md` | 60d | `docs/architecture/2026-06-09-long-running-agentic-process-architecture.md` (+60d)<br>`docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+44d)<br>`docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md` (+32d) |
-| `docs/founder-kernel/wiki/principles/make-silent-failures-observable.md` | 60d | `docs/superpowers/specs/2026-05-24-founder-kernel-evolution-discipline-design.md` (+60d)<br>`docs/superpowers/plans/2026-05-23-governed-platform-upgrade-phase-0-and-1.md` (+53d)<br>`docs/founder-kernel/wiki/principles/check-tool-signals-first.md` (+21d)<br>…+3 more |
-| `docs/architecture/2026-06-14-odysseus-review-depth-pass.md` | 55d | `packages/db/prisma/schema.prisma` (+55d)<br>`apps/web/lib/inference/routed-inference.ts` (+52d)<br>`apps/web/lib/routing/pipeline-v2.ts` (+51d)<br>…+5 more |
-| `docs/dev/collision-free-dev-workflow.md` | 54d | `docs/founder-kernel/wiki/principles/keep-root-clone-as-merge-worktree.md` (+54d)<br>`docs/founder-kernel/wiki/principles/worktree-per-session.md` (+54d) |
-| `docs/architecture/unified-development-tracking.md` | 50d | `AGENTS.md` (+50d)<br>`docs/superpowers/specs/2026-06-19-unified-build-studio-tracking-all-surfaces-design.md` (+20d) |
-| `docs/edge-node/deployment-topology.md` | 50d | `docs/edge-node/unifi-adapter.md` (+50d)<br>`docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+44d) |
-| `docs/design/golden-triangle-slice0-substrate-audit.md` | 48d | `docs/design/golden-triangle-design.md` (+48d) |
-| `docs/founder-kernel/wiki/principles/optimize-for-the-whole.md` | 48d | `docs/founder-kernel/raw-sources/frameworks/csdm.md` (+48d)<br>`docs/founder-kernel/raw-sources/frameworks/it4it-v3.md` (+48d) |
-| `docs/user-guide/ai-workforce/ai-cost-governance.md` | 47d | `docs/user-guide/ai-workforce/model-routing-lifecycle.md` (+47d)<br>`docs/user-guide/finance/ai-spend.md` (+38d) |
-| `docs/edge-node/security-and-sovereignty.md` | 46d | `scripts/verify-edge-node-air-gap.sh` (+46d)<br>`docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+44d) |
-| `docs/install/linux.md` | 46d | `.github/workflows/install-verification.yml` (+46d)<br>`docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+44d)<br>`docs/install/macos.md` (+30d) |
-| `docs/architecture/ui-token-styling.md` | 44d | `scripts/check-style-drift.mjs` (+44d)<br>`scripts/style-drift-baseline.json` (+29d) |
-| `docs/edge-node/fleet-operations.md` | 44d | `docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+44d) |
-| `docs/personas/marisol-retail.md` | 42d | `docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md` (+42d)<br>`docs/edge-node/deployment-topology.md` (+0d)<br>`docs/superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md` (+0d) |
-| `docs/founder-kernel/wiki/principles/never-fabricate.md` | 40d | `docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md` (+40d) |
-| `docs/testing/pending-backlog-items.md` | 38d | `docs/testing/archetype-audit-plan.md` (+38d) |
-| `docs/install/edge-node-multi-host.md` | 35d | `docker-compose.tls.yml` (+35d)<br>`docs/edge-node/deployment-topology.md` (+0d) |
-| `docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md` | 34d | `docs/founder-kernel/wiki/principles/destructive-actions-require-explicit-go.md` (+34d) |
-| `docs/runbooks/dependency-compromise.md` | 31d | `docs/architecture/dependency-reduction-routine.md` (+31d) |
-| `docs/founder-kernel/wiki/principles/never-auto-execute-irreversible-or-estate-wide-response.md` | 28d | `docs/founder-kernel/wiki/principles/never-wipe-db-for-code-fixes.md` (+28d) |
+| `docs/user-guide/storefront/setup-and-launch.md` | 68d | `docs/user-guide/storefront/settings-business-and-operations.md` (+68d)<br>`docs/user-guide/storefront/index.md` (+33d) |
+| `docs/architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md` | 67d | `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` (+67d)<br>`docs/superpowers/specs/2026-06-16-living-architecture-graph-and-operational-bridge-design.md` (+0d) |
+| `docs/user-guide/operations/getting-reached.md` | 67d | `docs/user-guide/operations/index.md` (+67d)<br>`docs/user-guide/operations/business-journeys.md` (+3d) |
+| `docs/architecture/archetype-owner-positioning.md` | 66d | `docs/marketing/archetype-owner-quick-guide.md` (+66d)<br>`docs/user-guide/market-archetypes.md` (+60d)<br>`docs/architecture/archetype-business-value-streams.md` (+35d) |
+| `docs/architecture/mcp-tool-surface-ergonomics-audit.md` | 63d | `docs/architecture/mcp-tool-authorization-runbook.md` (+63d)<br>`docs/architecture/mcp-tool-packs.md` (+52d) |
+| `docs/user-guide/operations/business-journeys.md` | 63d | `docs/user-guide/operations/index.md` (+63d)<br>`docs/user-guide/operations/self-upgrade.md` (+62d) |
+| `docs/architecture/jsi-conformance-tests.md` | 62d | `docs/architecture/job-specific-intelligence.md` (+62d) |
+| `docs/founder-kernel/wiki/principles/dco-sign-off-required.md` | 61d | `docs/architecture/build-gate-runbook.md` (+61d) |
+| `docs/marketing/dpf-market-vision.md` | 61d | `docs/index.html` (+61d) |
+| `docs/user-guide/finance/banking-and-reconciliation.md` | 61d | `docs/user-guide/finance/accounts-receivable.md` (+61d) |
+| `docs/user-guide/finance/controls-and-automation.md` | 61d | `docs/user-guide/finance/accounts-receivable.md` (+61d) |
+| `docs/user-guide/finance/reporting-and-close.md` | 61d | `docs/user-guide/finance/accounts-receivable.md` (+61d) |
+| `docs/architecture/external-planning-reference-boundary.md` | 60d | `docs/architecture/design-research-runbook.md` (+60d)<br>`docs/architecture/agent-standards-external-alignment.md` (+58d) |
+| `docs/founder-kernel/wiki/principles/external-and-internal-work-share-gates.md` | 60d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+60d)<br>`docs/founder-kernel/wiki/principles/destructive-actions-require-explicit-go.md` (+17d) |
+| `docs/founder-kernel/wiki/principles/security-fix-needs-regression-test-first.md` | 60d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+60d) |
+| `docs/founder-kernel/wiki/principles/worktree-base-origin-main.md` | 60d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+60d)<br>`docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md` (+22d) |
+| `docs/user-guide/getting-started/ai-coworker.md` | 59d | `docs/architecture/autonomy-and-wwmd.md` (+59d)<br>`docs/user-guide/market-archetypes.md` (+52d) |
+| `docs/architecture/2026-08-09-portal-architecture-hardening-findings.md` | 57d | `AGENTS.md` (+57d)<br>`docs/architecture/orientation.md` (+48d)<br>`docs/operations/disaster-recovery.md` (+47d)<br>…+3 more |
+| `docs/architecture/unified-development-tracking.md` | 57d | `AGENTS.md` (+57d)<br>`docs/superpowers/specs/2026-06-19-delivery-visibility-and-pr-capture-addendum.md` (+19d)<br>`docs/superpowers/specs/2026-06-19-unified-build-studio-tracking-all-surfaces-design.md` (+19d) |
+| `docs/founder-kernel/wiki/principles/check-tool-signals-first.md` | 57d | `docs/founder-kernel/wiki/principles/fail-fast-explain-clearly.md` (+57d)<br>`docs/founder-kernel/wiki/principles/never-fabricate.md` (+57d) |
+| `docs/founder-kernel/wiki/principles/mcp-is-the-coordination-plane.md` | 57d | `AGENTS.md` (+57d)<br>`docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md` (+27d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+21d) |
+| `docs/founder-kernel/wiki/principles/reap-sidecars-to-upgrade-tools.md` | 57d | `AGENTS.md` (+57d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+21d)<br>`docs/founder-kernel/wiki/principles/worktree-selection-and-reaping.md` (+17d) |
+| `docs/founder-kernel/wiki/principles/never-auto-execute-irreversible-or-estate-wide-response.md` | 54d | `docs/founder-kernel/wiki/principles/never-wipe-db-for-code-fixes.md` (+54d)<br>`docs/founder-kernel/wiki/principles/prefer-reversible-containment.md` (+46d) |
+| `docs/architecture/2026-06-14-odysseus-review-depth-pass.md` | 53d | `apps/web/lib/inference/routed-inference.ts` (+53d)<br>`apps/web/lib/routing/pipeline-v2.ts` (+50d)<br>`packages/db/prisma/schema/ai-coworker.prisma` (+49d)<br>…+2 more |
+| `docs/user-guide/contributing/dev-container.md` | 53d | `docs/user-guide/development-workspace.md` (+53d)<br>`docs/user-guide/contributing/developer-setup.md` (+52d) |
+| `docs/user-guide/ai-workforce/decision-perspective-in-practice.md` | 52d | `docs/architecture/autonomy-and-wwmd.md` (+52d)<br>`docs/user-guide/ai-workforce/decision-perspective.md` (+52d)<br>`docs/user-guide/ai-workforce/index.md` (+52d)<br>…+1 more |
+| `docs/founder-kernel/wiki/index.md` | 51d | `docs/founder-kernel/RAW-SOURCES-LICENSE.md` (+51d)<br>`docs/founder-kernel/raw-sources/frameworks/csdm.md` (+51d)<br>`docs/founder-kernel/raw-sources/frameworks/it4it-v3.md` (+24d)<br>…+1 more |
+| `docs/founder-kernel/wiki/stances/trust-the-cmdb-or-rebuild-it.md` | 51d | `docs/founder-kernel/raw-sources/frameworks/csdm.md` (+51d) |
+| `docs/user-guide/build-studio/autonomous-builds.md` | 51d | `docs/operations/autonomous-build-completion.md` (+51d) |
+| `docs/founder-kernel/wiki/principles/reporting-read-model-boundaries.md` | 49d | `docs/architecture/orientation.md` (+49d) |
+| `docs/founder-kernel/wiki/principles/sweep-main-before-trusting-worktree-specs.md` | 49d | `docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md` (+49d)<br>`docs/founder-kernel/wiki/principles/consult-specs-first.md` (+8d) |
+| `docs/maintenance/staleness-coverage.md` | 48d | `docs/founder-kernel/wiki/principles/gate-coverage-matches-blast-radius.md` (+48d) |
+| `docs/architecture/customer-zero-and-use-case-zero.md` | 46d | `docs/architecture/vector-decisioning-and-jsi.md` (+46d)<br>`docs/operations/oss-repo-identity-hygiene.md` (+17d)<br>`docs/superpowers/specs/2026-06-07-business-operating-model-portfolio-wiring-design.md` (+4d)<br>…+1 more |
+| `docs/architecture/ux-archetype-audit-rubric.md` | 46d | `docs/platform-usability-standards.md` (+46d)<br>`docs/architecture/theme-aware-styling-runbook.md` (+41d)<br>`docs/architecture/archetype-operating-model-audit.md` (+10d) |
+| `docs/user-guide/ai-workforce/priority-and-outcomes.md` | 46d | `docs/user-guide/ai-workforce/model-routing-lifecycle.md` (+46d)<br>`docs/user-guide/platform/ai-operations.md` (+46d)<br>`docs/user-guide/workspace/work-rooms.md` (+42d)<br>…+1 more |
+| `docs/dogfood/reset-cycle-playbook.md` | 45d | `docs/testing/pre-pr-gate.md` (+45d)<br>`docs/architecture/archetype-operating-model-audit.md` (+9d) |
+| `docs/founder-kernel/wiki/principles/runtime-gates-via-shared-lease.md` | 44d | `AGENTS.md` (+44d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+9d)<br>`docs/founder-kernel/wiki/principles/image-identity-equals-bytes.md` (+8d) |
+| `docs/install/hardware.md` | 44d | `docs/install/windows.md` (+44d)<br>`docs/install/macos.md` (+43d)<br>`docs/install/linux.md` (+39d)<br>…+1 more |
+| `docs/architecture/decision-vectors-by-archetype.md` | 43d | `docs/architecture/decision-vectors.md` (+43d) |
+| `docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md` | 42d | `docs/founder-kernel/wiki/principles/do-the-work-dont-task-the-operator.md` (+42d)<br>`docs/founder-kernel/wiki/principles/state-results-directly.md` (+42d)<br>`docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` (+25d) |
+| `docs/founder-kernel/wiki/principles/consult-specs-first.md` | 41d | `docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md` (+41d)<br>`docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+38d)<br>`docs/founder-kernel/wiki/principles/research-and-use-standards.md` (+9d) |
+| `docs/operations/oss-repo-identity-hygiene.md` | 41d | `scripts/check-no-private-identity.mjs` (+41d) |
+| `docs/architecture/2026-08-20-governed-autonomy-architecture.md` | 39d | `docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md` (+39d)<br>`docs/architecture/tak-conformance-tests.md` (+25d)<br>`docs/architecture/trusted-ai-kernel.md` (+25d)<br>…+1 more |
+| `docs/founder-kernel/wiki/principles/worktree-selection-and-reaping.md` | 39d | `AGENTS.md` (+39d)<br>`docs/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client.md` (+21d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+4d) |
+| `docs/edge-node/deployment-topology.md` | 38d | `docker-compose.edge-standalone.yml` (+38d)<br>`docker-compose.edge.macvlan.yml` (+38d)<br>`docker-compose.edge.yml` (+38d)<br>…+1 more |
+| `docs/operations/build-cost-flags-activation-runbook.md` | 37d | `docs/superpowers/specs/2026-07-12-dpf-development-model-and-frontier-harness-positioning-design.md` (+37d) |
+| `docs/founder-kernel/wiki/principles/image-identity-equals-bytes.md` | 35d | `AGENTS.md` (+35d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+0d) |
+| `docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md` | 34d | `docs/architecture/orientation.md` (+34d)<br>`docs/architecture/platform-overview.md` (+34d)<br>`docs/superpowers/specs/2026-08-14-portfolio-shaped-information-architecture-design.md` (+27d)<br>…+1 more |
+| `docs/testing/portal-ux-scorecard-template.md` | 33d | `docs/architecture/portal-ux-evaluation-framework.md` (+33d) |
+| `docs/architecture/archetype-operating-model-audit.md` | 29d | `docs/architecture/archetypes/pet-rescue-operating-model.md` (+29d)<br>`docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+7d)<br>`docs/architecture/archetype-business-value-streams.md` (+4d) |
 | `docs/maintenance/README.md` | 28d | `docs/maintenance/staleness-report.md` (+28d) |
-| `docs/founder-kernel/raw-sources/articles/why-we-ended-up-proposing-two-standards-for-ai-agents.md` | 27d | `docs/architecture/GAID.md` (+27d)<br>`docs/architecture/trusted-ai-kernel.md` (+20d)<br>`docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md` (+14d) |
-| `docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` | 27d | `docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md` (+27d) |
-| `docs/founder-kernel/wiki/index.md` | 24d | `docs/founder-kernel/RAW-SOURCES-LICENSE.md` (+24d)<br>`docs/founder-kernel/raw-sources/frameworks/csdm.md` (+24d)<br>`docs/founder-kernel/raw-sources/frameworks/it4it-v3.md` (+24d)<br>…+2 more |
-| `docs/founder-kernel/wiki/stances/trust-the-cmdb-or-rebuild-it.md` | 24d | `docs/founder-kernel/raw-sources/frameworks/csdm.md` (+24d) |
-| `docs/operations/antigravity-cli-onboarding.md` | 23d | `AGENTS.md` (+23d) |
-| `docs/architecture/platform-substrate-boundaries.md` | 21d | `scripts/platform-substrate-baseline.json` (+21d) |
-| `docs/founder-kernel/wiki/principles/research-before-implementing.md` | 21d | `docs/founder-kernel/wiki/principles/check-tool-signals-first.md` (+21d) |
-| `docs/install/windows.md` | 19d | `docs/install/platform-support-watchlist.md` (+19d)<br>`docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+14d) |
-| `docs/testing/archetype-audit-plan.md` | 17d | `packages/storefront-templates/src/archetypes/index.ts` (+17d)<br>`docs/architecture/archetype-business-value-streams.md` (+10d)<br>`docs/superpowers/specs/2026-06-09-bian-banking-archetypes-design.md` (+10d)<br>…+1 more |
-| `docs/architecture/dpf-patterns.md` | 16d | `apps/web/lib/mcp-tools.ts` (+16d)<br>`packages/db/prisma/schema.prisma` (+16d)<br>`docs/founder-kernel/wiki/principles/consult-specs-first.md` (+9d)<br>…+9 more |
-| `docs/founder-kernel/wiki/principles/image-identity-equals-bytes.md` | 16d | `AGENTS.md` (+16d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+16d) |
-| `docs/founder-kernel/wiki/principles/mcp-is-the-coordination-plane.md` | 16d | `AGENTS.md` (+16d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+16d) |
-| `docs/founder-kernel/wiki/principles/one-common-process-three-surfaces.md` | 16d | `AGENTS.md` (+16d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+16d) |
-| `docs/founder-kernel/wiki/principles/reap-sidecars-to-upgrade-tools.md` | 16d | `AGENTS.md` (+16d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+16d) |
-| `docs/founder-kernel/wiki/principles/runtime-gates-via-shared-lease.md` | 16d | `AGENTS.md` (+16d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+16d) |
-| `docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md` | 16d | `AGENTS.md` (+16d) |
-| `docs/founder-kernel/wiki/principles/worktree-selection-and-reaping.md` | 16d | `AGENTS.md` (+16d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+16d) |
-| `docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md` | 16d | `docs/founder-kernel/wiki/principles/prefer-self-hosted-infrastructure.md` (+16d)<br>`docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+10d) |
-| `docs/operations/customer-zero-preinstall-readiness.md` | 15d | `docs/user-guide/market-archetypes.md` (+15d)<br>`docs/index.html` (+11d)<br>`docs/README.md` (+11d)<br>…+1 more |
-| `docs/install/macos.md` | 14d | `docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+14d) |
-| `docs/marketing/archetype-persona-creative-narratives.md` | 14d | `docs/architecture/archetype-owner-positioning.md` (+14d)<br>`docs/marketing/archetype-owner-quick-guide.md` (+14d)<br>`docs/testing/archetype-audit-plan.md` (+4d) |
-| `docs/marketing/archetype-visual-asset-pack.md` | 14d | `docs/architecture/archetype-owner-positioning.md` (+14d)<br>`docs/marketing/archetype-owner-quick-guide.md` (+14d) |
-| `README.md` | 14d | `AGENTS.md` (+14d)<br>`docs/architecture/agent-standards-dpf-conformance.md` (+13d)<br>`docs/architecture/agent-standards-external-alignment.md` (+12d)<br>…+10 more |
-| `docs/architecture/job-specific-intelligence.md` | 13d | `docs/architecture/agent-standards-dpf-conformance.md` (+13d)<br>`docs/architecture/agent-standards-external-alignment.md` (+12d)<br>`docs/architecture/GAID.md` (+12d)<br>…+1 more |
-| `docs/operations/build-cost-flags-activation-runbook.md` | 13d | `docs/superpowers/specs/2026-07-12-dpf-development-model-and-frontier-harness-positioning-design.md` (+13d) |
-| `docs/user-guide/contributing/agent-dev-environments.md` | 13d | `docs/user-guide/contributing/dev-container.md` (+13d)<br>`docs/user-guide/build-studio/index.md` (+7d)<br>`docs/user-guide/contributing/developer-setup.md` (+3d) |
-| `docs/architecture/agent-standards-contribution-roadmap.md` | 12d | `docs/architecture/agent-standards-external-alignment.md` (+12d)<br>`docs/architecture/agent-standards-family.md` (+6d) |
-| `docs/architecture/capability-driven-runtime-profiles.md` | 12d | `apps/web/lib/platform-runtime/operational-state.ts` (+12d)<br>`scripts/dpf-compose.mjs` (+0d)<br>`scripts/lib/resolve-capability-compose-profiles.mjs` (+0d) |
-| `docs/install/verification-runbook.md` | 12d | `docs/install/edge-node-multi-host.md` (+12d) |
-| `docs/README.md` | 12d | `AGENTS.md` (+12d)<br>`docs/platform-usability-standards.md` (+11d)<br>`docs/user-guide/contributing/dev-container.md` (+11d)<br>…+13 more |
-| `docs/founder-kernel/AUTHORING.md` | 11d | `packages/db/src/wiki-taxonomy.ts` (+11d)<br>`docs/founder-kernel/RAW-SOURCES-LICENSE.md` (+3d) |
-| `docs/user-guide/getting-started/index.md` | 11d | `docs/user-guide/getting-started/ai-coworker.md` (+11d)<br>`docs/user-guide/workspace/index.md` (+7d)<br>`docs/user-guide/build-studio/index.md` (+4d)<br>…+4 more |
-| `docs/user-guide/index.md` | 11d | `docs/user-guide/ai-workforce/index.md` (+11d)<br>`docs/user-guide/getting-started/ai-coworker.md` (+11d)<br>`docs/user-guide/platform/index.md` (+11d)<br>…+14 more |
-| `docs/operations/runtime-glossary.md` | 10d | `docs/operations/local-ci-sandbox-slots.md` (+10d) |
-| `docs/user-guide/ai-workforce/decision-perspective-in-practice.md` | 10d | `docs/user-guide/ai-workforce/decision-perspective.md` (+10d)<br>`docs/user-guide/ai-workforce/index.md` (+10d)<br>`docs/architecture/platform-overview.md` (+2d) |
-| `docs/user-guide/contributing/developer-setup.md` | 10d | `docs/user-guide/contributing/dev-container.md` (+10d) |
-| `docs/user-guide/workspace/attention-inbox.md` | 10d | `docs/user-guide/getting-started/ai-coworker.md` (+10d) |
-| `docs/architecture/branch-and-worktree-runbook.md` | 9d | `AGENTS.md` (+9d) |
-| `docs/architecture/build-gate-runbook.md` | 9d | `AGENTS.md` (+9d)<br>`docs/testing/pre-pr-gate.md` (+8d) |
-| `docs/architecture/data-model-stewardship-runbook.md` | 9d | `AGENTS.md` (+9d) |
-| `docs/architecture/design-research-runbook.md` | 9d | `AGENTS.md` (+9d)<br>`docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+2d)<br>`docs/architecture/archetype-business-value-streams.md` (+1d) |
-| `docs/architecture/skill-surfaces-runbook.md` | 9d | `AGENTS.md` (+9d)<br>`docs/architecture/agent-skill-index.md` (+4d) |
-| `docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md` | 9d | `docs/founder-kernel/wiki/principles/consult-specs-first.md` (+9d)<br>`docs/founder-kernel/wiki/principles/sweep-main-before-trusting-worktree-specs.md` (+0d) |
-| `docs/user-guide/build-studio/sandbox.md` | 9d | `docs/user-guide/build-studio/deployment.md` (+9d) |
-| `docs/architecture/ai-routing-document-map.md` | 8d | `docs/superpowers/plans/2026-07-26-pre-dispatch-sensitive-llm-routing.md` (+8d)<br>`docs/user-guide/ai-workforce/model-routing-lifecycle.md` (+8d)<br>`docs/superpowers/specs/2026-07-26-ai-routing-architecture-explainability-design.md` (+5d) |
-| `docs/architecture/backlog-and-planning-runbook.md` | 8d | `AGENTS.md` (+8d)<br>`docs/architecture/enforced-ci-gates.md` (+0d) |
+| `docs/testing/pr-health.md` | 28d | `docs/architecture/failure-analysis-and-recovery.md` (+28d)<br>`scripts/pr-health.mjs` (+16d)<br>`scripts/pr-health.test.mjs` (+16d) |
+| `docs/founder-kernel/wiki/principles/prose-is-not-a-control-gate.md` | 27d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+27d) |
+| `docs/user-guide/storefront/index.md` | 27d | `docs/user-guide/market-archetypes.md` (+27d) |
+| `docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md` | 26d | `docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md` (+26d) |
+| `docs/design/golden-triangle-design.md` | 26d | `apps/web/lib/queue/functions/deliberation-run.ts` (+26d)<br>`apps/web/lib/routing/chat-adapter.ts` (+26d)<br>`docs/user-guide/ai-workforce/model-routing-lifecycle.md` (+26d)<br>…+2 more |
+| `docs/founder-kernel/wiki/principles/validate-an-archetype-by-running-its-business.md` | 26d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+26d) |
+| `docs/user-guide/compliance/regulatory-submissions.md` | 26d | `docs/user-guide/compliance/regulations-and-obligations.md` (+26d)<br>`docs/user-guide/compliance/controls-and-evidence.md` (+25d) |
+| `docs/founder-kernel/wiki/principles/destructive-actions-require-explicit-go.md` | 25d | `docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` (+25d)<br>`docs/founder-kernel/wiki/principles/never-wipe-db-for-code-fixes.md` (+7d) |
+| `docs/founder-kernel/wiki/principles/mirror-dont-migrate.md` | 25d | `docs/founder-kernel/wiki/principles/never-wipe-db-for-code-fixes.md` (+25d) |
+| `docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md` | 25d | `docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` (+25d) |
+| `docs/user-guide/compliance/audits-and-corrective-actions.md` | 25d | `docs/user-guide/compliance/controls-and-evidence.md` (+25d)<br>`docs/user-guide/compliance/incidents-risks-and-response.md` (+16d)<br>`docs/user-guide/compliance/posture-and-gaps.md` (+8d) |
+| `docs/user-guide/finance/index.md` | 23d | `docs/user-guide/finance/accounts-receivable.md` (+23d) |
+| `docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md` | 22d | `docs/architecture/2026-06-14-odysseus-review-depth-pass.md` (+22d)<br>`docs/architecture/2026-06-14-odysseus-ux-routing-model-review.md` (+19d)<br>`docs/superpowers/specs/2026-07-26-ai-routing-architecture-explainability-design.md` (+5d)<br>…+1 more |
+| `docs/user-guide/wiki/index.md` | 21d | `docs/architecture/autonomy-and-wwmd.md` (+21d)<br>`docs/user-guide/ai-workforce/coworker-proactivity.md` (+21d) |
+| `docs/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client.md` | 19d | `docs/architecture/2026-06-09-long-running-agentic-process-architecture.md` (+19d) |
+| `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` | 18d | `docs/architecture/trusted-ai-kernel.md` (+18d)<br>`docs/architecture/workroom-vocabulary-boundary.md` (+11d) |
+| `docs/founder-kernel/wiki/principles/optimize-for-the-whole.md` | 18d | `docs/founder-kernel/raw-sources/frameworks/csdm.md` (+18d) |
+| `docs/operations/autonomous-build-completion.md` | 18d | `docs/user-guide/operations/self-upgrade.md` (+18d) |
+| `docs/professions/frontend-engineer/wiki/compose-report-kit-for-reporting-ux.md` | 18d | `docs/founder-kernel/wiki/principles/no-hardcoded-colors.md` (+18d) |
+| `docs/user-guide/compliance/posture-and-gaps.md` | 18d | `docs/user-guide/compliance/regulations-and-obligations.md` (+18d)<br>`docs/user-guide/compliance/controls-and-evidence.md` (+17d) |
+| `docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` | 17d | `docs/founder-kernel/wiki/principles/do-the-work-dont-task-the-operator.md` (+17d)<br>`docs/founder-kernel/wiki/principles/state-results-directly.md` (+17d) |
+| `docs/founder-kernel/wiki/principles/schema-honesty-over-aspirational-naming.md` | 17d | `docs/founder-kernel/wiki/principles/single-source-of-truth.md` (+17d) |
+| `docs/user-guide/compliance/policies-and-acknowledgements.md` | 17d | `docs/user-guide/compliance/controls-and-evidence.md` (+17d)<br>`docs/user-guide/compliance/regulations-and-obligations.md` (+17d) |
+| `docs/architecture/workroom-vocabulary-boundary.md` | 16d | `docs/architecture/work-shapes-and-the-decision-gate.md` (+16d) |
+| `docs/README.md` | 16d | `docs/user-guide/contributing/agent-dev-environments.md` (+16d)<br>`AGENTS.md` (+15d)<br>`docs/architecture/autonomy-and-wwmd.md` (+11d)<br>…+15 more |
+| `docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md` | 16d | `docs/install/platform-support-watchlist.md` (+16d)<br>`docs/superpowers/specs/2026-03-19-mobile-companion-app-design.md` (+11d)<br>`docs/superpowers/specs/2026-05-09-build-execution-provider-design.md` (+6d) |
+| `docs/architecture/agent-client-governance.md` | 15d | `docs/architecture/failure-analysis-and-recovery.md` (+15d) |
+| `README.md` | 15d | `AGENTS.md` (+15d)<br>`docs/operations/install.md` (+15d)<br>`docs/install/macos.md` (+11d)<br>…+15 more |
+| `docs/architecture/decision-vectors.md` | 14d | `docs/architecture/job-specific-intelligence.md` (+14d)<br>`docs/architecture/trusted-ai-kernel.md` (+14d) |
+| `docs/architecture/vector-decisioning-and-jsi.md` | 14d | `docs/architecture/job-specific-intelligence.md` (+14d) |
+| `docs/security/2026-05-24-shift-left-rollout.md` | 14d | `docs/architecture/build-gate-runbook.md` (+14d)<br>`docs/testing/pre-pr-gate.md` (+10d)<br>`.github/workflows/ci.yml` (+4d) |
+| `docs/testing/archetype-exercise-harness.md` | 14d | `docs/testing/archetype-job-validation.md` (+14d) |
+| `docs/testing/archetype-exercise-playbook.md` | 14d | `docs/testing/archetype-job-validation.md` (+14d)<br>`docs/testing/archetype-exercise-harness.md` (+0d) |
+| `docs/user-guide/workspace/documents.md` | 12d | `docs/user-guide/customers/marketing.md` (+12d) |
+| `docs/architecture/2026-07-06-it4it-dppm-workforce-portfolio-white-paper.md` | 11d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+11d) |
+| `docs/founder-kernel/RAW-SOURCES-LICENSE.md` | 11d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+11d) |
+| `docs/Reference/operating-model-axes-additions.md` | 11d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+11d) |
+| `docs/runbooks/dependency-compromise.md` | 11d | `docs/architecture/dependency-reduction-routine.md` (+11d) |
+| `docs/user-guide/contributing/developer-setup.md` | 11d | `docs/user-guide/contributing/agent-dev-environments.md` (+11d)<br>`docs/user-guide/development-workspace.md` (+0d) |
+| `docs/architecture/agent-governance-market-landscape-2026.md` | 10d | `docs/architecture/gated-permissions-process.md` (+10d)<br>`docs/architecture/agent-standards-family.md` (+1d) |
+| `docs/architecture/agent-standards-external-alignment.md` | 10d | `docs/architecture/gated-permissions-process.md` (+10d) |
+| `docs/architecture/mcp-tool-packs.md` | 10d | `scripts/module-size-baseline.txt` (+10d)<br>`apps/web/lib/coworker/approved-request-run-types.ts` (+6d)<br>`apps/web/lib/mcp-governed-execute-types.ts` (+6d)<br>…+4 more |
+| `docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md` | 10d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+10d) |
+| `docs/security/tool-evaluations/2026-09-29-cloudflare-tunnel.md` | 10d | `docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+10d) |
+| `docs/user-guide/development-workspace.md` | 10d | `docs/user-guide/contributing/agent-dev-environments.md` (+10d)<br>`docs/user-guide/operations/self-upgrade.md` (+5d) |
+| `docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md` | 9d | `docs/architecture/gated-permissions-process.md` (+9d) |
+| `docs/architecture/agent-standards-family.md` | 9d | `docs/architecture/gated-permissions-process.md` (+9d) |
+| `docs/architecture/orientation.md` | 9d | `docs/architecture/architecture-counts.generated.md` (+9d)<br>`docs/architecture/mcp-tool-authorization-runbook.md` (+9d)<br>`docs/architecture/autonomy-and-wwmd.md` (+4d)<br>…+2 more |
+| `docs/architecture/trusted-agent-reference-contract.md` | 9d | `docs/architecture/gated-permissions-process.md` (+9d) |
+| `docs/founder-kernel/wiki/principles/claim-a-workroom-before-you-work.md` | 9d | `docs/founder-kernel/wiki/principles/worktree-selection-and-reaping.md` (+9d) |
+| `docs/founder-kernel/wiki/principles/responsible-capacity-utilization.md` | 9d | `docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` (+9d) |
+| `docs/user-guide/compliance/incidents-risks-and-response.md` | 9d | `docs/user-guide/compliance/controls-and-evidence.md` (+9d) |
+| `docs/user-guide/platform/index.md` | 9d | `docs/user-guide/platform/ai-operations.md` (+9d)<br>`docs/user-guide/platform/address-validation-providers.md` (+5d)<br>`docs/user-guide/platform/tools-and-integrations.md` (+4d) |
+| `docs/architecture/design-research-runbook.md` | 8d | `AGENTS.md` (+8d)<br>`docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+8d)<br>`docs/professions/software-engineer/wiki/tool-evaluation-pipeline.md` (+8d) |
+| `docs/architecture/skill-surfaces-runbook.md` | 8d | `AGENTS.md` (+8d)<br>`docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md` (+4d) |
 | `docs/architecture/theme-aware-styling-runbook.md` | 8d | `AGENTS.md` (+8d) |
-| `docs/founder-kernel/wiki/principles/sweep-main-before-trusting-worktree-specs.md` | 8d | `docs/founder-kernel/wiki/principles/consult-specs-first.md` (+8d) |
-| `docs/strategy/2026-09-cada-architects-forum-deck.md` | 8d | `docs/founder-kernel/wiki/principles/prefer-self-hosted-infrastructure.md` (+8d)<br>`apps/web/lib/routing/pipeline-v2.ts` (+3d)<br>`packages/db/src/regulation-applicability.ts` (+3d)<br>…+1 more |
-| `docs/user-guide/compliance/audits-and-corrective-actions.md` | 8d | `docs/user-guide/compliance/posture-and-gaps.md` (+8d) |
-| `docs/user-guide/compliance/controls-and-evidence.md` | 8d | `docs/user-guide/compliance/posture-and-gaps.md` (+8d)<br>`docs/user-guide/compliance/regulations-and-obligations.md` (+0d) |
-| `docs/user-guide/compliance/index.md` | 8d | `docs/user-guide/compliance/policies-and-acknowledgements.md` (+8d)<br>`docs/user-guide/compliance/posture-and-gaps.md` (+8d)<br>`docs/user-guide/compliance/regulations-and-obligations.md` (+0d) |
-| `docs/user-guide/compliance/licensing-readiness.md` | 8d | `docs/user-guide/compliance/posture-and-gaps.md` (+8d)<br>`docs/user-guide/compliance/regulations-and-obligations.md` (+0d) |
-| `docs/user-guide/compliance/regulations-and-obligations.md` | 8d | `docs/user-guide/compliance/posture-and-gaps.md` (+8d) |
-| `docs/architecture/2026-07-06-it4it-dppm-workforce-portfolio-white-paper.md` | 7d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+7d) |
-| `docs/architecture/agent-standards-family.md` | 7d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+7d)<br>`docs/architecture/agent-standards-external-alignment.md` (+6d)<br>`docs/architecture/GAID.md` (+6d) |
-| `docs/architecture/archetype-business-value-streams.md` | 7d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+7d) |
+| `docs/user-guide/getting-started/index.md` | 8d | `docs/user-guide/customers/index.md` (+8d)<br>`docs/user-guide/workspace/index.md` (+6d)<br>`docs/user-guide/build-studio/index.md` (+0d) |
+| `docs/user-guide/index.md` | 8d | `docs/user-guide/customers/index.md` (+8d)<br>`docs/user-guide/admin/index.md` (+7d)<br>`docs/user-guide/ai-workforce/index.md` (+6d)<br>…+10 more |
+| `docs/architecture/archetypes/campground-operating-model.md` | 7d | `docs/architecture/archetype-operating-model-audit.md` (+7d) |
 | `docs/architecture/operational-precedent-corpus.md` | 7d | `apps/web/data/design-intelligence/operational-precedents.csv` (+7d) |
-| `docs/architecture/trusted-ai-kernel.md` | 7d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+7d)<br>`docs/architecture/agent-standards-external-alignment.md` (+6d)<br>`docs/architecture/GAID.md` (+6d) |
-| `docs/founder-kernel/RAW-SOURCES-LICENSE.md` | 7d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+7d) |
-| `docs/founder-kernel/wiki/principles/consult-specs-first.md` | 7d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+7d) |
-| `docs/Reference/operating-model-axes-additions.md` | 7d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+7d) |
-| `docs/user-guide/market-archetypes.md` | 7d | `docs/user-guide/ai-workforce/decision-perspective.md` (+7d) |
-| `docs/architecture/2026-06-19-cada-cloud-sovereignty-architecture-note.md` | 6d | `docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md` (+6d) |
-| `docs/architecture/ux-archetype-audit-rubric.md` | 6d | `docs/platform-usability-standards.md` (+6d) |
-| `docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md` | 5d | `docs/superpowers/specs/2026-07-26-ai-routing-architecture-explainability-design.md` (+5d)<br>`apps/web/lib/ea/ai-routing-architecture-registry.ts` (+0d) |
-| `docs/architecture/external-planning-reference-boundary.md` | 5d | `docs/architecture/agent-standards-external-alignment.md` (+5d) |
-| `docs/operations/dpf-production-runtime.md` | 5d | `docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+5d)<br>`docs/operations/runtime-glossary.md` (+0d) |
+| `docs/architecture/job-specific-intelligence.md` | 6d | `docs/architecture/agent-standards-dpf-conformance.md` (+6d)<br>`docs/architecture/agent-standards-external-alignment.md` (+3d) |
+| `docs/edge-node/unifi-adapter.md` | 6d | `services/edge-node/src/collectors/unifi.ts` (+6d) |
+| `docs/user-guide/market-archetypes.md` | 6d | `docs/marketing/archetype-owner-quick-guide.md` (+6d)<br>`docs/user-guide/ai-workforce/decision-perspective.md` (+6d) |
+| `docs/architecture/failure-analysis-and-recovery.md` | 5d | `docs/architecture/2026-06-09-long-running-agentic-process-architecture.md` (+5d) |
+| `docs/architecture/platform-overview.md` | 5d | `docs/architecture/capability-driven-runtime-profiles.md` (+5d)<br>`docs/architecture/orientation.md` (+0d) |
 | `docs/operations/mobile-store-launch-runbook.md` | 5d | `apps/mobile/eas.json` (+5d) |
-| `docs/user-guide/customers/index.md` | 5d | `docs/user-guide/finance/accounts-receivable.md` (+5d)<br>`docs/user-guide/customers/marketing.md` (+4d)<br>`docs/user-guide/storefront/setup-and-launch.md` (+3d)<br>…+1 more |
-| `docs/user-guide/finance/banking-and-reconciliation.md` | 5d | `docs/user-guide/finance/accounts-receivable.md` (+5d) |
-| `docs/user-guide/finance/controls-and-automation.md` | 5d | `docs/user-guide/finance/accounts-receivable.md` (+5d) |
-| `docs/user-guide/finance/index.md` | 5d | `docs/user-guide/finance/accounts-receivable.md` (+5d) |
-| `docs/user-guide/finance/reporting-and-close.md` | 5d | `docs/user-guide/finance/accounts-receivable.md` (+5d) |
-| `docs/user-guide/platform/ai-operations.md` | 5d | `docs/user-guide/ai-workforce/model-routing-lifecycle.md` (+5d) |
-| `docs/user-guide/storefront/settings-business-and-operations.md` | 5d | `docs/user-guide/storefront/index.md` (+5d)<br>`docs/user-guide/storefront/setup-and-launch.md` (+4d) |
-| `docs/architecture/customer-zero-and-use-case-zero.md` | 4d | `docs/superpowers/specs/2026-06-07-business-operating-model-portfolio-wiring-design.md` (+4d)<br>`docs/architecture/vector-decisioning-and-jsi.md` (+3d)<br>`docs/superpowers/specs/2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md` (+1d) |
-| `docs/user-guide/workspace/index.md` | 4d | `docs/user-guide/workspace/work-rooms.md` (+4d) |
-| `docs/testing/pr-health.md` | 3d | `scripts/pr-health.mjs` (+3d)<br>`scripts/pr-health.test.mjs` (+3d) |
-| `docs/user-guide/operations/getting-reached.md` | 3d | `docs/user-guide/operations/business-journeys.md` (+3d)<br>`docs/user-guide/operations/index.md` (+3d) |
-| `docs/architecture/autonomy-and-wwmd.md` | 2d | `docs/architecture/vector-decisioning-and-jsi.md` (+2d) |
-| `docs/operations/autonomous-build-completion.md` | 2d | `docs/superpowers/plans/2026-07-25-governed-playbook-experimentation-autonomous-build-studio-plan.md` (+2d) |
-| `docs/testing/archetype-job-validation.md` | 2d | `docs/testing/archetype-exercise-harness.md` (+2d) |
-| `docs/user-guide/operations/index.md` | 2d | `docs/operations/federated-demand-channels.md` (+2d) |
-| `docs/architecture/decision-vectors.md` | 1d | `docs/architecture/trusted-ai-kernel.md` (+1d) |
-| `docs/operations/disaster-recovery.md` | 1d | `docs/operations/session-transcript-recovery.md` (+1d) |
+| `docs/user-guide/ai-workforce/how-governed-work-runs.md` | 5d | `docs/user-guide/contributing/agent-dev-environments.md` (+5d)<br>`docs/architecture/gated-permissions-process.md` (+4d)<br>`docs/architecture/work-shapes-and-the-decision-gate.md` (+1d)<br>…+4 more |
+| `docs/architecture/delivery-surfaces-runbook.md` | 4d | `AGENTS.md` (+4d) |
+| `docs/architecture/GAID.md` | 4d | `docs/architecture/agent-standards-family.md` (+4d)<br>`docs/architecture/agent-standards-external-alignment.md` (+3d) |
+| `docs/architecture/trusted-ai-kernel.md` | 4d | `docs/architecture/agent-standards-family.md` (+4d)<br>`docs/architecture/agent-standards-external-alignment.md` (+3d) |
+| `docs/install/cloud-single-vm.md` | 4d | `docker-compose.edge-standalone.yml` (+4d)<br>`docs/install/linux.md` (+0d) |
+| `docs/install/windows.md` | 4d | `docs/install/platform-support-watchlist.md` (+4d) |
+| `docs/platform-usability-standards.md` | 4d | `docs/architecture/portal-ux-evaluation-framework.md` (+4d) |
+| `docs/user-guide/ai-workforce/index.md` | 4d | `docs/user-guide/contributing/agent-dev-environments.md` (+4d) |
+| `docs/architecture/archetype-business-value-streams.md` | 3d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+3d) |
+| `docs/architecture/autonomy-and-wwmd.md` | 3d | `docs/architecture/gated-permissions-process.md` (+3d) |
+| `docs/architecture/data-model-stewardship-runbook.md` | 3d | `AGENTS.md` (+3d)<br>`apps/web/lib/datetime.ts` (+0d) |
+| `docs/architecture/work-shapes-and-the-decision-gate.md` | 3d | `docs/architecture/gated-permissions-process.md` (+3d) |
+| `docs/install/linux.md` | 3d | `docs/install/macos.md` (+3d) |
+| `docs/install/serve-the-directory.md` | 3d | `docs/superpowers/specs/2026-08-23-directory-service-identity-absorption-design.md` (+3d) |
+| `docs/testing/pre-pr-gate.md` | 3d | `AGENTS.md` (+3d)<br>`docs/architecture/build-gate-runbook.md` (+3d)<br>`scripts/lib/ci-policy-guards.mjs` (+3d) |
+| `docs/user-guide/ai-workforce/decision-perspective.md` | 3d | `docs/architecture/gated-permissions-process.md` (+3d) |
+| `docs/user-guide/platform/address-validation-providers.md` | 3d | `docs/user-guide/customers/customer-map.md` (+3d) |
+| `docs/user-guide/workspace/work-rooms.md` | 3d | `docs/architecture/gated-permissions-process.md` (+3d) |
+| `docs/user-guide/compliance/index.md` | 2d | `docs/user-guide/compliance/licensing-readiness.md` (+2d) |
+| `docs/user-guide/customers/marketing.md` | 2d | `docs/user-guide/customers/index.md` (+2d)<br>`docs/user-guide/storefront/catalog-and-page-content.md` (+0d) |
+| `docs/architecture/agent-standards-contribution-roadmap.md` | 1d | `docs/architecture/agent-standards-family.md` (+1d) |
 | `docs/Reference/html-living-standard.md` | 1d | `docs/Reference/sysml-v2.md` (+1d) |
-| `docs/user-guide/platform/address-validation-providers.md` | 1d | `docs/user-guide/platform/tools-and-integrations.md` (+1d) |
-| `docs/user-guide/storefront/setup-and-launch.md` | 1d | `docs/user-guide/storefront/index.md` (+1d) |
-| `docs/architecture/2026-06-09-long-running-agentic-process-architecture.md` | 0d | `docker-compose.yml` (+0d) |
-| `docs/architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md` | 0d | `docs/superpowers/specs/2026-06-16-living-architecture-graph-and-operational-bridge-design.md` (+0d) |
-| `docs/architecture/2026-08-09-portal-architecture-hardening-findings.md` | 0d | `AGENTS.md` (+0d) |
-| `docs/architecture/archetype-owner-positioning.md` | 0d | `docs/architecture/archetype-business-value-streams.md` (+0d) |
-| `docs/architecture/delivery-surfaces-runbook.md` | 0d | `AGENTS.md` (+0d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+0d) |
-| `docs/architecture/jsi-conformance-tests.md` | 0d | `docs/architecture/job-specific-intelligence.md` (+0d) |
-| `docs/architecture/mcp-tool-authorization-runbook.md` | 0d | `AGENTS.md` (+0d) |
-| `docs/architecture/mcp-tool-packs.md` | 0d | `apps/web/lib/mcp/packs/work-capsules-pack.ts` (+0d)<br>`scripts/check-module-size.mjs` (+0d)<br>`scripts/module-size-baseline.txt` (+0d) |
-| `docs/architecture/section-navigation.md` | 0d | `apps/web/components/shell/SectionNav.tsx` (+0d)<br>`apps/web/lib/navigation/section-nav-model.ts` (+0d) |
-| `docs/founder-kernel/wiki/principles/destructive-actions-require-explicit-go.md` | 0d | `docs/founder-kernel/wiki/principles/never-wipe-db-for-code-fixes.md` (+0d) |
-| `docs/founder-kernel/wiki/principles/propose-acknowledge-reassign.md` | 0d | `docs/founder-kernel/wiki/principles/mention-uncommitted-changes.md` (+0d)<br>`docs/founder-kernel/wiki/principles/worktree-base-origin-main.md` (+0d)<br>`docs/founder-kernel/wiki/principles/worktree-per-session.md` (+0d) |
-| `docs/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md` | 0d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+0d) |
-| `docs/marketing/archetype-owner-quick-guide.md` | 0d | `docs/architecture/archetype-business-value-streams.md` (+0d) |
-| `docs/operations/install.md` | 0d | `packages/dpf-skill-pack/README.md` (+0d)<br>`README.md` (+0d) |
-| `docs/professions/frontend-engineer/wiki/compose-report-kit-for-reporting-ux.md` | 0d | `docs/founder-kernel/wiki/principles/no-hardcoded-colors.md` (+0d) |
-| `docs/testing/archetype-exercise-playbook.md` | 0d | `docs/testing/archetype-exercise-harness.md` (+0d) |
-| `docs/testing/pre-pr-gate.md` | 0d | `.github/workflows/ci.yml` (+0d)<br>`AGENTS.md` (+0d)<br>`scripts/lib/ci-policy-guards.mjs` (+0d) |
-| `docs/user-guide/ai-workforce/coworker-proactivity.md` | 0d | `docs/user-guide/workspace/attention-inbox.md` (+0d) |
-| `docs/user-guide/build-studio/autonomous-builds.md` | 0d | `docs/operations/autonomous-build-completion.md` (+0d) |
-| `docs/user-guide/compliance/regulatory-submissions.md` | 0d | `docs/user-guide/compliance/regulations-and-obligations.md` (+0d) |
+| `docs/runbooks/bet5-windows-self-upgrade.md` | 1d | `docs/superpowers/specs/2026-07-18-install-state-readiness-migration-design.md` (+1d) |
+| `docs/user-guide/customers/index.md` | 1d | `docs/user-guide/customers/customer-map.md` (+1d) |
+| `docs/user-guide/platform/tools-and-integrations.md` | 1d | `docs/user-guide/platform/address-validation-providers.md` (+1d) |
+| `AGENTS.md` | 0d | `docs/architecture/branch-and-worktree-runbook.md` (+0d)<br>`docs/architecture/build-gate-runbook.md` (+0d)<br>`docs/architecture/contributor-procedure-runbook.md` (+0d)<br>…+1 more |
+| `docs/architecture/ai-routing-document-map.md` | 0d | `docs/user-guide/ai-workforce/model-routing-lifecycle.md` (+0d) |
+| `docs/architecture/application-boundaries.md` | 0d | `docs/superpowers/specs/2026-09-30-web-runtime-import-cycle-and-project-references-design.md` (+0d) |
+| `docs/architecture/backlog-and-planning-runbook.md` | 0d | `AGENTS.md` (+0d)<br>`docs/architecture/mcp-tool-authorization-runbook.md` (+0d) |
+| `docs/architecture/branch-and-worktree-runbook.md` | 0d | `docs/architecture/mcp-tool-authorization-runbook.md` (+0d) |
+| `docs/architecture/dependency-reduction-routine.md` | 0d | `docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+0d) |
+| `docs/architecture/document-generation-facility.md` | 0d | `docs/install/platform-support-watchlist.md` (+0d) |
+| `docs/architecture/four-portfolio-archetype-standard-profile-catalog.md` | 0d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+0d) |
+| `docs/architecture/gated-permissions-process.md` | 0d | `docs/architecture/mcp-tool-authorization-runbook.md` (+0d) |
+| `docs/architecture/review-reliability-recovery.md` | 0d | `docs/architecture/contributor-procedure-runbook.md` (+0d) |
+| `docs/operations/install.md` | 0d | `packages/dpf-skill-pack/README.md` (+0d) |
+| `docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md` | 0d | `docs/architecture/gated-permissions-process.md` (+0d) |
+| `docs/user-guide/ai-workforce/coworker-proactivity.md` | 0d | `docs/user-guide/workspace/work-rooms.md` (+0d) |
+| `docs/user-guide/build-studio/index.md` | 0d | `docs/user-guide/development-workspace.md` (+0d) |
+| `docs/user-guide/compliance/controls-and-evidence.md` | 0d | `docs/user-guide/compliance/regulations-and-obligations.md` (+0d) |
+| `docs/user-guide/contributing/agent-dev-environments.md` | 0d | `docs/architecture/mcp-tool-authorization-runbook.md` (+0d) |
+| `docs/user-guide/platform/ai-operations.md` | 0d | `docs/user-guide/ai-workforce/model-routing-lifecycle.md` (+0d) |
+| `docs/user-guide/workspace/index.md` | 0d | `docs/user-guide/operations/index.md` (+0d)<br>`docs/user-guide/workspace/work-rooms.md` (+0d) |
 
