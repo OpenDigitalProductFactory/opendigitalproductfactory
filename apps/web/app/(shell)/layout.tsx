@@ -34,6 +34,7 @@ import { UxInitialLoadBoundary } from "@/components/shell/UxInitialLoadBoundary"
 import { resolveCustomerSurface } from "@/lib/owner-first/archetype-surface";
 import { resolveFinanceSurface } from "@/lib/finance/finance-surface";
 import { recordUserSeen } from "@/lib/identity/last-seen";
+import { PortalVitals } from "@/components/telemetry/PortalVitals";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists.
@@ -316,6 +317,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
                       labelOverrides={shellLabelOverrides}
                     />
                   )}
+                  <PortalVitals />
                   <UxInitialLoadBoundary>{children}</UxInitialLoadBoundary>
                 </div>
               </div>

@@ -14,7 +14,10 @@ const pirContext = vi.hoisted(() => vi.fn(async () => ""));
 const sensitivity = vi.hoisted(() => vi.fn(async (_parsed: unknown, _token: unknown, fallback: string) => fallback));
 vi.mock("./mcp-task-review-sensitivity", () => ({ remoteReviewSensitivity: sensitivity }));
 vi.mock("./pir-evidence-context", () => ({ loadPirEvidenceContext: pirContext }));
-vi.mock("./mcp-task-review-outcome", () => ({
+vi.mock("./mcp-task-review-outcome", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./mcp-task-review-outcome")>(),
+  // BI-2E479619: the executor consults the TaskRun's persisted receipt before classifying a missing writer.
+  loadTaskInitiativeReviewOutcome: vi.fn(async () => null),
   loadInitiativeReviewOutcome: vi.fn(async (_binding: unknown, receiptId: string) => ({
     receiptId, summary: `Receipt ${receiptId} persisted. Implementation readiness: input-required; plan coverage remains missing.`,
   })),

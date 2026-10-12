@@ -9,6 +9,7 @@ import { DOCUMENT_TOOL_GRANTS } from "./document-tool-grants";
 import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
 import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-grants";
 import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
+import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "./provider-management-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -308,11 +309,11 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // it reports gaps and never changes authority.
   get_capability_completeness: ["registry_read"],
 
-  // Independent re-verification of a recorded decision's cited evidence
-  // (BI-8192557E phase 2b). Same `registry_read` tier as its siblings: auditing
-  // the evidence behind a decision must not need a higher grant than making the
-  // decision did, or the check is less reachable than the thing it checks.
+  // Re-verifying a decision's cited evidence (BI-8192557E) and reading the report-only
+  // decision trust measurement (BI-7D1E43DE): `registry_read`, as their siblings —
+  // auditing a decision must not need a higher grant than making it did.
   reverify_decision_evidence: ["registry_read"],
+  report_decision_trust_state: ["registry_read"],
   // BI-F302B80E: appends what the caller did with a kernel recommendation.
   // Same grant as propose_improvement — it records, it never re-decides.
   record_decision_outcome: ["decision_record_create"],
@@ -585,10 +586,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   find_related_tests: ["code_graph_read"],
 
   // Provider management
-  add_provider: ["agent_control_read"],
-  update_provider_category: ["agent_control_read"],
-  // Read-only AI-layer state aggregation for the posture-article refresh task
-  // (BI-5903D447) — same tier as the sibling provider-management tools.
+  ...PROVIDER_MANAGEMENT_TOOL_GRANTS,
+  // Read-only AI posture uses the same grant as provider management.
   get_ai_platform_posture: ["agent_control_read"],
   run_endpoint_tests: ["agent_control_read"],
   activity_harness_confidence_override: ["agent_control_read"],

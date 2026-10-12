@@ -4,6 +4,16 @@ import { getServedContextTokens, setServedContextTokens } from "./dmr-runtime-co
 const API_ROOT = "http://model-runner.docker.internal";
 
 describe("getServedContextTokens", () => {
+  it.each([0, -1, 1.5, NaN, Infinity, "40960", null])("rejects an invalid explicit context override: %s", async (size) => {
+    const fetchImpl = (async () => ({ ok: true, status: 200,
+      json: async () => [{ Config: { "context-size": size } }],
+    })) as unknown as typeof fetch;
+    const res = await getServedContextTokens(API_ROOT, "qwen3-coder", fetchImpl);
+    expect(res.supported).toBe(false);
+    expect(res.contextTokens).toBeNull();
+    expect(res.reason).toMatch(/invalid context/i);
+  });
+
   it("parses the context-size from a DMR configure response", async () => {
     const fetchImpl = (async (url: string) => {
       expect(url).toContain("/engines/_configure?model=");

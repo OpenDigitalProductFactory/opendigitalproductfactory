@@ -63,6 +63,22 @@ describe("buildAgentHostInstructions", () => {
     const copy = buildAgentHostInstructions(CONSUMER, { scope: "admin", scopes: ["admin_write"] });
     expect(copy).toContain("INSTALLATION IDENTITY: unverified");
   });
+  it("carries scoped investment and conflict guidance on both host surfaces", () => {
+    for (const host of [CONSUMER, SOURCE]) {
+      const copy = buildAgentHostInstructions(host, { scope: "admin", scopes: [] });
+      expect(copy).toContain("80% refactoring");
+      expect(copy).toContain("default 20% refactoring, 80% new capability");
+      expect(copy).toContain("never infer them from the installation");
+      expect(copy).toContain("record the superseded guidance and overlapping work");
+    }
+  });
+  it("distinguishes delegated routine administration from retained approval boundaries", () => {
+    const copy = buildAgentHostInstructions(CONSUMER, { scope: "admin", scopes: ["admin_write"] });
+    expect(copy).toContain("Reuse current delegation");
+    expect(copy).toContain("do not request fresh approval solely because an action administers this install");
+    expect(copy).toContain("Credential or authority changes, destructive actions and restricted data retain their required gates");
+    expect(copy).toContain("A development label never grants additional authority");
+  });
   it("makes a consumer runtime safe for a development agent", () => {
     const copy = buildAgentHostInstructions(CONSUMER, {
       scope: "write",

@@ -992,6 +992,46 @@ def retire_duplicate_project_mcp_json(project: Path, dry_run: bool) -> Optional[
     return str(backup)
 
 
+def retire_user_scope_dpf_server(home: Path, dry_run: bool) -> Optional[str]:
+    """Remove a user-scope `dpf` server that duplicates the plugin connector.
+
+    A user-scope server in ~/.claude.json loads in every folder, so a legacy
+    `dpf` entry there (the bearer-header registration the old token rotation
+    wrote) shows beside the plugin's `dpf` in every session (BI-81B0A3BE).
+    Acts only while the plugin connector is installed, and only on a `dpf`
+    server on the /api/mcp/v1 endpoint. Disable-not-delete: the entry is copied
+    to ~/.claude/dpf-user-mcp.legacy-bak.json first; the Claude CLI owns
+    ~/.claude.json, so the removal goes through `claude mcp remove`.
+    Returns None when there is nothing to do, else a status line.
+    """
+    if not claude_plugin_records(home):
+        return None
+    try:
+        server = json.loads((home / ".claude.json").read_text(encoding="utf-8-sig"))["mcpServers"]["dpf"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(server, dict) or _dpf_endpoint_path(server.get("url")) != "/api/mcp/v1":
+        return None
+    backup = home / ".claude" / "dpf-user-mcp.legacy-bak.json"
+    suffix = 1
+    while backup.exists():
+        backup = home / ".claude" / f"dpf-user-mcp.legacy-bak.{suffix}.json"
+        suffix += 1
+    if dry_run:
+        return f"would remove (backup {backup})"
+    claude = resolve_claude_binary()
+    if not claude:
+        return "failed: Claude CLI not found"
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    backup.write_text(json.dumps({"mcpServers": {"dpf": server}}, indent=2) + "\n", encoding="utf-8")
+    completed = subprocess.run(
+        [claude, "mcp", "remove", "dpf", "-s", "user"], cwd=str(home), capture_output=True, text=True
+    )
+    if completed.returncode != 0:
+        return f"failed: claude mcp remove exited {completed.returncode} (backup {backup})"
+    return f"removed (backup {backup})"
+
+
 def converge_claude_project_connectors(home: Path, version: str, dry_run: bool) -> list[str]:
     """Converge stale project-scope plugin pins and duplicate project connectors."""
     version = version.split("+", 1)[0]
@@ -2251,6 +2291,9 @@ def main(argv: list[str]) -> int:
         if not args.skip_claude_cli_install:
             for line in converge_claude_project_connectors(home, version, args.dry_run):
                 print(line)
+            user_scope_status = retire_user_scope_dpf_server(home, args.dry_run)
+            if user_scope_status:
+                print(f"  Claude user-scope dpf duplicate: {user_scope_status}")
         claude_competitive_status = "skipped by flag"
         if not args.skip_claude_cli_install:
             claude_competitive_status = disable_competitive_claude_plugins(

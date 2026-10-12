@@ -2,6 +2,7 @@ import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "./source-page-line
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
+  findBacklogItem: vi.fn(),
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   findModelConfig: vi.fn(),
@@ -22,6 +23,7 @@ const records = vi.hoisted(() => ({ create: vi.fn() }));
 const queue = vi.hoisted(() => ({ send: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: {
+    backlogItem: { findUnique: (...args: unknown[]) => db.findBacklogItem(...args) },
     taskRun: {
       findFirst: (...args: unknown[]) => db.findFirst(...args),
       findUnique: (...args: unknown[]) => db.findUnique(...args),
@@ -88,6 +90,7 @@ it("keeps OAuth idempotency stable through refresh while separating concurrent t
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  db.findBacklogItem.mockResolvedValue({ workType: "feature", featureBuilds: [], activeBuild: null, activities: [] });
   vi.unstubAllEnvs();
   vi.stubEnv("DPF_EXTERNAL_MCP_TASK_ASYNC", "0");
   db.findFirst.mockResolvedValue(null);
@@ -748,14 +751,9 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       toolsForProvider: Array<{ function?: { name?: string; parameters?: { properties?: Record<string, unknown> } } }>;
       terminalToolPolicy?: Record<string, unknown>;
     };
-    expect(execution.tools.map((tool) => tool.name)).toEqual([
-      "read_source_at_version",
-      "record_initiative_design_review",
-    ]);
-    expect(execution.toolsForProvider.map((tool) => tool.function?.name)).toEqual([
-      "read_source_at_version",
-      "record_initiative_design_review",
-    ]);
+    const expectedTools = ["read_source_at_version", "record_initiative_design_review"];
+    expect(execution.tools.map((tool) => tool.name)).toEqual(expectedTools);
+    expect(execution.toolsForProvider.map((tool) => tool.function?.name)).toEqual(expectedTools);
     expect(execution.terminalToolPolicy).toEqual({
       writerToolName: "record_initiative_design_review",
       readerToolNames: ["read_source_at_version"],
@@ -771,6 +769,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     });
     const boundWriter = execution.tools.find((tool) => tool.name === writer.name)!;
     const providerWriter = execution.toolsForProvider.find((tool) => tool.function?.name === writer.name)!;
+    expect(boundWriter.inputSchema.properties.profile).toEqual({ type: "string", enum: ["feature"] });
+    expect(providerWriter.function?.parameters?.properties?.profile).toEqual({ type: "string", enum: ["feature"] });
     expect(boundWriter.inputSchema.properties).not.toHaveProperty("expectedCurrentBaselineId");
     expect(providerWriter.function?.parameters?.properties).not.toHaveProperty("expectedCurrentBaselineId");
     expect(autonomous.create).toHaveBeenCalledWith(expect.objectContaining({

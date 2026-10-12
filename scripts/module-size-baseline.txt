@@ -48,7 +48,6 @@ apps/web/lib/navigation/portal-navigation-model.ts	1008
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1364
 apps/web/lib/routing/chat-adapter.test.ts	1073
-apps/web/lib/routing/eval-runner.ts	803
 apps/web/lib/routing/fallback.test.ts	1293
 apps/web/lib/self-upgrade/quiescence.test.ts	951
 apps/web/lib/self-upgrade/quiescence.ts	1495
@@ -59,8 +58,8 @@ apps/web/lib/tak/agent-routing.ts	1195
 apps/web/lib/tak/agentic-loop.test.ts	2472
 apps/web/lib/tak/agentic-loop.ts	2601
 apps/web/lib/tak/route-context-map.ts	1440
-apps/web/lib/work-capsules/work-capsule-store.test.ts	1239
-apps/web/lib/work-capsules/work-capsule-store.ts	987
+apps/web/lib/work-capsules/work-capsule-store.test.ts	1222
+apps/web/lib/work-capsules/work-capsule-store.ts	896
 apps/web/lib/workbooks/platform-tables.ts	940
 apps/web/lib/workforce/calendar-data.ts	1134
 apps/web/lib/workspace-home/command-center.ts	1118

@@ -92,5 +92,39 @@
     "allow": "Allow closing",
     "stop": "Stop closing",
     "saving": "Saving…"
+  },
+  "authorStagePreauthorisation": {
+    "heading": "Let agents run delivery stages within budget",
+    "on": "On",
+    "off": "Off",
+    "summary": {
+      "off": "Author stages wait for a person.",
+      "on": "Allowed by {$by} on",
+      "stopped": "Stopped by {$by} on",
+      "recordProblem": "The saved setting cannot be used, so author stages wait for a person."
+    },
+    "intro": "When this is on, the Workroom drive gives a delivery room's author stages (design note, reproduce, implement) to the Software Engineer coworker, but only for work whose portfolio has a budget this quarter with points to spare. Merging, deploying and acceptance still wait for a person, and xlarge work never starts. When a room cannot run, the drive says why.",
+    "recordProblem": "The saved setting is incomplete or for something else, so author stages wait for a person. Allow it again to fix it.",
+    "allowedBy": "Allowed by",
+    "reason": "Reason",
+    "stoppedBy": "Stopped by",
+    "reasonGrant": "Why are you allowing it?",
+    "reasonRevoke": "Why are you stopping it?",
+    "reasonHint": "At least {$min} characters. It is kept with the record.",
+    "consequence": {
+      "summaryGrant": "The next drive run gives funded author stages to the Software Engineer coworker.",
+      "summaryRevoke": "The next drive run sends author stages back to a person.",
+      "what": "The platform setting the Workroom drive reads every run.",
+      "who": "Delivery rooms whose work is funded within its portfolio's budget. The record keeps your name and reason.",
+      "reversibilityGrant": "You can stop it at any time. Work already done stays done.",
+      "reversibilityRevoke": "Yes. Allow it again at any time.",
+      "recovery": "Stop it here; rooms then wait for a person on their next run."
+    },
+    "successGrant": "Allowed. The next drive run can give funded author stages to an agent.",
+    "successRevoke": "Stopped. Author stages wait for a person.",
+    "notPermitted": "You need permission to manage the platform to change this.",
+    "allow": "Allow agents",
+    "stop": "Stop agents",
+    "saving": "Saving…"
   }
 }

@@ -20,6 +20,7 @@ import { DecompositionCoordinator } from "@/components/build/DecompositionCoordi
 import { Notice } from "@/components/ui/report-kit";
 import { semanticReviewDecisionPresentation } from "@/lib/change-review/review-decision-presentation";
 import type { SemanticReviewDecision } from "@/lib/change-review/semantic-change-review";
+import { isReviewExecutionIncomplete } from "@/lib/build/review-execution-state";
 
 type Props = {
   build: FeatureBuildRow;
@@ -129,8 +130,8 @@ function EvidenceBar({ build }: { build: FeatureBuildRow }) {
   const taskResults = normalizeTaskResults(build.taskResults);
   const verification = normalizeVerificationOutput(build.verificationOut);
   const items = [
-    { label: "Design", ok: !!build.designDoc && build.designReview?.decision === "pass" },
-    { label: "Plan", ok: !!build.buildPlan && build.planReview?.decision === "pass" },
+    { label: "Design", ok: !!build.designDoc && build.designReview?.decision === "pass" && !isReviewExecutionIncomplete(build.designReview) },
+    { label: "Plan", ok: !!build.buildPlan && build.planReview?.decision === "pass" && !isReviewExecutionIncomplete(build.planReview) },
     { label: "Build", ok: taskResults.totalTasks > 0 },
     { label: "Verify", ok: verification.typecheckPassed === true },
     {
@@ -215,9 +216,9 @@ function DesignDocSection({
   const [isFormatting, startFormatting] = useTransition();
 
   const reviewBadge = review
-    ? semanticReviewDecisionPresentation(review.decision).title
+    ? semanticReviewDecisionPresentation(review.decision, isReviewExecutionIncomplete(review)).title
     : doc ? "Not reviewed" : "Missing";
-  const reviewColor = review?.decision === "pass"
+  const reviewColor = isReviewExecutionIncomplete(review) ? "var(--dpf-warning)" : review?.decision === "pass"
     ? "var(--dpf-success)"
     : review?.decision === "fail"
     ? "var(--dpf-error)"
@@ -276,9 +277,9 @@ function DesignDocSection({
             </div>
           )}
           {review && (
-            <ReviewBadgeBlock decision={review.decision} summary={review.summary} issues={review.issues} />
+            <ReviewBadgeBlock decision={review.decision} executionIncomplete={isReviewExecutionIncomplete(review)} summary={review.summary} issues={review.issues} />
           )}
-          {review?.decision === "pass" && (
+          {review?.decision === "pass" && !isReviewExecutionIncomplete(review) && (
             <DecompositionCoordinator
               buildId={buildId}
               buildTitle={buildTitle}
@@ -309,7 +310,7 @@ function BuildPlanSection({
 }) {
   const taskCount = plan?.tasks?.length ?? 0;
   const badge = plan ? `${taskCount} task${taskCount !== 1 ? "s" : ""}` : "Missing";
-  const reviewColor = review?.decision === "pass"
+  const reviewColor = isReviewExecutionIncomplete(review) ? "var(--dpf-warning)" : review?.decision === "pass"
     ? "var(--dpf-success)"
     : review?.decision === "fail"
     ? "var(--dpf-error)"
@@ -365,7 +366,7 @@ function BuildPlanSection({
           )}
 
           {review && (
-            <ReviewBadgeBlock decision={review.decision} summary={review.summary} issues={review.issues} />
+            <ReviewBadgeBlock decision={review.decision} executionIncomplete={isReviewExecutionIncomplete(review)} summary={review.summary} issues={review.issues} />
           )}
         </div>
       )}
@@ -863,14 +864,16 @@ function Field({ label, value }: { label: string; value: string | undefined | nu
 
 function ReviewBadgeBlock({
   decision,
+  executionIncomplete = false,
   summary,
   issues,
 }: {
   decision: SemanticReviewDecision;
+  executionIncomplete?: boolean;
   summary: string;
   issues: Array<{ severity: string; description: string }>;
 }) {
-  const presentation = semanticReviewDecisionPresentation(decision);
+  const presentation = semanticReviewDecisionPresentation(decision, executionIncomplete);
 
   return (
     <Notice
@@ -878,10 +881,10 @@ function ReviewBadgeBlock({
       variant={presentation.variant}
       title={`Review status: ${presentation.title}`}
     >
-      {summary && (
-        <p className="text-[10px] text-[var(--dpf-muted)] leading-relaxed">{safeRenderValue(summary)}</p>
+      {(summary || executionIncomplete) && (
+        <p className="text-[10px] text-[var(--dpf-muted)] leading-relaxed">{executionIncomplete ? "The review could not complete. Keep the saved document; retry review after reviewer execution recovers." : safeRenderValue(summary)}</p>
       )}
-      {Array.isArray(issues) && issues.length > 0 && (
+      {!executionIncomplete && Array.isArray(issues) && issues.length > 0 && (
         <div className="mt-1 text-[10px] text-[var(--dpf-muted)]">
           {issues.length} issue{issues.length !== 1 ? "s" : ""} noted
         </div>

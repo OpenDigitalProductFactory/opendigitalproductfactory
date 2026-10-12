@@ -1,0 +1,57 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "QueueMetricSnapshot rows, upserted by aggregateQueueMetrics (apps/web/lib/queue/queue-metrics-rollup.ts) from QueueTelemetryEvent",
+    "QueueTelemetryEvent rows for itemKind workroom-stage, written by the workroom drive (apps/web/lib/queue/functions/workroom-drive.ts) through recordQueueTransition, and once by the drive-log replay (apps/web/lib/work-management/workroom-stage-backfill.ts, actorId backfill:drive-log)",
+    "Read by queue health (lib/queue/queue-snapshot-service.ts), the coworker queue-awareness pack and the Prometheus mirror"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: durations and counts per queue; telemetry rows reference a Workroom capsule id, never a person",
+    "dataSubjectRights": "No content about a person; actorType records only human / ai-agent / system.",
+    "reviewDisposition": "Snapshot columns follow the existing snapshot row. Telemetry rows follow the existing 90-day telemetry retention."
+  },
+  "migration": {
+    "name": "20261007130000_queue_snapshot_held_and_process_share",
+    "backfill": "None in SQL: three nullable columns, added with IF NOT EXISTS. Existing rows read NULL, which is exactly what a queue that never records holds reports. The Workroom stage history is replayed by the queue aggregator's one-time, idempotent drive-log replay, not by the migration.",
+    "rollback": "Forward-only. Older code ignores the new columns; rollback means reverting the code, never dropping the columns."
+  },
+  "tests": [
+    "apps/web/lib/queue/flow-metrics.test.ts",
+    "apps/web/lib/queue/queue-metrics-rollup.test.ts",
+    "apps/web/lib/work-management/workroom-stage-telemetry.test.ts",
+    "apps/web/lib/work-management/workroom-stage-backfill.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:queue-metric-snapshot",
+      "prismaModel": "QueueMetricSnapshot",
+      "lifecycleDisposition": "Existing model; new columns follow the row's lifecycle and add no retention obligation.",
+      "fields": [
+        {
+          "fieldId": "data:queue-metric-snapshot#heldP50Ms",
+          "resolution": "governed",
+          "reason": "Median held time (waiting on a person or blocked) of items finished in the window, computed from QueueTelemetryEvent held/released spans.",
+          "provenance": "BI-4ADFFEDB",
+          "flags": []
+        },
+        {
+          "fieldId": "data:queue-metric-snapshot#heldP95Ms",
+          "resolution": "governed",
+          "reason": "95th percentile of the same held time.",
+          "provenance": "BI-4ADFFEDB",
+          "flags": []
+        },
+        {
+          "fieldId": "data:queue-metric-snapshot#processShare",
+          "resolution": "governed",
+          "reason": "Sum of process time over sum of cycle time for items finished in the window: the queue's flow efficiency.",
+          "provenance": "BI-4ADFFEDB",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

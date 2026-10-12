@@ -127,7 +127,7 @@ export async function dispatchClaudeTask(params: {
   }
 
   const instructions = buildSpecialistInstructions({ role, buildContext, priorResults });
-  const taskPrompt = buildSpecialistTaskPrompt({ task, instructions });
+  const taskPrompt = buildSpecialistTaskPrompt({ task, instructions, workdir });
 
   const startMs = Date.now();
   // Use task-specific temp files to avoid collisions during parallel execution.
@@ -170,6 +170,8 @@ export async function dispatchClaudeTask(params: {
     const script = [
       "#!/bin/sh",
       `cd ${workdir}`,
+      // The repo SessionStart hook would call the build clone a shared root clone.
+      "export DPF_SKIP_CLONE_OCCUPANCY=1",
       authExportLine,
       `exec claude ${bareFlag}${sessionFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < ${promptFile}`,
     ].join("\n");

@@ -1,5 +1,43 @@
 # Build gate runbook
 
+## Semantic review publication and infrastructure recovery
+
+The publication adapter reads [semantic-review-policy.json](../../scripts/semantic-review-policy.json).
+Its mode is the source of truth for receipt enforcement; a skill must not present
+a shadow observation as an enforced refusal. This procedure applies to external
+Claude, Codex and Grok delivery. Build Studio keeps its own transition contract.
+
+1. Freeze a clean DCO-signed commit and produce its required gate evidence.
+   Call `review_semantic_change` with the governing Workroom, immutable base/head
+   trees, committed diff digest and failure analysis bound to that evidence.
+   Source-local test prose does not replace executed gate evidence.
+2. Repair blocking code findings. Re-review a changed tree; stop after two failed
+   repair rounds. A changed diff, policy, reviewer or specialist set invalidates
+   a receipt. An infrastructure refusal or uncertain execution is not a finding.
+3. Record a returned native receipt with
+   `pnpm review:semantic-gate -- record --receipt-file <tool-result.json> --evidence-id <id>`.
+   Then run `pnpm review:semantic-gate -- validate` for the current commit.
+   In enforced mode an unavailable or stale receipt blocks publication. Follow
+   the returned remedy; never change mode or forge a receipt to pass the check.
+4. If infrastructure cannot run the native review, use
+   `node scripts/gate-context.mjs --situation review-infrastructure-unavailable`.
+   Do not repeatedly submit an unchanged request to unavailable capacity or poll
+   a task whose execution has stopped. Use the existing review recovery contract
+   after a verified remediation.
+5. In shadow mode the adapter may allow publication with a missing receipt.
+   For a bounded DEV repair under explicit operator authorization, preserve an
+   independent assessment of the exact change, record the native review as unrun
+   or inconclusive, and proceed through passing source checks and the protected
+   PR/merge queue. Reuse authorization already granted for that scope; a phase
+   change does not require a new exception question. Shadow alone grants no
+   authority and does not excuse ignoring a completed review's blocking findings.
+
+Independent client reviews are valid assessments with their own author, source
+identity, findings and outcome. Cite them separately in the Workroom and PR;
+they are not native receipts. Publication permission, passing review, merge and
+live verification remain separate facts. DCO, grant intersection, ownership and
+production integrity remain mandatory throughout recovery.
+
 CI scopes a pull request from its source head and that head's merge-base with `origin/main`. GitHub's checkout may be a synthetic merge; using its base with the source head includes unrelated main changes as reverse diffs and can turn documentation into exhaustive work. Both comparison endpoints must describe the same source history. Merge-group and other non-PR events retain exhaustive verification.
 
 **Public documentation publication.** CI's `Documentation Publication Build` builds `docs/` with the same [GitHub Pages Jekyll action](https://github.com/actions/jekyll-build-pages) used by legacy Pages publication. It runs for changed documentation or CI configuration on PRs, merge candidates and main; missing comparison history runs the build. Unchanged publication inputs produce a terminal no-build result. The job also checks that malformed Liquid is rejected, and feeds the required `Merge Readiness` aggregate. It only builds: the existing Pages channel still owns deployment. A green build is not evidence that the public site has deployed. Jekyll processes Liquid inside code fences; protect literal examples using its [raw tag guidance](https://jekyllrb.com/docs/liquid/tags/#jekyll-processes-all-liquid-filters-in-code-blocks).
@@ -58,7 +96,7 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 **A build decision counts wherever it is recorded.** Readiness also fails closed on an *unclassified* build script, and DPF records those decisions in the top-level `allowBuilds:` block of `pnpm-workspace.yaml` — the canonical policy home, where every entry must carry an explicit boolean (enforced by `scripts/check-build-script-policy.mjs`). pnpm reports a package denied there under **"Automatically ignored builds during installation"**, because it is simply absent from the allowlist; only a package in `package.json`'s `pnpm.ignoredBuiltDependencies` reaches the "Explicitly ignored" section. To a stdout-only parser those two states are indistinguishable, so `puppeteer`, `protobufjs` and `unrs-resolver` read as undecided despite each carrying a deliberate `false`, and every worktree created off `main` sat `source-only` and unpushable with no way to converge (BI-6945BEEF). `classifyIgnoredBuilds` now takes the policy-denied set from `policyDeniedBuilds()`, so a recorded decision counts. It stays strict where it matters: an unreadable or malformed workspace file yields an empty set rather than passing everything, and a package with no recorded decision is still flagged even when its siblings are decided. **Do not "fix" this class by adding `pnpm.onlyBuiltDependencies` to `package.json`** — that flips pnpm into allowlist mode and silently denies `esbuild`, `msw`, `prisma` and `@prisma/engines`, which breaks Prisma.
 
-**The hook asks for the verdict; it does not look for the file.** `pregate` writes **slot-scoped** gate records (`dpf-local-ci-gate-slot-N.json`). The pre-push hook used to stat an unslotted `dpf-local-ci-gate.json` — which is written by exactly one path, the override branch, as `{gatePassed:false, skipped:true}`. So the file it consulted for a PASS could never contain one: a genuine, evidence-backed `pregate` PASS was invisible to the hook, `pnpm run pregate:status` and `git push` disagreed about the same fact, and the only way past a mandatory gate was the override — which is how a gate decays into a formality (BI-A167CF8A). The hook now delegates to `scripts/pregate-status.mjs`, the canonical slot-aware reader, which already applies the branch/sha, evidence-pending and expiry checks and exits 0 only on a PASS for the current HEAD. The unslotted record remains the **override receipt**, never a pass channel. `scripts/pre-push-gate-slot-contract.test.mjs` holds writer and reader together so they cannot drift apart again. The two other readers of that record — `pnpm pr:health` and the skill-pack PreToolUse hook `pregate-evidence-guard.mjs`, which fires on `git push` / `gh pr create` — consult every slot too (BI-5529B5AC): `pr:health` selects across slots the way the reader does, and the hook runs `scripts/pregate-status.mjs --json` when it is present and falls back to every `dpf-local-ci-gate*.json` beside the slot-0 path when it is not (the plugin ships to installs with no `scripts/` tree). A PASS also **retires the losers**: once a slot passes a branch+SHA, any sibling slot record for the same branch+SHA that is not a pass is rewritten as `status: superseded` naming the winner, so no reader that opens one file can mistake the earlier queued, blocked or overridden attempt for a verdict.
+**The hook asks for the verdict; it does not look for the file.** `pregate` writes **slot-scoped** gate records (`dpf-local-ci-gate-slot-N.json`). The pre-push hook used to stat an unslotted `dpf-local-ci-gate.json` — which is written by exactly one path, the override branch, as `{gatePassed:false, skipped:true}`. So the file it consulted for a PASS could never contain one: a genuine, evidence-backed `pregate` PASS was invisible to the hook, `pnpm run pregate:status` and `git push` disagreed about the same fact, and the only way past a mandatory gate was the override — which is how a gate decays into a formality (BI-A167CF8A). The hook now delegates to `scripts/pregate-status.mjs`, the canonical slot-aware reader, which already applies the branch/sha, evidence-pending and expiry checks and exits 0 only on a PASS for the current HEAD. The unslotted record remains the **override receipt**, never a pass channel. `scripts/pre-push-gate-slot-contract.test.mjs` holds writer and reader together so they cannot drift apart again. The two other readers of that record — `pnpm pr:health` and the skill-pack PreToolUse hook `pregate-evidence-guard.mjs`, which fires on `git push` / `gh pr create` — consult every slot too (BI-5529B5AC): `pr:health` selects across slots the way the reader does, and the hook runs `scripts/pregate-status.mjs --json` when it is present and falls back to every `dpf-local-ci-gate*.json` beside the slot-0 path when it is not (the plugin ships to installs with no `scripts/` tree). A PASS also **retires the losers**: once a slot passes a branch+SHA, any sibling slot record for the same branch+SHA that is not a pass is rewritten as `status: superseded` naming the winner, so no reader that opens one file can mistake the earlier queued, blocked or overridden attempt for a verdict. `pregate:status` re-reads the winner a superseded record names. If that record no longer holds a pass for the same branch and SHA (a late lease loss can rewrite it after it superseded its sibling), the reason names the winner's actual status and says no slot holds a pass, so a superseded record can never manufacture one (BI-A9031FF3).
 
 **A push is not "done".** Every gate path that lets a push through now prints an explicit reminder that a PR is complete only when its required checks are GREEN — verify with `pnpm pr:health <PR#>` after CI starts and do not leave a red PR unattended (the abandonment behind PR #4172). `pnpm pr:health` remains the authoritative green-checks completion verdict.
 

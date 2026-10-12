@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Project-local marketplace for the DPF-native Claude Code plugin: skills, MCP wiring, and governance hooks.",
-    "version": "0.1.0"
+    "version": "0.2.8"
   },
   "plugins": [
     {

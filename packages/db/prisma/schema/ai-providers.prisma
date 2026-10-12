@@ -85,6 +85,8 @@ model AiProviderConnection {
   authMethod         String    @default("unknown")
   contractEvidence   Json      @default("{}")
   entitlements       Json      @default("{}")
+  accessibleModelIds String[]  @default([])
+  modelsVerifiedAt   DateTime?
   evidenceStatus     String    @default("unreviewed")
   lastReviewedAt     DateTime?
   createdAt          DateTime  @default(now())
@@ -97,6 +99,7 @@ model AiProviderConnection {
   supplierContract SupplierContract?         @relation(fields: [supplierContractId], references: [id], onDelete: SetNull)
   capacityStatus   ProviderCapacityStatus?   @relation(fields: [capacityStatusId], references: [id], onDelete: SetNull)
   trustEvidence    ComplianceEvidence[]
+  oauthFlows       OAuthPendingFlow[]
 
   @@index([organizationId, status])
   @@index([providerId, status])

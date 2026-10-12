@@ -3,14 +3,14 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 429,
-      "reason": "BI-926A7E90: read_build_artifact_revision. A Build Studio design is an accepted BuildArtifactRevision, not a repository blob, so the independent reviewer that approves a large-shape build had no immutable reader for the artifact it is asked to judge, and 122 plan-phase builds owed receipts nothing could request. Read-only, page-capped, identity-bound (path/version/expectedBlobId) exactly like read_source_at_version, granted only through file_read, and handed to a reviewer solely by the server-issued binding. Claim to check: revision-bound reviews record receipts whose artifactRef is the revision the reader served.",
-      "recordedAt": "2026-10-02"
+      "value": 432,
+      "reason": "BI-1914A351: get_provider_accounts and manage_provider_account give external coworkers the same scoped account controls as portal server actions. A bounded masked reader and one operation-based writer cover account setup, authentication, model discovery and lifecycle without adding a tool per action. Existing provider controls cannot select an additional account, so omitting these tools would orphan that functionality for agent surfaces. Claim to check: two accounts are managed independently through governed tools with no default credential fallback.",
+      "recordedAt": "2026-10-08"
     },
     "registry.packFiles": {
-      "value": 105,
-      "reason": "BI-EBF0F6EE: contributor-inventory-pack.ts and payables-pack.ts. Contributor inventory had a sync trigger but no reader and no pack of its own; payables/supplier reads are a finance-operations domain distinct from banking and reporting packs, granted to a narrower key (payables_read) than financial_read.",
-      "recordedAt": "2026-10-01"
+      "value": 106,
+      "reason": "BI-1914A351: provider-account-tools.ts holds the two account tool definitions composed into the existing model-provider pack. Handlers remain in that pack and delegate to shared account services, avoiding a larger import cycle. This is an account contract module, not a second tool registration path. Claim to check: model-provider pack tests prove one registration and matching grants for each account control.",
+      "recordedAt": "2026-10-08"
     },
     "tier.coreToolNames": {
       "value": 35,

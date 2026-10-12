@@ -21,6 +21,7 @@ import { prisma } from "@dpf/db";
 import { lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import { parseAdminDiagnostic } from "../admin-command-diagnostic";
 
 // These tools are available on the /admin route for platform administration.
 // Tier 1 = read-only, Tier 2 = reversible, Tier 3 = destructive (sideEffect: true).
@@ -102,7 +103,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "admin_run_command",
-    description: "Run a shell command in the project directory. Only docker compose, git, and pnpm commands are permitted. Destructive commands require user confirmation.",
+    description: "Run a diagnostic or controlled command in the project directory. Only docker compose, git, and pnpm commands are permitted. Bounded local diagnostics use current delegation; destructive commands remain blocked.",
     inputSchema: {
       type: "object",
       properties: {
@@ -114,6 +115,9 @@ const definitions: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true, // Tier 3: potentially destructive
     consequence: "irreversible",
+    consequenceForCall: async ({ params }) => parseAdminDiagnostic(params.command)
+      ? { consequence: null, reason: "bounded-local-diagnostic" }
+      : { consequence: "irreversible", reason: "command-effect-not-proven-routine" },
   },
 ];
 
@@ -350,19 +354,21 @@ async function adminRunCommand(params: Record<string, unknown>, userId: string):
     return {
       success: false,
       error: "Destructive command blocked by safety policy.",
-      message: `This command is blocked: "${command.slice(0, 80)}". Destructive operations (rm -rf, docker compose down, git push, --force) require manual execution in the terminal.`,
+      message: `This command is blocked: "${command.slice(0, 80)}". Use the governed recovery or deployment operation for destructive work.`,
     };
   }
 
   try {
-    const { exec: execCb } = lazyChildProcess();
+    const diagnostic = parseAdminDiagnostic(command);
+    const { exec: execCb, execFile: execFileCb } = lazyChildProcess();
     const { promisify } = lazyUtil();
     const execAsync = promisify(execCb);
-    await logAdminActivity(userId, "admin_run_command", { command }, "success", 2, `Running: ${command.slice(0, 200)}`);
-    const { stdout, stderr } = await execAsync(command + " 2>&1", {
-      cwd: composeCwd(),
-      timeout: 60_000,
-    });
+    await logAdminActivity(userId, "admin_run_command", { command }, "success", diagnostic ? 1 : 2, `Running: ${command.slice(0, 200)}`);
+    const options = { cwd: composeCwd(), timeout: 60_000 };
+    // The exact argv admitted by the refiner is executed without a shell.
+    const { stdout, stderr } = diagnostic
+      ? await promisify(execFileCb)(diagnostic.file, diagnostic.args, options)
+      : await execAsync(command + " 2>&1", options);
     const output = (stdout + "\n" + stderr).trim();
     return { success: true, message: `Command completed.`, data: { command, output: output.slice(0, 15000) } };
   } catch (err) {
