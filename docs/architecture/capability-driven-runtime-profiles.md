@@ -328,6 +328,12 @@ related promoter, protocol, coordinator and upgrade tests passed. The caller mus
 still obtain expected digests from the trusted server closure and wire discovery
 before reconciliation admission; no actual image probe or live apply is claimed.
 
+The host actuator also uses the already-packaged shared capability-state hash
+helper instead of maintaining its own serialization. This preserves the existing
+ordinary-transition hash and consistent-baseline requirement. The existing hash,
+signing, host crash/recovery and promoter closure suites pass 45 source tests;
+this refactor supplies no live capability or reconciliation evidence.
+
 ## Safe operating rules
 
 - Change physical service facts in the substrate manifest and regenerate the catalog; do not hand-edit the generated catalog.

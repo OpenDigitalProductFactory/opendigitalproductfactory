@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { validateInstallState } from "./installer/validate-install-state.mjs";
 import { canonicalTransitionPayload, signTransitionPayload } from "./lib/transition-signing.mjs";
+import { computeCapabilityStateVersion } from "./lib/capability-state-hash.mjs";
 
 // strict: false keeps the old tolerance for flags this script does not read.
 const { values: flags } = utilParseArgs({ args: process.argv.slice(2), strict: false, allowPositionals: true, options: { "state-dir": { type: "string" }, "runtime-capability-protocol-info": { type: "boolean" } } });
@@ -114,7 +115,28 @@ try { catalog = JSON.parse(await readFile(catalogPath, "utf8")); } catch { await
 const { catalogHash, ...catalogContent } = catalog;
 if (catalogHash !== envelope.catalogHash || sha(catalogBytes(catalogContent)) !== catalogHash) await fail("capability_catalog_mismatch");
 const byId = new Map(catalog.capabilities.map((c) => [c.capabilityId, c]));
-const project = (keys) => { const enabled = new Set(); const add = (id) => { const c = byId.get(id); if (!c) throw new Error(`unknown_runtime_capability:${id}`); if (enabled.has(id)) return; for (const d of c.dependencies) add(d); enabled.add(id); }; for (const k of keys) add(k); for (const c of catalog.capabilities) if (c.activationPolicy === "always") add(c.capabilityId); const enabledKeys = [...enabled].sort(); const services = catalog.capabilities.filter((c) => enabled.has(c.capabilityId)).flatMap((c) => c.services).filter((s) => s.targetClassification !== "ephemeral-lifecycle"); return { enabledKeys, profiles: [...new Set(services.flatMap((s) => s.profiles))].sort(), required: [...new Set(services.map((s) => s.service))].sort(), stateHash: sha(`${catalogHash}\n${catalog.capabilities.map((c) => `${c.capabilityId}=${enabled.has(c.capabilityId) ? "active" : "disabled"}`).sort().join("\n")}`) }; };
+const project = (keys) => {
+  const enabled = new Set();
+  const add = (id) => {
+    const capability = byId.get(id);
+    if (!capability) throw new Error(`unknown_runtime_capability:${id}`);
+    if (enabled.has(id)) return;
+    for (const dependency of capability.dependencies) add(dependency);
+    enabled.add(id);
+  };
+  for (const key of keys) add(key);
+  for (const capability of catalog.capabilities) if (capability.activationPolicy === "always") add(capability.capabilityId);
+  const enabledKeys = [...enabled].sort();
+  const services = catalog.capabilities.filter((capability) => enabled.has(capability.capabilityId))
+    .flatMap((capability) => capability.services)
+    .filter((service) => service.targetClassification !== "ephemeral-lifecycle");
+  return {
+    enabledKeys,
+    profiles: [...new Set(services.flatMap((service) => service.profiles))].sort(),
+    required: [...new Set(services.map((service) => service.service))].sort(),
+    stateHash: computeCapabilityStateVersion(catalogHash, enabledKeys, catalog.capabilities.map((capability) => capability.capabilityId)),
+  };
+};
 let previous, desired; try { previous = project(envelope.previousKeys); desired = project(envelope.desiredKeys); } catch (e) { await fail(e.message); }
 if (canonical(previous.enabledKeys) !== canonical(envelope.previousKeys) || canonical(desired.enabledKeys) !== canonical(envelope.desiredKeys) || canonical(previous.profiles) !== canonical(envelope.previousProfiles) || canonical(desired.profiles) !== canonical(envelope.desiredProfiles) || canonical(previous.required) !== canonical(envelope.previousServices) || canonical(desired.required) !== canonical(envelope.desiredServices) || previous.stateHash !== envelope.previousStateHash || desired.stateHash !== envelope.desiredStateHash) await fail("capability_projection_mismatch");
 
