@@ -1,3 +1,9 @@
+---
+status: active
+backlogItem: BI-25CB699C
+workroom: WC-BB716B11
+---
+
 # Validation evidence reuse
 
 Backlog: BI-25CB699C. Workroom: WC-BB716B11.
@@ -62,6 +68,8 @@ Phases below are internal sequencing, not independently accepted outcomes.
    hook invocation and preserve exact failing output through diagnosis.
    **VC-DIAGNOSTICS:** concurrent invocations have distinct log paths; shell
    syntax and regression tests cover failure and cleanup.
+   Register the new regression suite in `scripts/lib/ci-policy-guards.mjs` so
+   protected CI executes it; do not add it to an exclusion allowlist.
 4. Reconcile the existing build-gate runbook with its current editing owner
    (WC-EE471770 / BI-9369DEB5); do not overwrite their changes. Run affected
    Node tests, guard tests, shell syntax, doc-index and source guards. Inspect
