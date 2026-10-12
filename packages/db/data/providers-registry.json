@@ -788,7 +788,7 @@
     "inputPricePerMToken": 0,
     "outputPricePerMToken": 0,
     "docsUrl": "https://platform.openai.com/docs",
-    "consoleUrl": "https://platform.openai.com/settings/organization/billing",
+    "consoleUrl": "https://chatgpt.com",
     "billingLabel": "Included with ChatGPT subscription",
     "costPerformanceNotes": "ChatGPT and Codex use one OpenAI sign-in. Manage authentication in Codex; manage traffic and routing restrictions on each provider's detail page.",
     "catalogVisibility": "visible",
