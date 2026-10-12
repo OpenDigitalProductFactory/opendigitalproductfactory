@@ -5648,6 +5648,7 @@
       "publishedPortal": false,
       "anchors": [
         "platform-support-watch-list-living-document",
+        "windows-host-guard-interpreters-bi-ba5f777a",
         "target-environments",
         "how-to-use-this-file",
         "1-monitoring-telemetry",

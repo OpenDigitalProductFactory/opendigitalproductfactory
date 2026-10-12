@@ -1,5 +1,18 @@
 # Platform Support Watch-List (living document)
 
+## Windows host guard interpreters (BI-BA5F777A)
+
+Windows may resolve `bash` to the WSL launcher while `sh` is absent. Native
+Windows fixture paths cannot be passed unchanged to WSL. Shell fixtures use
+`scripts/lib/guard-bash.mjs` to probe native path support in Git Bash discovered
+through the process PATH, a custom Git installation, or standard machine/user
+install locations. The host preflight and policy runner share a child-only shell
+environment, so nested fixtures find Bash, sh and Git utilities consistently.
+Missing compatible Bash is a `GuardRuntimeEnvironmentError`,
+not a passing test or a product validation failure. Host PATH is unchanged.
+Git isolation fixtures write files through Node instead of invoking a shell.
+PKI rejection assertions and existing POSIX permission checks remain intact.
+
 A running tally of **platform-specific gotchas** to watch for when supporting
 DPF's target environments. This is the operational companion to the canonical
 design docs — it tracks *symptoms and recurring traps*, not contracts:
