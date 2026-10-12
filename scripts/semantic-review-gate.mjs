@@ -63,7 +63,7 @@ if (command === "record-exemption") {
   const result = validateLocalSemanticReviewGate(state, current);
   if (!result.valid) throw new Error(`invalid canonical exemption: ${result.reason}`);
   writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`);
-  console.log(`[semantic-review-gate] recorded policy exception; native review UNRUN for ${current.branch}@${current.sha}`);
+  console.log(`[semantic-review-gate] recorded policy exception; native review UNRUN, assessment independence UNVERIFIED for ${current.branch}@${current.sha}`);
   process.exit(0);
 }
 
@@ -98,7 +98,7 @@ const state = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, "utf8")
 const current = currentIdentity(state);
 const result = validateLocalSemanticReviewGate(state, current);
 if (result.valid) {
-  console.log(`[semantic-review-gate] ${result.reason} for ${current.branch}@${current.sha}${result.reason === "policy-exemption" ? "; native review UNRUN" : ""}`);
+  console.log(`[semantic-review-gate] ${result.reason} for ${current.branch}@${current.sha}${result.reason === "policy-exemption" ? "; native review UNRUN, assessment independence UNVERIFIED" : ""}`);
   process.exit(0);
 }
 const message = `[semantic-review-gate] ${result.reason} for ${current.branch}@${current.sha}`;

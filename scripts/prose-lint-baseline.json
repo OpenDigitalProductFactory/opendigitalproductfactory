@@ -7303,6 +7303,14 @@
     "longSentences": 1,
     "textMass": 80
   },
+  "apps/web/components/platform/LocalProviderPauseControl.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
   "apps/web/components/platform/McpServiceRow.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

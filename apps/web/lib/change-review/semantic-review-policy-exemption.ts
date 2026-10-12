@@ -13,20 +13,28 @@ import { CHANGE_REVIEW_POLICY_VERSION } from "./semantic-change-review";
 import { SEMANTIC_REVIEW_EXEMPTION_SCHEMA_VERSION } from "./semantic-review-enforcement";
 
 const operationType = "semantic-change-review.exemption";
+const inputKeys = ["capsuleId", "sourceHeadSha", "baseTreeHash", "headTreeHash", "diffDigest", "reason", "expiresAt", "verificationEvidenceId", "clientAssessmentActivityId", "reviewBasis"];
 export const semanticReviewExemptionDefinition: ToolDefinition = {
   name: "record_semantic_review_exemption",
-  description: "Record one operator-authorized DEV publication exception on the current Workroom source, backed by executed verification and an independent review record. Native review remains UNRUN. No model executes and no failed review is overridden.",
+  description: "Record one operator-authorized DEV publication exception with current verification and a cited client assessment. Native review remains UNRUN and assessment independence UNVERIFIED. The operator explicitly accepts that assurance limit. No model executes and a failed review requires repair.",
   inputSchema: { type: "object", additionalProperties: false, properties: {
     capsuleId: { type: "string" }, sourceHeadSha: { type: "string" }, baseTreeHash: { type: "string" },
     headTreeHash: { type: "string" }, diffDigest: { type: "string" }, reason: { type: "string" },
-    expiresAt: { type: "string" }, verificationEvidenceId: { type: "string" }, independentReviewActivityId: { type: "string" },
-  }, required: ["capsuleId", "sourceHeadSha", "baseTreeHash", "headTreeHash", "diffDigest", "reason", "expiresAt", "verificationEvidenceId", "independentReviewActivityId"] },
+    expiresAt: { type: "string" }, verificationEvidenceId: { type: "string" }, clientAssessmentActivityId: { type: "string" },
+    reviewBasis: { type: "string", enum: ["operator-accepted-client-assessment"], description: "Explicit acceptance of client assessment whose independent execution is not certified. Part of the operator's exact approval." },
+  }, required: ["capsuleId", "sourceHeadSha", "baseTreeHash", "headTreeHash", "diffDigest", "reason", "expiresAt", "verificationEvidenceId", "clientAssessmentActivityId", "reviewBasis"] },
   requiredCapability: "manage_platform", executionMode: "immediate", sideEffect: true,
   consequence: "authority", consequenceScope: "platform", buildPhases: ["review", "ship"],
 };
 const nonempty = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
 const hash = (value: unknown, length: number) => typeof value === "string" && new RegExp(`^[a-f0-9]{${length}}$`).test(value);
 const fingerprint = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
+
+/** Query the revision itself; unrelated later receipts must not hide a failure. */
+export async function findCurrentSemanticFailure(roomId: string, headSha: string) {
+  return prisma.externalEvidenceRecord.findFirst({ where: { workCapsuleId: roomId, operationType: "semantic-change-review.receipt",
+    AND: [{ details: { path: ["sourceHeadSha"], equals: headSha } }, { details: { path: ["result", "decision"], equals: "fail" } }] }, select: { id: true } });
+}
 
 async function isEngineeringDevelopment() {
   const [environment, intent] = await Promise.all([
@@ -36,19 +44,19 @@ async function isEngineeringDevelopment() {
   return environment.environmentClass === "development" && intent.status === "valid" && intent.intent.primaryPurpose === "evolve-dpf";
 }
 
-/** Resolve existing executed CI and an independently authored Workroom record.
- * An exception never turns nonpassing verification into a passing test. */
+/** Resolve cited evidence, without treating client declarations as certified
+ * independent execution. The operator accepts this limit explicitly. */
 async function resolveBindings(value: Record<string, unknown>, roomId: string) {
-  if (!nonempty(value.verificationEvidenceId) || !nonempty(value.independentReviewActivityId)) return null;
+  if (!nonempty(value.verificationEvidenceId) || !nonempty(value.clientAssessmentActivityId)) return null;
   const [ci, review] = await Promise.all([
     prisma.externalEvidenceRecord.findUnique({ where: { id: value.verificationEvidenceId } }),
-    prisma.workroomActivity.findUnique({ where: { id: value.independentReviewActivityId } }),
+    prisma.workroomActivity.findUnique({ where: { id: value.clientAssessmentActivityId } }),
   ]);
   const source = !ci ? await prisma.workroomActivity.findUnique({ where: { id: value.verificationEvidenceId } }) : null;
   const sourcePayload = source && isRecord(source.payload) ? source.payload : null;
   const sourceEvidence = sourcePayload && isRecord(sourcePayload.result) ? sourcePayload.result : null;
   const sourceValid = source?.workCapsuleId === roomId && source.kind === "evidence-recorded" && sourcePayload?.kind === "test"
-    && nonempty(source.recordedById) && source.recordedByAgentId === value.authorAgentId && sourceEvidence?.tier === "source-local-checks"
+    && nonempty(source.recordedById) && source.recordedByAgentId === value.requestingAgentId && sourceEvidence?.tier === "source-local-checks"
     && sourceEvidence.status === "passed" && sourceEvidence.fullGateStatus === "UNRUN";
   if (!sourceValid && (!ci || ci.workCapsuleId !== roomId || ci.operationType !== "local_integration_ci" || !isRecord(ci.details))) return null;
   const details = ci && isRecord(ci.details) ? ci.details : {};
@@ -68,19 +76,15 @@ async function resolveBindings(value: Record<string, unknown>, roomId: string) {
     || !result || result.decision !== "pass"
     || result.sourceHeadSha !== value.sourceHeadSha || result.headTreeHash !== value.headTreeHash
     || result.diffDigest !== value.diffDigest || !nonempty(result.rationale) || result.rationale.trim().length < 20) return null;
-  // External chats can share one coworker principal. Use their separately
-  // admitted Workroom executors; never invent a reviewer agent to satisfy separation.
+  // Record the cited room separately from the activity's actual producer.
+  // Room executors do not establish who wrote a generic evidence record.
   const reviewerRoom = review.workCapsuleId !== roomId
     ? await prisma.workroom.findUnique({ where: { id: review.workCapsuleId } }) : null;
   if (review.workCapsuleId !== roomId && (!reviewerRoom || reviewerRoom.id !== review.workCapsuleId)) return null;
   if (reviewerRoom && result.capsuleId !== value.capsuleId) return null;
-  const separateExecutor = reviewerRoom && nonempty(reviewerRoom.executorRef) && nonempty(value.authorExecutorRef)
-    && reviewerRoom.executorRef !== value.authorExecutorRef;
-  if (review.recordedByAgentId === value.authorAgentId && !separateExecutor) return null;
-  return { reviewerAgentId: review.recordedByAgentId,
-    independenceBasis: review.recordedByAgentId !== value.authorAgentId ? "distinct-recorded-agents" : "distinct-recorded-workroom-executors",
-    reviewerWorkroomId: review.workCapsuleId, reviewerExecutorRef: reviewerRoom?.executorRef ?? null,
-    verificationStatus: sourceValid ? "source-checks-passed/full-gate-UNRUN" : "executed-gate-passed",
+  return { assessmentRecordedByAgentId: review.recordedByAgentId, assessmentRecordedByUserId: review.recordedById,
+    independentReview: "UNVERIFIED", assessmentWorkroomId: review.workCapsuleId, assessmentWorkroomExecutorRef: reviewerRoom?.executorRef ?? null,
+    verificationStatus: sourceValid ? "client-reported-source-checks-passed/full-gate-UNRUN" : "executed-gate-passed",
     bindingDigest: fingerprint({ verification: sourceValid ? source?.payload : ci?.details, review: review.payload,
       verificationUserId: source?.recordedById ?? null, verificationAgentId: source?.recordedByAgentId ?? null,
       reviewerUserId: review.recordedById, reviewerAgentId: review.recordedByAgentId,
@@ -89,7 +93,7 @@ async function resolveBindings(value: Record<string, unknown>, roomId: string) {
 
 function validIdentity(value: Record<string, unknown>) {
   const expiry = typeof value.expiresAt === "string" ? Date.parse(value.expiresAt) : NaN;
-  return nonempty(value.capsuleId) && hash(value.sourceHeadSha, 40) && hash(value.baseTreeHash, 40)
+  return value.reviewBasis === "operator-accepted-client-assessment" && nonempty(value.capsuleId) && hash(value.sourceHeadSha, 40) && hash(value.baseTreeHash, 40)
     && hash(value.headTreeHash, 40) && hash(value.diffDigest, 64) && nonempty(value.reason) && value.reason.trim().length >= 20
     && expiry > Date.now() && expiry <= Date.now() + 24 * 60 * 60 * 1000;
 }
@@ -98,18 +102,17 @@ export async function recordSemanticReviewExemption(params: Record<string, unkno
   const refuse = (message: string): ToolResult => ({ success: false, error: "review_exemption_refused", message });
   if (!context?.userContext || (context.userContext.userId && context.userContext.userId !== userId)
     || !can(context.userContext, "manage_platform")) return refuse("An authenticated platform operator must authorize this exception.");
+  if (!nonempty(context.agentId)) return refuse("The canonical waiver requires an operator-approved delegated call.");
   const approval = await humanApprovalForExecution({ envelopeId: context.approvedAuthorityEnvelopeId,
     toolName: "record_semantic_review_exemption", userId, agentId: context.agentId, params });
-  if (context.agentId && approval?.userId !== userId) return refuse("The delegate needs the existing verified operator approval for this exact exception.");
+  if (approval?.userId !== userId) return refuse("The delegate needs the existing verified operator approval for this exact exception.");
   if (!validIdentity(params) || !await isEngineeringDevelopment()) return refuse("Exceptions require a current source identity, expiry within 24 hours, and the development/evolve-dpf installation.");
   const room = await prisma.workroom.findUnique({ where: { capsuleId: String(params.capsuleId) } });
-  if (!room || !room.repositoryFullName || room.headSha !== params.sourceHeadSha) return refuse("The Workroom source identity changed or is incomplete.");
-  const value = { ...params, authorAgentId: context.agentId ?? null, authorExecutorRef: room.executorRef };
+  if (!room || !room.repositoryFullName || !room.headSha || room.headSha !== params.sourceHeadSha) return refuse("The Workroom source identity changed or is incomplete.");
+  const value = { ...params, requestingAgentId: context.agentId ?? null, sourceExecutorRef: room.executorRef };
   const bindings = await resolveBindings(value, room.id);
   if (!bindings) return refuse("Current executed verification and a separate reviewer record are required; failed checks remain failed.");
-  const current = await prisma.externalEvidenceRecord.findMany({ where: { workCapsuleId: room.id, operationType: "semantic-change-review.receipt" }, orderBy: { createdAt: "desc" }, take: 20 });
-  if (current.some(row => isRecord(row.details) && row.details.sourceHeadSha === room.headSha
-    && isRecord(row.details.result) && row.details.result.decision === "fail")) return refuse("A failed current review requires repair.");
+  if (await findCurrentSemanticFailure(room.id, room.headSha)) return refuse("A failed current review requires repair.");
   // Re-read immediately before capture; subsequent head movement invalidates the record at consumption.
   const finalRoom = await prisma.workroom.findUnique({ where: { capsuleId: String(params.capsuleId) } });
   if (finalRoom?.headSha !== room.headSha || finalRoom.repositoryFullName !== room.repositoryFullName) return refuse("Workroom identity changed while authorizing the exception.");
@@ -119,14 +122,15 @@ export async function recordSemanticReviewExemption(params: Record<string, unkno
     issuedAt: new Date().toISOString(), nativeReview: "UNRUN" };
   const record = await recordExternalEvidence({ actorUserId: userId, recordedByAgentId: context.agentId,
     routeContext: "change-review", operationType, target: room.capsuleId, provider: "dpf-change-review", workCapsuleId: room.id,
-    resultSummary: "Operator authorized a bounded DEV publication exception; native review UNRUN.", details: details as Prisma.InputJsonValue });
-  return { success: true, entityId: record.id, message: "Publication exception recorded; native review remains UNRUN.", data: { exemption: { ...details, evidenceId: record.id } } };
+    resultSummary: "Operator accepted a bounded DEV exception; native review UNRUN, assessment independence UNVERIFIED.", details: details as Prisma.InputJsonValue });
+  return { success: true, entityId: record.id, message: "Publication exception recorded; native review UNRUN and assessment independence UNVERIFIED.", data: { exemption: { ...details, evidenceId: record.id } } };
 }
 
 export async function resolveWorkroomReviewExemption(capsuleId: string, roomId: string, headSha: string) {
   if (!await isEngineeringDevelopment()) return null;
   const room = await prisma.workroom.findUnique({ where: { capsuleId } });
   if (!room || room.id !== roomId || room.headSha !== headSha) return null;
+  if (await findCurrentSemanticFailure(roomId, headSha)) return null;
   const rows = await prisma.externalEvidenceRecord.findMany({ where: { workCapsuleId: roomId, operationType }, orderBy: { createdAt: "desc" }, take: 20 });
   for (const row of rows) {
     const value = row.details;
@@ -134,16 +138,21 @@ export async function resolveWorkroomReviewExemption(capsuleId: string, roomId: 
     if (!validIdentity(value) || value.capsuleId !== capsuleId || value.schemaVersion !== SEMANTIC_REVIEW_EXEMPTION_SCHEMA_VERSION
       || value.policyVersion !== CHANGE_REVIEW_POLICY_VERSION || value.nativeReview !== "UNRUN"
       || value.sourceRepository !== room.repositoryFullName || value.sourceBranch !== room.headBranch
-      || value.authorExecutorRef !== room.executorRef
-      || !nonempty(value.approvedByUserId) || (value.authorAgentId && !nonempty(value.authorityEnvelopeId))) return null;
-    if (value.authorAgentId) {
+      || value.sourceExecutorRef !== room.executorRef || value.independentReview !== "UNVERIFIED"
+      || !nonempty(value.approvedByUserId) || !nonempty(value.requestingAgentId) || !nonempty(value.authorityEnvelopeId)) return null;
+    if (value.requestingAgentId) {
       const approval = await prisma.coworkerActionEnvelope.findUnique({ where: { id: String(value.authorityEnvelopeId) } });
+      const approvedInput = Object.fromEntries(inputKeys.map(key => [key, value[key]]));
+      const marker = approval && isRecord(approval.argsJson) && isRecord(approval.argsJson.humanApproval) ? approval.argsJson.humanApproval : null;
       if (!approval || !["approved", "executed"].includes(approval.status) || approval.delegatingUserId !== value.approvedByUserId
-        || approval.coworkerAgentId !== value.authorAgentId || approval.manifestActionId !== "record_semantic_review_exemption"
-        || approval.inputFingerprint !== value.authorityInputFingerprint) return null;
+        || approval.coworkerAgentId !== value.requestingAgentId || approval.manifestActionId !== "record_semantic_review_exemption"
+        || (approval.status === "approved" && !approval.resolvedAt) || marker?.userId !== value.approvedByUserId
+        || typeof marker.approvedAt !== "string" || !(Date.parse(marker.approvedAt) <= Date.now())
+        || approval.inputFingerprint !== value.authorityInputFingerprint
+        || approval.inputFingerprint !== fingerprintCoworkerInput(approvedInput)) return null;
     }
     const bindings = await resolveBindings(value, roomId);
-    if (!bindings || bindings.bindingDigest !== value.bindingDigest || bindings.reviewerAgentId !== value.reviewerAgentId) return null;
+    if (!bindings || bindings.bindingDigest !== value.bindingDigest || bindings.assessmentRecordedByAgentId !== value.assessmentRecordedByAgentId) return null;
     return { evidenceId: row.id, sourceHeadSha: headSha };
   }
   return null;
