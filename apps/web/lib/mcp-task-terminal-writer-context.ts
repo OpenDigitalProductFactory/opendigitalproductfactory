@@ -309,6 +309,7 @@ export function needsTerminalReaderBootstrap(
     return result?.["error"] === "invalid_cursor" && result["success"] !== true
       && typeof parameters["cursor"] === "string"
       && (parameters["startLine"] === undefined || parameters["startLine"] === 1)
+      && (result["data"] === undefined || record(result["data"]) !== null)
       && record(result["data"])?.["content"] === undefined;
   });
 }

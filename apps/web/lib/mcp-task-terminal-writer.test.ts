@@ -1,5 +1,6 @@
 import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readerBootstrapHistory, readerBootstrapTask } from "./test-support/terminal-reader-bootstrap";
 
 const db = vi.hoisted(() => ({
   persisted: {} as Record<string, unknown>,
@@ -348,55 +349,15 @@ describe("terminal writer resumption", () => {
   it.each([
     "none", "invalid-cursors", "denied", "other-failure", "conflicting-binding",
     "unauthorized-tool", "malformed-result", "conflicting-result", "duplicate-id",
-    "reversed-order", "continuation", "success-conflict",
+    "reversed-order", "continuation", "success-conflict", "malformed-data-array",
+    "malformed-data-primitive", "malformed-data-null",
   ])("resumes only safe initial-reader failures (%s)", async (historyKind) => {
     const metadata = await persistedMetadata("PAT-WRITER-ZERO-READER");
     vi.clearAllMocks();
     const updatedAt = new Date("2026-08-31T03:00:00.000Z");
-    db.findFirst.mockResolvedValue({
-      id: "task-internal",
-      taskRunId: "TR-MCP-ZERO-READER",
-      threadId: "thread-external",
-      contextId: "thread-external",
-      status: "input-required",
-      updatedAt,
-      progressPayload: {
-        summary: "The required governed writer could not be dispatched.",
-        terminalWriterWait: {
-          schemaVersion: 1,
-          kind: "missing-terminal-writer",
-          writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
-          attempt: 1,
-          observedAt: "2026-08-31T02:59:00.000Z",
-        },
-      },
-      a2aMetadata: metadata,
-    });
+    db.findFirst.mockResolvedValue(readerBootstrapTask(metadata, updatedAt));
     db.findEnvelope.mockResolvedValue(null);
-    const rejectedReaders: Array<typeof persistedReaderExecution> = historyKind !== "none"
-      ? ["start", "1", "0", "initial", "eyJvZmZzZXQiOjB9"].map((cursor, index) => ({
-          ...persistedReaderExecution,
-          id: `rejected-reader-${index}`,
-          parameters: { ...persistedReaderExecution.parameters, cursor },
-          result: { error: "invalid_cursor" },
-          success: false,
-          createdAt: new Date(index + 1),
-        }))
-      : [];
-    const first = rejectedReaders[0];
-    if (first) {
-      if (historyKind === "denied") first.result = { error: "insufficient_token_scope" };
-      if (historyKind === "other-failure") first.result = { error: "provider-unavailable" };
-      if (historyKind === "conflicting-binding") first.parameters.version = "0".repeat(40);
-      if (historyKind === "unauthorized-tool") first.toolName = "search_source_at_version";
-      if (historyKind === "malformed-result") first.result = { error: "invalid_cursor", data: { content: "unbound" } };
-      if (historyKind === "conflicting-result") first.result = { error: "invalid_cursor", data: { blobId: "0".repeat(40) } };
-      if (historyKind === "duplicate-id") rejectedReaders[1]!.id = first.id;
-      if (historyKind === "reversed-order") rejectedReaders.reverse();
-      if (historyKind === "continuation") first.parameters.startLine = 2;
-      if (historyKind === "success-conflict") first.result = { error: "invalid_cursor", success: true };
-    }
+    const rejectedReaders = readerBootstrapHistory(historyKind, persistedReaderExecution);
     db.findToolExecutions
       .mockReset()
       .mockResolvedValueOnce(rejectedReaders)
