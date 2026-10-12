@@ -145,8 +145,8 @@ export function parseRetryAfterSeconds(stderr: string): number | null {
 /**
  * Record a 429 / rate-limit event for the given CLI adapter.
  * Upserts the CliPoolStatus row (one row per adapterType).
- * Fire-and-forget from the adapter — errors are swallowed so they never
- * block the InferenceError from propagating to the caller.
+ * Await from the adapter before fallback. Persistence errors are swallowed so
+ * they never replace the InferenceError propagated to the caller.
  */
 export async function recordCliRateLimit(
   adapterType: CliAdapterType,
@@ -170,9 +170,10 @@ export async function recordCliRateLimit(
     // BI-38064739: a reset beyond the pool cap is a subscription cap, not a
     // throttle. Record it as the provider's capacity state so routing and the
     // provider page honor the real date instead of retrying every tick.
-    if (retryAfterSeconds !== null && retryAfterSeconds > MAX_CLI_COOLDOWN_SECONDS) {
-      void recordSubscriptionCap(providerId, new Date(now.getTime() + retryAfterSeconds * 1_000), retryAfterSeconds, errorText);
-    }
+    const subscriptionCap = retryAfterSeconds !== null && retryAfterSeconds > MAX_CLI_COOLDOWN_SECONDS;
+    await recordCliCapacity(providerId,
+      subscriptionCap ? new Date(now.getTime() + retryAfterSeconds * 1_000) : resetAt,
+      subscriptionCap ? retryAfterSeconds : cooldownSeconds, errorText, subscriptionCap);
 
     await prisma.cliPoolStatus.upsert({
       where: { adapterType },
@@ -441,11 +442,12 @@ export async function collectCliWeeklyQuota(_adapterType: CliAdapterType): Promi
  */
 const SHARED_CHATGPT_ACCOUNT_PROVIDERS = new Set(["codex", "chatgpt"]);
 
-async function recordSubscriptionCap(
+async function recordCliCapacity(
   providerId: string,
   retryAt: Date,
   retryAfterSeconds: number,
   errorText: string,
+  subscriptionCap: boolean,
 ): Promise<void> {
   try {
     const { recordProviderCapacityStatus } = await import("./provider-capacity/store");
@@ -457,16 +459,18 @@ async function recordSubscriptionCap(
       source: "cli",
       rawSnippet: errorText,
       classification: {
-        state: "quota_resets_at",
-        action: "retry_at",
+        state: subscriptionCap ? "quota_resets_at" : "rate_limited",
+        action: subscriptionCap ? "retry_at" : "retry_with_backoff",
         retryAt,
         retryAfterSeconds,
-        safeSummary: `The subscription's usage limit is reached; the provider says to try again at ${retryAt.toISOString()}.`,
-        confidence: "exact",
+        safeSummary: subscriptionCap
+          ? `The subscription's usage limit is reached; the provider says to try again at ${retryAt.toISOString()}.`
+          : `The CLI reported a usage or rate limit. DPF will back off until ${retryAt.toISOString()}; this is a bounded retry time, not a confirmed quota reset.`,
+        confidence: subscriptionCap ? "exact" : "heuristic",
         isHumanActionRequired: false,
       },
     })));
   } catch (err) {
-    console.warn("[cli-pool-status] Failed to record subscription cap:", { providerId }, err);
+    console.warn("[cli-pool-status] Failed to record CLI capacity:", { providerId }, err);
   }
 }
