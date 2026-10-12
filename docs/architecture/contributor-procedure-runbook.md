@@ -65,10 +65,11 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 
 - Login email: `admin@dpf.local` unless told otherwise.
 - Read the install's admin password from `ADMIN_PASSWORD` in repo-root `.env` — not from `apps/web/.env.local` (which may omit it). Seeded by `packages/db/src/seed.ts` (bcrypt, falls back to `changeme123`); both installers print it in their completion summary. Never copy the value into a tracked file, a commit, a PR body, or an issue.
-- **Pick the right browser surface before blaming auth.** An authenticated portal route reached from an agent's own sandboxed/preview browser has NO session and silently redirects to the sign-in chooser — it looks like the portal is broken when it is only anonymous. For any authenticated surface (`/ops/*`, `/build`, `/platform/*`, coworker panels) drive **Claude-in-Chrome**, which carries the operator's existing session. Confirm with `fetch('/api/auth/session')` BEFORE diagnosing anything else; a `null` user there explains most "page won't load" reports (see also the phantom-session case where a stale non-DB session id yields a null lookup — sign out and back in).
-- **Agents may sign in to a LOCAL install themselves.** Read `ADMIN_PASSWORD` from repo-root `.env` and type it into the `/login` form of the local, non-production install when driving the in-client browser. This is the normal path when the driven browser has no operator session; prefer an existing operator session when one is already authenticated. Scope limits, all hard: local/non-production installs only — never a hosted, shared or production surface; never a credential other than the seeded local admin; never echo, paste or log the value anywhere it persists (transcript summary, commit, PR body, issue, test fixture).
-  ⟦situational: some agent harnesses carry their own blanket ban on entering credentials into any form and will refuse regardless of this rule. On such a host the refusal is a harness limitation, not a DPF rule — say so and fall back to the operator's authenticated session rather than reporting the surface as unverifiable. Re-check on harness upgrades — BI-1E23243F.⟧
-- If `/build` or another shell route redirects to `/welcome`, authenticate at `/login` first.
+- **Establish the verification session before diagnosing auth.** A preview or automation browser may have no portal session and redirect to the sign-in chooser. Inspect `/api/auth/session` in the driven browser, then use the platform-owned sign-in procedure below when granted. Use the supported browser on the current client; no particular client or operator session is required. A null or stale session calls for restoring that verification session. A real authorization refusal remains a finding, not a reason to switch identities.
+- **Agents own authenticated verification on declared DEV/test installs.** Read the canonical installation context from MCP initialization or `get_my_coworker_profile` before applying an environment assumption. Its `installationContext` reports host capability, stance and operating instructions; a coworker's `lifecycleStage` does not classify the install. Routine granted exercise and local test credential management require no repeated operator hand-off. Environment never widens token/coworker grants, capabilities, action gates or paired-peer limits.
+- **Use the platform-owned browser sign-in.** Call `issue_ux_verification_sign_in` with the intended `nextPath` and open its one-time link in the driven browser. The tool resolves DEV/test permission, issues an audited automation persona session and requires no password entry. Keep the link and credentials out of transcripts, commits, PRs, issues and fixtures. Use an existing authenticated session when suitable. Production sign-in remains subject to the tool's explicit recorded operator grant; a refusal stops the refused action and names its supported remedy.
+- **Local seeded-admin credentials remain a fallback on verified local nonproduction installs.** When platform sign-in is unavailable and the harness permits credential entry, read `ADMIN_PASSWORD` from the install's ignored local `.env` and use `/login`. Never use this fallback on a hosted/shared/production surface or with another credential. A harness-level credential-entry refusal does not make DPF require the operator's browser: first discover and use the platform-owned sign-in route. If no authorized route works, report the concrete unavailable capability or denial.
+- If `/build` or another shell route redirects to `/welcome`, inspect its session and response before inferring a login failure. Establish the platform-owned verification session when permitted; use the local credential fallback only under its stated conditions.
 - Verify production-path UI changes against the **canonical local install** only after the target has reached it through `/ops/self-upgrade` / the governed self-upgrade runner, or against a leased shared nonprod environment. Do not use a worktree-local `next dev` / `next build` harness, stale `next dev` sessions, or a direct main-portal compose rebuild as production-path UX evidence. Direct compose rebuilds of `portal`/`portal-init` on the main `dpf` project are recovery/bootstrap actions, not the normal validation path.
 
 ## 9. External Tools
@@ -104,6 +105,38 @@ Runbook skill: `dpf-clear-dependabot-alerts`. Posture / prune / vendoring strate
 Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 phases). For feature work, run the affected phases as part of definition of done — `next build` and unit tests do not replace UX exercise. Failures get a backlog item with repro steps under the active QA epic. Test results are release evidence. Release QA phases run against the canonical local install or a leased shared nonprod environment per §5 — never against a worktree's local harness. A worktree is the source-control container for the change under test, not a release-QA runtime.
 
 ## 15. Communication
+
+### Ending an unfinished thread
+
+Before handing the thread back, determine whether its objective is complete,
+the user explicitly paused it, or an observed dependency prevents further
+authorized progress. A recoverable tool failure, completed intermediate phase,
+or unexamined configuration error is not by itself a reason to stop. Continue
+useful authorized work that does not depend on a pending answer.
+
+For a decision that needs direction, consult the recorded WWMD platform,
+WWWD organization and WSID profession context, reuse valid decisions, and
+identify the owning scope. Record which applicable scopes were inconclusive
+or silent and the specific unresolved fact or authority. Do not substitute
+another scope's doctrine for the owner's decision. See
+[Consult the Governed Scopes Before Asking a Human](../founder-kernel/wiki/principles/consult-scopes-before-asking.md)
+and [Escalation Is a Gate, Not a Trust Tier](../founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md).
+
+An unfinished handoff must state:
+
+- The remaining objective and the observed reason progress stopped.
+- The recovery or recorded direction checked, and why it did not resolve the dependency.
+- Who owns the next action and exactly what action or evidence permits resumption.
+- A direct, answerable question when human input is needed, with the missing fact or authority explained.
+
+If an external dependency is the owner, say that no user action is required
+and name the observable condition needed to resume. Do not imply monitoring
+or automatic resumption unless it has actually been arranged. If the user
+paused the work, identify what remains without inventing another approval.
+Avoid vague endings such as "blocked", "waiting for review", or "ready for
+the next phase" without that actionable explanation. A blocker report is
+not a completion claim, and the user must never have to ask whether the work
+is done or what the agent needs from them.
 
 - If uncommitted changes exist, mention them before starting new work. → [kernel principle](../founder-kernel/wiki/principles/mention-uncommitted-changes.md)
 - When committing, list what's included.

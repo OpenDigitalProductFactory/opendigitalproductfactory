@@ -3,9 +3,9 @@
 # Plain ASCII for Windows PowerShell 5.1.
 #
 # The rule, in one place for the installer and the agent-toolchain bootstrap:
-#   DPF_MCP_URL         = <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
-#                         .env names an https PUBLIC_URL; otherwise an explicit
-#                         DPF_MCP_URL already in the environment; then the saved
+#   DPF_MCP_URL         = an explicit DPF_MCP_URL already in the environment;
+#                         then <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
+#                         .env names an https PUBLIC_URL; then the saved
 #                         User endpoint; otherwise none
 #                         (the client plugin's loopback default applies).
 #   NODE_EXTRA_CA_CERTS = the organization root bundle, for an https endpoint
@@ -40,7 +40,7 @@ function Resolve-DpfMcpClientEnv {
         [scriptblock]$GetUserEnv = { param($name) [System.Environment]::GetEnvironmentVariable($name, 'User') }
     )
     $publicUrl = Get-DpfInstallEnvValue -InstallDir $InstallDir -Name "PUBLIC_URL"
-    $mcpUrl = if ($publicUrl -like "https://*") { "$($publicUrl.TrimEnd('/'))/api/mcp/v1?tier=full" } elseif ($ExplicitUrl) { $ExplicitUrl } else { [string](& $GetUserEnv "DPF_MCP_URL") }
+    $mcpUrl = if ($ExplicitUrl) { $ExplicitUrl } elseif ($publicUrl -like "https://*") { "$($publicUrl.TrimEnd('/'))/api/mcp/v1?tier=full" } else { [string](& $GetUserEnv "DPF_MCP_URL") }
     $bundle = ""
     if ($mcpUrl -like "https://*") {
         $defaultRoot = Join-Path (Join-Path (Join-Path $HomeDir ".dpf") "pki") "root_ca.crt"

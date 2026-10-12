@@ -16,6 +16,7 @@
 
 import { prisma } from "@dpf/db";
 import { coworkerAuthorityWhere } from "@/lib/coworker-identity";
+import { loadAgentHostContext } from "@/lib/mcp/agent-host-context";
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { CapabilityKey } from "@/lib/permissions";
@@ -206,7 +207,7 @@ function parseCapabilityNeeds(rawNeeds: unknown): CoworkerCapabilityNeedInput[] 
 const definitions: ToolDefinition[] = [
   {
     name: "get_my_coworker_profile",
-    description: "Read the current coworker's registry identity, skills, grants, latest self-assessment, and route context. Use before answering whether the coworker has the tools/capabilities to do a job.",
+    description: "Read the current coworker's identity, skills, effective grants and installation operating context. Use first when connection instructions are missing or before treating an install as production: installationContext states its declared environment, host, credential/teardown/peer limits and granted-work guidance. Coworker lifecycleStage is not the installation environment. Context never widens grants.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -330,12 +331,26 @@ async function getMyCoworkerProfileHandler(
   context: Parameters<ToolPackHandler>[2],
 ): Promise<ToolResult> {
   const agentId = currentCoworkerId(context);
-  if (!agentId) return coworkerNotBoundResult();
+  if (!agentId) {
+    const result = coworkerNotBoundResult();
+    const scope = context?.tokenScope;
+    const installationContext = await loadAgentHostContext({
+      scope: scope === "admin" || scope === "write" ? scope : "read",
+      scopes: context?.tokenGrantScopes ?? [],
+    });
+    return { ...result, data: { ...result.data as Record<string, unknown>, installationContext } };
+  }
   const profile = await loadCoworkerProfile(agentId, context?.routeContext ?? null);
+  const effectiveGrants = describeEffectiveGrants(profile.profile.grants, context?.tokenGrantScopes);
+  const scope = context?.tokenScope;
+  const installationContext = await loadAgentHostContext({
+    scope: scope === "admin" || scope === "write" ? scope : "read",
+    scopes: effectiveGrants.effective,
+  });
   return {
     success: true,
     message: `Loaded coworker profile for ${profile.profile.name}.`,
-    data: { ...profile, effectiveGrants: describeEffectiveGrants(profile.profile.grants, context?.tokenGrantScopes) },
+    data: { ...profile, effectiveGrants, installationContext },
   };
 }
 

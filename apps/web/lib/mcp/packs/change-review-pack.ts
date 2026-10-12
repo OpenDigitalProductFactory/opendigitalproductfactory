@@ -32,6 +32,7 @@ import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-stor
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 import { CHANGE_REVIEW_TOOL_GRANTS } from "@/lib/tak/change-review-tool-grants";
+import { recordSemanticReviewExemption, semanticReviewExemptionDefinition } from "@/lib/change-review/semantic-review-policy-exemption";
 
 const ARTIFACT_TYPES = [...REVIEW_ARTIFACT_TYPES];
 const RISKS = [...REVIEW_RISKS];
@@ -402,11 +403,12 @@ const retrySemanticReview: ToolPackHandler = async (params, userId) => {
 
 export const changeReviewPack: ToolPack = {
   packId: "change-review",
-  definitions,
+  definitions: [...definitions, semanticReviewExemptionDefinition],
   handlers: {
     review_semantic_change: reviewSemanticChange,
     record_semantic_review_outcome: recordSemanticReviewOutcome,
     retry_semantic_review: retrySemanticReview,
+    record_semantic_review_exemption: recordSemanticReviewExemption,
   },
   grants: CHANGE_REVIEW_TOOL_GRANTS,
 };

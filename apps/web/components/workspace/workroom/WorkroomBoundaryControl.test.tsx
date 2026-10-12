@@ -1,12 +1,16 @@
+// @vitest-environment jsdom
 import React from "react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { saveWorkroomBoundary } from "@/lib/actions/workroom-boundary";
 
 vi.mock("@/lib/actions/workroom-boundary", () => ({
   saveWorkroomBoundary: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
 import { WorkroomBoundaryControl } from "./WorkroomBoundaryControl";
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 // The defect being guarded is not "renders nothing" — it is "renders something
 // INERT". The room listed eleven things it had not defined and offered no way
@@ -24,6 +28,22 @@ function markup(current: unknown = null): string {
 }
 
 describe("WorkroomBoundaryControl", () => {
+  it("offers only canonical sensitivity choices after disclosure", () => {
+    render(<WorkroomBoundaryControl caseKey="WC-TEST" roomRowId="row" current={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Define this room" }));
+    fireEvent.click(screen.getByRole("button", { name: "More room details" }));
+    const field = screen.getByRole("combobox", { name: "Sensitivity limit" }) as HTMLSelectElement;
+    expect(Array.from(field.options).map(option => option.value)).toEqual(["", "public", "internal", "confidential", "restricted"]);
+  });
+  it("keeps an invalid historical value unresolved and preserves it on save", async () => {
+    render(<WorkroomBoundaryControl caseKey="WC-TEST" roomRowId="row" current={{ sensitivityCeiling: "engineering-only" }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Define this room" }));
+    fireEvent.click(screen.getByRole("button", { name: "More room details" }));
+    const field = screen.getByRole("combobox", { name: "Sensitivity limit" }) as HTMLSelectElement;
+    expect(field.disabled).toBe(true); expect(field.value).toBe("engineering-only");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saveWorkroomBoundary).toHaveBeenCalledWith("WC-TEST", "row", expect.objectContaining({ preserveSensitivity: true, sensitivityCeiling: null })));
+  });
   it("offers a real button, not a label", () => {
     const html = markup();
     expect(html).toContain("<button");

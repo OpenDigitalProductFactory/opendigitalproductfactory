@@ -218,7 +218,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
       {/* Status + toggle */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
-        <ProviderStatusToggle providerId={provider.providerId} initialStatus={provider.status} />
+        <ProviderStatusToggle providerId={provider.providerId} initialStatus={provider.status} initialPause={provider.operatorPause} initialConnectionStatus={provider.defaultConnectionStatus} />
         <span style={{ color: "var(--dpf-muted)", fontSize: 12 }}>{provider.costModel === "compute" ? "compute-priced" : "token-priced"}</span>
       </div>
 

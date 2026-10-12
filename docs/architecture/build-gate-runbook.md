@@ -1,5 +1,122 @@
 # Build gate runbook
 
+## Recovering an interrupted gate publication
+
+The controller retains `<full-log>.<lease-id>.execution.json` before descendant
+cleanup. It binds the observed command result to its original owner, lease, gate,
+candidate, merged tree, evidence plan, toolchain and artifact. This checkpoint is
+execution material; it is not a canonical pass. Termination decisions remain in
+the adjacent `.termination.jsonl` journal, including the Windows owned-job close
+policy recorded before launch.
+
+Before sending a completed result, the controller atomically saves the exact
+request in the existing slot's pending-evidence file. If acknowledgement is lost,
+run `pnpm run pregate -- --finalize-evidence` from the original governed worktree
+with its original provider/session attribution. Recovery validates the checkpoint,
+current evidence policy and original completion time, then uses the normal
+authenticated recorder. Publication and lease binding share a transaction; replay
+returns the existing receipt only for matching content and actor. A recovered
+failure stays failed. Recovery never extends the evidence lifetime.
+
+Missing checkpoints, changed identities/content, expired evidence and leases
+outside the recorder's active/released contract are refused. Preserve those files
+as inconclusive material and obtain a newly admitted run with the repaired
+controller. Do not edit a lease, invent a pass file or turn a timeline note into
+local-CI evidence. The September 12 profile execution predates this checkpoint
+contract and is outside the evidence freshness window.
+
+Windows commands run in a kernel Job Object before starting descendants; closing
+the owned handle fences that membership without traversing recycled parent PIDs.
+The wrapper watches its owned input pipe, so loss of its controller also closes
+the job. This uses the documented
+[Windows Job Object contract](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
+Normal Windows gates use job membership alone. The shared individual-cleanup
+helper also supports a bound Windows handle and creation-time comparison.
+Linux observations reuse the shared fence reader's kernel start ticks. Other
+POSIX hosts use process start time; a fresh identity check precedes signalling,
+but separate observation and signal calls retain a race and second-resolution
+start times on those hosts cannot prove same-second PID reuse impossible.
+Unreadable or inconsistent ownership never authorizes individual termination.
+These protections do not establish the cause of historical executor losses.
+
+Completion requires a validated packet from the current command, not merely a
+wrapper exit code. A missing executable, wrapper startup failure, missing or
+invalid packet, or unreadable cleanup identity produces an infrastructure
+inconclusive result. An unknown process is never killed to obtain a clean result.
+
+The server admits gate client revision 2 or newer. After the canonical release
+deploys this floor, refresh the governed source checkout before starting a new
+gate; a revision refusal names that refresh, not a permission override. Preserve
+older completed material and pending requests. Refreshing a client does not
+extend an expired lease or convert old unqualified material into a pass.
+
+
+## Isolated verification users
+
+For permission-removal and concurrent-user tests, `issue_ux_verification_sign_in`
+accepts an optional `fixture` with the owning `capsuleId`, active `leaseId`,
+role `profile`, and `slot` (0 or 1). Reuse the returned `runId` for that run.
+This creates ordinary users on development or test installations only, through
+the existing signed-link exchange. It requires current user permissions,
+assistant grants, and admission to the exact workroom. A fixture never grants
+access to another room.
+
+Renewing a link preserves role removals, disabled state, and absolute expiry.
+Five profiles and two slots bound a run to ten accounts; one lease owns one run.
+Sessions end no later than the lease and the original two-hour limit. Fixture
+expiry is checked at current-user authorization even if cleanup has not run.
+
+After testing, cancel and settle the run's tasks and close its rooms through
+their normal actions, then call the same tool with `retireRunId`. Pending work
+is returned explicitly. Completed retirement revokes the fixture connections,
+disables only those accounts, and retains provenance and audit. The existing
+retention sweep provides bounded expiry cleanup. Retire fixtures before rolling
+back code that enforces their expiry. The legacy shared persona remains the
+default when `fixture` is omitted.
+
+Fixture retirement records its own completion in the run's result; it never
+earns a passing UX verdict. A running run without a completed verdict closes
+as skipped. Existing verification outcomes remain intact, and a passed run
+still revokes its fixture users and credentials before cleanup is complete.
+
+## Semantic review publication and infrastructure recovery
+
+The publication adapter reads [semantic-review-policy.json](../../scripts/semantic-review-policy.json).
+Its mode is the source of truth for receipt enforcement; a skill must not present
+a shadow observation as an enforced refusal. This procedure applies to external
+Claude, Codex and Grok delivery. Build Studio keeps its own transition contract.
+
+1. Freeze a clean DCO-signed commit and produce its required gate evidence.
+   Call `review_semantic_change` with the governing Workroom, immutable base/head
+   trees, committed diff digest and failure analysis bound to that evidence.
+   Source-local test prose does not replace executed gate evidence.
+2. Repair blocking code findings. Re-review a changed tree; stop after two failed
+   repair rounds. A changed diff, policy, reviewer or specialist set invalidates
+   a receipt. An infrastructure refusal or uncertain execution is not a finding.
+3. Record a returned native receipt with
+   `pnpm review:semantic-gate -- record --receipt-file <tool-result.json> --evidence-id <id>`.
+   Then run `pnpm review:semantic-gate -- validate` for the current commit.
+   In enforced mode an unavailable or stale receipt blocks publication. Follow
+   the returned remedy; never change mode or forge a receipt to pass the check.
+4. If infrastructure cannot run the native review, use
+   `node scripts/gate-context.mjs --situation review-infrastructure-unavailable`.
+   Do not repeatedly submit an unchanged request to unavailable capacity or poll
+   a task whose execution has stopped. Use the existing review recovery contract
+   after a verified remediation.
+5. In shadow mode the adapter may allow publication with a missing receipt.
+   For a bounded DEV repair under explicit operator authorization, preserve an
+   independent assessment of the exact change, record the native review as unrun
+   or inconclusive, and proceed through passing source checks and the protected
+   PR/merge queue. Reuse authorization already granted for that scope; a phase
+   change does not require a new exception question. Shadow alone grants no
+   authority and does not excuse ignoring a completed review's blocking findings.
+
+Independent client reviews are valid assessments with their own author, source
+identity, findings and outcome. Cite them separately in the Workroom and PR;
+they are not native receipts. Publication permission, passing review, merge and
+live verification remain separate facts. DCO, grant intersection, ownership and
+production integrity remain mandatory throughout recovery.
+
 CI scopes a pull request from its source head and that head's merge-base with `origin/main`. GitHub's checkout may be a synthetic merge; using its base with the source head includes unrelated main changes as reverse diffs and can turn documentation into exhaustive work. Both comparison endpoints must describe the same source history. Merge-group and other non-PR events retain exhaustive verification.
 
 **Public documentation publication.** CI's `Documentation Publication Build` builds `docs/` with the same [GitHub Pages Jekyll action](https://github.com/actions/jekyll-build-pages) used by legacy Pages publication. It runs for changed documentation or CI configuration on PRs, merge candidates and main; missing comparison history runs the build. Unchanged publication inputs produce a terminal no-build result. The job also checks that malformed Liquid is rejected, and feeds the required `Merge Readiness` aggregate. It only builds: the existing Pages channel still owns deployment. A green build is not evidence that the public site has deployed. Jekyll processes Liquid inside code fences; protect literal examples using its [raw tag guidance](https://jekyllrb.com/docs/liquid/tags/#jekyll-processes-all-liquid-filters-in-code-blocks).

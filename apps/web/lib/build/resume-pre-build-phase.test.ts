@@ -101,7 +101,7 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     platformDevConfigFindUniqueMock.mockReset().mockResolvedValue({ governedBacklogEnabled: false });
     autoResolveDecomposeMock.mockReset().mockResolvedValue({ action: "park" });
     performPlanToBuildTransitionMock.mockReset().mockResolvedValue({ kind: "advanced" });
-    attestIdeateResearchMock.mockReset().mockResolvedValue(undefined);
+    attestIdeateResearchMock.mockReset().mockResolvedValue({ recorded: true, reason: "research receipt recorded" });
     buildActivityFindManyMock.mockReset().mockResolvedValue([]);
   });
 
@@ -135,6 +135,17 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect(attestIdeateResearchMock).not.toHaveBeenCalled();
     expect(performPlanToBuildTransitionMock).toHaveBeenCalledOnce();
     expect(out.kind).toBe("skipped");
+  });
+
+  it("holds a denied research writer without claiming re-attestation or retrying the transition", async () => {
+    findUniqueMock.mockResolvedValue({ designDoc: { x: 1 }, buildPlan: { tasks: [{ title: "t" }] }, planReview: { decision: "pass" } });
+    performPlanToBuildTransitionMock.mockResolvedValue({ kind: "gate-blocked", reason: "RESEARCH_REQUIRED" });
+    attestIdeateResearchMock.mockResolvedValue({ recorded: false, disposition: "held", reason: "authority_denied: writer grant revoked" });
+    const out = await resumePreBuildPhase({ buildId: "FB-DENIED", phase: "plan", userId: "u1" });
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledOnce();
+    expect(out).toMatchObject({ kind: "skipped" });
+    expect((out as { reason: string }).reason).toContain("authority_denied");
+    expect((out as { reason: string }).reason).not.toContain("after re-attesting");
   });
 
   it("skips honestly when the receipt still does not satisfy the gate after re-attesting", async () => {
