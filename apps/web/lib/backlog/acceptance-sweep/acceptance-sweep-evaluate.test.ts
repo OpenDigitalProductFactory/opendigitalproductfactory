@@ -177,6 +177,22 @@ describe("authorAgentIdFrom", () => {
 describe("evaluateOwedAcceptance", () => {
   const item = { id: "row-3", itemId: "BI-AA000003", claimedByAgentId: null, agentId: null };
 
+  it("retains unresolved acceptance when the item closes after page selection", async () => {
+    const resolveOwner = vi.fn();
+    const result = await evaluateOwedAcceptance({ ...item, status: "awaiting-acceptance" }, {
+      loadAuthorAgentId: vi.fn().mockResolvedValue(null),
+      loadDeliveryActorIds: vi.fn().mockResolvedValue(ok([])),
+      loadCompletionDecision: vi.fn().mockResolvedValue({
+        ...decision, verdict: "allowed", unmet: [],
+        transitionObject: { ...decision.transitionObject, expectedVersion: "done" },
+      }),
+      resolveOwner,
+    });
+    expect(result?.closable).toBe(false);
+    expect(result?.owed.map(entry => entry.code)).toContain("ACCEPTANCE_EVIDENCE_REQUIRED");
+    expect(resolveOwner).not.toHaveBeenCalled();
+  });
+
   it("projects the item's completion decision with its author excluded", async () => {
     const resolveOwner = vi.fn().mockResolvedValue({ reviewerRoutes: [], escalations: [], unroutable: [] });
     const loadCompletionDecision = vi.fn().mockResolvedValue(decision);

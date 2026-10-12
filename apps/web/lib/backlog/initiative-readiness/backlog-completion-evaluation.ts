@@ -113,6 +113,7 @@ export type BacklogCompletionDependencies = {
 export type BacklogCompletionEvaluation = {
   governed: boolean;
   decision: InitiativeReadinessDecision;
+  independentAcceptanceDecision: InitiativeReadinessDecision;
   reconciliation: ObjectiveReconciliationResult;
   delivery: "pass" | "fail" | "missing";
   mergedThroughGates: MergeDeliverySignal;
@@ -318,7 +319,7 @@ export async function evaluateBacklogItemCompletion(args: {
   const deliveryEvidenceRefs = completion.kind === "evaluated"
     ? completion.verdict.normalizedManifest?.evidenceActivityIds ?? []
     : [];
-  const projected = (deps.projectReadiness ?? projectBacklogItemReadiness)({
+  const projectionInput: Parameters<typeof projectBacklogItemReadiness>[0] = {
     item: {
       ...item,
       activeBuildKind: item.activeBuild?.kind ?? null,
@@ -358,10 +359,20 @@ export async function evaluateBacklogItemCompletion(args: {
       },
     },
     evaluatedAt,
-  });
+  };
+  const project = deps.projectReadiness ?? projectBacklogItemReadiness;
+  const projected = project(projectionInput);
+  const independent = project({ ...projectionInput, completion: {
+    ...projectionInput.completion!,
+    acceptanceEvidence: reconciliation.state === "pass" || directDocumentationAcceptance || smallShapeAcceptance
+      ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
+    objectiveReconciliation: reconciliation.state === "pass" || smallShapeAcceptance
+      ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
+  } });
   return {
     governed: projected.governed,
     decision: deployment ? projectDeploymentClosure(projected.decision, deployment) : projected.decision,
+    independentAcceptanceDecision: independent.decision,
     reconciliation,
     delivery,
     mergedThroughGates,
