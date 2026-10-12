@@ -132,3 +132,34 @@ reviewed revert, retain all data/history, and use supported reconciliation after
 repair. Never restore destructive cleanup as a runtime workaround.
 
 Implementation and acceptance remain pending. Follow the [repair plan](../plans/2026-09-27-archetype-room-projection-repair-plan.md).
+
+## Bounded live acceptance operation (BI-CAP-E7AE57C2)
+
+The deployed repair has no scoped lifecycle acceptance entrypoint. Setup and
+archetype-reset target business content; they must not serve as test cleanup.
+Real-Postgres tests verify persistence but do not exercise the deployed image.
+
+Reuse the production projection orchestration in a transaction that creates its
+own uniquely identified organization. Accept no caller-supplied organization or
+model. Use the built-in pet-rescue template, project twice, withdraw one stage,
+and restore it. Extract only the shared model-to-projection seam needed to run
+the same EA and room transaction; production template resolution stays unchanged.
+Assert stable definition IDs, declared role/gate/measure bindings, retirement,
+restoration, lifecycle events, and retained room references. Deliberately roll
+back all fixture writes after collecting bounded observations. A rollback failure
+or any failed assertion is a failed check, never a passing acceptance result.
+
+The governed operation requires current platform-management authority and a
+development or test environment. It rejects production and caller-selected
+business identities. Its bounded result may be recorded with the existing runtime
+verification carrier after rollback succeeds; no new persistence model, queue,
+authentication mechanism, or scheduled job is needed. A lost client leaves no
+committed fixture because the database owns transaction cleanup.
+
+This selects transaction-owned fixtures over destructive setup/reset and over
+source-only mocks. The existing isolated automation-persona work remains the
+owner of browser sign-in fixtures; this operation neither copies nor requires it.
+Verification must cover authority/environment rejection, rollback on exceptions,
+the actual lifecycle assertions, and execution on the canonical deployed image.
+Existing AC-1 through AC-6 remain unchanged. No acceptance is claimed by this
+design amendment.
