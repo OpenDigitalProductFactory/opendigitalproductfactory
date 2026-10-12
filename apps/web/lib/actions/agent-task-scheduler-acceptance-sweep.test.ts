@@ -46,18 +46,17 @@ beforeEach(() => {
 });
 
 describe("executeScheduledAgentTask — acceptance sweep", () => {
-  it("claims the due tick, then hands the task to the deterministic branch and never the LLM loop", async () => {
+  it("lets the acceptance executor claim its fenced lease before any generic cadence write", async () => {
     await executeScheduledAgentTask("acceptance-sweep-daily");
 
     expect(mocks.runDeterministicScheduledTaskKind).toHaveBeenCalledWith(sweepTask);
-    expect(mocks.prisma.scheduledAgentTask.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.runDeterministicScheduledTaskKind.mock.invocationCallOrder[0]!,
-    );
+    expect(mocks.prisma.scheduledAgentTask.updateMany).not.toHaveBeenCalled();
+    expect(mocks.prisma.scheduledJob.updateMany).not.toHaveBeenCalled();
     expect(mocks.runAgenticLoop).not.toHaveBeenCalled();
   });
 
-  it("does not run the sweep when a concurrent dispatch already claimed the tick", async () => {
-    mocks.prisma.scheduledAgentTask.updateMany.mockResolvedValue({ count: 0 });
+  it("does not dispatch an inactive acceptance task", async () => {
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({ ...sweepTask, isActive: false });
     await executeScheduledAgentTask("acceptance-sweep-daily");
     expect(mocks.runDeterministicScheduledTaskKind).not.toHaveBeenCalled();
   });

@@ -234,3 +234,23 @@ models without turning catalog history into availability claims.
 | AC-REPAIR-3: misses preserve sighting time and established retirement policies | inventory lifecycle | two misses, permanent refusal, local exception, pin regression tests |
 | AC-REPAIR-4: refresh counts and profiling describe this refresh | discovery action/result → UI | existing/new count, fresh-ID-only and pricing tests |
 | AC-REPAIR-5: overview hides technical catalog and avoids availability claims | provider overview → diagnostics | UI regressions and measured served UX evidence |
+
+### Background phase forecast contract — 2026-10-12
+
+The Build Studio phase forecast must compose its preview options through the
+shared `backgroundRouteOptions` helper. The existing `buildPhaseRouteOptions`
+module re-exports this helper for background plan and review callers, preserving
+their imports while keeping inference independent of build orchestration. These
+phases consume a completed response and do not require
+token streaming. Leaving the preview on the interactive default incorrectly
+excludes otherwise eligible endpoints whose streaming capability is unknown or
+false, then reports a blocked phase that differs from the actual caller.
+
+This reuses the existing background contract; it does not assign streaming
+capability to a model or change provider clearance. Internal sensitivity and all
+other routing requirements remain enforced. Interactive requests still require
+streaming unless their own contract says otherwise. Regression verification
+uses real contract inference and endpoint exclusion logic for both unknown and
+false streaming, plus a public-only endpoint that remains excluded from internal
+reviews. Forecast correctness does not establish settlement of an earlier
+provider call or successful execution on the served runtime.

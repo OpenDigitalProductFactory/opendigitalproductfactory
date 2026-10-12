@@ -238,3 +238,17 @@ repair needs no fixture schema or grant change.
    publish through the protected PR/release path. Retry the original review
    only after upgrade, then prove quiet-client queued continuity on the live
    install. Source tests are not completion of parent V6/V7/V9 acceptance.
+
+### Owned fixture origin recovery
+
+Live verification on October 12 found that an owned active lease for
+`http://127.0.0.1:3000` receives the generic lease refusal when the fixture
+tool's configured origin is `http://localhost:3000`. Reading installation
+settings through a broad command then required human approval unnecessarily.
+
+Separate the origin diagnostic after the existing ownership, branch and expiry
+checks. Tell the authorized caller which origin its verification lease must use
+and leave its MCP connection unchanged. Do not disclose that diagnostic for a
+foreign or expired lease, change origin matching, or widen fixture authority.
+First reproduce the opaque owned-lease refusal, then verify the recovery text
+and unchanged foreign-lease refusal with the related provisioning tests.

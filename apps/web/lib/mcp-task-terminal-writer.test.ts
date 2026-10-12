@@ -1,5 +1,6 @@
 import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readerBootstrapHistory, readerBootstrapTask } from "./test-support/terminal-reader-bootstrap";
 
 const db = vi.hoisted(() => ({
   persisted: {} as Record<string, unknown>,
@@ -345,34 +346,22 @@ describe("terminal writer resumption", () => {
     });
   });
 
-  it("bootstraps persisted immutable reader evidence when the resumable TaskRun has no reader rows", async () => {
+  it.each([
+    "none", "invalid-cursors", "denied", "other-failure", "conflicting-binding",
+    "unauthorized-tool", "malformed-result", "conflicting-result", "duplicate-id",
+    "reversed-order", "continuation", "success-conflict", "malformed-data-array",
+    "malformed-data-primitive", "malformed-data-null",
+  ])("resumes only safe initial-reader failures (%s)", async (historyKind) => {
     const metadata = await persistedMetadata("PAT-WRITER-ZERO-READER");
     vi.clearAllMocks();
     const updatedAt = new Date("2026-08-31T03:00:00.000Z");
-    db.findFirst.mockResolvedValue({
-      id: "task-internal",
-      taskRunId: "TR-MCP-ZERO-READER",
-      threadId: "thread-external",
-      contextId: "thread-external",
-      status: "input-required",
-      updatedAt,
-      progressPayload: {
-        summary: "The required governed writer could not be dispatched.",
-        terminalWriterWait: {
-          schemaVersion: 1,
-          kind: "missing-terminal-writer",
-          writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
-          attempt: 1,
-          observedAt: "2026-08-31T02:59:00.000Z",
-        },
-      },
-      a2aMetadata: metadata,
-    });
+    db.findFirst.mockResolvedValue(readerBootstrapTask(metadata, updatedAt));
     db.findEnvelope.mockResolvedValue(null);
+    const rejectedReaders = readerBootstrapHistory(historyKind, persistedReaderExecution);
     db.findToolExecutions
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([persistedReaderExecution]);
+      .mockReset()
+      .mockResolvedValueOnce(rejectedReaders)
+      .mockResolvedValueOnce([...rejectedReaders, persistedReaderExecution]);
     db.findToolExecution.mockResolvedValue(null);
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
@@ -383,6 +372,18 @@ describe("terminal writer resumption", () => {
     });
 
     const outcome = await submit("PAT-WRITER-ZERO-READER");
+
+    if (historyKind !== "none" && historyKind !== "invalid-cursors") {
+      expect(autonomous.executeTool).not.toHaveBeenCalled();
+      expect(autonomous.execute).not.toHaveBeenCalled();
+      expect(autonomous.create).not.toHaveBeenCalled();
+      expect(db.findToolExecutions).toHaveBeenCalledTimes(1);
+      expect(outcome).toMatchObject({ kind: "result", result: {
+        taskRunId: "TR-MCP-ZERO-READER", status: "input-required",
+        waitReason: "terminal-writer-context-unavailable", isError: true,
+      } });
+      return;
+    }
 
     expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { taskRunId: "TR-MCP-ZERO-READER", status: "input-required", updatedAt },

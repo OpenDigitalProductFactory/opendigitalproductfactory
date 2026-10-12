@@ -2,6 +2,7 @@ import { prisma } from "@dpf/db";
 import { getTestUrl, parseModelsResponse } from "./ai-provider-types";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { discoverChatGptBackendModels, getDecryptedCredential, getProviderBearerToken, getProviderExtraHeaders, profileModelsInternal, upsertDiscoveredModels } from "./ai-provider-internals";
 
 /** Account availability is independent of the shared vendor model catalog. No absence here retires another account's models. */
@@ -15,7 +16,7 @@ export async function discoverProviderAccountModels(connectionId: string): Promi
     const credential = await getDecryptedCredential(connection.providerId, connectionId);
     if (!credential?.secretRef) return err("Account API key not configured");
     if (provider.authHeader) headers[provider.authHeader] = provider.authHeader === "Authorization" ? `Bearer ${credential.secretRef}` : credential.secretRef;
-  } else {
+  } else if (connection.authMethod !== "local" || !isLocalProviderId(connection.providerId)) {
     const bearer = await getProviderBearerToken(connection.providerId, connectionId);
     if ("error" in bearer) return err(bearer.error);
     headers.Authorization = `Bearer ${bearer.token}`;

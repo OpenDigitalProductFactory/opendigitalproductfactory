@@ -10,6 +10,7 @@ import type {
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
 
 import {
+  buildCoworkerApprovalBinding,
   evaluateCoworkerAuthority,
   type CoworkerAuthorityDecision,
   type CoworkerAuthorityInput,
@@ -257,6 +258,11 @@ async function writeAuthorizationDecision(
         input.task?.taskRunId ?? execution.context?.taskRunId ?? null,
       subjectKind: input.subject?.kind ?? null,
       authorityOrganizationScope: input.organizationId ?? null,
+      ...(input.authorResearchBinding ? {
+        authorResearchBinding: input.authorResearchBinding,
+        artifactFingerprint: buildCoworkerApprovalBinding(input).inputFingerprint,
+        expiresAt: (input.approval?.expiresAt ?? new Date(Date.now() + 60_000)).toISOString(),
+      } : {}),
       ...(input.action.consequenceRefinement
         ? { consequenceRefinement: input.action.consequenceRefinement }
         : {}),
