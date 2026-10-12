@@ -39,7 +39,8 @@ test("Claude and Antigravity descriptors are URL-only on the canonical https ori
   assert.equal(antigravity.headers, undefined);
 });
 
-test("Grok keeps its compatibility bearer until it has a credential without a paste", () => {
+test("Grok descriptor names the refreshed bearer file and not an env var", () => {
   const grok = readJson("grok.mcp.json").mcp_servers.dpf;
-  assert.equal(grok.bearer_token_env_var, "DPF_MCP_BEARER_TOKEN");
+  assert.equal(grok.bearer_token_file, "~/.grok/dpf-mcp-token");
+  assert.equal(grok.bearer_token_env_var, undefined);
 });

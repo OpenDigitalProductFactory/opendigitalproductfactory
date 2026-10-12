@@ -86,12 +86,20 @@ describe("change-review MCP pack", () => {
       "review_semantic_change",
       "record_semantic_review_outcome",
       "retry_semantic_review",
+      "record_semantic_review_exemption",
     ]);
     expect(Object.keys(changeReviewPack.handlers)).toEqual([
       "review_semantic_change",
       "record_semantic_review_outcome",
       "retry_semantic_review",
+      "record_semantic_review_exemption",
     ]);
+  });
+
+  it("consults authority only for the exemption writer, preserving ordinary review", () => {
+    expect(changeReviewPack.definitions.find(d => d.name === "record_semantic_review_exemption")).toMatchObject({ consequence: "authority", requiredCapability: "manage_platform" });
+    expect(changeReviewPack.definitions.find(d => d.name === "review_semantic_change")?.consequence).toBeUndefined();
+    expect(isToolAllowedByGrants("record_semantic_review_exemption", ["view_platform"])).toBe(false);
   });
 
   it("requires evidence-writing authority", () => {

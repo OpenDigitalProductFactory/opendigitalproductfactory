@@ -4,6 +4,7 @@ import type {
   WorkCaseSourceRef,
 } from "./case-types";
 import type { ReceiptEnvelope } from "./receipt-envelope";
+import { composeRoomReviewProfile } from "./room-review-profile";
 import {
   normalizeWorkroomActivities,
   type WorkroomActivityInput,
@@ -321,6 +322,11 @@ export function buildWorkroomView(
 
   return {
     roomKey: input.caseKey,
+    reviewProfile: {
+      source: composeRoomReviewProfile(caseRef.sourceType, []),
+      applicability: "unknown",
+      assessment: "not-exercised",
+    },
     caseRef,
     identity: {
       definition: getWorkroomDefinitionIdentity(caseRef.sourceType),

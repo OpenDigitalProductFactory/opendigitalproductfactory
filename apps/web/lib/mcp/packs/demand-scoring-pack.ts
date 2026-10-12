@@ -186,6 +186,9 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
     consequence: "authority",
+    consequenceForCall: async ({ params }) => Object.keys(params).length === 0
+      ? { consequence: null, reason: "backlog-delivery-budget-read" }
+      : { consequence: "authority", reason: "backlog-delivery-budget-change" },
   },
   {
     name: "find_duplicate_candidates",

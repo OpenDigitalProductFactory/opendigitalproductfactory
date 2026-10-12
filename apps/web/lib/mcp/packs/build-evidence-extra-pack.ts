@@ -18,6 +18,7 @@ import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { buildStartApprovalRefusal, requiresBuildStartApproval } from "@/lib/build/build-start-approval";
 import { extractBuildIdHint, logBuildActivity, resolveActiveBuildId } from "@/lib/mcp/build-tool-helpers";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 /**
@@ -444,7 +445,7 @@ const recordExternalDevelopmentEvidence: ToolPackHandler = async (params, userId
       externalSessionId,
       provider,
       summary,
-      actor: { userId, agentId: context?.agentId ?? null, principalId: null },
+      actor: await workCapsuleActor(userId, context),
       backlogItemId: stringValue("backlogItemId") || null,
       worktreePath: stringValue("worktreePath") || null,
       branchName: stringValue("branchName") || null,

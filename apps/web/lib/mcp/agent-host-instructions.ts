@@ -35,7 +35,7 @@ const AUTHORITY_INSTRUCTIONS: Record<AgentAuthorityTier, string> = {
   observer: "Read and report only. Do not mutate, queue, approve, or administer anything.",
   employee: "Act only inside the granted business domains; use governed decision and approval boundaries.",
   development: "Use the backlog, Workroom, worktree, test, review, DCO, and PR gates for source changes.",
-  admin: "Administrative grants remain action-specific; inspect consequences and use explicit approval gates for risky changes.",
+  admin: "Administrative grants remain action-specific. Reuse current delegation for authorized routine reads and reversible maintenance; do not request fresh approval solely because an action administers this install. Credential or authority changes, destructive actions and restricted data retain their required gates. A development label never grants additional authority.",
 };
 
 export function buildAgentHostInstructions(
