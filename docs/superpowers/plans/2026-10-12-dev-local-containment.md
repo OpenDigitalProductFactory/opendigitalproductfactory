@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Delegated DEV local containment — BI-5818F811
 
 This atomic break fix follows BI-B22C8E02. The original fix intentionally retained general account activation authority. BI-734C1534 owns transactional disable persistence; BI-56F2AB99 owns timed pause. Neither implements this narrower consequence classification. Explicit operator authorization covers DEV traffic containment.
