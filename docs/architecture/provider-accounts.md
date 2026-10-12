@@ -26,7 +26,9 @@ A legacy default OAuth exchange applies the same reset. The Codex/ChatGPT
 default pair validates both credential owners, supersedes their active proofs,
 and replaces both tokens in one transaction before activation derives data
 clearance or discovers models. A credential owned by another account refuses
-the exchange. Disabled defaults remain disabled. Routine token renewal and
+the exchange. Conditional token writes also refuse an owner change after that
+validation, including a previously unowned legacy credential. Disabled defaults
+remain disabled. Routine token renewal and
 metadata reconciliation preserve reviewed trust; fresh sign-in requires a new
 review even when it retains the same credential row.
 

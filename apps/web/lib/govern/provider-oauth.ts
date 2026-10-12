@@ -299,7 +299,10 @@ export async function exchangeOAuthCode(
           });
         }
         await tx.credentialEntry.upsert({
-          where: { providerId, ...(credential ? { id: credential.id } : {}) },
+          where: {
+            providerId, ...(credential ? { id: credential.id } : {}),
+            AND: { providerConnection: { is: credential?.providerConnection ? { connectionId } : null } },
+          },
           create: { providerId, ...credentialUpdate, refreshToken: newRefreshToken },
           update: credentialUpdate,
         });

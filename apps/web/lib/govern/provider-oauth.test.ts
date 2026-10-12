@@ -178,6 +178,7 @@ describe("exchangeOAuthCode", () => {
     mockPrisma.modelProvider.update.mockResolvedValue({});
     mockPrisma.modelProvider.updateMany.mockResolvedValue({ count: 1 });
     mockPrisma.credentialEntry.upsert.mockResolvedValue({});
+    mockPrisma.aiProviderConnection.update.mockResolvedValue({});
     mockPrisma.credentialEntry.findUnique.mockResolvedValue(null);
     mockPrisma.aiProviderConnection.findUnique.mockImplementation(async ({ where }) => ({
       id: `db-${where.connectionId}`, connectionId: where.connectionId,
@@ -263,6 +264,24 @@ describe("exchangeOAuthCode", () => {
     expect(await exchangeOAuthCode("state-1", "code-1")).toEqual({ error: "account_changed" });
     expect(mockPrisma.credentialEntry.upsert).not.toHaveBeenCalled();
     expect(mockPrisma.complianceEvidence.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("cannot replace an initially unowned legacy credential claimed during the callback", async () => {
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({ id: "legacy-credential", providerConnection: null });
+    let owner: string | null = null;
+    let cachedToken = "original-token";
+    mockPrisma.aiProviderConnection.update.mockImplementation(async () => { owner = "account-b"; return {}; });
+    mockPrisma.credentialEntry.upsert.mockImplementation(async ({ where, update }) => {
+      const expectedOwner = where.AND?.providerConnection?.is;
+      if (where.AND && (expectedOwner === null ? owner !== null : expectedOwner?.connectionId !== owner)) {
+        throw new Error("Credential owner changed");
+      }
+      cachedToken = update.cachedToken;
+      return {};
+    });
+    await expect(exchangeOAuthCode("state-1", "code-1")).rejects.toThrow("Credential owner changed");
+    expect(cachedToken).toBe("original-token");
+    expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
   });
 
   it("does not activate a disabled default account while clearing its obsolete claims", async () => {
