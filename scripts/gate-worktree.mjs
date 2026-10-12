@@ -1093,12 +1093,16 @@ export function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFil
       child.once("error", reject);
       child.once("close", async (code, signal) => {
         let infrastructureReason = "";
+        // A preflight refusal has no completed product execution to attest.
+        // Preserve the shared classifier's typed infrastructure outcomes;
+        // every product pass/failure still requires a validated checkpoint.
+        const requiresProductCheckpoint = classifyGateOutcome({ gateExitCode: code ?? 143 }).productEvidence;
         try {
           // A Windows wrapper can fail before launching the command or writing
           // anything. Its process exit code alone is not a product verdict.
           // POSIX descendants remain owned until the cleanup below.
           if (process.platform !== "win32") writeExecutionCheckpoint(checkpointContext, code ?? 143);
-          {
+          if (requiresProductCheckpoint) {
             const packet = JSON.parse(readFileSync(checkpointContext.path, "utf8"));
             const validation = validateExecutionCheckpoint(packet, checkpointContext);
             if (!validation.valid || packet.exitCode !== code
@@ -1109,8 +1113,10 @@ export function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFil
           }
         } catch (error) {
           append(`gate-worktree: execution checkpoint failed: ${error.message}\n`);
-          infrastructureReason = "completion checkpoint missing or invalid";
-          code = 75;
+          if (requiresProductCheckpoint) {
+            infrastructureReason = "completion checkpoint missing or invalid";
+            code = 75;
+          }
         }
         scanStopped = true;
         if (trackerTimer) {

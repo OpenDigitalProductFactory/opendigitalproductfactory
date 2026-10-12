@@ -47,7 +47,11 @@ for termination. No new table, scheduler, runtime, grant or lease status is need
    release. Bind it to the original gate key, owner, lease, candidate, integration
    tree, evidence-plan and toolchain digests, command outcomes, artifact and
    completion time. Write atomically and retain failures as failures. A local
-   checkpoint is recovery material, not a canonical pass receipt.
+   checkpoint is recovery material, not a canonical pass receipt. Product pass/failure
+   outcomes require the validated packet; typed infrastructure exits retain their
+   shared classification without claiming a completed product execution. Cleanup
+   uncertainty still fences either path. Contract success fixtures must supply
+   complete synthetic provenance and exercise real supervision, not bare exit zero.
 4. Extend the existing finalizer with explicit recovery validation. Authenticate
    the caller and original ownership; require complete immutable evidence and
    valid freshness, reject conflicting prior receipts and incomplete or mismatched

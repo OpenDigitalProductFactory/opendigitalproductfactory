@@ -9,6 +9,22 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createGateCommand, createProcessTreeTracker } from './gate-worktree.mjs';
 const wrapper = fileURLToPath(new URL('./lib/run-in-windows-job.ps1', import.meta.url));
+for (const exitCode of [0, 1, 2, 3, 8, 75]) {
+  test(`missing product checkpoint cannot convert exit ${exitCode} to product evidence`, async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dpf-checkpoint-classification-'));
+    const command = createGateCommand({kind:'argv',value:[process.execPath,'-e',`process.exit(${exitCode})`],label:'classification fixture'}, {
+      cwd: dir, env: process.env, allowStub: false, fullLogFile: join(dir, 'output.log'),
+      checkpointContext: { path: join(dir, 'execution.json'), metadataFile: join(dir, 'metadata.json'), artifactFile: join(dir, 'artifact.json'),
+        ownerSessionId: 'test-owner', provider: 'codex', leaseId: 'test-lease', gateKey: 'test-gate', branch: 'fix/test', sha: 'a'.repeat(40) },
+      // Isolate classification from independently tested process ownership.
+      trackerFactory: () => ({sampleAsync: async()=>{}, waitForQuiescence: async()=>[], cleanupUncertain:()=>false}),
+    });
+    const result = await command.run();
+    const product = [0, 1, 2].includes(exitCode);
+    assert.equal(result.status, product ? 75 : exitCode, result.output);
+    assert.equal(Boolean(result.infrastructureReason), product, result.output);
+  });
+}
 for (const commandSpec of [
   { kind: 'unsupported', value: [], label: 'invalid wrapper command' },
   { kind: 'argv', value: ['dpf-executable-that-does-not-exist'], label: 'missing gate executable' },
