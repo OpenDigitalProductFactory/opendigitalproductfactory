@@ -82,9 +82,23 @@ therefore refused `RESEARCH_REQUIRED`. Its alternative requires named-source
 verification plus a passing failing-to-passing test before implementation;
 no passing repair evidence exists yet. The refusal and this timing problem
 were recorded on existing BI-6EB2DBBB as `cmv5m400xazfn01mw26kz2rpf`.
-Resolve the supported research authority/admission before editing runtime code;
-do not manufacture a passing result or reclassify the repair to escape the gate.
+The operator subsequently approved a bounded DEV operational override to move
+past internal defects. That direction is recorded in WC-F27AE4C8; implementation
+proceeds under that explicit authority without pretending the refused receipt
+passed. Tool-write grants, DCO, protected publication and cleanup safety remain.
 
-No runtime code, installation assets, worktrees or branches were deleted or
-modified by this review. The full fleet dry run was stopped after its ownership
+The initial review made no runtime edits or deletions. The repair now changes
+the source projection and ownership reader only. The full fleet dry run was stopped after its ownership
 read had already failed; no complete safe-removal classification is claimed.
+
+## Verification handoff
+
+The new loader regressions failed before repair. The repaired loader protects
+later-page owners, accepts explicit empty populations, rejects missing paths,
+partial/scoped observations, changed snapshots, duplicates, count drift and
+cursor loops, and uses the shared credential resolver. Projection tests retain
+exact identity in ordinary and minimum-budget rows and reject oversized identity.
+The current served release predates these fields, so it must continue returning
+unavailable to the new reader until the protected release deploys. Acceptance is
+then a read-only ownership traversal and janitor dry run; no live deletion is
+part of this delivery. The authoring session ends at evidenced PR submission.
