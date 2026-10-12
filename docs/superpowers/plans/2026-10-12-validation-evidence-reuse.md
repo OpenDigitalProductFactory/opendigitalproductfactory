@@ -90,5 +90,28 @@ Requirement references: AC-1, AC-2, AC-3, AC-4.
 Contract references: CT-VALIDATION-IDENTITY, CT-PUBLICATION, CT-DIAGNOSTICS.
 Flow references: FLOW-REUSE, FLOW-CORRECTION, FLOW-COMMIT.
 Verification references: VC-REUSE, VC-PUBLICATION, VC-DIAGNOSTICS.
-Native immutable-plan coverage receipt is not yet recorded. This plan is not a
-coverage PASS, implementation admission, test result, or delivery claim.
+Native atomic coverage receipt: `cmv5qcetxf4rr01mwdd6d4czg`, binding the plan at
+`b6a5901019cd1c6a230c0c51a061d4d47efae4d5`. No dependency edges. This receipt is
+not an implementation test result or delivery claim.
+
+## Implementation checkpoint and remaining boundary
+
+Host preflight and PR readiness now share the existing stage-receipt and
+owner-fenced local-convergence-lock mechanisms. Receipt storage is bounded to
+one result per stage per worktree. Reuse expires after one hour and preserves
+the execution timestamp; that is a local verification policy, unrelated to an
+AI provider's prompt-cache retention. Commit metadata changes still invalidate
+host guard receipts because several guards read commit messages. Integration
+tree equivalence remains the existing server evidence planner's responsibility.
+PR body and labels are in the readiness command plan identity. Dirty/untracked
+files, changed main, command plan, environment or toolchain invalidate reuse.
+
+The current pre-push hook has PASS or an audited override, not a native
+post-publication cloud-delegation receipt. Do not manufacture a full local PASS.
+For this authorized DEV recovery, use its documented scoped operator-emergency
+route and preserve skipped/unrun checks. Permanent cloud-delegation policy stays
+open in BI-25CB699C: it must bind the actual open PR/repository/branch/head,
+affected tests and independent changed-code review, and retain required GitHub
+checks and protected merge queue. This checkpoint does not claim AC-1/AC-2 or
+the entire BI is complete. Do not automatically relaunch full local validation
+merely because a published PR is blocked; diagnose its actual GitHub failure.
