@@ -55,7 +55,7 @@ The DPF unified connector kernel is adjacent but not the ownership boundary: DMR
 - **R12 — Measured fit:** the exact route is verified in dark and light themes at desktop and narrow widths, with a measured UX-fit artifact.
 - **R13 — Safe HTTP failures:** the net-new JSON status route returns bounded `application/problem+json` failures with a stable DPF problem type and request correlation ID.
 - **R14 — Governed reviewer:** Qwen3.8 27B remains the governed high-trust local reviewer. The catalog names that role explicitly; a low-memory catalog choice cannot override it through a generic recommendation flag.
-- **R15 — Bounded reviewer latency:** the governed reviewer defaults to 600,000 ms. An authorized autonomous activity with a persisted immutable parent deadline may use only the time remaining before that deadline, including queue wait and fallback. Generic local overrides remain capped at 600,000 ms. Autonomous origin alone never grants a longer window. See the BI-03AC2FD9 repair sequence below; that exception remains proposed until implemented and verified.
+- **R15 — Bounded reviewer latency:** the governed reviewer defaults to 600,000 ms. An authorized autonomous activity with a persisted immutable parent deadline may use only the time remaining before that deadline, including queue wait and fallback. Generic local overrides remain capped at 600,000 ms. Autonomous origin alone never grants a longer window. The BI-03AC2FD9 repair sequence below defines the exception and its verification obligations.
 - **R16 — Observable runtime:** the authenticated status projection exposes the reviewer model, effective timeout, timeout source, ceiling, and live served-context facts without exposing environment values.
 
 ## Architecture
@@ -187,7 +187,7 @@ DMR's local policy permits one generation model plus small supporting models, an
 
 ## BI-03AC2FD9 — Parent-bounded inference repair
 
-**Status:** implementation design; no runtime change or acceptance claimed.
+**Status:** source implementation in progress; deployment and live acceptance unrun.
 **Implementation owner:** BI-03AC2FD9 / WC-183763CA.
 **Decision:** WWMD DI-5DE30BBD52CC, adopted `parent-bounded-activity-deadline`.
 
@@ -300,5 +300,7 @@ header/body inactivity backstops from a whole-operation deadline. Consulted
 2026-10-12. Neither mechanism supplies execution authority.
 
 Research receipt: `initiative-2484c98c-a4f6-4773-8fd1-542c97876fb4`.
-Plan coverage is pending immutable publication of this design and the governed
-coverage write. No implementation readiness or completion is inferred here.
+Plan coverage: `cmv5o3uv9k1c401nsdtztjfwy`, atomic D1 → D2 → D3 → D4,
+all owned by BI-03AC2FD9. The receipt binds design commit
+`9e572ec60acd235136a27ce88138f1c6d1379160`. Implementation admission
+`IRD-5072C631C253` is allowed; this is not deployment or acceptance evidence.

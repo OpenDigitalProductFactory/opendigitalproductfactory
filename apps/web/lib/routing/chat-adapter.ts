@@ -42,11 +42,12 @@ import {
   resolveInferenceRuntimePolicy,
 } from "./local-inference-runtime-policy";
 import { isRecord } from "@/lib/shared/coerce";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/inference/governed-inference-deadline";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // The runtime-policy module separates the governed, deliberately slower 27B
 // reviewer from generic local models. Both operator overrides and defaults stay
-// bounded, while the reviewer always receives its approved ten-minute window.
+// bounded; a server-bound parent deadline supplies the governed exception.
 
 // A single-GPU local endpoint (Docker Model Runner / Ollama) serves ONE request
 // at a time. The platform routinely fires inference concurrently — reviewBuildPlan
@@ -478,25 +479,29 @@ export const chatAdapter: ExecutionAdapterHandler = {
     const startMs = Date.now();
     let res: Response;
     try {
-      // The AbortSignal is created inside the thunk so, for serialized local
-      // calls, the timeout clock starts when the call actually dispatches — not
-      // while it waits its turn in the local-inference lock.
-      const doFetch = () => request.fetchImpl(chatUrl, {
-        method: "POST",
-        headers: requestHeaders,
-        body: JSON.stringify(body),
-        signal: createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
+      // Generic calls start their per-call clock after admission. Governed
+      // calls use the absolute parent deadline, so queue wait consumes it.
+      const doFetch = async () => {
+        await assertGovernedInferenceAuthority();
+        const execution = currentGovernedInferenceDeadline();
+        const timeout = createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
           defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
           localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
-        }).effectiveTimeoutMs),
-      });
+        }, execution ? { deadlineAt: execution.deadlineAt, now: Date.now() } : undefined).effectiveTimeoutMs);
+        return request.fetchImpl(chatUrl, {
+          method: "POST",
+          headers: requestHeaders,
+          body: JSON.stringify(body),
+          signal: execution ? AbortSignal.any([timeout, execution.signal]) : timeout,
+        });
+      };
       res = providerId === "local"
-        ? await withLocalInferenceLock(doFetch, { modelId })
+        ? await withLocalInferenceLock(doFetch, { modelId, signal: currentGovernedInferenceDeadline()?.signal })
         : await doFetch();
     } catch (e) {
       // A busy GPU is a capacity deferral. Wrapping it as "network" makes the
       // fallback chain treat the local model as broken instead of waiting.
-      if (e instanceof Error && e.name === "LocalProviderCapacityDeferredError") throw e;
+      if (e instanceof Error && ["LocalProviderCapacityDeferredError", "GovernedInferenceDeadlineError"].includes(e.name)) throw e;
       throw new InferenceError(
         `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
         "network",

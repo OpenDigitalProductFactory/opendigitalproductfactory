@@ -51,6 +51,7 @@ import {
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { providerInferenceFetch } from "./provider-inference-transport";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "./governed-inference-deadline";
 import { InferenceError } from "../routing/inference-error";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -181,6 +182,7 @@ export async function callProvider(
     buildId?: string | null;
   },
 ): Promise<InferenceResult> {
+  await assertGovernedInferenceAuthority();
   // Resolve adapter enforceability before capacity or budget accounting. A
   // plan/adapter capability miss is not a provider request and must not consume
   // budget, wait on host capacity, or mutate provider health through fallback.
@@ -337,18 +339,22 @@ export async function callProvider(
   const releaseInferenceSlot = await acquireInferenceSlot(engineKey, currentInferenceOrigin(), {
     providerId,
     modelId,
+    signal: currentGovernedInferenceDeadline()?.signal,
   });
   let result;
   try {
     // Queued work has not started inference yet. A disable during admission
     // invalidates its earlier selection; finally still releases the slot.
     await readEnabledLocalProvider(providerId);
+    await assertGovernedInferenceAuthority();
     result = await adapter.execute({
       providerId,
       modelId,
       plan: effectivePlan,
       provider: { baseUrl, headers },
-      fetchImpl: providerInferenceFetch,
+      fetchImpl: providerId === "local"
+        ? currentGovernedInferenceDeadline()?.localFetch ?? providerInferenceFetch
+        : providerInferenceFetch,
       messages,
       systemPrompt,
       tools,

@@ -112,3 +112,37 @@ describe("provider inference transport deadlines", () => {
     });
   });
 });
+
+// The governed path owns one finite transport for its admitted parent scope.
+import { currentGovernedInferenceDeadline, withGovernedInferenceDeadline } from "./governed-inference-deadline";
+
+describe("parent-bound local inference transport", () => {
+  it("accepts one real HTTP response beyond 600 seconds only inside the admitted window", async () => {
+    await withGovernedInferenceDeadline({ deadlineAt: new Date(Date.now() + 900_000).toISOString(),
+      verifyAuthority: async () => true }, async () => {
+      await withProvider(async (url, dispatched) => {
+        const outcome = currentGovernedInferenceDeadline()!.localFetch(url)
+          .then(response => response.text()).catch(error => error);
+        const response = await dispatched;
+        transportClock.tick();
+        transportClock.tick(610_000);
+        await setImmediate();
+        response.end("completed independent review");
+        expect(await outcome).toBe("completed independent review");
+      });
+    });
+  });
+
+  it("retains a finite parser backstop within a governed activity", async () => {
+    await withGovernedInferenceDeadline({ deadlineAt: new Date(Date.now() + 900_000).toISOString(),
+      verifyAuthority: async () => true }, async () => {
+      await withProvider(async (url, dispatched) => {
+        const outcome = currentGovernedInferenceDeadline()!.localFetch(url).catch(error => error);
+        await dispatched;
+        transportClock.tick();
+        transportClock.tick(910_000);
+        expect(await outcome).toMatchObject({ cause: { code: "UND_ERR_HEADERS_TIMEOUT" } });
+      });
+    });
+  });
+});

@@ -571,3 +571,28 @@ For the review service's own repair, use the existing recovery routing and build
 gate runbooks. They provide no alternative independent-review receipt and do
 not relax DCO, grants, ownership or production integrity. Record unavailable
 checks as unrun, then reconcile them after canonical recovery.
+
+
+### Parent-bounded local review execution (BI-03AC2FD9)
+
+The local reviewer's default call window remains 600 seconds. A persisted native
+review binds each unfinished branch to its existing absolute parent deadline.
+The server checks current authority and generation before dispatch, after queue
+admission and periodically during execution. The branch uses only remaining
+parent time; queue waits and fallback never restart the clock. Ordinary chat,
+caller durations and an autonomous origin tag do not confer this authority.
+
+Parent expiry or loss of authority aborts local HTTP execution and removes queued
+waiters. Active work keeps its GPU slot until its actual call settles. A canceled
+client request is not proof that a remote provider stopped: uncertain outcomes
+still require the existing scoped reconciliation before recovery. Completed
+checkpoints survive revoked authority, but a review receipt cannot publish until
+current authority is valid. `auth-required` names that distinction; an execution
+failure remains infrastructure-inconclusive, never a failed code verdict.
+
+The 4,096-token generic output allowance and the 16,384-token semantic-review
+output reserve are separate from the model's served context window and execution
+deadline. This repair changes neither token/cost budgets nor model/tool routing.
+A larger context window alone does not prove reliable native tool execution;
+provider routing, tool schema/format fidelity, multistep completion and latency
+need separate measured acceptance.

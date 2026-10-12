@@ -20,7 +20,7 @@ export const GOVERNED_LOCAL_REVIEWER = {
 export type InferenceRuntimePolicy = {
   effectiveTimeoutMs: number;
   timeoutCeilingMs: number | null;
-  source: "governed-reviewer-policy" | "operator-local-timeout" | "local-default" | "operator-default-timeout" | "provider-default";
+  source: "governed-activity-deadline" | "governed-reviewer-policy" | "operator-local-timeout" | "local-default" | "operator-default-timeout" | "provider-default";
   role: "high-trust-reviewer" | "general-local" | "provider";
 };
 
@@ -58,7 +58,21 @@ export function resolveInferenceRuntimePolicy(
   providerId: string,
   modelId: string,
   configuration: TimeoutConfiguration,
+  execution?: { deadlineAt: number; now: number },
 ): InferenceRuntimePolicy {
+  if (execution) {
+    const remaining = Math.floor(execution.deadlineAt - execution.now);
+    if (!Number.isFinite(remaining) || remaining <= 0 || remaining > 2_147_483_647) {
+      throw new Error("inference-parent-deadline-exhausted-or-invalid");
+    }
+    if (providerId === "local") return {
+      effectiveTimeoutMs: remaining,
+      timeoutCeilingMs: remaining,
+      source: "governed-activity-deadline",
+      role: modelComparisonKey(modelId) === modelComparisonKey(GOVERNED_LOCAL_REVIEWER.modelId)
+        ? "high-trust-reviewer" : "general-local",
+    };
+  }
   if (
     providerId === "local"
     && modelComparisonKey(modelId) === modelComparisonKey(GOVERNED_LOCAL_REVIEWER.modelId)
