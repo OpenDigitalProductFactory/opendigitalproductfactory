@@ -153,6 +153,7 @@ export type WorkroomDriveEffects = SubShapeChildEffects & {
     taskId: string;
     agentId: string;
     ownerUserId: string;
+    dispatchScope?: import("@/lib/work-management/workroom-drive-checkpoint").DispatchScope;
     title: string;
     prompt: string;
     /** Stage + declared tools, written to taskConfig.workroomStage for the scheduler's pin (BI-43C3E914). */
@@ -355,6 +356,7 @@ export async function applyDrivePlan(input: {
       // to leave; send it.
       prompt: buildStageBrief(brief),
       stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...(brief.stageTools ?? [])] },
+      ...(plan.cycle ? { dispatchScope: { runKey: runKey ?? plan.cycle.cycleKey, cycleKey: plan.cycle.cycleKey, iteration: 0 } } : {}),
       now,
       lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });

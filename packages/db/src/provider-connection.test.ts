@@ -1,7 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "../generated/client/client";
 
-import { activateProviderWithDefaultConnection } from "./provider-connection";
+import { activateProviderWithDefaultConnection, setProviderStatusWithDefaultConnection } from "./provider-connection";
+
+describe("operator routing status", () => {
+  it("disables both halves atomically and surfaces failure for rollback", async () => {
+    const missing = new Error("connection missing");
+    const tx = {
+      modelProvider: { update: vi.fn().mockResolvedValue({}) },
+      aiProviderConnection: { update: vi.fn().mockRejectedValue(missing) },
+    };
+    const db = { $transaction: vi.fn(async (work: (t: typeof tx) => Promise<void>) => work(tx)) };
+    await expect(setProviderStatusWithDefaultConnection(db as unknown as PrismaClient, { providerId: "local", status: "inactive" })).rejects.toBe(missing);
+    expect(tx.modelProvider.update).toHaveBeenCalledWith({ where: { providerId: "local" }, data: { status: "inactive" } });
+    expect(tx.aiProviderConnection.update).toHaveBeenCalledWith({ where: { connectionId: "provider-default-local" }, data: { status: "inactive" } });
+  });
+});
 
 describe("activateProviderWithDefaultConnection", () => {
   it("activates the provider and its canonical connection in one transaction", async () => {

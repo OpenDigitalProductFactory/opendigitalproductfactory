@@ -25,7 +25,7 @@ When a problem has a quick fix and an architecturally sound fix, choose the soun
 
 ## Why
 
-The sound fix lands once and stays correct as the surrounding system evolves. The quick fix lands once and silently corrupts the surrounding system every time the system changes — because the quick fix is the special case the next change forgets about. The math compounds against the quick fix within a few sprint cycles. DPF treats technical debt as a first-class operating cost (the 20-percent refactoring budget); the way to avoid paying it is to not take it on in the first place. When the user asks for the quick fix anyway, surface the trade-off — show what the sound version would cost vs. what the quick version will cost over the next year.
+The sound fix lands once and stays correct as the surrounding system evolves. The quick fix lands once and silently corrupts the surrounding system every time the system changes — because the quick fix is the special case the next change forgets about. The math compounds against the quick fix within a few sprint cycles. DPF treats technical debt as a first-class operating cost; the current owner-scoped investment allocation lives in [Absorb, Don't Adopt](absorb-dont-adopt.md). The way to avoid paying debt is to not take it on in the first place. When the user asks for the quick fix anyway, surface the trade-off — show what the sound version would cost vs. what the quick version will cost over the next year.
 
 ## Applies To
 
