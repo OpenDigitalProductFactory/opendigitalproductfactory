@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { fieldControlClass, fieldOptionClass } from "@/components/ui/form/styles";
 import { useT } from "@/lib/i18n/use-t";
 import { toggleProviderStatus } from "@/lib/actions/ai-providers";
@@ -94,7 +95,7 @@ export function LocalProviderPauseControl({ providerId, initialStatus, initialPa
         </Button>}
       </div>
       {stopped && <p className="text-[var(--dpf-muted)]" aria-live="polite">
-        {pause?.resumeAt ? <>{t("providerPause.resumes")} <time dateTime={pause.resumeAt}>{new Date(pause.resumeAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</time></> : t("providerPause.indefinite")}
+        {pause?.resumeAt ? <>{t("providerPause.resumes")} <time dateTime={pause.resumeAt}><LocalTime value={pause.resumeAt} /></time></> : t("providerPause.indefinite")}
       </p>}
       {editing && <fieldset id={`${id}-time`} disabled={isPending} className="flex max-w-full flex-wrap items-end gap-2">
         <label htmlFor={`${id}-duration`} className="flex flex-col gap-1">{t("providerPause.duration")}

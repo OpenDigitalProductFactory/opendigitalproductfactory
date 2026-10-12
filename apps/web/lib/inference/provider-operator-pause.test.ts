@@ -19,6 +19,10 @@ function fixture(providerId = "local") {
     aiProviderConnection: {
       findUnique: vi.fn(async () => state.connection),
       update: vi.fn(async ({ data }: { data: { status: string } }) => Object.assign(state.connection, data)),
+      updateMany: vi.fn(async ({ where, data }: { where: { status: string }; data: { status: string } }) => {
+        if (state.connection.status !== where.status) return { count: 0 };
+        Object.assign(state.connection, data); return { count: 1 };
+      }),
     },
     scheduledJob: {
       findUnique: vi.fn(async () => state.job),
@@ -126,6 +130,19 @@ describe("durable operator provider pause", () => {
     f.state.provider.status = "disabled";
     expect(await resumeLocalProvider({ providerId: "local" }, f.deps)).toMatchObject({ outcome: "resumed", status: "disabled" });
     expect(f.state.provider.status).toBe("disabled");
+  });
+  it("preserves an account restriction that changes after the pause read", async () => {
+    const f = fixture();
+    await pauseLocalProvider({ providerId: "local", actorId: "operator" }, f.deps);
+    f.tx.modelProvider.findUnique.mockImplementationOnce(async () => {
+      f.state.connection.status = "disabled";
+      return f.state.provider;
+    });
+    expect(await resumeLocalProvider({ providerId: "local" }, f.deps)).toMatchObject({ outcome: "superseded" });
+    expect(f.state.connection.status).toBe("disabled");
+    expect(f.state.provider.status).toBe("inactive");
+    expect(f.state.job?.lastStatus).toBe("paused");
+    expect(f.state.audit).toHaveLength(1);
   });
   it("does not route to an unhealthy provider merely because the pause ended", async () => {
     const f = fixture();

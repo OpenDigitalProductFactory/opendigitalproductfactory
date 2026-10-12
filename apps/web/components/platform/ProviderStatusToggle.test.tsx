@@ -2,12 +2,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { renderToString } from "react-dom/server";
 import { namespaceMessages } from "@dpf/i18n";
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import type { FormatInstantOptions } from "@/lib/datetime";
 const actions = vi.hoisted(() => ({ getProviderPause: vi.fn(), pauseProvider: vi.fn(), resumeProvider: vi.fn(), refresh: vi.fn() }));
 vi.mock("@/lib/actions/provider-operator-pause", () => actions);
 vi.mock("@/lib/actions/ai-providers", () => ({ toggleProviderStatus: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: actions.refresh }) }));
+// Supply a fixed browser timezone while retaining the real formatter and the
+// explicit UTC requested by the shared component's first render.
+vi.mock("@/lib/datetime", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/datetime")>();
+  return { ...actual, formatInstant: (value: string | number | Date, options: FormatInstantOptions = {}) => actual.formatInstant(value, { ...options, timeZone: options.timeZone ?? "America/Chicago" }) };
+});
 import { ProviderStatusToggle } from "./ProviderStatusToggle";
 function render(node: ReactNode) {
   return renderView(node, { wrapper: ({ children }) => <MessagesProvider locale="en-US" messages={{ setup: namespaceMessages("en-US", "setup") }}>{children}</MessagesProvider> });
@@ -57,5 +65,14 @@ describe("local provider pause control", () => {
     expect(screen.getByText("Unavailable")).toBeTruthy();
     expect(screen.queryByText("Until you resume it")).toBeNull();
     expect(screen.queryByRole("button", { name: "Resume now" })).toBeNull();
+  });
+  it("uses a deterministic UTC first render before browser localization", () => {
+    const html = renderToString(<MessagesProvider locale="en-US" messages={{ setup: namespaceMessages("en-US", "setup") }}><ProviderStatusToggle providerId="local" initialStatus="inactive" initialConnectionStatus="paused" initialPause={{ resumeAt: "2026-10-14T02:00:00Z" }} /></MessagesProvider>);
+    expect(html).toContain("UTC");
+    expect(html).toContain("Oct 14");
+    expect(html).not.toContain("CDT");
+    render(<ProviderStatusToggle providerId="local" initialStatus="inactive" initialConnectionStatus="paused" initialPause={{ resumeAt: "2026-10-14T02:00:00Z" }} />);
+    expect(screen.getByText(/CDT/)).toBeTruthy();
+    expect(screen.getByText(/Oct 13/)).toBeTruthy();
   });
 });

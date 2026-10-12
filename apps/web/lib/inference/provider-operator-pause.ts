@@ -51,6 +51,10 @@ async function lockProvider(tx: Prisma.TransactionClient, providerId: string) {
   // Match the existing provider -> connection write order; every pause/expiry
   // serializes on the provider row, including first creation of the job row.
   await tx.$queryRaw`SELECT "id" FROM "ModelProvider" WHERE "providerId" = ${providerId} FOR UPDATE`;
+  // Connection-only credential/account writers also take this row's lock.
+  // Acquire it second, in the same order as the existing default helper.
+  const connectionId = `provider-default-${providerId}`;
+  await tx.$queryRaw`SELECT "id" FROM "AiProviderConnection" WHERE "connectionId" = ${connectionId} FOR UPDATE`;
 }
 async function auditPause(tx: Prisma.TransactionClient, pause: ProviderPauseState, action: string, now: Date, actorId?: string, automatic = false) {
   // A timer executes the operator's instruction; its origin remains attributable
@@ -174,6 +178,10 @@ export async function resumeLocalProvider(input: { providerId: string; operation
     const provider = await tx.modelProvider.findUnique({ where: { providerId: input.providerId } });
     if (!provider) return { outcome: "superseded" as const };
     const connectionStatus = ["active", "degraded", "inactive"].includes(pause.priorConnectionStatus) ? "active" : pause.priorConnectionStatus;
+    const resumed = await tx.aiProviderConnection.updateMany({
+      where: { connectionId: `provider-default-${input.providerId}`, status: "paused" }, data: { status: connectionStatus },
+    });
+    if (resumed.count !== 1) return { outcome: "superseded" as const };
     const connectionUsable = connectionStatus === "active" || connectionStatus === "degraded";
     let status = provider.status;
     // Only undo the inactive projection owned by this pause. Auth, billing,
@@ -183,7 +191,6 @@ export async function resumeLocalProvider(input: { providerId: string; operation
       status = wasUsable && healthy && connectionUsable ? pause.priorProviderStatus === "degraded" ? "degraded" : "active" : pause.priorProviderStatus === "disabled" ? "disabled" : "inactive";
       await tx.modelProvider.update({ where: { providerId: input.providerId }, data: { status } });
     }
-    await tx.aiProviderConnection.update({ where: { connectionId: `provider-default-${input.providerId}` }, data: { status: connectionStatus } });
     await tx.scheduledJob.update({ where: { jobId: providerPauseJobId(input.providerId) }, data: {
       lastStatus: input.automatic ? "expired" : "resumed", nextRunAt: null, lastRunAt: now,
       metadata: { ...pause, resumedAt: now.toISOString(), resumedBy: input.automatic ? "timer" : input.actorId ?? null },
