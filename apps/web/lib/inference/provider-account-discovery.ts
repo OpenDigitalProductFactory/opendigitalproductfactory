@@ -3,7 +3,8 @@ import { getTestUrl, parseModelsResponse } from "./ai-provider-types";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
-import { discoverChatGptBackendModels, getDecryptedCredential, getProviderBearerToken, getProviderExtraHeaders, profileModelsInternal, upsertDiscoveredModels } from "./ai-provider-internals";
+import { getDecryptedCredential, getProviderBearerToken, getProviderExtraHeaders, profileModelsInternal, upsertDiscoveredModels } from "./ai-provider-internals";
+import { discoverCodexCliModels } from "@/lib/routing/codex-cli-model-catalog";
 
 /** Account availability is independent of the shared vendor model catalog. No absence here retires another account's models. */
 export async function discoverProviderAccountModels(connectionId: string): Promise<ActionResult<{ modelIds: string[] }>> {
@@ -12,21 +13,20 @@ export async function discoverProviderAccountModels(connectionId: string): Promi
   const provider = await prisma.modelProvider.findUnique({ where: { providerId: connection.providerId } });
   if (!provider) return err("Provider not found");
   const headers = getProviderExtraHeaders(connection.providerId);
+  const subscriptionCli = connection.authMethod === "oauth" && ["codex", "chatgpt"].includes(connection.providerId);
   if (connection.authMethod === "api-key") {
     const credential = await getDecryptedCredential(connection.providerId, connectionId);
     if (!credential?.secretRef) return err("Account API key not configured");
     if (provider.authHeader) headers[provider.authHeader] = provider.authHeader === "Authorization" ? `Bearer ${credential.secretRef}` : credential.secretRef;
-  } else if (connection.authMethod !== "local" || !isLocalProviderId(connection.providerId)) {
+  } else if (!subscriptionCli && (connection.authMethod !== "local" || !isLocalProviderId(connection.providerId))) {
     const bearer = await getProviderBearerToken(connection.providerId, connectionId);
     if ("error" in bearer) return err(bearer.error);
     headers.Authorization = `Bearer ${bearer.token}`;
   }
   try {
     let models: Array<{ modelId: string; rawMetadata: Record<string, unknown> }>;
-    if (connection.authMethod === "oauth" && ["codex", "chatgpt"].includes(connection.providerId)) {
-      const discovered = await discoverChatGptBackendModels(connection.providerId, headers, provider.baseUrl ?? undefined);
-      if (discovered.error) return err(discovered.error);
-      models = discovered.models;
+    if (subscriptionCli) {
+      models = await discoverCodexCliModels(connection.providerId, connectionId);
     } else {
       const url = getTestUrl(provider);
       if (!url) return err("No provider discovery endpoint configured");
