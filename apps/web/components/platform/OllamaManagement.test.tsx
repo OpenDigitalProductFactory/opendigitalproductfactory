@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderComponent, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalModelStatusSnapshot } from "@/lib/inference/local-model-operations";
 
@@ -28,6 +31,14 @@ vi.mock("@/lib/hooks/useBackgroundOperationObserver", () => ({
 }));
 
 import { OllamaManagement } from "./OllamaManagement";
+
+function render(element: ReactElement) {
+  return renderComponent(
+    <MessagesProvider locale="en-US" messages={{ errors: namespaceMessages("en-US", "errors") }}>
+      {element}
+    </MessagesProvider>,
+  );
+}
 
 const baseModel = {
   comparisonKey: "",

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { deleteOllamaModel, pullOllamaModel } from "@/lib/actions/ollama-management";
 import { useBackgroundOperationObserver } from "@/lib/hooks/useBackgroundOperationObserver";
+import { useT } from "@/lib/i18n/use-t";
 import { StatusBadge } from "@/components/ui/report-kit";
 import type { LocalModelOperation, LocalModelStatusSnapshot } from "@/lib/inference/local-model-operations";
 import {
@@ -34,10 +35,11 @@ const secondaryButtonStyle = {
 } as const;
 
 export function OllamaManagement(props: Props) {
+  const t = useT("errors");
   if (!props.canWrite) {
     return (
       <p role="status" style={{ ...panelStyle, color: "var(--dpf-muted)", fontSize: 12 }}>
-        Provider management access required.
+        {t("localInventory.restricted")}
       </p>
     );
   }
@@ -45,6 +47,7 @@ export function OllamaManagement(props: Props) {
 }
 
 function ManagedLocalModels({ canWrite, vramGb }: Props) {
+  const t = useT("errors");
   const observer = useBackgroundOperationObserver<LocalModelStatusSnapshot>({
     endpoint: "/api/platform/ai/local-models/status",
     eventType: "system:local-model",
@@ -101,8 +104,8 @@ function ManagedLocalModels({ canWrite, vramGb }: Props) {
           <div>
             <h2 style={{ color: "var(--dpf-text)", fontSize: 15, margin: 0 }}>Installed models</h2>
             <p style={{ color: "var(--dpf-muted)", fontSize: 11, margin: "4px 0 0" }}>
-              {hasInventory ? <>{observer.error ? "Last known inventory · " : ""}{models.length} installed</>
-                : observer.error ? "Inventory unavailable" : "Checking inventory…"}
+              {hasInventory ? <>{observer.error ? t("localInventory.stale") : ""}{models.length} installed</>
+                : observer.error ? t("localInventory.unavailable") : t("localInventory.checking")}
               {knownBytes > 0 ? ` · ${formatModelBytes(knownBytes)} on disk` : ""}
               {unknownSizeCount > 0 ? ` · ${unknownSizeCount} size unavailable` : ""}
             </p>
@@ -114,7 +117,7 @@ function ManagedLocalModels({ canWrite, vramGb }: Props) {
 
         {(observer.error || actionMessage) && (
           <p role="status" style={{ color: observer.error ? "var(--dpf-error)" : "var(--dpf-muted)", fontSize: 11 }}>
-            {observer.error ? "Refresh failed." : actionMessage}
+            {observer.error ? t("localInventory.refreshFailed") : actionMessage}
           </p>
         )}
 
@@ -134,7 +137,7 @@ function ManagedLocalModels({ canWrite, vramGb }: Props) {
 
         {models.length === 0 && currentInventory ? (
           <p style={{ color: "var(--dpf-muted)", fontSize: 12, margin: "18px 0 2px" }}>
-            No models installed.
+            {t("localInventory.empty")}
           </p>
         ) : (
           <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
