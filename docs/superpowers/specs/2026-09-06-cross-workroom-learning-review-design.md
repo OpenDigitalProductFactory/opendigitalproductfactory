@@ -251,6 +251,15 @@ Separate three identities: immutable source event, independent work occurrence a
 problem hypothesis. Replayed events do not increase recurrence. Ten retries in one occurrence
 are one affected occurrence plus ten attempts, not ten independent failures.
 
+The shared signal writer enforces the source-identity boundary with one atomic upsert on
+`ImprovementSignal`'s existing `(sourceType, sourceId)` uniqueness constraint. Re-delivery touches
+`lastSeenAt` without replacing original evidence, incrementing recurrence or filing backlog work.
+Existing recurrence counts remain historical and ambiguous; this change neither resets them nor
+backfills independent occurrences. Existing backlog links and source-owned critical-finding intake
+remain intact. Source identities that represent aggregate findings also need explicit independent
+occurrence evidence before promotion; repeated sweeps alone do not establish it. This foundation
+does not implement the cross-room cohort evaluator or establish the three-occurrence heuristic.
+
 Every finding records observation versus hypothesis; evidence refs and counterexamples; affected
 definitions/profiles; eligible and affected counts; missing/excluded counts; time window; active,
 queue and dependency time; confidence; competing explanations; owner; existing-work link; proposed
