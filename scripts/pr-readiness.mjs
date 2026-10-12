@@ -13,6 +13,7 @@ import { readFileSync } from "node:fs";
 import { buildGatePlan, evaluateReadiness, formatReadinessReport } from "./pr-readiness/core.mjs";
 import { collectWorktreeDiff } from "./gate-context.mjs";
 import { resolvePolicyGuardInvocation } from "./lib/ci-policy-guards.mjs";
+import { guardShellEnv } from "./lib/guard-bash.mjs";
 import { buildGateContext } from "./lib/gate-context.mjs";
 import { fetchOriginMainSharedSafe, isShallowRepository } from "./lib/git-fetch-shared-safe.mjs";
 import { isEnvironmentFailureOutput } from "./lib/pregate-preflight.mjs";
@@ -131,12 +132,15 @@ function readRepoState(publishedRef = null) {
   };
 }
 
-function runGate(gate) {
+let guardEnv;
+export function runGate(gate) {
   const [command, args] = gate.command;
-  const invocation = resolvePolicyGuardInvocation(command, args);
+  guardEnv ??= guardShellEnv();
+  const env = { ...guardEnv, ...gate.env };
+  const invocation = resolvePolicyGuardInvocation(command, args, { env });
   const result = spawnSync(invocation.command, invocation.args, {
     cwd: process.cwd(),
-    env: { ...process.env, ...gate.env },
+    env,
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
     shell: false,
