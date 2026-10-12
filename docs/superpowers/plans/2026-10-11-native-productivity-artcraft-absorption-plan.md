@@ -13,7 +13,7 @@ For agentic workers: execute this plan one independently reviewable backlog item
 
 ## Current admission
 
-Design capture is underway. The eight Windows synthetic PdfCraft checks passed; they are not engine/runtime acceptance. Independent research/spec/architecture/plan reviews and provider-verified plan coverage are pending. Do not implement runtime source adoption against this proposed plan until its exact immutable coverage is valid. Do not downgrade the parent xlarge scope to bypass decomposition.
+The eight Windows synthetic PdfCraft checks passed; they are not engine/runtime acceptance. Research and independent scope approval have passed. Architecture and plan reviews remain pending. Do not implement runtime source adoption until the current immutable coverage and slice admission are valid. Do not downgrade the parent xlarge scope to bypass decomposition.
 
 ## Deliverable graph and traceability
 
@@ -70,7 +70,11 @@ Rollback disables new PDF operations and removes only new UI entry points. Prese
 
 ## Backlog coverage
 
-Proposed decision: **decomposed**. Parent BI-C03605C4 maps Q to BI-5D5AB47E, P to BI-3F319D83, H to BI-EBDB6CAE. P depends on Q; H reuses BI-4865EB4D and BI-4C17BF51. The governed coverage receipt is **pending** independent scope approval and the provider-verified immutable plan. A Markdown table is not a receipt. Copy the returned receipt here only after the server validates the current design baseline and exact plan blob.
+Decision: **decomposed**. Parent BI-C03605C4 maps Q to BI-5D5AB47E, P to BI-3F319D83, H to BI-EBDB6CAE. P depends on Q; H reuses BI-4865EB4D and BI-4C17BF51.
+
+Recorded scope approval: `initiative-82bbbbbb-1ac6-4a05-adb7-08f3efb78ff4`, baseline `baseline-54a3d5b8-78d5-4941-aef9-9d374ef86423`, design at `675442e090cc84baabd8df1df9e450e7f38ec4e2`.
+Recorded research: `initiative-f04768e9-a590-46b0-b941-89c36dcdc409`.
+Recorded coverage: `cmv4n31qm4hs301odjii73rtc`, checked valid, binding the plan at `ede419ac918dbe9e58e7533b4e03539710c5b364` (blob `b1652f8426982fbb4f141ab317dda5b33e8052f1`). This paragraph is the capture receipt pointer; subsequent immutable revisions receive their own coverage rather than rewriting its provenance. The live receipt and admission result are authoritative, not this Markdown table. Architecture/plan review and runtime delivery are not implied by coverage.
 
 ## Capture verification
 
