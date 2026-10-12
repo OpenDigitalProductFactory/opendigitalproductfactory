@@ -1,12 +1,68 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, symlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { identifyGuardExecution, runWithGuardReceipt } from "./pregate-preflight-receipt.mjs";
+import { identifyGuardExecution, readGuardInputStamp, runWithGuardReceipt } from "./pregate-preflight-receipt.mjs";
 import { runPreflight } from "./pregate-preflight.mjs";
 import { resolveGuardBash } from "./guard-bash.mjs";
+
+test("dependency bytes and metadata use an opened descriptor, closed after reading", () => {
+  const closed = [];
+  const stat = { dev: 1, ino: 2, size: 3, mtimeMs: 4, ctimeMs: 5, isFile: () => true };
+  const fs = { realpathSync: () => "/shared/input", statSync: () => stat,
+    openSync: () => 42, fstatSync: fd => { assert.equal(fd, 42); return stat; },
+    readFileSync: fd => { assert.equal(fd, 42, "must read the inspected descriptor, never reopen by path"); return Buffer.from("abc"); },
+    closeSync: fd => { closed.push(fd); },
+  };
+  assert.equal(readGuardInputStamp("/linked/input", fs).path, "/shared/input");
+  assert.ok(closed.length > 0);
+  assert.ok(closed.every(fd => fd === 42));
+});
+
+test("non-regular dependency inputs are rejected before reading", () => {
+  let closed = false;
+  const fs = { realpathSync: () => "/input", openSync: () => 42,
+    statSync: () => ({ isFile: () => false }), fstatSync: () => ({ isFile: () => false }),
+    readFileSync: () => { throw new Error("must not read a directory"); }, closeSync: () => { closed = true; },
+  };
+  assert.throws(() => readGuardInputStamp("/input", fs), /regular file/);
+  assert.equal(closed, true);
+});
+
+for (const failure of ["mutated", "replaced", "retargeted", "unreadable", "disappeared"]) {
+  test(`dependency ${failure} during inspection rejects identity and closes descriptors`, () => {
+    const opened = [];
+    const closed = [];
+    let reads = 0;
+    let paths = 0;
+    const stat = { dev: 1, ino: 2, size: 3, mtimeMs: 4, ctimeMs: 5, isFile: () => true };
+    const fs = {
+      realpathSync: () => { paths++; return failure === "retargeted" && paths > 1 ? "/new-target" : "/input"; },
+      openSync: () => {
+        if (failure === "disappeared" && opened.length) throw Object.assign(new Error("disappeared"), { code: "ENOENT" });
+        const fd = 42 + opened.length; opened.push(fd); return fd;
+      },
+      fstatSync: fd => failure === "mutated" && reads ? { ...stat, mtimeMs: 6 } : failure === "replaced" && fd === 43 ? { ...stat, ino: 3 } : stat,
+      readFileSync: () => { reads++; if (failure === "unreadable") throw new Error("unreadable"); return Buffer.from("abc"); },
+      closeSync: fd => { closed.push(fd); },
+    };
+    assert.throws(() => readGuardInputStamp("/input", fs), /changed|unreadable|disappeared/);
+    assert.deepEqual(closed.sort(), opened.sort());
+  });
+}
+
+test("a shared dependency junction retains its resolved regular-file identity", t => {
+  const f = fixture(t);
+  const target = join(f.options.directory, "shared");
+  const link = join(f.options.directory, "linked");
+  mkdirSync(target);
+  writeFileSync(join(target, "input"), "abc");
+  symlinkSync(target, link, process.platform === "win32" ? "junction" : "dir");
+  assert.deepEqual(readGuardInputStamp(join(link, "input")), readGuardInputStamp(join(target, "input")));
+  assert.throws(() => readGuardInputStamp(target));
+});
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), "dpf-guard-reuse-"));

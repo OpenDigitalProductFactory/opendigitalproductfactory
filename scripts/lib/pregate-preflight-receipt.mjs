@@ -1,6 +1,6 @@
 // Local guard acceleration only: never canonical integration evidence.
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, statSync, realpathSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, openSync, fstatSync, closeSync, constants } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { gitText } from "./git.mjs";
@@ -9,6 +9,32 @@ import { acquireLocalConvergenceLock, releaseLocalConvergenceLock } from "./loca
 
 const TTL_MS = 60 * 60 * 1000;
 const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+
+export function readGuardInputStamp(input, fs = { realpathSync, openSync, fstatSync, readFileSync, closeSync }) {
+  let path;
+  try { path = fs.realpathSync(input); } catch (error) {
+    if (error.code === "ENOENT") return null; // Optional input absent before inspection.
+    throw error;
+  }
+  // Follow legitimate shared-dependency symlinks, but inspect and read the same
+  // descriptor. Nonblocking open lets fstat reject a FIFO without waiting on it.
+  const fd = fs.openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    const before = fs.fstatSync(fd, { bigint: true });
+    if (!before.isFile()) throw new Error("guard dependency must be a regular file");
+    const bytes = fs.readFileSync(fd);
+    const after = fs.fstatSync(fd, { bigint: true });
+    const sameFile = stat => stat.isFile() && ["dev", "ino", "size", "mtimeNs", "ctimeNs", "mtimeMs", "ctimeMs"].every(key => stat[key] === before[key]);
+    if (!sameFile(after) || BigInt(bytes.length) !== BigInt(before.size) || fs.realpathSync(input) !== path) throw new Error("guard dependency changed during inspection");
+    // A replacement at the same pathname must not inherit the old descriptor's
+    // content. Verify the current target through a second, reliably closed fd.
+    const current = fs.openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
+    try {
+      if (!sameFile(fs.fstatSync(current, { bigint: true }))) throw new Error("guard dependency changed during inspection");
+    } finally { fs.closeSync(current); }
+    return { path, fileId: `${before.dev}:${before.ino}`, size: String(before.size), modified: String(before.mtimeNs ?? before.mtimeMs), digest: digest(bytes.toString("base64")) };
+  } finally { fs.closeSync(fd); }
+}
 
 // Include incidental changes conservatively, but not the pnpm wrapper's name:
 // standalone preflight and the identical preflight invoked by pregate must match.
@@ -21,18 +47,9 @@ export function identifyGuardExecution({ cwd = process.cwd(), plan, env = proces
     const windows = process.platform === "win32";
     const pnpm = spawnSync(windows ? "pnpm --version" : "pnpm", windows ? [] : ["--version"], { cwd, env, encoding: "utf8", shell: windows, timeout: 10000, windowsHide: true });
     if (pnpm.status !== 0 || !pnpm.stdout.trim()) return null;
-    const fileStamp = relative => {
-      try {
-        const path = realpathSync(join(cwd, relative));
-        const stat = statSync(path);
-        return { path, size: stat.size, modified: stat.mtimeMs, digest: stat.isFile() ? digest(readFileSync(path).toString("base64")) : null };
-      } catch (error) {
-        if (error.code === "ENOENT") return null;
-        throw error;
-      }
-    };
+    const fileStamp = relative => readGuardInputStamp(join(cwd, relative));
     return {
-      policy: "host-guards-v1",
+      policy: "host-guards-v2",
       repository: realpathSync(cwd),
       head: git(["rev-parse", "HEAD"]),
       tree: git(["rev-parse", "HEAD^{tree}"]),
