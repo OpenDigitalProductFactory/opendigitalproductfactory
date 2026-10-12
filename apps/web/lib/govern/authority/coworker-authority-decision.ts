@@ -6,6 +6,7 @@ import { effectiveApprovalExpiry } from "@/lib/coworker/approval-lifetime";
 
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import type { AuthorResearchPolicyBinding } from "@/lib/build/author-research-policy-binding";
 
 import {
   canAccessAuthoritySubject,
@@ -57,6 +58,7 @@ export type CoworkerAuthorityReasonCode =
   | "approval-not-active";
 
 export type CoworkerApprovalBinding = {
+  authorResearchBinding?: AuthorResearchPolicyBinding;
   actingHumanUserId: string;
   actingAgentId: string;
   chainId: string | null;
@@ -141,6 +143,8 @@ export type CoworkerAuthorityInput = {
     /** Immutable server-validated review scope; never sourced from tool args. */
     initiativeReviewBinding?: InitiativeReviewBinding;
   } | null;
+  /** Separate server-owned author fact; never independent-review steering. */
+  authorResearchBinding?: AuthorResearchPolicyBinding | null;
   rawParams: Record<string, unknown>;
   approval?: {
     envelopeId?: string;
@@ -278,8 +282,8 @@ function fingerprint(value: unknown): string {
 
 /** The exact-call fingerprint an approval binds to (BI-12E5DD91: the
  *  approved-request runner proves stored arguments are the approved ones). */
-export function fingerprintCoworkerInput(rawParams: Record<string, unknown>): string {
-  return fingerprint(rawParams);
+export function fingerprintCoworkerInput(rawParams: Record<string, unknown>, authorResearchBinding?: AuthorResearchPolicyBinding | null): string {
+  return fingerprint(authorResearchBinding ? { params: rawParams, authorResearchBinding } : rawParams);
 }
 
 function normalize(value: string | null | undefined): string | null {
@@ -298,6 +302,7 @@ export function buildCoworkerApprovalBinding(
   }
 
   return {
+    ...(input.authorResearchBinding ? { authorResearchBinding: input.authorResearchBinding } : {}),
     actingHumanUserId: humanId,
     actingAgentId: agentId,
     chainId: normalize(input.delegation?.chainId),
@@ -305,7 +310,7 @@ export function buildCoworkerApprovalBinding(
     toolName: input.action.toolName.trim(),
     subject: input.subject ?? null,
     routeContext: normalize(input.action.routeContext),
-    inputFingerprint: fingerprintCoworkerInput(input.rawParams),
+    inputFingerprint: fingerprintCoworkerInput(input.rawParams, input.authorResearchBinding),
     sensitivity: input.dataPolicy.sensitivity,
     decisionVersionFingerprint: fingerprint(
       [...(input.dataPolicy.decisionVersionIds ?? [])].sort(),

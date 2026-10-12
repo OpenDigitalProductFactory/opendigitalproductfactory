@@ -12,6 +12,8 @@ import {
 } from "./receipt-schema";
 import type { ReadinessProfile } from "./types";
 import { resolveReviewerIdentity } from "./reviewer-identity";
+import { resolveAuthorResearchPolicyBinding } from "@/lib/build/author-research-policy-binding";
+import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 
 type ReceiptHistoryRow = { payload: unknown };
 
@@ -53,6 +55,8 @@ export async function recordInitiativeGateReceipt(args: {
   tokenScope: string | null;
   requiresIndependentReviewer?: boolean;
   selectedProfile?: ReadinessProfile;
+  /** Exact dispatched tool inputs, supplied by the governed pack, not a policy claim. */
+  authorizationParams?: Record<string, unknown>;
 }): Promise<RecordInitiativeGateReceiptResult> {
   if (args.gate === "spec-approval" && args.decision === "pass") {
     return {
@@ -85,7 +89,9 @@ export async function recordInitiativeGateReceipt(args: {
 
   const authority = await prisma.authorizationDecisionLog.findUnique({
     where: { decisionId: args.authorityDecisionId },
-    select: { decisionId: true, decision: true, actionKey: true, policyVersion: true, organizationId: true },
+    select: { decisionId: true, decision: true, actionKey: true, policyVersion: true, organizationId: true,
+      rationale: true, humanContextRef: true, agentContextRef: true, objectRef: true, routeContext: true,
+      delegationGrantId: true },
   });
   if (!authority || authority.decision !== "allow" || authority.actionKey !== args.actionKey) {
     return { ok: false, code: "AUTHORIZATION_DENIED", error: "The current tool call has no matching allow decision." };
@@ -108,10 +114,14 @@ export async function recordInitiativeGateReceipt(args: {
     };
   }
   const reviewerPrincipalId = reviewer.principalId;
+  const rationale = authority.rationale && typeof authority.rationale === "object" && !Array.isArray(authority.rationale)
+    ? authority.rationale as Record<string, unknown> : {};
+  const authorPolicy = rationale.authorResearchBinding != null;
   const artifact = await resolveInitiativeArtifact({
     locator: args.artifactRef,
     subject: { kind: "backlog-item", id: item.itemId },
     organizationId: authority.organizationId ?? item.organizationId,
+    allowHumanResearchAuthor: authorPolicy && args.gate === "research" && args.requiresIndependentReviewer === false,
   });
   if (!artifact.ok) return artifact;
 
@@ -132,6 +142,7 @@ export async function recordInitiativeGateReceipt(args: {
     const lockedItem = await tx.backlogItem.findUnique({
       where: { id: item.id },
       select: {
+        organizationId: true,
         type: true,
         source: true,
         workType: true,
@@ -143,6 +154,45 @@ export async function recordInitiativeGateReceipt(args: {
       },
     });
     if (!lockedItem) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "The governed initiative no longer exists." };
+    if (authorPolicy) {
+      if ((lockedItem.organizationId ?? null) !== (authority.organizationId ?? null)) {
+        return { ok: false, code: "AUTHORIZATION_DENIED", error: "The initiative authority scope changed before publication." };
+      }
+      const current = args.authorizationParams && args.gate === "research" && args.requiresIndependentReviewer === false
+        && fingerprintCoworkerInput(args.authorizationParams) === fingerprintCoworkerInput({
+          itemId: args.itemId, gate: args.gate, decision: args.decision, artifactRef: args.artifactRef,
+          reason: args.reason, findings: args.findings, resolvedFindingRefs: args.resolvedFindingRefs,
+        })
+        && authority.humanContextRef === args.reviewerUserId && authority.agentContextRef === args.reviewerAgentId
+        && authority.objectRef === `backlog-item:${item.itemId}`
+        ? await resolveAuthorResearchPolicyBinding({ toolName: args.actionKey, params: args.authorizationParams,
+            userId: args.reviewerUserId, agentId: args.reviewerAgentId!, itemId: item.itemId,
+            routeContext: authority.routeContext }, tx)
+        : null;
+      const expiry = typeof rationale.expiresAt === "string" ? Date.parse(rationale.expiresAt) : NaN;
+      const judgment = typeof rationale.interactionId === "string"
+        ? await tx.decisionInteraction.findUnique({ where: { interactionId: rationale.interactionId },
+            select: { profileVersion: { select: { versionId: true } }, profile: { select: { currentVersionId: true } } } })
+        : null;
+      const delegation = authority.delegationGrantId
+        ? await tx.delegationGrant.findFirst({ where: { OR: [{ id: authority.delegationGrantId }, { grantId: authority.delegationGrantId }] },
+            select: { status: true, validFrom: true, expiresAt: true, grantorUserId: true,
+              workflowKey: true, objectRef: true, maxUses: true, useCount: true,
+              granteeAgent: { select: { agentId: true } } } }) : null;
+      if (!current || !Number.isFinite(expiry) || expiry <= Date.now()
+        || (rationale.interactionId && (!judgment || judgment.profileVersion.versionId !== authority.policyVersion
+          || judgment.profile.currentVersionId !== authority.policyVersion))
+        || (authority.delegationGrantId && (!delegation || delegation.status !== "active"
+          || delegation.validFrom.getTime() > Date.now() || delegation.expiresAt.getTime() <= Date.now()
+          || (delegation.workflowKey && delegation.workflowKey !== args.actionKey)
+          || (delegation.objectRef && delegation.objectRef !== authority.objectRef)
+          || (delegation.maxUses !== null && delegation.useCount >= delegation.maxUses)
+          || delegation.grantorUserId !== args.reviewerUserId || delegation.granteeAgent.agentId !== args.reviewerAgentId))
+        || fingerprintCoworkerInput(args.authorizationParams!, current) !== rationale.artifactFingerprint
+        || current.valueDigest !== artifact.artifact.digest) {
+        return { ok: false, code: "AUTHORIZATION_DENIED", error: "Author research evidence or current authority changed before publication." };
+      }
+    }
     const history = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: item.id, kind: "initiative_gate_receipt", gateKey },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
@@ -211,6 +261,10 @@ export async function recordInitiativeGateReceipt(args: {
       authoritativeProfile,
     });
     if (!validated.ok) return { ok: false, code: validated.code, error: validated.error };
+
+    if (authorPolicy && Date.parse(String(rationale.expiresAt)) <= Date.now()) {
+      return { ok: false, code: "AUTHORIZATION_DENIED", error: "Author research authority expired before append." };
+    }
 
     await tx.backlogItemActivity.create({
       data: {

@@ -18,7 +18,7 @@ One atomic deliverable: a valid author research receipt cannot be published unle
 
 Verification: resolve the claimed change-impact tests before Red, then regressions for eligible owner research, missing start approval remaining unchanged, null/unknown agent without invented independence, foreign/stale/malformed/unavailable artifact, revoked grant, removed participant, restricted data and propose policy. Run resolver, artifact, policy-projector and authority suites plus both TypeScript programs and the returned guards. Obtain an independent exact-source assessment before publication. Protected DCO, cloud checks and merge queue remain required. Native review and live acceptance are not inferred from source tests.
 
-Current status: design and WWMD option assessment; no implementation or approval sweep. Root release lane retains canonical deployment and overall BI acceptance. Failed-reader recovery belongs to the existing provider/recovery case and is separate.
+Current status: source implementation and local verification; no approval sweep. Root release lane retains canonical deployment and overall BI acceptance. Failed-reader recovery belongs to the existing provider/recovery case and is separate.
 
 ## Decision and coverage
 
@@ -34,7 +34,7 @@ The original parent BI acceptance criteria remain open and are quoted here for s
 - Verified merge triggers truthful Workroom closeout; provider outage or stale projection yields one recoverable blocker, not success.
 - Metrics capture PR-open-to-ready, ready-to-merge, follow-up commits, findings per kLOC, takeover count, and human touches.
 
-This scoped follow-up reduces unnecessary author-research human touches in the existing review tail; it does not complete the parent's controller, interruption, metrics or live acceptance obligations. Coverage receipt remains pending on the immutable plan. Rollback is the bounded author-binding eligibility and non-independent research resolver support; preserve existing judgments/audit rows and restore ordinary approval for future calls without deleting history.
+This scoped follow-up reduces unnecessary author-research human touches in the existing review tail; it does not complete the parent's controller, interruption, metrics or live acceptance obligations. Valid atomic plan coverage cmv5oiok8dddo01mwj6og4xcj was recorded against immutable plan fd57ffbbf663f8116a351108449641a9329092ee and approved parent baseline 524959f8-8508-4c5a-afbf-8bc285f77587. It retains the separate unaccepted parent dependencies below. Rollback is the bounded author-binding eligibility and non-independent research resolver support; preserve existing judgments/audit rows and restore ordinary approval for future calls without deleting history.
 
 ### Existing parent coverage dependencies
 
