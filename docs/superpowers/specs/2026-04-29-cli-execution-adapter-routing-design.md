@@ -870,6 +870,55 @@ review into a pass or bypass protected publication, grants, independent review,
 scope ownership, build gates or runtime integrity. Any unavailable review stays
 inconclusive. This scope expires when this repair merges or is abandoned.
 
+### Availability follow-through (BI-EDF1BD54, 2026-10-12)
+
+On canonical `007eef1a3bc035a5f7906cf92cd2432819695534`, the stdout
+classifier raises `rate_limit` but never calls `recordCliRateLimit`. Only the
+stderr branch records exhaustion. The existing recorder writes provider
+capacity only for resets longer than its pool cooldown cap. Consequently a
+recognized stdout quota can leave both the dispatch pool and the next routing
+decision reporting availability.
+
+The artifact review's original and recovery windows on October 11 have eight
+`RouteOutcome` rate-limit failures across Opus and Sonnet on `anthropic-sub`.
+The provider's available snapshot remained dated October 8, with no Claude pool
+row. The preserved bounded banner is `You've hit your weekly limit · resets
+4pm (UTC)`. It supplies no date: do not invent an October 13 reset from it.
+This is separate from local context admission and model behavior conformance.
+
+Ordered atomic fix for Workroom `WC-C6E10155`:
+
+1. Reproduce the missing stdout observation and ordering through the real CLI
+   adapter/fallback harness. On the unchanged base, two tests fail because the
+   recorder is called zero times; six existing fallback tests pass. A separate
+   pool test fails because a time-only weekly banner produces no provider
+   capacity observation. This rules out banner recognition and fallback
+   classification as the remaining defect.
+2. Await the existing pool recorder after a classified stdout quota and before
+   exposing the error to fallback. Preserve the original inference error,
+   successful content, unknown-failure handling and authority checks.
+3. Have the recorder await both existing pool and provider capacity writes.
+   Preserve known long reset dates and shared-account scoping. For an unknown
+   reset date, record a bounded policy backoff with heuristic confidence;
+   distinguish it from a provider-authoritative reset. Do not infer a day from
+   a clock-only banner or use an unrelated weekly reset as an organization
+   spend-cap reset. Persistence errors remain non-fatal to error propagation.
+4. Verify persistence ordering, unavailable-peer exclusion, bounded expiry,
+   successful prose, explicit long resets and record-write failure. Run the
+   graph-linked CLI, pool, capacity-drain and weekly collector tests, web source
+   and test typechecks, applicable guards and the canonical exact-tree gate.
+5. Obtain independent review, publish a DCO-signed PR through the merge queue,
+   deploy canonically, and verify existing affected review recovery. Preserve
+   any failed behavior probe and unavailable verdict as such. Roll back through
+   a reviewed revert if availability or fallback behavior regresses.
+
+This is one atomic correction to the existing CLI quota observation contract;
+the adapter and recorder changes are not independently sufficient. No new
+schema, provider enablement, credentials, budgets, privacy policy, review
+identity or retry authority is introduced. Existing controls still decide
+which fallback is eligible; if none is eligible, the result remains a truthful
+infrastructure failure.
+
 ## 18. References
 
 - [Coworker Substrate Status Review](../audits/2026-04-29-cli-substrate-status-review.md) — the audit this spec promotes
