@@ -31,7 +31,7 @@
 // free dry-run of routeEndpointV2) so its prediction matches what actually runs.
 
 import { prisma } from "@dpf/db";
-import { buildPhaseRouteOptions } from "@/lib/build/build-phase-route-options";
+import { backgroundRouteOptions } from "./background-route-options";
 import { previewRoute, type RouteAndCallOptions } from "@/lib/inference/routed-inference";
 import {
   classifyDispatchFailure,
@@ -191,7 +191,7 @@ async function resolveRoutedPhase(args: {
     parentRef: {},
   });
   // Preview the same completed-response contract used by background callers.
-  const routeOptions = buildPhaseRouteOptions({
+  const routeOptions = backgroundRouteOptions({
     ...routeContextFromActivity(activity),
     activityContract: activity,
     ...args.opts,

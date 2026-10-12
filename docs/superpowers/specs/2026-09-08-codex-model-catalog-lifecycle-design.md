@@ -238,8 +238,10 @@ models without turning catalog history into availability claims.
 ### Background phase forecast contract — 2026-10-12
 
 The Build Studio phase forecast must compose its preview options through the
-existing `buildPhaseRouteOptions` helper, as the background plan and review
-callers already do. These phases consume a completed response and do not require
+shared `backgroundRouteOptions` helper. The existing `buildPhaseRouteOptions`
+module re-exports this helper for background plan and review callers, preserving
+their imports while keeping inference independent of build orchestration. These
+phases consume a completed response and do not require
 token streaming. Leaving the preview on the interactive default incorrectly
 excludes otherwise eligible endpoints whose streaming capability is unknown or
 false, then reports a blocked phase that differs from the actual caller.
