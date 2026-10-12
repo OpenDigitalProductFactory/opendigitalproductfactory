@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles, getRecipesForProvider, getModelClassCounts, getTokenSpendByProvider } from "@/lib/ai-provider-data";
 import { ProviderDetailForm } from "@/components/platform/ProviderDetailForm";
+import { ProviderRoutingControlPanel } from "@/components/platform/ProviderRoutingControlPanel";
+import { loadProviderRoutingControls } from "@/lib/inference/provider-routing-control-data";
 import { ProviderCostSourcePanel } from "@/components/platform/ProviderCostSourcePanel";
 import { getInfraCIs, prisma } from "@dpf/db";
 import { getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
@@ -136,6 +138,9 @@ export default async function ProviderDetailPage({ params }: Props) {
   const session = await auth();
   const user = session?.user;
   const canWrite = !!user && can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections");
+  const routingView = pw.provider.endpointType !== "service"
+    ? (await loadProviderRoutingControls([pw], new Map([[providerId, models.length]]), now)).get(providerId)
+    : null;
   const showPosture = shouldShowProviderAccountPosture(providerId, pw.provider.endpointType);
   // Break-glass overrides (BI-FA412D44) — operator-only read; empty for everyone
   // else and on any error, so a read-only viewer never triggers the capability throw.
@@ -165,7 +170,7 @@ export default async function ProviderDetailPage({ params }: Props) {
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <Link href="/platform/ai/providers" style={{ color: "var(--dpf-muted)", fontSize: 12 }}>← External Services</Link>
+        <Link href="/platform/ai/providers" style={{ color: "var(--dpf-muted)", fontSize: 12 }}>← Providers</Link>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--dpf-text)", margin: "6px 0 2px" }}>{pw.provider.name}</h1>
         <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 4 }}>
           <span style={{ fontSize: 12, color: "var(--dpf-muted)", fontFamily: "monospace" }}>{pw.provider.providerId}</span>
@@ -193,6 +198,8 @@ export default async function ProviderDetailPage({ params }: Props) {
           </div>
         )}
       </div>
+
+      {routingView && <ProviderRoutingControlPanel pw={pw} view={routingView} canWrite={canWrite} />}
 
       {hardwareInfo && (
         <OllamaHardwareInfo
@@ -288,11 +295,11 @@ export default async function ProviderDetailPage({ params }: Props) {
               BEFORE the user clicks Connect — eliminates the silent
               :3000 → :1455 origin divergence that the shared OpenAI
               Codex/ChatGPT OAuth client requires today. */}
-          <OAuthPortMismatchBanner
+          {providerId !== "chatgpt" && <OAuthPortMismatchBanner
             oauthRedirectUri={pw.provider.oauthRedirectUri ?? null}
             providerLabel={pw.provider.name ?? pw.provider.providerId}
-          />
-          {pw.credential && (
+          />}
+          {pw.credential && providerId !== "chatgpt" && (
             <OAuthConnectionStatus
               credential={pw.credential}
               authMethod={pw.provider.authMethod}

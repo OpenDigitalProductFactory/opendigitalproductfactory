@@ -8,7 +8,6 @@ import { startProviderOAuth, disconnectProviderOAuth } from "@/lib/actions/provi
 import { ConnectGrokCard } from "./ConnectGrokCard";
 import type { ProviderWithCredential, DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
 import { ModelSection } from "@/components/platform/ModelSection";
-import { ProviderStatusToggle } from "@/components/platform/ProviderStatusToggle";
 
 // EP-INF-006: Routing profile shape passed through to ModelSection → ModelCard
 type RoutingProfile = {
@@ -48,6 +47,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const [isPending, startTransition] = useTransition();
   const isClaudeSubscription = provider.providerId === "anthropic-sub";
   const isZaiCodingProvider = provider.providerId === "zai-coding";
+  const isSharedOpenAiConsumer = provider.providerId === "chatgpt";
 
   // Secrets are write-only — never sent from server. Empty = no change on save.
   const [secretRef, setSecretRef]                   = useState("");
@@ -216,11 +216,6 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         </p>
       </div>
 
-      {/* Status + toggle */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
-        <ProviderStatusToggle providerId={provider.providerId} initialStatus={provider.status} initialPause={provider.operatorPause} initialConnectionStatus={provider.defaultConnectionStatus} />
-        <span style={{ color: "var(--dpf-muted)", fontSize: 12 }}>{provider.costModel === "compute" ? "compute-priced" : "token-priced"}</span>
-      </div>
 
       {/* Model families — hidden during initial setup, shown as advanced after profiling */}
       {showDiagnostics && hasProfiles && (
@@ -456,7 +451,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         </>
       )}
 
-      {selectedAuthMethod === "oauth2_authorization_code" && (
+      {selectedAuthMethod === "oauth2_authorization_code" && !isSharedOpenAiConsumer && (
         <div style={{ marginBottom: 16 }}>
           {/* BI-2DD7042A: judge connected/expired by the tokenExpiresAt TIMESTAMP,
               not the stored status enum — the enum only flips to "expired" when a

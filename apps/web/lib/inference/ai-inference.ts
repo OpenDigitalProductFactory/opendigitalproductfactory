@@ -133,8 +133,18 @@ async function resolveExecutionBaseUrl(
   return provider.baseUrl ?? provider.endpoint;
 }
 
-async function readEnabledLocalProvider(providerId: string) {
-  if (!isLocalProviderId(providerId)) return null;
+async function readEnabledRoutingProvider(providerId: string) {
+  if (!isLocalProviderId(providerId)) {
+    const connection = await prisma.aiProviderConnection.findUnique({
+      where: { connectionId: `provider-default-${providerId}` }, select: { status: true },
+    });
+    // Legacy direct callers can predate the default account. An existing account
+    // is authoritative, including when this selection waited in admission.
+    if (connection && !["active", "degraded"].includes(connection.status)) {
+      throw new InferenceError("Provider account is not enabled for routing", "provider_error", providerId);
+    }
+    return null;
+  }
   const [provider, connection] = await Promise.all([
     prisma.modelProvider.findUnique({ where: { providerId } }),
     prisma.aiProviderConnection.findUnique({
@@ -222,7 +232,7 @@ export async function callProvider(
   // the shared adapter boundary so direct, agentic, evaluation and fallback
   // callers cannot start a local model while governed local CI owns the host.
   // Revalidate an older routing selection before waiting for or using local capacity.
-  const localProvider = await readEnabledLocalProvider(providerId);
+  const localProvider = await readEnabledRoutingProvider(providerId);
   await assertProviderDispatchCapacity(providerId);
   // Lease ownership is routing policy. Whether the card is free is an inference
   // fact, so it stays in this layer (routing may not import inference).
@@ -342,7 +352,7 @@ export async function callProvider(
   try {
     // Queued work has not started inference yet. A disable during admission
     // invalidates its earlier selection; finally still releases the slot.
-    await readEnabledLocalProvider(providerId);
+    await readEnabledRoutingProvider(providerId);
     result = await adapter.execute({
       providerId,
       modelId,

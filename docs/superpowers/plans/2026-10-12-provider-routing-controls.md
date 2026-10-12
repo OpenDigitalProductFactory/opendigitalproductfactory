@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Provider navigation and routing controls
 
 Backlog: BI-E2BDE90B. Workroom: WC-F0807EB1. Medium platform repair.
@@ -34,7 +37,7 @@ These phases are internal sequencing for one atomic provider-management repair: 
 
 Requirement reference: Acceptance above. Contract reference: `AiProviderConnection.status` plus `ScheduledJob` pause generation. Flow reference: `/platform/ai/providers` to `/platform/ai/providers/chatgpt` and reciprocal `/platform/ai/providers/codex`. Verification reference: `provider-operator-pause.test.ts`, `ProviderStatusToggle.test.tsx`, `ServiceRow.test.tsx`, source typecheck and shared-runtime pregate.
 
-Coverage receipt pending immutable plan publication; implementation waits for governed coverage.
+Coverage receipt `cmv5o3et9cvzs01mwbzskhyvj`: atomic, parent BI-E2BDE90B, no independent children/dependencies. Immutable plan commit `7d1d302d7a4e9f794be91271218a4b4aab1135c4`, blob `1e8c1a433606b64bdabe0ce34c036bce61ed1a94`. Implementation admission IRD-C22FC5649796 passed.
 
 ## Risks and rollback
 

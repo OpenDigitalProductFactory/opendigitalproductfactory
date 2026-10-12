@@ -36,7 +36,7 @@ export type ProviderOnboardingRecommendation = {
 };
 
 export function resolveRuntimeConnectionStatus(providerStatus: string, connectionStatus: string): string {
-  if (connectionStatus === "disabled") return "disabled";
+  if (["disabled", "inactive", "paused"].includes(connectionStatus)) return connectionStatus;
   if (providerStatus === "active") return "active";
   return providerStatus;
 }

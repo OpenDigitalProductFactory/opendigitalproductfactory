@@ -103,6 +103,25 @@ describe("callProvider host-capacity boundary", () => {
       .rejects.toMatchObject({ code: "provider_error", message: "Local provider is not enabled for routing" });
     expect(assertProviderDispatchCapacity).not.toHaveBeenCalled();
   });
+  it("rejects a cloud request paused while it waits for an inference slot", async () => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "https://provider.example/v1", authMethod: "none" } as any);
+    const release = vi.fn();
+    let wake!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>(resolve => { entered = resolve; });
+    vi.mocked(acquireInferenceSlot).mockImplementationOnce(() => {
+      entered();
+      return new Promise<() => void>(resolve => { wake = () => resolve(release); });
+    });
+    const pending = callProvider("openai", "model-test", [], "system");
+    const rejected = expect(pending).rejects.toThrow("Provider account is not enabled for routing");
+    await waiting;
+    vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "paused" } as any);
+    wake();
+    await rejected;
+    expect(executeAdapter).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+  });
 
   it("rejects a disabled local provider even if its connection still appears active", async () => {
     vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "inactive" } as any);

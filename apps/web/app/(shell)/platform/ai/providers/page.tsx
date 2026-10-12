@@ -11,9 +11,9 @@ import { TokenSpendPanel } from "@/components/platform/TokenSpendPanel";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
 import { ServiceSection } from "@/components/platform/ServiceSection";
 import { ServiceRow } from "@/components/platform/ServiceRow";
-import { getAllCliPoolStatuses, formatWeeklyAllocationHint, type CliPoolState } from "@/lib/routing/cli-pool-status";
+import { getAllCliPoolStatuses } from "@/lib/routing/cli-pool-status";
 import { CliPoolStatusPanel } from "@/components/platform/CliPoolStatusPanel";
-import { cliAdapterTypeForProvider, deriveRoutingEligibility, type RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
+import { type RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
 import { getRecentBudgetEvents, countRecentRejections } from "@/lib/inference/budget-events-data";
 import { AgentBudgetEventsPanel } from "@/components/platform/AgentBudgetEventsPanel";
 import { LocalOnlyInferenceToggle } from "@/components/platform/LocalOnlyInferenceToggle";
@@ -24,21 +24,9 @@ import { resolveModelSelectionByPhase } from "@/lib/inference/phase-model-resolu
 import Link from "next/link";
 import { ProviderSuitabilityGuide } from "@/components/platform/ProviderSuitabilityGuide";
 import { loadProviderOnboardingRecommendation } from "@/lib/routing/provider-suitability/provider-onboarding-data";
-import { resolveRuntimeConnectionStatus } from "@/lib/routing/provider-suitability/onboarding-recommendation";
+import { loadProviderRoutingControls } from "@/lib/inference/provider-routing-control-data";
 import { getProviderSuitabilityTelemetryRollup } from "@/lib/actions/route-decision-logs";
 
-
-/**
- * Short, human reset hint for an exhausted CLI pool, e.g. "in ~5min".
- * Fills the routing-eligibility "rate_limited" reason on CLI-backed rows.
- */
-function poolResetHint(pool: CliPoolState): string | null {
-  const s = pool.secondsUntilReset;
-  if (s == null) return null;
-  if (s <= 0) return "any moment";
-  if (s < 60) return `in ~${s}s`;
-  return `in ~${Math.ceil(s / 60)}min`;
-}
 
 export default async function ProvidersPage() {
   const session = await auth();
@@ -85,65 +73,12 @@ export default async function ProvidersPage() {
   ]);
   const aiProviders = providers.filter((pw) => pw.provider.endpointType !== "service");
 
-  // BI-04E4F111: routing filters on AiProviderConnection.status, not
-  // ModelProvider.status — a provider whose only connection is disabled must
-  // not read "active" here while routing silently skips it. Fold the default
-  // connection's veto into the status the eligibility badge derives from.
-  const defaultConnections =
-    typeof prisma.aiProviderConnection?.findMany === "function"
-      ? await prisma.aiProviderConnection
-          .findMany({
-            where: { connectionId: { startsWith: "provider-default-" } },
-            select: { providerId: true, status: true },
-          })
-          .catch(() => [] as Array<{ providerId: string; status: string }>)
-      : [];
-  const connectionStatusByProvider = new Map(
-    defaultConnections.map((c) => [c.providerId, c.status] as const),
-  );
-
-  // Derive the single routing-eligibility state per provider from data already
-  // loaded above (status + credential + discovered models + CLI pool). This one
-  // answer drives the row badge and the section counts — replacing the old
-  // status-dot / "needs credentials" / billing "Not connected" muddle, and
-  // folding the separate CLI-pool box's signal into each CLI-backed row.
-  const cliPoolByAdapter = new Map(cliPoolStatuses.map((s) => [s.adapterType, s] as const));
-  const nowMs = now.getTime();
+  const routingControls = await loadProviderRoutingControls(aiProviders, new Map([...modelSummaries].map(([id, summary]) => [id, summary.totalModels])), now);
   const eligibilityById: Record<string, RoutingEligibility> = {};
   const weeklyHintById: Record<string, string | null> = {};
-  for (const pw of aiProviders) {
-    const p = pw.provider;
-    const adapterType = cliAdapterTypeForProvider(p.providerId);
-    const pool = adapterType ? cliPoolByAdapter.get(adapterType) : undefined;
-    const summary = modelSummaries.get(p.providerId);
-    const credentialExpired =
-      !!pw.credential?.tokenExpiresAt &&
-      new Date(pw.credential.tokenExpiresAt).getTime() < nowMs;
-    const connectionStatus = connectionStatusByProvider.get(p.providerId);
-    const connectionVetoed = p.status === "active" && connectionStatus === "disabled";
-    const eligibility = deriveRoutingEligibility({
-      status: connectionStatus != null
-        ? resolveRuntimeConnectionStatus(p.status, connectionStatus)
-        : p.status,
-      endpointType: p.endpointType,
-      category: p.category,
-      serviceKind: p.serviceKind ?? null,
-      authMethod: p.authMethod,
-      hasCredential: pw.credential?.hasUsableMaterial ?? false,
-      credentialExpired,
-      discoveredModelCount: summary?.totalModels ?? 0,
-      cliPoolExhausted: pool?.isExhausted ?? false,
-      cliPoolResetHint: pool ? poolResetHint(pool) : null,
-    });
-    eligibilityById[p.providerId] = connectionVetoed
-      ? {
-          ...eligibility,
-          reason:
-            "The provider is on, but its connection is disabled — routing skips it until you reconnect.",
-        }
-      : eligibility;
-    // Real remaining weekly subscription allocation, when a fresh snapshot exists.
-    weeklyHintById[p.providerId] = pool ? formatWeeklyAllocationHint(pool, now) : null;
+  for (const [id, view] of routingControls) {
+    eligibilityById[id] = view.eligibility;
+    weeklyHintById[id] = view.weeklyHint;
   }
 
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
@@ -230,6 +165,7 @@ export default async function ProvidersPage() {
                 <ServiceRow
                   key={pw.provider.providerId}
                   pw={pw}
+                  canWrite={canWrite}
                   eligibility={eligibilityById[pw.provider.providerId]!}
                   weeklyAllocationHint={weeklyHintById[pw.provider.providerId] ?? null}
                   {...(modelSummaries.has(pw.provider.providerId) ? { modelSummary: modelSummaries.get(pw.provider.providerId)! } : {})}

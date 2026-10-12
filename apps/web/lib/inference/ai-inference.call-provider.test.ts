@@ -11,6 +11,7 @@ const {
   mockProviderFetch,
 } = vi.hoisted(() => ({
   mockPrisma: {
+    aiProviderConnection: { findUnique: vi.fn() },
     modelProvider: {
       findUnique: vi.fn(),
     },
@@ -65,6 +66,7 @@ import { _setAdapterTelemetryWriteOverrideForTests } from "../routing/adapter-te
 describe("callProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "active" });
     mockStartTimer.mockReturnValue(vi.fn());
     mockAdapterExecute.mockResolvedValue({
       text: "ok",
@@ -73,6 +75,12 @@ describe("callProvider", () => {
       inferenceMs: 12,
       raw: {},
     });
+  });
+
+  it("does not dispatch a cloud provider while its account is paused", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "paused" });
+    await expect(callProvider("chatgpt", "model-under-test", [], "system")).rejects.toThrow("not enabled for routing");
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
   });
 
   it("omits async-operation metadata for a synchronous adapter result", async () => {

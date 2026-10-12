@@ -790,8 +790,8 @@
     "docsUrl": "https://platform.openai.com/docs",
     "consoleUrl": "https://platform.openai.com/settings/organization/billing",
     "billingLabel": "Included with ChatGPT subscription",
-    "costPerformanceNotes": "GPT chat models accessed via ChatGPT subscription OAuth. Activated automatically when Codex (OpenAI) is connected.",
-    "catalogVisibility": "hidden",
+    "costPerformanceNotes": "ChatGPT and Codex use one OpenAI sign-in. Manage authentication in Codex; manage traffic and routing restrictions on each provider's detail page.",
+    "catalogVisibility": "visible",
     "userFacing": {
       "plainDescription": "ChatGPT conversation models (GPT-4o) accessed through your OpenAI subscription. Activated automatically when you sign in to Codex.",
       "authExplained": "Uses the same sign-in as Codex — no separate configuration needed.",
