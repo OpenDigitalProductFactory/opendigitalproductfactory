@@ -911,7 +911,7 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
         chatHistory: [
           {
             role: "user",
-            content: "[Scheduled task: Discovery Taxonomy Gap Triage]\n\nTriage taxonomy gaps.",
+            content: "[Scheduled task: Discovery Taxonomy Gap Triage]\n\nCall the tool that does the next step in your first response. Do not write a plan or a status essay before that call. If the step is already done, say so in one sentence and stop.\n\nTriage taxonomy gaps.",
           },
         ],
       }),

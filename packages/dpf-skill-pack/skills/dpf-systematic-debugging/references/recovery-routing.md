@@ -12,4 +12,6 @@ Read this before a normal delivery gate when the platform or the gate itself is 
 
 PR protection, DCO, grant intersection, destructive-action and production-integrity controls remain mandatory. A recovery brief is not evidence that a gate ran. Preserve command outputs and source identity; report exactly what remains unverified.
 
+For unavailable semantic-review infrastructure, use `node scripts/gate-context.mjs --situation review-infrastructure-unavailable` and the source checkout's [publication procedure](../../../../../docs/architecture/build-gate-runbook.md#semantic-review-publication-and-infrastructure-recovery). It distinguishes receipt enforcement from shadow observations and preserves client review provenance. Reuse existing scoped operator authorization; record unavailable native review as unrun.
+
 With a repository checkout, the canonical detailed procedure is `docs/architecture/build-gate-runbook.md`; run `node scripts/gate-context.mjs --situation <situation>` for a concise route. With only this installed skill pack, read this reference first and obtain the repository's checked-in procedure before attempting an override.

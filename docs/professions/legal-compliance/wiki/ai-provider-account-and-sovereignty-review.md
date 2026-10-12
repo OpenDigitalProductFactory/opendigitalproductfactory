@@ -28,7 +28,7 @@ sources:
 
 Review the **connected account and execution channel**, not the provider name alone. Authentication or a successful model-list request establishes only that the credential works. It does not establish a business or enterprise plan, a controller-processor agreement, retention or no-training treatment, regional-processing enablement, or the identity of subprocessors.
 
-Until those facts are evidenced, a personal, consumer, individual, or unknown hosted connection is suitable only for public or synthetic material. Customer, employee, health, student, financial, privileged, source-code, security, and credential data stays on a governed non-egress path or is blocked.
+Until those facts are evidenced, a personal, consumer, individual, or unknown hosted connection is suitable for public or synthetic material, including public source-code development. Public development does not require business-account, contract or no-training evidence merely because it is code. Non-public customer, employee, health, student, financial, privileged, source-code, security, and credential data stays on a governed non-egress path or is blocked. Classify the actual payload: public source does not make embedded secrets, protected records or explicitly confidential code public.
 
 ## How to apply
 

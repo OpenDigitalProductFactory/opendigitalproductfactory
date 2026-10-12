@@ -7,9 +7,11 @@ It extends the [usability standards](../platform-usability-standards.md), not th
 runtime schema. Use the [scorecard](../testing/portal-ux-scorecard-template.md)
 for each route, persona, state and task combination.
 
-Operator direction, clarified 2026-09-06: allocate **80% to refactoring and
-consolidation, 20% to net-new capability**. This supersedes the earlier 20%
-refactoring allowance. The primary work is to collapse the existing spread of
+Operator direction, reconfirmed 2026-10-11: founder-funded shared platform work
+allocates **80% to refactoring and consolidation, 20% to new capability** under
+the [owner-scoped investment policy](../founder-kernel/wiki/principles/absorb-dont-adopt.md).
+Other funding scopes retain their own policy. This supersedes the earlier 20%
+platform refactoring allowance. The primary work is to collapse the existing spread of
 surfaces, repeated representations and unnecessary dependency burden. The
 net-new allocation is a ceiling for justified gaps, not a quota to fill.
 
@@ -200,8 +202,7 @@ competing skill. The navigation principles live in the spine.
    seam or missing task outcome defers implementation of that surface.
 3. **Implementation entry:** one BI, governed branch and PR-sized scope; current
    initiative readiness and immutable coverage receipts remain mandatory where
-   applicable. Allocate 80% of effort to refactoring/consolidation and at most
-   20% to justified net-new capability. Name what is merged, retired or removed,
+   applicable. Apply the owning scope's investment allocation. Name what is merged, retired or removed,
    including unnecessary per-item detail and external dependency paths.
 4. **Before merge:** existing source gates and UX-fit manifest plus measured
    before/after scorecard, browser task, failure/permission check, mobile and
@@ -247,7 +248,7 @@ The PR review distinguishes three outcomes:
 An unchanged baseline is not proof of good design. Refactoring slices declare
 which criteria they will improve and prove the improvement while preserving task
 outcomes and permissions. Do not silently rebaseline regressions. Track the
-80% refactoring / at most 20% justified net-new allocation across the program;
+owning scope's investment allocation across the program;
 individual PRs remain cohesive and need not artificially mix both work types.
 
 The author supplies impact and evidence; the PR reviewer records the criterion

@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -85,14 +85,16 @@ function fakeLaunchctl(home) {
 
 const resolveScript = `. "$ENV_LIB"; dpf_resolve_mcp_client_env "$INSTALL" || exit $?; printf '%s|%s' "$DPF_MCP_CLIENT_URL" "$DPF_MCP_CLIENT_CA_BUNDLE"`;
 
-test("the endpoint is <PUBLIC_URL>/api/mcp/v1?tier=full from the install .env, not a pre-set DPF_MCP_URL", NEEDS_BASH, () => {
+test("explicit process endpoint survives an HTTPS install origin without attaching its CA", NEEDS_BASH, () => {
   withHome(({ home, install }) => {
     writeRoot(home);
     writeFileSync(join(install, ".env"), 'PUBLIC_URL="https://desk.lan/"\n');
-    // A stale http endpoint from an earlier setup must not survive the canonical origin.
+    // The operator may select supported loopback OAuth while recovering TLS discovery.
     const out = bash(resolveScript, { home, env: { INSTALL: posix(install), DPF_MCP_URL: "http://127.0.0.1:3000/api/mcp/v1" } });
     assert.equal(out.status, 0, out.stderr);
-    assert.equal(out.stdout, `https://desk.lan/api/mcp/v1?tier=full|${defaultShellBundle(home)}`);
+    assert.equal(out.stdout, "http://127.0.0.1:3000/api/mcp/v1|");
+    const implicit = bash(resolveScript, { home, env: { INSTALL: posix(install) } });
+    assert.equal(implicit.stdout, `https://desk.lan/api/mcp/v1?tier=full|${defaultShellBundle(home)}`);
   });
 });
 
@@ -234,6 +236,17 @@ exec "$@"
 
 // --- Windows twin (PowerShell) ---------------------------------------------------
 
+test("Windows: explicit process endpoint survives an HTTPS install origin without attaching its CA", NEEDS_POWERSHELL, () => {
+  withHome(({ home, install }) => {
+    writeRoot(home);
+    writeFileSync(join(install, ".env"), "PUBLIC_URL=https://desk.lan\n");
+    const out = powershell(`. '${q(envLibPs)}'
+      $r = Resolve-DpfMcpClientEnv -InstallDir '${q(install)}' -ExplicitUrl 'http://127.0.0.1:3000/api/mcp/v1' -HomeDir '${q(home)}' -GetUserEnv { param($n) '' }
+      "$($r.McpUrl)|$($r.CaBundle)"`);
+    assert.equal(out, "http://127.0.0.1:3000/api/mcp/v1|");
+  });
+});
+
 function powershell(script) {
   const result = spawnSync(shell, ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" });
   assert.equal(result.status, 0, `${result.stderr}${result.stdout}`);
@@ -241,6 +254,63 @@ function powershell(script) {
 }
 
 const q = (value) => value.replaceAll("'", "''");
+
+function writeEndpointReaderFixture(install, extension) {
+  const scripts = join(install, "packages/dpf-skill-pack/scripts");
+  mkdirSync(scripts, { recursive: true });
+  const reader = posix(join(root, `packages/dpf-skill-pack/scripts/update-agent-toolchain.${extension}`));
+  const file = join(scripts, `update-agent-toolchain.${extension}`);
+  writeFileSync(file, extension === "sh"
+    ? `#!/bin/sh\n[ "$1" = "--print-existing-codex-mcp-url" ] || exit 79\nexec bash '${reader}' "$@"\n`
+    : `param([switch]$PrintExistingCodexMcpUrl)\nif (-not $PrintExistingCodexMcpUrl) { exit 79 }\n& '${q(reader)}' -PrintExistingCodexMcpUrl\nexit $LASTEXITCODE\n`);
+  return file;
+}
+
+for (const adapter of ["sh", "ps1"]) {
+  test(`${adapter}: bootstrap selects saved operator endpoint before install defaults and keeps explicit selection`, adapter === "sh" ? NEEDS_BASH : NEEDS_POWERSHELL, () => {
+    withHome(({ home, install }) => {
+      writeFileSync(join(install, ".env"), "PUBLIC_URL=https://desk.lan\n");
+      writeEndpointReaderFixture(install, adapter);
+      // Windows' python3 Store alias can install/update instead of running Python.
+      // Keep the real shell wrapper, but bind its interpreter inside this fixture.
+      const bin = join(home, "bin");
+      mkdirSync(bin);
+      const python = spawnSync(process.platform === "win32" ? "python" : "python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" });
+      assert.equal(python.status, 0, python.stderr);
+      writeFileSync(join(bin, "python3"), `#!/bin/sh\nexec '${posix(python.stdout.trim()).replaceAll("'", "'\\''")}' "$@"\n`);
+      chmodSync(join(bin, "python3"), 0o755);
+      const config = join(home, ".codex/config.toml");
+      mkdirSync(dirname(config), { recursive: true });
+      const source = readFileSync(join(root, `scripts/dpf-bootstrap-agent-toolchain.${adapter}`), "utf8");
+      const start = source.indexOf("# BI-2D545A0C (design 12.4.3):");
+      const end = source.indexOf(adapter === "sh" ? "SKILL_PACK_MANIFEST=" : "$SkillPackManifestPath", start);
+      const block = source.slice(start, end).replace("Resolve-DpfMcpClientEnv -InstallDir $RepoRoot",
+        `Resolve-DpfMcpClientEnv -InstallDir $RepoRoot -HomeDir '${q(home)}' -GetUserEnv { param($n) '' }`);
+      const run = (explicit = "") => {
+        if (adapter === "sh") {
+          const out = bash(`fail() { echo "$1" >&2; }; ${block}\nprintf '%s|%s' "$MCP_ENDPOINT" "$MCP_TRUST_BUNDLE"`, { home, env: {
+            SCRIPT_DIR: posix(join(root, "scripts")), REPO_ROOT: posix(install), CODEX_CONFIG_PATH: posix(config),
+            DPF_AGENT_TOOLCHAIN_HOME: posix(home), DPF_MCP_URL: explicit,
+            PATH: `${bin}${delimiter}${process.env.PATH}`,
+          } });
+          assert.equal(out.status, 0, out.stderr);
+          return out.stdout;
+        }
+        return powershell(`function Write-Fail2 { param($text) throw $text }
+          $ScriptDir = '${q(join(root, "scripts"))}'; $RepoRoot = '${q(install)}'; $CodexConfigPath = '${q(config)}'
+          $env:DPF_AGENT_TOOLCHAIN_HOME = '${q(home)}'; $env:DPF_MCP_URL = '${q(explicit)}'
+          $env:DPF_PKI_TRUST_BUNDLE = ''; $env:NODE_EXTRA_CA_CERTS = ''
+          ${block}
+          "$McpEndpoint|$McpTrustBundle"`);
+      };
+      assert.equal(run(), "https://desk.lan/api/mcp/v1?tier=full|");
+      writeFileSync(config, '[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1?tier=full"\n');
+      assert.equal(run(), "http://127.0.0.1:3000/api/mcp/v1?tier=full|");
+      assert.equal(run("https://explicit.lan/api/mcp/v1"), "https://explicit.lan/api/mcp/v1|");
+      assert.equal(readFileSync(config, "utf8"), '[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1?tier=full"\n');
+    });
+  });
+}
 
 test("Windows: DPF_MCP_URL and NODE_EXTRA_CA_CERTS go to the User env once; a rerun writes nothing", NEEDS_POWERSHELL, () => {
   withHome(({ home, install }) => {
@@ -288,7 +358,7 @@ test("both installers persist the client endpoint after HTTPS setup, on every ru
   assert.ok(sh.indexOf("dpf_persist_mcp_client_env") < sh.indexOf('step "Bringing up the platform"'));
 });
 
-test("the agent-toolchain bootstrap reads PUBLIC_URL through the shared module, not a pre-set https DPF_MCP_URL", () => {
+test("the agent-toolchain bootstrap uses the shared endpoint and trust resolver", () => {
   const ps = readFileSync(join(root, "scripts/dpf-bootstrap-agent-toolchain.ps1"), "utf8");
   assert.match(ps, /installer\\lib\\mcp-client-env\.ps1/);
   assert.match(ps, /Resolve-DpfMcpClientEnv -InstallDir \$RepoRoot/);
@@ -328,7 +398,9 @@ test("saved endpoint is below explicit process URL and canonical install origin"
     assert.equal(out.stdout, "http://explicit.lan/mcp|");
     writeFileSync(join(install, ".env"), "PUBLIC_URL=https://install.lan\n");
     const canonical = bash(resolveScript, { home, env: { INSTALL: posix(install), DPF_MCP_URL: "https://explicit.lan/mcp" } });
-    assert.equal(canonical.stdout, "https://install.lan/api/mcp/v1?tier=full|");
+    assert.equal(canonical.stdout, "https://explicit.lan/mcp|");
+    const implicit = bash(resolveScript, { home, env: { INSTALL: posix(install) } });
+    assert.equal(implicit.stdout, "https://install.lan/api/mcp/v1?tier=full|");
   });
 });
 

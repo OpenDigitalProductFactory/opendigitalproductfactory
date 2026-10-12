@@ -55,8 +55,8 @@ Blocked on the operator decision in design 12.5 for networks without DNS. For ne
 
 ## S6 — Grok credential (BI-5BCDB07C)
 
-1. Red: container-side script creates a `credentials` client idempotently for the operator; refresher exchanges and rewrites the Grok credential before expiry; revocation stops it.
-2. Green: implement, reusing `scripts/lib/mcp-credential.mjs` `exchangeClientCredentials` and the PAT auto-mint container pattern.
+1. Red: container-side script creates a `credentials` client idempotently for the operator, with scopes `dpf.read`, `dpf.work` and `dpf.build`; refresher exchanges `client_credentials` and rewrites Grok's `bearer_token_file` before expiry (design 12.4.7); revocation stops it.
+2. Green: implement, reusing `scripts/lib/mcp-credential.mjs` `exchangeClientCredentials` and the PAT auto-mint container pattern. No personal access token is minted.
 
 ## Completion gate per slice
 
