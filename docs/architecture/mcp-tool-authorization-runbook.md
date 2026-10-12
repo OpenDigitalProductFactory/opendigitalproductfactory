@@ -82,6 +82,14 @@ assistant attribution. Older connections missing approved identity need one
 consent repair through the client's reconnect flow. Never assign an old room
 to its caller or substitute a legacy token to repair OAuth.
 
+External evidence capture resolves the same authenticated human and assistant
+principals as other Workroom writers. A newly captured room records that ownership
+before returning its identity. Backlog and session binding are independent:
+adoption may fill a missing session reference on a room already bound to its
+backlog item, but cannot replace a recorded session. The conditional write also
+refuses a concurrent session assignment. Previously unowned rooms still require
+the existing owner-recovery path; capture does not manufacture their admission.
+
 **Status:** procedure reference. The *rules* — the authorization principle, scope escalation, and grant enforcement — live in [`AGENTS.md`](../../AGENTS.md) §8/§8a and stay always-on. This file holds transport detail, token issuance and rotation, worktree MCP sync, and the grant-intersection mechanics. Relocated from §8 by BI-0020D511 Phase 1; no rule was dropped.
 
 External coding agents use the real MCP JSON-RPC 2.0 transport at `/api/mcp/v1` (`apps/web/app/api/mcp/v1/route.ts`). The older `/api/mcp/tools` and `/api/mcp/call` endpoints remain for in-portal coworker chat and are not the external MCP client contract.
