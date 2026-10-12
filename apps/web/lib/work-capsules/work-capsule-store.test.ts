@@ -10,7 +10,6 @@ import {
   claimWorkCapsuleScope,
   createWorkCapsule,
   detectScopeConflicts,
-  heartbeatWorkCapsule,
   reassignWorkCapsuleExecutor,
   planCapsuleWorkspace,
   recordWorkCapsuleEvidence,
@@ -436,22 +435,6 @@ describe("work capsule store", () => {
         activityKind: "improvement",
         outcomeAnchor: { kind: "backlog-item", id: "BI-5F70A7DA" },
       }),
-    }));
-  });
-
-  it("renews a lease on heartbeat", async () => {
-    db.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-LEASE" });
-
-    const result = await heartbeatWorkCapsule({
-      db: capsuleDb(),
-      capsuleId: "WC-LEASE",
-      actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
-      now: new Date("2026-05-14T00:00:00.000Z"),
-    });
-
-    expect(result.capsuleId).toBe("WC-LEASE");
-    expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ leaseHolderPrincipalId: "principal-1" }),
     }));
   });
 

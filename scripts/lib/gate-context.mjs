@@ -67,6 +67,7 @@ export function buildTaskBrief(situation = "normal") {
     "upgrade-failed": ["recovery", "Inspect upgrade status/logs with existing authority; repair source and run local tests before the independent recovery procedure.", recovery],
     "mcp-unavailable": ["recovery", "Preserve local evidence and continue authorized source work; reconcile coordination when MCP returns.", recovery],
     "ci-unavailable": ["recovery", "Classify the infrastructure evidence; inspect the checked-in audited gate override and its prerequisites. Record gate-unrun.", recovery],
+    "review-infrastructure-unavailable": ["recovery", "Read the checked-in semantic review publication policy and validate the exact tree. Preserve independent assessments; record unavailable native review as unrun. Reuse existing scoped operator authorization.", "docs/architecture/build-gate-runbook.md"],
     "permission-denied": ["authorization", "Stop the denied operation; follow the returned token, coworker grant, role or clearance remedy. Never substitute shell/DB access.", recovery],
     "break-fix-occupied": ["coordination", "Inspect owner and liveness; reconcile a stale claim only through supported coordination. Occupancy is not an outage.", recovery],
   };

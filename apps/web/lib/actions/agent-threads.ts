@@ -6,6 +6,10 @@ import { THREAD_ERRORS, ThreadSpawnError } from "./agent-thread-errors";
 import { dispatchAgentThread } from "./agent-thread-dispatcher";
 import { getQuiescenceLevel, QuiescingError } from "@/lib/self-upgrade/quiescence";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
+import { TERMINAL_TASK_STATE_LIST } from "@/lib/tak/task-states";
+
+/** Children a parent may have open at once; finished children free their place (BI-A0BFA63E). */
+const MAX_OPEN_CHILDREN = 5;
 
 type SpawnWorkThreadOptions = {
   title?: string;
@@ -55,8 +59,19 @@ export async function spawnWorkThread(
       if (parent.parentThreadId) {
         throw new ThreadSpawnError(THREAD_ERRORS.DEPTH_LIMIT_EXCEEDED, "Child threads cannot spawn work threads.");
       }
-      if (parent.childCount >= 5) {
-        throw new ThreadSpawnError(THREAD_ERRORS.CHILD_LIMIT_EXCEEDED, "Parent thread has reached the child limit.");
+      // `childCount` is a lifetime counter; the limit is on children still open.
+      const children = await tx.agentThread.findMany({
+        where: { parentThreadId: parent.id },
+        select: { id: true },
+      });
+      const openChildren = children.length === 0 ? 0 : await tx.taskRun.count({
+        where: {
+          threadId: { in: children.map((child) => child.id) },
+          status: { notIn: [...TERMINAL_TASK_STATE_LIST] },
+        },
+      });
+      if (openChildren >= MAX_OPEN_CHILDREN) {
+        throw new ThreadSpawnError(THREAD_ERRORS.CHILD_LIMIT_EXCEEDED, "Parent thread has reached the open-child limit.");
       }
       if (parent.cancelledAt) {
         throw new ThreadSpawnError(THREAD_ERRORS.PARENT_CANCELLED, "Cancelled parent threads cannot spawn work.");

@@ -23,6 +23,7 @@ vi.mock("@dpf/db", () => ({
     phaseHandoff: { findMany: vi.fn() },
     deliberationRun: { findMany: vi.fn() },
     agentActionProposal: { findMany: vi.fn() },
+    userFact: { findMany: vi.fn() },
   },
 }));
 
@@ -138,6 +139,7 @@ describe("AI operations map page", () => {
     vi.mocked(prisma.phaseHandoff.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.deliberationRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.userFact.findMany).mockResolvedValue([] as never);
     const emptyCreatedBounds = { _min: { createdAt: null }, _max: { createdAt: null } };
     vi.mocked(prisma.routeDecisionLog.aggregate).mockResolvedValue(emptyCreatedBounds as never);
     vi.mocked(prisma.tokenUsage.aggregate).mockResolvedValue(emptyCreatedBounds as never);

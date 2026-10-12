@@ -266,7 +266,7 @@ test("task briefs separate outages, authority and contention without live depend
   const { buildTaskBrief } = await import("./lib/gate-context.mjs");
   for (const [situation, route] of Object.entries({
     normal: "delivery", "upgrade-failed": "recovery", "mcp-unavailable": "recovery",
-    "ci-unavailable": "recovery", "permission-denied": "authorization", "break-fix-occupied": "coordination",
+    "ci-unavailable": "recovery", "review-infrastructure-unavailable": "recovery", "permission-denied": "authorization", "break-fix-occupied": "coordination",
   })) {
     const brief = buildTaskBrief(situation);
     assert.equal(brief.route, route);
@@ -282,4 +282,13 @@ test("outage brief runs outside a Git checkout without platform access", () => {
   const result = spawnSync(process.execPath, [join(repoRoot, "scripts/gate-context.mjs"), "--situation", "mcp-unavailable", "--json"], { cwd: tmpdir(), encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).route, "recovery");
+});
+
+test("review outage routes to publication policy without inventing a review pass", async () => {
+  const { buildTaskBrief } = await import("./lib/gate-context.mjs");
+  const brief = buildTaskBrief("review-infrastructure-unavailable");
+  assert.equal(brief.reference, "docs/architecture/build-gate-runbook.md");
+  assert.match(brief.nextAction, /policy/);
+  assert.match(brief.nextAction, /unrun/);
+  assert.equal(brief.authorizesExecution, false);
 });

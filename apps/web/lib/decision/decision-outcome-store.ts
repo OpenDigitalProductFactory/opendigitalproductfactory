@@ -98,7 +98,7 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
-function readOptionIds(value: unknown): string[] {
+export function readOptionIds(value: unknown): string[] {
   // `options` is a Json column defaulting to `[]`. A malformed value yields an
   // empty menu, which makes every named option fail `option-not-offered` — the
   // safe direction: refuse rather than accept an unvalidatable choice.

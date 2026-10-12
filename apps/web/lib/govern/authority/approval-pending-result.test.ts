@@ -21,6 +21,18 @@ describe("settledApprovalResult", () => {
     expect(result.message).toContain("Calling it again returns this same outcome");
     expect(result.data).toMatchObject({ envelopeId: "env-2", recordedError: "workroom_access_denied" });
   });
+
+  // BI-5B34D277: a governed refusal settles the approval before the tool runs.
+  it("does not claim a call refused before it ran ever ran", () => {
+    const result = settledApprovalResult("create_digital_product", {
+      envelopeId: "env-3", status: "failed",
+      result: { success: false, error: "hook_denied", message: "create_digital_product rejected: blocked by hook" },
+    });
+    expect(result).toMatchObject({ success: false, error: "approval_outcome_failed", data: { recordedError: "hook_denied" } });
+    expect(result.message).toContain("was approved by a person (approval request env-3) but refused before it ran (hook_denied).");
+    expect(result.message).not.toContain("already ran");
+    expect(result.message).toContain("Calling it again returns this same outcome");
+  });
 });
 
 describe("approvalPendingResult", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  clearBuildPrDeliveryState,
   createBuildPrDeliveryState,
   readBuildPrDeliveryState,
   writeBuildPrDeliveryState,
@@ -51,5 +52,13 @@ describe("BuildPrDeliveryStateV1", () => {
 
     // A non-Build-Studio room never grows a buildStudio key.
     expect(writeBuildPrDeliveryState({ claim: "kept" }, state)).not.toHaveProperty("buildStudio");
+  });
+
+  it("retires current and legacy delivery identity without erasing unrelated room state", () => {
+    expect(clearBuildPrDeliveryState({
+      claim: "kept",
+      prDelivery: { schemaVersion: 1, prNumber: 7 },
+      buildStudio: { buildId: "FB-1", delivery: { schemaVersion: 1, prNumber: 7 } },
+    })).toEqual({ claim: "kept", buildStudio: { buildId: "FB-1" } });
   });
 });

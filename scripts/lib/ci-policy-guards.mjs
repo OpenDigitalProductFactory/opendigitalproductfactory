@@ -642,7 +642,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // Plane 4 — the standing TOOL registry, same soft shape and reusing plane 3's claim
     // review. Dispatch-time caps are governed elsewhere; this is the part that accretes.
     guard("tool-surface-guard", "Tool Surface Guard", [
-      node("--test", "scripts/check-tool-surface.test.mjs"),
+      node("--test", "scripts/check-tool-surface.test.mjs", "scripts/provider-management-grant-audit.test.mjs"),
       node("scripts/check-tool-surface.mjs"),
     ], { inputs: ["code"] }),
     // A coworker's standing rhythm is declared twice on purpose — the registry
@@ -737,6 +737,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("local-canonical-json-guard", "Local Canonical JSON Guard", [
       conformanceTest("scripts/check-no-local-canonical-json.test.mjs"),
       node("scripts/check-no-local-canonical-json.mjs"),
+    ]),
+    // One home for the dpf-platform pack version (BI-52934B3E): every client
+    // manifest and the marketplace entry are generated from toolchain-version.json.
+    guard("toolchain-version-guard", "Toolchain Version Guard", [
+      conformanceTest("scripts/sync-toolchain-version.test.mjs"),
+      node("scripts/sync-toolchain-version.mjs", "--check"),
     ]),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
@@ -884,6 +890,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // nothing about it.
         "scripts/lib/pregate-console.test.mjs",
         "scripts/lib/pregate-status.test.mjs",
+        // BI-A9031FF3: the CLI hands a superseded record its winner's current record.
+        "scripts/pregate-status-superseded.test.mjs",
         // BI-277ECBDB: the pre-claim slot PostgreSQL probe.
         "scripts/lib/local-ci-slot-substrate.test.mjs",
         // Symlink-robust entry guard shared by the pregate script family: a

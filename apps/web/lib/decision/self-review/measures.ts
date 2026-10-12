@@ -7,6 +7,9 @@
 // LINES, each carrying the evidence that produced it. A line without evidence
 // is never emitted — the human rules on the query, not on a summary.
 
+import { isBareQuestion } from "../question-quality";
+export { isBareQuestion } from "../question-quality";
+
 export type LedgerScope = "wwmd" | "wwwd" | "wsid";
 
 /** The DecisionInteraction columns the measures read (joined with the profile kind). */
@@ -113,12 +116,6 @@ export function normaliseQuestion(question: string): string {
     .replace(/\b(bi|wc|di|ep|tr)-[a-z0-9-]+\b/g, "<id>")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-/** A bare label: a tool name followed by a colon and nothing else, or empty. */
-export function isBareQuestion(question: string): boolean {
-  const q = question.trim();
-  return q.length === 0 || /^[a-z0-9 _-]{1,60}:$/i.test(q);
 }
 
 export function measureVolume(rows: readonly ReviewLedgerRow[]): ReviewLine[] {

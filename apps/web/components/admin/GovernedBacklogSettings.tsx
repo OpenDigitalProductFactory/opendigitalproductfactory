@@ -9,27 +9,38 @@ import { saveGovernedBacklogSettings } from "@/lib/actions/governed-backlog-sett
 // lane on. Everything downstream (auto-approved drafts, the 14:00 UTC daily
 // tee-up, capacity drain) reads PlatformDevConfig.governedBacklogEnabled; until
 // this control existed the flag could only be changed by editing the database.
+// BI-9AC1F99B: the capacity drain switch (PlatformDevConfig.capacityDrainEnabled,
+// opt-in per DI-5FED0D945EBB) sits with the other autopilot switches here.
 
 interface GovernedBacklogSettingsProps {
   enabled: boolean;
   dailyCap: number;
+  capacityDrainEnabled: boolean;
   playbookMode: "off" | "shadow" | "enforce";
 }
 
 export function GovernedBacklogSettings(props: GovernedBacklogSettingsProps) {
   const [enabled, setEnabled] = useState(props.enabled);
   const [dailyCap, setDailyCap] = useState(String(props.dailyCap));
+  const [capacityDrain, setCapacityDrain] = useState(props.capacityDrainEnabled);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const dirty = enabled !== props.enabled || dailyCap !== String(props.dailyCap);
+  const dirty =
+    enabled !== props.enabled ||
+    dailyCap !== String(props.dailyCap) ||
+    capacityDrain !== props.capacityDrainEnabled;
 
   const handleSave = () => {
     setSaved(false);
     setError(null);
     startTransition(async () => {
-      const result = await saveGovernedBacklogSettings({ enabled, dailyCap: Number(dailyCap) });
+      const result = await saveGovernedBacklogSettings({
+        enabled,
+        dailyCap: Number(dailyCap),
+        capacityDrainEnabled: capacityDrain,
+      });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -91,6 +102,27 @@ export function GovernedBacklogSettings(props: GovernedBacklogSettingsProps) {
               className="w-24 rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-1.5 text-sm text-[var(--dpf-text)] focus:border-[var(--dpf-accent)] focus:outline-none"
             />
           </div>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={capacityDrain}
+              onChange={(e) => {
+                setCapacityDrain(e.target.checked);
+                setSaved(false);
+              }}
+              className="mt-0.5 accent-[var(--dpf-accent)]"
+              data-testid="capacity-drain-enabled"
+            />
+            <div>
+              <span className="text-xs font-medium text-[var(--dpf-text)]">Use spare weekly AI allowance</span>
+              <p className="text-[var(--dpf-muted)] mt-0.5">
+                {capacityDrain
+                  ? "On: shortly before the weekly AI allowance resets, unused allowance starts the top-ranked ready work, a few items at a time."
+                  : "Off: unused weekly AI allowance is left to expire."}
+                {" "}Works only while the governed backlog lane is on.
+              </p>
+            </div>
+          </label>
           <p className="text-[var(--dpf-muted)]">
             Phase advancement is governed by the Living Playbook switch, currently{" "}
             <strong>{props.playbookMode}</strong>.

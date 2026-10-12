@@ -84,9 +84,12 @@ export async function runDeterministicBuildVerificationFor(buildId: string, chan
 type ParsedQa = { typecheckPassed: boolean; testsPassed: number; testsFailed: number; parseConfidence: "high" | "low" };
 
 /**
- * Keep a readable QA verdict; replace an unreadable one with checks the
- * platform actually ran. If the checks cannot run, the unreadable verdict
- * stands (low confidence), so the gate still refuses to advance on it.
+ * The gate verdict comes from checks the platform actually ran in the build's
+ * worktree. The QA specialist's prose is kept for the record and used only when
+ * those checks cannot run; an unreadable prose verdict then stands at low
+ * confidence, so the gate still refuses to advance on it. A "readable" prose
+ * verdict is not evidence: FB-91774D92's "tsc finished with no errors" parsed as a
+ * typecheck failure at high confidence (BI-E0931D5C).
  */
 export async function resolveQaVerification(input: {
   parsed: ParsedQa;
@@ -94,9 +97,6 @@ export async function resolveQaVerification(input: {
   changedFiles: string[];
   runDeterministic: (changedFiles: string[]) => Promise<{ verification: DeterministicVerification; changedFiles: string[]; output: string }>;
 }): Promise<{ verification: ParsedQa & Partial<Pick<DeterministicVerification, "source" | "scope">>; changedFiles: string[]; content: string }> {
-  if (input.parsed.parseConfidence === "high") {
-    return { verification: input.parsed, changedFiles: input.changedFiles, content: input.qaContent };
-  }
   try {
     const det = await input.runDeterministic(input.changedFiles);
     return { verification: det.verification, changedFiles: det.changedFiles, content: `${det.output}\n\nQA specialist said: ${input.qaContent.slice(0, 500)}` };

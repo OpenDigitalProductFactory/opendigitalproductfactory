@@ -20,6 +20,10 @@ import { openMonitorIssue, resolveMonitorIssue, type MonitorIssueDb } from "@/li
 import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
 import { err, ok } from "@/lib/shared/action-result";
 import { LOCAL_CI_LIVENESS_WINDOW_MS } from "@/lib/nonprod/local-ci-pool-liveness";
+import {
+  convergeHostUpkeepOnInstallerNodes,
+  type HostUpkeepConvergenceDb,
+} from "@/lib/edge-node/host-upkeep-convergence";
 
 type DockerSummary = { Id: string; Names?: string[]; State?: string; Labels?: Record<string, string> };
 type DockerInspect = {
@@ -111,6 +115,15 @@ export const substrateReconciler = jobs.createFunction(
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ops/substrate-reconciler");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
+    // BI-28EFE18A: the install's own edge node carries host upkeep. Converge it
+    // once per node; a failure here never blocks the substrate pass below.
+    await step.run("converge-host-upkeep", async () => {
+      try {
+        return await convergeHostUpkeepOnInstallerNodes(prisma as unknown as HostUpkeepConvergenceDb);
+      } catch (error) {
+        return { converged: [], error: error instanceof Error ? error.message : String(error) };
+      }
+    });
     return step.run("reconcile-substrate", () => reconcileSubstrate({
       listContainers: () => listSubstrateContainers(),
       requiredServices,

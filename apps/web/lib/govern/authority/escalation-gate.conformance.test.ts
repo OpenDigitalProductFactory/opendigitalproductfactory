@@ -50,14 +50,21 @@ const EXECUTION_MODES = ["immediate", "proposal"] as const;
  * The rule the platform ran BEFORE this gate: a proposal escalates, a read
  * never does, and otherwise the acting coworker's HITL-derived approval policy
  * alone decided. Encoded so the walk can prove the new rule adds nothing.
+ *
+ * A propose boundary (BI-C8EC05C9) was always a person: propose-interception
+ * diverted every side-effecting call under it to an AgentActionProposal BEFORE
+ * the monitor, whatever the coworker's tier. The gate branch reproduces that
+ * diversion, so it is encoded here as the platform's prior behaviour.
  */
 function retiredTierOnlyRule(shape: {
   sideEffect: boolean;
   executionMode: "proposal" | "immediate";
   operatorRequiresApproval: boolean;
+  proposeBoundary: boolean;
 }): "automated" | "human" {
   if (shape.executionMode === "proposal") return "human";
   if (!shape.sideEffect) return "automated";
+  if (shape.proposeBoundary) return "human";
   return shape.operatorRequiresApproval ? "human" : "automated";
 }
 
@@ -72,12 +79,14 @@ function everyCase(): Case[] {
           for (const sensitivity of SENSITIVITIES) {
             for (const steering of ESCALATION_STEERING) {
               for (const operatorRequiresApproval of [true, false]) {
+                for (const proposeBoundary of [true, false]) {
                 cases.push({
                   input: {
                     action: { sideEffect, executionMode, consequence, workCaseConsequential },
                     dataPolicy: { sensitivity },
                     operatorRequiresApproval,
                     steering,
+                    proposeBoundary,
                   },
                   damaging:
                     workCaseConsequential
@@ -86,8 +95,10 @@ function everyCase(): Case[] {
                   shape:
                     `sideEffect=${sideEffect} mode=${executionMode} consequence=${consequence} `
                     + `workCase=${workCaseConsequential} sensitivity=${sensitivity} `
-                    + `steering=${steering} operatorRequiresApproval=${operatorRequiresApproval}`,
+                    + `steering=${steering} operatorRequiresApproval=${operatorRequiresApproval} `
+                    + `proposeBoundary=${proposeBoundary}`,
                 });
+                }
               }
             }
           }
@@ -103,7 +114,7 @@ const CASES = everyCase();
 describe("escalation gate conformance — exhaustive domain proof", () => {
   it("covers the gate's entire input space", () => {
     expect(CASES.length).toBe(
-      2 * 2 * CONSEQUENCES.length * 2 * SENSITIVITIES.length * ESCALATION_STEERING.length * 2,
+      2 * 2 * CONSEQUENCES.length * 2 * SENSITIVITIES.length * ESCALATION_STEERING.length * 2 * 2,
     );
   });
 
@@ -113,6 +124,7 @@ describe("escalation gate conformance — exhaustive domain proof", () => {
         sideEffect: input.action.sideEffect,
         executionMode: input.action.executionMode,
         operatorRequiresApproval: input.operatorRequiresApproval,
+        proposeBoundary: input.proposeBoundary === true,
       });
       return resolveEscalation(input).verdict === "human" && retired === "automated"
         ? shape
@@ -127,6 +139,7 @@ describe("escalation gate conformance — exhaustive domain proof", () => {
         sideEffect: input.action.sideEffect,
         executionMode: input.action.executionMode,
         operatorRequiresApproval: input.operatorRequiresApproval,
+        proposeBoundary: input.proposeBoundary === true,
       });
       return retired === "human" && resolveEscalation(input).verdict === "automated";
     });
@@ -137,6 +150,17 @@ describe("escalation gate conformance — exhaustive domain proof", () => {
       expect(input.action.sideEffect).toBe(true);
       expect(input.action.executionMode).toBe("immediate");
       expect(input.operatorRequiresApproval).toBe(true);
+      expect(input.proposeBoundary).not.toBe(true);
+    }
+  });
+
+  it("the propose boundary decides exactly the side-effecting immediate calls under it", () => {
+    for (const { input, shape } of CASES) {
+      const decision = resolveEscalation(input);
+      const expected = input.proposeBoundary === true
+        && input.action.sideEffect
+        && input.action.executionMode === "immediate";
+      expect(decision.reasonCode === "propose-boundary", shape).toBe(expected);
     }
   });
 

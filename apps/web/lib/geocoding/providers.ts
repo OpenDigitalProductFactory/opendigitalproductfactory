@@ -10,8 +10,9 @@
 
 import Papa from "papaparse";
 
-export const GEOCODING_PROVIDER_IDS = ["none", "census", "opencage", "self-hosted"] as const;
-export type GeocodingProviderId = (typeof GEOCODING_PROVIDER_IDS)[number];
+import { GEOCODING_PROVIDER_IDS, type GeocodingProviderId } from "./sources";
+
+export { GEOCODING_PROVIDER_IDS, type GeocodingProviderId };
 
 /** PlatformConfig key holding the administrator's choice. */
 export const GEOCODING_PROVIDER_KEY = "geocoding.provider";

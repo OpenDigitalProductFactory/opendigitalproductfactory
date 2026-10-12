@@ -257,6 +257,33 @@ function makeResolveFetch(opts: {
 }
 
 describe("resolveLocalServedContextTokens", () => {
+  it("reads the requested model, never the first installed generation model", async () => {
+    const selected = "huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M";
+    const f = vi.fn(makeResolveFetch({ models: [
+      { id: GEN, dmr: { context_window: 4096 } },
+      { id: selected, dmr: { context_window: 32768 } },
+    ] }));
+    expect(await resolveLocalServedContextTokens(f, { modelId: selected })).toBe(32768);
+    expect(f.mock.calls.some(([url]) => String(url).includes(`model=${encodeURIComponent(selected)}`))).toBe(true);
+  });
+
+  it("does not borrow another installed model's capacity when the requested model is absent", async () => {
+    const f = makeResolveFetch({ override: 40960 });
+    expect(await resolveLocalServedContextTokens(f, { modelId: "ai/missing:latest" })).toBeNull();
+  });
+
+  it("fails closed when runtime configuration is unreadable even if a model card advertises capacity", async () => {
+    const base = makeResolveFetch({ models: [{ id: GEN, dmr: { context_window: 262144 } }] });
+    const f = (async (url: string, init?: RequestInit) => String(url).includes("_configure")
+      ? new Response(null, { status: 503 }) : base(url, init)) as typeof fetch;
+    expect(await resolveLocalServedContextTokens(f, { modelId: GEN })).toBeNull();
+  });
+
+  it("does not use the card default after an invalid explicit runtime override", async () => {
+    const f = makeResolveFetch({ override: 0, models: [{ id: GEN, dmr: { context_window: 262144 } }] });
+    expect(await resolveLocalServedContextTokens(f, { modelId: GEN })).toBeNull();
+  });
+
   it("returns the DMR runtime override when one is set (the steady state)", async () => {
     const f = makeResolveFetch({ models: [{ id: GEN, dmr: { context_window: 4096 } }], override: 24_576 });
     expect(await resolveLocalServedContextTokens(f)).toBe(24_576);

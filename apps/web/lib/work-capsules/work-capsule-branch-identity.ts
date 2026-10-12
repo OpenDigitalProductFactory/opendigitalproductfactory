@@ -36,6 +36,9 @@ type BranchCapsuleRecord = {
   baseBranch?: string | null;
   baseSha?: string | null;
   headSha?: string | null;
+  pullRequestNumber?: number | null;
+  pullRequestUrl?: string | null;
+  workspaceState?: unknown;
   headBranch?: string | null;
   epicId?: string | null;
   worktreePath?: string | null;

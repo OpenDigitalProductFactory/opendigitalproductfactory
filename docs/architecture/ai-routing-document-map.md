@@ -64,6 +64,7 @@ every planned behavior is already live.
 
 | Artifact | Status and purpose |
 | --- | --- |
+| [Task-aware inference routing](../superpowers/specs/2026-10-11-task-aware-inference-routing-design.md) | Draft source-grounded review and delivery plan for task readiness, prompt scope, constraint explanations, cloud capacity, admission and owner visibility. Live backlog reconciliation and scoped decisions remain pending; no runtime behavior changes are delivered by this document. |
 | [AI Routing Architecture & Explainability](../superpowers/specs/2026-07-26-ai-routing-architecture-explainability-design.md) | Architecture authority. The deterministic Designed projection is implemented; Observed/Compare evidence, technical drill-through, and the completed owner-facing Operations Map remain later child BIs. |
 | [Routing Control Plane / Data Plane](../superpowers/specs/2026-04-27-routing-control-data-plane-design.md) | Proposed and deferred RIB/FIB target state; not the current per-request routing runtime |
 
