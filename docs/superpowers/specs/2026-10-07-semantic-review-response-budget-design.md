@@ -83,6 +83,63 @@ binds this approach; provider dispatch and runtime acceptance remain to verify.
 This is one atomic deliverable under BI-128AEC8D. Its implementation coverage
 and readiness receipts are pending; this document alone is not admission.
 
+## Follow-up: local shared-context admission (2026-10-11)
+
+Local follow-up owner: BI-128AEC8D, WC-43E6BF3F. The originating
+WC-9F8B48B9 remains on its originating installation; this room claims the
+existing federated item without replacing that room or its evidence.
+Decision DI-6FEBDC3DDB97 selects observed shared-context capacity. Its scores
+are engineering estimates, not runtime measurements.
+
+On source `4bf3422a1daf24eb0a0dfe93380966b1ba36f22a`, local discovery
+leaves `maxOutputTokens` null and activity admission rejects null exactly as
+it rejects a numeric limit below the requested allowance. The transport review
+TR-GATE-DCAF88912D13BF578D366639 was excluded before dispatch. The specific
+live profile value remains unverified; source behavior must be reproduced in
+tests before claiming that value caused the live failure.
+
+[Docker's configuration contract](https://docs.docker.com/ai/model-runner/configuration/)
+defines configured context as input plus generated output and distinguishes it
+from advertised model context. Use the existing bounded runtime read for the
+exact local model, rather than seeding the requested allowance as a model fact.
+An observed shared window bounds both total context and the maximum possible
+completion; any lower explicit output cap remains binding. The existing activity
+admission still checks the sum of input and completion. Unknown runtime context
+remains excluded, including when a catalog/profile advertises a larger window.
+Cloud endpoints retain their existing explicit output-capacity requirement.
+
+Ordered follow-up delivery:
+
+1. Reproduce absent local output metadata, incorrect model selection and unread
+   runtime configuration using failure-injection tests.
+2. Reuse the context probe with exact-model and provider identity. Derive bounded
+   local manifests without database, provider-setting or request changes.
+3. Distinguish unknown capacity from a known insufficient limit in admission
+   diagnostics; retain numeric caps, input headroom and the 16,384 allowance.
+4. Run affected tests, typechecks, source guards, canonical gate and independent
+   review. Deliver through DCO PR, merge queue and canonical deployment.
+5. The transport owner performs supported recovery only after fresh runtime
+   verification. Preserve the saved review identity and obtain a genuine verdict.
+
+Additional acceptance under OBJ-1: exact-model selection, unavailable/invalid
+runtime capacity, insufficient shared context, explicit lower output caps and
+unchanged cloud behavior have regressions. Runtime health, original review
+recovery and deployment remain unrun until supported evidence exists.
+
+The existing backlog acceptance remains binding, quoted here for delivery
+coverage against this immutable plan:
+
+- Reproduce the 4,096-output ceiling with the actual selected recipe and show where it is imposed.
+- Add a regression proving the review's output allowance reaches actual dispatch and stays within model/context limits, including reasoning consumption where relevant.
+- A truncated response remains inconclusive, never PASS.
+- Resume the preserved OAuth prerequisite review after deployed repair; obtain a complete change-reviewer verdict and reuse the architecture pass when valid.
+- No repeated identical inference after the same failure recurs.
+
+Source reproduction on the named base: 11 expected failing regressions and 42
+passing controls in the loader/context suites on 2026-10-11. Research receipt
+`initiative-917ba525-be6f-4117-a6ca-3f237aa6af9a` records the run. No green
+implementation, deployed repair or recovered review is claimed by this design.
+
 ## Existing architecture
 
 - [Activity routing harness](2026-06-28-activity-level-ai-routing-harness-design.md)

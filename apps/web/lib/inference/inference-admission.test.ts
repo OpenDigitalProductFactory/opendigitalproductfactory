@@ -54,6 +54,7 @@ describe("inference origin (AsyncLocalStorage)", () => {
 describe("engineKeyForProvider", () => {
   it("maps the local provider to the local engine, all else to remote", () => {
     expect(engineKeyForProvider("local")).toBe("local");
+    expect(engineKeyForProvider("ollama")).toBe("local");
     expect(engineKeyForProvider("anthropic")).toBe("remote");
     expect(engineKeyForProvider("openai")).toBe("remote");
   });

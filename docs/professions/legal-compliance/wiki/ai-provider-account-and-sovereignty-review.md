@@ -28,7 +28,7 @@ sources:
 
 Review the **connected account and execution channel**, not the provider name alone. Authentication or a successful model-list request establishes only that the credential works. It does not establish a business or enterprise plan, a controller-processor agreement, retention or no-training treatment, regional-processing enablement, or the identity of subprocessors.
 
-Until those facts are evidenced, a personal, consumer, individual, or unknown hosted connection is suitable only for public or synthetic material. Customer, employee, health, student, financial, privileged, source-code, security, and credential data stays on a governed non-egress path or is blocked.
+Until those facts are evidenced, a personal, consumer, individual, or unknown hosted connection is suitable for public or synthetic material, including public source-code development. Public development does not require business-account, contract or no-training evidence merely because it is code. Non-public customer, employee, health, student, financial, privileged, source-code, security, and credential data stays on a governed non-egress path or is blocked. Classify the actual payload: public source does not make embedded secrets, protected records or explicitly confidential code public.
 
 ## How to apply
 
@@ -38,6 +38,14 @@ Until those facts are evidenced, a personal, consumer, individual, or unknown ho
 4. For EEA or UK personal data, establish the processor contract and assess any restricted international transfer using the applicable mechanism. Data location alone is not a complete sovereignty assessment; ownership, control, support access, subprocessors, and compelled-access exposure may matter.
 5. Local processing reduces external egress but is not automatically compliant. Verify capability, access control, retention, security, lawful basis, and sector requirements.
 6. When evidence is missing or the question requires legal interpretation, abstain and route to qualified privacy, legal, security, or procurement review.
+
+## Re-evaluation and continuity
+
+Reassess the connected account when ownership, terms, subprocessors, processing regions, support access, or model distribution changes. An announced acquisition agreement is distinct from a completed transaction; record the evidenced status and review date. Preserve the organization's accepted dependency and exit decision in its owning scope.
+
+Include analysis artifacts and derived evidence in the data-flow review. A locally executed analysis tool can still expose company information through hosted inference, telemetry, logs, or support channels. Verify export/restore, retention after session closure, key and update control, and permitted fallback behavior for the chosen deployment.
+
+Treat CADA and similar jurisdiction developments according to their current legal status and applicability. A proposed framework is a planning input, not a blanket obligation across EMEA. Hardware ownership or open-source licensing does not independently establish compliance. See the [dated REA and inference strategy](../../../strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md) for research evidence requiring deployment-specific qualification.
 
 ## Provider examples
 

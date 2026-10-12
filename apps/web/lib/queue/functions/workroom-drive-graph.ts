@@ -168,6 +168,9 @@ export async function applyGraphDrivePlan(input: {
       title: `Workroom ${room.capsuleId} / ${token.stageKey}`,
       prompt: buildStageBrief(brief),
       stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...(brief.stageTools ?? [])] },
+      ...(plan.marking && !("raw" in plan.marking) && plan.cycle ? { dispatchScope: {
+        runKey: plan.marking.cycleKey, cycleKey: plan.cycle.cycleKey, iteration: token.iteration,
+      } } : {}),
       now,
       lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });

@@ -354,7 +354,32 @@ describe("compileAiProviderSuitabilityPolicy", () => {
     expect(result.explanations.some((item) => item.code === "student-terms-unproven")).toBe(true);
   });
 
-  it("keeps source code off an unproven personal account", () => {
+  it.each(["regular", "unknown"] as const)("allows explicitly public source on an unproven %s account", (accountClass) => {
+    const publicSource = { ...deriveAiWorkloadDataProfile({ workloadClass: "source-code" }),
+      sensitivity: "public" as const, residencyClass: "unrestricted" as const };
+    const result = compileAiProviderSuitabilityPolicy({
+      businessProfile: BUSINESS, workloadProfiles: [publicSource],
+      dataPolicyDecisions: [ALLOW_DECISION], regulationResults: [],
+      providerFacts: [trust("anthropic-sub", "conn-personal", { accountClass })], source: "default",
+    });
+    expect(result.effect).toBe("allow");
+    expect(result.allowedProviderConnectionIds).toEqual(["conn-personal"]);
+    expect(result.explanations).toEqual([]);
+  });
+
+  it("does not let public source override non-public source in the same workload", () => {
+    const protectedSource = deriveAiWorkloadDataProfile({ workloadClass: "source-code" });
+    const result = compileAiProviderSuitabilityPolicy({
+      businessProfile: BUSINESS, workloadProfiles: [protectedSource,
+        { ...protectedSource, sensitivity: "public", residencyClass: "unrestricted" }],
+      dataPolicyDecisions: [ALLOW_DECISION], regulationResults: [],
+      providerFacts: [local(), trust("anthropic-sub", "conn-personal")], source: "default",
+    });
+    expect(result.allowedProviders).toEqual(["local"]);
+    expect(result.explanations.some((item) => item.code === "business-account-unproven")).toBe(true);
+  });
+
+  it("keeps non-public source code off an unproven personal account", () => {
     const result = compile({
       workloadClasses: ["source-code"],
       business: { archetypeId: "software-platform", archetypeCategory: "software-platform" },

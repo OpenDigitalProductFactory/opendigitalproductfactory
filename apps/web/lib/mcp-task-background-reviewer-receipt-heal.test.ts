@@ -60,7 +60,7 @@ vi.mock("@/lib/inference/async-operation-runtime", () => ({
 }));
 vi.mock("./mcp-task-durable-inference-runtime", () => ({ ensureDurableInferenceTaskRecipes: vi.fn() }));
 
-import { reconcilePersistedRemoteTaskDispatches } from "./mcp-task-background-dispatch";
+import { reconcilePersistedRemoteTaskDispatches, healParkedReviewFromReceipt } from "./mcp-task-background-dispatch";
 import { loadTaskInitiativeReviewOutcome } from "./mcp-task-review-outcome";
 
 const TASK_RUN_ID = "TR-MCP-STRANDED-6C272F7C1DAE";
@@ -149,5 +149,26 @@ describe("BI-2E479619 AC-4 stranded reviewer runs heal from their persisted rece
     await reconcilePersistedRemoteTaskDispatches({ now: NOW, includeOrdinary: false });
 
     expect(completedWrites()).toHaveLength(0);
+  });
+
+  it("can explicitly heal an exhausted review without opening another inference attempt", async () => {
+    db.executions.push(nativeWriter(true));
+    expect(await healParkedReviewFromReceipt({ ...stranded, progressPayload: { ...stranded.progressPayload,
+      terminalWriterWait: { ...wait, attempt: 3 }, approvalEnvelopeId: "stale-envelope" } })).toBe(true);
+    expect(completedWrites()).toHaveLength(1);
+    expect(queue.send).not.toHaveBeenCalled();
+  });
+
+  it("a stale submitted queue event can heal from its receipt without another model call", async () => {
+    db.executions.push(nativeWriter(true));
+    expect(await healParkedReviewFromReceipt({ ...stranded, status: "submitted", progressPayload: {} })).toBe(true);
+    expect(completedWrites()[0]?.where).toMatchObject({ status: "submitted", updatedAt: stranded.updatedAt });
+  });
+
+  it("never overwrites a concurrent cancellation or newer attempt", async () => {
+    db.executions.push(nativeWriter(true));
+    db.updateMany.mockResolvedValue({ count: 0 });
+    expect(await healParkedReviewFromReceipt(stranded)).toBe(false);
+    expect(db.update).not.toHaveBeenCalled();
   });
 });

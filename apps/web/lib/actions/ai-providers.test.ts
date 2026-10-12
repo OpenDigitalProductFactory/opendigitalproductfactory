@@ -26,6 +26,7 @@ const {
     credentialEntry: {
       findUnique: vi.fn(),
       upsert: vi.fn(),
+      update: vi.fn(),
     },
     platformConfig: {
       findUnique: vi.fn(),
@@ -35,6 +36,7 @@ const {
     aiProviderConnection: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
   mockAutoDiscoverAndProfile: vi.fn(),
@@ -53,6 +55,7 @@ vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
   ensureDefaultProviderConnection: vi.fn(),
   refreshDefaultProviderConnectionOwners: vi.fn(),
+  setProviderStatusWithDefaultConnection: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -95,8 +98,20 @@ import {
   discoverModels,
   runProviderCatalogReconciliationIfDue,
   testProviderAuth,
+  toggleProviderStatus,
 } from "./ai-providers";
+import { setProviderStatusWithDefaultConnection } from "@dpf/db";
 import { updateProviderConnectionPosture } from "./provider-connection-posture";
+
+describe("operator provider toggle", () => {
+  it("disables the connection together with the provider", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "user-1", platformRole: "HR-000", isSuperuser: true } });
+    mockCan.mockReturnValue(true);
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ status: "active" });
+    await expect(toggleProviderStatus("local")).resolves.toEqual({ status: "inactive", warning: null });
+    expect(setProviderStatusWithDefaultConnection).toHaveBeenCalledWith(mockPrisma, { providerId: "local", status: "inactive" });
+  });
+});
 
 describe("updateProviderConnectionPosture", () => {
   beforeEach(() => {
@@ -105,8 +120,24 @@ describe("updateProviderConnectionPosture", () => {
     mockCan.mockReturnValue(true);
   });
 
+  it("attests the selected account without activating or changing the default account", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ id: "connection-b", providerId: "anthropic", entitlements: {}, evidenceStatus: "unreviewed" });
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ status: "active" });
+    expect(await updateProviderConnectionPosture({ providerId: "anthropic", connectionId: "account-b", accountClass: "business-team", noTraining: true })).toEqual({});
+    expect(mockPrisma.aiProviderConnection.update).toHaveBeenCalledWith(expect.objectContaining({ where: { connectionId: "account-b" } }));
+    expect(mockRecordProviderTrustEvidence).toHaveBeenCalledWith(expect.objectContaining({ providerConnectionDbId: "connection-b" }));
+    expect(mockActivateProvider).not.toHaveBeenCalled();
+  });
+
+  it("rejects evidence changes to an account belonging to another provider", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ id: "wrong", providerId: "openai" });
+    expect(await updateProviderConnectionPosture({ providerId: "anthropic", connectionId: "wrong", accountClass: "enterprise", noTraining: true })).toHaveProperty("error");
+    expect(mockPrisma.aiProviderConnection.update).not.toHaveBeenCalled();
+  });
+
   it("records an operator attestation without promoting it to contract proof", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      providerId: "anthropic",
       id: "connection-db-1",
       entitlements: { adminAuditControls: true },
       evidenceStatus: "unreviewed",
@@ -148,6 +179,7 @@ describe("updateProviderConnectionPosture", () => {
 
   it("supersedes prior operator evidence when the declaration returns to unknown", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      providerId: "anthropic",
       id: "connection-db-1",
       entitlements: {},
       evidenceStatus: "operator-attested",
@@ -174,6 +206,7 @@ describe("updateProviderConnectionPosture", () => {
 
   it("preserves region entitlement and evidence when the current setup has no region requirement", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      providerId: "zai",
       id: "connection-db-1",
       entitlements: { enabledRegions: ["us"], regionalProcessing: true },
       evidenceStatus: "operator-attested",
@@ -198,6 +231,7 @@ describe("updateProviderConnectionPosture", () => {
 
   it("records a normalized direct-provider region guarantee on the exact connection", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      providerId: "zai",
       id: "connection-db-1",
       entitlements: {},
       evidenceStatus: "unreviewed",
@@ -232,6 +266,7 @@ describe("updateProviderConnectionPosture", () => {
 
   it("records OpenRouter controls on the exact connection without creating enterprise proof", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      providerId: "openrouter",
       entitlements: {},
       evidenceStatus: "unreviewed",
     });
@@ -302,6 +337,23 @@ describe("testProviderAuth", () => {
         text: async () => 'data: {"type":"response.completed","response":{"status":"completed"}}\n',
       }),
     );
+  });
+
+  it("authenticates only the selected account and preserves a concurrent disable", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "openai", baseUrl: "https://api.openai.com/v1", authMethod: "api_key", authHeader: "Authorization", families: [], enabledFamilies: [], supportedAuthMethods: ["api_key"] });
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ providerId: "openai", connectionId: "account-b", credentialEntryId: "credential-b", authMethod: "api-key", status: "active", updatedAt: new Date("2026-10-01") });
+    mockPrisma.aiProviderConnection.updateMany.mockResolvedValue({ count: 1 });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "key-b" });
+    Object.assign(mockPrisma, { $transaction: async (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma) });
+    expect(await testProviderAuth("openai", false, "account-b")).toMatchObject({ ok: true });
+    expect(fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ headers: { Authorization: "Bearer key-b" } }));
+    expect(mockPrisma.credentialEntry.update).toHaveBeenCalledWith({ where: { id: "credential-b" }, data: { status: "ok" } });
+    expect(mockPrisma.aiProviderConnection.updateMany).toHaveBeenCalledWith({ where: { connectionId: "account-b", credentialEntryId: "credential-b", updatedAt: new Date("2026-10-01"), status: { not: "disabled" } }, data: { status: "active" } });
+    expect(mockActivateProvider).not.toHaveBeenCalled();
+    mockPrisma.aiProviderConnection.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.credentialEntry.update.mockClear();
+    expect(await testProviderAuth("openai", false, "account-b")).toMatchObject({ ok: false, message: expect.stringContaining("Account changed") });
+    expect(mockPrisma.credentialEntry.update).not.toHaveBeenCalled();
   });
 
   it("triggers reconciliation for OAuth subscription-style providers", async () => {
@@ -575,22 +627,22 @@ describe("discoverModels", () => {
     mockCan.mockReturnValue(true);
   });
 
-  it("uses known-model seeding for Codex instead of raw live discovery", async () => {
-    mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 2, profiled: 2 });
+  it("returns the actual new count from a serving-catalog refresh", async () => {
+    mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 2, newCount: 0, profiled: 2 });
 
     const result = await discoverModels("codex");
 
-    expect(result).toEqual(expect.objectContaining({ discovered: 2, newCount: 2, error: undefined }));
-    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
+    expect(result).toEqual(expect.objectContaining({ discovered: 2, newCount: 0, profiled: 2 }));
+    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex", false);
   });
 
-  it("uses known-model seeding for xAI/Grok so OAuth-only Build Studio sync does not hit /v1/models", async () => {
-    mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 2, profiled: 2 });
+  it("does not count a bootstrap fallback as a successful refresh", async () => {
+    mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 0, profiled: 0, error: "HTTP 503" });
 
     const result = await discoverModels("xai");
 
-    expect(result).toEqual(expect.objectContaining({ discovered: 2, newCount: 2, error: undefined }));
-    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("xai");
+    expect(result).toEqual(expect.objectContaining({ discovered: 0, newCount: 0, error: "HTTP 503" }));
+    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("xai", false);
   });
 });
 
