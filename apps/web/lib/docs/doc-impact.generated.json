@@ -2379,6 +2379,9 @@
     "scripts/lib/git-changed-files.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "scripts/lib/guard-bash.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/lib/hooks-dir.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
@@ -3586,6 +3589,7 @@
       "scripts/installer/lib/platform.sh",
       "scripts/lib/dockerfile-portal-build.test.mjs",
       "scripts/lib/entry-module.mjs",
+      "scripts/lib/guard-bash.mjs",
       "scripts/lib/host-available-memory.mjs",
       "scripts/publish-host-gpu.ps1",
       "scripts/setup.ps1",
