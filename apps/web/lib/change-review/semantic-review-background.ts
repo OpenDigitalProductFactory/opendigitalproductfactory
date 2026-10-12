@@ -15,7 +15,7 @@ import { restoreSemanticReviewCheckpoint, type SemanticReviewResult } from "./se
 import { resolveFailureAnalysisEvidence } from "./failure-analysis-evidence";
 import { validateFailureAnalysis } from "./failure-analysis";
 import { withInferenceOrigin } from "@/lib/inference/inference-admission";
-import { withGovernedInferenceDeadline } from "@/lib/inference/governed-inference-deadline";
+import { withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 
 import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS as STALE_MS } from "./semantic-review-request";
 import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget, isSemanticReviewRecoveryWait } from "./semantic-review-recovery-policy";

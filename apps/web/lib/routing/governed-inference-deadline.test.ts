@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { withInferenceOrigin } from "./inference-admission";
+import { withInferenceOrigin } from "@/lib/inference/inference-admission";
 import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline, withGovernedInferenceDeadline } from "./governed-inference-deadline";
 
 afterEach(() => vi.useRealTimers());

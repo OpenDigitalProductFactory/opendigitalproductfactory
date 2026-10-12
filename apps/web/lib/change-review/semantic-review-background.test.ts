@@ -625,7 +625,7 @@ describe("expired review successor", () => {
 });
 
 // Exercise the server binding, not just a caller-created timeout policy.
-import { currentGovernedInferenceDeadline } from "@/lib/inference/governed-inference-deadline";
+import { currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 
 it("binds the immutable review deadline without changing its request or output budget", async () => {
   mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {

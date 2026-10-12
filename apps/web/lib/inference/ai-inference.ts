@@ -51,7 +51,7 @@ import {
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { providerInferenceFetch } from "./provider-inference-transport";
-import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "./governed-inference-deadline";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 import { InferenceError } from "../routing/inference-error";
 
 // ─── Types ───────────────────────────────────────────────────────────────────

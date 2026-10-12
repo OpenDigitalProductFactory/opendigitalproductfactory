@@ -114,7 +114,7 @@ describe("provider inference transport deadlines", () => {
 });
 
 // The governed path owns one finite transport for its admitted parent scope.
-import { currentGovernedInferenceDeadline, withGovernedInferenceDeadline } from "./governed-inference-deadline";
+import { currentGovernedInferenceDeadline, withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 
 describe("parent-bound local inference transport", () => {
   it("accepts one real HTTP response beyond 600 seconds only inside the admitted window", async () => {

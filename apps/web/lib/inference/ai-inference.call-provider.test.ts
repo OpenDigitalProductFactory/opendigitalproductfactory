@@ -465,7 +465,7 @@ describe("callProvider", () => {
   });
 });
 
-import { withGovernedInferenceDeadline } from "./governed-inference-deadline";
+import { withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 
 it("blocks every paid fallback before adapter dispatch when parent authority is lost", async () => {
   vi.clearAllMocks();
