@@ -185,6 +185,7 @@ function assessPageSet(
 function validateReaderExecutions(
   policy: TerminalToolPolicy,
   executions: readonly PersistedTerminalReaderExecution[],
+  requireSuccessfulReader = true,
 ): ActionSuccess<{ ids: string[]; contentfulAttempts: HydrationPageEvidence[][] }> | TerminalWriterContextFailure {
   if (!policy.immutableReaderArguments) {
     return hydrationFailure(
@@ -285,13 +286,31 @@ function validateReaderExecutions(
       );
     }
   }
-  if (ids.length === 0) {
+  if (ids.length === 0 && requireSuccessfulReader) {
     return hydrationFailure(
       "terminal_writer_context_reader_count_invalid",
       "No successful exact-bound immutable reader execution is available for terminal-writer hydration.",
     );
   }
   return ok({ ids, contentfulAttempts });
+}
+
+/** Failed cursors permit a new governed read, never writer evidence. */
+export function needsTerminalReaderBootstrap(
+  policy: TerminalToolPolicy,
+  executions: readonly PersistedTerminalReaderExecution[],
+): boolean {
+  if (executions.length === 0) return true;
+  if (executions.some((execution) => execution.success)) return false;
+  if (!validateReaderExecutions(policy, executions, false).ok) return false;
+  return executions.every((execution) => {
+    const parameters = record(execution.parameters)!;
+    const result = record(execution.result);
+    return result?.["error"] === "invalid_cursor" && result["success"] !== true
+      && typeof parameters["cursor"] === "string"
+      && (parameters["startLine"] === undefined || parameters["startLine"] === 1)
+      && record(result["data"])?.["content"] === undefined;
+  });
 }
 
 function selectCompletePersistedAttempt(

@@ -345,7 +345,11 @@ describe("terminal writer resumption", () => {
     });
   });
 
-  it("bootstraps persisted immutable reader evidence when the resumable TaskRun has no reader rows", async () => {
+  it.each([
+    "none", "invalid-cursors", "denied", "other-failure", "conflicting-binding",
+    "unauthorized-tool", "malformed-result", "conflicting-result", "duplicate-id",
+    "reversed-order", "continuation", "success-conflict",
+  ])("resumes only safe initial-reader failures (%s)", async (historyKind) => {
     const metadata = await persistedMetadata("PAT-WRITER-ZERO-READER");
     vi.clearAllMocks();
     const updatedAt = new Date("2026-08-31T03:00:00.000Z");
@@ -370,9 +374,33 @@ describe("terminal writer resumption", () => {
       a2aMetadata: metadata,
     });
     db.findEnvelope.mockResolvedValue(null);
+    const rejectedReaders: Array<typeof persistedReaderExecution> = historyKind !== "none"
+      ? ["start", "1", "0", "initial", "eyJvZmZzZXQiOjB9"].map((cursor, index) => ({
+          ...persistedReaderExecution,
+          id: `rejected-reader-${index}`,
+          parameters: { ...persistedReaderExecution.parameters, cursor },
+          result: { error: "invalid_cursor" },
+          success: false,
+          createdAt: new Date(index + 1),
+        }))
+      : [];
+    const first = rejectedReaders[0];
+    if (first) {
+      if (historyKind === "denied") first.result = { error: "insufficient_token_scope" };
+      if (historyKind === "other-failure") first.result = { error: "provider-unavailable" };
+      if (historyKind === "conflicting-binding") first.parameters.version = "0".repeat(40);
+      if (historyKind === "unauthorized-tool") first.toolName = "search_source_at_version";
+      if (historyKind === "malformed-result") first.result = { error: "invalid_cursor", data: { content: "unbound" } };
+      if (historyKind === "conflicting-result") first.result = { error: "invalid_cursor", data: { blobId: "0".repeat(40) } };
+      if (historyKind === "duplicate-id") rejectedReaders[1]!.id = first.id;
+      if (historyKind === "reversed-order") rejectedReaders.reverse();
+      if (historyKind === "continuation") first.parameters.startLine = 2;
+      if (historyKind === "success-conflict") first.result = { error: "invalid_cursor", success: true };
+    }
     db.findToolExecutions
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([persistedReaderExecution]);
+      .mockReset()
+      .mockResolvedValueOnce(rejectedReaders)
+      .mockResolvedValueOnce([...rejectedReaders, persistedReaderExecution]);
     db.findToolExecution.mockResolvedValue(null);
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
@@ -383,6 +411,18 @@ describe("terminal writer resumption", () => {
     });
 
     const outcome = await submit("PAT-WRITER-ZERO-READER");
+
+    if (historyKind !== "none" && historyKind !== "invalid-cursors") {
+      expect(autonomous.executeTool).not.toHaveBeenCalled();
+      expect(autonomous.execute).not.toHaveBeenCalled();
+      expect(autonomous.create).not.toHaveBeenCalled();
+      expect(db.findToolExecutions).toHaveBeenCalledTimes(1);
+      expect(outcome).toMatchObject({ kind: "result", result: {
+        taskRunId: "TR-MCP-ZERO-READER", status: "input-required",
+        waitReason: "terminal-writer-context-unavailable", isError: true,
+      } });
+      return;
+    }
 
     expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { taskRunId: "TR-MCP-ZERO-READER", status: "input-required", updatedAt },
