@@ -64,11 +64,10 @@ $GrokConfigPath         = Join-Path $HOME ".grok\config.toml"  # platform-specif
 $KernelPrinciplesDir    = Join-Path $RepoRoot "docs\founder-kernel\wiki\principles"
 $ContributorMemoryDir   = Join-Path $HOME ".claude\projects"
 $ProjectSlug            = ($RepoRoot -replace '[:\\\/]+', '-').TrimStart('-')
-# BI-2D545A0C (design 12.4.3): the endpoint is the install's canonical origin,
-# read from PUBLIC_URL in the install's .env, and on https Node clients trust
-# the organization's own CA (BI-FA2C46D7). One rule, shared with the installer:
-# scripts\installer\lib\mcp-client-env.ps1. An explicit DPF_MCP_URL stands only
-# when the install names no https origin.
+# BI-2D545A0C (design 12.4.3): an explicit process DPF_MCP_URL
+# selects the endpoint before the HTTPS PUBLIC_URL or saved-user fallback.
+# On HTTPS, Node clients trust the organization CA (BI-FA2C46D7).
+# The shared installer/lib/mcp-client-env module owns resolution.
 . (Join-Path $ScriptDir "installer\lib\mcp-client-env.ps1")
 $McpClientEnv           = Resolve-DpfMcpClientEnv -InstallDir $RepoRoot
 # $McpEndpointNamed is the endpoint the install or operator named (may be

@@ -3,9 +3,9 @@
 # Bash 3.2 compatible (macOS).
 #
 # The rule, in one place for the installer and the agent-toolchain bootstrap:
-#   DPF_MCP_URL         = <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
-#                         .env names an https PUBLIC_URL; otherwise an explicit
-#                         DPF_MCP_URL already in the environment; then the saved
+#   DPF_MCP_URL         = an explicit DPF_MCP_URL already in the environment;
+#                         then <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
+#                         .env names an https PUBLIC_URL; then the saved
 #                         user endpoint; otherwise none
 #                         (the client plugin's loopback default applies).
 #   NODE_EXTRA_CA_CERTS = the organization root bundle, for an https endpoint
@@ -65,10 +65,14 @@ dpf_resolve_mcp_client_env() {
   DPF_MCP_CLIENT_URL=""
   DPF_MCP_CLIENT_CA_BUNDLE=""
   public="$(dpf_mcp_install_env_value "$install_dir" PUBLIC_URL)"
-  case "$public" in
-    https://*) DPF_MCP_CLIENT_URL="${public%/}/api/mcp/v1?tier=full" ;;
-    *) DPF_MCP_CLIENT_URL="${DPF_MCP_URL:-$(dpf_mcp_saved_env_value DPF_MCP_URL)}" ;;
-  esac
+  if [ -n "${DPF_MCP_URL:-}" ]; then
+    DPF_MCP_CLIENT_URL="$DPF_MCP_URL"
+  else
+    case "$public" in
+      https://*) DPF_MCP_CLIENT_URL="${public%/}/api/mcp/v1?tier=full" ;;
+      *) DPF_MCP_CLIENT_URL="$(dpf_mcp_saved_env_value DPF_MCP_URL)" ;;
+    esac
+  fi
   case "$DPF_MCP_CLIENT_URL" in
     https://*)
       for candidate in "${DPF_PKI_TRUST_BUNDLE:-}" \

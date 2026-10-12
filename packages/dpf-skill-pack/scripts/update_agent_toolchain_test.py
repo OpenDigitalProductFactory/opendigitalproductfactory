@@ -1725,6 +1725,68 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
 
 class OAuthDefaultTest(unittest.TestCase):
+    def test_codex_unreadable_saved_endpoint_requires_explicit_repair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            path = updater.codex_config_path(home)
+            path.parent.mkdir(parents=True)
+            original = '[mcp_servers.dpf]\nurl="""https://operator.example/api/mcp/v1"""\n'
+            path.write_text(original)
+            with self.assertRaisesRegex(ValueError, "explicit.*endpoint"):
+                updater.ensure_codex_config(home, None, False)
+            self.assertEqual(path.read_text(), original)
+            updater.ensure_codex_config(home, "https://repair.example/api/mcp/v1", False)
+            self.assertIn('url = "https://repair.example/api/mcp/v1?tier=full"', path.read_text())
+
+    def test_main_distinguishes_implicit_environment_and_cli_endpoints(self):
+        original = "http://127.0.0.1:3000/api/mcp/v1?tier=full"
+        environment = "https://environment.example/api/mcp/v1"
+        explicit = "http://127.0.0.1:3001/api/mcp/v1"
+        for named_env, cli, expected in (("", [], original),
+                                        (environment, [], environment + "?tier=full"),
+                                        (environment, ["--mcp-url", explicit], explicit + "?tier=full")):
+            with self.subTest(environment=named_env, cli=cli), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                path.parent.mkdir(parents=True)
+                path.write_text(f'[mcp_servers.dpf]\nurl="{original}"\nstartup_timeout_sec=45\n')
+                with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp, "DPF_MCP_URL": named_env}), \
+                        patch.object(updater, "resolve_codex_binary", return_value=None):
+                    code = updater.main(["--codex-only", "--skip-codex-cli-install",
+                                         "--skip-grok-cli-install", "--skip-antigravity-cli-install", *cli])
+                self.assertEqual(code, 0)
+                self.assertIn(f'url = "{expected}"', path.read_text())
+                self.assertIn("startup_timeout_sec=45", path.read_text())
+
+    def test_codex_implicit_convergence_preserves_existing_endpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            path = updater.codex_config_path(home)
+            path.parent.mkdir(parents=True)
+            path.write_text('[mcp_servers."dpf"]\nurl="http://127.0.0.1:3000/api/mcp/v1?tier=full"\nstartup_timeout_sec=45\n')
+            updater.ensure_codex_config(home, None, False)
+            first = path.read_text()
+            self.assertIn('url = "http://127.0.0.1:3000/api/mcp/v1?tier=full"', first)
+            self.assertIn("startup_timeout_sec=45", first)
+            self.assertNotIn("bearer_token_env_var", first)
+            updater.ensure_codex_config(home, None, False)
+            self.assertEqual(first, path.read_text())
+
+    def test_codex_new_connection_keeps_https_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            updater.ensure_codex_config(home, None, False)
+            self.assertIn('url = "https://localhost/api/mcp/v1?tier=full"', updater.codex_config_path(home).read_text())
+
+    def test_codex_explicit_endpoint_replaces_existing_endpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            path = updater.codex_config_path(home)
+            path.parent.mkdir(parents=True)
+            path.write_text('[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\n')
+            updater.ensure_codex_config(home, "https://explicit.example/api/mcp/v1", False)
+            self.assertIn('url = "https://explicit.example/api/mcp/v1?tier=full"', path.read_text())
+
     def test_policy_agrees_with_shared_fixtures(self):
         cases = json.loads(Path(__file__).with_name("mcp-credential-policy-cases.json").read_text())
         for case in cases:
@@ -1982,12 +2044,12 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
             stub.write_text('printf "%s\\n" "$@"\nexit "$DPF_TEST_EXIT"\n')
             for exit_code, named in ((0, "https://example.invalid/api/mcp/v1"), (7, "https://example.invalid/api/mcp/v1"), (0, "")):
                 result = subprocess.run(
-                    ["bash", "-c", 'fail() { printf "%s\\n" "$1"; }\n' + block + '\nprintf "PLAN_REACHED\\n"'],
-                    env={**os.environ, "REPO_ROOT": tmp, "MCP_ENDPOINT": "https://localhost/api/mcp/v1",
+                    [updater.shutil.which("bash") or "bash", "-c", 'fail() { printf "%s\\n" "$1"; }\n' + block + '\nprintf "PLAN_REACHED\\n"'],
+                    env={**os.environ, "REPO_ROOT": Path(tmp).as_posix(), "MCP_ENDPOINT": "https://localhost/api/mcp/v1",
                          "MCP_ENDPOINT_NAMED": named, "DRY_RUN": "1", "DPF_TEST_EXIT": str(exit_code)},
                     capture_output=True, text=True,
                 )
-                self.assertIn("--dry-run", result.stdout)
+                self.assertIn("--dry-run", result.stdout, result.stderr)
                 self.assertIn("--codex-plugin-only", result.stdout)
                 # Only an endpoint the operator named reaches the updater.
                 if named:

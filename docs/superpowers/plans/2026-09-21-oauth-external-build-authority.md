@@ -15,6 +15,29 @@ any success claim, and dpf-pr-with-dco for handoff.
 
 ## Sequence and delivery boundaries
 
+### Preserve the approved connector during toolchain convergence
+
+BI-B986A18B / BI-9369DEB5, workroom WC-EE471770. Existing-connection
+verification observed the saved Codex endpoint change from supported loopback
+HTTP to HTTPS localhost, where metadata discovery failed certificate validation.
+The invoking writer is not established. Source inspection found two paths that
+can overwrite the endpoint: the updater's implicit default and the installer
+resolver's preference for PUBLIC_URL over an explicit DPF_MCP_URL.
+
+1. First fail updater endpoint-preservation and PowerShell/Bash precedence tests.
+2. Refactor the existing Codex table writer to preserve its saved URL when no
+   CLI or environment endpoint is named; retain the HTTPS default for new setup.
+   Explicit CLI or environment endpoint selection still replaces the saved URL.
+3. Give the explicit process endpoint precedence in the shared installer twins.
+   Preserve install-origin and saved-user fallbacks, CA selection and credentials.
+4. Verify isolated-home updater reruns and both real shell resolvers, document
+   recovery, then renew exact-source gate and independent review before release.
+5. Verify canonical delivery and the complete OAuth acceptance matrix. A config
+   repair or successful login alone does not establish acceptance.
+
+Convergence: operator-action — rerun the supported toolchain updater/bootstrap
+after the canonical source upgrade; existing user endpoint choices are preserved.
+
 ### Live acceptance follow-up: coworker data access
 
 Workroom WC-BDBAFFC7; decision DI-A8F0093A0CAF. On deployed 5c52f711,
