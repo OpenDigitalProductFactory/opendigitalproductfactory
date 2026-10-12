@@ -27,6 +27,47 @@ describe("account model discovery", () => {
     expect(mocks.profile).toHaveBeenCalledWith("openai", ["model-b"]);
   });
 
+  it.each(["local", "ollama"])("discovers credentialless %s inventory without enabling an inactive account", async (providerId) => {
+    mocks.db.aiProviderConnection.findUnique.mockResolvedValue({
+      connectionId: "local-account", providerId, authMethod: "local", status: "inactive",
+      updatedAt: new Date("2026-10-01"),
+    });
+    mocks.db.modelProvider.findUnique.mockResolvedValue({
+      providerId, authMethod: "none", authHeader: null,
+      baseUrl: providerId === "ollama" ? "http://ollama.example.test" : "http://model-runner.example.test/v1",
+      families: [], enabledFamilies: [],
+      supportedAuthMethods: ["none"],
+    });
+    mocks.bearer.mockResolvedValue({ error: "No credential configured" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => providerId === "ollama"
+      ? { models: [{ name: "model-b" }] }
+      : { data: [{ id: "model-b" }] } }));
+
+    expect(await discoverProviderAccountModels("local-account")).toEqual({
+      ok: true, data: { modelIds: ["model-b"] },
+    });
+    expect(mocks.credential).not.toHaveBeenCalled();
+    expect(mocks.bearer).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledWith(providerId === "ollama"
+      ? "http://ollama.example.test/api/tags" : "http://model-runner.example.test/v1/models",
+    expect.objectContaining({ headers: {} }));
+    expect(mocks.db.aiProviderConnection.updateMany).toHaveBeenCalledWith({
+      where: { connectionId: "local-account", updatedAt: new Date("2026-10-01"), status: { not: "disabled" } },
+      data: { accessibleModelIds: ["model-b"], modelsVerifiedAt: expect.any(Date) },
+    });
+  });
+
+  it.each(["openai", "unknown-provider"])("does not trust %s account's local auth label to skip credentials", async (providerId) => {
+    mocks.db.aiProviderConnection.findUnique.mockResolvedValue({
+      connectionId: "cloud-account", providerId, authMethod: "local", status: "active",
+    });
+    mocks.bearer.mockResolvedValue({ error: "No credential configured" });
+    expect(await discoverProviderAccountModels("cloud-account")).toEqual({ ok: false, error: "No credential configured" });
+    expect(mocks.bearer).toHaveBeenCalledWith(providerId, "cloud-account");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mocks.db.aiProviderConnection.updateMany).not.toHaveBeenCalled();
+  });
+
   it("does not replace account entitlements with an unsuccessful response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
     expect((await discoverProviderAccountModels("account-b")).ok).toBe(false);
