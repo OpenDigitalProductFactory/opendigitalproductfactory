@@ -12,7 +12,7 @@ Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/cop
 
 - **Broken upgrade, portal, MCP or CI:** read the local [recovery routing reference](packages/dpf-skill-pack/skills/dpf-systematic-debugging/references/recovery-routing.md) before applying ordinary coordination prerequisites. Recovery must not depend on the component being repaired. This selects an existing authorized procedure; it grants no override.
 - **Normal delivery:** use §3–5 and claim the existing backlog/workroom. Run `pnpm gate:context` for constraints on the actual diff. Load one applicable DPF skill, then its references as needed; do not preload the skill catalog or all runbooks.
-- **Known blocker:** `node scripts/gate-context.mjs --situation <normal|upgrade-failed|mcp-unavailable|ci-unavailable|permission-denied|break-fix-occupied>` prints a bounded local brief without portal or Git access. Classify from observed evidence; an occupied queue is not an outage.
+- **Known blocker:** `node scripts/gate-context.mjs --situation <situation>` prints a bounded local brief without portal or Git access; invalid input lists the routes. Classify from observed evidence; an occupied queue is not an outage.
 - **Task brief:** keep objective, affected scope, applicable procedure, next tools, required evidence and stop condition. Refresh when facts change. Existing workroom stage briefs and gate context supply this information; do not paste the whole rulebook into each tool.
 
 ## 1. First Principles
