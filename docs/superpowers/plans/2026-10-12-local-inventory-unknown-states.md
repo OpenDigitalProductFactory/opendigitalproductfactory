@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Local inventory unknown states — BI-A50B677E
 
 ## Design grounding
