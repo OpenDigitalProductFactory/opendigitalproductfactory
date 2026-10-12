@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   db: { aiProviderConnection: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() }, modelProvider: { findUnique: vi.fn() } },
-  credential: vi.fn(), upsert: vi.fn(), profile: vi.fn(), bearer: vi.fn(), backend: vi.fn(),
+  credential: vi.fn(), upsert: vi.fn(), profile: vi.fn(), bearer: vi.fn(), backend: vi.fn(), cli: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: mocks.db }));
 vi.mock("./ai-provider-internals", () => ({ getDecryptedCredential: mocks.credential, getProviderBearerToken: mocks.bearer, upsertDiscoveredModels: mocks.upsert, profileModelsInternal: mocks.profile, getProviderExtraHeaders: () => ({}), discoverChatGptBackendModels: mocks.backend }));
+vi.mock("./codex-cli-catalog-auth", () => ({ discoverCodexCliModels: mocks.cli }));
 import { discoverProviderAccountModels } from "./provider-account-discovery";
 
 describe("account model discovery", () => {
@@ -15,6 +16,7 @@ describe("account model discovery", () => {
     mocks.db.modelProvider.findUnique.mockResolvedValue({ providerId: "openai", authHeader: "Authorization", baseUrl: "https://api.example.test/v1", families: [], enabledFamilies: [], supportedAuthMethods: ["api_key"] });
     mocks.credential.mockResolvedValue({ secretRef: "key-b" });
     mocks.upsert.mockResolvedValue(1);
+    mocks.backend.mockResolvedValue({ models: [{ modelId: "wrong-api-catalog", rawMetadata: {} }] });
     mocks.profile.mockResolvedValue({ profiled: 1, failed: 0 });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [{ id: "model-b" }] }) }));
   });
@@ -25,6 +27,25 @@ describe("account model discovery", () => {
     expect(fetch).toHaveBeenCalledWith("https://api.example.test/v1/models", expect.objectContaining({ headers: { Authorization: "Bearer key-b" } }));
     expect(mocks.db.aiProviderConnection.updateMany).toHaveBeenCalledWith({ where: { connectionId: "account-b", updatedAt: new Date("2026-10-01"), status: { not: "disabled" } }, data: { accessibleModelIds: ["model-b"], modelsVerifiedAt: expect.any(Date) } });
     expect(mocks.profile).toHaveBeenCalledWith("openai", ["model-b"]);
+  });
+
+  it.each(["codex", "chatgpt"])("discovers %s subscription models through the selected account CLI context", async (providerId) => {
+    mocks.db.aiProviderConnection.findUnique.mockResolvedValue({ connectionId: "account-b", providerId, authMethod: "oauth", executionChannel: "subscription-cli", status: "active", updatedAt: new Date("2026-10-01") });
+    mocks.bearer.mockResolvedValue({ token: "account-b-token" });
+    mocks.cli.mockResolvedValue([{ modelId: "subscription-model", rawMetadata: { source: "codex_cli_model_list" } }]);
+    expect(await discoverProviderAccountModels("account-b")).toEqual({ ok: true, data: { modelIds: ["subscription-model"] } });
+    expect(mocks.cli).toHaveBeenCalledWith(providerId, "account-b");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mocks.backend).not.toHaveBeenCalled();
+  });
+
+  it("preserves model-access proof when the selected subscription CLI fails", async () => {
+    mocks.db.aiProviderConnection.findUnique.mockResolvedValue({ connectionId: "account-b", providerId: "codex", authMethod: "oauth", status: "active" });
+    mocks.bearer.mockResolvedValue({ token: "account-b-token" });
+    mocks.cli.mockRejectedValue(new Error("Selected account model discovery failed"));
+    expect(await discoverProviderAccountModels("account-b")).toEqual({ ok: false, error: "Selected account model discovery failed" });
+    expect(mocks.db.aiProviderConnection.updateMany).not.toHaveBeenCalled();
+    expect(mocks.upsert).not.toHaveBeenCalled();
   });
 
   it.each(["local", "ollama"])("discovers credentialless %s inventory without enabling an inactive account", async (providerId) => {

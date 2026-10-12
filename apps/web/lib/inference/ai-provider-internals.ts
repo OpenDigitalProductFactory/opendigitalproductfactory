@@ -483,7 +483,7 @@ export async function discoverModelsInternal(
 
   if (providerId === "codex" && provider.cliEngine === "codex") {
     try {
-      const { discoverCodexCliModels } = await import("@/lib/routing/codex-cli-model-catalog");
+      const { discoverCodexCliModels } = await import("./codex-cli-catalog-auth");
       const models = await discoverCodexCliModels(providerId);
       return await persistDiscoveredInventory(providerId, provider.authMethod, models);
     } catch (err) {
