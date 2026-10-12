@@ -5,7 +5,7 @@ export const PROVIDER_PAUSE_JOB_CATALOG_ENTRY: ScheduledJobCatalogEntry = {
   inngestId: "ops/provider-pause-reconcile",
   name: "Resume overdue provider pauses",
   purpose: "Resumes due operator pauses after restart or delayed event delivery, preserving newer pauses and health restrictions.",
-  cron: "*/5 * * * *",
+  cron: "1,6,11,16,21,26,31,36,41,46,51,56 * * * *",
   cadence: "Every 5 minutes",
   category: "core",
   tracksRunData: false,

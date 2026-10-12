@@ -15,7 +15,7 @@ export const providerPauseExpiry = jobs.createFunction(
 );
 
 export const providerPauseReconcile = jobs.createFunction(
-  { id: "ops/provider-pause-reconcile", retries: 1, triggers: [{ cron: "*/5 * * * *" }] },
+  { id: "ops/provider-pause-reconcile", retries: 1, triggers: [{ cron: "1,6,11,16,21,26,31,36,41,46,51,56 * * * *" }] },
   async ({ step }) => step.run("resume-overdue-pauses", async () => {
     const { reconcileOverdueProviderPauses } = await import("@/lib/inference/provider-operator-pause");
     return { resumed: await reconcileOverdueProviderPauses() };
