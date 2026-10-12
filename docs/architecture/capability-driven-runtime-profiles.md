@@ -280,6 +280,13 @@ protocol/coordinator/upgrade preflight tests pass. These are source proofs only:
 version 2 apply, compatibility probes, dual-baseline admission, compensation,
 canonical release and live reconciliation are still unqualified.
 
+Independent review then reproduced a malformed version 2 payload without its
+kind falling back to legacy signing. Both direct signing and live/historical
+receipt verification regressions failed before correction. Version 2 now refuses
+a missing or wrong kind before serialization; the corrected shared/host suite
+passes 24 tests and the related protocol suite passes 55. This review finding
+does not establish a live exploit or qualify version 2 application.
+
 ## Safe operating rules
 
 - Change physical service facts in the substrate manifest and regenerate the catalog; do not hand-edit the generated catalog.

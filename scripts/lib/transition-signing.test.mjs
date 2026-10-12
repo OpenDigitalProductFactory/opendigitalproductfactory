@@ -63,6 +63,15 @@ test("unknown runtime signing versions refuse rather than falling back to legacy
   }
 });
 
+test("version 2 refuses a missing or wrong kind before signing nested health", () => {
+  for (const kind of [undefined, null, "", "unknown-transition"]) {
+    const value = { ...reconciliation, kind };
+    if (kind === undefined) delete value.kind;
+    assert.throws(() => signTransitionPayload(value, secret), /unsupported_runtime_transition_kind/);
+    assert.throws(() => canonicalTransitionPayload(value), /unsupported_runtime_transition_kind/);
+  }
+});
+
 test("shared signing preserves the existing sorted top-level JSON/HMAC bytes", () => {
   const legacy = { version: 1, transitionId: "RCT-test", issuedAt: "a", expiresAt: "b", previousKeys: ["runtime:core"] };
   const payload = canonicalTransitionPayload(legacy);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createHmac } from "node:crypto";
 import { canonicalTransitionPayload, signTransitionPayload, verifyHistoricalTransitionReceipt, verifyTransitionReceipt, type RuntimeTransitionEnvelope } from "./transition-protocol";
 
 const secret = "s".repeat(32);
@@ -9,6 +10,15 @@ const envelope: RuntimeTransitionEnvelope = {
 };
 
 describe("runtime transition receipt verification", () => {
+  it("refuses malformed version 2 receipts instead of accepting legacy unsigned nested health", () => {
+    const malformed = { ...envelope, version: 2 } as unknown as RuntimeTransitionEnvelope;
+    const unsigned = { ...malformed, status: "applied" as const, observedServices: ["portal"], observedHealth: { portal: "unhealthy" as const }, completedAt: new Date(2_000).toISOString(), beforeHash: malformed.previousStateHash, afterHash: malformed.desiredStateHash };
+    // This reproduces the old fallback's actual signature. No v2 kind exists.
+    const signature = createHmac("sha256", secret).update(JSON.stringify(unsigned, Object.keys(unsigned).sort())).digest("hex");
+    const changed = { ...unsigned, observedHealth: { portal: "healthy" as const }, signature };
+    expect(() => verifyTransitionReceipt(changed, secret, malformed, 2_000)).toThrow("unsupported_runtime_transition_kind");
+    expect(() => verifyHistoricalTransitionReceipt(changed, secret, malformed)).toThrow("unsupported_runtime_transition_kind");
+  });
   it("delegates to the shared runtime-neutral signing bytes", async () => {
     const shared = await import("../../../../scripts/lib/transition-signing.mjs");
     expect(canonicalTransitionPayload(envelope)).toBe(shared.canonicalTransitionPayload(envelope));
