@@ -1,5 +1,43 @@
 # Build gate runbook
 
+## Semantic review publication and infrastructure recovery
+
+The publication adapter reads [semantic-review-policy.json](../../scripts/semantic-review-policy.json).
+Its mode is the source of truth for receipt enforcement; a skill must not present
+a shadow observation as an enforced refusal. This procedure applies to external
+Claude, Codex and Grok delivery. Build Studio keeps its own transition contract.
+
+1. Freeze a clean DCO-signed commit and produce its required gate evidence.
+   Call `review_semantic_change` with the governing Workroom, immutable base/head
+   trees, committed diff digest and failure analysis bound to that evidence.
+   Source-local test prose does not replace executed gate evidence.
+2. Repair blocking code findings. Re-review a changed tree; stop after two failed
+   repair rounds. A changed diff, policy, reviewer or specialist set invalidates
+   a receipt. An infrastructure refusal or uncertain execution is not a finding.
+3. Record a returned native receipt with
+   `pnpm review:semantic-gate -- record --receipt-file <tool-result.json> --evidence-id <id>`.
+   Then run `pnpm review:semantic-gate -- validate` for the current commit.
+   In enforced mode an unavailable or stale receipt blocks publication. Follow
+   the returned remedy; never change mode or forge a receipt to pass the check.
+4. If infrastructure cannot run the native review, use
+   `node scripts/gate-context.mjs --situation review-infrastructure-unavailable`.
+   Do not repeatedly submit an unchanged request to unavailable capacity or poll
+   a task whose execution has stopped. Use the existing review recovery contract
+   after a verified remediation.
+5. In shadow mode the adapter may allow publication with a missing receipt.
+   For a bounded DEV repair under explicit operator authorization, preserve an
+   independent assessment of the exact change, record the native review as unrun
+   or inconclusive, and proceed through passing source checks and the protected
+   PR/merge queue. Reuse authorization already granted for that scope; a phase
+   change does not require a new exception question. Shadow alone grants no
+   authority and does not excuse ignoring a completed review's blocking findings.
+
+Independent client reviews are valid assessments with their own author, source
+identity, findings and outcome. Cite them separately in the Workroom and PR;
+they are not native receipts. Publication permission, passing review, merge and
+live verification remain separate facts. DCO, grant intersection, ownership and
+production integrity remain mandatory throughout recovery.
+
 CI scopes a pull request from its source head and that head's merge-base with `origin/main`. GitHub's checkout may be a synthetic merge; using its base with the source head includes unrelated main changes as reverse diffs and can turn documentation into exhaustive work. Both comparison endpoints must describe the same source history. Merge-group and other non-PR events retain exhaustive verification.
 
 **Public documentation publication.** CI's `Documentation Publication Build` builds `docs/` with the same [GitHub Pages Jekyll action](https://github.com/actions/jekyll-build-pages) used by legacy Pages publication. It runs for changed documentation or CI configuration on PRs, merge candidates and main; missing comparison history runs the build. Unchanged publication inputs produce a terminal no-build result. The job also checks that malformed Liquid is rejected, and feeds the required `Merge Readiness` aggregate. It only builds: the existing Pages channel still owns deployment. A green build is not evidence that the public site has deployed. Jekyll processes Liquid inside code fences; protect literal examples using its [raw tag guidance](https://jekyllrb.com/docs/liquid/tags/#jekyll-processes-all-liquid-filters-in-code-blocks).
