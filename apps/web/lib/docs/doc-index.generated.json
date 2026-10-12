@@ -1185,6 +1185,7 @@
       "publishedPortal": false,
       "anchors": [
         "build-gate-runbook",
+        "recovering-an-interrupted-gate-publication",
         "isolated-verification-users",
         "semantic-review-publication-and-infrastructure-recovery",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",

@@ -10,4 +10,6 @@
 // 1 - durable-wait resumer and its gate runs spawn with windowsHide
 //     (BI-69178E02): older clients open a focus-stealing terminal window on
 //     every re-claim on Windows.
-export const GATE_CLIENT_REVISION = 1;
+// 2 - process-incarnation cleanup, Windows owned jobs, durable checkpoints and
+//     exact pending-result replay (BI-BFDB98B6).
+export const GATE_CLIENT_REVISION = 2;

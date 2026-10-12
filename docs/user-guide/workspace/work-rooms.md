@@ -436,6 +436,21 @@ shows the stages, decisions and tool permissions of a delivery room end to end.
 
 ## Incomplete or Unavailable Rooms
 
+In **Define this room > More room details**, **Sensitivity limit** offers public,
+internal, confidential and restricted classifications, or an explicit unset value.
+An older declaration outside those classifications shows **Needs classification
+review**. Editing the room's purpose or outcome preserves that declaration and
+does not restore access automatically.
+
+A platform administrator can ask their assistant to review the classification
+state of that exact room. This administrative check returns no room contents.
+After the administrator verifies the actual information classification, the
+assistant can propose a correction with the current review reference and a reason.
+The normal approval applies; if the room changed meanwhile, it must be reviewed
+again. Correction retains the original declaration in the room's audit and changes
+no coworker's global clearance. Existing valid classifications cannot be lowered
+through this recovery operation.
+
 If a room boundary is incomplete, the page identifies the missing elements instead of inventing them. If the source is unavailable, the last available projection is marked clearly and the page gives one recovery direction. If an AI coworker's current status is unavailable, the participant panel says so and directs you back to the room's next action instead of implying that the coworker is still working.
 
 If you do not have access, the internal room title, participants, source references, and sensitivity details are not shown. External customer case pages remain customer-safe case summaries; they do not expose internal Workroom controls or participants.
