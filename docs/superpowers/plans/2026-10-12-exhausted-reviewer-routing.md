@@ -88,6 +88,8 @@ change through a protected PR; audit rows and existing tasks are never mutated.
 
 ## Backlog coverage
 
-Coverage pending immutable plan publication and the governed coverage write.
-No source implementation begins before that receipt.
+Actual atomic coverage receipt: cmv5vklnz21uq01pgmt5mvgba, BI-CAP-EF2B04BB.
+It binds the published plan commit 6788d92cb03f4e3a9765b389b1bb158e55d6b69a,
+blob 05a7f520823b53ed2275bb467b0ebb1376fd9f6a. This paragraph records the
+receipt after that immutable checkpoint; it does not replace its artifact.
 
