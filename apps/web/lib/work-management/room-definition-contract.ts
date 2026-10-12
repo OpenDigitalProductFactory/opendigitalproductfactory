@@ -75,6 +75,23 @@ export interface WorkCaseRoomMeasure {
   bindingKey: string;
 }
 
+/** Read contracts only: these requirements never confer tool authority. */
+export interface RoomReviewRequirement {
+  ref: string;
+  outcome: string;
+  denominator: string;
+  evidence: readonly string[];
+  criticalFailures: readonly string[];
+  maxAgeSeconds?: number;
+}
+
+export interface RoomReviewLayer {
+  /** Immutable versioned reference; a changed payload needs a new version. */
+  ref: string;
+  kind: "common" | "source" | "shape" | "facet" | "category" | "leaf" | "organization";
+  requirements: readonly RoomReviewRequirement[];
+}
+
 /**
  * Intersect a room's grant ceiling with the agent's standing authority.
  *
