@@ -19,9 +19,9 @@ Design capture is underway. The eight Windows synthetic PdfCraft checks passed; 
 
 | Slice | Live item | Dependency | Requirement refs | Contract refs | Flow refs | Verification refs |
 | --- | --- | --- | --- | --- | --- | --- |
-| Q: selected source qualification | BI-5D5AB47E | Existing BI-815D40C6 engine contract | AC-NP-009, AC-NP-010 | Dockerfile.doctools; tools/doctools/; documents/conversion/image.ts | F-NP-QUALIFY | V-NP-CORPUS; V-NP-LICENSE; V-NP-FOOTPRINT |
-| P: native PDF packet editing | BI-3F319D83 | BI-5D5AB47E | AC-NP-002, AC-NP-003, AC-NP-004, AC-NP-005, AC-NP-006, AC-NP-008, AC-NP-011 | document-store.ts; documents/conversion/command.ts; authorized-surface-registry.ts | F-NP-PACKET; F-NP-REVISION | V-NP-PACKET; V-NP-TENANT; V-NP-CONFLICT; V-NP-RUNTIME |
-| H: shared artifact handoff | BI-EBDB6CAE | Existing BI-4865EB4D and BI-4C17BF51 | AC-NP-001, AC-NP-007, AC-NP-008, AC-NP-011 | export-workbook.ts; view-drawing-export.ts; knowledge-docs.prisma | F-NP-HANDOFF | V-NP-SOURCE; V-NP-UX; V-NP-RUNTIME |
+| Q: selected source qualification | BI-5D5AB47E | Existing BI-815D40C6 engine contract | OBJ-NP-QUALIFY, OBJ-NP-NATIVE | Dockerfile.doctools; tools/doctools/; documents/conversion/image.ts | F-NP-QUALIFY | AC-NP-009, AC-NP-010 |
+| P: native PDF packet editing | BI-3F319D83 | BI-5D5AB47E | OBJ-NP-PDF, OBJ-NP-CONTROL, OBJ-NP-HANDOFF | document-store.ts; documents/conversion/command.ts; authorized-surface-registry.ts | F-NP-PACKET; F-NP-REVISION | AC-NP-002, AC-NP-003, AC-NP-004, AC-NP-005, AC-NP-006, AC-NP-008, AC-NP-011 |
+| H: shared artifact handoff | BI-EBDB6CAE | Existing BI-4865EB4D and BI-4C17BF51 | OBJ-NP-NATIVE, OBJ-NP-HANDOFF, OBJ-NP-CONTROL | export-workbook.ts; view-drawing-export.ts; knowledge-docs.prisma | F-NP-HANDOFF | AC-NP-001, AC-NP-007, AC-NP-008, AC-NP-011 |
 
 Each slice is independently shippable and maps to a live BI. PDF runtime bundling waits for Q. H can improve existing source/artifact navigation without waiting for a PDF engine. Existing S4/S5/S8 work is reused, not re-filed or re-delivered by this plan.
 
