@@ -27,6 +27,13 @@ const base = {
 };
 
 describe("consent rendering", () => {
+  it("shows routine delegation and retained checks beside the requested permissions", () => {
+    const html = renderConsentPage(base);
+    expect(html).toContain("without another approval for each action");
+    expect(html).toContain("Changes to credentials or authority, destructive actions and restricted data keep their required approval checks.");
+    expect(html).toContain("A development installation does not grant extra access.");
+    expect(html.indexOf("without another approval")).toBeLessThan(html.indexOf("<summary>Adjust permissions</summary>"));
+  });
   it("lets a person cancel without selecting an assistant", () => {
     expect(renderConsentPage(base)).toContain('name="decision" value="deny" formnovalidate');
   });
