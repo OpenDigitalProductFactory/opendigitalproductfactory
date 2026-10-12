@@ -70,6 +70,18 @@ test("identity drift while running prevents publication of reusable evidence", a
   assert.equal((await runWithGuardReceipt(f.options)).reused, false);
 });
 
+test("a cached hit revalidates shared main before reporting reused PASS", async t => {
+  const f = fixture(t);
+  await runWithGuardReceipt(f.options);
+  let reads = 0;
+  const original = f.current();
+  f.options.identify = () => ++reads === 1 ? original : { ...original, base: "new-main" };
+  const result = await runWithGuardReceipt(f.options);
+  assert.equal(result.reused, false);
+  assert.equal(f.calls(), 2);
+  assert.ok(reads >= 2);
+});
+
 test("concurrent caller reports busy and never starts duplicate execution", async t => {
   const f = fixture(t);
   let release;

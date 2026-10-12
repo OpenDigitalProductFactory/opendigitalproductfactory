@@ -101,6 +101,8 @@ Verification references: VC-REUSE, VC-PUBLICATION, VC-DIAGNOSTICS.
 Native atomic coverage receipt: `cmv5qcetxf4rr01mwdd6d4czg`, binding the plan at
 `b6a5901019cd1c6a230c0c51a061d4d47efae4d5`. No dependency edges. This receipt is
 not an implementation test result or delivery claim.
+Refreshed coverage after CI inventory scope registration:
+`cmv5qqayffhxk01mwwxx0kk55`, binding `c8f00a6f4d6a854b1f8684c8d9853888dfc904f3`.
 
 ## Implementation checkpoint and remaining boundary
 
@@ -123,3 +125,9 @@ affected tests and independent changed-code review, and retain required GitHub
 checks and protected merge queue. This checkpoint does not claim AC-1/AC-2 or
 the entire BI is complete. Do not automatically relaunch full local validation
 merely because a published PR is blocked; diagnose its actual GitHub failure.
+
+Independent source review reproduced a cached-hit race on shared origin/main.
+Both cache-hit paths now re-read identity before returning a reused result;
+the regression failed before this correction and passes after it. The runbook
+owner released the exact documentation claim through the native tool, and this
+Workroom claimed it before editing; no force/co-claim was used.

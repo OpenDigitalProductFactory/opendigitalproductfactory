@@ -64,7 +64,8 @@ export async function runWithGuardReceipt({ directory, stage, identify, execute,
     const prior = readStageReceipt(path);
     const age = now() - Date.parse(prior?.completedAt);
     try {
-      if (age >= 0 && age < TTL_MS && reusablePassedStage({ receipt: prior, stage, identity }) && prior.result && passed(prior.result)) {
+      if (age >= 0 && age < TTL_MS && reusablePassedStage({ receipt: prior, stage, identity }) && prior.result && passed(prior.result)
+        && stageIdentityMatches(identity, identify())) {
         return { result: prior.result, reused: true, executedAt: prior.completedAt };
       }
     } catch { /* Malformed result payloads are misses, not cached passes. */ }
