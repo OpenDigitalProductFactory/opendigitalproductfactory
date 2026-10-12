@@ -201,7 +201,8 @@ export async function retireFixtureRun(runId: string, actor?: FixtureActor) {
     // Cleanup is not a UX verdict. Keep real outcomes and use the existing
     // result for lifecycle idempotence. A concurrent verifier changes updatedAt
     // and rolls this transaction back rather than losing its result.
-    await db.runtimeVerification.update({ where: { id: run.id, updatedAt: run.updatedAt }, data: {
+    await db.runtimeVerification.update({ where: { id: run.id, updatedAt: run.updatedAt, status: run.status,
+      result: { equals: run.result as Prisma.InputJsonValue } }, data: {
       ...(run.status === "running" ? { status: "skipped", completedAt: now } : {}),
       result: { ...(isRecord(run.result) ? run.result : {}), fixtureCleanup: { status: "retired", retiredAt: now.toISOString() } } as Prisma.InputJsonObject,
     } });

@@ -42,6 +42,25 @@ beforeEach(() => {
 });
 
 describe("isolated verification provisioning", () => {
+  it("preserves a changed UX result even when the verifier shares the same timestamp", async () => {
+    const first = await prepareFixture(request, actor, "http://portal:3000");
+    mocks.db.authorityBinding.updateMany.mockImplementationOnce(async () => {
+      run = { ...run, status: "passed", result: { ...run.result, uxOutcome: { passed: 7 } } };
+    });
+    mocks.db.runtimeVerification.update.mockImplementation(async ({ where, data }: {
+      where: { updatedAt?: Date; status?: string; result?: { equals: unknown } }; data: Record<string, unknown>;
+    }) => {
+      if ((where.updatedAt && where.updatedAt.getTime() !== run.updatedAt.getTime())
+        || (where.status && where.status !== run.status)
+        || (where.result && JSON.stringify(where.result.equals) !== JSON.stringify(run.result))) throw new Error("verification changed");
+      run = { ...run, ...data };
+      return run;
+    });
+    await expect(retireFixtureRun(first.runId, actor)).rejects.toThrow("verification changed");
+    expect(run.status).toBe("passed");
+    expect(run.result.uxOutcome).toEqual({ passed: 7 });
+    expect(run.result.fixtureCleanup).toBeUndefined();
+  });
   it("does not overwrite a UX verdict recorded while cleanup is in progress", async () => {
     const first = await prepareFixture(request, actor, "http://portal:3000");
     mocks.db.authorityBinding.updateMany.mockImplementationOnce(async () => {
