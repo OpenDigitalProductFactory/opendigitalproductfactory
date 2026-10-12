@@ -14,6 +14,7 @@ export async function loadWorkroomExecutionEvidence(
   now: Date,
 ) {
   const identities = new Map(rooms.filter(room => room.id).map(room => [room.id!, room.capsuleId]));
+  const roomsById = new Map(rooms.filter(room => room.id).map(room => [room.id!, room]));
   const [journal, reviewers, initiative] = await Promise.all([
     identities.size && db.workroomActivity
       ? db.workroomActivity.findMany({
@@ -32,7 +33,7 @@ export async function loadWorkroomExecutionEvidence(
       ...reviewers.receipts,
       ...initiative.receipts,
       ...rows.filter(row => ["evidence-recorded", "verification", "receipt"].includes(row.kind))
-        .map(row => fromWorkCapsuleActivity(row, { capsuleId: identities.get(row.workCapsuleId) })),
+        .map(row => fromWorkCapsuleActivity(row, { capsuleId: identities.get(row.workCapsuleId), room: roomsById.get(row.workCapsuleId) })),
     ],
     sourceRefs: reviewers.sourceRefs,
     attentionReason: reviewers.attentionReason,

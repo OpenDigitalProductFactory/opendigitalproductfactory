@@ -3,6 +3,7 @@ import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity
 import { isWorkCapsuleEvidenceKind, type WorkCapsuleEvidenceKind, type WorkCapsuleActivityKind } from "@/lib/work-capsules";
 
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import { buildStageEvidenceBinding } from "@/lib/work-management/workroom-stage-evidence-binding";
 
 export async function recordWorkCapsuleActivity(
   db: CapsuleDb,
@@ -60,16 +61,27 @@ export async function recordWorkCapsuleEvidence(args: {
     throw new Error("Invalid evidence kind");
   }
 
-  const capsule = await args.db.workroom.findUnique({
-    where: { capsuleId: args.capsuleId },
-  });
-  if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-
-  return recordWorkCapsuleActivity(args.db, {
-    workCapsuleId: capsule.id,
-    kind: "evidence-recorded",
-    summary: args.evidence.summary,
-    payload: args.evidence,
-    actor: args.actor,
-  }, { deferPublication: args.deferPublication });
+  // Snapshot the caller's flat stage identity before the first await. Reserved
+  // source context is always replaced, even for callers using an untyped input.
+  const evidence = { ...args.evidence };
+  const write = async (tx: CapsuleDb) => {
+    // Unscoped notes (including semantic-review transactions) need no new
+    // parent lock. Only stage-scoped source snapshots require serialization.
+    if (evidence.stageKey && tx.$queryRaw) {
+      await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${args.capsuleId} FOR UPDATE`;
+    }
+    const capsule = await tx.workroom.findUnique({ where: { capsuleId: args.capsuleId } });
+    if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+    const sourceBinding = buildStageEvidenceBinding({ ...capsule, capsuleId: args.capsuleId }, evidence);
+    return recordWorkCapsuleActivity(tx, {
+      workCapsuleId: capsule.id, kind: "evidence-recorded", summary: evidence.summary,
+      payload: { ...evidence, sourceBinding }, actor: args.actor,
+    }, { deferPublication: true });
+  };
+  const activity = args.db.$transaction ? await args.db.$transaction(write) : await write(args.db);
+  if (!args.deferPublication) {
+    publishRecordedWorkCapsuleActivity(activity.workCapsuleId, activity.id);
+    revalidatePortalContext();
+  }
+  return activity;
 }

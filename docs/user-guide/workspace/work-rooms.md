@@ -84,6 +84,13 @@ owner, supporting evidence, and affected work. Required evidence is not proof
 that the evidence has been recorded. Where a receipt cannot be linked to an
 individual step, the view reports that gap and keeps it in the room evidence.
 
+Stage-scoped development evidence recorded for the room's current source and
+process version can appear under that step's required evidence. A link means the
+record was observed; it does not grant approval or verify completion. After the
+room changes source or process version, older records remain in its history and
+do not satisfy the current step's evidence binding. Earlier records without a
+source binding remain uncorrelated.
+
 **Observed execution** counts activity events and receipts separately. Expand a
 record for its source identity, actor and timestamp. An event records what was
 observed; it does not verify a step. A process pause appears in the room's
