@@ -49,6 +49,7 @@ import {
   engineKeyForProvider,
 } from "./inference-admission";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { providerInferenceFetch } from "./provider-inference-transport";
 import { InferenceError } from "../routing/inference-error";
 
@@ -132,6 +133,22 @@ async function resolveExecutionBaseUrl(
   return provider.baseUrl ?? provider.endpoint;
 }
 
+async function readEnabledLocalProvider(providerId: string) {
+  if (!isLocalProviderId(providerId)) return null;
+  const [provider, connection] = await Promise.all([
+    prisma.modelProvider.findUnique({ where: { providerId } }),
+    prisma.aiProviderConnection.findUnique({
+      where: { connectionId: `provider-default-${providerId}` },
+      select: { status: true },
+    }),
+  ]);
+  if (!provider || !["active", "degraded"].includes(provider.status)
+    || !connection || !["active", "degraded"].includes(connection.status)) {
+    throw new InferenceError("Local provider is not enabled for routing", "provider_error", providerId);
+  }
+  return provider;
+}
+
 // ─── Tool Call Extraction & Message Formatting ──────────────────────────────
 // Pure helpers, defined in the leaf routing/provider-message-format.
 
@@ -204,6 +221,8 @@ export async function callProvider(
   // Host capacity is a dispatch constraint, not a routing hint. Enforce it at
   // the shared adapter boundary so direct, agentic, evaluation and fallback
   // callers cannot start a local model while governed local CI owns the host.
+  // Revalidate an older routing selection before waiting for or using local capacity.
+  const localProvider = await readEnabledLocalProvider(providerId);
   await assertProviderDispatchCapacity(providerId);
   // Lease ownership is routing policy. Whether the card is free is an inference
   // fact, so it stays in this layer (routing may not import inference).
@@ -263,7 +282,7 @@ export async function callProvider(
   }
 
   // 1. Resolve provider (DB lookup + auth headers)
-  const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
+  const provider = localProvider ?? await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) throw new InferenceError("Provider not found", "provider_error", providerId);
 
   // CLI adapters (anthropic-sub, codex) resolve their own auth and spawn CLI
@@ -321,6 +340,9 @@ export async function callProvider(
   });
   let result;
   try {
+    // Queued work has not started inference yet. A disable during admission
+    // invalidates its earlier selection; finally still releases the slot.
+    await readEnabledLocalProvider(providerId);
     result = await adapter.execute({
       providerId,
       modelId,

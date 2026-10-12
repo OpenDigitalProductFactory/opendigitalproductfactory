@@ -344,7 +344,16 @@ async function runSequence(definition: WorkShapeDefinition, shapeIndex: number, 
         return "acquired";
       },
       upsertAgentTask: async (input) => {
-        calls.push({ effect: "upsertAgentTask", input: plain(input) });
+        // The frozen pre-3c golden covers planner behavior. Validate the new
+        // persistence identity separately, then compare every original field.
+        // Do not regenerate the golden to bless a changed scheduling decision.
+        const { dispatchScope, ...original } = input;
+        if (dispatchScope) {
+          expect(dispatchScope.runKey).toBeTruthy();
+          expect(dispatchScope.cycleKey).toBe(`${input.stage.shapeKey}@${input.stage.shapeVersion}:${input.now.toISOString().slice(0, 10)}`);
+          expect(dispatchScope.iteration).toBe(0);
+        }
+        calls.push({ effect: "upsertAgentTask", input: plain(original) });
         if (upsertFails) return false;
         taskIds.push(input.taskId);
         return true;

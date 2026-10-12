@@ -32,26 +32,49 @@ export async function scheduleWorkroomAgentTask(
     const checkpoint = buildDispatchCheckpoint(workspace.workroomDispatchCheckpoint, {
       taskId: input.taskId, roomId: input.lease.roomId, objective: room.objective ?? null,
       stage: input.stage, now: input.now.toISOString(),
+      dispatchScope: input.dispatchScope,
       holderPrincipalId: input.lease.holderPrincipalId, leaseExpiresAt: input.lease.expiresAt.toISOString(),
     });
     // Merge, never replace: taskConfig is shared JSON; only workroomStage is this writer's.
     const current = await tx.scheduledAgentTask.findUnique({ where: { taskId: input.taskId }, select: { taskConfig: true, agentId: true, ownerUserId: true } });
-    const prior = readDispatchCheckpoint(workspace.workroomDispatchCheckpoint);
-    if (prior?.confirmedEffect.taskId === input.taskId) {
+    const taskState = isRecord(current?.taskConfig) ? current.taskConfig : {};
+    const storedReceipt = taskState.workroomDispatchCheckpoint;
+    const taskReceipt = readDispatchCheckpoint(storedReceipt);
+    if (storedReceipt != null && (!taskReceipt || taskReceipt.roomId !== input.lease.roomId
+      || taskReceipt.confirmedEffect.taskId !== input.taskId)) throw new Error("Unreadable or foreign task dispatch checkpoint");
+    const latest = readDispatchCheckpoint(workspace.workroomDispatchCheckpoint);
+    const prior = taskReceipt ?? (latest?.confirmedEffect.taskId === input.taskId ? latest : null);
+    if (prior) {
       const recordedStage = readWorkroomStageTaskConfig(current?.taskConfig);
-      const sameStage = (stage: typeof recordedStage) => stage !== null
-        && stage.shapeKey === input.stage.shapeKey && stage.shapeVersion === input.stage.shapeVersion
-        && stage.stageKey === input.stage.stageKey
-        && JSON.stringify([...new Set(stage.tools)].sort()) === JSON.stringify([...new Set(input.stage.tools)].sort());
-      if (!current || current.agentId !== input.agentId || current.ownerUserId !== input.ownerUserId
-        || !sameStage(recordedStage) || !sameStage(prior.stage)) {
+      const sameStage = (stage: typeof recordedStage, expected: typeof input.stage) => stage !== null
+        && stage.shapeKey === expected.shapeKey && stage.shapeVersion === expected.shapeVersion
+        && stage.stageKey === expected.stageKey
+        && JSON.stringify([...new Set(stage.tools)].sort()) === JSON.stringify([...new Set(expected.tools)].sort());
+      // Validate the stored receipt against its task before deciding whether this
+      // is a replay or a legitimate new stage/run. A task id alone is not an intent.
+      if (!current || current.ownerUserId !== input.ownerUserId || !sameStage(recordedStage, prior.stage)) {
         throw new Error("Recorded dispatch requires task identity reconciliation before replay");
       }
-      // Enqueue already committed. Preserve its receipt and the task's execution
-      // state; the caller can repair the missing drive snapshot without rearming it.
-      return true;
+      const sameScope = prior.dispatchScope && input.dispatchScope
+        ? prior.dispatchScope.runKey === input.dispatchScope.runKey
+          && prior.dispatchScope.cycleKey === input.dispatchScope.cycleKey
+          && prior.dispatchScope.iteration === input.dispatchScope.iteration
+        : !prior.dispatchScope && !input.dispatchScope;
+      const sameStageIdentity = prior.stage.shapeKey === input.stage.shapeKey
+        && prior.stage.shapeVersion === input.stage.shapeVersion && prior.stage.stageKey === input.stage.stageKey;
+      if (sameStageIdentity && sameScope) {
+        if (current.agentId !== input.agentId || !sameStage(prior.stage, input.stage)) {
+          throw new Error("Recorded dispatch requires task identity reconciliation before replay");
+        }
+        return true;
+      }
+      // Legacy same-stage receipts cannot establish a new cycle boundary.
+      if (sameStageIdentity && Boolean(prior.dispatchScope) !== Boolean(input.dispatchScope)) {
+        throw new Error("Legacy dispatch requires cycle identity reconciliation before replay");
+      }
     }
-    const taskConfig = withWorkroomStageTaskConfig(current?.taskConfig ?? null, input.stage) as Prisma.InputJsonValue;
+    const taskConfig = { ...withWorkroomStageTaskConfig(current?.taskConfig ?? null, input.stage),
+      workroomDispatchCheckpoint: checkpoint } as unknown as Prisma.InputJsonValue;
     await tx.scheduledAgentTask.upsert({
       where: { taskId: input.taskId },
       create: {

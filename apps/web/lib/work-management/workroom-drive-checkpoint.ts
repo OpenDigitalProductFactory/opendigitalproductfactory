@@ -1,5 +1,7 @@
 import { isRecord } from "@/lib/shared/coerce";
 
+export type DispatchScope = { runKey: string; cycleKey: string; iteration: number };
+
 /** Phase 2 capture boundary: enqueue is a database effect, never task completion.
  * Stored with the task in its lease-fenced transaction. Unknown executor-owned
  * artifacts/acceptance remain unknown; this record does not authorize replay.
@@ -8,6 +10,8 @@ import { isRecord } from "@/lib/shared/coerce";
 export type DispatchCheckpoint = {
   version: 1;
   revision: number;
+  /** Absent on legacy receipts: their dispatch boundary remains unknown. */
+  dispatchScope?: DispatchScope;
   roomId: string;
   objective: string | null;
   remainingAcceptance: null;
@@ -29,6 +33,9 @@ export function readDispatchCheckpoint(value: unknown): DispatchCheckpoint | nul
     || !(value.objective === null || typeof value.objective === "string")
     || value.remainingAcceptance !== null || value.artifacts !== null || value.dirtyOutputs !== null
     || value.pendingIntent !== null || value.nextAction !== "reconcile-scheduled-task") return null;
+  if (value.dispatchScope !== undefined && (!isRecord(value.dispatchScope)
+    || !text(value.dispatchScope.runKey) || !text(value.dispatchScope.cycleKey)
+    || !Number.isSafeInteger(value.dispatchScope.iteration) || (value.dispatchScope.iteration as number) < 0)) return null;
   const effect = value.confirmedEffect, stage = value.stage, authority = value.authority;
   if (!isRecord(effect) || effect.kind !== "scheduled-task-enqueued" || !text(effect.taskId)
     || !date(effect.recordedAt) || !isRecord(stage) || !text(stage.shapeKey) || !text(stage.shapeVersion)
@@ -40,6 +47,7 @@ export function readDispatchCheckpoint(value: unknown): DispatchCheckpoint | nul
 
 export function buildDispatchCheckpoint(previous: unknown, input: {
   taskId: string; roomId: string; objective: string | null;
+  dispatchScope?: DispatchScope;
   stage: DispatchCheckpoint["stage"];
   holderPrincipalId: string | null; leaseExpiresAt: string; now: string;
 }): DispatchCheckpoint {
@@ -47,6 +55,7 @@ export function buildDispatchCheckpoint(previous: unknown, input: {
   if (previous != null && (!prior || prior.roomId !== input.roomId)) throw new Error("Unreadable or foreign dispatch checkpoint");
   const next: DispatchCheckpoint = {
     version: 1, revision: (prior?.revision ?? 0) + 1, roomId: input.roomId, objective: input.objective,
+    ...(input.dispatchScope ? { dispatchScope: { ...input.dispatchScope } } : {}),
     remainingAcceptance: null, artifacts: null, dirtyOutputs: null, pendingIntent: null,
     confirmedEffect: { kind: "scheduled-task-enqueued", taskId: input.taskId, recordedAt: input.now },
     stage: { ...input.stage, tools: [...input.stage.tools] },

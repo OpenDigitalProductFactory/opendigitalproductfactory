@@ -1,6 +1,6 @@
 // packages/db/src/index.ts
 export { prisma } from "./client";
-export { ensureDefaultProviderConnection, refreshDefaultProviderConnectionOwners } from "./provider-connection";
+export { ensureDefaultProviderConnection, refreshDefaultProviderConnectionOwners, setProviderStatusWithDefaultConnection } from "./provider-connection";
 export {
   PROVIDER_COMPLIANCE_SOURCE_REGISTRY,
   validateProviderComplianceSourceRegistry,

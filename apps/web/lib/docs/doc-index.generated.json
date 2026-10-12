@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 738,
+  "pageCount": 739,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1186,6 +1186,7 @@
       "anchors": [
         "build-gate-runbook",
         "isolated-verification-users",
+        "semantic-review-publication-and-infrastructure-recovery",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
         "the-room-follows-its-pr-through-ci-bi-88341b5d",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
@@ -1344,6 +1345,7 @@
         "7-subagent-dispatch-discipline",
         "14-release-testing",
         "15-communication",
+        "ending-an-unfinished-thread",
         "8a-advise-safe-tools-server-action-exports-coworker-coordination-pointers",
         "task-specific-operating-rules"
       ]
@@ -2128,6 +2130,7 @@
       "publishedPortal": false,
       "anchors": [
         "mcp-tool-authorization-runbook",
+        "reading-an-owned-semantic-reviews-recovery-state",
         "discovered-external-mcp-tools-are-default-deny-bi-8b7b2fe9",
         "protocol-version-window-mechanics-landed-contract-pending-ratification",
         "gpp-permit-handles-phase-2",
@@ -2351,6 +2354,20 @@
         "governed-controls",
         "provider-ui-preservation-contract",
         "migration-and-verification"
+      ]
+    },
+    "docs/architecture/review-reliability-recovery.md": {
+      "publicHref": "/architecture/review-reliability-recovery/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "review-reliability-and-aligned-execution",
+        "objective-and-authority",
+        "existing-substrate-and-plan",
+        "conflicting-and-overlapping-work",
+        "evidence-and-recovery-boundary",
+        "public-development-routing"
       ]
     },
     "docs/architecture/section-navigation.md": {
@@ -11803,6 +11820,7 @@
         "overview",
         "how-it-works",
         "setup",
+        "pausing-local-ai",
         "pulling-models",
         "model-discovery-and-profiling",
         "local-multimodal-input-vision-audio",
