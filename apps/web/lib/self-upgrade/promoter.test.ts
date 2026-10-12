@@ -39,7 +39,7 @@ describe("runtime capability protocol probe", () => {
 
   it("uses the verified immutable image without mounts, credentials, socket or network", () => {
     const command = buildRuntimeCapabilityProtocolProbeCommand(artifact, "dpf-runtime-protocol-test");
-    expect(command).toEqual({ command: "docker", args: ["run", "--rm", "--name", "dpf-runtime-protocol-test", "--read-only", "--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "128m", "--cpus", "1", artifact.digest, "--runtime-capability-protocol-info"] });
+    expect(command).toEqual({ command: "docker", args: ["run", "--rm", "--name", "dpf-runtime-protocol-test", "--read-only", "--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "128m", "--cpus", "1", "--pids-limit", "64", "--pull", "never", artifact.digest, "--runtime-capability-protocol-info"] });
     expect(() => buildRuntimeCapabilityProtocolProbeCommand({ ...artifact, digest: "latest" as never }, "dpf-runtime-protocol-test")).toThrow("runtime_protocol_probe_identity_invalid");
     expect(() => buildRuntimeCapabilityProtocolProbeCommand(artifact, "another-owner")).toThrow("runtime_protocol_probe_identity_invalid");
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createHmac } from "node:crypto";
-import { canonicalTransitionPayload, signTransitionPayload, verifyHistoricalTransitionReceipt, verifyTransitionReceipt, type RuntimeTransitionEnvelope } from "./transition-protocol";
+import { canonicalTransitionPayload, signTransitionPayload, validateRuntimeCapabilityProtocolInfo, verifyHistoricalTransitionReceipt, verifyTransitionReceipt, type RuntimeTransitionEnvelope } from "./transition-protocol";
 
 const secret = "s".repeat(32);
 const envelope: RuntimeTransitionEnvelope = {
@@ -8,6 +8,24 @@ const envelope: RuntimeTransitionEnvelope = {
   catalogHash: "a".repeat(64), previousStateHash: "b".repeat(64), desiredStateHash: "c".repeat(64),
   previousKeys: ["runtime:core"], desiredKeys: ["runtime:core"], previousProfiles: [], desiredProfiles: [], previousServices: ["portal"], desiredServices: ["portal"],
 };
+
+describe("runtime capability protocol discovery", () => {
+  const expected = { sourceSha: "a".repeat(40), actuatorSha256: "b".repeat(64), signerSha256: "c".repeat(64) };
+  const info = { schemaVersion: 1, ...expected, signingVersions: [1, 2], applyVersions: [1], reconciliationVersions: [] };
+
+  it("binds packaged protocol information to trusted source and both byte digests", () => {
+    expect(validateRuntimeCapabilityProtocolInfo(info, expected)).toEqual(info);
+    for (const field of ["sourceSha", "actuatorSha256", "signerSha256"] as const) {
+      expect(() => validateRuntimeCapabilityProtocolInfo({ ...info, [field]: "d".repeat(field === "sourceSha" ? 40 : 64) }, expected)).toThrow("runtime_protocol_probe_identity_mismatch");
+    }
+  });
+
+  it("refuses malformed or contradictory support instead of inferring compatibility", () => {
+    for (const value of [null, [], {}, { ...info, schemaVersion: 2 }, { ...info, applyVersions: [2, 1] }, { ...info, signingVersions: [1, 1] }, { ...info, signingVersions: [0] }, { ...info, applyVersions: [3] }, { ...info, reconciliationVersions: [2] }, { ...info, signerSha256: "unknown" }]) {
+      expect(() => validateRuntimeCapabilityProtocolInfo(value, expected)).toThrow("runtime_protocol_probe_invalid");
+    }
+  });
+});
 
 describe("runtime transition receipt verification", () => {
   it("refuses malformed version 2 receipts instead of accepting legacy unsigned nested health", () => {

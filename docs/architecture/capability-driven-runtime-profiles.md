@@ -299,6 +299,15 @@ reconciliation support until implementation qualifies them. All 26 shared/host
 tests and 205 related promoter/protocol/coordinator/upgrade tests pass. No live
 image probe, admission integration, full gate or reconciliation is claimed.
 
+Before executing an image probe, its command also bounds PIDs and forbids an
+implicit pull; the verified artifact must already be present. The protocol
+reader requires the trusted source SHA and both expected byte digests, rejects
+malformed or contradictory version sets, and does not infer apply support from
+signing support. Its expected identities must come from the verified canonical
+server/candidate closure, never caller-provided policy claims. The existing
+owned-container timeout/fencing runner remains required when this discovery is
+wired into admission. Source tests do not establish that runtime wiring.
+
 ## Safe operating rules
 
 - Change physical service facts in the substrate manifest and regenerate the catalog; do not hand-edit the generated catalog.

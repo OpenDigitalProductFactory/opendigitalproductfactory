@@ -4,6 +4,35 @@ export { canonicalTransitionPayload, signTransitionPayload } from "../../../../s
 
 export const RUNTIME_TRANSITION_MAX_AGE_MS = 10 * 60 * 1000;
 
+export type RuntimeCapabilityProtocolIdentity = {
+  sourceSha: string; actuatorSha256: string; signerSha256: string;
+};
+export type RuntimeCapabilityProtocolInfo = RuntimeCapabilityProtocolIdentity & {
+  schemaVersion: 1;
+  signingVersions: readonly number[];
+  applyVersions: readonly number[];
+  reconciliationVersions: readonly number[];
+};
+
+/** Discovery is evidence only when it matches the trusted packaged bytes. */
+export function validateRuntimeCapabilityProtocolInfo(value: unknown, expected: RuntimeCapabilityProtocolIdentity): RuntimeCapabilityProtocolInfo {
+  const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const signing = record.signingVersions, applying = record.applyVersions, reconciliation = record.reconciliationVersions;
+  const versions = (entry: unknown): entry is number[] => Array.isArray(entry) && entry.length <= 2
+    && entry.every((version, index) => (version === 1 || version === 2) && (index === 0 || entry[index - 1] < version));
+  if (record.schemaVersion !== 1 || typeof record.sourceSha !== "string" || !/^[a-f0-9]{40}$/.test(record.sourceSha)
+      || ![record.actuatorSha256, record.signerSha256].every((digest) => typeof digest === "string" && /^[a-f0-9]{64}$/.test(digest))
+      || !versions(signing) || !versions(applying) || !versions(reconciliation)
+      || applying.some((version) => !signing.includes(version))
+      || reconciliation.some((version) => !applying.includes(version))) {
+    throw new Error("runtime_protocol_probe_invalid");
+  }
+  for (const key of ["sourceSha", "actuatorSha256", "signerSha256"] as const) {
+    if (record[key] !== expected[key]) throw new Error("runtime_protocol_probe_identity_mismatch");
+  }
+  return { schemaVersion: 1, ...expected, signingVersions: [...signing], applyVersions: [...applying], reconciliationVersions: [...reconciliation] };
+}
+
 export type RuntimeTransitionEnvelope = {
   version: 1; transitionId: string; issuedAt: string; expiresAt: string;
   catalogHash: string; previousStateHash: string; desiredStateHash: string;
