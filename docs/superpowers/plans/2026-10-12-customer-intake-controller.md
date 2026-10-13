@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Customer-first repository intake delivery
 Status: implementation plan; commissioning and acceptance remain outstanding.
 Backlog: BI-FD40397B. Workroom: WC-FDE1240A.
@@ -59,5 +63,7 @@ Use shared existing error and scheduling plumbing for the refactoring portion (o
 A failed sweep can have partially ingested work. Existing retries already exist; do not increase retry count or polling cadence until identity reconciliation is accepted. Page-cap exhaustion reports incomplete coverage conservatively even if the last full page happens to be the final page. Revert this branch through a normal PR to restore the prior source behavior; no database migration or peer mutation is included. Keep original receipts and source data.
 
 ## Backlog coverage
-Receipt pending immutable plan publication and server validation. Graph: controller depends on reconciliation, disposition, terminal and human-resumption; reconciliation depends on source-identity; disposition and terminal depend on reconciliation. All dependency work remains on its existing BI. This branch may deliver a verified controller repair increment, but BI-FD40397B remains open until all acceptance criteria are evidenced.
+Receipt cmv674efp0vuw01o77l9sg4hd validated six live mappings and was read back valid. It binds the immutable plan at f2129dc6e2d7adc87087bebb331b9f6fe665608d (blob 5802f0b0c613e2160936f51b588706311d777e02). Graph: controller depends on reconciliation, disposition, terminal and human-resumption; reconciliation depends on source-identity; disposition and terminal depend on reconciliation. All dependency work remains on its existing BI. This branch may deliver a verified controller repair increment, but BI-FD40397B remains open until all acceptance criteria are evidenced.
+
+Scope update: the subsequent claim resolved the impact contract to concrete paths. Related-test lookup returned the colocated reader/runner tests plus migration-proof, standing-operations-shapes, standing-room-declaration and standing-stage-evidence-grants tests. The queue wrapper has no linked tests; add its behavior test. The required style-drift guard, Design Grounding explanation and doc-index regeneration remain in the completion gate.
 
