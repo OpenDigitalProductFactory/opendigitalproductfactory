@@ -11,6 +11,37 @@
 
 ## 0. Two "shapes" — do not conflate them
 
+### Medium body criteria and independent acceptance
+
+Effective medium work, including product-linked work, can satisfy its objective
+baseline from an Acceptance heading with criterion bullets, or explicit
+`AC-<id>:` bullets. It does not owe a separate spec approval for that baseline.
+After delivery passes and acceptance remains unmet, the existing authorized,
+serialized completion mutation retains a DocumentVersion and baseline activity.
+Approved and inherited baselines retain precedence. The retained version binds
+criteria and anchors, item/organization, author provenance and delivered source
+identity; it creates no approval or acceptance receipt.
+
+Recovery requires one current source Workroom, fresh post-baseline passing
+evidence, and an independent reviewer with the existing reader/writer grants
+and room admission. `get_backlog_item` and completion refusals return the exact
+server-issued packet. Its existing `read_source_at_version` reader hydrates the
+bound retained criteria only for that authorized TaskRun. Room admission is
+checked before reading and again before receipt writing. Automatic reviewer
+dispatch carries the recorded requesting person into these checks.
+
+Changed criteria, source identity, organization or eligible evidence reject old
+requests. Refresh recovery for a current successor; unchanged retries reuse the
+TaskRun and proposal. Historical authority stays auditable. Research and
+dependency-disposition remain author lanes; only the acceptance mapping lane
+becomes independent. Missing prerequisites are reported as recovery actions,
+without unlinking the product, lowering shape or weakening completion gates.
+
+Implementation: [body baseline retention](../../apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts),
+[terminal recovery](../../apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts),
+and [objective mapping writer](../../apps/web/lib/backlog/initiative-readiness/objective-mapping-repository.ts).
+Operator procedure: [acceptance sweep](../operations/acceptance-sweep.md).
+
 The word *shape* is overloaded across the platform. Two distinct machines:
 
 1. **The initiative-readiness gate machine** (this runbook). Decides whether a backlog item / epic / build may transition `design → plan → implementation → completion`, by checking that the required **evidence receipts** exist and passed review. Roles are *governance accountabilities* (design-author, design-checklist-reviewer, …).

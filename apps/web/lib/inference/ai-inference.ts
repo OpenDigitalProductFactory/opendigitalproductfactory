@@ -245,11 +245,6 @@ export async function callProvider(
   // Transcription uses its registry adapter and has no model-routing connection.
   const needsModelConnection = executionAdapterRaw !== "transcription";
   const localProvider = needsModelConnection ? await readEnabledRoutingProvider(providerId) : null;
-  await assertProviderDispatchCapacity(providerId);
-  // Lease ownership is routing policy. Whether the card is free is an inference
-  // fact, so it stays in this layer (routing may not import inference).
-  const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
-  await assertLocalGpuFree({ providerId, modelId });
 
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has
@@ -302,6 +297,10 @@ export async function callProvider(
       console.warn("[budget-gate] Budget check failed (non-fatal):", { agentId: attribution.agentId }, err);
     }
   }
+
+  // An exclusive host reservation refuses promptly; ordinary local runner
+  // contention waits for admission below. Recheck the reservation at dispatch.
+  await assertProviderDispatchCapacity(providerId);
 
   // 1. Resolve provider (DB lookup + auth headers)
   const provider = localProvider ?? await prisma.modelProvider.findUnique({ where: { providerId } });
@@ -363,6 +362,16 @@ export async function callProvider(
   });
   let result;
   try {
+    // Queue before observing host ownership: an earlier portal request is
+    // ordinary contention, not a reason to fail the next caller. Recheck both
+    // safety facts at dispatch because they may change while admission waits.
+    await assertProviderDispatchCapacity(providerId);
+    // Local chat owns the shared build/chat lane and checks the GPU there.
+    // Inspecting it here would reject a build that this caller should wait for.
+    if (adapter.type !== "chat" || !isLocalProviderId(providerId)) {
+      const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
+      await assertLocalGpuFree({ providerId, modelId });
+    }
     // Queued work has not started inference yet. A disable during admission
     // invalidates its earlier selection; finally still releases the slot.
     if (needsModelConnection) await readEnabledRoutingProvider(providerId);

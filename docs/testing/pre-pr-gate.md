@@ -67,6 +67,12 @@ naming the substrate it ran on (AGENTS.md §15).
 
 ## Which gate runs where
 
+`pnpm pr:readiness` selects policy guards using the same changed-file
+classification as CI and host pregate. For documentation-only changes, it
+omits only guards explicitly declared code-only. Documentation guards and
+guards without input declarations still run. Mixed and unknown changes retain
+all guards; scope selection never substitutes for required publication proof.
+
 This is the single biggest source of drift, so it gets the decision table. A
 worktree is **source-control isolation, not a second DPF install**
 ([kernel principle](../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md)).

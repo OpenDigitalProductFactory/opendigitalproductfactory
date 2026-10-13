@@ -9,6 +9,9 @@ const {
   mockAiInferenceTokensInc,
   mockAiInferenceErrorsInc,
   mockProviderFetch,
+  mockGpuFree,
+  mockAcquireSlot,
+  mockReleaseSlot,
 } = vi.hoisted(() => ({
   mockPrisma: {
     aiProviderConnection: { findUnique: vi.fn() },
@@ -23,6 +26,17 @@ const {
   mockAiInferenceTokensInc: vi.fn(),
   mockAiInferenceErrorsInc: vi.fn(),
   mockProviderFetch: vi.fn(),
+  mockGpuFree: vi.fn(),
+  mockAcquireSlot: vi.fn(),
+  mockReleaseSlot: vi.fn(),
+}));
+
+vi.mock("./host-gpu-admission", () => ({ assertLocalGpuFree: mockGpuFree }));
+vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertProviderDispatchCapacity: vi.fn() }));
+vi.mock("./inference-admission", () => ({
+  acquireInferenceSlot: mockAcquireSlot,
+  currentInferenceOrigin: () => "interactive",
+  engineKeyForProvider: (id: string) => id === "local" ? "local" : "remote",
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -45,7 +59,7 @@ vi.mock("@/lib/metrics", () => ({
 }));
 
 vi.mock("../routing/execution-adapter-registry", () => ({
-  getExecutionAdapter: vi.fn(() => ({ execute: mockAdapterExecute })),
+  getExecutionAdapter: vi.fn(() => ({ type: "chat", execute: mockAdapterExecute })),
   registerExecutionAdapter: vi.fn(),
 }));
 
@@ -66,6 +80,8 @@ import { _setAdapterTelemetryWriteOverrideForTests } from "../routing/adapter-te
 describe("callProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGpuFree.mockReset().mockResolvedValue(undefined);
+    mockAcquireSlot.mockResolvedValue(mockReleaseSlot);
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "active" });
     mockStartTimer.mockReturnValue(vi.fn());
     mockAdapterExecute.mockResolvedValue({
@@ -75,6 +91,33 @@ describe("callProvider", () => {
       inferenceMs: 12,
       raw: {},
     });
+  });
+
+  it("waits for admission before inspecting the GPU and releases on deferral", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "openai", status: "active", authMethod: "api_key", authHeader: "Authorization",
+      baseUrl: "https://api.openai.com/v1", endpoint: null,
+    });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "test-key" });
+    const busy = new Error("GPU busy");
+    mockGpuFree.mockRejectedValueOnce(busy);
+    await expect(callProvider("openai", "model", [{ role: "user", content: "Hi" }], "Help"))
+      .rejects.toBe(busy);
+    expect(mockAcquireSlot.mock.invocationCallOrder[0]).toBeLessThan(mockGpuFree.mock.invocationCallOrder[0]);
+    expect(mockReleaseSlot).toHaveBeenCalledOnce();
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
+
+  it("delegates local chat host checks to the shared lane instead of rejecting an active build", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "local", status: "active", authMethod: "none", authHeader: null,
+      baseUrl: "http://localhost:12434/v1", endpoint: null,
+    });
+    await expect(callProvider("local", "local-model", [{ role: "user", content: "Hi" }], "Help"))
+      .resolves.toMatchObject({ content: "ok" });
+    expect(mockGpuFree).not.toHaveBeenCalled();
+    expect(mockAcquireSlot.mock.invocationCallOrder[0]).toBeLessThan(mockAdapterExecute.mock.invocationCallOrder[0]);
+    expect(mockReleaseSlot).toHaveBeenCalledOnce();
   });
 
   it.each(["active", "degraded"])("preserves %s legacy activation while its default account is unconfigured", async status => {

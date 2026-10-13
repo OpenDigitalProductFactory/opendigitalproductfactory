@@ -11,6 +11,8 @@
 // manifest (a read has none — the caller of the transition brings one).
 
 import { prisma } from "@dpf/db";
+import { isRecord } from "@/lib/shared/coerce";
+import { sameBodyCriteriaVersion } from "./body-baseline-version";
 
 import {
   resolveCompletionEvidence,
@@ -236,7 +238,7 @@ export async function evaluateBacklogItemCompletion(args: {
       .filter((activity) => activity.kind === "initiative_scope_baseline")
       .map((activity) => ({ id: activity.id, backlogItemId: item.id, kind: activity.kind, gateKey: activity.gateKey, recordedAt: activity.recordedAt, payload: activity.payload }))
     : [];
-  const reconciliation = (deps.reconcileObjectives ?? reconcileInitiativeObjectives)({
+  let reconciliation = (deps.reconcileObjectives ?? reconcileInitiativeObjectives)({
     itemId: item.itemId,
     itemRowId: item.id,
     activities: [...activities, ...inheritedBaselineRows],
@@ -244,6 +246,26 @@ export async function evaluateBacklogItemCompletion(args: {
       ? { baselineSubjectIds: [item.itemId, inheritedScope.parentItemId] }
       : {}),
   });
+  const reconciledBaseline = activities.find((activity) => activity.kind === "initiative_scope_baseline"
+    && isRecord(activity.payload) && activity.payload.baselineId === reconciliation.baselineId)?.payload;
+  if (isRecord(reconciledBaseline) && reconciledBaseline.origin === "item-body"
+    && (typeof reconciledBaseline.criteriaDigest !== "string"
+      || !sameBodyCriteriaVersion({ criteriaDigest: reconciledBaseline.criteriaDigest }, item.body))) {
+    reconciliation = { ...reconciliation, state: "missing", evidenceRefs: [] };
+  }
+  if (isRecord(reconciledBaseline) && reconciledBaseline.origin === "item-body") {
+    const source = isRecord(reconciledBaseline.sourceIdentity) ? reconciledBaseline.sourceIdentity : null;
+    const authority = isRecord(reconciledBaseline.authoritySnapshot) ? reconciledBaseline.authoritySnapshot : null;
+    const currentRoom = await (db as unknown as import("@dpf/db").Prisma.TransactionClient).workroom.findFirst({
+      where: { backlogItemId: { in: [item.id, item.itemId] }, archivedAt: null,
+        status: { notIn: ["abandoned", "archived", "superseded"] } },
+      orderBy: { updatedAt: "desc" }, select: { repositoryFullName: true, headSha: true },
+    });
+    if (!currentRoom || source?.headSha !== currentRoom.headSha || source?.repositoryFullName !== currentRoom.repositoryFullName
+      || authority?.organizationId !== (item.organizationId ?? "platform")) {
+      reconciliation = { ...reconciliation, state: "missing", evidenceRefs: [] };
+    }
+  }
   const acceptanceState = reconciliation.state;
   const directMerge = isDirectMergePlatformWork(item);
   const deploymentResult = directMerge
