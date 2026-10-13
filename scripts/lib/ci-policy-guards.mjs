@@ -361,6 +361,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-observation.test.mjs",
         "scripts/ci-shadow-selection.test.mjs",
         "scripts/ci-change-scope.test.mjs",
+        "scripts/pr-readiness-scope.test.mjs",
         "scripts/ci-evidence-plan.test.mjs",
         "scripts/ci-build-artifact-discovery.test.mjs",
         "scripts/lib/ci-build-artifact.test.mjs",
