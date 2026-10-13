@@ -218,9 +218,9 @@ export function CoworkerEnvelopeApproval({
         {decision.completeProposedContent ? (
           <details className="mt-3">
             <summary className="cursor-pointer text-dpf-caption font-semibold text-dpf-accent">
-            Complete proposed content
+              {COPY.completeContent}
             </summary>
-            <pre tabIndex={0} aria-label="Complete proposal" className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-dpf-md border border-dpf-border bg-dpf-surface-2 p-3 text-dpf-caption text-dpf-text">
+            <pre tabIndex={0} aria-label={COPY.completeProposal} className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-dpf-md border border-dpf-border bg-dpf-surface-2 p-3 text-dpf-caption text-dpf-text">
               {decision.completeProposedContent}
             </pre>
           </details>
