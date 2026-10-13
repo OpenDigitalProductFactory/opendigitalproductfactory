@@ -46,6 +46,7 @@ Folding "a human must decide this now" into the backlog is a category error: the
 - **Review the business decision** using the plain action on the card. In Simple view, builder-only links never appear as the main owner action — and neither does a placeholder button in their place.
 - **Accept, keep, or narrow a proactivity boundary** without leaving the workspace.
 - **Approve or decline a held coworker action** on the card. Once the answer is saved, or the time runs out, the buttons go away and the record stays readable. Pressing twice, or reloading and pressing again, cannot answer it twice.
+- **Inspect the complete proposal** before deciding. The card gives the action, destination, consequences, governing reason, and authorization scope. Open **Complete proposed content** to read the full saved proposal; the summary may be shortened. Authorizing an evidence record permits that write. It does not independently attest that its tests passed or replace a required specialist review. If consequences are not established, the card says so.
 - **Ask again** on a request that expired before anyone answered it. The same request comes back to you for a fresh decision.
 - **Open Technical detail** when a builder or specialist needs the full source record.
 - **Clear or snooze the Friday review** as one batch, or review an item individually.
