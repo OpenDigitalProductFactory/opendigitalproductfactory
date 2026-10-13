@@ -64,22 +64,14 @@ $GrokConfigPath         = Join-Path $HOME ".grok\config.toml"  # platform-specif
 $KernelPrinciplesDir    = Join-Path $RepoRoot "docs\founder-kernel\wiki\principles"
 $ContributorMemoryDir   = Join-Path $HOME ".claude\projects"
 $ProjectSlug            = ($RepoRoot -replace '[:\\\/]+', '-').TrimStart('-')
-# BI-2D545A0C (design 12.4.3): an explicit process DPF_MCP_URL
-# selects the endpoint before the saved Codex choice and install defaults.
-# On HTTPS, Node clients trust the organization CA (BI-FA2C46D7).
-# The shared installer/lib/mcp-client-env module owns resolution.
+# BI-2D545A0C (design 12.4.3): an explicit process DPF_MCP_URL selects the
+# endpoint before the saved https preference and install defaults. On HTTPS,
+# Node clients trust the organization CA (BI-FA2C46D7). The shared
+# installer/lib/mcp-client-env module owns resolution. Codex's saved endpoint
+# is not a selection for every client: the updater keeps it in Codex's own
+# config when no endpoint is named (BI-8FD7C0C9).
 . (Join-Path $ScriptDir "installer\lib\mcp-client-env.ps1")
-$SelectedMcpUrl = $env:DPF_MCP_URL
-if (-not $SelectedMcpUrl -and (Test-Path -LiteralPath $CodexConfigPath)) {
-    $endpointReader = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1"
-    $SelectedMcpUrl = & $endpointReader -PrintExistingCodexMcpUrl
-    if ($LASTEXITCODE -ne 0) {
-        Write-Fail2 "Cannot read the saved Codex endpoint. Set DPF_MCP_URL explicitly to repair it."
-        exit 1
-    }
-    $SelectedMcpUrl = [string]$SelectedMcpUrl
-}
-$McpClientEnv           = Resolve-DpfMcpClientEnv -InstallDir $RepoRoot -ExplicitUrl $SelectedMcpUrl
+$McpClientEnv           = Resolve-DpfMcpClientEnv -InstallDir $RepoRoot
 # $McpEndpointNamed is the endpoint the install or operator named (may be
 # empty); only it is forwarded to the updater, whose canonical https/OAuth
 # default governs otherwise (BI-772023BC). The probes and the plan bridge need
@@ -280,9 +272,9 @@ exit 127
     }
 }
 
-# Persist the selected HTTPS or loopback HTTP endpoint for new processes.
-# HTTPS may also carry the organization CA; credential setup is separate.
-# Save the preference even while OAuth is pending. Never at dry-run time.
+# Persist the selected https endpoint (and the organization CA) for new
+# processes, even while OAuth is pending; a plain-http endpoint is never
+# written to the User environment Claude reads (BI-8FD7C0C9). Never at dry-run.
 if (-not $DryRun) {
     $transport = Set-DpfMcpClientEnv -ClientEnv $McpClientEnv
     if ($transport -eq "persisted") {
