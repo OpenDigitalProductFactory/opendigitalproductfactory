@@ -84,6 +84,16 @@ const providerFixture: ProviderWithCredential = {
 describe("ProviderDetailForm", () => {
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
+  it("keeps workspace editing open when clearing an ID to replace it", () => {
+    const fixture = { ...providerFixture,
+      provider: { ...providerFixture.provider, providerId: "anthropic", name: "Anthropic" },
+      credential: { ...providerFixture.credential!, providerWorkspaceId: "wrkspc_accountA" },
+    };
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    fireEvent.change(screen.getByLabelText("Anthropic workspace ID"), { target: { value: "" } });
+    expect(screen.getByText("Organization-scoped key").closest("details")?.hasAttribute("open")).toBe(true);
+  });
+
   it("saves the Anthropic workspace without requiring the key to be re-entered", async () => {
     vi.mocked(configureProvider).mockResolvedValue({});
     vi.mocked(testProviderAuth).mockResolvedValue({ ok: true, message: "Connected" });

@@ -1,12 +1,14 @@
 "use client";
+import { useState } from "react";
 import { useT } from "@/lib/i18n/use-t";
 
 export function ProviderWorkspaceField({ id, value, onChange, disabled }: {
   id: string; value: string; onChange: (value: string) => void; disabled: boolean;
 }) {
   const t = useT("setup");
+  const [open, setOpen] = useState(Boolean(value));
   return (
-    <details open={value ? true : undefined} style={{ marginTop: 12 }}>
+    <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} style={{ marginTop: 12 }}>
       <summary style={{ color: "var(--dpf-muted)", fontSize: 12, cursor: "pointer" }}>{t("anthropicWorkspace.disclosure")}</summary>
       <label htmlFor={id} style={{ display: "block", marginTop: 8, color: "var(--dpf-text)", fontSize: 12 }}>{t("anthropicWorkspace.label")}</label>
       <input id={id} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled}
