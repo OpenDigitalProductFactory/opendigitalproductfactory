@@ -633,6 +633,7 @@ export async function resumeStrandedBuildsOnBoot(
         void (async () => {
           const { resumePreBuildPhase } = await import("@/lib/build/resume-pre-build-phase");
           const outcome = await resumePreBuildPhase(args);
+          if (outcome.kind === "skipped" && outcome.quiet) return; // BI-6F2872FC: unchanged refusal, nothing to record
           await prisma.buildActivity
             .create({
               data: {
@@ -748,15 +749,9 @@ export async function resumeStrandedBuildsOnBoot(
         logger.log(
           `[build-resume] ${build.buildId} stranded in ${build.phase} phase after restart/swap — auto-resuming (BI-9257CF19)`,
         );
-        await prisma.buildActivity
-          .create({
-            data: {
-              buildId: build.buildId,
-              tool: "resumeStrandedBuildsOnBoot",
-              summary: `Stranded in ${build.phase} phase after a restart/swap — auto-resuming the canonical ${build.phase} generator/reviewer (BI-9257CF19).`,
-            },
-          })
-          .catch(() => {});
+        // The resume's outcome row records this attempt; a pre-row here wrote one
+        // more line per build per tick even when the outcome was a quiet hold
+        // (BI-6F2872FC: 159k such rows on the live install).
         resumePreBuild({ buildId: build.buildId, phase: build.phase, userId: build.createdById });
         flagged++;
         continue;
