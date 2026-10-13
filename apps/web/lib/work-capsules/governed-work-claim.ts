@@ -172,6 +172,11 @@ async function resolveRecoveryOutsideTransaction(args: {
       nextAction: `The workroom lacks ${!pending.baseSha ? "baseSha" : "a valid reviewer dispatch identity (including headSha)"}, so no reviewer binding can be issued. Re-sync the branch with adopt_worktree(headBranch, baseSha, headSha), supplying full immutable commit SHAs for both fields and preserving any valid recorded identity, then retry.`,
     };
 
+  const needsPlanReview = [...pending.decision.blockers, ...pending.decision.unmet]
+    .some(entry => entry.code === "PLAN_REVIEW_REQUIRED");
+  const taskAuthorityKey = needsPlanReview && args.actor.taskAuthorityTokenId
+    ? await (await import("@/lib/auth/oauth-task-authority")).resolveMcpTaskAuthorityKey({
+      tokenId: args.actor.taskAuthorityTokenId, userId: args.actor.userId, source: "oauth" }) : null;
   const recovery = await resolveInitiativeReviewerRecovery({
     decision: pending.decision,
     currentAgentId: args.actor.agentId,
@@ -184,6 +189,10 @@ async function resolveRecoveryOutsideTransaction(args: {
         commitSha: pending.planArtifact.commitSha, providerBlobId: pending.planArtifact.providerBlobId }
       : { resolved: false, nextAction: "Record valid plan coverage for the current baseline and this Workroom repository, including the immutable plan commit and blob, then retry plan review." },
     expectedCurrentBaselineId: pending.baselineId,
+    ...(taskAuthorityKey ? { isPlanReviewExhausted:
+      (await import("@/lib/backlog/initiative-readiness/exhausted-plan-review")).createExhaustedPlanReviewPredicate(
+        { userId: args.actor.userId, taskAuthorityKey },
+        (await import("@dpf/db")).prisma) } : {}),
   });
   if (!pending.baseSha || !pending.dispatchContext?.headSha) {
     recovery.identityRepair = projectWorkroomIdentityRepair({
@@ -388,6 +397,23 @@ function exactReadback(args: {
   };
 }
 
+/**
+ * The activity kinds the claim's readiness projection reads.
+ *
+ * `evidence` is here because a small fix's research at claim is its recorded
+ * reproduction (BI-6EB2DBBB): `source_verified` plus `test_pass`, written by
+ * record_execution_evidence. The refusal advises exactly that remedy, so the
+ * claim must load what the remedy writes, or the advice can never be satisfied
+ * (BI-5C992261).
+ */
+export const CLAIM_READINESS_ACTIVITY_KINDS = [
+  "initiative_gate_receipt",
+  "initiative_scope_baseline",
+  "plan_backlog_coverage",
+  "break_fix_declared",
+  "evidence",
+] as const;
+
 export async function claimGovernedBacklogWorkspace(args: {
   db: CapsuleDb;
   input: ClaimInput;
@@ -432,7 +458,7 @@ export async function claimGovernedBacklogWorkspace(args: {
       if (!item) throw new Error(`BacklogItem ${args.input.backlogItemId} not found`);
       backlogItemRowId = item.id;
       const activities = await tx.backlogItemActivity.findMany({
-        where: { backlogItemId: item.id, kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage", "break_fix_declared"] } },
+        where: { backlogItemId: item.id, kind: { in: [...CLAIM_READINESS_ACTIVITY_KINDS] } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
       }) as InitiativeReadinessActivity[];

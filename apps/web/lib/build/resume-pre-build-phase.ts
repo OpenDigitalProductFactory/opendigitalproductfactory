@@ -42,6 +42,7 @@ import {
   isHappyPathIntakeReady,
   normalizeHappyPathState,
 } from "@/lib/feature-build-types";
+import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-terminal-phase-runs";
 
 export type ResumePreBuildOutcome =
   | { kind: "resumed"; phase: string; via: string; detail: string }
@@ -162,6 +163,7 @@ export async function abandonStrandedPreBuild(params: {
             `re-stranding it on the next upgrade (BI-A009313E). Re-promote the backlog item to retry.`,
         },
       });
+      await closeOpenBuildPhaseRunsForTerminalBuild(buildId, { db: tx, now });
       await tx.buildActivity.create({
         data: {
           buildId,
@@ -674,6 +676,9 @@ export async function resumePreBuildPhase(params: {
         const outcome = await dispatchPlanForApprovedBuild({ buildId, userId });
         return { kind: "resumed", phase, via: "dispatchPlanForApprovedBuild", detail: outcome.kind };
       }
+      if ((build.planReview as { reviewIncomplete?: boolean } | null)?.reviewIncomplete) {
+        return { kind: "skipped", phase, reason: "Plan review incomplete; preserve the plan and retry review after reviewer execution recovers." };
+      }
       // Plan exists. If its last review FAILED, REGENERATE via the fix loop —
       // re-reviewing the same bad plan just re-fails forever (the live jam: a plan
       // that "points at files that do not exist" stays stuck every resume). The
@@ -738,7 +743,9 @@ export async function resumePreBuildPhase(params: {
             // try the transition once more; anything else stays a skip.
             if (isResearchReceiptGateBlock(outcome.reason) && hasDesignDoc(build.designDoc)) {
               const { attestIdeateResearch } = await import("@/lib/build/record-ideate-research-receipt");
-              await attestIdeateResearch(buildId, build.designDoc, userId, null);
+              const research = await attestIdeateResearch(buildId, build.designDoc, userId, null);
+              if (!research.recorded) return { kind: "skipped", phase,
+                reason: `Research attestation held; no transition retry: ${research.reason}` };
               const retried = await performPlanToBuildTransition({ buildId, userId });
               if (retried.kind === "advanced") {
                 return {

@@ -53,6 +53,22 @@ models or serve as both the DPF host and a development workstation.
 See [Choosing Hardware for DPF](hardware.md) for current Mac and Windows machine
 examples, NVIDIA speed tradeoffs, model sizing, and purchase checks.
 
+For a compact business host, consider a **Mac mini with M6, 32 GB unified memory
+and a 1 TB SSD** for provider-assisted operations, or a **Mac mini with M5 Pro,
+64 GB unified memory and a 2 TB SSD** for local-first operations. These are
+planning configurations, not exact-model certifications; validate the actual
+business workload and any enabled build workload before purchase. Embedded
+Build Studio supports governed changes on customizable installs without separate
+Claude or Codex apps, but builds, tests, previews, and local coding models need
+additional capacity wherever they execute.
+
+For larger local models or document-heavy professional work, including law-firm
+workloads, evaluate a **Mac Studio with M5 Max, 128 GB unified memory and a
+2–4 TB SSD**. Apple offers 128 GB with the 40-core GPU configuration. Choose an
+M5 Ultra only when measured model capacity or throughput needs justify it. See
+the [hardware guide](hardware.md#local-ai-for-professional-firms) for sizing and
+data-handling checks.
+
 ## Prerequisites
 
 The installer auto-installs Docker Desktop. You bring:
@@ -175,7 +191,14 @@ single-tree mode persists — current behavior, full back-compat.
 9. **`.env` generation** — only on first install; existing `.env` is
    preserved. A re-run only adds generated secrets the file is missing:
    `DPF_GIT_WEBHOOK_SECRET`, the GPP permit signing key
-   `DPF_GPP_PERMIT_SECRET`, and the Inngest `INNGEST_SIGNING_KEY` and
+   `DPF_GPP_PERMIT_SECRET`, the reach-link and delegation-receipt signing keys
+   `DPF_ATTENTION_REACH_SECRET` and `DPF_DELEGATION_RECEIPT_SECRET`, the
+   self-upgrade target-binding and delivery-task cursor signing keys
+   `DPF_SELF_UPGRADE_TARGET_BINDING_SECRET` and
+   `DPF_DELIVERY_TASK_CURSOR_SECRET` (so `AUTH_SECRET` no longer signs any of
+   them; anything signed with `AUTH_SECRET` before the upgrade keeps verifying
+   until 9 November 2026), and
+   the Inngest `INNGEST_SIGNING_KEY` and
    `INNGEST_EVENT_KEY`. A real value already set is never rotated. The
    installer also replaces an Inngest key that still
    holds the old public default, because anyone who knows the signing key can

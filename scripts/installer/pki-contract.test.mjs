@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { resolveGuardBash } from "../lib/guard-bash.mjs";
 
 const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
@@ -90,6 +91,9 @@ test("successful PKI bootstrap persists member trust and Edge actions for normal
     read("install-dpf.ps1"),
     read("scripts/installer/lib/compose.sh"),
   ]);
+  // BI-B422ED03: the marker -> overlay rule lives in one table that compose.sh,
+  // compose-chain.ps1 and promote.sh all read.
+  const activationTable = await read("scripts/installer/lib/activation-overlays.txt");
   // dpf-start.ps1 resolves its chain through Get-DPFComposeArgs, so the overlay
   // names live in compose-chain.ps1; the start script must still route through it.
   assert.match(windowsStartScript, /Get-DPFComposeArgs/);
@@ -100,10 +104,9 @@ test("successful PKI bootstrap persists member trust and Edge actions for normal
     assert.match(source, /DPF_PKI_TRUST_BUNDLE/);
     assert.match(source, /DPF_TLS_DIR/);
   }
-  assert.match(composeLib, /docker-compose\.organization-trust\.yml/);
-  assert.match(composeLib, /docker-compose\.tls\.yml/);
-  assert.match(composeLib, /DPF_EDGE_ACTION_DISPATCH_CONFIGURED/);
-  assert.match(composeLib, /docker-compose\.edge-actions\.yml/);
+  assert.match(composeLib, /activation-overlays\.txt/);
+  assert.match(activationTable, /^DPF_ORGANIZATION_TRUST_ENABLED docker-compose\.organization-trust\.yml docker-compose\.tls\.yml$/m);
+  assert.match(activationTable, /^DPF_EDGE_ACTION_DISPATCH_CONFIGURED docker-compose\.edge-actions\.yml$/m);
   assert.match(shellStart, /DPF_ORGANIZATION_TRUST_ENABLED|organization-trust/);
   assert.match(windowsStart, /docker-compose\.organization-trust\.yml/);
   assert.match(windowsStart, /docker-compose\.tls\.yml/);
@@ -200,7 +203,7 @@ test("Bash join rejects an expired package before Docker is invoked", MODE_GATED
     ].join("\n"), { mode: 0o600 });
     await chmod(packagePath, 0o600);
 
-    const result = spawnSync("bash", [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
+    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
     assert.equal(result.status, 77);
     assert.match(result.stderr, /expired/i);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Docker is required/i);
@@ -228,7 +231,7 @@ test("Bash join rejects a package intended for a different installation", MODE_G
     ].join("\n"), { mode: 0o600 });
     await chmod(packagePath, 0o600);
 
-    const result = spawnSync("bash", [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
+    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
     assert.equal(result.status, 77);
     assert.match(result.stderr, /intended for another installation/i);
   } finally {
@@ -255,7 +258,7 @@ test("Bash join rejects a public CA origin before Docker is invoked", MODE_GATED
     ].join("\n"), { mode: 0o600 });
     await chmod(packagePath, 0o600);
 
-    const result = spawnSync("bash", [script, "--mode", "join", "--join-package", packagePath], { encoding: "utf8" });
+    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--join-package", packagePath], { encoding: "utf8" });
     assert.equal(result.status, 77);
     assert.match(result.stderr, /private or local/i);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Docker is required/i);
@@ -338,11 +341,12 @@ test("Caddy exposes a dedicated verified-client action listener and strips spoof
 
 test("Bash bootstrap rejects public binds and argument injection before Docker", () => {
   const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
-  const publicBind = spawnSync("bash", [script, "--hostname", "dpf.local", "--bind-address", "8.8.8.8"], { encoding: "utf8" });
+  const bash = resolveGuardBash();
+  const publicBind = spawnSync(bash, [script, "--hostname", "dpf.local", "--bind-address", "8.8.8.8"], { encoding: "utf8" });
   assert.equal(publicBind.status, 64);
   assert.match(publicBind.stderr, /private IPv4/i);
 
-  const injected = spawnSync("bash", [script, "--hostname", "dpf.local;touch-bad"], { encoding: "utf8" });
+  const injected = spawnSync(bash, [script, "--hostname", "dpf.local;touch-bad"], { encoding: "utf8" });
   assert.equal(injected.status, 64);
   assert.match(injected.stderr, /unsupported characters/i);
 });

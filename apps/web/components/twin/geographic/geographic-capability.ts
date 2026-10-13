@@ -3,32 +3,15 @@
 // says whether the map enhancement is available and, if not, why.
 
 import type { GeographicBounds } from "@/lib/twin/geographic-scene";
+import { packCoveringBounds, type InstalledPack } from "@/lib/twin/map-pack-coverage";
 
-export type InstalledPack = {
-  packId: string;
-  bounds: { west: number; south: number; east: number; north: number };
-};
+export { packCoveringBounds, type InstalledPack };
 
 export type GeographicRendererCapability =
   | { state: "renderer-ready"; pack: InstalledPack | null }
   | { state: "webgl-unavailable" }
   | { state: "region-pack-missing" }
   | { state: "region-out-of-coverage" };
-
-/** The first installed pack whose bounds fully contain the scene. */
-export function packCoveringBounds(packs: readonly InstalledPack[], scene: GeographicBounds): InstalledPack | null {
-  if (scene.crossesAntimeridian) return null;
-  return (
-    packs.find(
-      ({ bounds }) =>
-        bounds.west <= bounds.east &&
-        bounds.west <= scene.west &&
-        bounds.east >= scene.east &&
-        bounds.south <= scene.south &&
-        bounds.north >= scene.north,
-    ) ?? null
-  );
-}
 
 export function geographicRendererCapability(input: {
   webgl: boolean;

@@ -41,3 +41,15 @@ test("every separate root is excluded from the platform workspace and has Depend
     assert.equal(typeof baseline.roots?.[root.id]?.budgets?.resolvedComponents, "number", `${root.id}: no shape budgets`);
   }
 });
+
+test("the platform Dependabot entry owns the platform's coupled dependency policies", () => {
+  const text = readFileSync(join(ROOT, ".github", "dependabot.yml"), "utf8");
+  const entries = text.split(/^  - package-ecosystem: /m).slice(1);
+  const platform = entries.find((entry) => /^"npm"\s*\n/.test(entry) && /^    directory: "\/"$/m.test(entry));
+  assert.ok(platform, "platform npm entry missing");
+  for (const name of ["expo", "expo-*", "@expo/*", "react", "react-dom", "react-native", "typescript", "@fullcalendar/*", "react-data-grid", "@floating-ui/*"]) {
+    assert.ok(platform.includes(`- dependency-name: "${name}"`), `${name}: platform policy attached to another directory`);
+  }
+  assert.match(platform, /groups:\s*\n\s+minor-and-patch:/, "compatible platform updates must be grouped");
+  assert.match(platform, /exclude-paths:\s*\n\s+- "apps\/mobile\/\*\*"/, "root updates must not reach the independent mobile graph");
+});

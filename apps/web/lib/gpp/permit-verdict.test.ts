@@ -2,7 +2,7 @@
 // Plan: docs/superpowers/plans/2026-10-01-gpp-phase-2-permits-and-enforcement.md (PR-C).
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AUTHORITY_APPROVAL_TTL_MS } from "@/lib/coworker/authority-approval-envelope";
+import { APPROVAL_DECISION_WINDOW_MS } from "@/lib/coworker/approval-lifetime";
 
 import { GPP_BINDINGS } from "./bindings";
 import { canonicalPermitClaims } from "./permit-claims";
@@ -53,8 +53,11 @@ describe("evaluatePermitVerdict", () => {
 describe("shadow permit claims", () => {
   const binding = GPP_BINDINGS[0]!;
 
-  it("live as long as the approval a checkpoint permit cites", () => {
-    expect(GPP_PERMIT_TTL_MS).toBe(AUTHORITY_APPROVAL_TTL_MS);
+  // BI-0012E6CA: approvals now live as long as their decision, but a permit is
+  // minted at the gate admit for one use, so it keeps the short decision window.
+  it("live for the short decision window, from the admit that mints them", () => {
+    expect(GPP_PERMIT_TTL_MS).toBe(APPROVAL_DECISION_WINDOW_MS);
+    expect(GPP_PERMIT_TTL_MS).toBe(15 * 60 * 1000);
     const claims = shadowPermitClaims({ binding, toolName: "create_portal_pr", actorUserId: "u1", now: NOW });
     expect(claims.expiresAt.getTime() - NOW.getTime()).toBe(GPP_PERMIT_TTL_MS);
     expect(claims).toMatchObject({ enforcement: "shadow", maxUses: 1, capabilities: [{ tool: "create_portal_pr" }] });

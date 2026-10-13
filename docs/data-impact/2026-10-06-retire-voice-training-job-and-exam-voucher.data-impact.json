@@ -1,0 +1,78 @@
+{
+  "version": "1",
+  "accountableOwner": "portfolio-management",
+  "sensitivity": "No new model, field or sensitivity class. Two models leave the schema; neither has a table-classification, retention or @dpf declaration to retire.",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror (two models fewer)",
+    "Data-governance legacy coverage baseline (two whole-model gaps removed)",
+    "Shrink-only schema baselines: model metadata, stewardship scope, closed-set strings, FK index coverage",
+    "Platform substrate baseline prismaModelCount (645 -> 643)"
+  ],
+  "migration": {
+    "name": "20261006200000_retire_voice_training_job_and_exam_voucher",
+    "backfill": "None needed and none possible: neither model has a surviving reader, and no surviving model carries a field the rows would map to (VoiceProfile.status/providerVoiceId already record a voice's outcome; CourseRegistration is itself unread). Per table: absent -> no-op; empty -> DROP TABLE; holds rows -> renamed to <name>_retired_bi911840cb with every row, its indexes renamed off the original names, and a table comment naming BI-911840CB. No row is deleted on any install. Live install at authoring time (2026-10-06): VoiceTrainingJob 0 rows, ExamVoucher 0 rows."
+  },
+  "tests": [
+    "packages/db/src/retire-unread-voice-training-and-exam-voucher-migration.test.ts",
+    "packages/db/scripts/schema-regression-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:voice-training-job#retirement",
+      "prismaModel": "VoiceTrainingJob",
+      "lifecycleDisposition": "retired: removed from the Prisma schema; the table is dropped when empty and archived (renamed, rows intact, outside the schema) when it holds rows",
+      "fields": [
+        {
+          "fieldId": "data:voice-training-job#*",
+          "resolution": "not-applicable",
+          "reason": "The model leaves the schema. No code reads or writes it: apps/web/lib/voice-synthesis/training-pipeline.ts updates VoiceProfile directly and its test states the table is gone; the Chatterbox spec planned this drop.",
+          "provenance": "BI-911840CB; docs/superpowers/specs/2026-05-21-chatterbox-tts-self-hosted.md (Option A, drop VoiceTrainingJob); schema comment at base 2585122ec9 decision-governance.prisma:729-731"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:voice-profile#trainingJobs",
+      "prismaModel": "VoiceProfile",
+      "lifecycleDisposition": "unchanged; loses the trainingJobs back-relation, which has no column",
+      "fields": [
+        {
+          "fieldId": "data:voice-profile#trainingJobs",
+          "resolution": "not-applicable",
+          "reason": "Relation-only list field with no physical column; no code selects or includes it.",
+          "provenance": "BI-911840CB; git grep trainingJobs at base 2585122ec9 finds only the schema"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:exam-voucher#retirement",
+      "prismaModel": "ExamVoucher",
+      "lifecycleDisposition": "retired: removed from the Prisma schema; the table is dropped when empty and archived (renamed, rows intact, outside the schema) when it holds rows",
+      "fields": [
+        {
+          "fieldId": "data:exam-voucher#*",
+          "resolution": "not-applicable",
+          "reason": "The model leaves the schema. Its pages and actions were reverted the night they landed and nothing has read or written it since.",
+          "provenance": "BI-911840CB; bf12070011 (added) and c2dbf25679 (code reverted); migration 20260323030000_add_course_management seeds no rows"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:course-registration#examVoucher",
+      "prismaModel": "CourseRegistration",
+      "lifecycleDisposition": "unchanged; loses the examVoucher back-relation, which has no column",
+      "fields": [
+        {
+          "fieldId": "data:course-registration#examVoucher",
+          "resolution": "not-applicable",
+          "reason": "Relation-only optional field with no physical column; no code selects or includes it.",
+          "provenance": "BI-911840CB; git grep examVoucher at base 2585122ec9 finds only the schema"
+        }
+      ]
+    }
+  ]
+}

@@ -32,7 +32,7 @@ Use the translator that matches where the code runs:
 | Server components and actions | `const t = await getT("errors"); t("notFound.storefront.heading")` |
 | Client components | `const t = useT("setup"); t("steps.branding")` |
 
-A client component's namespace must be provided by a `MessagesProvider` (`apps/web/components/i18n/MessagesProvider.tsx`; its context lives in `apps/web/lib/i18n/messages-context.ts`) above it. The root layout provides `errors` and `setup`, and a page can add a provider for its own subtree. For example, `/customer/footprint` wraps its client map in a provider for the `footprint` namespace (`namespaceMessages(locale, "footprint")`). Likewise, `/admin/settings` provides the `admin` namespace for its accountable-owner panel.
+A client component's namespace must be provided by a `MessagesProvider` (`apps/web/components/i18n/MessagesProvider.tsx`; its context lives in `apps/web/lib/i18n/messages-context.ts`) above it. The root layout provides `errors` and `setup`, and a page can add a provider for its own subtree. For example, `/customer/footprint` wraps its client map in a provider for the `footprint` namespace (`namespaceMessages(locale, "footprint")`). Likewise, `/admin/settings` provides the `admin` namespace for its accountable-owner panel, and `/storefront/sections` provides `storefront` for its section text editor.
 
 **Message syntax** is a subset of Unicode MessageFormat 2.0:
 

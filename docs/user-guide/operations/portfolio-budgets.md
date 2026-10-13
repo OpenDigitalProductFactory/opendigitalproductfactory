@@ -40,12 +40,36 @@ no portfolio.
   "subscription: $0 recorded, N tokens", because a subscription records no cost
   per call. It does not mean the use was free.
 
+## Which portfolio an item counts against
+
+The panel, the budget proposal, funding approval and admission all decide an
+item's portfolio the same way, so a budget and the work that uses it always line
+up:
+
+1. A portfolio the item names directly wins: its own portfolio, its digital
+   product's, its taxonomy node's, its AI coworker's, or its epic's.
+2. Otherwise, platform and common work, and work that was never given a scope,
+   counts as **Foundational**. The item is not changed; the rule is applied each
+   time the figures are read.
+3. Anything else stays **Unallocated** and is shown as such.
+
+The budget proposal shows how much of each portfolio's delivery came from rule 2,
+as `attributedByRule` with the basis `platform-default`.
+
 ## Setting a budget
 
 Choose **Set budget** on a portfolio's row. The proposed figure is the points that
 portfolio delivered last quarter. Accept it or change it, and say why. The reason
 and your name are recorded with the budget. A change adds a new version and keeps
 the old one; nothing is overwritten.
+
+For a first quarter, when last quarter's delivery does not reflect how work is
+spread now, ask your AI coworker to propose budgets from a recent stretch of
+delivery instead, for example the last 90 days. It uses `propose_portfolio_budgets`
+with `trailingDays`, which scales those days' delivered points to the length of the
+quarter. The proposal comes with a suggested reason that marks the budget as
+provisional and revisable. Nothing is set until a person accepts each figure, and
+a later change replaces it while keeping the history.
 
 ## Choosing who answers for each portfolio
 
@@ -68,8 +92,10 @@ one at a time.
 ## How budgets steer work
 
 - Approving an item for funding reserves its points against its portfolio's
-  budget. Going over the budget needs a person and a recorded reason; an
-  autonomous approval is refused.
+  budget, decided by the rules above: platform, common and never-scoped work
+  with no portfolio of its own reserves against Foundational. Work that stays
+  Unallocated reserves nothing. Going over the budget needs a person and a
+  recorded reason; an autonomous approval is refused.
 - A portfolio starts new work while its points in flight fit its allowance: two
   weeks of its measured delivery, never less than one large item (8 points).
 - Admission starts in **shadow** mode. Every decision to admit, warn or refuse is

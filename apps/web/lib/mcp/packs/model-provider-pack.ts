@@ -18,8 +18,12 @@ import { lazyFsPromises, lazyPath, getCwd } from "@/lib/shared/lazy-node";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { resolveActiveBuildId, extractBuildIdHint } from "@/lib/mcp/build-tool-helpers";
+import { providerAccountDefinitions } from "./provider-account-tools";
+import type { ActionResult } from "@/lib/shared/action-result";
+import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "@/lib/tak/provider-management-tool-grants";
 
 const definitions: ToolDefinition[] = [
+  ...providerAccountDefinitions,
   {
     name: "resolve_model_selection",
     description:
@@ -294,7 +298,66 @@ async function updateProviderCategoryHandler(params: Record<string, unknown>): P
   };
 }
 
+function result<T>(outcome: ActionResult<T>): ToolResult {
+  return outcome.ok
+    ? { success: true, message: "Provider account updated", ...("data" in outcome ? { data: outcome.data as Record<string, unknown> } : {}) }
+    : { success: false, error: outcome.error, message: outcome.error };
+}
+
+async function manage(params: Record<string, unknown>): Promise<ToolResult> {
+  const { prisma } = await import("@dpf/db");
+  const accounts = await import("@/lib/inference/provider-account-management");
+  const providerId = typeof params.providerId === "string" ? params.providerId : "";
+  if (params.operation === "add") return result(await accounts.addProviderAccount({ providerId, label: typeof params.label === "string" ? params.label : "", authMethod: typeof params.authMethod === "string" ? params.authMethod : "" }));
+  const connectionId = typeof params.connectionId === "string" ? params.connectionId : "";
+  if (!connectionId) return { success: false, error: "connectionId required", message: "Select an explicit provider account" };
+  const connection = await prisma.aiProviderConnection.findUnique({ where: { connectionId } });
+  if (!connection || (providerId && providerId !== connection.providerId)) return { success: false, error: "Provider account not found", message: "Provider account not found" };
+  switch (params.operation) {
+    case "discover": {
+      const { discoverProviderAccountModels } = await import("@/lib/inference/provider-account-discovery");
+      return result(await discoverProviderAccountModels(connectionId));
+    }
+    case "configure": {
+      const input: Parameters<typeof accounts.configureProviderAccount>[0] = { connectionId };
+      for (const key of ["label", "secretRef", "clientId", "clientSecret", "tokenEndpoint", "scope"] as const) {
+        if (typeof params[key] === "string") input[key] = params[key];
+      }
+      return result(await accounts.configureProviderAccount(input));
+    }
+    case "enable": case "disable": return result(await accounts.setProviderAccountEnabled(connectionId, params.operation === "enable"));
+    case "sign-in": {
+      const { createOAuthFlow } = await import("@/lib/govern/provider-oauth");
+      const out = await createOAuthFlow(connection.providerId, connectionId);
+      return "error" in out ? { success: false, error: out.error, message: out.error } : { success: true, message: "Open the account sign-in URL", data: out };
+    }
+    case "disconnect": {
+      const { disconnectProviderOAuthInternal } = await import("@/lib/govern/provider-oauth");
+      const out = await disconnectProviderOAuthInternal(connection.providerId, connectionId);
+      return out.error ? { success: false, error: out.error, message: out.error } : { success: true, message: "Provider account disconnected" };
+    }
+    case "test": {
+      const { testProviderAuthInternal } = await import("@/lib/actions/provider-auth-test");
+      const out = await testProviderAuthInternal(connection.providerId, false, connectionId);
+      return { success: out.ok, message: out.message, ...(out.ok ? {} : { error: out.message }) };
+    }
+    default: return { success: false, error: "Invalid operation", message: "Choose a supported account operation" };
+  }
+}
+
+const providerAccountHandlers: Record<string, ToolPackHandler> = {
+  manage_provider_account: (params) => manage(params),
+  get_provider_accounts: async (params) => {
+    const { getProviderAccounts } = await import("@/lib/inference/ai-provider-data");
+    const limit = typeof params.limit === "number" && Number.isFinite(params.limit) ? Math.min(100, Math.max(1, Math.trunc(params.limit))) : 25;
+    const page = await getProviderAccounts(typeof params.providerId === "string" ? params.providerId : undefined, { limit: limit + 1, cursor: typeof params.cursor === "string" ? params.cursor : undefined });
+    const accounts = page.slice(0, limit);
+    return { success: true, message: `${accounts.length} provider account(s)`, data: { accounts, nextCursor: page.length > limit ? accounts.at(-1)?.connectionId : null } };
+  },
+};
+
 const handlers: Record<string, ToolPackHandler> = {
+  ...providerAccountHandlers,
   resolve_model_selection: () => resolveModelSelectionHandler(),
   describe_model: (params, userId) => describeModelHandler(params, userId),
   describe_committed_model: (params) => describeCommittedModelHandler(params),
@@ -307,12 +370,11 @@ export const modelProviderPack: ToolPack = {
   definitions,
   handlers,
   grants: {
+    ...PROVIDER_MANAGEMENT_TOOL_GRANTS,
     resolve_model_selection: ["work_capsule_read"],
     describe_model: ["sandbox_execute"],
     // file_read, not sandbox_execute: this reads committed source files exactly as
     // read_project_file does, so a read-scoped external token can hold it.
     describe_committed_model: ["file_read"],
-    add_provider: ["agent_control_read"],
-    update_provider_category: ["agent_control_read"],
   },
 };

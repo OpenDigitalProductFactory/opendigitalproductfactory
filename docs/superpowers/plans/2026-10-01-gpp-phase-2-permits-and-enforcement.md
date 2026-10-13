@@ -221,7 +221,7 @@ WWMD gate refuses")`).
   - Writes a `GppPermit` row with:
     - `enforcement: "shadow"`
     - `maxUses: 1`
-    - `expiresAt = now + 15 min`, mirroring `AUTHORITY_APPROVAL_TTL_MS`
+    - `expiresAt = now + 15 min`, mirroring `AUTHORITY_APPROVAL_TTL_MS` (as built after BI-0012E6CA: `GPP_PERMIT_TTL_MS = APPROVAL_DECISION_WINDOW_MS`, still 15 minutes from the gate admit; approval lifetimes became proportional, and the permit's window did not change)
     - a random `nonce`
   - Returns the permit id.
   - Fail-open: any error is logged, and the call proceeds with verdict `absent`.

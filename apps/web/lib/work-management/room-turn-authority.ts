@@ -12,7 +12,7 @@
 // (room-turn-authority.server.ts) loads the room and the grants and hands
 // them here. Every rule below is deny-by-default and tighten-only —
 // a room may narrow what a coworker's standing grants permit; it never widens.
-import { COWORKER_READ_BASELINE_GRANTS, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
+import { COWORKER_READ_BASELINE_GRANTS, grantsSatisfyRequirement, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
 import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
 
@@ -146,13 +146,30 @@ export function roomGrantsFromWorkShape(grants: readonly string[]): string[] {
 export function roomAuthorizesTool(
   toolName: string,
   authorizedGrants: readonly string[] | null | undefined,
+  /** A discovered external tool's policy-resolved grants (BI-8B7B2FE9); bundled names resolve via TOOL_TO_GRANTS. */
+  discoveredPolicyGrants?: readonly string[],
 ): boolean {
   if (!authorizedGrants) return true;
+  if (discoveredPolicyGrants) return grantsSatisfyRequirement(discoveredPolicyGrants, authorizedGrants);
   return isToolAllowedByGrants(toolName, [...authorizedGrants]);
 }
 
 function boundaryPermitsHandsOn(boundary: ProactivityActionBoundary | null): boolean {
   return boundary === "propose" || boundary === "preauthorized";
+}
+
+/**
+ * The room's action boundary: its own declaration, then its collaboration
+ * shape's bias, then the decreed platform default. One precedence for the turn
+ * authority and for the PR follow-through (BI-88341B5D), so they never disagree.
+ */
+export function resolveRoomActionBoundary(
+  room: { declaredActionBoundary: ProactivityActionBoundary | null; shapeActionBoundary: ProactivityActionBoundary | null } | null,
+  platformDefaultActionBoundary: ProactivityActionBoundary | null,
+): ProactivityActionBoundary | null {
+  return room
+    ? room.declaredActionBoundary ?? room.shapeActionBoundary ?? platformDefaultActionBoundary
+    : platformDefaultActionBoundary;
 }
 
 /**
@@ -189,9 +206,7 @@ export function deriveRoomTurnAuthority(facts: RoomTurnAuthorityFacts): RoomTurn
     externalAccess = { enabled: true, reason: "web-search-grant" };
   }
 
-  const actionBoundary: ProactivityActionBoundary | null = room
-    ? room.declaredActionBoundary ?? room.shapeActionBoundary ?? facts.platformDefaultActionBoundary
-    : facts.platformDefaultActionBoundary;
+  const actionBoundary = resolveRoomActionBoundary(room, facts.platformDefaultActionBoundary);
 
   let handsOn: RoomTurnAuthority["handsOn"];
   if (room && (!memberOfRoom || observerOnly)) {

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { worktreeContextFromGit } from "../pregate-status.mjs";
+import { readLocalCiGateState, writeLocalCiGateState } from "./local-ci-gate-state.mjs";
 
 import {
   classifySlotRecord,
@@ -66,6 +67,82 @@ function passingState(overrides = {}) {
     ...overrides,
   };
 }
+
+test("atomic documentation evidence survives a previous sandbox candidate without erasing it", () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-doc-gate-contract-"));
+  try {
+    const file = join(directory, "state.json");
+    const metadata = { candidateSha: OLD, execution: { status: "failed", failedCommand: "old diagnostic" } };
+    writeLocalCiGateState(file, {
+      ...passingState(), evidenceId: "EXT-DOC", leaseId: "", leaseEvents: [],
+      executionLane: "documentation",
+      producerEvidence: {
+        schemaVersion: 1, producer: "documentation-evidence-lane",
+        candidateSha: HEAD, candidateBranch: "claude/topic", evidenceRecordId: "EXT-DOC",
+        headTreeSha: "c".repeat(40), integrationTreeSha: "d".repeat(40), evidencePlanDigest: "e".repeat(64),
+      },
+    });
+    const result = classifySlotRecord({ state: readLocalCiGateState(file), metadata, headSha: HEAD, headBranch: "claude/topic", now: NOW });
+    assert.equal(result.verdict, "PASS");
+    assert.equal(result.candidateSha, HEAD);
+    assert.equal(metadata.execution.failedCommand, "old diagnostic");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+function documentationState() {
+  return passingState({
+    executionLane: "documentation", leaseId: "",
+    producerEvidence: {
+      schemaVersion: 1, producer: "documentation-evidence-lane", candidateSha: HEAD,
+      candidateBranch: "claude/topic", evidenceRecordId: "EXT-1",
+      headTreeSha: "c".repeat(40), integrationTreeSha: "d".repeat(40), evidencePlanDigest: "e".repeat(64),
+    },
+  });
+}
+
+test("documentation evidence rejects partial, unsupported and mismatched bindings even without sandbox metadata", () => {
+  const changes = [
+    (s) => { delete s.producerEvidence; },
+    (s) => { s.producerEvidence = null; },
+    (s) => { s.producerEvidence.schemaVersion = 2; },
+    (s) => { s.producerEvidence.producer = "unknown"; },
+    (s) => { s.producerEvidence.candidateSha = OLD; },
+    (s) => { s.producerEvidence.candidateBranch = "other"; },
+    (s) => { s.producerEvidence.evidenceRecordId = "other"; },
+    (s) => { s.evidenceRecordId = ""; s.producerEvidence.evidenceRecordId = ""; },
+    (s) => { s.producerEvidence.headTreeSha = ""; },
+    (s) => { s.producerEvidence.integrationTreeSha = ""; },
+    (s) => { s.producerEvidence.evidencePlanDigest = ""; },
+    (s) => { s.expiresAt = "invalid"; },
+    (s) => { s.recordedAt = "invalid"; },
+    (s) => { s.status = "running"; },
+    (s) => { s.leaseId = "unrelated-sandbox"; },
+    (s) => { s.executionLane = "unknown"; },
+    (s) => { delete s.executionLane; },
+  ];
+  for (const change of changes) {
+    const state = documentationState();
+    change(state);
+    assert.notEqual(classifySlotRecord({ state, metadata: null, headSha: HEAD, headBranch: "claude/topic", now: NOW }).verdict, "PASS", String(change));
+  }
+});
+
+test("documentation evidence retains expiry, source, pending, failure and legacy protections", () => {
+  for (const [overrides, expected] of [
+    [{ expiresAt: "2026-08-04T11:00:00.000Z" }, "STALE"],
+    [{ sha: OLD }, "STALE"],
+    [{ branch: "other" }, "STALE"],
+    [{ evidencePending: true }, "PENDING"],
+    [{ gatePassed: false, status: "failed" }, "FAIL"],
+    [{ gatePassed: false, status: "running" }, "INCONCLUSIVE"],
+    [{ testStub: true }, "INCONCLUSIVE"],
+    [{ executionLane: undefined, producerEvidence: undefined, leaseEvents: [{ type: "documentation-lane" }] }, "INCONCLUSIVE"],
+  ]) {
+    assert.equal(classifySlotRecord({ state: { ...documentationState(), ...overrides }, metadata: { candidateSha: HEAD }, headSha: HEAD, headBranch: "claude/topic", now: NOW }).verdict, expected);
+  }
+});
 
 test("PASS requires a passing record bound to THIS head", () => {
   const r = classifySlotRecord({
@@ -613,6 +690,59 @@ test("a superseded slot record is INCONCLUSIVE and names the winning slot", () =
   assert.match(result.reason, /slot-1/);
 });
 
+// BI-A9031FF3: the winner is re-read, not trusted. Observed 2026-10-08: slot-0
+// said "slot-1 passed this SHA" while slot-1's own record had since become
+// blocked_control_plane_starvation — no slot held a pass, yet the reason said one did.
+const SUPERSEDED_BY_SLOT_1 = {
+  branch: "feat/x",
+  sha: HEAD,
+  gatePassed: false,
+  status: "superseded",
+  supersededStatus: "queued",
+  supersededBy: { slotKey: "slot-1", at: "2026-10-08T02:50:00.000Z" },
+};
+
+test("a superseded record whose winner no longer holds a pass does not claim one", () => {
+  const result = classifySlotRecord({
+    state: SUPERSEDED_BY_SLOT_1,
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+    supersedingWinner: { branch: "feat/x", sha: HEAD, gatePassed: false, status: "blocked_control_plane_starvation" },
+  });
+  assert.equal(result.verdict, "INCONCLUSIVE");
+  assert.doesNotMatch(result.reason, /passed/);
+  assert.match(result.reason, /slot-1/);
+  assert.match(result.reason, /blocked_control_plane_starvation/);
+  assert.match(result.reason, /re-run pregate/i);
+});
+
+test("a superseded record whose winner record is gone says so instead of claiming a pass", () => {
+  const result = classifySlotRecord({
+    state: SUPERSEDED_BY_SLOT_1,
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+    supersedingWinner: null,
+  });
+  assert.doesNotMatch(result.reason, /passed/);
+  assert.match(result.reason, /no record/);
+});
+
+test("a superseded record whose winner still passed this SHA keeps the passed wording", () => {
+  const result = classifySlotRecord({
+    state: SUPERSEDED_BY_SLOT_1,
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+    supersedingWinner: { branch: "feat/x", sha: HEAD, gatePassed: true, status: "passed" },
+  });
+  assert.match(result.reason, /slot-1 passed this SHA/);
+});
+
 test("reconciliation still prefers the PASS over a superseded sibling", () => {
   const passed = {
     slotKey: "slot-1",
@@ -799,4 +929,44 @@ test("an admitted record is an in-flight run, never a FAIL", () => {
   });
   assert.equal(r.verdict, "INCONCLUSIVE");
   assert.match(r.reason, /has not recorded a verdict/);
+});
+
+// BI-277ECBDB (B): "queued" and "the substrate is dead" used the same words, so
+// nobody could tell "wait" from "this cannot work". They must read differently.
+test("a plain queued claim says how many claims are ahead of it", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "queued",
+      evidenceRecordId: "",
+      leaseEvents: [{ type: "queued", queuePosition: 4 }],
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+    queuedWaiter: { checked: true, alive: true, pids: [1] },
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /queued behind 3 other claim/i);
+});
+
+test("an unavailable slot substrate is BLOCKED, names the container, and does not advise a re-run", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "blocked_slot_substrate_unavailable",
+      evidenceRecordId: "",
+      substrate: { container: "dpf-local-ci-postgres-1", state: "exited (255)", remedy: "the platform substrate reconciler or `docker start dpf-local-ci-postgres-1` brings it back" },
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /^BLOCKED — slot substrate unavailable: dpf-local-ci-postgres-1 is exited \(255\)/);
+  assert.doesNotMatch(r.reason, /re-run/i);
+  assert.equal(r.rerun, false);
+  const lines = formatStatusReport(r, { headBranch: "topic", headSha: HEAD, now: NOW });
+  assert.ok(!lines.some((l) => l.includes("pnpm run pregate")), "a substrate block must not advise a re-run");
+  assert.ok(lines.some((l) => /next\s+.*dpf-local-ci-postgres-1/.test(l)), "it names the remedy instead");
 });

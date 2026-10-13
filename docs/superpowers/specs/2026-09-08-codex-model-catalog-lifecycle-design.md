@@ -143,3 +143,146 @@ This design is the durable operator/developer contract. No user guide change is
 needed: the visible Providers page keeps the same layout and wording, but its
 date becomes truthful. No principle, route map, schema, migration, or
 AI-coworker prompt changes.
+
+## October 11 repair: inventory truth and Connections disclosure
+
+BI-59E37E39 extends this design and the delivered BI-7F2FBDA3 eligibility
+repair. It does not replace the approved, unfinished BI-71ABBD95 multi-account
+design or its BI-7AA4EB6B compact-UX child. That design remains in the
+`provider-multi-account` worktree and is not yet on main. Preserve the bounded
+Responses inference verification in BI-F1C8F5A8 (awaiting acceptance).
+
+### Observed defects and limits
+
+At source revision `4bf3422a1daf24eb0a0dfe93380966b1ba36f22a`, successful
+ChatGPT-backend discovery upserts models without returning their IDs or running
+presence reconciliation and restricted-model readmission. Empty backend results
+do not try the existing CLI fallback. New tests against that actual module
+produce two failures and two passes before repair.
+
+A DEV refresh returned six discovered, six new, and twelve profiled models;
+the reloaded page still called all twelve profiles ready. The action assigns
+`newCount = discovered`, while auto-discovery and the UI each profile historical
+rows. Profile updates preserve model status; resurrection of retired rows has
+not been established. Absent-row counter updates advance `lastSeenAt` because
+the column uses `@updatedAt`, so future absence updates must explicitly preserve
+the previous sighting timestamp. Historical timestamps cannot be reconstructed.
+
+The running sandbox uses Codex CLI 0.157.0. Its direct, initialized `model/list`
+returned GPT-6 Astra/Sol/Luna and GPT-5.6 Sol/Terra/Luna, with no next page and no
+GPT-6.1 Sol. The desktop client therefore is not evidence of entitlement through
+this sandbox connection. The cause of that upstream difference is unresolved;
+do not insert model IDs or upgrade the shared sandbox to manufacture parity.
+
+OpenAI's [app-server contract](https://learn.chatgpt.com/docs/app-server)
+describes account/client-specific model availability; use the returned catalog.
+Local installed inventories retain their existing non-retirement exception
+([Ollama tags](https://docs.ollama.com/api/tags)). No new persistence is needed.
+
+### Repair scope and ordered implementation
+
+The working [Connections prototype](../mockups/2026-10-11-connections-catalog-health.html)
+extends the approved account-summary/disclosure direction. The bounded delivery
+changes the current single-provider detail surface; multi-account creation,
+schema, routing, billing and migration remain owned by the existing initiative.
+
+1. Preserve reproduction tests and research evidence before implementation.
+2. Refactor successful inventory persistence into one helper used by every
+   discovery path. Only nonempty successful inventories reconcile absence and
+   readmit restricted models. Empty, malformed, authentication and transport
+   failures preserve the last good catalog and report an error.
+3. Preserve absent models' sighting timestamps, two-confirmed-miss retirement,
+   permanent refusal reasons, local-provider exceptions and existing pin rules.
+4. Profile only IDs returned by that refresh; return actual insert counts and
+   profiling counts from the same operation. Remove duplicate UI profiling.
+   Preserve existing pricing and evaluated capability metadata.
+5. Describe profile counts as profiles, not usable or ready models. Keep
+   connection verification distinct from inventory freshness. Place model cards
+   and technical details behind the existing diagnostics disclosure; keep
+   actionable connection failures visible.
+6. Run focused lifecycle, pricing, pin, authentication and readiness regression
+   tests, package typecheck, shared CI, and served theme/viewport UX verification.
+
+Around twenty percent of this repair's implementation effort is allocated to
+consolidating discovery completion and removing duplicate work. Rollback is one
+PR revert; no schema or credential migration and no install advance are included.
+The inventory result and its UI projection are one atomic delivery: shipping
+only the projection would conceal inconsistent refresh behavior, while shipping
+only reconciliation would retain misleading readiness claims.
+
+### Objective and acceptance
+
+The live BI acceptance criteria, quoted for medium delivery coverage:
+
+- AC-1: Every successful authoritative subscription inventory uses shared persistence, presence reconciliation and auth-eligibility admission; errors and empty/malformed inventories preserve last-known-good state and do not claim freshness.
+- AC-2: Only models present in the authoritative run are profiled, so absent/retired rows are not resurrected; two confirmed absences and runtime-refusal retirement remain intact.
+- AC-3: Presence timestamps change only on actual sightings, not missed-discovery bookkeeping; existing lifecycle fields are reused unless steward proves a migration necessary.
+- AC-4: Connections separates connection, inventory freshness and workload restrictions; model count never equates historical profiles with usable models; technical inventory is disclosed under existing UX design.
+- AC-5: Tests cover new model arrival without source edits, removals/relisting, failure/empty response, stale pins, auth admission, pricing/metadata preservation and prior readiness behavior; served verification uses canonical runtime.
+
+AC-2 describes the intended preservation contract. Inspection confirmed repeated
+historical profiling, not resurrection of retired status; test status preservation
+without treating that unproven symptom as an observed defect.
+
+OBJ-CATALOG-TRUTH: automatic discovery tracks the serving connection's returned
+models without turning catalog history into availability claims.
+
+| Requirement | Flow/contract | Verification |
+| --- | --- | --- |
+| AC-REPAIR-1: all successful subscription discovery paths reconcile and return IDs | discover → persist → reconcile → readmit | actual-module backend and CLI fallback tests |
+| AC-REPAIR-2: failed/empty inventory preserves last good state | refresh failure contract | empty, authentication, malformed and transport tests |
+| AC-REPAIR-3: misses preserve sighting time and established retirement policies | inventory lifecycle | two misses, permanent refusal, local exception, pin regression tests |
+| AC-REPAIR-4: refresh counts and profiling describe this refresh | discovery action/result → UI | existing/new count, fresh-ID-only and pricing tests |
+| AC-REPAIR-5: overview hides technical catalog and avoids availability claims | provider overview → diagnostics | UI regressions and measured served UX evidence |
+
+### Background phase forecast contract — 2026-10-12
+
+The Build Studio phase forecast must compose its preview options through the
+shared `backgroundRouteOptions` helper. The existing `buildPhaseRouteOptions`
+module re-exports this helper for background plan and review callers, preserving
+their imports while keeping inference independent of build orchestration. These
+phases consume a completed response and do not require
+token streaming. Leaving the preview on the interactive default incorrectly
+excludes otherwise eligible endpoints whose streaming capability is unknown or
+false, then reports a blocked phase that differs from the actual caller.
+
+This reuses the existing background contract; it does not assign streaming
+capability to a model or change provider clearance. Internal sensitivity and all
+other routing requirements remain enforced. Interactive requests still require
+streaming unless their own contract says otherwise. Regression verification
+uses real contract inference and endpoint exclusion logic for both unknown and
+false streaming, plus a public-only endpoint that remains excluded from internal
+reviews. Forecast correctness does not establish settlement of an earlier
+provider call or successful execution on the served runtime.
+
+### Startup capability reconciliation and lifecycle ownership — 2026-10-12
+
+`packages/db/scripts/reconcile-catalog-capabilities.ts` applies static capability
+metadata at portal startup. Catalog lifecycle defaults apply only when creating
+a missing profile. Existing active, degraded, retired and disabled states belong
+to discovery, runtime refusal and operator decisions; a capability repair must
+preserve those states and their retirement timestamps and reasons. A static
+catalog entry also cannot retire an existing active profile. This extends AC-2
+through the startup path as well as the authoritative inventory refresh path.
+
+Live evidence on October 12 confirmed that startup catalog writes changed the
+status of historical retired rows while retaining their retirement timestamps.
+The routing loader still excludes rows with a retirement timestamp, so this
+evidence establishes inconsistent lifecycle presentation rather than routing
+readmission. The earlier qualification above concerned historical profiling;
+this later startup finding is separate and now reproduced by regression tests.
+
+Every field compared by the reconciler must be selected from the persisted row.
+The typed selection covers the complete mapping, preventing missing reads from
+being mistaken for null drift or logged as false previous values. A stable
+profile and catalog hash produce no profile update or change-log append; a
+changed hash alone advances provenance once. The existing capability drift
+comparison remains necessary even when the catalog hash matches. Discovery and
+evaluated ownership, full admin protection and field-level overrides remain
+intact. Ninety-day change-log pruning retains its existing maintenance contract.
+
+Regression tests execute the real reconciliation loop with a select-aware DB
+fixture, covering lifecycle preservation during capability repair, metadata
+change logging, repeated boots, protected ownership, overrides, hash-only
+changes and all creation defaults. This source repair does not establish live
+discovery success, endpoint capacity evidence or completed model execution.

@@ -153,8 +153,6 @@ const COMMUNITY_FIELDS = [
   "applicability",
 ];
 
-const DEMAND_ENVELOPE_V1_FIELDS = new Set(COLLABORATIVE_FIELDS);
-
 // Fields that must NEVER cross a federation boundary — source-local planning/context
 // that a minimization leak would expose. These are rejected on receive as a defensive
 // double-check of the sender's egress projection. Everything NOT on this denylist is

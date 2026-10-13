@@ -13,8 +13,9 @@
 // "I could not run git" is not "git printed nothing" (BI-B6433DC6): a caller
 // that wants partial output on failure reads `runGit(...).stdout` and says so.
 //
-// Options: cwd (default: repo root), trim, maxBuffer, timeout, env, exec (a
-// test seam with execFileSync's signature).
+// Options: cwd (default: repo root), trim, maxBuffer, timeout, env, input
+// (stdin for batch commands), binary (stdout as a Buffer), exec (a test seam
+// with execFileSync's signature).
 
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -22,8 +23,15 @@ import { fileURLToPath } from "node:url";
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-function execOptions({ cwd = REPO_ROOT, maxBuffer, timeout, env } = {}) {
-  const options = { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], windowsHide: true };
+function execOptions({ cwd = REPO_ROOT, maxBuffer, timeout, env, input, binary = false } = {}) {
+  const options = {
+    cwd,
+    stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+    windowsHide: true,
+  };
+  // No encoding returns a Buffer, which batch output with byte-counted sizes needs.
+  if (!binary) options.encoding = "utf8";
+  if (input !== undefined) options.input = input;
   if (maxBuffer !== undefined) options.maxBuffer = maxBuffer;
   if (timeout !== undefined) options.timeout = timeout;
   if (env !== undefined) options.env = env;
@@ -46,6 +54,7 @@ export class GitCommandError extends Error {
 export function runGit(args, { exec = execFileSync, ...opts } = {}) {
   try {
     const stdout = exec("git", args, execOptions(opts));
+    if (opts.binary) return { ok: true, stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout ?? ""), stderr: "", status: 0 };
     return { ok: true, stdout: String(stdout ?? ""), stderr: "", status: 0 };
   } catch (e) {
     return {
@@ -61,6 +70,7 @@ export function runGit(args, { exec = execFileSync, ...opts } = {}) {
 export function gitText(args, { trim = true, ...opts } = {}) {
   const result = runGit(args, opts);
   if (!result.ok) throw new GitCommandError(args, result);
+  if (opts.binary) return result.stdout;
   return trim ? result.stdout.trim() : result.stdout;
 }
 

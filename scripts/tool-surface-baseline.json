@@ -3,14 +3,14 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 429,
-      "reason": "BI-926A7E90: read_build_artifact_revision. A Build Studio design is an accepted BuildArtifactRevision, not a repository blob, so the independent reviewer that approves a large-shape build had no immutable reader for the artifact it is asked to judge, and 122 plan-phase builds owed receipts nothing could request. Read-only, page-capped, identity-bound (path/version/expectedBlobId) exactly like read_source_at_version, granted only through file_read, and handed to a reviewer solely by the server-issued binding. Claim to check: revision-bound reviews record receipts whose artifactRef is the revision the reader served.",
-      "recordedAt": "2026-10-02"
+      "value": 435,
+      "reason": "BI-1914A351: get_provider_accounts and manage_provider_account provide scoped account controls; their independent-account claim remains. BI-CAP-1774FB7A adds review_workroom_sensitivity and correct_workroom_sensitivity in the existing Workroom pack. The admin reader returns only a revision digest and known/unknown classification state because get_workroom correctly refuses protected contents. The separate authority-consequential writer requires administrator classification review, exact digest and rationale, and retains the original declaration in an audit. Ordinary boundary edits cannot safely repair historical unknown labels. Claim to check: denied-room information is never returned, valid labels cannot be downgraded through recovery, stale corrections are refused and original records remain. Both tools stay outside the core tier; no tool per classification or global clearance control. BI-CAP-E7AE57C2 adds verify_archetype_projection: the missing no-argument DEV/test-only live lifecycle check, which uses production reconciliation and rolls back its own fixture. Existing setup/reset targets business content; source tests cannot verify the served image. Claim to check: stable identity, withdrawal/restoration, retained references and history without durable fixture writes or selecting existing organizations.",
+      "recordedAt": "2026-10-12"
     },
     "registry.packFiles": {
-      "value": 105,
-      "reason": "BI-EBF0F6EE: contributor-inventory-pack.ts and payables-pack.ts. Contributor inventory had a sync trigger but no reader and no pack of its own; payables/supplier reads are a finance-operations domain distinct from banking and reporting packs, granted to a narrower key (payables_read) than financial_read.",
-      "recordedAt": "2026-10-01"
+      "value": 106,
+      "reason": "BI-1914A351: provider-account-tools.ts holds the two account tool definitions composed into the existing model-provider pack. Handlers remain in that pack and delegate to shared account services, avoiding a larger import cycle. This is an account contract module, not a second tool registration path. Claim to check: model-provider pack tests prove one registration and matching grants for each account control.",
+      "recordedAt": "2026-10-08"
     },
     "tier.coreToolNames": {
       "value": 35,

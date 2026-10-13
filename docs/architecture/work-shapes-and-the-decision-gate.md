@@ -129,9 +129,38 @@ normalization rather than stored, because a claim that can never resolve would l
 looking declared and behaving inert — the exact failure this contract exists to end.
 
 The drive never executes a stage whose accountable principal is a `role:` or `person:`
-reference, and never executes a `governed-decision` advance, at any posture. Those become
-attention for the named principal. Sending outward, moving money, rotating a credential,
-merging a change, and changing authority are declared that way in every standing shape.
+reference, at any posture, and executes a `governed-decision` advance only when its
+principal is an `agent:` and the room's action boundary is `preauthorized` (EP-4614F35E).
+Everything else becomes attention for the named principal. Sending outward, moving money,
+rotating a credential, merging a change, and changing authority are declared with `role:`
+principals in every standing shape, so they always reach a person.
+
+**A readiness review stage is bound to its reviewer, never its author (BI-2C8750FC).** A
+delivery stage that leaves a `spec-approval-receipt` or `plan-review-receipt` is where a
+design-spec, spec-approval or plan-review is owed. When the drive stops there, it reads the
+independent reviewer route the readiness recovery issues and rebinds the stage for that
+tick: person-authored work at `preauthorized` gets `agent:<eligible reviewer>` and is
+dispatched as the exact server-issued reviewer packet through the BI-A835D300 runner (no
+generic scheduled task); agent-authored work, or a room below `preauthorized`, gets
+`role:<gate role>`, so attention goes to the reviewer role. With no independent route, an
+unknown author, or a reviewer agent that is the authoring agent, nothing is bound. The
+registry shape is unchanged. Design: `docs/superpowers/specs/2026-09-02-proactive-review-drive-design.md`
+("As built — review stages").
+
+The reviewer's receipt is the stage's evidence (BI-80738C08): once every review receipt
+the stage declares has passed for the room's current head, the next tick advances it. A
+failing receipt blocks the stage and shows in the room with its finding count.
+
+Two bounded exceptions bind a non-governed `role:` stage to an agent; neither ever reaches a
+`governed-decision` advance (`boundStagePrincipal`, `drive-plan-stage.ts`). A room may carry
+its own `workShapeRoleBindings` scope claim naming the agent that holds a role there
+(BI-C1781121). And a delivery shape's `role:author` stages bind to the software-engineer
+coworker for a tick when the operator's recorded pre-authorisation
+(`workroom-drive.author-stage-preauthorisation`, granted and revoked on
+**Admin > Platform Development**, off by default) is in force and the room's item is funded
+within budget: its portfolio has a budget this quarter and its delivered plus in-flight points
+fit it (`author-stage-autonomy.ts`, BI-8A32EBFF). `delivery-xlarge` never binds. When either
+condition fails the stage stays attention and the drive ledger names the missing condition.
 
 A room that never declared one gets a **derived** shape from what it already is
 (`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,
@@ -216,6 +245,17 @@ mutation. Standing-room runs persist the full projection and its stable reconcil
 next drive and the operator read the same evidence. Missing or unresolvable evidence pauses a
 shaped room; the runtime does not infer conformance from the absence of an error. AI coordinators
 must have eligible JSI qualification and TAK authority inputs, and an unknown input fails closed.
+
+**Stage receipts belong to one run** ⟦runtime: 2026-10-06, `BI-853120EE`⟧. A run starts on the
+first drive tick after the previous run concluded (success, or sleeping on a concluded run) on a
+later cycle key, and lasts until it concludes; it does not end at UTC midnight. Its key is the
+cycle key of the tick it started on: a graph room's marking `cycleKey`, a sequential room's
+snapshot `runKey`, both read through `driveRunKeyOf` (`workroom-drive-state.ts`). Receipts carry
+that `runKey`; a new run starts with none, so every stage and every governed decision is earned
+again (`drive-sequential-run.ts`). Only a shape that declares the `cadence` trigger starts a new
+run (`workShapeRecurs`, WWMD DI-8DCB9A4B566C): a claim-triggered room's successful run is final.
+The persist merge compares run keys, so a same-run receipt landed during the tick that crosses
+midnight is kept.
 
 The Workroom surface makes this control legible in **Details → Process Overseer**: coordinator
 identity, explicit versus derived assignment, conformance status, current and expected next stage,
@@ -774,6 +814,21 @@ inherited room, then the organization's top accountable owner). The evidence
 records `decidedBy: "accountable-owner-fallback"` so the substitution is
 visible; anyone else sees who decides and is refused.
 
+**The author's own stage starts at the drive's ask too (BI-C9912C22).** A
+`status-change` stage accountable to `role:author` (delivery shapes'
+`reproduce` and `repair`) is also never dispatched: the drive raises
+`role_stage` attention for the author, who does the work in their own worktree
+and records it with `record_workroom_evidence` (stage key, declared kind,
+outcome `completed`). That ask is the stage's start time, so the author's
+evidence earns the receipt; before this, the stage had no start and the
+evidence was never read (WC-BFDF763B held on `reproduce` for 88 ticks). Only
+`role:author` qualifies. A stage accountable to any other role or to a person
+stays unstarted by evidence the author writes, so an approver's or reviewer's
+stage cannot be satisfied by the author (separation of duties). The evidence
+call now answers with `stageReach`: whether the next drive tick can advance the
+stage from it, or why not (a blocker, not the current stage, accountable to
+someone else, or no driven stage yet).
+
 ## Failing closed is not the same as locking
 
 `#5166` stopped a real defect: a stage that produced no completing receipt was
@@ -822,6 +877,37 @@ The general lesson is worth stating plainly, because it applies to any
 fail-closed guard: a guard whose own output re-triggers its input has no
 recovery path, and the estate it protects can only degrade. Bound the latch to
 something that changes on its own.
+
+### Every reason the drive emits is in its vocabulary, by type
+
+The no-silence rule (BI-12A083B4) concludes every drive row as outcome met, in
+motion or blocked. It walks `DRIVE_REASONS_BY_ACTION`, and that list was once a
+hand list beside an untyped `reason: string`. It drifted. `cycle_complete`,
+`executor_writeback_unavailable`, `lease_held` and `missing_task_owner` were
+missing, and `unknown_principal` was filed under the wrong action. In 30 days,
+11,435 writeback-paused ticks concluded `unconcluded` while the walk stayed
+green (BI-3ACFD254).
+
+`DrivePlan.reason`, the drive's plan constructor and the drive job's overrides
+are now typed from that list. A reason the drive emits but the list omits fails
+typecheck. A writeback-paused room now concludes as blocked, and clears when the
+executor records evidence or a writeback for the dispatched stage. A room with
+no owner user for its agent stage concludes as blocked, and clears when an owner
+user is bound. A finished cycle and a lease held by another worker conclude as
+in motion.
+
+### Every stage is a queue
+
+Since EP-B70E718D F2 (BI-4ADFFEDB), the drive reports where each room's time goes. When it writes a state-change row, it also emits queue transitions into the shared flow telemetry, under `wr:<shape>@<version>:<stage>`:
+
+- A room entering a stage is enqueued.
+- Work starting is a start.
+- Waiting on a person, or being blocked, is a hold. The hold carries its cause, for example `conformance_pause`.
+- Leaving the stage finishes it.
+
+The hourly queue rollup turns those transitions into per-stage dwell, touch time, wait, held time, queue depth, throughput and flow efficiency. These are the same numbers every other queue reports, so queue health, Prometheus and the coworker queue tools read stages with no extra wiring.
+
+The drive log from before the change is replayed once, so stage trends start with history.
 
 ## A named governed writer must be attached, not discovered
 

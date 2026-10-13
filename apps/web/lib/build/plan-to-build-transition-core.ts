@@ -223,10 +223,12 @@ export const PLAN_TO_BUILD_GATE_PROFILES = {
       "wwmd-plan-advancement": "not-evaluated-recorded",
     },
     steps: ["structural-phase-gate"],
-    callerChecksBefore: ["auto-advance requested", "canTransitionPhase"],
+    // Approve Start added by BI-BDB63485 (lib/build/build-start-approval.ts).
+    callerChecksBefore: ["auto-advance requested", "canTransitionPhase", "Approve Start"],
     refusal:
       "Soft: the tool returns success: true with \"Phase handoff saved but gate blocked advance: <reason>\". " +
-      "The structural gate result is recorded on the PhaseHandoff row either way.",
+      "The structural gate result is recorded on the PhaseHandoff row either way. " +
+      "An Approve Start refusal uses the same soft form, before the structural gate.",
     callerEffectsAfter: ["phase:change event", "phase:advance activity"],
     gateSkippedSummary:
       "plan → build advanced by save_phase_handoff without the WWMD plan-advancement gate (shadow; not enforced)",

@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./script-argv.mjs";
 
 import { isEntryModule } from "./entry-module.mjs";
 
@@ -106,6 +107,6 @@ export function runBreakawayLaunch(specPath, { spawnImpl = spawn } = {}) {
 }
 
 if (isEntryModule(import.meta.url)) {
-  const { positionals: [specPath] } = utilParseArgs({ args: process.argv.slice(2), allowPositionals: true, strict: true });
+  const { positionals: [specPath] } = utilParseArgs({ args: scriptArgv(), allowPositionals: true, strict: true });
   runBreakawayLaunch(specPath);
 }

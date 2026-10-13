@@ -22,7 +22,6 @@
 import {
   resolveBusinessProfile,
   resolveStanceVectors,
-  seededStanceVectorKeys,
   type ArchetypeBusinessProfile,
   type ArchetypeStanceVectors,
 } from "@/lib/onboarding/archetype-business-context";
@@ -127,60 +126,21 @@ export async function buildOrgContextBundle(
   };
 }
 
-/**
- * Render the MCP `initialize` instructions: the base surface note plus, when an
- * organization is resolved, an ORGANIZATION CONTEXT block carrying the mission,
- * archetype, operating locale/currency, who-we-serve / how-we-decide doctrine,
- * the stance vectors, and the decision-routing directive. Returns exactly the
- * base string when `bundle` is null (uninitialized deployment).
- *
- * The block is composed from a fixed set of short fields (no per-tool or
- * per-turn growth), so it stays economical in the model's context — it is sent
- * once at connect, not on every call.
- */
+/** Compact connection orientation. Decision tools resolve detailed live doctrine on demand. */
 export function formatOrgContextInstructions(
   base: string,
   bundle: OrgContextBundle | null,
 ): string {
   if (!bundle) return base;
-
-  const p = bundle.businessProfile;
-  const who = bundle.organizationName ?? "this organization";
-  const localeBits = [
-    `operating locale ${bundle.locale.locale}`,
-    `currency ${bundle.locale.currency}`,
-    bundle.locale.countryCode ? `country ${bundle.locale.countryCode}` : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
-  const archetypeBits = [bundle.archetypeName, bundle.industry]
-    .filter(Boolean)
-    .join(" · ");
-
-  // Only the vectors this archetype is actually seeded (BI-0902BAE9). Telling a
-  // software platform's coworkers how to behave in a customer's home would be
-  // noise at best; at worst it invites a stance nobody here has a view on.
-  const stances = seededStanceVectorKeys({ industry: bundle.industry }).map((key) => {
-    const s = bundle.stanceVectors[key];
-    const ceiling =
-      typeof s.ceilingUsd === "number" ? ` (authority ceiling ~$${s.ceilingUsd})` : "";
-    return `- ${s.title}: ${s.stance}${ceiling}`;
-  }).join("\n");
-
+  // Bound user-editable fields independently; never truncate the decision routes.
+  const brief = (value: string | null | undefined, max: number) =>
+    (value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
   const block = [
-    `ORGANIZATION CONTEXT — you are interacting with the platform on behalf of ${who}. Ground every business decision, recommendation, and action in this context, not in generic defaults.`,
-    bundle.mission ? `Mission: ${bundle.mission}` : `Mission theme: ${p.missionTheme}.`,
-    archetypeBits ? `Business archetype: ${archetypeBits}.` : null,
-    `Operating model: ${p.businessModel}`,
-    localeBits ? `Where it operates: ${localeBits}.` : null,
-    `Who we serve: ${p.whoWeServe}`,
-    `How we decide: ${p.howWeDecide}`,
-    `Supply/vendor posture: ${p.supplyChain}`,
-    `Standing stances (owner-editable starters):\n${stances}`,
-    `DECISION ROUTING: name the scope that OWNS the question before you ask anything to answer it. For a decision about operating THIS organization's business (pricing, staffing, customers, spend, growth, what it promises, how it treats customer data), call evaluate_org_business_decision with decisionScope "wwwd" — it is scored against the organization's own recorded stance (its WWWD profile) and escalates to a human when confidence is not high enough for the risk. For a decision about building or operating the DPF platform itself, or about how a supplier's product works, use principle_decide (the founder kernel). For what a qualified practitioner should do — legal, privacy, regulatory, clinical, accounting — use evaluate_profession_decision: the business sets its posture around a craft but does not decide the craft answer, and lawful basis is not a business preference. If you cannot tell which scope owns it, ask the owner rather than defaulting to the business gate; a question the business never owned cannot be answered there, it only waits in the queue.`,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-
+    `ORGANIZATION CONTEXT: ${brief(bundle.organizationName, 80) || "this organization"}.`,
+    `Mission: ${brief(bundle.mission || bundle.businessProfile.missionTheme, 180)}`,
+    `Archetype: ${brief(bundle.archetypeName, 60)}; industry: ${brief(bundle.industry, 60)}.`,
+    `Locale: ${brief(bundle.locale.locale, 20)}; currency: ${brief(bundle.locale.currency, 10)}; country: ${brief(bundle.locale.countryCode, 10)}.`,
+    'DECISION ROUTING: organization business → evaluate_org_business_decision (decisionScope "wwwd"); practitioner judgment → evaluate_profession_decision; DPF platform → principle_decide. These tools resolve the owning scope’s recorded doctrine. Cross-scope doctrine is advisory. If ownership is unclear, ask the owner. Do not substitute generic defaults for recorded business policy.',
+  ].join("\n");
   return `${base}\n\n${block}`;
 }

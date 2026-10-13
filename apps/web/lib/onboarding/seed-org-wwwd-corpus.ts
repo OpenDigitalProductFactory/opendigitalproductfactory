@@ -46,7 +46,6 @@ import { deriveExcellenceCorpus, excellenceCorpusToMarkdown } from "./excellence
 import {
   resolveBusinessProfile,
   resolveStanceVectors,
-  STANCE_VECTOR_KEYS,
   seededStanceVectorKeys,
   type StanceVectorKey,
 } from "./archetype-business-context";

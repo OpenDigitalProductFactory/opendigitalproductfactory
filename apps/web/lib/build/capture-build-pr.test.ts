@@ -30,13 +30,12 @@ describe("captureBuildPrOntoCapsule (delivery visibility — PR capture onto the
         pullRequestNumber: 2145,
         workspaceState: expect.objectContaining({
           retained: true,
-          buildStudio: expect.objectContaining({
-            delivery: expect.objectContaining({
-              schemaVersion: 1,
-              status: "created",
-              repository: "o/r",
-              prNumber: 2145,
-            }),
+          // BI-88341B5D: one room-generic PR delivery record for every room.
+          prDelivery: expect.objectContaining({
+            schemaVersion: 1,
+            status: "created",
+            repository: "o/r",
+            prNumber: 2145,
           }),
         }),
       }),

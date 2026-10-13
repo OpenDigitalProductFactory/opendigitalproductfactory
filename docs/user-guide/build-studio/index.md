@@ -14,6 +14,14 @@ Build Studio is the platform's guided way to turn a plain-language outcome into 
 
 Build Studio is not a separate code universe. It works from the install's shared development workspace. In customizable installs, that means Build Studio and VS Code operate on the same source tree while the portal continues to own review, evidence, and governed promotion.
 
+You do not need separate Claude or Codex apps to use embedded Build Studio for
+supported changes. It needs a configured AI provider and development workspace.
+Builds, tests, previews, and local coding models still consume resources wherever
+they execute, so size enabled build work separately from everyday business
+operations. The [hardware guide](../../install/hardware.md) distinguishes those
+workloads; a 32 GB operations configuration is not a guarantee for a full
+development workload.
+
 ### Development Workrooms
 
 Open `/build/work` when you need the engineering context behind Build Studio. The **Delivery task hub** groups recent Workrooms as Ready, Working, Waiting, Needs attention, or Complete and keeps the outcome, owner, current stage, age, progress, branch, and next action together. A card may also show the authorized durable async-operation status and platform handle; provider handles, prompts, raw results, and private failure detail stay out of this view.

@@ -156,10 +156,15 @@ export class PrismaAsyncOperationQueryStore {
 
   async listUndeliveredTransitions(input: {
     limit?: number;
+    maxAttempts?: number;
   } = {}): Promise<AsyncOperationTransitionRecord[]> {
     const limit = Math.min(100, Math.max(1, Math.floor(input.limit ?? 50)));
     const rows = await this.db.asyncInferenceOperationTransition.findMany({
-      where: { deliveredAt: null },
+      // A row at the attempt cap is dead-lettered and no longer selected (BI-6BB830E4).
+      where: {
+        deliveredAt: null,
+        ...(input.maxAttempts ? { deliveryAttempts: { lt: input.maxAttempts } } : {}),
+      },
       orderBy: [{ occurredAt: "asc" }, { operationId: "asc" }, { sequence: "asc" }],
       take: limit,
     });

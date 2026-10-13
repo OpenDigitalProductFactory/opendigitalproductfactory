@@ -6,6 +6,8 @@ export function semanticReviewRecoveryPresentation(state: ReturnType<typeof sema
     exhausted: "Recovery limit reached", unknown: "Recovery availability unknown" }[state];
   const nextAction = state === "available"
     ? "The original requester can confirm recovery; authority is checked again when submitted."
+    : state === "expired"
+      ? "This request cannot resume. The requester must reconcile prior execution and record fresh runtime remediation evidence before confirming one bounded successor through review recovery."
     : state === "unknown"
       ? "Recovery limits could not be read. Inspect the request history before further action."
       : "This request cannot resume. Its deadline and recovery limit stay unchanged; inspect history with the requester.";
@@ -16,6 +18,7 @@ const REASONS: Record<string, string> = {
   "unparseable-review-response": "The reviewer response could not be validated. No review verdict was accepted.",
   "review-response-truncated": "The provider stopped before the review response was complete.",
   "provider-outcome-uncertain": "The provider outcome is uncertain. Inspect the recorded execution before replacing it.",
+  "review-capacity-deferred": "Review could not start because provider capacity was unavailable. No verdict was produced.",
   "provider-outcome-uncertain-after-restart": "Execution restarted before a provider outcome was recorded.",
   "submitting-authority-no-longer-valid": "The original request no longer has valid authority.",
   "failure-analysis-evidence-changed": "The request's verification evidence is no longer current.",

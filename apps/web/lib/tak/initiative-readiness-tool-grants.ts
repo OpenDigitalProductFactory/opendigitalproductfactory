@@ -194,20 +194,45 @@ type ResolvedRecoveryArtifact = Extract<InitiativeRecoveryCanonicalArtifact, { r
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 type RecoveryArtifactInput = DistributiveOmit<ResolvedRecoveryArtifact, "resolved">;
 
-type ReviewerRouteDb = {
-  agentToolGrant?: {
-    findMany(args: unknown): Promise<Array<{
-      grantKey: string;
-      agent: {
-        agentId: string;
-        displayName: string;
-        status: string;
-        archived: boolean;
-        lifecycleStage: string;
-      };
-    }>>;
+export type GrantHolderRow = {
+  grantKey: string;
+  agent: {
+    agentId: string;
+    displayName: string;
+    status: string;
+    archived: boolean;
+    lifecycleStage: string;
   };
 };
+
+export type ReviewerRouteDb = {
+  agentToolGrant?: { findMany(args: unknown): Promise<GrantHolderRow[]> };
+};
+
+/**
+ * The active, production, unarchived holders of any of `grants`, one row per
+ * (agent, grant), in deterministic order (agent id, then grant key). The one
+ * eligibility rule every lane owner is picked by: the reviewer routes below
+ * and the acceptance sweep's execution-evidence lane (BI-7C7E8CAC).
+ */
+export async function loadEligibleGrantHolders(db: ReviewerRouteDb, grants: readonly string[]): Promise<GrantHolderRow[]> {
+  if (!db.agentToolGrant || grants.length === 0) return [];
+  const rows = await db.agentToolGrant.findMany({
+    where: {
+      grantKey: { in: [...grants] },
+      agent: { status: "active", archived: false, lifecycleStage: "production" },
+    },
+    select: {
+      grantKey: true,
+      agent: { select: { agentId: true, displayName: true, status: true, archived: true, lifecycleStage: true } },
+    },
+  });
+  return rows
+    .filter((row) => row.agent.status === "active" && !row.agent.archived && row.agent.lifecycleStage === "production")
+    .sort((left, right) =>
+      left.agent.agentId.localeCompare(right.agent.agentId)
+      || left.grantKey.localeCompare(right.grantKey));
+}
 
 const IMMUTABLE_READER_GRANT = "file_read";
 
@@ -239,10 +264,18 @@ const AUTHOR_RESEARCH_NEXT_ACTION =
 const SMALL_FIX_RESEARCH_NEXT_ACTION =
   "Research for a small fix is its reproduction, recorded as execution evidence: call record_execution_evidence on this item with kind \"source_verified\" (the defect on a named ref, with its URL) and kind \"test_pass\" (the failing-to-passing test), then claim again. record_initiative_evidence(gate: \"research\") also satisfies it where that grant is held. No canonical design is required, so do not commit a spec to obtain a reviewer route.";
 
+// BI-77C600B2: the research receipt cites a commit on a LIVE workroom, and an
+// implementation claim refused here binds none. Without this step the receipt is
+// refused ("claim or adopt the branch first") and the claim it points back to is
+// refused again at this gate. A design claim owes no research, so it binds the
+// room the receipt needs.
+const RESEARCH_RECEIPT_ORDER =
+  " The receipt cites a commit on a live workroom, and this refused claim bound none: first claim with workIntent \"design\" (it does not owe research), then record the receipt, then claim with workIntent \"implementation\" again.";
+
 function authorResearchNextAction(decision: InitiativeReadinessDecision): string {
-  return decision.shapeDecision?.effective === "small" && decision.profile === "fix"
+  return (decision.shapeDecision?.effective === "small" && decision.profile === "fix"
     ? SMALL_FIX_RESEARCH_NEXT_ACTION
-    : AUTHOR_RESEARCH_NEXT_ACTION;
+    : AUTHOR_RESEARCH_NEXT_ACTION) + RESEARCH_RECEIPT_ORDER;
 }
 
 /** Resolve actionable, exact-grant reviewer routes without changing readiness. */
@@ -256,6 +289,8 @@ export async function resolveInitiativeReviewerRecovery(input: {
   planArtifact?: InitiativeRecoveryCanonicalArtifact | null;
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: readonly string[];
+  /** Server-owned history predicate; never a caller-supplied exclusion list. */
+  isPlanReviewExhausted?: (packet: ReturnType<typeof requestCoworkerPacket>) => Promise<boolean>;
 }): Promise<InitiativeReviewerRecovery> {
   const requirements = [...input.decision.blockers, ...input.decision.unmet];
   const requested: Array<{
@@ -295,31 +330,13 @@ export async function resolveInitiativeReviewerRecovery(input: {
       ? [IMMUTABLE_READER_GRANT]
       : []),
   ])];
-  const rows = input.db.agentToolGrant
-    ? await input.db.agentToolGrant.findMany({
-        where: {
-          grantKey: { in: grants },
-          agent: { status: "active", archived: false, lifecycleStage: "production" },
-        },
-        select: {
-          grantKey: true,
-          agent: { select: { agentId: true, displayName: true, status: true, archived: true, lifecycleStage: true } },
-        },
-      })
-    : [];
-  const activeProductionRows = rows.filter((row) =>
-    row.agent.status === "active"
-    && !row.agent.archived
-    && row.agent.lifecycleStage === "production");
+  const deterministicRows = await loadEligibleGrantHolders(input.db, grants);
   const grantsByAgent = new Map<string, Set<string>>();
-  for (const row of activeProductionRows) {
+  for (const row of deterministicRows) {
     const held = grantsByAgent.get(row.agent.agentId) ?? new Set<string>();
     held.add(row.grantKey);
     grantsByAgent.set(row.agent.agentId, held);
   }
-  const deterministicRows = [...activeProductionRows].sort((left, right) =>
-    left.agent.agentId.localeCompare(right.agent.agentId)
-    || left.grantKey.localeCompare(right.grantKey));
 
   const reviewerRoutes: InitiativeReviewerRecovery["reviewerRoutes"] = [];
   const escalations: InitiativeReviewerRecovery["escalations"] = [];
@@ -338,10 +355,11 @@ export async function resolveInitiativeReviewerRecovery(input: {
     const requiredGrants = bindable
       ? [entry.route.lane.grant, IMMUTABLE_READER_GRANT]
       : [entry.route.lane.grant];
-    const candidate = deterministicRows.find((row) =>
+    const candidates = deterministicRows.filter((row) =>
       row.grantKey === entry.route.lane.grant
       && requiredGrants.every((grant) => grantsByAgent.get(row.agent.agentId)?.has(grant))
       && (!entry.route.lane.independent || row.agent.agentId !== input.currentAgentId));
+    let candidate: GrantHolderRow | undefined = candidates[0];
     if (candidate) {
       if (!input.dispatchContext) {
         escalations.push({
@@ -391,17 +409,34 @@ export async function resolveInitiativeReviewerRecovery(input: {
         });
         continue;
       }
-      const packet = requestCoworkerPacket({
+      const dispatch = input.dispatchContext;
+      const preparePacket = (targetAgentId: string) => requestCoworkerPacket({
         decision: input.decision,
         gate: entry.gate,
         toolName: entry.route.toolName,
-        targetAgentId: candidate.agent.agentId,
-        dispatch: input.dispatchContext,
+        targetAgentId,
+        dispatch,
         independent: entry.route.lane.independent,
         artifact: bindable && artifact?.resolved ? artifact : null,
         expectedCurrentBaselineId: input.expectedCurrentBaselineId ?? null,
         eligibleEvidenceActivityIds,
       });
+      let packet = preparePacket(candidate.agent.agentId);
+      if (entry.gate === "plan-review" && input.isPlanReviewExhausted) {
+        for (const next of candidates) {
+          const nextPacket = preparePacket(next.agent.agentId);
+          if (await input.isPlanReviewExhausted(nextPacket)) { candidate = undefined; continue; }
+          candidate = next;
+          packet = nextPacket;
+          break;
+        }
+        if (!candidate) {
+          escalations.push({ accountableRole: entry.role, toolName: entry.route.toolName,
+            grant: entry.route.lane.grant, reason: "no-eligible-reviewer",
+            nextAction: "All currently eligible independent plan reviewers exhausted this exact packet. Select another eligible reviewer/provider through recorded authority; do not replay exhausted tasks or reset their attempts." });
+          continue;
+        }
+      }
       reviewerRoutes.push({
         accountableRole: entry.role,
         toolName: entry.route.toolName,

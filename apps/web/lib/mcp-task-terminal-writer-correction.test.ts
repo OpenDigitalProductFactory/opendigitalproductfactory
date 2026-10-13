@@ -164,7 +164,8 @@ describe("terminal writer correction resumption", () => {
       return {
         id: "schema-invalid-writer",
         success: false,
-        result: { error: "Every proposal mapping must name each current objective exactly once." },
+        result: { error: "CLASSIFICATION_REQUIRED", message: "Expected profile: feature." },
+        parameters: { profile: "fix" },
       };
     });
     db.findUnique.mockResolvedValue({ status: "working" });
@@ -216,7 +217,9 @@ describe("terminal writer correction resumption", () => {
       data: expect.objectContaining({
         status: "working",
         progressPayload: expect.objectContaining({
-          terminalWriterWait: expect.objectContaining({ attempt: 2 }),
+          terminalWriterWait: expect.objectContaining({ attempt: 2, validationFailure: {
+            error: "CLASSIFICATION_REQUIRED", message: "Expected profile: feature.", proposal: { profile: "fix" },
+          } }),
         }),
       }),
     }));

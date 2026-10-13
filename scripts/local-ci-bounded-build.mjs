@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -50,7 +51,7 @@ const BUILDKIT_CONFIG = join(SCRIPT_DIR, "config", "local-ci-buildkitd.toml");
 function valueAfter(flag) {
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
   const { values } = utilParseArgs({
-    args: process.argv.slice(2),
+    args: scriptArgv(),
     strict: false,
     allowPositionals: true,
     options: { "tag": { type: "string" }, "slot-key": { type: "string" }, "candidate": { type: "string" } },

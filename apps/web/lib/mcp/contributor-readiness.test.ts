@@ -9,7 +9,10 @@ import {
   copyMcpApiTokenPlaintext,
   listMcpApiTokens,
 } from "@/lib/auth/mcp-api-token";
-import { CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS } from "@/lib/mcp-token-scopes";
+import {
+  CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS,
+  getMcpTokenTemplate,
+} from "@/lib/mcp-token-scopes";
 import {
   _resetContributorMcpReadinessProbeCacheForTests,
   getContributorMcpReadiness,
@@ -113,6 +116,38 @@ describe("getContributorMcpReadiness", () => {
     expect(result.recommendedAction).toBe("rotate_development_token");
     expect(result.token?.id).toBe("tok_read");
     expect(result.missingGrants).toContain("backlog_write");
+  });
+
+  it("stops telling a followed-through development connection to rotate", async () => {
+    const development = getMcpTokenTemplate("development")!;
+    listTokensMock.mockResolvedValue([
+      token({
+        id: "tok_followed",
+        scopes: [...development.grants],
+      }),
+    ]);
+
+    const result = await getContributorMcpReadiness("user_1");
+
+    expect(result.status).toBe("ready");
+    expect(result.recommendedAction).toBe("test_connection");
+    expect(result.missingGrants).toEqual([]);
+  });
+
+  it("still tells a development prefix that has not been followed through to rotate", async () => {
+    const development = getMcpTokenTemplate("development")!;
+    listTokensMock.mockResolvedValue([
+      token({
+        id: "tok_prefix",
+        scopes: development.grants.slice(0, -1),
+      }),
+    ]);
+
+    const result = await getContributorMcpReadiness("user_1");
+
+    expect(result.status).toBe("needs_grants");
+    expect(result.recommendedAction).toBe("rotate_development_token");
+    expect(result.missingGrants).toEqual(["initiative_evidence_write"]);
   });
 
   it("returns ready for an active write token with every required grant", async () => {

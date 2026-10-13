@@ -12,6 +12,7 @@ import {
   EXIT_CHILD_SIGNAL_DEATH,
   EXIT_VITEST_RUNNER_TERMINATION,
   EXIT_CONTROL_PLANE_STARVATION,
+  EXIT_RUNNER_PREREQUISITE_UNAVAILABLE,
   EXIT_BUILDER_RESOURCE_EXHAUSTED,
   EXIT_GREEN,
   EXIT_SANDBOX_DRIFT,
@@ -696,4 +697,17 @@ test("the two causes are told apart by their summaries, not by their status", ()
   const plane = classifyGateOutcome({ freshnessVerdict: null, gateExitCode: EXIT_CONTROL_PLANE_STARVATION });
   assert.equal(builder.status, plane.status);
   assert.notEqual(builder.summary, plane.summary);
+});
+
+test("a runner that could not set up its prerequisites is infrastructure, not a verdict", () => {
+  // Observed 2026-10-02: the base refresh hit "Could not resolve host:
+  // github.com", the runner exited 1, and the record read `failed` with no
+  // reason — a FAIL against a SHA nothing had graded.
+  const outcome = classifyGateOutcome({ freshnessVerdict: null, gateExitCode: EXIT_RUNNER_PREREQUISITE_UNAVAILABLE });
+  assert.equal(outcome.status, "blocked_control_plane_starvation");
+  assert.equal(outcome.gatePassed, false);
+  assert.equal(outcome.productEvidence, false);
+  assert.match(outcome.summary, /before it could grade/);
+  const plane = classifyGateOutcome({ freshnessVerdict: null, gateExitCode: EXIT_CONTROL_PLANE_STARVATION });
+  assert.notEqual(outcome.summary, plane.summary, "different remedies, different summaries");
 });

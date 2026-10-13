@@ -5,7 +5,8 @@ import { prisma } from "@dpf/db";
 import {
   fingerprintCoworkerApprovalBinding,
 } from "@/lib/govern/authority/coworker-authority-decision";
-import { AUTHORITY_APPROVAL_TTL_MS } from "@/lib/coworker/authority-approval-envelope";
+import { approvalLifetimeMs } from "@/lib/coworker/approval-lifetime";
+import type { ClassifyApprovalCall } from "@/lib/coworker/approval-classification";
 import {
   type ApprovalRecoveryDb,
   type RecoverableProposal,
@@ -42,6 +43,12 @@ export async function recoverStaleApprovedRemoteTask(
     now?: Date;
   },
   db: ApprovalRecoveryDb = prisma as unknown as ApprovalRecoveryDb,
+  /**
+   * Classifies the stored call for the replacement's lifetime (BI-0012E6CA).
+   * Without one the replacement keeps the short window. Injected, because the
+   * tool registry sits in the web import cycle this module must stay out of.
+   */
+  classify: ClassifyApprovalCall = async () => "unclassified",
 ): Promise<StaleApprovalRecovery | null> {
   const now = input.now ?? new Date();
   try {
@@ -216,15 +223,24 @@ export async function recoverStaleApprovedRemoteTask(
         return { kind: "approved-resume-ready", envelopeId: envelope.id };
       }
 
-      const cancelled = await tx.coworkerActionEnvelope.updateMany({
+      // A superseded request that lapsed unanswered is `expired`, not
+      // `cancelled` (BI-0012E6CA). Superseding a failed provider-provenance
+      // envelope is not a lapse and keeps its existing supersede mark.
+      const superseded = await tx.coworkerActionEnvelope.updateMany({
         where: {
           id: envelope.id,
           status: envelope.status,
           expiresAt: { lte: now },
         },
-        data: { status: "cancelled", resolvedAt: now },
+        data: { status: envelope.status === "failed" ? "cancelled" : "expired", resolvedAt: now },
       });
-      if (cancelled.count !== 1) throw new ApprovalRecoveryRace();
+      if (superseded.count !== 1) throw new ApprovalRecoveryRace();
+      // The replacement's lifetime follows the call's CURRENT classification.
+      const consequence = await classify({
+        toolName: proposal.toolName,
+        params: objectRecord(proposal.parameters) ?? {},
+        userId: proposal.userId,
+      });
 
       const replacement = await tx.coworkerActionEnvelope.create({
         data: {
@@ -241,7 +257,7 @@ export async function recoverStaleApprovedRemoteTask(
           authorityDecisionId: envelope.authorityDecisionId,
           inputFingerprint: envelope.inputFingerprint,
           approvalBindingFingerprint,
-          expiresAt: new Date(now.getTime() + AUTHORITY_APPROVAL_TTL_MS),
+          expiresAt: new Date(now.getTime() + approvalLifetimeMs(consequence)),
           resolvedAt: null,
         },
         select: { id: true },

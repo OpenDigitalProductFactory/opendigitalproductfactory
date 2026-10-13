@@ -42,3 +42,21 @@ test("ordinary stop preserves volumes while uninstall makes purge explicit", () 
   assert.match(read("uninstall-dpf.ps1"), /\[switch\]\$Purge/);
   assert.match(read("uninstall-dpf.ps1"), /\[switch\]\$Yes/);
 });
+
+test("the Windows start chain adds exactly the overlays the shared activation table names (BI-B422ED03)", () => {
+  // compose.sh and promote.sh read scripts/installer/lib/activation-overlays.txt
+  // directly; the PowerShell resolver keeps its own branches, so pin them to the
+  // same table: each marker's Start branch adds that marker's overlays.
+  const table = read("scripts/installer/lib/activation-overlays.txt")
+    .split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#"))
+    .map((line) => line.split(/\s+/));
+  assert.ok(table.length > 0, "activation table is empty");
+  const helper = readFileSync(helperPath, "utf8");
+  const startPath = helper.slice(helper.indexOf("if ($IncludeRelease)"));
+  for (const [marker, ...overlays] of table) {
+    const branch = new RegExp(`if \\(Test-DPFEnvFlag -InstallDir \\$InstallDir -Name "${marker}"\\) \\{([\\s\\S]*?)\\n    \\}`).exec(startPath);
+    assert.ok(branch, `PowerShell start chain has no branch for ${marker}`);
+    const added = [...branch[1].matchAll(/-Name "([^"]+)"/g)].map((match) => match[1]).sort();
+    assert.deepEqual(added, [...overlays].sort(), `${marker} adds different overlays in PowerShell than in the activation table`);
+  }
+});

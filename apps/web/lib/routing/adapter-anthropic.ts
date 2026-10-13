@@ -6,7 +6,6 @@ import type {
 import type { ModelCard } from "./model-card-types";
 import {
   EMPTY_CAPABILITIES,
-  EMPTY_PRICING,
   DEFAULT_DIMENSION_SCORES,
 } from "./model-card-types";
 import { referenceCardPricing } from "./model-pricing-reference";

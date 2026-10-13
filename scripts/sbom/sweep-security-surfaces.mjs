@@ -24,6 +24,7 @@
 // all-clear.
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "../lib/script-argv.mjs";
 import { writeFileSync } from "node:fs";
 
 const REPO = process.env.GITHUB_REPOSITORY ?? "OpenDigitalProductFactory/opendigitalproductfactory";
@@ -33,7 +34,7 @@ const API = process.env.GITHUB_API_URL ?? "https://api.github.com";
 const argOf = (flag) => {
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
   const { values } = utilParseArgs({
-    args: process.argv.slice(2),
+    args: scriptArgv(),
     strict: false,
     allowPositionals: true,
     options: { "md": { type: "string" }, "json": { type: "string" } },

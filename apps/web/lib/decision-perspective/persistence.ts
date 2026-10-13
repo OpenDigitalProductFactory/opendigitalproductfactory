@@ -13,6 +13,11 @@ import {
 } from "./types";
 import type { DecisionSubjectKind } from "@dpf/db";
 import { normalizeLocator } from "@/lib/deliberation/evidence";
+import {
+  syncDecisionShadowLedger,
+  type DecisionShadowLedgerDb,
+  type ShadowLedgerSyncOutcome,
+} from "@/lib/decision/decision-shadow-ledger-bridge";
 
 type DecisionInteractionClient = {
   decisionInteraction: {
@@ -202,7 +207,11 @@ export async function findExistingDecisionInteraction(input: {
 }
 
 export async function persistDecisionInteraction(input: {
-  db: DecisionInteractionClient;
+  /**
+   * The ledger client is only needed when `agentId` is supplied: that is the
+   * one case where the decision is bridged into the shadow ledger.
+   */
+  db: DecisionInteractionClient & Partial<DecisionShadowLedgerDb>;
   /** Optional: the build a decision belongs to. Omit for non-build (e.g. org/WWWD) decisions. */
   build?: { buildId: string } | null;
   evaluation: DecisionPerspectiveEvaluationResult;
@@ -240,6 +249,13 @@ export async function persistDecisionInteraction(input: {
    */
   autonomous?: boolean;
   /**
+   * The coworker that made this decision (BI-6082C235), already resolved to an
+   * existing Agent.agentId (see resolveDecisionAgentId) — the column is a real
+   * foreign key. Omit or pass null when no coworker made it. When present, the
+   * decision is also recorded in the shadow ledger, at `shadow`, record only.
+   */
+  agentId?: string | null;
+  /**
    * Trust-envelope immutability seal (BI-81CC5D8E). When present, the row is
    * written as the next append-only entry in a hash chain. Omitted for callers
    * that do not seal (behavior unchanged — all chain columns stay NULL).
@@ -250,8 +266,14 @@ export async function persistDecisionInteraction(input: {
     chainEntryHash: string;
     sealedAt: Date;
   } | null;
-}): Promise<{ interactionId: string; row: Record<string, unknown> }> {
+}): Promise<{
+  interactionId: string;
+  row: Record<string, unknown>;
+  /** Null when the decision names no coworker, so there was nothing to bridge. */
+  shadowLedger: ShadowLedgerSyncOutcome | null;
+}> {
   const interactionId = input.interactionId ?? createDecisionInteractionId();
+  const agentId = input.agentId?.trim() || null;
   const row = await input.db.decisionInteraction.create({
     data: {
       interactionId,
@@ -287,6 +309,7 @@ export async function persistDecisionInteraction(input: {
       subjectKind: input.subject?.kind ?? null,
       subjectRef: input.subject?.id ?? null,
       autonomous: input.autonomous ?? false,
+      agentId,
       chainId: input.chain?.chainId ?? null,
       prevHash: input.chain?.prevHash ?? null,
       chainEntryHash: input.chain?.chainEntryHash ?? null,
@@ -305,5 +328,40 @@ export async function persistDecisionInteraction(input: {
     },
   }) as Record<string, unknown>;
 
-  return { interactionId, row };
+  const shadowLedger = agentId
+    ? await bridgeNewDecision(input.db, {
+        interactionId,
+        agentId,
+        domainClass: input.evaluation.domainClass,
+        riskTier: input.evaluation.riskTier,
+        outcomeType: input.evaluation.outcomeType,
+        recommendedOptionId: input.evaluation.recommendedOptionId ?? null,
+        options: input.evaluation.options,
+        rationale: input.evaluation.rationale || null,
+        // A decision is born unresolved; slice 1 fills the outcome half later.
+        chosenOptionId: null,
+        humanOutcome: null,
+        taskRunId: input.taskRunId ?? null,
+        autonomous: input.autonomous ?? false,
+        subjectKind: input.subject?.kind ?? null,
+        subjectRef: input.subject?.id ?? null,
+      })
+    : null;
+
+  return { interactionId, row, shadowLedger };
+}
+
+/**
+ * The decision is already recorded when this runs, and its ledger row is a
+ * measurement of it: a missing ledger client or a failed write is reported in
+ * the result, never thrown back over a decision that succeeded.
+ */
+async function bridgeNewDecision(
+  db: Partial<DecisionShadowLedgerDb>,
+  row: Parameters<typeof syncDecisionShadowLedger>[1],
+): Promise<ShadowLedgerSyncOutcome> {
+  if (!db.decisionShadowLedger) {
+    return { written: false, reason: "write-failed", detail: "No shadow-ledger client was supplied." };
+  }
+  return syncDecisionShadowLedger({ decisionShadowLedger: db.decisionShadowLedger }, row);
 }

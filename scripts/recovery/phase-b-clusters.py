@@ -21,7 +21,6 @@ where <source> is the strongest evidence (typically "pr-<n>" or "spec-<path>").
 """
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Literal, TypedDict
 
 
@@ -59,22 +58,6 @@ APRIL27_STALE_DEFER: list[str] = [
     "EP-ARCH-8D4F2A",   # "Archetype Model V2" — 1 item, no recent activity
     "EP-LAB-6A91C2",    # "Integration Lab Sandbox" — survey shows no extensions
 ]
-
-# Epics that stay open because survey shows active extensions
-APRIL27_KEEP_OPEN: list[str] = [
-    "EP-INT-2E7C1A",    # Integration Harness — extended by voice, ADP, MCP, etc.
-    "EP-CTRL-5E21A4",   # Automated Control Utility — extended by edge-node, capsules, runtime
-    "EP-BUILD-CC1BD8",  # Build Studio header — extended by CWS-BUILD-STUDIO
-    "EP-TAK-3F9A21",    # TAK/GAID — extended by wiki, agents-doc
-    "EP-SITE-7C4D2B",   # Customer Site Records — extended by installer
-]
-
-# Already-done epics stay done
-APRIL27_KEEP_DONE: list[str] = [
-    "EP-BUILD-9F749C",  # Code Graph Ship Test
-    "EP-TAX-6C82D1",    # Tax Remittance — note: extended by CWS-FINANCE-TAX (continues under same epic)
-]
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # New epics
@@ -728,3 +711,12 @@ CLUSTERS: list[EpicSeed] = [
         ],
     },
 ]
+
+
+def load_phase_b_tables():
+    """Tables read by generate-phase-b-sql.py through import_module."""
+    return CLUSTERS, APRIL27_STALE_DEFER
+
+
+# Keep the tables referenced in this module. The SQL emitter imports them by name.
+load_phase_b_tables()

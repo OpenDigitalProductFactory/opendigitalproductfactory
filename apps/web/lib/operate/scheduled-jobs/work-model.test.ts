@@ -259,6 +259,12 @@ describe("buildWorkView", () => {
     expect(view.enabled).toBe(true);
   });
 
+  it("projects the typed cron result without leaking a stale mirror into agent work", () => {
+    const job = { ...staleMirror, jobId: "backlog-triage-drain", lastRunSummary: "0 assessed; 25 unchanged or waiting", metadata: { lastRunSummary: "stale JSON result" } };
+    expect(buildWorkView(job.jobId, job, undefined, NOW).lastRunSummary).toBe(job.lastRunSummary);
+    expect(buildWorkView(task.taskId, { ...staleMirror, lastRunSummary: "stale mirror" }, task, NOW).lastRunSummary).toBeNull();
+  });
+
   it("carries no proactivity when the pair has no stored fact", () => {
     expect(buildWorkView(task.taskId, undefined, task, NOW).agent?.proactivity).toBeNull();
   });

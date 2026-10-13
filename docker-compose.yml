@@ -42,6 +42,8 @@ x-dev-workspace-volumes: &dev-workspace-volumes
 
 services:
   postgres:
+    labels:
+      dpf.recreate-class: data-owner
     # Built from docker/postgres/Dockerfile (FROM pgvector + baked-in inngest
     # init script) rather than the stock pgvector image with a host bind mount.
     # The bind mount made postgres un-startable when the self-upgrade promoter
@@ -80,6 +82,8 @@ services:
   # To list models:   docker model list
 
   portal-init:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       target: runner
@@ -106,6 +110,8 @@ services:
   # Production-served runtime for the real install. Keep localhost:3000 reserved
   # for this surface so customer-zero verification always targets the live path.
   portal:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       target: runner
@@ -308,6 +314,23 @@ services:
       # The key id defaults to "local-install" when unset.
       DPF_GPP_PERMIT_SECRET: ${DPF_GPP_PERMIT_SECRET:-}
       DPF_GPP_PERMIT_KEY_ID: ${DPF_GPP_PERMIT_KEY_ID:-}
+      # Dedicated HMAC keys for attention reach links and coworker delegation
+      # receipts (apps/web/lib/attention/reach-link.ts,
+      # apps/web/lib/coworker-service-catalog/delegation-receipt.ts,
+      # BI-F6929F50). Provisioned exactly like the permit key above. Optional:
+      # without them both fall back to AUTH_SECRET, as before. The receipt key
+      # id defaults to "local-install" when unset.
+      DPF_ATTENTION_REACH_SECRET: ${DPF_ATTENTION_REACH_SECRET:-}
+      DPF_DELEGATION_RECEIPT_SECRET: ${DPF_DELEGATION_RECEIPT_SECRET:-}
+      DPF_DELEGATION_RECEIPT_KEY_ID: ${DPF_DELEGATION_RECEIPT_KEY_ID:-}
+      # Dedicated HMAC keys for self-upgrade target bindings and delivery task
+      # hub cursors (apps/web/lib/self-upgrade/target-binding.ts,
+      # apps/web/lib/work-capsules/delivery-task-hub-store.ts, BI-231A4BC7).
+      # Provisioned exactly like the keys above. Optional: without them both fall
+      # back to AUTH_SECRET, as before. Portal only: never pass them to the
+      # sandbox (BI-F1C680C7).
+      DPF_SELF_UPGRADE_TARGET_BINDING_SECRET: ${DPF_SELF_UPGRADE_TARGET_BINDING_SECRET:-}
+      DPF_DELIVERY_TASK_CURSOR_SECRET: ${DPF_DELIVERY_TASK_CURSOR_SECRET:-}
       HIVE_CONTRIBUTION_TOKEN: ${HIVE_CONTRIBUTION_TOKEN:-}
       HIVE_OPS_TOKEN: ${HIVE_OPS_TOKEN:-}
       INNGEST_BASE_URL: http://inngest:8288
@@ -467,6 +490,8 @@ services:
 
   # ─── Sandbox Database (isolated from production) ────────────────────────
   sandbox-postgres:
+    labels:
+      dpf.recreate-class: data-owner
     profiles: ["runtime-build"]
     image: pgvector/pgvector:pg16
     restart: unless-stopped
@@ -486,6 +511,8 @@ services:
 
   # ─── Sandbox Init (migrations on sandbox DB) ──────────────────────────
   sandbox-init:
+    labels:
+      dpf.recreate-class: managed
     profiles: ["runtime-build"]
     build:
       context: .
@@ -510,11 +537,23 @@ services:
   # Legacy dpf-sandbox-1 on port 3035 remains as fallback.
   # This is the isolated build/runtime surface, not the production-served app.
   sandbox:
+    labels:
+      dpf.recreate-class: managed
     profiles: ["runtime-build"]
     build:
       context: .
       dockerfile: Dockerfile.sandbox
     restart: unless-stopped
+    # PID 1 here is `pnpm --filter web dev`, which never reaps the children
+    # builds leave behind, so every git call a build makes becomes a zombie
+    # that holds a PID slot forever. Live, 2026-10-06: 14,646 zombie `git`
+    # processes 45 minutes after a restart, 75,944 tasks before it, at which
+    # point the container engine could not spawn (docker exec and the
+    # self-upgrade promoter build failed with EAGAIN). `init` gives the
+    # container a reaping PID 1; `pids_limit` makes a future leak fail the
+    # sandbox instead of the engine (BI-95BB9CB1).
+    init: true
+    pids_limit: 4096
     logging: *default-logging
     ports:
       - "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3035:3000"
@@ -522,7 +561,12 @@ services:
       - sandbox_workspace:/workspace
     environment:
       DATABASE_URL: postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf
-      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
+      # No AUTH_SECRET here, ever (BI-F1C680C7). Agent CLIs run in this
+      # container unprompted through `docker exec`, which inherits this
+      # environment, and the portal's secret signs its sessions and MCP tokens.
+      # The sandbox's own app gets a sandbox-only secret from
+      # scripts/sandbox-entrypoint.sh, scoped to the dev server process.
+      # Guarded by scripts/installer/sandbox-auth-secret-isolation-contract.test.mjs.
       AUTH_TRUST_HOST: "true"
       APP_URL: http://localhost:3035
       NODE_ENV: development
@@ -551,6 +595,8 @@ services:
   # Triggered by: execute_promotion MCP tool or operator "Deploy" button.
   # Not started by default (profiles: promote).
   promoter:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       dockerfile: Dockerfile.promoter
@@ -582,6 +628,8 @@ services:
   # in the browser-automation capability profile. Portal clients report the
   # capability as inactive until the sidecar is enabled and healthy.
   browser-use:
+    labels:
+      dpf.recreate-class: stateless
     profiles: ["runtime-browser-automation"]
     build:
       context: ./services/browser-use
@@ -613,6 +661,8 @@ services:
       start_period: 30s
 
   adp:
+    labels:
+      dpf.recreate-class: stateless
     build:
       context: .
       dockerfile: services/adp/Dockerfile
@@ -647,6 +697,8 @@ services:
       start_period: 15s
 
   integration-test-harness:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       dockerfile: services/integration-test-harness/Dockerfile
@@ -669,6 +721,8 @@ services:
 
   # ─── Dev Environment (isolated databases for development) ──────────────────
   dev-postgres:
+    labels:
+      dpf.recreate-class: data-owner
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     logging: *default-logging
@@ -690,6 +744,8 @@ services:
       retries: 5
 
   dev-init:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       target: dev
@@ -714,6 +770,8 @@ services:
   # Developer runtime surface. Use localhost:3001 for local non-production app
   # work so localhost:3000 remains the production-served portal.
   dev-portal:
+    labels:
+      dpf.recreate-class: managed
     build:
       context: .
       target: dev
@@ -749,6 +807,8 @@ services:
   # Grafana (power-user tool) available at :3002.
 
   prometheus:
+    labels:
+      dpf.recreate-class: stateless
     profiles: ["runtime-deep-observability", "observability-ui"]
     image: prom/prometheus:v3.12.0
     restart: unless-stopped
@@ -772,6 +832,8 @@ services:
       retries: 3
 
   grafana:
+    labels:
+      dpf.recreate-class: stateless
     image: grafana/grafana-oss:13.0.2
     restart: unless-stopped
     logging: *default-logging
@@ -814,6 +876,8 @@ services:
   # Captures EVERY container's stdout/stderr with 14-day retention so errors
   # stop scrolling out of the ephemeral Docker buffer unseen.
   loki:
+    labels:
+      dpf.recreate-class: stateless
     # NOT profile-gated (BI-F8024A9D). This pair reads container logs through
     # the Docker socket with no host-path bind mount, so it runs identically on
     # macOS/Windows Docker Desktop and native Linux. Gating it made the capture
@@ -845,6 +909,8 @@ services:
     # scrapes it and the portal's log-issues panel talks to its API.
 
   alloy:
+    labels:
+      dpf.recreate-class: stateless
     image: grafana/alloy:v1.7.5
     restart: unless-stopped
     logging: *default-logging
@@ -878,6 +944,8 @@ services:
   # should use docker-compose.linux.yml, which also mounts the matching
   # Prometheus scrape config for these exporter targets.
   cadvisor:
+    labels:
+      dpf.recreate-class: stateless
     image: gcr.io/cadvisor/cadvisor:v0.52.1
     restart: unless-stopped
     logging: *default-logging
@@ -891,6 +959,8 @@ services:
     privileged: true
 
   node-exporter:
+    labels:
+      dpf.recreate-class: stateless
     image: prom/node-exporter:v1.9.1
     restart: unless-stopped
     logging: *default-logging
@@ -909,6 +979,8 @@ services:
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
 
   postgres-exporter:
+    labels:
+      dpf.recreate-class: stateless
     profiles: ["runtime-deep-observability", "observability-ui"]
     image: prometheuscommunity/postgres-exporter:v0.19.1
     restart: unless-stopped
@@ -926,6 +998,8 @@ services:
 
   # ─── Durable Execution (Inngest + Redis) ──────────────────────────────
   redis:
+    labels:
+      dpf.recreate-class: data-owner
     image: redis:7-alpine
     restart: unless-stopped
     logging: *default-logging
@@ -947,6 +1021,8 @@ services:
   # exposes it on :9121/metrics in Prometheus format. Lets the platform Health
   # tab promote the "Redis" tile from "Not scraped" to a real UP/DOWN tile.
   redis-exporter:
+    labels:
+      dpf.recreate-class: stateless
     profiles: ["runtime-durable-automation"]
     image: oliver006/redis_exporter:v1.86.0
     restart: unless-stopped
@@ -961,6 +1037,8 @@ services:
     # scraping /metrics is the effective health signal.
 
   inngest:
+    labels:
+      dpf.recreate-class: stateless
     # Pinned (was :latest). :latest drifted onto 1.26.0, which has a
     # self-hosted `inngest start` regression: every queued item fails its
     # capacity-lease with "missing envID" (itemLeaseConstraintCheck) and
@@ -1024,10 +1102,25 @@ services:
   # Principle: prefer-self-hosted-infrastructure
   # Spec: docs/superpowers/specs/2026-05-21-chatterbox-tts-self-hosted.md
   #
+  # Image (BI-E2763038): travisvn/chatterbox-tts-api (AGPL-3.0 API wrapper, run
+  # unmodified as a separate container; the Chatterbox model itself is MIT).
+  # Pinned by published tag, never by digest (BI-F7E9A541): a digest-pinned
+  # third-party image is unreachable once its publisher prunes it, and the
+  # release manifest guard refuses a release whose tag no longer resolves.
+  # No versioned GPU tag exists, so the default is the `gpu` variant tag. At
+  # evaluation every published variant was built from upstream tag v1.0.1
+  # (revision 13611fd, 2025-06-03). Evaluation:
+  # docs/security/tool-evaluations/2026-10-07-chatterbox-tts-api.md
+  #
   # Hardware tiers:
-  #   Tier 1 (CPU):   DPF_TTS_IMAGE=travisvn/chatterbox-tts-api:latest + unset NVIDIA deploy
+  #   Tier 1 (CPU):   DPF_TTS_IMAGE=travisvn/chatterbox-tts-api:1.0.1
+  #                   (the `cpu` build; linux/amd64 + linux/arm64, ~1.3 GB) and
+  #                   drop the NVIDIA deploy reservation below.
   #                   ~10–30x slower but requires no GPU. Good for testing.
-  #   Tier 2 (CUDA):  Default. Requires NVIDIA GPU ≥ 6 GB VRAM (Turbo model).
+  #   Tier 2 (CUDA):  Default — the `gpu` build (== `latest`; linux/amd64 only,
+  #                   CUDA 12.4, ~8.3 GB compressed; no versioned GPU tag exists).
+  #                   Requires an NVIDIA GPU ≥ 6 GB VRAM; the installers start
+  #                   dpf-tts only when they detect one.
   #                   Speech-to-text no longer runs as a shipped sidecar
   #                   (BI-F7E9A541), so this is the only local speech service
   #                   competing for VRAM. An operator running their own STT
@@ -1038,9 +1131,11 @@ services:
   # Compatibility alias selects the full local-speech closure:
   #   docker compose --profile tts up
   dpf-tts:
+    labels:
+      dpf.recreate-class: stateless
     # BI-A0A0568F: profile-gated only (never always-on). See
     # docs/architecture/2026-08-09-tts-idle-process-elimination.md.
-    image: ${DPF_TTS_IMAGE:-travisvn/chatterbox-tts-api:v0.1.0}
+    image: ${DPF_TTS_IMAGE:-travisvn/chatterbox-tts-api:gpu}
     profiles: ["runtime-local-speech", "tts"]
     restart: unless-stopped
     logging: *default-logging
@@ -1048,9 +1143,8 @@ services:
       # travisvn/chatterbox-tts-api defaults to port 5123; force 8000 so the
       # Docker-network DNS address (dpf-tts:8000) matches DPF_TTS_URL.
       PORT: "8000"
-      # turbo = 350M params, ~5-6 GB VRAM, fastest inference.
-      # Override to `original` (500M, ~7 GB) or `multilingual` (550M, 23 langs).
-      TTS_MODEL: ${TTS_CHATTERBOX_MODEL:-turbo}
+      # No model selector: v1.0.1 always loads the original 500M Chatterbox model
+      # (app/core/tts_model.py) and reads no TTS_MODEL variable, so none is set.
     deploy:
       resources:
         limits:

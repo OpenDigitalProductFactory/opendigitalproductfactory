@@ -1,10 +1,11 @@
 import { describeReadinessRefusal } from "@/lib/build/readiness-refusal-message";
 import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from "@/lib/backlog/initiative-readiness/bound-work-shape";
-import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
+import { assessDeliverySensitivity, buildPlanPaths } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { randomUUID } from "node:crypto";
 
 import { prisma } from "@dpf/db";
+import { CLAIM_READINESS_ACTIVITY_KINDS } from "@/lib/work-capsules/governed-work-claim";
 
 import {
   projectBacklogItemReadiness,
@@ -114,15 +115,19 @@ export async function enforceBuildInitiativeReadiness(args: {
       originatingBacklogItemId: true,
       designDoc: true,
       designReview: true,
+      buildPlan: true,
       originator: {
         select: {
           id: true, itemId: true, title: true, type: true, source: true, workType: true, scopeKind: true,
           body: true,
           archetypeCategories: true, archetypeIds: true,
+          // BI-7027C26E: the same rows the claim reads. A small fix may leave
+          // ideate with no design review (FIX_SMALL_GATES), and then its research
+          // is its recorded reproduction — `evidence` rows (BI-6EB2DBBB). No cap:
+          // evidence rows must not crowd receipts out of the projection.
           activities: {
-            where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+            where: { kind: { in: [...CLAIM_READINESS_ACTIVITY_KINDS] } },
             orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
-            take: 100,
             select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
           },
         },
@@ -173,6 +178,8 @@ export async function enforceBuildInitiativeReadiness(args: {
         body: build.originator.body,
         workType: build.originator.workType,
         declaredPaths,
+        // The plan's files are the change at this gate (operator direction 2026-10-07).
+        planPaths: buildPlanPaths(build.buildPlan),
       }),
     },
     buildDesign: {

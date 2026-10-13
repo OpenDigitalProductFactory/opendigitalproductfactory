@@ -78,15 +78,13 @@ export function useGraphLayout(
       }
       case "radial": {
         const rootId = focusNodeId ?? filtered.nodes[0]?.id ?? "";
-        if (!isCancelled) {
-          setResult(
-            computeRadialLayout(filtered, {
-              rootId,
-              centerX: dimensions.width / 2,
-              centerY: dimensions.height / 2,
-            }),
-          );
-        }
+        setResult(
+          computeRadialLayout(filtered, {
+            rootId,
+            centerX: dimensions.width / 2,
+            centerY: dimensions.height / 2,
+          }),
+        );
         break;
       }
       case "swimlane": {
@@ -136,9 +134,7 @@ export function useGraphLayout(
       case "force":
       default:
         // Return null to signal the existing force simulation should be used
-        if (!isCancelled) {
-          setResult(null);
-        }
+        setResult(null);
         break;
     }
 

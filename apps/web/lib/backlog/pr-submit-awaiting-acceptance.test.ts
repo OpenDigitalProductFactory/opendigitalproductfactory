@@ -280,11 +280,11 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
     expect(mockWorkroomUpdateMany).not.toHaveBeenCalled();
   });
 
-  it("creates one corrective BI and leaves the original awaiting-acceptance", async () => {
+  it.each(["awaiting-acceptance", "done"])("creates corrective work while retaining original %s status", async (status) => {
     mockBacklogFindUnique.mockResolvedValue({
       id: "row-1",
       itemId: "BI-CA54ACC8",
-      status: "awaiting-acceptance",
+      status,
       epicId: "epic-1",
       organizationId: null,
     });

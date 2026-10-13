@@ -126,6 +126,8 @@ export function writeLocalCiGateState(stateFile, {
   failureSummary = null,
   childExitCode = null,
   testStub = false,
+  executionLane = null,
+  producerEvidence = null,
 }) {
   const previous = readLocalCiGateState(stateFile);
   // BI-FFCFCCE0. A verdict that was reached and reported must not be erased by
@@ -195,8 +197,35 @@ export function writeLocalCiGateState(stateFile, {
   if (failureSummary) payload.failureSummary = failureSummary;
   if (childExitCode !== null && childExitCode !== undefined) payload.childExitCode = childExitCode;
   if (testStub) payload.testStub = true;
+  if (executionLane !== null) payload.executionLane = executionLane;
+  if (producerEvidence !== null) payload.producerEvidence = producerEvidence;
   writeGateStateAtomically(stateFile, serializeGateState(payload));
   return { written: true, preservedPass: false, status };
+}
+
+/** Documentation runs have no sandbox metadata producer. Bind their result in
+ * the same atomic record, after publication, rather than consulting another run.
+ * This is a consistency check, not a replacement for canonical server evidence.
+ */
+export function hasBoundDocumentationEvidence(state) {
+  const evidence = state?.producerEvidence;
+  const gitHash = (value) => typeof value === "string" && /^[a-f0-9]{40}$/.test(value);
+  return state?.executionLane === "documentation"
+    && evidence?.schemaVersion === 1
+    && evidence.producer === "documentation-evidence-lane"
+    && gitHash(state.sha)
+    && typeof state.branch === "string" && state.branch.length > 0
+    && evidence.candidateSha === state.sha
+    && evidence.candidateBranch === state.branch
+    && typeof state.evidenceRecordId === "string" && state.evidenceRecordId.trim().length > 0
+    && evidence.evidenceRecordId === state.evidenceRecordId
+    && gitHash(evidence.headTreeSha)
+    && gitHash(evidence.integrationTreeSha)
+    && typeof evidence.evidencePlanDigest === "string" && /^[a-f0-9]{64}$/.test(evidence.evidencePlanDigest)
+    && state.status === "passed"
+    && !state.leaseId
+    && Number.isFinite(Date.parse(state.recordedAt))
+    && Number.isFinite(Date.parse(state.expiresAt));
 }
 
 /**

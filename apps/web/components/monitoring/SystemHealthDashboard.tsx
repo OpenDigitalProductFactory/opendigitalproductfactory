@@ -5,7 +5,6 @@ import { AlertBanner } from "./AlertBanner";
 import { ServiceStatusGrid } from "./ServiceStatusGrid";
 import { MetricGauge } from "./MetricGauge";
 import { MetricTimeSeries } from "./MetricTimeSeries";
-import { MetricStat } from "./MetricStat";
 import { MetricTable } from "./MetricTable";
 import { ContainerResourceTable } from "./ContainerResourceTable";
 import { AiCoworkerHealthPanel } from "./AiCoworkerHealthPanel";

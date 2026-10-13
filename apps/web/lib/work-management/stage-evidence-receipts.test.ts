@@ -119,3 +119,43 @@ describe("earnEvidenceReceipts", () => {
     expect(earnEvidenceReceipts({ ...base, evidence: [], existing })).toBe(existing);
   });
 });
+
+// GPP Phase 3c PR-3c-1 (BI-8875C9DF): evidence across iterations on a graph shape.
+describe("earnEvidenceReceipts with an iteration (Phase 3c)", () => {
+  const reworkDispatch = at("2026-09-08T09:00:00Z");
+
+  it("an iteration-0 receipt does not short-circuit iteration 1", () => {
+    const existing = [{ stageKey: "sweep", kind: STAGE_EVIDENCE_RECEIPT_KIND }];
+    const earned = earnEvidenceReceipts({
+      ...base,
+      dispatchedAt: reworkDispatch,
+      iteration: 1,
+      evidence: [evidence({ recordedAt: at("2026-09-08T09:05:00Z") })],
+      existing,
+    });
+    expect(earned).toEqual([...existing, { stageKey: "sweep", kind: STAGE_EVIDENCE_RECEIPT_KIND, iteration: 1 }]);
+  });
+
+  it("evidence older than iteration 1's own dispatch does not earn iteration 1", () => {
+    const existing = [{ stageKey: "sweep", kind: STAGE_EVIDENCE_RECEIPT_KIND }];
+    const earned = earnEvidenceReceipts({
+      ...base,
+      dispatchedAt: reworkDispatch,
+      iteration: 1,
+      evidence: [evidence()],
+      existing,
+    });
+    expect(earned).toBe(existing);
+  });
+
+  it("a receipt at the current iteration short-circuits, returning the same array", () => {
+    const existing = [{ stageKey: "sweep", kind: STAGE_EVIDENCE_RECEIPT_KIND, iteration: 1 }];
+    expect(earnEvidenceReceipts({ ...base, dispatchedAt: reworkDispatch, iteration: 1, evidence: [], existing })).toBe(existing);
+  });
+
+  it("without an iteration the function is unchanged: the earned receipt carries no iteration key", () => {
+    const earned = earnEvidenceReceipts({ ...base, evidence: [evidence()], existing: [] });
+    expect(earned).toEqual([{ stageKey: "sweep", kind: STAGE_EVIDENCE_RECEIPT_KIND }]);
+    expect(Object.hasOwn(earned[0]!, "iteration")).toBe(false);
+  });
+});

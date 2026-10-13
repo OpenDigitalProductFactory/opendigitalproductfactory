@@ -144,7 +144,6 @@ describe("withHeartbeatTicker()", () => {
 
   it("emits heartbeats while fn is in flight", async () => {
     mockUpdateMany.mockResolvedValue({ count: 1 });
-    const ticked: number[] = [];
     const fn = vi.fn(async () => {
       await new Promise((r) => setTimeout(r, 100));
     });

@@ -315,7 +315,6 @@ apps/web/app/(shell)/platform/ai/overview/page.tsx	physical-direction	2
 apps/web/app/(shell)/platform/ai/prompts/page.tsx	jsx-copy	1
 apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx	jsx-copy	5
 apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx	physical-direction	2
-apps/web/app/(shell)/platform/ai/providers/loading.tsx	jsx-copy	5
 apps/web/app/(shell)/platform/ai/providers/page.tsx	jsx-copy	5
 apps/web/app/(shell)/platform/ai/providers/page.tsx	physical-direction	1
 apps/web/app/(shell)/platform/ai/readiness/page.tsx	jsx-copy	1

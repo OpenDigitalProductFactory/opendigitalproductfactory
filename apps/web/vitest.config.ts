@@ -167,6 +167,10 @@ export default defineConfig({
         replacement: resolve(rootDir, "packages/db/src/installation-operating-intent.ts"),
       },
       {
+        find: "@dpf/db/acceptance-sweep-config",
+        replacement: resolve(rootDir, "packages/db/src/acceptance-sweep-config.ts"),
+      },
+      {
         find: "@dpf/db/backlog-portfolio",
         replacement: resolve(rootDir, "packages/db/src/backlog-portfolio.ts"),
       },

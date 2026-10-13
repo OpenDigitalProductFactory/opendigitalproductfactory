@@ -14,8 +14,12 @@ import {
   buildWorkspaceMode,
 } from "./build-clone";
 
+// These are POSIX commands for the Linux sandbox. On a Windows host, hand `sh`
+// forward-slash paths (backslashes would be read as escapes) and stop Git for
+// Windows rewriting literal POSIX arguments such as /dev/null to `nul`.
+const posix = (p: string) => p.replace(/\\/g, "/");
 const sh = (command: string) => {
-  const r = spawnSync("sh", ["-c", command], { encoding: "utf8" });
+  const r = spawnSync("sh", ["-c", command], { encoding: "utf8", env: { ...process.env, MSYS_NO_PATHCONV: "1" } });
   if (r.status !== 0) throw new Error(`exit ${r.status}: ${r.stderr}\n--- command ---\n${command}`);
   return r.stdout;
 };
@@ -28,11 +32,11 @@ const branch = "build/FB-TEST1";
 
 function cloneCommand() {
   return buildSandboxBuildCloneCommand({
-    path,
+    path: posix(path),
     branchRef: branch,
-    workspace: shared,
+    workspace: posix(shared),
     install: "true",
-    commitInFlight: `{ cd '${path}' && git add -A && git commit -qm 'wip: in-flight' || true; }`,
+    commitInFlight: `{ cd '${posix(path)}' && git add -A && git commit -qm 'wip: in-flight' || true; }`,
   });
 }
 
@@ -80,7 +84,7 @@ describe("build clone (W1, M1)", () => {
     git(path, "add", "-A");
     git(path, "commit", "-qm", "feature");
     const head = git(path, "rev-parse", "HEAD");
-    sh(buildSandboxBuildCloneRemoveCommand(path, branch, shared));
+    sh(buildSandboxBuildCloneRemoveCommand(posix(path), branch, posix(shared)));
     expect(existsSync(path)).toBe(false);
     expect(git(shared, "rev-parse", branch)).toBe(head);
   });
@@ -90,7 +94,7 @@ describe("build clone (W1, M1)", () => {
     writeFileSync(join(path, "feature.txt"), "work\n");
     git(path, "add", "-A");
     git(path, "commit", "-qm", "feature");
-    sh(buildSandboxBuildCloneSyncCommand(path, branch));
+    sh(buildSandboxBuildCloneSyncCommand(posix(path), branch));
     git(shared, "merge", "-q", "--no-ff", branch, "-m", "promote");
     expect(git(shared, "show", "HEAD:feature.txt")).toBe("work");
   });
@@ -109,6 +113,25 @@ describe("build clone (W1, M1)", () => {
     expect(statSync(join(path, ".git")).isDirectory()).toBe(true);
     expect(git(path, "show", "HEAD:inflight.txt")).toBe("from the worktree");
     expect(git(shared, "worktree", "list")).not.toContain(".builds");
+  });
+
+  // FB-91774D92 (2026-10-08): the repo's postinstall (scripts/set-hooks-path.mjs)
+  // re-points core.hooksPath at .githooks AFTER the clone's config set /dev/null.
+  // On the next re-ensure the platform's own push into the shared repo ran the
+  // contributor pre-push gate, which refused it, and the build failed at start.
+  it("syncs the branch even when an install re-pointed the clone's hooks at a refusing pre-push hook", () => {
+    sh(cloneCommand());
+    writeFileSync(join(path, "feature.txt"), "work\n");
+    git(path, "add", "-A");
+    git(path, "commit", "-qm", "feature");
+    const hooks = join(root, "hooks");
+    execFileSync("mkdir", ["-p", hooks]);
+    writeFileSync(join(hooks, "pre-push"), "#!/bin/sh\necho '[pre-push-gate] Run the sandbox gate first' >&2\nexit 1\n", { mode: 0o755 });
+    git(path, "config", "core.hooksPath", hooks);
+
+    sh(buildSandboxBuildCloneSyncCommand(posix(path), branch));
+    expect(git(shared, "rev-parse", branch)).toBe(git(path, "rev-parse", "HEAD"));
+    expect(() => sh(cloneCommand())).not.toThrow();
   });
 
   it("is a no-op sync for a path that is not a clone on the branch", () => {

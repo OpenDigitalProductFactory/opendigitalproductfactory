@@ -343,3 +343,11 @@ already have a PR number and items whose evidence links name `/pull/N`.
 
 Failure: reuse the existing corrective-intake fingerprint
 (`capture-corrective-bi.ts` pattern). Do not reopen the coding thread.
+
+## Deployment closure addendum — 2026-10-03, BI-7161625D
+
+The operator directed implementation of deployment-based BI closure and preparation of safe cleanup. For direct platform source delivery (the existing platform/common, no build/product/objective predicate), this supersedes earlier statements in this design that `done` always requires acceptance. A server-resolved merged PR included in the successful canonical deployment may close delivery. The terminal activity records deployment identity, closure basis and the actual acceptance state. Pending, unavailable or failed acceptance is never relabeled passed; a subsequent miss can create corrective work while the delivered original stays closed.
+
+Extend the existing governed completion transaction, durable activities, SelfUpgradeRun and canonical served identity. Missing proof, a mismatched repository/served identity, unmerged code, conflicting or malformed scope and denied authority cannot use this path. Product/customer acceptance retains its contract. No new lifecycle enum or parallel completion engine is introduced. The implementation plan is [deployment-based BI closure](../plans/2026-10-03-deployment-bi-closure.md).
+
+Delivery closure and source cleanup remain distinct decisions. Existing liveness, ownership, dirty-tree, pin and unmerged-work protections apply even to a closed BI. Prepare the concrete janitor report before any operator-approved removal. An unreadable ownership source means keep, never infer abandonment.

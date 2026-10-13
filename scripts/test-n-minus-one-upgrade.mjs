@@ -3,8 +3,9 @@ import { createHash, randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { access, mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { parseArgs as utilParseArgs, promisify } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { pathToFileURL } from "node:url";
 import { signTransitionPayload } from "./lib/transition-signing.mjs";
 
@@ -494,7 +495,7 @@ function createRuntimeDependencies(options) {
 function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
     options: {

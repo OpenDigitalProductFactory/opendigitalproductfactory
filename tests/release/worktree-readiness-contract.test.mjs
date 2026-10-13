@@ -13,7 +13,6 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
-const repoRoot = new URL("../..", import.meta.url);
 const seedScript = new URL("../../scripts/seed-worktree-mcp.sh", import.meta.url);
 const syncScript = new URL("../../scripts/sync-mcp-worktrees.sh", import.meta.url);
 

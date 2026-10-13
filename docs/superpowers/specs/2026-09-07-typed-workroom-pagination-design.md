@@ -125,6 +125,18 @@ objective text, arbitrary outcome JSON or repair payloads in every list row.
 Recovery summaries consume the existing projector, not a second diagnosis.
 Exact full repair fields remain available through the detail route.
 
+The ownership consumer also needs exact nullable `worktreePath` and `status`,
+including in minimal rows. These identity fields are never shortened; an
+identity exceeding the supported page budget returns the typed budget refusal.
+`page.ownershipScope` distinguishes `installation` from `caller-visible`.
+OAuth observations retain their existing principal filters and report
+`caller-visible`; they cannot prove that no other Workroom owns a host tree.
+The janitor accepts only a complete unfiltered installation observation, with
+stable observation identity and population count and each room seen once.
+It discards partial ownership results on any continuation or identity error.
+Legacy lists need an explicit matching total and `truncated: false`.
+BI-CFA49FAE repairs this consumer regression without changing reaping policy.
+
 The page builder measures actual serialized content, including escaping,
 metadata and continuation overhead. It selects whole rows that fit. An oversized
 row becomes a typed minimal ID/detail record; it cannot disappear from traversal.

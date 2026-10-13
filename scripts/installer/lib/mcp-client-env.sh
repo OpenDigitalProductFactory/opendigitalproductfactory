@@ -3,13 +3,14 @@
 # Bash 3.2 compatible (macOS).
 #
 # The rule, in one place for the installer and the agent-toolchain bootstrap:
-#   DPF_MCP_URL         = <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
-#                         .env names an https PUBLIC_URL; otherwise an explicit
-#                         DPF_MCP_URL already in the environment; otherwise none
+#   DPF_MCP_URL         = an explicit DPF_MCP_URL already in the environment;
+#                         then the saved user endpoint; then
+#                         <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
+#                         .env names an https PUBLIC_URL; otherwise none
 #                         (the client plugin's loopback default applies).
 #   NODE_EXTRA_CA_CERTS = the organization root bundle, for an https endpoint
 #                         only: DPF_PKI_TRUST_BUNDLE, then the install's .env,
-#                         then ~/.dpf/pki/root_ca.crt.
+#                         then saved NODE_EXTRA_CA_CERTS, then ~/.dpf/pki/root_ca.crt.
 # Persisted for the installing user in ~/.dpf/agent-toolchain.env, sourced from
 # ~/.zshenv and ~/.profile, and on macOS also in the launchd user environment so
 # GUI-launched clients see them. Idempotent: each value has exactly one line and
@@ -33,21 +34,54 @@ dpf_mcp_client_env_file() {
   printf '%s\n' "$HOME/.dpf/agent-toolchain.env"
 }
 
+# Decode only the single-quoted export format written below. Never source the
+# file: it also contains credentials and may contain arbitrary shell commands.
+dpf_mcp_saved_env_value() {
+  local file
+  case "$1" in DPF_MCP_URL|NODE_EXTRA_CA_CERTS) ;; *) return 64 ;; esac
+  file="$(dpf_mcp_client_env_file)"
+  [ -f "$file" ] || return 0
+  awk -v name="$1" '
+    BEGIN { q = sprintf("%c", 39); esc = q sprintf("%c", 92) q q; prefix = "export " name "=" }
+    index($0, prefix) == 1 {
+      result = ""; value = substr($0, length(prefix) + 1)
+      if (substr(value, 1, 1) != q || substr(value, length(value), 1) != q) next
+      value = substr(value, 2, length(value) - 2); decoded = ""; valid = 1
+      while (length(value)) {
+        if (index(value, esc) == 1) { decoded = decoded q; value = substr(value, 5) }
+        else if (substr(value, 1, 1) == q) { valid = 0; break }
+        else { decoded = decoded substr(value, 1, 1); value = substr(value, 2) }
+      }
+      if (valid) result = decoded
+    }
+    END { printf "%s", result }
+  ' "$file"
+}
+
 # Usage: dpf_resolve_mcp_client_env INSTALL_DIR
 # Sets DPF_MCP_CLIENT_URL and DPF_MCP_CLIENT_CA_BUNDLE (either may be empty).
 dpf_resolve_mcp_client_env() {
-  local install_dir="$1" public candidate
+  local install_dir="$1" public candidate saved
   DPF_MCP_CLIENT_URL=""
   DPF_MCP_CLIENT_CA_BUNDLE=""
   public="$(dpf_mcp_install_env_value "$install_dir" PUBLIC_URL)"
-  case "$public" in
-    https://*) DPF_MCP_CLIENT_URL="${public%/}/api/mcp/v1?tier=full" ;;
-    *) DPF_MCP_CLIENT_URL="${DPF_MCP_URL:-}" ;;
-  esac
+  if [ -n "${DPF_MCP_URL:-}" ]; then
+    DPF_MCP_CLIENT_URL="$DPF_MCP_URL"
+  else
+    saved="$(dpf_mcp_saved_env_value DPF_MCP_URL)"
+    if [ -n "$saved" ]; then
+      DPF_MCP_CLIENT_URL="$saved"
+    else
+      case "$public" in
+        https://*) DPF_MCP_CLIENT_URL="${public%/}/api/mcp/v1?tier=full" ;;
+      esac
+    fi
+  fi
   case "$DPF_MCP_CLIENT_URL" in
     https://*)
       for candidate in "${DPF_PKI_TRUST_BUNDLE:-}" \
                        "$(dpf_mcp_install_env_value "$install_dir" DPF_PKI_TRUST_BUNDLE)" \
+                       "$(dpf_mcp_saved_env_value NODE_EXTRA_CA_CERTS)" \
                        "$HOME/.dpf/pki/root_ca.crt"; do
         if [ -n "$candidate" ] && [ -f "$candidate" ]; then DPF_MCP_CLIENT_CA_BUNDLE="$candidate"; break; fi
       done
@@ -107,16 +141,44 @@ dpf_launchd_setenv() {
   "$launchctl_cmd" setenv "$1" "$2" 2>/dev/null || true
 }
 
+# HTTPS and loopback HTTP are supported persistence targets. This checks the
+# transport only; it neither authenticates nor creates credentials.
+dpf_mcp_client_endpoint_can_persist() {
+  local authority port
+  case "$1" in
+    https://*) return 0 ;;
+    http://*)
+      authority="${1#http://}"; authority="${authority%%/*}"
+      authority="$(printf '%s' "$authority" | tr '[:upper:]' '[:lower:]')"
+      case "$authority" in
+        localhost|127.0.0.1|'[::1]') return 0 ;;
+        localhost:*|127.0.0.1:*|'[::1]':*)
+          port="${authority##*:}"
+          case "$port" in ''|*[!0-9]*) return 1 ;; esac
+          [ "$port" -le 65535 ] 2>/dev/null && return 0
+          ;;
+      esac
+      ;;
+  esac
+  return 1
+}
+
 # Usage: dpf_persist_mcp_client_env (after dpf_resolve_mcp_client_env)
-# Returns 1 and writes nothing when the endpoint is not https.
+# Returns 1 and writes nothing for an unsupported endpoint.
 dpf_persist_mcp_client_env() {
-  case "${DPF_MCP_CLIENT_URL:-}" in https://*) ;; *) return 1 ;; esac
+  dpf_mcp_client_endpoint_can_persist "${DPF_MCP_CLIENT_URL:-}" || return 1
   dpf_set_client_env_export DPF_MCP_URL "$DPF_MCP_CLIENT_URL" || return $?
-  dpf_set_client_env_export NODE_EXTRA_CA_CERTS "${DPF_MCP_CLIENT_CA_BUNDLE:-}" || return $?
+  case "$DPF_MCP_CLIENT_URL" in
+    https://*) dpf_set_client_env_export NODE_EXTRA_CA_CERTS "${DPF_MCP_CLIENT_CA_BUNDLE:-}" || return $? ;;
+  esac
   dpf_source_client_env_from_profiles
   dpf_launchd_setenv DPF_MCP_URL "$DPF_MCP_CLIENT_URL"
-  dpf_launchd_setenv NODE_EXTRA_CA_CERTS "${DPF_MCP_CLIENT_CA_BUNDLE:-}"
   export DPF_MCP_URL="$DPF_MCP_CLIENT_URL"
-  if [ -n "${DPF_MCP_CLIENT_CA_BUNDLE:-}" ]; then export NODE_EXTRA_CA_CERTS="$DPF_MCP_CLIENT_CA_BUNDLE"; fi
+  case "$DPF_MCP_CLIENT_URL" in
+    https://*)
+      dpf_launchd_setenv NODE_EXTRA_CA_CERTS "${DPF_MCP_CLIENT_CA_BUNDLE:-}"
+      if [ -n "${DPF_MCP_CLIENT_CA_BUNDLE:-}" ]; then export NODE_EXTRA_CA_CERTS="$DPF_MCP_CLIENT_CA_BUNDLE"; fi
+      ;;
+  esac
   return 0
 }

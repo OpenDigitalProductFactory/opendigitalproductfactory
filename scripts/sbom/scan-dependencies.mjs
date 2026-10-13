@@ -29,6 +29,7 @@
 // Env: OSV_BASE_URL (default https://api.osv.dev) — point at an offline mirror.
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "../lib/script-argv.mjs";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,7 +45,7 @@ const SEV_RANK = { critical: 4, high: 3, moderate: 2, medium: 2, low: 1, unknown
 function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
     options: {

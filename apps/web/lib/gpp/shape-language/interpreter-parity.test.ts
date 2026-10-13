@@ -19,6 +19,14 @@
 // run on both the registry definition and its decompiled shape document, so the
 // document notation and the runtime agree too.
 //
+// Typed gates (§6.2). Today's drive has one verdict channel: the stage decision
+// a person records (`decision-record`, workroom-stage-decision.ts) is the
+// completing receipt, and the drive does not route on its choice. So, for a
+// stage whose advance carries an enforced, blocking gate (a ratified scope,
+// first `outbound-customer-communication`, PR-3b-R), each completing receipt the
+// drive sees is also fed to the interpreter as the `admit` verdict it stands
+// for. A stage with no typed gate gets the receipt alone, exactly as before.
+//
 // Sequences come from a seeded PRNG written here (no property-testing package
 // is a dependency; plan "Constraints" 2). Each failure message prints the
 // sequence seed, the shape and the step.
@@ -28,7 +36,10 @@ import { describe, expect, it } from "vitest";
 import { nextStageKey } from "@/lib/work-management/drive-resolution";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prior-versions";
 import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
-import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import {
+  isCompletingWorkroomDriveReceipt,
+  WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
+} from "@/lib/work-management/workroom-drive-receipts";
 
 import { decompile } from "./decompile";
 import {
@@ -95,6 +106,25 @@ function nextReceipt(
     : { stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND };
 }
 
+/**
+ * The interpreter events one drive receipt stands for: the receipt, then, when
+ * it completes a stage whose gate is enforced and blocking, the `admit` that
+ * today's recorded decision is (see the header).
+ */
+function eventsForReceipt(shape: InterpretableShape, receipt: Receipt): GppShapeEvent[] {
+  const events: GppShapeEvent[] = [{ type: "receipt", ...receipt }];
+  const stage = shape.stages.find((entry) => entry.key === receipt.stageKey);
+  const gate = stage?.advance.kind === "governed-decision" ? stage.advance.gate : undefined;
+  if (gate && gate.mode === "enforced" && gate.blocking && isCompletingWorkroomDriveReceipt(receipt, receipt.stageKey)) {
+    events.push({ type: "gate-verdict", stageKey: receipt.stageKey, verdict: "admit", mode: "enforced" });
+  }
+  return events;
+}
+
+function stepAll(shape: InterpretableShape, marking: GppShapeMarking, events: readonly GppShapeEvent[]): GppShapeMarking {
+  return events.reduce((current, event) => stepShapeInstance(shape, current, event), marking);
+}
+
 type SequenceOutcome = { visited: Set<string>; completed: boolean };
 
 /** Run one seeded sequence, asserting parity after every prefix. */
@@ -117,11 +147,9 @@ function runSequence(definition: WorkShapeDefinition, document: InterpretableSha
     visited.add(driveStage);
     const receipt = nextReceipt(random, definition, driveStage, receipts);
     receipts.push(receipt);
-    const event: GppShapeEvent = { type: "receipt", ...receipt };
-
     driveStage = nextStageKey(definition, driveStage, receipts);
-    onDefinition = stepShapeInstance(definition, onDefinition, event);
-    onDocument = stepShapeInstance(document, onDocument, event);
+    onDefinition = stepAll(definition, onDefinition, eventsForReceipt(definition, receipt));
+    onDocument = stepAll(document, onDocument, eventsForReceipt(document, receipt));
 
     const expected = driveStage ? [driveStage] : [];
     expect(markedStageKeys(definition, onDefinition), where(step)).toEqual(expected);

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +16,7 @@ const git = (...args) => gitText(args, { cwd: process.cwd() });
 function option(name) {
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
   const { values } = utilParseArgs({
-    args: process.argv.slice(2),
+    args: scriptArgv(),
     strict: false,
     allowPositionals: true,
     options: { "receipt-file": { type: "string" }, "evidence-id": { type: "string" } },
@@ -46,6 +47,25 @@ function currentIdentity(receipt = null) {
 
 const stateFile = git("rev-parse", "--git-path", "dpf-semantic-review-gate.json");
 const command = process.argv[2] ?? "validate";
+
+if (command === "record-exemption") {
+  const sourceFile = option("--receipt-file");
+  if (!sourceFile) throw new Error("record-exemption requires --receipt-file containing the canonical writer response");
+  const payload = JSON.parse(readFileSync(sourceFile, "utf8"));
+  const exemption = payload?.data?.exemption;
+  if (payload.success !== true || !exemption || payload.entityId !== exemption.evidenceId) throw new Error("A successful canonical exemption response is required");
+  const current = currentIdentity(exemption);
+  if (exemption.sourceHeadSha !== current.sha || exemption.baseTreeHash !== current.baseTreeHash
+    || exemption.headTreeHash !== current.headTreeHash || exemption.diffDigest !== current.diffDigest
+    || exemption.policyVersion !== current.policyVersion) throw new Error("exemption identity does not match the committed source and policy");
+  const state = { ...exemption, ...current, schemaVersion: LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION,
+    exemptionSchemaVersion: exemption.schemaVersion, receiptDisposition: "policy-exemption", recordedAt: new Date().toISOString() };
+  const result = validateLocalSemanticReviewGate(state, current);
+  if (!result.valid) throw new Error(`invalid canonical exemption: ${result.reason}`);
+  writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`);
+  console.log(`[semantic-review-gate] recorded policy exception; native review UNRUN, assessment independence UNVERIFIED for ${current.branch}@${current.sha}`);
+  process.exit(0);
+}
 
 if (command === "record") {
   const receiptFile = option("--receipt-file");
@@ -78,7 +98,7 @@ const state = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, "utf8")
 const current = currentIdentity(state);
 const result = validateLocalSemanticReviewGate(state, current);
 if (result.valid) {
-  console.log(`[semantic-review-gate] fresh receipt for ${current.branch}@${current.sha}`);
+  console.log(`[semantic-review-gate] ${result.reason} for ${current.branch}@${current.sha}${result.reason === "policy-exemption" ? "; native review UNRUN, assessment independence UNVERIFIED" : ""}`);
   process.exit(0);
 }
 const message = `[semantic-review-gate] ${result.reason} for ${current.branch}@${current.sha}`;

@@ -170,7 +170,7 @@ export async function setQuiescenceLevel(
 
 // ─── QuiescenceRun lifecycle helpers ─────────────────────────────────────
 
-export type QuiescenceTrigger = "self-upgrade" | "manual" | "sandbox-recovery" | "installation-teardown";
+export type QuiescenceTrigger = "self-upgrade" | "manual" | "sandbox-recovery" | "installation-teardown" | "docker-vm-restart";
 
 /**
  * Single canonical state transition. Updates status + the per-state entry

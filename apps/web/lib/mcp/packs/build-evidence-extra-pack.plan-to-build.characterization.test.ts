@@ -171,4 +171,29 @@ describe("characterization: save_phase_handoff plan→build", () => {
       "activity:phase:advance",
     ]);
   });
+
+  // BI-BDB63485 rows: Approve Start is now a caller check on this path, and the
+  // tool refuses phases outside its buildPhases tag. The rows above are unchanged.
+  it("unapproved backlog draft: Approve Start soft refusal before the structural gate, no write", async () => {
+    buildIn("plan", { originatingBacklogItemId: "BI-1", draftApprovedAt: null });
+    const res = await handoff({ summary: "plan done" }, "u1", { agentId: "AGT-ORCH-200", routeContext: "/build" } as never);
+    expect(res).toEqual({
+      success: true,
+      message: "Phase handoff saved but gate blocked advance: Approve Start before moving this backlog-linked draft into implementation. Evidence may be incomplete.",
+    });
+    expect(trace).toEqual(["handoff:create"]);
+    expect(m.wwmd).not.toHaveBeenCalled();
+    expect(m.initiative).not.toHaveBeenCalled();
+  });
+
+  it("ship (outside buildPhases): refused before the handoff row, no gate, no write", async () => {
+    buildIn("ship");
+    const res = await handoff({ summary: "shipped" }, "u1", { agentId: "AGT-ORCH-200", routeContext: "/build" } as never);
+    expect(res).toEqual({
+      success: false,
+      error: "phase_out_of_scope",
+      message: "save_phase_handoff works in the ideate, plan, build, review phases; build B1 is in ship. Nothing was saved.",
+    });
+    expect(trace).toEqual([]);
+  });
 });

@@ -14,10 +14,9 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
  * "No value-stream view generated yet." state forever. Nothing self-heals it.
  *
  * This reconciler closes that gap on boot, mirroring the other boot reconcilers
- * in instrumentation.ts. For every StorefrontConfig with no operational-value-
- * stream view yet, it resolves the archetype slug and runs the SAME idempotent
- * projection setup uses. It is cheap when already present (one existence query
- * per storefront, no projection) and non-fatal per org — an archetype with no
+ * in instrumentation.ts. Every StorefrontConfig runs the same idempotent
+ * projection setup uses: an existing diagram cannot prove its rooms are present
+ * or current. It is non-fatal per org — an archetype with no
  * template OVSM derivation, or a missing EA seed, is logged and skipped rather
  * than failing boot.
  *
@@ -43,8 +42,7 @@ export async function backfillOperationalValueStreamsOnBoot(
     let skipped = 0;
 
     for (const config of configs) {
-      // Cheap existence check — skip orgs that already have their operational
-      // value stream so a healthy install does no projection work on boot.
+      // Existence distinguishes creation from reconciliation, not eligibility.
       const existing = await prisma.eaView.findFirst({
         where: {
           scopeType: ARCHETYPE_VALUE_STREAM_SCOPE,
@@ -52,10 +50,6 @@ export async function backfillOperationalValueStreamsOnBoot(
         },
         select: { id: true },
       });
-      if (existing) {
-        present++;
-        continue;
-      }
 
       // StorefrontConfig.archetypeId is the DB id; the projection resolves the
       // template by the stable slug (StorefrontArchetype.archetypeId).
@@ -76,9 +70,10 @@ export async function backfillOperationalValueStreamsOnBoot(
           organizationId: config.organizationId,
           archetypeId: archetype.archetypeId,
         });
-        created++;
+        if (existing) present++;
+        else created++;
         logger.log(
-          `[ovsm-backfill] org ${config.organizationId} (${archetype.archetypeId}): created value-stream view ${result.viewId} (${result.createdElements} elements)`,
+          `[ovsm-backfill] org ${config.organizationId} (${archetype.archetypeId}): reconciled value-stream view ${result.viewId} (${result.createdElements} new elements) and room definitions`,
         );
       } catch (err) {
         // A missing template OVSM derivation or unseeded EA notation/types must

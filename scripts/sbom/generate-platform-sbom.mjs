@@ -23,6 +23,7 @@
 //   node scripts/sbom/generate-platform-sbom.mjs --root <repoRoot> --out <dir> --git-ref <sha>
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "../lib/script-argv.mjs";
 import {
   DEPENDENCY_KINDS,
   parseImporters as parseLockImporters,
@@ -40,7 +41,7 @@ import { fileURLToPath } from "node:url";
 function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
     options: { root: { type: "string" }, out: { type: "string" }, "git-ref": { type: "string" } },

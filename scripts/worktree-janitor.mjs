@@ -44,6 +44,7 @@ import {
 import { runGit as runGitShared } from "./lib/git.mjs";
 import { mcpPost } from "./lib/mcp-client.mjs";
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_GRACE = 14;
@@ -51,7 +52,7 @@ const DEFAULT_GRACE = 14;
 function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values, tokens } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
     tokens: true,

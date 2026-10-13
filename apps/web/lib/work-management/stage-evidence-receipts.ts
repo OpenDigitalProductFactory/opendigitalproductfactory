@@ -20,7 +20,12 @@
 //
 // Pure resolution over supplied rows.
 
-import { appendCompletingWorkroomDriveReceipt, isCompletingWorkroomDriveReceipt } from "./workroom-drive-receipts";
+import {
+  appendCompletingWorkroomDriveReceipt,
+  isCompletingWorkroomDriveReceipt,
+  isCompletingWorkroomDriveReceiptAt,
+  receiptInRun,
+} from "./workroom-drive-receipts";
 
 export type RecordedEvidence = {
   /** Stage the evidence was recorded against. Evidence with no stage cannot
@@ -32,6 +37,12 @@ export type RecordedEvidence = {
    *  (the brief asks for it) and must never be read as the work being done. */
   outcome: string | null;
   recordedAt: Date;
+  /**
+   * The stage decision's choice (`payload.result.choice`: accept, patch,
+   * defer), when the evidence is a recorded decision. Read by the Phase 3c
+   * graph path from PR-3c-3 (gate verdicts); nothing reads it before then.
+   */
+  choice?: string | null;
 };
 
 /** Stage-evidence outcomes the evidence tool accepts. */
@@ -47,6 +58,22 @@ export type StageEvidenceInput = {
   /** When the stage was most recently dispatched. Evidence older than the
    *  dispatch belongs to a previous attempt and must not satisfy this one. */
   dispatchedAt: Date | null;
+  /**
+   * Graph shapes only (Phase 3c, BI-8875C9DF): the stage's current iteration.
+   * When given, an existing receipt short-circuits only at this iteration, the
+   * earned receipt carries it, and `dispatchedAt` must be THIS iteration's own
+   * dispatch or attention time (the per-stage loader supplies it). Omitted,
+   * the function behaves exactly as before.
+   */
+  iteration?: number;
+  /**
+   * The run the receipt belongs to: a graph room's marking run (BI-086DC167)
+   * or a sequential room's run (BI-853120EE). When given, an existing receipt
+   * short-circuits only within this run, and the earned receipt carries it,
+   * so the next run never replays it. Omitted, the function behaves exactly
+   * as before.
+   */
+  runKey?: string;
 };
 
 /**
@@ -82,7 +109,7 @@ export function stageHasCompletingEvidence(input: StageEvidenceInput): boolean {
  *  from #5166's `blocked`, which records a dispatch that produced no writeback. */
 export const STAGE_EVIDENCE_RECEIPT_KIND = "stage-evidence-recorded";
 
-export type StageReceipt = { stageKey: string; kind: string };
+export type StageReceipt = { stageKey: string; kind: string; iteration?: number; runKey?: string };
 
 /**
  * The room's receipts after reading its recorded evidence.
@@ -94,8 +121,18 @@ export function earnEvidenceReceipts(input: StageEvidenceInput & {
   existing: readonly StageReceipt[];
 }): readonly StageReceipt[] {
   if (!input.stageKey) return input.existing;
-  if (input.existing.some((receipt) => isCompletingWorkroomDriveReceipt(receipt, input.stageKey!))) return input.existing;
+  const iteration = input.iteration;
+  const runKey = input.runKey;
+  const done = iteration === undefined
+    ? input.existing.some((receipt) => isCompletingWorkroomDriveReceipt(receipt, input.stageKey!) && receiptInRun(receipt, runKey))
+    : input.existing.some((receipt) => isCompletingWorkroomDriveReceiptAt(receipt, input.stageKey!, iteration, runKey));
+  if (done) return input.existing;
   if (!stageHasCompletingEvidence(input)) return input.existing;
-  const result = appendCompletingWorkroomDriveReceipt(input.existing, { stageKey: input.stageKey, kind: STAGE_EVIDENCE_RECEIPT_KIND });
+  const result = appendCompletingWorkroomDriveReceipt(input.existing, {
+    stageKey: input.stageKey,
+    kind: STAGE_EVIDENCE_RECEIPT_KIND,
+    ...(iteration !== undefined ? { iteration } : {}),
+    ...(runKey !== undefined ? { runKey } : {}),
+  });
   return result.ok ? result.data : input.existing;
 }

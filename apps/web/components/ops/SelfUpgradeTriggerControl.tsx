@@ -85,6 +85,7 @@ export default function SelfUpgradeTriggerControl({
   const [triggerResult, setTriggerResult] = useState<{
     queued: boolean;
     reason?: string;
+    message?: string;
     runId?: string;
     dispatchStatus?: string;
     uncertain?: boolean;
@@ -505,14 +506,16 @@ export default function SelfUpgradeTriggerControl({
       {updateAvailable && triggerResult && !triggerResult.queued && (
         <div
           className={`p-3 rounded-lg text-sm ${
-            triggerResult.uncertain
+            triggerResult.uncertain || triggerResult.reason === "deferred-to-window"
               ? "bg-[var(--dpf-info)]/10 text-[var(--dpf-text)] border border-[var(--dpf-info)]/30"
               : "bg-[var(--dpf-destructive)]/10 text-[var(--dpf-destructive)] border border-[var(--dpf-destructive)]/30"
           }`}
         >
           {triggerResult.uncertain
             ? `Admission response interrupted: ${triggerResult.reason} Checking the server record…`
-            : `Not admitted: ${triggerResult.reason}`}
+            : triggerResult.reason === "deferred-to-window"
+              ? `Queued for the maintenance window: ${triggerResult.message ?? ""}`
+              : `Not admitted: ${triggerResult.reason}`}
         </div>
       )}
     </div>

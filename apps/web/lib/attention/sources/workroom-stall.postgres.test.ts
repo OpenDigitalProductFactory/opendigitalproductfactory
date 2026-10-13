@@ -78,4 +78,19 @@ databaseSuite("Workroom stall SQL on PostgreSQL", () => {
     expect(result.rows.map(r => [r.capsuleId, Number(r.consecutivePauses)])).toEqual([["mixed", 5], ["reset", 4]]);
     expect(result.rows.find(r => r.capsuleId === "mixed")?.stuckSince).toBe("2026-01-01T00:15:00.000Z");
   });
+
+  // GPP Phase 3c PR-3c-4: a graph room with a raised stage-deadline notice is selected though it is moving.
+  it("also selects a moving graph room whose marking holds a raised deadline, and no room with an empty or absent one", async () => {
+    const query = fixture([{ id: "moving", actions: ["dispatch_agent"] }]);
+    const marking = (deadlines: unknown) => ({ workroomDrive: { action: "dispatch_agent", hold: holdAfter(["dispatch_agent"]), marking: { deadlines } } });
+    const rooms = [
+      ["overdue", marking({ "c#b#0": { raisedAt: "2026-01-01T00:00:00Z", notifiedAt: null } })],
+      ["none-raised", marking({})],
+      ["no-marking", { workroomDrive: { action: "dispatch_agent", hold: holdAfter(["dispatch_agent"]) } }],
+    ].map(([id, workspaceState]) => ({
+      id, capsuleId: id, title: id, portfolioRole: null, updatedAt: "2026-01-01T00:00:00Z", archivedAt: null, status: "ready", scopeClaims: {}, workspaceState,
+    }));
+    const result = await client.query({ ...query, values: [...parameters, JSON.stringify(rooms)] });
+    expect(result.rows.map(r => [r.capsuleId, Number(r.consecutivePauses)])).toEqual([["overdue", 0]]);
+  });
 });

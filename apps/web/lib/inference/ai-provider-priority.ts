@@ -2,7 +2,7 @@
 // Provider priority management and failover engine.
 
 import { prisma, type Prisma } from "@dpf/db";
-import { callProvider, logTokenUsage, InferenceError } from "@/lib/ai-inference";
+import { callProvider, InferenceError } from "@/lib/ai-inference";
 import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import type { InferenceResult } from "@/lib/ai-inference";
 import {
@@ -397,7 +397,6 @@ export async function callWithFailover(
     throw new NoAllowedProvidersForSensitivityError(sensitivity);
   }
 
-  const baselineTier = filteredPriority[0]!.capabilityTier;
   const attempts: Array<{ providerId: string; error: string }> = [];
   const limit = Math.min(filteredPriority.length, MAX_CASCADE_DEPTH);
   let quotaDisableMessage: string | null = null;
@@ -412,11 +411,6 @@ export async function callWithFailover(
       // Build downgrade message — quota-specific or generic
       let downgradeMessage: string | null = quotaDisableMessage;
       if (!downgradeMessage && downgraded) {
-        const failedName = filteredPriority[0]!.providerId;
-        const usedProvider = await prisma.modelProvider.findUnique({
-          where: { providerId: entry.providerId },
-          select: { name: true },
-        });
         downgradeMessage = `Switched to an alternative AI provider for this response.`;
       }
 
@@ -438,11 +432,6 @@ export async function callWithFailover(
           console.error("[callWithFailover] auto-disable failed:", err);
           return null;
         });
-        const providerName = await prisma.modelProvider.findUnique({
-          where: { providerId: entry.providerId },
-          select: { name: true },
-        });
-        const name = providerName?.name ?? entry.providerId;
         const timeStr = reenableAt ? formatReenableTime(reenableAt) : "in about 1 hour";
         quotaDisableMessage = `The preferred AI provider hit its usage quota and has been temporarily paused. It will resume ${timeStr}. Using an alternative for now.`;
       }

@@ -63,8 +63,13 @@ export function WorkroomProcessOverseer({ room }: { room: WorkroomView }) {
               <p className="mt-1 break-all font-medium text-[var(--dpf-text)]">{shapeIdentity}</p>
             </div>
             <div>
-              <p className="text-xs text-[var(--dpf-muted)]">Current stage</p>
-              <p className="mt-1 font-medium text-[var(--dpf-text)]">{roomLabel(projection.currentStageKey ?? "Not started")}</p>
+              {/* A graph room can hold several current stages at once (GPP Phase 3c PR-3c-2). */}
+              <p className="text-xs text-[var(--dpf-muted)]">{(projection.currentStageKeys?.length ?? 0) > 1 ? "Current stages" : "Current stage"}</p>
+              <p className="mt-1 font-medium text-[var(--dpf-text)]">
+                {projection.currentStageKeys && projection.currentStageKeys.length > 1
+                  ? projection.currentStageKeys.map((key) => roomLabel(key)).join(", ")
+                  : roomLabel(projection.currentStageKey ?? "Not started")}
+              </p>
             </div>
             <div>
               <p className="text-xs text-[var(--dpf-muted)]">Next permitted stage</p>

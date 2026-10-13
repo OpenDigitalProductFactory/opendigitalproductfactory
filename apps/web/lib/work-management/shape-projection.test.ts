@@ -158,6 +158,28 @@ describe("execution truth", () => {
     expect(projectRoomShape({ ...base, state: "cancelled", processOverseer: check }).stages[0].state).toBe("cancelled");
   });
 
+  // GPP Phase 3c PR-3c-2: a room on parallel branches holds several stages at once.
+  it("reads every stage in currentStageKeys as current; a sequential check is unchanged", () => {
+    const keys = getWorkShape("delivery-large")!.stages.map((stage) => stage.key);
+    const check = (over: Partial<WorkroomView["processOverseer"]>): WorkroomView["processOverseer"] => ({
+      shapeKey: "delivery-large", shapeVersion: "1.0.0", currentStageKey: keys[1]!,
+      nextPermittedStageKey: keys[1]!, disposition: "continue", interventionReason: null,
+      checkedAt: "2026-09-06T12:00:00.000Z", deviations: [], collaborationShape: null,
+      processOverseerPrincipalRef: null, processOverseerSource: "none", reconciliationKey: "test",
+      observed: { participantCount: 0, receiptKinds: [], proposedGrantCount: 0, budgetUsage: [], stopConditionHits: [], reviewDue: false },
+      ...over,
+    });
+    const position = (graph: ReturnType<typeof projectRoomShape>) => graph.stages.map((stage) => stage.inspection?.position);
+    const current = "Current stage reported by the process check";
+    const parallel = projectRoomShape(view({ processOverseer: check({ currentStageKeys: [keys[1]!, keys[3]!] }) }));
+    expect(position(parallel).map((entry, index) => entry === current ? keys[index] : null).filter(Boolean)).toEqual([keys[1], keys[3]]);
+    expect(parallel.stages[1]!.state).toBe("observed");
+    expect(parallel.stages[3]!.state).toBe("observed");
+    const sequential = projectRoomShape(view({ processOverseer: check({}) }));
+    expect(position(sequential).filter((entry) => entry === current)).toHaveLength(1);
+    expect(sequential.stages[3]!.state).toBe("unknown");
+  });
+
   it("does not treat an observed recommendation as a passed gate", () => {
     const graph = projectRoomShape(view({ state: "awaiting-decision", receipts: [receipt({ id: "recommendation" })] }));
     expect(graph.stages.find((stage) => stage.key === "decide")?.rows[0]?.state).toBe("observed");

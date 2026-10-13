@@ -647,7 +647,7 @@
       "service": "dpf-tts",
       "class": "capability-activated",
       "capability": "runtime:local-speech",
-      "boundaryReason": "Separate dpf-tts runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
+      "boundaryReason": "Docker speech runtime for Windows/Linux; macOS uses the host-native Chatterbox service declared by its platform overlay.",
       "defaultRequired": false,
       "profiles": [
         "runtime-local-speech",
@@ -665,7 +665,6 @@
       "healthSemantics": "compose-healthcheck",
       "hostPlatforms": [
         "windows",
-        "macos",
         "linux"
       ],
       "targetClassification": "capability-activated"

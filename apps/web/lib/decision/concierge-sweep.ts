@@ -52,6 +52,8 @@ export type SweepSummary = {
   deferredToNextPass: number;
   /** Panelled but produced no proposal, by reason. */
   unproductive: Record<string, number>;
+  /** Refused before inference, by reason; these do not consume the panel cap. */
+  skipped: Record<string, number>;
   retiredStaleProposals: number;
   /** Plain sentence for the room digest. */
   headline: string;
@@ -99,6 +101,8 @@ function buildHeadline(summary: Omit<SweepSummary, "headline">): string {
     .filter(([, count]) => count > 0)
     .map(([reason, count]) => `${count} ${reason.replace(/-/g, " ")}`);
   if (unproductive.length > 0) parts.push(`No draft for: ${unproductive.join(", ")}.`);
+  const skipped = Object.entries(summary.skipped).map(([reason, count]) => `${count} ${reason.replace(/-/g, " ")}`);
+  if (skipped.length) parts.push(`No new panel for: ${skipped.join(", ")}.`);
   return parts.join(" ");
 }
 
@@ -121,13 +125,23 @@ export async function runConciergeSweep(
   const retiredStaleProposals = await deps.retireStale();
 
   const ordered = orderCandidates(await deps.candidates());
-  const budgeted = ordered.slice(0, Math.max(0, limits.maxPanels));
+  const cap = Math.max(0, Math.floor(limits.maxPanels));
 
   let proposed = 0;
   const unproductive: Record<string, number> = {};
+  const skipped: Record<string, number> = {};
+  let panelled = 0;
+  let visited = 0;
 
-  for (const subject of budgeted) {
+  for (const subject of ordered) {
+    if (panelled >= cap) break;
+    visited += 1;
     const outcome = await deps.conduct(subject);
+    if (["not-worth-a-panel", "already-resolved", "panel-pending", "case-unchanged"].includes(outcome.status)) {
+      skipped[outcome.status] = (skipped[outcome.status] ?? 0) + 1;
+      continue;
+    }
+    panelled += 1;
     if (outcome.status === "proposed") {
       proposed += 1;
       continue;
@@ -137,10 +151,11 @@ export async function runConciergeSweep(
 
   const base = {
     considered: ordered.length,
-    panelled: budgeted.length,
+    panelled,
     proposed,
-    deferredToNextPass: Math.max(0, ordered.length - budgeted.length),
+    deferredToNextPass: Math.max(0, ordered.length - visited),
     unproductive,
+    skipped,
     retiredStaleProposals,
   };
   const summary: SweepSummary = { ...base, headline: buildHeadline(base) };

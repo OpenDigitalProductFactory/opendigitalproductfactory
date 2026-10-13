@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Governed MCP Backlog Surface — Design Spec
 
 | Field | Value |
@@ -212,6 +216,32 @@ Behavior:
 - Writes a `BacklogItemActivity` row tagged `kind: "evidence"` with a `payload` JSON capturing the structured fields above.
 - The audit row in `ToolExecution` (written by the governed wrapper, §4.4) is the canonical proof of the call. The activity row is the per-item view used by the UI.
 - This is the **shared successor** alluded to in the goals: `ToolExecution` for the cross-cutting audit, `BacklogItemActivity` for the per-entity timeline. We do NOT extend `EvidenceBundle` (which is scoped to deliberation runs in Build Studio) for this — see §6.
+
+#### Failure evidence source contract (BI-E4F747C0)
+
+The evidence kind describes the observation; a tool's success flag describes
+execution. The existing `execution-evidence.ts` polarity metadata is authoritative.
+Every supplied ToolExecution must exist and belong to the recording user.
+`test_fail`, `build_fail`, `ux_fail`, and `migration_fail` may retain a failed
+execution reference. They remain non-gate-eligible and cannot earn completion
+credit; newer failure evidence can invalidate an older pass. Successful tool
+execution may also produce a negative observation, as before.
+
+All other kinds still require a successful source execution. In particular,
+`manual_check` is positive evidence: calling an error expected in prose does not
+turn a failed source into a passing assertion. Use an actual successful assertion
+that checks the expected error for positive acceptance evidence. Never omit or
+substitute a source reference merely to avoid validation.
+
+Ordered repair for BI-E4F747C0: reproduce same-owner failure rejection in the
+handler tests; reuse polarity metadata in source validation; exercise missing and
+foreign source refusals, all four failure kinds, positive-kind refusals, and
+completion exclusion; run affected tests and typechecks before governed
+publication. These are one atomic defect repair, not independently shippable
+deliverables. Runtime acceptance records the real failed source with a failure
+kind and confirms that it does not satisfy completion. No migration, UI, grant,
+approval, schema or historical audit rewrite is required. The initiative-review
+author-provenance issue is outside this repair.
 
 ### 3.9 `get_next_recommended_work`
 

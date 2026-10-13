@@ -7,23 +7,23 @@
 // closes the audit gap on the REST and JSON-RPC paths and gives the future
 // external-MCP transport a stable hook.
 
-import { prisma } from "@dpf/db";
 import { can, type CapabilityKey } from "./permissions";
 import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./govern/authority/governed-rejection-disposition";
 import { approvalPendingResult, settledApprovalResult } from "./govern/authority/approval-pending-result";
 import {
   enforceCoworkerToolAuthority,
-  finalizeCoworkerAuthorityApproval,
   setCoworkerToolAuthorityOverridesForTests,
   type AuthorizationDecisionCreate,
   type AuthorityApprovalEnvelopeCreate,
   type AuthorityApprovalEnvelopeFinalize,
+  type AuthorityApprovalReservationRelease,
   type AuthorityApprovalTaskResume,
   type CoworkerAuthorityInputResolver,
   type PolicyAuthorityProjectionAttempt,
   type PolicyAuthorityEnvelopeReserve,
   type AuthorityExecutedOutcome,
 } from "./govern/authority/coworker-tool-authority-gate";
+import { type ApprovalRun, handApprovalToToolRun, newApprovalRun, releaseUnsettledApproval, settleApprovalRefusal, settleApprovalRun } from "./govern/authority/approval-reservation";
 export type {
   AuthorityApprovalEnvelopeCreate,
   AuthorityApprovalEnvelopeFinalize,
@@ -34,6 +34,7 @@ export type {
 } from "./govern/authority/coworker-tool-authority-gate";
 import { PLATFORM_TOOLS, executeTool } from "./mcp-tools";
 import type { ToolDefinition, ToolResult, ToolExecutionContext } from "./mcp-tool-types";
+import { resolveGovernedTool, discoveredToolExecutionContext, discoveredToolGrantAllowed } from "./tak/discovered-tool-governance";
 import type {
   GovernedExecuteArgs,
   GovernedExecuteContext,
@@ -122,6 +123,7 @@ export function _setGovernanceForTests(overrides: {
   authorityApprovalEnvelopeCreate?: AuthorityApprovalEnvelopeCreate | null;
   authorityApprovalTaskResume?: AuthorityApprovalTaskResume | null;
   authorityApprovalEnvelopeFinalize?: AuthorityApprovalEnvelopeFinalize | null;
+  authorityApprovalReservationRelease?: AuthorityApprovalReservationRelease | null;
   policyAuthorityProjectionAttempt?: PolicyAuthorityProjectionAttempt | null;
   policyAuthorityEnvelopeReserve?: PolicyAuthorityEnvelopeReserve | null;
   authorityExecutedOutcome?: AuthorityExecutedOutcome | null;
@@ -175,18 +177,15 @@ async function isAllowedByGrants(toolName: string, grants: string[]): Promise<bo
   return isToolAllowedByGrants(toolName, grants);
 }
 
+/** The callerClient an approved request runs under (approved-request-credential.ts). */
+const APPROVAL_COMPLETION = "approval-completion";
+
 async function runGovernedToolPreflight(event: ToolLifecycleEvent): Promise<ToolResult | null> {
   if (_toolPreflightOverride) return _toolPreflightOverride(event);
-  if (event.context?.authSource === "oauth") {
-    const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
-    const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === event.toolName);
-    const refusal = await workroomTargetAccessRefusal({
-      params: event.rawParams,
-      userId: event.userId,
-      ...event.context,
-      toolName: event.toolName,
-      action: tool?.sideEffect !== false,
-    });
+  // An approved run is room-checked after the gate instead, so a refusal
+  // closes its approval as failed (BI-F4EB23C1).
+  if (event.context?.callerClient !== APPROVAL_COMPLETION) {
+    const refusal = await oauthRoomRefusal(event.toolName, event.rawParams, event.userId, event.context);
     if (refusal) return refusal;
   }
   if (event.toolName === "invite_room_participant") {
@@ -220,19 +219,20 @@ export async function agentHasAnyGrant(agentId: string, toolNames: string[]): Pr
   return false;
 }
 
+/** An OAuth call's exact-room admission. */
+const oauthRoomRefusal = async (toolName: string, params: Record<string, unknown>, userId: string, ctx?: ToolLifecycleEvent["context"]): Promise<ToolResult | null> => ctx?.authSource !== "oauth" ? null
+  : (await import("./work-capsules/oauth-workroom-ownership")).workroomTargetAccessRefusal({ params, userId, ...ctx, toolName, action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
+
 async function callExecuteTool(
   toolName: string,
   params: Record<string, unknown>,
   userId: string,
   ctx?: ToolExecutionContext,
 ): Promise<ToolResult> {
-  // Recheck at execution: approval may resume after room or connection access changed.
-  if (ctx?.authSource === "oauth") {
-    const { workroomTargetAccessRefusal } = await import("./work-capsules/oauth-workroom-ownership");
-    const refusal = await workroomTargetAccessRefusal({ params, userId, ...ctx, toolName,
-      action: PLATFORM_TOOLS.find((tool) => tool.name === toolName)?.sideEffect !== false });
-    if (refusal) return refusal;
-  }
+  // Recheck at execution: access may change before an approval resumes (#5925);
+  // an approved run is first checked here (BI-F4EB23C1).
+  const refusal = await oauthRoomRefusal(toolName, params, userId, ctx);
+  if (refusal) return refusal;
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
   return executeTool(toolName, params, userId, ctx);
 }
@@ -276,7 +276,8 @@ function rejectionResult(
   };
 }
 
-async function runPreToolHooks(event: ToolLifecycleEvent): Promise<GovernedExecuteResult | null> {
+/** Also read by the approval-convergence probe (scripts/approval-convergence-probe.ts), on a read-only session. */
+export async function runPreToolHooks(event: ToolLifecycleEvent): Promise<GovernedExecuteResult | null> {
   for (const hook of _lifecycleHooks) {
     const decision = await hook.onPreToolUse?.(event);
     if (decision?.decision === "deny") {
@@ -302,15 +303,26 @@ async function runPostToolHooks(event: ToolLifecyclePostEvent): Promise<void> {
   }
 }
 
-export async function governedExecuteTool(
-  args: GovernedExecuteArgs,
-): Promise<GovernedExecuteResult> {
+/** BI-5B34D277: an exception before the tool ran gives back the approval it reserved. */
+export async function governedExecuteTool(args: GovernedExecuteArgs): Promise<GovernedExecuteResult> {
+  const run = newApprovalRun();
+  try {
+    return await governedExecuteToolRun(args, run);
+  } catch (err) {
+    await releaseUnsettledApproval(run, args.toolName);
+    throw err;
+  }
+}
+
+async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRun): Promise<GovernedExecuteResult> {
   args = { ...args, toolName: canonicalWorkroomToolName(args.toolName) };
+  // Every return after the reservation goes through this (BI-5B34D277).
+  const refuse = (result: GovernedExecuteResult) => settleApprovalRefusal(run, args.toolName, result);
   let approvedAuthorityEnvelopeId: string | null = null;
   let authorityDecisionId: string | undefined;
   let alignmentDecision: AlignmentGateDecision | null = null;
   let preconditionDecision: PreconditionOrderingDecision | null = null;
-  const tool = findTool(args.toolName);
+  const { tool, discovered } = await resolveGovernedTool(args, findTool(args.toolName)); // BI-8B7B2FE9
   if (!tool) {
     return {
       success: false,
@@ -393,7 +405,7 @@ export async function governedExecuteTool(
       const { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } = await import("@/lib/coworker/authorized-surface-coworker-contract");
       grants = Array.from(new Set([...grants, ...COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS]));
     }
-    const agentGrantAllowed = await isAllowedByGrants(args.toolName, grants);
+    const agentGrantAllowed = discovered ? discoveredToolGrantAllowed(discovered.policy, grants, args) : await isAllowedByGrants(args.toolName, grants);
 
     // Deterministic target preconditions run before authority escalation,
     // including when a missing capability/grant would otherwise create an
@@ -493,6 +505,9 @@ export async function governedExecuteTool(
     }
     approvedAuthorityEnvelopeId = authorityGate.approvedEnvelopeId;
     authorityDecisionId = authorityGate.authorityDecisionId;
+    if (authorityGate.approvedEnvelopeId && authorityGate.reservedAt) {
+      run.reservation = { envelopeId: authorityGate.approvedEnvelopeId, reservedAt: authorityGate.reservedAt };
+    }
   }
 
   const hookRejection = await runPreToolHooks({
@@ -512,6 +527,7 @@ export async function governedExecuteTool(
       source: args.source,
       context: args.context,
       durationMs: null,
+      envelopeId: approvedAuthorityEnvelopeId,
     });
     if (auditRow?.id && consequence.consequential) {
       await writeToolExecutionReceipt({
@@ -525,7 +541,7 @@ export async function governedExecuteTool(
         governedArgs: args,
       });
     }
-    return hookRejection;
+    return refuse(hookRejection);
   }
 
   // EP-WORK-POSTURE 8.2 (BI-F114354D item 6): inside a Workroom, EVERY tool the
@@ -542,12 +558,12 @@ export async function governedExecuteTool(
     writeAudit: ({ result, alignmentDecision: alignment, preconditionDecision: precondition }) => writeAudit({
       toolName: args.toolName, rawParams: args.rawParams, result, userId: args.userId,
       source: args.source, context: args.context, durationMs: null,
-      alignmentDecision: alignment, preconditionDecision: precondition,
+      alignmentDecision: alignment, preconditionDecision: precondition, envelopeId: approvedAuthorityEnvelopeId,
     }),
   });
   alignmentDecision = preexecution.alignmentDecision;
   preconditionDecision = preexecution.preconditionDecision;
-  if (preexecution.result) return preexecution.result;
+  if (preexecution.result) return refuse(preexecution.result);
 
   // GPP Phase 2 PR-C (BI-69415B68): shadow permit. For an outward, authority or
   // irreversible call only, mint a permit under the binding whose gate just
@@ -602,7 +618,7 @@ export async function governedExecuteTool(
         toolName: args.toolName, context: args.context, consequential: true, governedArgs: args,
       });
     }
-    return refused;
+    return refuse(refused);
   }
 
   let reservedAuditId: string | null = null;
@@ -631,10 +647,11 @@ export async function governedExecuteTool(
         "the mandatory GAID receipt channel could not be reserved before execution",
       );
       if (reservedAuditId) await updateAudit(reservedAuditId, failure, 0);
-      return failure;
+      return refuse(failure);
     }
   }
 
+  handApprovalToToolRun(run);
   const t0 = Date.now();
   let result: ToolResult;
   try {
@@ -658,7 +675,7 @@ export async function governedExecuteTool(
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
       authorityDecisionId,
       approvedAuthorityEnvelopeId,
-      ...(gppPermit?.permitId ? { gppPermitId: gppPermit.permitId } : {}),
+      ...(gppPermit?.permitId ? { gppPermitId: gppPermit.permitId } : {}), ...discoveredToolExecutionContext(discovered),
       governedDispatch: async (nestedToolName, nestedParams, surfaceInvocation) => {
         const nestedTool = findTool(nestedToolName);
         if (!nestedTool) {
@@ -707,24 +724,7 @@ export async function governedExecuteTool(
   }
   const durationMs = Date.now() - t0;
 
-  if (approvedAuthorityEnvelopeId) {
-    try {
-      await finalizeCoworkerAuthorityApproval(
-        approvedAuthorityEnvelopeId,
-        result.success,
-      );
-    } catch (err) {
-      // The action has already run, so this cannot fail closed without
-      // misreporting the side effect. Preserve the result and surface the
-      // evidence defect in server logs for reconciliation.
-      console.error(
-        "[governed-execute] approval envelope finalization failed envelope=%s tool=%s: %s",
-        JSON.stringify(approvedAuthorityEnvelopeId),
-        JSON.stringify(args.toolName),
-        err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
-      );
-    }
-  }
+  await settleApprovalRun(run, args.toolName, result.success);
 
   await runPostToolHooks({
     toolName: args.toolName,

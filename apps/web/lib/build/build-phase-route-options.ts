@@ -8,13 +8,8 @@
 // not stream tokens. Every routed build phase composes its routeAndCall
 // options from this one place so the demand is stated once (BI-F84887FF).
 
-import type { RouteAndCallOptions } from "@/lib/inference/routed-inference-options";
-
-export const BUILD_PHASE_ROUTE_OPTIONS = { requiresStreaming: false } as const satisfies RouteAndCallOptions;
-
-/** routeAndCall options for a non-interactive Build Studio phase, plus any per-call extras. */
-export function buildPhaseRouteOptions<T extends RouteAndCallOptions>(
-  extra?: T,
-): Omit<T, "requiresStreaming"> & { requiresStreaming: false } {
-  return { ...(extra ?? ({} as T)), ...BUILD_PHASE_ROUTE_OPTIONS };
-}
+// Keep existing Build Studio callers on the canonical inference contract.
+export {
+  BACKGROUND_ROUTE_OPTIONS as BUILD_PHASE_ROUTE_OPTIONS,
+  backgroundRouteOptions as buildPhaseRouteOptions,
+} from "@/lib/inference/background-route-options";

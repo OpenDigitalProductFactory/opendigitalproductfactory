@@ -170,6 +170,8 @@ describe("surface-neutral review compatibility", () => {
       verificationEvidence: "PASS 1 test",
     });
     expect(prompt).toContain("CHANGE: Add filter");
+    expect(prompt).toContain("The supplied immutable artifact is the review target");
+    expect(prompt).toContain("An unrelated ambient checkout is not evidence");
     expect(prompt).toContain("CODE CHANGES:\nconst x = 1;");
     expect(prompt).toContain("VERIFICATION EVIDENCE:\nPASS 1 test");
   });

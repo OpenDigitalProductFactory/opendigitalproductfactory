@@ -1,4 +1,6 @@
 import { prisma, type Prisma } from "@dpf/db";
+import { createHash } from "node:crypto";
+import { stableStringify } from "@/lib/governance/reconcile-keyed-findings";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import {
   contractLocalCiPoolAfterGateResult,
@@ -9,6 +11,7 @@ import {
   type BuilderCalibrationStore,
 } from "./local-ci-builder-memory-calibration";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
+import type { findLocalCiEvidenceWorkroom } from "./local-ci-evidence-workroom";
 import type { LocalIntegrationStatus } from "../../../../scripts/lib/local-integration-status.mjs";
 
 export type LocalIntegrationResultInput = {
@@ -33,6 +36,8 @@ export type LocalIntegrationResultInput = {
 };
 
 type LocalIntegrationDependencies = {
+  recordEvidence?: typeof recordExternalEvidence;
+  findEvidence?: (id: string) => Promise<Awaited<ReturnType<typeof recordExternalEvidence>> | null>;
   platformConfig: PlatformConfigCircuitBreakerStore;
   environmentLease?: Pick<
     typeof prisma.nonProductionEnvironmentLease,
@@ -46,6 +51,8 @@ type LocalIntegrationDependencies = {
   writeEvidenceBlob?: import("@/lib/evidence/bounded-evidence-output").EvidenceBlobWriter;
   /** BI-903FB5F9: where measured builder peaks accumulate. Defaults to PlatformConfig. */
   builderCalibration?: BuilderCalibrationStore;
+  /** BI-C9912C22: where the gated branch's Workroom is found. Defaults to prisma. */
+  workroom?: Parameters<typeof findLocalCiEvidenceWorkroom>[0];
 };
 
 /**
@@ -88,11 +95,26 @@ function isTestStubEvidence(evidence: unknown): boolean {
 
 export async function recordLocalIntegrationResult(
   input: LocalIntegrationResultInput,
-  dependencies: LocalIntegrationDependencies = {
-    platformConfig: prisma.platformConfig,
-    environmentLease: prisma.nonProductionEnvironmentLease,
-  },
-) {
+  dependencies?: LocalIntegrationDependencies,
+): Promise<Awaited<ReturnType<typeof recordExternalEvidence>>> {
+  // Serialize publication with its lease binding. A lost HTTP acknowledgement
+  // can then replay the same immutable result without creating an orphan row.
+  if (!dependencies && input.leaseId && input.gateKey) {
+    const { recordExternalEvidenceInStore } = await import("@/lib/observability/external-evidence-store");
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "NonProductionEnvironmentLease" WHERE "leaseId" = ${input.leaseId} FOR UPDATE`;
+      return recordLocalIntegrationResult(input, {
+        platformConfig: tx.platformConfig,
+        builderCalibration: tx.platformConfig,
+        workroom: tx.workroom,
+        environmentLease: tx.nonProductionEnvironmentLease,
+        recordEvidence: (value) => recordExternalEvidenceInStore(value, tx),
+        findEvidence: (id) => tx.externalEvidenceRecord.findUnique({ where: { id } }),
+      });
+    }, { timeout: 30_000 });
+  }
+  dependencies ??= { platformConfig: prisma.platformConfig, environmentLease: prisma.nonProductionEnvironmentLease };
+  const inputFingerprint = createHash("sha256").update(stableStringify(input)).digest("hex");
   // BI-F5344F65: first, before any lease, pool or evidence write.
   if (isTestStubEvidence(input.evidence)) {
     throw new TestStubEvidenceRefusedError();
@@ -112,11 +134,25 @@ export async function recordLocalIntegrationResult(
     if (!lease || lease.claimKey !== `gate:${gateKey}`) {
       throw new Error("Local-CI lease does not match the immutable gate key");
     }
-    if (lease.ownerSessionId !== input.externalSessionId) {
+    if (lease.ownerSessionId !== input.externalSessionId || lease.ownerProvider !== input.provider) {
       throw new Error("Only the Local-CI lease owner may record gate evidence");
     }
     if (lease.status !== "active" && lease.status !== "released") {
       throw new Error("Local-CI gate evidence requires the canonical executor lease");
+    }
+    if (lease.evidenceRecordId) {
+      const prior = await (dependencies.findEvidence ?? ((id) => prisma.externalEvidenceRecord.findUnique({ where: { id } })))(lease.evidenceRecordId);
+      const details = prior?.details as Record<string, unknown> | null;
+      const sameContent = details?.inputFingerprint
+        ? details.inputFingerprint === inputFingerprint
+        : stableStringify(details?.evidence) === stableStringify(input.evidence);
+      if (!prior || prior.actorUserId !== input.actorUserId || prior.provider !== input.provider
+        || prior.target !== input.candidateBranch || prior.operationType !== "local_integration_ci"
+        || details?.gateKey !== gateKey || details?.leaseId !== leaseId
+        || details?.externalSessionId !== input.externalSessionId || details?.status !== input.status || !sameContent) {
+        throw new Error("Local-CI evidence replay conflicts with the canonical receipt");
+      }
+      return prior;
     }
   }
   // BI-39AAE9B8: the full console output leaves the JSON column. The record
@@ -153,13 +189,16 @@ export async function recordLocalIntegrationResult(
     );
   }
 
-  const result = await recordExternalEvidence({
-    ...(typeof evidenceObject?.headTreeHash === "string" ? {
-      workCapsuleId: (await prisma.workroom.findFirst({ where: {
-        headBranch: input.candidateBranch, headSha: String(evidenceObject.sha ?? ""),
-        executorRef: input.externalSessionId, archivedAt: null,
-      }, select: { id: true } }))?.id,
-    } : {}),
+  // Loaded like the blob writer above: a dynamic import keeps this module's
+  // static graph unchanged across the build-evidence pack's dynamic boundary.
+  const { findLocalCiEvidenceWorkroom } = await import("./local-ci-evidence-workroom");
+  const room = typeof evidenceObject?.headTreeHash === "string"
+    ? await findLocalCiEvidenceWorkroom(dependencies.workroom ?? prisma.workroom, {
+      branch: input.candidateBranch, sha: String(evidenceObject.sha ?? ""), sessionId: input.externalSessionId,
+    })
+    : undefined;
+  const result = await (dependencies.recordEvidence ?? recordExternalEvidence)({
+    ...(room !== undefined ? { workCapsuleId: room && room !== "ambiguous" ? room.id : undefined } : {}),
     actorUserId: input.actorUserId,
     routeContext: input.routeContext,
     operationType: "local_integration_ci",
@@ -169,6 +208,7 @@ export async function recordLocalIntegrationResult(
     buildId: input.buildId,
     taskRunId: input.taskRunId,
     details: {
+      ...(gateKey && leaseId ? { inputFingerprint } : {}),
       externalSessionId: input.externalSessionId,
       mode: input.mode,
       status: input.status,
@@ -190,6 +230,7 @@ export async function recordLocalIntegrationResult(
         leaseId,
         claimKey: `gate:${gateKey}`,
         ownerSessionId: input.externalSessionId,
+        ownerProvider: input.provider,
         evidenceRecordId: null,
       },
       data: { evidenceRecordId: result.id },

@@ -381,9 +381,43 @@ A coworker can act faster over time, but the organization can always reconstruct
 
 The shadow ledger and trust states described above are a second, parallel record: they are how "this coworker has earned autopilot on invoice matching but is still proposing on refunds" is a queryable fact rather than a feeling.
 
+A decision reaches the shadow ledger only when it names the coworker that made it. `DecisionInteraction.agentId` is a foreign key onto the coworker record; it is null for decisions no coworker made, such as the hourly triage drain or an operator's review. A decision that names a coworker gets exactly one ledger row, keyed by its interaction id. The row is written at `shadow` when the decision is recorded. When `record_decision_outcome` reports what was actually done, the same row receives the actual decision, the outcome and the agreement. Agreement stays null until that report arrives, and stays null for a report of "left unresolved". The two vocabularies are mapped by one explicit table, and a value missing from it is refused rather than placed in a nearby bucket:
+
+| Decision `domainClass` | Ledger `activityType` |
+|---|---|
+| `plan-readiness` | `governed_decision_plan_readiness` |
+| `architecture-tradeoff` | `governed_decision_architecture_tradeoff` |
+| `risk-assessment` | `governed_decision_risk_assessment` |
+| `professional-practice` | `governed_decision_professional_practice` |
+| `kernel-consult` | `governed_decision_kernel_consult` |
+
+| Decision `riskTier` | Ledger `riskClass` |
+|---|---|
+| `low` | `internal-reversible` |
+| `medium` | `internal-irreversible` |
+| `high` | `outbound-or-floor` |
+| `critical` | `outbound-or-floor` |
+
+The risk mapping matches the funding gate's mapping on the three tiers both share. The ledger records evidence and authorizes nothing: no code path reads a bridged row back to raise a trust level.
+
+### Governed-decision trust state (report only)
+
+A scheduled job, *Decision trust measurement* (every 6 hours, with a run-now event), turns the ledger into `TrustState` rows, one per coworker × activity type × risk class. Each pass does two things, and both are idempotent:
+
+1. It backfills the ledger through the same writer a live decision uses. Most attributed decisions were made before the bridge existed, so a coworker would otherwise be missing from the measurement. A backfilled row carries the decision's own time. A row whose decision has since been resolved is completed.
+2. It recomputes every governed-decision `TrustState` from the whole ledger: `sampleCount`, `agreementCount`, `agreementRate`, `lastLedgerId` and `lastEvaluatedAt`.
+
+Only human-resolved decisions are samples. A coworker's report on its own decision is counted separately and never pooled into the rate, the same rule slice 1 applies to its resolvers. A decision with no known resolution is counted as unresolved, and one the kernel abstained on is counted as having no recommendation.
+
+A new row is created at `shadow`. An update never writes `currentLevel`, and the stored recommendation is always a fixed hold at `shadow`. No code path in this measurement raises a level or recommends raising one. Graduation is a separate decision for the founder, taken against these numbers.
+
+`report_decision_trust_state` (MCP, read-only) shows the sample count beside each rate. It withholds the rate below 10 human-resolved samples, the smallest sample the trust rules act on, and shows "insufficient samples" in its place. A coworker with attributed decisions that no trust row covers yet is listed rather than left out. Every report says what it cannot show: agreement is concordance, not correctness, and a human who rubber-stamps produces high agreement and no information.
+
 Code references:
 
 - [`DecisionInteraction`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/packages/db/prisma/schema.prisma), [`persistDecisionInteraction`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision-perspective/persistence.ts)
+- [`decision-shadow-ledger-mapping.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/decision-shadow-ledger-mapping.ts), [`decision-shadow-ledger-bridge.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/decision-shadow-ledger-bridge.ts)
+- [`decision-trust-state.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/decision-trust-state.ts), [`decision-trust-state-store.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/decision-trust-state-store.ts)
 
 ## The learning loop
 

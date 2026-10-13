@@ -187,14 +187,3 @@ export async function completeFeatureBuildTransition(args: {
     },
   });
 }
-
-export async function assertFeatureBuildCompletion(args: {
-  buildId: string;
-  expectedPhase: string;
-}): Promise<void> {
-  const terminal = await completeFeatureBuildTransition(args);
-  if (!terminal.ok) {
-    const codes = [...terminal.decision.blockers, ...terminal.decision.unmet].map((entry) => entry.code);
-    throw new Error(`Cannot complete this build: ${codes.join(", ")}.`);
-  }
-}
