@@ -495,3 +495,20 @@ describe("callProvider", () => {
     expect(mockAdapterExecute).not.toHaveBeenCalled();
   });
 });
+
+import { withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
+
+it("blocks every paid fallback before adapter dispatch when parent authority is lost", async () => {
+  vi.clearAllMocks();
+  let valid = true;
+  await withGovernedInferenceDeadline({ deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+    verifyAuthority: async () => valid }, async () => {
+    valid = false;
+    for (const provider of ["openai", "anthropic-sub", "codex"]) {
+      await expect(callProvider(provider, "review-model", [], "Review the diff"))
+        .rejects.toThrow("authority-lost");
+    }
+  });
+  expect(mockAdapterExecute).not.toHaveBeenCalled();
+  expect(mockPrisma.modelProvider.findUnique).not.toHaveBeenCalled();
+});

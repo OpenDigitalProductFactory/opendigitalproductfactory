@@ -2156,7 +2156,8 @@
         "task-specific-operating-rules",
         "disclosure-measurement-and-recovery",
         "administrator-classification-recovery",
-        "recovering-an-interrupted-independent-review"
+        "recovering-an-interrupted-independent-review",
+        "parent-bounded-local-review-execution-bi-03ac2fd9"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -5619,13 +5620,15 @@
       "anchors": [
         "choosing-hardware-for-dpf",
         "the-short-recommendation",
+        "a-mac-mini-for-everyday-business-operations",
+        "local-ai-for-professional-firms",
         "machines-available-now",
         "provider-assisted-operations",
         "local-first-windows-with-nvidia",
         "local-first-apple-unified-memory",
         "why-unified-memory-changes-the-calculation",
         "model-and-context-sizing",
-        "shared-memory-systems-not-yet-in-the-standard-profile",
+        "compact-linux-candidates-qualification-required",
         "before-ordering"
       ]
     },
@@ -5694,6 +5697,7 @@
       "anchors": [
         "platform-support-watch-list-living-document",
         "windows-host-guard-interpreters-bi-ba5f777a",
+        "repository-local-codex-endpoint-overrides-bi-9f258707",
         "target-environments",
         "how-to-use-this-file",
         "1-monitoring-telemetry",
@@ -6216,6 +6220,7 @@
       "publishedPortal": false,
       "anchors": [
         "local-ci-sandbox-slots",
+        "owned-development-lease-cleanup",
         "host-wide-heavyweight-resource-admission",
         "current-operating-mode",
         "peer-slot-host-fencing",

@@ -13,11 +13,25 @@ const durableWait = vi.hoisted(() => ({
   checkpointNonprodLeaseWait: vi.fn(),
   settleNonprodLeaseWait: vi.fn(),
 }));
-vi.mock("@/lib/nonprod/durable-wait", () => durableWait);
+vi.mock("@/lib/nonprod/durable-wait", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/nonprod/durable-wait")>(),
+  ...durableWait,
+}));
+const cleanup = vi.hoisted(() => ({ readLease: vi.fn(), readWait: vi.fn(), stance: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: {
+  nonProductionEnvironmentLease: { findUnique: cleanup.readLease },
+  taskRun: { findUnique: cleanup.readWait },
+} }));
+vi.mock("@/lib/install/instance-stance", () => ({
+  loadInstanceStance: cleanup.stance,
+  prismaInstanceStanceStore: () => ({}),
+}));
 
 import { nonprodLeasePack } from "./nonprod-lease-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { deriveGateKey } from "@/lib/gates/gate-run-identity";
+import { resolveCallConsequence } from "@/lib/tool-consequence";
+import { deterministicNonprodWaitTaskRunId } from "@/lib/nonprod/durable-wait";
 
 const EXPECTED_TOOLS = [
   "list_nonprod_environment_leases",
@@ -37,6 +51,27 @@ beforeEach(() => {
 });
 
 describe("nonprod-lease pack — registration", () => {
+  it("does not require another authority approval for server-bound owned DEV cleanup", async () => {
+    const taskRunId = deterministicNonprodWaitTaskRunId("user-1", "NPEL-OWNED");
+    const binding = {
+      leaseId: "NPEL-OWNED", claimKey: "own-gate", environmentKey: "local-integration-ci",
+      ownerProvider: "codex", ownerSessionId: "session-1", worktreePath: "D:/DPF-worktrees/owned",
+      branchName: "fix/owned", taskRunId,
+    };
+    cleanup.stance.mockResolvedValue({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
+    cleanup.readLease.mockResolvedValue({ ...binding, status: "expired", slotManifestVersion: 1,
+      ownerPid: null, ownerProcessIdentity: null });
+    cleanup.readWait.mockResolvedValue({ taskRunId, userId: "user-1", progressPayload: {
+      nonprodLeaseWait: { ...binding, schemaVersion: 1, kind: "nonprod-lease-wait", state: "terminal",
+        queuePosition: null, waitDeadlineAt: "2026-10-13T04:00:00Z", lastTransitionAt: "2026-10-13T04:00:00Z",
+        eventId: null, eventConsumed: true },
+    } });
+    const tool = nonprodLeasePack.definitions.find((d) => d.name === "release_nonprod_environment_lease")!;
+    expect(tool.consequence).toBe("authority");
+    expect((await resolveCallConsequence(tool, { toolName: tool.name, userId: "user-1",
+      params: { leaseId: "NPEL-OWNED", ownerSessionId: "session-1" } })).consequence).toBeNull();
+  });
+
   it("exposes exactly the lease + origin-lookup tools", () => {
     expect(nonprodLeasePack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(nonprodLeasePack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());

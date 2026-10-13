@@ -87,6 +87,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-903FB5F9: no checked-in recipe may drop the Docker VM page cache by hand.
       node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs"),
+      node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
